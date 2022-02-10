@@ -1,4 +1,4 @@
-[console_scripts]
-py.test = pytest:main
-pytest = pytest:main
-
+[console_scripts] 
+py.test = pytest:main 
+pytest = pytest:main 
+ 

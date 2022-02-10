@@ -4,7 +4,7 @@
 
     Lexer for Relax-NG Compact syntax
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -23,7 +23,7 @@ class RNCCompactLexer(RegexLexer):
     """
 
     name = 'Relax-NG Compact'
-    aliases = ['rng-compact', 'rnc']
+    aliases = ['rng-compact', 'rnc'] 
     filenames = ['*.rnc']
 
     tokens = {

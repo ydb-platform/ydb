@@ -11,7 +11,7 @@ from future.builtins.iterators import (filter, map, zip)
 # The isinstance import is no longer needed. We provide it only for
 # backward-compatibility with future v0.8.2. It will be removed in future v1.0.
 from future.builtins.misc import (ascii, chr, hex, input, isinstance, next,
-                                  oct, open, pow, round, super, max, min)
+                                  oct, open, pow, round, super, max, min) 
 from future.utils import PY3
 
 if PY3:
@@ -38,12 +38,12 @@ from future import utils
 if not utils.PY3:
     # We only import names that shadow the builtins on Py2. No other namespace
     # pollution on Py2.
-
+ 
     # Only shadow builtins on Py2; no new names
-    __all__ = ['filter', 'map', 'zip',
+    __all__ = ['filter', 'map', 'zip', 
                'ascii', 'chr', 'hex', 'input', 'next', 'oct', 'open', 'pow',
                'round', 'super',
-               'bytes', 'dict', 'int', 'list', 'object', 'range', 'str', 'max', 'min'
+               'bytes', 'dict', 'int', 'list', 'object', 'range', 'str', 'max', 'min' 
               ]
 
 else:

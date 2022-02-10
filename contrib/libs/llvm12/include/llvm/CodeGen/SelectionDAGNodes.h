@@ -92,43 +92,43 @@ namespace ISD {
 
   /// Node predicates
 
-/// If N is a BUILD_VECTOR or SPLAT_VECTOR node whose elements are all the
-/// same constant or undefined, return true and return the constant value in
-/// \p SplatValue.
-bool isConstantSplatVector(const SDNode *N, APInt &SplatValue);
+/// If N is a BUILD_VECTOR or SPLAT_VECTOR node whose elements are all the 
+/// same constant or undefined, return true and return the constant value in 
+/// \p SplatValue. 
+bool isConstantSplatVector(const SDNode *N, APInt &SplatValue); 
 
-/// Return true if the specified node is a BUILD_VECTOR or SPLAT_VECTOR where
-/// all of the elements are ~0 or undef. If \p BuildVectorOnly is set to
-/// true, it only checks BUILD_VECTOR.
-bool isConstantSplatVectorAllOnes(const SDNode *N,
-                                  bool BuildVectorOnly = false);
+/// Return true if the specified node is a BUILD_VECTOR or SPLAT_VECTOR where 
+/// all of the elements are ~0 or undef. If \p BuildVectorOnly is set to 
+/// true, it only checks BUILD_VECTOR. 
+bool isConstantSplatVectorAllOnes(const SDNode *N, 
+                                  bool BuildVectorOnly = false); 
 
-/// Return true if the specified node is a BUILD_VECTOR or SPLAT_VECTOR where
-/// all of the elements are 0 or undef. If \p BuildVectorOnly is set to true, it
-/// only checks BUILD_VECTOR.
-bool isConstantSplatVectorAllZeros(const SDNode *N,
-                                   bool BuildVectorOnly = false);
+/// Return true if the specified node is a BUILD_VECTOR or SPLAT_VECTOR where 
+/// all of the elements are 0 or undef. If \p BuildVectorOnly is set to true, it 
+/// only checks BUILD_VECTOR. 
+bool isConstantSplatVectorAllZeros(const SDNode *N, 
+                                   bool BuildVectorOnly = false); 
 
-/// Return true if the specified node is a BUILD_VECTOR where all of the
-/// elements are ~0 or undef.
-bool isBuildVectorAllOnes(const SDNode *N);
+/// Return true if the specified node is a BUILD_VECTOR where all of the 
+/// elements are ~0 or undef. 
+bool isBuildVectorAllOnes(const SDNode *N); 
 
-/// Return true if the specified node is a BUILD_VECTOR where all of the
-/// elements are 0 or undef.
-bool isBuildVectorAllZeros(const SDNode *N);
+/// Return true if the specified node is a BUILD_VECTOR where all of the 
+/// elements are 0 or undef. 
+bool isBuildVectorAllZeros(const SDNode *N); 
 
-/// Return true if the specified node is a BUILD_VECTOR node of all
-/// ConstantSDNode or undef.
-bool isBuildVectorOfConstantSDNodes(const SDNode *N);
+/// Return true if the specified node is a BUILD_VECTOR node of all 
+/// ConstantSDNode or undef. 
+bool isBuildVectorOfConstantSDNodes(const SDNode *N); 
 
-/// Return true if the specified node is a BUILD_VECTOR node of all
-/// ConstantFPSDNode or undef.
-bool isBuildVectorOfConstantFPSDNodes(const SDNode *N);
-
-/// Return true if the node has at least one operand and all operands of the
-/// specified node are ISD::UNDEF.
-bool allOperandsUndef(const SDNode *N);
-
+/// Return true if the specified node is a BUILD_VECTOR node of all 
+/// ConstantFPSDNode or undef. 
+bool isBuildVectorOfConstantFPSDNodes(const SDNode *N); 
+ 
+/// Return true if the node has at least one operand and all operands of the 
+/// specified node are ISD::UNDEF. 
+bool allOperandsUndef(const SDNode *N); 
+ 
 } // end namespace ISD
 
 //===----------------------------------------------------------------------===//
@@ -200,8 +200,8 @@ public:
     return getValueType().getSizeInBits();
   }
 
-  uint64_t getScalarValueSizeInBits() const {
-    return getValueType().getScalarType().getFixedSizeInBits();
+  uint64_t getScalarValueSizeInBits() const { 
+    return getValueType().getScalarType().getFixedSizeInBits(); 
   }
 
   // Forwarding methods - These forward to the corresponding methods in SDNode.
@@ -398,8 +398,8 @@ private:
 public:
   /// Default constructor turns off all optimization flags.
   SDNodeFlags()
-      : NoUnsignedWrap(false), NoSignedWrap(false), Exact(false), NoNaNs(false),
-        NoInfs(false), NoSignedZeros(false), AllowReciprocal(false),
+      : NoUnsignedWrap(false), NoSignedWrap(false), Exact(false), NoNaNs(false), 
+        NoInfs(false), NoSignedZeros(false), AllowReciprocal(false), 
         AllowContract(false), ApproximateFuncs(false),
         AllowReassociation(false), NoFPExcept(false) {}
 
@@ -415,17 +415,17 @@ public:
   }
 
   // These are mutators for each flag.
-  void setNoUnsignedWrap(bool b) { NoUnsignedWrap = b; }
-  void setNoSignedWrap(bool b) { NoSignedWrap = b; }
-  void setExact(bool b) { Exact = b; }
-  void setNoNaNs(bool b) { NoNaNs = b; }
-  void setNoInfs(bool b) { NoInfs = b; }
-  void setNoSignedZeros(bool b) { NoSignedZeros = b; }
-  void setAllowReciprocal(bool b) { AllowReciprocal = b; }
-  void setAllowContract(bool b) { AllowContract = b; }
-  void setApproximateFuncs(bool b) { ApproximateFuncs = b; }
-  void setAllowReassociation(bool b) { AllowReassociation = b; }
-  void setNoFPExcept(bool b) { NoFPExcept = b; }
+  void setNoUnsignedWrap(bool b) { NoUnsignedWrap = b; } 
+  void setNoSignedWrap(bool b) { NoSignedWrap = b; } 
+  void setExact(bool b) { Exact = b; } 
+  void setNoNaNs(bool b) { NoNaNs = b; } 
+  void setNoInfs(bool b) { NoInfs = b; } 
+  void setNoSignedZeros(bool b) { NoSignedZeros = b; } 
+  void setAllowReciprocal(bool b) { AllowReciprocal = b; } 
+  void setAllowContract(bool b) { AllowContract = b; } 
+  void setApproximateFuncs(bool b) { ApproximateFuncs = b; } 
+  void setAllowReassociation(bool b) { AllowReassociation = b; } 
+  void setNoFPExcept(bool b) { NoFPExcept = b; } 
 
   // These are accessors for each flag.
   bool hasNoUnsignedWrap() const { return NoUnsignedWrap; }
@@ -440,8 +440,8 @@ public:
   bool hasAllowReassociation() const { return AllowReassociation; }
   bool hasNoFPExcept() const { return NoFPExcept; }
 
-  /// Clear any flags in this flag set that aren't also set in Flags. All
-  /// flags will be cleared if Flags are undefined.
+  /// Clear any flags in this flag set that aren't also set in Flags. All 
+  /// flags will be cleared if Flags are undefined. 
   void intersectWith(const SDNodeFlags Flags) {
     NoUnsignedWrap &= Flags.NoUnsignedWrap;
     NoSignedWrap &= Flags.NoSignedWrap;
@@ -533,7 +533,7 @@ BEGIN_TWO_BYTE_PACK()
   class LoadSDNodeBitfields {
     friend class LoadSDNode;
     friend class MaskedLoadSDNode;
-    friend class MaskedGatherSDNode;
+    friend class MaskedGatherSDNode; 
 
     uint16_t : NumLSBaseSDNodeBits;
 
@@ -544,7 +544,7 @@ BEGIN_TWO_BYTE_PACK()
   class StoreSDNodeBitfields {
     friend class StoreSDNode;
     friend class MaskedStoreSDNode;
-    friend class MaskedScatterSDNode;
+    friend class MaskedScatterSDNode; 
 
     uint16_t : NumLSBaseSDNodeBits;
 
@@ -696,7 +696,7 @@ public:
   bool use_empty() const { return UseList == nullptr; }
 
   /// Return true if there is exactly one use of this node.
-  bool hasOneUse() const { return hasSingleElement(uses()); }
+  bool hasOneUse() const { return hasSingleElement(uses()); } 
 
   /// Return the number of uses of this node. This method takes
   /// time proportional to the number of uses.
@@ -1353,18 +1353,18 @@ public:
   }
 
   const SDValue &getChain() const { return getOperand(0); }
-
+ 
   const SDValue &getBasePtr() const {
-    switch (getOpcode()) {
-    case ISD::STORE:
-    case ISD::MSTORE:
-      return getOperand(2);
-    case ISD::MGATHER:
-    case ISD::MSCATTER:
-      return getOperand(3);
-    default:
-      return getOperand(1);
-    }
+    switch (getOpcode()) { 
+    case ISD::STORE: 
+    case ISD::MSTORE: 
+      return getOperand(2); 
+    case ISD::MGATHER: 
+    case ISD::MSCATTER: 
+      return getOperand(3); 
+    default: 
+      return getOperand(1); 
+    } 
   }
 
   // Methods to support isa and dyn_cast
@@ -1768,32 +1768,32 @@ public:
   }
 };
 
-/// This SDNode is used for PSEUDO_PROBE values, which are the function guid and
-/// the index of the basic block being probed. A pseudo probe serves as a place
-/// holder and will be removed at the end of compilation. It does not have any
-/// operand because we do not want the instruction selection to deal with any.
-class PseudoProbeSDNode : public SDNode {
-  friend class SelectionDAG;
-  uint64_t Guid;
-  uint64_t Index;
-  uint32_t Attributes;
-
-  PseudoProbeSDNode(unsigned Opcode, unsigned Order, const DebugLoc &Dl,
-                    SDVTList VTs, uint64_t Guid, uint64_t Index, uint32_t Attr)
-      : SDNode(Opcode, Order, Dl, VTs), Guid(Guid), Index(Index),
-        Attributes(Attr) {}
-
-public:
-  uint64_t getGuid() const { return Guid; }
-  uint64_t getIndex() const { return Index; }
-  uint32_t getAttributes() const { return Attributes; }
-
-  // Methods to support isa and dyn_cast
-  static bool classof(const SDNode *N) {
-    return N->getOpcode() == ISD::PSEUDO_PROBE;
-  }
-};
-
+/// This SDNode is used for PSEUDO_PROBE values, which are the function guid and 
+/// the index of the basic block being probed. A pseudo probe serves as a place 
+/// holder and will be removed at the end of compilation. It does not have any 
+/// operand because we do not want the instruction selection to deal with any. 
+class PseudoProbeSDNode : public SDNode { 
+  friend class SelectionDAG; 
+  uint64_t Guid; 
+  uint64_t Index; 
+  uint32_t Attributes; 
+ 
+  PseudoProbeSDNode(unsigned Opcode, unsigned Order, const DebugLoc &Dl, 
+                    SDVTList VTs, uint64_t Guid, uint64_t Index, uint32_t Attr) 
+      : SDNode(Opcode, Order, Dl, VTs), Guid(Guid), Index(Index), 
+        Attributes(Attr) {} 
+ 
+public: 
+  uint64_t getGuid() const { return Guid; } 
+  uint64_t getIndex() const { return Index; } 
+  uint32_t getAttributes() const { return Attributes; } 
+ 
+  // Methods to support isa and dyn_cast 
+  static bool classof(const SDNode *N) { 
+    return N->getOpcode() == ISD::PSEUDO_PROBE; 
+  } 
+}; 
+ 
 class JumpTableSDNode : public SDNode {
   friend class SelectionDAG;
 
@@ -1954,33 +1954,33 @@ public:
   /// the vector width and set the bits where elements are undef.
   SDValue getSplatValue(BitVector *UndefElements = nullptr) const;
 
-  /// Find the shortest repeating sequence of values in the build vector.
-  ///
-  /// e.g. { u, X, u, X, u, u, X, u } -> { X }
-  ///      { X, Y, u, Y, u, u, X, u } -> { X, Y }
-  ///
-  /// Currently this must be a power-of-2 build vector.
-  /// The DemandedElts mask indicates the elements that must be present,
-  /// undemanded elements in Sequence may be null (SDValue()). If passed a
-  /// non-null UndefElements bitvector, it will resize it to match the original
-  /// vector width and set the bits where elements are undef. If result is
-  /// false, Sequence will be empty.
-  bool getRepeatedSequence(const APInt &DemandedElts,
-                           SmallVectorImpl<SDValue> &Sequence,
-                           BitVector *UndefElements = nullptr) const;
-
-  /// Find the shortest repeating sequence of values in the build vector.
-  ///
-  /// e.g. { u, X, u, X, u, u, X, u } -> { X }
-  ///      { X, Y, u, Y, u, u, X, u } -> { X, Y }
-  ///
-  /// Currently this must be a power-of-2 build vector.
-  /// If passed a non-null UndefElements bitvector, it will resize it to match
-  /// the original vector width and set the bits where elements are undef.
-  /// If result is false, Sequence will be empty.
-  bool getRepeatedSequence(SmallVectorImpl<SDValue> &Sequence,
-                           BitVector *UndefElements = nullptr) const;
-
+  /// Find the shortest repeating sequence of values in the build vector. 
+  /// 
+  /// e.g. { u, X, u, X, u, u, X, u } -> { X } 
+  ///      { X, Y, u, Y, u, u, X, u } -> { X, Y } 
+  /// 
+  /// Currently this must be a power-of-2 build vector. 
+  /// The DemandedElts mask indicates the elements that must be present, 
+  /// undemanded elements in Sequence may be null (SDValue()). If passed a 
+  /// non-null UndefElements bitvector, it will resize it to match the original 
+  /// vector width and set the bits where elements are undef. If result is 
+  /// false, Sequence will be empty. 
+  bool getRepeatedSequence(const APInt &DemandedElts, 
+                           SmallVectorImpl<SDValue> &Sequence, 
+                           BitVector *UndefElements = nullptr) const; 
+ 
+  /// Find the shortest repeating sequence of values in the build vector. 
+  /// 
+  /// e.g. { u, X, u, X, u, u, X, u } -> { X } 
+  ///      { X, Y, u, Y, u, u, X, u } -> { X, Y } 
+  /// 
+  /// Currently this must be a power-of-2 build vector. 
+  /// If passed a non-null UndefElements bitvector, it will resize it to match 
+  /// the original vector width and set the bits where elements are undef. 
+  /// If result is false, Sequence will be empty. 
+  bool getRepeatedSequence(SmallVectorImpl<SDValue> &Sequence, 
+                           BitVector *UndefElements = nullptr) const; 
+ 
   /// Returns the demanded splatted constant or null if this is not a constant
   /// splat.
   ///
@@ -2436,9 +2436,9 @@ public:
   ISD::MemIndexType getIndexType() const {
     return static_cast<ISD::MemIndexType>(LSBaseSDNodeBits.AddressingMode);
   }
-  void setIndexType(ISD::MemIndexType IndexType) {
-    LSBaseSDNodeBits.AddressingMode = IndexType;
-  }
+  void setIndexType(ISD::MemIndexType IndexType) { 
+    LSBaseSDNodeBits.AddressingMode = IndexType; 
+  } 
   bool isIndexScaled() const {
     return (getIndexType() == ISD::SIGNED_SCALED) ||
            (getIndexType() == ISD::UNSIGNED_SCALED);
@@ -2471,18 +2471,18 @@ public:
 
   MaskedGatherSDNode(unsigned Order, const DebugLoc &dl, SDVTList VTs,
                      EVT MemVT, MachineMemOperand *MMO,
-                     ISD::MemIndexType IndexType, ISD::LoadExtType ETy)
+                     ISD::MemIndexType IndexType, ISD::LoadExtType ETy) 
       : MaskedGatherScatterSDNode(ISD::MGATHER, Order, dl, VTs, MemVT, MMO,
-                                  IndexType) {
-    LoadSDNodeBits.ExtTy = ETy;
-  }
+                                  IndexType) { 
+    LoadSDNodeBits.ExtTy = ETy; 
+  } 
 
   const SDValue &getPassThru() const { return getOperand(1); }
 
-  ISD::LoadExtType getExtensionType() const {
-    return ISD::LoadExtType(LoadSDNodeBits.ExtTy);
-  }
-
+  ISD::LoadExtType getExtensionType() const { 
+    return ISD::LoadExtType(LoadSDNodeBits.ExtTy); 
+  } 
+ 
   static bool classof(const SDNode *N) {
     return N->getOpcode() == ISD::MGATHER;
   }
@@ -2496,17 +2496,17 @@ public:
 
   MaskedScatterSDNode(unsigned Order, const DebugLoc &dl, SDVTList VTs,
                       EVT MemVT, MachineMemOperand *MMO,
-                      ISD::MemIndexType IndexType, bool IsTrunc)
+                      ISD::MemIndexType IndexType, bool IsTrunc) 
       : MaskedGatherScatterSDNode(ISD::MSCATTER, Order, dl, VTs, MemVT, MMO,
-                                  IndexType) {
-    StoreSDNodeBits.IsTruncating = IsTrunc;
-  }
+                                  IndexType) { 
+    StoreSDNodeBits.IsTruncating = IsTrunc; 
+  } 
 
-  /// Return true if the op does a truncation before store.
-  /// For integers this is the same as doing a TRUNCATE and storing the result.
-  /// For floats, it is the same as doing an FP_ROUND and storing the result.
-  bool isTruncatingStore() const { return StoreSDNodeBits.IsTruncating; }
-
+  /// Return true if the op does a truncation before store. 
+  /// For integers this is the same as doing a TRUNCATE and storing the result. 
+  /// For floats, it is the same as doing an FP_ROUND and storing the result. 
+  bool isTruncatingStore() const { return StoreSDNodeBits.IsTruncating; } 
+ 
   const SDValue &getValue() const { return getOperand(1); }
 
   static bool classof(const SDNode *N) {
@@ -2655,8 +2655,8 @@ template <> struct GraphTraits<SDNode*> {
 /// with 4 and 8 byte pointer alignment, respectively.
 using LargestSDNode = AlignedCharArrayUnion<AtomicSDNode, TargetIndexSDNode,
                                             BlockAddressSDNode,
-                                            GlobalAddressSDNode,
-                                            PseudoProbeSDNode>;
+                                            GlobalAddressSDNode, 
+                                            PseudoProbeSDNode>; 
 
 /// The SDNode class with the greatest alignment requirement.
 using MostAlignedSDNode = GlobalAddressSDNode;

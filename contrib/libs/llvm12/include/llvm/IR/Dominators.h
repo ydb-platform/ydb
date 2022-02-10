@@ -51,9 +51,9 @@ using BBPostDomTree = PostDomTreeBase<BasicBlock>;
 
 using BBUpdates = ArrayRef<llvm::cfg::Update<BasicBlock *>>;
 
-using BBDomTreeGraphDiff = GraphDiff<BasicBlock *, false>;
-using BBPostDomTreeGraphDiff = GraphDiff<BasicBlock *, true>;
-
+using BBDomTreeGraphDiff = GraphDiff<BasicBlock *, false>; 
+using BBPostDomTreeGraphDiff = GraphDiff<BasicBlock *, true>; 
+ 
 extern template void Calculate<BBDomTree>(BBDomTree &DT);
 extern template void CalculateWithUpdates<BBDomTree>(BBDomTree &DT,
                                                      BBUpdates U);
@@ -72,12 +72,12 @@ extern template void DeleteEdge<BBPostDomTree>(BBPostDomTree &DT,
                                                BasicBlock *From,
                                                BasicBlock *To);
 
-extern template void ApplyUpdates<BBDomTree>(BBDomTree &DT,
-                                             BBDomTreeGraphDiff &,
-                                             BBDomTreeGraphDiff *);
-extern template void ApplyUpdates<BBPostDomTree>(BBPostDomTree &DT,
-                                                 BBPostDomTreeGraphDiff &,
-                                                 BBPostDomTreeGraphDiff *);
+extern template void ApplyUpdates<BBDomTree>(BBDomTree &DT, 
+                                             BBDomTreeGraphDiff &, 
+                                             BBDomTreeGraphDiff *); 
+extern template void ApplyUpdates<BBPostDomTree>(BBPostDomTree &DT, 
+                                                 BBPostDomTreeGraphDiff &, 
+                                                 BBPostDomTreeGraphDiff *); 
 
 extern template bool Verify<BBDomTree>(const BBDomTree &DT,
                                        BBDomTree::VerificationLevel VL);
@@ -172,21 +172,21 @@ class DominatorTree : public DominatorTreeBase<BasicBlock, false> {
   // Ensure base-class overloads are visible.
   using Base::dominates;
 
-  /// Return true if value Def dominates use U, in the sense that Def is
-  /// available at U, and could be substituted as the used value without
-  /// violating the SSA dominance requirement.
+  /// Return true if value Def dominates use U, in the sense that Def is 
+  /// available at U, and could be substituted as the used value without 
+  /// violating the SSA dominance requirement. 
   ///
-  /// In particular, it is worth noting that:
-  ///  * Non-instruction Defs dominate everything.
-  ///  * Def does not dominate a use in Def itself (outside of degenerate cases
-  ///    like unreachable code or trivial phi cycles).
-  ///  * Invoke/callbr Defs only dominate uses in their default destination.
-  bool dominates(const Value *Def, const Use &U) const;
-  /// Return true if value Def dominates all possible uses inside instruction
-  /// User. Same comments as for the Use-based API apply.
-  bool dominates(const Value *Def, const Instruction *User) const;
-  // Does not accept Value to avoid ambiguity with dominance checks between
-  // two basic blocks.
+  /// In particular, it is worth noting that: 
+  ///  * Non-instruction Defs dominate everything. 
+  ///  * Def does not dominate a use in Def itself (outside of degenerate cases 
+  ///    like unreachable code or trivial phi cycles). 
+  ///  * Invoke/callbr Defs only dominate uses in their default destination. 
+  bool dominates(const Value *Def, const Use &U) const; 
+  /// Return true if value Def dominates all possible uses inside instruction 
+  /// User. Same comments as for the Use-based API apply. 
+  bool dominates(const Value *Def, const Instruction *User) const; 
+  // Does not accept Value to avoid ambiguity with dominance checks between 
+  // two basic blocks. 
   bool dominates(const Instruction *Def, const BasicBlock *BB) const;
 
   /// Return true if an edge dominates a use.

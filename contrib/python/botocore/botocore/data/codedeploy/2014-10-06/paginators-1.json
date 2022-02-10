@@ -29,21 +29,21 @@
       "input_token": "nextToken",
       "output_token": "nextToken",
       "result_key": "deployments"
-    },
-    "ListDeploymentTargets": {
-      "input_token": "nextToken",
-      "output_token": "nextToken",
-      "result_key": "targetIds"
-    },
-    "ListGitHubAccountTokenNames": {
-      "input_token": "nextToken",
-      "output_token": "nextToken",
-      "result_key": "tokenNameList"
-    },
-    "ListOnPremisesInstances": {
-      "input_token": "nextToken",
-      "output_token": "nextToken",
-      "result_key": "instanceNames"
+    }, 
+    "ListDeploymentTargets": { 
+      "input_token": "nextToken", 
+      "output_token": "nextToken", 
+      "result_key": "targetIds" 
+    }, 
+    "ListGitHubAccountTokenNames": { 
+      "input_token": "nextToken", 
+      "output_token": "nextToken", 
+      "result_key": "tokenNameList" 
+    }, 
+    "ListOnPremisesInstances": { 
+      "input_token": "nextToken", 
+      "output_token": "nextToken", 
+      "result_key": "instanceNames" 
     }
   }
 }

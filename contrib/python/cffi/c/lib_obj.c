@@ -29,7 +29,7 @@ struct LibObject_s {
     PyObject *l_libname;        /* some string that gives the name of the lib */
     FFIObject *l_ffi;           /* reference back to the ffi object */
     void *l_libhandle;          /* the dlopen()ed handle, if any */
-    int l_auto_close;           /* if we must dlclose() this handle */
+    int l_auto_close;           /* if we must dlclose() this handle */ 
 };
 
 static struct CPyExtFunc_s *_cpyextfunc_get(PyObject *x)
@@ -86,14 +86,14 @@ static PyObject *_cpyextfunc_type_index(PyObject *x)
 }
 
 static void cdlopen_close_ignore_errors(void *libhandle);  /* forward */
-static void *cdlopen_fetch(PyObject *libname, void *libhandle,
-                           const char *symbol);
+static void *cdlopen_fetch(PyObject *libname, void *libhandle, 
+                           const char *symbol); 
 
 static void lib_dealloc(LibObject *lib)
 {
-    PyObject_GC_UnTrack(lib);
-    if (lib->l_auto_close)
-        cdlopen_close_ignore_errors(lib->l_libhandle);
+    PyObject_GC_UnTrack(lib); 
+    if (lib->l_auto_close) 
+        cdlopen_close_ignore_errors(lib->l_libhandle); 
     Py_DECREF(lib->l_dict);
     Py_DECREF(lib->l_libname);
     Py_DECREF(lib->l_ffi);
@@ -130,7 +130,7 @@ static PyObject *lib_build_cpython_func(LibObject *lib,
     int i, type_index = _CFFI_GETARG(g->type_op);
     _cffi_opcode_t *opcodes = lib->l_types_builder->ctx.types;
     static const char *const format = ";\n\nCFFI C function from %s.lib";
-    const char *libname = PyText_AS_UTF8(lib->l_libname);
+    const char *libname = PyText_AS_UTF8(lib->l_libname); 
     struct funcbuilder_s funcbuilder;
 
     /* return type: */
@@ -161,14 +161,14 @@ static PyObject *lib_build_cpython_func(LibObject *lib,
     if (fb_build_name(&funcbuilder, g->name, pfargs, nargs, fresult, 0) < 0)
         goto error;
 
-    /* The few bytes of memory we allocate here appear to leak, but
-       this is not a real leak.  Indeed, CPython never unloads its C
-       extension modules.  There is only one PyMem_Malloc() per real
-       C function in a CFFI C extension module.  That means that this
-       PyMem_Malloc() could also have been written with a static
-       global variable generated for each CPYTHON_BLTN defined in the
-       C extension, and the effect would be the same (but a bit more
-       complicated).
+    /* The few bytes of memory we allocate here appear to leak, but 
+       this is not a real leak.  Indeed, CPython never unloads its C 
+       extension modules.  There is only one PyMem_Malloc() per real 
+       C function in a CFFI C extension module.  That means that this 
+       PyMem_Malloc() could also have been written with a static 
+       global variable generated for each CPYTHON_BLTN defined in the 
+       C extension, and the effect would be the same (but a bit more 
+       complicated). 
     */
     xfunc = PyMem_Malloc(sizeof(struct CPyExtFunc_s) +
                          funcbuilder.nb_bytes +
@@ -213,7 +213,7 @@ static PyObject *lib_build_and_cache_attr(LibObject *lib, PyObject *name,
     const struct _cffi_global_s *g;
     CTypeDescrObject *ct;
     builder_c_t *types_builder = lib->l_types_builder;
-    const char *s = PyText_AsUTF8(name);
+    const char *s = PyText_AsUTF8(name); 
     if (s == NULL)
         return NULL;
 
@@ -320,20 +320,20 @@ static PyObject *lib_build_and_cache_attr(LibObject *lib, PyObject *name,
                 return NULL;
         }
         else {
-            /* The few bytes of memory we allocate here appear to leak, but
-               this is not a real leak.  Indeed, CPython never unloads its C
-               extension modules.  There is only one PyMem_Malloc() per real
-               non-integer C constant in a CFFI C extension module.  That
-               means that this PyMem_Malloc() could also have been written
-               with a static global variable generated for each OP_CONSTANT
-               defined in the C extension, and the effect would be the same
-               (but a bit more complicated).
-
-               Note that we used to do alloca(), but see issue #198.  We
-               could still do alloca(), or explicit PyMem_Free(), in some
-               cases; but there is no point and it only makes the remaining
-               less-common cases more suspicious.
-            */
+            /* The few bytes of memory we allocate here appear to leak, but 
+               this is not a real leak.  Indeed, CPython never unloads its C 
+               extension modules.  There is only one PyMem_Malloc() per real 
+               non-integer C constant in a CFFI C extension module.  That 
+               means that this PyMem_Malloc() could also have been written 
+               with a static global variable generated for each OP_CONSTANT 
+               defined in the C extension, and the effect would be the same 
+               (but a bit more complicated). 
+ 
+               Note that we used to do alloca(), but see issue #198.  We 
+               could still do alloca(), or explicit PyMem_Free(), in some 
+               cases; but there is no point and it only makes the remaining 
+               less-common cases more suspicious. 
+            */ 
             assert(_CFFI_GETOP(g->type_op) == _CFFI_OP_CONSTANT);
             data = PyMem_Malloc(ct->ct_size);
             if (data == NULL) {
@@ -508,7 +508,7 @@ static PyObject *_lib_dict(LibObject *lib)
 
 static PyObject *lib_getattr(LibObject *lib, PyObject *name)
 {
-    const char *p;
+    const char *p; 
     PyObject *x;
     LIB_GET_OR_CACHE_ADDR(x, lib, name, goto missing);
 
@@ -519,7 +519,7 @@ static PyObject *lib_getattr(LibObject *lib, PyObject *name)
     return x;
 
  missing:
-    /*** ATTRIBUTEERROR IS SET HERE ***/
+    /*** ATTRIBUTEERROR IS SET HERE ***/ 
     p = PyText_AsUTF8(name);
     if (p == NULL)
         return NULL;
@@ -546,14 +546,14 @@ static PyObject *lib_getattr(LibObject *lib, PyObject *name)
         PyErr_Clear();
         return PyText_FromFormat("%s.lib", PyText_AS_UTF8(lib->l_libname));
     }
-#if PY_MAJOR_VERSION >= 3
-    if (strcmp(p, "__loader__") == 0 || strcmp(p, "__spec__") == 0) {
-        /* some more module-like behavior hacks */
-        PyErr_Clear();
-        Py_INCREF(Py_None);
-        return Py_None;
-    }
-#endif
+#if PY_MAJOR_VERSION >= 3 
+    if (strcmp(p, "__loader__") == 0 || strcmp(p, "__spec__") == 0) { 
+        /* some more module-like behavior hacks */ 
+        PyErr_Clear(); 
+        Py_INCREF(Py_None); 
+        return Py_None; 
+    } 
+#endif 
     return NULL;
 }
 
@@ -589,7 +589,7 @@ static PyMethodDef lib_methods[] = {
 
 static PyTypeObject Lib_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "_cffi_backend.Lib",
+    "_cffi_backend.Lib", 
     sizeof(LibObject),
     0,
     (destructor)lib_dealloc,                    /* tp_dealloc */
@@ -625,8 +625,8 @@ static PyTypeObject Lib_Type = {
     offsetof(LibObject, l_dict),                /* tp_dictoffset */
 };
 
-static LibObject *lib_internal_new(FFIObject *ffi, const char *module_name,
-                                   void *dlopen_libhandle, int auto_close)
+static LibObject *lib_internal_new(FFIObject *ffi, const char *module_name, 
+                                   void *dlopen_libhandle, int auto_close) 
 {
     LibObject *lib;
     PyObject *libname, *dict;
@@ -649,7 +649,7 @@ static LibObject *lib_internal_new(FFIObject *ffi, const char *module_name,
     Py_INCREF(ffi);
     lib->l_ffi = ffi;
     lib->l_libhandle = dlopen_libhandle;
-    lib->l_auto_close = auto_close;
+    lib->l_auto_close = auto_close; 
     return lib;
 
  err3:
@@ -657,8 +657,8 @@ static LibObject *lib_internal_new(FFIObject *ffi, const char *module_name,
  err2:
     Py_DECREF(libname);
  err1:
-    if (auto_close)
-        cdlopen_close_ignore_errors(dlopen_libhandle);
+    if (auto_close) 
+        cdlopen_close_ignore_errors(dlopen_libhandle); 
     return NULL;
 }
 

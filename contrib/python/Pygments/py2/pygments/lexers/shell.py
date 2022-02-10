@@ -154,9 +154,9 @@ class ShellSessionBaseLexer(Lexer):
 
     .. versionadded:: 2.1
     """
-
-    _venv = re.compile(r'^(\([^)]*\))(\s*)')
-
+ 
+    _venv = re.compile(r'^(\([^)]*\))(\s*)') 
+ 
     def get_tokens_unprocessed(self, text):
         innerlexer = self._innerLexerCls(**self.options)
 
@@ -170,21 +170,21 @@ class ShellSessionBaseLexer(Lexer):
             if backslash_continuation:
                 curcode += line
                 backslash_continuation = curcode.endswith('\\\n')
-                continue
-            
-            venv_match = self._venv.match(line)
-            if venv_match:
-                venv = venv_match.group(1)
-                venv_whitespace = venv_match.group(2)
-                insertions.append((len(curcode),
-                    [(0, Generic.Prompt.VirtualEnv, venv)]))
-                if venv_whitespace:
-                    insertions.append((len(curcode),
-                        [(0, Text, venv_whitespace)]))
-                line = line[venv_match.end():]
-
-            m = self._ps1rgx.match(line)
-            if m:
+                continue 
+             
+            venv_match = self._venv.match(line) 
+            if venv_match: 
+                venv = venv_match.group(1) 
+                venv_whitespace = venv_match.group(2) 
+                insertions.append((len(curcode), 
+                    [(0, Generic.Prompt.VirtualEnv, venv)])) 
+                if venv_whitespace: 
+                    insertions.append((len(curcode), 
+                        [(0, Text, venv_whitespace)])) 
+                line = line[venv_match.end():] 
+ 
+            m = self._ps1rgx.match(line) 
+            if m: 
                 # To support output lexers (say diff output), the output
                 # needs to be broken by prompts whenever the output lexer
                 # changes.
@@ -227,9 +227,9 @@ class BashSessionLexer(ShellSessionBaseLexer):
     mimetypes = ['application/x-shell-session', 'application/x-sh-session']
 
     _innerLexerCls = BashLexer
-    _ps1rgx = re.compile(
+    _ps1rgx = re.compile( 
         r'^((?:(?:\[.*?\])|(?:\(\S+\))?(?:| |sh\S*?|\w+\S+[@:]\S+(?:\s+\S+)' \
-        r'?|\[\S+[@:][^\n]+\].+))\s*[$#%])(.*\n?)')
+        r'?|\[\S+[@:][^\n]+\].+))\s*[$#%])(.*\n?)') 
     _ps2 = '>'
 
 
@@ -556,7 +556,7 @@ class MSDOSSessionLexer(ShellSessionBaseLexer):
     mimetypes = []
 
     _innerLexerCls = BatchLexer
-    _ps1rgx = re.compile(r'^([^>]*>)(.*\n?)')
+    _ps1rgx = re.compile(r'^([^>]*>)(.*\n?)') 
     _ps2 = 'More? '
 
 
@@ -641,7 +641,7 @@ class TcshSessionLexer(ShellSessionBaseLexer):
     mimetypes = []
 
     _innerLexerCls = TcshLexer
-    _ps1rgx = re.compile(r'^([^>]+>)(.*\n?)')
+    _ps1rgx = re.compile(r'^([^>]+>)(.*\n?)') 
     _ps2 = '? '
 
 
@@ -772,7 +772,7 @@ class PowerShellSessionLexer(ShellSessionBaseLexer):
     mimetypes = []
 
     _innerLexerCls = PowerShellLexer
-    _ps1rgx = re.compile(r'^(PS [^>]+> )(.*\n?)')
+    _ps1rgx = re.compile(r'^(PS [^>]+> )(.*\n?)') 
     _ps2 = '>> '
 
 

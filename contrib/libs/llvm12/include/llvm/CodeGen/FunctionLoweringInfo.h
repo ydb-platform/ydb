@@ -98,34 +98,34 @@ public:
   /// Track virtual registers created for exception pointers.
   DenseMap<const Value *, Register> CatchPadExceptionPointers;
 
-  /// Helper object to track which of three possible relocation mechanisms are
-  /// used for a particular value being relocated over a statepoint.
-  struct StatepointRelocationRecord {
-    enum RelocType {
-      // Value did not need to be relocated and can be used directly.
-      NoRelocate,
-      // Value was spilled to stack and needs filled at the gc.relocate.
-      Spill,
-      // Value was lowered to tied def and gc.relocate should be replaced with
-      // copy from vreg.
-      VReg,
-    } type = NoRelocate;
-    // Payload contains either frame index of the stack slot in which the value
-    // was spilled, or virtual register which contains the re-definition.
-    union payload_t {
-      payload_t() : FI(-1) {}
-      int FI;
-      Register Reg;
-    } payload;
-  };
+  /// Helper object to track which of three possible relocation mechanisms are 
+  /// used for a particular value being relocated over a statepoint. 
+  struct StatepointRelocationRecord { 
+    enum RelocType { 
+      // Value did not need to be relocated and can be used directly. 
+      NoRelocate, 
+      // Value was spilled to stack and needs filled at the gc.relocate. 
+      Spill, 
+      // Value was lowered to tied def and gc.relocate should be replaced with 
+      // copy from vreg. 
+      VReg, 
+    } type = NoRelocate; 
+    // Payload contains either frame index of the stack slot in which the value 
+    // was spilled, or virtual register which contains the re-definition. 
+    union payload_t { 
+      payload_t() : FI(-1) {} 
+      int FI; 
+      Register Reg; 
+    } payload; 
+  }; 
 
-  /// Keep track of each value which was relocated and the strategy used to
-  /// relocate that value.  This information is required when visiting
-  /// gc.relocates which may appear in following blocks.
-  using StatepointSpillMapTy =
-    DenseMap<const Value *, StatepointRelocationRecord>;
-  DenseMap<const Instruction *, StatepointSpillMapTy> StatepointRelocationMaps;
-
+  /// Keep track of each value which was relocated and the strategy used to 
+  /// relocate that value.  This information is required when visiting 
+  /// gc.relocates which may appear in following blocks. 
+  using StatepointSpillMapTy = 
+    DenseMap<const Value *, StatepointRelocationRecord>; 
+  DenseMap<const Instruction *, StatepointSpillMapTy> StatepointRelocationMaps; 
+ 
   /// StaticAllocaMap - Keep track of frame indices for fixed sized allocas in
   /// the entry block.  This allows the allocas to be efficiently referenced
   /// anywhere in the function.

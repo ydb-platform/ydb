@@ -14,7 +14,7 @@ import os
 import threading
 import collections
 import time
-import types
+import types 
 import weakref
 import errno
 
@@ -49,7 +49,7 @@ class Queue(object):
         self._sem = ctx.BoundedSemaphore(maxsize)
         # For use by concurrent.futures
         self._ignore_epipe = False
-        self._reset()
+        self._reset() 
 
         if sys.platform != 'win32':
             register_after_fork(self, Queue._after_fork)
@@ -62,17 +62,17 @@ class Queue(object):
     def __setstate__(self, state):
         (self._ignore_epipe, self._maxsize, self._reader, self._writer,
          self._rlock, self._wlock, self._sem, self._opid) = state
-        self._reset()
+        self._reset() 
 
     def _after_fork(self):
         debug('Queue._after_fork()')
-        self._reset(after_fork=True)
-
-    def _reset(self, after_fork=False):
-        if after_fork:
-            self._notempty._at_fork_reinit()
-        else:
-            self._notempty = threading.Condition(threading.Lock())
+        self._reset(after_fork=True) 
+ 
+    def _reset(self, after_fork=False): 
+        if after_fork: 
+            self._notempty._at_fork_reinit() 
+        else: 
+            self._notempty = threading.Condition(threading.Lock()) 
         self._buffer = collections.deque()
         self._thread = None
         self._jointhread = None
@@ -84,8 +84,8 @@ class Queue(object):
         self._poll = self._reader.poll
 
     def put(self, obj, block=True, timeout=None):
-        if self._closed:
-            raise ValueError(f"Queue {self!r} is closed")
+        if self._closed: 
+            raise ValueError(f"Queue {self!r} is closed") 
         if not self._sem.acquire(block, timeout):
             raise Full
 
@@ -96,8 +96,8 @@ class Queue(object):
             self._notempty.notify()
 
     def get(self, block=True, timeout=None):
-        if self._closed:
-            raise ValueError(f"Queue {self!r} is closed")
+        if self._closed: 
+            raise ValueError(f"Queue {self!r} is closed") 
         if block and timeout is None:
             with self._rlock:
                 res = self._recv_bytes()
@@ -307,8 +307,8 @@ class JoinableQueue(Queue):
         self._cond, self._unfinished_tasks = state[-2:]
 
     def put(self, obj, block=True, timeout=None):
-        if self._closed:
-            raise ValueError(f"Queue {self!r} is closed")
+        if self._closed: 
+            raise ValueError(f"Queue {self!r} is closed") 
         if not self._sem.acquire(block, timeout):
             raise Full
 
@@ -346,10 +346,10 @@ class SimpleQueue(object):
         else:
             self._wlock = ctx.Lock()
 
-    def close(self):
-        self._reader.close()
-        self._writer.close()
-
+    def close(self): 
+        self._reader.close() 
+        self._writer.close() 
+ 
     def empty(self):
         return not self._poll()
 
@@ -376,5 +376,5 @@ class SimpleQueue(object):
         else:
             with self._wlock:
                 self._writer.send_bytes(obj)
-
-    __class_getitem__ = classmethod(types.GenericAlias)
+ 
+    __class_getitem__ = classmethod(types.GenericAlias) 

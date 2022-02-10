@@ -30,8 +30,8 @@
 #include <io.h>
 #define S_IRUSR _S_IREAD
 #define S_IWUSR _S_IWRITE
-#define stat _stat64
-#define fstat _fstat64
+#define stat _stat64 
+#define fstat _fstat64 
 #else
 #include <unistd.h>
 #define O_BINARY 0

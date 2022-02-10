@@ -244,7 +244,7 @@ class XsltLexer(XmlLexer):
     filenames = ['*.xsl', '*.xslt', '*.xpl']  # xpl is XProc
     mimetypes = ['application/xsl+xml', 'application/xslt+xml']
 
-    EXTRA_KEYWORDS = {
+    EXTRA_KEYWORDS = { 
         'apply-imports', 'apply-templates', 'attribute',
         'attribute-set', 'call-template', 'choose', 'comment',
         'copy', 'copy-of', 'decimal-format', 'element', 'fallback',
@@ -253,7 +253,7 @@ class XsltLexer(XmlLexer):
         'preserve-space', 'processing-instruction', 'sort',
         'strip-space', 'stylesheet', 'template', 'text', 'transform',
         'value-of', 'variable', 'when', 'with-param'
-    }
+    } 
 
     def get_tokens_unprocessed(self, text):
         for index, token, value in XmlLexer.get_tokens_unprocessed(self, text):

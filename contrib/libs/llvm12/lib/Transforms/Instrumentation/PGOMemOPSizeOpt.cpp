@@ -22,7 +22,7 @@
 #include "llvm/Analysis/DomTreeUpdater.h"
 #include "llvm/Analysis/GlobalsModRef.h"
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Analysis/TargetLibraryInfo.h" 
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
@@ -39,8 +39,8 @@
 #include "llvm/Pass.h"
 #include "llvm/PassRegistry.h"
 #include "llvm/ProfileData/InstrProf.h"
-#define INSTR_PROF_VALUE_PROF_MEMOP_API
-#include "llvm/ProfileData/InstrProfData.inc"
+#define INSTR_PROF_VALUE_PROF_MEMOP_API 
+#include "llvm/ProfileData/InstrProfData.inc" 
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -97,10 +97,10 @@ cl::opt<bool>
                        cl::Hidden,
                        cl::desc("Size-specialize memcmp and bcmp calls"));
 
-static cl::opt<unsigned>
-    MemOpMaxOptSize("memop-value-prof-max-opt-size", cl::Hidden, cl::init(128),
-                    cl::desc("Optimize the memop size <= this value"));
-
+static cl::opt<unsigned> 
+    MemOpMaxOptSize("memop-value-prof-max-opt-size", cl::Hidden, cl::init(128), 
+                    cl::desc("Optimize the memop size <= this value")); 
+ 
 namespace {
 class PGOMemOPSizeOptLegacyPass : public FunctionPass {
 public:
@@ -254,7 +254,7 @@ public:
     LibFunc Func;
     if (TLI.getLibFunc(CI, Func) &&
         (Func == LibFunc_memcmp || Func == LibFunc_bcmp) &&
-        !isa<ConstantInt>(CI.getArgOperand(2))) {
+        !isa<ConstantInt>(CI.getArgOperand(2))) { 
       WorkList.push_back(MemOp(&CI));
     }
   }
@@ -346,7 +346,7 @@ bool MemOPSizeOpt::perform(MemOp MO) {
     if (MemOPScaleCount)
       C = getScaledCount(C, ActualCount, SavedTotalCount);
 
-    if (!InstrProfIsSingleValRange(V) || V > MemOpMaxOptSize)
+    if (!InstrProfIsSingleValRange(V) || V > MemOpMaxOptSize) 
       continue;
 
     // ValueCounts are sorted on the count. Break at the first un-profitable

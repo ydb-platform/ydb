@@ -46,43 +46,43 @@ NOTE: uriparser is looking for help with a few things:
   * Added: Test suite invocation for MinGW using Wine (GitHub #120)
   * Soname: 1:29:0 — see https://verbump.de/ for what these numbers do
 
-2021-03-18 -- 0.9.5
-
-  * Fixed: Fix a bug regarding section "5.2.4. Remove Dot Segments"
-      of RFC 3986 that affected both normalization and reference resolution
-      with regard to trailing slashes (GitHub #92, #97)
-      Thanks to Dan Pape for the report!
-  * Fixed: MinGW: Fix name of static library (GitHub #90)
-      Thanks to SpaceIm for the patch and Sandro Mani for review!
-  * Fixed: Use correct inline marker "__forceinline" for Intel C++ Compiler
-      (GitHub #93)
-      Thanks to jensenrichardson for the patch!
-  * Fixed: Link against pthreads for (default) -DURIPARSER_BUILD_TESTS=ON
-      (GitHub #99, #100)
-  * Fixed: When integrated using CMake function add_subdirectory, installation
-      could fail due to lack of prefix ${CMAKE_CURRENT_SOURCE_DIR} (GitHub #98)
-      Thanks for the patch to Shehzan Mohammed!
-  * Fixed: Addressed MSVC compile warning about lack of /EHsc when compiling
-      the C++ test suite code (GitHub #102)
-  * Fixed: Stopped misadvertising wide characters as Unicode support
-      (GitHub #104)
-  * Added: CMake option URIPARSER_WARNINGS_AS_ERRORS=(ON|OFF)
-      to turn compile warnings into errors, defaults to "OFF" (GitHub #102)
-  * Improved: pkg-config: Use ${prefix} and ${exec_prefix} to ease
-      overriding variables using --define-variable=NAME=VALUE,
-      e.g. as done on OpenWRT (GitHub #91)
-      Thanks to Karel Kočí for the pull request!
-  * Improved: Auto-detection of the qhelpgenerator command based on CMake
-      package "Qt5Help" when available.  CMake option "QHG_LOCATION" can still
-      be used to enforce a specific location (GitHub #103)
-      Thanks for his help to Andreas Sturmlechner!
-  * Improved: Make documentation use pkg-config in example on how to
-      check for uriparser from within configure.ac (GNU Autoconf)
-      (GitHub #37, #106)
-  * Improved: In testing code, add a missing 'extern "C"' (GitHub #109)
-      Thanks to Jørgen Ibsen for the patch!
-  * Soname: 1:28:0 — see https://verbump.de/ for what these numbers do
-
+2021-03-18 -- 0.9.5 
+ 
+  * Fixed: Fix a bug regarding section "5.2.4. Remove Dot Segments" 
+      of RFC 3986 that affected both normalization and reference resolution 
+      with regard to trailing slashes (GitHub #92, #97) 
+      Thanks to Dan Pape for the report! 
+  * Fixed: MinGW: Fix name of static library (GitHub #90) 
+      Thanks to SpaceIm for the patch and Sandro Mani for review! 
+  * Fixed: Use correct inline marker "__forceinline" for Intel C++ Compiler 
+      (GitHub #93) 
+      Thanks to jensenrichardson for the patch! 
+  * Fixed: Link against pthreads for (default) -DURIPARSER_BUILD_TESTS=ON 
+      (GitHub #99, #100) 
+  * Fixed: When integrated using CMake function add_subdirectory, installation 
+      could fail due to lack of prefix ${CMAKE_CURRENT_SOURCE_DIR} (GitHub #98) 
+      Thanks for the patch to Shehzan Mohammed! 
+  * Fixed: Addressed MSVC compile warning about lack of /EHsc when compiling 
+      the C++ test suite code (GitHub #102) 
+  * Fixed: Stopped misadvertising wide characters as Unicode support 
+      (GitHub #104) 
+  * Added: CMake option URIPARSER_WARNINGS_AS_ERRORS=(ON|OFF) 
+      to turn compile warnings into errors, defaults to "OFF" (GitHub #102) 
+  * Improved: pkg-config: Use ${prefix} and ${exec_prefix} to ease 
+      overriding variables using --define-variable=NAME=VALUE, 
+      e.g. as done on OpenWRT (GitHub #91) 
+      Thanks to Karel Kočí for the pull request! 
+  * Improved: Auto-detection of the qhelpgenerator command based on CMake 
+      package "Qt5Help" when available.  CMake option "QHG_LOCATION" can still 
+      be used to enforce a specific location (GitHub #103) 
+      Thanks for his help to Andreas Sturmlechner! 
+  * Improved: Make documentation use pkg-config in example on how to 
+      check for uriparser from within configure.ac (GNU Autoconf) 
+      (GitHub #37, #106) 
+  * Improved: In testing code, add a missing 'extern "C"' (GitHub #109) 
+      Thanks to Jørgen Ibsen for the patch! 
+  * Soname: 1:28:0 — see https://verbump.de/ for what these numbers do 
+ 
 2020-05-31 -- 0.9.4
 
   * Fixed: testrunner: No longer crashes when compiled with NDEBUG (GitHub #67)
@@ -103,7 +103,7 @@ NOTE: uriparser is looking for help with a few things:
   * Added: CMake option URIPARSER_ENABLE_INSTALL to toggle installation of
       files, defaults to "ON" (GitHub #74, #75)
       Thanks to Scott Donelan for the patch!
-  * Soname: 1:27:0
+  * Soname: 1:27:0 
 
 2019-04-28 -- 0.9.3
 
@@ -568,7 +568,7 @@ NOTE: uriparser is looking for help with a few things:
 2007-03-26 -- 0.3.0
 
   * Added: New API, old marked deprecated
-  * Added: Added support for wide strings (think wchar_t)
+  * Added: Added support for wide strings (think wchar_t) 
   * Added: Doxygen code documentation
   * Added: Test suite using CppTest
   * Changed: Library code is now licensed under the new BSD license.

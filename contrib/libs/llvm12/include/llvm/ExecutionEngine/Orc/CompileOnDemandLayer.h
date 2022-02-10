@@ -30,7 +30,7 @@
 #include "llvm/ExecutionEngine/Orc/Layer.h"
 #include "llvm/ExecutionEngine/Orc/LazyReexports.h"
 #include "llvm/ExecutionEngine/Orc/Speculation.h"
-#include "llvm/ExecutionEngine/Orc/Shared/OrcError.h"
+#include "llvm/ExecutionEngine/Orc/Shared/OrcError.h" 
 #include "llvm/ExecutionEngine/RuntimeDyld.h"
 #include "llvm/IR/Attributes.h"
 #include "llvm/IR/Constant.h"
@@ -101,8 +101,8 @@ public:
 
   /// Emits the given module. This should not be called by clients: it will be
   /// called by the JIT when a definition added via the add method is requested.
-  void emit(std::unique_ptr<MaterializationResponsibility> R,
-            ThreadSafeModule TSM) override;
+  void emit(std::unique_ptr<MaterializationResponsibility> R, 
+            ThreadSafeModule TSM) override; 
 
 private:
   struct PerDylibResources {
@@ -126,8 +126,8 @@ private:
 
   void expandPartition(GlobalValueSet &Partition);
 
-  void emitPartition(std::unique_ptr<MaterializationResponsibility> R,
-                     ThreadSafeModule TSM,
+  void emitPartition(std::unique_ptr<MaterializationResponsibility> R, 
+                     ThreadSafeModule TSM, 
                      IRMaterializationUnit::SymbolNameToDefinitionMap Defs);
 
   mutable std::mutex CODLayerMutex;

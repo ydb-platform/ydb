@@ -1,2 +1,2 @@
-exclude:
-- tests/integration/.+
+exclude: 
+- tests/integration/.+ 

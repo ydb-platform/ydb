@@ -1,15 +1,15 @@
-PY2_LIBRARY()
+PY2_LIBRARY() 
 
 OWNER(g:python-contrib)
 
-VERSION(0.13.1)
+VERSION(0.13.1) 
 
-LICENSE(MIT)
-
-PEERDIR(
-    contrib/python/importlib-metadata
-)
-
+LICENSE(MIT) 
+ 
+PEERDIR( 
+    contrib/python/importlib-metadata 
+) 
+ 
 NO_LINT()
 
 PY_SRCS(
@@ -22,14 +22,14 @@ PY_SRCS(
     pluggy/manager.py
 )
 
-RESOURCE_FILES(
-    PREFIX contrib/python/pluggy/py2/
-    .dist-info/METADATA
-    .dist-info/top_level.txt
-)
-
+RESOURCE_FILES( 
+    PREFIX contrib/python/pluggy/py2/ 
+    .dist-info/METADATA 
+    .dist-info/top_level.txt 
+) 
+ 
 END()
-
-RECURSE_FOR_TESTS(
-    tests
-)
+ 
+RECURSE_FOR_TESTS( 
+    tests 
+) 

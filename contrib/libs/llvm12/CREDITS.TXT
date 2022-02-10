@@ -163,7 +163,7 @@ E: foldr@codedgers.com
 D: Author of llvmc2
 
 N: Dan Gohman
-E: llvm@sunfishcode.online
+E: llvm@sunfishcode.online 
 D: Miscellaneous bug fixes
 D: WebAssembly Backend
 
@@ -337,10 +337,10 @@ N: Michael McCracken
 E: michael.mccracken@gmail.com
 D: Line number support for llvmgcc
 
-N: Fanbo Meng
-E: fanbo.meng@ibm.com
-D: z/OS support
-
+N: Fanbo Meng 
+E: fanbo.meng@ibm.com 
+D: z/OS support 
+ 
 N: Vladimir Merzliakov
 E: wanderer@rsu.ru
 D: Test suite fixes for FreeBSD
@@ -482,10 +482,10 @@ E: rspencer@reidspencer.com
 W: http://reidspencer.com/
 D: Lots of stuff, see: http://wiki.llvm.org/index.php/User:Reid
 
-N: Abhina Sreeskantharajan
-E: Abhina.Sreeskantharajan@ibm.com
-D: z/OS support
-
+N: Abhina Sreeskantharajan 
+E: Abhina.Sreeskantharajan@ibm.com 
+D: z/OS support 
+ 
 N: Alp Toker
 E: alp@nuanti.com
 W: http://atoker.com/
@@ -530,9 +530,9 @@ N: Li Jia He
 E: hljhehlj@cn.ibm.com
 D: PowerPC Backend Developer
 
-N: Zi Xuan Wu
-N: Zeson
-E: zixuan.wu@linux.alibaba.com
+N: Zi Xuan Wu 
+N: Zeson 
+E: zixuan.wu@linux.alibaba.com 
 
 N: Kang Zhang
 E: shkzhang@cn.ibm.com
@@ -545,7 +545,7 @@ D: PowerPC Backend Developer
 N: Djordje Todorovic
 E: djordje.todorovic@rt-rk.com
 D: Debug Information
-
-N: Biplob Mishra
-E: biplmish@in.ibm.com
-D: PowerPC Analysis
+ 
+N: Biplob Mishra 
+E: biplmish@in.ibm.com 
+D: PowerPC Analysis 

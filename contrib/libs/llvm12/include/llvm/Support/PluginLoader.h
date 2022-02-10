@@ -23,12 +23,12 @@
 #ifndef LLVM_SUPPORT_PLUGINLOADER_H
 #define LLVM_SUPPORT_PLUGINLOADER_H
 
-#ifndef DONT_GET_PLUGIN_LOADER_OPTION
+#ifndef DONT_GET_PLUGIN_LOADER_OPTION 
 #include "llvm/Support/CommandLine.h"
-#endif
+#endif 
 
-#include <string>
-
+#include <string> 
+ 
 namespace llvm {
   struct PluginLoader {
     void operator=(const std::string &Filename);

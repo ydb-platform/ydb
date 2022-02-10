@@ -8,8 +8,8 @@ from .filters import CLIFilter, to_cli_filter
 from .key_binding.bindings.basic import load_basic_bindings
 from .key_binding.bindings.emacs import load_emacs_bindings
 from .key_binding.bindings.vi import load_vi_bindings
-from .key_binding.registry import BaseRegistry
-from .key_binding.defaults import load_key_bindings
+from .key_binding.registry import BaseRegistry 
+from .key_binding.defaults import load_key_bindings 
 from .layout import Window
 from .layout.containers import Container
 from .layout.controls import BufferControl
@@ -50,17 +50,17 @@ class Application(object):
     :param buffer: A :class:`~prompt_toolkit.buffer.Buffer` instance for the default buffer.
     :param initial_focussed_buffer: Name of the buffer that is focussed during start-up.
     :param key_bindings_registry:
-        :class:`~prompt_toolkit.key_binding.registry.BaseRegistry` instance for
-        the key bindings.
+        :class:`~prompt_toolkit.key_binding.registry.BaseRegistry` instance for 
+        the key bindings. 
     :param clipboard: :class:`~prompt_toolkit.clipboard.base.Clipboard` to use.
     :param on_abort: What to do when Control-C is pressed.
     :param on_exit: What to do when Control-D is pressed.
     :param use_alternate_screen: When True, run the application on the alternate screen buffer.
     :param get_title: Callable that returns the current title to be displayed in the terminal.
     :param erase_when_done: (bool) Clear the application output when it finishes.
-    :param reverse_vi_search_direction: Normally, in Vi mode, a '/' searches
-        forward and a '?' searches backward. In readline mode, this is usually
-        reversed.
+    :param reverse_vi_search_direction: Normally, in Vi mode, a '/' searches 
+        forward and a '?' searches backward. In readline mode, this is usually 
+        reversed. 
 
     Filters:
 
@@ -94,7 +94,7 @@ class Application(object):
 
                  paste_mode=False, ignore_case=False, editing_mode=EditingMode.EMACS,
                  erase_when_done=False,
-                 reverse_vi_search_direction=False,
+                 reverse_vi_search_direction=False, 
 
                  on_input_timeout=None, on_start=None, on_stop=None,
                  on_reset=None, on_initialize=None, on_buffer_changed=None,
@@ -103,12 +103,12 @@ class Application(object):
         paste_mode = to_cli_filter(paste_mode)
         ignore_case = to_cli_filter(ignore_case)
         mouse_support = to_cli_filter(mouse_support)
-        reverse_vi_search_direction = to_cli_filter(reverse_vi_search_direction)
+        reverse_vi_search_direction = to_cli_filter(reverse_vi_search_direction) 
 
         assert layout is None or isinstance(layout, Container)
         assert buffer is None or isinstance(buffer, Buffer)
         assert buffers is None or isinstance(buffers, (dict, BufferMapping))
-        assert key_bindings_registry is None or isinstance(key_bindings_registry, BaseRegistry)
+        assert key_bindings_registry is None or isinstance(key_bindings_registry, BaseRegistry) 
         assert clipboard is None or isinstance(clipboard, Clipboard)
         assert on_abort in AbortAction._all
         assert on_exit in AbortAction._all
@@ -151,7 +151,7 @@ class Application(object):
         self.style = style or DEFAULT_STYLE
 
         if key_bindings_registry is None:
-            key_bindings_registry = load_key_bindings()
+            key_bindings_registry = load_key_bindings() 
 
         if get_title is None:
             get_title = lambda: None
@@ -168,7 +168,7 @@ class Application(object):
         self.ignore_case = ignore_case
         self.editing_mode = editing_mode
         self.erase_when_done = erase_when_done
-        self.reverse_vi_search_direction = reverse_vi_search_direction
+        self.reverse_vi_search_direction = reverse_vi_search_direction 
 
         def dummy_handler(cli):
             " Dummy event handler. "
@@ -181,12 +181,12 @@ class Application(object):
         self.on_buffer_changed = on_buffer_changed or dummy_handler
         self.on_render = on_render or dummy_handler
         self.on_invalidate = on_invalidate or dummy_handler
-
-        # List of 'extra' functions to execute before a CommandLineInterface.run.
-        # Note: It's important to keep this here, and not in the
-        #       CommandLineInterface itself. shortcuts.run_application creates
-        #       a new Application instance everytime. (Which is correct, it
-        #       could be that we want to detach from one IO backend and attach
-        #       the UI on a different backend.) But important is to keep as
-        #       much state as possible between runs.
-        self.pre_run_callables = []
+ 
+        # List of 'extra' functions to execute before a CommandLineInterface.run. 
+        # Note: It's important to keep this here, and not in the 
+        #       CommandLineInterface itself. shortcuts.run_application creates 
+        #       a new Application instance everytime. (Which is correct, it 
+        #       could be that we want to detach from one IO backend and attach 
+        #       the UI on a different backend.) But important is to keep as 
+        #       much state as possible between runs. 
+        self.pre_run_callables = [] 

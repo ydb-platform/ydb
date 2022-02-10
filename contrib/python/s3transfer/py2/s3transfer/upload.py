@@ -61,7 +61,7 @@ class AggregatedProgressCallback(object):
 class InterruptReader(object):
     """Wrapper that can interrupt reading using an error
 
-    It uses a transfer coordinator to propagate an error if it notices
+    It uses a transfer coordinator to propagate an error if it notices 
     that a read is being made while the file is being read from.
 
     :type fileobj: file-like obj
@@ -85,8 +85,8 @@ class InterruptReader(object):
             raise self._transfer_coordinator.exception
         return self._fileobj.read(amount)
 
-    def seek(self, where, whence=0):
-        self._fileobj.seek(where, whence)
+    def seek(self, where, whence=0): 
+        self._fileobj.seek(where, whence) 
 
     def tell(self):
         return self._fileobj.tell()
@@ -333,10 +333,10 @@ class UploadSeekableInputManager(UploadFilenameInputManager):
         # since there is not really a mechanism in python (i.e. os.dup
         # points to the same OS filehandle which causes concurrency
         # issues). So instead we need to read from the fileobj and
-        # chunk the data out to separate file-like objects in memory.
+        # chunk the data out to separate file-like objects in memory. 
         data = fileobj.read(kwargs['part_size'])
         # We return the length of the data instead of the full_file_size
-        # because we partitioned the data into separate BytesIO objects
+        # because we partitioned the data into separate BytesIO objects 
         # meaning the BytesIO object has no knowledge of its start position
         # relative the input source nor access to the rest of the input
         # source. So we must treat it as its own standalone file.
@@ -439,7 +439,7 @@ class UploadNonSeekableInputManager(UploadInputManager):
         if len(self._initial_data) == 0:
             return fileobj.read(amount)
 
-        # If the requested number of bytes is less than the amount of
+        # If the requested number of bytes is less than the amount of 
         # initial data, pull entirely from initial data.
         if amount <= len(self._initial_data):
             data = self._initial_data[:amount]
@@ -490,16 +490,16 @@ class UploadSubmissionTask(SubmissionTask):
         'SSECustomerAlgorithm',
         'SSECustomerKeyMD5',
         'RequestPayer',
-        'ExpectedBucketOwner'
+        'ExpectedBucketOwner' 
     ]
 
     COMPLETE_MULTIPART_ARGS = [
-        'RequestPayer',
-        'ExpectedBucketOwner'
+        'RequestPayer', 
+        'ExpectedBucketOwner' 
     ]
 
     def _get_upload_input_manager_cls(self, transfer_future):
-        """Retrieves a class for managing input for an upload based on file type
+        """Retrieves a class for managing input for an upload based on file type 
 
         :type transfer_future: s3transfer.futures.TransferFuture
         :param transfer_future: The transfer future for the request

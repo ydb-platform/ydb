@@ -11,7 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/SmallVector.h" 
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
@@ -147,7 +147,7 @@ void AsmPrinter::emitInlineAsm(StringRef Str, const MCSubtargetInfo &STI,
   // we only need MCInstrInfo for asm parsing. We create one unconditionally
   // because it's not subtarget dependent.
   std::unique_ptr<MCInstrInfo> MII(TM.getTarget().createMCInstrInfo());
-  assert(MII && "Failed to create instruction info");
+  assert(MII && "Failed to create instruction info"); 
   std::unique_ptr<MCTargetAsmParser> TAP(TM.getTarget().createMCAsmParser(
       STI, *Parser, *MII, MCOptions));
   if (!TAP)
@@ -234,8 +234,8 @@ static void EmitMSInlineAsmStr(const char *AsmStr, const MachineInstr *MI,
 
       const char *IDStart = LastEmitted;
       const char *IDEnd = IDStart;
-      while (isDigit(*IDEnd))
-        ++IDEnd;
+      while (isDigit(*IDEnd)) 
+        ++IDEnd; 
 
       unsigned Val;
       if (StringRef(IDStart, IDEnd-IDStart).getAsInteger(10, Val))
@@ -400,8 +400,8 @@ static void EmitGCCInlineAsmStr(const char *AsmStr, const MachineInstr *MI,
 
       const char *IDStart = LastEmitted;
       const char *IDEnd = IDStart;
-      while (isDigit(*IDEnd))
-        ++IDEnd;
+      while (isDigit(*IDEnd)) 
+        ++IDEnd; 
 
       unsigned Val;
       if (StringRef(IDStart, IDEnd-IDStart).getAsInteger(10, Val))
@@ -551,23 +551,23 @@ void AsmPrinter::emitInlineAsm(const MachineInstr *MI) const {
     EmitMSInlineAsmStr(AsmStr, MI, MMI, AP, LocCookie, OS);
 
   // Emit warnings if we use reserved registers on the clobber list, as
-  // that might lead to undefined behaviour.
-  SmallVector<Register, 8> RestrRegs;
-  const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
+  // that might lead to undefined behaviour. 
+  SmallVector<Register, 8> RestrRegs; 
+  const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo(); 
   // Start with the first operand descriptor, and iterate over them.
   for (unsigned I = InlineAsm::MIOp_FirstOperand, NumOps = MI->getNumOperands();
        I < NumOps; ++I) {
     const MachineOperand &MO = MI->getOperand(I);
-    if (!MO.isImm())
-      continue;
-    unsigned Flags = MO.getImm();
-    if (InlineAsm::getKind(Flags) == InlineAsm::Kind_Clobber) {
-      Register Reg = MI->getOperand(I + 1).getReg();
-      if (!TRI->isAsmClobberable(*MF, Reg))
-        RestrRegs.push_back(Reg);
+    if (!MO.isImm()) 
+      continue; 
+    unsigned Flags = MO.getImm(); 
+    if (InlineAsm::getKind(Flags) == InlineAsm::Kind_Clobber) { 
+      Register Reg = MI->getOperand(I + 1).getReg(); 
+      if (!TRI->isAsmClobberable(*MF, Reg)) 
+        RestrRegs.push_back(Reg); 
     }
-    // Skip to one before the next operand descriptor, if it exists.
-    I += InlineAsm::getNumOperandRegisters(Flags);
+    // Skip to one before the next operand descriptor, if it exists. 
+    I += InlineAsm::getNumOperandRegisters(Flags); 
   }
 
   if (!RestrRegs.empty()) {
@@ -577,15 +577,15 @@ void AsmPrinter::emitInlineAsm(const MachineInstr *MI) const {
         SrcMgr.getMemoryBuffer(BufNum)->getBuffer().begin());
 
     std::string Msg = "inline asm clobber list contains reserved registers: ";
-    for (auto I = RestrRegs.begin(), E = RestrRegs.end(); I != E; ++I) {
+    for (auto I = RestrRegs.begin(), E = RestrRegs.end(); I != E; ++I) { 
       if(I != RestrRegs.begin())
         Msg += ", ";
-      Msg += TRI->getName(*I);
+      Msg += TRI->getName(*I); 
     }
-    const char *Note =
-        "Reserved registers on the clobber list may not be "
-        "preserved across the asm statement, and clobbering them may "
-        "lead to undefined behaviour.";
+    const char *Note = 
+        "Reserved registers on the clobber list may not be " 
+        "preserved across the asm statement, and clobbering them may " 
+        "lead to undefined behaviour."; 
     SrcMgr.PrintMessage(Loc, SourceMgr::DK_Warning, Msg);
     SrcMgr.PrintMessage(Loc, SourceMgr::DK_Note, Note);
   }

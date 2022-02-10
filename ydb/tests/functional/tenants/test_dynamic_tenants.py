@@ -177,7 +177,7 @@ class TestCreateAndDropTenants(DBWithDynamicSlot):
                             "upsert into {table_one} (id, value) "
                             "values (1u, \"{val_one}\");"
                             "upsert into {table_two} (id, value) "
-                            "values (2u, \"{val_two}\");"
+                            "values (2u, \"{val_two}\");" 
                             "".format(table_one=table_one, val_one=value,
                                       table_two=table_two, val_two=value),
                             commit_tx=True,
@@ -256,7 +256,7 @@ class TestCreateAndDropTheSameTenant2(DBForStaticSlots):
                                 "upsert into {table_one} (id, value) "
                                 "values (1u, \"{val_one}\");"
                                 "upsert into {table_two} (id, value) "
-                                "values (2u, \"{val_two}\");"
+                                "values (2u, \"{val_two}\");" 
                                 "".format(table_one=table_one, val_one=value,
                                           table_two=table_two, val_two=value),
                                 commit_tx=True,

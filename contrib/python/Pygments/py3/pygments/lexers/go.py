@@ -4,7 +4,7 @@
 
     Lexers for the Google Go language.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -25,7 +25,7 @@ class GoLexer(RegexLexer):
     """
     name = 'Go'
     filenames = ['*.go']
-    aliases = ['go', 'golang']
+    aliases = ['go', 'golang'] 
     mimetypes = ['text/x-gosrc']
 
     flags = re.MULTILINE | re.UNICODE
@@ -89,7 +89,7 @@ class GoLexer(RegexLexer):
             # -- raw_string_lit
             (r'`[^`]*`', String),
             # -- interpreted_string_lit
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String),
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String), 
             # Tokens
             (r'(<<=|>>=|<<|>>|<=|>=|&\^=|&\^|\+=|-=|\*=|/=|%=|&=|\|=|&&|\|\|'
              r'|<-|\+\+|--|==|!=|:=|\.\.\.|[+\-*/%&])', Operator),

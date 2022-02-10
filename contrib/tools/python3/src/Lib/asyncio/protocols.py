@@ -16,8 +16,8 @@ class BaseProtocol:
     write-only transport like write pipe
     """
 
-    __slots__ = ()
-
+    __slots__ = () 
+ 
     def connection_made(self, transport):
         """Called when a connection is made.
 
@@ -89,8 +89,8 @@ class Protocol(BaseProtocol):
     * CL: connection_lost()
     """
 
-    __slots__ = ()
-
+    __slots__ = () 
+ 
     def data_received(self, data):
         """Called when some data is received.
 
@@ -134,8 +134,8 @@ class BufferedProtocol(BaseProtocol):
     * CL: connection_lost()
     """
 
-    __slots__ = ()
-
+    __slots__ = () 
+ 
     def get_buffer(self, sizehint):
         """Called to allocate a new receive buffer.
 
@@ -166,8 +166,8 @@ class BufferedProtocol(BaseProtocol):
 class DatagramProtocol(BaseProtocol):
     """Interface for datagram protocol."""
 
-    __slots__ = ()
-
+    __slots__ = () 
+ 
     def datagram_received(self, data, addr):
         """Called when some datagram is received."""
 
@@ -181,8 +181,8 @@ class DatagramProtocol(BaseProtocol):
 class SubprocessProtocol(BaseProtocol):
     """Interface for protocol for subprocess calls."""
 
-    __slots__ = ()
-
+    __slots__ = () 
+ 
     def pipe_data_received(self, fd, data):
         """Called when the subprocess writes data into stdout/stderr pipe.
 

@@ -6,7 +6,7 @@
     "jsonVersion":"1.1",
     "protocol":"json",
     "serviceFullName":"Amazon Inspector",
-    "serviceId":"Inspector",
+    "serviceId":"Inspector", 
     "signatureVersion":"v4",
     "targetPrefix":"InspectorService"
   },

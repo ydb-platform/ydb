@@ -8,7 +8,7 @@
 
 #include "MIRVRegNamerUtils.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/MachineStableHash.h"
+#include "llvm/CodeGen/MachineStableHash.h" 
 #include "llvm/IR/Constants.h"
 #include "llvm/Support/Debug.h"
 
@@ -16,11 +16,11 @@ using namespace llvm;
 
 #define DEBUG_TYPE "mir-vregnamer-utils"
 
-static cl::opt<bool>
-    UseStableNamerHash("mir-vreg-namer-use-stable-hash", cl::init(false),
-                       cl::Hidden,
-                       cl::desc("Use Stable Hashing for MIR VReg Renaming"));
-
+static cl::opt<bool> 
+    UseStableNamerHash("mir-vreg-namer-use-stable-hash", cl::init(false), 
+                       cl::Hidden, 
+                       cl::desc("Use Stable Hashing for MIR VReg Renaming")); 
+ 
 using VRegRenameMap = std::map<unsigned, unsigned>;
 
 bool VRegRenamer::doVRegRenaming(const VRegRenameMap &VRM) {
@@ -58,14 +58,14 @@ std::string VRegRenamer::getInstructionOpcodeHash(MachineInstr &MI) {
   std::string S;
   raw_string_ostream OS(S);
 
-  if (UseStableNamerHash) {
-    auto Hash = stableHashValue(MI, /* HashVRegs */ true,
-                                /* HashConstantPoolIndices */ true,
-                                /* HashMemOperands */ true);
-    assert(Hash && "Expected non-zero Hash");
-    return std::to_string(Hash).substr(0, 5);
-  }
-
+  if (UseStableNamerHash) { 
+    auto Hash = stableHashValue(MI, /* HashVRegs */ true, 
+                                /* HashConstantPoolIndices */ true, 
+                                /* HashMemOperands */ true); 
+    assert(Hash && "Expected non-zero Hash"); 
+    return std::to_string(Hash).substr(0, 5); 
+  } 
+ 
   // Gets a hashable artifact from a given MachineOperand (ie an unsigned).
   auto GetHashableMO = [this](const MachineOperand &MO) -> unsigned {
     switch (MO.getType()) {

@@ -6,7 +6,7 @@
 /* Submitted by Jim Hugunin */
 
 #include "Python.h"
-#include "structmember.h"         // PyMemberDef
+#include "structmember.h"         // PyMemberDef 
 
 /*[clinic input]
 class complex "PyComplexObject *" "&PyComplex_Type"
@@ -55,10 +55,10 @@ _Py_c_prod(Py_complex a, Py_complex b)
     return r;
 }
 
-/* Avoid bad optimization on Windows ARM64 until the compiler is fixed */
-#ifdef _M_ARM64
-#pragma optimize("", off)
-#endif
+/* Avoid bad optimization on Windows ARM64 until the compiler is fixed */ 
+#ifdef _M_ARM64 
+#pragma optimize("", off) 
+#endif 
 Py_complex
 _Py_c_quot(Py_complex a, Py_complex b)
 {
@@ -116,9 +116,9 @@ _Py_c_quot(Py_complex a, Py_complex b)
     }
     return r;
 }
-#ifdef _M_ARM64
-#pragma optimize("", on)
-#endif
+#ifdef _M_ARM64 
+#pragma optimize("", on) 
+#endif 
 
 Py_complex
 _Py_c_pow(Py_complex a, Py_complex b)
@@ -169,7 +169,7 @@ c_powu(Py_complex x, long n)
 static Py_complex
 c_powi(Py_complex x, long n)
 {
-    if (n > 0)
+    if (n > 0) 
         return c_powu(x,n);
     else
         return _Py_c_quot(c_1, c_powu(x,-n));
@@ -289,7 +289,7 @@ try_complex_special_method(PyObject *op)
         if (!PyComplex_Check(res)) {
             PyErr_Format(PyExc_TypeError,
                 "__complex__ returned non-complex (type %.200s)",
-                Py_TYPE(res)->tp_name);
+                Py_TYPE(res)->tp_name); 
             Py_DECREF(res);
             return NULL;
         }
@@ -298,7 +298,7 @@ try_complex_special_method(PyObject *op)
                 "__complex__ returned non-complex (type %.200s).  "
                 "The ability to return an instance of a strict subclass of complex "
                 "is deprecated, and may be removed in a future version of Python.",
-                Py_TYPE(res)->tp_name)) {
+                Py_TYPE(res)->tp_name)) { 
             Py_DECREF(res);
             return NULL;
         }
@@ -531,14 +531,14 @@ complex_pow(PyObject *v, PyObject *w, PyObject *z)
         return NULL;
     }
     errno = 0;
-    // Check whether the exponent has a small integer value, and if so use
-    // a faster and more accurate algorithm.
-    if (b.imag == 0.0 && b.real == floor(b.real) && fabs(b.real) <= 100.0) {
-        p = c_powi(a, (long)b.real);
-    }
-    else {
-        p = _Py_c_pow(a, b);
-    }
+    // Check whether the exponent has a small integer value, and if so use 
+    // a faster and more accurate algorithm. 
+    if (b.imag == 0.0 && b.real == floor(b.real) && fabs(b.real) <= 100.0) { 
+        p = c_powi(a, (long)b.real); 
+    } 
+    else { 
+        p = _Py_c_pow(a, b); 
+    } 
 
     Py_ADJUST_ERANGE2(p.real, p.imag);
     if (errno == EDOM) {
@@ -677,7 +677,7 @@ complex_float(PyObject *v)
 }
 
 static PyObject *
-complex_conjugate(PyObject *self, PyObject *Py_UNUSED(ignored))
+complex_conjugate(PyObject *self, PyObject *Py_UNUSED(ignored)) 
 {
     Py_complex c;
     c = ((PyComplexObject *)self)->cval;
@@ -691,7 +691,7 @@ PyDoc_STRVAR(complex_conjugate_doc,
 "Return the complex conjugate of its argument. (3-4j).conjugate() == 3+4j.");
 
 static PyObject *
-complex_getnewargs(PyComplexObject *v, PyObject *Py_UNUSED(ignored))
+complex_getnewargs(PyComplexObject *v, PyObject *Py_UNUSED(ignored)) 
 {
     Py_complex c = v->cval;
     return Py_BuildValue("(dd)", c.real, c.imag);
@@ -951,8 +951,8 @@ complex_new_impl(PyTypeObject *type, PyObject *r, PyObject *i)
         return NULL;
     }
 
-    nbr = Py_TYPE(r)->tp_as_number;
-    if (nbr == NULL || (nbr->nb_float == NULL && nbr->nb_index == NULL)) {
+    nbr = Py_TYPE(r)->tp_as_number; 
+    if (nbr == NULL || (nbr->nb_float == NULL && nbr->nb_index == NULL)) { 
         PyErr_Format(PyExc_TypeError,
                      "complex() first argument must be a string or a number, "
                      "not '%.200s'",
@@ -963,8 +963,8 @@ complex_new_impl(PyTypeObject *type, PyObject *r, PyObject *i)
         return NULL;
     }
     if (i != NULL) {
-        nbi = Py_TYPE(i)->tp_as_number;
-        if (nbi == NULL || (nbi->nb_float == NULL && nbi->nb_index == NULL)) {
+        nbi = Py_TYPE(i)->tp_as_number; 
+        if (nbi == NULL || (nbi->nb_float == NULL && nbi->nb_index == NULL)) { 
             PyErr_Format(PyExc_TypeError,
                          "complex() second argument must be a number, "
                          "not '%.200s'",
@@ -1020,7 +1020,7 @@ complex_new_impl(PyTypeObject *type, PyObject *r, PyObject *i)
         /* The "imag" part really is entirely imaginary, and
            contributes nothing in the real direction.
            Just treat it as a double. */
-        tmp = PyNumber_Float(i);
+        tmp = PyNumber_Float(i); 
         if (tmp == NULL)
             return NULL;
         ci.real = PyFloat_AsDouble(tmp);
@@ -1080,18 +1080,18 @@ PyTypeObject PyComplex_Type = {
     "complex",
     sizeof(PyComplexObject),
     0,
-    0,                                          /* tp_dealloc */
-    0,                                          /* tp_vectorcall_offset */
+    0,                                          /* tp_dealloc */ 
+    0,                                          /* tp_vectorcall_offset */ 
     0,                                          /* tp_getattr */
     0,                                          /* tp_setattr */
-    0,                                          /* tp_as_async */
+    0,                                          /* tp_as_async */ 
     (reprfunc)complex_repr,                     /* tp_repr */
     &complex_as_number,                         /* tp_as_number */
     0,                                          /* tp_as_sequence */
     0,                                          /* tp_as_mapping */
     (hashfunc)complex_hash,                     /* tp_hash */
     0,                                          /* tp_call */
-    0,                                          /* tp_str */
+    0,                                          /* tp_str */ 
     PyObject_GenericGetAttr,                    /* tp_getattro */
     0,                                          /* tp_setattro */
     0,                                          /* tp_as_buffer */

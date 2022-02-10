@@ -1,5 +1,5 @@
 #include "ares-test.h"
-#include "ares-test-ai.h"
+#include "ares-test-ai.h" 
 #include "dns-proto.h"
 
 // Include ares internal files for DNS protocol details
@@ -565,79 +565,79 @@ void HostCallback(void *data, int status, int timeouts,
   if (verbose) std::cerr << "HostCallback(" << *result << ")" << std::endl;
 }
 
-std::ostream& operator<<(std::ostream& os, const AddrInfoResult& result) {
-  os << '{';
-  if (result.done_ && result.ai_) {
-    os << StatusToString(result.status_) << " " << result.ai_;
-  } else {
-    os << "(incomplete)";
-  }
-  os << '}';
-  return os;
-}
-
-std::ostream& operator<<(std::ostream& os, const AddrInfo& ai) {
-  os << '{';
-  if (ai == nullptr) {
-    os << "nullptr}";
-    return os;
-  }
-
-  struct ares_addrinfo_cname *next_cname = ai->cnames;
-  while(next_cname) {
-    if(next_cname->alias) {
-      os << next_cname->alias << "->";
-    }
-    if(next_cname->name) {
-      os << next_cname->name;
-    }
-    if((next_cname = next_cname->next))
-      os << ", ";
-    else
-      os << " ";
-  }
-
-  struct ares_addrinfo_node *next = ai->nodes;
-  while(next) {
-    //if(next->ai_canonname) {
-      //os << "'" << next->ai_canonname << "' ";
-    //}
-    unsigned short port = 0;
-    os << "addr=[";
-    if(next->ai_family == AF_INET) {
-      sockaddr_in* sin = (sockaddr_in*)next->ai_addr;
-      port = ntohs(sin->sin_port);
-      os << AddressToString(&sin->sin_addr, 4);
-    }
-    else if (next->ai_family == AF_INET6) {
-      sockaddr_in6* sin = (sockaddr_in6*)next->ai_addr;
-      port = ntohs(sin->sin6_port);
-      os << "[" << AddressToString(&sin->sin6_addr, 16) << "]";
-    }
-    else
-      os << "unknown family";
-    if(port) {
-      os << ":" << port;
-    }
-    os << "]";
-    if((next = next->ai_next))
-      os << ", ";
-  }
-  os << '}';
-  return os;
-}
-
-void AddrInfoCallback(void *data, int status, int timeouts,
-                      struct ares_addrinfo *ai) {
-  EXPECT_NE(nullptr, data);
-  AddrInfoResult* result = reinterpret_cast<AddrInfoResult*>(data);
-  result->done_ = true;
-  result->status_ = status;
-  result->timeouts_= timeouts;
-  result->ai_ = AddrInfo(ai);
-  if (verbose) std::cerr << "AddrInfoCallback(" << *result << ")" << std::endl;
-}
-
+std::ostream& operator<<(std::ostream& os, const AddrInfoResult& result) { 
+  os << '{'; 
+  if (result.done_ && result.ai_) { 
+    os << StatusToString(result.status_) << " " << result.ai_; 
+  } else { 
+    os << "(incomplete)"; 
+  } 
+  os << '}'; 
+  return os; 
+} 
+ 
+std::ostream& operator<<(std::ostream& os, const AddrInfo& ai) { 
+  os << '{'; 
+  if (ai == nullptr) { 
+    os << "nullptr}"; 
+    return os; 
+  } 
+ 
+  struct ares_addrinfo_cname *next_cname = ai->cnames; 
+  while(next_cname) { 
+    if(next_cname->alias) { 
+      os << next_cname->alias << "->"; 
+    } 
+    if(next_cname->name) { 
+      os << next_cname->name; 
+    } 
+    if((next_cname = next_cname->next)) 
+      os << ", "; 
+    else 
+      os << " "; 
+  } 
+ 
+  struct ares_addrinfo_node *next = ai->nodes; 
+  while(next) { 
+    //if(next->ai_canonname) { 
+      //os << "'" << next->ai_canonname << "' "; 
+    //} 
+    unsigned short port = 0; 
+    os << "addr=["; 
+    if(next->ai_family == AF_INET) { 
+      sockaddr_in* sin = (sockaddr_in*)next->ai_addr; 
+      port = ntohs(sin->sin_port); 
+      os << AddressToString(&sin->sin_addr, 4); 
+    } 
+    else if (next->ai_family == AF_INET6) { 
+      sockaddr_in6* sin = (sockaddr_in6*)next->ai_addr; 
+      port = ntohs(sin->sin6_port); 
+      os << "[" << AddressToString(&sin->sin6_addr, 16) << "]"; 
+    } 
+    else 
+      os << "unknown family"; 
+    if(port) { 
+      os << ":" << port; 
+    } 
+    os << "]"; 
+    if((next = next->ai_next)) 
+      os << ", "; 
+  } 
+  os << '}'; 
+  return os; 
+} 
+ 
+void AddrInfoCallback(void *data, int status, int timeouts, 
+                      struct ares_addrinfo *ai) { 
+  EXPECT_NE(nullptr, data); 
+  AddrInfoResult* result = reinterpret_cast<AddrInfoResult*>(data); 
+  result->done_ = true; 
+  result->status_ = status; 
+  result->timeouts_= timeouts; 
+  result->ai_ = AddrInfo(ai); 
+  if (verbose) std::cerr << "AddrInfoCallback(" << *result << ")" << std::endl; 
+} 
+ 
 std::ostream& operator<<(std::ostream& os, const SearchResult& result) {
   os << '{';
   if (result.done_) {

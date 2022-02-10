@@ -38,7 +38,7 @@ SRCS(
     ares-test-internal.cc
     ares-test-live.cc
     ares-test-misc.cc
-    ares-test-mock-ai.cc
+    ares-test-mock-ai.cc 
     ares-test-mock.cc
     ares-test-ns.cc
     ares-test-parse-a.cc
@@ -47,7 +47,7 @@ SRCS(
     ares-test-parse-naptr.cc
     ares-test-parse-ns.cc
     ares-test-parse-ptr.cc
-    ares-test-parse-soa-any.cc
+    ares-test-parse-soa-any.cc 
     ares-test-parse-soa.cc
     ares-test-parse-srv.cc
     ares-test-parse-txt.cc

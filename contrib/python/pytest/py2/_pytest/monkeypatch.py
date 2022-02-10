@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 """ monkeypatching and mocking functionality.  """
 from __future__ import absolute_import
 from __future__ import division
@@ -182,8 +182,8 @@ class MonkeyPatch(object):
         attribute is missing.
         """
         __tracebackhide__ = True
-        import inspect
-
+        import inspect 
+ 
         if name is notset:
             if not isinstance(target, six.string_types):
                 raise TypeError(
@@ -197,11 +197,11 @@ class MonkeyPatch(object):
             if raising:
                 raise AttributeError(name)
         else:
-            oldval = getattr(target, name, notset)
-            # Avoid class descriptors like staticmethod/classmethod.
-            if inspect.isclass(target):
-                oldval = target.__dict__.get(name, notset)
-            self._setattr.append((target, name, oldval))
+            oldval = getattr(target, name, notset) 
+            # Avoid class descriptors like staticmethod/classmethod. 
+            if inspect.isclass(target): 
+                oldval = target.__dict__.get(name, notset) 
+            self._setattr.append((target, name, oldval)) 
             delattr(target, name)
 
     def setitem(self, dic, name, value):
@@ -263,27 +263,27 @@ class MonkeyPatch(object):
 
     def syspath_prepend(self, path):
         """ Prepend ``path`` to ``sys.path`` list of import locations. """
-        from pkg_resources import fixup_namespace_packages
-
+        from pkg_resources import fixup_namespace_packages 
+ 
         if self._savesyspath is None:
             self._savesyspath = sys.path[:]
         sys.path.insert(0, str(path))
 
-        # https://github.com/pypa/setuptools/blob/d8b901bc/docs/pkg_resources.txt#L162-L171
-        fixup_namespace_packages(str(path))
-
-        # A call to syspathinsert() usually means that the caller wants to
-        # import some dynamically created files, thus with python3 we
-        # invalidate its import caches.
-        # This is especially important when any namespace package is in used,
-        # since then the mtime based FileFinder cache (that gets created in
-        # this case already) gets not invalidated when writing the new files
-        # quickly afterwards.
-        if sys.version_info >= (3, 3):
-            from importlib import invalidate_caches
-
-            invalidate_caches()
-
+        # https://github.com/pypa/setuptools/blob/d8b901bc/docs/pkg_resources.txt#L162-L171 
+        fixup_namespace_packages(str(path)) 
+ 
+        # A call to syspathinsert() usually means that the caller wants to 
+        # import some dynamically created files, thus with python3 we 
+        # invalidate its import caches. 
+        # This is especially important when any namespace package is in used, 
+        # since then the mtime based FileFinder cache (that gets created in 
+        # this case already) gets not invalidated when writing the new files 
+        # quickly afterwards. 
+        if sys.version_info >= (3, 3): 
+            from importlib import invalidate_caches 
+ 
+            invalidate_caches() 
+ 
     def chdir(self, path):
         """ Change the current working directory to the specified path.
         Path can be a string or a py.path.local object.

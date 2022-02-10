@@ -18,10 +18,10 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2016-03-03-08f0372c351a57b01afee6c64066961203da28c5)
-
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project)
-
+VERSION(2016-03-03-08f0372c351a57b01afee6c64066961203da28c5) 
+ 
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project) 
+ 
 OWNER(
     pg
     somov

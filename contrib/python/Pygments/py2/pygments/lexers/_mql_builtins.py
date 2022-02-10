@@ -884,7 +884,7 @@ constants = (
     'PERIOD_W1',
     'POINTER_AUTOMATIC',
     'POINTER_DYNAMIC',
-    'POINTER_INVALID',
+    'POINTER_INVALID', 
     'PRICE_CLOSE',
     'PRICE_HIGH',
     'PRICE_LOW',

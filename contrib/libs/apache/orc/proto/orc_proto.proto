@@ -67,9 +67,9 @@ message TimestampStatistics {
   optional sint64 maximum = 2;
   optional sint64 minimumUtc = 3;
   optional sint64 maximumUtc = 4;
-  // store the lower 6 TS digits for min/max to achieve nanosecond precision
-  optional int32 minimumNanos = 5;
-  optional int32 maximumNanos = 6;
+  // store the lower 6 TS digits for min/max to achieve nanosecond precision 
+  optional int32 minimumNanos = 5; 
+  optional int32 maximumNanos = 6; 
 }
 
 message BinaryStatistics {
@@ -343,14 +343,14 @@ message Encryption {
   optional KeyProviderKind keyProvider = 4;
 }
 
-enum CalendarKind {
-  UNKNOWN_CALENDAR = 0;
-   // A hybrid Julian/Gregorian calendar with a cutover point in October 1582.
-  JULIAN_GREGORIAN = 1;
-  // A calendar that extends the Gregorian calendar back forever.
-  PROLEPTIC_GREGORIAN = 2;
-}
-
+enum CalendarKind { 
+  UNKNOWN_CALENDAR = 0; 
+   // A hybrid Julian/Gregorian calendar with a cutover point in October 1582. 
+  JULIAN_GREGORIAN = 1; 
+  // A calendar that extends the Gregorian calendar back forever. 
+  PROLEPTIC_GREGORIAN = 2; 
+} 
+ 
 message Footer {
   optional uint64 headerLength = 1;
   optional uint64 contentLength = 2;
@@ -370,12 +370,12 @@ message Footer {
 
   // information about the encryption in this file
   optional Encryption encryption = 10;
-  optional CalendarKind calendar = 11;
-
-  // informative description about the version of the software that wrote
-  // the file. It is assumed to be within a given writer, so for example
-  // ORC 1.7.2 = "1.7.2". It may include suffixes, such as "-SNAPSHOT".
-  optional string softwareVersion = 12;
+  optional CalendarKind calendar = 11; 
+ 
+  // informative description about the version of the software that wrote 
+  // the file. It is assumed to be within a given writer, so for example 
+  // ORC 1.7.2 = "1.7.2". It may include suffixes, such as "-SNAPSHOT". 
+  optional string softwareVersion = 12; 
 }
 
 enum CompressionKind {
@@ -428,9 +428,9 @@ message PostScript {
   // Version of the Scritchley Go writer:
   //   6 = original
   //
-  // Version of the Trino writer:
-  //   6 = original
-  //
+  // Version of the Trino writer: 
+  //   6 = original 
+  // 
   optional uint32 writerVersion = 6;
 
   // the number of bytes in the encrypted stripe statistics

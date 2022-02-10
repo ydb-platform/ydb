@@ -10,11 +10,11 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
-import errno
+import errno 
 import inspect
 import os
 import socket
-import sys
+import sys 
 
 from botocore.compat import six
 
@@ -34,18 +34,18 @@ else:
     rename_file = os.rename
 
 
-def accepts_kwargs(func):
-    return inspect.getfullargspec(func)[2]
+def accepts_kwargs(func): 
+    return inspect.getfullargspec(func)[2] 
 
 
-# In python 3, socket.error is OSError, which is too general
-# for what we want (i.e FileNotFoundError is a subclass of OSError).
-# In python 3, all the socket related errors are in a newly created
-# ConnectionError.
-SOCKET_ERROR = ConnectionError
-MAXINT = None
+# In python 3, socket.error is OSError, which is too general 
+# for what we want (i.e FileNotFoundError is a subclass of OSError). 
+# In python 3, all the socket related errors are in a newly created 
+# ConnectionError. 
+SOCKET_ERROR = ConnectionError 
+MAXINT = None 
 
-
+ 
 def seekable(fileobj):
     """Backwards compat function to determine if a fileobj is seekable
 
@@ -63,7 +63,7 @@ def seekable(fileobj):
         try:
             fileobj.seek(0, 1)
             return True
-        except OSError:
+        except OSError: 
             # If an io related error was thrown then it is not seekable.
             return False
     # Else, the fileobj is not seekable
@@ -81,14 +81,14 @@ def readable(fileobj):
         return fileobj.readable()
 
     return hasattr(fileobj, 'read')
-
-
-def fallocate(fileobj, size):
-    if hasattr(os, 'posix_fallocate'):
-        os.posix_fallocate(fileobj.fileno(), 0, size)
-    else:
-        fileobj.truncate(size)
-
-
-# Import at end of file to avoid circular dependencies
-from multiprocessing.managers import BaseManager  # noqa: F401,E402
+ 
+ 
+def fallocate(fileobj, size): 
+    if hasattr(os, 'posix_fallocate'): 
+        os.posix_fallocate(fileobj.fileno(), 0, size) 
+    else: 
+        fileobj.truncate(size) 
+ 
+ 
+# Import at end of file to avoid circular dependencies 
+from multiprocessing.managers import BaseManager  # noqa: F401,E402 

@@ -10,10 +10,10 @@
       "input_token": "NextToken",
       "output_token": "NextToken",
       "limit_key": "MaxRecords",
-      "result_key": [
-        "MetricAlarms",
-        "CompositeAlarms"
-      ]
+      "result_key": [ 
+        "MetricAlarms", 
+        "CompositeAlarms" 
+      ] 
     },
     "ListDashboards": {
       "input_token": "NextToken",
@@ -24,15 +24,15 @@
       "input_token": "NextToken",
       "output_token": "NextToken",
       "result_key": "Metrics"
-    },
-    "GetMetricData": {
-      "input_token": "NextToken",
-      "limit_key": "MaxDatapoints",
-      "output_token": "NextToken",
-      "result_key": [
-        "MetricDataResults",
-        "Messages"
-      ]
+    }, 
+    "GetMetricData": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxDatapoints", 
+      "output_token": "NextToken", 
+      "result_key": [ 
+        "MetricDataResults", 
+        "Messages" 
+      ] 
     }
   }
 }

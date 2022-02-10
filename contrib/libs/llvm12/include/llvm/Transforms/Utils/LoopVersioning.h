@@ -23,7 +23,7 @@
 #define LLVM_TRANSFORMS_UTILS_LOOPVERSIONING_H
 
 #include "llvm/Analysis/ScalarEvolution.h"
-#include "llvm/IR/PassManager.h"
+#include "llvm/IR/PassManager.h" 
 #include "llvm/Transforms/Utils/LoopUtils.h"
 #include "llvm/Transforms/Utils/ValueMapper.h"
 
@@ -50,9 +50,9 @@ public:
   /// It uses runtime check provided by the user. If \p UseLAIChecks is true,
   /// we will retain the default checks made by LAI. Otherwise, construct an
   /// object having no checks and we expect the user to add them.
-  LoopVersioning(const LoopAccessInfo &LAI,
-                 ArrayRef<RuntimePointerCheck> Checks, Loop *L, LoopInfo *LI,
-                 DominatorTree *DT, ScalarEvolution *SE);
+  LoopVersioning(const LoopAccessInfo &LAI, 
+                 ArrayRef<RuntimePointerCheck> Checks, Loop *L, LoopInfo *LI, 
+                 DominatorTree *DT, ScalarEvolution *SE); 
 
   /// Performs the CFG manipulation part of versioning the loop including
   /// the DominatorTree and LoopInfo updates.
@@ -130,7 +130,7 @@ private:
   SmallVector<RuntimePointerCheck, 4> AliasChecks;
 
   /// The set of SCEV checks that we are versioning for.
-  const SCEVUnionPredicate &Preds;
+  const SCEVUnionPredicate &Preds; 
 
   /// Maps a pointer to the pointer checking group that the pointer
   /// belongs to.
@@ -149,14 +149,14 @@ private:
   DominatorTree *DT;
   ScalarEvolution *SE;
 };
-
-/// Expose LoopVersioning as a pass.  Currently this is only used for
-/// unit-testing.  It adds all memchecks necessary to remove all may-aliasing
-/// array accesses from the loop.
-class LoopVersioningPass : public PassInfoMixin<LoopVersioningPass> {
-public:
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
-};
+ 
+/// Expose LoopVersioning as a pass.  Currently this is only used for 
+/// unit-testing.  It adds all memchecks necessary to remove all may-aliasing 
+/// array accesses from the loop. 
+class LoopVersioningPass : public PassInfoMixin<LoopVersioningPass> { 
+public: 
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM); 
+}; 
 }
 
 #endif

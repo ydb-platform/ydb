@@ -105,7 +105,7 @@ is destroyed.
 
 from collections import namedtuple
 
-
+ 
 _sunau_params = namedtuple('_sunau_params',
                            'nchannels sampwidth framerate nframes comptype compname')
 

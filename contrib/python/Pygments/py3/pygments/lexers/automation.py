@@ -4,7 +4,7 @@
 
     Lexers for automation scripting languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -22,7 +22,7 @@ class AutohotkeyLexer(RegexLexer):
     .. versionadded:: 1.4
     """
     name = 'autohotkey'
-    aliases = ['autohotkey', 'ahk']
+    aliases = ['autohotkey', 'ahk'] 
     filenames = ['*.ahk', '*.ahkl']
     mimetypes = ['text/x-autohotkey']
 
@@ -326,7 +326,7 @@ class AutoItLexer(RegexLexer):
             include('builtInFunctions'),
             include('builtInMarcros'),
             (r'"', String, combined('stringescape', 'dqs')),
-            (r"'", String, 'sqs'),
+            (r"'", String, 'sqs'), 
             include('numbers'),
             (r'[a-zA-Z_#@$][\w#@$]*', Name),
             (r'\\|\'', Text),
@@ -368,11 +368,11 @@ class AutoItLexer(RegexLexer):
             (r'"', String, '#pop'),
             include('strings')
         ],
-        'sqs': [
-            (r'\'\'|\`([,%`abfnrtv])', String.Escape),
-            (r"'", String, '#pop'),
-            (r"[^'\n]+", String)
-        ],
+        'sqs': [ 
+            (r'\'\'|\`([,%`abfnrtv])', String.Escape), 
+            (r"'", String, '#pop'), 
+            (r"[^'\n]+", String) 
+        ], 
         'garbage': [
             (r'[^\S\n]', Text),
         ],

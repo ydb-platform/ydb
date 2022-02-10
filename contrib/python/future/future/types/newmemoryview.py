@@ -4,13 +4,13 @@ A pretty lame implementation of a memoryview object for Python 2.6.
 from numbers import Integral
 import string
 
-from future.utils import istext, isbytes, PY2, with_metaclass
+from future.utils import istext, isbytes, PY2, with_metaclass 
 from future.types import no, issubset
 
-if PY2:
-    from collections import Iterable
-else:
-    from collections.abc import Iterable
+if PY2: 
+    from collections import Iterable 
+else: 
+    from collections.abc import Iterable 
 
 # class BaseNewBytes(type):
 #     def __instancecheck__(cls, instance):

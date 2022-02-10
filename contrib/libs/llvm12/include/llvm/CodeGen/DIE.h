@@ -254,7 +254,7 @@ public:
   unsigned SizeOf(const AsmPrinter *AP, dwarf::Form Form) const;
 
   void print(raw_ostream &O) const;
-  uint64_t getIndex() const { return Index; }
+  uint64_t getIndex() const { return Index; } 
 };
 
 //===--------------------------------------------------------------------===//
@@ -390,12 +390,12 @@ private:
     static_assert(std::is_standard_layout<T>::value ||
                       std::is_pointer<T>::value,
                   "Expected standard layout or pointer");
-    new (reinterpret_cast<void *>(&Val)) T(V);
+    new (reinterpret_cast<void *>(&Val)) T(V); 
   }
 
-  template <class T> T *get() { return reinterpret_cast<T *>(&Val); }
+  template <class T> T *get() { return reinterpret_cast<T *>(&Val); } 
   template <class T> const T *get() const {
-    return reinterpret_cast<const T *>(&Val);
+    return reinterpret_cast<const T *>(&Val); 
   }
   template <class T> void destruct() { get<T>()->~T(); }
 
@@ -794,7 +794,7 @@ public:
 
   /// Get the absolute offset within the .debug_info or .debug_types section
   /// for this DIE.
-  uint64_t getDebugSectionOffset() const;
+  uint64_t getDebugSectionOffset() const; 
 
   /// Compute the offset of this DIE and all its children.
   ///
@@ -874,7 +874,7 @@ protected:
   virtual ~DIEUnit() = default;
 
 public:
-  explicit DIEUnit(dwarf::Tag UnitTag);
+  explicit DIEUnit(dwarf::Tag UnitTag); 
   DIEUnit(const DIEUnit &RHS) = delete;
   DIEUnit(DIEUnit &&RHS) = delete;
   void operator=(const DIEUnit &RHS) = delete;
@@ -896,14 +896,14 @@ public:
   ///
   /// \returns Section pointer which can be NULL.
   MCSection *getSection() const { return Section; }
-  void setDebugSectionOffset(uint64_t O) { Offset = O; }
-  uint64_t getDebugSectionOffset() const { return Offset; }
+  void setDebugSectionOffset(uint64_t O) { Offset = O; } 
+  uint64_t getDebugSectionOffset() const { return Offset; } 
   DIE &getUnitDie() { return Die; }
   const DIE &getUnitDie() const { return Die; }
 };
 
 struct BasicDIEUnit final : DIEUnit {
-  explicit BasicDIEUnit(dwarf::Tag UnitTag) : DIEUnit(UnitTag) {}
+  explicit BasicDIEUnit(dwarf::Tag UnitTag) : DIEUnit(UnitTag) {} 
 };
 
 //===--------------------------------------------------------------------===//

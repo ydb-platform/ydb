@@ -2,23 +2,23 @@ PY23_LIBRARY()
 
 LICENSE(MIT)
 
-OWNER(g:python-contrib)
+OWNER(g:python-contrib) 
 
-IF (PYTHON2)
-    PEERDIR(
-        contrib/python/PyYAML/py2
+IF (PYTHON2) 
+    PEERDIR( 
+        contrib/python/PyYAML/py2 
     )
-ELSE()
-    PEERDIR(
-        contrib/python/PyYAML/py3
+ELSE() 
+    PEERDIR( 
+        contrib/python/PyYAML/py3 
     )
-ENDIF()
+ENDIF() 
 
 NO_LINT()
 
-END()
-
-RECURSE(
-    py2
-    py3
-)
+END() 
+ 
+RECURSE( 
+    py2 
+    py3 
+) 

@@ -156,13 +156,13 @@ import uuid
 
 import six
 
-try:
-  # Since python 3
-  import collections.abc as collections_abc
-except ImportError:
-  # Won't work after python 3.8
-  import collections as collections_abc
-
+try: 
+  # Since python 3 
+  import collections.abc as collections_abc 
+except ImportError: 
+  # Won't work after python 3.8 
+  import collections as collections_abc 
+ 
 ADDR_RE = re.compile(r'\<([a-zA-Z0-9_\-\.]+) object at 0x[a-fA-F0-9]+\>')
 _SEPARATOR = uuid.uuid1().hex
 _FIRST_ARG = object()
@@ -180,12 +180,12 @@ def _StrClass(cls):
 
 
 def _NonStringIterable(obj):
-  return (isinstance(obj, collections_abc.Iterable) and not
+  return (isinstance(obj, collections_abc.Iterable) and not 
           isinstance(obj, six.string_types))
 
 
 def _FormatParameterList(testcase_params):
-  if isinstance(testcase_params, collections_abc.Mapping):
+  if isinstance(testcase_params, collections_abc.Mapping): 
     return ', '.join('%s=%s' % (argname, _CleanRepr(value))
                      for argname, value in testcase_params.items())
   elif _NonStringIterable(testcase_params):
@@ -228,7 +228,7 @@ class _ParameterizedTestIter(object):
     def MakeBoundParamTest(testcase_params):
       @functools.wraps(test_method)
       def BoundParamTest(self):
-        if isinstance(testcase_params, collections_abc.Mapping):
+        if isinstance(testcase_params, collections_abc.Mapping): 
           test_method(self, **testcase_params)
         elif _NonStringIterable(testcase_params):
           test_method(self, *testcase_params)
@@ -297,7 +297,7 @@ def _ParameterDecorator(naming_type, testcases):
     if isinstance(obj, type):
       _ModifyClass(
           obj,
-          list(testcases) if not isinstance(testcases, collections_abc.Sequence)
+          list(testcases) if not isinstance(testcases, collections_abc.Sequence) 
           else testcases,
           naming_type)
       return obj

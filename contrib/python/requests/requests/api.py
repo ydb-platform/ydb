@@ -16,13 +16,13 @@ from . import sessions
 def request(method, url, **kwargs):
     """Constructs and sends a :class:`Request <Request>`.
 
-    :param method: method for the new :class:`Request` object: ``GET``, ``OPTIONS``, ``HEAD``, ``POST``, ``PUT``, ``PATCH``, or ``DELETE``.
+    :param method: method for the new :class:`Request` object: ``GET``, ``OPTIONS``, ``HEAD``, ``POST``, ``PUT``, ``PATCH``, or ``DELETE``. 
     :param url: URL for the new :class:`Request` object.
-    :param params: (optional) Dictionary, list of tuples or bytes to send
-        in the query string for the :class:`Request`.
-    :param data: (optional) Dictionary, list of tuples, bytes, or file-like
-        object to send in the body of the :class:`Request`.
-    :param json: (optional) A JSON serializable Python object to send in the body of the :class:`Request`.
+    :param params: (optional) Dictionary, list of tuples or bytes to send 
+        in the query string for the :class:`Request`. 
+    :param data: (optional) Dictionary, list of tuples, bytes, or file-like 
+        object to send in the body of the :class:`Request`. 
+    :param json: (optional) A JSON serializable Python object to send in the body of the :class:`Request`. 
     :param headers: (optional) Dictionary of HTTP Headers to send with the :class:`Request`.
     :param cookies: (optional) Dict or CookieJar object to send with the :class:`Request`.
     :param files: (optional) Dictionary of ``'name': file-like-objects`` (or ``{'name': file-tuple}``) for multipart encoding upload.
@@ -49,8 +49,8 @@ def request(method, url, **kwargs):
     Usage::
 
       >>> import requests
-      >>> req = requests.request('GET', 'https://httpbin.org/get')
-      >>> req
+      >>> req = requests.request('GET', 'https://httpbin.org/get') 
+      >>> req 
       <Response [200]>
     """
 
@@ -65,8 +65,8 @@ def get(url, params=None, **kwargs):
     r"""Sends a GET request.
 
     :param url: URL for the new :class:`Request` object.
-    :param params: (optional) Dictionary, list of tuples or bytes to send
-        in the query string for the :class:`Request`.
+    :param params: (optional) Dictionary, list of tuples or bytes to send 
+        in the query string for the :class:`Request`. 
     :param \*\*kwargs: Optional arguments that ``request`` takes.
     :return: :class:`Response <Response>` object
     :rtype: requests.Response
@@ -91,9 +91,9 @@ def head(url, **kwargs):
     r"""Sends a HEAD request.
 
     :param url: URL for the new :class:`Request` object.
-    :param \*\*kwargs: Optional arguments that ``request`` takes. If
-        `allow_redirects` is not provided, it will be set to `False` (as
-        opposed to the default :meth:`request` behavior).
+    :param \*\*kwargs: Optional arguments that ``request`` takes. If 
+        `allow_redirects` is not provided, it will be set to `False` (as 
+        opposed to the default :meth:`request` behavior). 
     :return: :class:`Response <Response>` object
     :rtype: requests.Response
     """
@@ -106,8 +106,8 @@ def post(url, data=None, json=None, **kwargs):
     r"""Sends a POST request.
 
     :param url: URL for the new :class:`Request` object.
-    :param data: (optional) Dictionary, list of tuples, bytes, or file-like
-        object to send in the body of the :class:`Request`.
+    :param data: (optional) Dictionary, list of tuples, bytes, or file-like 
+        object to send in the body of the :class:`Request`. 
     :param json: (optional) json data to send in the body of the :class:`Request`.
     :param \*\*kwargs: Optional arguments that ``request`` takes.
     :return: :class:`Response <Response>` object
@@ -121,8 +121,8 @@ def put(url, data=None, **kwargs):
     r"""Sends a PUT request.
 
     :param url: URL for the new :class:`Request` object.
-    :param data: (optional) Dictionary, list of tuples, bytes, or file-like
-        object to send in the body of the :class:`Request`.
+    :param data: (optional) Dictionary, list of tuples, bytes, or file-like 
+        object to send in the body of the :class:`Request`. 
     :param json: (optional) json data to send in the body of the :class:`Request`.
     :param \*\*kwargs: Optional arguments that ``request`` takes.
     :return: :class:`Response <Response>` object
@@ -136,8 +136,8 @@ def patch(url, data=None, **kwargs):
     r"""Sends a PATCH request.
 
     :param url: URL for the new :class:`Request` object.
-    :param data: (optional) Dictionary, list of tuples, bytes, or file-like
-        object to send in the body of the :class:`Request`.
+    :param data: (optional) Dictionary, list of tuples, bytes, or file-like 
+        object to send in the body of the :class:`Request`. 
     :param json: (optional) json data to send in the body of the :class:`Request`.
     :param \*\*kwargs: Optional arguments that ``request`` takes.
     :return: :class:`Response <Response>` object

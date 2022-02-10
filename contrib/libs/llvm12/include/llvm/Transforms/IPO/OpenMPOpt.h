@@ -40,11 +40,11 @@ struct OpenMPInModule {
   bool isKnown() { return Value != OpenMP::UNKNOWN; }
   operator bool() { return Value != OpenMP::NOT_FOUND; }
 
-  /// Does this function \p F contain any OpenMP runtime calls?
-  bool containsOMPRuntimeCalls(Function *F) const {
-    return FuncsWithOMPRuntimeCalls.contains(F);
-  }
-
+  /// Does this function \p F contain any OpenMP runtime calls? 
+  bool containsOMPRuntimeCalls(Function *F) const { 
+    return FuncsWithOMPRuntimeCalls.contains(F); 
+  } 
+ 
   /// Return the known kernels (=GPU entry points) in the module.
   SmallPtrSetImpl<Kernel> &getKernels() { return Kernels; }
 
@@ -54,11 +54,11 @@ struct OpenMPInModule {
 private:
   enum class OpenMP { FOUND, NOT_FOUND, UNKNOWN } Value = OpenMP::UNKNOWN;
 
-  friend bool containsOpenMP(Module &M, OpenMPInModule &OMPInModule);
-
-  /// In which functions are OpenMP runtime calls present?
-  SmallPtrSet<Function *, 32> FuncsWithOMPRuntimeCalls;
-
+  friend bool containsOpenMP(Module &M, OpenMPInModule &OMPInModule); 
+ 
+  /// In which functions are OpenMP runtime calls present? 
+  SmallPtrSet<Function *, 32> FuncsWithOMPRuntimeCalls; 
+ 
   /// Collection of known kernels (=GPU entry points) in the module.
   SmallPtrSet<Kernel, 8> Kernels;
 };

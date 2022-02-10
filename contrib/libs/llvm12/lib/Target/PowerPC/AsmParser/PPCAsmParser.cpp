@@ -284,16 +284,16 @@ public:
     return (unsigned) Imm.Val;
   }
 
-  unsigned getACCReg() const {
-    assert(isACCRegNumber() && "Invalid access!");
-    return (unsigned) Imm.Val;
-  }
-
-  unsigned getVSRpEvenReg() const {
-    assert(isVSRpEvenRegNumber() && "Invalid access!");
-    return (unsigned) Imm.Val >> 1;
-  }
-
+  unsigned getACCReg() const { 
+    assert(isACCRegNumber() && "Invalid access!"); 
+    return (unsigned) Imm.Val; 
+  } 
+ 
+  unsigned getVSRpEvenReg() const { 
+    assert(isVSRpEvenRegNumber() && "Invalid access!"); 
+    return (unsigned) Imm.Val >> 1; 
+  } 
+ 
   unsigned getCCReg() const {
     assert(isCCRegNumber() && "Invalid access!");
     return (unsigned) (Kind == Immediate ? Imm.Val : Expr.CRVal);
@@ -406,12 +406,12 @@ public:
                                   (getImm() & 3) == 0); }
   bool isImmZero() const { return Kind == Immediate && getImm() == 0; }
   bool isRegNumber() const { return Kind == Immediate && isUInt<5>(getImm()); }
-  bool isACCRegNumber() const {
-    return Kind == Immediate && isUInt<3>(getImm());
-  }
-  bool isVSRpEvenRegNumber() const {
-    return Kind == Immediate && isUInt<6>(getImm()) && ((getImm() & 1) == 0);
-  }
+  bool isACCRegNumber() const { 
+    return Kind == Immediate && isUInt<3>(getImm()); 
+  } 
+  bool isVSRpEvenRegNumber() const { 
+    return Kind == Immediate && isUInt<6>(getImm()) && ((getImm() & 1) == 0); 
+  } 
   bool isVSRegNumber() const {
     return Kind == Immediate && isUInt<6>(getImm());
   }
@@ -502,29 +502,29 @@ public:
     Inst.addOperand(MCOperand::createReg(VSSRegs[getVSReg()]));
   }
 
-  void addRegSPE4RCOperands(MCInst &Inst, unsigned N) const {
+  void addRegSPE4RCOperands(MCInst &Inst, unsigned N) const { 
     assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(RRegs[getReg()]));
+    Inst.addOperand(MCOperand::createReg(RRegs[getReg()])); 
   }
 
-  void addRegSPERCOperands(MCInst &Inst, unsigned N) const {
+  void addRegSPERCOperands(MCInst &Inst, unsigned N) const { 
     assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(SPERegs[getReg()]));
+    Inst.addOperand(MCOperand::createReg(SPERegs[getReg()])); 
   }
 
-  void addRegACCRCOperands(MCInst &Inst, unsigned N) const {
+  void addRegACCRCOperands(MCInst &Inst, unsigned N) const { 
     assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(ACCRegs[getACCReg()]));
+    Inst.addOperand(MCOperand::createReg(ACCRegs[getACCReg()])); 
   }
 
-  void addRegVSRpRCOperands(MCInst &Inst, unsigned N) const {
+  void addRegVSRpRCOperands(MCInst &Inst, unsigned N) const { 
     assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(VSRpRegs[getVSRpEvenReg()]));
+    Inst.addOperand(MCOperand::createReg(VSRpRegs[getVSRpEvenReg()])); 
   }
 
-  void addRegVSRpEvenRCOperands(MCInst &Inst, unsigned N) const {
+  void addRegVSRpEvenRCOperands(MCInst &Inst, unsigned N) const { 
     assert(N == 1 && "Invalid number of operands!");
-    Inst.addOperand(MCOperand::createReg(VSRpRegs[getVSRpEvenReg()]));
+    Inst.addOperand(MCOperand::createReg(VSRpRegs[getVSRpEvenReg()])); 
   }
 
   void addRegCRBITRCOperands(MCInst &Inst, unsigned N) const {
@@ -676,8 +676,8 @@ public:
       return CreateImm(CE->getValue(), S, E, IsPPC64);
 
     if (const MCSymbolRefExpr *SRE = dyn_cast<MCSymbolRefExpr>(Val))
-      if (SRE->getKind() == MCSymbolRefExpr::VK_PPC_TLS ||
-          SRE->getKind() == MCSymbolRefExpr::VK_PPC_TLS_PCREL)
+      if (SRE->getKind() == MCSymbolRefExpr::VK_PPC_TLS || 
+          SRE->getKind() == MCSymbolRefExpr::VK_PPC_TLS_PCREL) 
         return CreateTLSReg(SRE, S, E, IsPPC64);
 
     if (const PPCMCExpr *TE = dyn_cast<PPCMCExpr>(Val)) {
@@ -773,18 +773,18 @@ void PPCAsmParser::ProcessInstruction(MCInst &Inst,
   }
   case PPC::DCBFx:
   case PPC::DCBFL:
-  case PPC::DCBFLP:
-  case PPC::DCBFPS:
-  case PPC::DCBSTPS: {
+  case PPC::DCBFLP: 
+  case PPC::DCBFPS: 
+  case PPC::DCBSTPS: { 
     int L = 0;
     if (Opcode == PPC::DCBFL)
       L = 1;
     else if (Opcode == PPC::DCBFLP)
       L = 3;
-    else if (Opcode == PPC::DCBFPS)
-      L = 4;
-    else if (Opcode == PPC::DCBSTPS)
-      L = 6;
+    else if (Opcode == PPC::DCBFPS) 
+      L = 4; 
+    else if (Opcode == PPC::DCBSTPS) 
+      L = 6; 
 
     MCInst TmpInst;
     TmpInst.setOpcode(PPC::DCBF);
@@ -1201,41 +1201,41 @@ bool PPCAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
 }
 
 bool PPCAsmParser::MatchRegisterName(unsigned &RegNo, int64_t &IntVal) {
-  if (getParser().getTok().is(AsmToken::Percent))
-    getParser().Lex(); // Eat the '%'.
-
-  if (!getParser().getTok().is(AsmToken::Identifier))
-    return true;
-
-  StringRef Name = getParser().getTok().getString();
-  if (Name.equals_lower("lr")) {
-    RegNo = isPPC64() ? PPC::LR8 : PPC::LR;
-    IntVal = 8;
-  } else if (Name.equals_lower("ctr")) {
-    RegNo = isPPC64() ? PPC::CTR8 : PPC::CTR;
-    IntVal = 9;
-  } else if (Name.equals_lower("vrsave")) {
-    RegNo = PPC::VRSAVE;
-    IntVal = 256;
-  } else if (Name.startswith_lower("r") &&
-             !Name.substr(1).getAsInteger(10, IntVal) && IntVal < 32) {
-    RegNo = isPPC64() ? XRegs[IntVal] : RRegs[IntVal];
-  } else if (Name.startswith_lower("f") &&
-             !Name.substr(1).getAsInteger(10, IntVal) && IntVal < 32) {
-    RegNo = FRegs[IntVal];
-  } else if (Name.startswith_lower("vs") &&
-             !Name.substr(2).getAsInteger(10, IntVal) && IntVal < 64) {
-    RegNo = VSRegs[IntVal];
-  } else if (Name.startswith_lower("v") &&
-             !Name.substr(1).getAsInteger(10, IntVal) && IntVal < 32) {
-    RegNo = VRegs[IntVal];
-  } else if (Name.startswith_lower("cr") &&
-             !Name.substr(2).getAsInteger(10, IntVal) && IntVal < 8) {
-    RegNo = CRRegs[IntVal];
-  } else
-    return true;
-  getParser().Lex();
-  return false;
+  if (getParser().getTok().is(AsmToken::Percent)) 
+    getParser().Lex(); // Eat the '%'. 
+ 
+  if (!getParser().getTok().is(AsmToken::Identifier)) 
+    return true; 
+ 
+  StringRef Name = getParser().getTok().getString(); 
+  if (Name.equals_lower("lr")) { 
+    RegNo = isPPC64() ? PPC::LR8 : PPC::LR; 
+    IntVal = 8; 
+  } else if (Name.equals_lower("ctr")) { 
+    RegNo = isPPC64() ? PPC::CTR8 : PPC::CTR; 
+    IntVal = 9; 
+  } else if (Name.equals_lower("vrsave")) { 
+    RegNo = PPC::VRSAVE; 
+    IntVal = 256; 
+  } else if (Name.startswith_lower("r") && 
+             !Name.substr(1).getAsInteger(10, IntVal) && IntVal < 32) { 
+    RegNo = isPPC64() ? XRegs[IntVal] : RRegs[IntVal]; 
+  } else if (Name.startswith_lower("f") && 
+             !Name.substr(1).getAsInteger(10, IntVal) && IntVal < 32) { 
+    RegNo = FRegs[IntVal]; 
+  } else if (Name.startswith_lower("vs") && 
+             !Name.substr(2).getAsInteger(10, IntVal) && IntVal < 64) { 
+    RegNo = VSRegs[IntVal]; 
+  } else if (Name.startswith_lower("v") && 
+             !Name.substr(1).getAsInteger(10, IntVal) && IntVal < 32) { 
+    RegNo = VRegs[IntVal]; 
+  } else if (Name.startswith_lower("cr") && 
+             !Name.substr(2).getAsInteger(10, IntVal) && IntVal < 8) { 
+    RegNo = CRRegs[IntVal]; 
+  } else 
+    return true; 
+  getParser().Lex(); 
+  return false; 
 }
 
 bool PPCAsmParser::
@@ -1432,7 +1432,7 @@ bool PPCAsmParser::ParseOperand(OperandVector &Operands) {
   switch (getLexer().getKind()) {
   // Special handling for register names.  These are interpreted
   // as immediates corresponding to the register number.
-  case AsmToken::Percent: {
+  case AsmToken::Percent: { 
     unsigned RegNo;
     int64_t IntVal;
     if (MatchRegisterName(RegNo, IntVal))
@@ -1440,7 +1440,7 @@ bool PPCAsmParser::ParseOperand(OperandVector &Operands) {
 
     Operands.push_back(PPCOperand::CreateImm(IntVal, S, E, isPPC64()));
     return false;
-  }
+  } 
   case AsmToken::Identifier:
   case AsmToken::LParen:
   case AsmToken::Plus:
@@ -1488,18 +1488,18 @@ bool PPCAsmParser::ParseOperand(OperandVector &Operands) {
 
     int64_t IntVal;
     switch (getLexer().getKind()) {
-    case AsmToken::Percent: {
+    case AsmToken::Percent: { 
       unsigned RegNo;
       if (MatchRegisterName(RegNo, IntVal))
         return Error(S, "invalid register name");
       break;
-    }
+    } 
     case AsmToken::Integer:
-      if (getParser().parseAbsoluteExpression(IntVal) || IntVal < 0 ||
-          IntVal > 31)
+      if (getParser().parseAbsoluteExpression(IntVal) || IntVal < 0 || 
+          IntVal > 31) 
         return Error(S, "invalid register number");
       break;
-    case AsmToken::Identifier:
+    case AsmToken::Identifier: 
     default:
       return Error(S, "invalid memory operand");
     }
@@ -1583,7 +1583,7 @@ bool PPCAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
 /// ParseDirective parses the PPC specific directives
 bool PPCAsmParser::ParseDirective(AsmToken DirectiveID) {
   StringRef IDVal = DirectiveID.getIdentifier();
-  if (IDVal == ".word")
+  if (IDVal == ".word") 
     ParseDirectiveWord(2, DirectiveID);
   else if (IDVal == ".llong")
     ParseDirectiveWord(8, DirectiveID);
@@ -1655,7 +1655,7 @@ bool PPCAsmParser::ParseDirectiveMachine(SMLoc L) {
 
   // FIXME: Right now, the parser always allows any available
   // instruction, so the .machine directive is not useful.
-  // In the wild, any/push/pop/ppc64/altivec/power[4-9] are seen.
+  // In the wild, any/push/pop/ppc64/altivec/power[4-9] are seen. 
 
   Parser.Lex();
 
@@ -1715,9 +1715,9 @@ bool PPCAsmParser::ParseDirectiveLocalEntry(SMLoc L) {
 /// Force static initialization.
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializePowerPCAsmParser() {
   RegisterMCAsmParser<PPCAsmParser> A(getThePPC32Target());
-  RegisterMCAsmParser<PPCAsmParser> B(getThePPC32LETarget());
-  RegisterMCAsmParser<PPCAsmParser> C(getThePPC64Target());
-  RegisterMCAsmParser<PPCAsmParser> D(getThePPC64LETarget());
+  RegisterMCAsmParser<PPCAsmParser> B(getThePPC32LETarget()); 
+  RegisterMCAsmParser<PPCAsmParser> C(getThePPC64Target()); 
+  RegisterMCAsmParser<PPCAsmParser> D(getThePPC64LETarget()); 
 }
 
 #define GET_REGISTER_MATCHER

@@ -30,7 +30,7 @@ class SMLLexer(RegexLexer):
     filenames = ['*.sml', '*.sig', '*.fun']
     mimetypes = ['text/x-standardml', 'application/x-standardml']
 
-    alphanumid_reserved = {
+    alphanumid_reserved = { 
         # Core
         'abstype', 'and', 'andalso', 'as', 'case', 'datatype', 'do', 'else',
         'end', 'exception', 'fn', 'fun', 'handle', 'if', 'in', 'infix',
@@ -39,16 +39,16 @@ class SMLLexer(RegexLexer):
         # Modules
         'eqtype', 'functor', 'include', 'sharing', 'sig', 'signature',
         'struct', 'structure', 'where',
-    }
+    } 
 
-    symbolicid_reserved = {
+    symbolicid_reserved = { 
         # Core
         ':', r'\|', '=', '=>', '->', '#',
         # Modules
         ':>',
-    }
+    } 
 
-    nonid_reserved = {'(', ')', '[', ']', '{', '}', ',', ';', '...', '_'}
+    nonid_reserved = {'(', ')', '[', ']', '{', '}', ',', ';', '...', '_'} 
 
     alphanumid_re = r"[a-zA-Z][\w']*"
     symbolicid_re = r"[!%&$#+\-/:<=>?@\\~`^|*]+"

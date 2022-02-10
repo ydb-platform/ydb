@@ -464,7 +464,7 @@ void ELFWriter::writeHeader(const MCAssembler &Asm) {
 
 uint64_t ELFWriter::SymbolValue(const MCSymbol &Sym,
                                 const MCAsmLayout &Layout) {
-  if (Sym.isCommon())
+  if (Sym.isCommon()) 
     return Sym.getCommonAlignment();
 
   uint64_t Res;
@@ -1024,13 +1024,13 @@ void ELFWriter::writeSection(const SectionIndexMapTy &SectionIndexMap,
   }
 
   if (Section.getFlags() & ELF::SHF_LINK_ORDER) {
-    // If the value in the associated metadata is not a definition, Sym will be
-    // undefined. Represent this with sh_link=0.
+    // If the value in the associated metadata is not a definition, Sym will be 
+    // undefined. Represent this with sh_link=0. 
     const MCSymbol *Sym = Section.getLinkedToSymbol();
-    if (Sym && Sym->isInSection()) {
-      const MCSectionELF *Sec = cast<MCSectionELF>(&Sym->getSection());
-      sh_link = SectionIndexMap.lookup(Sec);
-    }
+    if (Sym && Sym->isInSection()) { 
+      const MCSectionELF *Sec = cast<MCSectionELF>(&Sym->getSection()); 
+      sh_link = SectionIndexMap.lookup(Sec); 
+    } 
   }
 
   WriteSecHdrEntry(StrTabBuilder.getOffset(Section.getName()),
@@ -1258,9 +1258,9 @@ void ELFObjectWriter::executePostLayoutBinding(MCAssembler &Asm,
                                                const MCAsmLayout &Layout) {
   // The presence of symbol versions causes undefined symbols and
   // versions declared with @@@ to be renamed.
-  for (const MCAssembler::Symver &S : Asm.Symvers) {
-    StringRef AliasName = S.Name;
-    const auto &Symbol = cast<MCSymbolELF>(*S.Sym);
+  for (const MCAssembler::Symver &S : Asm.Symvers) { 
+    StringRef AliasName = S.Name; 
+    const auto &Symbol = cast<MCSymbolELF>(*S.Sym); 
     size_t Pos = AliasName.find('@');
     assert(Pos != StringRef::npos);
 
@@ -1279,7 +1279,7 @@ void ELFObjectWriter::executePostLayoutBinding(MCAssembler &Asm,
     // Aliases defined with .symvar copy the binding from the symbol they alias.
     // This is the first place we are able to copy this information.
     Alias->setBinding(Symbol.getBinding());
-    Alias->setVisibility(Symbol.getVisibility());
+    Alias->setVisibility(Symbol.getVisibility()); 
     Alias->setOther(Symbol.getOther());
 
     if (!Symbol.isUndefined() && !Rest.startswith("@@@"))
@@ -1287,14 +1287,14 @@ void ELFObjectWriter::executePostLayoutBinding(MCAssembler &Asm,
 
     if (Symbol.isUndefined() && Rest.startswith("@@") &&
         !Rest.startswith("@@@")) {
-      Asm.getContext().reportError(S.Loc, "default version symbol " +
-                                              AliasName + " must be defined");
+      Asm.getContext().reportError(S.Loc, "default version symbol " + 
+                                              AliasName + " must be defined"); 
       continue;
     }
 
     if (Renames.count(&Symbol) && Renames[&Symbol] != Alias) {
-      Asm.getContext().reportError(S.Loc, Twine("multiple versions for ") +
-                                              Symbol.getName());
+      Asm.getContext().reportError(S.Loc, Twine("multiple versions for ") + 
+                                              Symbol.getName()); 
       continue;
     }
 
@@ -1392,22 +1392,22 @@ bool ELFObjectWriter::shouldRelocateWithSymbol(const MCAssembler &Asm,
       if (C != 0)
         return true;
 
-      // gold<2.34 incorrectly ignored the addend for R_386_GOTOFF (9)
-      // (http://sourceware.org/PR16794).
-      if (TargetObjectWriter->getEMachine() == ELF::EM_386 &&
-          Type == ELF::R_386_GOTOFF)
+      // gold<2.34 incorrectly ignored the addend for R_386_GOTOFF (9) 
+      // (http://sourceware.org/PR16794). 
+      if (TargetObjectWriter->getEMachine() == ELF::EM_386 && 
+          Type == ELF::R_386_GOTOFF) 
         return true;
-
-      // ld.lld handles R_MIPS_HI16/R_MIPS_LO16 separately, not as a whole, so
-      // it doesn't know that an R_MIPS_HI16 with implicit addend 1 and an
-      // R_MIPS_LO16 with implicit addend -32768 represents 32768, which is in
-      // range of a MergeInputSection. We could introduce a new RelExpr member
-      // (like R_RISCV_PC_INDIRECT for R_RISCV_PCREL_HI20 / R_RISCV_PCREL_LO12)
-      // but the complexity is unnecessary given that GNU as keeps the original
-      // symbol for this case as well.
-      if (TargetObjectWriter->getEMachine() == ELF::EM_MIPS &&
-          !hasRelocationAddend())
-        return true;
+ 
+      // ld.lld handles R_MIPS_HI16/R_MIPS_LO16 separately, not as a whole, so 
+      // it doesn't know that an R_MIPS_HI16 with implicit addend 1 and an 
+      // R_MIPS_LO16 with implicit addend -32768 represents 32768, which is in 
+      // range of a MergeInputSection. We could introduce a new RelExpr member 
+      // (like R_RISCV_PC_INDIRECT for R_RISCV_PCREL_HI20 / R_RISCV_PCREL_LO12) 
+      // but the complexity is unnecessary given that GNU as keeps the original 
+      // symbol for this case as well. 
+      if (TargetObjectWriter->getEMachine() == ELF::EM_MIPS && 
+          !hasRelocationAddend()) 
+        return true; 
     }
 
     // Most TLS relocations use a got, so they need the symbol. Even those that

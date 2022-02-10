@@ -17,16 +17,16 @@ _have_code = (types.MethodType, types.FunctionType, types.CodeType,
               classmethod, staticmethod, type)
 
 FORMAT_VALUE = opmap['FORMAT_VALUE']
-FORMAT_VALUE_CONVERTERS = (
-    (None, ''),
-    (str, 'str'),
-    (repr, 'repr'),
-    (ascii, 'ascii'),
-)
-MAKE_FUNCTION = opmap['MAKE_FUNCTION']
-MAKE_FUNCTION_FLAGS = ('defaults', 'kwdefaults', 'annotations', 'closure')
+FORMAT_VALUE_CONVERTERS = ( 
+    (None, ''), 
+    (str, 'str'), 
+    (repr, 'repr'), 
+    (ascii, 'ascii'), 
+) 
+MAKE_FUNCTION = opmap['MAKE_FUNCTION'] 
+MAKE_FUNCTION_FLAGS = ('defaults', 'kwdefaults', 'annotations', 'closure') 
 
-
+ 
 def _try_compile(source, name):
     """Attempts to compile the given source, first as an expression and
        then as a statement if the first approach fails.
@@ -157,7 +157,7 @@ def _format_code_info(co):
     lines.append("Name:              %s" % co.co_name)
     lines.append("Filename:          %s" % co.co_filename)
     lines.append("Argument count:    %s" % co.co_argcount)
-    lines.append("Positional-only arguments: %s" % co.co_posonlyargcount)
+    lines.append("Positional-only arguments: %s" % co.co_posonlyargcount) 
     lines.append("Kw-only arguments: %s" % co.co_kwonlyargcount)
     lines.append("Number of locals:  %s" % co.co_nlocals)
     lines.append("Stack size:        %s" % co.co_stacksize)
@@ -349,15 +349,15 @@ def _get_instructions_bytes(code, varnames=None, names=None, constants=None,
             elif op in hasfree:
                 argval, argrepr = _get_name_info(arg, cells)
             elif op == FORMAT_VALUE:
-                argval, argrepr = FORMAT_VALUE_CONVERTERS[arg & 0x3]
-                argval = (argval, bool(arg & 0x4))
+                argval, argrepr = FORMAT_VALUE_CONVERTERS[arg & 0x3] 
+                argval = (argval, bool(arg & 0x4)) 
                 if argval[1]:
                     if argrepr:
                         argrepr += ', '
                     argrepr += 'with format'
-            elif op == MAKE_FUNCTION:
-                argrepr = ', '.join(s for i, s in enumerate(MAKE_FUNCTION_FLAGS)
-                                    if arg & (1<<i))
+            elif op == MAKE_FUNCTION: 
+                argrepr = ', '.join(s for i, s in enumerate(MAKE_FUNCTION_FLAGS) 
+                                    if arg & (1<<i)) 
         yield Instruction(opname[op], op,
                           arg, argval, argrepr,
                           offset, starts_line, is_jump_target)
@@ -454,7 +454,7 @@ def findlinestarts(code):
     """
     byte_increments = code.co_lnotab[0::2]
     line_increments = code.co_lnotab[1::2]
-    bytecode_len = len(code.co_code)
+    bytecode_len = len(code.co_code) 
 
     lastlineno = None
     lineno = code.co_firstlineno
@@ -465,10 +465,10 @@ def findlinestarts(code):
                 yield (addr, lineno)
                 lastlineno = lineno
             addr += byte_incr
-            if addr >= bytecode_len:
-                # The rest of the lnotab byte offsets are past the end of
-                # the bytecode, so the lines were optimized away.
-                return
+            if addr >= bytecode_len: 
+                # The rest of the lnotab byte offsets are past the end of 
+                # the bytecode, so the lines were optimized away. 
+                return 
         if line_incr >= 0x80:
             # line_increments is an array of 8-bit signed integers
             line_incr -= 0x100
@@ -542,7 +542,7 @@ def _test():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('infile', type=argparse.FileType('rb'), nargs='?', default='-')
+    parser.add_argument('infile', type=argparse.FileType('rb'), nargs='?', default='-') 
     args = parser.parse_args()
     with args.infile as infile:
         source = infile.read()

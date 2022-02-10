@@ -28,7 +28,7 @@ http://wwwsearch.sf.net/):
 __all__ = ['Cookie', 'CookieJar', 'CookiePolicy', 'DefaultCookiePolicy',
            'FileCookieJar', 'LWPCookieJar', 'LoadError', 'MozillaCookieJar']
 
-import os
+import os 
 import copy
 import datetime
 import re
@@ -214,14 +214,14 @@ LOOSE_HTTP_DATE_RE = re.compile(
        (?::(\d\d))?    # optional seconds
     )?                 # optional clock
        \s*
-    (?:
-       ([-+]?\d{2,4}|(?![APap][Mm]\b)[A-Za-z]+) # timezone
+    (?: 
+       ([-+]?\d{2,4}|(?![APap][Mm]\b)[A-Za-z]+) # timezone 
        \s*
-    )?
-    (?:
-       \(\w+\)         # ASCII representation of timezone in parens.
-       \s*
-    )?$""", re.X | re.ASCII)
+    )? 
+    (?: 
+       \(\w+\)         # ASCII representation of timezone in parens. 
+       \s* 
+    )?$""", re.X | re.ASCII) 
 def http2time(text):
     """Returns time in seconds since epoch of time represented by a string.
 
@@ -291,11 +291,11 @@ ISO_DATE_RE = re.compile(
       (?::?(\d\d(?:\.\d*)?))?  # optional seconds (and fractional)
    )?                    # optional clock
       \s*
-   (?:
-      ([-+]?\d\d?:?(:?\d\d)?
-       |Z|z)             # timezone  (Z is "zero meridian", i.e. GMT)
-      \s*
-   )?$""", re.X | re. ASCII)
+   (?: 
+      ([-+]?\d\d?:?(:?\d\d)? 
+       |Z|z)             # timezone  (Z is "zero meridian", i.e. GMT) 
+      \s* 
+   )?$""", re.X | re. ASCII) 
 def iso2time(text):
     """
     As for http2time, but parses the ISO 8601 formats:
@@ -885,7 +885,7 @@ class DefaultCookiePolicy(CookiePolicy):
                  strict_ns_domain=DomainLiberal,
                  strict_ns_set_initial_dollar=False,
                  strict_ns_set_path=False,
-                 secure_protocols=("https", "wss")
+                 secure_protocols=("https", "wss") 
                  ):
         """Constructor arguments should be passed as keyword arguments only."""
         self.netscape = netscape
@@ -898,7 +898,7 @@ class DefaultCookiePolicy(CookiePolicy):
         self.strict_ns_domain = strict_ns_domain
         self.strict_ns_set_initial_dollar = strict_ns_set_initial_dollar
         self.strict_ns_set_path = strict_ns_set_path
-        self.secure_protocols = secure_protocols
+        self.secure_protocols = secure_protocols 
 
         if blocked_domains is not None:
             self._blocked_domains = tuple(blocked_domains)
@@ -1125,7 +1125,7 @@ class DefaultCookiePolicy(CookiePolicy):
         return True
 
     def return_ok_secure(self, cookie, request):
-        if cookie.secure and request.type not in self.secure_protocols:
+        if cookie.secure and request.type not in self.secure_protocols: 
             _debug("   secure cookie with non-secure request")
             return False
         return True
@@ -1599,7 +1599,7 @@ class CookieJar:
         headers = response.info()
         rfc2965_hdrs = headers.get_all("Set-Cookie2", [])
         ns_hdrs = headers.get_all("Set-Cookie", [])
-        self._policy._now = self._now = int(time.time())
+        self._policy._now = self._now = int(time.time()) 
 
         rfc2965 = self._policy.rfc2965
         netscape = self._policy.netscape
@@ -1781,7 +1781,7 @@ class FileCookieJar(CookieJar):
         """
         CookieJar.__init__(self, policy)
         if filename is not None:
-            filename = os.fspath(filename)
+            filename = os.fspath(filename) 
         self.filename = filename
         self.delayload = bool(delayload)
 

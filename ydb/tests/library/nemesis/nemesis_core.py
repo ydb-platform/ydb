@@ -7,7 +7,7 @@ import random
 import time
 import threading
 import six.moves
-from six.moves import collections_abc
+from six.moves import collections_abc 
 from ydb.tests.library.nemesis import remote_execution
 
 
@@ -276,7 +276,7 @@ class AbstractNemesisNodeTerrorist(Nemesis):
             return ["ssh", address] + list(node_command)
 
 
-class Schedule(collections_abc.Iterator):
+class Schedule(collections_abc.Iterator): 
     def __init__(self, schedule_iterator):
         self.__iterator = schedule_iterator
 

@@ -1,6 +1,6 @@
 """
-These are Python 3.6+-only and keyword-only APIs that call `attr.s` and
-`attr.ib` with different default values.
+These are Python 3.6+-only and keyword-only APIs that call `attr.s` and 
+`attr.ib` with different default values. 
 """
 
 from functools import partial
@@ -31,7 +31,7 @@ def define(
     auto_detect=True,
     getstate_setstate=None,
     on_setattr=None,
-    field_transformer=None,
+    field_transformer=None, 
 ):
     r"""
     The only behavioral differences are the handling of the *auto_attribs*
@@ -40,8 +40,8 @@ def define(
     :param Optional[bool] auto_attribs: If set to `True` or `False`, it behaves
        exactly like `attr.s`. If left `None`, `attr.s` will try to guess:
 
-       1. If any attributes are annotated and no unannotated `attr.ib`\ s
-          are found, it assumes *auto_attribs=True*.
+       1. If any attributes are annotated and no unannotated `attr.ib`\ s 
+          are found, it assumes *auto_attribs=True*. 
        2. Otherwise it assumes *auto_attribs=False* and tries to collect
           `attr.ib`\ s.
 
@@ -71,7 +71,7 @@ def define(
             collect_by_mro=True,
             getstate_setstate=getstate_setstate,
             on_setattr=on_setattr,
-            field_transformer=field_transformer,
+            field_transformer=field_transformer, 
         )
 
     def wrap(cls):

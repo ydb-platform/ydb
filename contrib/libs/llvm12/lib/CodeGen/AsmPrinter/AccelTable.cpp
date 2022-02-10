@@ -270,7 +270,7 @@ void AccelTableWriter::emitOffsets(const MCSymbol *Base) const {
         continue;
       PrevHash = HashValue;
       Asm->OutStreamer->AddComment("Offset in Bucket " + Twine(i));
-      Asm->emitLabelDifference(Hash->Sym, Base, Asm->getDwarfOffsetByteSize());
+      Asm->emitLabelDifference(Hash->Sym, Base, Asm->getDwarfOffsetByteSize()); 
     }
   }
 }
@@ -366,8 +366,8 @@ void Dwarf5AccelTableWriter<DataT>::Header::emit(
   assert(CompUnitCount > 0 && "Index must have at least one CU.");
 
   AsmPrinter *Asm = Ctx.Asm;
-  Asm->emitDwarfUnitLength(Ctx.ContributionEnd, Ctx.ContributionStart,
-                           "Header: unit length");
+  Asm->emitDwarfUnitLength(Ctx.ContributionEnd, Ctx.ContributionStart, 
+                           "Header: unit length"); 
   Asm->OutStreamer->emitLabel(Ctx.ContributionStart);
   Asm->OutStreamer->AddComment("Header: version");
   Asm->emitInt16(Version);
@@ -504,7 +504,7 @@ template <typename DataT> void Dwarf5AccelTableWriter<DataT>::emitData() const {
       for (const auto *Value : Hash->Values)
         emitEntry(*static_cast<const DataT *>(Value));
       Asm->OutStreamer->AddComment("End of list: " + Hash->Name.getString());
-      Asm->emitInt8(0);
+      Asm->emitInt8(0); 
     }
   }
 }
@@ -591,14 +591,14 @@ void llvm::emitDWARF5AccelTable(
 }
 
 void AppleAccelTableOffsetData::emit(AsmPrinter *Asm) const {
-  assert(Die.getDebugSectionOffset() <= UINT32_MAX &&
-         "The section offset exceeds the limit.");
+  assert(Die.getDebugSectionOffset() <= UINT32_MAX && 
+         "The section offset exceeds the limit."); 
   Asm->emitInt32(Die.getDebugSectionOffset());
 }
 
 void AppleAccelTableTypeData::emit(AsmPrinter *Asm) const {
-  assert(Die.getDebugSectionOffset() <= UINT32_MAX &&
-         "The section offset exceeds the limit.");
+  assert(Die.getDebugSectionOffset() <= UINT32_MAX && 
+         "The section offset exceeds the limit."); 
   Asm->emitInt32(Die.getDebugSectionOffset());
   Asm->emitInt16(Die.getTag());
   Asm->emitInt8(0);

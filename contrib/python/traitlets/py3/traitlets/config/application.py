@@ -4,16 +4,16 @@
 # Distributed under the terms of the Modified BSD License.
 
 
-from collections import defaultdict, OrderedDict
+from collections import defaultdict, OrderedDict 
 from copy import deepcopy
-import functools
+import functools 
 import json
 import logging
 import os
-import pprint
+import pprint 
 import re
 import sys
-import warnings
+import warnings 
 
 from traitlets.config.configurable import Configurable, SingletonConfigurable
 from traitlets.config.loader import (
@@ -22,11 +22,11 @@ from traitlets.config.loader import (
 from traitlets.traitlets import (
     Bool, Unicode, List, Enum, Dict, Instance, TraitError, observe, observe_compat, default,
 )
-
-from ..utils.importstring import import_item
-from ..utils import cast_unicode
-from traitlets.utils.text import indent, wrap_paragraphs
-from textwrap import dedent
+ 
+from ..utils.importstring import import_item 
+from ..utils import cast_unicode 
+from traitlets.utils.text import indent, wrap_paragraphs 
+from textwrap import dedent 
 
 
 #-----------------------------------------------------------------------------
@@ -34,18 +34,18 @@ from textwrap import dedent
 #-----------------------------------------------------------------------------
 # merge flags&aliases into options
 option_description = """
-The options below are convenience aliases to configurable class-options,
-as listed in the "Equivalent to" description-line of the aliases.
-To see all configurable class-options for some <cmd>, use:
-    <cmd> --help-all
-""".strip()  # trim newlines of front and back
+The options below are convenience aliases to configurable class-options, 
+as listed in the "Equivalent to" description-line of the aliases. 
+To see all configurable class-options for some <cmd>, use: 
+    <cmd> --help-all 
+""".strip()  # trim newlines of front and back 
 
 keyvalue_description = """
-The command-line option below sets the respective configurable class-parameter:
-    --Class.parameter=value
-This line is evaluated in Python, so simple expressions are allowed.
-For instance, to set `C.a=[0,1,2]`, you may type this:
-    --C.a='range(3)'
+The command-line option below sets the respective configurable class-parameter: 
+    --Class.parameter=value 
+This line is evaluated in Python, so simple expressions are allowed. 
+For instance, to set `C.a=[0,1,2]`, you may type this: 
+    --C.a='range(3)' 
 """.strip() # trim newlines of front and back
 
 # sys.argv can be missing, for example when python is embedded. See the docs
@@ -74,7 +74,7 @@ else:
     raise ValueError("Unsupported value for environment variable: 'TRAITLETS_APPLICATION_RAISE_CONFIG_FILE_ERROR' is set to '%s' which is none of  {'0', '1', 'false', 'true', ''}."% _envvar )
 
 
-def catch_config_error(method):
+def catch_config_error(method): 
     """Method decorator for catching invalid config (Trait/ArgumentErrors) during init.
 
     On a TraitError (generally caused by bad config), this will print the trait's
@@ -82,16 +82,16 @@ def catch_config_error(method):
 
     For use on init methods, to prevent invoking excepthook on invalid input.
     """
-    @functools.wraps(method)
-    def inner(app, *args, **kwargs):
-        try:
-            return method(app, *args, **kwargs)
-        except (TraitError, ArgumentError) as e:
-            app.log.fatal("Bad config encountered during initialization: %s", e)
-            app.log.debug("Config at the time: %s", app.config)
-            app.exit(1)
+    @functools.wraps(method) 
+    def inner(app, *args, **kwargs): 
+        try: 
+            return method(app, *args, **kwargs) 
+        except (TraitError, ArgumentError) as e: 
+            app.log.fatal("Bad config encountered during initialization: %s", e) 
+            app.log.debug("Config at the time: %s", app.config) 
+            app.exit(1) 
 
-    return inner
+    return inner 
 
 class ApplicationError(Exception):
     pass
@@ -122,11 +122,11 @@ class Application(SingletonConfigurable):
 
     # The name of the application, will usually match the name of the command
     # line application
-    name = Unicode('application')
+    name = Unicode('application') 
 
     # The description of the application that is printed at the beginning
     # of the help.
-    description = Unicode('This is an application.')
+    description = Unicode('This is an application.') 
     # default section descriptions
     option_description = Unicode(option_description)
     keyvalue_description = Unicode(keyvalue_description)
@@ -142,20 +142,20 @@ class Application(SingletonConfigurable):
     # be exposed at the command line.
     classes = []
 
-    def _classes_inc_parents(self, classes=None):
+    def _classes_inc_parents(self, classes=None): 
         """Iterate through configurable classes, including configurable parents
 
-        :param classes:
-            The list of classes to iterate; if not set, uses :attr:`classes`.
-
+        :param classes: 
+            The list of classes to iterate; if not set, uses :attr:`classes`. 
+ 
         Children should always be after parents, and each class should only be
         yielded once.
         """
-        if classes is None:
-            classes = self.classes
-
+        if classes is None: 
+            classes = self.classes 
+ 
         seen = set()
-        for c in classes:
+        for c in classes: 
             # We want to sort parents before children, so we reverse the MRO
             for parent in reversed(c.mro()):
                 if issubclass(parent, Configurable) and (parent not in seen):
@@ -163,7 +163,7 @@ class Application(SingletonConfigurable):
                     yield parent
 
     # The version string of this application.
-    version = Unicode('0.0')
+    version = Unicode('0.0') 
 
     # the argv used to initialize the application
     argv = List()
@@ -181,7 +181,7 @@ class Application(SingletonConfigurable):
     def _log_level_changed(self, change):
         """Adjust the log level when log_level is set."""
         new = change.new
-        if isinstance(new, str):
+        if isinstance(new, str): 
             new = getattr(logging, new)
             self.log_level = new
         self.log.setLevel(new)
@@ -200,13 +200,13 @@ class Application(SingletonConfigurable):
     @observe_compat
     def _log_format_changed(self, change):
         """Change the log formatter when log_format is set."""
-        _log_handler = self._get_log_handler()
-        if not _log_handler:
-            warnings.warn(
-                f"No Handler found on {self.log}, setting log_format will have no effect",
-                RuntimeWarning,
-            )
-            return
+        _log_handler = self._get_log_handler() 
+        if not _log_handler: 
+            warnings.warn( 
+                f"No Handler found on {self.log}, setting log_format will have no effect", 
+                RuntimeWarning, 
+            ) 
+            return 
         _log_formatter = self._log_formatter_cls(fmt=self.log_format, datefmt=self.log_datefmt)
         _log_handler.setFormatter(_log_formatter)
 
@@ -240,32 +240,32 @@ class Application(SingletonConfigurable):
         log.addHandler(_log_handler)
         return log
 
-    #: the alias map for configurables
-    #: Keys might strings or tuples for additional options; single-letter alias accessed like `-v`.
-    #: Values might be like "Class.trait" strings of two-tuples: (Class.trait, help-text).
-    aliases = {'log-level' : 'Application.log_level'}
+    #: the alias map for configurables 
+    #: Keys might strings or tuples for additional options; single-letter alias accessed like `-v`. 
+    #: Values might be like "Class.trait" strings of two-tuples: (Class.trait, help-text). 
+    aliases = {'log-level' : 'Application.log_level'} 
 
     # flags for loading Configurables or store_const style flags
     # flags are loaded from this dict by '--key' flags
     # this must be a dict of two-tuples, the first element being the Config/dict
     # and the second being the help string for the flag
-    flags = {
-        'debug': ({
-            'Application': {
-                'log_level': logging.DEBUG,
-            },
-        }, "Set log-level to debug, for the most verbose logging."),
-        'show-config': ({
-            'Application': {
-                'show_config': True,
-            },
-        }, "Show the application's configuration (human-readable format)"),
-        'show-config-json': ({
-            'Application': {
-                'show_config_json': True,
-            },
-        }, "Show the application's configuration (json format)"),
-    }
+    flags = { 
+        'debug': ({ 
+            'Application': { 
+                'log_level': logging.DEBUG, 
+            }, 
+        }, "Set log-level to debug, for the most verbose logging."), 
+        'show-config': ({ 
+            'Application': { 
+                'show_config': True, 
+            }, 
+        }, "Show the application's configuration (human-readable format)"), 
+        'show-config-json': ({ 
+            'Application': { 
+                'show_config_json': True, 
+            }, 
+        }, "Show the application's configuration (json format)"), 
+    } 
 
     # subcommands for launching other applications
     # if this is not empty, this will be a parent Application
@@ -287,26 +287,26 @@ class Application(SingletonConfigurable):
         """
     )
 
-    _loaded_config_files = List()
+    _loaded_config_files = List() 
 
-    show_config = Bool(
-        help="Instead of starting the Application, dump configuration to stdout"
-    ).tag(config=True)
-
-    show_config_json = Bool(
-        help="Instead of starting the Application, dump configuration to stdout (as JSON)"
-    ).tag(config=True)
-
-    @observe('show_config_json')
-    def _show_config_json_changed(self, change):
-        self.show_config = change.new
-
-    @observe('show_config')
-    def _show_config_changed(self, change):
-        if change.new:
-            self._save_start = self.start
-            self.start = self.start_show_config
-
+    show_config = Bool( 
+        help="Instead of starting the Application, dump configuration to stdout" 
+    ).tag(config=True) 
+ 
+    show_config_json = Bool( 
+        help="Instead of starting the Application, dump configuration to stdout (as JSON)" 
+    ).tag(config=True) 
+ 
+    @observe('show_config_json') 
+    def _show_config_json_changed(self, change): 
+        self.show_config = change.new 
+ 
+    @observe('show_config') 
+    def _show_config_changed(self, change): 
+        if change.new: 
+            self._save_start = self.start 
+            self.start = self.start_show_config 
+ 
     def __init__(self, **kwargs):
         SingletonConfigurable.__init__(self, **kwargs)
         # Ensure my class is in self.classes, so my attributes appear in command line
@@ -315,7 +315,7 @@ class Application(SingletonConfigurable):
         if cls not in self.classes:
             if self.classes is cls.classes:
                 # class attr, assign instead of insert
-                self.classes = [cls] + self.classes
+                self.classes = [cls] + self.classes 
             else:
                 self.classes.insert(0, self.__class__)
 
@@ -323,7 +323,7 @@ class Application(SingletonConfigurable):
     @observe_compat
     def _config_changed(self, change):
         super(Application, self)._config_changed(change)
-        self.log.debug('Config changed: %r', change.new)
+        self.log.debug('Config changed: %r', change.new) 
 
     @catch_config_error
     def initialize(self, argv=None):
@@ -342,49 +342,49 @@ class Application(SingletonConfigurable):
         if self.subapp is not None:
             return self.subapp.start()
 
-    def start_show_config(self):
-        """start function used when show_config is True"""
-        config = self.config.copy()
-        # exclude show_config flags from displayed config
-        for cls in self.__class__.mro():
-            if cls.__name__ in config:
-                cls_config = config[cls.__name__]
-                cls_config.pop('show_config', None)
-                cls_config.pop('show_config_json', None)
-
-        if self.show_config_json:
-            json.dump(config, sys.stdout,
-                      indent=1, sort_keys=True, default=repr)
-            # add trailing newline
-            sys.stdout.write('\n')
-            return
-
-        if self._loaded_config_files:
-            print("Loaded config files:")
-            for f in self._loaded_config_files:
-                print('  ' + f)
-            print()
-
-        for classname in sorted(config):
-            class_config = config[classname]
-            if not class_config:
-                continue
-            print(classname)
-            pformat_kwargs = dict(indent=4, compact=True)
-
-            for traitname in sorted(class_config):
-                value = class_config[traitname]
-                print('  .{} = {}'.format(
-                    traitname,
-                    pprint.pformat(value, **pformat_kwargs),
-                ))
-
+    def start_show_config(self): 
+        """start function used when show_config is True""" 
+        config = self.config.copy() 
+        # exclude show_config flags from displayed config 
+        for cls in self.__class__.mro(): 
+            if cls.__name__ in config: 
+                cls_config = config[cls.__name__] 
+                cls_config.pop('show_config', None) 
+                cls_config.pop('show_config_json', None) 
+ 
+        if self.show_config_json: 
+            json.dump(config, sys.stdout, 
+                      indent=1, sort_keys=True, default=repr) 
+            # add trailing newline 
+            sys.stdout.write('\n') 
+            return 
+ 
+        if self._loaded_config_files: 
+            print("Loaded config files:") 
+            for f in self._loaded_config_files: 
+                print('  ' + f) 
+            print() 
+ 
+        for classname in sorted(config): 
+            class_config = config[classname] 
+            if not class_config: 
+                continue 
+            print(classname) 
+            pformat_kwargs = dict(indent=4, compact=True) 
+ 
+            for traitname in sorted(class_config): 
+                value = class_config[traitname] 
+                print('  .{} = {}'.format( 
+                    traitname, 
+                    pprint.pformat(value, **pformat_kwargs), 
+                )) 
+ 
     def print_alias_help(self):
-        """Print the alias parts of the help."""
-        print('\n'.join(self.emit_alias_help()))
-
-    def emit_alias_help(self):
-        """Yield the lines for alias part of the help."""
+        """Print the alias parts of the help.""" 
+        print('\n'.join(self.emit_alias_help())) 
+ 
+    def emit_alias_help(self): 
+        """Yield the lines for alias part of the help.""" 
         if not self.aliases:
             return
 
@@ -395,151 +395,151 @@ class Application(SingletonConfigurable):
                 classdict[c.__name__] = c
 
         for alias, longname in self.aliases.items():
-            try:
-                if isinstance(longname, tuple):
-                    longname, fhelp = longname
-                else:
-                    fhelp = None
-                classname, traitname = longname.split('.')[-2:]
-                longname = classname + '.' + traitname
-                cls = classdict[classname]
+            try: 
+                if isinstance(longname, tuple): 
+                    longname, fhelp = longname 
+                else: 
+                    fhelp = None 
+                classname, traitname = longname.split('.')[-2:] 
+                longname = classname + '.' + traitname 
+                cls = classdict[classname] 
 
-                trait = cls.class_traits(config=True)[traitname]
-                fhelp = cls.class_get_trait_help(trait, helptext=fhelp).splitlines()
+                trait = cls.class_traits(config=True)[traitname] 
+                fhelp = cls.class_get_trait_help(trait, helptext=fhelp).splitlines() 
 
-                if not isinstance(alias, tuple):
-                    alias = (alias, )
-                alias = sorted(alias, key=len)
-                alias = ', '.join(('--%s' if len(m) > 1 else '-%s') % m
-                                  for m in alias)
-
-                # reformat first line
-                fhelp[0] = fhelp[0].replace('--' + longname, alias)
-                for l in fhelp:
-                    yield l
-                yield indent("Equivalent to: [--%s]" % longname)
-            except Exception as ex:
-                self.log.error('Failed collecting help-message for alias %r, due to: %s',
-                               alias, ex)
-                raise
-
+                if not isinstance(alias, tuple): 
+                    alias = (alias, ) 
+                alias = sorted(alias, key=len) 
+                alias = ', '.join(('--%s' if len(m) > 1 else '-%s') % m 
+                                  for m in alias) 
+ 
+                # reformat first line 
+                fhelp[0] = fhelp[0].replace('--' + longname, alias) 
+                for l in fhelp: 
+                    yield l 
+                yield indent("Equivalent to: [--%s]" % longname) 
+            except Exception as ex: 
+                self.log.error('Failed collecting help-message for alias %r, due to: %s', 
+                               alias, ex) 
+                raise 
+ 
     def print_flag_help(self):
         """Print the flag part of the help."""
-        print('\n'.join(self.emit_flag_help()))
-
-    def emit_flag_help(self):
-        """Yield the lines for the flag part of the help."""
+        print('\n'.join(self.emit_flag_help())) 
+ 
+    def emit_flag_help(self): 
+        """Yield the lines for the flag part of the help.""" 
         if not self.flags:
             return
 
-        for flags, (cfg, fhelp) in self.flags.items():
-            try:
-                if not isinstance(flags, tuple):
-                    flags = (flags, )
-                flags = sorted(flags, key=len)
-                flags = ', '.join(('--%s' if len(m) > 1 else '-%s') % m
-                                  for m in flags)
-                yield flags
-                yield indent(dedent(fhelp.strip()))
-                cfg_list = ' '.join('--%s.%s=%s' %(clname, prop, val)
-                                    for clname, props_dict
-                                    in cfg.items()
-                                    for prop, val in props_dict.items())
-                cfg_txt = "Equivalent to: [%s]" % cfg_list
-                yield indent(dedent(cfg_txt))
-            except Exception as ex:
-                self.log.error('Failed collecting help-message for flag %r, due to: %s',
-                               flags, ex)
-                raise
+        for flags, (cfg, fhelp) in self.flags.items(): 
+            try: 
+                if not isinstance(flags, tuple): 
+                    flags = (flags, ) 
+                flags = sorted(flags, key=len) 
+                flags = ', '.join(('--%s' if len(m) > 1 else '-%s') % m 
+                                  for m in flags) 
+                yield flags 
+                yield indent(dedent(fhelp.strip())) 
+                cfg_list = ' '.join('--%s.%s=%s' %(clname, prop, val) 
+                                    for clname, props_dict 
+                                    in cfg.items() 
+                                    for prop, val in props_dict.items()) 
+                cfg_txt = "Equivalent to: [%s]" % cfg_list 
+                yield indent(dedent(cfg_txt)) 
+            except Exception as ex: 
+                self.log.error('Failed collecting help-message for flag %r, due to: %s', 
+                               flags, ex) 
+                raise 
 
     def print_options(self):
-        """Print the options part of the help."""
-        print('\n'.join(self.emit_options_help()))
-
-    def emit_options_help(self):
-        """Yield the lines for the options part of the help."""
+        """Print the options part of the help.""" 
+        print('\n'.join(self.emit_options_help())) 
+ 
+    def emit_options_help(self): 
+        """Yield the lines for the options part of the help.""" 
         if not self.flags and not self.aliases:
             return
-        header = 'Options'
-        yield header
-        yield '=' * len(header)
+        header = 'Options' 
+        yield header 
+        yield '=' * len(header) 
         for p in wrap_paragraphs(self.option_description):
-            yield p
-            yield ''
+            yield p 
+            yield '' 
 
-        for l in self.emit_flag_help():
-            yield l
-        for l in self.emit_alias_help():
-            yield l
-        yield ''
-
+        for l in self.emit_flag_help(): 
+            yield l 
+        for l in self.emit_alias_help(): 
+            yield l 
+        yield '' 
+ 
     def print_subcommands(self):
         """Print the subcommand part of the help."""
-        print('\n'.join(self.emit_subcommands_help()))
-
-    def emit_subcommands_help(self):
-        """Yield the lines for the subcommand part of the help."""
+        print('\n'.join(self.emit_subcommands_help())) 
+ 
+    def emit_subcommands_help(self): 
+        """Yield the lines for the subcommand part of the help.""" 
         if not self.subcommands:
             return
 
-        header = "Subcommands"
-        yield header
-        yield '=' * len(header)
+        header = "Subcommands" 
+        yield header 
+        yield '=' * len(header) 
         for p in wrap_paragraphs(self.subcommand_description.format(
                     app=self.name)):
-            yield p
-            yield ''
+            yield p 
+            yield '' 
         for subc, (cls, help) in self.subcommands.items():
-            yield subc
+            yield subc 
             if help:
-                yield indent(dedent(help.strip()))
-        yield ''
+                yield indent(dedent(help.strip())) 
+        yield '' 
 
-    def emit_help_epilogue(self, classes):
-        """Yield the very bottom lines of the help message.
-
-        If classes=False (the default), print `--help-all` msg.
-        """
-        if not classes:
-            yield "To see all available configurables, use `--help-all`."
-            yield ''
-
+    def emit_help_epilogue(self, classes): 
+        """Yield the very bottom lines of the help message. 
+ 
+        If classes=False (the default), print `--help-all` msg. 
+        """ 
+        if not classes: 
+            yield "To see all available configurables, use `--help-all`." 
+            yield '' 
+ 
     def print_help(self, classes=False):
         """Print the help for each Configurable class in self.classes.
 
         If classes=False (the default), only flags and aliases are printed.
         """
-        print('\n'.join(self.emit_help(classes=classes)))
+        print('\n'.join(self.emit_help(classes=classes))) 
 
-    def emit_help(self, classes=False):
-        """Yield the help-lines for each Configurable class in self.classes.
-
-        If classes=False (the default), only flags and aliases are printed.
-        """
-        for l in self.emit_description():
-            yield l
-        for l in self.emit_subcommands_help():
-            yield l
-        for l in self.emit_options_help():
-            yield l
-
+    def emit_help(self, classes=False): 
+        """Yield the help-lines for each Configurable class in self.classes. 
+ 
+        If classes=False (the default), only flags and aliases are printed. 
+        """ 
+        for l in self.emit_description(): 
+            yield l 
+        for l in self.emit_subcommands_help(): 
+            yield l 
+        for l in self.emit_options_help(): 
+            yield l 
+ 
         if classes:
-            help_classes = self._classes_with_config_traits()
+            help_classes = self._classes_with_config_traits() 
             if help_classes:
-                yield "Class options"
-                yield "============="
+                yield "Class options" 
+                yield "=============" 
                 for p in wrap_paragraphs(self.keyvalue_description):
-                    yield p
-                    yield ''
+                    yield p 
+                    yield '' 
 
             for cls in help_classes:
-                yield cls.class_get_help()
-                yield ''
-        for l in self.emit_examples():
-            yield l
+                yield cls.class_get_help() 
+                yield '' 
+        for l in self.emit_examples(): 
+            yield l 
 
-        for l in self.emit_help_epilogue(classes):
-            yield l
+        for l in self.emit_help_epilogue(classes): 
+            yield l 
 
     def document_config_options(self):
         """Generate rST format documentation for the config options this application
@@ -551,30 +551,30 @@ class Application(SingletonConfigurable):
 
     def print_description(self):
         """Print the application description."""
-        print('\n'.join(self.emit_description()))
+        print('\n'.join(self.emit_description())) 
 
-    def emit_description(self):
-        """Yield lines with the application description."""
-        for p in wrap_paragraphs(self.description or self.__doc__):
-            yield p
-            yield ''
-
+    def emit_description(self): 
+        """Yield lines with the application description.""" 
+        for p in wrap_paragraphs(self.description or self.__doc__): 
+            yield p 
+            yield '' 
+ 
     def print_examples(self):
-        """Print usage and examples (see `emit_examples()`). """
-        print('\n'.join(self.emit_examples()))
+        """Print usage and examples (see `emit_examples()`). """ 
+        print('\n'.join(self.emit_examples())) 
 
-    def emit_examples(self):
-        """Yield lines with the usage and examples.
-
+    def emit_examples(self): 
+        """Yield lines with the usage and examples. 
+ 
         This usage string goes at the end of the command line help string
         and should contain examples of the application's usage.
         """
         if self.examples:
-            yield "Examples"
-            yield "--------"
-            yield ''
-            yield indent(dedent(self.examples.strip()))
-            yield ''
+            yield "Examples" 
+            yield "--------" 
+            yield '' 
+            yield indent(dedent(self.examples.strip())) 
+            yield '' 
 
     def print_version(self):
         """Print the version string."""
@@ -583,33 +583,33 @@ class Application(SingletonConfigurable):
     @catch_config_error
     def initialize_subcommand(self, subc, argv=None):
         """Initialize a subcommand with argv."""
-        subapp, _ = self.subcommands.get(subc)
+        subapp, _ = self.subcommands.get(subc) 
 
-        if isinstance(subapp, str):
+        if isinstance(subapp, str): 
             subapp = import_item(subapp)
 
-        ## Cannot issubclass() on a non-type (SOhttp://stackoverflow.com/questions/8692430)
-        if isinstance(subapp, type) and issubclass(subapp, Application):
-            # Clear existing instances before...
-            self.__class__.clear_instance()
-            # instantiating subapp...
-            self.subapp = subapp.instance(parent=self)
-        elif callable(subapp):
-            # or ask factory to create it...
-            self.subapp = subapp(self)
-        else:
-            raise AssertionError("Invalid mappings for subcommand '%s'!" % subc)
-
-        # ... and finally initialize subapp.
+        ## Cannot issubclass() on a non-type (SOhttp://stackoverflow.com/questions/8692430) 
+        if isinstance(subapp, type) and issubclass(subapp, Application): 
+            # Clear existing instances before... 
+            self.__class__.clear_instance() 
+            # instantiating subapp... 
+            self.subapp = subapp.instance(parent=self) 
+        elif callable(subapp): 
+            # or ask factory to create it... 
+            self.subapp = subapp(self) 
+        else: 
+            raise AssertionError("Invalid mappings for subcommand '%s'!" % subc) 
+ 
+        # ... and finally initialize subapp. 
         self.subapp.initialize(argv)
 
     def flatten_flags(self):
-        """Flatten flags and aliases for loaders, so cl-args override as expected.
+        """Flatten flags and aliases for loaders, so cl-args override as expected. 
 
         This prevents issues such as an alias pointing to InteractiveShell,
         but a config file setting the same trait in TerminalInteraciveShell
         getting inappropriate priority over the command-line arg.
-        Also, loaders expect ``(key: longname)`` and not ````key: (longname, help)`` items.
+        Also, loaders expect ``(key: longname)`` and not ````key: (longname, help)`` items. 
 
         Only aliases with exactly one descendent in the class list
         will be promoted.
@@ -627,18 +627,18 @@ class Application(SingletonConfigurable):
         # flatten aliases, which have the form:
         # { 'alias' : 'Class.trait' }
         aliases = {}
-        for alias, longname in self.aliases.items():
-            if isinstance(longname, tuple):
-                longname, _ = longname
-            cls, trait = longname.split('.', 1)
+        for alias, longname in self.aliases.items(): 
+            if isinstance(longname, tuple): 
+                longname, _ = longname 
+            cls, trait = longname.split('.', 1) 
             children = mro_tree[cls]
             if len(children) == 1:
                 # exactly one descendent, promote alias
                 cls = children[0]
-            if not isinstance(aliases, tuple):
-                alias = (alias, )
-            for al in alias:
-                aliases[al] = '.'.join([cls,trait])
+            if not isinstance(aliases, tuple): 
+                alias = (alias, ) 
+            for al in alias: 
+                aliases[al] = '.'.join([cls,trait]) 
 
         # flatten flags, which are of the form:
         # { 'key' : ({'Cls' : {'trait' : value}}, 'help')}
@@ -650,28 +650,28 @@ class Application(SingletonConfigurable):
                 # exactly one descendent, promote flag section
                 if len(children) == 1:
                     cls = children[0]
-
-                if cls in newflag:
-                    newflag[cls].update(subdict)
-                else:
-                    newflag[cls] = subdict
-
-            if not isinstance(key, tuple):
-                key = (key, )
-            for k in key:
-                flags[k] = (newflag, help)
+ 
+                if cls in newflag: 
+                    newflag[cls].update(subdict) 
+                else: 
+                    newflag[cls] = subdict 
+ 
+            if not isinstance(key, tuple): 
+                key = (key, ) 
+            for k in key: 
+                flags[k] = (newflag, help) 
         return flags, aliases
 
-    def _create_loader(self, argv, aliases, flags, classes):
-        return KVArgParseConfigLoader(argv, aliases, flags, classes=classes,
-                                      log=self.log)
-
+    def _create_loader(self, argv, aliases, flags, classes): 
+        return KVArgParseConfigLoader(argv, aliases, flags, classes=classes, 
+                                      log=self.log) 
+ 
     @catch_config_error
     def parse_command_line(self, argv=None):
         """Parse the command line arguments."""
-        assert not isinstance(argv, str)
+        assert not isinstance(argv, str) 
         argv = sys.argv[1:] if argv is None else argv
-        self.argv = [cast_unicode(arg) for arg in argv ]
+        self.argv = [cast_unicode(arg) for arg in argv ] 
 
         if argv and argv[0] == 'help':
             # turn `ipython help notebook` into `ipython notebook -h`
@@ -702,15 +702,15 @@ class Application(SingletonConfigurable):
             self.exit(0)
 
         # flatten flags&aliases, so cl-args get appropriate priority:
-        flags, aliases = self.flatten_flags()
-        classes = tuple(self._classes_with_config_traits())
-        loader = self._create_loader(argv, aliases, flags, classes=classes)
-        try:
-            self.cli_config = deepcopy(loader.load_config())
-        except SystemExit:
-            # traitlets 5: no longer print help output on error
-            # help output is huge, and comes after the error
-            raise
+        flags, aliases = self.flatten_flags() 
+        classes = tuple(self._classes_with_config_traits()) 
+        loader = self._create_loader(argv, aliases, flags, classes=classes) 
+        try: 
+            self.cli_config = deepcopy(loader.load_config()) 
+        except SystemExit: 
+            # traitlets 5: no longer print help output on error 
+            # help output is huge, and comes after the error 
+            raise 
         self.update_config(self.cli_config)
         # store unparsed args in extra_args
         self.extra_args = loader.extra_args
@@ -733,7 +733,7 @@ class Application(SingletonConfigurable):
             loaded = []
             filenames = []
             for loader in [pyloader, jsonloader]:
-                config = None
+                config = None 
                 try:
                     config = loader.load_config()
                 except ConfigFileNotFound:
@@ -759,37 +759,37 @@ class Application(SingletonConfigurable):
                                 " {1} has higher priority: {2}".format(
                                 filename, loader.full_filename, json.dumps(collisions, indent=2),
                             ))
-                    yield (config, loader.full_filename)
+                    yield (config, loader.full_filename) 
                     loaded.append(config)
                     filenames.append(loader.full_filename)
 
-    @property
-    def loaded_config_files(self):
-        """Currently loaded configuration files"""
-        return self._loaded_config_files[:]
+    @property 
+    def loaded_config_files(self): 
+        """Currently loaded configuration files""" 
+        return self._loaded_config_files[:] 
 
     @catch_config_error
     def load_config_file(self, filename, path=None):
         """Load config files by filename and path."""
         filename, ext = os.path.splitext(filename)
         new_config = Config()
-        for (config, filename) in self._load_config_files(filename, path=path, log=self.log,
+        for (config, filename) in self._load_config_files(filename, path=path, log=self.log, 
             raise_config_file_errors=self.raise_config_file_errors,
         ):
             new_config.merge(config)
-            if filename not in self._loaded_config_files:  # only add to list of loaded files if not previously loaded
-                self._loaded_config_files.append(filename)
+            if filename not in self._loaded_config_files:  # only add to list of loaded files if not previously loaded 
+                self._loaded_config_files.append(filename) 
         # add self.cli_config to preserve CLI config priority
         new_config.merge(self.cli_config)
         self.update_config(new_config)
 
-    def _classes_with_config_traits(self, classes=None):
+    def _classes_with_config_traits(self, classes=None): 
         """
-        Yields only classes with configurable traits, and their subclasses.
+        Yields only classes with configurable traits, and their subclasses. 
 
-        :param classes:
-            The list of classes to iterate; if not set, uses :attr:`classes`.
-
+        :param classes: 
+            The list of classes to iterate; if not set, uses :attr:`classes`. 
+ 
         Thus, produced sample config-file will contain all classes
         on which a trait-value may be overridden:
 
@@ -797,12 +797,12 @@ class Application(SingletonConfigurable):
         - or on its subclasses, even if those subclasses do not define
           any traits themselves.
         """
-        if classes is None:
-            classes = self.classes
-
+        if classes is None: 
+            classes = self.classes 
+ 
         cls_to_config = OrderedDict( (cls, bool(cls.class_own_traits(config=True)))
                               for cls
-                              in self._classes_inc_parents(classes))
+                              in self._classes_inc_parents(classes)) 
 
         def is_any_parent_included(cls):
             return any(b in cls_to_config and cls_to_config[b] for b in cls.__bases__)
@@ -821,14 +821,14 @@ class Application(SingletonConfigurable):
             if inc_yes:
                 yield cl
 
-    def generate_config_file(self, classes=None):
+    def generate_config_file(self, classes=None): 
         """generate default config file from Configurables"""
         lines = ["# Configuration file for %s." % self.name]
         lines.append('')
-        classes = self.classes if classes is None else classes
-        config_classes = list(self._classes_with_config_traits(classes))
-        for cls in config_classes:
-            lines.append(cls.class_config_section(config_classes))
+        classes = self.classes if classes is None else classes 
+        config_classes = list(self._classes_with_config_traits(classes)) 
+        for cls in config_classes: 
+            lines.append(cls.class_config_section(config_classes)) 
         return '\n'.join(lines)
 
     def exit(self, exit_status=0):
@@ -849,9 +849,9 @@ class Application(SingletonConfigurable):
 # utility functions, for convenience
 #-----------------------------------------------------------------------------
 
-default_aliases = Application.aliases
-default_flags = Application.flags
-
+default_aliases = Application.aliases 
+default_flags = Application.flags 
+ 
 def boolean_flag(name, configurable, set_help='', unset_help=''):
     """Helper for building basic --trait, --no-trait flags.
 
@@ -892,7 +892,7 @@ def get_config():
         return Application.instance().config
     else:
         return Config()
-
-
-if __name__ == '__main__':
-    Application.launch_instance()
+ 
+ 
+if __name__ == '__main__': 
+    Application.launch_instance() 

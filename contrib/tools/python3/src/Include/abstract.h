@@ -141,16 +141,16 @@ extern "C" {
 #endif
 
 
-#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03090000
-/* Call a callable Python object without any arguments */
-PyAPI_FUNC(PyObject *) PyObject_CallNoArgs(PyObject *func);
-#endif
-
-
+#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03090000 
+/* Call a callable Python object without any arguments */ 
+PyAPI_FUNC(PyObject *) PyObject_CallNoArgs(PyObject *func); 
+#endif 
+ 
+ 
 /* Call a callable Python object 'callable' with arguments given by the
    tuple 'args' and keywords arguments given by the dictionary 'kwargs'.
 
-   'args' must not be NULL, use an empty tuple if no arguments are
+   'args' must not be NULL, use an empty tuple if no arguments are 
    needed. If no named arguments are needed, 'kwargs' can be NULL.
 
    This is the equivalent of the Python expression:
@@ -160,9 +160,9 @@ PyAPI_FUNC(PyObject *) PyObject_Call(PyObject *callable,
 
 
 /* Call a callable Python object 'callable', with arguments given by the
-   tuple 'args'.  If no arguments are needed, then 'args' can be NULL.
+   tuple 'args'.  If no arguments are needed, then 'args' can be NULL. 
 
-   Returns the result of the call on success, or NULL on failure.
+   Returns the result of the call on success, or NULL on failure. 
 
    This is the equivalent of the Python expression:
    callable(*args). */
@@ -318,20 +318,20 @@ PyAPI_FUNC(int) PyObject_DelItem(PyObject *o, PyObject *key);
 
 /* Takes an arbitrary object which must support the (character, single segment)
    buffer interface and returns a pointer to a read-only memory location
-   usable as character based input for subsequent processing.
+   usable as character based input for subsequent processing. 
 
    Return 0 on success.  buffer and buffer_len are only set in case no error
    occurs. Otherwise, -1 is returned and an exception set. */
-Py_DEPRECATED(3.0)
+Py_DEPRECATED(3.0) 
 PyAPI_FUNC(int) PyObject_AsCharBuffer(PyObject *obj,
                                       const char **buffer,
-                                      Py_ssize_t *buffer_len);
+                                      Py_ssize_t *buffer_len); 
 
 /* Checks whether an arbitrary object supports the (character, single segment)
    buffer interface.
 
    Returns 1 on success, 0 on failure. */
-Py_DEPRECATED(3.0) PyAPI_FUNC(int) PyObject_CheckReadBuffer(PyObject *obj);
+Py_DEPRECATED(3.0) PyAPI_FUNC(int) PyObject_CheckReadBuffer(PyObject *obj); 
 
 /* Same as PyObject_AsCharBuffer() except that this API expects (readable,
    single segment) buffer interface and returns a pointer to a read-only memory
@@ -339,10 +339,10 @@ Py_DEPRECATED(3.0) PyAPI_FUNC(int) PyObject_CheckReadBuffer(PyObject *obj);
 
    0 is returned on success.  buffer and buffer_len are only set in case no
    error occurs.  Otherwise, -1 is returned and an exception set. */
-Py_DEPRECATED(3.0)
+Py_DEPRECATED(3.0) 
 PyAPI_FUNC(int) PyObject_AsReadBuffer(PyObject *obj,
                                       const void **buffer,
-                                      Py_ssize_t *buffer_len);
+                                      Py_ssize_t *buffer_len); 
 
 /* Takes an arbitrary object which must support the (writable, single segment)
    buffer interface and returns a pointer to a writable memory location in
@@ -350,10 +350,10 @@ PyAPI_FUNC(int) PyObject_AsReadBuffer(PyObject *obj,
 
    Return 0 on success.  buffer and buffer_len are only set in case no error
    occurs. Otherwise, -1 is returned and an exception set. */
-Py_DEPRECATED(3.0)
+Py_DEPRECATED(3.0) 
 PyAPI_FUNC(int) PyObject_AsWriteBuffer(PyObject *obj,
                                        void **buffer,
-                                       Py_ssize_t *buffer_len);
+                                       Py_ssize_t *buffer_len); 
 
 
 /* === New Buffer API ============================================ */
@@ -371,11 +371,11 @@ PyAPI_FUNC(PyObject *) PyObject_Format(PyObject *obj,
    returns itself. */
 PyAPI_FUNC(PyObject *) PyObject_GetIter(PyObject *);
 
-/* Returns 1 if the object 'obj' provides iterator protocols, and 0 otherwise.
+/* Returns 1 if the object 'obj' provides iterator protocols, and 0 otherwise. 
 
-   This function always succeeds. */
-PyAPI_FUNC(int) PyIter_Check(PyObject *);
-
+   This function always succeeds. */ 
+PyAPI_FUNC(int) PyIter_Check(PyObject *); 
+ 
 /* Takes an iterator object and calls its tp_iternext slot,
    returning the next value.
 
@@ -492,9 +492,9 @@ PyAPI_FUNC(PyObject *) PyNumber_Xor(PyObject *o1, PyObject *o2);
    This is the equivalent of the Python expression: o1 | o2. */
 PyAPI_FUNC(PyObject *) PyNumber_Or(PyObject *o1, PyObject *o2);
 
-/* Returns 1 if obj is an index integer (has the nb_index slot of the
-   tp_as_number structure filled in), and 0 otherwise. */
-PyAPI_FUNC(int) PyIndex_Check(PyObject *);
+/* Returns 1 if obj is an index integer (has the nb_index slot of the 
+   tp_as_number structure filled in), and 0 otherwise. */ 
+PyAPI_FUNC(int) PyIndex_Check(PyObject *); 
 
 /* Returns the object 'o' converted to a Python int, or NULL with an exception
    raised on failure. */
@@ -702,7 +702,7 @@ PyAPI_FUNC(PyObject *) PySequence_Fast(PyObject *o, const char* m);
      (PyList_Check(o) ? PyList_GET_ITEM(o, i) : PyTuple_GET_ITEM(o, i))
 
 /* Return a pointer to the underlying item array for
-   an object returned by PySequence_Fast */
+   an object returned by PySequence_Fast */ 
 #define PySequence_Fast_ITEMS(sf) \
     (PyList_Check(sf) ? ((PyListObject *)(sf))->ob_item \
                       : ((PyTupleObject *)(sf))->ob_item)
@@ -839,10 +839,10 @@ PyAPI_FUNC(int) PyObject_IsInstance(PyObject *object, PyObject *typeorclass);
 PyAPI_FUNC(int) PyObject_IsSubclass(PyObject *object, PyObject *typeorclass);
 
 #ifndef Py_LIMITED_API
-#  define Py_CPYTHON_ABSTRACTOBJECT_H
-#  include  "cpython/abstract.h"
-#  undef Py_CPYTHON_ABSTRACTOBJECT_H
-#endif
+#  define Py_CPYTHON_ABSTRACTOBJECT_H 
+#  include  "cpython/abstract.h" 
+#  undef Py_CPYTHON_ABSTRACTOBJECT_H 
+#endif 
 
 #ifdef __cplusplus
 }

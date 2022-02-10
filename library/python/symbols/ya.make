@@ -8,5 +8,5 @@ RECURSE(
     libmagic
     python
     uuid
-    win_unicode_console
+    win_unicode_console 
 )

@@ -1,4 +1,4 @@
-import os
+import os 
 import sys
 from six import reraise
 
@@ -34,9 +34,9 @@ class LoadedModule(_pytest.python.Module):
     @property
     def _nodeid(self):
         if os.getenv('CONFTEST_LOAD_POLICY') == 'LOCAL':
-            return self._getobj().__file__
-        else:
-            return self.name
+            return self._getobj().__file__ 
+        else: 
+            return self.name 
     
     @property
     def nodeid(self):

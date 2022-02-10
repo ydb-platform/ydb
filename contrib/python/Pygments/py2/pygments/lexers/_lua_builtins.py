@@ -288,7 +288,7 @@ if __name__ == '__main__':  # pragma: no cover
             print('>> %s' % full_function_name)
             m = get_function_module(full_function_name)
             modules.setdefault(m, []).append(full_function_name)
-        modules = {k: tuple(v) for k, v in modules.iteritems()}
+        modules = {k: tuple(v) for k, v in modules.iteritems()} 
 
         regenerate(__file__, modules)
 

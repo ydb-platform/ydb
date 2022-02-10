@@ -564,7 +564,7 @@ void MachODebugMapParser::loadMainBinarySymbols(
       continue;
     }
     Section = *SectionOrErr;
-    if ((Section == MainBinary.section_end() || Section->isText()) && !Extern)
+    if ((Section == MainBinary.section_end() || Section->isText()) && !Extern) 
       continue;
     uint64_t Addr = cantFail(Sym.getValue());
     Expected<StringRef> NameOrErr = Sym.getName();

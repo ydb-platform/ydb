@@ -46,7 +46,7 @@ public:
 
   /// Get the offset of string \p S in the string table. This can insert a new
   /// element or return the offset of a pre-existing one.
-  uint64_t getStringOffset(StringRef S) { return getEntry(S).getOffset(); }
+  uint64_t getStringOffset(StringRef S) { return getEntry(S).getOffset(); } 
 
   /// Get permanent storage for \p S (but do not necessarily emit \p S in the
   /// output section). A latter call to getStringOffset() with the same string
@@ -64,7 +64,7 @@ public:
 
 private:
   MapTy Strings;
-  uint64_t CurrentEndOffset = 0;
+  uint64_t CurrentEndOffset = 0; 
   unsigned NumEntries = 0;
   DwarfStringPoolEntryRef EmptyString;
   std::function<StringRef(StringRef Input)> Translator;

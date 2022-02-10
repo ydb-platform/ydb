@@ -19,10 +19,10 @@ __all__ = ['Reader', 'ReaderError']
 
 from error import YAMLError, Mark
 
-import codecs, re, sys
+import codecs, re, sys 
 
-has_ucs4 = sys.maxunicode > 0xffff
-
+has_ucs4 = sys.maxunicode > 0xffff 
+ 
 class ReaderError(YAMLError):
 
     def __init__(self, name, position, character, encoding, reason):
@@ -136,15 +136,15 @@ class Reader(object):
                 self.encoding = 'utf-8'
         self.update(1)
 
-    if has_ucs4:
-        NON_PRINTABLE = u'[^\x09\x0A\x0D\x20-\x7E\x85\xA0-\uD7FF\uE000-\uFFFD\U00010000-\U0010ffff]'
-    elif sys.platform.startswith('java'):
-        # Jython doesn't support lone surrogates https://bugs.jython.org/issue2048 
-        NON_PRINTABLE = u'[^\x09\x0A\x0D\x20-\x7E\x85\xA0-\uD7FF\uE000-\uFFFD]'
-    else:
-        # Need to use eval here due to the above Jython issue
-        NON_PRINTABLE = eval(r"u'[^\x09\x0A\x0D\x20-\x7E\x85\xA0-\uFFFD]|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uD800-\uDBFF](?:[^\uDC00-\uDFFF]|$)'")
-    NON_PRINTABLE = re.compile(NON_PRINTABLE)
+    if has_ucs4: 
+        NON_PRINTABLE = u'[^\x09\x0A\x0D\x20-\x7E\x85\xA0-\uD7FF\uE000-\uFFFD\U00010000-\U0010ffff]' 
+    elif sys.platform.startswith('java'): 
+        # Jython doesn't support lone surrogates https://bugs.jython.org/issue2048  
+        NON_PRINTABLE = u'[^\x09\x0A\x0D\x20-\x7E\x85\xA0-\uD7FF\uE000-\uFFFD]' 
+    else: 
+        # Need to use eval here due to the above Jython issue 
+        NON_PRINTABLE = eval(r"u'[^\x09\x0A\x0D\x20-\x7E\x85\xA0-\uFFFD]|(?:^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uD800-\uDBFF](?:[^\uDC00-\uDFFF]|$)'") 
+    NON_PRINTABLE = re.compile(NON_PRINTABLE) 
     def check_printable(self, data):
         match = self.NON_PRINTABLE.search(data)
         if match:

@@ -4,7 +4,7 @@
 
     Lexer for the Nim language (formerly known as Nimrod).
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -25,7 +25,7 @@ class NimrodLexer(RegexLexer):
     """
 
     name = 'Nimrod'
-    aliases = ['nimrod', 'nim']
+    aliases = ['nimrod', 'nim'] 
     filenames = ['*.nim', '*.nimrod']
     mimetypes = ['text/x-nim']
 
@@ -42,14 +42,14 @@ class NimrodLexer(RegexLexer):
         return "|".join(newWords)
 
     keywords = [
-        'addr', 'and', 'as', 'asm', 'bind', 'block', 'break', 'case',
+        'addr', 'and', 'as', 'asm', 'bind', 'block', 'break', 'case', 
         'cast', 'concept', 'const', 'continue', 'converter', 'defer', 'discard',
         'distinct', 'div', 'do', 'elif', 'else', 'end', 'enum', 'except',
         'export', 'finally', 'for', 'func', 'if', 'in', 'yield', 'interface',
         'is', 'isnot', 'iterator', 'let', 'macro', 'method', 'mixin', 'mod',
         'not', 'notin', 'object', 'of', 'or', 'out', 'proc', 'ptr', 'raise',
-        'ref', 'return', 'shl', 'shr', 'static', 'template', 'try',
-        'tuple', 'type', 'using', 'when', 'while', 'xor'
+        'ref', 'return', 'shl', 'shr', 'static', 'template', 'try', 
+        'tuple', 'type', 'using', 'when', 'while', 'xor' 
     ]
 
     keywordsPseudo = [

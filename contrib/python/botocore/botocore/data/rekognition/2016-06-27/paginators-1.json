@@ -23,18 +23,18 @@
       "output_token": "NextToken",
       "input_token": "NextToken",
       "limit_key": "MaxResults"
-    },
-    "DescribeProjectVersions": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "ProjectVersionDescriptions"
-    },
-    "DescribeProjects": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "ProjectDescriptions"
+    }, 
+    "DescribeProjectVersions": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "output_token": "NextToken", 
+      "result_key": "ProjectVersionDescriptions" 
+    }, 
+    "DescribeProjects": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "output_token": "NextToken", 
+      "result_key": "ProjectDescriptions" 
     }
   }
 }

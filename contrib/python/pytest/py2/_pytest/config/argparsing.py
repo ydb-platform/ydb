@@ -1,11 +1,11 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 import argparse
 import warnings
 
 import py
 import six
 
-from _pytest.config.exceptions import UsageError
+from _pytest.config.exceptions import UsageError 
 
 FILE_OR_DIR = "file_or_dir"
 
@@ -17,8 +17,8 @@ class Parser(object):
         there's an error processing the command line arguments.
     """
 
-    prog = None
-
+    prog = None 
+ 
     def __init__(self, usage=None, processopt=None):
         self._anonymous = OptionGroup("custom options", parser=self)
         self._groups = []
@@ -83,7 +83,7 @@ class Parser(object):
     def _getparser(self):
         from _pytest._argcomplete import filescompleter
 
-        optparser = MyOptionParser(self, self.extra_info, prog=self.prog)
+        optparser = MyOptionParser(self, self.extra_info, prog=self.prog) 
         groups = self._groups + [self._anonymous]
         for group in groups:
             if group.options:
@@ -320,13 +320,13 @@ class OptionGroup(object):
 
 
 class MyOptionParser(argparse.ArgumentParser):
-    def __init__(self, parser, extra_info=None, prog=None):
+    def __init__(self, parser, extra_info=None, prog=None): 
         if not extra_info:
             extra_info = {}
         self._parser = parser
         argparse.ArgumentParser.__init__(
             self,
-            prog=prog,
+            prog=prog, 
             usage=parser._usage,
             add_help=False,
             formatter_class=DropShorterLongHelpFormatter,
@@ -336,14 +336,14 @@ class MyOptionParser(argparse.ArgumentParser):
         self.extra_info = extra_info
 
     def error(self, message):
-        """Transform argparse error message into UsageError."""
-        msg = "%s: error: %s" % (self.prog, message)
+        """Transform argparse error message into UsageError.""" 
+        msg = "%s: error: %s" % (self.prog, message) 
 
-        if hasattr(self._parser, "_config_source_hint"):
-            msg = "%s (%s)" % (msg, self._parser._config_source_hint)
+        if hasattr(self._parser, "_config_source_hint"): 
+            msg = "%s (%s)" % (msg, self._parser._config_source_hint) 
 
-        raise UsageError(self.format_usage() + msg)
-
+        raise UsageError(self.format_usage() + msg) 
+ 
     def parse_args(self, args=None, namespace=None):
         """allow splitting of positional arguments"""
         args, argv = self.parse_known_args(args, namespace)

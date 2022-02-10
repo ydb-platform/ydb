@@ -8,9 +8,9 @@ Typical use is:
 
 This iterates over the lines of all files listed in sys.argv[1:],
 defaulting to sys.stdin if the list is empty.  If a filename is '-' it
-is also replaced by sys.stdin and the optional arguments mode and
-openhook are ignored.  To specify an alternative list of filenames,
-pass it as the argument to input().  A single file name is also allowed.
+is also replaced by sys.stdin and the optional arguments mode and 
+openhook are ignored.  To specify an alternative list of filenames, 
+pass it as the argument to input().  A single file name is also allowed. 
 
 Functions filename(), lineno() return the filename and cumulative line
 number of the line that has just been read; filelineno() returns its
@@ -73,7 +73,7 @@ XXX Possible additions:
 """
 
 import sys, os
-from types import GenericAlias
+from types import GenericAlias 
 
 __all__ = ["input", "close", "nextfile", "filename", "lineno", "filelineno",
            "fileno", "isfirstline", "isstdin", "FileInput", "hook_compressed",
@@ -81,7 +81,7 @@ __all__ = ["input", "close", "nextfile", "filename", "lineno", "filelineno",
 
 _state = None
 
-def input(files=None, inplace=False, backup="", *, mode="r", openhook=None):
+def input(files=None, inplace=False, backup="", *, mode="r", openhook=None): 
     """Return an instance of the FileInput class, which can be iterated.
 
     The parameters are passed to the constructor of the FileInput class.
@@ -91,7 +91,7 @@ def input(files=None, inplace=False, backup="", *, mode="r", openhook=None):
     global _state
     if _state and _state._file:
         raise RuntimeError("input() already active")
-    _state = FileInput(files, inplace, backup, mode=mode, openhook=openhook)
+    _state = FileInput(files, inplace, backup, mode=mode, openhook=openhook) 
     return _state
 
 def close():
@@ -173,7 +173,7 @@ def isstdin():
     return _state.isstdin()
 
 class FileInput:
-    """FileInput([files[, inplace[, backup]]], *, mode=None, openhook=None)
+    """FileInput([files[, inplace[, backup]]], *, mode=None, openhook=None) 
 
     Class FileInput is the implementation of the module; its methods
     filename(), lineno(), fileline(), isfirstline(), isstdin(), fileno(),
@@ -185,7 +185,7 @@ class FileInput:
     sequential order; random access and readline() cannot be mixed.
     """
 
-    def __init__(self, files=None, inplace=False, backup="", *,
+    def __init__(self, files=None, inplace=False, backup="", *, 
                  mode="r", openhook=None):
         if isinstance(files, str):
             files = (files,)
@@ -218,7 +218,7 @@ class FileInput:
             warnings.warn("'U' mode is deprecated",
                           DeprecationWarning, 2)
         self._mode = mode
-        self._write_mode = mode.replace('r', 'w') if 'U' not in mode else 'w'
+        self._write_mode = mode.replace('r', 'w') if 'U' not in mode else 'w' 
         if openhook:
             if inplace:
                 raise ValueError("FileInput cannot use an opening hook in inplace mode")
@@ -256,13 +256,13 @@ class FileInput:
             # repeat with next file
 
     def __getitem__(self, i):
-        import warnings
-        warnings.warn(
-            "Support for indexing FileInput objects is deprecated. "
-            "Use iterator protocol instead.",
-            DeprecationWarning,
-            stacklevel=2
-        )
+        import warnings 
+        warnings.warn( 
+            "Support for indexing FileInput objects is deprecated. " 
+            "Use iterator protocol instead.", 
+            DeprecationWarning, 
+            stacklevel=2 
+        ) 
         if i != self.lineno():
             raise RuntimeError("accessing lines out of order")
         try:
@@ -345,16 +345,16 @@ class FileInput:
                 try:
                     perm = os.fstat(self._file.fileno()).st_mode
                 except OSError:
-                    self._output = open(self._filename, self._write_mode)
+                    self._output = open(self._filename, self._write_mode) 
                 else:
                     mode = os.O_CREAT | os.O_WRONLY | os.O_TRUNC
                     if hasattr(os, 'O_BINARY'):
                         mode |= os.O_BINARY
 
                     fd = os.open(self._filename, mode, perm)
-                    self._output = os.fdopen(fd, self._write_mode)
+                    self._output = os.fdopen(fd, self._write_mode) 
                     try:
-                        os.chmod(self._filename, perm)
+                        os.chmod(self._filename, perm) 
                     except OSError:
                         pass
                 self._savestdout = sys.stdout
@@ -392,9 +392,9 @@ class FileInput:
     def isstdin(self):
         return self._isstdin
 
-    __class_getitem__ = classmethod(GenericAlias)
+    __class_getitem__ = classmethod(GenericAlias) 
 
-
+ 
 def hook_compressed(filename, mode):
     ext = os.path.splitext(filename)[1]
     if ext == '.gz':

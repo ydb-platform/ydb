@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 """ discovery and running of std-library "unittest" style tests. """
 from __future__ import absolute_import
 from __future__ import division
@@ -8,7 +8,7 @@ import sys
 import traceback
 
 import _pytest._code
-import pytest
+import pytest 
 from _pytest.compat import getimfunc
 from _pytest.config import hookimpl
 from _pytest.outcomes import fail
@@ -40,12 +40,12 @@ class UnitTestCase(Class):
         cls = self.obj
         if not getattr(cls, "__test__", True):
             return
-
-        skipped = getattr(cls, "__unittest_skip__", False)
-        if not skipped:
-            self._inject_setup_teardown_fixtures(cls)
-            self._inject_setup_class_fixture()
-
+ 
+        skipped = getattr(cls, "__unittest_skip__", False) 
+        if not skipped: 
+            self._inject_setup_teardown_fixtures(cls) 
+            self._inject_setup_class_fixture() 
+ 
         self.session._fixturemanager.parsefactories(self, unittest=True)
         loader = TestLoader()
         foundsomething = False
@@ -64,48 +64,48 @@ class UnitTestCase(Class):
                 if ut is None or runtest != ut.TestCase.runTest:
                     yield TestCaseFunction("runTest", parent=self)
 
-    def _inject_setup_teardown_fixtures(self, cls):
-        """Injects a hidden auto-use fixture to invoke setUpClass/setup_method and corresponding
-        teardown functions (#517)"""
-        class_fixture = _make_xunit_fixture(
-            cls, "setUpClass", "tearDownClass", scope="class", pass_self=False
-        )
-        if class_fixture:
-            cls.__pytest_class_setup = class_fixture
+    def _inject_setup_teardown_fixtures(self, cls): 
+        """Injects a hidden auto-use fixture to invoke setUpClass/setup_method and corresponding 
+        teardown functions (#517)""" 
+        class_fixture = _make_xunit_fixture( 
+            cls, "setUpClass", "tearDownClass", scope="class", pass_self=False 
+        ) 
+        if class_fixture: 
+            cls.__pytest_class_setup = class_fixture 
 
-        method_fixture = _make_xunit_fixture(
-            cls, "setup_method", "teardown_method", scope="function", pass_self=True
-        )
-        if method_fixture:
-            cls.__pytest_method_setup = method_fixture
-
-
-def _make_xunit_fixture(obj, setup_name, teardown_name, scope, pass_self):
-    setup = getattr(obj, setup_name, None)
-    teardown = getattr(obj, teardown_name, None)
-    if setup is None and teardown is None:
-        return None
-
-    @pytest.fixture(scope=scope, autouse=True)
-    def fixture(self, request):
-        if getattr(self, "__unittest_skip__", None):
-            reason = self.__unittest_skip_why__
-            pytest.skip(reason)
-        if setup is not None:
-            if pass_self:
-                setup(self, request.function)
-            else:
-                setup()
-        yield
-        if teardown is not None:
-            if pass_self:
-                teardown(self, request.function)
-            else:
-                teardown()
-
-    return fixture
-
-
+        method_fixture = _make_xunit_fixture( 
+            cls, "setup_method", "teardown_method", scope="function", pass_self=True 
+        ) 
+        if method_fixture: 
+            cls.__pytest_method_setup = method_fixture 
+ 
+ 
+def _make_xunit_fixture(obj, setup_name, teardown_name, scope, pass_self): 
+    setup = getattr(obj, setup_name, None) 
+    teardown = getattr(obj, teardown_name, None) 
+    if setup is None and teardown is None: 
+        return None 
+ 
+    @pytest.fixture(scope=scope, autouse=True) 
+    def fixture(self, request): 
+        if getattr(self, "__unittest_skip__", None): 
+            reason = self.__unittest_skip_why__ 
+            pytest.skip(reason) 
+        if setup is not None: 
+            if pass_self: 
+                setup(self, request.function) 
+            else: 
+                setup() 
+        yield 
+        if teardown is not None: 
+            if pass_self: 
+                teardown(self, request.function) 
+            else: 
+                teardown() 
+ 
+    return fixture 
+ 
+ 
 class TestCaseFunction(Function):
     nofuncargs = True
     _excinfo = None
@@ -143,10 +143,10 @@ class TestCaseFunction(Function):
         rawexcinfo = getattr(rawexcinfo, "_rawexcinfo", rawexcinfo)
         try:
             excinfo = _pytest._code.ExceptionInfo(rawexcinfo)
-            # invoke the attributes to trigger storing the traceback
-            # trial causes some issue there
-            excinfo.value
-            excinfo.traceback
+            # invoke the attributes to trigger storing the traceback 
+            # trial causes some issue there 
+            excinfo.value 
+            excinfo.traceback 
         except TypeError:
             try:
                 try:
@@ -168,7 +168,7 @@ class TestCaseFunction(Function):
             except KeyboardInterrupt:
                 raise
             except fail.Exception:
-                excinfo = _pytest._code.ExceptionInfo.from_current()
+                excinfo = _pytest._code.ExceptionInfo.from_current() 
         self.__dict__.setdefault("_excinfo", []).append(excinfo)
 
     def addError(self, testcase, rawexcinfo):

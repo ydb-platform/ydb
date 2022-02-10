@@ -7,11 +7,11 @@
 
 /* Return the DFA for the given type */
 
-const dfa *
+const dfa * 
 PyGrammar_FindDFA(grammar *g, int type)
 {
     /* Massive speed-up */
-    const dfa *d = &g->g_dfa[type - NT_OFFSET];
+    const dfa *d = &g->g_dfa[type - NT_OFFSET]; 
     assert(d->d_type == type);
     return d;
 }
@@ -41,7 +41,7 @@ PyGrammar_LabelRepr(label *lb)
         }
     }
     else {
-        Py_FatalError("invalid grammar label");
+        Py_FatalError("invalid grammar label"); 
         return NULL;
     }
 }

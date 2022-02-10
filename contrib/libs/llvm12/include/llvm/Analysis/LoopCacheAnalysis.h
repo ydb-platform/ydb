@@ -23,18 +23,18 @@
 
 #include "llvm/Analysis/LoopAnalysisManager.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/PassManager.h"
+#include "llvm/IR/PassManager.h" 
 #include "llvm/Support/raw_ostream.h"
 
 namespace llvm {
 
-class AAResults;
-class DependenceInfo;
+class AAResults; 
+class DependenceInfo; 
 class LPMUpdater;
-class ScalarEvolution;
-class SCEV;
-class TargetTransformInfo;
-
+class ScalarEvolution; 
+class SCEV; 
+class TargetTransformInfo; 
+ 
 using CacheCostTy = int64_t;
 using LoopVectorTy = SmallVector<Loop *, 8>;
 
@@ -78,7 +78,7 @@ public:
   /// the same chace line iff the distance between them in the innermost
   /// dimension is less than the cache line size. Return None if unsure.
   Optional<bool> hasSpacialReuse(const IndexedReference &Other, unsigned CLS,
-                                 AAResults &AA) const;
+                                 AAResults &AA) const; 
 
   /// Return true if the current object and the indexed reference \p Other
   /// have distance smaller than \p MaxDistance in the dimension associated with
@@ -86,7 +86,7 @@ public:
   /// MaxDistance and None if unsure.
   Optional<bool> hasTemporalReuse(const IndexedReference &Other,
                                   unsigned MaxDistance, const Loop &L,
-                                  DependenceInfo &DI, AAResults &AA) const;
+                                  DependenceInfo &DI, AAResults &AA) const; 
 
   /// Compute the cost of the reference w.r.t. the given loop \p L when it is
   /// considered in the innermost position in the loop nest.
@@ -126,7 +126,7 @@ private:
 
   /// Return true if the given reference \p Other is definetely aliased with
   /// the indexed reference represented by this class.
-  bool isAliased(const IndexedReference &Other, AAResults &AA) const;
+  bool isAliased(const IndexedReference &Other, AAResults &AA) const; 
 
 private:
   /// True if the reference can be delinearized, false otherwise.
@@ -191,7 +191,7 @@ public:
   /// between array elements accessed in a loop so that the elements are
   /// classified to have temporal reuse.
   CacheCost(const LoopVectorTy &Loops, const LoopInfo &LI, ScalarEvolution &SE,
-            TargetTransformInfo &TTI, AAResults &AA, DependenceInfo &DI,
+            TargetTransformInfo &TTI, AAResults &AA, DependenceInfo &DI, 
             Optional<unsigned> TRT = None);
 
   /// Create a CacheCost for the loop nest rooted by \p Root.
@@ -205,9 +205,9 @@ public:
   /// Return the estimated cost of loop \p L if the given loop is part of the
   /// loop nest associated with this object. Return -1 otherwise.
   CacheCostTy getLoopCost(const Loop &L) const {
-    auto IT = llvm::find_if(LoopCosts, [&L](const LoopCacheCostTy &LCC) {
-      return LCC.first == &L;
-    });
+    auto IT = llvm::find_if(LoopCosts, [&L](const LoopCacheCostTy &LCC) { 
+      return LCC.first == &L; 
+    }); 
     return (IT != LoopCosts.end()) ? (*IT).second : -1;
   }
 
@@ -266,7 +266,7 @@ private:
   const LoopInfo &LI;
   ScalarEvolution &SE;
   TargetTransformInfo &TTI;
-  AAResults &AA;
+  AAResults &AA; 
   DependenceInfo &DI;
 };
 

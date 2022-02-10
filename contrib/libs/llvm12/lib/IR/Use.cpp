@@ -17,17 +17,17 @@ void Use::swap(Use &RHS) {
   if (Val == RHS.Val)
     return;
 
-  std::swap(Val, RHS.Val);
-  std::swap(Next, RHS.Next);
-  std::swap(Prev, RHS.Prev);
+  std::swap(Val, RHS.Val); 
+  std::swap(Next, RHS.Next); 
+  std::swap(Prev, RHS.Prev); 
 
-  *Prev = this;
-  if (Next)
-    Next->Prev = &Next;
+  *Prev = this; 
+  if (Next) 
+    Next->Prev = &Next; 
 
-  *RHS.Prev = &RHS;
-  if (RHS.Next)
-    RHS.Next->Prev = &RHS.Next;
+  *RHS.Prev = &RHS; 
+  if (RHS.Next) 
+    RHS.Next->Prev = &RHS.Next; 
 }
 
 unsigned Use::getOperandNo() const {

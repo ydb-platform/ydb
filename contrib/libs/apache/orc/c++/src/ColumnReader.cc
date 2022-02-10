@@ -374,7 +374,7 @@ namespace orc {
         }
         int64_t writerTime = secsBuffer[i] + epochOffset;
         secsBuffer[i] = writerTimezone.convertToUTC(writerTime);
-        if (secsBuffer[i] < 0 && nanoBuffer[i] > 999999) {
+        if (secsBuffer[i] < 0 && nanoBuffer[i] > 999999) { 
           secsBuffer[i] -= 1;
         }
       }

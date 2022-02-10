@@ -554,7 +554,7 @@ def main(args=sys.argv):
                   file=sys.stderr)
             print('Please report the whole traceback to the issue tracker at',
                   file=sys.stderr)
-            print('<https://github.com/pygments/pygments/issues>.',
+            print('<https://github.com/pygments/pygments/issues>.', 
                   file=sys.stderr)
             print('*' * 65, file=sys.stderr)
             print(file=sys.stderr)

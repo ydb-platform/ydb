@@ -28,7 +28,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include <memory>
-#include <unordered_map>
+#include <unordered_map> 
 
 namespace llvm {
 
@@ -38,27 +38,27 @@ class Loop;
 class PostDominatorTree;
 
 using ConstBlockSet = SmallPtrSet<const BasicBlock *, 4>;
-struct ControlDivergenceDesc {
-  // Join points of divergent disjoint paths.
-  ConstBlockSet JoinDivBlocks;
-  // Divergent loop exits
-  ConstBlockSet LoopDivBlocks;
-};
+struct ControlDivergenceDesc { 
+  // Join points of divergent disjoint paths. 
+  ConstBlockSet JoinDivBlocks; 
+  // Divergent loop exits 
+  ConstBlockSet LoopDivBlocks; 
+}; 
 
-struct ModifiedPO {
-  std::vector<const BasicBlock *> LoopPO;
-  std::unordered_map<const BasicBlock *, unsigned> POIndex;
-  void appendBlock(const BasicBlock &BB) {
-    POIndex[&BB] = LoopPO.size();
-    LoopPO.push_back(&BB);
-  }
-  unsigned getIndexOf(const BasicBlock &BB) const {
-    return POIndex.find(&BB)->second;
-  }
-  unsigned size() const { return LoopPO.size(); }
-  const BasicBlock *getBlockAt(unsigned Idx) const { return LoopPO[Idx]; }
-};
-
+struct ModifiedPO { 
+  std::vector<const BasicBlock *> LoopPO; 
+  std::unordered_map<const BasicBlock *, unsigned> POIndex; 
+  void appendBlock(const BasicBlock &BB) { 
+    POIndex[&BB] = LoopPO.size(); 
+    LoopPO.push_back(&BB); 
+  } 
+  unsigned getIndexOf(const BasicBlock &BB) const { 
+    return POIndex.find(&BB)->second; 
+  } 
+  unsigned size() const { return LoopPO.size(); } 
+  const BasicBlock *getBlockAt(unsigned Idx) const { return LoopPO[Idx]; } 
+}; 
+ 
 /// \brief Relates points of divergent control to join points in
 /// reducible CFGs.
 ///
@@ -79,19 +79,19 @@ public:
   /// header. Those exit blocks are added to the returned set.
   /// If L is the parent loop of \p Term and an exit of L is in the returned
   /// set then L is a divergent loop.
-  const ControlDivergenceDesc &getJoinBlocks(const Instruction &Term);
+  const ControlDivergenceDesc &getJoinBlocks(const Instruction &Term); 
 
 private:
-  static ControlDivergenceDesc EmptyDivergenceDesc;
+  static ControlDivergenceDesc EmptyDivergenceDesc; 
 
-  ModifiedPO LoopPO;
-
+  ModifiedPO LoopPO; 
+ 
   const DominatorTree &DT;
   const PostDominatorTree &PDT;
   const LoopInfo &LI;
 
-  std::map<const Instruction *, std::unique_ptr<ControlDivergenceDesc>>
-      CachedControlDivDescs;
+  std::map<const Instruction *, std::unique_ptr<ControlDivergenceDesc>> 
+      CachedControlDivDescs; 
 };
 
 } // namespace llvm

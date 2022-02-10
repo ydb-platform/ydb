@@ -1,17 +1,17 @@
 #include "Python.h"
 #ifdef MS_WINDOWS
-#include <winsock2.h>         /* struct timeval */
+#include <winsock2.h>         /* struct timeval */ 
 #endif
 
 #if defined(__APPLE__)
 #include <mach/mach_time.h>   /* mach_absolute_time(), mach_timebase_info() */
-
-#if defined(__APPLE__) && defined(__has_builtin)
-#  if __has_builtin(__builtin_available)
-#    define HAVE_CLOCK_GETTIME_RUNTIME __builtin_available(macOS 10.12, iOS 10.0, tvOS 10.0, watchOS 3.0, *)
-#  endif
+ 
+#if defined(__APPLE__) && defined(__has_builtin) 
+#  if __has_builtin(__builtin_available) 
+#    define HAVE_CLOCK_GETTIME_RUNTIME __builtin_available(macOS 10.12, iOS 10.0, tvOS 10.0, watchOS 3.0, *) 
+#  endif 
 #endif
-#endif
+#endif 
 
 #define _PyTime_check_mul_overflow(a, b) \
     (assert(b > 0), \
@@ -689,22 +689,22 @@ pygettimeofday(_PyTime_t *tp, _Py_clock_info_t *info, int raise)
 
 #else   /* MS_WINDOWS */
     int err;
-#if defined(HAVE_CLOCK_GETTIME)
+#if defined(HAVE_CLOCK_GETTIME) 
     struct timespec ts;
-#endif
-
-#if !defined(HAVE_CLOCK_GETTIME) || defined(__APPLE__)
+#endif 
+ 
+#if !defined(HAVE_CLOCK_GETTIME) || defined(__APPLE__) 
     struct timeval tv;
 #endif
 
     assert(info == NULL || raise);
 
 #ifdef HAVE_CLOCK_GETTIME
-
-#ifdef HAVE_CLOCK_GETTIME_RUNTIME
-    if (HAVE_CLOCK_GETTIME_RUNTIME) {
-#endif
-
+ 
+#ifdef HAVE_CLOCK_GETTIME_RUNTIME 
+    if (HAVE_CLOCK_GETTIME_RUNTIME) { 
+#endif 
+ 
     err = clock_gettime(CLOCK_REALTIME, &ts);
     if (err) {
         if (raise) {
@@ -729,14 +729,14 @@ pygettimeofday(_PyTime_t *tp, _Py_clock_info_t *info, int raise)
         }
     }
 
-#ifdef HAVE_CLOCK_GETTIME_RUNTIME
-    } else {
-#endif
-
-#endif
-
-#if !defined(HAVE_CLOCK_GETTIME) || defined(HAVE_CLOCK_GETTIME_RUNTIME)
-
+#ifdef HAVE_CLOCK_GETTIME_RUNTIME 
+    } else { 
+#endif 
+ 
+#endif 
+ 
+#if !defined(HAVE_CLOCK_GETTIME) || defined(HAVE_CLOCK_GETTIME_RUNTIME) 
+ 
      /* test gettimeofday() */
     err = gettimeofday(&tv, (struct timezone *)NULL);
     if (err) {
@@ -755,11 +755,11 @@ pygettimeofday(_PyTime_t *tp, _Py_clock_info_t *info, int raise)
         info->monotonic = 0;
         info->adjustable = 1;
     }
-
-#if defined(HAVE_CLOCK_GETTIME_RUNTIME) && defined(HAVE_CLOCK_GETTIME)
-    } /* end of availibity block */
-#endif
-
+ 
+#if defined(HAVE_CLOCK_GETTIME_RUNTIME) && defined(HAVE_CLOCK_GETTIME) 
+    } /* end of availibity block */ 
+#endif 
+ 
 #endif   /* !HAVE_CLOCK_GETTIME */
 #endif   /* !MS_WINDOWS */
     return 0;
@@ -771,7 +771,7 @@ _PyTime_GetSystemClock(void)
     _PyTime_t t;
     if (pygettimeofday(&t, NULL, 0) < 0) {
         /* should not happen, _PyTime_Init() checked the clock at startup */
-        Py_FatalError("pygettimeofday() failed");
+        Py_FatalError("pygettimeofday() failed"); 
     }
     return t;
 }
@@ -801,7 +801,7 @@ pymonotonic(_PyTime_t *tp, _Py_clock_info_t *info, int raise)
             return -1;
         }
         /* Hello, time traveler! */
-        Py_FatalError("pymonotonic: integer overflow");
+        Py_FatalError("pymonotonic: integer overflow"); 
     }
     *tp = t * MS_TO_NS;
 
@@ -943,7 +943,7 @@ _PyTime_GetMonotonicClock(void)
     if (pymonotonic(&t, NULL, 0) < 0) {
         /* should not happen, _PyTime_Init() checked that monotonic clock at
            startup */
-        Py_FatalError("pymonotonic() failed");
+        Py_FatalError("pymonotonic() failed"); 
     }
     return t;
 }
@@ -1044,7 +1044,7 @@ _PyTime_GetPerfCounter(void)
 {
     _PyTime_t t;
     if (_PyTime_GetPerfCounterWithInfo(&t, NULL)) {
-        Py_FatalError("_PyTime_GetPerfCounterWithInfo() failed");
+        Py_FatalError("_PyTime_GetPerfCounterWithInfo() failed"); 
     }
     return t;
 }
@@ -1083,19 +1083,19 @@ _PyTime_localtime(time_t t, struct tm *tm)
     }
     return 0;
 #else /* !MS_WINDOWS */
-
-#if defined(_AIX) && (SIZEOF_TIME_T < 8)
-    /* bpo-34373: AIX does not return NULL if t is too small or too large */
-    if (t < -2145916800 /* 1902-01-01 */
-       || t > 2145916800 /* 2038-01-01 */) {
-        errno = EINVAL;
-        PyErr_SetString(PyExc_OverflowError,
-                        "localtime argument out of range");
-        return -1;
-    }
-#endif
-
-    errno = 0;
+ 
+#if defined(_AIX) && (SIZEOF_TIME_T < 8) 
+    /* bpo-34373: AIX does not return NULL if t is too small or too large */ 
+    if (t < -2145916800 /* 1902-01-01 */ 
+       || t > 2145916800 /* 2038-01-01 */) { 
+        errno = EINVAL; 
+        PyErr_SetString(PyExc_OverflowError, 
+                        "localtime argument out of range"); 
+        return -1; 
+    } 
+#endif 
+ 
+    errno = 0; 
     if (localtime_r(&t, tm) == NULL) {
         if (errno == 0) {
             errno = EINVAL;

@@ -4,7 +4,7 @@
 
     Lexers for computer graphics and plotting related languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -407,7 +407,7 @@ class AsymptoteLexer(RegexLexer):
     .. versionadded:: 1.2
     """
     name = 'Asymptote'
-    aliases = ['asymptote', 'asy']
+    aliases = ['asymptote', 'asy'] 
     filenames = ['*.asy']
     mimetypes = ['text/x-asymptote']
 
@@ -424,7 +424,7 @@ class AsymptoteLexer(RegexLexer):
         ],
         'statements': [
             # simple string (TeX friendly)
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String),
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String), 
             # C style string (with character escapes)
             (r"'", String, 'string'),
             (r'(\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+[lL]?', Number.Float),
@@ -774,26 +774,26 @@ class PovrayLexer(RegexLexer):
             (r'[0-9]+\.[0-9]*', Number.Float),
             (r'\.[0-9]+', Number.Float),
             (r'[0-9]+', Number.Integer),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String),
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String), 
             (r'\s+', Whitespace),
         ]
     }
-
-    def analyse_text(text):
-        """POVRAY is similar to JSON/C, but the combination of camera and
-        light_source is probably not very likely elsewhere. HLSL or GLSL
-        are similar (GLSL even has #version), but they miss #declare, and
-        light_source/camera are not keywords anywhere else -- it's fair
-        to assume though that any POVRAY scene must have a camera and
-        lightsource."""
-        result = 0
-        if '#version' in text:
-            result += 0.05
-        if '#declare' in text:
-            result += 0.05
-        if 'camera' in text:
-            result += 0.05
-        if 'light_source' in text:
-            result += 0.1
-
-        return result
+ 
+    def analyse_text(text): 
+        """POVRAY is similar to JSON/C, but the combination of camera and 
+        light_source is probably not very likely elsewhere. HLSL or GLSL 
+        are similar (GLSL even has #version), but they miss #declare, and 
+        light_source/camera are not keywords anywhere else -- it's fair 
+        to assume though that any POVRAY scene must have a camera and 
+        lightsource.""" 
+        result = 0 
+        if '#version' in text: 
+            result += 0.05 
+        if '#declare' in text: 
+            result += 0.05 
+        if 'camera' in text: 
+            result += 0.05 
+        if 'light_source' in text: 
+            result += 0.1 
+ 
+        return result 

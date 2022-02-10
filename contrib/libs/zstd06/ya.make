@@ -1,7 +1,7 @@
 LIBRARY()
 
-VERSION(0.6.2)
-
+VERSION(0.6.2) 
+ 
 LICENSE(
     BSD-2-Clause AND
     MIT

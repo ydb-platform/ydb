@@ -28,7 +28,7 @@ class FixReload(fixer_base.BaseFix):
             obj = results['obj']
             if obj:
                 if (obj.type == self.syms.argument and
-                    obj.children[0].value in {'**', '*'}):
+                    obj.children[0].value in {'**', '*'}): 
                     return  # Make no change.
         names = ('importlib', 'reload')
         new = ImportAndCall(node, results, names)

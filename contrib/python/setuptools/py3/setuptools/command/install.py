@@ -30,13 +30,13 @@ class install(orig.install):
     _nc = dict(new_commands)
 
     def initialize_options(self):
-
-        warnings.warn(
-            "setup.py install is deprecated. "
-            "Use build and pip and other standards-based tools.",
-            setuptools.SetuptoolsDeprecationWarning,
-        )
-
+ 
+        warnings.warn( 
+            "setup.py install is deprecated. " 
+            "Use build and pip and other standards-based tools.", 
+            setuptools.SetuptoolsDeprecationWarning, 
+        ) 
+ 
         orig.install.initialize_options(self)
         self.old_and_unmanageable = None
         self.single_version_externally_managed = None
@@ -121,7 +121,7 @@ class install(orig.install):
             args.insert(0, setuptools.bootstrap_install_from)
 
         cmd.args = args
-        cmd.run(show_deprecation=False)
+        cmd.run(show_deprecation=False) 
         setuptools.bootstrap_install_from = None
 
 

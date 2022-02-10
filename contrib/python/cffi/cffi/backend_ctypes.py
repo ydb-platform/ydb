@@ -112,20 +112,20 @@ class CTypesData(object):
     def _make_cmp(name):
         cmpfunc = getattr(operator, name)
         def cmp(self, other):
-            v_is_ptr = not isinstance(self, CTypesGenericPrimitive)
-            w_is_ptr = (isinstance(other, CTypesData) and
-                           not isinstance(other, CTypesGenericPrimitive))
-            if v_is_ptr and w_is_ptr:
+            v_is_ptr = not isinstance(self, CTypesGenericPrimitive) 
+            w_is_ptr = (isinstance(other, CTypesData) and 
+                           not isinstance(other, CTypesGenericPrimitive)) 
+            if v_is_ptr and w_is_ptr: 
                 return cmpfunc(self._convert_to_address(None),
                                other._convert_to_address(None))
-            elif v_is_ptr or w_is_ptr:
-                return NotImplemented
+            elif v_is_ptr or w_is_ptr: 
+                return NotImplemented 
             else:
-                if isinstance(self, CTypesGenericPrimitive):
-                    self = self._value
-                if isinstance(other, CTypesGenericPrimitive):
-                    other = other._value
-                return cmpfunc(self, other)
+                if isinstance(self, CTypesGenericPrimitive): 
+                    self = self._value 
+                if isinstance(other, CTypesGenericPrimitive): 
+                    other = other._value 
+                return cmpfunc(self, other) 
         cmp.func_name = name
         return cmp
 
@@ -137,7 +137,7 @@ class CTypesData(object):
     __ge__ = _make_cmp('__ge__')
 
     def __hash__(self):
-        return hash(self._convert_to_address(None))
+        return hash(self._convert_to_address(None)) 
 
     def _to_string(self, maxlen):
         raise TypeError("string(): %r" % (self,))
@@ -147,7 +147,7 @@ class CTypesGenericPrimitive(CTypesData):
     __slots__ = []
 
     def __hash__(self):
-        return hash(self._value)
+        return hash(self._value) 
 
     def _get_own_repr(self):
         return repr(self._from_ctypes(self._value))
@@ -403,7 +403,7 @@ class CTypesBackend(object):
                         source = _cast_source_to_int(source)
                     return cls(bool(source))
                 def __int__(self):
-                    return int(self._value)
+                    return int(self._value) 
 
             if kind == 'char':
                 @classmethod
@@ -636,10 +636,10 @@ class CTypesBackend(object):
                 if isinstance(init, bytes):
                     init = [init[i:i+1] for i in range(len(init))]
                 else:
-                    if isinstance(init, CTypesGenericArray):
-                        if (len(init) != len(blob) or
-                            not isinstance(init, CTypesArray)):
-                            raise TypeError("length/type mismatch: %s" % (init,))
+                    if isinstance(init, CTypesGenericArray): 
+                        if (len(init) != len(blob) or 
+                            not isinstance(init, CTypesArray)): 
+                            raise TypeError("length/type mismatch: %s" % (init,)) 
                     init = tuple(init)
                 if len(init) > len(blob):
                     raise IndexError("too many initializers")
@@ -734,8 +734,8 @@ class CTypesBackend(object):
         return self._new_struct_or_union('union', name, ctypes.Union)
 
     def complete_struct_or_union(self, CTypesStructOrUnion, fields, tp,
-                                 totalsize=-1, totalalignment=-1, sflags=0,
-                                 pack=0):
+                                 totalsize=-1, totalalignment=-1, sflags=0, 
+                                 pack=0): 
         if totalsize >= 0 or totalalignment >= 0:
             raise NotImplementedError("the ctypes backend of CFFI does not support "
                                       "structures completed by verify(); please "
@@ -756,8 +756,8 @@ class CTypesBackend(object):
                 bfield_types[fname] = Ellipsis
         if sflags & 8:
             struct_or_union._pack_ = 1
-        elif pack:
-            struct_or_union._pack_ = pack
+        elif pack: 
+            struct_or_union._pack_ = pack 
         struct_or_union._fields_ = cfields
         CTypesStructOrUnion._bfield_types = bfield_types
         #
@@ -1009,7 +1009,7 @@ class CTypesBackend(object):
 
     _weakref_cache_ref = None
 
-    def gcp(self, cdata, destructor, size=0):
+    def gcp(self, cdata, destructor, size=0): 
         if self._weakref_cache_ref is None:
             import weakref
             class MyRef(weakref.ref):

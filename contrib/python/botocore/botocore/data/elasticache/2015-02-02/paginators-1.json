@@ -71,36 +71,36 @@
       "output_token": "Marker",
       "limit_key": "MaxRecords",
       "result_key": "Snapshots"
-    },
-    "DescribeServiceUpdates": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "ServiceUpdates"
-    },
-    "DescribeUpdateActions": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "UpdateActions"
-    },
-    "DescribeGlobalReplicationGroups": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "GlobalReplicationGroups"
-    },
-    "DescribeUserGroups": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "UserGroups"
-    },
-    "DescribeUsers": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "Users"
+    }, 
+    "DescribeServiceUpdates": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "ServiceUpdates" 
+    }, 
+    "DescribeUpdateActions": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "UpdateActions" 
+    }, 
+    "DescribeGlobalReplicationGroups": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "GlobalReplicationGroups" 
+    }, 
+    "DescribeUserGroups": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "UserGroups" 
+    }, 
+    "DescribeUsers": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "Users" 
     }
   }
 }

@@ -39,8 +39,8 @@ and if a str/unicode type is passed in, it will be encoded as utf-8.
 """
 import re
 import base64
-import calendar
-import datetime
+import calendar 
+import datetime 
 from xml.etree import ElementTree
 
 from botocore.compat import six
@@ -49,7 +49,7 @@ from botocore.compat import json, formatdate
 from botocore.utils import parse_to_aware_datetime
 from botocore.utils import percent_encode
 from botocore.utils import is_json_value_header
-from botocore.utils import conditionally_calculate_md5
+from botocore.utils import conditionally_calculate_md5 
 from botocore import validate
 
 
@@ -89,7 +89,7 @@ class Serializer(object):
         a dictionary of:
 
             * 'url_path'
-            * 'host_prefix'
+            * 'host_prefix' 
             * 'query_string'
             * 'headers'
             * 'body'
@@ -106,7 +106,7 @@ class Serializer(object):
              'headers': {},
              'method': 'POST',
              'query_string': '',
-             'host_prefix': 'value.',
+             'host_prefix': 'value.', 
              'url_path': '/'}
 
         :param parameters: The dictionary input parameters for the
@@ -142,17 +142,17 @@ class Serializer(object):
         return int(calendar.timegm(value.timetuple()))
 
     def _timestamp_rfc822(self, value):
-        if isinstance(value, datetime.datetime):
-            value = self._timestamp_unixtimestamp(value)
+        if isinstance(value, datetime.datetime): 
+            value = self._timestamp_unixtimestamp(value) 
         return formatdate(value, usegmt=True)
 
-    def _convert_timestamp_to_str(self, value, timestamp_format=None):
-        if timestamp_format is None:
-            timestamp_format = self.TIMESTAMP_FORMAT
-        timestamp_format = timestamp_format.lower()
+    def _convert_timestamp_to_str(self, value, timestamp_format=None): 
+        if timestamp_format is None: 
+            timestamp_format = self.TIMESTAMP_FORMAT 
+        timestamp_format = timestamp_format.lower() 
         datetime_obj = parse_to_aware_datetime(value)
         converter = getattr(
-            self, '_timestamp_%s' % timestamp_format)
+            self, '_timestamp_%s' % timestamp_format) 
         final_value = converter(datetime_obj)
         return final_value
 
@@ -170,28 +170,28 @@ class Serializer(object):
         return base64.b64encode(value).strip().decode(
             self.DEFAULT_ENCODING)
 
-    def _expand_host_prefix(self, parameters, operation_model):
-        operation_endpoint = operation_model.endpoint
-        if operation_endpoint is None:
-            return None
+    def _expand_host_prefix(self, parameters, operation_model): 
+        operation_endpoint = operation_model.endpoint 
+        if operation_endpoint is None: 
+            return None 
 
-        host_prefix_expression = operation_endpoint['hostPrefix']
-        input_members = operation_model.input_shape.members
-        host_labels = [
-            member for member, shape in input_members.items()
-            if shape.serialization.get('hostLabel')
-        ]
-        format_kwargs = dict((name, parameters[name]) for name in host_labels)
-
-        return host_prefix_expression.format(**format_kwargs)
-
-    def _prepare_additional_traits(self, request, operation_model):
-        """Determine if additional traits are required for given model"""
-        if operation_model.http_checksum_required:
-            conditionally_calculate_md5(request)
-        return request
-
-
+        host_prefix_expression = operation_endpoint['hostPrefix'] 
+        input_members = operation_model.input_shape.members 
+        host_labels = [ 
+            member for member, shape in input_members.items() 
+            if shape.serialization.get('hostLabel') 
+        ] 
+        format_kwargs = dict((name, parameters[name]) for name in host_labels) 
+ 
+        return host_prefix_expression.format(**format_kwargs) 
+ 
+    def _prepare_additional_traits(self, request, operation_model): 
+        """Determine if additional traits are required for given model""" 
+        if operation_model.http_checksum_required: 
+            conditionally_calculate_md5(request) 
+        return request 
+ 
+ 
 class QuerySerializer(Serializer):
 
     TIMESTAMP_FORMAT = 'iso8601'
@@ -212,13 +212,13 @@ class QuerySerializer(Serializer):
         if shape is not None:
             self._serialize(body_params, parameters, shape)
         serialized['body'] = body_params
-
-        host_prefix = self._expand_host_prefix(parameters, operation_model)
-        if host_prefix is not None:
-            serialized['host_prefix'] = host_prefix
-
-        serialized = self._prepare_additional_traits(serialized,
-                operation_model)
+ 
+        host_prefix = self._expand_host_prefix(parameters, operation_model) 
+        if host_prefix is not None: 
+            serialized['host_prefix'] = host_prefix 
+ 
+        serialized = self._prepare_additional_traits(serialized, 
+                operation_model) 
         return serialized
 
     def _serialize(self, serialized, value, shape, prefix=''):
@@ -282,8 +282,8 @@ class QuerySerializer(Serializer):
         serialized[prefix] = self._get_base64(value)
 
     def _serialize_type_timestamp(self, serialized, value, shape, prefix=''):
-        serialized[prefix] = self._convert_timestamp_to_str(
-            value, shape.serialization.get('timestampFormat'))
+        serialized[prefix] = self._convert_timestamp_to_str( 
+            value, shape.serialization.get('timestampFormat')) 
 
     def _serialize_type_boolean(self, serialized, value, shape, prefix=''):
         if value:
@@ -342,18 +342,18 @@ class JSONSerializer(Serializer):
             'X-Amz-Target': target,
             'Content-Type': 'application/x-amz-json-%s' % json_version,
         }
-        body = self.MAP_TYPE()
+        body = self.MAP_TYPE() 
         input_shape = operation_model.input_shape
         if input_shape is not None:
             self._serialize(body, parameters, input_shape)
         serialized['body'] = json.dumps(body).encode(self.DEFAULT_ENCODING)
-
-        host_prefix = self._expand_host_prefix(parameters, operation_model)
-        if host_prefix is not None:
-            serialized['host_prefix'] = host_prefix
-
-        serialized = self._prepare_additional_traits(serialized,
-                operation_model)
+ 
+        host_prefix = self._expand_host_prefix(parameters, operation_model) 
+        if host_prefix is not None: 
+            serialized['host_prefix'] = host_prefix 
+ 
+        serialized = self._prepare_additional_traits(serialized, 
+                operation_model) 
         return serialized
 
     def _serialize(self, serialized, value, shape, key=None):
@@ -362,24 +362,24 @@ class JSONSerializer(Serializer):
         method(serialized, value, shape, key)
 
     def _serialize_type_structure(self, serialized, value, shape, key):
-        if shape.is_document_type:
-            serialized[key] = value
-        else:
-            if key is not None:
-                # If a key is provided, this is a result of a recursive
-                # call so we need to add a new child dict as the value
-                # of the passed in serialized dict.  We'll then add
-                # all the structure members as key/vals in the new serialized
-                # dictionary we just created.
-                new_serialized = self.MAP_TYPE()
-                serialized[key] = new_serialized
-                serialized = new_serialized
-            members = shape.members
-            for member_key, member_value in value.items():
-                member_shape = members[member_key]
-                if 'name' in member_shape.serialization:
-                    member_key = member_shape.serialization['name']
-                self._serialize(serialized, member_value, member_shape, member_key)
+        if shape.is_document_type: 
+            serialized[key] = value 
+        else: 
+            if key is not None: 
+                # If a key is provided, this is a result of a recursive 
+                # call so we need to add a new child dict as the value 
+                # of the passed in serialized dict.  We'll then add 
+                # all the structure members as key/vals in the new serialized 
+                # dictionary we just created. 
+                new_serialized = self.MAP_TYPE() 
+                serialized[key] = new_serialized 
+                serialized = new_serialized 
+            members = shape.members 
+            for member_key, member_value in value.items(): 
+                member_shape = members[member_key] 
+                if 'name' in member_shape.serialization: 
+                    member_key = member_shape.serialization['name'] 
+                self._serialize(serialized, member_value, member_shape, member_key) 
 
     def _serialize_type_map(self, serialized, value, shape, key):
         map_obj = self.MAP_TYPE()
@@ -403,8 +403,8 @@ class JSONSerializer(Serializer):
         serialized[key] = value
 
     def _serialize_type_timestamp(self, serialized, value, shape, key):
-        serialized[key] = self._convert_timestamp_to_str(
-            value, shape.serialization.get('timestampFormat'))
+        serialized[key] = self._convert_timestamp_to_str( 
+            value, shape.serialization.get('timestampFormat')) 
 
     def _serialize_type_blob(self, serialized, value, shape, key):
         serialized[key] = self._get_base64(value)
@@ -420,8 +420,8 @@ class BaseRestSerializer(Serializer):
     Subclasses must implement the ``_serialize_body_params`` method.
 
     """
-    QUERY_STRING_TIMESTAMP_FORMAT = 'iso8601'
-    HEADER_TIMESTAMP_FORMAT = 'rfc822'
+    QUERY_STRING_TIMESTAMP_FORMAT = 'iso8601' 
+    HEADER_TIMESTAMP_FORMAT = 'rfc822' 
     # This is a list of known values for the "location" key in the
     # serialization dict.  The location key tells us where on the request
     # to put the serialized value.
@@ -469,13 +469,13 @@ class BaseRestSerializer(Serializer):
             serialized['headers'] = partitioned['headers']
         self._serialize_payload(partitioned, parameters,
                                 serialized, shape, shape_members)
-
-        host_prefix = self._expand_host_prefix(parameters, operation_model)
-        if host_prefix is not None:
-            serialized['host_prefix'] = host_prefix
-
-        serialized = self._prepare_additional_traits(serialized,
-                operation_model)
+ 
+        host_prefix = self._expand_host_prefix(parameters, operation_model) 
+        if host_prefix is not None: 
+            serialized['host_prefix'] = host_prefix 
+ 
+        serialized = self._prepare_additional_traits(serialized, 
+                operation_model) 
         return serialized
 
     def _render_uri_template(self, uri_template, params):
@@ -544,13 +544,13 @@ class BaseRestSerializer(Serializer):
             elif isinstance(param_value, bool):
                 partitioned['query_string_kwargs'][
                     key_name] = str(param_value).lower()
-            elif member.type_name == 'timestamp':
-                timestamp_format = member.serialization.get(
-                    'timestampFormat', self.QUERY_STRING_TIMESTAMP_FORMAT)
-                partitioned['query_string_kwargs'][
-                    key_name] = self._convert_timestamp_to_str(
-                        param_value, timestamp_format
-                    )
+            elif member.type_name == 'timestamp': 
+                timestamp_format = member.serialization.get( 
+                    'timestampFormat', self.QUERY_STRING_TIMESTAMP_FORMAT) 
+                partitioned['query_string_kwargs'][ 
+                    key_name] = self._convert_timestamp_to_str( 
+                        param_value, timestamp_format 
+                    ) 
             else:
                 partitioned['query_string_kwargs'][key_name] = param_value
         elif location == 'header':
@@ -583,9 +583,9 @@ class BaseRestSerializer(Serializer):
         if shape.type_name == 'timestamp':
             datetime_obj = parse_to_aware_datetime(value)
             timestamp = calendar.timegm(datetime_obj.utctimetuple())
-            timestamp_format = shape.serialization.get(
-                'timestampFormat', self.HEADER_TIMESTAMP_FORMAT)
-            return self._convert_timestamp_to_str(timestamp, timestamp_format)
+            timestamp_format = shape.serialization.get( 
+                'timestampFormat', self.HEADER_TIMESTAMP_FORMAT) 
+            return self._convert_timestamp_to_str(timestamp, timestamp_format) 
         elif is_json_value_header(shape):
             # Serialize with no spaces after separators to save space in
             # the header.
@@ -690,8 +690,8 @@ class RestXMLSerializer(BaseRestSerializer):
 
     def _serialize_type_timestamp(self, xmlnode, params, shape, name):
         node = ElementTree.SubElement(xmlnode, name)
-        node.text = self._convert_timestamp_to_str(
-            params, shape.serialization.get('timestampFormat'))
+        node.text = self._convert_timestamp_to_str( 
+            params, shape.serialization.get('timestampFormat')) 
 
     def _default_serialize(self, xmlnode, params, shape, name):
         node = ElementTree.SubElement(xmlnode, name)

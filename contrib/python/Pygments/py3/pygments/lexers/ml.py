@@ -4,7 +4,7 @@
 
     Lexers for ML family languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -14,7 +14,7 @@ from pygments.lexer import RegexLexer, include, bygroups, default, words
 from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
     Number, Punctuation, Error
 
-__all__ = ['SMLLexer', 'OcamlLexer', 'OpaLexer', 'ReasonLexer', 'FStarLexer']
+__all__ = ['SMLLexer', 'OcamlLexer', 'OpaLexer', 'ReasonLexer', 'FStarLexer'] 
 
 
 class SMLLexer(RegexLexer):
@@ -29,7 +29,7 @@ class SMLLexer(RegexLexer):
     filenames = ['*.sml', '*.sig', '*.fun']
     mimetypes = ['text/x-standardml', 'application/x-standardml']
 
-    alphanumid_reserved = {
+    alphanumid_reserved = { 
         # Core
         'abstype', 'and', 'andalso', 'as', 'case', 'datatype', 'do', 'else',
         'end', 'exception', 'fn', 'fun', 'handle', 'if', 'in', 'infix',
@@ -38,16 +38,16 @@ class SMLLexer(RegexLexer):
         # Modules
         'eqtype', 'functor', 'include', 'sharing', 'sig', 'signature',
         'struct', 'structure', 'where',
-    }
+    } 
 
-    symbolicid_reserved = {
+    symbolicid_reserved = { 
         # Core
         ':', r'\|', '=', '=>', '->', '#',
         # Modules
         ':>',
-    }
+    } 
 
-    nonid_reserved = {'(', ')', '[', ']', '{', '}', ',', ';', '...', '_'}
+    nonid_reserved = {'(', ')', '[', ']', '{', '}', ',', ';', '...', '_'} 
 
     alphanumid_re = r"[a-zA-Z][\w']*"
     symbolicid_re = r"[!%&$#+\-/:<=>?@\\~`^|*]+"
@@ -141,7 +141,7 @@ class SMLLexer(RegexLexer):
             (r'#\s+(%s)' % symbolicid_re, Name.Label),
             # Some reserved words trigger a special, local lexer state change
             (r'\b(datatype|abstype)\b(?!\')', Keyword.Reserved, 'dname'),
-            (r'\b(exception)\b(?!\')', Keyword.Reserved, 'ename'),
+            (r'\b(exception)\b(?!\')', Keyword.Reserved, 'ename'), 
             (r'\b(functor|include|open|signature|structure)\b(?!\')',
              Keyword.Reserved, 'sname'),
             (r'\b(type|eqtype)\b(?!\')', Keyword.Reserved, 'tname'),
@@ -314,14 +314,14 @@ class SMLLexer(RegexLexer):
         'ename': [
             include('whitespace'),
 
-            (r'(and\b)(\s+)(%s)' % alphanumid_re,
+            (r'(and\b)(\s+)(%s)' % alphanumid_re, 
              bygroups(Keyword.Reserved, Text, Name.Class)),
-            (r'(and\b)(\s*)(%s)' % symbolicid_re,
+            (r'(and\b)(\s*)(%s)' % symbolicid_re, 
              bygroups(Keyword.Reserved, Text, Name.Class)),
             (r'\b(of)\b(?!\')', Keyword.Reserved),
-            (r'(%s)|(%s)' % (alphanumid_re, symbolicid_re), Name.Class),
+            (r'(%s)|(%s)' % (alphanumid_re, symbolicid_re), Name.Class), 
 
-            default('#pop'),
+            default('#pop'), 
         ],
 
         'datcon': [
@@ -443,7 +443,7 @@ class OcamlLexer(RegexLexer):
         ],
     }
 
-
+ 
 class OpaLexer(RegexLexer):
     """
     Lexer for the Opa language (http://opalang.org).
@@ -765,193 +765,193 @@ class OpaLexer(RegexLexer):
             (r'[^\-]+|-', Comment),
         ],
     }
-
-
-class ReasonLexer(RegexLexer):
-    """
-    For the ReasonML language (https://reasonml.github.io/).
-
-    .. versionadded:: 2.6
-    """
-
-    name = 'ReasonML'
-    aliases = ['reasonml', 'reason']
-    filenames = ['*.re', '*.rei']
-    mimetypes = ['text/x-reasonml']
-
-    keywords = (
-        'as', 'assert', 'begin', 'class', 'constraint', 'do', 'done', 'downto',
-        'else', 'end', 'exception', 'external', 'false', 'for', 'fun', 'esfun',
-        'function', 'functor', 'if', 'in', 'include', 'inherit', 'initializer', 'lazy',
-        'let', 'switch', 'module', 'pub', 'mutable', 'new', 'nonrec', 'object', 'of',
-        'open', 'pri', 'rec', 'sig', 'struct', 'then', 'to', 'true', 'try',
-        'type', 'val', 'virtual', 'when', 'while', 'with',
-    )
-    keyopts = (
-        '!=', '#', '&', '&&', r'\(', r'\)', r'\*', r'\+', ',', '-',
-        r'-\.', '=>', r'\.', r'\.\.', r'\.\.\.', ':', '::', ':=', ':>', ';', ';;', '<',
-        '<-', '=', '>', '>]', r'>\}', r'\?', r'\?\?', r'\[', r'\[<', r'\[>',
-        r'\[\|', ']', '_', '`', r'\{', r'\{<', r'\|', r'\|\|', r'\|]', r'\}', '~'
-    )
-
-    operators = r'[!$%&*+\./:<=>?@^|~-]'
-    word_operators = ('and', 'asr', 'land', 'lor', 'lsl', 'lsr', 'lxor', 'mod', 'or')
-    prefix_syms = r'[!?~]'
-    infix_syms = r'[=<>@^|&+\*/$%-]'
-    primitives = ('unit', 'int', 'float', 'bool', 'string', 'char', 'list', 'array')
-
-    tokens = {
-        'escape-sequence': [
-            (r'\\[\\"\'ntbr]', String.Escape),
-            (r'\\[0-9]{3}', String.Escape),
-            (r'\\x[0-9a-fA-F]{2}', String.Escape),
-        ],
-        'root': [
-            (r'\s+', Text),
-            (r'false|true|\(\)|\[\]', Name.Builtin.Pseudo),
-            (r'\b([A-Z][\w\']*)(?=\s*\.)', Name.Namespace, 'dotted'),
-            (r'\b([A-Z][\w\']*)', Name.Class),
-            (r'//.*?\n', Comment.Single),
-            (r'\/\*(?!/)', Comment.Multiline, 'comment'),
-            (r'\b(%s)\b' % '|'.join(keywords), Keyword),
-            (r'(%s)' % '|'.join(keyopts[::-1]), Operator.Word),
-            (r'(%s|%s)?%s' % (infix_syms, prefix_syms, operators), Operator),
-            (r'\b(%s)\b' % '|'.join(word_operators), Operator.Word),
-            (r'\b(%s)\b' % '|'.join(primitives), Keyword.Type),
-
-            (r"[^\W\d][\w']*", Name),
-
-            (r'-?\d[\d_]*(.[\d_]*)?([eE][+\-]?\d[\d_]*)', Number.Float),
-            (r'0[xX][\da-fA-F][\da-fA-F_]*', Number.Hex),
-            (r'0[oO][0-7][0-7_]*', Number.Oct),
-            (r'0[bB][01][01_]*', Number.Bin),
-            (r'\d[\d_]*', Number.Integer),
-
-            (r"'(?:(\\[\\\"'ntbr ])|(\\[0-9]{3})|(\\x[0-9a-fA-F]{2}))'",
-             String.Char),
-            (r"'.'", String.Char),
-            (r"'", Keyword),
-
-            (r'"', String.Double, 'string'),
-
-            (r'[~?][a-z][\w\']*:', Name.Variable),
-        ],
-        'comment': [
-            (r'[^/*]+', Comment.Multiline),
-            (r'\/\*', Comment.Multiline, '#push'),
-            (r'\*\/', Comment.Multiline, '#pop'),
-            (r'\*', Comment.Multiline),
-        ],
-        'string': [
-            (r'[^\\"]+', String.Double),
-            include('escape-sequence'),
-            (r'\\\n', String.Double),
-            (r'"', String.Double, '#pop'),
-        ],
-        'dotted': [
-            (r'\s+', Text),
-            (r'\.', Punctuation),
-            (r'[A-Z][\w\']*(?=\s*\.)', Name.Namespace),
-            (r'[A-Z][\w\']*', Name.Class, '#pop'),
-            (r'[a-z_][\w\']*', Name, '#pop'),
-            default('#pop'),
-        ],
-    }
-
-
-class FStarLexer(RegexLexer):
-    """
-    For the F* language (https://www.fstar-lang.org/).
-    .. versionadded:: 2.7
-    """
-
-    name = 'FStar'
-    aliases = ['fstar']
-    filenames = ['*.fst', '*.fsti']
-    mimetypes = ['text/x-fstar']
-
-    keywords = (
-        'abstract', 'attributes', 'noeq', 'unopteq', 'and'
-        'begin', 'by', 'default', 'effect', 'else', 'end', 'ensures',
-        'exception', 'exists', 'false', 'forall', 'fun', 'function', 'if',
-        'in', 'include', 'inline', 'inline_for_extraction', 'irreducible',
-        'logic', 'match', 'module', 'mutable', 'new', 'new_effect', 'noextract',
-        'of', 'open', 'opaque', 'private', 'range_of', 'reifiable',
-        'reify', 'reflectable', 'requires', 'set_range_of', 'sub_effect',
-        'synth', 'then', 'total', 'true', 'try', 'type', 'unfold', 'unfoldable',
-        'val', 'when', 'with', 'not'
-    )
-    decl_keywords = ('let', 'rec')
-    assume_keywords = ('assume', 'admit', 'assert', 'calc')
-    keyopts = (
-        r'~', r'-', r'/\\', r'\\/', r'<:', r'<@', r'\(\|', r'\|\)', r'#', r'u#',
-        r'&', r'\(', r'\)', r'\(\)', r',', r'~>', r'->', r'<-', r'<--', r'<==>',
-        r'==>', r'\.', r'\?', r'\?\.', r'\.\[', r'\.\(', r'\.\(\|', r'\.\[\|',
-        r'\{:pattern', r':', r'::', r':=', r';', r';;', r'=', r'%\[', r'!\{',
-        r'\[', r'\[@', r'\[\|', r'\|>', r'\]', r'\|\]', r'\{', r'\|', r'\}', r'\$'
-    )
-
-    operators = r'[!$%&*+\./:<=>?@^|~-]'
-    prefix_syms = r'[!?~]'
-    infix_syms = r'[=<>@^|&+\*/$%-]'
-    primitives = ('unit', 'int', 'float', 'bool', 'string', 'char', 'list', 'array')
-
-    tokens = {
-        'escape-sequence': [
-            (r'\\[\\"\'ntbr]', String.Escape),
-            (r'\\[0-9]{3}', String.Escape),
-            (r'\\x[0-9a-fA-F]{2}', String.Escape),
-        ],
-        'root': [
-            (r'\s+', Text),
-            (r'false|true|False|True|\(\)|\[\]', Name.Builtin.Pseudo),
-            (r'\b([A-Z][\w\']*)(?=\s*\.)', Name.Namespace, 'dotted'),
-            (r'\b([A-Z][\w\']*)', Name.Class),
-            (r'\(\*(?![)])', Comment, 'comment'),
-            (r'^\/\/.+$', Comment),
-            (r'\b(%s)\b' % '|'.join(keywords), Keyword),
-            (r'\b(%s)\b' % '|'.join(assume_keywords), Name.Exception),
-            (r'\b(%s)\b' % '|'.join(decl_keywords), Keyword.Declaration),
-            (r'(%s)' % '|'.join(keyopts[::-1]), Operator),
-            (r'(%s|%s)?%s' % (infix_syms, prefix_syms, operators), Operator),
-            (r'\b(%s)\b' % '|'.join(primitives), Keyword.Type),
-
-            (r"[^\W\d][\w']*", Name),
-
-            (r'-?\d[\d_]*(.[\d_]*)?([eE][+\-]?\d[\d_]*)', Number.Float),
-            (r'0[xX][\da-fA-F][\da-fA-F_]*', Number.Hex),
-            (r'0[oO][0-7][0-7_]*', Number.Oct),
-            (r'0[bB][01][01_]*', Number.Bin),
-            (r'\d[\d_]*', Number.Integer),
-
-            (r"'(?:(\\[\\\"'ntbr ])|(\\[0-9]{3})|(\\x[0-9a-fA-F]{2}))'",
-             String.Char),
-            (r"'.'", String.Char),
-            (r"'", Keyword),  # a stray quote is another syntax element
-            (r"\`([\w\'.]+)\`", Operator.Word),  # for infix applications
-            (r"\`", Keyword),  # for quoting
-            (r'"', String.Double, 'string'),
-
-            (r'[~?][a-z][\w\']*:', Name.Variable),
-        ],
-        'comment': [
-            (r'[^(*)]+', Comment),
-            (r'\(\*', Comment, '#push'),
-            (r'\*\)', Comment, '#pop'),
-            (r'[(*)]', Comment),
-        ],
-        'string': [
-            (r'[^\\"]+', String.Double),
-            include('escape-sequence'),
-            (r'\\\n', String.Double),
-            (r'"', String.Double, '#pop'),
-        ],
-        'dotted': [
-            (r'\s+', Text),
-            (r'\.', Punctuation),
-            (r'[A-Z][\w\']*(?=\s*\.)', Name.Namespace),
-            (r'[A-Z][\w\']*', Name.Class, '#pop'),
-            (r'[a-z_][\w\']*', Name, '#pop'),
-            default('#pop'),
-        ],
-    }
+ 
+ 
+class ReasonLexer(RegexLexer): 
+    """ 
+    For the ReasonML language (https://reasonml.github.io/). 
+ 
+    .. versionadded:: 2.6 
+    """ 
+ 
+    name = 'ReasonML' 
+    aliases = ['reasonml', 'reason'] 
+    filenames = ['*.re', '*.rei'] 
+    mimetypes = ['text/x-reasonml'] 
+ 
+    keywords = ( 
+        'as', 'assert', 'begin', 'class', 'constraint', 'do', 'done', 'downto', 
+        'else', 'end', 'exception', 'external', 'false', 'for', 'fun', 'esfun', 
+        'function', 'functor', 'if', 'in', 'include', 'inherit', 'initializer', 'lazy', 
+        'let', 'switch', 'module', 'pub', 'mutable', 'new', 'nonrec', 'object', 'of', 
+        'open', 'pri', 'rec', 'sig', 'struct', 'then', 'to', 'true', 'try', 
+        'type', 'val', 'virtual', 'when', 'while', 'with', 
+    ) 
+    keyopts = ( 
+        '!=', '#', '&', '&&', r'\(', r'\)', r'\*', r'\+', ',', '-', 
+        r'-\.', '=>', r'\.', r'\.\.', r'\.\.\.', ':', '::', ':=', ':>', ';', ';;', '<', 
+        '<-', '=', '>', '>]', r'>\}', r'\?', r'\?\?', r'\[', r'\[<', r'\[>', 
+        r'\[\|', ']', '_', '`', r'\{', r'\{<', r'\|', r'\|\|', r'\|]', r'\}', '~' 
+    ) 
+ 
+    operators = r'[!$%&*+\./:<=>?@^|~-]' 
+    word_operators = ('and', 'asr', 'land', 'lor', 'lsl', 'lsr', 'lxor', 'mod', 'or') 
+    prefix_syms = r'[!?~]' 
+    infix_syms = r'[=<>@^|&+\*/$%-]' 
+    primitives = ('unit', 'int', 'float', 'bool', 'string', 'char', 'list', 'array') 
+ 
+    tokens = { 
+        'escape-sequence': [ 
+            (r'\\[\\"\'ntbr]', String.Escape), 
+            (r'\\[0-9]{3}', String.Escape), 
+            (r'\\x[0-9a-fA-F]{2}', String.Escape), 
+        ], 
+        'root': [ 
+            (r'\s+', Text), 
+            (r'false|true|\(\)|\[\]', Name.Builtin.Pseudo), 
+            (r'\b([A-Z][\w\']*)(?=\s*\.)', Name.Namespace, 'dotted'), 
+            (r'\b([A-Z][\w\']*)', Name.Class), 
+            (r'//.*?\n', Comment.Single), 
+            (r'\/\*(?!/)', Comment.Multiline, 'comment'), 
+            (r'\b(%s)\b' % '|'.join(keywords), Keyword), 
+            (r'(%s)' % '|'.join(keyopts[::-1]), Operator.Word), 
+            (r'(%s|%s)?%s' % (infix_syms, prefix_syms, operators), Operator), 
+            (r'\b(%s)\b' % '|'.join(word_operators), Operator.Word), 
+            (r'\b(%s)\b' % '|'.join(primitives), Keyword.Type), 
+ 
+            (r"[^\W\d][\w']*", Name), 
+ 
+            (r'-?\d[\d_]*(.[\d_]*)?([eE][+\-]?\d[\d_]*)', Number.Float), 
+            (r'0[xX][\da-fA-F][\da-fA-F_]*', Number.Hex), 
+            (r'0[oO][0-7][0-7_]*', Number.Oct), 
+            (r'0[bB][01][01_]*', Number.Bin), 
+            (r'\d[\d_]*', Number.Integer), 
+ 
+            (r"'(?:(\\[\\\"'ntbr ])|(\\[0-9]{3})|(\\x[0-9a-fA-F]{2}))'", 
+             String.Char), 
+            (r"'.'", String.Char), 
+            (r"'", Keyword), 
+ 
+            (r'"', String.Double, 'string'), 
+ 
+            (r'[~?][a-z][\w\']*:', Name.Variable), 
+        ], 
+        'comment': [ 
+            (r'[^/*]+', Comment.Multiline), 
+            (r'\/\*', Comment.Multiline, '#push'), 
+            (r'\*\/', Comment.Multiline, '#pop'), 
+            (r'\*', Comment.Multiline), 
+        ], 
+        'string': [ 
+            (r'[^\\"]+', String.Double), 
+            include('escape-sequence'), 
+            (r'\\\n', String.Double), 
+            (r'"', String.Double, '#pop'), 
+        ], 
+        'dotted': [ 
+            (r'\s+', Text), 
+            (r'\.', Punctuation), 
+            (r'[A-Z][\w\']*(?=\s*\.)', Name.Namespace), 
+            (r'[A-Z][\w\']*', Name.Class, '#pop'), 
+            (r'[a-z_][\w\']*', Name, '#pop'), 
+            default('#pop'), 
+        ], 
+    } 
+ 
+ 
+class FStarLexer(RegexLexer): 
+    """ 
+    For the F* language (https://www.fstar-lang.org/). 
+    .. versionadded:: 2.7 
+    """ 
+ 
+    name = 'FStar' 
+    aliases = ['fstar'] 
+    filenames = ['*.fst', '*.fsti'] 
+    mimetypes = ['text/x-fstar'] 
+ 
+    keywords = ( 
+        'abstract', 'attributes', 'noeq', 'unopteq', 'and' 
+        'begin', 'by', 'default', 'effect', 'else', 'end', 'ensures', 
+        'exception', 'exists', 'false', 'forall', 'fun', 'function', 'if', 
+        'in', 'include', 'inline', 'inline_for_extraction', 'irreducible', 
+        'logic', 'match', 'module', 'mutable', 'new', 'new_effect', 'noextract', 
+        'of', 'open', 'opaque', 'private', 'range_of', 'reifiable', 
+        'reify', 'reflectable', 'requires', 'set_range_of', 'sub_effect', 
+        'synth', 'then', 'total', 'true', 'try', 'type', 'unfold', 'unfoldable', 
+        'val', 'when', 'with', 'not' 
+    ) 
+    decl_keywords = ('let', 'rec') 
+    assume_keywords = ('assume', 'admit', 'assert', 'calc') 
+    keyopts = ( 
+        r'~', r'-', r'/\\', r'\\/', r'<:', r'<@', r'\(\|', r'\|\)', r'#', r'u#', 
+        r'&', r'\(', r'\)', r'\(\)', r',', r'~>', r'->', r'<-', r'<--', r'<==>', 
+        r'==>', r'\.', r'\?', r'\?\.', r'\.\[', r'\.\(', r'\.\(\|', r'\.\[\|', 
+        r'\{:pattern', r':', r'::', r':=', r';', r';;', r'=', r'%\[', r'!\{', 
+        r'\[', r'\[@', r'\[\|', r'\|>', r'\]', r'\|\]', r'\{', r'\|', r'\}', r'\$' 
+    ) 
+ 
+    operators = r'[!$%&*+\./:<=>?@^|~-]' 
+    prefix_syms = r'[!?~]' 
+    infix_syms = r'[=<>@^|&+\*/$%-]' 
+    primitives = ('unit', 'int', 'float', 'bool', 'string', 'char', 'list', 'array') 
+ 
+    tokens = { 
+        'escape-sequence': [ 
+            (r'\\[\\"\'ntbr]', String.Escape), 
+            (r'\\[0-9]{3}', String.Escape), 
+            (r'\\x[0-9a-fA-F]{2}', String.Escape), 
+        ], 
+        'root': [ 
+            (r'\s+', Text), 
+            (r'false|true|False|True|\(\)|\[\]', Name.Builtin.Pseudo), 
+            (r'\b([A-Z][\w\']*)(?=\s*\.)', Name.Namespace, 'dotted'), 
+            (r'\b([A-Z][\w\']*)', Name.Class), 
+            (r'\(\*(?![)])', Comment, 'comment'), 
+            (r'^\/\/.+$', Comment), 
+            (r'\b(%s)\b' % '|'.join(keywords), Keyword), 
+            (r'\b(%s)\b' % '|'.join(assume_keywords), Name.Exception), 
+            (r'\b(%s)\b' % '|'.join(decl_keywords), Keyword.Declaration), 
+            (r'(%s)' % '|'.join(keyopts[::-1]), Operator), 
+            (r'(%s|%s)?%s' % (infix_syms, prefix_syms, operators), Operator), 
+            (r'\b(%s)\b' % '|'.join(primitives), Keyword.Type), 
+ 
+            (r"[^\W\d][\w']*", Name), 
+ 
+            (r'-?\d[\d_]*(.[\d_]*)?([eE][+\-]?\d[\d_]*)', Number.Float), 
+            (r'0[xX][\da-fA-F][\da-fA-F_]*', Number.Hex), 
+            (r'0[oO][0-7][0-7_]*', Number.Oct), 
+            (r'0[bB][01][01_]*', Number.Bin), 
+            (r'\d[\d_]*', Number.Integer), 
+ 
+            (r"'(?:(\\[\\\"'ntbr ])|(\\[0-9]{3})|(\\x[0-9a-fA-F]{2}))'", 
+             String.Char), 
+            (r"'.'", String.Char), 
+            (r"'", Keyword),  # a stray quote is another syntax element 
+            (r"\`([\w\'.]+)\`", Operator.Word),  # for infix applications 
+            (r"\`", Keyword),  # for quoting 
+            (r'"', String.Double, 'string'), 
+ 
+            (r'[~?][a-z][\w\']*:', Name.Variable), 
+        ], 
+        'comment': [ 
+            (r'[^(*)]+', Comment), 
+            (r'\(\*', Comment, '#push'), 
+            (r'\*\)', Comment, '#pop'), 
+            (r'[(*)]', Comment), 
+        ], 
+        'string': [ 
+            (r'[^\\"]+', String.Double), 
+            include('escape-sequence'), 
+            (r'\\\n', String.Double), 
+            (r'"', String.Double, '#pop'), 
+        ], 
+        'dotted': [ 
+            (r'\s+', Text), 
+            (r'\.', Punctuation), 
+            (r'[A-Z][\w\']*(?=\s*\.)', Name.Namespace), 
+            (r'[A-Z][\w\']*', Name.Class, '#pop'), 
+            (r'[a-z_][\w\']*', Name, '#pop'), 
+            default('#pop'), 
+        ], 
+    } 

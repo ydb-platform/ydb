@@ -12,46 +12,46 @@ there are global variables, which are holding the cache information. Some of
 these variables are being cleaned after every API usage.
 """
 import time
-from functools import wraps
+from functools import wraps 
 
 from jedi import settings
-from parso.cache import parser_cache
+from parso.cache import parser_cache 
 
 _time_caches = {}
 
 
-def underscore_memoization(func):
-    """
-    Decorator for methods::
+def underscore_memoization(func): 
+    """ 
+    Decorator for methods:: 
 
-        class A(object):
-            def x(self):
-                if self._x:
-                    self._x = 10
-                return self._x
+        class A(object): 
+            def x(self): 
+                if self._x: 
+                    self._x = 10 
+                return self._x 
 
-    Becomes::
+    Becomes:: 
 
-        class A(object):
-            @underscore_memoization
-            def x(self):
-                return 10
-
-    A now has an attribute ``_x`` written by this decorator.
-    """
-    name = '_' + func.__name__
-
-    def wrapper(self):
-        try:
-            return getattr(self, name)
-        except AttributeError:
-            result = func(self)
-            setattr(self, name, result)
-            return result
-
-    return wrapper
-
-
+        class A(object): 
+            @underscore_memoization 
+            def x(self): 
+                return 10 
+ 
+    A now has an attribute ``_x`` written by this decorator. 
+    """ 
+    name = '_' + func.__name__ 
+ 
+    def wrapper(self): 
+        try: 
+            return getattr(self, name) 
+        except AttributeError: 
+            result = func(self) 
+            setattr(self, name, result) 
+            return result 
+ 
+    return wrapper 
+ 
+ 
 def clear_time_caches(delete_all=False):
     """ Jedi caches many things, that should be completed after each completion
     finishes.
@@ -75,14 +75,14 @@ def clear_time_caches(delete_all=False):
                     del tc[key]
 
 
-def call_signature_time_cache(time_add_setting):
+def call_signature_time_cache(time_add_setting): 
     """
     This decorator works as follows: Call it with a setting and after that
     use the function with a callable that returns the key.
     But: This function is only called if the key is not available. After a
     certain amount of time (`time_add_setting`) the cache is invalid.
-
-    If the given key is None, the function will not be cached.
+ 
+    If the given key is None, the function will not be cached. 
     """
     def _temp(key_func):
         dct = {}
@@ -107,35 +107,35 @@ def call_signature_time_cache(time_add_setting):
     return _temp
 
 
-def time_cache(seconds):
-    def decorator(func):
-        cache = {}
+def time_cache(seconds): 
+    def decorator(func): 
+        cache = {} 
 
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            key = (args, frozenset(kwargs.items()))
-            try:
-                created, result = cache[key]
-                if time.time() < created + seconds:
-                    return result
-            except KeyError:
-                pass
-            result = func(*args, **kwargs)
-            cache[key] = time.time(), result
-            return result
+        @wraps(func) 
+        def wrapper(*args, **kwargs): 
+            key = (args, frozenset(kwargs.items())) 
+            try: 
+                created, result = cache[key] 
+                if time.time() < created + seconds: 
+                    return result 
+            except KeyError: 
+                pass 
+            result = func(*args, **kwargs) 
+            cache[key] = time.time(), result 
+            return result 
 
-        wrapper.clear_cache = lambda: cache.clear()
-        return wrapper
+        wrapper.clear_cache = lambda: cache.clear() 
+        return wrapper 
 
-    return decorator
+    return decorator 
 
 
 def memoize_method(method):
     """A normal memoize function."""
-    @wraps(method)
+    @wraps(method) 
     def wrapper(self, *args, **kwargs):
-        cache_dict = self.__dict__.setdefault('_memoize_method_dct', {})
-        dct = cache_dict.setdefault(method, {})
+        cache_dict = self.__dict__.setdefault('_memoize_method_dct', {}) 
+        dct = cache_dict.setdefault(method, {}) 
         key = (args, frozenset(kwargs.items()))
         try:
             return dct[key]

@@ -124,7 +124,7 @@ namespace orc {
     proto::Footer* footer;
     DataBuffer<uint64_t> firstRowOfStripe;
     mutable std::unique_ptr<Type> selectedSchema;
-    bool skipBloomFilters;
+    bool skipBloomFilters; 
 
     // reading state
     uint64_t previousRow;
@@ -150,13 +150,13 @@ namespace orc {
      */
     void seekToRowGroup(uint32_t rowGroupEntryId);
 
-    /**
-     * Check if the file has bad bloom filters. We will skip using them in the
-     * following reads.
-     * @return true if it has.
-     */
-    bool hasBadBloomFilters();
-
+    /** 
+     * Check if the file has bad bloom filters. We will skip using them in the 
+     * following reads. 
+     * @return true if it has. 
+     */ 
+    bool hasBadBloomFilters(); 
+ 
   public:
    /**
     * Constructor that lets the user specify additional options.
@@ -238,8 +238,8 @@ namespace orc {
 
     uint32_t getWriterIdValue() const override;
 
-    std::string getSoftwareVersion() const override;
-
+    std::string getSoftwareVersion() const override; 
+ 
     WriterVersion getWriterVersion() const override;
 
     uint64_t getNumberOfRows() const override;

@@ -4,7 +4,7 @@
 
     Lexers for Oberon family languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -102,19 +102,19 @@ class ComponentPascalLexer(RegexLexer):
             (r'(TRUE|FALSE|NIL|INF)\b', Keyword.Constant),
         ]
     }
-
-    def analyse_text(text):
-        """The only other lexer using .cp is the C++ one, so we check if for
-        a few common Pascal keywords here. Those are unfortunately quite
-        common across various business languages as well."""
-        result = 0
-        if 'BEGIN' in text:
-            result += 0.01
-        if 'END' in text:
-            result += 0.01
-        if 'PROCEDURE' in text:
-            result += 0.01
-        if 'END' in text:
-            result += 0.01
-
-        return result
+ 
+    def analyse_text(text): 
+        """The only other lexer using .cp is the C++ one, so we check if for 
+        a few common Pascal keywords here. Those are unfortunately quite 
+        common across various business languages as well.""" 
+        result = 0 
+        if 'BEGIN' in text: 
+            result += 0.01 
+        if 'END' in text: 
+            result += 0.01 
+        if 'PROCEDURE' in text: 
+            result += 0.01 
+        if 'END' in text: 
+            result += 0.01 
+ 
+        return result 

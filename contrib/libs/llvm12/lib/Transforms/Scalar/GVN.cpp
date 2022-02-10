@@ -26,7 +26,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/AliasAnalysis.h" 
 #include "llvm/Analysis/AssumeBundleQueries.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/CFG.h"
@@ -36,8 +36,8 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/Analysis/MemoryDependenceAnalysis.h"
-#include "llvm/Analysis/MemorySSA.h"
-#include "llvm/Analysis/MemorySSAUpdater.h"
+#include "llvm/Analysis/MemorySSA.h" 
+#include "llvm/Analysis/MemorySSAUpdater.h" 
 #include "llvm/Analysis/OptimizationRemarkEmitter.h"
 #include "llvm/Analysis/PHITransAddr.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
@@ -99,33 +99,33 @@ STATISTIC(NumGVNSimpl,  "Number of instructions simplified");
 STATISTIC(NumGVNEqProp, "Number of equalities propagated");
 STATISTIC(NumPRELoad,   "Number of loads PRE'd");
 
-STATISTIC(IsValueFullyAvailableInBlockNumSpeculationsMax,
-          "Number of blocks speculated as available in "
-          "IsValueFullyAvailableInBlock(), max");
-STATISTIC(MaxBBSpeculationCutoffReachedTimes,
-          "Number of times we we reached gvn-max-block-speculations cut-off "
-          "preventing further exploration");
-
+STATISTIC(IsValueFullyAvailableInBlockNumSpeculationsMax, 
+          "Number of blocks speculated as available in " 
+          "IsValueFullyAvailableInBlock(), max"); 
+STATISTIC(MaxBBSpeculationCutoffReachedTimes, 
+          "Number of times we we reached gvn-max-block-speculations cut-off " 
+          "preventing further exploration"); 
+ 
 static cl::opt<bool> GVNEnablePRE("enable-pre", cl::init(true), cl::Hidden);
 static cl::opt<bool> GVNEnableLoadPRE("enable-load-pre", cl::init(true));
 static cl::opt<bool> GVNEnableLoadInLoopPRE("enable-load-in-loop-pre",
                                             cl::init(true));
-static cl::opt<bool>
-GVNEnableSplitBackedgeInLoadPRE("enable-split-backedge-in-load-pre",
-                                cl::init(true));
+static cl::opt<bool> 
+GVNEnableSplitBackedgeInLoadPRE("enable-split-backedge-in-load-pre", 
+                                cl::init(true)); 
 static cl::opt<bool> GVNEnableMemDep("enable-gvn-memdep", cl::init(true));
 
 static cl::opt<uint32_t> MaxNumDeps(
     "gvn-max-num-deps", cl::Hidden, cl::init(100), cl::ZeroOrMore,
     cl::desc("Max number of dependences to attempt Load PRE (default = 100)"));
 
-// This is based on IsValueFullyAvailableInBlockNumSpeculationsMax stat.
-static cl::opt<uint32_t> MaxBBSpeculations(
-    "gvn-max-block-speculations", cl::Hidden, cl::init(600), cl::ZeroOrMore,
-    cl::desc("Max number of blocks we're willing to speculate on (and recurse "
-             "into) when deducing if a value is fully available or not in GVN "
-             "(default = 600)"));
-
+// This is based on IsValueFullyAvailableInBlockNumSpeculationsMax stat. 
+static cl::opt<uint32_t> MaxBBSpeculations( 
+    "gvn-max-block-speculations", cl::Hidden, cl::init(600), cl::ZeroOrMore, 
+    cl::desc("Max number of blocks we're willing to speculate on (and recurse " 
+             "into) when deducing if a value is fully available or not in GVN " 
+             "(default = 600)")); 
+ 
 struct llvm::GVN::Expression {
   uint32_t opcode;
   bool commutative = false;
@@ -295,9 +295,9 @@ GVN::Expression GVN::ValueTable::createExpr(Instruction *I) {
   if (I->isCommutative()) {
     // Ensure that commutative instructions that only differ by a permutation
     // of their operands get the same value number by sorting the operand value
-    // numbers.  Since commutative operands are the 1st two operands it is more
+    // numbers.  Since commutative operands are the 1st two operands it is more 
     // efficient to sort by hand rather than using, say, std::sort.
-    assert(I->getNumOperands() >= 2 && "Unsupported commutative instruction!");
+    assert(I->getNumOperands() >= 2 && "Unsupported commutative instruction!"); 
     if (e.varargs[0] > e.varargs[1])
       std::swap(e.varargs[0], e.varargs[1]);
     e.commutative = true;
@@ -366,7 +366,7 @@ GVN::Expression GVN::ValueTable::createExtractvalueExpr(ExtractValueInst *EI) {
        OI != OE; ++OI)
     e.varargs.push_back(lookupOrAdd(*OI));
 
-  append_range(e.varargs, EI->indices());
+  append_range(e.varargs, EI->indices()); 
 
   return e;
 }
@@ -410,12 +410,12 @@ uint32_t GVN::ValueTable::lookupOrAddCall(CallInst *C) {
     }
 
     if (local_dep.isDef()) {
-      // For masked load/store intrinsics, the local_dep may actully be
-      // a normal load or store instruction.
-      CallInst *local_cdep = dyn_cast<CallInst>(local_dep.getInst());
+      // For masked load/store intrinsics, the local_dep may actully be 
+      // a normal load or store instruction. 
+      CallInst *local_cdep = dyn_cast<CallInst>(local_dep.getInst()); 
 
-      if (!local_cdep ||
-          local_cdep->getNumArgOperands() != C->getNumArgOperands()) {
+      if (!local_cdep || 
+          local_cdep->getNumArgOperands() != C->getNumArgOperands()) { 
         valueNumbering[C] = nextValueNumber;
         return nextValueNumber++;
       }
@@ -640,11 +640,11 @@ bool GVN::isLoadInLoopPREEnabled() const {
   return Options.AllowLoadInLoopPRE.getValueOr(GVNEnableLoadInLoopPRE);
 }
 
-bool GVN::isLoadPRESplitBackedgeEnabled() const {
-  return Options.AllowLoadPRESplitBackedge.getValueOr(
-      GVNEnableSplitBackedgeInLoadPRE);
-}
-
+bool GVN::isLoadPRESplitBackedgeEnabled() const { 
+  return Options.AllowLoadPRESplitBackedge.getValueOr( 
+      GVNEnableSplitBackedgeInLoadPRE); 
+} 
+ 
 bool GVN::isMemDepEnabled() const {
   return Options.AllowMemDep.getValueOr(GVNEnableMemDep);
 }
@@ -661,18 +661,18 @@ PreservedAnalyses GVN::run(Function &F, FunctionAnalysisManager &AM) {
   auto *MemDep =
       isMemDepEnabled() ? &AM.getResult<MemoryDependenceAnalysis>(F) : nullptr;
   auto *LI = AM.getCachedResult<LoopAnalysis>(F);
-  auto *MSSA = AM.getCachedResult<MemorySSAAnalysis>(F);
+  auto *MSSA = AM.getCachedResult<MemorySSAAnalysis>(F); 
   auto &ORE = AM.getResult<OptimizationRemarkEmitterAnalysis>(F);
-  bool Changed = runImpl(F, AC, DT, TLI, AA, MemDep, LI, &ORE,
-                         MSSA ? &MSSA->getMSSA() : nullptr);
+  bool Changed = runImpl(F, AC, DT, TLI, AA, MemDep, LI, &ORE, 
+                         MSSA ? &MSSA->getMSSA() : nullptr); 
   if (!Changed)
     return PreservedAnalyses::all();
   PreservedAnalyses PA;
   PA.preserve<DominatorTreeAnalysis>();
   PA.preserve<GlobalsAA>();
   PA.preserve<TargetLibraryAnalysis>();
-  if (MSSA)
-    PA.preserve<MemorySSAAnalysis>();
+  if (MSSA) 
+    PA.preserve<MemorySSAAnalysis>(); 
   if (LI)
     PA.preserve<LoopAnalysis>();
   return PA;
@@ -690,18 +690,18 @@ LLVM_DUMP_METHOD void GVN::dump(DenseMap<uint32_t, Value*>& d) const {
 }
 #endif
 
-enum class AvailabilityState : char {
-  /// We know the block *is not* fully available. This is a fixpoint.
-  Unavailable = 0,
-  /// We know the block *is* fully available. This is a fixpoint.
-  Available = 1,
-  /// We do not know whether the block is fully available or not,
-  /// but we are currently speculating that it will be.
-  /// If it would have turned out that the block was, in fact, not fully
-  /// available, this would have been cleaned up into an Unavailable.
-  SpeculativelyAvailable = 2,
-};
-
+enum class AvailabilityState : char { 
+  /// We know the block *is not* fully available. This is a fixpoint. 
+  Unavailable = 0, 
+  /// We know the block *is* fully available. This is a fixpoint. 
+  Available = 1, 
+  /// We do not know whether the block is fully available or not, 
+  /// but we are currently speculating that it will be. 
+  /// If it would have turned out that the block was, in fact, not fully 
+  /// available, this would have been cleaned up into an Unavailable. 
+  SpeculativelyAvailable = 2, 
+}; 
+ 
 /// Return true if we can prove that the value
 /// we're analyzing is fully available in the specified block.  As we go, keep
 /// track of which blocks we know are fully alive in FullyAvailableBlocks.  This
@@ -710,118 +710,118 @@ enum class AvailabilityState : char {
 ///   1) we know the block *is* fully available.
 ///   2) we do not know whether the block is fully available or not, but we are
 ///      currently speculating that it will be.
-static bool IsValueFullyAvailableInBlock(
-    BasicBlock *BB,
-    DenseMap<BasicBlock *, AvailabilityState> &FullyAvailableBlocks) {
-  SmallVector<BasicBlock *, 32> Worklist;
-  Optional<BasicBlock *> UnavailableBB;
+static bool IsValueFullyAvailableInBlock( 
+    BasicBlock *BB, 
+    DenseMap<BasicBlock *, AvailabilityState> &FullyAvailableBlocks) { 
+  SmallVector<BasicBlock *, 32> Worklist; 
+  Optional<BasicBlock *> UnavailableBB; 
 
-  // The number of times we didn't find an entry for a block in a map and
-  // optimistically inserted an entry marking block as speculatively available.
-  unsigned NumNewNewSpeculativelyAvailableBBs = 0;
+  // The number of times we didn't find an entry for a block in a map and 
+  // optimistically inserted an entry marking block as speculatively available. 
+  unsigned NumNewNewSpeculativelyAvailableBBs = 0; 
 
-#ifndef NDEBUG
-  SmallSet<BasicBlock *, 32> NewSpeculativelyAvailableBBs;
-  SmallVector<BasicBlock *, 32> AvailableBBs;
-#endif
+#ifndef NDEBUG 
+  SmallSet<BasicBlock *, 32> NewSpeculativelyAvailableBBs; 
+  SmallVector<BasicBlock *, 32> AvailableBBs; 
+#endif 
 
-  Worklist.emplace_back(BB);
-  while (!Worklist.empty()) {
-    BasicBlock *CurrBB = Worklist.pop_back_val(); // LIFO - depth-first!
-    // Optimistically assume that the block is Speculatively Available and check
-    // to see if we already know about this block in one lookup.
-    std::pair<DenseMap<BasicBlock *, AvailabilityState>::iterator, bool> IV =
-        FullyAvailableBlocks.try_emplace(
-            CurrBB, AvailabilityState::SpeculativelyAvailable);
-    AvailabilityState &State = IV.first->second;
+  Worklist.emplace_back(BB); 
+  while (!Worklist.empty()) { 
+    BasicBlock *CurrBB = Worklist.pop_back_val(); // LIFO - depth-first! 
+    // Optimistically assume that the block is Speculatively Available and check 
+    // to see if we already know about this block in one lookup. 
+    std::pair<DenseMap<BasicBlock *, AvailabilityState>::iterator, bool> IV = 
+        FullyAvailableBlocks.try_emplace( 
+            CurrBB, AvailabilityState::SpeculativelyAvailable); 
+    AvailabilityState &State = IV.first->second; 
 
-    // Did the entry already exist for this block?
-    if (!IV.second) {
-      if (State == AvailabilityState::Unavailable) {
-        UnavailableBB = CurrBB;
-        break; // Backpropagate unavailability info.
-      }
+    // Did the entry already exist for this block? 
+    if (!IV.second) { 
+      if (State == AvailabilityState::Unavailable) { 
+        UnavailableBB = CurrBB; 
+        break; // Backpropagate unavailability info. 
+      } 
 
-#ifndef NDEBUG
-      AvailableBBs.emplace_back(CurrBB);
-#endif
-      continue; // Don't recurse further, but continue processing worklist.
-    }
+#ifndef NDEBUG 
+      AvailableBBs.emplace_back(CurrBB); 
+#endif 
+      continue; // Don't recurse further, but continue processing worklist. 
+    } 
 
-    // No entry found for block.
-    ++NumNewNewSpeculativelyAvailableBBs;
-    bool OutOfBudget = NumNewNewSpeculativelyAvailableBBs > MaxBBSpeculations;
+    // No entry found for block. 
+    ++NumNewNewSpeculativelyAvailableBBs; 
+    bool OutOfBudget = NumNewNewSpeculativelyAvailableBBs > MaxBBSpeculations; 
 
-    // If we have exhausted our budget, mark this block as unavailable.
-    // Also, if this block has no predecessors, the value isn't live-in here.
-    if (OutOfBudget || pred_empty(CurrBB)) {
-      MaxBBSpeculationCutoffReachedTimes += (int)OutOfBudget;
-      State = AvailabilityState::Unavailable;
-      UnavailableBB = CurrBB;
-      break; // Backpropagate unavailability info.
-    }
+    // If we have exhausted our budget, mark this block as unavailable. 
+    // Also, if this block has no predecessors, the value isn't live-in here. 
+    if (OutOfBudget || pred_empty(CurrBB)) { 
+      MaxBBSpeculationCutoffReachedTimes += (int)OutOfBudget; 
+      State = AvailabilityState::Unavailable; 
+      UnavailableBB = CurrBB; 
+      break; // Backpropagate unavailability info. 
+    } 
 
-    // Tentatively consider this block as speculatively available.
-#ifndef NDEBUG
-    NewSpeculativelyAvailableBBs.insert(CurrBB);
-#endif
-    // And further recurse into block's predecessors, in depth-first order!
-    Worklist.append(pred_begin(CurrBB), pred_end(CurrBB));
+    // Tentatively consider this block as speculatively available. 
+#ifndef NDEBUG 
+    NewSpeculativelyAvailableBBs.insert(CurrBB); 
+#endif 
+    // And further recurse into block's predecessors, in depth-first order! 
+    Worklist.append(pred_begin(CurrBB), pred_end(CurrBB)); 
   }
 
-#if LLVM_ENABLE_STATS
-  IsValueFullyAvailableInBlockNumSpeculationsMax.updateMax(
-      NumNewNewSpeculativelyAvailableBBs);
-#endif
+#if LLVM_ENABLE_STATS 
+  IsValueFullyAvailableInBlockNumSpeculationsMax.updateMax( 
+      NumNewNewSpeculativelyAvailableBBs); 
+#endif 
 
-  // If the block isn't marked as fixpoint yet
-  // (the Unavailable and Available states are fixpoints)
-  auto MarkAsFixpointAndEnqueueSuccessors =
-      [&](BasicBlock *BB, AvailabilityState FixpointState) {
-        auto It = FullyAvailableBlocks.find(BB);
-        if (It == FullyAvailableBlocks.end())
-          return; // Never queried this block, leave as-is.
-        switch (AvailabilityState &State = It->second) {
-        case AvailabilityState::Unavailable:
-        case AvailabilityState::Available:
-          return; // Don't backpropagate further, continue processing worklist.
-        case AvailabilityState::SpeculativelyAvailable: // Fix it!
-          State = FixpointState;
-#ifndef NDEBUG
-          assert(NewSpeculativelyAvailableBBs.erase(BB) &&
-                 "Found a speculatively available successor leftover?");
-#endif
-          // Queue successors for further processing.
-          Worklist.append(succ_begin(BB), succ_end(BB));
-          return;
-        }
-      };
+  // If the block isn't marked as fixpoint yet 
+  // (the Unavailable and Available states are fixpoints) 
+  auto MarkAsFixpointAndEnqueueSuccessors = 
+      [&](BasicBlock *BB, AvailabilityState FixpointState) { 
+        auto It = FullyAvailableBlocks.find(BB); 
+        if (It == FullyAvailableBlocks.end()) 
+          return; // Never queried this block, leave as-is. 
+        switch (AvailabilityState &State = It->second) { 
+        case AvailabilityState::Unavailable: 
+        case AvailabilityState::Available: 
+          return; // Don't backpropagate further, continue processing worklist. 
+        case AvailabilityState::SpeculativelyAvailable: // Fix it! 
+          State = FixpointState; 
+#ifndef NDEBUG 
+          assert(NewSpeculativelyAvailableBBs.erase(BB) && 
+                 "Found a speculatively available successor leftover?"); 
+#endif 
+          // Queue successors for further processing. 
+          Worklist.append(succ_begin(BB), succ_end(BB)); 
+          return; 
+        } 
+      }; 
 
-  if (UnavailableBB) {
-    // Okay, we have encountered an unavailable block.
-    // Mark speculatively available blocks reachable from UnavailableBB as
-    // unavailable as well. Paths are terminated when they reach blocks not in
-    // FullyAvailableBlocks or they are not marked as speculatively available.
-    Worklist.clear();
-    Worklist.append(succ_begin(*UnavailableBB), succ_end(*UnavailableBB));
-    while (!Worklist.empty())
-      MarkAsFixpointAndEnqueueSuccessors(Worklist.pop_back_val(),
-                                         AvailabilityState::Unavailable);
-  }
+  if (UnavailableBB) { 
+    // Okay, we have encountered an unavailable block. 
+    // Mark speculatively available blocks reachable from UnavailableBB as 
+    // unavailable as well. Paths are terminated when they reach blocks not in 
+    // FullyAvailableBlocks or they are not marked as speculatively available. 
+    Worklist.clear(); 
+    Worklist.append(succ_begin(*UnavailableBB), succ_end(*UnavailableBB)); 
+    while (!Worklist.empty()) 
+      MarkAsFixpointAndEnqueueSuccessors(Worklist.pop_back_val(), 
+                                         AvailabilityState::Unavailable); 
+  } 
 
-#ifndef NDEBUG
-  Worklist.clear();
-  for (BasicBlock *AvailableBB : AvailableBBs)
-    Worklist.append(succ_begin(AvailableBB), succ_end(AvailableBB));
-  while (!Worklist.empty())
-    MarkAsFixpointAndEnqueueSuccessors(Worklist.pop_back_val(),
-                                       AvailabilityState::Available);
+#ifndef NDEBUG 
+  Worklist.clear(); 
+  for (BasicBlock *AvailableBB : AvailableBBs) 
+    Worklist.append(succ_begin(AvailableBB), succ_end(AvailableBB)); 
+  while (!Worklist.empty()) 
+    MarkAsFixpointAndEnqueueSuccessors(Worklist.pop_back_val(), 
+                                       AvailabilityState::Available); 
 
-  assert(NewSpeculativelyAvailableBBs.empty() &&
-         "Must have fixed all the new speculatively available blocks.");
-#endif
-
-  return !UnavailableBB;
+  assert(NewSpeculativelyAvailableBBs.empty() && 
+         "Must have fixed all the new speculatively available blocks."); 
+#endif 
+ 
+  return !UnavailableBB; 
 }
 
 /// Given a set of loads specified by ValuesPerBlock,
@@ -1040,7 +1040,7 @@ bool GVN::AnalyzeLoadAvailability(LoadInst *LI, MemDepResult DepInfo,
 
   if (StoreInst *S = dyn_cast<StoreInst>(DepInst)) {
     // Reject loads and stores that are to the same address but are of
-    // different types if we have to. If the stored value is convertable to
+    // different types if we have to. If the stored value is convertable to 
     // the loaded value, we can reuse it.
     if (!canCoerceMustAliasedValueToLoad(S->getValueOperand(), LI->getType(),
                                          DL))
@@ -1155,9 +1155,9 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
   // because if the index is out of bounds we should deoptimize rather than
   // access the array.
   // Check that there is no guard in this block above our instruction.
-  bool MustEnsureSafetyOfSpeculativeExecution =
-      ICF->isDominatedByICFIFromSameBlock(LI);
-
+  bool MustEnsureSafetyOfSpeculativeExecution = 
+      ICF->isDominatedByICFIFromSameBlock(LI); 
+ 
   while (TmpBB->getSinglePredecessor()) {
     TmpBB = TmpBB->getSinglePredecessor();
     if (TmpBB == LoadBB) // Infinite (unreachable) loop.
@@ -1174,8 +1174,8 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
       return false;
 
     // Check that there is no implicit control flow in a block above.
-    MustEnsureSafetyOfSpeculativeExecution =
-        MustEnsureSafetyOfSpeculativeExecution || ICF->hasICF(TmpBB);
+    MustEnsureSafetyOfSpeculativeExecution = 
+        MustEnsureSafetyOfSpeculativeExecution || ICF->hasICF(TmpBB); 
   }
 
   assert(TmpBB);
@@ -1184,11 +1184,11 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
   // Check to see how many predecessors have the loaded value fully
   // available.
   MapVector<BasicBlock *, Value *> PredLoads;
-  DenseMap<BasicBlock *, AvailabilityState> FullyAvailableBlocks;
+  DenseMap<BasicBlock *, AvailabilityState> FullyAvailableBlocks; 
   for (const AvailableValueInBlock &AV : ValuesPerBlock)
-    FullyAvailableBlocks[AV.BB] = AvailabilityState::Available;
+    FullyAvailableBlocks[AV.BB] = AvailabilityState::Available; 
   for (BasicBlock *UnavailableBB : UnavailableBlocks)
-    FullyAvailableBlocks[UnavailableBB] = AvailabilityState::Unavailable;
+    FullyAvailableBlocks[UnavailableBB] = AvailabilityState::Unavailable; 
 
   SmallVector<BasicBlock *, 4> CriticalEdgePred;
   for (BasicBlock *Pred : predecessors(LoadBB)) {
@@ -1201,7 +1201,7 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
       return false;
     }
 
-    if (IsValueFullyAvailableInBlock(Pred, FullyAvailableBlocks)) {
+    if (IsValueFullyAvailableInBlock(Pred, FullyAvailableBlocks)) { 
       continue;
     }
 
@@ -1228,16 +1228,16 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
         return false;
       }
 
-      // Do not split backedge as it will break the canonical loop form.
-      if (!isLoadPRESplitBackedgeEnabled())
-        if (DT->dominates(LoadBB, Pred)) {
-          LLVM_DEBUG(
-              dbgs()
-              << "COULD NOT PRE LOAD BECAUSE OF A BACKEDGE CRITICAL EDGE '"
-              << Pred->getName() << "': " << *LI << '\n');
-          return false;
-        }
-
+      // Do not split backedge as it will break the canonical loop form. 
+      if (!isLoadPRESplitBackedgeEnabled()) 
+        if (DT->dominates(LoadBB, Pred)) { 
+          LLVM_DEBUG( 
+              dbgs() 
+              << "COULD NOT PRE LOAD BECAUSE OF A BACKEDGE CRITICAL EDGE '" 
+              << Pred->getName() << "': " << *LI << '\n'); 
+          return false; 
+        } 
+ 
       CriticalEdgePred.push_back(Pred);
     } else {
       // Only add the predecessors that will not be split for now.
@@ -1257,17 +1257,17 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
   if (NumUnavailablePreds != 1)
       return false;
 
-  // Now we know where we will insert load. We must ensure that it is safe
-  // to speculatively execute the load at that points.
-  if (MustEnsureSafetyOfSpeculativeExecution) {
-    if (CriticalEdgePred.size())
-      if (!isSafeToSpeculativelyExecute(LI, LoadBB->getFirstNonPHI(), DT))
-        return false;
-    for (auto &PL : PredLoads)
-      if (!isSafeToSpeculativelyExecute(LI, PL.first->getTerminator(), DT))
-        return false;
-  }
-
+  // Now we know where we will insert load. We must ensure that it is safe 
+  // to speculatively execute the load at that points. 
+  if (MustEnsureSafetyOfSpeculativeExecution) { 
+    if (CriticalEdgePred.size()) 
+      if (!isSafeToSpeculativelyExecute(LI, LoadBB->getFirstNonPHI(), DT)) 
+        return false; 
+    for (auto &PL : PredLoads) 
+      if (!isSafeToSpeculativelyExecute(LI, PL.first->getTerminator(), DT)) 
+        return false; 
+  } 
+ 
   // Split critical edges, and update the unavailable predecessors accordingly.
   for (BasicBlock *OrigPred : CriticalEdgePred) {
     BasicBlock *NewPred = splitCriticalEdges(OrigPred, LoadBB);
@@ -1349,7 +1349,7 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
     // Instructions that have been inserted in predecessor(s) to materialize
     // the load address do not retain their original debug locations. Doing
     // so could lead to confusing (but correct) source attributions.
-    I->updateLocationAfterHoist();
+    I->updateLocationAfterHoist(); 
 
     // FIXME: We really _ought_ to insert these value numbers into their
     // parent's availability map.  However, in doing so, we risk getting into
@@ -1367,22 +1367,22 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
         LI->getAlign(), LI->getOrdering(), LI->getSyncScopeID(),
         UnavailablePred->getTerminator());
     NewLoad->setDebugLoc(LI->getDebugLoc());
-    if (MSSAU) {
-      auto *MSSA = MSSAU->getMemorySSA();
-      // Get the defining access of the original load or use the load if it is a
-      // MemoryDef (e.g. because it is volatile). The inserted loads are
-      // guaranteed to load from the same definition.
-      auto *LIAcc = MSSA->getMemoryAccess(LI);
-      auto *DefiningAcc =
-          isa<MemoryDef>(LIAcc) ? LIAcc : LIAcc->getDefiningAccess();
-      auto *NewAccess = MSSAU->createMemoryAccessInBB(
-          NewLoad, DefiningAcc, NewLoad->getParent(),
-          MemorySSA::BeforeTerminator);
-      if (auto *NewDef = dyn_cast<MemoryDef>(NewAccess))
-        MSSAU->insertDef(NewDef, /*RenameUses=*/true);
-      else
-        MSSAU->insertUse(cast<MemoryUse>(NewAccess), /*RenameUses=*/true);
-    }
+    if (MSSAU) { 
+      auto *MSSA = MSSAU->getMemorySSA(); 
+      // Get the defining access of the original load or use the load if it is a 
+      // MemoryDef (e.g. because it is volatile). The inserted loads are 
+      // guaranteed to load from the same definition. 
+      auto *LIAcc = MSSA->getMemoryAccess(LI); 
+      auto *DefiningAcc = 
+          isa<MemoryDef>(LIAcc) ? LIAcc : LIAcc->getDefiningAccess(); 
+      auto *NewAccess = MSSAU->createMemoryAccessInBB( 
+          NewLoad, DefiningAcc, NewLoad->getParent(), 
+          MemorySSA::BeforeTerminator); 
+      if (auto *NewDef = dyn_cast<MemoryDef>(NewAccess)) 
+        MSSAU->insertDef(NewDef, /*RenameUses=*/true); 
+      else 
+        MSSAU->insertUse(cast<MemoryUse>(NewAccess), /*RenameUses=*/true); 
+    } 
 
     // Transfer the old load's AA tags to the new load.
     AAMDNodes Tags;
@@ -1470,14 +1470,14 @@ bool GVN::processNonLocalLoad(LoadInst *LI) {
     return false;
   }
 
-  bool Changed = false;
+  bool Changed = false; 
   // If this load follows a GEP, see if we can PRE the indices before analyzing.
   if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(LI->getOperand(0))) {
     for (GetElementPtrInst::op_iterator OI = GEP->idx_begin(),
                                         OE = GEP->idx_end();
          OI != OE; ++OI)
       if (Instruction *I = dyn_cast<Instruction>(OI->get()))
-        Changed |= performScalarPRE(I);
+        Changed |= performScalarPRE(I); 
   }
 
   // Step 2: Analyze the availability of the load
@@ -1488,7 +1488,7 @@ bool GVN::processNonLocalLoad(LoadInst *LI) {
   // If we have no predecessors that produce a known value for this load, exit
   // early.
   if (ValuesPerBlock.empty())
-    return Changed;
+    return Changed; 
 
   // Step 3: Eliminate fully redundancy.
   //
@@ -1520,12 +1520,12 @@ bool GVN::processNonLocalLoad(LoadInst *LI) {
 
   // Step 4: Eliminate partial redundancy.
   if (!isPREEnabled() || !isLoadPREEnabled())
-    return Changed;
+    return Changed; 
   if (!isLoadInLoopPREEnabled() && this->LI &&
       this->LI->getLoopFor(LI->getParent()))
-    return Changed;
+    return Changed; 
 
-  return Changed || PerformLoadPRE(LI, ValuesPerBlock, UnavailableBlocks);
+  return Changed || PerformLoadPRE(LI, ValuesPerBlock, UnavailableBlocks); 
 }
 
 static bool impliesEquivalanceIfTrue(CmpInst* Cmp) {
@@ -1600,40 +1600,40 @@ bool GVN::processAssumeIntrinsic(IntrinsicInst *IntrinsicI) {
       // Insert a new store to null instruction before the load to indicate that
       // this code is not reachable.  FIXME: We could insert unreachable
       // instruction directly because we can modify the CFG.
-      auto *NewS = new StoreInst(UndefValue::get(Int8Ty),
-                                 Constant::getNullValue(Int8Ty->getPointerTo()),
-                                 IntrinsicI);
-      if (MSSAU) {
-        const MemoryUseOrDef *FirstNonDom = nullptr;
-        const auto *AL =
-            MSSAU->getMemorySSA()->getBlockAccesses(IntrinsicI->getParent());
-
-        // If there are accesses in the current basic block, find the first one
-        // that does not come before NewS. The new memory access is inserted
-        // after the found access or before the terminator if no such access is
-        // found.
-        if (AL) {
-          for (auto &Acc : *AL) {
-            if (auto *Current = dyn_cast<MemoryUseOrDef>(&Acc))
-              if (!Current->getMemoryInst()->comesBefore(NewS)) {
-                FirstNonDom = Current;
-                break;
-              }
-          }
-        }
-
-        // This added store is to null, so it will never executed and we can
-        // just use the LiveOnEntry def as defining access.
-        auto *NewDef =
-            FirstNonDom ? MSSAU->createMemoryAccessBefore(
-                              NewS, MSSAU->getMemorySSA()->getLiveOnEntryDef(),
-                              const_cast<MemoryUseOrDef *>(FirstNonDom))
-                        : MSSAU->createMemoryAccessInBB(
-                              NewS, MSSAU->getMemorySSA()->getLiveOnEntryDef(),
-                              NewS->getParent(), MemorySSA::BeforeTerminator);
-
-        MSSAU->insertDef(cast<MemoryDef>(NewDef), /*RenameUses=*/false);
-      }
+      auto *NewS = new StoreInst(UndefValue::get(Int8Ty), 
+                                 Constant::getNullValue(Int8Ty->getPointerTo()), 
+                                 IntrinsicI); 
+      if (MSSAU) { 
+        const MemoryUseOrDef *FirstNonDom = nullptr; 
+        const auto *AL = 
+            MSSAU->getMemorySSA()->getBlockAccesses(IntrinsicI->getParent()); 
+ 
+        // If there are accesses in the current basic block, find the first one 
+        // that does not come before NewS. The new memory access is inserted 
+        // after the found access or before the terminator if no such access is 
+        // found. 
+        if (AL) { 
+          for (auto &Acc : *AL) { 
+            if (auto *Current = dyn_cast<MemoryUseOrDef>(&Acc)) 
+              if (!Current->getMemoryInst()->comesBefore(NewS)) { 
+                FirstNonDom = Current; 
+                break; 
+              } 
+          } 
+        } 
+ 
+        // This added store is to null, so it will never executed and we can 
+        // just use the LiveOnEntry def as defining access. 
+        auto *NewDef = 
+            FirstNonDom ? MSSAU->createMemoryAccessBefore( 
+                              NewS, MSSAU->getMemorySSA()->getLiveOnEntryDef(), 
+                              const_cast<MemoryUseOrDef *>(FirstNonDom)) 
+                        : MSSAU->createMemoryAccessInBB( 
+                              NewS, MSSAU->getMemorySSA()->getLiveOnEntryDef(), 
+                              NewS->getParent(), MemorySSA::BeforeTerminator); 
+ 
+        MSSAU->insertDef(cast<MemoryDef>(NewDef), /*RenameUses=*/false); 
+      } 
     }
     if (isAssumeWithEmptyBundle(*IntrinsicI))
       markInstructionForDeletion(IntrinsicI);
@@ -1661,11 +1661,11 @@ bool GVN::processAssumeIntrinsic(IntrinsicInst *IntrinsicI) {
   // br i1 %cmp, label %bb1, label %bb2 ; will change %cmp to true
   ReplaceOperandsWithMap[V] = True;
 
-  // Similarly, after assume(!NotV) we know that NotV == false.
-  Value *NotV;
-  if (match(V, m_Not(m_Value(NotV))))
-    ReplaceOperandsWithMap[NotV] = ConstantInt::getFalse(V->getContext());
-
+  // Similarly, after assume(!NotV) we know that NotV == false. 
+  Value *NotV; 
+  if (match(V, m_Not(m_Value(NotV)))) 
+    ReplaceOperandsWithMap[NotV] = ConstantInt::getFalse(V->getContext()); 
+ 
   // If we find an equality fact, canonicalize all dominated uses in this block
   // to one of the two values.  We heuristically choice the "oldest" of the
   // two where age is determined by value number. (Note that propagateEquality
@@ -1772,8 +1772,8 @@ bool GVN::processLoad(LoadInst *L) {
     // Replace the load!
     patchAndReplaceAllUsesWith(L, AvailableValue);
     markInstructionForDeletion(L);
-    if (MSSAU)
-      MSSAU->removeMemoryAccess(L);
+    if (MSSAU) 
+      MSSAU->removeMemoryAccess(L); 
     ++NumGVNLoad;
     reportLoadElim(L, AvailableValue, ORE);
     // Tell MDA to rexamine the reused pointer since we might have more
@@ -1895,7 +1895,7 @@ uint32_t GVN::ValueTable::phiTranslateImpl(const BasicBlock *Pred,
   }
 
   if (Exp.commutative) {
-    assert(Exp.varargs.size() >= 2 && "Unsupported commutative instruction!");
+    assert(Exp.varargs.size() >= 2 && "Unsupported commutative instruction!"); 
     if (Exp.varargs[0] > Exp.varargs[1]) {
       std::swap(Exp.varargs[0], Exp.varargs[1]);
       uint32_t Opcode = Exp.opcode >> 8;
@@ -1918,8 +1918,8 @@ uint32_t GVN::ValueTable::phiTranslateImpl(const BasicBlock *Pred,
 /// again.
 void GVN::ValueTable::eraseTranslateCacheEntry(uint32_t Num,
                                                const BasicBlock &CurrBlock) {
-  for (const BasicBlock *Pred : predecessors(&CurrBlock))
-    PhiTranslateTable.erase({Num, Pred});
+  for (const BasicBlock *Pred : predecessors(&CurrBlock)) 
+    PhiTranslateTable.erase({Num, Pred}); 
 }
 
 // In order to find a leader for a given value number at a
@@ -2083,8 +2083,8 @@ bool GVN::propagateEquality(Value *LHS, Value *RHS, const BasicBlockEdge &Root,
     // If "A && B" is known true then both A and B are known true.  If "A || B"
     // is known false then both A and B are known false.
     Value *A, *B;
-    if ((isKnownTrue && match(LHS, m_LogicalAnd(m_Value(A), m_Value(B)))) ||
-        (isKnownFalse && match(LHS, m_LogicalOr(m_Value(A), m_Value(B))))) {
+    if ((isKnownTrue && match(LHS, m_LogicalAnd(m_Value(A), m_Value(B)))) || 
+        (isKnownFalse && match(LHS, m_LogicalOr(m_Value(A), m_Value(B))))) { 
       Worklist.push_back(std::make_pair(A, RHS));
       Worklist.push_back(std::make_pair(B, RHS));
       continue;
@@ -2286,7 +2286,7 @@ bool GVN::processInstruction(Instruction *I) {
 bool GVN::runImpl(Function &F, AssumptionCache &RunAC, DominatorTree &RunDT,
                   const TargetLibraryInfo &RunTLI, AAResults &RunAA,
                   MemoryDependenceResults *RunMD, LoopInfo *LI,
-                  OptimizationRemarkEmitter *RunORE, MemorySSA *MSSA) {
+                  OptimizationRemarkEmitter *RunORE, MemorySSA *MSSA) { 
   AC = &RunAC;
   DT = &RunDT;
   VN.setDomTree(DT);
@@ -2299,8 +2299,8 @@ bool GVN::runImpl(Function &F, AssumptionCache &RunAC, DominatorTree &RunDT,
   VN.setMemDep(MD);
   ORE = RunORE;
   InvalidBlockRPONumbers = true;
-  MemorySSAUpdater Updater(MSSA);
-  MSSAU = MSSA ? &Updater : nullptr;
+  MemorySSAUpdater Updater(MSSA); 
+  MSSAU = MSSA ? &Updater : nullptr; 
 
   bool Changed = false;
   bool ShouldContinue = true;
@@ -2311,7 +2311,7 @@ bool GVN::runImpl(Function &F, AssumptionCache &RunAC, DominatorTree &RunDT,
   for (Function::iterator FI = F.begin(), FE = F.end(); FI != FE; ) {
     BasicBlock *BB = &*FI++;
 
-    bool removedBlock = MergeBlockIntoPredecessor(BB, &DTU, LI, MSSAU, MD);
+    bool removedBlock = MergeBlockIntoPredecessor(BB, &DTU, LI, MSSAU, MD); 
     if (removedBlock)
       ++NumGVNBlocks;
 
@@ -2347,9 +2347,9 @@ bool GVN::runImpl(Function &F, AssumptionCache &RunAC, DominatorTree &RunDT,
   // iteration.
   DeadBlocks.clear();
 
-  if (MSSA && VerifyMemorySSA)
-    MSSA->verifyMemorySSA();
-
+  if (MSSA && VerifyMemorySSA) 
+    MSSA->verifyMemorySSA(); 
+ 
   return Changed;
 }
 
@@ -2390,8 +2390,8 @@ bool GVN::processBlock(BasicBlock *BB) {
       salvageKnowledge(I, AC);
       salvageDebugInfo(*I);
       if (MD) MD->removeInstruction(I);
-      if (MSSAU)
-        MSSAU->removeMemoryAccess(I);
+      if (MSSAU) 
+        MSSAU->removeMemoryAccess(I); 
       LLVM_DEBUG(verifyRemoved(I));
       ICF->removeInstruction(I);
       I->eraseFromParent();
@@ -2479,14 +2479,14 @@ bool GVN::performScalarPRE(Instruction *CurInst) {
   if (isa<GetElementPtrInst>(CurInst))
     return false;
 
-  if (auto *CallB = dyn_cast<CallBase>(CurInst)) {
-    // We don't currently value number ANY inline asm calls.
+  if (auto *CallB = dyn_cast<CallBase>(CurInst)) { 
+    // We don't currently value number ANY inline asm calls. 
     if (CallB->isInlineAsm())
       return false;
-    // Don't do PRE on convergent calls.
-    if (CallB->isConvergent())
-      return false;
-  }
+    // Don't do PRE on convergent calls. 
+    if (CallB->isConvergent()) 
+      return false; 
+  } 
 
   uint32_t ValNo = VN.lookup(CurInst);
 
@@ -2626,8 +2626,8 @@ bool GVN::performScalarPRE(Instruction *CurInst) {
   LLVM_DEBUG(dbgs() << "GVN PRE removed: " << *CurInst << '\n');
   if (MD)
     MD->removeInstruction(CurInst);
-  if (MSSAU)
-    MSSAU->removeMemoryAccess(CurInst);
+  if (MSSAU) 
+    MSSAU->removeMemoryAccess(CurInst); 
   LLVM_DEBUG(verifyRemoved(CurInst));
   // FIXME: Intended to be markInstructionForDeletion(CurInst), but it causes
   // some assertion failures.
@@ -2672,12 +2672,12 @@ BasicBlock *GVN::splitCriticalEdges(BasicBlock *Pred, BasicBlock *Succ) {
   // possible.
   BasicBlock *BB = SplitCriticalEdge(
       Pred, Succ,
-      CriticalEdgeSplittingOptions(DT, LI, MSSAU).unsetPreserveLoopSimplify());
-  if (BB) {
-    if (MD)
-      MD->invalidateCachedPredecessors();
-    InvalidBlockRPONumbers = true;
-  }
+      CriticalEdgeSplittingOptions(DT, LI, MSSAU).unsetPreserveLoopSimplify()); 
+  if (BB) { 
+    if (MD) 
+      MD->invalidateCachedPredecessors(); 
+    InvalidBlockRPONumbers = true; 
+  } 
   return BB;
 }
 
@@ -2686,20 +2686,20 @@ BasicBlock *GVN::splitCriticalEdges(BasicBlock *Pred, BasicBlock *Succ) {
 bool GVN::splitCriticalEdges() {
   if (toSplit.empty())
     return false;
-
-  bool Changed = false;
+ 
+  bool Changed = false; 
   do {
     std::pair<Instruction *, unsigned> Edge = toSplit.pop_back_val();
-    Changed |= SplitCriticalEdge(Edge.first, Edge.second,
-                                 CriticalEdgeSplittingOptions(DT, LI, MSSAU)) !=
-               nullptr;
+    Changed |= SplitCriticalEdge(Edge.first, Edge.second, 
+                                 CriticalEdgeSplittingOptions(DT, LI, MSSAU)) != 
+               nullptr; 
   } while (!toSplit.empty());
-  if (Changed) {
-    if (MD)
-      MD->invalidateCachedPredecessors();
-    InvalidBlockRPONumbers = true;
-  }
-  return Changed;
+  if (Changed) { 
+    if (MD) 
+      MD->invalidateCachedPredecessors(); 
+    InvalidBlockRPONumbers = true; 
+  } 
+  return Changed; 
 }
 
 /// Executes one iteration of GVN
@@ -2803,12 +2803,12 @@ void GVN::addDeadBlock(BasicBlock *BB) {
 
     // First, split the critical edges. This might also create additional blocks
     // to preserve LoopSimplify form and adjust edges accordingly.
-    SmallVector<BasicBlock *, 4> Preds(predecessors(B));
+    SmallVector<BasicBlock *, 4> Preds(predecessors(B)); 
     for (BasicBlock *P : Preds) {
       if (!DeadBlocks.count(P))
         continue;
 
-      if (llvm::is_contained(successors(P), B) &&
+      if (llvm::is_contained(successors(P), B) && 
           isCriticalEdge(P->getTerminator(), B)) {
         if (BasicBlock *S = splitCriticalEdges(P, B))
           DeadBlocks.insert(P = S);
@@ -2893,7 +2893,7 @@ public:
 
     auto *LIWP = getAnalysisIfAvailable<LoopInfoWrapperPass>();
 
-    auto *MSSAWP = getAnalysisIfAvailable<MemorySSAWrapperPass>();
+    auto *MSSAWP = getAnalysisIfAvailable<MemorySSAWrapperPass>(); 
     return Impl.runImpl(
         F, getAnalysis<AssumptionCacheTracker>().getAssumptionCache(F),
         getAnalysis<DominatorTreeWrapperPass>().getDomTree(),
@@ -2903,8 +2903,8 @@ public:
             ? &getAnalysis<MemoryDependenceWrapperPass>().getMemDep()
             : nullptr,
         LIWP ? &LIWP->getLoopInfo() : nullptr,
-        &getAnalysis<OptimizationRemarkEmitterWrapperPass>().getORE(),
-        MSSAWP ? &MSSAWP->getMSSA() : nullptr);
+        &getAnalysis<OptimizationRemarkEmitterWrapperPass>().getORE(), 
+        MSSAWP ? &MSSAWP->getMSSA() : nullptr); 
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
@@ -2920,7 +2920,7 @@ public:
     AU.addPreserved<TargetLibraryInfoWrapperPass>();
     AU.addPreserved<LoopInfoWrapperPass>();
     AU.addRequired<OptimizationRemarkEmitterWrapperPass>();
-    AU.addPreserved<MemorySSAWrapperPass>();
+    AU.addPreserved<MemorySSAWrapperPass>(); 
   }
 
 private:

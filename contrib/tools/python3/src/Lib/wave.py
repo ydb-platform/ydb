@@ -53,7 +53,7 @@ This returns an instance of a class with the following public methods:
                       -- set all parameters at once
       tell()          -- return current position in output file
       writeframesraw(data)
-                      -- write audio frames without patching up the
+                      -- write audio frames without patching up the 
                          file header
       writeframes(data)
                       -- write audio frames and patch up the file header
@@ -71,16 +71,16 @@ The close() method is called automatically when the class instance
 is destroyed.
 """
 
-from chunk import Chunk
-from collections import namedtuple
-import audioop
+from chunk import Chunk 
+from collections import namedtuple 
+import audioop 
 import builtins
-import struct
-import sys
+import struct 
+import sys 
 
 
-__all__ = ["open", "Error", "Wave_read", "Wave_write"]
-
+__all__ = ["open", "Error", "Wave_read", "Wave_write"] 
+ 
 class Error(Exception):
     pass
 

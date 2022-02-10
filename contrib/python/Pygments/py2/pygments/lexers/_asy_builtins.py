@@ -14,7 +14,7 @@
     :license: BSD, see LICENSE for details.
 """
 
-ASYFUNCNAME = {
+ASYFUNCNAME = { 
     'AND',
     'Arc',
     'ArcArrow',
@@ -1038,9 +1038,9 @@ ASYFUNCNAME = {
     'ztick',
     'ztick3',
     'ztrans'
-}
+} 
 
-ASYVARNAME = {
+ASYVARNAME = { 
     'AliceBlue',
     'Align',
     'Allow',
@@ -1642,4 +1642,4 @@ ASYVARNAME = {
     'ylabelwidth',
     'zerotickfuzz',
     'zerowinding'
-}
+} 

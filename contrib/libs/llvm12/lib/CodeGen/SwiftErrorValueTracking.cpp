@@ -202,8 +202,8 @@ void SwiftErrorValueTracking::propagateVRegs() {
       // downward defs.
       bool needPHI =
           VRegs.size() >= 1 &&
-          llvm::find_if(
-              VRegs,
+          llvm::find_if( 
+              VRegs, 
               [&](const std::pair<const MachineBasicBlock *, Register> &V)
                   -> bool { return V.second != VRegs[0].second; }) !=
               VRegs.end();

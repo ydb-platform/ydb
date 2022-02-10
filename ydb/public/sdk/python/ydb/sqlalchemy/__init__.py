@@ -199,7 +199,7 @@ try:
         supports_alter = False
         max_identifier_length = 63
         supports_sane_rowcount = False
-        supports_statement_cache = False
+        supports_statement_cache = False 
 
         supports_native_enum = False
         supports_native_boolean = True

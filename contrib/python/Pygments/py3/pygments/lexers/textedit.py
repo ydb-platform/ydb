@@ -4,7 +4,7 @@
 
     Lexers for languages related to text processing.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -67,8 +67,8 @@ class AwkLexer(RegexLexer):
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'0x[0-9a-fA-F]+', Number.Hex),
             (r'[0-9]+', Number.Integer),
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double), 
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single), 
         ]
     }
 
@@ -135,9 +135,9 @@ class VimLexer(RegexLexer):
 
             (r'[ \t]+', Text),
             # TODO: regexes can have other delims
-            (r'/[^/\\\n]*(?:\\[\s\S][^/\\\n]*)*/', String.Regex),
-            (r'"[^"\\\n]*(?:\\[\s\S][^"\\\n]*)*"', String.Double),
-            (r"'[^\n']*(?:''[^\n']*)*'", String.Single),
+            (r'/[^/\\\n]*(?:\\[\s\S][^/\\\n]*)*/', String.Regex), 
+            (r'"[^"\\\n]*(?:\\[\s\S][^"\\\n]*)*"', String.Double), 
+            (r"'[^\n']*(?:''[^\n']*)*'", String.Single), 
 
             # Who decided that doublequote was a good comment character??
             (r'(?<=\s)"[^\-:.%#=*].*', Comment),

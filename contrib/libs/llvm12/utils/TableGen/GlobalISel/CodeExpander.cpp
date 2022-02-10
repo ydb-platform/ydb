@@ -58,15 +58,15 @@ void CodeExpander::emit(raw_ostream &OS) const {
       // Warn if we split because no terminator was found.
       StringRef EndVar = StartVar.drop_front(2 /* ${ */ + Var.size());
       if (EndVar.empty()) {
-        PrintWarning(Loc, "Unterminated expansion '${" + Var + "'");
-        PrintNote("Code: [{" + Code + "}]");
+        PrintWarning(Loc, "Unterminated expansion '${" + Var + "'"); 
+        PrintNote("Code: [{" + Code + "}]"); 
       }
 
       auto ValueI = Expansions.find(Var);
       if (ValueI == Expansions.end()) {
-        PrintError(Loc,
-                   "Attempt to expand an undeclared variable '" + Var + "'");
-        PrintNote("Code: [{" + Code + "}]");
+        PrintError(Loc, 
+                   "Attempt to expand an undeclared variable '" + Var + "'"); 
+        PrintNote("Code: [{" + Code + "}]"); 
       }
       if (ShowExpansions)
         OS << "/*$" << Var << "{*/";
@@ -76,8 +76,8 @@ void CodeExpander::emit(raw_ostream &OS) const {
       continue;
     }
 
-    PrintWarning(Loc, "Assuming missing escape character: \\$");
-    PrintNote("Code: [{" + Code + "}]");
+    PrintWarning(Loc, "Assuming missing escape character: \\$"); 
+    PrintNote("Code: [{" + Code + "}]"); 
     OS << "$";
     Current = Current.drop_front(1);
   }

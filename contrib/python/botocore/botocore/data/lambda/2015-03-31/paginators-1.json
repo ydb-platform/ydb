@@ -17,48 +17,48 @@
       "output_token": "NextMarker",
       "limit_key": "MaxItems",
       "result_key": "Aliases"
-    },
-    "ListLayerVersions": {
-      "input_token": "Marker",
-      "limit_key": "MaxItems",
-      "output_token": "NextMarker",
-      "result_key": "LayerVersions"
-    },
-    "ListLayers": {
-      "input_token": "Marker",
-      "limit_key": "MaxItems",
-      "output_token": "NextMarker",
-      "result_key": "Layers"
-    },
-    "ListVersionsByFunction": {
-      "input_token": "Marker",
-      "limit_key": "MaxItems",
-      "output_token": "NextMarker",
-      "result_key": "Versions"
-    },
-    "ListFunctionEventInvokeConfigs": {
-      "input_token": "Marker",
-      "limit_key": "MaxItems",
-      "output_token": "NextMarker",
-      "result_key": "FunctionEventInvokeConfigs"
-    },
-    "ListProvisionedConcurrencyConfigs": {
-      "input_token": "Marker",
-      "limit_key": "MaxItems",
-      "output_token": "NextMarker",
-      "result_key": "ProvisionedConcurrencyConfigs"
-    },
-    "ListCodeSigningConfigs": {
-      "input_token": "Marker",
-      "limit_key": "MaxItems",
-      "output_token": "NextMarker",
-      "result_key": "CodeSigningConfigs"
-    },
-    "ListFunctionsByCodeSigningConfig": {
-      "input_token": "Marker",
-      "limit_key": "MaxItems",
-      "output_token": "NextMarker",
-      "result_key": "FunctionArns"
+    }, 
+    "ListLayerVersions": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxItems", 
+      "output_token": "NextMarker", 
+      "result_key": "LayerVersions" 
+    }, 
+    "ListLayers": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxItems", 
+      "output_token": "NextMarker", 
+      "result_key": "Layers" 
+    }, 
+    "ListVersionsByFunction": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxItems", 
+      "output_token": "NextMarker", 
+      "result_key": "Versions" 
+    }, 
+    "ListFunctionEventInvokeConfigs": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxItems", 
+      "output_token": "NextMarker", 
+      "result_key": "FunctionEventInvokeConfigs" 
+    }, 
+    "ListProvisionedConcurrencyConfigs": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxItems", 
+      "output_token": "NextMarker", 
+      "result_key": "ProvisionedConcurrencyConfigs" 
+    }, 
+    "ListCodeSigningConfigs": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxItems", 
+      "output_token": "NextMarker", 
+      "result_key": "CodeSigningConfigs" 
+    }, 
+    "ListFunctionsByCodeSigningConfig": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxItems", 
+      "output_token": "NextMarker", 
+      "result_key": "FunctionArns" 
     }
   }
 }

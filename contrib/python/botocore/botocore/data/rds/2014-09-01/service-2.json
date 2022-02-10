@@ -5,7 +5,7 @@
     "endpointPrefix":"rds",
     "serviceAbbreviation":"Amazon RDS",
     "serviceFullName":"Amazon Relational Database Service",
-    "serviceId":"RDS",
+    "serviceId":"RDS", 
     "signatureVersion":"v4",
     "xmlNamespace":"http://rds.amazonaws.com/doc/2014-09-01/",
     "protocol":"query"

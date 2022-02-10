@@ -15,8 +15,8 @@ PROTO_NAMESPACE(
     contrib/libs/grpc
 )
 
-PY_NAMESPACE(src.proto.grpc.reflection.v1alpha)
-
+PY_NAMESPACE(src.proto.grpc.reflection.v1alpha) 
+ 
 GRPC()
 
 SRCS(

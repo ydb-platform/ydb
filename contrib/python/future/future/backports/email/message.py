@@ -800,7 +800,7 @@ class Message(object):
             # There was no Content-Type header, and we don't know what type
             # to set it to, so raise an exception.
             raise errors.HeaderParseError('No Content-Type header found')
-        newparams = list()
+        newparams = list() 
         foundp = False
         for pk, pv in params:
             if pk.lower() == 'boundary':
@@ -814,10 +814,10 @@ class Message(object):
             # instead???
             newparams.append(('boundary', '"%s"' % boundary))
         # Replace the existing Content-Type header with the new value
-        newheaders = list()
+        newheaders = list() 
         for h, v in self._headers:
             if h.lower() == 'content-type':
-                parts = list()
+                parts = list() 
                 for k, v in newparams:
                     if v == '':
                         parts.append(k)

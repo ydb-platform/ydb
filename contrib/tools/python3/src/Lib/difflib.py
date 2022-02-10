@@ -32,7 +32,7 @@ __all__ = ['get_close_matches', 'ndiff', 'restore', 'SequenceMatcher',
 
 from heapq import nlargest as _nlargest
 from collections import namedtuple as _namedtuple
-from types import GenericAlias
+from types import GenericAlias 
 
 Match = _namedtuple('Match', 'a b size')
 
@@ -62,7 +62,7 @@ class SequenceMatcher:
     notion, pairing up elements that appear uniquely in each sequence.
     That, and the method here, appear to yield more intuitive difference
     reports than does diff.  This method appears to be the least vulnerable
-    to syncing up on blocks of "junk lines", though (like blank lines in
+    to syncing up on blocks of "junk lines", though (like blank lines in 
     ordinary text files, or maybe "<P>" lines in HTML files).  That may be
     because this is the only method of the 3 that has a *concept* of
     "junk" <wink>.
@@ -302,11 +302,11 @@ class SequenceMatcher:
             for elt in popular: # ditto; as fast for 1% deletion
                 del b2j[elt]
 
-    def find_longest_match(self, alo=0, ahi=None, blo=0, bhi=None):
+    def find_longest_match(self, alo=0, ahi=None, blo=0, bhi=None): 
         """Find longest matching block in a[alo:ahi] and b[blo:bhi].
 
-        By default it will find the longest match in the entirety of a and b.
-
+        By default it will find the longest match in the entirety of a and b. 
+ 
         If isjunk is not defined:
 
         Return (i,j,k) such that a[i:i+k] is equal to b[j:j+k], where
@@ -361,10 +361,10 @@ class SequenceMatcher:
         # the unique 'b's and then matching the first two 'a's.
 
         a, b, b2j, isbjunk = self.a, self.b, self.b2j, self.bjunk.__contains__
-        if ahi is None:
-            ahi = len(a)
-        if bhi is None:
-            bhi = len(b)
+        if ahi is None: 
+            ahi = len(a) 
+        if bhi is None: 
+            bhi = len(b) 
         besti, bestj, bestsize = alo, blo, 0
         # find longest junk-free match
         # during an iteration of the loop, j2len[j] = length of longest
@@ -660,9 +660,9 @@ class SequenceMatcher:
         # shorter sequence
         return _calculate_ratio(min(la, lb), la + lb)
 
-    __class_getitem__ = classmethod(GenericAlias)
-
-
+    __class_getitem__ = classmethod(GenericAlias) 
+ 
+ 
 def get_close_matches(word, possibilities, n=3, cutoff=0.6):
     """Use SequenceMatcher to return list of the best "good enough" matches.
 
@@ -712,12 +712,12 @@ def get_close_matches(word, possibilities, n=3, cutoff=0.6):
     return [x for score, x in result]
 
 
-def _keep_original_ws(s, tag_s):
-    """Replace whitespace with the original whitespace characters in `s`"""
-    return ''.join(
-        c if tag_c == " " and c.isspace() else tag_c
-        for c, tag_c in zip(s, tag_s)
-    )
+def _keep_original_ws(s, tag_s): 
+    """Replace whitespace with the original whitespace characters in `s`""" 
+    return ''.join( 
+        c if tag_c == " " and c.isspace() else tag_c 
+        for c, tag_c in zip(s, tag_s) 
+    ) 
 
 
 
@@ -998,7 +998,7 @@ class Differ:
 
     def _qformat(self, aline, bline, atags, btags):
         r"""
-        Format "?" output and deal with tabs.
+        Format "?" output and deal with tabs. 
 
         Example:
 
@@ -1012,16 +1012,16 @@ class Differ:
         '+ \tabcdefGhijkl\n'
         '? \t ^ ^  ^\n'
         """
-        atags = _keep_original_ws(aline, atags).rstrip()
-        btags = _keep_original_ws(bline, btags).rstrip()
+        atags = _keep_original_ws(aline, atags).rstrip() 
+        btags = _keep_original_ws(bline, btags).rstrip() 
 
         yield "- " + aline
         if atags:
-            yield f"? {atags}\n"
+            yield f"? {atags}\n" 
 
         yield "+ " + bline
         if btags:
-            yield f"? {btags}\n"
+            yield f"? {btags}\n" 
 
 # With respect to junk, an earlier version of ndiff simply refused to
 # *start* a match with a junk element.  The result was cases like this:
@@ -1044,7 +1044,7 @@ import re
 
 def IS_LINE_JUNK(line, pat=re.compile(r"\s*(?:#\s*)?$").match):
     r"""
-    Return True for ignorable line: iff `line` is blank or contains a single '#'.
+    Return True for ignorable line: iff `line` is blank or contains a single '#'. 
 
     Examples:
 
@@ -1060,7 +1060,7 @@ def IS_LINE_JUNK(line, pat=re.compile(r"\s*(?:#\s*)?$").match):
 
 def IS_CHARACTER_JUNK(ch, ws=" \t"):
     r"""
-    Return True for ignorable character: iff `ch` is a space or tab.
+    Return True for ignorable character: iff `ch` is a space or tab. 
 
     Examples:
 

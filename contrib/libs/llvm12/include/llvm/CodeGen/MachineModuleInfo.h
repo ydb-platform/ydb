@@ -61,8 +61,8 @@ class Module;
 //===----------------------------------------------------------------------===//
 /// This class can be derived from and used by targets to hold private
 /// target-specific information for each Module.  Objects of type are
-/// accessed/created with MachineModuleInfo::getObjFileInfo and destroyed when
-/// the MachineModuleInfo is destroyed.
+/// accessed/created with MachineModuleInfo::getObjFileInfo and destroyed when 
+/// the MachineModuleInfo is destroyed. 
 ///
 class MachineModuleInfoImpl {
 public:
@@ -90,9 +90,9 @@ class MachineModuleInfo {
 
   /// This is the MCContext used for the entire code generator.
   MCContext Context;
-  // This is an external context, that if assigned, will be used instead of the
-  // internal context.
-  MCContext *ExternalContext = nullptr;
+  // This is an external context, that if assigned, will be used instead of the 
+  // internal context. 
+  MCContext *ExternalContext = nullptr; 
 
   /// This is the LLVM Module being worked on.
   const Module *TheModule;
@@ -159,9 +159,9 @@ class MachineModuleInfo {
 public:
   explicit MachineModuleInfo(const LLVMTargetMachine *TM = nullptr);
 
-  explicit MachineModuleInfo(const LLVMTargetMachine *TM,
-                             MCContext *ExtContext);
-
+  explicit MachineModuleInfo(const LLVMTargetMachine *TM, 
+                             MCContext *ExtContext); 
+ 
   MachineModuleInfo(MachineModuleInfo &&MMII);
 
   ~MachineModuleInfo();
@@ -171,12 +171,12 @@ public:
 
   const LLVMTargetMachine &getTarget() const { return TM; }
 
-  const MCContext &getContext() const {
-    return ExternalContext ? *ExternalContext : Context;
-  }
-  MCContext &getContext() {
-    return ExternalContext ? *ExternalContext : Context;
-  }
+  const MCContext &getContext() const { 
+    return ExternalContext ? *ExternalContext : Context; 
+  } 
+  MCContext &getContext() { 
+    return ExternalContext ? *ExternalContext : Context; 
+  } 
 
   const Module *getModule() const { return TheModule; }
 
@@ -268,12 +268,12 @@ public:
     return Personalities;
   }
   /// \}
-
-  // MMI owes MCContext. It should never be invalidated.
-  bool invalidate(Module &, const PreservedAnalyses &,
-                  ModuleAnalysisManager::Invalidator &) {
-    return false;
-  }
+ 
+  // MMI owes MCContext. It should never be invalidated. 
+  bool invalidate(Module &, const PreservedAnalyses &, 
+                  ModuleAnalysisManager::Invalidator &) { 
+    return false; 
+  } 
 }; // End class MachineModuleInfo
 
 class MachineModuleInfoWrapperPass : public ImmutablePass {
@@ -283,9 +283,9 @@ public:
   static char ID; // Pass identification, replacement for typeid
   explicit MachineModuleInfoWrapperPass(const LLVMTargetMachine *TM = nullptr);
 
-  explicit MachineModuleInfoWrapperPass(const LLVMTargetMachine *TM,
-                                        MCContext *ExtContext);
-
+  explicit MachineModuleInfoWrapperPass(const LLVMTargetMachine *TM, 
+                                        MCContext *ExtContext); 
+ 
   // Initialization and Finalization
   bool doInitialization(Module &) override;
   bool doFinalization(Module &) override;

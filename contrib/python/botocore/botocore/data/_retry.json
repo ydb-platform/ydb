@@ -78,14 +78,14 @@
           "http_status_code": 509
         }
       }
-    },
-    "throughput_exceeded": {
-      "applies_when": {
-        "response": {
-          "service_error_code": "ProvisionedThroughputExceededException",
-          "http_status_code": 400
-        }
-      }
+    }, 
+    "throughput_exceeded": { 
+      "applies_when": { 
+        "response": { 
+          "service_error_code": "ProvisionedThroughputExceededException", 
+          "http_status_code": 400 
+        } 
+      } 
     }
   },
   "retry": {
@@ -107,24 +107,24 @@
           "throttled_exception": {"$ref": "throttled_exception"},
           "request_throttled_exception": {"$ref": "request_throttled_exception"},
           "throttling": {"$ref": "throttling"},
-          "too_many_requests": {"$ref": "too_many_requests"},
-          "throughput_exceeded": {"$ref": "throughput_exceeded"}
+          "too_many_requests": {"$ref": "too_many_requests"}, 
+          "throughput_exceeded": {"$ref": "throughput_exceeded"} 
       }
     },
-    "organizations": {
-      "__default__": {
-        "policies": {
-          "too_many_requests": {
-            "applies_when": {
-              "response": {
-                "service_error_code": "TooManyRequestsException",
-                "http_status_code": 400
-              }
-            }
-          }
-        }
-      }
-    },
+    "organizations": { 
+      "__default__": { 
+        "policies": { 
+          "too_many_requests": { 
+            "applies_when": { 
+              "response": { 
+                "service_error_code": "TooManyRequestsException", 
+                "http_status_code": 400 
+              } 
+            } 
+          } 
+        } 
+      } 
+    }, 
     "dynamodb": {
       "__default__": {
         "max_attempts": 10,
@@ -134,14 +134,14 @@
           "growth_factor": 2
         },
         "policies": {
-	  "still_processing": {
-	    "applies_when": {
-	      "response": {
-		"service_error_code": "TransactionInProgressException",
-		"http_status_code": 400
-	      }
-	    }
-	  },
+	  "still_processing": { 
+	    "applies_when": { 
+	      "response": { 
+		"service_error_code": "TransactionInProgressException", 
+		"http_status_code": 400 
+	      } 
+	    } 
+	  }, 
           "crc32": {
             "applies_when": {
               "response": {
@@ -162,14 +162,14 @@
                 "http_status_code": 503
               }
             }
-          },
-          "ec2_throttled_exception": {
-            "applies_when": {
-              "response": {
-                "service_error_code": "EC2ThrottledException",
-                "http_status_code": 503
-              }
-            }
+          }, 
+          "ec2_throttled_exception": { 
+            "applies_when": { 
+              "response": { 
+                "service_error_code": "EC2ThrottledException", 
+                "http_status_code": 503 
+              } 
+            } 
           }
         }
       }
@@ -189,7 +189,7 @@
       }
     },
     "kinesis": {
-      "__default__": {
+      "__default__": { 
         "policies": {
           "request_limit_exceeded": {
             "applies_when": {
@@ -273,20 +273,20 @@
           }
         }
       }
-    },
-    "sts": {
-      "__default__": {
-        "policies": {
-          "idp_unreachable_error": {
-            "applies_when": {
-              "response": {
-                "service_error_code": "IDPCommunicationError",
-                "http_status_code": 400
-              }
-            }
-          }
-        }
-      }
+    }, 
+    "sts": { 
+      "__default__": { 
+        "policies": { 
+          "idp_unreachable_error": { 
+            "applies_when": { 
+              "response": { 
+                "service_error_code": "IDPCommunicationError", 
+                "http_status_code": 400 
+              } 
+            } 
+          } 
+        } 
+      } 
     }
   }
 }

@@ -171,8 +171,8 @@ static HANDLE RedirectIO(Optional<StringRef> Path, int fd,
 static bool Execute(ProcessInfo &PI, StringRef Program,
                     ArrayRef<StringRef> Args, Optional<ArrayRef<StringRef>> Env,
                     ArrayRef<Optional<StringRef>> Redirects,
-                    unsigned MemoryLimit, std::string *ErrMsg,
-                    BitVector *AffinityMask) {
+                    unsigned MemoryLimit, std::string *ErrMsg, 
+                    BitVector *AffinityMask) { 
   if (!sys::fs::can_execute(Program)) {
     if (ErrMsg)
       *ErrMsg = "program not executable";
@@ -190,13 +190,13 @@ static bool Execute(ProcessInfo &PI, StringRef Program,
   // Windows wants a command line, not an array of args, to pass to the new
   // process.  We have to concatenate them all, while quoting the args that
   // have embedded spaces (or are empty).
-  auto Result = flattenWindowsCommandLine(Args);
-  if (std::error_code ec = Result.getError()) {
-    SetLastError(ec.value());
-    MakeErrMsg(ErrMsg, std::string("Unable to convert command-line to UTF-16"));
-    return false;
-  }
-  std::wstring Command = *Result;
+  auto Result = flattenWindowsCommandLine(Args); 
+  if (std::error_code ec = Result.getError()) { 
+    SetLastError(ec.value()); 
+    MakeErrMsg(ErrMsg, std::string("Unable to convert command-line to UTF-16")); 
+    return false; 
+  } 
+  std::wstring Command = *Result; 
 
   // The pointer to the environment block for the new process.
   std::vector<wchar_t> EnvBlock;
@@ -213,7 +213,7 @@ static bool Execute(ProcessInfo &PI, StringRef Program,
         return false;
       }
 
-      llvm::append_range(EnvBlock, EnvString);
+      llvm::append_range(EnvBlock, EnvString); 
       EnvBlock.push_back(0);
     }
     EnvBlock.push_back(0);
@@ -278,15 +278,15 @@ static bool Execute(ProcessInfo &PI, StringRef Program,
     return false;
   }
 
-  unsigned CreateFlags = CREATE_UNICODE_ENVIRONMENT;
-  if (AffinityMask)
-    CreateFlags |= CREATE_SUSPENDED;
+  unsigned CreateFlags = CREATE_UNICODE_ENVIRONMENT; 
+  if (AffinityMask) 
+    CreateFlags |= CREATE_SUSPENDED; 
 
-  std::vector<wchar_t> CommandUtf16(Command.size() + 1, 0);
-  std::copy(Command.begin(), Command.end(), CommandUtf16.begin());
-  BOOL rc = CreateProcessW(ProgramUtf16.data(), CommandUtf16.data(), 0, 0, TRUE,
-                           CreateFlags, EnvBlock.empty() ? 0 : EnvBlock.data(),
-                           0, &si, &pi);
+  std::vector<wchar_t> CommandUtf16(Command.size() + 1, 0); 
+  std::copy(Command.begin(), Command.end(), CommandUtf16.begin()); 
+  BOOL rc = CreateProcessW(ProgramUtf16.data(), CommandUtf16.data(), 0, 0, TRUE, 
+                           CreateFlags, EnvBlock.empty() ? 0 : EnvBlock.data(), 
+                           0, &si, &pi); 
   DWORD err = GetLastError();
 
   // Regardless of whether the process got created or not, we are done with
@@ -334,13 +334,13 @@ static bool Execute(ProcessInfo &PI, StringRef Program,
     }
   }
 
-  // Set the affinity mask
-  if (AffinityMask) {
-    ::SetProcessAffinityMask(pi.hProcess,
-                             (DWORD_PTR)AffinityMask->getData().front());
-    ::ResumeThread(pi.hThread);
-  }
-
+  // Set the affinity mask 
+  if (AffinityMask) { 
+    ::SetProcessAffinityMask(pi.hProcess, 
+                             (DWORD_PTR)AffinityMask->getData().front()); 
+    ::ResumeThread(pi.hThread); 
+  } 
+ 
   return true;
 }
 
@@ -387,7 +387,7 @@ static std::string quoteSingleArg(StringRef Arg) {
 }
 
 namespace llvm {
-ErrorOr<std::wstring> sys::flattenWindowsCommandLine(ArrayRef<StringRef> Args) {
+ErrorOr<std::wstring> sys::flattenWindowsCommandLine(ArrayRef<StringRef> Args) { 
   std::string Command;
   for (StringRef Arg : Args) {
     if (argNeedsQuotes(Arg))
@@ -398,11 +398,11 @@ ErrorOr<std::wstring> sys::flattenWindowsCommandLine(ArrayRef<StringRef> Args) {
     Command.push_back(' ');
   }
 
-  SmallVector<wchar_t, MAX_PATH> CommandUtf16;
-  if (std::error_code ec = windows::UTF8ToUTF16(Command, CommandUtf16))
-    return ec;
-
-  return std::wstring(CommandUtf16.begin(), CommandUtf16.end());
+  SmallVector<wchar_t, MAX_PATH> CommandUtf16; 
+  if (std::error_code ec = windows::UTF8ToUTF16(Command, CommandUtf16)) 
+    return ec; 
+ 
+  return std::wstring(CommandUtf16.begin(), CommandUtf16.end()); 
 }
 
 ProcessInfo sys::Wait(const ProcessInfo &PI, unsigned SecondsToWait,
@@ -547,16 +547,16 @@ llvm::sys::writeFileWithEncoding(StringRef FileName, StringRef Contents,
 
 bool llvm::sys::commandLineFitsWithinSystemLimits(StringRef Program,
                                                   ArrayRef<StringRef> Args) {
-  // The documentation on CreateProcessW states that the size of the argument
-  // lpCommandLine must not be greater than 32767 characters, including the
-  // Unicode terminating null character. We use smaller value to reduce risk
-  // of getting invalid command line due to unaccounted factors.
-  static const size_t MaxCommandStringLength = 32000;
+  // The documentation on CreateProcessW states that the size of the argument 
+  // lpCommandLine must not be greater than 32767 characters, including the 
+  // Unicode terminating null character. We use smaller value to reduce risk 
+  // of getting invalid command line due to unaccounted factors. 
+  static const size_t MaxCommandStringLength = 32000; 
   SmallVector<StringRef, 8> FullArgs;
   FullArgs.push_back(Program);
   FullArgs.append(Args.begin(), Args.end());
-  auto Result = flattenWindowsCommandLine(FullArgs);
-  assert(!Result.getError());
-  return (Result->size() + 1) <= MaxCommandStringLength;
+  auto Result = flattenWindowsCommandLine(FullArgs); 
+  assert(!Result.getError()); 
+  return (Result->size() + 1) <= MaxCommandStringLength; 
 }
 }

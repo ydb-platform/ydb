@@ -4,7 +4,7 @@
 
     Lexer for RiverBed's TrafficScript (RTS) language.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -21,7 +21,7 @@ class RtsLexer(RegexLexer):
     .. versionadded:: 2.1
     """
     name = 'TrafficScript'
-    aliases = ['trafficscript', 'rts']
+    aliases = ['trafficscript', 'rts'] 
     filenames = ['*.rts']
 
     tokens = {

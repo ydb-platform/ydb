@@ -16,7 +16,7 @@
 #ifndef LLVM_OBJECTYAML_OBJECTYAML_H
 #define LLVM_OBJECTYAML_OBJECTYAML_H
 
-#include "llvm/ObjectYAML/ArchiveYAML.h"
+#include "llvm/ObjectYAML/ArchiveYAML.h" 
 #include "llvm/ObjectYAML/COFFYAML.h"
 #include "llvm/ObjectYAML/ELFYAML.h"
 #include "llvm/ObjectYAML/MachOYAML.h"
@@ -31,7 +31,7 @@ namespace yaml {
 class IO;
 
 struct YamlObjectFile {
-  std::unique_ptr<ArchYAML::Archive> Arch;
+  std::unique_ptr<ArchYAML::Archive> Arch; 
   std::unique_ptr<ELFYAML::Object> Elf;
   std::unique_ptr<COFFYAML::Object> Coff;
   std::unique_ptr<MachOYAML::Object> MachO;

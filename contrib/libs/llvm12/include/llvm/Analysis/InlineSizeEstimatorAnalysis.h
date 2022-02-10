@@ -38,19 +38,19 @@ public:
 private:
   std::unique_ptr<TFModelEvaluator> Evaluator;
 };
-
-class InlineSizeEstimatorAnalysisPrinterPass
-    : public PassInfoMixin<InlineSizeEstimatorAnalysisPrinterPass> {
-  raw_ostream &OS;
-
-public:
-  explicit InlineSizeEstimatorAnalysisPrinterPass(raw_ostream &OS) : OS(OS) {}
-
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-};
+ 
+class InlineSizeEstimatorAnalysisPrinterPass 
+    : public PassInfoMixin<InlineSizeEstimatorAnalysisPrinterPass> { 
+  raw_ostream &OS; 
+ 
+public: 
+  explicit InlineSizeEstimatorAnalysisPrinterPass(raw_ostream &OS) : OS(OS) {} 
+ 
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM); 
+}; 
 } // namespace llvm
 #endif // LLVM_ANALYSIS_INLINESIZEESTIMATORANALYSIS_H
-
+ 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif

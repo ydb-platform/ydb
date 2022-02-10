@@ -522,10 +522,10 @@ class PageIterator(object):
             try:
                 index = int(parts.pop())
             except ValueError:
-                # This doesn't look like a valid old-style token, so we're
-                # passing it along as an opaque service token.
-                parts = [self._starting_token]
-
+                # This doesn't look like a valid old-style token, so we're 
+                # passing it along as an opaque service token. 
+                parts = [self._starting_token] 
+ 
         for part in parts:
             if part == 'None':
                 next_token.append(None)

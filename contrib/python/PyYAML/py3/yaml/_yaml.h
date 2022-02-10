@@ -3,7 +3,7 @@
 
 #if PY_MAJOR_VERSION < 3
 
-#define PyUnicode_FromString(s) PyUnicode_DecodeUTF8((s), strlen(s), "strict")
+#define PyUnicode_FromString(s) PyUnicode_DecodeUTF8((s), strlen(s), "strict") 
 
 #else
 

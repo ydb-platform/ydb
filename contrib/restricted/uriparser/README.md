@@ -1,4 +1,4 @@
-[![Build and test](https://github.com/uriparser/uriparser/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/uriparser/uriparser/actions/workflows/build-and-test.yml)
+[![Build and test](https://github.com/uriparser/uriparser/actions/workflows/build-and-test.yml/badge.svg)](https://github.com/uriparser/uriparser/actions/workflows/build-and-test.yml) 
 [![AppVeyor Build Status](https://ci.appveyor.com/api/projects/status/github/uriparseradmin/uriparser?svg=true)](https://ci.appveyor.com/project/uriparseradmin/uriparser)
 
 
@@ -10,7 +10,7 @@ URI parsing and handling library
 written in C89 ("ANSI C").
 uriparser is cross-platform,
 fast,
-supports both `char` and `wchar_t`, and
+supports both `char` and `wchar_t`, and 
 is licensed under the [New BSD license](https://github.com/uriparser/uriparser/blob/master/COPYING).
 
 To learn more about uriparser,
@@ -58,8 +58,8 @@ CMAKE_BUILD_TYPE:STRING=
 // Install path prefix, prepended onto install directories.
 CMAKE_INSTALL_PREFIX:PATH=/usr/local
 
-// Path to qhelpgenerator program (default: auto-detect)
-QHG_LOCATION:FILEPATH=
+// Path to qhelpgenerator program (default: auto-detect) 
+QHG_LOCATION:FILEPATH= 
 
 // Build code supporting data type 'char'
 URIPARSER_BUILD_CHAR:BOOL=ON
@@ -81,7 +81,7 @@ URIPARSER_ENABLE_INSTALL:BOOL=ON
 
 // Use of specific runtime library (/MT /MTd /MD /MDd) with MSVC
 URIPARSER_MSVC_RUNTIME:STRING=
-
-// Treat all compiler warnings as errors
-URIPARSER_WARNINGS_AS_ERRORS:BOOL=OFF
+ 
+// Treat all compiler warnings as errors 
+URIPARSER_WARNINGS_AS_ERRORS:BOOL=OFF 
 ```

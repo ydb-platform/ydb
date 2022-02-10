@@ -46,10 +46,10 @@ STATISTIC(ExpectIntrinsicsHandled,
 // 'select' instructions. It may be worthwhile to hoist these values to some
 // shared space, so they can be used directly by other passes.
 
-cl::opt<uint32_t> llvm::LikelyBranchWeight(
+cl::opt<uint32_t> llvm::LikelyBranchWeight( 
     "likely-branch-weight", cl::Hidden, cl::init(2000),
     cl::desc("Weight of the branch likely to be taken (default = 2000)"));
-cl::opt<uint32_t> llvm::UnlikelyBranchWeight(
+cl::opt<uint32_t> llvm::UnlikelyBranchWeight( 
     "unlikely-branch-weight", cl::Hidden, cl::init(1),
     cl::desc("Weight of the branch unlikely to be taken (default = 1)"));
 

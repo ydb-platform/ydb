@@ -138,8 +138,8 @@ from future.utils import PY2, as_native_str
 # Import our required modules
 #
 import re
-if PY2:
-    re.ASCII = 0    # for py2 compatibility
+if PY2: 
+    re.ASCII = 0    # for py2 compatibility 
 import string
 
 __all__ = ["CookieError", "BaseCookie", "SimpleCookie"]

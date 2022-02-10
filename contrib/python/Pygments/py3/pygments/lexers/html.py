@@ -4,7 +4,7 @@
 
     Lexers for HTML, XML and related markup.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -71,24 +71,24 @@ class HtmlLexer(RegexLexer):
              bygroups(Punctuation, Text, Punctuation, Text, Name.Tag, Text,
                       Punctuation), '#pop'),
             (r'.+?(?=<\s*/\s*script\s*>)', using(JavascriptLexer)),
-            # fallback cases for when there is no closing script tag
-            # first look for newline and then go back into root state
-            # if that fails just read the rest of the file
-            # this is similar to the error handling logic in lexer.py
-            (r'.+?\n', using(JavascriptLexer), '#pop'),
-            (r'.+', using(JavascriptLexer), '#pop'),
+            # fallback cases for when there is no closing script tag 
+            # first look for newline and then go back into root state 
+            # if that fails just read the rest of the file 
+            # this is similar to the error handling logic in lexer.py 
+            (r'.+?\n', using(JavascriptLexer), '#pop'), 
+            (r'.+', using(JavascriptLexer), '#pop'), 
         ],
         'style-content': [
             (r'(<)(\s*)(/)(\s*)(style)(\s*)(>)',
              bygroups(Punctuation, Text, Punctuation, Text, Name.Tag, Text,
                       Punctuation),'#pop'),
             (r'.+?(?=<\s*/\s*style\s*>)', using(CssLexer)),
-            # fallback cases for when there is no closing style tag
-            # first look for newline and then go back into root state
-            # if that fails just read the rest of the file
-            # this is similar to the error handling logic in lexer.py
-            (r'.+?\n', using(CssLexer), '#pop'),
-            (r'.+', using(CssLexer), '#pop'),
+            # fallback cases for when there is no closing style tag 
+            # first look for newline and then go back into root state 
+            # if that fails just read the rest of the file 
+            # this is similar to the error handling logic in lexer.py 
+            (r'.+?\n', using(CssLexer), '#pop'), 
+            (r'.+', using(CssLexer), '#pop'), 
         ],
         'attr': [
             ('".*?"', String, '#pop'),
@@ -245,7 +245,7 @@ class XsltLexer(XmlLexer):
     filenames = ['*.xsl', '*.xslt', '*.xpl']  # xpl is XProc
     mimetypes = ['application/xsl+xml', 'application/xslt+xml']
 
-    EXTRA_KEYWORDS = {
+    EXTRA_KEYWORDS = { 
         'apply-imports', 'apply-templates', 'attribute',
         'attribute-set', 'call-template', 'choose', 'comment',
         'copy', 'copy-of', 'decimal-format', 'element', 'fallback',
@@ -254,7 +254,7 @@ class XsltLexer(XmlLexer):
         'preserve-space', 'processing-instruction', 'sort',
         'strip-space', 'stylesheet', 'template', 'text', 'transform',
         'value-of', 'variable', 'when', 'with-param'
-    }
+    } 
 
     def get_tokens_unprocessed(self, text):
         for index, token, value in XmlLexer.get_tokens_unprocessed(self, text):
@@ -358,8 +358,8 @@ class HamlLexer(ExtendedRegexLexer):
             (r'\w+', Name.Variable, '#pop'),
             (r'@\w+', Name.Variable.Instance, '#pop'),
             (r'\$\w+', Name.Variable.Global, '#pop'),
-            (r"'(\\\\|\\[^\\]|[^'\\\n])*'", String, '#pop'),
-            (r'"(\\\\|\\[^\\]|[^"\\\n])*"', String, '#pop'),
+            (r"'(\\\\|\\[^\\]|[^'\\\n])*'", String, '#pop'), 
+            (r'"(\\\\|\\[^\\]|[^"\\\n])*"', String, '#pop'), 
         ],
 
         'html-comment-block': [
@@ -470,8 +470,8 @@ class ScamlLexer(ExtendedRegexLexer):
             (r'\w+', Name.Variable, '#pop'),
             (r'@\w+', Name.Variable.Instance, '#pop'),
             (r'\$\w+', Name.Variable.Global, '#pop'),
-            (r"'(\\\\|\\[^\\]|[^'\\\n])*'", String, '#pop'),
-            (r'"(\\\\|\\[^\\]|[^"\\\n])*"', String, '#pop'),
+            (r"'(\\\\|\\[^\\]|[^'\\\n])*'", String, '#pop'), 
+            (r'"(\\\\|\\[^\\]|[^"\\\n])*"', String, '#pop'), 
         ],
 
         'html-comment-block': [
@@ -579,8 +579,8 @@ class PugLexer(ExtendedRegexLexer):
             (r'\w+', Name.Variable, '#pop'),
             (r'@\w+', Name.Variable.Instance, '#pop'),
             (r'\$\w+', Name.Variable.Global, '#pop'),
-            (r"'(\\\\|\\[^\\]|[^'\\\n])*'", String, '#pop'),
-            (r'"(\\\\|\\[^\\]|[^"\\\n])*"', String, '#pop'),
+            (r"'(\\\\|\\[^\\]|[^'\\\n])*'", String, '#pop'), 
+            (r'"(\\\\|\\[^\\]|[^"\\\n])*"', String, '#pop'), 
         ],
 
         'html-comment-block': [

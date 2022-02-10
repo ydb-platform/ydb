@@ -97,20 +97,20 @@ void BasicBlock::setParent(Function *parent) {
 
 iterator_range<filter_iterator<BasicBlock::const_iterator,
                                std::function<bool(const Instruction &)>>>
-BasicBlock::instructionsWithoutDebug(bool SkipPseudoOp) const {
-  std::function<bool(const Instruction &)> Fn = [=](const Instruction &I) {
-    return !isa<DbgInfoIntrinsic>(I) &&
-           !(SkipPseudoOp && isa<PseudoProbeInst>(I));
+BasicBlock::instructionsWithoutDebug(bool SkipPseudoOp) const { 
+  std::function<bool(const Instruction &)> Fn = [=](const Instruction &I) { 
+    return !isa<DbgInfoIntrinsic>(I) && 
+           !(SkipPseudoOp && isa<PseudoProbeInst>(I)); 
   };
   return make_filter_range(*this, Fn);
 }
 
-iterator_range<
-    filter_iterator<BasicBlock::iterator, std::function<bool(Instruction &)>>>
-BasicBlock::instructionsWithoutDebug(bool SkipPseudoOp) {
-  std::function<bool(Instruction &)> Fn = [=](Instruction &I) {
-    return !isa<DbgInfoIntrinsic>(I) &&
-           !(SkipPseudoOp && isa<PseudoProbeInst>(I));
+iterator_range< 
+    filter_iterator<BasicBlock::iterator, std::function<bool(Instruction &)>>> 
+BasicBlock::instructionsWithoutDebug(bool SkipPseudoOp) { 
+  std::function<bool(Instruction &)> Fn = [=](Instruction &I) { 
+    return !isa<DbgInfoIntrinsic>(I) && 
+           !(SkipPseudoOp && isa<PseudoProbeInst>(I)); 
   };
   return make_filter_range(*this, Fn);
 }
@@ -216,21 +216,21 @@ const Instruction* BasicBlock::getFirstNonPHI() const {
   return nullptr;
 }
 
-const Instruction *BasicBlock::getFirstNonPHIOrDbg(bool SkipPseudoOp) const {
-  for (const Instruction &I : *this) {
-    if (isa<PHINode>(I) || isa<DbgInfoIntrinsic>(I))
-      continue;
-
-    if (SkipPseudoOp && isa<PseudoProbeInst>(I))
-      continue;
-
-    return &I;
-  }
+const Instruction *BasicBlock::getFirstNonPHIOrDbg(bool SkipPseudoOp) const { 
+  for (const Instruction &I : *this) { 
+    if (isa<PHINode>(I) || isa<DbgInfoIntrinsic>(I)) 
+      continue; 
+ 
+    if (SkipPseudoOp && isa<PseudoProbeInst>(I)) 
+      continue; 
+ 
+    return &I; 
+  } 
   return nullptr;
 }
 
-const Instruction *
-BasicBlock::getFirstNonPHIOrDbgOrLifetime(bool SkipPseudoOp) const {
+const Instruction * 
+BasicBlock::getFirstNonPHIOrDbgOrLifetime(bool SkipPseudoOp) const { 
   for (const Instruction &I : *this) {
     if (isa<PHINode>(I) || isa<DbgInfoIntrinsic>(I))
       continue;
@@ -238,9 +238,9 @@ BasicBlock::getFirstNonPHIOrDbgOrLifetime(bool SkipPseudoOp) const {
     if (I.isLifetimeStartOrEnd())
       continue;
 
-    if (SkipPseudoOp && isa<PseudoProbeInst>(I))
-      continue;
-
+    if (SkipPseudoOp && isa<PseudoProbeInst>(I)) 
+      continue; 
+ 
     return &I;
   }
   return nullptr;
@@ -321,28 +321,28 @@ iterator_range<BasicBlock::phi_iterator> BasicBlock::phis() {
 void BasicBlock::removePredecessor(BasicBlock *Pred,
                                    bool KeepOneInputPHIs) {
   // Use hasNUsesOrMore to bound the cost of this assertion for complex CFGs.
-  assert((hasNUsesOrMore(16) || llvm::is_contained(predecessors(this), Pred)) &&
+  assert((hasNUsesOrMore(16) || llvm::is_contained(predecessors(this), Pred)) && 
          "Pred is not a predecessor!");
 
   // Return early if there are no PHI nodes to update.
-  if (empty() || !isa<PHINode>(begin()))
+  if (empty() || !isa<PHINode>(begin())) 
     return;
-
+ 
   unsigned NumPreds = cast<PHINode>(front()).getNumIncomingValues();
-  for (PHINode &Phi : make_early_inc_range(phis())) {
-    Phi.removeIncomingValue(Pred, !KeepOneInputPHIs);
-    if (KeepOneInputPHIs)
-      continue;
+  for (PHINode &Phi : make_early_inc_range(phis())) { 
+    Phi.removeIncomingValue(Pred, !KeepOneInputPHIs); 
+    if (KeepOneInputPHIs) 
+      continue; 
 
-    // If we have a single predecessor, removeIncomingValue may have erased the
-    // PHI node itself.
-    if (NumPreds == 1)
-      continue;
-
-    // Try to replace the PHI node with a constant value.
-    if (Value *PhiConstant = Phi.hasConstantValue()) {
-      Phi.replaceAllUsesWith(PhiConstant);
-      Phi.eraseFromParent();
+    // If we have a single predecessor, removeIncomingValue may have erased the 
+    // PHI node itself. 
+    if (NumPreds == 1) 
+      continue; 
+ 
+    // Try to replace the PHI node with a constant value. 
+    if (Value *PhiConstant = Phi.hasConstantValue()) { 
+      Phi.replaceAllUsesWith(PhiConstant); 
+      Phi.eraseFromParent(); 
     }
   }
 }
@@ -372,11 +372,11 @@ bool BasicBlock::isLegalToHoistInto() const {
   return !Term->isExceptionalTerminator();
 }
 
-BasicBlock *BasicBlock::splitBasicBlock(iterator I, const Twine &BBName,
-                                        bool Before) {
-  if (Before)
-    return splitBasicBlockBefore(I, BBName);
-
+BasicBlock *BasicBlock::splitBasicBlock(iterator I, const Twine &BBName, 
+                                        bool Before) { 
+  if (Before) 
+    return splitBasicBlockBefore(I, BBName); 
+ 
   assert(getTerminator() && "Can't use splitBasicBlock on degenerate BB!");
   assert(I != InstList.end() &&
          "Trying to get me to create degenerate basic block!");
@@ -403,40 +403,40 @@ BasicBlock *BasicBlock::splitBasicBlock(iterator I, const Twine &BBName,
   return New;
 }
 
-BasicBlock *BasicBlock::splitBasicBlockBefore(iterator I, const Twine &BBName) {
-  assert(getTerminator() &&
-         "Can't use splitBasicBlockBefore on degenerate BB!");
-  assert(I != InstList.end() &&
-         "Trying to get me to create degenerate basic block!");
-
-  assert((!isa<PHINode>(*I) || getSinglePredecessor()) &&
-         "cannot split on multi incoming phis");
-
-  BasicBlock *New = BasicBlock::Create(getContext(), BBName, getParent(), this);
-  // Save DebugLoc of split point before invalidating iterator.
-  DebugLoc Loc = I->getDebugLoc();
-  // Move all of the specified instructions from the original basic block into
-  // the new basic block.
-  New->getInstList().splice(New->end(), this->getInstList(), begin(), I);
-
-  // Loop through all of the predecessors of the 'this' block (which will be the
-  // predecessors of the New block), replace the specified successor 'this'
-  // block to point at the New block and update any PHI nodes in 'this' block.
-  // If there were PHI nodes in 'this' block, the PHI nodes are updated
-  // to reflect that the incoming branches will be from the New block and not
-  // from predecessors of the 'this' block.
-  for (BasicBlock *Pred : predecessors(this)) {
-    Instruction *TI = Pred->getTerminator();
-    TI->replaceSuccessorWith(this, New);
-    this->replacePhiUsesWith(Pred, New);
-  }
-  // Add a branch instruction from  "New" to "this" Block.
-  BranchInst *BI = BranchInst::Create(this, New);
-  BI->setDebugLoc(Loc);
-
-  return New;
-}
-
+BasicBlock *BasicBlock::splitBasicBlockBefore(iterator I, const Twine &BBName) { 
+  assert(getTerminator() && 
+         "Can't use splitBasicBlockBefore on degenerate BB!"); 
+  assert(I != InstList.end() && 
+         "Trying to get me to create degenerate basic block!"); 
+ 
+  assert((!isa<PHINode>(*I) || getSinglePredecessor()) && 
+         "cannot split on multi incoming phis"); 
+ 
+  BasicBlock *New = BasicBlock::Create(getContext(), BBName, getParent(), this); 
+  // Save DebugLoc of split point before invalidating iterator. 
+  DebugLoc Loc = I->getDebugLoc(); 
+  // Move all of the specified instructions from the original basic block into 
+  // the new basic block. 
+  New->getInstList().splice(New->end(), this->getInstList(), begin(), I); 
+ 
+  // Loop through all of the predecessors of the 'this' block (which will be the 
+  // predecessors of the New block), replace the specified successor 'this' 
+  // block to point at the New block and update any PHI nodes in 'this' block. 
+  // If there were PHI nodes in 'this' block, the PHI nodes are updated 
+  // to reflect that the incoming branches will be from the New block and not 
+  // from predecessors of the 'this' block. 
+  for (BasicBlock *Pred : predecessors(this)) { 
+    Instruction *TI = Pred->getTerminator(); 
+    TI->replaceSuccessorWith(this, New); 
+    this->replacePhiUsesWith(Pred, New); 
+  } 
+  // Add a branch instruction from  "New" to "this" Block. 
+  BranchInst *BI = BranchInst::Create(this, New); 
+  BI->setDebugLoc(Loc); 
+ 
+  return New; 
+} 
+ 
 void BasicBlock::replacePhiUsesWith(BasicBlock *Old, BasicBlock *New) {
   // N.B. This might not be a complete BasicBlock, so don't assume
   // that it ends with a non-phi instruction.

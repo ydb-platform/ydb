@@ -41,15 +41,15 @@ public:
   /// SymbolFlags and SymbolToDefinition maps.
   IRMaterializationUnit(ExecutionSession &ES,
                         const IRSymbolMapper::ManglingOptions &MO,
-                        ThreadSafeModule TSM);
+                        ThreadSafeModule TSM); 
 
   /// Create an IRMaterializationLayer from a module, and pre-existing
   /// SymbolFlags and SymbolToDefinition maps. The maps must provide
   /// entries for each definition in M.
   /// This constructor is useful for delegating work from one
   /// IRMaterializationUnit to another.
-  IRMaterializationUnit(ThreadSafeModule TSM, SymbolFlagsMap SymbolFlags,
-                        SymbolStringPtr InitSymbol,
+  IRMaterializationUnit(ThreadSafeModule TSM, SymbolFlagsMap SymbolFlags, 
+                        SymbolStringPtr InitSymbol, 
                         SymbolNameToDefinitionMap SymbolToDefinition);
 
   /// Return the ModuleIdentifier as the name for this MaterializationUnit.
@@ -101,19 +101,19 @@ public:
   /// Returns the current value of the CloneToNewContextOnEmit flag.
   bool getCloneToNewContextOnEmit() const { return CloneToNewContextOnEmit; }
 
-  /// Add a MaterializatinoUnit representing the given IR to the JITDylib
-  /// targeted by the given tracker.
-  virtual Error add(ResourceTrackerSP RT, ThreadSafeModule TSM);
-
+  /// Add a MaterializatinoUnit representing the given IR to the JITDylib 
+  /// targeted by the given tracker. 
+  virtual Error add(ResourceTrackerSP RT, ThreadSafeModule TSM); 
+ 
   /// Adds a MaterializationUnit representing the given IR to the given
-  /// JITDylib. If RT is not specif
-  Error add(JITDylib &JD, ThreadSafeModule TSM) {
-    return add(JD.getDefaultResourceTracker(), std::move(TSM));
-  }
+  /// JITDylib. If RT is not specif 
+  Error add(JITDylib &JD, ThreadSafeModule TSM) { 
+    return add(JD.getDefaultResourceTracker(), std::move(TSM)); 
+  } 
 
   /// Emit should materialize the given IR.
-  virtual void emit(std::unique_ptr<MaterializationResponsibility> R,
-                    ThreadSafeModule TSM) = 0;
+  virtual void emit(std::unique_ptr<MaterializationResponsibility> R, 
+                    ThreadSafeModule TSM) = 0; 
 
 private:
   bool CloneToNewContextOnEmit = false;
@@ -127,10 +127,10 @@ class BasicIRLayerMaterializationUnit : public IRMaterializationUnit {
 public:
   BasicIRLayerMaterializationUnit(IRLayer &L,
                                   const IRSymbolMapper::ManglingOptions &MO,
-                                  ThreadSafeModule TSM);
+                                  ThreadSafeModule TSM); 
 
 private:
-  void materialize(std::unique_ptr<MaterializationResponsibility> R) override;
+  void materialize(std::unique_ptr<MaterializationResponsibility> R) override; 
 
   IRLayer &L;
 };
@@ -146,14 +146,14 @@ public:
 
   /// Adds a MaterializationUnit representing the given IR to the given
   /// JITDylib.
-  virtual Error add(ResourceTrackerSP RT, std::unique_ptr<MemoryBuffer> O);
+  virtual Error add(ResourceTrackerSP RT, std::unique_ptr<MemoryBuffer> O); 
 
-  Error add(JITDylib &JD, std::unique_ptr<MemoryBuffer> O) {
-    return add(JD.getDefaultResourceTracker(), std::move(O));
-  }
-
+  Error add(JITDylib &JD, std::unique_ptr<MemoryBuffer> O) { 
+    return add(JD.getDefaultResourceTracker(), std::move(O)); 
+  } 
+ 
   /// Emit should materialize the given IR.
-  virtual void emit(std::unique_ptr<MaterializationResponsibility> R,
+  virtual void emit(std::unique_ptr<MaterializationResponsibility> R, 
                     std::unique_ptr<MemoryBuffer> O) = 0;
 
 private:
@@ -165,9 +165,9 @@ private:
 class BasicObjectLayerMaterializationUnit : public MaterializationUnit {
 public:
   static Expected<std::unique_ptr<BasicObjectLayerMaterializationUnit>>
-  Create(ObjectLayer &L, std::unique_ptr<MemoryBuffer> O);
+  Create(ObjectLayer &L, std::unique_ptr<MemoryBuffer> O); 
 
-  BasicObjectLayerMaterializationUnit(ObjectLayer &L,
+  BasicObjectLayerMaterializationUnit(ObjectLayer &L, 
                                       std::unique_ptr<MemoryBuffer> O,
                                       SymbolFlagsMap SymbolFlags,
                                       SymbolStringPtr InitSymbol);
@@ -176,7 +176,7 @@ public:
   StringRef getName() const override;
 
 private:
-  void materialize(std::unique_ptr<MaterializationResponsibility> R) override;
+  void materialize(std::unique_ptr<MaterializationResponsibility> R) override; 
   void discard(const JITDylib &JD, const SymbolStringPtr &Name) override;
 
   ObjectLayer &L;

@@ -407,9 +407,9 @@ template <> struct ScalarTraits<Target> {
     case PlatformKind::watchOSSimulator:
       OS << "watchos-simulator";
       break;
-    case PlatformKind::driverKit:
-      OS << "driverkit";
-      break;
+    case PlatformKind::driverKit: 
+      OS << "driverkit"; 
+      break; 
     }
   }
 
@@ -521,12 +521,12 @@ template <> struct MappingTraits<const InterfaceFile *> {
             break;
           }
         }
-        llvm::sort(Section.Symbols);
-        llvm::sort(Section.Classes);
-        llvm::sort(Section.ClassEHs);
-        llvm::sort(Section.IVars);
-        llvm::sort(Section.WeakDefSymbols);
-        llvm::sort(Section.TLVSymbols);
+        llvm::sort(Section.Symbols); 
+        llvm::sort(Section.Classes); 
+        llvm::sort(Section.ClassEHs); 
+        llvm::sort(Section.IVars); 
+        llvm::sort(Section.WeakDefSymbols); 
+        llvm::sort(Section.TLVSymbols); 
         Exports.emplace_back(std::move(Section));
       }
 
@@ -578,11 +578,11 @@ template <> struct MappingTraits<const InterfaceFile *> {
             break;
           }
         }
-        llvm::sort(Section.Symbols);
-        llvm::sort(Section.Classes);
-        llvm::sort(Section.ClassEHs);
-        llvm::sort(Section.IVars);
-        llvm::sort(Section.WeakRefSymbols);
+        llvm::sort(Section.Symbols); 
+        llvm::sort(Section.Classes); 
+        llvm::sort(Section.ClassEHs); 
+        llvm::sort(Section.IVars); 
+        llvm::sort(Section.WeakRefSymbols); 
         Undefineds.emplace_back(std::move(Section));
       }
     }

@@ -12,12 +12,12 @@ LICENSE(Apache-2.0 WITH LLVM-exception)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12
-    contrib/libs/llvm12/lib/BinaryFormat
-    contrib/libs/llvm12/lib/DebugInfo/CodeView
-    contrib/libs/llvm12/lib/DebugInfo/MSF
-    contrib/libs/llvm12/lib/Object
-    contrib/libs/llvm12/lib/Support
+    contrib/libs/llvm12 
+    contrib/libs/llvm12/lib/BinaryFormat 
+    contrib/libs/llvm12/lib/DebugInfo/CodeView 
+    contrib/libs/llvm12/lib/DebugInfo/MSF 
+    contrib/libs/llvm12/lib/Object 
+    contrib/libs/llvm12/lib/Support 
 )
 
 ADDINCL(
@@ -51,11 +51,11 @@ SRCS(
     Native/NativeEnumInjectedSources.cpp
     Native/NativeEnumLineNumbers.cpp
     Native/NativeEnumModules.cpp
-    Native/NativeEnumSymbols.cpp
+    Native/NativeEnumSymbols.cpp 
     Native/NativeEnumTypes.cpp
     Native/NativeExeSymbol.cpp
     Native/NativeFunctionSymbol.cpp
-    Native/NativeInlineSiteSymbol.cpp
+    Native/NativeInlineSiteSymbol.cpp 
     Native/NativeLineNumber.cpp
     Native/NativePublicSymbol.cpp
     Native/NativeRawSymbol.cpp

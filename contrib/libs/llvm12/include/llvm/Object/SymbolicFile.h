@@ -168,7 +168,7 @@ public:
   // construction aux.
   static Expected<std::unique_ptr<SymbolicFile>>
   createSymbolicFile(MemoryBufferRef Object, llvm::file_magic Type,
-                     LLVMContext *Context, bool InitContent = true);
+                     LLVMContext *Context, bool InitContent = true); 
 
   static Expected<std::unique_ptr<SymbolicFile>>
   createSymbolicFile(MemoryBufferRef Object) {
@@ -178,8 +178,8 @@ public:
   static bool classof(const Binary *v) {
     return v->isSymbolic();
   }
-
-  static bool isSymbolicFile(file_magic Type, const LLVMContext *Context);
+ 
+  static bool isSymbolicFile(file_magic Type, const LLVMContext *Context); 
 };
 
 inline BasicSymbolRef::BasicSymbolRef(DataRefImpl SymbolP,

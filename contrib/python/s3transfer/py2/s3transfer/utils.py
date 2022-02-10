@@ -15,7 +15,7 @@ import time
 import functools
 import math
 import os
-import socket
+import socket 
 import stat
 import string
 import logging
@@ -23,13 +23,13 @@ import threading
 import io
 from collections import defaultdict
 
-from botocore.exceptions import IncompleteReadError
-from botocore.exceptions import ReadTimeoutError
-
-from s3transfer.compat import SOCKET_ERROR
+from botocore.exceptions import IncompleteReadError 
+from botocore.exceptions import ReadTimeoutError 
+ 
+from s3transfer.compat import SOCKET_ERROR 
 from s3transfer.compat import rename_file
 from s3transfer.compat import seekable
-from s3transfer.compat import fallocate
+from s3transfer.compat import fallocate 
 
 
 MAX_PARTS = 10000
@@ -41,11 +41,11 @@ MIN_UPLOAD_CHUNKSIZE = 5 * (1024 ** 2)
 logger = logging.getLogger(__name__)
 
 
-S3_RETRYABLE_DOWNLOAD_ERRORS = (
-    socket.timeout, SOCKET_ERROR, ReadTimeoutError, IncompleteReadError
-)
-
-
+S3_RETRYABLE_DOWNLOAD_ERRORS = ( 
+    socket.timeout, SOCKET_ERROR, ReadTimeoutError, IncompleteReadError 
+) 
+ 
+ 
 def random_file_extension(num_digits=8):
     return ''.join(random.choice(string.hexdigits) for _ in range(num_digits))
 
@@ -62,10 +62,10 @@ def signal_transferring(request, operation_name, **kwargs):
         request.body.signal_transferring()
 
 
-def calculate_num_parts(size, part_size):
-    return int(math.ceil(size / float(part_size)))
-
-
+def calculate_num_parts(size, part_size): 
+    return int(math.ceil(size / float(part_size))) 
+ 
+ 
 def calculate_range_parameter(part_size, part_index, num_parts,
                               total_size=None):
     """Calculate the range parameter for multipart downloads/copies
@@ -239,8 +239,8 @@ class CountCallbackInvoker(object):
 
 
 class OSUtils(object):
-    _MAX_FILENAME_LEN = 255
-
+    _MAX_FILENAME_LEN = 255 
+ 
     def get_file_size(self, filename):
         return os.path.getsize(filename)
 
@@ -301,22 +301,22 @@ class OSUtils(object):
             return True
         return False
 
-    def get_temp_filename(self, filename):
-        suffix = os.extsep + random_file_extension()
-        path = os.path.dirname(filename)
-        name = os.path.basename(filename)
-        temp_filename = name[:self._MAX_FILENAME_LEN - len(suffix)] + suffix 
-        return os.path.join(path, temp_filename)
+    def get_temp_filename(self, filename): 
+        suffix = os.extsep + random_file_extension() 
+        path = os.path.dirname(filename) 
+        name = os.path.basename(filename) 
+        temp_filename = name[:self._MAX_FILENAME_LEN - len(suffix)] + suffix  
+        return os.path.join(path, temp_filename) 
 
-    def allocate(self, filename, size):
-        try:
-            with self.open(filename, 'wb') as f:
-                fallocate(f, size)
-        except (OSError, IOError):
-            self.remove_file(filename)
-            raise
-
-
+    def allocate(self, filename, size): 
+        try: 
+            with self.open(filename, 'wb') as f: 
+                fallocate(f, size) 
+        except (OSError, IOError): 
+            self.remove_file(filename) 
+            raise 
+ 
+ 
 class DeferredOpenFile(object):
     def __init__(self, filename, start_byte=0, mode='rb', open_function=open):
         """A class that defers the opening of a file till needed
@@ -363,9 +363,9 @@ class DeferredOpenFile(object):
         self._open_if_needed()
         self._fileobj.write(data)
 
-    def seek(self, where, whence=0):
+    def seek(self, where, whence=0): 
         self._open_if_needed()
-        self._fileobj.seek(where, whence)
+        self._fileobj.seek(where, whence) 
 
     def tell(self):
         if self._fileobj is None:
@@ -425,8 +425,8 @@ class ReadFileChunk(object):
         self._size = self._calculate_file_size(
             self._fileobj, requested_size=chunk_size,
             start_byte=self._start_byte, actual_file_size=full_file_size)
-        # _amount_read represents the position in the chunk and may exceed
-        # the chunk size, but won't allow reads out of bounds.
+        # _amount_read represents the position in the chunk and may exceed 
+        # the chunk size, but won't allow reads out of bounds. 
         self._amount_read = 0
         self._callbacks = callbacks
         if callbacks is None:
@@ -475,11 +475,11 @@ class ReadFileChunk(object):
         return min(max_chunk_size, requested_size)
 
     def read(self, amount=None):
-        amount_left = max(self._size - self._amount_read, 0)
+        amount_left = max(self._size - self._amount_read, 0) 
         if amount is None:
-            amount_to_read = amount_left
+            amount_to_read = amount_left 
         else:
-            amount_to_read = min(amount_left, amount)
+            amount_to_read = min(amount_left, amount) 
         data = self._fileobj.read(amount_to_read)
         self._amount_read += len(data)
         if self._callbacks is not None and self._callbacks_enabled:
@@ -502,29 +502,29 @@ class ReadFileChunk(object):
     def disable_callback(self):
         self._callbacks_enabled = False
 
-    def seek(self, where, whence=0):
-        if whence not in (0, 1, 2):
-            # Mimic io's error for invalid whence values
-            raise ValueError(
-                "invalid whence (%s, should be 0, 1 or 2)" % whence)
-
-        # Recalculate where based on chunk attributes so seek from file
-        # start (whence=0) is always used
-        where += self._start_byte
-        if whence == 1:
-            where += self._amount_read
-        elif whence == 2:
-            where += self._size
-
-        self._fileobj.seek(max(where, self._start_byte))
+    def seek(self, where, whence=0): 
+        if whence not in (0, 1, 2): 
+            # Mimic io's error for invalid whence values 
+            raise ValueError( 
+                "invalid whence (%s, should be 0, 1 or 2)" % whence) 
+ 
+        # Recalculate where based on chunk attributes so seek from file 
+        # start (whence=0) is always used 
+        where += self._start_byte 
+        if whence == 1: 
+            where += self._amount_read 
+        elif whence == 2: 
+            where += self._size 
+ 
+        self._fileobj.seek(max(where, self._start_byte)) 
         if self._callbacks is not None and self._callbacks_enabled:
             # To also rewind the callback() for an accurate progress report
-            bounded_where = max(min(where - self._start_byte, self._size), 0)
-            bounded_amount_read = min(self._amount_read, self._size)
-            amount = bounded_where - bounded_amount_read
+            bounded_where = max(min(where - self._start_byte, self._size), 0) 
+            bounded_amount_read = min(self._amount_read, self._size) 
+            amount = bounded_where - bounded_amount_read 
             invoke_progress_callbacks(
-                self._callbacks, bytes_transferred=amount)
-        self._amount_read = max(where - self._start_byte, 0)
+                self._callbacks, bytes_transferred=amount) 
+        self._amount_read = max(where - self._start_byte, 0) 
 
     def close(self):
         if self._close_callbacks is not None and self._callbacks_enabled:

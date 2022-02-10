@@ -20,7 +20,7 @@ PyDoc_STRVAR(marshal_dump__doc__,
 "to the file. The object will not be properly read back by load().");
 
 #define MARSHAL_DUMP_METHODDEF    \
-    {"dump", (PyCFunction)(void(*)(void))marshal_dump, METH_FASTCALL, marshal_dump__doc__},
+    {"dump", (PyCFunction)(void(*)(void))marshal_dump, METH_FASTCALL, marshal_dump__doc__}, 
 
 static PyObject *
 marshal_dump_impl(PyObject *module, PyObject *value, PyObject *file,
@@ -34,24 +34,24 @@ marshal_dump(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     PyObject *file;
     int version = Py_MARSHAL_VERSION;
 
-    if (!_PyArg_CheckPositional("dump", nargs, 2, 3)) {
+    if (!_PyArg_CheckPositional("dump", nargs, 2, 3)) { 
         goto exit;
     }
-    value = args[0];
-    file = args[1];
-    if (nargs < 3) {
-        goto skip_optional;
-    }
-    if (PyFloat_Check(args[2])) {
-        PyErr_SetString(PyExc_TypeError,
-                        "integer argument expected, got float" );
-        goto exit;
-    }
-    version = _PyLong_AsInt(args[2]);
-    if (version == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-skip_optional:
+    value = args[0]; 
+    file = args[1]; 
+    if (nargs < 3) { 
+        goto skip_optional; 
+    } 
+    if (PyFloat_Check(args[2])) { 
+        PyErr_SetString(PyExc_TypeError, 
+                        "integer argument expected, got float" ); 
+        goto exit; 
+    } 
+    version = _PyLong_AsInt(args[2]); 
+    if (version == -1 && PyErr_Occurred()) { 
+        goto exit; 
+    } 
+skip_optional: 
     return_value = marshal_dump_impl(module, value, file, version);
 
 exit:
@@ -92,7 +92,7 @@ PyDoc_STRVAR(marshal_dumps__doc__,
 "unsupported type.");
 
 #define MARSHAL_DUMPS_METHODDEF    \
-    {"dumps", (PyCFunction)(void(*)(void))marshal_dumps, METH_FASTCALL, marshal_dumps__doc__},
+    {"dumps", (PyCFunction)(void(*)(void))marshal_dumps, METH_FASTCALL, marshal_dumps__doc__}, 
 
 static PyObject *
 marshal_dumps_impl(PyObject *module, PyObject *value, int version);
@@ -104,23 +104,23 @@ marshal_dumps(PyObject *module, PyObject *const *args, Py_ssize_t nargs)
     PyObject *value;
     int version = Py_MARSHAL_VERSION;
 
-    if (!_PyArg_CheckPositional("dumps", nargs, 1, 2)) {
+    if (!_PyArg_CheckPositional("dumps", nargs, 1, 2)) { 
         goto exit;
     }
-    value = args[0];
-    if (nargs < 2) {
-        goto skip_optional;
-    }
-    if (PyFloat_Check(args[1])) {
-        PyErr_SetString(PyExc_TypeError,
-                        "integer argument expected, got float" );
-        goto exit;
-    }
-    version = _PyLong_AsInt(args[1]);
-    if (version == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-skip_optional:
+    value = args[0]; 
+    if (nargs < 2) { 
+        goto skip_optional; 
+    } 
+    if (PyFloat_Check(args[1])) { 
+        PyErr_SetString(PyExc_TypeError, 
+                        "integer argument expected, got float" ); 
+        goto exit; 
+    } 
+    version = _PyLong_AsInt(args[1]); 
+    if (version == -1 && PyErr_Occurred()) { 
+        goto exit; 
+    } 
+skip_optional: 
     return_value = marshal_dumps_impl(module, value, version);
 
 exit:
@@ -148,13 +148,13 @@ marshal_loads(PyObject *module, PyObject *arg)
     PyObject *return_value = NULL;
     Py_buffer bytes = {NULL, NULL};
 
-    if (PyObject_GetBuffer(arg, &bytes, PyBUF_SIMPLE) != 0) {
+    if (PyObject_GetBuffer(arg, &bytes, PyBUF_SIMPLE) != 0) { 
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&bytes, 'C')) {
-        _PyArg_BadArgument("loads", "argument", "contiguous buffer", arg);
-        goto exit;
-    }
+    if (!PyBuffer_IsContiguous(&bytes, 'C')) { 
+        _PyArg_BadArgument("loads", "argument", "contiguous buffer", arg); 
+        goto exit; 
+    } 
     return_value = marshal_loads_impl(module, &bytes);
 
 exit:
@@ -165,4 +165,4 @@ exit:
 
     return return_value;
 }
-/*[clinic end generated code: output=a859dabe8b0afeb6 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=a859dabe8b0afeb6 input=a9049054013a1b77]*/ 

@@ -163,7 +163,7 @@ namespace llvm {
 
     CodeGenRegister(Record *R, unsigned Enum);
 
-    StringRef getName() const;
+    StringRef getName() const; 
 
     // Extract more information from TheDef. This is used to build an object
     // graph after all CodeGenRegister objects have been created.
@@ -353,7 +353,7 @@ namespace llvm {
     unsigned getNumValueTypes() const { return VTs.size(); }
 
     bool hasType(const ValueTypeByHwMode &VT) const {
-      return llvm::is_contained(VTs, VT);
+      return llvm::is_contained(VTs, VT); 
     }
 
     const ValueTypeByHwMode &getValueTypeNum(unsigned VTNum) const {

@@ -13,7 +13,7 @@
 from botocore.exceptions import DataNotFoundError
 from botocore.docs.utils import get_official_service_name
 from botocore.docs.client import ClientDocumenter
-from botocore.docs.client import ClientExceptionsDocumenter
+from botocore.docs.client import ClientExceptionsDocumenter 
 from botocore.docs.waiter import WaiterDocumenter
 from botocore.docs.paginator import PaginatorDocumenter
 from botocore.docs.bcdoc.restdoc import DocumentStructure
@@ -27,13 +27,13 @@ class ServiceDocumenter(object):
         self._client = self._session.create_client(
             service_name, region_name='us-east-1', aws_access_key_id='foo',
             aws_secret_access_key='bar')
-        self._event_emitter = self._client.meta.events
+        self._event_emitter = self._client.meta.events 
 
         self.sections = [
             'title',
             'table-of-contents',
             'client-api',
-            'client-exceptions',
+            'client-exceptions', 
             'paginator-api',
             'waiter-api'
         ]
@@ -49,18 +49,18 @@ class ServiceDocumenter(object):
         self.title(doc_structure.get_section('title'))
         self.table_of_contents(doc_structure.get_section('table-of-contents'))
         self.client_api(doc_structure.get_section('client-api'))
-        self.client_exceptions(doc_structure.get_section('client-exceptions'))
+        self.client_exceptions(doc_structure.get_section('client-exceptions')) 
         self.paginator_api(doc_structure.get_section('paginator-api'))
         self.waiter_api(doc_structure.get_section('waiter-api'))
         return doc_structure.flush_structure()
 
     def title(self, section):
         section.style.h1(self._client.__class__.__name__)
-        self._event_emitter.emit(
-            'docs.%s.%s' % ('title',
-                            self._service_name),
-            section=section
-        )
+        self._event_emitter.emit( 
+            'docs.%s.%s' % ('title', 
+                            self._service_name), 
+            section=section 
+        ) 
 
     def table_of_contents(self, section):
         section.style.table_of_contents(title='Table of Contents', depth=2)
@@ -74,9 +74,9 @@ class ServiceDocumenter(object):
 
         ClientDocumenter(self._client, examples).document_client(section)
 
-    def client_exceptions(self, section):
-        ClientExceptionsDocumenter(self._client).document_exceptions(section)
-
+    def client_exceptions(self, section): 
+        ClientExceptionsDocumenter(self._client).document_exceptions(section) 
+ 
     def paginator_api(self, section):
         try:
             service_paginator_model = self._session.get_paginator_model(

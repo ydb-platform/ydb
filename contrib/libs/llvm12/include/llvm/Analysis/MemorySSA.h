@@ -95,7 +95,7 @@
 #include "llvm/IR/DerivedUser.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/Operator.h"
+#include "llvm/IR/Operator.h" 
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
 #include "llvm/IR/User.h"
@@ -116,7 +116,7 @@ namespace llvm {
 /// Enables memory ssa as a dependency for loop passes.
 extern cl::opt<bool> EnableMSSALoopDependency;
 
-class AllocaInst;
+class AllocaInst; 
 class Function;
 class Instruction;
 class MemoryAccess;
@@ -279,7 +279,7 @@ public:
   // Retrieve AliasResult type of the optimized access. Ideally this would be
   // returned by the caching walker and may go away in the future.
   Optional<AliasResult> getOptimizedAccessType() const {
-    return isOptimized() ? OptimizedAccessAlias : None;
+    return isOptimized() ? OptimizedAccessAlias : None; 
   }
 
   /// Reset the ID of what this MemoryUse was optimized to, causing it to
@@ -1185,11 +1185,11 @@ class upward_defs_iterator
   using BaseT = upward_defs_iterator::iterator_facade_base;
 
 public:
-  upward_defs_iterator(const MemoryAccessPair &Info, DominatorTree *DT,
-                       bool *PerformedPhiTranslation = nullptr)
+  upward_defs_iterator(const MemoryAccessPair &Info, DominatorTree *DT, 
+                       bool *PerformedPhiTranslation = nullptr) 
       : DefIterator(Info.first), Location(Info.second),
-        OriginalAccess(Info.first), DT(DT),
-        PerformedPhiTranslation(PerformedPhiTranslation) {
+        OriginalAccess(Info.first), DT(DT), 
+        PerformedPhiTranslation(PerformedPhiTranslation) { 
     CurrentPair.first = nullptr;
 
     WalkingPhi = Info.first && isa<MemoryPhi>(Info.first);
@@ -1221,42 +1221,42 @@ public:
   BasicBlock *getPhiArgBlock() const { return DefIterator.getPhiArgBlock(); }
 
 private:
-  /// Returns true if \p Ptr is guaranteed to be loop invariant for any possible
-  /// loop. In particular, this guarantees that it only references a single
-  /// MemoryLocation during execution of the containing function.
-  bool IsGuaranteedLoopInvariant(Value *Ptr) const;
-
+  /// Returns true if \p Ptr is guaranteed to be loop invariant for any possible 
+  /// loop. In particular, this guarantees that it only references a single 
+  /// MemoryLocation during execution of the containing function. 
+  bool IsGuaranteedLoopInvariant(Value *Ptr) const; 
+ 
   void fillInCurrentPair() {
     CurrentPair.first = *DefIterator;
-    CurrentPair.second = Location;
+    CurrentPair.second = Location; 
     if (WalkingPhi && Location.Ptr) {
-      // Mark size as unknown, if the location is not guaranteed to be
-      // loop-invariant for any possible loop in the function. Setting the size
-      // to unknown guarantees that any memory accesses that access locations
-      // after the pointer are considered as clobbers, which is important to
-      // catch loop carried dependences.
-      if (Location.Ptr &&
-          !IsGuaranteedLoopInvariant(const_cast<Value *>(Location.Ptr)))
-        CurrentPair.second =
-            Location.getWithNewSize(LocationSize::beforeOrAfterPointer());
+      // Mark size as unknown, if the location is not guaranteed to be 
+      // loop-invariant for any possible loop in the function. Setting the size 
+      // to unknown guarantees that any memory accesses that access locations 
+      // after the pointer are considered as clobbers, which is important to 
+      // catch loop carried dependences. 
+      if (Location.Ptr && 
+          !IsGuaranteedLoopInvariant(const_cast<Value *>(Location.Ptr))) 
+        CurrentPair.second = 
+            Location.getWithNewSize(LocationSize::beforeOrAfterPointer()); 
       PHITransAddr Translator(
           const_cast<Value *>(Location.Ptr),
           OriginalAccess->getBlock()->getModule()->getDataLayout(), nullptr);
-
+ 
       if (!Translator.PHITranslateValue(OriginalAccess->getBlock(),
                                         DefIterator.getPhiArgBlock(), DT,
-                                        true)) {
-        Value *TransAddr = Translator.getAddr();
-        if (TransAddr != Location.Ptr) {
-          CurrentPair.second = CurrentPair.second.getWithNewPtr(TransAddr);
-
-          if (TransAddr &&
-              !IsGuaranteedLoopInvariant(const_cast<Value *>(TransAddr)))
-            CurrentPair.second = CurrentPair.second.getWithNewSize(
-                LocationSize::beforeOrAfterPointer());
-
-          if (PerformedPhiTranslation)
-            *PerformedPhiTranslation = true;
+                                        true)) { 
+        Value *TransAddr = Translator.getAddr(); 
+        if (TransAddr != Location.Ptr) { 
+          CurrentPair.second = CurrentPair.second.getWithNewPtr(TransAddr); 
+ 
+          if (TransAddr && 
+              !IsGuaranteedLoopInvariant(const_cast<Value *>(TransAddr))) 
+            CurrentPair.second = CurrentPair.second.getWithNewSize( 
+                LocationSize::beforeOrAfterPointer()); 
+ 
+          if (PerformedPhiTranslation) 
+            *PerformedPhiTranslation = true; 
         }
       }
     }
@@ -1266,15 +1266,15 @@ private:
   memoryaccess_def_iterator DefIterator;
   MemoryLocation Location;
   MemoryAccess *OriginalAccess = nullptr;
-  DominatorTree *DT = nullptr;
+  DominatorTree *DT = nullptr; 
   bool WalkingPhi = false;
-  bool *PerformedPhiTranslation = nullptr;
+  bool *PerformedPhiTranslation = nullptr; 
 };
 
-inline upward_defs_iterator
-upward_defs_begin(const MemoryAccessPair &Pair, DominatorTree &DT,
-                  bool *PerformedPhiTranslation = nullptr) {
-  return upward_defs_iterator(Pair, &DT, PerformedPhiTranslation);
+inline upward_defs_iterator 
+upward_defs_begin(const MemoryAccessPair &Pair, DominatorTree &DT, 
+                  bool *PerformedPhiTranslation = nullptr) { 
+  return upward_defs_iterator(Pair, &DT, PerformedPhiTranslation); 
 }
 
 inline upward_defs_iterator upward_defs_end() { return upward_defs_iterator(); }

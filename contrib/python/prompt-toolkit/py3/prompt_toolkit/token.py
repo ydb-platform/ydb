@@ -1,8 +1,8 @@
-"""
-"""
-
-__all__ = [
-    "ZeroWidthEscape",
-]
-
-ZeroWidthEscape = "[ZeroWidthEscape]"
+""" 
+""" 
+ 
+__all__ = [ 
+    "ZeroWidthEscape", 
+] 
+ 
+ZeroWidthEscape = "[ZeroWidthEscape]" 

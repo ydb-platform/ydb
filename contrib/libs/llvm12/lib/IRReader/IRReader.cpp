@@ -24,10 +24,10 @@ namespace llvm {
   extern bool TimePassesIsEnabled;
 }
 
-const char TimeIRParsingGroupName[] = "irparse";
-const char TimeIRParsingGroupDescription[] = "LLVM IR Parsing";
-const char TimeIRParsingName[] = "parse";
-const char TimeIRParsingDescription[] = "Parse IR";
+const char TimeIRParsingGroupName[] = "irparse"; 
+const char TimeIRParsingGroupDescription[] = "LLVM IR Parsing"; 
+const char TimeIRParsingName[] = "parse"; 
+const char TimeIRParsingDescription[] = "Parse IR"; 
 
 std::unique_ptr<Module>
 llvm::getLazyIRModule(std::unique_ptr<MemoryBuffer> Buffer, SMDiagnostic &Err,

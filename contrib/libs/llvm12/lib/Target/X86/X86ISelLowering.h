@@ -384,10 +384,10 @@ namespace llvm {
     /// Vector comparison generating mask bits for fp and
     /// integer signed and unsigned data types.
     CMPM,
-    // Vector mask comparison generating mask bits for FP values.
-    CMPMM,
-    // Vector mask comparison with SAE for FP values.
-    CMPMM_SAE,
+    // Vector mask comparison generating mask bits for FP values. 
+    CMPMM, 
+    // Vector mask comparison with SAE for FP values. 
+    CMPMM_SAE, 
 
     // Arithmetic operations with FLAGS results.
     ADD,
@@ -402,7 +402,7 @@ namespace llvm {
 
     // Bit field extract.
     BEXTR,
-    BEXTRI,
+    BEXTRI, 
 
     // Zero High Bits Starting with Specified Bit Position.
     BZHI,
@@ -709,9 +709,9 @@ namespace llvm {
     // For avx512-vp2intersect
     VP2INTERSECT,
 
-    // User level interrupts - testui
-    TESTUI,
-
+    // User level interrupts - testui 
+    TESTUI, 
+ 
     /// X86 strict FP compare instructions.
     STRICT_FCMP = ISD::FIRST_TARGET_STRICTFP_OPCODE,
     STRICT_FCMPS,
@@ -751,9 +751,9 @@ namespace llvm {
     STRICT_CVTPS2PH,
     STRICT_CVTPH2PS,
 
-    // WARNING: Only add nodes here if they are stric FP nodes. Non-memory and
-    // non-strict FP nodes should be above FIRST_TARGET_STRICTFP_OPCODE.
-
+    // WARNING: Only add nodes here if they are stric FP nodes. Non-memory and 
+    // non-strict FP nodes should be above FIRST_TARGET_STRICTFP_OPCODE. 
+ 
     // Compare and swap.
     LCMPXCHG_DAG = ISD::FIRST_TARGET_MEMORY_OPCODE,
     LCMPXCHG8_DAG,
@@ -774,12 +774,12 @@ namespace llvm {
     // extract_vector_elt, store.
     VEXTRACT_STORE,
 
-    // scalar broadcast from memory.
+    // scalar broadcast from memory. 
     VBROADCAST_LOAD,
 
-    // subvector broadcast from memory.
-    SUBV_BROADCAST_LOAD,
-
+    // subvector broadcast from memory. 
+    SUBV_BROADCAST_LOAD, 
+ 
     // Store FP control world into i16 memory.
     FNSTCW16m,
 
@@ -815,10 +815,10 @@ namespace llvm {
     /// specifies the type to store as.
     FST,
 
-    /// These instructions grab the address of the next argument
+    /// These instructions grab the address of the next argument 
     /// from a va_list. (reads and modifies the va_list in memory)
     VAARG_64,
-    VAARG_X32,
+    VAARG_X32, 
 
     // Vector truncating store with unsigned/signed saturation
     VTRUNCSTOREUS,
@@ -831,16 +831,16 @@ namespace llvm {
     MGATHER,
     MSCATTER,
 
-    // Key locker nodes that produce flags.
-    AESENC128KL,
-    AESDEC128KL,
-    AESENC256KL,
-    AESDEC256KL,
-    AESENCWIDE128KL,
-    AESDECWIDE128KL,
-    AESENCWIDE256KL,
-    AESDECWIDE256KL,
-
+    // Key locker nodes that produce flags. 
+    AESENC128KL, 
+    AESDEC128KL, 
+    AESENC256KL, 
+    AESDEC256KL, 
+    AESENCWIDE128KL, 
+    AESDECWIDE128KL, 
+    AESENCWIDE256KL, 
+    AESDECWIDE256KL, 
+ 
     // WARNING: Do not add anything in the end unless you want the node to
     // have memop! In fact, starting from FIRST_TARGET_MEMORY_OPCODE all
     // opcodes will be thought as target memory ops!
@@ -855,7 +855,7 @@ namespace llvm {
     /// Returns true of the given offset can be
     /// fit into displacement field of the instruction.
     bool isOffsetSuitableForCodeModel(int64_t Offset, CodeModel::Model M,
-                                      bool hasSymbolicDisplacement);
+                                      bool hasSymbolicDisplacement); 
 
     /// Determines whether the callee is required to pop its
     /// own arguments. Callee pop is necessary to support tail calls.
@@ -1128,8 +1128,8 @@ namespace llvm {
     }
 
     /// Handle Lowering flag assembly outputs.
-    SDValue LowerAsmOutputForConstraint(SDValue &Chain, SDValue &Flag,
-                                        const SDLoc &DL,
+    SDValue LowerAsmOutputForConstraint(SDValue &Chain, SDValue &Flag, 
+                                        const SDLoc &DL, 
                                         const AsmOperandInfo &Constraint,
                                         SelectionDAG &DAG) const override;
 
@@ -1408,8 +1408,8 @@ namespace llvm {
                                    SDValue Addr, SelectionDAG &DAG)
                                    const override;
 
-    Align getPrefLoopAlignment(MachineLoop *ML) const override;
-
+    Align getPrefLoopAlignment(MachineLoop *ML) const override; 
+ 
   protected:
     std::pair<const TargetRegisterClass *, uint8_t>
     findRepresentativeClass(const TargetRegisterInfo *TRI,
@@ -1501,7 +1501,7 @@ namespace llvm {
     SDValue LowerUINT_TO_FP(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerTRUNCATE(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerFP_TO_INT(SDValue Op, SelectionDAG &DAG) const;
-    SDValue LowerFP_TO_INT_SAT(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerFP_TO_INT_SAT(SDValue Op, SelectionDAG &DAG) const; 
     SDValue LowerLRINT_LLRINT(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerSETCC(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerSETCCCARRY(SDValue Op, SelectionDAG &DAG) const;
@@ -1583,7 +1583,7 @@ namespace llvm {
 
     // Utility function to emit the low-level va_arg code for X86-64.
     MachineBasicBlock *
-    EmitVAARGWithCustomInserter(MachineInstr &MI, MachineBasicBlock *MBB) const;
+    EmitVAARGWithCustomInserter(MachineInstr &MI, MachineBasicBlock *MBB) const; 
 
     /// Utility function to emit the xmm reg save portion of va_start.
     MachineBasicBlock *
@@ -1699,7 +1699,7 @@ namespace llvm {
   };
 
   /// Generate unpacklo/unpackhi shuffle mask.
-  void createUnpackShuffleMask(EVT VT, SmallVectorImpl<int> &Mask, bool Lo,
+  void createUnpackShuffleMask(EVT VT, SmallVectorImpl<int> &Mask, bool Lo, 
                                bool Unary);
 
   /// Similar to unpacklo/unpackhi, but without the 128-bit lane limitation

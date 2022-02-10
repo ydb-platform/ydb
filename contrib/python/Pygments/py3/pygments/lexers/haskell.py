@@ -4,7 +4,7 @@
 
     Lexers for Haskell and related languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -65,7 +65,7 @@ class HaskellLexer(RegexLexer):
             (r"(')[" + uni.Lu + r"][\w\']*", Keyword.Type),
             (r"(')\[[^\]]*\]", Keyword.Type),  # tuples and lists get special treatment in GHC
             (r"(')\([^)]*\)", Keyword.Type),  # ..
-            (r"(')[:!#$%&*+.\\/<=>?@^|~-]+", Keyword.Type),  # promoted type operators
+            (r"(')[:!#$%&*+.\\/<=>?@^|~-]+", Keyword.Type),  # promoted type operators 
             #  Operators
             (r'\\(?![:!#$%&*+.\\/<=>?@^|~-]+)', Name.Function),  # lambda operator
             (r'(<-|::|->|=>|=)(?![:!#$%&*+.\\/<=>?@^|~-]+)', Operator.Word),  # specials
@@ -197,7 +197,7 @@ class IdrisLexer(RegexLexer):
                 'if', 'in', 'infix[lr]?', 'instance', 'rewrite', 'auto',
                 'namespace', 'codata', 'mutual', 'private', 'public', 'abstract',
                 'total', 'partial',
-                'interface', 'implementation', 'export', 'covering', 'constructor',
+                'interface', 'implementation', 'export', 'covering', 'constructor', 
                 'let', 'proof', 'of', 'then', 'static', 'where', '_', 'with',
                 'pattern',  'term',  'syntax', 'prefix',
                 'postulate', 'parameters', 'record', 'dsl', 'impossible', 'implicit',
@@ -214,7 +214,7 @@ class IdrisLexer(RegexLexer):
     tokens = {
         'root': [
             # Comments
-            (r'^(\s*)(%%(%s))' % '|'.join(directives),
+            (r'^(\s*)(%%(%s))' % '|'.join(directives), 
              bygroups(Whitespace, Keyword.Reserved)),
             (r'(\s*)(--(?![!#$%&*+./<=>?@^|_~:\\]).*?)$', bygroups(Whitespace, Comment.Single)),
             (r'(\s*)(\|{3}.*?)$', bygroups(Whitespace, Comment.Single)),
@@ -326,10 +326,10 @@ class AgdaLexer(RegexLexer):
             #  Identifiers
             (r'\b(%s)(?!\')\b' % '|'.join(reserved), Keyword.Reserved),
             (r'(import|module)(\s+)', bygroups(Keyword.Reserved, Whitespace), 'module'),
-            (r'\b(Set|Prop)[\u2080-\u2089]*\b', Keyword.Type),
+            (r'\b(Set|Prop)[\u2080-\u2089]*\b', Keyword.Type), 
             #  Special Symbols
             (r'(\(|\)|\{|\})', Operator),
-            (r'(\.{1,3}|\||\u03BB|\u2200|\u2192|:|=|->)', Operator.Word),
+            (r'(\.{1,3}|\||\u03BB|\u2200|\u2192|:|=|->)', Operator.Word), 
             #  Numbers
             (r'\d+[eE][+-]?\d+', Number.Float),
             (r'\d+\.\d+([eE][+-]?\d+)?', Number.Float),
@@ -482,10 +482,10 @@ class CryptolLexer(RegexLexer):
         ],
     }
 
-    EXTRA_KEYWORDS = {'join', 'split', 'reverse', 'transpose', 'width',
-                      'length', 'tail', '<<', '>>', '<<<', '>>>', 'const',
-                      'reg', 'par', 'seq', 'ASSERT', 'undefined', 'error',
-                      'trace'}
+    EXTRA_KEYWORDS = {'join', 'split', 'reverse', 'transpose', 'width', 
+                      'length', 'tail', '<<', '>>', '<<<', '>>>', 'const', 
+                      'reg', 'par', 'seq', 'ASSERT', 'undefined', 'error', 
+                      'trace'} 
 
     def get_tokens_unprocessed(self, text):
         stack = ['root']
@@ -558,7 +558,7 @@ class LiterateLexer(Lexer):
                     latex += line
             insertions.append((len(code),
                                list(lxlexer.get_tokens_unprocessed(latex))))
-        yield from do_insertions(insertions, self.baselexer.get_tokens_unprocessed(code))
+        yield from do_insertions(insertions, self.baselexer.get_tokens_unprocessed(code)) 
 
 
 class LiterateHaskellLexer(LiterateLexer):
@@ -575,7 +575,7 @@ class LiterateHaskellLexer(LiterateLexer):
     .. versionadded:: 0.9
     """
     name = 'Literate Haskell'
-    aliases = ['literate-haskell', 'lhaskell', 'lhs']
+    aliases = ['literate-haskell', 'lhaskell', 'lhs'] 
     filenames = ['*.lhs']
     mimetypes = ['text/x-literate-haskell']
 
@@ -598,7 +598,7 @@ class LiterateIdrisLexer(LiterateLexer):
     .. versionadded:: 2.0
     """
     name = 'Literate Idris'
-    aliases = ['literate-idris', 'lidris', 'lidr']
+    aliases = ['literate-idris', 'lidris', 'lidr'] 
     filenames = ['*.lidr']
     mimetypes = ['text/x-literate-idris']
 
@@ -621,7 +621,7 @@ class LiterateAgdaLexer(LiterateLexer):
     .. versionadded:: 2.0
     """
     name = 'Literate Agda'
-    aliases = ['literate-agda', 'lagda']
+    aliases = ['literate-agda', 'lagda'] 
     filenames = ['*.lagda']
     mimetypes = ['text/x-literate-agda']
 
@@ -644,7 +644,7 @@ class LiterateCryptolLexer(LiterateLexer):
     .. versionadded:: 2.0
     """
     name = 'Literate Cryptol'
-    aliases = ['literate-cryptol', 'lcryptol', 'lcry']
+    aliases = ['literate-cryptol', 'lcryptol', 'lcry'] 
     filenames = ['*.lcry']
     mimetypes = ['text/x-literate-cryptol']
 

@@ -13,19 +13,19 @@
 
 namespace llvm {
 
-struct NewArchiveMember;
+struct NewArchiveMember; 
 
-namespace object {
+namespace object { 
 
-class Archive;
-
-} // end namespace object
-
-namespace objcopy {
-struct CopyConfig;
-Expected<std::vector<NewArchiveMember>>
-createNewArchiveMembers(CopyConfig &Config, const object::Archive &Ar);
-
+class Archive; 
+ 
+} // end namespace object 
+ 
+namespace objcopy { 
+struct CopyConfig; 
+Expected<std::vector<NewArchiveMember>> 
+createNewArchiveMembers(CopyConfig &Config, const object::Archive &Ar); 
+ 
 } // end namespace objcopy
 } // end namespace llvm
 

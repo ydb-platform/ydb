@@ -16,12 +16,12 @@ PEERDIR(
     contrib/libs/zstd
 )
 
-ADDINCL(
-    contrib/libs/zstd/lib
-    contrib/libs/zstd/lib/common
-    contrib/libs/zstd/programs
-)
-
+ADDINCL( 
+    contrib/libs/zstd/lib 
+    contrib/libs/zstd/lib/common 
+    contrib/libs/zstd/programs 
+) 
+ 
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
@@ -31,18 +31,18 @@ CFLAGS(
     -DZSTD_MULTITHREAD
 )
 
-SRCDIR(contrib/libs/zstd/programs)
+SRCDIR(contrib/libs/zstd/programs) 
 
 SRCS(
-    benchfn.c
-    benchzstd.c
-    datagen.c
-    dibio.c
-    fileio.c
-    timefn.c
-    util.c
-    zstdcli.c
-    zstdcli_trace.c
+    benchfn.c 
+    benchzstd.c 
+    datagen.c 
+    dibio.c 
+    fileio.c 
+    timefn.c 
+    util.c 
+    zstdcli.c 
+    zstdcli_trace.c 
 )
 
 END()

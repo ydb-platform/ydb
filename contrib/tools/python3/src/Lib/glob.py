@@ -1,10 +1,10 @@
 """Filename globbing utility."""
 
-import contextlib
+import contextlib 
 import os
 import re
 import fnmatch
-import sys
+import sys 
 
 __all__ = ["glob", "iglob", "escape"]
 
@@ -32,7 +32,7 @@ def iglob(pathname, *, recursive=False):
     If recursive is true, the pattern '**' will match any files and
     zero or more directories and subdirectories.
     """
-    sys.audit("glob.glob", pathname, recursive)
+    sys.audit("glob.glob", pathname, recursive) 
     it = _iglob(pathname, recursive, False)
     if recursive and _isrecursive(pathname):
         s = next(it)  # skip empty string
@@ -80,7 +80,7 @@ def _iglob(pathname, recursive, dironly):
 # takes a literal basename (so it only has to check for its existence).
 
 def _glob1(dirname, pattern, dironly):
-    names = _listdir(dirname, dironly)
+    names = _listdir(dirname, dironly) 
     if not _ishidden(pattern):
         names = (x for x in names if not _ishidden(x))
     return fnmatch.filter(names, pattern)
@@ -131,13 +131,13 @@ def _iterdir(dirname, dironly):
     except OSError:
         return
 
-def _listdir(dirname, dironly):
-    with contextlib.closing(_iterdir(dirname, dironly)) as it:
-        return list(it)
-
+def _listdir(dirname, dironly): 
+    with contextlib.closing(_iterdir(dirname, dironly)) as it: 
+        return list(it) 
+ 
 # Recursively yields relative pathnames inside a literal directory.
 def _rlistdir(dirname, dironly):
-    names = _listdir(dirname, dironly)
+    names = _listdir(dirname, dironly) 
     for x in names:
         if not _ishidden(x):
             yield x

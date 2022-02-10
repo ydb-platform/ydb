@@ -647,7 +647,7 @@ static int __Pyx_CLineForTraceback(PyThreadState *tstate, int c_line);/*proto*/
 //@substitute: naming
 
 #ifndef CYTHON_CLINE_IN_TRACEBACK
-static int __Pyx_CLineForTraceback(CYTHON_NCP_UNUSED PyThreadState *tstate, int c_line) {
+static int __Pyx_CLineForTraceback(CYTHON_NCP_UNUSED PyThreadState *tstate, int c_line) { 
     PyObject *use_cline;
     PyObject *ptype, *pvalue, *ptraceback;
 #if CYTHON_COMPILING_IN_CPYTHON
@@ -681,8 +681,8 @@ static int __Pyx_CLineForTraceback(CYTHON_NCP_UNUSED PyThreadState *tstate, int 
     }
     if (!use_cline) {
         c_line = 0;
-        // No need to handle errors here when we reset the exception state just afterwards.
-        (void) PyObject_SetAttr(${cython_runtime_cname}, PYIDENT("cline_in_traceback"), Py_False);
+        // No need to handle errors here when we reset the exception state just afterwards. 
+        (void) PyObject_SetAttr(${cython_runtime_cname}, PYIDENT("cline_in_traceback"), Py_False); 
     }
     else if (use_cline == Py_False || (use_cline != Py_True && PyObject_Not(use_cline) != 0)) {
         c_line = 0;
@@ -709,33 +709,33 @@ static void __Pyx_AddTraceback(const char *funcname, int c_line,
 static PyCodeObject* __Pyx_CreateCodeObjectForTraceback(
             const char *funcname, int c_line,
             int py_line, const char *filename) {
-    PyCodeObject *py_code = NULL;
-    PyObject *py_funcname = NULL;
-    #if PY_MAJOR_VERSION < 3
-    PyObject *py_srcfile = NULL;
+    PyCodeObject *py_code = NULL; 
+    PyObject *py_funcname = NULL; 
+    #if PY_MAJOR_VERSION < 3 
+    PyObject *py_srcfile = NULL; 
 
     py_srcfile = PyString_FromString(filename);
-    if (!py_srcfile) goto bad;
+    if (!py_srcfile) goto bad; 
     #endif
-
+ 
     if (c_line) {
         #if PY_MAJOR_VERSION < 3
         py_funcname = PyString_FromFormat( "%s (%s:%d)", funcname, $cfilenm_cname, c_line);
-        if (!py_funcname) goto bad;
+        if (!py_funcname) goto bad; 
         #else
         py_funcname = PyUnicode_FromFormat( "%s (%s:%d)", funcname, $cfilenm_cname, c_line);
-        if (!py_funcname) goto bad;
-        funcname = PyUnicode_AsUTF8(py_funcname);
-        if (!funcname) goto bad;
+        if (!py_funcname) goto bad; 
+        funcname = PyUnicode_AsUTF8(py_funcname); 
+        if (!funcname) goto bad; 
         #endif
     }
     else {
         #if PY_MAJOR_VERSION < 3
         py_funcname = PyString_FromString(funcname);
-        if (!py_funcname) goto bad;
+        if (!py_funcname) goto bad; 
         #endif
     }
-    #if PY_MAJOR_VERSION < 3
+    #if PY_MAJOR_VERSION < 3 
     py_code = __Pyx_PyCode_New(
         0,            /*int argcount,*/
         0,            /*int kwonlyargcount,*/
@@ -754,16 +754,16 @@ static PyCodeObject* __Pyx_CreateCodeObjectForTraceback(
         $empty_bytes  /*PyObject *lnotab*/
     );
     Py_DECREF(py_srcfile);
-    #else
-    py_code = PyCode_NewEmpty(filename, funcname, py_line);
-    #endif
-    Py_XDECREF(py_funcname);  // XDECREF since it's only set on Py3 if cline
+    #else 
+    py_code = PyCode_NewEmpty(filename, funcname, py_line); 
+    #endif 
+    Py_XDECREF(py_funcname);  // XDECREF since it's only set on Py3 if cline 
     return py_code;
 bad:
-    Py_XDECREF(py_funcname);
-    #if PY_MAJOR_VERSION < 3
+    Py_XDECREF(py_funcname); 
+    #if PY_MAJOR_VERSION < 3 
     Py_XDECREF(py_srcfile);
-    #endif
+    #endif 
     return NULL;
 }
 

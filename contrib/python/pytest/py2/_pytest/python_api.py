@@ -1,10 +1,10 @@
-# -*- coding: utf-8 -*-
-from __future__ import absolute_import
-
+# -*- coding: utf-8 -*- 
+from __future__ import absolute_import 
+ 
 import math
 import pprint
 import sys
-import warnings
+import warnings 
 from decimal import Decimal
 from numbers import Number
 
@@ -13,11 +13,11 @@ from six.moves import filterfalse
 from six.moves import zip
 
 import _pytest._code
-from _pytest import deprecated
+from _pytest import deprecated 
 from _pytest.compat import isclass
-from _pytest.compat import Iterable
+from _pytest.compat import Iterable 
 from _pytest.compat import Mapping
-from _pytest.compat import Sized
+from _pytest.compat import Sized 
 from _pytest.compat import STRING_TYPES
 from _pytest.outcomes import fail
 
@@ -150,10 +150,10 @@ class ApproxNumpy(ApproxBase):
 
         if np.isscalar(actual):
             for i in np.ndindex(self.expected.shape):
-                yield actual, self.expected[i].item()
+                yield actual, self.expected[i].item() 
         else:
             for i in np.ndindex(self.expected.shape):
-                yield actual[i].item(), self.expected[i].item()
+                yield actual[i].item(), self.expected[i].item() 
 
 
 class ApproxMapping(ApproxBase):
@@ -187,7 +187,7 @@ class ApproxMapping(ApproxBase):
                 raise _non_numeric_type_error(self.expected, at="key={!r}".format(key))
 
 
-class ApproxSequencelike(ApproxBase):
+class ApproxSequencelike(ApproxBase): 
     """
     Perform approximate comparisons where the expected value is a sequence of
     numbers.
@@ -525,12 +525,12 @@ def approx(expected, rel=None, abs=None, nan_ok=False):
         cls = ApproxMapping
     elif _is_numpy_array(expected):
         cls = ApproxNumpy
-    elif (
-        isinstance(expected, Iterable)
-        and isinstance(expected, Sized)
-        and not isinstance(expected, STRING_TYPES)
-    ):
-        cls = ApproxSequencelike
+    elif ( 
+        isinstance(expected, Iterable) 
+        and isinstance(expected, Sized) 
+        and not isinstance(expected, STRING_TYPES) 
+    ): 
+        cls = ApproxSequencelike 
     else:
         raise _non_numeric_type_error(expected, at=None)
 
@@ -556,55 +556,55 @@ def _is_numpy_array(obj):
 def raises(expected_exception, *args, **kwargs):
     r"""
     Assert that a code block/function call raises ``expected_exception``
-    or raise a failure exception otherwise.
+    or raise a failure exception otherwise. 
 
-    :kwparam match: if specified, a string containing a regular expression,
-        or a regular expression object, that is tested against the string
-        representation of the exception using ``re.search``. To match a literal
-        string that may contain `special characters`__, the pattern can
-        first be escaped with ``re.escape``.
+    :kwparam match: if specified, a string containing a regular expression, 
+        or a regular expression object, that is tested against the string 
+        representation of the exception using ``re.search``. To match a literal 
+        string that may contain `special characters`__, the pattern can 
+        first be escaped with ``re.escape``. 
 
-    __ https://docs.python.org/3/library/re.html#regular-expression-syntax
+    __ https://docs.python.org/3/library/re.html#regular-expression-syntax 
 
-    :kwparam message: **(deprecated since 4.1)** if specified, provides a custom failure message
-        if the exception is not raised. See :ref:`the deprecation docs <raises message deprecated>` for a workaround.
+    :kwparam message: **(deprecated since 4.1)** if specified, provides a custom failure message 
+        if the exception is not raised. See :ref:`the deprecation docs <raises message deprecated>` for a workaround. 
 
-    .. currentmodule:: _pytest._code
-
-    Use ``pytest.raises`` as a context manager, which will capture the exception of the given
-    type::
-
+    .. currentmodule:: _pytest._code 
+ 
+    Use ``pytest.raises`` as a context manager, which will capture the exception of the given 
+    type:: 
+ 
         >>> with raises(ZeroDivisionError):
         ...    1/0
 
-    If the code block does not raise the expected exception (``ZeroDivisionError`` in the example
-    above), or no exception at all, the check will fail instead.
+    If the code block does not raise the expected exception (``ZeroDivisionError`` in the example 
+    above), or no exception at all, the check will fail instead. 
 
-    You can also use the keyword argument ``match`` to assert that the
-    exception matches a text or regex::
+    You can also use the keyword argument ``match`` to assert that the 
+    exception matches a text or regex:: 
 
-        >>> with raises(ValueError, match='must be 0 or None'):
-        ...     raise ValueError("value must be 0 or None")
+        >>> with raises(ValueError, match='must be 0 or None'): 
+        ...     raise ValueError("value must be 0 or None") 
 
-        >>> with raises(ValueError, match=r'must be \d+$'):
-        ...     raise ValueError("value must be 42")
-
-    The context manager produces an :class:`ExceptionInfo` object which can be used to inspect the
-    details of the captured exception::
-
-        >>> with raises(ValueError) as exc_info:
-        ...     raise ValueError("value must be 42")
-        >>> assert exc_info.type is ValueError
-        >>> assert exc_info.value.args[0] == "value must be 42"
-
-    .. deprecated:: 4.1
-
-        In the context manager form you may use the keyword argument
-        ``message`` to specify a custom failure message that will be displayed
-        in case the ``pytest.raises`` check fails. This has been deprecated as it
-        is considered error prone as users often mean to use ``match`` instead.
-        See :ref:`the deprecation docs <raises message deprecated>` for a workaround.
-
+        >>> with raises(ValueError, match=r'must be \d+$'): 
+        ...     raise ValueError("value must be 42") 
+ 
+    The context manager produces an :class:`ExceptionInfo` object which can be used to inspect the 
+    details of the captured exception:: 
+ 
+        >>> with raises(ValueError) as exc_info: 
+        ...     raise ValueError("value must be 42") 
+        >>> assert exc_info.type is ValueError 
+        >>> assert exc_info.value.args[0] == "value must be 42" 
+ 
+    .. deprecated:: 4.1 
+ 
+        In the context manager form you may use the keyword argument 
+        ``message`` to specify a custom failure message that will be displayed 
+        in case the ``pytest.raises`` check fails. This has been deprecated as it 
+        is considered error prone as users often mean to use ``match`` instead. 
+        See :ref:`the deprecation docs <raises message deprecated>` for a workaround. 
+ 
     .. note::
 
        When using ``pytest.raises`` as a context manager, it's worthwhile to
@@ -617,7 +617,7 @@ def raises(expected_exception, *args, **kwargs):
            >>> with raises(ValueError) as exc_info:
            ...     if value > 10:
            ...         raise ValueError("value must be <= 10")
-           ...     assert exc_info.type is ValueError  # this will not execute
+           ...     assert exc_info.type is ValueError  # this will not execute 
 
        Instead, the following approach must be taken (note the difference in
        scope)::
@@ -626,17 +626,17 @@ def raises(expected_exception, *args, **kwargs):
            ...     if value > 10:
            ...         raise ValueError("value must be <= 10")
            ...
-           >>> assert exc_info.type is ValueError
+           >>> assert exc_info.type is ValueError 
 
-    **Using with** ``pytest.mark.parametrize``
+    **Using with** ``pytest.mark.parametrize`` 
 
-    When using :ref:`pytest.mark.parametrize ref`
-    it is possible to parametrize tests such that
-    some runs raise an exception and others do not.
+    When using :ref:`pytest.mark.parametrize ref` 
+    it is possible to parametrize tests such that 
+    some runs raise an exception and others do not. 
 
-    See :ref:`parametrizing_conditional_raising` for an example.
+    See :ref:`parametrizing_conditional_raising` for an example. 
 
-    **Legacy form**
+    **Legacy form** 
 
     It is possible to specify a callable by passing a to-be-called lambda::
 
@@ -652,8 +652,8 @@ def raises(expected_exception, *args, **kwargs):
         >>> raises(ZeroDivisionError, f, x=0)
         <ExceptionInfo ...>
 
-    The form above is fully supported but discouraged for new code because the
-    context manager form is regarded as more readable and less error-prone.
+    The form above is fully supported but discouraged for new code because the 
+    context manager form is regarded as more readable and less error-prone. 
 
     .. note::
         Similar to caught exception objects in Python, explicitly clearing
@@ -684,35 +684,35 @@ def raises(expected_exception, *args, **kwargs):
     if not args:
         if "message" in kwargs:
             message = kwargs.pop("message")
-            warnings.warn(deprecated.RAISES_MESSAGE_PARAMETER, stacklevel=2)
+            warnings.warn(deprecated.RAISES_MESSAGE_PARAMETER, stacklevel=2) 
         if "match" in kwargs:
             match_expr = kwargs.pop("match")
         if kwargs:
             msg = "Unexpected keyword arguments passed to pytest.raises: "
-            msg += ", ".join(sorted(kwargs))
+            msg += ", ".join(sorted(kwargs)) 
             raise TypeError(msg)
         return RaisesContext(expected_exception, message, match_expr)
     elif isinstance(args[0], str):
-        warnings.warn(deprecated.RAISES_EXEC, stacklevel=2)
-        (code,) = args
+        warnings.warn(deprecated.RAISES_EXEC, stacklevel=2) 
+        (code,) = args 
         assert isinstance(code, str)
         frame = sys._getframe(1)
         loc = frame.f_locals.copy()
         loc.update(kwargs)
         # print "raises frame scope: %r" % frame.f_locals
         try:
-            code = _pytest._code.Source(code).compile(_genframe=frame)
-            exec(code, frame.f_globals, loc)
+            code = _pytest._code.Source(code).compile(_genframe=frame) 
+            exec(code, frame.f_globals, loc) 
             # XXX didn't mean f_globals == f_locals something special?
             #     this is destroyed here ...
         except expected_exception:
-            return _pytest._code.ExceptionInfo.from_current()
+            return _pytest._code.ExceptionInfo.from_current() 
     else:
         func = args[0]
         try:
             func(*args[1:], **kwargs)
         except expected_exception:
-            return _pytest._code.ExceptionInfo.from_current()
+            return _pytest._code.ExceptionInfo.from_current() 
     fail(message)
 
 
@@ -727,7 +727,7 @@ class RaisesContext(object):
         self.excinfo = None
 
     def __enter__(self):
-        self.excinfo = _pytest._code.ExceptionInfo.for_later()
+        self.excinfo = _pytest._code.ExceptionInfo.for_later() 
         return self.excinfo
 
     def __exit__(self, *tp):
@@ -738,6 +738,6 @@ class RaisesContext(object):
         suppress_exception = issubclass(self.excinfo.type, self.expected_exception)
         if sys.version_info[0] == 2 and suppress_exception:
             sys.exc_clear()
-        if self.match_expr is not None and suppress_exception:
+        if self.match_expr is not None and suppress_exception: 
             self.excinfo.match(self.match_expr)
         return suppress_exception

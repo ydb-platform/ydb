@@ -149,7 +149,7 @@
         {"shape":"ValidationException"},
         {"shape":"FacetValidationException"}
       ],
-      "documentation":"<p>Attaches a typed link to a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+      "documentation":"<p>Attaches a typed link to a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
     },
     "BatchRead":{
       "name":"BatchRead",
@@ -211,7 +211,7 @@
         {"shape":"DirectoryAlreadyExistsException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Creates a <a>Directory</a> by copying the published schema into the directory. A directory cannot be created without a schema.</p> <p>You can also quickly create a directory using a managed schema, called the <code>QuickStartSchema</code>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_managed.html\">Managed Schema</a> in the <i>Amazon Cloud Directory Developer Guide</i>.</p>"
+      "documentation":"<p>Creates a <a>Directory</a> by copying the published schema into the directory. A directory cannot be created without a schema.</p> <p>You can also quickly create a directory using a managed schema, called the <code>QuickStartSchema</code>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_managed.html\">Managed Schema</a> in the <i>Amazon Cloud Directory Developer Guide</i>.</p>" 
     },
     "CreateFacet":{
       "name":"CreateFacet",
@@ -258,7 +258,7 @@
         {"shape":"LinkNameAlreadyInUseException"},
         {"shape":"UnsupportedIndexTypeException"}
       ],
-      "documentation":"<p>Creates an index object. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/indexing_search.html\">Indexing and search</a> for more information.</p>"
+      "documentation":"<p>Creates an index object. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/indexing_search.html\">Indexing and search</a> for more information.</p>" 
     },
     "CreateObject":{
       "name":"CreateObject",
@@ -326,7 +326,7 @@
         {"shape":"InvalidRuleException"},
         {"shape":"FacetValidationException"}
       ],
-      "documentation":"<p>Creates a <a>TypedLinkFacet</a>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+      "documentation":"<p>Creates a <a>TypedLinkFacet</a>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
     },
     "DeleteDirectory":{
       "name":"DeleteDirectory",
@@ -392,7 +392,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ObjectNotDetachedException"}
       ],
-      "documentation":"<p>Deletes an object and its associated attributes. Only objects with no children and no parents can be deleted. The maximum number of attributes that can be deleted during an object deletion is 30. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/limits.html\">Amazon Cloud Directory Limits</a>.</p>"
+      "documentation":"<p>Deletes an object and its associated attributes. Only objects with no children and no parents can be deleted. The maximum number of attributes that can be deleted during an object deletion is 30. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/limits.html\">Amazon Cloud Directory Limits</a>.</p>" 
     },
     "DeleteSchema":{
       "name":"DeleteSchema",
@@ -434,7 +434,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"FacetNotFoundException"}
       ],
-      "documentation":"<p>Deletes a <a>TypedLinkFacet</a>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+      "documentation":"<p>Deletes a <a>TypedLinkFacet</a>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
     },
     "DetachFromIndex":{
       "name":"DetachFromIndex",
@@ -522,7 +522,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"FacetValidationException"}
       ],
-      "documentation":"<p>Detaches a typed link from a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+      "documentation":"<p>Detaches a typed link from a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
     },
     "DisableDirectory":{
       "name":"DisableDirectory",
@@ -710,7 +710,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ValidationException"}
       ],
-      "documentation":"<p>Retrieves a JSON representation of the schema. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_jsonformat.html#schemas_json\">JSON Schema Format</a> for more information.</p>"
+      "documentation":"<p>Retrieves a JSON representation of the schema. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_jsonformat.html#schemas_json\">JSON Schema Format</a> for more information.</p>" 
     },
     "GetTypedLinkFacetInformation":{
       "name":"GetTypedLinkFacetInformation",
@@ -732,7 +732,7 @@
         {"shape":"InvalidNextTokenException"},
         {"shape":"FacetNotFoundException"}
       ],
-      "documentation":"<p>Returns the identity attribute order for a specific <a>TypedLinkFacet</a>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+      "documentation":"<p>Returns the identity attribute order for a specific <a>TypedLinkFacet</a>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
     },
     "ListAppliedSchemaArns":{
       "name":"ListAppliedSchemaArns",
@@ -881,7 +881,7 @@
         {"shape":"InvalidNextTokenException"},
         {"shape":"FacetValidationException"}
       ],
-      "documentation":"<p>Returns a paginated list of all the incoming <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+      "documentation":"<p>Returns a paginated list of all the incoming <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
     },
     "ListIndex":{
       "name":"ListIndex",
@@ -992,7 +992,7 @@
         {"shape":"InvalidNextTokenException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Retrieves all available parent paths for any object type such as node, leaf node, policy node, and index node objects. For more information about objects, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directorystructure.html\">Directory Structure</a>.</p> <p>Use this API to evaluate all parents for an object. The call returns all objects from the root of the directory up to the requested object. The API returns the number of paths based on user-defined <code>MaxResults</code>, in case there are multiple paths to the parent. The order of the paths and nodes returned is consistent among multiple API calls unless the objects are deleted or moved. Paths not leading to the directory root are ignored from the target object.</p>"
+      "documentation":"<p>Retrieves all available parent paths for any object type such as node, leaf node, policy node, and index node objects. For more information about objects, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directorystructure.html\">Directory Structure</a>.</p> <p>Use this API to evaluate all parents for an object. The call returns all objects from the root of the directory up to the requested object. The API returns the number of paths based on user-defined <code>MaxResults</code>, in case there are multiple paths to the parent. The order of the paths and nodes returned is consistent among multiple API calls unless the objects are deleted or moved. Paths not leading to the directory root are ignored from the target object.</p>" 
     },
     "ListObjectParents":{
       "name":"ListObjectParents",
@@ -1060,7 +1060,7 @@
         {"shape":"InvalidNextTokenException"},
         {"shape":"FacetValidationException"}
       ],
-      "documentation":"<p>Returns a paginated list of all the outgoing <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+      "documentation":"<p>Returns a paginated list of all the outgoing <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
     },
     "ListPolicyAttachments":{
       "name":"ListPolicyAttachments",
@@ -1147,7 +1147,7 @@
         {"shape":"FacetNotFoundException"},
         {"shape":"InvalidNextTokenException"}
       ],
-      "documentation":"<p>Returns a paginated list of all attribute definitions for a particular <a>TypedLinkFacet</a>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+      "documentation":"<p>Returns a paginated list of all attribute definitions for a particular <a>TypedLinkFacet</a>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
     },
     "ListTypedLinkFacetNames":{
       "name":"ListTypedLinkFacetNames",
@@ -1168,7 +1168,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"InvalidNextTokenException"}
       ],
-      "documentation":"<p>Returns a paginated list of <code>TypedLink</code> facet names for a particular schema. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+      "documentation":"<p>Returns a paginated list of <code>TypedLink</code> facet names for a particular schema. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
     },
     "LookupPolicy":{
       "name":"LookupPolicy",
@@ -1190,7 +1190,7 @@
         {"shape":"InvalidNextTokenException"},
         {"shape":"ResourceNotFoundException"}
       ],
-      "documentation":"<p>Lists all policies from the root of the <a>Directory</a> to the object specified. If there are no policies present, an empty list is returned. If policies are present, and if some objects don't have the policies attached, it returns the <code>ObjectIdentifier</code> for such objects. If policies are present, it returns <code>ObjectIdentifier</code>, <code>policyId</code>, and <code>policyType</code>. Paths that don't lead to the root from the target object are ignored. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>"
+      "documentation":"<p>Lists all policies from the root of the <a>Directory</a> to the object specified. If there are no policies present, an empty list is returned. If policies are present, and if some objects don't have the policies attached, it returns the <code>ObjectIdentifier</code> for such objects. If policies are present, it returns <code>ObjectIdentifier</code>, <code>policyId</code>, and <code>policyType</code>. Paths that don't lead to the root from the target object are ignored. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>" 
     },
     "PublishSchema":{
       "name":"PublishSchema",
@@ -1232,7 +1232,7 @@
         {"shape":"InvalidSchemaDocException"},
         {"shape":"InvalidRuleException"}
       ],
-      "documentation":"<p>Allows a schema to be updated using JSON upload. Only available for development schemas. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_jsonformat.html#schemas_json\">JSON Schema Format</a> for more information.</p>"
+      "documentation":"<p>Allows a schema to be updated using JSON upload. Only available for development schemas. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_jsonformat.html#schemas_json\">JSON Schema Format</a> for more information.</p>" 
     },
     "RemoveFacetFromObject":{
       "name":"RemoveFacetFromObject",
@@ -1409,7 +1409,7 @@
         {"shape":"FacetNotFoundException"},
         {"shape":"InvalidRuleException"}
       ],
-      "documentation":"<p>Updates a <a>TypedLinkFacet</a>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+      "documentation":"<p>Updates a <a>TypedLinkFacet</a>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
     },
     "UpgradeAppliedSchema":{
       "name":"UpgradeAppliedSchema",
@@ -1730,9 +1730,9 @@
     },
     "AttributeName":{
       "type":"string",
-      "max":230,
+      "max":230, 
       "min":1,
-      "pattern":"^[a-zA-Z0-9._:-]*$"
+      "pattern":"^[a-zA-Z0-9._:-]*$" 
     },
     "AttributeNameAndValue":{
       "type":"structure",
@@ -1937,7 +1937,7 @@
         },
         "BatchReferenceName":{
           "shape":"BatchReferenceName",
-          "documentation":"<p>The batch reference name. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/transaction_support.html\">Transaction Support</a> for more information.</p>"
+          "documentation":"<p>The batch reference name. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/transaction_support.html\">Transaction Support</a> for more information.</p>" 
         }
       },
       "documentation":"<p>Creates an index object inside of a <a>BatchRead</a> operation. For more information, see <a>CreateIndex</a> and <a>BatchReadRequest$Operations</a>.</p>"
@@ -1977,7 +1977,7 @@
         },
         "BatchReferenceName":{
           "shape":"BatchReferenceName",
-          "documentation":"<p>The batch reference name. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/transaction_support.html\">Transaction Support</a> for more information.</p>"
+          "documentation":"<p>The batch reference name. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/transaction_support.html\">Transaction Support</a> for more information.</p>" 
         }
       },
       "documentation":"<p>Represents the output of a <a>CreateObject</a> operation.</p>"
@@ -2054,7 +2054,7 @@
         },
         "BatchReferenceName":{
           "shape":"BatchReferenceName",
-          "documentation":"<p>The batch reference name. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/transaction_support.html\">Transaction Support</a> for more information.</p>"
+          "documentation":"<p>The batch reference name. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/transaction_support.html\">Transaction Support</a> for more information.</p>" 
         }
       },
       "documentation":"<p>Represents the output of a <a>DetachObject</a> operation.</p>"
@@ -2410,22 +2410,22 @@
       },
       "documentation":"<p>Represents the output of a <a>ListObjectParentPaths</a> response operation.</p>"
     },
-    "BatchListObjectParents":{
-      "type":"structure",
-      "required":["ObjectReference"],
-      "members":{
-        "ObjectReference":{"shape":"ObjectReference"},
-        "NextToken":{"shape":"NextToken"},
-        "MaxResults":{"shape":"NumberResults"}
-      }
-    },
-    "BatchListObjectParentsResponse":{
-      "type":"structure",
-      "members":{
-        "ParentLinks":{"shape":"ObjectIdentifierAndLinkNameList"},
-        "NextToken":{"shape":"NextToken"}
-      }
-    },
+    "BatchListObjectParents":{ 
+      "type":"structure", 
+      "required":["ObjectReference"], 
+      "members":{ 
+        "ObjectReference":{"shape":"ObjectReference"}, 
+        "NextToken":{"shape":"NextToken"}, 
+        "MaxResults":{"shape":"NumberResults"} 
+      } 
+    }, 
+    "BatchListObjectParentsResponse":{ 
+      "type":"structure", 
+      "members":{ 
+        "ParentLinks":{"shape":"ObjectIdentifierAndLinkNameList"}, 
+        "NextToken":{"shape":"NextToken"} 
+      } 
+    }, 
     "BatchListObjectPolicies":{
       "type":"structure",
       "required":["ObjectReference"],
@@ -2557,7 +2557,7 @@
       "members":{
         "PolicyToPathList":{
           "shape":"PolicyToPathList",
-          "documentation":"<p>Provides list of path to policies. Policies contain <code>PolicyId</code>, <code>ObjectIdentifier</code>, and <code>PolicyType</code>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>"
+          "documentation":"<p>Provides list of path to policies. Policies contain <code>PolicyId</code>, <code>ObjectIdentifier</code>, and <code>PolicyType</code>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>" 
         },
         "NextToken":{
           "shape":"NextToken",
@@ -2616,7 +2616,7 @@
         },
         "ListObjectParentPaths":{
           "shape":"BatchListObjectParentPaths",
-          "documentation":"<p>Retrieves all available parent paths for any object type such as node, leaf node, policy node, and index node objects. For more information about objects, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directorystructure.html\">Directory Structure</a>.</p>"
+          "documentation":"<p>Retrieves all available parent paths for any object type such as node, leaf node, policy node, and index node objects. For more information about objects, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directorystructure.html\">Directory Structure</a>.</p>" 
         },
         "GetObjectInformation":{
           "shape":"BatchGetObjectInformation",
@@ -2626,7 +2626,7 @@
           "shape":"BatchGetObjectAttributes",
           "documentation":"<p>Retrieves attributes within a facet that are associated with an object.</p>"
         },
-        "ListObjectParents":{"shape":"BatchListObjectParents"},
+        "ListObjectParents":{"shape":"BatchListObjectParents"}, 
         "ListObjectPolicies":{
           "shape":"BatchListObjectPolicies",
           "documentation":"<p>Returns policies attached to an object in pagination fashion.</p>"
@@ -2637,7 +2637,7 @@
         },
         "LookupPolicy":{
           "shape":"BatchLookupPolicy",
-          "documentation":"<p>Lists all policies from the root of the <a>Directory</a> to the object specified. If there are no policies present, an empty list is returned. If policies are present, and if some objects don't have the policies attached, it returns the <code>ObjectIdentifier</code> for such objects. If policies are present, it returns <code>ObjectIdentifier</code>, <code>policyId</code>, and <code>policyType</code>. Paths that don't lead to the root from the target object are ignored. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>"
+          "documentation":"<p>Lists all policies from the root of the <a>Directory</a> to the object specified. If there are no policies present, an empty list is returned. If policies are present, and if some objects don't have the policies attached, it returns the <code>ObjectIdentifier</code> for such objects. If policies are present, it returns <code>ObjectIdentifier</code>, <code>policyId</code>, and <code>policyType</code>. Paths that don't lead to the root from the target object are ignored. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>" 
         },
         "ListIndex":{
           "shape":"BatchListIndex",
@@ -2645,11 +2645,11 @@
         },
         "ListOutgoingTypedLinks":{
           "shape":"BatchListOutgoingTypedLinks",
-          "documentation":"<p>Returns a paginated list of all the outgoing <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+          "documentation":"<p>Returns a paginated list of all the outgoing <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
         },
         "ListIncomingTypedLinks":{
           "shape":"BatchListIncomingTypedLinks",
-          "documentation":"<p>Returns a paginated list of all the incoming <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+          "documentation":"<p>Returns a paginated list of all the incoming <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
         },
         "GetLinkAttributes":{
           "shape":"BatchGetLinkAttributes",
@@ -2739,7 +2739,7 @@
         },
         "ListObjectParentPaths":{
           "shape":"BatchListObjectParentPathsResponse",
-          "documentation":"<p>Retrieves all available parent paths for any object type such as node, leaf node, policy node, and index node objects. For more information about objects, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directorystructure.html\">Directory Structure</a>.</p>"
+          "documentation":"<p>Retrieves all available parent paths for any object type such as node, leaf node, policy node, and index node objects. For more information about objects, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directorystructure.html\">Directory Structure</a>.</p>" 
         },
         "ListObjectPolicies":{
           "shape":"BatchListObjectPoliciesResponse",
@@ -2751,7 +2751,7 @@
         },
         "LookupPolicy":{
           "shape":"BatchLookupPolicyResponse",
-          "documentation":"<p>Lists all policies from the root of the <a>Directory</a> to the object specified. If there are no policies present, an empty list is returned. If policies are present, and if some objects don't have the policies attached, it returns the <code>ObjectIdentifier</code> for such objects. If policies are present, it returns <code>ObjectIdentifier</code>, <code>policyId</code>, and <code>policyType</code>. Paths that don't lead to the root from the target object are ignored. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>"
+          "documentation":"<p>Lists all policies from the root of the <a>Directory</a> to the object specified. If there are no policies present, an empty list is returned. If policies are present, and if some objects don't have the policies attached, it returns the <code>ObjectIdentifier</code> for such objects. If policies are present, it returns <code>ObjectIdentifier</code>, <code>policyId</code>, and <code>policyType</code>. Paths that don't lead to the root from the target object are ignored. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>" 
         },
         "ListIndex":{
           "shape":"BatchListIndexResponse",
@@ -2759,17 +2759,17 @@
         },
         "ListOutgoingTypedLinks":{
           "shape":"BatchListOutgoingTypedLinksResponse",
-          "documentation":"<p>Returns a paginated list of all the outgoing <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+          "documentation":"<p>Returns a paginated list of all the outgoing <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
         },
         "ListIncomingTypedLinks":{
           "shape":"BatchListIncomingTypedLinksResponse",
-          "documentation":"<p>Returns a paginated list of all the incoming <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+          "documentation":"<p>Returns a paginated list of all the incoming <a>TypedLinkSpecifier</a> information for an object. It also supports filtering by typed link facet and identity attributes. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
         },
         "GetLinkAttributes":{
           "shape":"BatchGetLinkAttributesResponse",
           "documentation":"<p>The list of attributes to retrieve from the typed link.</p>"
-        },
-        "ListObjectParents":{"shape":"BatchListObjectParentsResponse"}
+        }, 
+        "ListObjectParents":{"shape":"BatchListObjectParentsResponse"} 
       },
       "documentation":"<p>Represents the output of a <code>BatchRead</code> success response operation.</p>"
     },
@@ -2924,7 +2924,7 @@
         },
         "CreateIndex":{
           "shape":"BatchCreateIndex",
-          "documentation":"<p>Creates an index object. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/indexing_search.htm\">Indexing and search</a> for more information.</p>"
+          "documentation":"<p>Creates an index object. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/indexing_search.htm\">Indexing and search</a> for more information.</p>" 
         },
         "AttachToIndex":{
           "shape":"BatchAttachToIndex",
@@ -2936,11 +2936,11 @@
         },
         "AttachTypedLink":{
           "shape":"BatchAttachTypedLink",
-          "documentation":"<p>Attaches a typed link to a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+          "documentation":"<p>Attaches a typed link to a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
         },
         "DetachTypedLink":{
           "shape":"BatchDetachTypedLink",
-          "documentation":"<p>Detaches a typed link from a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+          "documentation":"<p>Detaches a typed link from a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
         },
         "UpdateLinkAttributes":{
           "shape":"BatchUpdateLinkAttributes",
@@ -2994,7 +2994,7 @@
         },
         "CreateIndex":{
           "shape":"BatchCreateIndexResponse",
-          "documentation":"<p>Creates an index object. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/indexing_search.htm\">Indexing and search</a> for more information.</p>"
+          "documentation":"<p>Creates an index object. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/indexing_search.htm\">Indexing and search</a> for more information.</p>" 
         },
         "AttachToIndex":{
           "shape":"BatchAttachToIndexResponse",
@@ -3006,11 +3006,11 @@
         },
         "AttachTypedLink":{
           "shape":"BatchAttachTypedLinkResponse",
-          "documentation":"<p>Attaches a typed link to a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+          "documentation":"<p>Attaches a typed link to a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
         },
         "DetachTypedLink":{
           "shape":"BatchDetachTypedLinkResponse",
-          "documentation":"<p>Detaches a typed link from a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+          "documentation":"<p>Detaches a typed link from a specified source and target object. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
         },
         "UpdateLinkAttributes":{
           "shape":"BatchUpdateLinkAttributesResponse",
@@ -3139,7 +3139,7 @@
         },
         "ObjectType":{
           "shape":"ObjectType",
-          "documentation":"<p>Specifies whether a given object created from this facet is of type node, leaf node, policy or index.</p> <ul> <li> <p>Node: Can have multiple children but one parent.</p> </li> </ul> <ul> <li> <p>Leaf node: Cannot have children but can have multiple parents.</p> </li> </ul> <ul> <li> <p>Policy: Allows you to store a policy document and policy type. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p> </li> </ul> <ul> <li> <p>Index: Can be created with the Index API.</p> </li> </ul>"
+          "documentation":"<p>Specifies whether a given object created from this facet is of type node, leaf node, policy or index.</p> <ul> <li> <p>Node: Can have multiple children but one parent.</p> </li> </ul> <ul> <li> <p>Leaf node: Cannot have children but can have multiple parents.</p> </li> </ul> <ul> <li> <p>Policy: Allows you to store a policy document and policy type. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p> </li> </ul> <ul> <li> <p>Index: Can be created with the Index API.</p> </li> </ul>" 
         },
         "FacetStyle":{
           "shape":"FacetStyle",
@@ -3645,7 +3645,7 @@
           "documentation":"<p>There are two different styles that you can define on any given facet, <code>Static</code> and <code>Dynamic</code>. For static facets, all attributes must be defined in the schema. For dynamic facets, attributes can be defined during data plane operations.</p>"
         }
       },
-      "documentation":"<p>A structure that contains <code>Name</code>, <code>ARN</code>, <code>Attributes</code>, <code> <a>Rule</a>s</code>, and <code>ObjectTypes</code>. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_whatarefacets.html\">Facets</a> for more information.</p>"
+      "documentation":"<p>A structure that contains <code>Name</code>, <code>ARN</code>, <code>Attributes</code>, <code> <a>Rule</a>s</code>, and <code>ObjectTypes</code>. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_whatarefacets.html\">Facets</a> for more information.</p>" 
     },
     "FacetAlreadyExistsException":{
       "type":"structure",
@@ -3666,11 +3666,11 @@
         },
         "AttributeDefinition":{
           "shape":"FacetAttributeDefinition",
-          "documentation":"<p>A facet attribute consists of either a definition or a reference. This structure contains the attribute definition. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_attributereferences.html\">Attribute References</a> for more information.</p>"
+          "documentation":"<p>A facet attribute consists of either a definition or a reference. This structure contains the attribute definition. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_attributereferences.html\">Attribute References</a> for more information.</p>" 
         },
         "AttributeReference":{
           "shape":"FacetAttributeReference",
-          "documentation":"<p>An attribute reference that is associated with the attribute. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_attributereferences.html\">Attribute References</a> for more information.</p>"
+          "documentation":"<p>An attribute reference that is associated with the attribute. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_attributereferences.html\">Attribute References</a> for more information.</p>" 
         },
         "RequiredBehavior":{
           "shape":"RequiredAttributeBehavior",
@@ -3700,7 +3700,7 @@
           "documentation":"<p>Validation rules attached to the attribute definition.</p>"
         }
       },
-      "documentation":"<p>A facet attribute definition. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_attributereferences.html\">Attribute References</a> for more information.</p>"
+      "documentation":"<p>A facet attribute definition. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_attributereferences.html\">Attribute References</a> for more information.</p>" 
     },
     "FacetAttributeList":{
       "type":"list",
@@ -3715,11 +3715,11 @@
       "members":{
         "TargetFacetName":{
           "shape":"FacetName",
-          "documentation":"<p>The target facet name that is associated with the facet reference. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_attributereferences.html\">Attribute References</a> for more information.</p>"
+          "documentation":"<p>The target facet name that is associated with the facet reference. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_attributereferences.html\">Attribute References</a> for more information.</p>" 
         },
         "TargetAttributeName":{
           "shape":"AttributeName",
-          "documentation":"<p>The target attribute name that is associated with the facet reference. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_attributereferences.html\">Attribute References</a> for more information.</p>"
+          "documentation":"<p>The target attribute name that is associated with the facet reference. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_attributereferences.html\">Attribute References</a> for more information.</p>" 
         }
       },
       "documentation":"<p>The facet attribute reference that specifies the attribute definition that contains the attribute facet name and attribute name.</p>"
@@ -3876,7 +3876,7 @@
       "members":{
         "DirectoryArn":{
           "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) that is associated with the Directory where the typed link resides. For more information, see <a>arns</a> or <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>",
+          "documentation":"<p>The Amazon Resource Name (ARN) that is associated with the Directory where the typed link resides. For more information, see <a>arns</a> or <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>", 
           "location":"header",
           "locationName":"x-amz-data-partition"
         },
@@ -4034,7 +4034,7 @@
       "members":{
         "IdentityAttributeOrder":{
           "shape":"AttributeNameList",
-          "documentation":"<p>The order of identity attributes for the facet, from most significant to least significant. The ability to filter typed links considers the order that the attributes are defined on the typed link facet. When providing ranges to typed link selection, any inexact ranges must be specified at the end. Any attributes that do not have a range specified are presumed to match the entire range. Filters are interpreted in the order of the attributes on the typed link facet, not the order in which they are supplied to any API calls. For more information about identity attributes, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+          "documentation":"<p>The order of identity attributes for the facet, from most significant to least significant. The ability to filter typed links considers the order that the attributes are defined on the typed link facet. When providing ranges to typed link selection, any inexact ranges must be specified at the end. Any attributes that do not have a range specified are presumed to match the entire range. Filters are interpreted in the order of the attributes on the typed link facet, not the order in which they are supplied to any API calls. For more information about identity attributes, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
         }
       }
     },
@@ -4097,7 +4097,7 @@
       "members":{
         "Message":{"shape":"ExceptionMessage"}
       },
-      "documentation":"<p>Indicates that an attempt to make an attachment was invalid. For example, attaching two nodes with a link type that is not applicable to the nodes or attempting to apply a schema to a directory a second time.</p>",
+      "documentation":"<p>Indicates that an attempt to make an attachment was invalid. For example, attaching two nodes with a link type that is not applicable to the nodes or attempting to apply a schema to a directory a second time.</p>", 
       "error":{"httpStatusCode":400},
       "exception":true
     },
@@ -4151,7 +4151,7 @@
       "members":{
         "Message":{"shape":"ExceptionMessage"}
       },
-      "documentation":"<p>Indicates that limits are exceeded. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/limits.html\">Limits</a> for more information.</p>",
+      "documentation":"<p>Indicates that limits are exceeded. See <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/limits.html\">Limits</a> for more information.</p>", 
       "error":{"httpStatusCode":400},
       "exception":true
     },
@@ -4493,7 +4493,7 @@
         },
         "MaxResults":{
           "shape":"NumberResults",
-          "documentation":"<p>The maximum number of objects in a single page to retrieve from the index during a request. For more information, see <a href=\"http://docs.aws.amazon.com/clouddirectory/latest/developerguide/limits.html\">Amazon Cloud Directory Limits</a>.</p>"
+          "documentation":"<p>The maximum number of objects in a single page to retrieve from the index during a request. For more information, see <a href=\"http://docs.aws.amazon.com/clouddirectory/latest/developerguide/limits.html\">Amazon Cloud Directory Limits</a>.</p>" 
         },
         "NextToken":{
           "shape":"NextToken",
@@ -4716,10 +4716,10 @@
           "documentation":"<p>Represents the manner and timing in which the successful write or update of an object is reflected in a subsequent read operation of that same object.</p>",
           "location":"header",
           "locationName":"x-amz-consistency-level"
-        },
-        "IncludeAllLinksToEachParent":{
-          "shape":"Bool",
-          "documentation":"<p>When set to True, returns all <a>ListObjectParentsResponse$ParentLinks</a>. There could be multiple links between a parent-child pair.</p>"
+        }, 
+        "IncludeAllLinksToEachParent":{ 
+          "shape":"Bool", 
+          "documentation":"<p>When set to True, returns all <a>ListObjectParentsResponse$ParentLinks</a>. There could be multiple links between a parent-child pair.</p>" 
         }
       }
     },
@@ -4733,10 +4733,10 @@
         "NextToken":{
           "shape":"NextToken",
           "documentation":"<p>The pagination token.</p>"
-        },
-        "ParentLinks":{
-          "shape":"ObjectIdentifierAndLinkNameList",
-          "documentation":"<p>Returns a list of parent reference and LinkName Tuples.</p>"
+        }, 
+        "ParentLinks":{ 
+          "shape":"ObjectIdentifierAndLinkNameList", 
+          "documentation":"<p>Returns a list of parent reference and LinkName Tuples.</p>" 
         }
       }
     },
@@ -5050,7 +5050,7 @@
       "members":{
         "PolicyToPathList":{
           "shape":"PolicyToPathList",
-          "documentation":"<p>Provides list of path to policies. Policies contain <code>PolicyId</code>, <code>ObjectIdentifier</code>, and <code>PolicyType</code>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>"
+          "documentation":"<p>Provides list of path to policies. Policies contain <code>PolicyId</code>, <code>ObjectIdentifier</code>, and <code>PolicyType</code>. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>" 
         },
         "NextToken":{
           "shape":"NextToken",
@@ -5151,24 +5151,24 @@
       "member":{"shape":"ObjectAttributeUpdate"}
     },
     "ObjectIdentifier":{"type":"string"},
-    "ObjectIdentifierAndLinkNameList":{
-      "type":"list",
-      "member":{"shape":"ObjectIdentifierAndLinkNameTuple"}
-    },
-    "ObjectIdentifierAndLinkNameTuple":{
-      "type":"structure",
-      "members":{
-        "ObjectIdentifier":{
-          "shape":"ObjectIdentifier",
-          "documentation":"<p>The ID that is associated with the object.</p>"
-        },
-        "LinkName":{
-          "shape":"LinkName",
-          "documentation":"<p>The name of the link between the parent and the child object.</p>"
-        }
-      },
-      "documentation":"<p>A pair of ObjectIdentifier and LinkName.</p>"
-    },
+    "ObjectIdentifierAndLinkNameList":{ 
+      "type":"list", 
+      "member":{"shape":"ObjectIdentifierAndLinkNameTuple"} 
+    }, 
+    "ObjectIdentifierAndLinkNameTuple":{ 
+      "type":"structure", 
+      "members":{ 
+        "ObjectIdentifier":{ 
+          "shape":"ObjectIdentifier", 
+          "documentation":"<p>The ID that is associated with the object.</p>" 
+        }, 
+        "LinkName":{ 
+          "shape":"LinkName", 
+          "documentation":"<p>The name of the link between the parent and the child object.</p>" 
+        } 
+      }, 
+      "documentation":"<p>A pair of ObjectIdentifier and LinkName.</p>" 
+    }, 
     "ObjectIdentifierList":{
       "type":"list",
       "member":{"shape":"ObjectIdentifier"}
@@ -5192,7 +5192,7 @@
       "members":{
         "Selector":{
           "shape":"SelectorObjectReference",
-          "documentation":"<p>A path selector supports easy selection of an object by the parent/child links leading to it from the directory root. Use the link names from each parent/child link to construct the path. Path selectors start with a slash (/) and link names are separated by slashes. For more information about paths, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_access_objects.html\">Access Objects</a>. You can identify an object in one of the following ways:</p> <ul> <li> <p> <i>$ObjectIdentifier</i> - An object identifier is an opaque string provided by Amazon Cloud Directory. When creating objects, the system will provide you with the identifier of the created object. An object’s identifier is immutable and no two objects will ever share the same object identifier</p> </li> <li> <p> <i>/some/path</i> - Identifies the object based on path</p> </li> <li> <p> <i>#SomeBatchReference</i> - Identifies the object in a batch call</p> </li> </ul>"
+          "documentation":"<p>A path selector supports easy selection of an object by the parent/child links leading to it from the directory root. Use the link names from each parent/child link to construct the path. Path selectors start with a slash (/) and link names are separated by slashes. For more information about paths, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_access_objects.html\">Access Objects</a>. You can identify an object in one of the following ways:</p> <ul> <li> <p> <i>$ObjectIdentifier</i> - An object identifier is an opaque string provided by Amazon Cloud Directory. When creating objects, the system will provide you with the identifier of the created object. An object’s identifier is immutable and no two objects will ever share the same object identifier</p> </li> <li> <p> <i>/some/path</i> - Identifies the object based on path</p> </li> <li> <p> <i>#SomeBatchReference</i> - Identifies the object in a batch call</p> </li> </ul>" 
         }
       },
       "documentation":"<p>The reference that identifies an object.</p>"
@@ -5241,7 +5241,7 @@
           "documentation":"<p>The type of policy that can be associated with <code>PolicyAttachment</code>.</p>"
         }
       },
-      "documentation":"<p>Contains the <code>PolicyType</code>, <code>PolicyId</code>, and the <code>ObjectIdentifier</code> to which it is attached. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>"
+      "documentation":"<p>Contains the <code>PolicyType</code>, <code>PolicyId</code>, and the <code>ObjectIdentifier</code> to which it is attached. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/key_concepts_directory.html#key_concepts_policies\">Policies</a>.</p>" 
     },
     "PolicyAttachmentList":{
       "type":"list",
@@ -5458,7 +5458,7 @@
       "members":{
         "SchemaArn":{
           "shape":"Arn",
-          "documentation":"<p>The ARN of the schema that contains the facet with no minor component. See <a>arns</a> and <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_inplaceschemaupgrade.html\">In-Place Schema Upgrade</a> for a description of when to provide minor versions.</p>"
+          "documentation":"<p>The ARN of the schema that contains the facet with no minor component. See <a>arns</a> and <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/schemas_inplaceschemaupgrade.html\">In-Place Schema Upgrade</a> for a description of when to provide minor versions.</p>" 
         },
         "FacetName":{
           "shape":"FacetName",
@@ -5589,7 +5589,7 @@
           "documentation":"<p>The attribute value to terminate the range at.</p>"
         }
       },
-      "documentation":"<p>A range of attribute values. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_range_filters.html\">Range Filters</a>.</p>"
+      "documentation":"<p>A range of attribute values. For more information, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_range_filters.html\">Range Filters</a>.</p>" 
     },
     "TypedLinkAttributeDefinition":{
       "type":"structure",
@@ -5832,7 +5832,7 @@
       "members":{
         "DirectoryArn":{
           "shape":"Arn",
-          "documentation":"<p>The Amazon Resource Name (ARN) that is associated with the Directory where the updated typed link resides. For more information, see <a>arns</a> or <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>",
+          "documentation":"<p>The Amazon Resource Name (ARN) that is associated with the Directory where the updated typed link resides. For more information, see <a>arns</a> or <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>", 
           "location":"header",
           "locationName":"x-amz-data-partition"
         },
@@ -5937,7 +5937,7 @@
         },
         "IdentityAttributeOrder":{
           "shape":"AttributeNameList",
-          "documentation":"<p>The order of identity attributes for the facet, from most significant to least significant. The ability to filter typed links considers the order that the attributes are defined on the typed link facet. When providing ranges to a typed link selection, any inexact ranges must be specified at the end. Any attributes that do not have a range specified are presumed to match the entire range. Filters are interpreted in the order of the attributes on the typed link facet, not the order in which they are supplied to any API calls. For more information about identity attributes, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>"
+          "documentation":"<p>The order of identity attributes for the facet, from most significant to least significant. The ability to filter typed links considers the order that the attributes are defined on the typed link facet. When providing ranges to a typed link selection, any inexact ranges must be specified at the end. Any attributes that do not have a range specified are presumed to match the entire range. Filters are interpreted in the order of the attributes on the typed link facet, not the order in which they are supplied to any API calls. For more information about identity attributes, see <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/directory_objects_links.html#directory_objects_links_typedlink\">Typed Links</a>.</p>" 
         }
       }
     },
@@ -6031,5 +6031,5 @@
       "pattern":"^[a-zA-Z0-9._-]*$"
     }
   },
-  "documentation":"<fullname>Amazon Cloud Directory</fullname> <p>Amazon Cloud Directory is a component of the AWS Directory Service that simplifies the development and management of cloud-scale web, mobile, and IoT applications. This guide describes the Cloud Directory operations that you can call programmatically and includes detailed information on data types and errors. For information about Cloud Directory features, see <a href=\"https://aws.amazon.com/directoryservice/\">AWS Directory Service</a> and the <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/what_is_cloud_directory.html\">Amazon Cloud Directory Developer Guide</a>.</p>"
+  "documentation":"<fullname>Amazon Cloud Directory</fullname> <p>Amazon Cloud Directory is a component of the AWS Directory Service that simplifies the development and management of cloud-scale web, mobile, and IoT applications. This guide describes the Cloud Directory operations that you can call programmatically and includes detailed information on data types and errors. For information about Cloud Directory features, see <a href=\"https://aws.amazon.com/directoryservice/\">AWS Directory Service</a> and the <a href=\"https://docs.aws.amazon.com/clouddirectory/latest/developerguide/what_is_cloud_directory.html\">Amazon Cloud Directory Developer Guide</a>.</p>" 
 }

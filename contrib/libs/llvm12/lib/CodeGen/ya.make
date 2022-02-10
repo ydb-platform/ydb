@@ -15,18 +15,18 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12
-    contrib/libs/llvm12/include
-    contrib/libs/llvm12/lib/Analysis
-    contrib/libs/llvm12/lib/Bitcode/Reader
-    contrib/libs/llvm12/lib/Bitcode/Writer
-    contrib/libs/llvm12/lib/IR
-    contrib/libs/llvm12/lib/MC
-    contrib/libs/llvm12/lib/ProfileData
-    contrib/libs/llvm12/lib/Support
-    contrib/libs/llvm12/lib/Target
-    contrib/libs/llvm12/lib/Transforms/Scalar
-    contrib/libs/llvm12/lib/Transforms/Utils
+    contrib/libs/llvm12 
+    contrib/libs/llvm12/include 
+    contrib/libs/llvm12/lib/Analysis 
+    contrib/libs/llvm12/lib/Bitcode/Reader 
+    contrib/libs/llvm12/lib/Bitcode/Writer 
+    contrib/libs/llvm12/lib/IR 
+    contrib/libs/llvm12/lib/MC 
+    contrib/libs/llvm12/lib/ProfileData 
+    contrib/libs/llvm12/lib/Support 
+    contrib/libs/llvm12/lib/Target 
+    contrib/libs/llvm12/lib/Transforms/Scalar 
+    contrib/libs/llvm12/lib/Transforms/Utils 
 )
 
 ADDINCL(
@@ -42,7 +42,7 @@ SRCS(
     AllocationOrder.cpp
     Analysis.cpp
     AtomicExpandPass.cpp
-    BasicBlockSections.cpp
+    BasicBlockSections.cpp 
     BasicTargetTransformInfo.cpp
     BranchFolding.cpp
     BranchRelaxation.cpp
@@ -53,7 +53,7 @@ SRCS(
     CalcSpillWeights.cpp
     CallingConvLower.cpp
     CodeGen.cpp
-    CodeGenPassBuilder.cpp
+    CodeGenPassBuilder.cpp 
     CodeGenPrepare.cpp
     CommandFlags.cpp
     CriticalAntiDepBreaker.cpp
@@ -90,9 +90,9 @@ SRCS(
     LatencyPriorityQueue.cpp
     LazyMachineBlockFrequencyInfo.cpp
     LexicalScopes.cpp
-    LiveDebugValues/InstrRefBasedImpl.cpp
-    LiveDebugValues/LiveDebugValues.cpp
-    LiveDebugValues/VarLocBasedImpl.cpp
+    LiveDebugValues/InstrRefBasedImpl.cpp 
+    LiveDebugValues/LiveDebugValues.cpp 
+    LiveDebugValues/VarLocBasedImpl.cpp 
     LiveDebugVariables.cpp
     LiveInterval.cpp
     LiveIntervalCalc.cpp
@@ -121,7 +121,7 @@ SRCS(
     MachineBlockPlacement.cpp
     MachineBranchProbabilityInfo.cpp
     MachineCSE.cpp
-    MachineCheckDebugify.cpp
+    MachineCheckDebugify.cpp 
     MachineCombiner.cpp
     MachineCopyPropagation.cpp
     MachineDebugify.cpp
@@ -131,7 +131,7 @@ SRCS(
     MachineFunction.cpp
     MachineFunctionPass.cpp
     MachineFunctionPrinterPass.cpp
-    MachineFunctionSplitter.cpp
+    MachineFunctionSplitter.cpp 
     MachineInstr.cpp
     MachineInstrBundle.cpp
     MachineLICM.cpp
@@ -142,7 +142,7 @@ SRCS(
     MachineOperand.cpp
     MachineOptimizationRemarkEmitter.cpp
     MachineOutliner.cpp
-    MachinePassManager.cpp
+    MachinePassManager.cpp 
     MachinePipeliner.cpp
     MachinePostDominators.cpp
     MachineRegionInfo.cpp
@@ -151,13 +151,13 @@ SRCS(
     MachineScheduler.cpp
     MachineSink.cpp
     MachineSizeOpts.cpp
-    MachineStableHash.cpp
+    MachineStableHash.cpp 
     MachineStripDebug.cpp
     MachineTraceMetrics.cpp
     MachineVerifier.cpp
     MacroFusion.cpp
     ModuloSchedule.cpp
-    MultiHazardRecognizer.cpp
+    MultiHazardRecognizer.cpp 
     NonRelocatableStringpool.cpp
     OptimizePHIs.cpp
     PHIElimination.cpp
@@ -170,7 +170,7 @@ SRCS(
     PreISelIntrinsicLowering.cpp
     ProcessImplicitDefs.cpp
     PrologEpilogInserter.cpp
-    PseudoProbeInserter.cpp
+    PseudoProbeInserter.cpp 
     PseudoSourceValue.cpp
     RDFGraph.cpp
     RDFLiveness.cpp

@@ -379,7 +379,7 @@ namespace orc {
     fileFooter.set_rowindexstride(
                           static_cast<uint32_t>(options.getRowIndexStride()));
     fileFooter.set_writer(writerId);
-    fileFooter.set_softwareversion(ORC_VERSION);
+    fileFooter.set_softwareversion(ORC_VERSION); 
 
     uint32_t index = 0;
     buildFooterType(type, fileFooter, index);

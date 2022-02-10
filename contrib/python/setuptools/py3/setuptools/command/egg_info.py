@@ -8,7 +8,7 @@ from distutils.util import convert_path
 from distutils import log
 import distutils.errors
 import distutils.filelist
-import functools
+import functools 
 import os
 import re
 import sys
@@ -28,11 +28,11 @@ from pkg_resources import (
 import setuptools.unicode_utils as unicode_utils
 from setuptools.glob import glob
 
-from setuptools.extern import packaging
-from setuptools import SetuptoolsDeprecationWarning
+from setuptools.extern import packaging 
+from setuptools import SetuptoolsDeprecationWarning 
 
-
-def translate_pattern(glob):  # noqa: C901  # is too complex (14)  # FIXME
+ 
+def translate_pattern(glob):  # noqa: C901  # is too complex (14)  # FIXME 
     """
     Translate a file path glob like '*.txt' in to a regular expression.
     This differs from fnmatch.translate which allows wildcards to match
@@ -111,42 +111,42 @@ def translate_pattern(glob):  # noqa: C901  # is too complex (14)  # FIXME
         if not last_chunk:
             pat += sep
 
-    pat += r'\Z'
-    return re.compile(pat, flags=re.MULTILINE | re.DOTALL)
+    pat += r'\Z' 
+    return re.compile(pat, flags=re.MULTILINE | re.DOTALL) 
 
 
-class InfoCommon:
-    tag_build = None
-    tag_date = None
-
-    @property
-    def name(self):
-        return safe_name(self.distribution.get_name())
-
-    def tagged_version(self):
-        return safe_version(self._maybe_tag(self.distribution.get_version()))
-
-    def _maybe_tag(self, version):
-        """
-        egg_info may be called more than once for a distribution,
-        in which case the version string already contains all tags.
-        """
-        return (
-            version if self.vtags and version.endswith(self.vtags)
-            else version + self.vtags
-        )
-
-    def tags(self):
-        version = ''
-        if self.tag_build:
-            version += self.tag_build
-        if self.tag_date:
-            version += time.strftime("-%Y%m%d")
-        return version
-    vtags = property(tags)
-
-
-class egg_info(InfoCommon, Command):
+class InfoCommon: 
+    tag_build = None 
+    tag_date = None 
+ 
+    @property 
+    def name(self): 
+        return safe_name(self.distribution.get_name()) 
+ 
+    def tagged_version(self): 
+        return safe_version(self._maybe_tag(self.distribution.get_version())) 
+ 
+    def _maybe_tag(self, version): 
+        """ 
+        egg_info may be called more than once for a distribution, 
+        in which case the version string already contains all tags. 
+        """ 
+        return ( 
+            version if self.vtags and version.endswith(self.vtags) 
+            else version + self.vtags 
+        ) 
+ 
+    def tags(self): 
+        version = '' 
+        if self.tag_build: 
+            version += self.tag_build 
+        if self.tag_date: 
+            version += time.strftime("-%Y%m%d") 
+        return version 
+    vtags = property(tags) 
+ 
+ 
+class egg_info(InfoCommon, Command): 
     description = "create a distribution's .egg-info directory"
 
     user_options = [
@@ -163,9 +163,9 @@ class egg_info(InfoCommon, Command):
     }
 
     def initialize_options(self):
-        self.egg_base = None
+        self.egg_base = None 
         self.egg_name = None
-        self.egg_info = None
+        self.egg_info = None 
         self.egg_version = None
         self.broken_egg_info = False
 
@@ -187,7 +187,7 @@ class egg_info(InfoCommon, Command):
         build tag. Install build keys in a deterministic order
         to avoid arbitrary reordering on subsequent builds.
         """
-        egg_info = collections.OrderedDict()
+        egg_info = collections.OrderedDict() 
         # follow the order these keys would have been added
         # when PYTHONHASHSEED=0
         egg_info['tag_build'] = self.tags()
@@ -195,11 +195,11 @@ class egg_info(InfoCommon, Command):
         edit_config(filename, dict(egg_info=egg_info))
 
     def finalize_options(self):
-        # Note: we need to capture the current value returned
-        # by `self.tagged_version()`, so we can later update
-        # `self.distribution.metadata.version` without
-        # repercussions.
-        self.egg_name = self.name
+        # Note: we need to capture the current value returned 
+        # by `self.tagged_version()`, so we can later update 
+        # `self.distribution.metadata.version` without 
+        # repercussions. 
+        self.egg_name = self.name 
         self.egg_version = self.tagged_version()
         parsed_version = parse_version(self.egg_version)
 
@@ -211,11 +211,11 @@ class egg_info(InfoCommon, Command):
             list(
                 parse_requirements(spec % (self.egg_name, self.egg_version))
             )
-        except ValueError as e:
+        except ValueError as e: 
             raise distutils.errors.DistutilsOptionError(
                 "Invalid distribution name or version syntax: %s-%s" %
                 (self.egg_name, self.egg_version)
-            ) from e
+            ) from e 
 
         if self.egg_base is None:
             dirs = self.distribution.package_dir
@@ -270,7 +270,7 @@ class egg_info(InfoCommon, Command):
         to the file.
         """
         log.info("writing %s to %s", what, filename)
-        data = data.encode("utf-8")
+        data = data.encode("utf-8") 
         if not self.dry_run:
             f = open(filename, 'wb')
             f.write(data)
@@ -284,7 +284,7 @@ class egg_info(InfoCommon, Command):
 
     def run(self):
         self.mkpath(self.egg_info)
-        os.utime(self.egg_info, None)
+        os.utime(self.egg_info, None) 
         installer = self.distribution.fetch_build_egg
         for ep in iter_entry_points('egg_info.writers'):
             ep.require(installer=installer)
@@ -333,74 +333,74 @@ class FileList(_FileList):
         # patterns, (dir and patterns), or (dir_pattern).
         (action, patterns, dir, dir_pattern) = self._parse_template_line(line)
 
-        action_map = {
-            'include': self.include,
-            'exclude': self.exclude,
-            'global-include': self.global_include,
-            'global-exclude': self.global_exclude,
-            'recursive-include': functools.partial(
-                self.recursive_include, dir,
-            ),
-            'recursive-exclude': functools.partial(
-                self.recursive_exclude, dir,
-            ),
-            'graft': self.graft,
-            'prune': self.prune,
-        }
-        log_map = {
-            'include': "warning: no files found matching '%s'",
-            'exclude': (
-                "warning: no previously-included files found "
-                "matching '%s'"
-            ),
-            'global-include': (
-                "warning: no files found matching '%s' "
-                "anywhere in distribution"
-            ),
-            'global-exclude': (
-                "warning: no previously-included files matching "
-                "'%s' found anywhere in distribution"
-            ),
-            'recursive-include': (
-                "warning: no files found matching '%s' "
-                "under directory '%s'"
-            ),
-            'recursive-exclude': (
-                "warning: no previously-included files matching "
-                "'%s' found under directory '%s'"
-            ),
-            'graft': "warning: no directories found matching '%s'",
-            'prune': "no previously-included directories found matching '%s'",
-        }
-
-        try:
-            process_action = action_map[action]
-        except KeyError:
-            raise DistutilsInternalError(
-                "this cannot happen: invalid action '{action!s}'".
-                format(action=action),
-            )
-
+        action_map = { 
+            'include': self.include, 
+            'exclude': self.exclude, 
+            'global-include': self.global_include, 
+            'global-exclude': self.global_exclude, 
+            'recursive-include': functools.partial( 
+                self.recursive_include, dir, 
+            ), 
+            'recursive-exclude': functools.partial( 
+                self.recursive_exclude, dir, 
+            ), 
+            'graft': self.graft, 
+            'prune': self.prune, 
+        } 
+        log_map = { 
+            'include': "warning: no files found matching '%s'", 
+            'exclude': ( 
+                "warning: no previously-included files found " 
+                "matching '%s'" 
+            ), 
+            'global-include': ( 
+                "warning: no files found matching '%s' " 
+                "anywhere in distribution" 
+            ), 
+            'global-exclude': ( 
+                "warning: no previously-included files matching " 
+                "'%s' found anywhere in distribution" 
+            ), 
+            'recursive-include': ( 
+                "warning: no files found matching '%s' " 
+                "under directory '%s'" 
+            ), 
+            'recursive-exclude': ( 
+                "warning: no previously-included files matching " 
+                "'%s' found under directory '%s'" 
+            ), 
+            'graft': "warning: no directories found matching '%s'", 
+            'prune': "no previously-included directories found matching '%s'", 
+        } 
+ 
+        try: 
+            process_action = action_map[action] 
+        except KeyError: 
+            raise DistutilsInternalError( 
+                "this cannot happen: invalid action '{action!s}'". 
+                format(action=action), 
+            ) 
+ 
         # OK, now we know that the action is valid and we have the
         # right number of words on the line for that action -- so we
         # can proceed with minimal error-checking.
 
-        action_is_recursive = action.startswith('recursive-')
-        if action in {'graft', 'prune'}:
-            patterns = [dir_pattern]
-        extra_log_args = (dir, ) if action_is_recursive else ()
-        log_tmpl = log_map[action]
+        action_is_recursive = action.startswith('recursive-') 
+        if action in {'graft', 'prune'}: 
+            patterns = [dir_pattern] 
+        extra_log_args = (dir, ) if action_is_recursive else () 
+        log_tmpl = log_map[action] 
 
-        self.debug_print(
-            ' '.join(
-                [action] +
-                ([dir] if action_is_recursive else []) +
-                patterns,
-            )
-        )
-        for pattern in patterns:
-            if not process_action(pattern):
-                log.warn(log_tmpl, pattern, *extra_log_args)
+        self.debug_print( 
+            ' '.join( 
+                [action] + 
+                ([dir] if action_is_recursive else []) + 
+                patterns, 
+            ) 
+        ) 
+        for pattern in patterns: 
+            if not process_action(pattern): 
+                log.warn(log_tmpl, pattern, *extra_log_args) 
 
     def _remove_files(self, predicate):
         """
@@ -541,7 +541,7 @@ class manifest_maker(sdist):
         self.add_defaults()
         if os.path.exists(self.template):
             self.read_template()
-        self.add_license_files()
+        self.add_license_files() 
         self.prune_file_list()
         self.filelist.sort()
         self.filelist.remove_duplicates()
@@ -583,22 +583,22 @@ class manifest_maker(sdist):
             self.filelist.extend(rcfiles)
         elif os.path.exists(self.manifest):
             self.read_manifest()
-
-        if os.path.exists("setup.py"):
-            # setup.py should be included by default, even if it's not
-            # the script called to create the sdist
-            self.filelist.append("setup.py")
-
+ 
+        if os.path.exists("setup.py"): 
+            # setup.py should be included by default, even if it's not 
+            # the script called to create the sdist 
+            self.filelist.append("setup.py") 
+ 
         ei_cmd = self.get_finalized_command('egg_info')
         self.filelist.graft(ei_cmd.egg_info)
 
-    def add_license_files(self):
-        license_files = self.distribution.metadata.license_files or []
-        for lf in license_files:
-            log.info("adding license file '%s'", lf)
-            pass
-        self.filelist.extend(license_files)
-
+    def add_license_files(self): 
+        license_files = self.distribution.metadata.license_files or [] 
+        for lf in license_files: 
+            log.info("adding license file '%s'", lf) 
+            pass 
+        self.filelist.extend(license_files) 
+ 
     def prune_file_list(self):
         build = self.get_finalized_command('build')
         base_dir = self.distribution.get_fullname()
@@ -608,28 +608,28 @@ class manifest_maker(sdist):
         self.filelist.exclude_pattern(r'(^|' + sep + r')(RCS|CVS|\.svn)' + sep,
                                       is_regex=1)
 
-    def _safe_data_files(self, build_py):
-        """
-        The parent class implementation of this method
-        (``sdist``) will try to include data files, which
-        might cause recursion problems when
-        ``include_package_data=True``.
+    def _safe_data_files(self, build_py): 
+        """ 
+        The parent class implementation of this method 
+        (``sdist``) will try to include data files, which 
+        might cause recursion problems when 
+        ``include_package_data=True``. 
 
-        Therefore, avoid triggering any attempt of
-        analyzing/building the manifest again.
-        """
-        if hasattr(build_py, 'get_data_files_without_manifest'):
-            return build_py.get_data_files_without_manifest()
-
-        warnings.warn(
-            "Custom 'build_py' does not implement "
-            "'get_data_files_without_manifest'.\nPlease extend command classes"
-            " from setuptools instead of distutils.",
-            SetuptoolsDeprecationWarning
-        )
-        return build_py.get_data_files()
-
-
+        Therefore, avoid triggering any attempt of 
+        analyzing/building the manifest again. 
+        """ 
+        if hasattr(build_py, 'get_data_files_without_manifest'): 
+            return build_py.get_data_files_without_manifest() 
+ 
+        warnings.warn( 
+            "Custom 'build_py' does not implement " 
+            "'get_data_files_without_manifest'.\nPlease extend command classes" 
+            " from setuptools instead of distutils.", 
+            SetuptoolsDeprecationWarning 
+        ) 
+        return build_py.get_data_files() 
+ 
+ 
 def write_file(filename, contents):
     """Create a file with the specified name and write 'contents' (a
     sequence of strings without line terminators) to it.
@@ -649,7 +649,7 @@ def write_pkg_info(cmd, basename, filename):
         metadata = cmd.distribution.metadata
         metadata.version, oldver = cmd.egg_version, metadata.version
         metadata.name, oldname = cmd.egg_name, metadata.name
-
+ 
         try:
             # write unescaped data to PKG-INFO, so older pkg_resources
             # can still parse it
@@ -672,16 +672,16 @@ def warn_depends_obsolete(cmd, basename, filename):
 
 def _write_requirements(stream, reqs):
     lines = yield_lines(reqs or ())
-
-    def append_cr(line):
-        return line + '\n'
+ 
+    def append_cr(line): 
+        return line + '\n' 
     lines = map(append_cr, lines)
     stream.writelines(lines)
 
 
 def write_requirements(cmd, basename, filename):
     dist = cmd.distribution
-    data = io.StringIO()
+    data = io.StringIO() 
     _write_requirements(data, dist.install_requires)
     extras_require = dist.extras_require or {}
     for extra in sorted(extras_require):
@@ -691,7 +691,7 @@ def write_requirements(cmd, basename, filename):
 
 
 def write_setup_requirements(cmd, basename, filename):
-    data = io.StringIO()
+    data = io.StringIO() 
     _write_requirements(data, cmd.distribution.setup_requires)
     cmd.write_or_delete_file("setup-requirements", filename, data.getvalue())
 
@@ -721,12 +721,12 @@ def write_arg(cmd, basename, filename, force=False):
 def write_entries(cmd, basename, filename):
     ep = cmd.distribution.entry_points
 
-    if isinstance(ep, str) or ep is None:
+    if isinstance(ep, str) or ep is None: 
         data = ep
     elif ep is not None:
         data = []
         for section, contents in sorted(ep.items()):
-            if not isinstance(contents, str):
+            if not isinstance(contents, str): 
                 contents = EntryPoint.parse_group(section, contents)
                 contents = '\n'.join(sorted(map(str, contents.values())))
             data.append('[%s]\n%s\n\n' % (section, contents))
@@ -740,8 +740,8 @@ def get_pkg_info_revision():
     Get a -r### off of PKG-INFO Version in case this is an sdist of
     a subversion revision.
     """
-    warnings.warn(
-        "get_pkg_info_revision is deprecated.", EggInfoDeprecationWarning)
+    warnings.warn( 
+        "get_pkg_info_revision is deprecated.", EggInfoDeprecationWarning) 
     if os.path.exists('PKG-INFO'):
         with io.open('PKG-INFO') as f:
             for line in f:
@@ -749,7 +749,7 @@ def get_pkg_info_revision():
                 if match:
                     return int(match.group(1))
     return 0
-
-
-class EggInfoDeprecationWarning(SetuptoolsDeprecationWarning):
-    """Deprecated behavior warning for EggInfo, bypassing suppression."""
+ 
+ 
+class EggInfoDeprecationWarning(SetuptoolsDeprecationWarning): 
+    """Deprecated behavior warning for EggInfo, bypassing suppression.""" 

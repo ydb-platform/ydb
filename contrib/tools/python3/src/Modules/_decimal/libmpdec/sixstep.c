@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2020 Stefan Krah. All rights reserved.
+ * Copyright (c) 2008-2020 Stefan Krah. All rights reserved. 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -27,15 +27,15 @@
 
 
 #include "mpdecimal.h"
-
-#include <assert.h>
+ 
+#include <assert.h> 
 #include <stdio.h>
-
+ 
 #include "bits.h"
-#include "constants.h"
+#include "constants.h" 
 #include "difradix2.h"
 #include "numbertheory.h"
-#include "sixstep.h"
+#include "sixstep.h" 
 #include "transpose.h"
 #include "umodarith.h"
 

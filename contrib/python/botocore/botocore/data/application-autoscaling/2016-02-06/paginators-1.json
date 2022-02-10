@@ -17,12 +17,12 @@
       "output_token": "NextToken",
       "limit_key": "MaxResults",
       "result_key": "ScalingPolicies"
-    },
-    "DescribeScheduledActions": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "ScheduledActions"
+    }, 
+    "DescribeScheduledActions": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "output_token": "NextToken", 
+      "result_key": "ScheduledActions" 
     }
   }
 }

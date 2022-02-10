@@ -20,8 +20,8 @@
 #ifndef LLVM_ANALYSIS_CAPTURETRACKING_H
 #define LLVM_ANALYSIS_CAPTURETRACKING_H
 
-#include "llvm/ADT/DenseMap.h"
-
+#include "llvm/ADT/DenseMap.h" 
+ 
 namespace llvm {
 
   class Value;
@@ -103,12 +103,12 @@ namespace llvm {
   /// is zero, a default value is assumed.
   void PointerMayBeCaptured(const Value *V, CaptureTracker *Tracker,
                             unsigned MaxUsesToExplore = 0);
-
-  /// Returns true if the pointer is to a function-local object that never
-  /// escapes from the function.
-  bool isNonEscapingLocalObject(
-      const Value *V,
-      SmallDenseMap<const Value *, bool, 8> *IsCapturedCache = nullptr);
+ 
+  /// Returns true if the pointer is to a function-local object that never 
+  /// escapes from the function. 
+  bool isNonEscapingLocalObject( 
+      const Value *V, 
+      SmallDenseMap<const Value *, bool, 8> *IsCapturedCache = nullptr); 
 } // end namespace llvm
 
 #endif

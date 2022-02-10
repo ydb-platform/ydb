@@ -66,7 +66,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Transforms/Utils/FixIrreducible.h"
+#include "llvm/Transforms/Utils/FixIrreducible.h" 
 #include "llvm/ADT/SCCIterator.h"
 #include "llvm/Analysis/LoopIterator.h"
 #include "llvm/InitializePasses.h"
@@ -105,7 +105,7 @@ FunctionPass *llvm::createFixIrreduciblePass() { return new FixIrreducible(); }
 INITIALIZE_PASS_BEGIN(FixIrreducible, "fix-irreducible",
                       "Convert irreducible control-flow into natural loops",
                       false /* Only looks at CFG */, false /* Analysis Pass */)
-INITIALIZE_PASS_DEPENDENCY(LowerSwitchLegacyPass)
+INITIALIZE_PASS_DEPENDENCY(LowerSwitchLegacyPass) 
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_END(FixIrreducible, "fix-irreducible",
@@ -305,7 +305,7 @@ static bool makeReducible(LoopInfo &LI, DominatorTree &DT, Graph &&G) {
   return Changed;
 }
 
-static bool FixIrreducibleImpl(Function &F, LoopInfo &LI, DominatorTree &DT) {
+static bool FixIrreducibleImpl(Function &F, LoopInfo &LI, DominatorTree &DT) { 
   LLVM_DEBUG(dbgs() << "===== Fix irreducible control-flow in function: "
                     << F.getName() << "\n");
 
@@ -317,10 +317,10 @@ static bool FixIrreducibleImpl(Function &F, LoopInfo &LI, DominatorTree &DT) {
 
   // Any SCCs reduced are now already in the list of top-level loops, so simply
   // add them all to the worklist.
-  append_range(WorkList, LI);
+  append_range(WorkList, LI); 
 
   while (!WorkList.empty()) {
-    auto L = WorkList.pop_back_val();
+    auto L = WorkList.pop_back_val(); 
     LLVM_DEBUG(dbgs() << "visiting loop with header "
                       << L->getHeader()->getName() << "\n");
     Changed |= makeReducible(LI, DT, *L);
@@ -331,21 +331,21 @@ static bool FixIrreducibleImpl(Function &F, LoopInfo &LI, DominatorTree &DT) {
 
   return Changed;
 }
-
-bool FixIrreducible::runOnFunction(Function &F) {
-  auto &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-  auto &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-  return FixIrreducibleImpl(F, LI, DT);
-}
-
-PreservedAnalyses FixIrreduciblePass::run(Function &F,
-                                          FunctionAnalysisManager &AM) {
-  auto &LI = AM.getResult<LoopAnalysis>(F);
-  auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
-  if (!FixIrreducibleImpl(F, LI, DT))
-    return PreservedAnalyses::all();
-  PreservedAnalyses PA;
-  PA.preserve<LoopAnalysis>();
-  PA.preserve<DominatorTreeAnalysis>();
-  return PA;
-}
+ 
+bool FixIrreducible::runOnFunction(Function &F) { 
+  auto &LI = getAnalysis<LoopInfoWrapperPass>().getLoopInfo(); 
+  auto &DT = getAnalysis<DominatorTreeWrapperPass>().getDomTree(); 
+  return FixIrreducibleImpl(F, LI, DT); 
+} 
+ 
+PreservedAnalyses FixIrreduciblePass::run(Function &F, 
+                                          FunctionAnalysisManager &AM) { 
+  auto &LI = AM.getResult<LoopAnalysis>(F); 
+  auto &DT = AM.getResult<DominatorTreeAnalysis>(F); 
+  if (!FixIrreducibleImpl(F, LI, DT)) 
+    return PreservedAnalyses::all(); 
+  PreservedAnalyses PA; 
+  PA.preserve<LoopAnalysis>(); 
+  PA.preserve<DominatorTreeAnalysis>(); 
+  return PA; 
+} 

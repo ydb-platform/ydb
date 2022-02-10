@@ -241,7 +241,7 @@ class Charset:
         self.output_codec = CODEC_MAP.get(self.output_charset,
                                           self.output_charset)
 
-    def __repr__(self):
+    def __repr__(self): 
         return self.input_charset.lower()
 
     def __eq__(self, other):

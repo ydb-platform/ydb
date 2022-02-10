@@ -15,13 +15,13 @@ import os
 import re
 import socket
 import struct
-import sys
-import tempfile
+import sys 
+import tempfile 
 import warnings
-import zipfile
-from collections import OrderedDict
-from urllib3.util import make_headers
-from urllib3.util import parse_url
+import zipfile 
+from collections import OrderedDict 
+from urllib3.util import make_headers 
+from urllib3.util import parse_url 
 
 from .__version__ import __version__
 from . import certs
@@ -29,9 +29,9 @@ from . import certs
 from ._internal_utils import to_native_string
 from .compat import parse_http_list as _parse_list_header
 from .compat import (
-    quote, urlparse, bytes, str, unquote, getproxies,
+    quote, urlparse, bytes, str, unquote, getproxies, 
     proxy_bypass, urlunparse, basestring, integer_types, is_py3,
-    proxy_bypass_environment, getproxies_environment, Mapping)
+    proxy_bypass_environment, getproxies_environment, Mapping) 
 from .cookies import cookiejar_from_dict
 from .structures import CaseInsensitiveDict
 from .exceptions import (
@@ -41,33 +41,33 @@ NETRC_FILES = ('.netrc', '_netrc')
 
 DEFAULT_CA_BUNDLE_PATH = certs.where()
 
-DEFAULT_PORTS = {'http': 80, 'https': 443}
+DEFAULT_PORTS = {'http': 80, 'https': 443} 
 
-# Ensure that ', ' is used to preserve previous delimiter behavior.
-DEFAULT_ACCEPT_ENCODING = ", ".join(
-    re.split(r",\s*", make_headers(accept_encoding=True)["accept-encoding"])
-)
-
-
-if sys.platform == 'win32':
+# Ensure that ', ' is used to preserve previous delimiter behavior. 
+DEFAULT_ACCEPT_ENCODING = ", ".join( 
+    re.split(r",\s*", make_headers(accept_encoding=True)["accept-encoding"]) 
+) 
+ 
+ 
+if sys.platform == 'win32': 
     # provide a proxy_bypass version on Windows without DNS lookups
 
     def proxy_bypass_registry(host):
         try:
-            if is_py3:
-                import winreg
-            else:
-                import _winreg as winreg
-        except ImportError:
-            return False
-
-        try:
+            if is_py3: 
+                import winreg 
+            else: 
+                import _winreg as winreg 
+        except ImportError: 
+            return False 
+ 
+        try: 
             internetSettings = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                 r'Software\Microsoft\Windows\CurrentVersion\Internet Settings')
-            # ProxyEnable could be REG_SZ or REG_DWORD, normalizing it
-            proxyEnable = int(winreg.QueryValueEx(internetSettings,
-                                              'ProxyEnable')[0])
-            # ProxyOverride is almost always a string
+            # ProxyEnable could be REG_SZ or REG_DWORD, normalizing it 
+            proxyEnable = int(winreg.QueryValueEx(internetSettings, 
+                                              'ProxyEnable')[0]) 
+            # ProxyOverride is almost always a string 
             proxyOverride = winreg.QueryValueEx(internetSettings,
                                                 'ProxyOverride')[0]
         except OSError:
@@ -125,10 +125,10 @@ def super_len(o):
     elif hasattr(o, 'fileno'):
         try:
             fileno = o.fileno()
-        except (io.UnsupportedOperation, AttributeError):
-            # AttributeError is a surprising exception, seeing as how we've just checked
-            # that `hasattr(o, 'fileno')`.  It happens for objects obtained via
-            # `Tarfile.extractfile()`, per issue 5229.
+        except (io.UnsupportedOperation, AttributeError): 
+            # AttributeError is a surprising exception, seeing as how we've just checked 
+            # that `hasattr(o, 'fileno')`.  It happens for objects obtained via 
+            # `Tarfile.extractfile()`, per issue 5229. 
             pass
         else:
             total_length = os.fstat(fileno).st_size
@@ -158,7 +158,7 @@ def super_len(o):
                 current_position = total_length
         else:
             if hasattr(o, 'seek') and total_length is None:
-                # StringIO and BytesIO have seek but no usable fileno
+                # StringIO and BytesIO have seek but no usable fileno 
                 try:
                     # seek to end of file
                     o.seek(0, 2)
@@ -179,24 +179,24 @@ def super_len(o):
 def get_netrc_auth(url, raise_errors=False):
     """Returns the Requests tuple auth for a given url from netrc."""
 
-    netrc_file = os.environ.get('NETRC')
-    if netrc_file is not None:
-        netrc_locations = (netrc_file,)
-    else:
-        netrc_locations = ('~/{}'.format(f) for f in NETRC_FILES)
-
+    netrc_file = os.environ.get('NETRC') 
+    if netrc_file is not None: 
+        netrc_locations = (netrc_file,) 
+    else: 
+        netrc_locations = ('~/{}'.format(f) for f in NETRC_FILES) 
+ 
     try:
         from netrc import netrc, NetrcParseError
 
         netrc_path = None
 
-        for f in netrc_locations:
+        for f in netrc_locations: 
             try:
-                loc = os.path.expanduser(f)
+                loc = os.path.expanduser(f) 
             except KeyError:
                 # os.path.expanduser can fail when $HOME is undefined and
-                # getpwuid fails. See https://bugs.python.org/issue20164 &
-                # https://github.com/psf/requests/issues/1846
+                # getpwuid fails. See https://bugs.python.org/issue20164 & 
+                # https://github.com/psf/requests/issues/1846 
                 return
 
             if os.path.exists(loc):
@@ -228,7 +228,7 @@ def get_netrc_auth(url, raise_errors=False):
             if raise_errors:
                 raise
 
-    # App Engine hackiness.
+    # App Engine hackiness. 
     except (ImportError, AttributeError):
         pass
 
@@ -241,57 +241,57 @@ def guess_filename(obj):
         return os.path.basename(name)
 
 
-def extract_zipped_paths(path):
-    """Replace nonexistent paths that look like they refer to a member of a zip
-    archive with the location of an extracted copy of the target, or else
-    just return the provided path unchanged.
-    """
-    if callable(path) or os.path.exists(path):
-        # this is already a valid path, no need to do anything further
-        return path
-
-    # find the first valid part of the provided path and treat that as a zip archive
-    # assume the rest of the path is the name of a member in the archive
-    archive, member = os.path.split(path)
-    while archive and not os.path.exists(archive):
-        archive, prefix = os.path.split(archive)
-        if not prefix:
-            # If we don't check for an empty prefix after the split (in other words, archive remains unchanged after the split),
-            # we _can_ end up in an infinite loop on a rare corner case affecting a small number of users
-            break
-        member = '/'.join([prefix, member])
-
-    if not zipfile.is_zipfile(archive):
-        return path
-
-    zip_file = zipfile.ZipFile(archive)
-    if member not in zip_file.namelist():
-        return path
-
-    # we have a valid zip archive and a valid member of that archive
-    tmp = tempfile.gettempdir()
-    extracted_path = os.path.join(tmp, member.split('/')[-1])
-    if not os.path.exists(extracted_path):
-        # use read + write to avoid the creating nested folders, we only want the file, avoids mkdir racing condition
-        with atomic_open(extracted_path) as file_handler:
-            file_handler.write(zip_file.read(member))
-    return extracted_path
-
-
-@contextlib.contextmanager
-def atomic_open(filename):
-    """Write a file to the disk in an atomic fashion"""
-    replacer = os.rename if sys.version_info[0] == 2 else os.replace
-    tmp_descriptor, tmp_name = tempfile.mkstemp(dir=os.path.dirname(filename))
-    try:
-        with os.fdopen(tmp_descriptor, 'wb') as tmp_handler:
-            yield tmp_handler
-        replacer(tmp_name, filename)
-    except BaseException:
-        os.remove(tmp_name)
-        raise
-
-
+def extract_zipped_paths(path): 
+    """Replace nonexistent paths that look like they refer to a member of a zip 
+    archive with the location of an extracted copy of the target, or else 
+    just return the provided path unchanged. 
+    """ 
+    if callable(path) or os.path.exists(path): 
+        # this is already a valid path, no need to do anything further 
+        return path 
+ 
+    # find the first valid part of the provided path and treat that as a zip archive 
+    # assume the rest of the path is the name of a member in the archive 
+    archive, member = os.path.split(path) 
+    while archive and not os.path.exists(archive): 
+        archive, prefix = os.path.split(archive) 
+        if not prefix: 
+            # If we don't check for an empty prefix after the split (in other words, archive remains unchanged after the split), 
+            # we _can_ end up in an infinite loop on a rare corner case affecting a small number of users 
+            break 
+        member = '/'.join([prefix, member]) 
+ 
+    if not zipfile.is_zipfile(archive): 
+        return path 
+ 
+    zip_file = zipfile.ZipFile(archive) 
+    if member not in zip_file.namelist(): 
+        return path 
+ 
+    # we have a valid zip archive and a valid member of that archive 
+    tmp = tempfile.gettempdir() 
+    extracted_path = os.path.join(tmp, member.split('/')[-1]) 
+    if not os.path.exists(extracted_path): 
+        # use read + write to avoid the creating nested folders, we only want the file, avoids mkdir racing condition 
+        with atomic_open(extracted_path) as file_handler: 
+            file_handler.write(zip_file.read(member)) 
+    return extracted_path 
+ 
+ 
+@contextlib.contextmanager 
+def atomic_open(filename): 
+    """Write a file to the disk in an atomic fashion""" 
+    replacer = os.rename if sys.version_info[0] == 2 else os.replace 
+    tmp_descriptor, tmp_name = tempfile.mkstemp(dir=os.path.dirname(filename)) 
+    try: 
+        with os.fdopen(tmp_descriptor, 'wb') as tmp_handler: 
+            yield tmp_handler 
+        replacer(tmp_name, filename) 
+    except BaseException: 
+        os.remove(tmp_name) 
+        raise 
+ 
+ 
 def from_key_val_list(value):
     """Take an object and test to see if it can be represented as a
     dictionary. Unless it can not be represented as such, return an
@@ -302,9 +302,9 @@ def from_key_val_list(value):
         >>> from_key_val_list([('key', 'val')])
         OrderedDict([('key', 'val')])
         >>> from_key_val_list('string')
-        Traceback (most recent call last):
-        ...
-        ValueError: cannot encode objects that are not 2-tuples
+        Traceback (most recent call last): 
+        ... 
+        ValueError: cannot encode objects that are not 2-tuples 
         >>> from_key_val_list({'key': 'val'})
         OrderedDict([('key', 'val')])
 
@@ -330,9 +330,9 @@ def to_key_val_list(value):
         >>> to_key_val_list({'key': 'val'})
         [('key', 'val')]
         >>> to_key_val_list('string')
-        Traceback (most recent call last):
-        ...
-        ValueError: cannot encode objects that are not 2-tuples
+        Traceback (most recent call last): 
+        ... 
+        ValueError: cannot encode objects that are not 2-tuples 
 
     :rtype: list
     """
@@ -342,7 +342,7 @@ def to_key_val_list(value):
     if isinstance(value, (str, bytes, bool, int)):
         raise ValueError('cannot encode objects that are not 2-tuples')
 
-    if isinstance(value, Mapping):
+    if isinstance(value, Mapping): 
         value = value.items()
 
     return list(value)
@@ -487,31 +487,31 @@ def get_encodings_from_content(content):
             xml_re.findall(content))
 
 
-def _parse_content_type_header(header):
-    """Returns content type and parameters from given header
-
-    :param header: string
-    :return: tuple containing content type and dictionary of
-         parameters
-    """
-
-    tokens = header.split(';')
-    content_type, params = tokens[0].strip(), tokens[1:]
-    params_dict = {}
-    items_to_strip = "\"' "
-
-    for param in params:
-        param = param.strip()
-        if param:
-            key, value = param, True
-            index_of_equals = param.find("=")
-            if index_of_equals != -1:
-                key = param[:index_of_equals].strip(items_to_strip)
-                value = param[index_of_equals + 1:].strip(items_to_strip)
-            params_dict[key.lower()] = value
-    return content_type, params_dict
-
-
+def _parse_content_type_header(header): 
+    """Returns content type and parameters from given header 
+ 
+    :param header: string 
+    :return: tuple containing content type and dictionary of 
+         parameters 
+    """ 
+ 
+    tokens = header.split(';') 
+    content_type, params = tokens[0].strip(), tokens[1:] 
+    params_dict = {} 
+    items_to_strip = "\"' " 
+ 
+    for param in params: 
+        param = param.strip() 
+        if param: 
+            key, value = param, True 
+            index_of_equals = param.find("=") 
+            if index_of_equals != -1: 
+                key = param[:index_of_equals].strip(items_to_strip) 
+                value = param[index_of_equals + 1:].strip(items_to_strip) 
+            params_dict[key.lower()] = value 
+    return content_type, params_dict 
+ 
+ 
 def get_encoding_from_headers(headers):
     """Returns encodings from given HTTP Header Dict.
 
@@ -524,7 +524,7 @@ def get_encoding_from_headers(headers):
     if not content_type:
         return None
 
-    content_type, params = _parse_content_type_header(content_type)
+    content_type, params = _parse_content_type_header(content_type) 
 
     if 'charset' in params:
         return params['charset'].strip("'\"")
@@ -532,11 +532,11 @@ def get_encoding_from_headers(headers):
     if 'text' in content_type:
         return 'ISO-8859-1'
 
-    if 'application/json' in content_type:
-        # Assume UTF-8 based on RFC 4627: https://www.ietf.org/rfc/rfc4627.txt since the charset was unset
-        return 'utf-8'
+    if 'application/json' in content_type: 
+        # Assume UTF-8 based on RFC 4627: https://www.ietf.org/rfc/rfc4627.txt since the charset was unset 
+        return 'utf-8' 
 
-
+ 
 def stream_decode_response_unicode(iterator, r):
     """Stream decodes a iterator."""
 
@@ -741,8 +741,8 @@ def should_bypass_proxies(url, no_proxy):
 
     :rtype: bool
     """
-    # Prioritize lowercase environment variables over uppercase
-    # to keep a consistent behaviour with other http projects (curl, wget).
+    # Prioritize lowercase environment variables over uppercase 
+    # to keep a consistent behaviour with other http projects (curl, wget). 
     get_proxy = lambda k: os.environ.get(k) or os.environ.get(k.upper())
 
     # First check whether no_proxy is defined. If it is, check that the URL
@@ -750,43 +750,43 @@ def should_bypass_proxies(url, no_proxy):
     no_proxy_arg = no_proxy
     if no_proxy is None:
         no_proxy = get_proxy('no_proxy')
-    parsed = urlparse(url)
+    parsed = urlparse(url) 
 
-    if parsed.hostname is None:
-        # URLs don't always have hostnames, e.g. file:/// urls.
-        return True
-
+    if parsed.hostname is None: 
+        # URLs don't always have hostnames, e.g. file:/// urls. 
+        return True 
+ 
     if no_proxy:
         # We need to check whether we match here. We need to see if we match
-        # the end of the hostname, both with and without the port.
+        # the end of the hostname, both with and without the port. 
         no_proxy = (
             host for host in no_proxy.replace(' ', '').split(',') if host
         )
 
-        if is_ipv4_address(parsed.hostname):
+        if is_ipv4_address(parsed.hostname): 
             for proxy_ip in no_proxy:
                 if is_valid_cidr(proxy_ip):
-                    if address_in_network(parsed.hostname, proxy_ip):
+                    if address_in_network(parsed.hostname, proxy_ip): 
                         return True
-                elif parsed.hostname == proxy_ip:
+                elif parsed.hostname == proxy_ip: 
                     # If no_proxy ip was defined in plain IP notation instead of cidr notation &
                     # matches the IP of the index
                     return True
         else:
-            host_with_port = parsed.hostname
-            if parsed.port:
-                host_with_port += ':{}'.format(parsed.port)
-
+            host_with_port = parsed.hostname 
+            if parsed.port: 
+                host_with_port += ':{}'.format(parsed.port) 
+ 
             for host in no_proxy:
-                if parsed.hostname.endswith(host) or host_with_port.endswith(host):
+                if parsed.hostname.endswith(host) or host_with_port.endswith(host): 
                     # The URL does match something in no_proxy, so we don't want
                     # to apply the proxies on this URL.
                     return True
 
     with set_environ('no_proxy', no_proxy_arg):
-        # parsed.hostname can be `None` in cases such as a file URI.
+        # parsed.hostname can be `None` in cases such as a file URI. 
         try:
-            bypass = proxy_bypass(parsed.hostname)
+            bypass = proxy_bypass(parsed.hostname) 
         except (TypeError, socket.gaierror):
             bypass = False
 
@@ -834,33 +834,33 @@ def select_proxy(url, proxies):
     return proxy
 
 
-def resolve_proxies(request, proxies, trust_env=True):
-    """This method takes proxy information from a request and configuration
-    input to resolve a mapping of target proxies. This will consider settings
-    such a NO_PROXY to strip proxy configurations.
-
-    :param request: Request or PreparedRequest
-    :param proxies: A dictionary of schemes or schemes and hosts to proxy URLs
-    :param trust_env: Boolean declaring whether to trust environment configs
-
-    :rtype: dict
-    """
-    proxies = proxies if proxies is not None else {}
-    url = request.url
-    scheme = urlparse(url).scheme
-    no_proxy = proxies.get('no_proxy')
-    new_proxies = proxies.copy()
-
-    if trust_env and not should_bypass_proxies(url, no_proxy=no_proxy):
-        environ_proxies = get_environ_proxies(url, no_proxy=no_proxy)
-
-        proxy = environ_proxies.get(scheme, environ_proxies.get('all'))
-
-        if proxy:
-            new_proxies.setdefault(scheme, proxy)
-    return new_proxies
-
-
+def resolve_proxies(request, proxies, trust_env=True): 
+    """This method takes proxy information from a request and configuration 
+    input to resolve a mapping of target proxies. This will consider settings 
+    such a NO_PROXY to strip proxy configurations. 
+ 
+    :param request: Request or PreparedRequest 
+    :param proxies: A dictionary of schemes or schemes and hosts to proxy URLs 
+    :param trust_env: Boolean declaring whether to trust environment configs 
+ 
+    :rtype: dict 
+    """ 
+    proxies = proxies if proxies is not None else {} 
+    url = request.url 
+    scheme = urlparse(url).scheme 
+    no_proxy = proxies.get('no_proxy') 
+    new_proxies = proxies.copy() 
+ 
+    if trust_env and not should_bypass_proxies(url, no_proxy=no_proxy): 
+        environ_proxies = get_environ_proxies(url, no_proxy=no_proxy) 
+ 
+        proxy = environ_proxies.get(scheme, environ_proxies.get('all')) 
+ 
+        if proxy: 
+            new_proxies.setdefault(scheme, proxy) 
+    return new_proxies 
+ 
+ 
 def default_user_agent(name="python-requests"):
     """
     Return a string representing the default user agent.
@@ -876,14 +876,14 @@ def default_headers():
     """
     return CaseInsensitiveDict({
         'User-Agent': default_user_agent(),
-        'Accept-Encoding': DEFAULT_ACCEPT_ENCODING,
+        'Accept-Encoding': DEFAULT_ACCEPT_ENCODING, 
         'Accept': '*/*',
         'Connection': 'keep-alive',
     })
 
 
 def parse_header_links(value):
-    """Return a list of parsed link headers proxies.
+    """Return a list of parsed link headers proxies. 
 
     i.e. Link: <http:/.../front.jpeg>; rel=front; type="image/jpeg",<http://.../back.jpeg>; rel=back;type="image/jpeg"
 
@@ -894,10 +894,10 @@ def parse_header_links(value):
 
     replace_chars = ' \'"'
 
-    value = value.strip(replace_chars)
-    if not value:
-        return links
-
+    value = value.strip(replace_chars) 
+    if not value: 
+        return links 
+ 
     for val in re.split(', *<', value):
         try:
             url, params = val.split(';', 1)
@@ -963,29 +963,29 @@ def prepend_scheme_if_needed(url, new_scheme):
 
     :rtype: str
     """
-    parsed = parse_url(url)
-    scheme, auth, host, port, path, query, fragment = parsed
+    parsed = parse_url(url) 
+    scheme, auth, host, port, path, query, fragment = parsed 
 
-    # A defect in urlparse determines that there isn't a netloc present in some
-    # urls. We previously assumed parsing was overly cautious, and swapped the
-    # netloc and path. Due to a lack of tests on the original defect, this is
-    # maintained with parse_url for backwards compatibility.
-    netloc = parsed.netloc
+    # A defect in urlparse determines that there isn't a netloc present in some 
+    # urls. We previously assumed parsing was overly cautious, and swapped the 
+    # netloc and path. Due to a lack of tests on the original defect, this is 
+    # maintained with parse_url for backwards compatibility. 
+    netloc = parsed.netloc 
     if not netloc:
         netloc, path = path, netloc
 
-    if auth:
-        # parse_url doesn't provide the netloc with auth
-        # so we'll add it ourselves.
-        netloc = '@'.join([auth, netloc])
-    if scheme is None:
-        scheme = new_scheme
-    if path is None:
-        path = ''
+    if auth: 
+        # parse_url doesn't provide the netloc with auth 
+        # so we'll add it ourselves. 
+        netloc = '@'.join([auth, netloc]) 
+    if scheme is None: 
+        scheme = new_scheme 
+    if path is None: 
+        path = '' 
 
-    return urlunparse((scheme, netloc, path, '', query, fragment))
+    return urlunparse((scheme, netloc, path, '', query, fragment)) 
 
-
+ 
 def get_auth_from_url(url):
     """Given a url with authentication components, extract them into a tuple of
     username,password.

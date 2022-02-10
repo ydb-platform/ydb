@@ -214,8 +214,8 @@ static unsigned getSubRegIndex(const TargetRegisterClass *RC) {
   return SubIdx;
 }
 
-static const TargetRegisterClass *getRegClassFromGRPhysReg(Register Reg) {
-  assert(Reg.isPhysical());
+static const TargetRegisterClass *getRegClassFromGRPhysReg(Register Reg) { 
+  assert(Reg.isPhysical()); 
   if (X86::GR64RegClass.contains(Reg))
     return &X86::GR64RegClass;
   if (X86::GR32RegClass.contains(Reg))
@@ -239,7 +239,7 @@ bool X86InstructionSelector::selectCopy(MachineInstr &I,
   const unsigned SrcSize = RBI.getSizeInBits(SrcReg, MRI, TRI);
   const RegisterBank &SrcRegBank = *RBI.getRegBank(SrcReg, MRI, TRI);
 
-  if (DstReg.isPhysical()) {
+  if (DstReg.isPhysical()) { 
     assert(I.isCopy() && "Generic operators do not allow physical registers");
 
     if (DstSize > SrcSize && SrcRegBank.getID() == X86::GPRRegBankID &&
@@ -266,12 +266,12 @@ bool X86InstructionSelector::selectCopy(MachineInstr &I,
     return true;
   }
 
-  assert((!SrcReg.isPhysical() || I.isCopy()) &&
+  assert((!SrcReg.isPhysical() || I.isCopy()) && 
          "No phys reg on generic operators");
   assert((DstSize == SrcSize ||
           // Copies are a mean to setup initial types, the number of
           // bits may not exactly match.
-          (SrcReg.isPhysical() &&
+          (SrcReg.isPhysical() && 
            DstSize <= RBI.getSizeInBits(SrcReg, MRI, TRI))) &&
          "Copy with different width?!");
 
@@ -280,7 +280,7 @@ bool X86InstructionSelector::selectCopy(MachineInstr &I,
 
   if (SrcRegBank.getID() == X86::GPRRegBankID &&
       DstRegBank.getID() == X86::GPRRegBankID && SrcSize > DstSize &&
-      SrcReg.isPhysical()) {
+      SrcReg.isPhysical()) { 
     // Change the physical register to performe truncate.
 
     const TargetRegisterClass *SrcRC = getRegClassFromGRPhysReg(SrcReg);
@@ -479,7 +479,7 @@ static void X86SelectAddress(const MachineInstr &I,
          "unsupported type.");
 
   if (I.getOpcode() == TargetOpcode::G_PTR_ADD) {
-    if (auto COff = getConstantVRegSExtVal(I.getOperand(2).getReg(), MRI)) {
+    if (auto COff = getConstantVRegSExtVal(I.getOperand(2).getReg(), MRI)) { 
       int64_t Imm = *COff;
       if (isInt<32>(Imm)) { // Check for displacement overflow.
         AM.Disp = static_cast<int32_t>(Imm);
@@ -780,18 +780,18 @@ bool X86InstructionSelector::selectZext(MachineInstr &I,
   const LLT DstTy = MRI.getType(DstReg);
   const LLT SrcTy = MRI.getType(SrcReg);
 
-  assert(!(SrcTy == LLT::scalar(8) && DstTy == LLT::scalar(16)) &&
-         "8=>16 Zext is handled by tablegen");
+  assert(!(SrcTy == LLT::scalar(8) && DstTy == LLT::scalar(16)) && 
+         "8=>16 Zext is handled by tablegen"); 
   assert(!(SrcTy == LLT::scalar(8) && DstTy == LLT::scalar(32)) &&
          "8=>32 Zext is handled by tablegen");
   assert(!(SrcTy == LLT::scalar(16) && DstTy == LLT::scalar(32)) &&
          "16=>32 Zext is handled by tablegen");
-  assert(!(SrcTy == LLT::scalar(8) && DstTy == LLT::scalar(64)) &&
-         "8=>64 Zext is handled by tablegen");
-  assert(!(SrcTy == LLT::scalar(16) && DstTy == LLT::scalar(64)) &&
-         "16=>64 Zext is handled by tablegen");
-  assert(!(SrcTy == LLT::scalar(32) && DstTy == LLT::scalar(64)) &&
-         "32=>64 Zext is handled by tablegen");
+  assert(!(SrcTy == LLT::scalar(8) && DstTy == LLT::scalar(64)) && 
+         "8=>64 Zext is handled by tablegen"); 
+  assert(!(SrcTy == LLT::scalar(16) && DstTy == LLT::scalar(64)) && 
+         "16=>64 Zext is handled by tablegen"); 
+  assert(!(SrcTy == LLT::scalar(32) && DstTy == LLT::scalar(64)) && 
+         "32=>64 Zext is handled by tablegen"); 
 
   if (SrcTy != LLT::scalar(1))
     return false;
@@ -808,17 +808,17 @@ bool X86InstructionSelector::selectZext(MachineInstr &I,
   else
     return false;
 
-  Register DefReg = SrcReg;
+  Register DefReg = SrcReg; 
   if (DstTy != LLT::scalar(8)) {
-    Register ImpDefReg =
-        MRI.createVirtualRegister(getRegClass(DstTy, DstReg, MRI));
-    BuildMI(*I.getParent(), I, I.getDebugLoc(),
-            TII.get(TargetOpcode::IMPLICIT_DEF), ImpDefReg);
-
+    Register ImpDefReg = 
+        MRI.createVirtualRegister(getRegClass(DstTy, DstReg, MRI)); 
+    BuildMI(*I.getParent(), I, I.getDebugLoc(), 
+            TII.get(TargetOpcode::IMPLICIT_DEF), ImpDefReg); 
+ 
     DefReg = MRI.createVirtualRegister(getRegClass(DstTy, DstReg, MRI));
     BuildMI(*I.getParent(), I, I.getDebugLoc(),
-            TII.get(TargetOpcode::INSERT_SUBREG), DefReg)
-        .addReg(ImpDefReg)
+            TII.get(TargetOpcode::INSERT_SUBREG), DefReg) 
+        .addReg(ImpDefReg) 
         .addReg(SrcReg)
         .addImm(X86::sub_8bit);
   }
@@ -1559,9 +1559,9 @@ bool X86InstructionSelector::selectDivRem(MachineInstr &I,
        }},                                                 // i64
   };
 
-  auto OpEntryIt = llvm::find_if(OpTable, [RegTy](const DivRemEntry &El) {
-    return El.SizeInBits == RegTy.getSizeInBits();
-  });
+  auto OpEntryIt = llvm::find_if(OpTable, [RegTy](const DivRemEntry &El) { 
+    return El.SizeInBits == RegTy.getSizeInBits(); 
+  }); 
   if (OpEntryIt == std::end(OpTable))
     return false;
 

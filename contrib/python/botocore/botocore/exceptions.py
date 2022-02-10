@@ -12,22 +12,22 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 from __future__ import unicode_literals
-from botocore.vendored import requests
-from botocore.vendored.requests.packages import urllib3
+from botocore.vendored import requests 
+from botocore.vendored.requests.packages import urllib3 
 
 
-def _exception_from_packed_args(exception_cls, args=None, kwargs=None):
-    # This is helpful for reducing Exceptions that only accept kwargs as
-    # only positional arguments can be provided for __reduce__
-    # Ideally, this would also be a class method on the BotoCoreError
-    # but instance methods cannot be pickled.
-    if args is None:
-        args = ()
-    if kwargs is None:
-        kwargs = {}
-    return exception_cls(*args, **kwargs)
-
-
+def _exception_from_packed_args(exception_cls, args=None, kwargs=None): 
+    # This is helpful for reducing Exceptions that only accept kwargs as 
+    # only positional arguments can be provided for __reduce__ 
+    # Ideally, this would also be a class method on the BotoCoreError 
+    # but instance methods cannot be pickled. 
+    if args is None: 
+        args = () 
+    if kwargs is None: 
+        kwargs = {} 
+    return exception_cls(*args, **kwargs) 
+ 
+ 
 class BotoCoreError(Exception):
     """
     The base exception class for BotoCore exceptions.
@@ -41,15 +41,15 @@ class BotoCoreError(Exception):
         Exception.__init__(self, msg)
         self.kwargs = kwargs
 
-    def __reduce__(self):
-        return _exception_from_packed_args, (self.__class__, None, self.kwargs)
+    def __reduce__(self): 
+        return _exception_from_packed_args, (self.__class__, None, self.kwargs) 
 
-
+ 
 class DataNotFoundError(BotoCoreError):
     """
     The data associated with a particular path could not be loaded.
 
-    :ivar data_path: The data path that the user attempted to load.
+    :ivar data_path: The data path that the user attempted to load. 
     """
     fmt = 'Unable to load data for: {data_path}'
 
@@ -67,65 +67,65 @@ class UnknownServiceError(DataNotFoundError):
 
 class ApiVersionNotFoundError(BotoCoreError):
     """
-    The data associated with either the API version or a compatible one
+    The data associated with either the API version or a compatible one 
     could not be loaded.
 
-    :ivar data_path: The data path that the user attempted to load.
-    :ivar api_version: The API version that the user attempted to load.
+    :ivar data_path: The data path that the user attempted to load. 
+    :ivar api_version: The API version that the user attempted to load. 
     """
     fmt = 'Unable to load data {data_path} for: {api_version}'
 
 
-class HTTPClientError(BotoCoreError):
-    fmt = 'An HTTP Client raised an unhandled exception: {error}'
-    def __init__(self, request=None, response=None, **kwargs):
-        self.request = request
-        self.response = response
-        super(HTTPClientError, self).__init__(**kwargs)
+class HTTPClientError(BotoCoreError): 
+    fmt = 'An HTTP Client raised an unhandled exception: {error}' 
+    def __init__(self, request=None, response=None, **kwargs): 
+        self.request = request 
+        self.response = response 
+        super(HTTPClientError, self).__init__(**kwargs) 
 
-    def __reduce__(self):
-        return _exception_from_packed_args, (
-            self.__class__, (self.request, self.response), self.kwargs)
+    def __reduce__(self): 
+        return _exception_from_packed_args, ( 
+            self.__class__, (self.request, self.response), self.kwargs) 
 
-
-class ConnectionError(BotoCoreError):
-    fmt = 'An HTTP Client failed to establish a connection: {error}'
-
-
-class InvalidIMDSEndpointError(BotoCoreError):
-    fmt = 'Invalid endpoint EC2 Instance Metadata endpoint: {endpoint}'
-
-
-class EndpointConnectionError(ConnectionError):
-    fmt = 'Could not connect to the endpoint URL: "{endpoint_url}"'
-
-
-class SSLError(ConnectionError, requests.exceptions.SSLError):
-    fmt = 'SSL validation failed for {endpoint_url} {error}'
-
-
-class ConnectionClosedError(HTTPClientError):
+ 
+class ConnectionError(BotoCoreError): 
+    fmt = 'An HTTP Client failed to establish a connection: {error}' 
+ 
+ 
+class InvalidIMDSEndpointError(BotoCoreError): 
+    fmt = 'Invalid endpoint EC2 Instance Metadata endpoint: {endpoint}' 
+ 
+ 
+class EndpointConnectionError(ConnectionError): 
+    fmt = 'Could not connect to the endpoint URL: "{endpoint_url}"' 
+ 
+ 
+class SSLError(ConnectionError, requests.exceptions.SSLError): 
+    fmt = 'SSL validation failed for {endpoint_url} {error}' 
+ 
+ 
+class ConnectionClosedError(HTTPClientError): 
     fmt = (
         'Connection was closed before we received a valid response '
         'from endpoint URL: "{endpoint_url}".')
 
 
-class ReadTimeoutError(HTTPClientError, requests.exceptions.ReadTimeout,
-                       urllib3.exceptions.ReadTimeoutError):
-    fmt = 'Read timeout on endpoint URL: "{endpoint_url}"'
+class ReadTimeoutError(HTTPClientError, requests.exceptions.ReadTimeout, 
+                       urllib3.exceptions.ReadTimeoutError): 
+    fmt = 'Read timeout on endpoint URL: "{endpoint_url}"' 
 
-
-class ConnectTimeoutError(ConnectionError, requests.exceptions.ConnectTimeout):
-    fmt = 'Connect timeout on endpoint URL: "{endpoint_url}"'
-
-
-class ProxyConnectionError(ConnectionError, requests.exceptions.ProxyError):
-    fmt = 'Failed to connect to proxy URL: "{proxy_url}"'
-
-
+ 
+class ConnectTimeoutError(ConnectionError, requests.exceptions.ConnectTimeout): 
+    fmt = 'Connect timeout on endpoint URL: "{endpoint_url}"' 
+ 
+ 
+class ProxyConnectionError(ConnectionError, requests.exceptions.ProxyError): 
+    fmt = 'Failed to connect to proxy URL: "{proxy_url}"' 
+ 
+ 
 class NoCredentialsError(BotoCoreError):
     """
-    No credentials could be found.
+    No credentials could be found. 
     """
     fmt = 'Unable to locate credentials'
 
@@ -145,7 +145,7 @@ class CredentialRetrievalError(BotoCoreError):
     Error attempting to retrieve credentials from a remote source.
 
     :ivar provider: The name of the credential provider.
-    :ivar error_msg: The msg explaining why credentials could not be
+    :ivar error_msg: The msg explaining why credentials could not be 
         retrieved.
 
     """
@@ -198,20 +198,20 @@ class UnknownEndpointError(BaseEndpointResolverError, ValueError):
         '{service_name} in region {region_name}')
 
 
-class UnknownFIPSEndpointError(BaseEndpointResolverError):
-    """
-    Could not construct a FIPS endpoint.
-
-    :ivar service_name: The name of the service.
-    :ivar region_name: The name of the region.
-    """
-    fmt = (
-        'The provided FIPS pseudo-region "{region_name}" is not known for '
-        'the service "{service_name}". A FIPS compliant endpoint cannot be '
-        'constructed.'
-    )
-
-
+class UnknownFIPSEndpointError(BaseEndpointResolverError): 
+    """ 
+    Could not construct a FIPS endpoint. 
+ 
+    :ivar service_name: The name of the service. 
+    :ivar region_name: The name of the region. 
+    """ 
+    fmt = ( 
+        'The provided FIPS pseudo-region "{region_name}" is not known for ' 
+        'the service "{service_name}". A FIPS compliant endpoint cannot be ' 
+        'constructed.' 
+    ) 
+ 
+ 
 class ProfileNotFound(BotoCoreError):
     """
     The specified configuration profile was not found in the
@@ -279,7 +279,7 @@ class ParamValidationError(BotoCoreError):
 # error.
 class UnknownKeyError(ValidationError):
     """
-    Unknown key in a struct parameter.
+    Unknown key in a struct parameter. 
 
     :ivar value: The value that was being checked.
     :ivar param: The name of the parameter.
@@ -316,17 +316,17 @@ class UnknownParameterError(ValidationError):
     )
 
 
-class InvalidRegionError(ValidationError, ValueError):
-    """
-    Invalid region_name provided to client or resource.
-
-    :ivar region_name: region_name that was being validated.
-    """
-    fmt = (
-        "Provided region_name '{region_name}' doesn't match a supported format."
-    )
-
-
+class InvalidRegionError(ValidationError, ValueError): 
+    """ 
+    Invalid region_name provided to client or resource. 
+ 
+    :ivar region_name: region_name that was being validated. 
+    """ 
+    fmt = ( 
+        "Provided region_name '{region_name}' doesn't match a supported format." 
+    ) 
+ 
+ 
 class AliasConflictParameterError(ValidationError):
     """
     Error when an alias is provided for a parameter as well as the original.
@@ -411,7 +411,7 @@ class UnknownClientMethodError(BotoCoreError):
 
 
 class UnsupportedSignatureVersionError(BotoCoreError):
-    """Error when trying to use an unsupported Signature Version."""
+    """Error when trying to use an unsupported Signature Version.""" 
     fmt = 'Signature version is not supported: {signature_version}'
 
 
@@ -443,17 +443,17 @@ class ClientError(Exception):
                                   metadata['RetryAttempts'])
         return retry_info
 
-    def __reduce__(self):
-        # Subclasses of ClientError's are dynamically generated and
-        # cannot be pickled unless they are attributes of a
-        # module. So at the very least return a ClientError back.
-        return ClientError, (self.response, self.operation_name)
+    def __reduce__(self): 
+        # Subclasses of ClientError's are dynamically generated and 
+        # cannot be pickled unless they are attributes of a 
+        # module. So at the very least return a ClientError back. 
+        return ClientError, (self.response, self.operation_name) 
 
-
-class EventStreamError(ClientError):
-    pass
-
-
+ 
+class EventStreamError(ClientError): 
+    pass 
+ 
+ 
 class UnsupportedTLSVersionWarning(Warning):
     """Warn when an openssl version that uses TLS 1.2 is required"""
     pass
@@ -477,72 +477,72 @@ class InvalidDNSNameError(BotoCoreError):
 class InvalidS3AddressingStyleError(BotoCoreError):
     """Error when an invalid path style is specified"""
     fmt = (
-        'S3 addressing style {s3_addressing_style} is invalid. Valid options '
+        'S3 addressing style {s3_addressing_style} is invalid. Valid options ' 
         'are: \'auto\', \'virtual\', and \'path\''
     )
 
 
-class UnsupportedS3ArnError(BotoCoreError):
-    """Error when S3 ARN provided to Bucket parameter is not supported"""
-    fmt = (
-        'S3 ARN {arn} provided to "Bucket" parameter is invalid. Only '
-        'ARNs for S3 access-points are supported.'
-    )
-
-
-class UnsupportedS3ControlArnError(BotoCoreError):
-    """Error when S3 ARN provided to S3 control parameter is not supported"""
-    fmt = (
-        'S3 ARN "{arn}" provided is invalid for this operation. {msg}'
-    )
-
-
-class InvalidHostLabelError(BotoCoreError):
-    """Error when an invalid host label would be bound to an endpoint"""
-    fmt = (
-        'Invalid host label to be bound to the hostname of the endpoint: '
-        '"{label}".'
-    )
-
-
-class UnsupportedOutpostResourceError(BotoCoreError):
-    """Error when S3 Outpost ARN provided to Bucket parameter is incomplete"""
-    fmt = (
-        'S3 Outpost ARN resource "{resource_name}" provided to "Bucket" '
-        'parameter is invalid. Only ARNs for S3 Outpost arns with an '
-        'access-point sub-resource are supported.'
-    )
-
-
-class UnsupportedS3ConfigurationError(BotoCoreError):
-    """Error when an unsupported configuration is used with access-points"""
-    fmt = (
-        'Unsupported configuration when using S3: {msg}'
-    )
-
-
-class UnsupportedS3AccesspointConfigurationError(BotoCoreError):
-    """Error when an unsupported configuration is used with access-points"""
-    fmt = (
-        'Unsupported configuration when using S3 access-points: {msg}'
-    )
-
-
-class InvalidEndpointDiscoveryConfigurationError(BotoCoreError):
-    """Error when invalid value supplied for endpoint_discovery_enabled"""
-    fmt = (
-        'Unsupported configuration value for endpoint_discovery_enabled. '
-        'Expected one of ("true", "false", "auto") but got {config_value}.'
-    )
-
-
-class UnsupportedS3ControlConfigurationError(BotoCoreError):
-    """Error when an unsupported configuration is used with S3 Control"""
-    fmt = (
-        'Unsupported configuration when using S3 Control: {msg}'
-    )
-
-
+class UnsupportedS3ArnError(BotoCoreError): 
+    """Error when S3 ARN provided to Bucket parameter is not supported""" 
+    fmt = ( 
+        'S3 ARN {arn} provided to "Bucket" parameter is invalid. Only ' 
+        'ARNs for S3 access-points are supported.' 
+    ) 
+ 
+ 
+class UnsupportedS3ControlArnError(BotoCoreError): 
+    """Error when S3 ARN provided to S3 control parameter is not supported""" 
+    fmt = ( 
+        'S3 ARN "{arn}" provided is invalid for this operation. {msg}' 
+    ) 
+ 
+ 
+class InvalidHostLabelError(BotoCoreError): 
+    """Error when an invalid host label would be bound to an endpoint""" 
+    fmt = ( 
+        'Invalid host label to be bound to the hostname of the endpoint: ' 
+        '"{label}".' 
+    ) 
+ 
+ 
+class UnsupportedOutpostResourceError(BotoCoreError): 
+    """Error when S3 Outpost ARN provided to Bucket parameter is incomplete""" 
+    fmt = ( 
+        'S3 Outpost ARN resource "{resource_name}" provided to "Bucket" ' 
+        'parameter is invalid. Only ARNs for S3 Outpost arns with an ' 
+        'access-point sub-resource are supported.' 
+    ) 
+ 
+ 
+class UnsupportedS3ConfigurationError(BotoCoreError): 
+    """Error when an unsupported configuration is used with access-points""" 
+    fmt = ( 
+        'Unsupported configuration when using S3: {msg}' 
+    ) 
+ 
+ 
+class UnsupportedS3AccesspointConfigurationError(BotoCoreError): 
+    """Error when an unsupported configuration is used with access-points""" 
+    fmt = ( 
+        'Unsupported configuration when using S3 access-points: {msg}' 
+    ) 
+ 
+ 
+class InvalidEndpointDiscoveryConfigurationError(BotoCoreError): 
+    """Error when invalid value supplied for endpoint_discovery_enabled""" 
+    fmt = ( 
+        'Unsupported configuration value for endpoint_discovery_enabled. ' 
+        'Expected one of ("true", "false", "auto") but got {config_value}.' 
+    ) 
+ 
+ 
+class UnsupportedS3ControlConfigurationError(BotoCoreError): 
+    """Error when an unsupported configuration is used with S3 Control""" 
+    fmt = ( 
+        'Unsupported configuration when using S3 Control: {msg}' 
+    ) 
+ 
+ 
 class InvalidRetryConfigurationError(BotoCoreError):
     """Error when invalid retry configuration is specified"""
     fmt = (
@@ -555,47 +555,47 @@ class InvalidMaxRetryAttemptsError(InvalidRetryConfigurationError):
     """Error when invalid retry configuration is specified"""
     fmt = (
         'Value provided to "max_attempts": {provided_max_attempts} must '
-        'be an integer greater than or equal to {min_value}.'
+        'be an integer greater than or equal to {min_value}.' 
     )
 
-
-class InvalidRetryModeError(InvalidRetryConfigurationError):
-    """Error when invalid retry mode configuration is specified"""
-    fmt = (
-        'Invalid value provided to "mode": "{provided_retry_mode}" must '
-        'be one of: "legacy", "standard", "adaptive"'
-    )
-
-
-class InvalidS3UsEast1RegionalEndpointConfigError(BotoCoreError):
-    """Error for invalid s3 us-east-1 regional endpoints configuration"""
-    fmt = (
-        'S3 us-east-1 regional endpoint option '
-        '{s3_us_east_1_regional_endpoint_config} is '
-        'invalid. Valid options are: "legacy", "regional"'
-    )
-
-
-class InvalidSTSRegionalEndpointsConfigError(BotoCoreError):
-    """Error when invalid sts regional endpoints configuration is specified"""
-    fmt = (
-        'STS regional endpoints option {sts_regional_endpoints_config} is '
-        'invalid. Valid options are: "legacy", "regional"'
-    )
-
-
+ 
+class InvalidRetryModeError(InvalidRetryConfigurationError): 
+    """Error when invalid retry mode configuration is specified""" 
+    fmt = ( 
+        'Invalid value provided to "mode": "{provided_retry_mode}" must ' 
+        'be one of: "legacy", "standard", "adaptive"' 
+    ) 
+ 
+ 
+class InvalidS3UsEast1RegionalEndpointConfigError(BotoCoreError): 
+    """Error for invalid s3 us-east-1 regional endpoints configuration""" 
+    fmt = ( 
+        'S3 us-east-1 regional endpoint option ' 
+        '{s3_us_east_1_regional_endpoint_config} is ' 
+        'invalid. Valid options are: "legacy", "regional"' 
+    ) 
+ 
+ 
+class InvalidSTSRegionalEndpointsConfigError(BotoCoreError): 
+    """Error when invalid sts regional endpoints configuration is specified""" 
+    fmt = ( 
+        'STS regional endpoints option {sts_regional_endpoints_config} is ' 
+        'invalid. Valid options are: "legacy", "regional"' 
+    ) 
+ 
+ 
 class StubResponseError(BotoCoreError):
     fmt = 'Error getting response stub for operation {operation_name}: {reason}'
 
 
 class StubAssertionError(StubResponseError, AssertionError):
-    pass
+    pass 
 
+ 
+class UnStubbedResponseError(StubResponseError): 
+    pass 
 
-class UnStubbedResponseError(StubResponseError):
-    pass
-
-
+ 
 class InvalidConfigError(BotoCoreError):
     fmt = '{error_msg}'
 
@@ -618,47 +618,47 @@ class MD5UnavailableError(BotoCoreError):
 
 class MetadataRetrievalError(BotoCoreError):
     fmt = "Error retrieving metadata: {error_msg}"
-
-
-class UndefinedModelAttributeError(Exception):
-    pass
-
-
-class MissingServiceIdError(UndefinedModelAttributeError):
-    fmt = (
-        "The model being used for the service {service_name} is missing the "
-        "serviceId metadata property, which is required."
-    )
-
-    def __init__(self, **kwargs):
-        msg = self.fmt.format(**kwargs)
-        Exception.__init__(self, msg)
-        self.kwargs = kwargs
-
-
-class SSOError(BotoCoreError):
-    fmt = "An unspecified error happened when resolving SSO credentials"
-
-
-class SSOTokenLoadError(SSOError):
-    fmt = "Error loading SSO Token: {error_msg}"
-
-
-class UnauthorizedSSOTokenError(SSOError):
-    fmt = (
-        "The SSO session associated with this profile has expired or is "
-        "otherwise invalid. To refresh this SSO session run aws sso login "
-        "with the corresponding profile."
-    )
-
-
-class CapacityNotAvailableError(BotoCoreError):
-    fmt = (
-        'Insufficient request capacity available.'
-    )
-
-
-class InvalidProxiesConfigError(BotoCoreError):
-    fmt = (
-        'Invalid configuration value(s) provided for proxies_config.'
-    )
+ 
+ 
+class UndefinedModelAttributeError(Exception): 
+    pass 
+ 
+ 
+class MissingServiceIdError(UndefinedModelAttributeError): 
+    fmt = ( 
+        "The model being used for the service {service_name} is missing the " 
+        "serviceId metadata property, which is required." 
+    ) 
+ 
+    def __init__(self, **kwargs): 
+        msg = self.fmt.format(**kwargs) 
+        Exception.__init__(self, msg) 
+        self.kwargs = kwargs 
+ 
+ 
+class SSOError(BotoCoreError): 
+    fmt = "An unspecified error happened when resolving SSO credentials" 
+ 
+ 
+class SSOTokenLoadError(SSOError): 
+    fmt = "Error loading SSO Token: {error_msg}" 
+ 
+ 
+class UnauthorizedSSOTokenError(SSOError): 
+    fmt = ( 
+        "The SSO session associated with this profile has expired or is " 
+        "otherwise invalid. To refresh this SSO session run aws sso login " 
+        "with the corresponding profile." 
+    ) 
+ 
+ 
+class CapacityNotAvailableError(BotoCoreError): 
+    fmt = ( 
+        'Insufficient request capacity available.' 
+    ) 
+ 
+ 
+class InvalidProxiesConfigError(BotoCoreError): 
+    fmt = ( 
+        'Invalid configuration value(s) provided for proxies_config.' 
+    ) 

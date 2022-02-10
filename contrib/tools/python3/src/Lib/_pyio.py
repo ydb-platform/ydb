@@ -33,13 +33,13 @@ DEFAULT_BUFFER_SIZE = 8 * 1024  # bytes
 # Rebind for compatibility
 BlockingIOError = BlockingIOError
 
-# Does io.IOBase finalizer log the exception if the close() method fails?
-# The exception is ignored silently by default in release build.
-_IOBASE_EMITS_UNRAISABLE = (hasattr(sys, "gettotalrefcount") or sys.flags.dev_mode)
-# Does open() check its 'errors' argument?
-_CHECK_ERRORS = _IOBASE_EMITS_UNRAISABLE
+# Does io.IOBase finalizer log the exception if the close() method fails? 
+# The exception is ignored silently by default in release build. 
+_IOBASE_EMITS_UNRAISABLE = (hasattr(sys, "gettotalrefcount") or sys.flags.dev_mode) 
+# Does open() check its 'errors' argument? 
+_CHECK_ERRORS = _IOBASE_EMITS_UNRAISABLE 
 
-
+ 
 def open(file, mode="r", buffering=-1, encoding=None, errors=None,
          newline=None, closefd=True, opener=None):
 
@@ -204,11 +204,11 @@ def open(file, mode="r", buffering=-1, encoding=None, errors=None,
         raise ValueError("binary mode doesn't take an errors argument")
     if binary and newline is not None:
         raise ValueError("binary mode doesn't take a newline argument")
-    if binary and buffering == 1:
-        import warnings
-        warnings.warn("line buffering (buffering=1) isn't supported in binary "
-                      "mode, the default buffer size will be used",
-                      RuntimeWarning, 2)
+    if binary and buffering == 1: 
+        import warnings 
+        warnings.warn("line buffering (buffering=1) isn't supported in binary " 
+                      "mode, the default buffer size will be used", 
+                      RuntimeWarning, 2) 
     raw = FileIO(file,
                  (creating and "x" or "") +
                  (reading and "r" or "") +
@@ -256,34 +256,34 @@ def open(file, mode="r", buffering=-1, encoding=None, errors=None,
         result.close()
         raise
 
-# Define a default pure-Python implementation for open_code()
-# that does not allow hooks. Warn on first use. Defined for tests.
-def _open_code_with_warning(path):
-    """Opens the provided file with mode ``'rb'``. This function
-    should be used when the intent is to treat the contents as
-    executable code.
+# Define a default pure-Python implementation for open_code() 
+# that does not allow hooks. Warn on first use. Defined for tests. 
+def _open_code_with_warning(path): 
+    """Opens the provided file with mode ``'rb'``. This function 
+    should be used when the intent is to treat the contents as 
+    executable code. 
 
-    ``path`` should be an absolute path.
-
-    When supported by the runtime, this function can be hooked
-    in order to allow embedders more control over code files.
-    This functionality is not supported on the current runtime.
-    """
-    import warnings
-    warnings.warn("_pyio.open_code() may not be using hooks",
-                  RuntimeWarning, 2)
-    return open(path, "rb")
-
-try:
-    open_code = io.open_code
-except AttributeError:
-    open_code = _open_code_with_warning
-
-
+    ``path`` should be an absolute path. 
+ 
+    When supported by the runtime, this function can be hooked 
+    in order to allow embedders more control over code files. 
+    This functionality is not supported on the current runtime. 
+    """ 
+    import warnings 
+    warnings.warn("_pyio.open_code() may not be using hooks", 
+                  RuntimeWarning, 2) 
+    return open(path, "rb") 
+ 
+try: 
+    open_code = io.open_code 
+except AttributeError: 
+    open_code = _open_code_with_warning 
+ 
+ 
 class DocDescriptor:
     """Helper for builtins.open.__doc__
     """
-    def __get__(self, obj, typ=None):
+    def __get__(self, obj, typ=None): 
         return (
             "open(file, mode='r', buffering=-1, encoding=None, "
                  "errors=None, newline=None, closefd=True)\n\n" +
@@ -321,15 +321,15 @@ class IOBase(metaclass=abc.ABCMeta):
     derived classes can override selectively; the default implementations
     represent a file that cannot be read, written or seeked.
 
-    Even though IOBase does not declare read or write because
+    Even though IOBase does not declare read or write because 
     their signatures will vary, implementations and clients should
     consider those methods part of the interface. Also, implementations
     may raise UnsupportedOperation when operations they do not support are
     called.
 
     The basic type used for binary data read from or written to a file is
-    bytes. Other bytes-like objects are accepted as method arguments too.
-    Text I/O classes work with str data.
+    bytes. Other bytes-like objects are accepted as method arguments too. 
+    Text I/O classes work with str data. 
 
     Note that calling any method (even inquiries) on a closed stream is
     undefined. Implementations may raise OSError in this case.
@@ -408,27 +408,27 @@ class IOBase(metaclass=abc.ABCMeta):
     def __del__(self):
         """Destructor.  Calls close()."""
         try:
-            closed = self.closed
-        except AttributeError:
-            # If getting closed fails, then the object is probably
-            # in an unusable state, so ignore.
-            return
-
-        if closed:
-            return
-
-        if _IOBASE_EMITS_UNRAISABLE:
+            closed = self.closed 
+        except AttributeError: 
+            # If getting closed fails, then the object is probably 
+            # in an unusable state, so ignore. 
+            return 
+ 
+        if closed: 
+            return 
+ 
+        if _IOBASE_EMITS_UNRAISABLE: 
             self.close()
-        else:
-            # The try/except block is in case this is called at program
-            # exit time, when it's possible that globals have already been
-            # deleted, and then the close() call might fail.  Since
-            # there's nothing we can do about such failures and they annoy
-            # the end users, we suppress the traceback.
-            try:
-                self.close()
-            except:
-                pass
+        else: 
+            # The try/except block is in case this is called at program 
+            # exit time, when it's possible that globals have already been 
+            # deleted, and then the close() call might fail.  Since 
+            # there's nothing we can do about such failures and they annoy 
+            # the end users, we suppress the traceback. 
+            try: 
+                self.close() 
+            except: 
+                pass 
 
     ### Inquiries ###
 
@@ -593,11 +593,11 @@ class IOBase(metaclass=abc.ABCMeta):
         return lines
 
     def writelines(self, lines):
-        """Write a list of lines to the stream.
-
-        Line separators are not added, so it is usual for each of the lines
-        provided to have a line separator at the end.
-        """
+        """Write a list of lines to the stream. 
+ 
+        Line separators are not added, so it is usual for each of the lines 
+        provided to have a line separator at the end. 
+        """ 
         self._checkClosed()
         for line in lines:
             self.write(line)
@@ -804,9 +804,9 @@ class _BufferedIOMixin(BufferedIOBase):
         return pos
 
     def truncate(self, pos=None):
-        self._checkClosed()
-        self._checkWritable()
-
+        self._checkClosed() 
+        self._checkWritable() 
+ 
         # Flush the stream.  We're mixing buffered I/O with lower-level I/O,
         # and a flush may be necessary to synch both views of the current
         # file state.
@@ -863,14 +863,14 @@ class _BufferedIOMixin(BufferedIOBase):
         return self.raw.mode
 
     def __getstate__(self):
-        raise TypeError(f"cannot pickle {self.__class__.__name__!r} object")
+        raise TypeError(f"cannot pickle {self.__class__.__name__!r} object") 
 
     def __repr__(self):
         modname = self.__class__.__module__
         clsname = self.__class__.__qualname__
         try:
             name = self.name
-        except AttributeError:
+        except AttributeError: 
             return "<{}.{}>".format(modname, clsname)
         else:
             return "<{}.{} name={!r}>".format(modname, clsname, name)
@@ -888,10 +888,10 @@ class BytesIO(BufferedIOBase):
 
     """Buffered I/O implementation using an in-memory bytes buffer."""
 
-    # Initialize _buffer as soon as possible since it's used by __del__()
-    # which calls close()
-    _buffer = None
-
+    # Initialize _buffer as soon as possible since it's used by __del__() 
+    # which calls close() 
+    _buffer = None 
+ 
     def __init__(self, initial_bytes=None):
         buf = bytearray()
         if initial_bytes is not None:
@@ -919,8 +919,8 @@ class BytesIO(BufferedIOBase):
         return memoryview(self._buffer)
 
     def close(self):
-        if self._buffer is not None:
-            self._buffer.clear()
+        if self._buffer is not None: 
+            self._buffer.clear() 
         super().close()
 
     def read(self, size=-1):
@@ -1576,7 +1576,7 @@ class FileIO(RawIOBase):
                     raise IsADirectoryError(errno.EISDIR,
                                             os.strerror(errno.EISDIR), file)
             except AttributeError:
-                # Ignore the AttributeError if stat.S_ISDIR or errno.EISDIR
+                # Ignore the AttributeError if stat.S_ISDIR or errno.EISDIR 
                 # don't exist.
                 pass
             self._blksize = getattr(fdfstat, 'st_blksize', 0)
@@ -1592,11 +1592,11 @@ class FileIO(RawIOBase):
                 # For consistent behaviour, we explicitly seek to the
                 # end of file (otherwise, it might be done only on the
                 # first write()).
-                try:
-                    os.lseek(fd, 0, SEEK_END)
-                except OSError as e:
-                    if e.errno != errno.ESPIPE:
-                        raise
+                try: 
+                    os.lseek(fd, 0, SEEK_END) 
+                except OSError as e: 
+                    if e.errno != errno.ESPIPE: 
+                        raise 
         except:
             if owned_fd is not None:
                 os.close(owned_fd)
@@ -1611,7 +1611,7 @@ class FileIO(RawIOBase):
             self.close()
 
     def __getstate__(self):
-        raise TypeError(f"cannot pickle {self.__class__.__name__!r} object")
+        raise TypeError(f"cannot pickle {self.__class__.__name__!r} object") 
 
     def __repr__(self):
         class_name = '%s.%s' % (self.__class__.__module__,
@@ -1821,7 +1821,7 @@ class TextIOBase(IOBase):
     """Base class for text I/O.
 
     This class provides a character and line based interface to stream
-    I/O. There is no public constructor.
+    I/O. There is no public constructor. 
     """
 
     def read(self, size=-1):
@@ -1994,10 +1994,10 @@ class TextIOWrapper(TextIOBase):
 
     _CHUNK_SIZE = 2048
 
-    # Initialize _buffer as soon as possible since it's used by __del__()
-    # which calls close()
-    _buffer = None
-
+    # Initialize _buffer as soon as possible since it's used by __del__() 
+    # which calls close() 
+    _buffer = None 
+ 
     # The write_through argument has no effect here since this
     # implementation always writes through.  The argument is present only
     # so that the signature can match the signature of the C version.
@@ -2031,8 +2031,8 @@ class TextIOWrapper(TextIOBase):
         else:
             if not isinstance(errors, str):
                 raise ValueError("invalid errors: %r" % errors)
-            if _CHECK_ERRORS:
-                codecs.lookup_error(errors)
+            if _CHECK_ERRORS: 
+                codecs.lookup_error(errors) 
 
         self._buffer = buffer
         self._decoded_chars = ''  # buffer for text returned from decoder
@@ -2090,13 +2090,13 @@ class TextIOWrapper(TextIOBase):
                                  self.__class__.__qualname__)
         try:
             name = self.name
-        except AttributeError:
+        except AttributeError: 
             pass
         else:
             result += " name={0!r}".format(name)
         try:
             mode = self.mode
-        except AttributeError:
+        except AttributeError: 
             pass
         else:
             result += " mode={0!r}".format(mode)
@@ -2302,7 +2302,7 @@ class TextIOWrapper(TextIOBase):
         return not eof
 
     def _pack_cookie(self, position, dec_flags=0,
-                           bytes_to_feed=0, need_eof=False, chars_to_skip=0):
+                           bytes_to_feed=0, need_eof=False, chars_to_skip=0): 
         # The meaning of a tell() cookie is: seek to position, set the
         # decoder flags to dec_flags, read bytes_to_feed bytes, feed them
         # into the decoder with need_eof as the EOF flag, then skip
@@ -2316,7 +2316,7 @@ class TextIOWrapper(TextIOBase):
         rest, dec_flags = divmod(rest, 1<<64)
         rest, bytes_to_feed = divmod(rest, 1<<64)
         need_eof, chars_to_skip = divmod(rest, 1<<64)
-        return position, dec_flags, bytes_to_feed, bool(need_eof), chars_to_skip
+        return position, dec_flags, bytes_to_feed, bool(need_eof), chars_to_skip 
 
     def tell(self):
         if not self._seekable:
@@ -2350,7 +2350,7 @@ class TextIOWrapper(TextIOBase):
             # current pos.
             # Rationale: calling decoder.decode() has a large overhead
             # regardless of chunk size; we want the number of such calls to
-            # be O(1) in most situations (common decoders, sensible input).
+            # be O(1) in most situations (common decoders, sensible input). 
             # Actually, it will be exactly 1 for fixed-size codecs (all
             # 8-bit codecs, also UTF-16 and UTF-32).
             skip_bytes = int(self._b2cratio * chars_to_skip)
@@ -2390,7 +2390,7 @@ class TextIOWrapper(TextIOBase):
             # (a point where the decoder has nothing buffered, so seek()
             # can safely start from there and advance to this location).
             bytes_fed = 0
-            need_eof = False
+            need_eof = False 
             # Chars decoded since `start_pos`
             chars_decoded = 0
             for i in range(skip_bytes, len(next_input)):
@@ -2407,7 +2407,7 @@ class TextIOWrapper(TextIOBase):
             else:
                 # We didn't get enough decoded data; signal EOF to get more.
                 chars_decoded += len(decoder.decode(b'', final=True))
-                need_eof = True
+                need_eof = True 
                 if chars_decoded < chars_to_skip:
                     raise OSError("can't reconstruct logical file position")
 
@@ -2449,18 +2449,18 @@ class TextIOWrapper(TextIOBase):
             raise ValueError("tell on closed file")
         if not self._seekable:
             raise UnsupportedOperation("underlying stream is not seekable")
-        if whence == SEEK_CUR:
+        if whence == SEEK_CUR: 
             if cookie != 0:
                 raise UnsupportedOperation("can't do nonzero cur-relative seeks")
             # Seeking to the current position should attempt to
             # sync the underlying buffer with the current position.
             whence = 0
             cookie = self.tell()
-        elif whence == SEEK_END:
+        elif whence == SEEK_END: 
             if cookie != 0:
                 raise UnsupportedOperation("can't do nonzero end-relative seeks")
             self.flush()
-            position = self.buffer.seek(0, whence)
+            position = self.buffer.seek(0, whence) 
             self._set_decoded_chars('')
             self._snapshot = None
             if self._decoder:

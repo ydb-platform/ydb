@@ -33,7 +33,7 @@
 
 namespace llvm {
 
-class AAResults;
+class AAResults; 
 class AssumptionCache;
 class BasicBlock;
 class CmpInst;
@@ -41,7 +41,7 @@ class DataLayout;
 class DemandedBits;
 class DominatorTree;
 class Function;
-class GetElementPtrInst;
+class GetElementPtrInst; 
 class InsertElementInst;
 class InsertValueInst;
 class Instruction;
@@ -71,7 +71,7 @@ struct SLPVectorizerPass : public PassInfoMixin<SLPVectorizerPass> {
   ScalarEvolution *SE = nullptr;
   TargetTransformInfo *TTI = nullptr;
   TargetLibraryInfo *TLI = nullptr;
-  AAResults *AA = nullptr;
+  AAResults *AA = nullptr; 
   LoopInfo *LI = nullptr;
   DominatorTree *DT = nullptr;
   AssumptionCache *AC = nullptr;
@@ -83,7 +83,7 @@ public:
 
   // Glue for old PM.
   bool runImpl(Function &F, ScalarEvolution *SE_, TargetTransformInfo *TTI_,
-               TargetLibraryInfo *TLI_, AAResults *AA_, LoopInfo *LI_,
+               TargetLibraryInfo *TLI_, AAResults *AA_, LoopInfo *LI_, 
                DominatorTree *DT_, AssumptionCache *AC_, DemandedBits *DB_,
                OptimizationRemarkEmitter *ORE_);
 

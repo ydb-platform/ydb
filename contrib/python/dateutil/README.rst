@@ -1,11 +1,11 @@
 dateutil - powerful extensions to datetime
 ==========================================
 
-|pypi| |support| |licence|
+|pypi| |support| |licence| 
 
 |gitter| |readthedocs|
 
-|travis| |appveyor| |pipelines| |coverage|
+|travis| |appveyor| |pipelines| |coverage| 
 
 .. |pypi| image:: https://img.shields.io/pypi/v/python-dateutil.svg?style=flat-square
     :target: https://pypi.org/project/python-dateutil/
@@ -23,12 +23,12 @@ dateutil - powerful extensions to datetime
     :target: https://ci.appveyor.com/project/dateutil/dateutil
     :alt: appveyor build status
 
-.. |pipelines| image:: https://dev.azure.com/pythondateutilazure/dateutil/_apis/build/status/dateutil.dateutil?branchName=master
-    :target: https://dev.azure.com/pythondateutilazure/dateutil/_build/latest?definitionId=1&branchName=master
-    :alt: azure pipelines build status
-
-.. |coverage| image:: https://codecov.io/gh/dateutil/dateutil/branch/master/graphs/badge.svg?branch=master
-    :target: https://codecov.io/gh/dateutil/dateutil?branch=master
+.. |pipelines| image:: https://dev.azure.com/pythondateutilazure/dateutil/_apis/build/status/dateutil.dateutil?branchName=master 
+    :target: https://dev.azure.com/pythondateutilazure/dateutil/_build/latest?definitionId=1&branchName=master 
+    :alt: azure pipelines build status 
+ 
+.. |coverage| image:: https://codecov.io/gh/dateutil/dateutil/branch/master/graphs/badge.svg?branch=master 
+    :target: https://codecov.io/gh/dateutil/dateutil?branch=master 
     :alt: Code coverage
 
 .. |gitter| image:: https://badges.gitter.im/dateutil/dateutil.svg
@@ -46,13 +46,13 @@ dateutil - powerful extensions to datetime
 The `dateutil` module provides powerful extensions to
 the standard `datetime` module, available in Python.
 
-Installation
-============
-`dateutil` can be installed from PyPI using `pip` (note that the package name is
-different from the importable name)::
+Installation 
+============ 
+`dateutil` can be installed from PyPI using `pip` (note that the package name is 
+different from the importable name):: 
 
-    pip install python-dateutil
-
+    pip install python-dateutil 
+ 
 Download
 ========
 dateutil is available on PyPI
@@ -63,14 +63,14 @@ https://dateutil.readthedocs.io/en/stable/
 
 Code
 ====
-The code and issue tracker are hosted on GitHub:
+The code and issue tracker are hosted on GitHub: 
 https://github.com/dateutil/dateutil/
 
 Features
 ========
 
 * Computing of relative deltas (next month, next year,
-  next Monday, last week of month, etc);
+  next Monday, last week of month, etc); 
 * Computing of relative deltas between two given
   date and/or datetime objects;
 * Computing of dates based on very flexible recurrence rules,
@@ -139,24 +139,24 @@ It is maintained by:
 * Yaron de Leeuw <me@jarondl.net> 2014-2016
 * Paul Ganssle <paul@ganssle.io> 2015-
 
-Starting with version 2.4.1 and running until 2.8.2, all source and binary
-distributions will be signed by a PGP key that has, at the very least, been
-signed by the key which made the previous release. A table of release signing
-keys can be found below:
+Starting with version 2.4.1 and running until 2.8.2, all source and binary 
+distributions will be signed by a PGP key that has, at the very least, been 
+signed by the key which made the previous release. A table of release signing 
+keys can be found below: 
 
 ===========  ============================
 Releases     Signing key fingerprint
 ===========  ============================
-2.4.1-2.8.2  `6B49 ACBA DCF6 BD1C A206 67AB CD54 FCE3 D964 BEFB`_ 
+2.4.1-2.8.2  `6B49 ACBA DCF6 BD1C A206 67AB CD54 FCE3 D964 BEFB`_  
 ===========  ============================
 
-New releases *may* have signed tags, but binary and source distributions
-uploaded to PyPI will no longer have GPG signatures attached.
+New releases *may* have signed tags, but binary and source distributions 
+uploaded to PyPI will no longer have GPG signatures attached. 
 
 Contact
 =======
 Our mailing list is available at `dateutil@python.org <https://mail.python.org/mailman/listinfo/dateutil>`_. As it is hosted by the PSF, it is subject to the `PSF code of
-conduct <https://www.python.org/psf/conduct/>`_.
+conduct <https://www.python.org/psf/conduct/>`_. 
 
 License
 =======

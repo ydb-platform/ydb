@@ -151,9 +151,9 @@ public:
   /// \param STI - The MCSubtargetInfo in effect when the instruction was
   /// encoded.
   virtual bool mayNeedRelaxation(const MCInst &Inst,
-                                 const MCSubtargetInfo &STI) const {
-    return false;
-  }
+                                 const MCSubtargetInfo &STI) const { 
+    return false; 
+  } 
 
   /// Target specific predicate for whether a given fixup requires the
   /// associated instruction to be relaxed.
@@ -184,10 +184,10 @@ public:
   ///
   virtual unsigned getMinimumNopSize() const { return 1; }
 
-  /// Returns the maximum size of a nop in bytes on this target.
-  ///
-  virtual unsigned getMaximumNopSize() const { return 0; }
-
+  /// Returns the maximum size of a nop in bytes on this target. 
+  /// 
+  virtual unsigned getMaximumNopSize() const { return 0; } 
+ 
   /// Write an (optimal) nop sequence of Count bytes to the given output. If the
   /// target cannot generate such a sequence, it should return an error.
   ///

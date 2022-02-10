@@ -4,12 +4,12 @@
 
     Other formatters: NullFormatter, RawTokenFormatter.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
 from pygments.formatter import Formatter
-from pygments.util import get_choice_opt
+from pygments.util import get_choice_opt 
 from pygments.token import Token
 from pygments.console import colorize
 
@@ -86,44 +86,44 @@ class RawTokenFormatter(Formatter):
         if self.compress == 'gz':
             import gzip
             outfile = gzip.GzipFile('', 'wb', 9, outfile)
-
-            write = outfile.write
-            flush = outfile.close
+ 
+            write = outfile.write 
+            flush = outfile.close 
         elif self.compress == 'bz2':
             import bz2
             compressor = bz2.BZ2Compressor(9)
-
+ 
             def write(text):
-                outfile.write(compressor.compress(text))
-
+                outfile.write(compressor.compress(text)) 
+ 
             def flush():
                 outfile.write(compressor.flush())
                 outfile.flush()
         else:
-            write = outfile.write
+            write = outfile.write 
             flush = outfile.flush
 
         if self.error_color:
             for ttype, value in tokensource:
-                line = b"%r\t%r\n" % (ttype, value)
+                line = b"%r\t%r\n" % (ttype, value) 
                 if ttype is Token.Error:
                     write(colorize(self.error_color, line))
                 else:
                     write(line)
         else:
             for ttype, value in tokensource:
-                write(b"%r\t%r\n" % (ttype, value))
+                write(b"%r\t%r\n" % (ttype, value)) 
         flush()
 
-
-TESTCASE_BEFORE = '''\
-    def testNeedsName(lexer):
+ 
+TESTCASE_BEFORE = '''\ 
+    def testNeedsName(lexer): 
         fragment = %r
         tokens = [
 '''
-TESTCASE_AFTER = '''\
+TESTCASE_AFTER = '''\ 
         ]
-        assert list(lexer.get_tokens(fragment)) == tokens
+        assert list(lexer.get_tokens(fragment)) == tokens 
 '''
 
 
@@ -149,8 +149,8 @@ class TestcaseFormatter(Formatter):
             rawbuf.append(value)
             outbuf.append('%s(%s, %r),\n' % (indentation, ttype, value))
 
-        before = TESTCASE_BEFORE % (''.join(rawbuf),)
-        during = ''.join(outbuf)
+        before = TESTCASE_BEFORE % (''.join(rawbuf),) 
+        during = ''.join(outbuf) 
         after = TESTCASE_AFTER
         if self.encoding is None:
             outfile.write(before + during + after)

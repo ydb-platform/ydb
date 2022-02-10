@@ -47,9 +47,9 @@ public:
   using NotifyResolvedFunction =
       unique_function<Error(JITTargetAddress ResolvedAddr)>;
 
-  LazyCallThroughManager(ExecutionSession &ES,
-                         JITTargetAddress ErrorHandlerAddr, TrampolinePool *TP);
-
+  LazyCallThroughManager(ExecutionSession &ES, 
+                         JITTargetAddress ErrorHandlerAddr, TrampolinePool *TP); 
+ 
   // Return a free call-through trampoline and bind it to look up and call
   // through to the given symbol.
   Expected<JITTargetAddress>
@@ -151,12 +151,12 @@ public:
                                    IndirectStubsManager &ISManager,
                                    JITDylib &SourceJD,
                                    SymbolAliasMap CallableAliases,
-                                   ImplSymbolMap *SrcJDLoc);
+                                   ImplSymbolMap *SrcJDLoc); 
 
   StringRef getName() const override;
 
 private:
-  void materialize(std::unique_ptr<MaterializationResponsibility> R) override;
+  void materialize(std::unique_ptr<MaterializationResponsibility> R) override; 
   void discard(const JITDylib &JD, const SymbolStringPtr &Name) override;
   static SymbolFlagsMap extractFlags(const SymbolAliasMap &Aliases);
 
@@ -173,10 +173,10 @@ private:
 inline std::unique_ptr<LazyReexportsMaterializationUnit>
 lazyReexports(LazyCallThroughManager &LCTManager,
               IndirectStubsManager &ISManager, JITDylib &SourceJD,
-              SymbolAliasMap CallableAliases,
-              ImplSymbolMap *SrcJDLoc = nullptr) {
+              SymbolAliasMap CallableAliases, 
+              ImplSymbolMap *SrcJDLoc = nullptr) { 
   return std::make_unique<LazyReexportsMaterializationUnit>(
-      LCTManager, ISManager, SourceJD, std::move(CallableAliases), SrcJDLoc);
+      LCTManager, ISManager, SourceJD, std::move(CallableAliases), SrcJDLoc); 
 }
 
 } // End namespace orc

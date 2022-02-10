@@ -35,7 +35,7 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Support/CFGDiff.h"
+#include "llvm/Support/CFGDiff.h" 
 #include "llvm/Support/CFGUpdate.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -67,7 +67,7 @@ template <class NodeT> class DomTreeNodeBase {
   NodeT *TheBB;
   DomTreeNodeBase *IDom;
   unsigned Level;
-  SmallVector<DomTreeNodeBase *, 4> Children;
+  SmallVector<DomTreeNodeBase *, 4> Children; 
   mutable unsigned DFSNumIn = ~0;
   mutable unsigned DFSNumOut = ~0;
 
@@ -75,9 +75,9 @@ template <class NodeT> class DomTreeNodeBase {
   DomTreeNodeBase(NodeT *BB, DomTreeNodeBase *iDom)
       : TheBB(BB), IDom(iDom), Level(IDom ? IDom->Level + 1 : 0) {}
 
-  using iterator = typename SmallVector<DomTreeNodeBase *, 4>::iterator;
+  using iterator = typename SmallVector<DomTreeNodeBase *, 4>::iterator; 
   using const_iterator =
-      typename SmallVector<DomTreeNodeBase *, 4>::const_iterator;
+      typename SmallVector<DomTreeNodeBase *, 4>::const_iterator; 
 
   iterator begin() { return Children.begin(); }
   iterator end() { return Children.end(); }
@@ -218,10 +218,10 @@ void DeleteEdge(DomTreeT &DT, typename DomTreeT::NodePtr From,
 
 template <typename DomTreeT>
 void ApplyUpdates(DomTreeT &DT,
-                  GraphDiff<typename DomTreeT::NodePtr,
-                            DomTreeT::IsPostDominator> &PreViewCFG,
-                  GraphDiff<typename DomTreeT::NodePtr,
-                            DomTreeT::IsPostDominator> *PostViewCFG);
+                  GraphDiff<typename DomTreeT::NodePtr, 
+                            DomTreeT::IsPostDominator> &PreViewCFG, 
+                  GraphDiff<typename DomTreeT::NodePtr, 
+                            DomTreeT::IsPostDominator> *PostViewCFG); 
 
 template <typename DomTreeT>
 bool Verify(const DomTreeT &DT, typename DomTreeT::VerificationLevel VL);
@@ -470,8 +470,8 @@ protected:
     return this->Roots[0];
   }
 
-  /// Find nearest common dominator basic block for basic block A and B. A and B
-  /// must have tree nodes.
+  /// Find nearest common dominator basic block for basic block A and B. A and B 
+  /// must have tree nodes. 
   NodeT *findNearestCommonDominator(NodeT *A, NodeT *B) const {
     assert(A && B && "Pointers are not valid");
     assert(A->getParent() == B->getParent() &&
@@ -487,18 +487,18 @@ protected:
 
     DomTreeNodeBase<NodeT> *NodeA = getNode(A);
     DomTreeNodeBase<NodeT> *NodeB = getNode(B);
-    assert(NodeA && "A must be in the tree");
-    assert(NodeB && "B must be in the tree");
+    assert(NodeA && "A must be in the tree"); 
+    assert(NodeB && "B must be in the tree"); 
 
     // Use level information to go up the tree until the levels match. Then
     // continue going up til we arrive at the same node.
-    while (NodeA != NodeB) {
+    while (NodeA != NodeB) { 
       if (NodeA->getLevel() < NodeB->getLevel()) std::swap(NodeA, NodeB);
 
       NodeA = NodeA->IDom;
     }
 
-    return NodeA->getBlock();
+    return NodeA->getBlock(); 
   }
 
   const NodeT *findNearestCommonDominator(const NodeT *A,
@@ -545,41 +545,41 @@ protected:
   /// The type of updates is the same for DomTreeBase<T> and PostDomTreeBase<T>
   /// with the same template parameter T.
   ///
-  /// \param Updates An unordered sequence of updates to perform. The current
-  /// CFG and the reverse of these updates provides the pre-view of the CFG.
+  /// \param Updates An unordered sequence of updates to perform. The current 
+  /// CFG and the reverse of these updates provides the pre-view of the CFG. 
   ///
   void applyUpdates(ArrayRef<UpdateType> Updates) {
-    GraphDiff<NodePtr, IsPostDominator> PreViewCFG(
-        Updates, /*ReverseApplyUpdates=*/true);
-    DomTreeBuilder::ApplyUpdates(*this, PreViewCFG, nullptr);
+    GraphDiff<NodePtr, IsPostDominator> PreViewCFG( 
+        Updates, /*ReverseApplyUpdates=*/true); 
+    DomTreeBuilder::ApplyUpdates(*this, PreViewCFG, nullptr); 
   }
 
-  /// \param Updates An unordered sequence of updates to perform. The current
-  /// CFG and the reverse of these updates provides the pre-view of the CFG.
-  /// \param PostViewUpdates An unordered sequence of update to perform in order
-  /// to obtain a post-view of the CFG. The DT will be updated assuming the
-  /// obtained PostViewCFG is the desired end state.
-  void applyUpdates(ArrayRef<UpdateType> Updates,
-                    ArrayRef<UpdateType> PostViewUpdates) {
-    if (Updates.empty()) {
-      GraphDiff<NodePtr, IsPostDom> PostViewCFG(PostViewUpdates);
-      DomTreeBuilder::ApplyUpdates(*this, PostViewCFG, &PostViewCFG);
-    } else {
-      // PreViewCFG needs to merge Updates and PostViewCFG. The updates in
-      // Updates need to be reversed, and match the direction in PostViewCFG.
-      // The PostViewCFG is created with updates reversed (equivalent to changes
-      // made to the CFG), so the PreViewCFG needs all the updates reverse
-      // applied.
-      SmallVector<UpdateType> AllUpdates(Updates.begin(), Updates.end());
-      for (auto &Update : PostViewUpdates)
-        AllUpdates.push_back(Update);
-      GraphDiff<NodePtr, IsPostDom> PreViewCFG(AllUpdates,
-                                               /*ReverseApplyUpdates=*/true);
-      GraphDiff<NodePtr, IsPostDom> PostViewCFG(PostViewUpdates);
-      DomTreeBuilder::ApplyUpdates(*this, PreViewCFG, &PostViewCFG);
-    }
-  }
-
+  /// \param Updates An unordered sequence of updates to perform. The current 
+  /// CFG and the reverse of these updates provides the pre-view of the CFG. 
+  /// \param PostViewUpdates An unordered sequence of update to perform in order 
+  /// to obtain a post-view of the CFG. The DT will be updated assuming the 
+  /// obtained PostViewCFG is the desired end state. 
+  void applyUpdates(ArrayRef<UpdateType> Updates, 
+                    ArrayRef<UpdateType> PostViewUpdates) { 
+    if (Updates.empty()) { 
+      GraphDiff<NodePtr, IsPostDom> PostViewCFG(PostViewUpdates); 
+      DomTreeBuilder::ApplyUpdates(*this, PostViewCFG, &PostViewCFG); 
+    } else { 
+      // PreViewCFG needs to merge Updates and PostViewCFG. The updates in 
+      // Updates need to be reversed, and match the direction in PostViewCFG. 
+      // The PostViewCFG is created with updates reversed (equivalent to changes 
+      // made to the CFG), so the PreViewCFG needs all the updates reverse 
+      // applied. 
+      SmallVector<UpdateType> AllUpdates(Updates.begin(), Updates.end()); 
+      for (auto &Update : PostViewUpdates) 
+        AllUpdates.push_back(Update); 
+      GraphDiff<NodePtr, IsPostDom> PreViewCFG(AllUpdates, 
+                                               /*ReverseApplyUpdates=*/true); 
+      GraphDiff<NodePtr, IsPostDom> PostViewCFG(PostViewUpdates); 
+      DomTreeBuilder::ApplyUpdates(*this, PreViewCFG, &PostViewCFG); 
+    } 
+  } 
+ 
   /// Inform the dominator tree about a CFG edge insertion and update the tree.
   ///
   /// This function has to be called just before or just after making the update
@@ -846,7 +846,7 @@ protected:
            "NewBB should have a single successor!");
     NodeRef NewBBSucc = *GraphT::child_begin(NewBB);
 
-    SmallVector<NodeRef, 4> PredBlocks(children<Inverse<N>>(NewBB));
+    SmallVector<NodeRef, 4> PredBlocks(children<Inverse<N>>(NewBB)); 
 
     assert(!PredBlocks.empty() && "No predblocks?");
 

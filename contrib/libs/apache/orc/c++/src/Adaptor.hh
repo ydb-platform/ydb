@@ -30,12 +30,12 @@
 #define HAS_DOUBLE_TO_STRING
 #define HAS_INT64_TO_STRING
 #define HAS_PRE_1970
-#define HAS_POST_2038
+#define HAS_POST_2038 
 #define HAS_STD_ISNAN
 #define HAS_STD_MUTEX
-#ifndef _MSC_VER
-#define HAS_BUILTIN_OVERFLOW_CHECK
-#endif
+#ifndef _MSC_VER 
+#define HAS_BUILTIN_OVERFLOW_CHECK 
+#endif 
 /* #undef NEEDS_REDUNDANT_MOVE */
 /* #undef NEEDS_Z_PREFIX */
 
@@ -170,40 +170,40 @@ namespace orc {
   std::string to_string(int64_t val);
 }
 
-#ifdef HAS_BUILTIN_OVERFLOW_CHECK
-  #define multiplyExact !__builtin_mul_overflow
-  #define addExact !__builtin_add_overflow
-#else
-namespace orc {
-  /**
-   * Compute value * repetitions, return false if overflow, return true otherwise
-   * and save the result at the address pointed to by result
-   * imitates the jdk Math.multiplyExact implementation
-   * but this method makes the assumption that repetitions > 1
-   */
-  static bool multiplyExact(int64_t value, int64_t repetitions, int64_t* result) {
-    int64_t r = value * repetitions;
-    if (((value < 0 ? -value : value) | repetitions) >> 31 != 0 && r / repetitions != value) {
-      return false;
-    }
-    *result = r;
-    return true;
-  }
-
-  /**
-   * imitates the jdk Math.addExact implementation
-   */
-  static bool addExact(int64_t sum, int64_t increment, int64_t* result) {
-    int64_t r = sum + increment;
-    if (((sum ^ r) & (increment ^ r)) < 0) {
-      return false;
-    }
-    *result = r;
-    return true;
-  }
-}
-#endif
-
+#ifdef HAS_BUILTIN_OVERFLOW_CHECK 
+  #define multiplyExact !__builtin_mul_overflow 
+  #define addExact !__builtin_add_overflow 
+#else 
+namespace orc { 
+  /** 
+   * Compute value * repetitions, return false if overflow, return true otherwise 
+   * and save the result at the address pointed to by result 
+   * imitates the jdk Math.multiplyExact implementation 
+   * but this method makes the assumption that repetitions > 1 
+   */ 
+  static bool multiplyExact(int64_t value, int64_t repetitions, int64_t* result) { 
+    int64_t r = value * repetitions; 
+    if (((value < 0 ? -value : value) | repetitions) >> 31 != 0 && r / repetitions != value) { 
+      return false; 
+    } 
+    *result = r; 
+    return true; 
+  } 
+ 
+  /** 
+   * imitates the jdk Math.addExact implementation 
+   */ 
+  static bool addExact(int64_t sum, int64_t increment, int64_t* result) { 
+    int64_t r = sum + increment; 
+    if (((sum ^ r) & (increment ^ r)) < 0) { 
+      return false; 
+    } 
+    *result = r; 
+    return true; 
+  } 
+} 
+#endif 
+ 
 #ifndef HAS_CONSTEXPR
 #define constexpr const
 #endif

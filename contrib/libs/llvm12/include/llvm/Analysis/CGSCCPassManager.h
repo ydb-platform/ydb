@@ -97,7 +97,7 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/MapVector.h"
+#include "llvm/ADT/MapVector.h" 
 #include "llvm/ADT/PriorityWorklist.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -322,16 +322,16 @@ struct CGSCCUpdateResult {
   /// for a better technique.
   SmallDenseSet<std::pair<LazyCallGraph::Node *, LazyCallGraph::SCC *>, 4>
       &InlinedInternalEdges;
-
-  /// Weak VHs to keep track of indirect calls for the purposes of detecting
-  /// devirtualization.
-  ///
-  /// This is a map to avoid having duplicate entries. If a Value is
-  /// deallocated, its corresponding WeakTrackingVH will be nulled out. When
-  /// checking if a Value is in the map or not, also check if the corresponding
-  /// WeakTrackingVH is null to avoid issues with a new Value sharing the same
-  /// address as a deallocated one.
-  SmallMapVector<Value *, WeakTrackingVH, 16> IndirectVHs;
+ 
+  /// Weak VHs to keep track of indirect calls for the purposes of detecting 
+  /// devirtualization. 
+  /// 
+  /// This is a map to avoid having duplicate entries. If a Value is 
+  /// deallocated, its corresponding WeakTrackingVH will be nulled out. When 
+  /// checking if a Value is in the map or not, also check if the corresponding 
+  /// WeakTrackingVH is null to avoid issues with a new Value sharing the same 
+  /// address as a deallocated one. 
+  SmallMapVector<Value *, WeakTrackingVH, 16> IndirectVHs; 
 };
 
 /// The core module pass which does a post-order walk of the SCCs and
@@ -344,13 +344,13 @@ struct CGSCCUpdateResult {
 /// pass over the module to enable a \c FunctionAnalysisManager to be used
 /// within this run safely.
 class ModuleToPostOrderCGSCCPassAdaptor
-    : public PassInfoMixin<ModuleToPostOrderCGSCCPassAdaptor> {
+    : public PassInfoMixin<ModuleToPostOrderCGSCCPassAdaptor> { 
 public:
-  using PassConceptT =
-      detail::PassConcept<LazyCallGraph::SCC, CGSCCAnalysisManager,
-                          LazyCallGraph &, CGSCCUpdateResult &>;
-
-  explicit ModuleToPostOrderCGSCCPassAdaptor(std::unique_ptr<PassConceptT> Pass)
+  using PassConceptT = 
+      detail::PassConcept<LazyCallGraph::SCC, CGSCCAnalysisManager, 
+                          LazyCallGraph &, CGSCCUpdateResult &>; 
+ 
+  explicit ModuleToPostOrderCGSCCPassAdaptor(std::unique_ptr<PassConceptT> Pass) 
       : Pass(std::move(Pass)) {}
 
   ModuleToPostOrderCGSCCPassAdaptor(ModuleToPostOrderCGSCCPassAdaptor &&Arg)
@@ -370,22 +370,22 @@ public:
   /// Runs the CGSCC pass across every SCC in the module.
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
 
-  static bool isRequired() { return true; }
-
+  static bool isRequired() { return true; } 
+ 
 private:
-  std::unique_ptr<PassConceptT> Pass;
+  std::unique_ptr<PassConceptT> Pass; 
 };
 
 /// A function to deduce a function pass type and wrap it in the
 /// templated adaptor.
 template <typename CGSCCPassT>
-ModuleToPostOrderCGSCCPassAdaptor
+ModuleToPostOrderCGSCCPassAdaptor 
 createModuleToPostOrderCGSCCPassAdaptor(CGSCCPassT Pass) {
-  using PassModelT = detail::PassModel<LazyCallGraph::SCC, CGSCCPassT,
-                                       PreservedAnalyses, CGSCCAnalysisManager,
-                                       LazyCallGraph &, CGSCCUpdateResult &>;
-  return ModuleToPostOrderCGSCCPassAdaptor(
-      std::make_unique<PassModelT>(std::move(Pass)));
+  using PassModelT = detail::PassModel<LazyCallGraph::SCC, CGSCCPassT, 
+                                       PreservedAnalyses, CGSCCAnalysisManager, 
+                                       LazyCallGraph &, CGSCCUpdateResult &>; 
+  return ModuleToPostOrderCGSCCPassAdaptor( 
+      std::make_unique<PassModelT>(std::move(Pass))); 
 }
 
 /// A proxy from a \c FunctionAnalysisManager to an \c SCC.
@@ -464,11 +464,11 @@ LazyCallGraph::SCC &updateCGAndAnalysisManagerForCGSCCPass(
 /// pass over the SCC to enable a \c FunctionAnalysisManager to be used
 /// within this run safely.
 class CGSCCToFunctionPassAdaptor
-    : public PassInfoMixin<CGSCCToFunctionPassAdaptor> {
+    : public PassInfoMixin<CGSCCToFunctionPassAdaptor> { 
 public:
-  using PassConceptT = detail::PassConcept<Function, FunctionAnalysisManager>;
-
-  explicit CGSCCToFunctionPassAdaptor(std::unique_ptr<PassConceptT> Pass)
+  using PassConceptT = detail::PassConcept<Function, FunctionAnalysisManager>; 
+ 
+  explicit CGSCCToFunctionPassAdaptor(std::unique_ptr<PassConceptT> Pass) 
       : Pass(std::move(Pass)) {}
 
   CGSCCToFunctionPassAdaptor(CGSCCToFunctionPassAdaptor &&Arg)
@@ -486,24 +486,24 @@ public:
 
   /// Runs the function pass across every function in the module.
   PreservedAnalyses run(LazyCallGraph::SCC &C, CGSCCAnalysisManager &AM,
-                        LazyCallGraph &CG, CGSCCUpdateResult &UR);
+                        LazyCallGraph &CG, CGSCCUpdateResult &UR); 
 
-  static bool isRequired() { return true; }
+  static bool isRequired() { return true; } 
 
 private:
-  std::unique_ptr<PassConceptT> Pass;
+  std::unique_ptr<PassConceptT> Pass; 
 };
 
 /// A function to deduce a function pass type and wrap it in the
 /// templated adaptor.
 template <typename FunctionPassT>
-CGSCCToFunctionPassAdaptor
+CGSCCToFunctionPassAdaptor 
 createCGSCCToFunctionPassAdaptor(FunctionPassT Pass) {
-  using PassModelT =
-      detail::PassModel<Function, FunctionPassT, PreservedAnalyses,
-                        FunctionAnalysisManager>;
-  return CGSCCToFunctionPassAdaptor(
-      std::make_unique<PassModelT>(std::move(Pass)));
+  using PassModelT = 
+      detail::PassModel<Function, FunctionPassT, PreservedAnalyses, 
+                        FunctionAnalysisManager>; 
+  return CGSCCToFunctionPassAdaptor( 
+      std::make_unique<PassModelT>(std::move(Pass))); 
 }
 
 /// A helper that repeats an SCC pass each time an indirect call is refined to
@@ -520,36 +520,36 @@ createCGSCCToFunctionPassAdaptor(FunctionPassT Pass) {
 /// This repetition has the potential to be very large however, as each one
 /// might refine a single call site. As a consequence, in practice we use an
 /// upper bound on the number of repetitions to limit things.
-class DevirtSCCRepeatedPass : public PassInfoMixin<DevirtSCCRepeatedPass> {
+class DevirtSCCRepeatedPass : public PassInfoMixin<DevirtSCCRepeatedPass> { 
 public:
-  using PassConceptT =
-      detail::PassConcept<LazyCallGraph::SCC, CGSCCAnalysisManager,
-                          LazyCallGraph &, CGSCCUpdateResult &>;
-
-  explicit DevirtSCCRepeatedPass(std::unique_ptr<PassConceptT> Pass,
-                                 int MaxIterations)
+  using PassConceptT = 
+      detail::PassConcept<LazyCallGraph::SCC, CGSCCAnalysisManager, 
+                          LazyCallGraph &, CGSCCUpdateResult &>; 
+ 
+  explicit DevirtSCCRepeatedPass(std::unique_ptr<PassConceptT> Pass, 
+                                 int MaxIterations) 
       : Pass(std::move(Pass)), MaxIterations(MaxIterations) {}
 
   /// Runs the wrapped pass up to \c MaxIterations on the SCC, iterating
   /// whenever an indirect call is refined.
   PreservedAnalyses run(LazyCallGraph::SCC &InitialC, CGSCCAnalysisManager &AM,
-                        LazyCallGraph &CG, CGSCCUpdateResult &UR);
+                        LazyCallGraph &CG, CGSCCUpdateResult &UR); 
 
 private:
-  std::unique_ptr<PassConceptT> Pass;
+  std::unique_ptr<PassConceptT> Pass; 
   int MaxIterations;
 };
 
 /// A function to deduce a function pass type and wrap it in the
 /// templated adaptor.
 template <typename CGSCCPassT>
-DevirtSCCRepeatedPass createDevirtSCCRepeatedPass(CGSCCPassT Pass,
-                                                  int MaxIterations) {
-  using PassModelT = detail::PassModel<LazyCallGraph::SCC, CGSCCPassT,
-                                       PreservedAnalyses, CGSCCAnalysisManager,
-                                       LazyCallGraph &, CGSCCUpdateResult &>;
-  return DevirtSCCRepeatedPass(std::make_unique<PassModelT>(std::move(Pass)),
-                               MaxIterations);
+DevirtSCCRepeatedPass createDevirtSCCRepeatedPass(CGSCCPassT Pass, 
+                                                  int MaxIterations) { 
+  using PassModelT = detail::PassModel<LazyCallGraph::SCC, CGSCCPassT, 
+                                       PreservedAnalyses, CGSCCAnalysisManager, 
+                                       LazyCallGraph &, CGSCCUpdateResult &>; 
+  return DevirtSCCRepeatedPass(std::make_unique<PassModelT>(std::move(Pass)), 
+                               MaxIterations); 
 }
 
 // Clear out the debug logging macro.

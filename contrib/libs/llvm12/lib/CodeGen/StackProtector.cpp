@@ -170,8 +170,8 @@ bool StackProtector::HasAddressTaken(const Instruction *AI,
     // If this instruction accesses memory make sure it doesn't access beyond
     // the bounds of the allocated object.
     Optional<MemoryLocation> MemLoc = MemoryLocation::getOrNone(I);
-    if (MemLoc.hasValue() && MemLoc->Size.hasValue() &&
-        MemLoc->Size.getValue() > AllocSize)
+    if (MemLoc.hasValue() && MemLoc->Size.hasValue() && 
+        MemLoc->Size.getValue() > AllocSize) 
       return true;
     switch (I->getOpcode()) {
     case Instruction::Store:
@@ -192,7 +192,7 @@ bool StackProtector::HasAddressTaken(const Instruction *AI,
       // Ignore intrinsics that do not become real instructions.
       // TODO: Narrow this to intrinsics that have store-like effects.
       const auto *CI = cast<CallInst>(I);
-      if (!CI->isDebugOrPseudoInst() && !CI->isLifetimeStartOrEnd())
+      if (!CI->isDebugOrPseudoInst() && !CI->isLifetimeStartOrEnd()) 
         return true;
       break;
     }
@@ -252,9 +252,9 @@ bool StackProtector::HasAddressTaken(const Instruction *AI,
 static const CallInst *findStackProtectorIntrinsic(Function &F) {
   for (const BasicBlock &BB : F)
     for (const Instruction &I : BB)
-      if (const auto *II = dyn_cast<IntrinsicInst>(&I))
-        if (II->getIntrinsicID() == Intrinsic::stackprotector)
-          return II;
+      if (const auto *II = dyn_cast<IntrinsicInst>(&I)) 
+        if (II->getIntrinsicID() == Intrinsic::stackprotector) 
+          return II; 
   return nullptr;
 }
 
@@ -378,10 +378,10 @@ bool StackProtector::RequiresStackProtector() {
 static Value *getStackGuard(const TargetLoweringBase *TLI, Module *M,
                             IRBuilder<> &B,
                             bool *SupportsSelectionDAGSP = nullptr) {
-  Value *Guard = TLI->getIRStackGuard(B);
-  auto GuardMode = TLI->getTargetMachine().Options.StackProtectorGuard;
-  if ((GuardMode == llvm::StackProtectorGuards::TLS ||
-       GuardMode == llvm::StackProtectorGuards::None) && Guard)
+  Value *Guard = TLI->getIRStackGuard(B); 
+  auto GuardMode = TLI->getTargetMachine().Options.StackProtectorGuard; 
+  if ((GuardMode == llvm::StackProtectorGuards::TLS || 
+       GuardMode == llvm::StackProtectorGuards::None) && Guard) 
     return B.CreateLoad(B.getInt8PtrTy(), Guard, true, "StackGuard");
 
   // Use SelectionDAG SSP handling, since there isn't an IR guard.
@@ -470,36 +470,36 @@ bool StackProtector::InsertStackProtectors() {
     // instrumentation has already been generated.
     HasIRCheck = true;
 
-    // If we're instrumenting a block with a musttail call, the check has to be
-    // inserted before the call rather than between it and the return. The
-    // verifier guarantees that a musttail call is either directly before the
-    // return or with a single correct bitcast of the return value in between so
-    // we don't need to worry about many situations here.
-    Instruction *CheckLoc = RI;
-    Instruction *Prev = RI->getPrevNonDebugInstruction();
-    if (Prev && isa<CallInst>(Prev) && cast<CallInst>(Prev)->isMustTailCall())
-      CheckLoc = Prev;
-    else if (Prev) {
-      Prev = Prev->getPrevNonDebugInstruction();
-      if (Prev && isa<CallInst>(Prev) && cast<CallInst>(Prev)->isMustTailCall())
-        CheckLoc = Prev;
-    }
-
+    // If we're instrumenting a block with a musttail call, the check has to be 
+    // inserted before the call rather than between it and the return. The 
+    // verifier guarantees that a musttail call is either directly before the 
+    // return or with a single correct bitcast of the return value in between so 
+    // we don't need to worry about many situations here. 
+    Instruction *CheckLoc = RI; 
+    Instruction *Prev = RI->getPrevNonDebugInstruction(); 
+    if (Prev && isa<CallInst>(Prev) && cast<CallInst>(Prev)->isMustTailCall()) 
+      CheckLoc = Prev; 
+    else if (Prev) { 
+      Prev = Prev->getPrevNonDebugInstruction(); 
+      if (Prev && isa<CallInst>(Prev) && cast<CallInst>(Prev)->isMustTailCall()) 
+        CheckLoc = Prev; 
+    } 
+ 
     // Generate epilogue instrumentation. The epilogue intrumentation can be
     // function-based or inlined depending on which mechanism the target is
     // providing.
     if (Function *GuardCheck = TLI->getSSPStackGuardCheck(*M)) {
       // Generate the function-based epilogue instrumentation.
       // The target provides a guard check function, generate a call to it.
-      IRBuilder<> B(CheckLoc);
+      IRBuilder<> B(CheckLoc); 
       LoadInst *Guard = B.CreateLoad(B.getInt8PtrTy(), AI, true, "Guard");
       CallInst *Call = B.CreateCall(GuardCheck, {Guard});
       Call->setAttributes(GuardCheck->getAttributes());
       Call->setCallingConv(GuardCheck->getCallingConv());
     } else {
       // Generate the epilogue with inline instrumentation.
-      // If we do not support SelectionDAG based calls, generate IR level
-      // calls.
+      // If we do not support SelectionDAG based calls, generate IR level 
+      // calls. 
       //
       // For each block with a return instruction, convert this:
       //
@@ -529,8 +529,8 @@ bool StackProtector::InsertStackProtectors() {
       BasicBlock *FailBB = CreateFailBB();
 
       // Split the basic block before the return instruction.
-      BasicBlock *NewBB =
-          BB->splitBasicBlock(CheckLoc->getIterator(), "SP_return");
+      BasicBlock *NewBB = 
+          BB->splitBasicBlock(CheckLoc->getIterator(), "SP_return"); 
 
       // Update the dominator tree if we need to.
       if (DT && DT->isReachableFromEntry(BB)) {
@@ -572,9 +572,9 @@ BasicBlock *StackProtector::CreateFailBB() {
   LLVMContext &Context = F->getContext();
   BasicBlock *FailBB = BasicBlock::Create(Context, "CallStackCheckFailBlk", F);
   IRBuilder<> B(FailBB);
-  if (F->getSubprogram())
-    B.SetCurrentDebugLocation(
-        DILocation::get(Context, 0, 0, F->getSubprogram()));
+  if (F->getSubprogram()) 
+    B.SetCurrentDebugLocation( 
+        DILocation::get(Context, 0, 0, F->getSubprogram())); 
   if (Trip.isOSOpenBSD()) {
     FunctionCallee StackChkFail = M->getOrInsertFunction(
         "__stack_smash_handler", Type::getVoidTy(Context),

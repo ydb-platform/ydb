@@ -230,9 +230,9 @@ void setAfterReturnValues(MutableArrayRef<VirtualCallTarget> Targets,
 struct WholeProgramDevirtPass : public PassInfoMixin<WholeProgramDevirtPass> {
   ModuleSummaryIndex *ExportSummary;
   const ModuleSummaryIndex *ImportSummary;
-  bool UseCommandLine = false;
-  WholeProgramDevirtPass()
-      : ExportSummary(nullptr), ImportSummary(nullptr), UseCommandLine(true) {}
+  bool UseCommandLine = false; 
+  WholeProgramDevirtPass() 
+      : ExportSummary(nullptr), ImportSummary(nullptr), UseCommandLine(true) {} 
   WholeProgramDevirtPass(ModuleSummaryIndex *ExportSummary,
                          const ModuleSummaryIndex *ImportSummary)
       : ExportSummary(ExportSummary), ImportSummary(ImportSummary) {

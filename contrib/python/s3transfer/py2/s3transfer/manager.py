@@ -12,13 +12,13 @@
 # language governing permissions and limitations under the License.
 import copy
 import logging
-import re
+import re 
 import threading
 
 from botocore.compat import six
 
-from s3transfer.constants import KB, MB
-from s3transfer.constants import ALLOWED_DOWNLOAD_ARGS
+from s3transfer.constants import KB, MB 
+from s3transfer.constants import ALLOWED_DOWNLOAD_ARGS 
 from s3transfer.utils import get_callbacks
 from s3transfer.utils import signal_transferring
 from s3transfer.utils import signal_not_transferring
@@ -41,7 +41,7 @@ from s3transfer.delete import DeleteSubmissionTask
 from s3transfer.bandwidth import LeakyBucket
 from s3transfer.bandwidth import BandwidthLimiter
 
-
+ 
 logger = logging.getLogger(__name__)
 
 
@@ -156,7 +156,7 @@ class TransferConfig(object):
 
 
 class TransferManager(object):
-    ALLOWED_DOWNLOAD_ARGS = ALLOWED_DOWNLOAD_ARGS
+    ALLOWED_DOWNLOAD_ARGS = ALLOWED_DOWNLOAD_ARGS 
 
     ALLOWED_UPLOAD_ARGS = [
         'ACL',
@@ -165,7 +165,7 @@ class TransferManager(object):
         'ContentEncoding',
         'ContentLanguage',
         'ContentType',
-        'ExpectedBucketOwner',
+        'ExpectedBucketOwner', 
         'Expires',
         'GrantFullControl',
         'GrantRead',
@@ -179,8 +179,8 @@ class TransferManager(object):
         'SSECustomerKey',
         'SSECustomerKeyMD5',
         'SSEKMSKeyId',
-        'SSEKMSEncryptionContext',
-        'Tagging',
+        'SSEKMSEncryptionContext', 
+        'Tagging', 
         'WebsiteRedirectLocation'
     ]
 
@@ -192,26 +192,26 @@ class TransferManager(object):
         'CopySourceSSECustomerAlgorithm',
         'CopySourceSSECustomerKey',
         'CopySourceSSECustomerKeyMD5',
-        'MetadataDirective',
-        'TaggingDirective',
+        'MetadataDirective', 
+        'TaggingDirective', 
     ]
 
     ALLOWED_DELETE_ARGS = [
         'MFA',
         'VersionId',
         'RequestPayer',
-        'ExpectedBucketOwner'
+        'ExpectedBucketOwner' 
     ]
 
-    VALIDATE_SUPPORTED_BUCKET_VALUES = True
-
-    _UNSUPPORTED_BUCKET_PATTERNS = {
-        'S3 Object Lambda': re.compile(
-            r'^arn:(aws).*:s3-object-lambda:[a-z\-0-9]+:[0-9]{12}:'
-            r'accesspoint[/:][a-zA-Z0-9\-]{1,63}'
-        ),
-    }
-
+    VALIDATE_SUPPORTED_BUCKET_VALUES = True 
+ 
+    _UNSUPPORTED_BUCKET_PATTERNS = { 
+        'S3 Object Lambda': re.compile( 
+            r'^arn:(aws).*:s3-object-lambda:[a-z\-0-9]+:[0-9]{12}:' 
+            r'accesspoint[/:][a-zA-Z0-9\-]{1,63}' 
+        ), 
+    } 
+ 
     def __init__(self, client, config=None, osutil=None, executor_cls=None):
         """A transfer manager interface for Amazon S3
 
@@ -276,14 +276,14 @@ class TransferManager(object):
 
         self._register_handlers()
 
-    @property
-    def client(self):
-        return self._client
-
-    @property
-    def config(self):
-        return self._config
-
+    @property 
+    def client(self): 
+        return self._client 
+ 
+    @property 
+    def config(self): 
+        return self._config 
+ 
     def upload(self, fileobj, bucket, key, extra_args=None, subscribers=None):
         """Uploads a file to S3
 
@@ -315,7 +315,7 @@ class TransferManager(object):
         if subscribers is None:
             subscribers = []
         self._validate_all_known_args(extra_args, self.ALLOWED_UPLOAD_ARGS)
-        self._validate_if_bucket_supported(bucket)
+        self._validate_if_bucket_supported(bucket) 
         call_args = CallArgs(
             fileobj=fileobj, bucket=bucket, key=key, extra_args=extra_args,
             subscribers=subscribers
@@ -358,7 +358,7 @@ class TransferManager(object):
         if subscribers is None:
             subscribers = []
         self._validate_all_known_args(extra_args, self.ALLOWED_DOWNLOAD_ARGS)
-        self._validate_if_bucket_supported(bucket)
+        self._validate_if_bucket_supported(bucket) 
         call_args = CallArgs(
             bucket=bucket, key=key, fileobj=fileobj, extra_args=extra_args,
             subscribers=subscribers
@@ -412,9 +412,9 @@ class TransferManager(object):
         if source_client is None:
             source_client = self._client
         self._validate_all_known_args(extra_args, self.ALLOWED_COPY_ARGS)
-        if isinstance(copy_source, dict):
-            self._validate_if_bucket_supported(copy_source.get('Bucket'))
-        self._validate_if_bucket_supported(bucket)
+        if isinstance(copy_source, dict): 
+            self._validate_if_bucket_supported(copy_source.get('Bucket')) 
+        self._validate_if_bucket_supported(bucket) 
         call_args = CallArgs(
             copy_source=copy_source, bucket=bucket, key=key,
             extra_args=extra_args, subscribers=subscribers,
@@ -449,26 +449,26 @@ class TransferManager(object):
         if subscribers is None:
             subscribers = []
         self._validate_all_known_args(extra_args, self.ALLOWED_DELETE_ARGS)
-        self._validate_if_bucket_supported(bucket)
+        self._validate_if_bucket_supported(bucket) 
         call_args = CallArgs(
             bucket=bucket, key=key, extra_args=extra_args,
             subscribers=subscribers
         )
         return self._submit_transfer(call_args, DeleteSubmissionTask)
 
-    def _validate_if_bucket_supported(self, bucket):
-        # s3 high level operations don't support some resources
-        # (eg. S3 Object Lambda) only direct API calls are available
-        # for such resources
-        if self.VALIDATE_SUPPORTED_BUCKET_VALUES:
-            for resource, pattern in self._UNSUPPORTED_BUCKET_PATTERNS.items():
-                match = pattern.match(bucket)
-                if match:
-                    raise ValueError(
-                        'TransferManager methods do not support %s '
-                        'resource. Use direct client calls instead.' % resource
-                    )
-
+    def _validate_if_bucket_supported(self, bucket): 
+        # s3 high level operations don't support some resources 
+        # (eg. S3 Object Lambda) only direct API calls are available 
+        # for such resources 
+        if self.VALIDATE_SUPPORTED_BUCKET_VALUES: 
+            for resource, pattern in self._UNSUPPORTED_BUCKET_PATTERNS.items(): 
+                match = pattern.match(bucket) 
+                if match: 
+                    raise ValueError( 
+                        'TransferManager methods do not support %s ' 
+                        'resource. Use direct client calls instead.' % resource 
+                    ) 
+ 
     def _validate_all_known_args(self, actual, allowed):
         for kwarg in actual:
             if kwarg not in allowed:

@@ -471,8 +471,8 @@
       {
         "input": {
           "ExpressionAttributeNames": {
-            "#AT": "AlbumTitle",
-            "#ST": "SongTitle"
+            "#AT": "AlbumTitle", 
+            "#ST": "SongTitle" 
           },
           "ExpressionAttributeValues": {
             ":a": {
@@ -548,16 +548,16 @@
         "output": {
           "Attributes": {
             "AlbumTitle": {
-              "S": "Louder Than Ever"
+              "S": "Louder Than Ever" 
             },
             "Artist": {
               "S": "Acme Band"
             },
             "SongTitle": {
               "S": "Happy Day"
-            },
-            "Year": {
-              "N": "2015"
+            }, 
+            "Year": { 
+              "N": "2015" 
             }
           }
         },

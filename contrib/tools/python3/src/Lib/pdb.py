@@ -68,7 +68,7 @@ Debugger commands
 # commands and is appended to __doc__ after the class has been defined.
 
 import os
-import io
+import io 
 import re
 import sys
 import cmd
@@ -79,7 +79,7 @@ import glob
 import pprint
 import signal
 import inspect
-import tokenize
+import tokenize 
 import traceback
 import linecache
 
@@ -94,7 +94,7 @@ __all__ = ["run", "pm", "Pdb", "runeval", "runctx", "runcall", "set_trace",
 def find_function(funcname, filename):
     cre = re.compile(r'def\s+%s\s*[(]' % re.escape(funcname))
     try:
-        fp = tokenize.open(filename)
+        fp = tokenize.open(filename) 
     except OSError:
         return None
     # consumer of this info expects the first line to be 1
@@ -143,7 +143,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
                  nosigint=False, readrc=True):
         bdb.Bdb.__init__(self, skip=skip)
         cmd.Cmd.__init__(self, completekey, stdin, stdout)
-        sys.audit("pdb.Pdb")
+        sys.audit("pdb.Pdb") 
         if stdout:
             self.use_rawinput = 0
         self.prompt = '(Pdb) '
@@ -162,15 +162,15 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         self.allow_kbdint = False
         self.nosigint = nosigint
 
-        # Read ~/.pdbrc and ./.pdbrc
+        # Read ~/.pdbrc and ./.pdbrc 
         self.rcLines = []
         if readrc:
             try:
-                with open(os.path.expanduser('~/.pdbrc')) as rcFile:
-                    self.rcLines.extend(rcFile)
-            except OSError:
-                pass
-            try:
+                with open(os.path.expanduser('~/.pdbrc')) as rcFile: 
+                    self.rcLines.extend(rcFile) 
+            except OSError: 
+                pass 
+            try: 
                 with open(".pdbrc") as rcFile:
                     self.rcLines.extend(rcFile)
             except OSError:
@@ -342,12 +342,12 @@ class Pdb(bdb.Bdb, cmd.Cmd):
     def interaction(self, frame, traceback):
         # Restore the previous signal handler at the Pdb prompt.
         if Pdb._previous_sigint_handler:
-            try:
-                signal.signal(signal.SIGINT, Pdb._previous_sigint_handler)
-            except ValueError:  # ValueError: signal only works in main thread
-                pass
-            else:
-                Pdb._previous_sigint_handler = None
+            try: 
+                signal.signal(signal.SIGINT, Pdb._previous_sigint_handler) 
+            except ValueError:  # ValueError: signal only works in main thread 
+                pass 
+            else: 
+                Pdb._previous_sigint_handler = None 
         if self.setup(frame, traceback):
             # no interaction desired at this time (happens if .pdbrc contains
             # a command like "continue")
@@ -384,7 +384,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
                 sys.stdin = save_stdin
                 sys.displayhook = save_displayhook
         except:
-            self._error_exc()
+            self._error_exc() 
 
     def precmd(self, line):
         """Handle alias expansion and ';;' separator."""
@@ -473,7 +473,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         except Exception:
             ret = []
         # Then, try to complete file names as well.
-        globs = glob.glob(glob.escape(text) + '*')
+        globs = glob.glob(glob.escape(text) + '*') 
         for fn in globs:
             if os.path.isdir(fn):
                 ret.append(fn + '/')
@@ -495,7 +495,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         # Collect globals and locals.  It is usually not really sensible to also
         # complete builtins, and they clutter the namespace quite heavily, so we
         # leave them out.
-        ns = {**self.curframe.f_globals, **self.curframe_locals}
+        ns = {**self.curframe.f_globals, **self.curframe_locals} 
         if '.' in text:
             # Walk an attribute chain up to the last part, similar to what
             # rlcompleter does.  This will bail if any of the parts are not
@@ -751,8 +751,8 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         """
         # this method should be callable before starting debugging, so default
         # to "no globals" if there is no current frame
-        frame = getattr(self, 'curframe', None)
-        globs = frame.f_globals if frame else None
+        frame = getattr(self, 'curframe', None) 
+        globs = frame.f_globals if frame else None 
         line = linecache.getline(filename, lineno, globs)
         if not line:
             self.message('End of file')
@@ -893,7 +893,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             except ValueError:
                 err = "Invalid line number (%s)" % arg
             else:
-                bplist = self.get_breaks(filename, lineno)[:]
+                bplist = self.get_breaks(filename, lineno)[:] 
                 err = self.clear_break(filename, lineno)
             if err:
                 self.error(err)
@@ -1026,11 +1026,11 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         if arg:
             import shlex
             argv0 = sys.argv[0:1]
-            try:
-                sys.argv = shlex.split(arg)
-            except ValueError as e:
-                self.error('Cannot run %s: %s' % (arg, e))
-                return
+            try: 
+                sys.argv = shlex.split(arg) 
+            except ValueError as e: 
+                self.error('Cannot run %s: %s' % (arg, e)) 
+                return 
             sys.argv[:0] = argv0
         # this is caught in the main debugger loop
         raise Restart
@@ -1107,7 +1107,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         try:
             sys.call_tracing(p.run, (arg, globals, locals))
         except Exception:
-            self._error_exc()
+            self._error_exc() 
         self.message("LEAVING RECURSIVE DEBUGGER")
         sys.settrace(self.trace_dispatch)
         self.lastcmd = p.lastcmd
@@ -1140,9 +1140,9 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         """
         co = self.curframe.f_code
         dict = self.curframe_locals
-        n = co.co_argcount + co.co_kwonlyargcount
-        if co.co_flags & inspect.CO_VARARGS: n = n+1
-        if co.co_flags & inspect.CO_VARKEYWORDS: n = n+1
+        n = co.co_argcount + co.co_kwonlyargcount 
+        if co.co_flags & inspect.CO_VARARGS: n = n+1 
+        if co.co_flags & inspect.CO_VARKEYWORDS: n = n+1 
         for i in range(n):
             name = co.co_varnames[i]
             if name in dict:
@@ -1165,7 +1165,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         try:
             return eval(arg, self.curframe.f_globals, self.curframe_locals)
         except:
-            self._error_exc()
+            self._error_exc() 
             raise
 
     def _getval_except(self, arg, frame=None):
@@ -1179,31 +1179,31 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             err = traceback.format_exception_only(*exc_info)[-1].strip()
             return _rstr('** raised %s **' % err)
 
-    def _error_exc(self):
-        exc_info = sys.exc_info()[:2]
-        self.error(traceback.format_exception_only(*exc_info)[-1].strip())
-
-    def _msg_val_func(self, arg, func):
-        try:
-            val = self._getval(arg)
-        except:
-            return  # _getval() has displayed the error
-        try:
-            self.message(func(val))
-        except:
-            self._error_exc()
-
+    def _error_exc(self): 
+        exc_info = sys.exc_info()[:2] 
+        self.error(traceback.format_exception_only(*exc_info)[-1].strip()) 
+ 
+    def _msg_val_func(self, arg, func): 
+        try: 
+            val = self._getval(arg) 
+        except: 
+            return  # _getval() has displayed the error 
+        try: 
+            self.message(func(val)) 
+        except: 
+            self._error_exc() 
+ 
     def do_p(self, arg):
         """p expression
         Print the value of the expression.
         """
-        self._msg_val_func(arg, repr)
+        self._msg_val_func(arg, repr) 
 
     def do_pp(self, arg):
         """pp expression
         Pretty-print the value of the expression.
         """
-        self._msg_val_func(arg, pprint.pformat)
+        self._msg_val_func(arg, pprint.pformat) 
 
     complete_print = _complete_expression
     complete_p = _complete_expression
@@ -1322,21 +1322,21 @@ class Pdb(bdb.Bdb, cmd.Cmd):
             # _getval() already printed the error
             return
         code = None
-        # Is it an instance method?
+        # Is it an instance method? 
         try:
-            code = value.__func__.__code__
+            code = value.__func__.__code__ 
         except Exception:
             pass
         if code:
-            self.message('Method %s' % code.co_name)
+            self.message('Method %s' % code.co_name) 
             return
-        # Is it a function?
+        # Is it a function? 
         try:
-            code = value.__code__
+            code = value.__code__ 
         except Exception:
             pass
         if code:
-            self.message('Function %s' % code.co_name)
+            self.message('Function %s' % code.co_name) 
             return
         # Is it a class?
         if value.__class__ is type:
@@ -1391,7 +1391,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         Start an interactive interpreter whose global namespace
         contains all the (global and local) names found in the current scope.
         """
-        ns = {**self.curframe.f_globals, **self.curframe_locals}
+        ns = {**self.curframe.f_globals, **self.curframe_locals} 
         code.interact("*interactive*", local=ns)
 
     def do_alias(self, arg):
@@ -1577,7 +1577,7 @@ class Pdb(bdb.Bdb, cmd.Cmd):
         self._wait_for_mainpyfile = True
         self.mainpyfile = self.canonic(filename)
         self._user_requested_quit = False
-        with io.open_code(filename) as fp:
+        with io.open_code(filename) as fp: 
             statement = "exec(compile(%r, %r, 'exec'))" % \
                         (fp.read(), self.mainpyfile)
         self.run(statement)
@@ -1672,7 +1672,7 @@ To let the script run up to a given line X in the debugged file, use
 def main():
     import getopt
 
-    opts, args = getopt.getopt(sys.argv[1:], 'mhc:', ['help', 'command='])
+    opts, args = getopt.getopt(sys.argv[1:], 'mhc:', ['help', 'command=']) 
 
     if not args:
         print(_usage)
@@ -1694,19 +1694,19 @@ def main():
         print('Error:', mainpyfile, 'does not exist')
         sys.exit(1)
 
-    if run_as_module:
-        import runpy
-        try:
-            runpy._get_module_details(mainpyfile)
-        except Exception:
-            traceback.print_exc()
-            sys.exit(1)
-
+    if run_as_module: 
+        import runpy 
+        try: 
+            runpy._get_module_details(mainpyfile) 
+        except Exception: 
+            traceback.print_exc() 
+            sys.exit(1) 
+ 
     sys.argv[:] = args      # Hide "pdb.py" and pdb options from argument list
 
     if not run_as_module:
-        mainpyfile = os.path.realpath(mainpyfile)
-        # Replace pdb's dir with script's dir in front of module search path.
+        mainpyfile = os.path.realpath(mainpyfile) 
+        # Replace pdb's dir with script's dir in front of module search path. 
         sys.path[0] = os.path.dirname(mainpyfile)
 
     # Note on saving/restoring sys.argv: it's a good idea when sys.argv was
@@ -1726,7 +1726,7 @@ def main():
             print("The program finished and will be restarted")
         except Restart:
             print("Restarting", mainpyfile, "with arguments:")
-            print("\t" + " ".join(sys.argv[1:]))
+            print("\t" + " ".join(sys.argv[1:])) 
         except SystemExit:
             # In most cases SystemExit does not warrant a post-mortem session.
             print("The program exited via sys.exit(). Exit status:", end=' ')

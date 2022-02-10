@@ -71,42 +71,42 @@
       "limit_key": "limit",
       "output_token": "position",
       "result_key": "items"
-    },
-    "GetAuthorizers": {
-      "input_token": "position",
-      "limit_key": "limit",
-      "output_token": "position",
-      "result_key": "items"
-    },
-    "GetDocumentationParts": {
-      "input_token": "position",
-      "limit_key": "limit",
-      "output_token": "position",
-      "result_key": "items"
-    },
-    "GetDocumentationVersions": {
-      "input_token": "position",
-      "limit_key": "limit",
-      "output_token": "position",
-      "result_key": "items"
-    },
-    "GetGatewayResponses": {
-      "input_token": "position",
-      "limit_key": "limit",
-      "output_token": "position",
-      "result_key": "items"
-    },
-    "GetRequestValidators": {
-      "input_token": "position",
-      "limit_key": "limit",
-      "output_token": "position",
-      "result_key": "items"
-    },
-    "GetSdkTypes": {
-      "input_token": "position",
-      "limit_key": "limit",
-      "output_token": "position",
-      "result_key": "items"
+    }, 
+    "GetAuthorizers": { 
+      "input_token": "position", 
+      "limit_key": "limit", 
+      "output_token": "position", 
+      "result_key": "items" 
+    }, 
+    "GetDocumentationParts": { 
+      "input_token": "position", 
+      "limit_key": "limit", 
+      "output_token": "position", 
+      "result_key": "items" 
+    }, 
+    "GetDocumentationVersions": { 
+      "input_token": "position", 
+      "limit_key": "limit", 
+      "output_token": "position", 
+      "result_key": "items" 
+    }, 
+    "GetGatewayResponses": { 
+      "input_token": "position", 
+      "limit_key": "limit", 
+      "output_token": "position", 
+      "result_key": "items" 
+    }, 
+    "GetRequestValidators": { 
+      "input_token": "position", 
+      "limit_key": "limit", 
+      "output_token": "position", 
+      "result_key": "items" 
+    }, 
+    "GetSdkTypes": { 
+      "input_token": "position", 
+      "limit_key": "limit", 
+      "output_token": "position", 
+      "result_key": "items" 
     }
   }
 }

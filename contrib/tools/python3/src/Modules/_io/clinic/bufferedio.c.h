@@ -19,15 +19,15 @@ _io__BufferedIOBase_readinto(PyObject *self, PyObject *arg)
     PyObject *return_value = NULL;
     Py_buffer buffer = {NULL, NULL};
 
-    if (PyObject_GetBuffer(arg, &buffer, PyBUF_WRITABLE) < 0) {
-        PyErr_Clear();
-        _PyArg_BadArgument("readinto", "argument", "read-write bytes-like object", arg);
+    if (PyObject_GetBuffer(arg, &buffer, PyBUF_WRITABLE) < 0) { 
+        PyErr_Clear(); 
+        _PyArg_BadArgument("readinto", "argument", "read-write bytes-like object", arg); 
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&buffer, 'C')) {
-        _PyArg_BadArgument("readinto", "argument", "contiguous buffer", arg);
-        goto exit;
-    }
+    if (!PyBuffer_IsContiguous(&buffer, 'C')) { 
+        _PyArg_BadArgument("readinto", "argument", "contiguous buffer", arg); 
+        goto exit; 
+    } 
     return_value = _io__BufferedIOBase_readinto_impl(self, &buffer);
 
 exit:
@@ -56,15 +56,15 @@ _io__BufferedIOBase_readinto1(PyObject *self, PyObject *arg)
     PyObject *return_value = NULL;
     Py_buffer buffer = {NULL, NULL};
 
-    if (PyObject_GetBuffer(arg, &buffer, PyBUF_WRITABLE) < 0) {
-        PyErr_Clear();
-        _PyArg_BadArgument("readinto1", "argument", "read-write bytes-like object", arg);
+    if (PyObject_GetBuffer(arg, &buffer, PyBUF_WRITABLE) < 0) { 
+        PyErr_Clear(); 
+        _PyArg_BadArgument("readinto1", "argument", "read-write bytes-like object", arg); 
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&buffer, 'C')) {
-        _PyArg_BadArgument("readinto1", "argument", "contiguous buffer", arg);
-        goto exit;
-    }
+    if (!PyBuffer_IsContiguous(&buffer, 'C')) { 
+        _PyArg_BadArgument("readinto1", "argument", "contiguous buffer", arg); 
+        goto exit; 
+    } 
     return_value = _io__BufferedIOBase_readinto1_impl(self, &buffer);
 
 exit:
@@ -103,7 +103,7 @@ PyDoc_STRVAR(_io__Buffered_peek__doc__,
 "\n");
 
 #define _IO__BUFFERED_PEEK_METHODDEF    \
-    {"peek", (PyCFunction)(void(*)(void))_io__Buffered_peek, METH_FASTCALL, _io__Buffered_peek__doc__},
+    {"peek", (PyCFunction)(void(*)(void))_io__Buffered_peek, METH_FASTCALL, _io__Buffered_peek__doc__}, 
 
 static PyObject *
 _io__Buffered_peek_impl(buffered *self, Py_ssize_t size);
@@ -114,30 +114,30 @@ _io__Buffered_peek(buffered *self, PyObject *const *args, Py_ssize_t nargs)
     PyObject *return_value = NULL;
     Py_ssize_t size = 0;
 
-    if (!_PyArg_CheckPositional("peek", nargs, 0, 1)) {
+    if (!_PyArg_CheckPositional("peek", nargs, 0, 1)) { 
         goto exit;
     }
-    if (nargs < 1) {
-        goto skip_optional;
-    }
-    if (PyFloat_Check(args[0])) {
-        PyErr_SetString(PyExc_TypeError,
-                        "integer argument expected, got float" );
-        goto exit;
-    }
-    {
-        Py_ssize_t ival = -1;
-        PyObject *iobj = PyNumber_Index(args[0]);
-        if (iobj != NULL) {
-            ival = PyLong_AsSsize_t(iobj);
-            Py_DECREF(iobj);
-        }
-        if (ival == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        size = ival;
-    }
-skip_optional:
+    if (nargs < 1) { 
+        goto skip_optional; 
+    } 
+    if (PyFloat_Check(args[0])) { 
+        PyErr_SetString(PyExc_TypeError, 
+                        "integer argument expected, got float" ); 
+        goto exit; 
+    } 
+    { 
+        Py_ssize_t ival = -1; 
+        PyObject *iobj = PyNumber_Index(args[0]); 
+        if (iobj != NULL) { 
+            ival = PyLong_AsSsize_t(iobj); 
+            Py_DECREF(iobj); 
+        } 
+        if (ival == -1 && PyErr_Occurred()) { 
+            goto exit; 
+        } 
+        size = ival; 
+    } 
+skip_optional: 
     return_value = _io__Buffered_peek_impl(self, size);
 
 exit:
@@ -150,7 +150,7 @@ PyDoc_STRVAR(_io__Buffered_read__doc__,
 "\n");
 
 #define _IO__BUFFERED_READ_METHODDEF    \
-    {"read", (PyCFunction)(void(*)(void))_io__Buffered_read, METH_FASTCALL, _io__Buffered_read__doc__},
+    {"read", (PyCFunction)(void(*)(void))_io__Buffered_read, METH_FASTCALL, _io__Buffered_read__doc__}, 
 
 static PyObject *
 _io__Buffered_read_impl(buffered *self, Py_ssize_t n);
@@ -161,16 +161,16 @@ _io__Buffered_read(buffered *self, PyObject *const *args, Py_ssize_t nargs)
     PyObject *return_value = NULL;
     Py_ssize_t n = -1;
 
-    if (!_PyArg_CheckPositional("read", nargs, 0, 1)) {
+    if (!_PyArg_CheckPositional("read", nargs, 0, 1)) { 
         goto exit;
     }
-    if (nargs < 1) {
-        goto skip_optional;
-    }
-    if (!_Py_convert_optional_to_ssize_t(args[0], &n)) {
-        goto exit;
-    }
-skip_optional:
+    if (nargs < 1) { 
+        goto skip_optional; 
+    } 
+    if (!_Py_convert_optional_to_ssize_t(args[0], &n)) { 
+        goto exit; 
+    } 
+skip_optional: 
     return_value = _io__Buffered_read_impl(self, n);
 
 exit:
@@ -183,7 +183,7 @@ PyDoc_STRVAR(_io__Buffered_read1__doc__,
 "\n");
 
 #define _IO__BUFFERED_READ1_METHODDEF    \
-    {"read1", (PyCFunction)(void(*)(void))_io__Buffered_read1, METH_FASTCALL, _io__Buffered_read1__doc__},
+    {"read1", (PyCFunction)(void(*)(void))_io__Buffered_read1, METH_FASTCALL, _io__Buffered_read1__doc__}, 
 
 static PyObject *
 _io__Buffered_read1_impl(buffered *self, Py_ssize_t n);
@@ -194,30 +194,30 @@ _io__Buffered_read1(buffered *self, PyObject *const *args, Py_ssize_t nargs)
     PyObject *return_value = NULL;
     Py_ssize_t n = -1;
 
-    if (!_PyArg_CheckPositional("read1", nargs, 0, 1)) {
+    if (!_PyArg_CheckPositional("read1", nargs, 0, 1)) { 
         goto exit;
     }
-    if (nargs < 1) {
-        goto skip_optional;
-    }
-    if (PyFloat_Check(args[0])) {
-        PyErr_SetString(PyExc_TypeError,
-                        "integer argument expected, got float" );
-        goto exit;
-    }
-    {
-        Py_ssize_t ival = -1;
-        PyObject *iobj = PyNumber_Index(args[0]);
-        if (iobj != NULL) {
-            ival = PyLong_AsSsize_t(iobj);
-            Py_DECREF(iobj);
-        }
-        if (ival == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        n = ival;
-    }
-skip_optional:
+    if (nargs < 1) { 
+        goto skip_optional; 
+    } 
+    if (PyFloat_Check(args[0])) { 
+        PyErr_SetString(PyExc_TypeError, 
+                        "integer argument expected, got float" ); 
+        goto exit; 
+    } 
+    { 
+        Py_ssize_t ival = -1; 
+        PyObject *iobj = PyNumber_Index(args[0]); 
+        if (iobj != NULL) { 
+            ival = PyLong_AsSsize_t(iobj); 
+            Py_DECREF(iobj); 
+        } 
+        if (ival == -1 && PyErr_Occurred()) { 
+            goto exit; 
+        } 
+        n = ival; 
+    } 
+skip_optional: 
     return_value = _io__Buffered_read1_impl(self, n);
 
 exit:
@@ -241,15 +241,15 @@ _io__Buffered_readinto(buffered *self, PyObject *arg)
     PyObject *return_value = NULL;
     Py_buffer buffer = {NULL, NULL};
 
-    if (PyObject_GetBuffer(arg, &buffer, PyBUF_WRITABLE) < 0) {
-        PyErr_Clear();
-        _PyArg_BadArgument("readinto", "argument", "read-write bytes-like object", arg);
+    if (PyObject_GetBuffer(arg, &buffer, PyBUF_WRITABLE) < 0) { 
+        PyErr_Clear(); 
+        _PyArg_BadArgument("readinto", "argument", "read-write bytes-like object", arg); 
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&buffer, 'C')) {
-        _PyArg_BadArgument("readinto", "argument", "contiguous buffer", arg);
-        goto exit;
-    }
+    if (!PyBuffer_IsContiguous(&buffer, 'C')) { 
+        _PyArg_BadArgument("readinto", "argument", "contiguous buffer", arg); 
+        goto exit; 
+    } 
     return_value = _io__Buffered_readinto_impl(self, &buffer);
 
 exit:
@@ -278,15 +278,15 @@ _io__Buffered_readinto1(buffered *self, PyObject *arg)
     PyObject *return_value = NULL;
     Py_buffer buffer = {NULL, NULL};
 
-    if (PyObject_GetBuffer(arg, &buffer, PyBUF_WRITABLE) < 0) {
-        PyErr_Clear();
-        _PyArg_BadArgument("readinto1", "argument", "read-write bytes-like object", arg);
+    if (PyObject_GetBuffer(arg, &buffer, PyBUF_WRITABLE) < 0) { 
+        PyErr_Clear(); 
+        _PyArg_BadArgument("readinto1", "argument", "read-write bytes-like object", arg); 
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&buffer, 'C')) {
-        _PyArg_BadArgument("readinto1", "argument", "contiguous buffer", arg);
-        goto exit;
-    }
+    if (!PyBuffer_IsContiguous(&buffer, 'C')) { 
+        _PyArg_BadArgument("readinto1", "argument", "contiguous buffer", arg); 
+        goto exit; 
+    } 
     return_value = _io__Buffered_readinto1_impl(self, &buffer);
 
 exit:
@@ -304,7 +304,7 @@ PyDoc_STRVAR(_io__Buffered_readline__doc__,
 "\n");
 
 #define _IO__BUFFERED_READLINE_METHODDEF    \
-    {"readline", (PyCFunction)(void(*)(void))_io__Buffered_readline, METH_FASTCALL, _io__Buffered_readline__doc__},
+    {"readline", (PyCFunction)(void(*)(void))_io__Buffered_readline, METH_FASTCALL, _io__Buffered_readline__doc__}, 
 
 static PyObject *
 _io__Buffered_readline_impl(buffered *self, Py_ssize_t size);
@@ -315,16 +315,16 @@ _io__Buffered_readline(buffered *self, PyObject *const *args, Py_ssize_t nargs)
     PyObject *return_value = NULL;
     Py_ssize_t size = -1;
 
-    if (!_PyArg_CheckPositional("readline", nargs, 0, 1)) {
+    if (!_PyArg_CheckPositional("readline", nargs, 0, 1)) { 
         goto exit;
     }
-    if (nargs < 1) {
-        goto skip_optional;
-    }
-    if (!_Py_convert_optional_to_ssize_t(args[0], &size)) {
-        goto exit;
-    }
-skip_optional:
+    if (nargs < 1) { 
+        goto skip_optional; 
+    } 
+    if (!_Py_convert_optional_to_ssize_t(args[0], &size)) { 
+        goto exit; 
+    } 
+skip_optional: 
     return_value = _io__Buffered_readline_impl(self, size);
 
 exit:
@@ -337,7 +337,7 @@ PyDoc_STRVAR(_io__Buffered_seek__doc__,
 "\n");
 
 #define _IO__BUFFERED_SEEK_METHODDEF    \
-    {"seek", (PyCFunction)(void(*)(void))_io__Buffered_seek, METH_FASTCALL, _io__Buffered_seek__doc__},
+    {"seek", (PyCFunction)(void(*)(void))_io__Buffered_seek, METH_FASTCALL, _io__Buffered_seek__doc__}, 
 
 static PyObject *
 _io__Buffered_seek_impl(buffered *self, PyObject *targetobj, int whence);
@@ -349,23 +349,23 @@ _io__Buffered_seek(buffered *self, PyObject *const *args, Py_ssize_t nargs)
     PyObject *targetobj;
     int whence = 0;
 
-    if (!_PyArg_CheckPositional("seek", nargs, 1, 2)) {
+    if (!_PyArg_CheckPositional("seek", nargs, 1, 2)) { 
         goto exit;
     }
-    targetobj = args[0];
-    if (nargs < 2) {
-        goto skip_optional;
-    }
-    if (PyFloat_Check(args[1])) {
-        PyErr_SetString(PyExc_TypeError,
-                        "integer argument expected, got float" );
-        goto exit;
-    }
-    whence = _PyLong_AsInt(args[1]);
-    if (whence == -1 && PyErr_Occurred()) {
-        goto exit;
-    }
-skip_optional:
+    targetobj = args[0]; 
+    if (nargs < 2) { 
+        goto skip_optional; 
+    } 
+    if (PyFloat_Check(args[1])) { 
+        PyErr_SetString(PyExc_TypeError, 
+                        "integer argument expected, got float" ); 
+        goto exit; 
+    } 
+    whence = _PyLong_AsInt(args[1]); 
+    if (whence == -1 && PyErr_Occurred()) { 
+        goto exit; 
+    } 
+skip_optional: 
     return_value = _io__Buffered_seek_impl(self, targetobj, whence);
 
 exit:
@@ -378,7 +378,7 @@ PyDoc_STRVAR(_io__Buffered_truncate__doc__,
 "\n");
 
 #define _IO__BUFFERED_TRUNCATE_METHODDEF    \
-    {"truncate", (PyCFunction)(void(*)(void))_io__Buffered_truncate, METH_FASTCALL, _io__Buffered_truncate__doc__},
+    {"truncate", (PyCFunction)(void(*)(void))_io__Buffered_truncate, METH_FASTCALL, _io__Buffered_truncate__doc__}, 
 
 static PyObject *
 _io__Buffered_truncate_impl(buffered *self, PyObject *pos);
@@ -389,14 +389,14 @@ _io__Buffered_truncate(buffered *self, PyObject *const *args, Py_ssize_t nargs)
     PyObject *return_value = NULL;
     PyObject *pos = Py_None;
 
-    if (!_PyArg_CheckPositional("truncate", nargs, 0, 1)) {
+    if (!_PyArg_CheckPositional("truncate", nargs, 0, 1)) { 
         goto exit;
     }
-    if (nargs < 1) {
-        goto skip_optional;
-    }
-    pos = args[0];
-skip_optional:
+    if (nargs < 1) { 
+        goto skip_optional; 
+    } 
+    pos = args[0]; 
+skip_optional: 
     return_value = _io__Buffered_truncate_impl(self, pos);
 
 exit:
@@ -418,40 +418,40 @@ _io_BufferedReader___init__(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     int return_value = -1;
     static const char * const _keywords[] = {"raw", "buffer_size", NULL};
-    static _PyArg_Parser _parser = {NULL, _keywords, "BufferedReader", 0};
-    PyObject *argsbuf[2];
-    PyObject * const *fastargs;
-    Py_ssize_t nargs = PyTuple_GET_SIZE(args);
-    Py_ssize_t noptargs = nargs + (kwargs ? PyDict_GET_SIZE(kwargs) : 0) - 1;
+    static _PyArg_Parser _parser = {NULL, _keywords, "BufferedReader", 0}; 
+    PyObject *argsbuf[2]; 
+    PyObject * const *fastargs; 
+    Py_ssize_t nargs = PyTuple_GET_SIZE(args); 
+    Py_ssize_t noptargs = nargs + (kwargs ? PyDict_GET_SIZE(kwargs) : 0) - 1; 
     PyObject *raw;
     Py_ssize_t buffer_size = DEFAULT_BUFFER_SIZE;
 
-    fastargs = _PyArg_UnpackKeywords(_PyTuple_CAST(args)->ob_item, nargs, kwargs, NULL, &_parser, 1, 2, 0, argsbuf);
-    if (!fastargs) {
+    fastargs = _PyArg_UnpackKeywords(_PyTuple_CAST(args)->ob_item, nargs, kwargs, NULL, &_parser, 1, 2, 0, argsbuf); 
+    if (!fastargs) { 
         goto exit;
     }
-    raw = fastargs[0];
-    if (!noptargs) {
-        goto skip_optional_pos;
-    }
-    if (PyFloat_Check(fastargs[1])) {
-        PyErr_SetString(PyExc_TypeError,
-                        "integer argument expected, got float" );
-        goto exit;
-    }
-    {
-        Py_ssize_t ival = -1;
-        PyObject *iobj = PyNumber_Index(fastargs[1]);
-        if (iobj != NULL) {
-            ival = PyLong_AsSsize_t(iobj);
-            Py_DECREF(iobj);
-        }
-        if (ival == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        buffer_size = ival;
-    }
-skip_optional_pos:
+    raw = fastargs[0]; 
+    if (!noptargs) { 
+        goto skip_optional_pos; 
+    } 
+    if (PyFloat_Check(fastargs[1])) { 
+        PyErr_SetString(PyExc_TypeError, 
+                        "integer argument expected, got float" ); 
+        goto exit; 
+    } 
+    { 
+        Py_ssize_t ival = -1; 
+        PyObject *iobj = PyNumber_Index(fastargs[1]); 
+        if (iobj != NULL) { 
+            ival = PyLong_AsSsize_t(iobj); 
+            Py_DECREF(iobj); 
+        } 
+        if (ival == -1 && PyErr_Occurred()) { 
+            goto exit; 
+        } 
+        buffer_size = ival; 
+    } 
+skip_optional_pos: 
     return_value = _io_BufferedReader___init___impl((buffered *)self, raw, buffer_size);
 
 exit:
@@ -477,40 +477,40 @@ _io_BufferedWriter___init__(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     int return_value = -1;
     static const char * const _keywords[] = {"raw", "buffer_size", NULL};
-    static _PyArg_Parser _parser = {NULL, _keywords, "BufferedWriter", 0};
-    PyObject *argsbuf[2];
-    PyObject * const *fastargs;
-    Py_ssize_t nargs = PyTuple_GET_SIZE(args);
-    Py_ssize_t noptargs = nargs + (kwargs ? PyDict_GET_SIZE(kwargs) : 0) - 1;
+    static _PyArg_Parser _parser = {NULL, _keywords, "BufferedWriter", 0}; 
+    PyObject *argsbuf[2]; 
+    PyObject * const *fastargs; 
+    Py_ssize_t nargs = PyTuple_GET_SIZE(args); 
+    Py_ssize_t noptargs = nargs + (kwargs ? PyDict_GET_SIZE(kwargs) : 0) - 1; 
     PyObject *raw;
     Py_ssize_t buffer_size = DEFAULT_BUFFER_SIZE;
 
-    fastargs = _PyArg_UnpackKeywords(_PyTuple_CAST(args)->ob_item, nargs, kwargs, NULL, &_parser, 1, 2, 0, argsbuf);
-    if (!fastargs) {
+    fastargs = _PyArg_UnpackKeywords(_PyTuple_CAST(args)->ob_item, nargs, kwargs, NULL, &_parser, 1, 2, 0, argsbuf); 
+    if (!fastargs) { 
         goto exit;
     }
-    raw = fastargs[0];
-    if (!noptargs) {
-        goto skip_optional_pos;
-    }
-    if (PyFloat_Check(fastargs[1])) {
-        PyErr_SetString(PyExc_TypeError,
-                        "integer argument expected, got float" );
-        goto exit;
-    }
-    {
-        Py_ssize_t ival = -1;
-        PyObject *iobj = PyNumber_Index(fastargs[1]);
-        if (iobj != NULL) {
-            ival = PyLong_AsSsize_t(iobj);
-            Py_DECREF(iobj);
-        }
-        if (ival == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        buffer_size = ival;
-    }
-skip_optional_pos:
+    raw = fastargs[0]; 
+    if (!noptargs) { 
+        goto skip_optional_pos; 
+    } 
+    if (PyFloat_Check(fastargs[1])) { 
+        PyErr_SetString(PyExc_TypeError, 
+                        "integer argument expected, got float" ); 
+        goto exit; 
+    } 
+    { 
+        Py_ssize_t ival = -1; 
+        PyObject *iobj = PyNumber_Index(fastargs[1]); 
+        if (iobj != NULL) { 
+            ival = PyLong_AsSsize_t(iobj); 
+            Py_DECREF(iobj); 
+        } 
+        if (ival == -1 && PyErr_Occurred()) { 
+            goto exit; 
+        } 
+        buffer_size = ival; 
+    } 
+skip_optional_pos: 
     return_value = _io_BufferedWriter___init___impl((buffered *)self, raw, buffer_size);
 
 exit:
@@ -534,13 +534,13 @@ _io_BufferedWriter_write(buffered *self, PyObject *arg)
     PyObject *return_value = NULL;
     Py_buffer buffer = {NULL, NULL};
 
-    if (PyObject_GetBuffer(arg, &buffer, PyBUF_SIMPLE) != 0) {
+    if (PyObject_GetBuffer(arg, &buffer, PyBUF_SIMPLE) != 0) { 
         goto exit;
     }
-    if (!PyBuffer_IsContiguous(&buffer, 'C')) {
-        _PyArg_BadArgument("write", "argument", "contiguous buffer", arg);
-        goto exit;
-    }
+    if (!PyBuffer_IsContiguous(&buffer, 'C')) { 
+        _PyArg_BadArgument("write", "argument", "contiguous buffer", arg); 
+        goto exit; 
+    } 
     return_value = _io_BufferedWriter_write_impl(self, &buffer);
 
 exit:
@@ -578,36 +578,36 @@ _io_BufferedRWPair___init__(PyObject *self, PyObject *args, PyObject *kwargs)
     PyObject *writer;
     Py_ssize_t buffer_size = DEFAULT_BUFFER_SIZE;
 
-    if (Py_IS_TYPE(self, &PyBufferedRWPair_Type) &&
+    if (Py_IS_TYPE(self, &PyBufferedRWPair_Type) && 
         !_PyArg_NoKeywords("BufferedRWPair", kwargs)) {
         goto exit;
     }
-    if (!_PyArg_CheckPositional("BufferedRWPair", PyTuple_GET_SIZE(args), 2, 3)) {
+    if (!_PyArg_CheckPositional("BufferedRWPair", PyTuple_GET_SIZE(args), 2, 3)) { 
         goto exit;
     }
-    reader = PyTuple_GET_ITEM(args, 0);
-    writer = PyTuple_GET_ITEM(args, 1);
-    if (PyTuple_GET_SIZE(args) < 3) {
-        goto skip_optional;
-    }
-    if (PyFloat_Check(PyTuple_GET_ITEM(args, 2))) {
-        PyErr_SetString(PyExc_TypeError,
-                        "integer argument expected, got float" );
-        goto exit;
-    }
-    {
-        Py_ssize_t ival = -1;
-        PyObject *iobj = PyNumber_Index(PyTuple_GET_ITEM(args, 2));
-        if (iobj != NULL) {
-            ival = PyLong_AsSsize_t(iobj);
-            Py_DECREF(iobj);
-        }
-        if (ival == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        buffer_size = ival;
-    }
-skip_optional:
+    reader = PyTuple_GET_ITEM(args, 0); 
+    writer = PyTuple_GET_ITEM(args, 1); 
+    if (PyTuple_GET_SIZE(args) < 3) { 
+        goto skip_optional; 
+    } 
+    if (PyFloat_Check(PyTuple_GET_ITEM(args, 2))) { 
+        PyErr_SetString(PyExc_TypeError, 
+                        "integer argument expected, got float" ); 
+        goto exit; 
+    } 
+    { 
+        Py_ssize_t ival = -1; 
+        PyObject *iobj = PyNumber_Index(PyTuple_GET_ITEM(args, 2)); 
+        if (iobj != NULL) { 
+            ival = PyLong_AsSsize_t(iobj); 
+            Py_DECREF(iobj); 
+        } 
+        if (ival == -1 && PyErr_Occurred()) { 
+            goto exit; 
+        } 
+        buffer_size = ival; 
+    } 
+skip_optional: 
     return_value = _io_BufferedRWPair___init___impl((rwpair *)self, reader, writer, buffer_size);
 
 exit:
@@ -633,43 +633,43 @@ _io_BufferedRandom___init__(PyObject *self, PyObject *args, PyObject *kwargs)
 {
     int return_value = -1;
     static const char * const _keywords[] = {"raw", "buffer_size", NULL};
-    static _PyArg_Parser _parser = {NULL, _keywords, "BufferedRandom", 0};
-    PyObject *argsbuf[2];
-    PyObject * const *fastargs;
-    Py_ssize_t nargs = PyTuple_GET_SIZE(args);
-    Py_ssize_t noptargs = nargs + (kwargs ? PyDict_GET_SIZE(kwargs) : 0) - 1;
+    static _PyArg_Parser _parser = {NULL, _keywords, "BufferedRandom", 0}; 
+    PyObject *argsbuf[2]; 
+    PyObject * const *fastargs; 
+    Py_ssize_t nargs = PyTuple_GET_SIZE(args); 
+    Py_ssize_t noptargs = nargs + (kwargs ? PyDict_GET_SIZE(kwargs) : 0) - 1; 
     PyObject *raw;
     Py_ssize_t buffer_size = DEFAULT_BUFFER_SIZE;
 
-    fastargs = _PyArg_UnpackKeywords(_PyTuple_CAST(args)->ob_item, nargs, kwargs, NULL, &_parser, 1, 2, 0, argsbuf);
-    if (!fastargs) {
+    fastargs = _PyArg_UnpackKeywords(_PyTuple_CAST(args)->ob_item, nargs, kwargs, NULL, &_parser, 1, 2, 0, argsbuf); 
+    if (!fastargs) { 
         goto exit;
     }
-    raw = fastargs[0];
-    if (!noptargs) {
-        goto skip_optional_pos;
-    }
-    if (PyFloat_Check(fastargs[1])) {
-        PyErr_SetString(PyExc_TypeError,
-                        "integer argument expected, got float" );
-        goto exit;
-    }
-    {
-        Py_ssize_t ival = -1;
-        PyObject *iobj = PyNumber_Index(fastargs[1]);
-        if (iobj != NULL) {
-            ival = PyLong_AsSsize_t(iobj);
-            Py_DECREF(iobj);
-        }
-        if (ival == -1 && PyErr_Occurred()) {
-            goto exit;
-        }
-        buffer_size = ival;
-    }
-skip_optional_pos:
+    raw = fastargs[0]; 
+    if (!noptargs) { 
+        goto skip_optional_pos; 
+    } 
+    if (PyFloat_Check(fastargs[1])) { 
+        PyErr_SetString(PyExc_TypeError, 
+                        "integer argument expected, got float" ); 
+        goto exit; 
+    } 
+    { 
+        Py_ssize_t ival = -1; 
+        PyObject *iobj = PyNumber_Index(fastargs[1]); 
+        if (iobj != NULL) { 
+            ival = PyLong_AsSsize_t(iobj); 
+            Py_DECREF(iobj); 
+        } 
+        if (ival == -1 && PyErr_Occurred()) { 
+            goto exit; 
+        } 
+        buffer_size = ival; 
+    } 
+skip_optional_pos: 
     return_value = _io_BufferedRandom___init___impl((buffered *)self, raw, buffer_size);
 
 exit:
     return return_value;
 }
-/*[clinic end generated code: output=7d9ad40c95bdd808 input=a9049054013a1b77]*/
+/*[clinic end generated code: output=7d9ad40c95bdd808 input=a9049054013a1b77]*/ 

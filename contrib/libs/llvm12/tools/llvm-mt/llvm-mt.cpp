@@ -64,7 +64,7 @@ public:
 };
 } // namespace
 
-LLVM_ATTRIBUTE_NORETURN static void reportError(Twine Msg) {
+LLVM_ATTRIBUTE_NORETURN static void reportError(Twine Msg) { 
   WithColor::error(errs(), "llvm-mt") << Msg << '\n';
   exit(1);
 }
@@ -73,7 +73,7 @@ static void reportError(StringRef Input, std::error_code EC) {
   reportError(Twine(Input) + ": " + EC.message());
 }
 
-static void error(Error EC) {
+static void error(Error EC) { 
   if (EC)
     handleAllErrors(std::move(EC), [&](const ErrorInfoBase &EI) {
       reportError(EI.message());

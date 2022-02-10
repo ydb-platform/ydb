@@ -9,12 +9,12 @@ Unit tests are in test_collections.
 from abc import ABCMeta, abstractmethod
 import sys
 
-GenericAlias = type(list[int])
-EllipsisType = type(...)
-def _f(): pass
-FunctionType = type(_f)
-del _f
-
+GenericAlias = type(list[int]) 
+EllipsisType = type(...) 
+def _f(): pass 
+FunctionType = type(_f) 
+del _f 
+ 
 __all__ = ["Awaitable", "Coroutine",
            "AsyncIterable", "AsyncIterator", "AsyncGenerator",
            "Hashable", "Iterable", "Iterator", "Generator", "Reversible",
@@ -116,9 +116,9 @@ class Awaitable(metaclass=ABCMeta):
             return _check_methods(C, "__await__")
         return NotImplemented
 
-    __class_getitem__ = classmethod(GenericAlias)
+    __class_getitem__ = classmethod(GenericAlias) 
 
-
+ 
 class Coroutine(Awaitable):
 
     __slots__ = ()
@@ -177,9 +177,9 @@ class AsyncIterable(metaclass=ABCMeta):
             return _check_methods(C, "__aiter__")
         return NotImplemented
 
-    __class_getitem__ = classmethod(GenericAlias)
+    __class_getitem__ = classmethod(GenericAlias) 
 
-
+ 
 class AsyncIterator(AsyncIterable):
 
     __slots__ = ()
@@ -265,9 +265,9 @@ class Iterable(metaclass=ABCMeta):
             return _check_methods(C, "__iter__")
         return NotImplemented
 
-    __class_getitem__ = classmethod(GenericAlias)
+    __class_getitem__ = classmethod(GenericAlias) 
 
-
+ 
 class Iterator(Iterable):
 
     __slots__ = ()
@@ -286,7 +286,7 @@ class Iterator(Iterable):
             return _check_methods(C, '__iter__', '__next__')
         return NotImplemented
 
-
+ 
 Iterator.register(bytes_iterator)
 Iterator.register(bytearray_iterator)
 #Iterator.register(callable_iterator)
@@ -366,7 +366,7 @@ class Generator(Iterator):
                                   'send', 'throw', 'close')
         return NotImplemented
 
-
+ 
 Generator.register(generator)
 
 
@@ -399,9 +399,9 @@ class Container(metaclass=ABCMeta):
             return _check_methods(C, "__contains__")
         return NotImplemented
 
-    __class_getitem__ = classmethod(GenericAlias)
-
-
+    __class_getitem__ = classmethod(GenericAlias) 
+ 
+ 
 class Collection(Sized, Iterable, Container):
 
     __slots__ = ()
@@ -412,87 +412,87 @@ class Collection(Sized, Iterable, Container):
             return _check_methods(C,  "__len__", "__iter__", "__contains__")
         return NotImplemented
 
-
-class _CallableGenericAlias(GenericAlias):
-    """ Represent `Callable[argtypes, resulttype]`.
-
-    This sets ``__args__`` to a tuple containing the flattened``argtypes``
-    followed by ``resulttype``.
-
-    Example: ``Callable[[int, str], float]`` sets ``__args__`` to
-    ``(int, str, float)``.
-    """
-
-    __slots__ = ()
-
-    def __new__(cls, origin, args):
-        try:
-            return cls.__create_ga(origin, args)
-        except TypeError as exc:
-            import warnings
-            warnings.warn(f'{str(exc)} '
-                          f'(This will raise a TypeError in Python 3.10.)',
-                          DeprecationWarning)
-            return GenericAlias(origin, args)
-
-    @classmethod
-    def __create_ga(cls, origin, args):
-        if not isinstance(args, tuple) or len(args) != 2:
-            raise TypeError(
-                "Callable must be used as Callable[[arg, ...], result].")
-        t_args, t_result = args
-        if isinstance(t_args, (list, tuple)):
-            ga_args = tuple(t_args) + (t_result,)
-        # This relaxes what t_args can be on purpose to allow things like
-        # PEP 612 ParamSpec.  Responsibility for whether a user is using
-        # Callable[...] properly is deferred to static type checkers.
-        else:
-            ga_args = args
-        return super().__new__(cls, origin, ga_args)
-
-    def __repr__(self):
-        if len(self.__args__) == 2 and self.__args__[0] is Ellipsis:
-            return super().__repr__()
-        return (f'collections.abc.Callable'
-                f'[[{", ".join([_type_repr(a) for a in self.__args__[:-1]])}], '
-                f'{_type_repr(self.__args__[-1])}]')
-
-    def __reduce__(self):
-        args = self.__args__
-        if not (len(args) == 2 and args[0] is Ellipsis):
-            args = list(args[:-1]), args[-1]
-        return _CallableGenericAlias, (Callable, args)
-
-    def __getitem__(self, item):
-        # Called during TypeVar substitution, returns the custom subclass
-        # rather than the default types.GenericAlias object.
-        ga = super().__getitem__(item)
-        args = ga.__args__
-        t_result = args[-1]
-        t_args = args[:-1]
-        args = (t_args, t_result)
-        return _CallableGenericAlias(Callable, args)
-
-
-def _type_repr(obj):
-    """Return the repr() of an object, special-casing types (internal helper).
-
-    Copied from :mod:`typing` since collections.abc
-    shouldn't depend on that module.
-    """
-    if isinstance(obj, GenericAlias):
-        return repr(obj)
-    if isinstance(obj, type):
-        if obj.__module__ == 'builtins':
-            return obj.__qualname__
-        return f'{obj.__module__}.{obj.__qualname__}'
-    if obj is Ellipsis:
-        return '...'
-    if isinstance(obj, FunctionType):
-        return obj.__name__
-    return repr(obj)
-
-
+ 
+class _CallableGenericAlias(GenericAlias): 
+    """ Represent `Callable[argtypes, resulttype]`. 
+ 
+    This sets ``__args__`` to a tuple containing the flattened``argtypes`` 
+    followed by ``resulttype``. 
+ 
+    Example: ``Callable[[int, str], float]`` sets ``__args__`` to 
+    ``(int, str, float)``. 
+    """ 
+ 
+    __slots__ = () 
+ 
+    def __new__(cls, origin, args): 
+        try: 
+            return cls.__create_ga(origin, args) 
+        except TypeError as exc: 
+            import warnings 
+            warnings.warn(f'{str(exc)} ' 
+                          f'(This will raise a TypeError in Python 3.10.)', 
+                          DeprecationWarning) 
+            return GenericAlias(origin, args) 
+ 
+    @classmethod 
+    def __create_ga(cls, origin, args): 
+        if not isinstance(args, tuple) or len(args) != 2: 
+            raise TypeError( 
+                "Callable must be used as Callable[[arg, ...], result].") 
+        t_args, t_result = args 
+        if isinstance(t_args, (list, tuple)): 
+            ga_args = tuple(t_args) + (t_result,) 
+        # This relaxes what t_args can be on purpose to allow things like 
+        # PEP 612 ParamSpec.  Responsibility for whether a user is using 
+        # Callable[...] properly is deferred to static type checkers. 
+        else: 
+            ga_args = args 
+        return super().__new__(cls, origin, ga_args) 
+ 
+    def __repr__(self): 
+        if len(self.__args__) == 2 and self.__args__[0] is Ellipsis: 
+            return super().__repr__() 
+        return (f'collections.abc.Callable' 
+                f'[[{", ".join([_type_repr(a) for a in self.__args__[:-1]])}], ' 
+                f'{_type_repr(self.__args__[-1])}]') 
+ 
+    def __reduce__(self): 
+        args = self.__args__ 
+        if not (len(args) == 2 and args[0] is Ellipsis): 
+            args = list(args[:-1]), args[-1] 
+        return _CallableGenericAlias, (Callable, args) 
+ 
+    def __getitem__(self, item): 
+        # Called during TypeVar substitution, returns the custom subclass 
+        # rather than the default types.GenericAlias object. 
+        ga = super().__getitem__(item) 
+        args = ga.__args__ 
+        t_result = args[-1] 
+        t_args = args[:-1] 
+        args = (t_args, t_result) 
+        return _CallableGenericAlias(Callable, args) 
+ 
+ 
+def _type_repr(obj): 
+    """Return the repr() of an object, special-casing types (internal helper). 
+ 
+    Copied from :mod:`typing` since collections.abc 
+    shouldn't depend on that module. 
+    """ 
+    if isinstance(obj, GenericAlias): 
+        return repr(obj) 
+    if isinstance(obj, type): 
+        if obj.__module__ == 'builtins': 
+            return obj.__qualname__ 
+        return f'{obj.__module__}.{obj.__qualname__}' 
+    if obj is Ellipsis: 
+        return '...' 
+    if isinstance(obj, FunctionType): 
+        return obj.__name__ 
+    return repr(obj) 
+ 
+ 
 class Callable(metaclass=ABCMeta):
 
     __slots__ = ()
@@ -507,9 +507,9 @@ class Callable(metaclass=ABCMeta):
             return _check_methods(C, "__call__")
         return NotImplemented
 
-    __class_getitem__ = classmethod(_CallableGenericAlias)
+    __class_getitem__ = classmethod(_CallableGenericAlias) 
 
-
+ 
 ### SETS ###
 
 
@@ -642,7 +642,7 @@ class Set(Collection):
             hx = hash(x)
             h ^= (hx ^ (hx << 16) ^ 89869747)  * 3644798167
             h &= MASK
-        h ^= (h >> 11) ^ (h >> 25)
+        h ^= (h >> 11) ^ (h >> 25) 
         h = h * 69069 + 907133923
         h &= MASK
         if h > MAX:
@@ -651,7 +651,7 @@ class Set(Collection):
             h = 590923713
         return h
 
-
+ 
 Set.register(frozenset)
 
 
@@ -734,7 +734,7 @@ class MutableSet(Set):
                 self.discard(value)
         return self
 
-
+ 
 MutableSet.register(set)
 
 
@@ -791,7 +791,7 @@ class Mapping(Collection):
 
     __reversed__ = None
 
-
+ 
 Mapping.register(mappingproxy)
 
 
@@ -808,9 +808,9 @@ class MappingView(Sized):
     def __repr__(self):
         return '{0.__class__.__name__}({0._mapping!r})'.format(self)
 
-    __class_getitem__ = classmethod(GenericAlias)
+    __class_getitem__ = classmethod(GenericAlias) 
 
-
+ 
 class KeysView(MappingView, Set):
 
     __slots__ = ()
@@ -825,7 +825,7 @@ class KeysView(MappingView, Set):
     def __iter__(self):
         yield from self._mapping
 
-
+ 
 KeysView.register(dict_keys)
 
 
@@ -850,7 +850,7 @@ class ItemsView(MappingView, Set):
         for key in self._mapping:
             yield (key, self._mapping[key])
 
-
+ 
 ItemsView.register(dict_items)
 
 
@@ -869,7 +869,7 @@ class ValuesView(MappingView, Collection):
         for key in self._mapping:
             yield self._mapping[key]
 
-
+ 
 ValuesView.register(dict_values)
 
 
@@ -930,21 +930,21 @@ class MutableMapping(Mapping):
         except KeyError:
             pass
 
-    def update(self, other=(), /, **kwds):
+    def update(self, other=(), /, **kwds): 
         ''' D.update([E, ]**F) -> None.  Update D from mapping/iterable E and F.
             If E present and has a .keys() method, does:     for k in E: D[k] = E[k]
             If E present and lacks .keys() method, does:     for (k, v) in E: D[k] = v
             In either case, this is followed by: for k, v in F.items(): D[k] = v
         '''
-        if isinstance(other, Mapping):
-            for key in other:
-                self[key] = other[key]
-        elif hasattr(other, "keys"):
-            for key in other.keys():
-                self[key] = other[key]
-        else:
-            for key, value in other:
-                self[key] = value
+        if isinstance(other, Mapping): 
+            for key in other: 
+                self[key] = other[key] 
+        elif hasattr(other, "keys"): 
+            for key in other.keys(): 
+                self[key] = other[key] 
+        else: 
+            for key, value in other: 
+                self[key] = value 
         for key, value in kwds.items():
             self[key] = value
 
@@ -956,7 +956,7 @@ class MutableMapping(Mapping):
             self[key] = default
         return default
 
-
+ 
 MutableMapping.register(dict)
 
 
@@ -1024,7 +1024,7 @@ class Sequence(Reversible, Collection):
         'S.count(value) -> integer -- return number of occurrences of value'
         return sum(1 for v in self if v is value or v == value)
 
-
+ 
 Sequence.register(tuple)
 Sequence.register(str)
 Sequence.register(range)
@@ -1088,8 +1088,8 @@ class MutableSequence(Sequence):
 
     def extend(self, values):
         'S.extend(iterable) -- extend sequence by appending elements from the iterable'
-        if values is self:
-            values = list(values)
+        if values is self: 
+            values = list(values) 
         for v in values:
             self.append(v)
 
@@ -1111,6 +1111,6 @@ class MutableSequence(Sequence):
         self.extend(values)
         return self
 
-
+ 
 MutableSequence.register(list)
 MutableSequence.register(bytearray)  # Multiply inheriting, see ByteString

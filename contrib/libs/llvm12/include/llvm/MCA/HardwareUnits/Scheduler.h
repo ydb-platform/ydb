@@ -274,9 +274,9 @@ public:
   // This routine performs a sanity check.  This routine should only be called
   // when we know that 'IR' is not in the scheduler's instruction queues.
   void sanityCheck(const InstRef &IR) const {
-    assert(!is_contained(WaitSet, IR) && "Already in the wait set!");
-    assert(!is_contained(ReadySet, IR) && "Already in the ready set!");
-    assert(!is_contained(IssuedSet, IR) && "Already executing!");
+    assert(!is_contained(WaitSet, IR) && "Already in the wait set!"); 
+    assert(!is_contained(ReadySet, IR) && "Already in the ready set!"); 
+    assert(!is_contained(IssuedSet, IR) && "Already executing!"); 
   }
 #endif // !NDEBUG
 };

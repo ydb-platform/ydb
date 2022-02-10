@@ -2,10 +2,10 @@ PROGRAM()
 
 OWNER(g:contrib orivej)
 
-VERSION(3.9.10)
-
-ORIGINAL_SOURCE(https://github.com/python/cpython)
-
+VERSION(3.9.10) 
+ 
+ORIGINAL_SOURCE(https://github.com/python/cpython) 
+ 
 LICENSE(Python-2.0)
 
 USE_PYTHON3()

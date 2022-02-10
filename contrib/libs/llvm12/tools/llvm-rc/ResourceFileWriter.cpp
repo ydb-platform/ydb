@@ -138,8 +138,8 @@ enum class NullHandlingMethod {
 };
 
 // Parses an identifier or string and returns a processed version of it:
-//   * Strip the string boundary quotes.
-//   * Convert the input code page characters to UTF16.
+//   * Strip the string boundary quotes. 
+//   * Convert the input code page characters to UTF16. 
 //   * Squash "" to a single ".
 //   * Replace the escape sequences with their processed version.
 // For identifiers, this is no-op.
@@ -1514,16 +1514,16 @@ ResourceFileWriter::loadFile(StringRef File) const {
   SmallString<128> Cwd;
   std::unique_ptr<MemoryBuffer> Result;
 
-  // 0. The file path is absolute or has a root directory, so we shouldn't
-  // try to append it on top of other base directories. (An absolute path
-  // must have a root directory, but e.g. the path "\dir\file" on windows
-  // isn't considered absolute, but it does have a root directory. As long as
-  // sys::path::append doesn't handle appending an absolute path or a path
-  // starting with a root directory on top of a base, we must handle this
-  // case separately at the top. C++17's path::append handles that case
-  // properly though, so if using that to append paths below, this early
-  // exception case could be removed.)
-  if (sys::path::has_root_directory(File))
+  // 0. The file path is absolute or has a root directory, so we shouldn't 
+  // try to append it on top of other base directories. (An absolute path 
+  // must have a root directory, but e.g. the path "\dir\file" on windows 
+  // isn't considered absolute, but it does have a root directory. As long as 
+  // sys::path::append doesn't handle appending an absolute path or a path 
+  // starting with a root directory on top of a base, we must handle this 
+  // case separately at the top. C++17's path::append handles that case 
+  // properly though, so if using that to append paths below, this early 
+  // exception case could be removed.) 
+  if (sys::path::has_root_directory(File)) 
     return errorOrToExpected(MemoryBuffer::getFile(File, -1, false));
 
   // 1. The current working directory.

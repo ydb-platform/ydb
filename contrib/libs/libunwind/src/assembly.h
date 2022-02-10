@@ -34,35 +34,35 @@
 #define PPC64_OFFS_V      824
 #elif defined(__APPLE__) && defined(__aarch64__)
 #define SEPARATOR %%
-#elif defined(__riscv)
-# define RISCV_ISIZE (__riscv_xlen / 8)
-# define RISCV_FOFFSET (RISCV_ISIZE * 32)
-# if defined(__riscv_flen)
-#  define RISCV_FSIZE (__riscv_flen / 8)
-# endif
-
-# if __riscv_xlen == 64
-#  define ILOAD ld
-#  define ISTORE sd
-# elif __riscv_xlen == 32
-#  define ILOAD lw
-#  define ISTORE sw
-# else
-#  error "Unsupported __riscv_xlen"
-# endif
-
-# if defined(__riscv_flen)
-#  if __riscv_flen == 64
-#   define FLOAD fld
-#   define FSTORE fsd
-#  elif __riscv_flen == 32
-#   define FLOAD flw
-#   define FSTORE fsw
-#  else
-#   error "Unsupported __riscv_flen"
-#  endif
-# endif
-# define SEPARATOR ;
+#elif defined(__riscv) 
+# define RISCV_ISIZE (__riscv_xlen / 8) 
+# define RISCV_FOFFSET (RISCV_ISIZE * 32) 
+# if defined(__riscv_flen) 
+#  define RISCV_FSIZE (__riscv_flen / 8) 
+# endif 
+ 
+# if __riscv_xlen == 64 
+#  define ILOAD ld 
+#  define ISTORE sd 
+# elif __riscv_xlen == 32 
+#  define ILOAD lw 
+#  define ISTORE sw 
+# else 
+#  error "Unsupported __riscv_xlen" 
+# endif 
+ 
+# if defined(__riscv_flen) 
+#  if __riscv_flen == 64 
+#   define FLOAD fld 
+#   define FSTORE fsd 
+#  elif __riscv_flen == 32 
+#   define FLOAD flw 
+#   define FSTORE fsw 
+#  else 
+#   error "Unsupported __riscv_flen" 
+#  endif 
+# endif 
+# define SEPARATOR ; 
 #else
 #define SEPARATOR ;
 #endif
@@ -117,15 +117,15 @@
 #if defined(__APPLE__)
 
 #define SYMBOL_IS_FUNC(name)
-#define HIDDEN_SYMBOL(name) .private_extern name
-#if defined(_LIBUNWIND_HIDE_SYMBOLS)
-#define EXPORT_SYMBOL(name) HIDDEN_SYMBOL(name)
-#else
+#define HIDDEN_SYMBOL(name) .private_extern name 
+#if defined(_LIBUNWIND_HIDE_SYMBOLS) 
+#define EXPORT_SYMBOL(name) HIDDEN_SYMBOL(name) 
+#else 
 #define EXPORT_SYMBOL(name)
-#endif
+#endif 
 #define WEAK_ALIAS(name, aliasname)                                            \
   .globl SYMBOL_NAME(aliasname) SEPARATOR                                      \
-  EXPORT_SYMBOL(SYMBOL_NAME(aliasname)) SEPARATOR                              \
+  EXPORT_SYMBOL(SYMBOL_NAME(aliasname)) SEPARATOR                              \ 
   SYMBOL_NAME(aliasname) = SYMBOL_NAME(name)
 
 #define NO_EXEC_STACK_DIRECTIVE
@@ -137,23 +137,23 @@
 #else
 #define SYMBOL_IS_FUNC(name) .type name,@function
 #endif
-#define HIDDEN_SYMBOL(name) .hidden name
-#if defined(_LIBUNWIND_HIDE_SYMBOLS)
-#define EXPORT_SYMBOL(name) HIDDEN_SYMBOL(name)
-#else
+#define HIDDEN_SYMBOL(name) .hidden name 
+#if defined(_LIBUNWIND_HIDE_SYMBOLS) 
+#define EXPORT_SYMBOL(name) HIDDEN_SYMBOL(name) 
+#else 
 #define EXPORT_SYMBOL(name)
-#endif
+#endif 
 #define WEAK_SYMBOL(name) .weak name
 
 #if defined(__hexagon__)
-#define WEAK_ALIAS(name, aliasname)                                            \
-  EXPORT_SYMBOL(SYMBOL_NAME(aliasname)) SEPARATOR                              \
-  WEAK_SYMBOL(SYMBOL_NAME(aliasname)) SEPARATOR                                \
+#define WEAK_ALIAS(name, aliasname)                                            \ 
+  EXPORT_SYMBOL(SYMBOL_NAME(aliasname)) SEPARATOR                              \ 
+  WEAK_SYMBOL(SYMBOL_NAME(aliasname)) SEPARATOR                                \ 
   .equiv SYMBOL_NAME(aliasname), SYMBOL_NAME(name)
 #else
 #define WEAK_ALIAS(name, aliasname)                                            \
-  EXPORT_SYMBOL(SYMBOL_NAME(aliasname)) SEPARATOR                              \
-  WEAK_SYMBOL(SYMBOL_NAME(aliasname)) SEPARATOR                                \
+  EXPORT_SYMBOL(SYMBOL_NAME(aliasname)) SEPARATOR                              \ 
+  WEAK_SYMBOL(SYMBOL_NAME(aliasname)) SEPARATOR                                \ 
   SYMBOL_NAME(aliasname) = SYMBOL_NAME(name)
 #endif
 
@@ -175,7 +175,7 @@
   .section .drectve,"yn" SEPARATOR                                             \
   .ascii "-export:", #name, "\0" SEPARATOR                                     \
   .text
-#if defined(_LIBUNWIND_HIDE_SYMBOLS)
+#if defined(_LIBUNWIND_HIDE_SYMBOLS) 
 #define EXPORT_SYMBOL(name)
 #else
 #define EXPORT_SYMBOL(name) EXPORT_SYMBOL2(name)
@@ -235,7 +235,7 @@
 #endif /* __arm__ */
 
 #if defined(__powerpc__)
-#define PPC_LEFT_SHIFT(index) << (index)
-#endif
-
+#define PPC_LEFT_SHIFT(index) << (index) 
+#endif 
+ 
 #endif /* UNWIND_ASSEMBLY_H */

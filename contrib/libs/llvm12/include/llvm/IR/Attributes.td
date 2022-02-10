@@ -1,15 +1,15 @@
-//===- Attributes.td - Defines all LLVM attributes ---------*- tablegen -*-===//
-//
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
-//
-//===----------------------------------------------------------------------===//
-//
-// This file defines all the LLVM attributes.
-//
-//===----------------------------------------------------------------------===//
-
+//===- Attributes.td - Defines all LLVM attributes ---------*- tablegen -*-===// 
+// 
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
+// 
+//===----------------------------------------------------------------------===// 
+// 
+// This file defines all the LLVM attributes. 
+// 
+//===----------------------------------------------------------------------===// 
+ 
 /// Attribute base class.
 class Attr<string S> {
   // String representation of this attribute in the IR.
@@ -51,9 +51,9 @@ def Builtin : EnumAttr<"builtin">;
 /// Pass structure by value.
 def ByVal : TypeAttr<"byval">;
 
-/// Mark in-memory ABI type.
-def ByRef : TypeAttr<"byref">;
-
+/// Mark in-memory ABI type. 
+def ByRef : TypeAttr<"byref">; 
+ 
 /// Parameter or return value may not contain uninitialized or poison bits.
 def NoUndef : EnumAttr<"noundef">;
 
@@ -63,9 +63,9 @@ def Cold : EnumAttr<"cold">;
 /// Can only be moved to control-equivalent blocks.
 def Convergent : EnumAttr<"convergent">;
 
-/// Marks function as being in a hot path and frequently called.
-def Hot: EnumAttr<"hot">;
-
+/// Marks function as being in a hot path and frequently called. 
+def Hot: EnumAttr<"hot">; 
+ 
 /// Pointer is known to be dereferenceable.
 def Dereferenceable : IntAttr<"dereferenceable">;
 
@@ -106,9 +106,9 @@ def NoAlias : EnumAttr<"noalias">;
 /// Callee isn't recognized as a builtin.
 def NoBuiltin : EnumAttr<"nobuiltin">;
 
-/// Function cannot enter into caller's translation unit.
-def NoCallback : EnumAttr<"nocallback">;
-
+/// Function cannot enter into caller's translation unit. 
+def NoCallback : EnumAttr<"nocallback">; 
+ 
 /// Function creates no aliases of pointer.
 def NoCapture : EnumAttr<"nocapture">;
 
@@ -127,7 +127,7 @@ def NoInline : EnumAttr<"noinline">;
 /// Function is called early and/or often, so lazy binding isn't worthwhile.
 def NonLazyBind : EnumAttr<"nonlazybind">;
 
-/// Disable merging for specified functions or call sites.
+/// Disable merging for specified functions or call sites. 
 def NoMerge : EnumAttr<"nomerge">;
 
 /// Pointer is known to be not null.
@@ -148,9 +148,9 @@ def NoSync : EnumAttr<"nosync">;
 /// Disable Indirect Branch Tracking.
 def NoCfCheck : EnumAttr<"nocf_check">;
 
-/// Function should be instrumented.
-def NoProfile : EnumAttr<"noprofile">;
-
+/// Function should be instrumented. 
+def NoProfile : EnumAttr<"noprofile">; 
+ 
 /// Function doesn't unwind stack.
 def NoUnwind : EnumAttr<"nounwind">;
 
@@ -213,7 +213,7 @@ def StackProtectStrong : EnumAttr<"sspstrong">;
 def StrictFP : EnumAttr<"strictfp">;
 
 /// Hidden pointer to structure to return.
-def StructRet : TypeAttr<"sret">;
+def StructRet : TypeAttr<"sret">; 
 
 /// AddressSanitizer is on.
 def SanitizeAddress : EnumAttr<"sanitize_address">;
@@ -256,9 +256,9 @@ def WriteOnly : EnumAttr<"writeonly">;
 /// Zero extended before/after call.
 def ZExt : EnumAttr<"zeroext">;
 
-/// Function is required to make Forward Progress.
-def MustProgress : TypeAttr<"mustprogress">;
-
+/// Function is required to make Forward Progress. 
+def MustProgress : TypeAttr<"mustprogress">; 
+ 
 /// Target-independent string attributes.
 def LessPreciseFPMAD : StrBoolAttr<"less-precise-fpmad">;
 def NoInfsFPMath : StrBoolAttr<"no-infs-fp-math">;
@@ -312,4 +312,4 @@ def : MergeRule<"adjustCallerStackProbes">;
 def : MergeRule<"adjustCallerStackProbeSize">;
 def : MergeRule<"adjustMinLegalVectorWidth">;
 def : MergeRule<"adjustNullPointerValidAttr">;
-def : MergeRule<"setAND<MustProgressAttr>">;
+def : MergeRule<"setAND<MustProgressAttr>">; 

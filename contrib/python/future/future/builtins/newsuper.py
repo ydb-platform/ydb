@@ -24,7 +24,7 @@ Excerpts from Ryan's docstring:
   "Of course, you can still explicitly pass in the arguments if you want
   to do something strange.  Sometimes you really do want that, e.g. to
   skip over some classes in the method resolution order.
-
+ 
   "How does it work?  By inspecting the calling frame to determine the
   function object being executed and the object on which it's being
   called, and then walking the object's __mro__ chain to find out where
@@ -51,14 +51,14 @@ def newsuper(typ=_SENTINEL, type_or_obj=_SENTINEL, framedepth=1):
     #  Infer the correct call if used without arguments.
     if typ is _SENTINEL:
         # We'll need to do some frame hacking.
-        f = sys._getframe(framedepth)
+        f = sys._getframe(framedepth) 
 
         try:
             # Get the function's first positional argument.
             type_or_obj = f.f_locals[f.f_code.co_varnames[0]]
         except (IndexError, KeyError,):
             raise RuntimeError('super() used in a function with no args')
-
+ 
         try:
             # Get the MRO so we can crawl it.
             mro = type_or_obj.__mro__
@@ -67,9 +67,9 @@ def newsuper(typ=_SENTINEL, type_or_obj=_SENTINEL, framedepth=1):
                 mro = type_or_obj.__class__.__mro__
             except AttributeError:
                 raise RuntimeError('super() used with a non-newstyle class')
-
+ 
         #   A ``for...else`` block?  Yes!  It's odd, but useful.
-        #   If unfamiliar with for...else, see:
+        #   If unfamiliar with for...else, see: 
         #
         #       http://psung.blogspot.com/2007/12/for-else-in-python.html
         for typ in mro:
@@ -88,7 +88,7 @@ def newsuper(typ=_SENTINEL, type_or_obj=_SENTINEL, framedepth=1):
                             try:
                                 meth = meth.__func__
                             except AttributeError:
-                                meth = meth.__get__(type_or_obj, typ)
+                                meth = meth.__get__(type_or_obj, typ) 
                 except (AttributeError, TypeError):
                     continue
                 if meth.func_code is f.f_code:
@@ -98,7 +98,7 @@ def newsuper(typ=_SENTINEL, type_or_obj=_SENTINEL, framedepth=1):
             break    #  Found! Break out of the search loop.
         else:
             raise RuntimeError('super() called outside a method')
-
+ 
     #  Dispatch to builtin super().
     if type_or_obj is not _SENTINEL:
         return _builtin_super(typ, type_or_obj)

@@ -791,17 +791,17 @@ def int_arm_neon_vcvtbfp2bf
     : Intrinsic<[llvm_bfloat_ty], [llvm_float_ty], [IntrNoMem]>;
 
 def int_arm_neon_bfdot : Neon_Dot_Intrinsic;
-def int_arm_neon_bfmmla
-    : Intrinsic<[llvm_v4f32_ty],
-                [llvm_v4f32_ty, llvm_v8bf16_ty, llvm_v8bf16_ty],
-                [IntrNoMem]>;
+def int_arm_neon_bfmmla 
+    : Intrinsic<[llvm_v4f32_ty], 
+                [llvm_v4f32_ty, llvm_v8bf16_ty, llvm_v8bf16_ty], 
+                [IntrNoMem]>; 
 
-class Neon_BF16FML_Intrinsic
-    : Intrinsic<[llvm_v4f32_ty],
-                [llvm_v4f32_ty, llvm_v8bf16_ty, llvm_v8bf16_ty],
-                [IntrNoMem]>;
-def int_arm_neon_bfmlalb : Neon_BF16FML_Intrinsic;
-def int_arm_neon_bfmlalt : Neon_BF16FML_Intrinsic;
+class Neon_BF16FML_Intrinsic 
+    : Intrinsic<[llvm_v4f32_ty], 
+                [llvm_v4f32_ty, llvm_v8bf16_ty, llvm_v8bf16_ty], 
+                [IntrNoMem]>; 
+def int_arm_neon_bfmlalb : Neon_BF16FML_Intrinsic; 
+def int_arm_neon_bfmlalt : Neon_BF16FML_Intrinsic; 
 
 def int_arm_cls: Intrinsic<[llvm_i32_ty], [llvm_i32_ty], [IntrNoMem]>;
 def int_arm_cls64: Intrinsic<[llvm_i32_ty], [llvm_i64_ty], [IntrNoMem]>;
@@ -817,7 +817,7 @@ def int_arm_neon_vcadd_rot90  : Neon_2Arg_Intrinsic;
 def int_arm_neon_vcadd_rot270 : Neon_2Arg_Intrinsic;
 
 // GNU eabi mcount
-def int_arm_gnu_eabi_mcount : Intrinsic<[], [], []>;
+def int_arm_gnu_eabi_mcount : Intrinsic<[], [], []>; 
 
 def int_arm_mve_pred_i2v : Intrinsic<
   [llvm_anyvector_ty], [llvm_i32_ty], [IntrNoMem]>;
@@ -922,7 +922,7 @@ multiclass MVEPredicatedM<list<LLVMType> rets, list<LLVMType> params,
                           list<IntrinsicProperty> props = [IntrNoMem]> {
   def "": Intrinsic<rets, params, props>;
   def _predicated: Intrinsic<rets, params # [pred,
-      !if(!eq(rets[0], llvm_anyvector_ty),
+      !if(!eq(rets[0], llvm_anyvector_ty), 
           LLVMMatchType<0>, rets[0])], props>;
 }
 

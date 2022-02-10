@@ -273,7 +273,7 @@ getOrCreateJumpTableInfo(unsigned EntryKind) {
 }
 
 DenormalMode MachineFunction::getDenormalMode(const fltSemantics &FPType) const {
-  return F.getDenormalMode(FPType);
+  return F.getDenormalMode(FPType); 
 }
 
 /// Should we be emitting segmented stack stuff for the function
@@ -347,9 +347,9 @@ void MachineFunction::assignBeginEndSections() {
 /// Allocate a new MachineInstr. Use this instead of `new MachineInstr'.
 MachineInstr *MachineFunction::CreateMachineInstr(const MCInstrDesc &MCID,
                                                   const DebugLoc &DL,
-                                                  bool NoImplicit) {
+                                                  bool NoImplicit) { 
   return new (InstructionRecycler.Allocate<MachineInstr>(Allocator))
-      MachineInstr(*this, MCID, DL, NoImplicit);
+      MachineInstr(*this, MCID, DL, NoImplicit); 
 }
 
 /// Create a new MachineInstr which is a copy of the 'Orig' instruction,
@@ -420,9 +420,9 @@ MachineFunction::CreateMachineBasicBlock(const BasicBlock *bb) {
 void
 MachineFunction::DeleteMachineBasicBlock(MachineBasicBlock *MBB) {
   assert(MBB->getParent() == this && "MBB parent mismatch!");
-  // Clean up any references to MBB in jump tables before deleting it.
-  if (JumpTableInfo)
-    JumpTableInfo->RemoveMBBFromJumpTables(MBB);
+  // Clean up any references to MBB in jump tables before deleting it. 
+  if (JumpTableInfo) 
+    JumpTableInfo->RemoveMBBFromJumpTables(MBB); 
   MBB->~MachineBasicBlock();
   BasicBlockRecycler.Deallocate(Allocator, MBB);
 }
@@ -437,13 +437,13 @@ MachineMemOperand *MachineFunction::getMachineMemOperand(
                         SSID, Ordering, FailureOrdering);
 }
 
-MachineMemOperand *MachineFunction::getMachineMemOperand(
-    const MachineMemOperand *MMO, MachinePointerInfo &PtrInfo, uint64_t Size) {
-  return new (Allocator) MachineMemOperand(
-      PtrInfo, MMO->getFlags(), Size, MMO->getBaseAlign(), AAMDNodes(), nullptr,
-      MMO->getSyncScopeID(), MMO->getOrdering(), MMO->getFailureOrdering());
-}
-
+MachineMemOperand *MachineFunction::getMachineMemOperand( 
+    const MachineMemOperand *MMO, MachinePointerInfo &PtrInfo, uint64_t Size) { 
+  return new (Allocator) MachineMemOperand( 
+      PtrInfo, MMO->getFlags(), Size, MMO->getBaseAlign(), AAMDNodes(), nullptr, 
+      MMO->getSyncScopeID(), MMO->getOrdering(), MMO->getFailureOrdering()); 
+} 
+ 
 MachineMemOperand *
 MachineFunction::getMachineMemOperand(const MachineMemOperand *MMO,
                                       int64_t Offset, uint64_t Size) {
@@ -455,11 +455,11 @@ MachineFunction::getMachineMemOperand(const MachineMemOperand *MMO,
                         ? commonAlignment(MMO->getBaseAlign(), Offset)
                         : MMO->getBaseAlign();
 
-  // Do not preserve ranges, since we don't necessarily know what the high bits
-  // are anymore.
+  // Do not preserve ranges, since we don't necessarily know what the high bits 
+  // are anymore. 
   return new (Allocator)
       MachineMemOperand(PtrInfo.getWithOffset(Offset), MMO->getFlags(), Size,
-                        Alignment, MMO->getAAInfo(), nullptr, MMO->getSyncScopeID(),
+                        Alignment, MMO->getAAInfo(), nullptr, MMO->getSyncScopeID(), 
                         MMO->getOrdering(), MMO->getFailureOrdering());
 }
 
@@ -868,7 +868,7 @@ try_next:;
   // Add the new filter.
   int FilterID = -(1 + FilterIds.size());
   FilterIds.reserve(FilterIds.size() + TyIds.size() + 1);
-  llvm::append_range(FilterIds, TyIds);
+  llvm::append_range(FilterIds, TyIds); 
   FilterEnds.push_back(FilterIds.size());
   FilterIds.push_back(0); // terminator
   return FilterID;
@@ -946,46 +946,46 @@ void MachineFunction::moveCallSiteInfo(const MachineInstr *Old,
   CallSitesInfo[New] = CSInfo;
 }
 
-void MachineFunction::setDebugInstrNumberingCount(unsigned Num) {
-  DebugInstrNumberingCount = Num;
-}
-
-void MachineFunction::makeDebugValueSubstitution(DebugInstrOperandPair A,
-                                                 DebugInstrOperandPair B) {
-  auto Result = DebugValueSubstitutions.insert(std::make_pair(A, B));
-  (void)Result;
-  assert(Result.second && "Substitution for an already substituted value?");
-}
-
-void MachineFunction::substituteDebugValuesForInst(const MachineInstr &Old,
-                                                   MachineInstr &New,
-                                                   unsigned MaxOperand) {
-  // If the Old instruction wasn't tracked at all, there is no work to do.
-  unsigned OldInstrNum = Old.peekDebugInstrNum();
-  if (!OldInstrNum)
-    return;
-
-  // Iterate over all operands looking for defs to create substitutions for.
-  // Avoid creating new instr numbers unless we create a new substitution.
-  // While this has no functional effect, it risks confusing someone reading
-  // MIR output.
-  // Examine all the operands, or the first N specified by the caller.
-  MaxOperand = std::min(MaxOperand, Old.getNumOperands());
-  for (unsigned int I = 0; I < Old.getNumOperands(); ++I) {
-    const auto &OldMO = Old.getOperand(I);
-    auto &NewMO = New.getOperand(I);
-    (void)NewMO;
-
-    if (!OldMO.isReg() || !OldMO.isDef())
-      continue;
-    assert(NewMO.isDef());
-
-    unsigned NewInstrNum = New.getDebugInstrNum();
-    makeDebugValueSubstitution(std::make_pair(OldInstrNum, I),
-                               std::make_pair(NewInstrNum, I));
-  }
-}
-
+void MachineFunction::setDebugInstrNumberingCount(unsigned Num) { 
+  DebugInstrNumberingCount = Num; 
+} 
+ 
+void MachineFunction::makeDebugValueSubstitution(DebugInstrOperandPair A, 
+                                                 DebugInstrOperandPair B) { 
+  auto Result = DebugValueSubstitutions.insert(std::make_pair(A, B)); 
+  (void)Result; 
+  assert(Result.second && "Substitution for an already substituted value?"); 
+} 
+ 
+void MachineFunction::substituteDebugValuesForInst(const MachineInstr &Old, 
+                                                   MachineInstr &New, 
+                                                   unsigned MaxOperand) { 
+  // If the Old instruction wasn't tracked at all, there is no work to do. 
+  unsigned OldInstrNum = Old.peekDebugInstrNum(); 
+  if (!OldInstrNum) 
+    return; 
+ 
+  // Iterate over all operands looking for defs to create substitutions for. 
+  // Avoid creating new instr numbers unless we create a new substitution. 
+  // While this has no functional effect, it risks confusing someone reading 
+  // MIR output. 
+  // Examine all the operands, or the first N specified by the caller. 
+  MaxOperand = std::min(MaxOperand, Old.getNumOperands()); 
+  for (unsigned int I = 0; I < Old.getNumOperands(); ++I) { 
+    const auto &OldMO = Old.getOperand(I); 
+    auto &NewMO = New.getOperand(I); 
+    (void)NewMO; 
+ 
+    if (!OldMO.isReg() || !OldMO.isDef()) 
+      continue; 
+    assert(NewMO.isDef()); 
+ 
+    unsigned NewInstrNum = New.getDebugInstrNum(); 
+    makeDebugValueSubstitution(std::make_pair(OldInstrNum, I), 
+                               std::make_pair(NewInstrNum, I)); 
+  } 
+} 
+ 
 /// \}
 
 //===----------------------------------------------------------------------===//
@@ -1050,17 +1050,17 @@ bool MachineJumpTableInfo::ReplaceMBBInJumpTables(MachineBasicBlock *Old,
   return MadeChange;
 }
 
-/// If MBB is present in any jump tables, remove it.
-bool MachineJumpTableInfo::RemoveMBBFromJumpTables(MachineBasicBlock *MBB) {
-  bool MadeChange = false;
-  for (MachineJumpTableEntry &JTE : JumpTables) {
-    auto removeBeginItr = std::remove(JTE.MBBs.begin(), JTE.MBBs.end(), MBB);
-    MadeChange |= (removeBeginItr != JTE.MBBs.end());
-    JTE.MBBs.erase(removeBeginItr, JTE.MBBs.end());
-  }
-  return MadeChange;
-}
-
+/// If MBB is present in any jump tables, remove it. 
+bool MachineJumpTableInfo::RemoveMBBFromJumpTables(MachineBasicBlock *MBB) { 
+  bool MadeChange = false; 
+  for (MachineJumpTableEntry &JTE : JumpTables) { 
+    auto removeBeginItr = std::remove(JTE.MBBs.begin(), JTE.MBBs.end(), MBB); 
+    MadeChange |= (removeBeginItr != JTE.MBBs.end()); 
+    JTE.MBBs.erase(removeBeginItr, JTE.MBBs.end()); 
+  } 
+  return MadeChange; 
+} 
+ 
 /// If Old is a target of the jump tables, update the jump table to branch to
 /// New instead.
 bool MachineJumpTableInfo::ReplaceMBBInJumpTable(unsigned Idx,
@@ -1107,14 +1107,14 @@ Printable llvm::printJumpTableEntryReference(unsigned Idx) {
 
 void MachineConstantPoolValue::anchor() {}
 
-unsigned MachineConstantPoolValue::getSizeInBytes(const DataLayout &DL) const {
-  return DL.getTypeAllocSize(Ty);
-}
-
-unsigned MachineConstantPoolEntry::getSizeInBytes(const DataLayout &DL) const {
+unsigned MachineConstantPoolValue::getSizeInBytes(const DataLayout &DL) const { 
+  return DL.getTypeAllocSize(Ty); 
+} 
+ 
+unsigned MachineConstantPoolEntry::getSizeInBytes(const DataLayout &DL) const { 
   if (isMachineConstantPoolEntry())
-    return Val.MachineCPVal->getSizeInBytes(DL);
-  return DL.getTypeAllocSize(Val.ConstVal->getType());
+    return Val.MachineCPVal->getSizeInBytes(DL); 
+  return DL.getTypeAllocSize(Val.ConstVal->getType()); 
 }
 
 bool MachineConstantPoolEntry::needsRelocation() const {
@@ -1127,7 +1127,7 @@ SectionKind
 MachineConstantPoolEntry::getSectionKind(const DataLayout *DL) const {
   if (needsRelocation())
     return SectionKind::getReadOnlyWithRel();
-  switch (getSizeInBytes(*DL)) {
+  switch (getSizeInBytes(*DL)) { 
   case 4:
     return SectionKind::getMergeableConst4();
   case 8:

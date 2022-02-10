@@ -15,13 +15,13 @@ CodeType = type(_f.__code__)
 MappingProxyType = type(type.__dict__)
 SimpleNamespace = type(sys.implementation)
 
-def _cell_factory():
-    a = 1
-    def f():
-        nonlocal a
-    return f.__closure__[0]
-CellType = type(_cell_factory())
-
+def _cell_factory(): 
+    a = 1 
+    def f(): 
+        nonlocal a 
+    return f.__closure__[0] 
+CellType = type(_cell_factory()) 
+ 
 def _g():
     yield 1
 GeneratorType = type(_g())
@@ -82,7 +82,7 @@ def resolve_bases(bases):
     updated = False
     shift = 0
     for i, base in enumerate(bases):
-        if isinstance(base, type) and not isinstance(base, GenericAlias):
+        if isinstance(base, type) and not isinstance(base, GenericAlias): 
             continue
         if not hasattr(base, "__mro_entries__"):
             continue
@@ -262,8 +262,8 @@ def coroutine(func):
         if co_flags & 0x20:
             # TODO: Implement this in C.
             co = func.__code__
-            # 0x100 == CO_ITERABLE_COROUTINE
-            func.__code__ = co.replace(co_flags=co.co_flags | 0x100)
+            # 0x100 == CO_ITERABLE_COROUTINE 
+            func.__code__ = co.replace(co_flags=co.co_flags | 0x100) 
             return func
 
     # The following code is primarily to support functions that
@@ -293,7 +293,7 @@ def coroutine(func):
     return wrapped
 
 
-GenericAlias = type(list[int])
-
-
+GenericAlias = type(list[int]) 
+ 
+ 
 __all__ = [n for n in globals() if n[:1] != '_']

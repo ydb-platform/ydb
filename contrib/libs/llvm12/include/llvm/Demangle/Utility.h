@@ -59,7 +59,7 @@ class OutputStream {
     char *TempPtr = std::end(Temp);
 
     while (N) {
-      *--TempPtr = char('0' + N % 10);
+      *--TempPtr = char('0' + N % 10); 
       N /= 10;
     }
 

@@ -16,7 +16,7 @@ For example:
 import sys
 import numbers
 
-PY3 = sys.version_info[0] >= 3
+PY3 = sys.version_info[0] >= 3 
 PY2 = sys.version_info[0] == 2
 PYPY = hasattr(sys, 'pypy_translation_info')
 
@@ -26,13 +26,13 @@ def with_metaclass(meta, *bases):
     Function from jinja2/_compat.py. License: BSD.
 
     Use it like this::
-
+ 
         class BaseForm(object):
             pass
-
+ 
         class FormType(type):
             pass
-
+ 
         class Form(with_metaclass(FormType, BaseForm)):
             pass
 
@@ -42,7 +42,7 @@ def with_metaclass(meta, *bases):
     we also need to make sure that we downgrade the custom metaclass
     for one level to something closer to type (that's why __call__ and
     __init__ comes back from type etc.).
-
+ 
     This has the advantage over six.with_metaclass of not introducing
     dummy classes into the final MRO.
     """
@@ -62,7 +62,7 @@ def native(obj):
 
     On Py3, returns the corresponding native Py3 types that are
     superclasses for forward-ported objects from Py2:
-
+ 
     >>> from past.builtins import str, dict
 
     >>> native(str(b'ABC'))   # Output on Py3 follows. On Py2, output is 'ABC'

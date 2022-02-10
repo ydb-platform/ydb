@@ -41,12 +41,12 @@
       "limit_key": "MaxResults",
       "output_token": "NextToken",
       "result_key": "FilterNames"
-    },
-    "ListOrganizationAdminAccounts": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxResults",
-      "result_key": "AdminAccounts"
+    }, 
+    "ListOrganizationAdminAccounts": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "result_key": "AdminAccounts" 
     }
   }
 }

@@ -112,13 +112,13 @@ void pysqlite_cache_dealloc(pysqlite_Cache* self)
     Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
-PyObject* pysqlite_cache_get(pysqlite_Cache* self, PyObject* key)
+PyObject* pysqlite_cache_get(pysqlite_Cache* self, PyObject* key) 
 {
     pysqlite_Node* node;
     pysqlite_Node* ptr;
     PyObject* data;
 
-    node = (pysqlite_Node*)PyDict_GetItemWithError(self->mapping, key);
+    node = (pysqlite_Node*)PyDict_GetItemWithError(self->mapping, key); 
     if (node) {
         /* an entry for this key already exists in the cache */
 
@@ -156,11 +156,11 @@ PyObject* pysqlite_cache_get(pysqlite_Cache* self, PyObject* key)
             }
             ptr->prev = node;
         }
-    }
-    else if (PyErr_Occurred()) {
-        return NULL;
-    }
-    else {
+    } 
+    else if (PyErr_Occurred()) { 
+        return NULL; 
+    } 
+    else { 
         /* There is no entry for this key in the cache, yet. We'll insert a new
          * entry in the cache, and make space if necessary by throwing the
          * least used item out of the cache. */
@@ -183,9 +183,9 @@ PyObject* pysqlite_cache_get(pysqlite_Cache* self, PyObject* key)
             }
         }
 
-        /* We cannot replace this by PyObject_CallOneArg() since
-         * PyObject_CallFunction() has a special case when using a
-         * single tuple as argument. */
+        /* We cannot replace this by PyObject_CallOneArg() since 
+         * PyObject_CallFunction() has a special case when using a 
+         * single tuple as argument. */ 
         data = PyObject_CallFunction(self->factory, "O", key);
 
         if (!data) {
@@ -267,10 +267,10 @@ PyTypeObject pysqlite_NodeType = {
         sizeof(pysqlite_Node),                          /* tp_basicsize */
         0,                                              /* tp_itemsize */
         (destructor)pysqlite_node_dealloc,              /* tp_dealloc */
-        0,                                              /* tp_vectorcall_offset */
+        0,                                              /* tp_vectorcall_offset */ 
         0,                                              /* tp_getattr */
         0,                                              /* tp_setattr */
-        0,                                              /* tp_as_async */
+        0,                                              /* tp_as_async */ 
         0,                                              /* tp_repr */
         0,                                              /* tp_as_number */
         0,                                              /* tp_as_sequence */
@@ -309,10 +309,10 @@ PyTypeObject pysqlite_CacheType = {
         sizeof(pysqlite_Cache),                         /* tp_basicsize */
         0,                                              /* tp_itemsize */
         (destructor)pysqlite_cache_dealloc,             /* tp_dealloc */
-        0,                                              /* tp_vectorcall_offset */
+        0,                                              /* tp_vectorcall_offset */ 
         0,                                              /* tp_getattr */
         0,                                              /* tp_setattr */
-        0,                                              /* tp_as_async */
+        0,                                              /* tp_as_async */ 
         0,                                              /* tp_repr */
         0,                                              /* tp_as_number */
         0,                                              /* tp_as_sequence */

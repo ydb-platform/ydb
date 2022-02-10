@@ -15,7 +15,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Instructions.h" 
 #include "llvm/InitializePasses.h"
 #define AA_NAME "alignment-from-assumptions"
 #define DEBUG_TYPE AA_NAME
@@ -204,33 +204,33 @@ static Align getNewAlignment(const SCEV *AASCEV, const SCEV *AlignSCEV,
 }
 
 bool AlignmentFromAssumptionsPass::extractAlignmentInfo(CallInst *I,
-                                                        unsigned Idx,
+                                                        unsigned Idx, 
                                                         Value *&AAPtr,
                                                         const SCEV *&AlignSCEV,
                                                         const SCEV *&OffSCEV) {
-  Type *Int64Ty = Type::getInt64Ty(I->getContext());
-  OperandBundleUse AlignOB = I->getOperandBundleAt(Idx);
-  if (AlignOB.getTagName() != "align")
+  Type *Int64Ty = Type::getInt64Ty(I->getContext()); 
+  OperandBundleUse AlignOB = I->getOperandBundleAt(Idx); 
+  if (AlignOB.getTagName() != "align") 
     return false;
-  assert(AlignOB.Inputs.size() >= 2);
-  AAPtr = AlignOB.Inputs[0].get();
-  // TODO: Consider accumulating the offset to the base.
-  AAPtr = AAPtr->stripPointerCastsSameRepresentation();
-  AlignSCEV = SE->getSCEV(AlignOB.Inputs[1].get());
-  AlignSCEV = SE->getTruncateOrZeroExtend(AlignSCEV, Int64Ty);
-  if (AlignOB.Inputs.size() == 3)
-    OffSCEV = SE->getSCEV(AlignOB.Inputs[2].get());
-  else
+  assert(AlignOB.Inputs.size() >= 2); 
+  AAPtr = AlignOB.Inputs[0].get(); 
+  // TODO: Consider accumulating the offset to the base. 
+  AAPtr = AAPtr->stripPointerCastsSameRepresentation(); 
+  AlignSCEV = SE->getSCEV(AlignOB.Inputs[1].get()); 
+  AlignSCEV = SE->getTruncateOrZeroExtend(AlignSCEV, Int64Ty); 
+  if (AlignOB.Inputs.size() == 3) 
+    OffSCEV = SE->getSCEV(AlignOB.Inputs[2].get()); 
+  else 
     OffSCEV = SE->getZero(Int64Ty);
-  OffSCEV = SE->getTruncateOrZeroExtend(OffSCEV, Int64Ty);
+  OffSCEV = SE->getTruncateOrZeroExtend(OffSCEV, Int64Ty); 
   return true;
 }
 
-bool AlignmentFromAssumptionsPass::processAssumption(CallInst *ACall,
-                                                     unsigned Idx) {
+bool AlignmentFromAssumptionsPass::processAssumption(CallInst *ACall, 
+                                                     unsigned Idx) { 
   Value *AAPtr;
   const SCEV *AlignSCEV, *OffSCEV;
-  if (!extractAlignmentInfo(ACall, Idx, AAPtr, AlignSCEV, OffSCEV))
+  if (!extractAlignmentInfo(ACall, Idx, AAPtr, AlignSCEV, OffSCEV)) 
     return false;
 
   // Skip ConstantPointerNull and UndefValue.  Assumptions on these shouldn't
@@ -254,8 +254,8 @@ bool AlignmentFromAssumptionsPass::processAssumption(CallInst *ACall,
   while (!WorkList.empty()) {
     Instruction *J = WorkList.pop_back_val();
     if (LoadInst *LI = dyn_cast<LoadInst>(J)) {
-      if (!isValidAssumeForContext(ACall, J, DT))
-        continue;
+      if (!isValidAssumeForContext(ACall, J, DT)) 
+        continue; 
       Align NewAlignment = getNewAlignment(AASCEV, AlignSCEV, OffSCEV,
                                            LI->getPointerOperand(), SE);
       if (NewAlignment > LI->getAlign()) {
@@ -263,8 +263,8 @@ bool AlignmentFromAssumptionsPass::processAssumption(CallInst *ACall,
         ++NumLoadAlignChanged;
       }
     } else if (StoreInst *SI = dyn_cast<StoreInst>(J)) {
-      if (!isValidAssumeForContext(ACall, J, DT))
-        continue;
+      if (!isValidAssumeForContext(ACall, J, DT)) 
+        continue; 
       Align NewAlignment = getNewAlignment(AASCEV, AlignSCEV, OffSCEV,
                                            SI->getPointerOperand(), SE);
       if (NewAlignment > SI->getAlign()) {
@@ -272,8 +272,8 @@ bool AlignmentFromAssumptionsPass::processAssumption(CallInst *ACall,
         ++NumStoreAlignChanged;
       }
     } else if (MemIntrinsic *MI = dyn_cast<MemIntrinsic>(J)) {
-      if (!isValidAssumeForContext(ACall, J, DT))
-        continue;
+      if (!isValidAssumeForContext(ACall, J, DT)) 
+        continue; 
       Align NewDestAlignment =
           getNewAlignment(AASCEV, AlignSCEV, OffSCEV, MI->getDest(), SE);
 
@@ -305,7 +305,7 @@ bool AlignmentFromAssumptionsPass::processAssumption(CallInst *ACall,
     Visited.insert(J);
     for (User *UJ : J->users()) {
       Instruction *K = cast<Instruction>(UJ);
-      if (!Visited.count(K))
+      if (!Visited.count(K)) 
         WorkList.push_back(K);
     }
   }
@@ -332,11 +332,11 @@ bool AlignmentFromAssumptionsPass::runImpl(Function &F, AssumptionCache &AC,
 
   bool Changed = false;
   for (auto &AssumeVH : AC.assumptions())
-    if (AssumeVH) {
-      CallInst *Call = cast<CallInst>(AssumeVH);
-      for (unsigned Idx = 0; Idx < Call->getNumOperandBundles(); Idx++)
-        Changed |= processAssumption(Call, Idx);
-    }
+    if (AssumeVH) { 
+      CallInst *Call = cast<CallInst>(AssumeVH); 
+      for (unsigned Idx = 0; Idx < Call->getNumOperandBundles(); Idx++) 
+        Changed |= processAssumption(Call, Idx); 
+    } 
 
   return Changed;
 }

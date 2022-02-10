@@ -35,7 +35,7 @@ class BZ2File(_compression.BaseStream):
     returned as bytes, and data to be written should be given as bytes.
     """
 
-    def __init__(self, filename, mode="r", *, compresslevel=9):
+    def __init__(self, filename, mode="r", *, compresslevel=9): 
         """Open a bzip2-compressed file.
 
         If filename is a str, bytes, or PathLike object, it gives the
@@ -226,23 +226,23 @@ class BZ2File(_compression.BaseStream):
         """Write a byte string to the file.
 
         Returns the number of uncompressed bytes written, which is
-        always the length of data in bytes. Note that due to buffering,
-        the file on disk may not reflect the data written until close()
-        is called.
+        always the length of data in bytes. Note that due to buffering, 
+        the file on disk may not reflect the data written until close() 
+        is called. 
         """
         with self._lock:
             self._check_can_write()
-            if isinstance(data, (bytes, bytearray)):
-                length = len(data)
-            else:
-                # accept any data that supports the buffer protocol
-                data = memoryview(data)
-                length = data.nbytes
-
+            if isinstance(data, (bytes, bytearray)): 
+                length = len(data) 
+            else: 
+                # accept any data that supports the buffer protocol 
+                data = memoryview(data) 
+                length = data.nbytes 
+ 
             compressed = self._compressor.compress(data)
             self._fp.write(compressed)
-            self._pos += length
-            return length
+            self._pos += length 
+            return length 
 
     def writelines(self, seq):
         """Write a sequence of byte strings to the file.

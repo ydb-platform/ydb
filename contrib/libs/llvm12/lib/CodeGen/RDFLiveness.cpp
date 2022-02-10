@@ -23,10 +23,10 @@
 // <10.1145/2086696.2086706>. <hal-00647369>
 //
 #include "llvm/ADT/BitVector.h"
-#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseMap.h" 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SetVector.h"
-#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/SmallSet.h" 
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineDominanceFrontier.h"
 #include "llvm/CodeGen/MachineDominators.h"
@@ -47,7 +47,7 @@
 #include <cstdint>
 #include <iterator>
 #include <map>
-#include <unordered_map>
+#include <unordered_map> 
 #include <utility>
 #include <vector>
 
@@ -111,7 +111,7 @@ NodeList Liveness::getAllReachingDefs(RegisterRef RefRR,
       const RegisterAggr &DefRRs) {
   NodeList RDefs; // Return value.
   SetVector<NodeId> DefQ;
-  DenseMap<MachineInstr*, uint32_t> OrdMap;
+  DenseMap<MachineInstr*, uint32_t> OrdMap; 
 
   // Dead defs will be treated as if they were live, since they are actually
   // on the data-flow path. They cannot be ignored because even though they
@@ -154,9 +154,9 @@ NodeList Liveness::getAllReachingDefs(RegisterRef RefRR,
     for (auto S : DFG.getRelatedRefs(TA.Addr->getOwner(DFG), TA))
       if (NodeId RD = NodeAddr<RefNode*>(S).Addr->getReachingDef())
         DefQ.insert(RD);
-    // Don't visit sibling defs. They share the same reaching def (which
-    // will be visited anyway), but they define something not aliased to
-    // this ref.
+    // Don't visit sibling defs. They share the same reaching def (which 
+    // will be visited anyway), but they define something not aliased to 
+    // this ref. 
   }
 
   // Return the MachineBasicBlock containing a given instruction.
@@ -168,81 +168,81 @@ NodeList Liveness::getAllReachingDefs(RegisterRef RefRR,
     NodeAddr<BlockNode*> BA = PA.Addr->getOwner(DFG);
     return BA.Addr->getCode();
   };
-
-  SmallSet<NodeId,32> Defs;
-
-  // Remove all non-phi defs that are not aliased to RefRR, and segregate
-  // the the remaining defs into buckets for containing blocks.
-  std::map<NodeId, NodeAddr<InstrNode*>> Owners;
-  std::map<MachineBasicBlock*, SmallVector<NodeId,32>> Blocks;
-  for (NodeId N : DefQ) {
-    auto TA = DFG.addr<DefNode*>(N);
-    bool IsPhi = TA.Addr->getFlags() & NodeAttrs::PhiRef;
-    if (!IsPhi && !PRI.alias(RefRR, TA.Addr->getRegRef(DFG)))
-      continue;
-    Defs.insert(TA.Id);
-    NodeAddr<InstrNode*> IA = TA.Addr->getOwner(DFG);
-    Owners[TA.Id] = IA;
-    Blocks[Block(IA)].push_back(IA.Id);
-  }
-
-  auto Precedes = [this,&OrdMap] (NodeId A, NodeId B) {
+ 
+  SmallSet<NodeId,32> Defs; 
+ 
+  // Remove all non-phi defs that are not aliased to RefRR, and segregate 
+  // the the remaining defs into buckets for containing blocks. 
+  std::map<NodeId, NodeAddr<InstrNode*>> Owners; 
+  std::map<MachineBasicBlock*, SmallVector<NodeId,32>> Blocks; 
+  for (NodeId N : DefQ) { 
+    auto TA = DFG.addr<DefNode*>(N); 
+    bool IsPhi = TA.Addr->getFlags() & NodeAttrs::PhiRef; 
+    if (!IsPhi && !PRI.alias(RefRR, TA.Addr->getRegRef(DFG))) 
+      continue; 
+    Defs.insert(TA.Id); 
+    NodeAddr<InstrNode*> IA = TA.Addr->getOwner(DFG); 
+    Owners[TA.Id] = IA; 
+    Blocks[Block(IA)].push_back(IA.Id); 
+  } 
+ 
+  auto Precedes = [this,&OrdMap] (NodeId A, NodeId B) { 
     if (A == B)
       return false;
-    NodeAddr<InstrNode*> OA = DFG.addr<InstrNode*>(A);
-    NodeAddr<InstrNode*> OB = DFG.addr<InstrNode*>(B);
+    NodeAddr<InstrNode*> OA = DFG.addr<InstrNode*>(A); 
+    NodeAddr<InstrNode*> OB = DFG.addr<InstrNode*>(B); 
     bool StmtA = OA.Addr->getKind() == NodeAttrs::Stmt;
     bool StmtB = OB.Addr->getKind() == NodeAttrs::Stmt;
-    if (StmtA && StmtB) {
-      const MachineInstr *InA = NodeAddr<StmtNode*>(OA).Addr->getCode();
-      const MachineInstr *InB = NodeAddr<StmtNode*>(OB).Addr->getCode();
-      assert(InA->getParent() == InB->getParent());
-      auto FA = OrdMap.find(InA);
-      if (FA != OrdMap.end())
-        return FA->second < OrdMap.find(InB)->second;
-      const MachineBasicBlock *BB = InA->getParent();
-      for (auto It = BB->begin(), E = BB->end(); It != E; ++It) {
-        if (It == InA->getIterator())
-          return true;
-        if (It == InB->getIterator())
-          return false;
-      }
-      llvm_unreachable("InA and InB should be in the same block");
-    }
-    // One of them is a phi node.
-    if (!StmtA && !StmtB) {
-      // Both are phis, which are unordered. Break the tie by id numbers.
+    if (StmtA && StmtB) { 
+      const MachineInstr *InA = NodeAddr<StmtNode*>(OA).Addr->getCode(); 
+      const MachineInstr *InB = NodeAddr<StmtNode*>(OB).Addr->getCode(); 
+      assert(InA->getParent() == InB->getParent()); 
+      auto FA = OrdMap.find(InA); 
+      if (FA != OrdMap.end()) 
+        return FA->second < OrdMap.find(InB)->second; 
+      const MachineBasicBlock *BB = InA->getParent(); 
+      for (auto It = BB->begin(), E = BB->end(); It != E; ++It) { 
+        if (It == InA->getIterator()) 
+          return true; 
+        if (It == InB->getIterator()) 
+          return false; 
+      } 
+      llvm_unreachable("InA and InB should be in the same block"); 
+    } 
+    // One of them is a phi node. 
+    if (!StmtA && !StmtB) { 
+      // Both are phis, which are unordered. Break the tie by id numbers. 
       return A < B;
     }
-    // Only one of them is a phi. Phis always precede statements.
-    return !StmtA;
+    // Only one of them is a phi. Phis always precede statements. 
+    return !StmtA; 
   };
 
-  auto GetOrder = [&OrdMap] (MachineBasicBlock &B) {
-    uint32_t Pos = 0;
-    for (MachineInstr &In : B)
-      OrdMap.insert({&In, ++Pos});
-  };
+  auto GetOrder = [&OrdMap] (MachineBasicBlock &B) { 
+    uint32_t Pos = 0; 
+    for (MachineInstr &In : B) 
+      OrdMap.insert({&In, ++Pos}); 
+  }; 
 
-  // For each block, sort the nodes in it.
-  std::vector<MachineBasicBlock*> TmpBB;
-  for (auto &Bucket : Blocks) {
-    TmpBB.push_back(Bucket.first);
-    if (Bucket.second.size() > 2)
-      GetOrder(*Bucket.first);
-    llvm::sort(Bucket.second, Precedes);
-  }
-
-  // Sort the blocks with respect to dominance.
-  llvm::sort(TmpBB,
-             [this](auto A, auto B) { return MDT.properlyDominates(A, B); });
-
-  std::vector<NodeId> TmpInst;
-  for (auto I = TmpBB.rbegin(), E = TmpBB.rend(); I != E; ++I) {
-    auto &Bucket = Blocks[*I];
-    TmpInst.insert(TmpInst.end(), Bucket.rbegin(), Bucket.rend());
-  }
-
+  // For each block, sort the nodes in it. 
+  std::vector<MachineBasicBlock*> TmpBB; 
+  for (auto &Bucket : Blocks) { 
+    TmpBB.push_back(Bucket.first); 
+    if (Bucket.second.size() > 2) 
+      GetOrder(*Bucket.first); 
+    llvm::sort(Bucket.second, Precedes); 
+  } 
+ 
+  // Sort the blocks with respect to dominance. 
+  llvm::sort(TmpBB, 
+             [this](auto A, auto B) { return MDT.properlyDominates(A, B); }); 
+ 
+  std::vector<NodeId> TmpInst; 
+  for (auto I = TmpBB.rbegin(), E = TmpBB.rend(); I != E; ++I) { 
+    auto &Bucket = Blocks[*I]; 
+    TmpInst.insert(TmpInst.end(), Bucket.rbegin(), Bucket.rend()); 
+  } 
+ 
   // The vector is a list of instructions, so that defs coming from
   // the same instruction don't need to be artificially ordered.
   // Then, when computing the initial segment, and iterating over an
@@ -256,9 +256,9 @@ NodeList Liveness::getAllReachingDefs(RegisterRef RefRR,
   // *d3<C>              If A \incl BuC, and B \incl AuC, then *d2 would be
   //                     covered if we added A first, and A would be covered
   //                     if we added B first.
-  // In this example we want both A and B, because we don't want to give
-  // either one priority over the other, since they belong to the same
-  // statement.
+  // In this example we want both A and B, because we don't want to give 
+  // either one priority over the other, since they belong to the same 
+  // statement. 
 
   RegisterAggr RRs(DefRRs);
 
@@ -266,8 +266,8 @@ NodeList Liveness::getAllReachingDefs(RegisterRef RefRR,
     return TA.Addr->getKind() == NodeAttrs::Def &&
            Defs.count(TA.Id);
   };
-
-  for (NodeId T : TmpInst) {
+ 
+  for (NodeId T : TmpInst) { 
     if (!FullChain && RRs.hasCoverOf(RefRR))
       break;
     auto TA = DFG.addr<InstrNode*>(T);
@@ -286,7 +286,7 @@ NodeList Liveness::getAllReachingDefs(RegisterRef RefRR,
       if (FullChain || IsPhi || !RRs.hasCoverOf(QR))
         Ds.push_back(DA);
     }
-    llvm::append_range(RDefs, Ds);
+    llvm::append_range(RDefs, Ds); 
     for (NodeAddr<DefNode*> DA : Ds) {
       // When collecting a full chain of definitions, do not consider phi
       // defs to actually define a register.
@@ -300,7 +300,7 @@ NodeList Liveness::getAllReachingDefs(RegisterRef RefRR,
   auto DeadP = [](const NodeAddr<DefNode*> DA) -> bool {
     return DA.Addr->getFlags() & NodeAttrs::Dead;
   };
-  llvm::erase_if(RDefs, DeadP);
+  llvm::erase_if(RDefs, DeadP); 
 
   return RDefs;
 }
@@ -470,13 +470,13 @@ void Liveness::computePhiInfo() {
   NodeList Blocks = FA.Addr->members(DFG);
   for (NodeAddr<BlockNode*> BA : Blocks) {
     auto Ps = BA.Addr->members_if(DFG.IsCode<NodeAttrs::Phi>, DFG);
-    llvm::append_range(Phis, Ps);
+    llvm::append_range(Phis, Ps); 
   }
 
   // phi use -> (map: reaching phi -> set of registers defined in between)
   std::map<NodeId,std::map<NodeId,RegisterAggr>> PhiUp;
   std::vector<NodeId> PhiUQ;  // Work list of phis for upward propagation.
-  std::unordered_map<NodeId,RegisterAggr> PhiDRs;  // Phi -> registers defined by it.
+  std::unordered_map<NodeId,RegisterAggr> PhiDRs;  // Phi -> registers defined by it. 
 
   // Go over all phis.
   for (NodeAddr<PhiNode*> PhiA : Phis) {
@@ -514,7 +514,7 @@ void Liveness::computePhiInfo() {
         NodeAddr<UseNode*> A = DFG.addr<UseNode*>(UN);
         uint16_t F = A.Addr->getFlags();
         if ((F & (NodeAttrs::Undef | NodeAttrs::PhiRef)) == 0) {
-          RegisterRef R = A.Addr->getRegRef(DFG);
+          RegisterRef R = A.Addr->getRegRef(DFG); 
           RealUses[R.Reg].insert({A.Id,R.Mask});
         }
         UN = A.Addr->getSibling();
@@ -652,23 +652,23 @@ void Liveness::computePhiInfo() {
   // is covered, or until reaching the final phi. Only assume that the
   // reference reaches the phi in the latter case.
 
-  // The operation "clearIn" can be expensive. For a given set of intervening
-  // defs, cache the result of subtracting these defs from a given register
-  // ref.
-  using SubMap = std::unordered_map<RegisterRef, RegisterRef>;
-  std::unordered_map<RegisterAggr, SubMap> Subs;
-  auto ClearIn = [] (RegisterRef RR, const RegisterAggr &Mid, SubMap &SM) {
-    if (Mid.empty())
-      return RR;
-    auto F = SM.find(RR);
-    if (F != SM.end())
-      return F->second;
-    RegisterRef S = Mid.clearIn(RR);
-    SM.insert({RR, S});
-    return S;
-  };
-
-  // Go over all phis.
+  // The operation "clearIn" can be expensive. For a given set of intervening 
+  // defs, cache the result of subtracting these defs from a given register 
+  // ref. 
+  using SubMap = std::unordered_map<RegisterRef, RegisterRef>; 
+  std::unordered_map<RegisterAggr, SubMap> Subs; 
+  auto ClearIn = [] (RegisterRef RR, const RegisterAggr &Mid, SubMap &SM) { 
+    if (Mid.empty()) 
+      return RR; 
+    auto F = SM.find(RR); 
+    if (F != SM.end()) 
+      return F->second; 
+    RegisterRef S = Mid.clearIn(RR); 
+    SM.insert({RR, S}); 
+    return S; 
+  }; 
+ 
+  // Go over all phis. 
   for (unsigned i = 0; i < PhiUQ.size(); ++i) {
     auto PA = DFG.addr<PhiNode*>(PhiUQ[i]);
     NodeList PUs = PA.Addr->members_if(DFG.IsRef<NodeAttrs::Use>, DFG);
@@ -676,7 +676,7 @@ void Liveness::computePhiInfo() {
 
     for (NodeAddr<UseNode*> UA : PUs) {
       std::map<NodeId,RegisterAggr> &PUM = PhiUp[UA.Id];
-      RegisterRef UR = UA.Addr->getRegRef(DFG);
+      RegisterRef UR = UA.Addr->getRegRef(DFG); 
       for (const std::pair<const NodeId, RegisterAggr> &P : PUM) {
         bool Changed = false;
         const RegisterAggr &MidDefs = P.second;
@@ -686,7 +686,7 @@ void Liveness::computePhiInfo() {
 
         if (MidDefs.hasCoverOf(UR))
           continue;
-        SubMap &SM = Subs[MidDefs];
+        SubMap &SM = Subs[MidDefs]; 
 
         // General algorithm:
         //   for each (R,U) : U is use node of R, U is reached by PA
@@ -706,7 +706,7 @@ void Liveness::computePhiInfo() {
             LaneBitmask M = R.Mask & V.second;
             if (M.none())
               continue;
-            if (RegisterRef SS = ClearIn(RegisterRef(R.Reg, M), MidDefs, SM)) {
+            if (RegisterRef SS = ClearIn(RegisterRef(R.Reg, M), MidDefs, SM)) { 
               NodeRefSet &RS = RealUseMap[P.first][SS.Reg];
               Changed |= RS.insert({V.first,SS.Mask}).second;
             }
@@ -1130,7 +1130,7 @@ void Liveness::traverse(MachineBasicBlock *B, RefMap &LiveIn) {
     for (NodeAddr<UseNode*> UA : IA.Addr->members_if(DFG.IsUse, DFG)) {
       if (UA.Addr->getFlags() & NodeAttrs::Undef)
         continue;
-      RegisterRef RR = UA.Addr->getRegRef(DFG);
+      RegisterRef RR = UA.Addr->getRegRef(DFG); 
       for (NodeAddr<DefNode*> D : getAllReachingDefs(UA))
         if (getBlockWithRef(D.Id) != B)
           LiveIn[RR.Reg].insert({D.Id,RR.Mask});

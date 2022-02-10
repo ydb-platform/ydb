@@ -124,13 +124,13 @@ class Scanner:
 
     def peek_token(self):
         # Return the next token, but do not delete if from the queue.
-        # Return None if no more tokens.
+        # Return None if no more tokens. 
         while self.need_more_tokens():
             self.fetch_more_tokens()
         if self.tokens:
             return self.tokens[0]
-        else:
-            return None
+        else: 
+            return None 
 
     def get_token(self):
         # Return the next token.
@@ -332,7 +332,7 @@ class Scanner:
         ## }
         #if self.flow_level and self.indent > column:
         #    raise ScannerError(None, None,
-        #            "invalid indentation or unclosed '[' or '{'",
+        #            "invalid indentation or unclosed '[' or '{'", 
         #            self.get_mark())
 
         # In the flow context, indentation is ignored. We make the scanner less
@@ -370,7 +370,7 @@ class Scanner:
 
     def fetch_stream_end(self):
 
-        # Set the current indentation to -1.
+        # Set the current indentation to -1. 
         self.unwind_indent(-1)
 
         # Reset simple keys.
@@ -389,7 +389,7 @@ class Scanner:
 
     def fetch_directive(self):
         
-        # Set the current indentation to -1.
+        # Set the current indentation to -1. 
         self.unwind_indent(-1)
 
         # Reset simple keys.
@@ -407,7 +407,7 @@ class Scanner:
 
     def fetch_document_indicator(self, TokenClass):
 
-        # Set the current indentation to -1.
+        # Set the current indentation to -1. 
         self.unwind_indent(-1)
 
         # Reset simple keys. Note that there could not be a block collection
@@ -519,7 +519,7 @@ class Scanner:
         # Block context needs additional checks.
         if not self.flow_level:
 
-            # Are we allowed to start a key (not necessary a simple)?
+            # Are we allowed to start a key (not necessary a simple)? 
             if not self.allow_simple_key:
                 raise ScannerError(None, None,
                         "mapping keys are not allowed here",
@@ -567,7 +567,7 @@ class Scanner:
         else:
             
             # Block context needs additional checks.
-            # (Do we really need them? They will be caught by the parser
+            # (Do we really need them? They will be caught by the parser 
             # anyway.)
             if not self.flow_level:
 
@@ -900,7 +900,7 @@ class Scanner:
         # The specification does not restrict characters for anchors and
         # aliases. This may lead to problems, for instance, the document:
         #   [ *alias, value ]
-        # can be interpreted in two ways, as
+        # can be interpreted in two ways, as 
         #   [ "value" ]
         # and
         #   [ *alias , "value" ]
@@ -1169,7 +1169,7 @@ class Scanner:
         ' ':    '\x20',
         '\"':   '\"',
         '\\':   '\\',
-        '/':    '/',
+        '/':    '/', 
         'N':    '\x85',
         '_':    '\xA0',
         'L':    '\u2028',
@@ -1270,7 +1270,7 @@ class Scanner:
     def scan_plain(self):
         # See the specification for details.
         # We add an additional restriction for the flow context:
-        #   plain scalars in the flow context cannot contain ',' or '?'.
+        #   plain scalars in the flow context cannot contain ',' or '?'. 
         # We also keep track of the `allow_simple_key` flag here.
         # Indentation rules are loosed for the flow context.
         chunks = []
@@ -1289,10 +1289,10 @@ class Scanner:
             while True:
                 ch = self.peek(length)
                 if ch in '\0 \t\r\n\x85\u2028\u2029'    \
-                        or (ch == ':' and
-                                self.peek(length+1) in '\0 \t\r\n\x85\u2028\u2029'
-                                      + (u',[]{}' if self.flow_level else u''))\
-                        or (self.flow_level and ch in ',?[]{}'):
+                        or (ch == ':' and 
+                                self.peek(length+1) in '\0 \t\r\n\x85\u2028\u2029' 
+                                      + (u',[]{}' if self.flow_level else u''))\ 
+                        or (self.flow_level and ch in ',?[]{}'): 
                     break
                 length += 1
             if length == 0:

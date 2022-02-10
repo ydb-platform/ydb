@@ -109,7 +109,7 @@ public:
                                 bool Recover = false,
                                 bool UseAfterScope = false);
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-  static bool isRequired() { return true; }
+  static bool isRequired() { return true; } 
 
 private:
   bool CompileKernel;
@@ -130,7 +130,7 @@ public:
                                       bool UseGlobalGC = true,
                                       bool UseOdrIndicator = false);
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
-  static bool isRequired() { return true; }
+  static bool isRequired() { return true; } 
 
 private:
   bool CompileKernel;

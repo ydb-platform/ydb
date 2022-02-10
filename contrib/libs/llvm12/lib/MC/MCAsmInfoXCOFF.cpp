@@ -8,12 +8,12 @@
 
 #include "llvm/MC/MCAsmInfoXCOFF.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/Support/CommandLine.h"
+#include "llvm/Support/CommandLine.h" 
 
 using namespace llvm;
 
-extern cl::opt<cl::boolOrDefault> UseLEB128Directives;
-
+extern cl::opt<cl::boolOrDefault> UseLEB128Directives; 
+ 
 void MCAsmInfoXCOFF::anchor() {}
 
 MCAsmInfoXCOFF::MCAsmInfoXCOFF() {
@@ -23,14 +23,14 @@ MCAsmInfoXCOFF::MCAsmInfoXCOFF() {
   PrivateLabelPrefix = "L..";
   SupportsQuotedNames = false;
   UseDotAlignForAlignment = true;
-  if (UseLEB128Directives == cl::BOU_UNSET)
-    HasLEB128Directives = false;
+  if (UseLEB128Directives == cl::BOU_UNSET) 
+    HasLEB128Directives = false; 
   ZeroDirective = "\t.space\t";
   ZeroDirectiveSupportsNonZeroValue = false;
   AsciiDirective = nullptr; // not supported
   AscizDirective = nullptr; // not supported
-  ByteListDirective = "\t.byte\t";
-  CharacterLiteralSyntax = ACLS_SingleQuotePrefix;
+  ByteListDirective = "\t.byte\t"; 
+  CharacterLiteralSyntax = ACLS_SingleQuotePrefix; 
 
   // Use .vbyte for data definition to avoid directives that apply an implicit
   // alignment.
@@ -42,8 +42,8 @@ MCAsmInfoXCOFF::MCAsmInfoXCOFF() {
   HasDotTypeDotSizeDirective = false;
   UseIntegratedAssembler = false;
   NeedsFunctionDescriptors = true;
-
-  ExceptionsType = ExceptionHandling::AIX;
+ 
+  ExceptionsType = ExceptionHandling::AIX; 
 }
 
 bool MCAsmInfoXCOFF::isAcceptableChar(char C) const {

@@ -59,7 +59,7 @@ class RustLexer(RegexLexer):
     tokens = {
         'root': [
             # rust allows a file to start with a shebang, but if the first line
-            # starts with #![ then it's not a shebang but a crate attribute.
+            # starts with #![ then it's not a shebang but a crate attribute. 
             (r'#![^[\r\n].*$', Comment.Preproc),
             default('base'),
         ],
@@ -78,10 +78,10 @@ class RustLexer(RegexLexer):
             (r"""\$([a-zA-Z_]\w*|\(,?|\),?|,?)""", Comment.Preproc),
             # Keywords
             (words((
-                'as', 'async', 'await', 'box', 'const', 'crate', 'else',
-                'extern', 'for', 'if', 'impl', 'in', 'loop', 'match', 'move',
-                'mut', 'pub', 'ref', 'return', 'static', 'super', 'trait',
-                'try', 'unsafe', 'use', 'where', 'while'), suffix=r'\b'),
+                'as', 'async', 'await', 'box', 'const', 'crate', 'else', 
+                'extern', 'for', 'if', 'impl', 'in', 'loop', 'match', 'move', 
+                'mut', 'pub', 'ref', 'return', 'static', 'super', 'trait', 
+                'try', 'unsafe', 'use', 'where', 'while'), suffix=r'\b'), 
              Keyword),
             (words(('abstract', 'alignof', 'become', 'do', 'final', 'macro',
                     'offsetof', 'override', 'priv', 'proc', 'pure', 'sizeof',
@@ -95,7 +95,7 @@ class RustLexer(RegexLexer):
             (r'(default)(\s+)(type|fn)\b', bygroups(Keyword, Text, Keyword)),
             keyword_types,
             (r'self\b', Name.Builtin.Pseudo),
-            # Prelude (taken from Rust's src/libstd/prelude.rs)
+            # Prelude (taken from Rust's src/libstd/prelude.rs) 
             builtin_types,
             # Path seperators, so types don't catch them.
             (r'::\b', Text),

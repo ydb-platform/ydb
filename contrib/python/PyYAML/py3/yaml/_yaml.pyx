@@ -2,7 +2,7 @@
 import yaml
 
 def get_version_string():
-    cdef char *value
+    cdef char *value 
     value = yaml_get_version_string()
     if PY_MAJOR_VERSION < 3:
         return value
@@ -63,13 +63,13 @@ MappingNode = yaml.nodes.MappingNode
 
 cdef class Mark:
     cdef readonly object name
-    cdef readonly size_t index
-    cdef readonly size_t line
-    cdef readonly size_t column
+    cdef readonly size_t index 
+    cdef readonly size_t line 
+    cdef readonly size_t column 
     cdef readonly buffer
     cdef readonly pointer
 
-    def __init__(self, object name, size_t index, size_t line, size_t column,
+    def __init__(self, object name, size_t index, size_t line, size_t column, 
             object buffer, object pointer):
         self.name = name
         self.index = index
@@ -255,8 +255,8 @@ cdef class CParser:
     cdef object current_event
     cdef object anchors
     cdef object stream_cache
-    cdef int stream_cache_len
-    cdef int stream_cache_pos
+    cdef int stream_cache_len 
+    cdef int stream_cache_pos 
     cdef int unicode_source
 
     def __init__(self, stream):
@@ -302,7 +302,7 @@ cdef class CParser:
                 else:
                     raise TypeError(u"a string or stream input is required")
             self.stream = stream
-            yaml_parser_set_input_string(&self.parser, PyString_AS_STRING(stream), PyString_GET_SIZE(stream))
+            yaml_parser_set_input_string(&self.parser, PyString_AS_STRING(stream), PyString_GET_SIZE(stream)) 
         self.current_token = None
         self.current_event = None
         self.anchors = {}
@@ -414,8 +414,8 @@ cdef class CParser:
                         token.data.version_directive.minor),
                     start_mark, end_mark)
         elif token.type == YAML_TAG_DIRECTIVE_TOKEN:
-            handle = PyUnicode_FromString(token.data.tag_directive.handle)
-            prefix = PyUnicode_FromString(token.data.tag_directive.prefix)
+            handle = PyUnicode_FromString(token.data.tag_directive.handle) 
+            prefix = PyUnicode_FromString(token.data.tag_directive.prefix) 
             return DirectiveToken(u"TAG", (handle, prefix),
                     start_mark, end_mark)
         elif token.type == YAML_DOCUMENT_START_TOKEN:
@@ -451,13 +451,13 @@ cdef class CParser:
             value = PyUnicode_FromString(token.data.anchor.value)
             return AnchorToken(value, start_mark, end_mark)
         elif token.type == YAML_TAG_TOKEN:
-            handle = PyUnicode_FromString(token.data.tag.handle)
-            suffix = PyUnicode_FromString(token.data.tag.suffix)
+            handle = PyUnicode_FromString(token.data.tag.handle) 
+            suffix = PyUnicode_FromString(token.data.tag.suffix) 
             if not handle:
                 handle = None
             return TagToken((handle, suffix), start_mark, end_mark)
         elif token.type == YAML_SCALAR_TOKEN:
-            value = PyUnicode_DecodeUTF8(token.data.scalar.value,
+            value = PyUnicode_DecodeUTF8(token.data.scalar.value, 
                     token.data.scalar.length, 'strict')
             plain = False
             style = None
@@ -571,8 +571,8 @@ cdef class CParser:
                 tags = {}
                 tag_directive = event.data.document_start.tag_directives.start
                 while tag_directive != event.data.document_start.tag_directives.end:
-                    handle = PyUnicode_FromString(tag_directive.handle)
-                    prefix = PyUnicode_FromString(tag_directive.prefix)
+                    handle = PyUnicode_FromString(tag_directive.handle) 
+                    prefix = PyUnicode_FromString(tag_directive.prefix) 
                     tags[handle] = prefix
                     tag_directive = tag_directive+1
             return DocumentStartEvent(start_mark, end_mark,
@@ -592,7 +592,7 @@ cdef class CParser:
             tag = None
             if event.data.scalar.tag != NULL:
                 tag = PyUnicode_FromString(event.data.scalar.tag)
-            value = PyUnicode_DecodeUTF8(event.data.scalar.value,
+            value = PyUnicode_DecodeUTF8(event.data.scalar.value, 
                     event.data.scalar.length, 'strict')
             plain_implicit = False
             if event.data.scalar.plain_implicit == 1:
@@ -762,11 +762,11 @@ cdef class CParser:
                         self.parsed_event.start_mark.column,
                         None, None)
                 if PY_MAJOR_VERSION < 3:
-                    raise ComposerError("found duplicate anchor; first occurrence",
-                            self.anchors[anchor].start_mark, "second occurrence", mark)
+                    raise ComposerError("found duplicate anchor; first occurrence", 
+                            self.anchors[anchor].start_mark, "second occurrence", mark) 
                 else:
-                    raise ComposerError(u"found duplicate anchor; first occurrence",
-                            self.anchors[anchor].start_mark, u"second occurrence", mark)
+                    raise ComposerError(u"found duplicate anchor; first occurrence", 
+                            self.anchors[anchor].start_mark, u"second occurrence", mark) 
         self.descend_resolver(parent, index)
         if self.parsed_event.type == YAML_SCALAR_EVENT:
             node = self._compose_scalar_node(anchor)
@@ -788,7 +788,7 @@ cdef class CParser:
                 self.parsed_event.end_mark.line,
                 self.parsed_event.end_mark.column,
                 None, None)
-        value = PyUnicode_DecodeUTF8(self.parsed_event.data.scalar.value,
+        value = PyUnicode_DecodeUTF8(self.parsed_event.data.scalar.value, 
                 self.parsed_event.data.scalar.length, 'strict')
         plain_implicit = False
         if self.parsed_event.data.scalar.plain_implicit == 1:
@@ -905,7 +905,7 @@ cdef class CParser:
                 raise error
         return 1
 
-cdef int input_handler(void *data, char *buffer, size_t size, size_t *read) except 0:
+cdef int input_handler(void *data, char *buffer, size_t size, size_t *read) except 0: 
     cdef CParser parser
     parser = <CParser>data
     if parser.stream_cache is None:
@@ -924,7 +924,7 @@ cdef int input_handler(void *data, char *buffer, size_t size, size_t *read) exce
     if (parser.stream_cache_len - parser.stream_cache_pos) < size:
         size = parser.stream_cache_len - parser.stream_cache_pos
     if size > 0:
-        memcpy(buffer, PyString_AS_STRING(parser.stream_cache)
+        memcpy(buffer, PyString_AS_STRING(parser.stream_cache) 
                             + parser.stream_cache_pos, size)
     read[0] = size
     parser.stream_cache_pos += size
@@ -964,7 +964,7 @@ cdef class CEmitter:
             if hasattr(stream, u'encoding'):
                 self.dump_unicode = 1
         self.use_encoding = encoding
-        yaml_emitter_set_output(&self.emitter, output_handler, <void *>self)    
+        yaml_emitter_set_output(&self.emitter, output_handler, <void *>self)     
         if canonical:
             yaml_emitter_set_canonical(&self.emitter, 1)
         if indent is not None:
@@ -1071,7 +1071,7 @@ cdef class CEmitter:
                             raise TypeError("tag handle must be a string")
                         else:
                             raise TypeError(u"tag handle must be a string")
-                    tag_directives_end.handle = PyString_AS_STRING(handle)
+                    tag_directives_end.handle = PyString_AS_STRING(handle) 
                     if PyUnicode_CheckExact(prefix):
                         prefix = PyUnicode_AsUTF8String(prefix)
                         cache.append(prefix)
@@ -1080,7 +1080,7 @@ cdef class CEmitter:
                             raise TypeError("tag prefix must be a string")
                         else:
                             raise TypeError(u"tag prefix must be a string")
-                    tag_directives_end.prefix = PyString_AS_STRING(prefix)
+                    tag_directives_end.prefix = PyString_AS_STRING(prefix) 
                     tag_directives_end = tag_directives_end+1
             implicit = 1
             if event_object.explicit:
@@ -1104,7 +1104,7 @@ cdef class CEmitter:
                 else:
                     raise TypeError(u"anchor must be a string")
             anchor = PyString_AS_STRING(anchor_object)
-            if yaml_alias_event_initialize(event, anchor) == 0:
+            if yaml_alias_event_initialize(event, anchor) == 0: 
                 raise MemoryError
         elif event_class is ScalarEvent:
             anchor = NULL
@@ -1154,7 +1154,7 @@ cdef class CEmitter:
                 scalar_style = YAML_LITERAL_SCALAR_STYLE
             elif style_object == ">" or style_object == u">":
                 scalar_style = YAML_FOLDED_SCALAR_STYLE
-            if yaml_scalar_event_initialize(event, anchor, tag, value, length,
+            if yaml_scalar_event_initialize(event, anchor, tag, value, length, 
                     plain_implicit, quoted_implicit, scalar_style) == 0:
                 raise MemoryError
         elif event_class is SequenceStartEvent:
@@ -1186,7 +1186,7 @@ cdef class CEmitter:
             sequence_style = YAML_BLOCK_SEQUENCE_STYLE
             if event_object.flow_style:
                 sequence_style = YAML_FLOW_SEQUENCE_STYLE
-            if yaml_sequence_start_event_initialize(event, anchor, tag,
+            if yaml_sequence_start_event_initialize(event, anchor, tag, 
                     implicit, sequence_style) == 0:
                 raise MemoryError
         elif event_class is MappingStartEvent:
@@ -1218,7 +1218,7 @@ cdef class CEmitter:
             mapping_style = YAML_BLOCK_MAPPING_STYLE
             if event_object.flow_style:
                 mapping_style = YAML_FLOW_MAPPING_STYLE
-            if yaml_mapping_start_event_initialize(event, anchor, tag,
+            if yaml_mapping_start_event_initialize(event, anchor, tag, 
                     implicit, mapping_style) == 0:
                 raise MemoryError
         elif event_class is SequenceEndEvent:
@@ -1326,7 +1326,7 @@ cdef class CEmitter:
                         raise TypeError("tag handle must be a string")
                     else:
                         raise TypeError(u"tag handle must be a string")
-                tag_directives_end.handle = PyString_AS_STRING(handle)
+                tag_directives_end.handle = PyString_AS_STRING(handle) 
                 if PyUnicode_CheckExact(prefix):
                     prefix = PyUnicode_AsUTF8String(prefix)
                     cache.append(prefix)
@@ -1335,7 +1335,7 @@ cdef class CEmitter:
                         raise TypeError("tag prefix must be a string")
                     else:
                         raise TypeError(u"tag prefix must be a string")
-                tag_directives_end.prefix = PyString_AS_STRING(prefix)
+                tag_directives_end.prefix = PyString_AS_STRING(prefix) 
                 tag_directives_end = tag_directives_end+1
         if yaml_document_start_event_initialize(&event, version_directive,
                 tag_directives_start, tag_directives_end,
@@ -1396,7 +1396,7 @@ cdef class CEmitter:
                     raise TypeError(u"anchor must be a string")
             anchor = PyString_AS_STRING(anchor_object)
         if node in self.serialized_nodes:
-            if yaml_alias_event_initialize(&event, anchor) == 0:
+            if yaml_alias_event_initialize(&event, anchor) == 0: 
                 raise MemoryError
             if yaml_emitter_emit(&self.emitter, &event) == 0:
                 error = self._emitter_error()
@@ -1443,7 +1443,7 @@ cdef class CEmitter:
                     scalar_style = YAML_LITERAL_SCALAR_STYLE
                 elif style_object == ">" or style_object == u">":
                     scalar_style = YAML_FOLDED_SCALAR_STYLE
-                if yaml_scalar_event_initialize(&event, anchor, tag, value, length,
+                if yaml_scalar_event_initialize(&event, anchor, tag, value, length, 
                         plain_implicit, quoted_implicit, scalar_style) == 0:
                     raise MemoryError
                 if yaml_emitter_emit(&self.emitter, &event) == 0:
@@ -1467,7 +1467,7 @@ cdef class CEmitter:
                 sequence_style = YAML_BLOCK_SEQUENCE_STYLE
                 if node.flow_style:
                     sequence_style = YAML_FLOW_SEQUENCE_STYLE
-                if yaml_sequence_start_event_initialize(&event, anchor, tag,
+                if yaml_sequence_start_event_initialize(&event, anchor, tag, 
                         implicit, sequence_style) == 0:
                     raise MemoryError
                 if yaml_emitter_emit(&self.emitter, &event) == 0:
@@ -1499,7 +1499,7 @@ cdef class CEmitter:
                 mapping_style = YAML_BLOCK_MAPPING_STYLE
                 if node.flow_style:
                     mapping_style = YAML_FLOW_MAPPING_STYLE
-                if yaml_mapping_start_event_initialize(&event, anchor, tag,
+                if yaml_mapping_start_event_initialize(&event, anchor, tag, 
                         implicit, mapping_style) == 0:
                     raise MemoryError
                 if yaml_emitter_emit(&self.emitter, &event) == 0:
@@ -1515,13 +1515,13 @@ cdef class CEmitter:
             self.ascend_resolver()
         return 1
 
-cdef int output_handler(void *data, char *buffer, size_t size) except 0:
+cdef int output_handler(void *data, char *buffer, size_t size) except 0: 
     cdef CEmitter emitter
     emitter = <CEmitter>data
     if emitter.dump_unicode == 0:
-        value = PyString_FromStringAndSize(buffer, size)
+        value = PyString_FromStringAndSize(buffer, size) 
     else:
-        value = PyUnicode_DecodeUTF8(buffer, size, 'strict')
+        value = PyUnicode_DecodeUTF8(buffer, size, 'strict') 
     emitter.stream.write(value)
     return 1
 

@@ -1,12 +1,12 @@
 
 /***** Support code for embedding *****/
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-
-#if defined(_WIN32)
+#ifdef __cplusplus 
+extern "C" { 
+#endif 
+ 
+ 
+#if defined(_WIN32) 
 #  define CFFI_DLLEXPORT  __declspec(dllexport)
 #elif defined(__GNUC__)
 #  define CFFI_DLLEXPORT  __attribute__((visibility("default")))
@@ -114,9 +114,9 @@ static void _cffi_release_reentrant_mutex(void)
 /**********  CPython-specific section  **********/
 #ifndef PYPY_VERSION
 
-#include "_cffi_errors.h"
+#include "_cffi_errors.h" 
 
-
+ 
 #define _cffi_call_python_org  _cffi_exports[_CFFI_CPIDX]
 
 PyMODINIT_FUNC _CFFI_PYTHON_STARTUP_FUNC(void);   /* forward */
@@ -145,7 +145,7 @@ static int _cffi_initialize_python(void)
     int result;
     PyGILState_STATE state;
     PyObject *pycode=NULL, *global_dict=NULL, *x;
-    PyObject *builtins;
+    PyObject *builtins; 
 
     state = PyGILState_Ensure();
 
@@ -170,11 +170,11 @@ static int _cffi_initialize_python(void)
     global_dict = PyDict_New();
     if (global_dict == NULL)
         goto error;
-    builtins = PyEval_GetBuiltins();
-    if (builtins == NULL)
+    builtins = PyEval_GetBuiltins(); 
+    if (builtins == NULL) 
         goto error;
-    if (PyDict_SetItemString(global_dict, "__builtins__", builtins) < 0)
-        goto error;
+    if (PyDict_SetItemString(global_dict, "__builtins__", builtins) < 0) 
+        goto error; 
     x = PyEval_EvalCode(
 #if PY_MAJOR_VERSION < 3
                         (PyCodeObject *)
@@ -204,16 +204,16 @@ static int _cffi_initialize_python(void)
         /* Print as much information as potentially useful.
            Debugging load-time failures with embedding is not fun
         */
-        PyObject *ecap;
+        PyObject *ecap; 
         PyObject *exception, *v, *tb, *f, *modules, *mod;
         PyErr_Fetch(&exception, &v, &tb);
-        ecap = _cffi_start_error_capture();
-        f = PySys_GetObject((char *)"stderr");
-        if (f != NULL && f != Py_None) {
-            PyFile_WriteString(
-                "Failed to initialize the Python-CFFI embedding logic:\n\n", f);
-        }
-
+        ecap = _cffi_start_error_capture(); 
+        f = PySys_GetObject((char *)"stderr"); 
+        if (f != NULL && f != Py_None) { 
+            PyFile_WriteString( 
+                "Failed to initialize the Python-CFFI embedding logic:\n\n", f); 
+        } 
+ 
         if (exception != NULL) {
             PyErr_NormalizeException(&exception, &v, &tb);
             PyErr_Display(exception, v, tb);
@@ -224,7 +224,7 @@ static int _cffi_initialize_python(void)
 
         if (f != NULL && f != Py_None) {
             PyFile_WriteString("\nFrom: " _CFFI_MODULE_NAME
-                               "\ncompiled with cffi version: 1.15.0"
+                               "\ncompiled with cffi version: 1.15.0" 
                                "\n_cffi_backend module: ", f);
             modules = PyImport_GetModuleDict();
             mod = PyDict_GetItemString(modules, "_cffi_backend");
@@ -240,15 +240,15 @@ static int _cffi_initialize_python(void)
             PyFile_WriteObject(PySys_GetObject((char *)"path"), f, 0);
             PyFile_WriteString("\n\n", f);
         }
-        _cffi_stop_error_capture(ecap);
+        _cffi_stop_error_capture(ecap); 
     }
     result = -1;
     goto done;
 }
 
-#if PY_VERSION_HEX < 0x03080000
+#if PY_VERSION_HEX < 0x03080000 
 PyAPI_DATA(char *) _PyParser_TokenNames[];  /* from CPython */
-#endif
+#endif 
 
 static int _cffi_carefully_make_gil(void)
 {
@@ -257,44 +257,44 @@ static int _cffi_carefully_make_gil(void)
        that we don't hold the GIL before (if it exists), and we don't
        hold it afterwards.
 
-       (What it really does used to be completely different in Python 2
-       and Python 3, with the Python 2 solution avoiding the spin-lock
-       around the Py_InitializeEx() call.  However, after recent changes
-       to CPython 2.7 (issue #358) it no longer works.  So we use the
-       Python 3 solution everywhere.)
+       (What it really does used to be completely different in Python 2 
+       and Python 3, with the Python 2 solution avoiding the spin-lock 
+       around the Py_InitializeEx() call.  However, after recent changes 
+       to CPython 2.7 (issue #358) it no longer works.  So we use the 
+       Python 3 solution everywhere.) 
 
-       This initializes Python by calling Py_InitializeEx().
-       Important: this must not be called concurrently at all.
+       This initializes Python by calling Py_InitializeEx(). 
+       Important: this must not be called concurrently at all. 
        So we use a global variable as a simple spin lock.  This global
        variable must be from 'libpythonX.Y.so', not from this
        cffi-based extension module, because it must be shared from
-       different cffi-based extension modules.
-
-       In Python < 3.8, we choose
+       different cffi-based extension modules. 
+ 
+       In Python < 3.8, we choose 
        _PyParser_TokenNames[0] as a completely arbitrary pointer value
        that is never written to.  The default is to point to the
        string "ENDMARKER".  We change it temporarily to point to the
        next character in that string.  (Yes, I know it's REALLY
        obscure.)
 
-       In Python >= 3.8, this string array is no longer writable, so
-       instead we pick PyCapsuleType.tp_version_tag.  We can't change
-       Python < 3.8 because someone might use a mixture of cffi
-       embedded modules, some of which were compiled before this file
-       changed.
+       In Python >= 3.8, this string array is no longer writable, so 
+       instead we pick PyCapsuleType.tp_version_tag.  We can't change 
+       Python < 3.8 because someone might use a mixture of cffi 
+       embedded modules, some of which were compiled before this file 
+       changed. 
     */
 
 #ifdef WITH_THREAD
-# if PY_VERSION_HEX < 0x03080000
+# if PY_VERSION_HEX < 0x03080000 
     char *volatile *lock = (char *volatile *)_PyParser_TokenNames;
-    char *old_value, *locked_value;
+    char *old_value, *locked_value; 
 
     while (1) {    /* spin loop */
         old_value = *lock;
-        locked_value = old_value + 1;
+        locked_value = old_value + 1; 
         if (old_value[0] == 'E') {
             assert(old_value[1] == 'N');
-            if (cffi_compare_and_swap(lock, old_value, locked_value))
+            if (cffi_compare_and_swap(lock, old_value, locked_value)) 
                 break;
         }
         else {
@@ -305,51 +305,51 @@ static int _cffi_carefully_make_gil(void)
                this is only run at start-up anyway. */
         }
     }
-# else
-    int volatile *lock = (int volatile *)&PyCapsule_Type.tp_version_tag;
-    int old_value, locked_value;
-    assert(!(PyCapsule_Type.tp_flags & Py_TPFLAGS_HAVE_VERSION_TAG));
-
-    while (1) {    /* spin loop */
-        old_value = *lock;
-        locked_value = -42;
-        if (old_value == 0) {
-            if (cffi_compare_and_swap(lock, old_value, locked_value))
-                break;
-        }
-        else {
-            assert(old_value == locked_value);
-            /* should ideally do a spin loop instruction here, but
-               hard to do it portably and doesn't really matter I
-               think: PyEval_InitThreads() should be very fast, and
-               this is only run at start-up anyway. */
-        }
-    }
-# endif
+# else 
+    int volatile *lock = (int volatile *)&PyCapsule_Type.tp_version_tag; 
+    int old_value, locked_value; 
+    assert(!(PyCapsule_Type.tp_flags & Py_TPFLAGS_HAVE_VERSION_TAG)); 
+ 
+    while (1) {    /* spin loop */ 
+        old_value = *lock; 
+        locked_value = -42; 
+        if (old_value == 0) { 
+            if (cffi_compare_and_swap(lock, old_value, locked_value)) 
+                break; 
+        } 
+        else { 
+            assert(old_value == locked_value); 
+            /* should ideally do a spin loop instruction here, but 
+               hard to do it portably and doesn't really matter I 
+               think: PyEval_InitThreads() should be very fast, and 
+               this is only run at start-up anyway. */ 
+        } 
+    } 
+# endif 
 #endif
 
-    /* call Py_InitializeEx() */
-    if (!Py_IsInitialized()) {
-        _cffi_py_initialize();
-#if PY_VERSION_HEX < 0x03070000
+    /* call Py_InitializeEx() */ 
+    if (!Py_IsInitialized()) { 
+        _cffi_py_initialize(); 
+#if PY_VERSION_HEX < 0x03070000 
         PyEval_InitThreads();
-#endif
-        PyEval_SaveThread();  /* release the GIL */
-        /* the returned tstate must be the one that has been stored into the
-           autoTLSkey by _PyGILState_Init() called from Py_Initialize(). */
-    }
-    else {
-#if PY_VERSION_HEX < 0x03070000
-        /* PyEval_InitThreads() is always a no-op from CPython 3.7 */
-        PyGILState_STATE state = PyGILState_Ensure();
-        PyEval_InitThreads();
+#endif 
+        PyEval_SaveThread();  /* release the GIL */ 
+        /* the returned tstate must be the one that has been stored into the 
+           autoTLSkey by _PyGILState_Init() called from Py_Initialize(). */ 
+    } 
+    else { 
+#if PY_VERSION_HEX < 0x03070000 
+        /* PyEval_InitThreads() is always a no-op from CPython 3.7 */ 
+        PyGILState_STATE state = PyGILState_Ensure(); 
+        PyEval_InitThreads(); 
         PyGILState_Release(state);
-#endif
+#endif 
     }
 
 #ifdef WITH_THREAD
     /* release the lock */
-    while (!cffi_compare_and_swap(lock, locked_value, old_value))
+    while (!cffi_compare_and_swap(lock, locked_value, old_value)) 
         ;
 #endif
 
@@ -368,11 +368,11 @@ PyMODINIT_FUNC _CFFI_PYTHON_STARTUP_FUNC(const void *[]);   /* forward */
 
 static struct _cffi_pypy_init_s {
     const char *name;
-    void *func;    /* function pointer */
+    void *func;    /* function pointer */ 
     const char *code;
 } _cffi_pypy_init = {
     _CFFI_MODULE_NAME,
-    _CFFI_PYTHON_STARTUP_FUNC,
+    _CFFI_PYTHON_STARTUP_FUNC, 
     _CFFI_PYTHON_STARTUP_CODE,
 };
 
@@ -521,7 +521,7 @@ static int cffi_start_python(void)
 #undef cffi_compare_and_swap
 #undef cffi_write_barrier
 #undef cffi_read_barrier
-
-#ifdef __cplusplus
-}
-#endif
+ 
+#ifdef __cplusplus 
+} 
+#endif 

@@ -188,7 +188,7 @@ private:
 
 struct TypeSetByHwMode : public InfoByHwMode<MachineValueTypeSet> {
   using SetType = MachineValueTypeSet;
-  SmallVector<unsigned, 16> AddrSpaces;
+  SmallVector<unsigned, 16> AddrSpaces; 
 
   TypeSetByHwMode() = default;
   TypeSetByHwMode(const TypeSetByHwMode &VTS) = default;
@@ -1176,7 +1176,7 @@ public:
   const CodeGenTarget &getTargetInfo() const { return Target; }
   const TypeSetByHwMode &getLegalTypes() const { return LegalVTS; }
 
-  Record *getSDNodeNamed(StringRef Name) const;
+  Record *getSDNodeNamed(StringRef Name) const; 
 
   const SDNodeInfo &getSDNodeInfo(Record *R) const {
     auto F = SDNodes.find(R);

@@ -47,7 +47,7 @@ StringRef SymbolMapTranslator::operator()(StringRef Input) {
     return Translation;
 
   // Objective-C symbols for the MachO symbol table start with a \1. Please see
-  // `MangleContext::mangleObjCMethodName` in clang.
+  // `MangleContext::mangleObjCMethodName` in clang. 
   if (Translation[0] == 1)
     return StringRef(Translation).drop_front();
 

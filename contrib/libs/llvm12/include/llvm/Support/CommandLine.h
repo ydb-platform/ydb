@@ -376,22 +376,22 @@ public:
 
   virtual void setDefault() = 0;
 
-  // Prints the help string for an option.
-  //
-  // This maintains the Indent for multi-line descriptions.
-  // FirstLineIndentedBy is the count of chars of the first line
-  //      i.e. the one containing the --<option name>.
+  // Prints the help string for an option. 
+  // 
+  // This maintains the Indent for multi-line descriptions. 
+  // FirstLineIndentedBy is the count of chars of the first line 
+  //      i.e. the one containing the --<option name>. 
   static void printHelpStr(StringRef HelpStr, size_t Indent,
                            size_t FirstLineIndentedBy);
 
-  // Prints the help string for an enum value.
-  //
-  // This maintains the Indent for multi-line descriptions.
-  // FirstLineIndentedBy is the count of chars of the first line
-  //      i.e. the one containing the =<value>.
-  static void printEnumValHelpStr(StringRef HelpStr, size_t Indent,
-                                  size_t FirstLineIndentedBy);
-
+  // Prints the help string for an enum value. 
+  // 
+  // This maintains the Indent for multi-line descriptions. 
+  // FirstLineIndentedBy is the count of chars of the first line 
+  //      i.e. the one containing the =<value>. 
+  static void printEnumValHelpStr(StringRef HelpStr, size_t Indent, 
+                                  size_t FirstLineIndentedBy); 
+ 
   virtual void getExtraOptionNames(SmallVectorImpl<StringRef> &) {}
 
   // addOccurrence - Wrapper around handleOccurrence that enforces Flags.
@@ -692,7 +692,7 @@ public:
       : Values(Options) {}
 
   template <class Opt> void apply(Opt &O) const {
-    for (const auto &Value : Values)
+    for (const auto &Value : Values) 
       O.getParser().addLiteralOption(Value.Name, Value.Value,
                                      Value.Description);
   }
@@ -1501,7 +1501,7 @@ public:
 
   template <class... Mods>
   explicit opt(const Mods &... Ms)
-      : Option(llvm::cl::Optional, NotHidden), Parser(*this) {
+      : Option(llvm::cl::Optional, NotHidden), Parser(*this) { 
     apply(this, Ms...);
     done();
   }
@@ -2105,14 +2105,14 @@ bool ExpandResponseFiles(
     llvm::vfs::FileSystem &FS = *llvm::vfs::getRealFileSystem(),
     llvm::Optional<llvm::StringRef> CurrentDir = llvm::None);
 
-/// A convenience helper which concatenates the options specified by the
-/// environment variable EnvVar and command line options, then expands response
-/// files recursively. The tokenizer is a predefined GNU or Windows one.
-/// \return true if all @files were expanded successfully or there were none.
-bool expandResponseFiles(int Argc, const char *const *Argv, const char *EnvVar,
-                         StringSaver &Saver,
-                         SmallVectorImpl<const char *> &NewArgv);
-
+/// A convenience helper which concatenates the options specified by the 
+/// environment variable EnvVar and command line options, then expands response 
+/// files recursively. The tokenizer is a predefined GNU or Windows one. 
+/// \return true if all @files were expanded successfully or there were none. 
+bool expandResponseFiles(int Argc, const char *const *Argv, const char *EnvVar, 
+                         StringSaver &Saver, 
+                         SmallVectorImpl<const char *> &NewArgv); 
+ 
 /// Mark all options not part of this category as cl::ReallyHidden.
 ///
 /// \param Category the category of options to keep displaying

@@ -25,7 +25,7 @@
 #define LLVM_BITSTREAM_BITCODES_H
 
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringExtras.h" 
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <cassert>
@@ -145,7 +145,7 @@ public:
   }
 
   /// isChar6 - Return true if this character is legal in the Char6 encoding.
-  static bool isChar6(char C) { return isAlnum(C) || C == '.' || C == '_'; }
+  static bool isChar6(char C) { return isAlnum(C) || C == '.' || C == '_'; } 
   static unsigned EncodeChar6(char C) {
     if (C >= 'a' && C <= 'z') return C-'a';
     if (C >= 'A' && C <= 'Z') return C-'A'+26;

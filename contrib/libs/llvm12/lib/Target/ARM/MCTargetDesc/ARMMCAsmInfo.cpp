@@ -87,7 +87,7 @@ void ARMCOFFMCAsmInfoMicrosoft::anchor() { }
 
 ARMCOFFMCAsmInfoMicrosoft::ARMCOFFMCAsmInfoMicrosoft() {
   AlignmentIsInBytes = false;
-  SupportsDebugInformation = true;
+  SupportsDebugInformation = true; 
   ExceptionsType = ExceptionHandling::WinEH;
   PrivateGlobalPrefix = "$M";
   PrivateLabelPrefix = "$M";

@@ -10,7 +10,7 @@
 
     Formatter version 1.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -32,12 +32,12 @@ __all__ = ['Terminal256Formatter', 'TerminalTrueColorFormatter']
 
 
 class EscapeSequence:
-    def __init__(self, fg=None, bg=None, bold=False, underline=False, italic=False):
+    def __init__(self, fg=None, bg=None, bold=False, underline=False, italic=False): 
         self.fg = fg
         self.bg = bg
         self.bold = bold
         self.underline = underline
-        self.italic = italic
+        self.italic = italic 
 
     def escape(self, attrs):
         if len(attrs):
@@ -66,8 +66,8 @@ class EscapeSequence:
             attrs.append("01")
         if self.underline:
             attrs.append("04")
-        if self.italic:
-            attrs.append("03")
+        if self.italic: 
+            attrs.append("03") 
         return self.escape(attrs)
 
     def true_color_string(self):
@@ -80,8 +80,8 @@ class EscapeSequence:
             attrs.append("01")
         if self.underline:
             attrs.append("04")
-        if self.italic:
-            attrs.append("03")
+        if self.italic: 
+            attrs.append("03") 
         return self.escape(attrs)
 
     def reset_string(self):
@@ -90,7 +90,7 @@ class EscapeSequence:
             attrs.append("39")
         if self.bg is not None:
             attrs.append("49")
-        if self.bold or self.underline or self.italic:
+        if self.bold or self.underline or self.italic: 
             attrs.append("00")
         return self.escape(attrs)
 
@@ -123,10 +123,10 @@ class Terminal256Formatter(Formatter):
     `style`
         The style to use, can be a string or a Style subclass (default:
         ``'default'``).
-
-    `linenos`
-        Set to ``True`` to have line numbers on the terminal output as well
-        (default: ``False`` = no line numbers).
+ 
+    `linenos` 
+        Set to ``True`` to have line numbers on the terminal output as well 
+        (default: ``False`` = no line numbers). 
     """
     name = 'Terminal256'
     aliases = ['terminal256', 'console256', '256']
@@ -141,14 +141,14 @@ class Terminal256Formatter(Formatter):
 
         self.usebold = 'nobold' not in options
         self.useunderline = 'nounderline' not in options
-        self.useitalic = 'noitalic' not in options
+        self.useitalic = 'noitalic' not in options 
 
         self._build_color_table()  # build an RGB-to-256 color conversion table
         self._setup_styles()  # convert selected style's colors to term. colors
 
-        self.linenos = options.get('linenos', False)
-        self._lineno = 0
-
+        self.linenos = options.get('linenos', False) 
+        self._lineno = 0 
+ 
     def _build_color_table(self):
         # colors 0..15: 16 basic colors
 
@@ -237,22 +237,22 @@ class Terminal256Formatter(Formatter):
                 escape.bold = True
             if self.useunderline and ndef['underline']:
                 escape.underline = True
-            if self.useitalic and ndef['italic']:
-                escape.italic = True
+            if self.useitalic and ndef['italic']: 
+                escape.italic = True 
             self.style_string[str(ttype)] = (escape.color_string(),
                                              escape.reset_string())
 
-    def _write_lineno(self, outfile):
-        self._lineno += 1
-        outfile.write("%s%04d: " % (self._lineno != 1 and '\n' or '', self._lineno))
-
+    def _write_lineno(self, outfile): 
+        self._lineno += 1 
+        outfile.write("%s%04d: " % (self._lineno != 1 and '\n' or '', self._lineno)) 
+ 
     def format(self, tokensource, outfile):
         return Formatter.format(self, tokensource, outfile)
 
     def format_unencoded(self, tokensource, outfile):
-        if self.linenos:
-            self._write_lineno(outfile)
-
+        if self.linenos: 
+            self._write_lineno(outfile) 
+ 
         for ttype, value in tokensource:
             not_found = True
             while ttype and not_found:
@@ -266,11 +266,11 @@ class Terminal256Formatter(Formatter):
                     for line in spl[:-1]:
                         if line:
                             outfile.write(on + line + off)
-                        if self.linenos:
-                            self._write_lineno(outfile)
-                        else:
-                            outfile.write('\n')
-
+                        if self.linenos: 
+                            self._write_lineno(outfile) 
+                        else: 
+                            outfile.write('\n') 
+ 
                     if spl[-1]:
                         outfile.write(on + spl[-1] + off)
 
@@ -285,11 +285,11 @@ class Terminal256Formatter(Formatter):
             if not_found:
                 outfile.write(value)
 
-        if self.linenos:
-            outfile.write("\n")
+        if self.linenos: 
+            outfile.write("\n") 
 
-
-
+ 
+ 
 class TerminalTrueColorFormatter(Terminal256Formatter):
     r"""
     Format tokens with ANSI color sequences, for output in a true-color
@@ -332,7 +332,7 @@ class TerminalTrueColorFormatter(Terminal256Formatter):
                 escape.bold = True
             if self.useunderline and ndef['underline']:
                 escape.underline = True
-            if self.useitalic and ndef['italic']:
-                escape.italic = True
+            if self.useitalic and ndef['italic']: 
+                escape.italic = True 
             self.style_string[str(ttype)] = (escape.true_color_string(),
                                              escape.reset_string())

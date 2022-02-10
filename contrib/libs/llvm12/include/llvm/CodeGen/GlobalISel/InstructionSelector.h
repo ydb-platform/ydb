@@ -119,14 +119,14 @@ enum {
   /// - InsnID - Instruction ID
   /// - Expected opcode
   GIM_CheckOpcode,
-
-  /// Check the opcode on the specified instruction, checking 2 acceptable
-  /// alternatives.
-  /// - InsnID - Instruction ID
-  /// - Expected opcode
-  /// - Alternative expected opcode
-  GIM_CheckOpcodeIsEither,
-
+ 
+  /// Check the opcode on the specified instruction, checking 2 acceptable 
+  /// alternatives. 
+  /// - InsnID - Instruction ID 
+  /// - Expected opcode 
+  /// - Alternative expected opcode 
+  GIM_CheckOpcodeIsEither, 
+ 
   /// Check the instruction has the right number of operands
   /// - InsnID - Instruction ID
   /// - Expected number of operands
@@ -179,15 +179,15 @@ enum {
   GIM_CheckMemorySizeEqualToLLT,
   GIM_CheckMemorySizeLessThanLLT,
   GIM_CheckMemorySizeGreaterThanLLT,
-
-  /// Check if this is a vector that can be treated as a vector splat
-  /// constant. This is valid for both G_BUILD_VECTOR as well as
-  /// G_BUILD_VECTOR_TRUNC. For AllOnes refers to individual bits, so a -1
-  /// element.
-  /// - InsnID - Instruction ID
-  GIM_CheckIsBuildVectorAllOnes,
-  GIM_CheckIsBuildVectorAllZeros,
-
+ 
+  /// Check if this is a vector that can be treated as a vector splat 
+  /// constant. This is valid for both G_BUILD_VECTOR as well as 
+  /// G_BUILD_VECTOR_TRUNC. For AllOnes refers to individual bits, so a -1 
+  /// element. 
+  /// - InsnID - Instruction ID 
+  GIM_CheckIsBuildVectorAllOnes, 
+  GIM_CheckIsBuildVectorAllZeros, 
+ 
   /// Check a generic C++ instruction predicate
   /// - InsnID - Instruction ID
   /// - PredicateID - The ID of the predicate function to call
@@ -261,15 +261,15 @@ enum {
   /// - OtherOpIdx - Other operand index
   GIM_CheckIsSameOperand,
 
-  /// Predicates with 'let PredicateCodeUsesOperands = 1' need to examine some
-  /// named operands that will be recorded in RecordedOperands. Names of these
-  /// operands are referenced in predicate argument list. Emitter determines
-  /// StoreIdx(corresponds to the order in which names appear in argument list).
-  /// - InsnID - Instruction ID
-  /// - OpIdx - Operand index
-  /// - StoreIdx - Store location in RecordedOperands.
-  GIM_RecordNamedOperand,
-
+  /// Predicates with 'let PredicateCodeUsesOperands = 1' need to examine some 
+  /// named operands that will be recorded in RecordedOperands. Names of these 
+  /// operands are referenced in predicate argument list. Emitter determines 
+  /// StoreIdx(corresponds to the order in which names appear in argument list). 
+  /// - InsnID - Instruction ID 
+  /// - OpIdx - Operand index 
+  /// - StoreIdx - Store location in RecordedOperands. 
+  GIM_RecordNamedOperand, 
+ 
   /// Fail the current try-block, or completely fail to match if there is no
   /// current try-block.
   GIM_Reject,
@@ -462,11 +462,11 @@ protected:
     std::vector<ComplexRendererFns::value_type> Renderers;
     RecordedMIVector MIs;
     DenseMap<unsigned, unsigned> TempRegisters;
-    /// Named operands that predicate with 'let PredicateCodeUsesOperands = 1'
-    /// referenced in its argument list. Operands are inserted at index set by
-    /// emitter, it corresponds to the order in which names appear in argument
-    /// list. Currently such predicates don't have more then 3 arguments.
-    std::array<const MachineOperand *, 3> RecordedOperands;
+    /// Named operands that predicate with 'let PredicateCodeUsesOperands = 1' 
+    /// referenced in its argument list. Operands are inserted at index set by 
+    /// emitter, it corresponds to the order in which names appear in argument 
+    /// list. Currently such predicates don't have more then 3 arguments. 
+    std::array<const MachineOperand *, 3> RecordedOperands; 
 
     MatcherState(unsigned MaxRenderers);
   };
@@ -527,9 +527,9 @@ protected:
     llvm_unreachable(
         "Subclasses must override this with a tablegen-erated function");
   }
-  virtual bool testMIPredicate_MI(
-      unsigned, const MachineInstr &,
-      const std::array<const MachineOperand *, 3> &Operands) const {
+  virtual bool testMIPredicate_MI( 
+      unsigned, const MachineInstr &, 
+      const std::array<const MachineOperand *, 3> &Operands) const { 
     llvm_unreachable(
         "Subclasses must override this with a tablegen-erated function");
   }

@@ -3,7 +3,7 @@ from distutils import log
 from distutils.errors import DistutilsOptionError
 import distutils
 import os
-import configparser
+import configparser 
 
 from setuptools import Command
 
@@ -39,7 +39,7 @@ def edit_config(filename, settings, dry_run=False):
     """
     log.debug("Reading configuration from %s", filename)
     opts = configparser.RawConfigParser()
-    opts.optionxform = lambda x: x
+    opts.optionxform = lambda x: x 
     opts.read([filename])
     for section, options in settings.items():
         if options is None:

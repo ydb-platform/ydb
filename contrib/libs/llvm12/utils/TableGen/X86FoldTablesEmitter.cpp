@@ -127,15 +127,15 @@ class X86FoldTablesEmitter {
 
       OS << "0 },\n";
     }
-
-    bool operator<(const X86FoldTableEntry &RHS) const {
-      bool LHSpseudo = RegInst->TheDef->getValueAsBit("isPseudo");
-      bool RHSpseudo = RHS.RegInst->TheDef->getValueAsBit("isPseudo");
-      if (LHSpseudo != RHSpseudo)
-        return LHSpseudo;
-
-      return RegInst->TheDef->getName() < RHS.RegInst->TheDef->getName();
-    }
+ 
+    bool operator<(const X86FoldTableEntry &RHS) const { 
+      bool LHSpseudo = RegInst->TheDef->getValueAsBit("isPseudo"); 
+      bool RHSpseudo = RHS.RegInst->TheDef->getValueAsBit("isPseudo"); 
+      if (LHSpseudo != RHSpseudo) 
+        return LHSpseudo; 
+ 
+      return RegInst->TheDef->getName() < RHS.RegInst->TheDef->getName(); 
+    } 
   };
 
   typedef std::vector<X86FoldTableEntry> FoldTable;
@@ -234,7 +234,7 @@ static inline unsigned int getRegOperandSize(const Record *RegRec) {
 }
 
 // Return the size of the memory operand
-static inline unsigned getMemOperandSize(const Record *MemRec) {
+static inline unsigned getMemOperandSize(const Record *MemRec) { 
   if (MemRec->isSubClassOf("Operand")) {
     StringRef Name =
         MemRec->getValueAsDef("ParserMatchClass")->getValueAsString("Name");
@@ -654,14 +654,14 @@ void X86FoldTablesEmitter::run(formatted_raw_ostream &OS) {
                  &(Target.getInstruction(MemInstIter)), Entry.Strategy);
   }
 
-  // Sort the tables before printing.
-  llvm::sort(Table2Addr);
-  llvm::sort(Table0);
-  llvm::sort(Table1);
-  llvm::sort(Table2);
-  llvm::sort(Table3);
-  llvm::sort(Table4);
-
+  // Sort the tables before printing. 
+  llvm::sort(Table2Addr); 
+  llvm::sort(Table0); 
+  llvm::sort(Table1); 
+  llvm::sort(Table2); 
+  llvm::sort(Table3); 
+  llvm::sort(Table4); 
+ 
   // Print all tables.
   printTable(Table2Addr, "Table2Addr", OS);
   printTable(Table0, "Table0", OS);

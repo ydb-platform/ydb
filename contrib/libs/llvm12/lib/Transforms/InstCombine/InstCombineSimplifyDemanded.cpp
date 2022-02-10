@@ -12,12 +12,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "InstCombineInternal.h"
-#include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/Analysis/TargetTransformInfo.h" 
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/Support/KnownBits.h"
-#include "llvm/Transforms/InstCombine/InstCombiner.h"
+#include "llvm/Transforms/InstCombine/InstCombiner.h" 
 
 using namespace llvm;
 using namespace llvm::PatternMatch;
@@ -52,7 +52,7 @@ static bool ShrinkDemandedConstant(Instruction *I, unsigned OpNo,
 
 /// Inst is an integer instruction that SimplifyDemandedBits knows about. See if
 /// the instruction has any properties that allow us to simplify its operands.
-bool InstCombinerImpl::SimplifyDemandedInstructionBits(Instruction &Inst) {
+bool InstCombinerImpl::SimplifyDemandedInstructionBits(Instruction &Inst) { 
   unsigned BitWidth = Inst.getType()->getScalarSizeInBits();
   KnownBits Known(BitWidth);
   APInt DemandedMask(APInt::getAllOnesValue(BitWidth));
@@ -68,16 +68,16 @@ bool InstCombinerImpl::SimplifyDemandedInstructionBits(Instruction &Inst) {
 /// This form of SimplifyDemandedBits simplifies the specified instruction
 /// operand if possible, updating it in place. It returns true if it made any
 /// change and false otherwise.
-bool InstCombinerImpl::SimplifyDemandedBits(Instruction *I, unsigned OpNo,
-                                            const APInt &DemandedMask,
-                                            KnownBits &Known, unsigned Depth) {
+bool InstCombinerImpl::SimplifyDemandedBits(Instruction *I, unsigned OpNo, 
+                                            const APInt &DemandedMask, 
+                                            KnownBits &Known, unsigned Depth) { 
   Use &U = I->getOperandUse(OpNo);
   Value *NewVal = SimplifyDemandedUseBits(U.get(), DemandedMask, Known,
                                           Depth, I);
   if (!NewVal) return false;
   if (Instruction* OpInst = dyn_cast<Instruction>(U))
     salvageDebugInfo(*OpInst);
-
+ 
   replaceUse(U, NewVal);
   return true;
 }
@@ -105,12 +105,12 @@ bool InstCombinerImpl::SimplifyDemandedBits(Instruction *I, unsigned OpNo,
 /// operands based on the information about what bits are demanded. This returns
 /// some other non-null value if it found out that V is equal to another value
 /// in the context where the specified bits are demanded, but not for all users.
-Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
-                                                 KnownBits &Known,
-                                                 unsigned Depth,
-                                                 Instruction *CxtI) {
+Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask, 
+                                                 KnownBits &Known, 
+                                                 unsigned Depth, 
+                                                 Instruction *CxtI) { 
   assert(V != nullptr && "Null pointer of Value???");
-  assert(Depth <= MaxAnalysisRecursionDepth && "Limit Search Depth");
+  assert(Depth <= MaxAnalysisRecursionDepth && "Limit Search Depth"); 
   uint32_t BitWidth = DemandedMask.getBitWidth();
   Type *VTy = V->getType();
   assert(
@@ -127,12 +127,12 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
   if (DemandedMask.isNullValue())     // Not demanding any bits from V.
     return UndefValue::get(VTy);
 
-  if (Depth == MaxAnalysisRecursionDepth)
+  if (Depth == MaxAnalysisRecursionDepth) 
     return nullptr;
 
-  if (isa<ScalableVectorType>(VTy))
-    return nullptr;
-
+  if (isa<ScalableVectorType>(VTy)) 
+    return nullptr; 
+ 
   Instruction *I = dyn_cast<Instruction>(V);
   if (!I) {
     computeKnownBits(V, Known, Depth, CxtI);
@@ -259,44 +259,44 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
       return InsertNewInstWith(And, *I);
     }
 
-    // If the RHS is a constant, see if we can change it. Don't alter a -1
-    // constant because that's a canonical 'not' op, and that is better for
-    // combining, SCEV, and codegen.
-    const APInt *C;
-    if (match(I->getOperand(1), m_APInt(C)) && !C->isAllOnesValue()) {
-      if ((*C | ~DemandedMask).isAllOnesValue()) {
-        // Force bits to 1 to create a 'not' op.
-        I->setOperand(1, ConstantInt::getAllOnesValue(VTy));
-        return I;
-      }
-      // If we can't turn this into a 'not', try to shrink the constant.
-      if (ShrinkDemandedConstant(I, 1, DemandedMask))
-        return I;
-    }
+    // If the RHS is a constant, see if we can change it. Don't alter a -1 
+    // constant because that's a canonical 'not' op, and that is better for 
+    // combining, SCEV, and codegen. 
+    const APInt *C; 
+    if (match(I->getOperand(1), m_APInt(C)) && !C->isAllOnesValue()) { 
+      if ((*C | ~DemandedMask).isAllOnesValue()) { 
+        // Force bits to 1 to create a 'not' op. 
+        I->setOperand(1, ConstantInt::getAllOnesValue(VTy)); 
+        return I; 
+      } 
+      // If we can't turn this into a 'not', try to shrink the constant. 
+      if (ShrinkDemandedConstant(I, 1, DemandedMask)) 
+        return I; 
+    } 
 
     // If our LHS is an 'and' and if it has one use, and if any of the bits we
     // are flipping are known to be set, then the xor is just resetting those
     // bits to zero.  We can just knock out bits from the 'and' and the 'xor',
     // simplifying both of them.
-    if (Instruction *LHSInst = dyn_cast<Instruction>(I->getOperand(0))) {
-      ConstantInt *AndRHS, *XorRHS;
+    if (Instruction *LHSInst = dyn_cast<Instruction>(I->getOperand(0))) { 
+      ConstantInt *AndRHS, *XorRHS; 
       if (LHSInst->getOpcode() == Instruction::And && LHSInst->hasOneUse() &&
-          match(I->getOperand(1), m_ConstantInt(XorRHS)) &&
-          match(LHSInst->getOperand(1), m_ConstantInt(AndRHS)) &&
+          match(I->getOperand(1), m_ConstantInt(XorRHS)) && 
+          match(LHSInst->getOperand(1), m_ConstantInt(AndRHS)) && 
           (LHSKnown.One & RHSKnown.One & DemandedMask) != 0) {
         APInt NewMask = ~(LHSKnown.One & RHSKnown.One & DemandedMask);
 
         Constant *AndC =
-            ConstantInt::get(I->getType(), NewMask & AndRHS->getValue());
+            ConstantInt::get(I->getType(), NewMask & AndRHS->getValue()); 
         Instruction *NewAnd = BinaryOperator::CreateAnd(I->getOperand(0), AndC);
         InsertNewInstWith(NewAnd, *I);
 
         Constant *XorC =
-            ConstantInt::get(I->getType(), NewMask & XorRHS->getValue());
+            ConstantInt::get(I->getType(), NewMask & XorRHS->getValue()); 
         Instruction *NewXor = BinaryOperator::CreateXor(NewAnd, XorC);
         return InsertNewInstWith(NewXor, *I);
       }
-    }
+    } 
     break;
   }
   case Instruction::Select: {
@@ -339,20 +339,20 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
     // we can. This helps not break apart (or helps put back together)
     // canonical patterns like min and max.
     auto CanonicalizeSelectConstant = [](Instruction *I, unsigned OpNo,
-                                         const APInt &DemandedMask) {
+                                         const APInt &DemandedMask) { 
       const APInt *SelC;
       if (!match(I->getOperand(OpNo), m_APInt(SelC)))
         return false;
 
       // Get the constant out of the ICmp, if there is one.
-      // Only try this when exactly 1 operand is a constant (if both operands
-      // are constant, the icmp should eventually simplify). Otherwise, we may
-      // invert the transform that reduces set bits and infinite-loop.
-      Value *X;
+      // Only try this when exactly 1 operand is a constant (if both operands 
+      // are constant, the icmp should eventually simplify). Otherwise, we may 
+      // invert the transform that reduces set bits and infinite-loop. 
+      Value *X; 
       const APInt *CmpC;
       ICmpInst::Predicate Pred;
-      if (!match(I->getOperand(0), m_ICmp(Pred, m_Value(X), m_APInt(CmpC))) ||
-          isa<Constant>(X) || CmpC->getBitWidth() != SelC->getBitWidth())
+      if (!match(I->getOperand(0), m_ICmp(Pred, m_Value(X), m_APInt(CmpC))) || 
+          isa<Constant>(X) || CmpC->getBitWidth() != SelC->getBitWidth()) 
         return ShrinkDemandedConstant(I, OpNo, DemandedMask);
 
       // If the constant is already the same as the ICmp, leave it as-is.
@@ -371,7 +371,7 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
       return I;
 
     // Only known if known in both the LHS and RHS.
-    Known = KnownBits::commonBits(LHSKnown, RHSKnown);
+    Known = KnownBits::commonBits(LHSKnown, RHSKnown); 
     break;
   }
   case Instruction::ZExt:
@@ -394,8 +394,8 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
     if (VectorType *DstVTy = dyn_cast<VectorType>(I->getType())) {
       if (VectorType *SrcVTy =
             dyn_cast<VectorType>(I->getOperand(0)->getType())) {
-        if (cast<FixedVectorType>(DstVTy)->getNumElements() !=
-            cast<FixedVectorType>(SrcVTy)->getNumElements())
+        if (cast<FixedVectorType>(DstVTy)->getNumElements() != 
+            cast<FixedVectorType>(SrcVTy)->getNumElements()) 
           // Don't touch a bitcast between vectors of different element counts.
           return nullptr;
       } else
@@ -673,9 +673,9 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
     }
     break;
   }
-  case Instruction::SRem: {
-    ConstantInt *Rem;
-    if (match(I->getOperand(1), m_ConstantInt(Rem))) {
+  case Instruction::SRem: { 
+    ConstantInt *Rem; 
+    if (match(I->getOperand(1), m_ConstantInt(Rem))) { 
       // X % -1 demands all the bits because we don't want to introduce
       // INT_MIN % -1 (== undef) by accident.
       if (Rem->isMinusOne())
@@ -718,7 +718,7 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
         Known.makeNonNegative();
     }
     break;
-  }
+  } 
   case Instruction::URem: {
     KnownBits Known2(BitWidth);
     APInt AllOnes = APInt::getAllOnesValue(BitWidth);
@@ -789,12 +789,12 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
         KnownBitsComputed = true;
         break;
       }
-      default: {
-        // Handle target specific intrinsics
-        Optional<Value *> V = targetSimplifyDemandedUseBitsIntrinsic(
-            *II, DemandedMask, Known, KnownBitsComputed);
-        if (V.hasValue())
-          return V.getValue();
+      default: { 
+        // Handle target specific intrinsics 
+        Optional<Value *> V = targetSimplifyDemandedUseBitsIntrinsic( 
+            *II, DemandedMask, Known, KnownBitsComputed); 
+        if (V.hasValue()) 
+          return V.getValue(); 
         break;
       }
       }
@@ -816,9 +816,9 @@ Value *InstCombinerImpl::SimplifyDemandedUseBits(Value *V, APInt DemandedMask,
 /// Helper routine of SimplifyDemandedUseBits. It computes Known
 /// bits. It also tries to handle simplifications that can be done based on
 /// DemandedMask, but without modifying the Instruction.
-Value *InstCombinerImpl::SimplifyMultipleUseDemandedBits(
-    Instruction *I, const APInt &DemandedMask, KnownBits &Known, unsigned Depth,
-    Instruction *CxtI) {
+Value *InstCombinerImpl::SimplifyMultipleUseDemandedBits( 
+    Instruction *I, const APInt &DemandedMask, KnownBits &Known, unsigned Depth, 
+    Instruction *CxtI) { 
   unsigned BitWidth = DemandedMask.getBitWidth();
   Type *ITy = I->getType();
 
@@ -903,33 +903,33 @@ Value *InstCombinerImpl::SimplifyMultipleUseDemandedBits(
 
     break;
   }
-  case Instruction::AShr: {
-    // Compute the Known bits to simplify things downstream.
-    computeKnownBits(I, Known, Depth, CxtI);
-
-    // If this user is only demanding bits that we know, return the known
-    // constant.
-    if (DemandedMask.isSubsetOf(Known.Zero | Known.One))
-      return Constant::getIntegerValue(ITy, Known.One);
-
-    // If the right shift operand 0 is a result of a left shift by the same
-    // amount, this is probably a zero/sign extension, which may be unnecessary,
-    // if we do not demand any of the new sign bits. So, return the original
-    // operand instead.
-    const APInt *ShiftRC;
-    const APInt *ShiftLC;
-    Value *X;
-    unsigned BitWidth = DemandedMask.getBitWidth();
-    if (match(I,
-              m_AShr(m_Shl(m_Value(X), m_APInt(ShiftLC)), m_APInt(ShiftRC))) &&
-        ShiftLC == ShiftRC &&
-        DemandedMask.isSubsetOf(APInt::getLowBitsSet(
-            BitWidth, BitWidth - ShiftRC->getZExtValue()))) {
-      return X;
-    }
-
-    break;
-  }
+  case Instruction::AShr: { 
+    // Compute the Known bits to simplify things downstream. 
+    computeKnownBits(I, Known, Depth, CxtI); 
+ 
+    // If this user is only demanding bits that we know, return the known 
+    // constant. 
+    if (DemandedMask.isSubsetOf(Known.Zero | Known.One)) 
+      return Constant::getIntegerValue(ITy, Known.One); 
+ 
+    // If the right shift operand 0 is a result of a left shift by the same 
+    // amount, this is probably a zero/sign extension, which may be unnecessary, 
+    // if we do not demand any of the new sign bits. So, return the original 
+    // operand instead. 
+    const APInt *ShiftRC; 
+    const APInt *ShiftLC; 
+    Value *X; 
+    unsigned BitWidth = DemandedMask.getBitWidth(); 
+    if (match(I, 
+              m_AShr(m_Shl(m_Value(X), m_APInt(ShiftLC)), m_APInt(ShiftRC))) && 
+        ShiftLC == ShiftRC && 
+        DemandedMask.isSubsetOf(APInt::getLowBitsSet( 
+            BitWidth, BitWidth - ShiftRC->getZExtValue()))) { 
+      return X; 
+    } 
+ 
+    break; 
+  } 
   default:
     // Compute the Known bits to simplify things downstream.
     computeKnownBits(I, Known, Depth, CxtI);
@@ -962,9 +962,9 @@ Value *InstCombinerImpl::SimplifyMultipleUseDemandedBits(
 ///
 /// As with SimplifyDemandedUseBits, it returns NULL if the simplification was
 /// not successful.
-Value *InstCombinerImpl::simplifyShrShlDemandedBits(
-    Instruction *Shr, const APInt &ShrOp1, Instruction *Shl,
-    const APInt &ShlOp1, const APInt &DemandedMask, KnownBits &Known) {
+Value *InstCombinerImpl::simplifyShrShlDemandedBits( 
+    Instruction *Shr, const APInt &ShrOp1, Instruction *Shl, 
+    const APInt &ShlOp1, const APInt &DemandedMask, KnownBits &Known) { 
   if (!ShlOp1 || !ShrOp1)
     return nullptr; // No-op.
 
@@ -1025,8 +1025,8 @@ Value *InstCombinerImpl::simplifyShrShlDemandedBits(
 }
 
 /// The specified value produces a vector with any number of elements.
-/// This method analyzes which elements of the operand are undef or poison and
-/// returns that information in UndefElts.
+/// This method analyzes which elements of the operand are undef or poison and 
+/// returns that information in UndefElts. 
 ///
 /// DemandedElts contains the set of elements that are actually used by the
 /// caller, and by default (AllowMultipleUsers equals false) the value is
@@ -1037,11 +1037,11 @@ Value *InstCombinerImpl::simplifyShrShlDemandedBits(
 /// If the information about demanded elements can be used to simplify the
 /// operation, the operation is simplified, then the resultant value is
 /// returned.  This returns null if no change was made.
-Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
-                                                    APInt DemandedElts,
-                                                    APInt &UndefElts,
-                                                    unsigned Depth,
-                                                    bool AllowMultipleUsers) {
+Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V, 
+                                                    APInt DemandedElts, 
+                                                    APInt &UndefElts, 
+                                                    unsigned Depth, 
+                                                    bool AllowMultipleUsers) { 
   // Cannot analyze scalable type. The number of vector elements is not a
   // compile-time constant.
   if (isa<ScalableVectorType>(V->getType()))
@@ -1052,14 +1052,14 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
   assert((DemandedElts & ~EltMask) == 0 && "Invalid DemandedElts!");
 
   if (isa<UndefValue>(V)) {
-    // If the entire vector is undef or poison, just return this info.
+    // If the entire vector is undef or poison, just return this info. 
     UndefElts = EltMask;
     return nullptr;
   }
 
-  if (DemandedElts.isNullValue()) { // If nothing is demanded, provide poison.
+  if (DemandedElts.isNullValue()) { // If nothing is demanded, provide poison. 
     UndefElts = EltMask;
-    return PoisonValue::get(V->getType());
+    return PoisonValue::get(V->getType()); 
   }
 
   UndefElts = 0;
@@ -1071,11 +1071,11 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
       return nullptr;
 
     Type *EltTy = cast<VectorType>(V->getType())->getElementType();
-    Constant *Poison = PoisonValue::get(EltTy);
+    Constant *Poison = PoisonValue::get(EltTy); 
     SmallVector<Constant*, 16> Elts;
     for (unsigned i = 0; i != VWidth; ++i) {
-      if (!DemandedElts[i]) {   // If not demanded, set to poison.
-        Elts.push_back(Poison);
+      if (!DemandedElts[i]) {   // If not demanded, set to poison. 
+        Elts.push_back(Poison); 
         UndefElts.setBit(i);
         continue;
       }
@@ -1083,8 +1083,8 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
       Constant *Elt = C->getAggregateElement(i);
       if (!Elt) return nullptr;
 
-      Elts.push_back(Elt);
-      if (isa<UndefValue>(Elt))   // Already undef or poison.
+      Elts.push_back(Elt); 
+      if (isa<UndefValue>(Elt))   // Already undef or poison. 
         UndefElts.setBit(i);
     }
 
@@ -1145,12 +1145,12 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
     };
     if (mayIndexStructType(cast<GetElementPtrInst>(*I)))
       break;
-
+ 
     // Conservatively track the demanded elements back through any vector
     // operands we may have.  We know there must be at least one, or we
     // wouldn't have a vector result to get here. Note that we intentionally
     // merge the undef bits here since gepping with either an undef base or
-    // index results in undef.
+    // index results in undef. 
     for (unsigned i = 0; i < I->getNumOperands(); i++) {
       if (isa<UndefValue>(I->getOperand(i))) {
         // If the entire vector is undefined, just return this info.
@@ -1184,19 +1184,19 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
     if (IdxNo < VWidth)
       PreInsertDemandedElts.clearBit(IdxNo);
 
-    // If we only demand the element that is being inserted and that element
-    // was extracted from the same index in another vector with the same type,
-    // replace this insert with that other vector.
-    // Note: This is attempted before the call to simplifyAndSetOp because that
-    //       may change UndefElts to a value that does not match with Vec.
-    Value *Vec;
-    if (PreInsertDemandedElts == 0 &&
-        match(I->getOperand(1),
-              m_ExtractElt(m_Value(Vec), m_SpecificInt(IdxNo))) &&
-        Vec->getType() == I->getType()) {
-      return Vec;
-    }
-
+    // If we only demand the element that is being inserted and that element 
+    // was extracted from the same index in another vector with the same type, 
+    // replace this insert with that other vector. 
+    // Note: This is attempted before the call to simplifyAndSetOp because that 
+    //       may change UndefElts to a value that does not match with Vec. 
+    Value *Vec; 
+    if (PreInsertDemandedElts == 0 && 
+        match(I->getOperand(1), 
+              m_ExtractElt(m_Value(Vec), m_SpecificInt(IdxNo))) && 
+        Vec->getType() == I->getType()) { 
+      return Vec; 
+    } 
+ 
     simplifyAndSetOp(I, 0, PreInsertDemandedElts, UndefElts);
 
     // If this is inserting an element that isn't demanded, remove this
@@ -1215,8 +1215,8 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
     assert(Shuffle->getOperand(0)->getType() ==
            Shuffle->getOperand(1)->getType() &&
            "Expected shuffle operands to have same type");
-    unsigned OpWidth = cast<FixedVectorType>(Shuffle->getOperand(0)->getType())
-                           ->getNumElements();
+    unsigned OpWidth = cast<FixedVectorType>(Shuffle->getOperand(0)->getType()) 
+                           ->getNumElements(); 
     // Handle trivial case of a splat. Only check the first element of LHS
     // operand.
     if (all_of(Shuffle->getShuffleMask(), [](int Elt) { return Elt == 0; }) &&
@@ -1317,8 +1317,8 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
     // this constant vector to single insertelement instruction.
     // shufflevector V, C, <v1, v2, .., ci, .., vm> ->
     // insertelement V, C[ci], ci-n
-    if (OpWidth ==
-        cast<FixedVectorType>(Shuffle->getType())->getNumElements()) {
+    if (OpWidth == 
+        cast<FixedVectorType>(Shuffle->getType())->getNumElements()) { 
       Value *Op = nullptr;
       Constant *Value = nullptr;
       unsigned Idx = -1u;
@@ -1405,7 +1405,7 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
     // Vector->vector casts only.
     VectorType *VTy = dyn_cast<VectorType>(I->getOperand(0)->getType());
     if (!VTy) break;
-    unsigned InVWidth = cast<FixedVectorType>(VTy)->getNumElements();
+    unsigned InVWidth = cast<FixedVectorType>(VTy)->getNumElements(); 
     APInt InputDemandedElts(InVWidth, 0);
     UndefElts2 = APInt(InVWidth, 0);
     unsigned Ratio;
@@ -1488,19 +1488,19 @@ Value *InstCombinerImpl::SimplifyDemandedVectorElts(Value *V,
       if (II->getIntrinsicID() == Intrinsic::masked_gather)
         simplifyAndSetOp(II, 0, DemandedPtrs, UndefElts2);
       simplifyAndSetOp(II, 3, DemandedPassThrough, UndefElts3);
-
+ 
       // Output elements are undefined if the element from both sources are.
       // TODO: can strengthen via mask as well.
       UndefElts = UndefElts2 & UndefElts3;
       break;
     }
     default: {
-      // Handle target specific intrinsics
-      Optional<Value *> V = targetSimplifyDemandedVectorEltsIntrinsic(
-          *II, DemandedElts, UndefElts, UndefElts2, UndefElts3,
-          simplifyAndSetOp);
-      if (V.hasValue())
-        return V.getValue();
+      // Handle target specific intrinsics 
+      Optional<Value *> V = targetSimplifyDemandedVectorEltsIntrinsic( 
+          *II, DemandedElts, UndefElts, UndefElts2, UndefElts3, 
+          simplifyAndSetOp); 
+      if (V.hasValue()) 
+        return V.getValue(); 
       break;
     }
     } // switch on IntrinsicID

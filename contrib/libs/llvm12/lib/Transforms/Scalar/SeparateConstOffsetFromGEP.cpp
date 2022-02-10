@@ -155,7 +155,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Transforms/Scalar/SeparateConstOffsetFromGEP.h"
+#include "llvm/Transforms/Scalar/SeparateConstOffsetFromGEP.h" 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DepthFirstIterator.h"
@@ -178,7 +178,7 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/PassManager.h"
+#include "llvm/IR/PassManager.h" 
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/User.h"
@@ -344,14 +344,14 @@ private:
 /// A pass that tries to split every GEP in the function into a variadic
 /// base and a constant offset. It is a FunctionPass because searching for the
 /// constant offset may inspect other basic blocks.
-class SeparateConstOffsetFromGEPLegacyPass : public FunctionPass {
+class SeparateConstOffsetFromGEPLegacyPass : public FunctionPass { 
 public:
   static char ID;
 
-  SeparateConstOffsetFromGEPLegacyPass(bool LowerGEP = false)
+  SeparateConstOffsetFromGEPLegacyPass(bool LowerGEP = false) 
       : FunctionPass(ID), LowerGEP(LowerGEP) {
-    initializeSeparateConstOffsetFromGEPLegacyPassPass(
-        *PassRegistry::getPassRegistry());
+    initializeSeparateConstOffsetFromGEPLegacyPassPass( 
+        *PassRegistry::getPassRegistry()); 
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
@@ -366,23 +366,23 @@ public:
   bool runOnFunction(Function &F) override;
 
 private:
-  bool LowerGEP;
-};
-
-/// A pass that tries to split every GEP in the function into a variadic
-/// base and a constant offset. It is a FunctionPass because searching for the
-/// constant offset may inspect other basic blocks.
-class SeparateConstOffsetFromGEP {
-public:
-  SeparateConstOffsetFromGEP(
-      DominatorTree *DT, ScalarEvolution *SE, LoopInfo *LI,
-      TargetLibraryInfo *TLI,
-      function_ref<TargetTransformInfo &(Function &)> GetTTI, bool LowerGEP)
-      : DT(DT), SE(SE), LI(LI), TLI(TLI), GetTTI(GetTTI), LowerGEP(LowerGEP) {}
-
-  bool run(Function &F);
-
-private:
+  bool LowerGEP; 
+}; 
+ 
+/// A pass that tries to split every GEP in the function into a variadic 
+/// base and a constant offset. It is a FunctionPass because searching for the 
+/// constant offset may inspect other basic blocks. 
+class SeparateConstOffsetFromGEP { 
+public: 
+  SeparateConstOffsetFromGEP( 
+      DominatorTree *DT, ScalarEvolution *SE, LoopInfo *LI, 
+      TargetLibraryInfo *TLI, 
+      function_ref<TargetTransformInfo &(Function &)> GetTTI, bool LowerGEP) 
+      : DT(DT), SE(SE), LI(LI), TLI(TLI), GetTTI(GetTTI), LowerGEP(LowerGEP) {} 
+ 
+  bool run(Function &F); 
+ 
+private: 
   /// Tries to split the given GEP into a variadic base and a constant offset,
   /// and returns true if the splitting succeeds.
   bool splitGEP(GetElementPtrInst *GEP);
@@ -467,8 +467,8 @@ private:
   ScalarEvolution *SE;
   LoopInfo *LI;
   TargetLibraryInfo *TLI;
-  // Retrieved lazily since not always used.
-  function_ref<TargetTransformInfo &(Function &)> GetTTI;
+  // Retrieved lazily since not always used. 
+  function_ref<TargetTransformInfo &(Function &)> GetTTI; 
 
   /// Whether to lower a GEP with multiple indices into arithmetic operations or
   /// multiple GEPs with a single index.
@@ -480,10 +480,10 @@ private:
 
 } // end anonymous namespace
 
-char SeparateConstOffsetFromGEPLegacyPass::ID = 0;
+char SeparateConstOffsetFromGEPLegacyPass::ID = 0; 
 
 INITIALIZE_PASS_BEGIN(
-    SeparateConstOffsetFromGEPLegacyPass, "separate-const-offset-from-gep",
+    SeparateConstOffsetFromGEPLegacyPass, "separate-const-offset-from-gep", 
     "Split GEPs to a variadic base and a constant offset for better CSE", false,
     false)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
@@ -492,12 +492,12 @@ INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
 INITIALIZE_PASS_END(
-    SeparateConstOffsetFromGEPLegacyPass, "separate-const-offset-from-gep",
+    SeparateConstOffsetFromGEPLegacyPass, "separate-const-offset-from-gep", 
     "Split GEPs to a variadic base and a constant offset for better CSE", false,
     false)
 
 FunctionPass *llvm::createSeparateConstOffsetFromGEPPass(bool LowerGEP) {
-  return new SeparateConstOffsetFromGEPLegacyPass(LowerGEP);
+  return new SeparateConstOffsetFromGEPLegacyPass(LowerGEP); 
 }
 
 bool ConstantOffsetExtractor::CanTraceInto(bool SignExtended,
@@ -902,8 +902,8 @@ void SeparateConstOffsetFromGEP::lowerToSingleIndexGEPs(
   // If we created a GEP with constant index, and the base is loop invariant,
   // then we swap the first one with it, so LICM can move constant GEP out
   // later.
-  auto *FirstGEP = dyn_cast_or_null<GetElementPtrInst>(FirstResult);
-  auto *SecondGEP = dyn_cast<GetElementPtrInst>(ResultPtr);
+  auto *FirstGEP = dyn_cast_or_null<GetElementPtrInst>(FirstResult); 
+  auto *SecondGEP = dyn_cast<GetElementPtrInst>(ResultPtr); 
   if (isSwapCandidate && isLegalToSwapOperand(FirstGEP, SecondGEP, L))
     swapGEPOperand(FirstGEP, SecondGEP);
 
@@ -978,7 +978,7 @@ bool SeparateConstOffsetFromGEP::splitGEP(GetElementPtrInst *GEP) {
   if (!NeedsExtraction)
     return Changed;
 
-  TargetTransformInfo &TTI = GetTTI(*GEP->getFunction());
+  TargetTransformInfo &TTI = GetTTI(*GEP->getFunction()); 
 
   // If LowerGEP is disabled, before really splitting the GEP, check whether the
   // backend supports the addressing mode we are about to produce. If no, this
@@ -1143,25 +1143,25 @@ bool SeparateConstOffsetFromGEP::splitGEP(GetElementPtrInst *GEP) {
   return true;
 }
 
-bool SeparateConstOffsetFromGEPLegacyPass::runOnFunction(Function &F) {
+bool SeparateConstOffsetFromGEPLegacyPass::runOnFunction(Function &F) { 
   if (skipFunction(F))
     return false;
-  auto *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-  auto *SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
-  auto *LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-  auto *TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
-  auto GetTTI = [this](Function &F) -> TargetTransformInfo & {
-    return this->getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F);
-  };
-  SeparateConstOffsetFromGEP Impl(DT, SE, LI, TLI, GetTTI, LowerGEP);
-  return Impl.run(F);
-}
+  auto *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree(); 
+  auto *SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE(); 
+  auto *LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo(); 
+  auto *TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F); 
+  auto GetTTI = [this](Function &F) -> TargetTransformInfo & { 
+    return this->getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F); 
+  }; 
+  SeparateConstOffsetFromGEP Impl(DT, SE, LI, TLI, GetTTI, LowerGEP); 
+  return Impl.run(F); 
+} 
 
-bool SeparateConstOffsetFromGEP::run(Function &F) {
+bool SeparateConstOffsetFromGEP::run(Function &F) { 
   if (DisableSeparateConstOffsetFromGEP)
     return false;
 
-  DL = &F.getParent()->getDataLayout();
+  DL = &F.getParent()->getDataLayout(); 
   bool Changed = false;
   for (BasicBlock &B : F) {
     for (BasicBlock::iterator I = B.begin(), IE = B.end(); I != IE;)
@@ -1368,20 +1368,20 @@ void SeparateConstOffsetFromGEP::swapGEPOperand(GetElementPtrInst *First,
   } else
     First->setIsInBounds(true);
 }
-
-PreservedAnalyses
-SeparateConstOffsetFromGEPPass::run(Function &F, FunctionAnalysisManager &AM) {
-  auto *DT = &AM.getResult<DominatorTreeAnalysis>(F);
-  auto *SE = &AM.getResult<ScalarEvolutionAnalysis>(F);
-  auto *LI = &AM.getResult<LoopAnalysis>(F);
-  auto *TLI = &AM.getResult<TargetLibraryAnalysis>(F);
-  auto GetTTI = [&AM](Function &F) -> TargetTransformInfo & {
-    return AM.getResult<TargetIRAnalysis>(F);
-  };
-  SeparateConstOffsetFromGEP Impl(DT, SE, LI, TLI, GetTTI, LowerGEP);
-  if (!Impl.run(F))
-    return PreservedAnalyses::all();
-  PreservedAnalyses PA;
-  PA.preserveSet<CFGAnalyses>();
-  return PA;
-}
+ 
+PreservedAnalyses 
+SeparateConstOffsetFromGEPPass::run(Function &F, FunctionAnalysisManager &AM) { 
+  auto *DT = &AM.getResult<DominatorTreeAnalysis>(F); 
+  auto *SE = &AM.getResult<ScalarEvolutionAnalysis>(F); 
+  auto *LI = &AM.getResult<LoopAnalysis>(F); 
+  auto *TLI = &AM.getResult<TargetLibraryAnalysis>(F); 
+  auto GetTTI = [&AM](Function &F) -> TargetTransformInfo & { 
+    return AM.getResult<TargetIRAnalysis>(F); 
+  }; 
+  SeparateConstOffsetFromGEP Impl(DT, SE, LI, TLI, GetTTI, LowerGEP); 
+  if (!Impl.run(F)) 
+    return PreservedAnalyses::all(); 
+  PreservedAnalyses PA; 
+  PA.preserveSet<CFGAnalyses>(); 
+  return PA; 
+} 

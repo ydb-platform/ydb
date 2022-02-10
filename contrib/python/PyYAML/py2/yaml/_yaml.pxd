@@ -1,5 +1,5 @@
 
-cdef extern from "_yaml.h":
+cdef extern from "_yaml.h": 
 
     void malloc(int l)
     void memcpy(char *d, char *s, int l)
@@ -85,22 +85,22 @@ cdef extern from "_yaml.h":
         YAML_MAPPING_START_EVENT
         YAML_MAPPING_END_EVENT
 
-    ctypedef int yaml_read_handler_t(void *data, char *buffer,
+    ctypedef int yaml_read_handler_t(void *data, char *buffer, 
             size_t size, size_t *size_read) except 0
 
-    ctypedef int yaml_write_handler_t(void *data, char *buffer,
+    ctypedef int yaml_write_handler_t(void *data, char *buffer, 
             size_t size) except 0
 
     ctypedef struct yaml_mark_t:
-        size_t index
-        size_t line
-        size_t column
+        size_t index 
+        size_t line 
+        size_t column 
     ctypedef struct yaml_version_directive_t:
         int major
         int minor
     ctypedef struct yaml_tag_directive_t:
-        char *handle
-        char *prefix
+        char *handle 
+        char *prefix 
 
     ctypedef struct _yaml_token_stream_start_data_t:
         yaml_encoding_t encoding
@@ -109,18 +109,18 @@ cdef extern from "_yaml.h":
     ctypedef struct _yaml_token_anchor_data_t:
         char *value
     ctypedef struct _yaml_token_tag_data_t:
-        char *handle
-        char *suffix
+        char *handle 
+        char *suffix 
     ctypedef struct _yaml_token_scalar_data_t:
         char *value
-        size_t length
+        size_t length 
         yaml_scalar_style_t style
     ctypedef struct _yaml_token_version_directive_data_t:
         int major
         int minor
     ctypedef struct _yaml_token_tag_directive_data_t:
-        char *handle
-        char *prefix
+        char *handle 
+        char *prefix 
     ctypedef union _yaml_token_data_t:
         _yaml_token_stream_start_data_t stream_start
         _yaml_token_alias_data_t alias
@@ -152,7 +152,7 @@ cdef extern from "_yaml.h":
         char *anchor
         char *tag
         char *value
-        size_t length
+        size_t length 
         int plain_implicit
         int quoted_implicit
         yaml_scalar_style_t style
@@ -183,7 +183,7 @@ cdef extern from "_yaml.h":
     ctypedef struct yaml_parser_t:
         yaml_error_type_t error
         char *problem
-        size_t problem_offset
+        size_t problem_offset 
         int problem_value
         yaml_mark_t problem_mark
         char *context
@@ -208,23 +208,23 @@ cdef extern from "_yaml.h":
             int implicit)
     int yaml_document_end_event_initialize(yaml_event_t *event,
             int implicit)
-    int yaml_alias_event_initialize(yaml_event_t *event, char *anchor)
+    int yaml_alias_event_initialize(yaml_event_t *event, char *anchor) 
     int yaml_scalar_event_initialize(yaml_event_t *event,
-            char *anchor, char *tag, char *value, size_t length,
+            char *anchor, char *tag, char *value, size_t length, 
             int plain_implicit, int quoted_implicit,
             yaml_scalar_style_t style)
     int yaml_sequence_start_event_initialize(yaml_event_t *event,
-            char *anchor, char *tag, int implicit, yaml_sequence_style_t style)
+            char *anchor, char *tag, int implicit, yaml_sequence_style_t style) 
     int yaml_sequence_end_event_initialize(yaml_event_t *event)
     int yaml_mapping_start_event_initialize(yaml_event_t *event,
-            char *anchor, char *tag, int implicit, yaml_mapping_style_t style)
+            char *anchor, char *tag, int implicit, yaml_mapping_style_t style) 
     int yaml_mapping_end_event_initialize(yaml_event_t *event)
     void yaml_event_delete(yaml_event_t *event)
 
     int yaml_parser_initialize(yaml_parser_t *parser)
     void yaml_parser_delete(yaml_parser_t *parser)
     void yaml_parser_set_input_string(yaml_parser_t *parser,
-            char *input, size_t size)
+            char *input, size_t size) 
     void yaml_parser_set_input(yaml_parser_t *parser,
             yaml_read_handler_t *handler, void *data)
     void yaml_parser_set_encoding(yaml_parser_t *parser,
@@ -235,7 +235,7 @@ cdef extern from "_yaml.h":
     int yaml_emitter_initialize(yaml_emitter_t *emitter)
     void yaml_emitter_delete(yaml_emitter_t *emitter)
     void yaml_emitter_set_output_string(yaml_emitter_t *emitter,
-            char *output, size_t size, size_t *size_written)
+            char *output, size_t size, size_t *size_written) 
     void yaml_emitter_set_output(yaml_emitter_t *emitter,
             yaml_write_handler_t *handler, void *data)
     void yaml_emitter_set_encoding(yaml_emitter_t *emitter,

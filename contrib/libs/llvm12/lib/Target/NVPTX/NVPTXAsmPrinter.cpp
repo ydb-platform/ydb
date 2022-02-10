@@ -1302,8 +1302,8 @@ NVPTXAsmPrinter::getPTXFundamentalTypeStr(Type *Ty, bool useB4PTR) const {
       return "b32";
     else
       return "u32";
-  default:
-    break;
+  default: 
+    break; 
   }
   llvm_unreachable("unexpected type");
 }

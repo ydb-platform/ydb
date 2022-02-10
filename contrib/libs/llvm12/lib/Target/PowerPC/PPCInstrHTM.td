@@ -164,8 +164,8 @@ def : Pat<(int_ppc_tsuspend),
           (TSR 0)>;
 
 def : Pat<(i64 (int_ppc_ttest)),
-          (i64 (INSERT_SUBREG
-                (i64 (IMPLICIT_DEF)), (TABORTWCI 0, (LI 0), 0), sub_32))>;
+          (i64 (INSERT_SUBREG 
+                (i64 (IMPLICIT_DEF)), (TABORTWCI 0, (LI 0), 0), sub_32))>; 
 
 } // [HasHTM]
 

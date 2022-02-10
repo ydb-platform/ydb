@@ -49,7 +49,7 @@ Type *Type::getPrimitiveType(LLVMContext &C, TypeID IDNumber) {
   case LabelTyID     : return getLabelTy(C);
   case MetadataTyID  : return getMetadataTy(C);
   case X86_MMXTyID   : return getX86_MMXTy(C);
-  case X86_AMXTyID   : return getX86_AMXTy(C);
+  case X86_AMXTyID   : return getX86_AMXTy(C); 
   case TokenTyID     : return getTokenTy(C);
   default:
     return nullptr;
@@ -82,14 +82,14 @@ bool Type::canLosslesslyBitCastTo(Type *Ty) const {
       Ty->getPrimitiveSizeInBits().getFixedSize() == 64)
     return true;
 
-  //  8192-bit fixed width vector types can be losslessly converted to x86amx.
-  if (((isa<FixedVectorType>(this)) && Ty->isX86_AMXTy()) &&
-      getPrimitiveSizeInBits().getFixedSize() == 8192)
-    return true;
-  if ((isX86_AMXTy() && isa<FixedVectorType>(Ty)) &&
-      Ty->getPrimitiveSizeInBits().getFixedSize() == 8192)
-    return true;
-
+  //  8192-bit fixed width vector types can be losslessly converted to x86amx. 
+  if (((isa<FixedVectorType>(this)) && Ty->isX86_AMXTy()) && 
+      getPrimitiveSizeInBits().getFixedSize() == 8192) 
+    return true; 
+  if ((isX86_AMXTy() && isa<FixedVectorType>(Ty)) && 
+      Ty->getPrimitiveSizeInBits().getFixedSize() == 8192) 
+    return true; 
+ 
   // At this point we have only various mismatches of the first class types
   // remaining and ptr->ptr. Just select the lossless conversions. Everything
   // else is not lossless. Conservatively assume we can't losslessly convert
@@ -129,7 +129,7 @@ TypeSize Type::getPrimitiveSizeInBits() const {
   case Type::FP128TyID: return TypeSize::Fixed(128);
   case Type::PPC_FP128TyID: return TypeSize::Fixed(128);
   case Type::X86_MMXTyID: return TypeSize::Fixed(64);
-  case Type::X86_AMXTyID: return TypeSize::Fixed(8192);
+  case Type::X86_AMXTyID: return TypeSize::Fixed(8192); 
   case Type::IntegerTyID:
     return TypeSize::Fixed(cast<IntegerType>(this)->getBitWidth());
   case Type::FixedVectorTyID:
@@ -138,7 +138,7 @@ TypeSize Type::getPrimitiveSizeInBits() const {
     ElementCount EC = VTy->getElementCount();
     TypeSize ETS = VTy->getElementType()->getPrimitiveSizeInBits();
     assert(!ETS.isScalable() && "Vector type should have fixed-width elements");
-    return {ETS.getFixedSize() * EC.getKnownMinValue(), EC.isScalable()};
+    return {ETS.getFixedSize() * EC.getKnownMinValue(), EC.isScalable()}; 
   }
   default: return TypeSize::Fixed(0);
   }
@@ -189,7 +189,7 @@ Type *Type::getX86_FP80Ty(LLVMContext &C) { return &C.pImpl->X86_FP80Ty; }
 Type *Type::getFP128Ty(LLVMContext &C) { return &C.pImpl->FP128Ty; }
 Type *Type::getPPC_FP128Ty(LLVMContext &C) { return &C.pImpl->PPC_FP128Ty; }
 Type *Type::getX86_MMXTy(LLVMContext &C) { return &C.pImpl->X86_MMXTy; }
-Type *Type::getX86_AMXTy(LLVMContext &C) { return &C.pImpl->X86_AMXTy; }
+Type *Type::getX86_AMXTy(LLVMContext &C) { return &C.pImpl->X86_AMXTy; } 
 
 IntegerType *Type::getInt1Ty(LLVMContext &C) { return &C.pImpl->Int1Ty; }
 IntegerType *Type::getInt8Ty(LLVMContext &C) { return &C.pImpl->Int8Ty; }
@@ -234,10 +234,10 @@ PointerType *Type::getX86_MMXPtrTy(LLVMContext &C, unsigned AS) {
   return getX86_MMXTy(C)->getPointerTo(AS);
 }
 
-PointerType *Type::getX86_AMXPtrTy(LLVMContext &C, unsigned AS) {
-  return getX86_AMXTy(C)->getPointerTo(AS);
-}
-
+PointerType *Type::getX86_AMXPtrTy(LLVMContext &C, unsigned AS) { 
+  return getX86_AMXTy(C)->getPointerTo(AS); 
+} 
+ 
 PointerType *Type::getIntNPtrTy(LLVMContext &C, unsigned N, unsigned AS) {
   return getIntNTy(C, N)->getPointerTo(AS);
 }
@@ -390,18 +390,18 @@ StructType *StructType::get(LLVMContext &Context, ArrayRef<Type*> ETypes,
   return ST;
 }
 
-bool StructType::containsScalableVectorType() const {
-  for (Type *Ty : elements()) {
-    if (isa<ScalableVectorType>(Ty))
-      return true;
-    if (auto *STy = dyn_cast<StructType>(Ty))
-      if (STy->containsScalableVectorType())
-        return true;
-  }
-
-  return false;
-}
-
+bool StructType::containsScalableVectorType() const { 
+  for (Type *Ty : elements()) { 
+    if (isa<ScalableVectorType>(Ty)) 
+      return true; 
+    if (auto *STy = dyn_cast<StructType>(Ty)) 
+      if (STy->containsScalableVectorType()) 
+        return true; 
+  } 
+ 
+  return false; 
+} 
+ 
 void StructType::setBody(ArrayRef<Type*> Elements, bool isPacked) {
   assert(isOpaque() && "Struct body already set!");
 
@@ -521,14 +521,14 @@ bool StructType::isSized(SmallPtrSetImpl<Type*> *Visited) const {
   // Okay, our struct is sized if all of the elements are, but if one of the
   // elements is opaque, the struct isn't sized *yet*, but may become sized in
   // the future, so just bail out without caching.
-  for (Type *Ty : elements()) {
-    // If the struct contains a scalable vector type, don't consider it sized.
-    // This prevents it from being used in loads/stores/allocas/GEPs.
-    if (isa<ScalableVectorType>(Ty))
+  for (Type *Ty : elements()) { 
+    // If the struct contains a scalable vector type, don't consider it sized. 
+    // This prevents it from being used in loads/stores/allocas/GEPs. 
+    if (isa<ScalableVectorType>(Ty)) 
       return false;
-    if (!Ty->isSized(Visited))
-      return false;
-  }
+    if (!Ty->isSized(Visited)) 
+      return false; 
+  } 
 
   // Here we cheat a bit and cast away const-ness. The goal is to memoize when
   // we find a sized type, as types can only move from opaque to sized, not the
@@ -548,7 +548,7 @@ StringRef StructType::getName() const {
 bool StructType::isValidElementType(Type *ElemTy) {
   return !ElemTy->isVoidTy() && !ElemTy->isLabelTy() &&
          !ElemTy->isMetadataTy() && !ElemTy->isFunctionTy() &&
-         !ElemTy->isTokenTy();
+         !ElemTy->isTokenTy(); 
 }
 
 bool StructType::isLayoutIdentical(StructType *Other) const {
@@ -580,10 +580,10 @@ bool StructType::indexValid(const Value *V) const {
   return CU && CU->getZExtValue() < getNumElements();
 }
 
-StructType *StructType::getTypeByName(LLVMContext &C, StringRef Name) {
-  return C.pImpl->NamedStructTypes.lookup(Name);
-}
-
+StructType *StructType::getTypeByName(LLVMContext &C, StringRef Name) { 
+  return C.pImpl->NamedStructTypes.lookup(Name); 
+} 
+ 
 //===----------------------------------------------------------------------===//
 //                           ArrayType Implementation
 //===----------------------------------------------------------------------===//
@@ -625,10 +625,10 @@ VectorType::VectorType(Type *ElType, unsigned EQ, Type::TypeID TID)
 }
 
 VectorType *VectorType::get(Type *ElementType, ElementCount EC) {
-  if (EC.isScalable())
-    return ScalableVectorType::get(ElementType, EC.getKnownMinValue());
+  if (EC.isScalable()) 
+    return ScalableVectorType::get(ElementType, EC.getKnownMinValue()); 
   else
-    return FixedVectorType::get(ElementType, EC.getKnownMinValue());
+    return FixedVectorType::get(ElementType, EC.getKnownMinValue()); 
 }
 
 bool VectorType::isValidElementType(Type *ElemTy) {
@@ -646,7 +646,7 @@ FixedVectorType *FixedVectorType::get(Type *ElementType, unsigned NumElts) {
                                             "be an integer, floating point, or "
                                             "pointer type.");
 
-  auto EC = ElementCount::getFixed(NumElts);
+  auto EC = ElementCount::getFixed(NumElts); 
 
   LLVMContextImpl *pImpl = ElementType->getContext().pImpl;
   VectorType *&Entry = ElementType->getContext()
@@ -668,7 +668,7 @@ ScalableVectorType *ScalableVectorType::get(Type *ElementType,
                                             "be an integer, floating point, or "
                                             "pointer type.");
 
-  auto EC = ElementCount::getScalable(MinNumElts);
+  auto EC = ElementCount::getScalable(MinNumElts); 
 
   LLVMContextImpl *pImpl = ElementType->getContext().pImpl;
   VectorType *&Entry = ElementType->getContext()

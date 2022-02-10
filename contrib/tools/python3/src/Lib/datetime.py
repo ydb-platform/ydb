@@ -4,10 +4,10 @@ See http://www.iana.org/time-zones/repository/tz-link.html for
 time zone and DST data sources.
 """
 
-__all__ = ("date", "datetime", "time", "timedelta", "timezone", "tzinfo",
-           "MINYEAR", "MAXYEAR")
-
-
+__all__ = ("date", "datetime", "time", "timedelta", "timezone", "tzinfo", 
+           "MINYEAR", "MAXYEAR") 
+ 
+ 
 import time as _time
 import math as _math
 import sys
@@ -383,34 +383,34 @@ def _check_utc_offset(name, offset):
 def _check_int_field(value):
     if isinstance(value, int):
         return value
-    if isinstance(value, float):
-        raise TypeError('integer argument expected, got float')
-    try:
-        value = value.__index__()
-    except AttributeError:
-        pass
-    else:
-        if not isinstance(value, int):
-            raise TypeError('__index__ returned non-int (type %s)' %
-                            type(value).__name__)
-        return value
-    orig = value
-    try:
-        value = value.__int__()
-    except AttributeError:
-        pass
-    else:
-        if not isinstance(value, int):
+    if isinstance(value, float): 
+        raise TypeError('integer argument expected, got float') 
+    try: 
+        value = value.__index__() 
+    except AttributeError: 
+        pass 
+    else: 
+        if not isinstance(value, int): 
+            raise TypeError('__index__ returned non-int (type %s)' % 
+                            type(value).__name__) 
+        return value 
+    orig = value 
+    try: 
+        value = value.__int__() 
+    except AttributeError: 
+        pass 
+    else: 
+        if not isinstance(value, int): 
             raise TypeError('__int__ returned non-int (type %s)' %
                             type(value).__name__)
-        import warnings
-        warnings.warn("an integer is required (got type %s)"  %
-                      type(orig).__name__,
-                      DeprecationWarning,
-                      stacklevel=2)
-        return value
-    raise TypeError('an integer is required (got type %s)' %
-                    type(value).__name__)
+        import warnings 
+        warnings.warn("an integer is required (got type %s)"  % 
+                      type(orig).__name__, 
+                      DeprecationWarning, 
+                      stacklevel=2) 
+        return value 
+    raise TypeError('an integer is required (got type %s)' % 
+                    type(value).__name__) 
 
 def _check_date_fields(year, month, day):
     year = _check_int_field(year)
@@ -737,31 +737,31 @@ class timedelta:
         if isinstance(other, timedelta):
             return self._cmp(other) == 0
         else:
-            return NotImplemented
+            return NotImplemented 
 
     def __le__(self, other):
         if isinstance(other, timedelta):
             return self._cmp(other) <= 0
         else:
-            return NotImplemented
+            return NotImplemented 
 
     def __lt__(self, other):
         if isinstance(other, timedelta):
             return self._cmp(other) < 0
         else:
-            return NotImplemented
+            return NotImplemented 
 
     def __ge__(self, other):
         if isinstance(other, timedelta):
             return self._cmp(other) >= 0
         else:
-            return NotImplemented
+            return NotImplemented 
 
     def __gt__(self, other):
         if isinstance(other, timedelta):
             return self._cmp(other) > 0
         else:
-            return NotImplemented
+            return NotImplemented 
 
     def _cmp(self, other):
         assert isinstance(other, timedelta)
@@ -888,41 +888,41 @@ class date:
         except Exception:
             raise ValueError(f'Invalid isoformat string: {date_string!r}')
 
-    @classmethod
-    def fromisocalendar(cls, year, week, day):
-        """Construct a date from the ISO year, week number and weekday.
+    @classmethod 
+    def fromisocalendar(cls, year, week, day): 
+        """Construct a date from the ISO year, week number and weekday. 
 
-        This is the inverse of the date.isocalendar() function"""
-        # Year is bounded this way because 9999-12-31 is (9999, 52, 5)
-        if not MINYEAR <= year <= MAXYEAR:
-            raise ValueError(f"Year is out of range: {year}")
-
-        if not 0 < week < 53:
-            out_of_range = True
-
-            if week == 53:
-                # ISO years have 53 weeks in them on years starting with a
-                # Thursday and leap years starting on a Wednesday
-                first_weekday = _ymd2ord(year, 1, 1) % 7
-                if (first_weekday == 4 or (first_weekday == 3 and
-                                           _is_leap(year))):
-                    out_of_range = False
-
-            if out_of_range:
-                raise ValueError(f"Invalid week: {week}")
-
-        if not 0 < day < 8:
-            raise ValueError(f"Invalid weekday: {day} (range is [1, 7])")
-
-        # Now compute the offset from (Y, 1, 1) in days:
-        day_offset = (week - 1) * 7 + (day - 1)
-
-        # Calculate the ordinal day for monday, week 1
-        day_1 = _isoweek1monday(year)
-        ord_day = day_1 + day_offset
-
-        return cls(*_ord2ymd(ord_day))
-
+        This is the inverse of the date.isocalendar() function""" 
+        # Year is bounded this way because 9999-12-31 is (9999, 52, 5) 
+        if not MINYEAR <= year <= MAXYEAR: 
+            raise ValueError(f"Year is out of range: {year}") 
+ 
+        if not 0 < week < 53: 
+            out_of_range = True 
+ 
+            if week == 53: 
+                # ISO years have 53 weeks in them on years starting with a 
+                # Thursday and leap years starting on a Wednesday 
+                first_weekday = _ymd2ord(year, 1, 1) % 7 
+                if (first_weekday == 4 or (first_weekday == 3 and 
+                                           _is_leap(year))): 
+                    out_of_range = False 
+ 
+            if out_of_range: 
+                raise ValueError(f"Invalid week: {week}") 
+ 
+        if not 0 < day < 8: 
+            raise ValueError(f"Invalid weekday: {day} (range is [1, 7])") 
+ 
+        # Now compute the offset from (Y, 1, 1) in days: 
+        day_offset = (week - 1) * 7 + (day - 1) 
+ 
+        # Calculate the ordinal day for monday, week 1 
+        day_1 = _isoweek1monday(year) 
+        ord_day = day_1 + day_offset 
+ 
+        return cls(*_ord2ymd(ord_day)) 
+ 
     # Conversions to string
 
     def __repr__(self):
@@ -1067,7 +1067,7 @@ class date:
         if isinstance(other, timedelta):
             o = self.toordinal() + other.days
             if 0 < o <= _MAXORDINAL:
-                return type(self).fromordinal(o)
+                return type(self).fromordinal(o) 
             raise OverflowError("result out of range")
         return NotImplemented
 
@@ -1095,7 +1095,7 @@ class date:
         return self.toordinal() % 7 or 7
 
     def isocalendar(self):
-        """Return a named tuple containing ISO year, week number, and weekday.
+        """Return a named tuple containing ISO year, week number, and weekday. 
 
         The first ISO week of the year is the (Mon-Sun) week
         containing the year's first Thursday; everything else derives
@@ -1120,7 +1120,7 @@ class date:
             if today >= _isoweek1monday(year+1):
                 year += 1
                 week = 0
-        return _IsoCalendarDate(year, week+1, day+1)
+        return _IsoCalendarDate(year, week+1, day+1) 
 
     # Pickle support.
 
@@ -1210,36 +1210,36 @@ class tzinfo:
         else:
             return (self.__class__, args, state)
 
-
-class IsoCalendarDate(tuple):
-
-    def __new__(cls, year, week, weekday, /):
-        return super().__new__(cls, (year, week, weekday))
-
-    @property
-    def year(self):
-        return self[0]
-
-    @property
-    def week(self):
-        return self[1]
-
-    @property
-    def weekday(self):
-        return self[2]
-
-    def __reduce__(self):
-        # This code is intended to pickle the object without making the
-        # class public. See https://bugs.python.org/msg352381
-        return (tuple, (tuple(self),))
-
-    def __repr__(self):
-        return (f'{self.__class__.__name__}'
-                f'(year={self[0]}, week={self[1]}, weekday={self[2]})')
-
-
-_IsoCalendarDate = IsoCalendarDate
-del IsoCalendarDate
+ 
+class IsoCalendarDate(tuple): 
+ 
+    def __new__(cls, year, week, weekday, /): 
+        return super().__new__(cls, (year, week, weekday)) 
+ 
+    @property 
+    def year(self): 
+        return self[0] 
+ 
+    @property 
+    def week(self): 
+        return self[1] 
+ 
+    @property 
+    def weekday(self): 
+        return self[2] 
+ 
+    def __reduce__(self): 
+        # This code is intended to pickle the object without making the 
+        # class public. See https://bugs.python.org/msg352381 
+        return (tuple, (tuple(self),)) 
+ 
+    def __repr__(self): 
+        return (f'{self.__class__.__name__}' 
+                f'(year={self[0]}, week={self[1]}, weekday={self[2]})') 
+ 
+ 
+_IsoCalendarDate = IsoCalendarDate 
+del IsoCalendarDate 
 _tzinfo_class = tzinfo
 
 class time:
@@ -1344,31 +1344,31 @@ class time:
         if isinstance(other, time):
             return self._cmp(other, allow_mixed=True) == 0
         else:
-            return NotImplemented
+            return NotImplemented 
 
     def __le__(self, other):
         if isinstance(other, time):
             return self._cmp(other) <= 0
         else:
-            return NotImplemented
+            return NotImplemented 
 
     def __lt__(self, other):
         if isinstance(other, time):
             return self._cmp(other) < 0
         else:
-            return NotImplemented
+            return NotImplemented 
 
     def __ge__(self, other):
         if isinstance(other, time):
             return self._cmp(other) >= 0
         else:
-            return NotImplemented
+            return NotImplemented 
 
     def __gt__(self, other):
         if isinstance(other, time):
             return self._cmp(other) > 0
         else:
-            return NotImplemented
+            return NotImplemented 
 
     def _cmp(self, other, allow_mixed=False):
         assert isinstance(other, time)
@@ -1452,8 +1452,8 @@ class time:
         part is omitted if self.microsecond == 0.
 
         The optional argument timespec specifies the number of additional
-        terms of the time to include. Valid options are 'auto', 'hours',
-        'minutes', 'seconds', 'milliseconds' and 'microseconds'.
+        terms of the time to include. Valid options are 'auto', 'hours', 
+        'minutes', 'seconds', 'milliseconds' and 'microseconds'. 
         """
         s = _format_time(self._hour, self._minute, self._second,
                           self._microsecond, timespec)
@@ -1579,7 +1579,7 @@ class time:
         self._tzinfo = tzinfo
 
     def __reduce_ex__(self, protocol):
-        return (self.__class__, self._getstate(protocol))
+        return (self.__class__, self._getstate(protocol)) 
 
     def __reduce__(self):
         return self.__reduce_ex__(2)
@@ -1590,7 +1590,7 @@ time.min = time(0, 0, 0)
 time.max = time(23, 59, 59, 999999)
 time.resolution = timedelta(microseconds=1)
 
-
+ 
 class datetime(date):
     """datetime(year, month, day[, hour[, minute[, second[, microsecond[,tzinfo]]]]])
 
@@ -1883,10 +1883,10 @@ class datetime(date):
             ts = (self - _EPOCH) // timedelta(seconds=1)
         localtm = _time.localtime(ts)
         local = datetime(*localtm[:6])
-        # Extract TZ data
-        gmtoff = localtm.tm_gmtoff
-        zone = localtm.tm_zone
-        return timezone(timedelta(seconds=gmtoff), zone)
+        # Extract TZ data 
+        gmtoff = localtm.tm_gmtoff 
+        zone = localtm.tm_zone 
+        return timezone(timedelta(seconds=gmtoff), zone) 
 
     def astimezone(self, tz=None):
         if tz is None:
@@ -1938,8 +1938,8 @@ class datetime(date):
         time, default 'T'.
 
         The optional argument timespec specifies the number of additional
-        terms of the time to include. Valid options are 'auto', 'hours',
-        'minutes', 'seconds', 'milliseconds' and 'microseconds'.
+        terms of the time to include. Valid options are 'auto', 'hours', 
+        'minutes', 'seconds', 'milliseconds' and 'microseconds'. 
         """
         s = ("%04d-%02d-%02d%c" % (self._year, self._month, self._day, sep) +
              _format_time(self._hour, self._minute, self._second,
@@ -2110,10 +2110,10 @@ class datetime(date):
         hour, rem = divmod(delta.seconds, 3600)
         minute, second = divmod(rem, 60)
         if 0 < delta.days <= _MAXORDINAL:
-            return type(self).combine(date.fromordinal(delta.days),
-                                      time(hour, minute, second,
-                                           delta.microseconds,
-                                           tzinfo=self._tzinfo))
+            return type(self).combine(date.fromordinal(delta.days), 
+                                      time(hour, minute, second, 
+                                           delta.microseconds, 
+                                           tzinfo=self._tzinfo)) 
         raise OverflowError("result out of range")
 
     __radd__ = __add__
@@ -2212,7 +2212,7 @@ def _isoweek1monday(year):
         week1monday += 7
     return week1monday
 
-
+ 
 class timezone(tzinfo):
     __slots__ = '_offset', '_name'
 
@@ -2247,9 +2247,9 @@ class timezone(tzinfo):
         return (self._offset, self._name)
 
     def __eq__(self, other):
-        if isinstance(other, timezone):
-            return self._offset == other._offset
-        return NotImplemented
+        if isinstance(other, timezone): 
+            return self._offset == other._offset 
+        return NotImplemented 
 
     def __hash__(self):
         return hash(self._offset)
@@ -2306,7 +2306,7 @@ class timezone(tzinfo):
         raise TypeError("fromutc() argument must be a datetime instance"
                         " or None")
 
-    _maxoffset = timedelta(hours=24, microseconds=-1)
+    _maxoffset = timedelta(hours=24, microseconds=-1) 
     _minoffset = -_maxoffset
 
     @staticmethod
@@ -2330,11 +2330,11 @@ class timezone(tzinfo):
         return f'UTC{sign}{hours:02d}:{minutes:02d}'
 
 timezone.utc = timezone._create(timedelta(0))
-# bpo-37642: These attributes are rounded to the nearest minute for backwards
-# compatibility, even though the constructor will accept a wider range of
-# values. This may change in the future.
-timezone.min = timezone._create(-timedelta(hours=23, minutes=59))
-timezone.max = timezone._create(timedelta(hours=23, minutes=59))
+# bpo-37642: These attributes are rounded to the nearest minute for backwards 
+# compatibility, even though the constructor will accept a wider range of 
+# values. This may change in the future. 
+timezone.min = timezone._create(-timedelta(hours=23, minutes=59)) 
+timezone.max = timezone._create(timedelta(hours=23, minutes=59)) 
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 # Some time zone algebra.  For a datetime x, let
@@ -2358,7 +2358,7 @@ _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 #    This is again a requirement for a sane tzinfo class.
 #
 # 4. (x+k).s = x.s
-#    This follows from #2, and that datetime.timetz+timedelta preserves tzinfo.
+#    This follows from #2, and that datetime.timetz+timedelta preserves tzinfo. 
 #
 # 5. (x+k).n = x.n + k
 #    Again follows from how arithmetic is defined.
@@ -2547,7 +2547,7 @@ else:
          _format_time, _format_offset, _is_leap, _isoweek1monday, _math,
          _ord2ymd, _time, _time_class, _tzinfo_class, _wrap_strftime, _ymd2ord,
          _divide_and_round, _parse_isoformat_date, _parse_isoformat_time,
-         _parse_hh_mm_ss_ff, _IsoCalendarDate)
+         _parse_hh_mm_ss_ff, _IsoCalendarDate) 
     # XXX Since import * above excludes names that start with _,
     # docstring does not get overwritten. In the future, it may be
     # appropriate to maintain a single module level docstring and

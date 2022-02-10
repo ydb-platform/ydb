@@ -182,51 +182,51 @@
       ],
       "documentation":"<p>Lists the AWS IoT 1-Click project(s) associated with your AWS account and region.</p>"
     },
-    "ListTagsForResource":{
-      "name":"ListTagsForResource",
-      "http":{
-        "method":"GET",
-        "requestUri":"/tags/{resourceArn}"
-      },
-      "input":{"shape":"ListTagsForResourceRequest"},
-      "output":{"shape":"ListTagsForResourceResponse"},
-      "errors":[
-        {"shape":"InternalFailureException"},
-        {"shape":"InvalidRequestException"},
-        {"shape":"ResourceNotFoundException"}
-      ],
-      "documentation":"<p>Lists the tags (metadata key/value pairs) which you have assigned to the resource.</p>"
-    },
-    "TagResource":{
-      "name":"TagResource",
-      "http":{
-        "method":"POST",
-        "requestUri":"/tags/{resourceArn}"
-      },
-      "input":{"shape":"TagResourceRequest"},
-      "output":{"shape":"TagResourceResponse"},
-      "errors":[
-        {"shape":"InternalFailureException"},
-        {"shape":"InvalidRequestException"},
-        {"shape":"ResourceNotFoundException"}
-      ],
-      "documentation":"<p>Creates or modifies tags for a resource. Tags are key/value pairs (metadata) that can be used to manage a resource. For more information, see <a href=\"https://aws.amazon.com/answers/account-management/aws-tagging-strategies/\">AWS Tagging Strategies</a>.</p>"
-    },
-    "UntagResource":{
-      "name":"UntagResource",
-      "http":{
-        "method":"DELETE",
-        "requestUri":"/tags/{resourceArn}"
-      },
-      "input":{"shape":"UntagResourceRequest"},
-      "output":{"shape":"UntagResourceResponse"},
-      "errors":[
-        {"shape":"InternalFailureException"},
-        {"shape":"InvalidRequestException"},
-        {"shape":"ResourceNotFoundException"}
-      ],
-      "documentation":"<p>Removes one or more tags (metadata key/value pairs) from a resource.</p>"
-    },
+    "ListTagsForResource":{ 
+      "name":"ListTagsForResource", 
+      "http":{ 
+        "method":"GET", 
+        "requestUri":"/tags/{resourceArn}" 
+      }, 
+      "input":{"shape":"ListTagsForResourceRequest"}, 
+      "output":{"shape":"ListTagsForResourceResponse"}, 
+      "errors":[ 
+        {"shape":"InternalFailureException"}, 
+        {"shape":"InvalidRequestException"}, 
+        {"shape":"ResourceNotFoundException"} 
+      ], 
+      "documentation":"<p>Lists the tags (metadata key/value pairs) which you have assigned to the resource.</p>" 
+    }, 
+    "TagResource":{ 
+      "name":"TagResource", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/tags/{resourceArn}" 
+      }, 
+      "input":{"shape":"TagResourceRequest"}, 
+      "output":{"shape":"TagResourceResponse"}, 
+      "errors":[ 
+        {"shape":"InternalFailureException"}, 
+        {"shape":"InvalidRequestException"}, 
+        {"shape":"ResourceNotFoundException"} 
+      ], 
+      "documentation":"<p>Creates or modifies tags for a resource. Tags are key/value pairs (metadata) that can be used to manage a resource. For more information, see <a href=\"https://aws.amazon.com/answers/account-management/aws-tagging-strategies/\">AWS Tagging Strategies</a>.</p>" 
+    }, 
+    "UntagResource":{ 
+      "name":"UntagResource", 
+      "http":{ 
+        "method":"DELETE", 
+        "requestUri":"/tags/{resourceArn}" 
+      }, 
+      "input":{"shape":"UntagResourceRequest"}, 
+      "output":{"shape":"UntagResourceResponse"}, 
+      "errors":[ 
+        {"shape":"InternalFailureException"}, 
+        {"shape":"InvalidRequestException"}, 
+        {"shape":"ResourceNotFoundException"} 
+      ], 
+      "documentation":"<p>Removes one or more tags (metadata key/value pairs) from a resource.</p>" 
+    }, 
     "UpdatePlacement":{
       "name":"UpdatePlacement",
       "http":{
@@ -356,10 +356,10 @@
         "placementTemplate":{
           "shape":"PlacementTemplate",
           "documentation":"<p>The schema defining the placement to be created. A placement template defines placement default attributes and device templates. You cannot add or remove device templates after the project has been created. However, you can update <code>callbackOverrides</code> for the device templates using the <code>UpdateProject</code> API.</p>"
-        },
-        "tags":{
-          "shape":"TagMap",
-          "documentation":"<p>Optional tags (metadata key/value pairs) to be associated with the project. For example, <code>{ {\"key1\": \"value1\", \"key2\": \"value2\"} }</code>. For more information, see <a href=\"https://aws.amazon.com/answers/account-management/aws-tagging-strategies/\">AWS Tagging Strategies</a>.</p>"
+        }, 
+        "tags":{ 
+          "shape":"TagMap", 
+          "documentation":"<p>Optional tags (metadata key/value pairs) to be associated with the project. For example, <code>{ {\"key1\": \"value1\", \"key2\": \"value2\"} }</code>. For more information, see <a href=\"https://aws.amazon.com/answers/account-management/aws-tagging-strategies/\">AWS Tagging Strategies</a>.</p>" 
         }
       }
     },
@@ -688,27 +688,27 @@
         }
       }
     },
-    "ListTagsForResourceRequest":{
-      "type":"structure",
-      "required":["resourceArn"],
-      "members":{
-        "resourceArn":{
-          "shape":"ProjectArn",
-          "documentation":"<p>The ARN of the resource whose tags you want to list.</p>",
-          "location":"uri",
-          "locationName":"resourceArn"
-        }
-      }
-    },
-    "ListTagsForResourceResponse":{
-      "type":"structure",
-      "members":{
-        "tags":{
-          "shape":"TagMap",
-          "documentation":"<p>The tags (metadata key/value pairs) which you have assigned to the resource.</p>"
-        }
-      }
-    },
+    "ListTagsForResourceRequest":{ 
+      "type":"structure", 
+      "required":["resourceArn"], 
+      "members":{ 
+        "resourceArn":{ 
+          "shape":"ProjectArn", 
+          "documentation":"<p>The ARN of the resource whose tags you want to list.</p>", 
+          "location":"uri", 
+          "locationName":"resourceArn" 
+        } 
+      } 
+    }, 
+    "ListTagsForResourceResponse":{ 
+      "type":"structure", 
+      "members":{ 
+        "tags":{ 
+          "shape":"TagMap", 
+          "documentation":"<p>The tags (metadata key/value pairs) which you have assigned to the resource.</p>" 
+        } 
+      } 
+    }, 
     "MaxResults":{
       "type":"integer",
       "max":250,
@@ -810,10 +810,10 @@
       },
       "documentation":"<p>An object defining the template for a placement.</p>"
     },
-    "ProjectArn":{
-      "type":"string",
-      "pattern":"^arn:aws:iot1click:[A-Za-z0-9_/.-]{0,63}:\\d+:projects/[0-9A-Za-z_-]{1,128}$"
-    },
+    "ProjectArn":{ 
+      "type":"string", 
+      "pattern":"^arn:aws:iot1click:[A-Za-z0-9_/.-]{0,63}:\\d+:projects/[0-9A-Za-z_-]{1,128}$" 
+    }, 
     "ProjectDescription":{
       "type":"structure",
       "required":[
@@ -822,10 +822,10 @@
         "updatedDate"
       ],
       "members":{
-        "arn":{
-          "shape":"ProjectArn",
-          "documentation":"<p>The ARN of the project.</p>"
-        },
+        "arn":{ 
+          "shape":"ProjectArn", 
+          "documentation":"<p>The ARN of the project.</p>" 
+        }, 
         "projectName":{
           "shape":"ProjectName",
           "documentation":"<p>The name of the project for which to obtain information from.</p>"
@@ -845,10 +845,10 @@
         "placementTemplate":{
           "shape":"PlacementTemplate",
           "documentation":"<p>An object describing the project's placement specifications.</p>"
-        },
-        "tags":{
-          "shape":"TagMap",
-          "documentation":"<p>The tags (metadata key/value pairs) associated with the project.</p>"
+        }, 
+        "tags":{ 
+          "shape":"TagMap", 
+          "documentation":"<p>The tags (metadata key/value pairs) associated with the project.</p>" 
         }
       },
       "documentation":"<p>An object providing detailed information for a particular project associated with an AWS account and region.</p>"
@@ -867,10 +867,10 @@
         "updatedDate"
       ],
       "members":{
-        "arn":{
-          "shape":"ProjectArn",
-          "documentation":"<p>The ARN of the project.</p>"
-        },
+        "arn":{ 
+          "shape":"ProjectArn", 
+          "documentation":"<p>The ARN of the project.</p>" 
+        }, 
         "projectName":{
           "shape":"ProjectName",
           "documentation":"<p>The name of the project being summarized.</p>"
@@ -882,10 +882,10 @@
         "updatedDate":{
           "shape":"Time",
           "documentation":"<p>The date when the project was last updated, in UNIX epoch time format. If the project was not updated, then <code>createdDate</code> and <code>updatedDate</code> are the same.</p>"
-        },
-        "tags":{
-          "shape":"TagMap",
-          "documentation":"<p>The tags (metadata key/value pairs) associated with the project.</p>"
+        }, 
+        "tags":{ 
+          "shape":"TagMap", 
+          "documentation":"<p>The tags (metadata key/value pairs) associated with the project.</p>" 
         }
       },
       "documentation":"<p>An object providing summary information for a particular project for an associated AWS account and region.</p>"
@@ -922,53 +922,53 @@
       "error":{"httpStatusCode":404},
       "exception":true
     },
-    "TagKey":{
-      "type":"string",
-      "max":128,
-      "min":1,
-      "pattern":"^(?!aws:)[a-zA-Z+-=._:/]+$"
-    },
-    "TagKeyList":{
-      "type":"list",
-      "member":{"shape":"TagKey"},
-      "max":50,
-      "min":1
-    },
-    "TagMap":{
-      "type":"map",
-      "key":{"shape":"TagKey"},
-      "value":{"shape":"TagValue"},
-      "max":50,
-      "min":1
-    },
-    "TagResourceRequest":{
-      "type":"structure",
-      "required":[
-        "resourceArn",
-        "tags"
-      ],
-      "members":{
-        "resourceArn":{
-          "shape":"ProjectArn",
-          "documentation":"<p>The ARN of the resouce for which tag(s) should be added or modified.</p>",
-          "location":"uri",
-          "locationName":"resourceArn"
-        },
-        "tags":{
-          "shape":"TagMap",
-          "documentation":"<p>The new or modifying tag(s) for the resource. See <a href=\"https://docs.aws.amazon.com/iot-1-click/latest/developerguide/1click-appendix.html#1click-limits\">AWS IoT 1-Click Service Limits</a> for the maximum number of tags allowed per resource.</p>"
-        }
-      }
-    },
-    "TagResourceResponse":{
-      "type":"structure",
-      "members":{
-      }
-    },
-    "TagValue":{
-      "type":"string",
-      "max":256
-    },
+    "TagKey":{ 
+      "type":"string", 
+      "max":128, 
+      "min":1, 
+      "pattern":"^(?!aws:)[a-zA-Z+-=._:/]+$" 
+    }, 
+    "TagKeyList":{ 
+      "type":"list", 
+      "member":{"shape":"TagKey"}, 
+      "max":50, 
+      "min":1 
+    }, 
+    "TagMap":{ 
+      "type":"map", 
+      "key":{"shape":"TagKey"}, 
+      "value":{"shape":"TagValue"}, 
+      "max":50, 
+      "min":1 
+    }, 
+    "TagResourceRequest":{ 
+      "type":"structure", 
+      "required":[ 
+        "resourceArn", 
+        "tags" 
+      ], 
+      "members":{ 
+        "resourceArn":{ 
+          "shape":"ProjectArn", 
+          "documentation":"<p>The ARN of the resouce for which tag(s) should be added or modified.</p>", 
+          "location":"uri", 
+          "locationName":"resourceArn" 
+        }, 
+        "tags":{ 
+          "shape":"TagMap", 
+          "documentation":"<p>The new or modifying tag(s) for the resource. See <a href=\"https://docs.aws.amazon.com/iot-1-click/latest/developerguide/1click-appendix.html#1click-limits\">AWS IoT 1-Click Service Limits</a> for the maximum number of tags allowed per resource.</p>" 
+        } 
+      } 
+    }, 
+    "TagResourceResponse":{ 
+      "type":"structure", 
+      "members":{ 
+      } 
+    }, 
+    "TagValue":{ 
+      "type":"string", 
+      "max":256 
+    }, 
     "Time":{"type":"timestamp"},
     "TooManyRequestsException":{
       "type":"structure",
@@ -984,32 +984,32 @@
       "error":{"httpStatusCode":429},
       "exception":true
     },
-    "UntagResourceRequest":{
-      "type":"structure",
-      "required":[
-        "resourceArn",
-        "tagKeys"
-      ],
-      "members":{
-        "resourceArn":{
-          "shape":"ProjectArn",
-          "documentation":"<p>The ARN of the resource whose tag you want to remove.</p>",
-          "location":"uri",
-          "locationName":"resourceArn"
-        },
-        "tagKeys":{
-          "shape":"TagKeyList",
-          "documentation":"<p>The keys of those tags which you want to remove.</p>",
-          "location":"querystring",
-          "locationName":"tagKeys"
-        }
-      }
-    },
-    "UntagResourceResponse":{
-      "type":"structure",
-      "members":{
-      }
-    },
+    "UntagResourceRequest":{ 
+      "type":"structure", 
+      "required":[ 
+        "resourceArn", 
+        "tagKeys" 
+      ], 
+      "members":{ 
+        "resourceArn":{ 
+          "shape":"ProjectArn", 
+          "documentation":"<p>The ARN of the resource whose tag you want to remove.</p>", 
+          "location":"uri", 
+          "locationName":"resourceArn" 
+        }, 
+        "tagKeys":{ 
+          "shape":"TagKeyList", 
+          "documentation":"<p>The keys of those tags which you want to remove.</p>", 
+          "location":"querystring", 
+          "locationName":"tagKeys" 
+        } 
+      } 
+    }, 
+    "UntagResourceResponse":{ 
+      "type":"structure", 
+      "members":{ 
+      } 
+    }, 
     "UpdatePlacementRequest":{
       "type":"structure",
       "required":[
@@ -1066,5 +1066,5 @@
       }
     }
   },
-  "documentation":"<p>The AWS IoT 1-Click Projects API Reference</p>"
+  "documentation":"<p>The AWS IoT 1-Click Projects API Reference</p>" 
 }

@@ -66,7 +66,7 @@ import pkgutil
 import platform
 import re
 import sys
-import sysconfig
+import sysconfig 
 import time
 import tokenize
 import urllib.parse
@@ -90,101 +90,101 @@ def pathdirs():
             normdirs.append(normdir)
     return dirs
 
-def _findclass(func):
-    cls = sys.modules.get(func.__module__)
-    if cls is None:
-        return None
-    for name in func.__qualname__.split('.')[:-1]:
-        cls = getattr(cls, name)
-    if not inspect.isclass(cls):
-        return None
-    return cls
-
-def _finddoc(obj):
-    if inspect.ismethod(obj):
-        name = obj.__func__.__name__
-        self = obj.__self__
-        if (inspect.isclass(self) and
-            getattr(getattr(self, name, None), '__func__') is obj.__func__):
-            # classmethod
-            cls = self
-        else:
-            cls = self.__class__
-    elif inspect.isfunction(obj):
-        name = obj.__name__
-        cls = _findclass(obj)
-        if cls is None or getattr(cls, name) is not obj:
-            return None
-    elif inspect.isbuiltin(obj):
-        name = obj.__name__
-        self = obj.__self__
-        if (inspect.isclass(self) and
-            self.__qualname__ + '.' + name == obj.__qualname__):
-            # classmethod
-            cls = self
-        else:
-            cls = self.__class__
-    # Should be tested before isdatadescriptor().
-    elif isinstance(obj, property):
-        func = obj.fget
-        name = func.__name__
-        cls = _findclass(func)
-        if cls is None or getattr(cls, name) is not obj:
-            return None
-    elif inspect.ismethoddescriptor(obj) or inspect.isdatadescriptor(obj):
-        name = obj.__name__
-        cls = obj.__objclass__
-        if getattr(cls, name) is not obj:
-            return None
-        if inspect.ismemberdescriptor(obj):
-            slots = getattr(cls, '__slots__', None)
-            if isinstance(slots, dict) and name in slots:
-                return slots[name]
-    else:
-        return None
-    for base in cls.__mro__:
-        try:
-            doc = _getowndoc(getattr(base, name))
-        except AttributeError:
-            continue
-        if doc is not None:
-            return doc
-    return None
-
-def _getowndoc(obj):
-    """Get the documentation string for an object if it is not
-    inherited from its class."""
-    try:
-        doc = object.__getattribute__(obj, '__doc__')
-        if doc is None:
-            return None
-        if obj is not type:
-            typedoc = type(obj).__doc__
-            if isinstance(typedoc, str) and typedoc == doc:
-                return None
-        return doc
-    except AttributeError:
-        return None
-
-def _getdoc(object):
-    """Get the documentation string for an object.
-
-    All tabs are expanded to spaces.  To clean up docstrings that are
-    indented to line up with blocks of code, any whitespace than can be
-    uniformly removed from the second line onwards is removed."""
-    doc = _getowndoc(object)
-    if doc is None:
-        try:
-            doc = _finddoc(object)
-        except (AttributeError, TypeError):
-            return None
-    if not isinstance(doc, str):
-        return None
-    return inspect.cleandoc(doc)
-
+def _findclass(func): 
+    cls = sys.modules.get(func.__module__) 
+    if cls is None: 
+        return None 
+    for name in func.__qualname__.split('.')[:-1]: 
+        cls = getattr(cls, name) 
+    if not inspect.isclass(cls): 
+        return None 
+    return cls 
+ 
+def _finddoc(obj): 
+    if inspect.ismethod(obj): 
+        name = obj.__func__.__name__ 
+        self = obj.__self__ 
+        if (inspect.isclass(self) and 
+            getattr(getattr(self, name, None), '__func__') is obj.__func__): 
+            # classmethod 
+            cls = self 
+        else: 
+            cls = self.__class__ 
+    elif inspect.isfunction(obj): 
+        name = obj.__name__ 
+        cls = _findclass(obj) 
+        if cls is None or getattr(cls, name) is not obj: 
+            return None 
+    elif inspect.isbuiltin(obj): 
+        name = obj.__name__ 
+        self = obj.__self__ 
+        if (inspect.isclass(self) and 
+            self.__qualname__ + '.' + name == obj.__qualname__): 
+            # classmethod 
+            cls = self 
+        else: 
+            cls = self.__class__ 
+    # Should be tested before isdatadescriptor(). 
+    elif isinstance(obj, property): 
+        func = obj.fget 
+        name = func.__name__ 
+        cls = _findclass(func) 
+        if cls is None or getattr(cls, name) is not obj: 
+            return None 
+    elif inspect.ismethoddescriptor(obj) or inspect.isdatadescriptor(obj): 
+        name = obj.__name__ 
+        cls = obj.__objclass__ 
+        if getattr(cls, name) is not obj: 
+            return None 
+        if inspect.ismemberdescriptor(obj): 
+            slots = getattr(cls, '__slots__', None) 
+            if isinstance(slots, dict) and name in slots: 
+                return slots[name] 
+    else: 
+        return None 
+    for base in cls.__mro__: 
+        try: 
+            doc = _getowndoc(getattr(base, name)) 
+        except AttributeError: 
+            continue 
+        if doc is not None: 
+            return doc 
+    return None 
+ 
+def _getowndoc(obj): 
+    """Get the documentation string for an object if it is not 
+    inherited from its class.""" 
+    try: 
+        doc = object.__getattribute__(obj, '__doc__') 
+        if doc is None: 
+            return None 
+        if obj is not type: 
+            typedoc = type(obj).__doc__ 
+            if isinstance(typedoc, str) and typedoc == doc: 
+                return None 
+        return doc 
+    except AttributeError: 
+        return None 
+ 
+def _getdoc(object): 
+    """Get the documentation string for an object. 
+ 
+    All tabs are expanded to spaces.  To clean up docstrings that are 
+    indented to line up with blocks of code, any whitespace than can be 
+    uniformly removed from the second line onwards is removed.""" 
+    doc = _getowndoc(object) 
+    if doc is None: 
+        try: 
+            doc = _finddoc(object) 
+        except (AttributeError, TypeError): 
+            return None 
+    if not isinstance(doc, str): 
+        return None 
+    return inspect.cleandoc(doc) 
+ 
 def getdoc(object):
     """Get the doc string or comments for an object."""
-    result = _getdoc(object) or inspect.getcomments(object)
+    result = _getdoc(object) or inspect.getcomments(object) 
     return result and re.sub('^ *\n', '', result.rstrip()) or ''
 
 def splitdoc(doc):
@@ -245,7 +245,7 @@ def _is_bound_method(fn):
 
 def allmethods(cl):
     methods = {}
-    for key, value in inspect.getmembers(cl, inspect.isroutine):
+    for key, value in inspect.getmembers(cl, inspect.isroutine): 
         methods[key] = 1
     for base in cl.__bases__:
         methods.update(allmethods(base)) # all your base are belong to us
@@ -296,8 +296,8 @@ def classify_class_attrs(object):
     for (name, kind, cls, value) in inspect.classify_class_attrs(object):
         if inspect.isdatadescriptor(value):
             kind = 'data descriptor'
-            if isinstance(value, property) and value.fset is None:
-                kind = 'readonly property'
+            if isinstance(value, property) and value.fset is None: 
+                kind = 'readonly property' 
         results.append((name, kind, cls, value))
     return results
 
@@ -474,7 +474,7 @@ class Doc:
             if inspect.isroutine(object): return self.docroutine(*args)
         except AttributeError:
             pass
-        if inspect.isdatadescriptor(object): return self.docdata(*args)
+        if inspect.isdatadescriptor(object): return self.docdata(*args) 
         return self.docother(*args)
 
     def fail(self, object, name=None, *args):
@@ -485,7 +485,7 @@ class Doc:
 
     docmodule = docclass = docroutine = docother = docproperty = docdata = fail
 
-    def getdocloc(self, object, basedir=sysconfig.get_path('stdlib')):
+    def getdocloc(self, object, basedir=sysconfig.get_path('stdlib')): 
         """Return the location of module docs or None"""
 
         try:
@@ -676,7 +676,7 @@ class HTMLDoc(Doc):
         escape = escape or self.escape
         results = []
         here = 0
-        pattern = re.compile(r'\b((http|https|ftp)://\S+[\w/]|'
+        pattern = re.compile(r'\b((http|https|ftp)://\S+[\w/]|' 
                                 r'RFC[- ]?(\d+)|'
                                 r'PEP[- ]?(\d+)|'
                                 r'(self\.)?(\w+))')
@@ -694,7 +694,7 @@ class HTMLDoc(Doc):
                 url = 'http://www.rfc-editor.org/rfc/rfc%d.txt' % int(rfc)
                 results.append('<a href="%s">%s</a>' % (url, escape(all)))
             elif pep:
-                url = 'https://www.python.org/dev/peps/pep-%04d/' % int(pep)
+                url = 'https://www.python.org/dev/peps/pep-%04d/' % int(pep) 
                 results.append('<a href="%s">%s</a>' % (url, escape(all)))
             elif selfdot:
                 # Create a link for methods like 'self.method(...)'
@@ -894,7 +894,7 @@ class HTMLDoc(Doc):
                     except Exception:
                         # Some descriptors may meet a failure in their __get__.
                         # (bug #1785)
-                        push(self.docdata(value, name, mod))
+                        push(self.docdata(value, name, mod)) 
                     else:
                         push(self.document(value, name, mod,
                                         funcs, classes, mdict, object))
@@ -907,7 +907,7 @@ class HTMLDoc(Doc):
                 hr.maybe()
                 push(msg)
                 for name, kind, homecls, value in ok:
-                    push(self.docdata(value, name, mod))
+                    push(self.docdata(value, name, mod)) 
             return attrs
 
         def spilldata(msg, attrs, predicate):
@@ -917,8 +917,8 @@ class HTMLDoc(Doc):
                 push(msg)
                 for name, kind, homecls, value in ok:
                     base = self.docother(getattr(object, name), name, mod)
-                    doc = getdoc(value)
-                    if not doc:
+                    doc = getdoc(value) 
+                    if not doc: 
                         push('<dl><dt>%s</dl>\n' % base)
                     else:
                         doc = self.markup(getdoc(value), self.preformat,
@@ -955,7 +955,7 @@ class HTMLDoc(Doc):
                 thisclass = attrs[0][2]
             attrs, inherited = _split_list(attrs, lambda t: t[2] is thisclass)
 
-            if object is not builtins.object and thisclass is builtins.object:
+            if object is not builtins.object and thisclass is builtins.object: 
                 attrs = inherited
                 continue
             elif thisclass is object:
@@ -974,8 +974,8 @@ class HTMLDoc(Doc):
                           lambda t: t[1] == 'class method')
             attrs = spill('Static methods %s' % tag, attrs,
                           lambda t: t[1] == 'static method')
-            attrs = spilldescriptors("Readonly properties %s" % tag, attrs,
-                                     lambda t: t[1] == 'readonly property')
+            attrs = spilldescriptors("Readonly properties %s" % tag, attrs, 
+                                     lambda t: t[1] == 'readonly property') 
             attrs = spilldescriptors('Data descriptors %s' % tag, attrs,
                                      lambda t: t[1] == 'data descriptor')
             attrs = spilldata('Data and other attributes %s' % tag, attrs,
@@ -1039,12 +1039,12 @@ class HTMLDoc(Doc):
                 else:
                     note = ' unbound %s method' % self.classlink(imclass,mod)
 
-        if (inspect.iscoroutinefunction(object) or
-                inspect.isasyncgenfunction(object)):
-            asyncqualifier = 'async '
-        else:
-            asyncqualifier = ''
-
+        if (inspect.iscoroutinefunction(object) or 
+                inspect.isasyncgenfunction(object)): 
+            asyncqualifier = 'async ' 
+        else: 
+            asyncqualifier = '' 
+ 
         if name == realname:
             title = '<a name="%s"><strong>%s</strong></a>' % (anchor, realname)
         else:
@@ -1073,8 +1073,8 @@ class HTMLDoc(Doc):
         if not argspec:
             argspec = '(...)'
 
-        decl = asyncqualifier + title + self.escape(argspec) + (note and
-               self.grey('<font face="helvetica, arial">%s</font>' % note))
+        decl = asyncqualifier + title + self.escape(argspec) + (note and 
+               self.grey('<font face="helvetica, arial">%s</font>' % note)) 
 
         if skipdocs:
             return '<dl><dt>%s</dt></dl>\n' % decl
@@ -1084,21 +1084,21 @@ class HTMLDoc(Doc):
             doc = doc and '<dd><tt>%s</tt></dd>' % doc
             return '<dl><dt>%s</dt>%s</dl>\n' % (decl, doc)
 
-    def docdata(self, object, name=None, mod=None, cl=None):
-        """Produce html documentation for a data descriptor."""
+    def docdata(self, object, name=None, mod=None, cl=None): 
+        """Produce html documentation for a data descriptor.""" 
         results = []
         push = results.append
 
         if name:
             push('<dl><dt><strong>%s</strong></dt>\n' % name)
-        doc = self.markup(getdoc(object), self.preformat)
-        if doc:
+        doc = self.markup(getdoc(object), self.preformat) 
+        if doc: 
             push('<dd><tt>%s</tt></dd>\n' % doc)
         push('</dl>\n')
 
         return ''.join(results)
 
-    docproperty = docdata
+    docproperty = docdata 
 
     def docother(self, object, name=None, mod=None, *ignored):
         """Produce HTML documentation for a data object."""
@@ -1338,24 +1338,24 @@ location listed above.
                 push('    ' + makename(base))
             push('')
 
-        # List the built-in subclasses, if any:
-        subclasses = sorted(
-            (str(cls.__name__) for cls in type.__subclasses__(object)
-             if not cls.__name__.startswith("_") and cls.__module__ == "builtins"),
-            key=str.lower
-        )
-        no_of_subclasses = len(subclasses)
-        MAX_SUBCLASSES_TO_DISPLAY = 4
-        if subclasses:
-            push("Built-in subclasses:")
-            for subclassname in subclasses[:MAX_SUBCLASSES_TO_DISPLAY]:
-                push('    ' + subclassname)
-            if no_of_subclasses > MAX_SUBCLASSES_TO_DISPLAY:
-                push('    ... and ' +
-                     str(no_of_subclasses - MAX_SUBCLASSES_TO_DISPLAY) +
-                     ' other subclasses')
-            push('')
-
+        # List the built-in subclasses, if any: 
+        subclasses = sorted( 
+            (str(cls.__name__) for cls in type.__subclasses__(object) 
+             if not cls.__name__.startswith("_") and cls.__module__ == "builtins"), 
+            key=str.lower 
+        ) 
+        no_of_subclasses = len(subclasses) 
+        MAX_SUBCLASSES_TO_DISPLAY = 4 
+        if subclasses: 
+            push("Built-in subclasses:") 
+            for subclassname in subclasses[:MAX_SUBCLASSES_TO_DISPLAY]: 
+                push('    ' + subclassname) 
+            if no_of_subclasses > MAX_SUBCLASSES_TO_DISPLAY: 
+                push('    ... and ' + 
+                     str(no_of_subclasses - MAX_SUBCLASSES_TO_DISPLAY) + 
+                     ' other subclasses') 
+            push('') 
+ 
         # Cute little class to pump out a horizontal rule between sections.
         class HorizontalRule:
             def __init__(self):
@@ -1377,7 +1377,7 @@ location listed above.
                     except Exception:
                         # Some descriptors may meet a failure in their __get__.
                         # (bug #1785)
-                        push(self.docdata(value, name, mod))
+                        push(self.docdata(value, name, mod)) 
                     else:
                         push(self.document(value,
                                         name, mod, object))
@@ -1389,7 +1389,7 @@ location listed above.
                 hr.maybe()
                 push(msg)
                 for name, kind, homecls, value in ok:
-                    push(self.docdata(value, name, mod))
+                    push(self.docdata(value, name, mod)) 
             return attrs
 
         def spilldata(msg, attrs, predicate):
@@ -1398,7 +1398,7 @@ location listed above.
                 hr.maybe()
                 push(msg)
                 for name, kind, homecls, value in ok:
-                    doc = getdoc(value)
+                    doc = getdoc(value) 
                     try:
                         obj = getattr(object, name)
                     except AttributeError:
@@ -1418,7 +1418,7 @@ location listed above.
                 thisclass = attrs[0][2]
             attrs, inherited = _split_list(attrs, lambda t: t[2] is thisclass)
 
-            if object is not builtins.object and thisclass is builtins.object:
+            if object is not builtins.object and thisclass is builtins.object: 
                 attrs = inherited
                 continue
             elif thisclass is object:
@@ -1436,8 +1436,8 @@ location listed above.
                           lambda t: t[1] == 'class method')
             attrs = spill("Static methods %s:\n" % tag, attrs,
                           lambda t: t[1] == 'static method')
-            attrs = spilldescriptors("Readonly properties %s:\n" % tag, attrs,
-                                     lambda t: t[1] == 'readonly property')
+            attrs = spilldescriptors("Readonly properties %s:\n" % tag, attrs, 
+                                     lambda t: t[1] == 'readonly property') 
             attrs = spilldescriptors("Data descriptors %s:\n" % tag, attrs,
                                      lambda t: t[1] == 'data descriptor')
             attrs = spilldata("Data and other attributes %s:\n" % tag, attrs,
@@ -1473,12 +1473,12 @@ location listed above.
                 else:
                     note = ' unbound %s method' % classname(imclass,mod)
 
-        if (inspect.iscoroutinefunction(object) or
-                inspect.isasyncgenfunction(object)):
-            asyncqualifier = 'async '
-        else:
-            asyncqualifier = ''
-
+        if (inspect.iscoroutinefunction(object) or 
+                inspect.isasyncgenfunction(object)): 
+            asyncqualifier = 'async ' 
+        else: 
+            asyncqualifier = '' 
+ 
         if name == realname:
             title = self.bold(realname)
         else:
@@ -1502,7 +1502,7 @@ location listed above.
                     argspec = argspec[1:-1] # remove parentheses
         if not argspec:
             argspec = '(...)'
-        decl = asyncqualifier + title + argspec + note
+        decl = asyncqualifier + title + argspec + note 
 
         if skipdocs:
             return decl + '\n'
@@ -1510,21 +1510,21 @@ location listed above.
             doc = getdoc(object) or ''
             return decl + '\n' + (doc and self.indent(doc).rstrip() + '\n')
 
-    def docdata(self, object, name=None, mod=None, cl=None):
-        """Produce text documentation for a data descriptor."""
+    def docdata(self, object, name=None, mod=None, cl=None): 
+        """Produce text documentation for a data descriptor.""" 
         results = []
         push = results.append
 
         if name:
             push(self.bold(name))
             push('\n')
-        doc = getdoc(object) or ''
+        doc = getdoc(object) or '' 
         if doc:
             push(self.indent(doc))
             push('\n')
         return ''.join(results)
 
-    docproperty = docdata
+    docproperty = docdata 
 
     def docother(self, object, name=None, mod=None, parent=None, maxlen=None, doc=None):
         """Produce text documentation for a data object."""
@@ -1534,10 +1534,10 @@ location listed above.
             chop = maxlen - len(line)
             if chop < 0: repr = repr[:chop] + '...'
         line = (name and self.bold(name) + ' = ' or '') + repr
-        if not doc:
-            doc = getdoc(object)
-        if doc:
-            line += '\n' + self.indent(str(doc)) + '\n'
+        if not doc: 
+            doc = getdoc(object) 
+        if doc: 
+            line += '\n' + self.indent(str(doc)) + '\n' 
         return line
 
 class _PlainTextDoc(TextDoc):
@@ -1617,13 +1617,13 @@ def pipepager(text, cmd):
 def tempfilepager(text, cmd):
     """Page through text by invoking a program on a temporary file."""
     import tempfile
-    with tempfile.TemporaryDirectory() as tempdir:
-        filename = os.path.join(tempdir, 'pydoc.out')
-        with open(filename, 'w', errors='backslashreplace',
-                  encoding=os.device_encoding(0) if
-                  sys.platform == 'win32' else None
-                  ) as file:
-            file.write(text)
+    with tempfile.TemporaryDirectory() as tempdir: 
+        filename = os.path.join(tempdir, 'pydoc.out') 
+        with open(filename, 'w', errors='backslashreplace', 
+                  encoding=os.device_encoding(0) if 
+                  sys.platform == 'win32' else None 
+                  ) as file: 
+            file.write(text) 
         os.system(cmd + ' "' + filename + '"')
 
 def _escape_stdout(text):
@@ -1761,15 +1761,15 @@ def render_doc(thing, title='Python Library Documentation: %s', forceload=0,
     if not (inspect.ismodule(object) or
               inspect.isclass(object) or
               inspect.isroutine(object) or
-              inspect.isdatadescriptor(object) or
-              _getdoc(object)):
+              inspect.isdatadescriptor(object) or 
+              _getdoc(object)): 
         # If the passed object is a piece of data or an instance,
         # document its available methods instead of its value.
-        if hasattr(object, '__origin__'):
-            object = object.__origin__
-        else:
-            object = type(object)
-            desc += ' object'
+        if hasattr(object, '__origin__'): 
+            object = object.__origin__ 
+        else: 
+            object = type(object) 
+            desc += ' object' 
     return title % desc + '\n\n' + renderer.document(object, name)
 
 def doc(thing, title='Python Library Documentation: %s', forceload=0,
@@ -1818,7 +1818,7 @@ class Helper:
         'False': '',
         'None': '',
         'True': '',
-        '__peg_parser__': '',
+        '__peg_parser__': '', 
         'and': 'BOOLEAN',
         'as': 'with',
         'assert': ('assert', ''),

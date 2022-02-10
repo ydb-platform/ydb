@@ -4,7 +4,7 @@
 
     Lexers for UrbiScript language.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -116,11 +116,11 @@ class UrbiscriptLexer(ExtendedRegexLexer):
         ],
         'string.double': [
             (r'((?:\\\\|\\"|[^"])*?)(\\B\((\d+)\)\()', blob_callback),
-            (r'(\\\\|\\[^\\]|[^"\\])*?"', String.Double, '#pop'),
+            (r'(\\\\|\\[^\\]|[^"\\])*?"', String.Double, '#pop'), 
         ],
         'string.single': [
             (r"((?:\\\\|\\'|[^'])*?)(\\B\((\d+)\)\()", blob_callback),
-            (r"(\\\\|\\[^\\]|[^'\\])*?'", String.Single, '#pop'),
+            (r"(\\\\|\\[^\\]|[^'\\])*?'", String.Single, '#pop'), 
         ],
         # from http://pygments.org/docs/lexerdevelopment/#changing-states
         'comment': [
@@ -130,16 +130,16 @@ class UrbiscriptLexer(ExtendedRegexLexer):
             (r'[*/]', Comment.Multiline),
         ]
     }
-
-    def analyse_text(text):
-        """This is fairly similar to C and others, but freezeif and
-        waituntil are unique keywords."""
-        result = 0
-
-        if 'freezeif' in text:
-            result += 0.05
-
-        if 'waituntil' in text:
-            result += 0.05
-
-        return result
+ 
+    def analyse_text(text): 
+        """This is fairly similar to C and others, but freezeif and 
+        waituntil are unique keywords.""" 
+        result = 0 
+ 
+        if 'freezeif' in text: 
+            result += 0.05 
+ 
+        if 'waituntil' in text: 
+            result += 0.05 
+ 
+        return result 

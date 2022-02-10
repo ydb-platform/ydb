@@ -421,7 +421,7 @@ RegisterBankInfo::getInstrPossibleMappings(const MachineInstr &MI) const {
 
   // Then the alternative mapping, if any.
   InstructionMappings AltMappings = getInstrAlternativeMappings(MI);
-  append_range(PossibleMappings, AltMappings);
+  append_range(PossibleMappings, AltMappings); 
 #ifndef NDEBUG
   for (const InstructionMapping *Mapping : PossibleMappings)
     assert(Mapping->verify(MI) && "Mapping is invalid");

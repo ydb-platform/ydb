@@ -35,7 +35,7 @@ class RtfFormatter(Formatter):
         ``'default'``).
 
     `fontface`
-        The used font family, for example ``Bitstream Vera Sans``. Defaults to
+        The used font family, for example ``Bitstream Vera Sans``. Defaults to 
         some generic font which is supposed to have fixed width.
 
     `fontsize`
@@ -70,7 +70,7 @@ class RtfFormatter(Formatter):
                    .replace(u'}', u'\\}')
 
     def _escape_text(self, text):
-        # empty strings, should give a small performance improvement
+        # empty strings, should give a small performance improvement 
         if not text:
             return u''
 

@@ -347,8 +347,8 @@ bool GuardWideningImpl::eliminateInstrViaWidening(
     const auto &GuardsInCurBB = GuardsInBlock.find(CurBB)->second;
 
     auto I = GuardsInCurBB.begin();
-    auto E = Instr->getParent() == CurBB ? find(GuardsInCurBB, Instr)
-                                         : GuardsInCurBB.end();
+    auto E = Instr->getParent() == CurBB ? find(GuardsInCurBB, Instr) 
+                                         : GuardsInCurBB.end(); 
 
 #ifndef NDEBUG
     {
@@ -665,12 +665,12 @@ bool GuardWideningImpl::combineRangeChecks(
     };
 
     copy_if(Checks, std::back_inserter(CurrentChecks), IsCurrentCheck);
-    erase_if(Checks, IsCurrentCheck);
+    erase_if(Checks, IsCurrentCheck); 
 
     assert(CurrentChecks.size() != 0 && "We know we have at least one!");
 
     if (CurrentChecks.size() < 3) {
-      llvm::append_range(RangeChecksOut, CurrentChecks);
+      llvm::append_range(RangeChecksOut, CurrentChecks); 
       continue;
     }
 
@@ -698,7 +698,7 @@ bool GuardWideningImpl::combineRangeChecks(
       return (HighOffset - RC.getOffsetValue()).ult(MaxDiff);
     };
 
-    if (MaxDiff.isMinValue() || !all_of(drop_begin(CurrentChecks), OffsetOK))
+    if (MaxDiff.isMinValue() || !all_of(drop_begin(CurrentChecks), OffsetOK)) 
       return false;
 
     // We have a series of f+1 checks as:

@@ -42,9 +42,9 @@ get_encoded_name(PyObject *name, const char **hook_prefix) {
 
     /* Get the short name (substring after last dot) */
     name_len = PyUnicode_GetLength(name);
-    if (name_len < 0) {
-        return NULL;
-    }
+    if (name_len < 0) { 
+        return NULL; 
+    } 
     lastdot = PyUnicode_FindChar(name, '.', 0, name_len, -1);
     if (lastdot < -1) {
         return NULL;
@@ -122,11 +122,11 @@ _PyImport_LoadDynamicModuleWithSpec(PyObject *spec, FILE *fp)
     if (path == NULL)
         goto error;
 
-    if (PySys_Audit("import", "OOOOO", name_unicode, path,
-                    Py_None, Py_None, Py_None) < 0) {
-        goto error;
-    }
-
+    if (PySys_Audit("import", "OOOOO", name_unicode, path, 
+                    Py_None, Py_None, Py_None) < 0) { 
+        goto error; 
+    } 
+ 
 #ifdef MS_WINDOWS
     exportfunc = _PyImport_FindSharedFuncptrWindows(hook_prefix, name_buf,
                                                     path, fp);
@@ -184,7 +184,7 @@ _PyImport_LoadDynamicModuleWithSpec(PyObject *spec, FILE *fp)
         m = NULL;
         goto error;
     }
-    if (Py_IS_TYPE(m, NULL)) {
+    if (Py_IS_TYPE(m, NULL)) { 
         /* This can happen when a PyModuleDef is returned without calling
          * PyModuleDef_Init on it
          */
@@ -207,7 +207,7 @@ _PyImport_LoadDynamicModuleWithSpec(PyObject *spec, FILE *fp)
         /* don't allow legacy init for non-ASCII module names */
         PyErr_Format(
             PyExc_SystemError,
-            "initialization of %s did not return PyModuleDef",
+            "initialization of %s did not return PyModuleDef", 
             name_buf);
         goto error;
     }

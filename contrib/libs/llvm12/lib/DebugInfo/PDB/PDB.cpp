@@ -11,7 +11,7 @@
 #include "llvm/Config/config.h"
 #include "llvm/DebugInfo/PDB/GenericError.h"
 #if LLVM_ENABLE_DIA_SDK
-#error #include "llvm/DebugInfo/PDB/DIA/DIASession.h"
+#error #include "llvm/DebugInfo/PDB/DIA/DIASession.h" 
 #endif
 #include "llvm/DebugInfo/PDB/Native/NativeSession.h"
 #include "llvm/Support/Error.h"

@@ -15,7 +15,7 @@
 #include "llvm/Analysis/RegionPass.h"
 #include "llvm/IR/OptBisect.h"
 #include "llvm/IR/PassTimingInfo.h"
-#include "llvm/IR/StructuralHash.h"
+#include "llvm/IR/StructuralHash.h" 
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Timer.h"
 #include "llvm/Support/raw_ostream.h"
@@ -87,54 +87,54 @@ bool RGPassManager::runOnFunction(Function &F) {
 
       initializeAnalysisImpl(P);
 
-      bool LocalChanged = false;
+      bool LocalChanged = false; 
       {
         PassManagerPrettyStackEntry X(P, *CurrentRegion->getEntry());
 
         TimeRegion PassTimer(getPassTimer(P));
-#ifdef EXPENSIVE_CHECKS
-        uint64_t RefHash = StructuralHash(F);
-#endif
-        LocalChanged = P->runOnRegion(CurrentRegion, *this);
-
-#ifdef EXPENSIVE_CHECKS
-        if (!LocalChanged && (RefHash != StructuralHash(F))) {
-          llvm::errs() << "Pass modifies its input and doesn't report it: "
-                       << P->getPassName() << "\n";
-          llvm_unreachable("Pass modifies its input and doesn't report it");
-        }
-#endif
-
-        Changed |= LocalChanged;
+#ifdef EXPENSIVE_CHECKS 
+        uint64_t RefHash = StructuralHash(F); 
+#endif 
+        LocalChanged = P->runOnRegion(CurrentRegion, *this); 
+ 
+#ifdef EXPENSIVE_CHECKS 
+        if (!LocalChanged && (RefHash != StructuralHash(F))) { 
+          llvm::errs() << "Pass modifies its input and doesn't report it: " 
+                       << P->getPassName() << "\n"; 
+          llvm_unreachable("Pass modifies its input and doesn't report it"); 
+        } 
+#endif 
+ 
+        Changed |= LocalChanged; 
       }
 
       if (isPassDebuggingExecutionsOrMore()) {
-        if (LocalChanged)
+        if (LocalChanged) 
           dumpPassInfo(P, MODIFICATION_MSG, ON_REGION_MSG,
                                       CurrentRegion->getNameStr());
         dumpPreservedSet(P);
       }
 
-      // Manually check that this region is still healthy. This is done
-      // instead of relying on RegionInfo::verifyRegion since RegionInfo
-      // is a function pass and it's really expensive to verify every
-      // Region in the function every time. That level of checking can be
-      // enabled with the -verify-region-info option.
-      {
-        TimeRegion PassTimer(getPassTimer(P));
-        CurrentRegion->verifyRegion();
+      // Manually check that this region is still healthy. This is done 
+      // instead of relying on RegionInfo::verifyRegion since RegionInfo 
+      // is a function pass and it's really expensive to verify every 
+      // Region in the function every time. That level of checking can be 
+      // enabled with the -verify-region-info option. 
+      { 
+        TimeRegion PassTimer(getPassTimer(P)); 
+        CurrentRegion->verifyRegion(); 
       }
 
-      // Then call the regular verifyAnalysis functions.
-      verifyPreservedAnalysis(P);
-
-      if (LocalChanged)
-        removeNotPreservedAnalysis(P);
+      // Then call the regular verifyAnalysis functions. 
+      verifyPreservedAnalysis(P); 
+ 
+      if (LocalChanged) 
+        removeNotPreservedAnalysis(P); 
       recordAvailableAnalysis(P);
       removeDeadPasses(P,
-                       (!isPassDebuggingExecutionsOrMore())
-                           ? "<deleted>"
-                           : CurrentRegion->getNameStr(),
+                       (!isPassDebuggingExecutionsOrMore()) 
+                           ? "<deleted>" 
+                           : CurrentRegion->getNameStr(), 
                        ON_REGION_MSG);
     }
 

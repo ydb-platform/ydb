@@ -226,11 +226,11 @@ cdef extern from "numpy/arrayobject.h":
         # this field via the inline helper method PyDataType_SHAPE.
         cdef PyArray_ArrayDescr* subarray
 
-    ctypedef class numpy.flatiter [object PyArrayIterObject, check_size ignore]:
+    ctypedef class numpy.flatiter [object PyArrayIterObject, check_size ignore]: 
         # Use through macros
         pass
 
-    ctypedef class numpy.broadcast [object PyArrayMultiIterObject, check_size ignore]:
+    ctypedef class numpy.broadcast [object PyArrayMultiIterObject, check_size ignore]: 
         # Use through macros
         pass
 
@@ -685,7 +685,7 @@ cdef extern from "numpy/arrayobject.h":
     object PyArray_Choose (ndarray, object, ndarray, NPY_CLIPMODE)
     int PyArray_Sort (ndarray, int, NPY_SORTKIND)
     object PyArray_ArgSort (ndarray, int, NPY_SORTKIND)
-    object PyArray_SearchSorted (ndarray, object, NPY_SEARCHSIDE, PyObject*)
+    object PyArray_SearchSorted (ndarray, object, NPY_SEARCHSIDE, PyObject*) 
     object PyArray_ArgMax (ndarray, int, ndarray)
     object PyArray_ArgMin (ndarray, int, ndarray)
     object PyArray_Reshape (ndarray, object)
@@ -914,7 +914,7 @@ cdef extern from "numpy/ufuncobject.h":
 
     ctypedef void (*PyUFuncGenericFunction) (char **, npy_intp *, npy_intp *, void *)
 
-    ctypedef class numpy.ufunc [object PyUFuncObject, check_size ignore]:
+    ctypedef class numpy.ufunc [object PyUFuncObject, check_size ignore]: 
         cdef:
             int nin, nout, nargs
             int identity

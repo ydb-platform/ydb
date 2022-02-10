@@ -236,7 +236,7 @@ int DwarfInstructions<A, R>::stepWithDwarf(A &addressSpace, pint_t pc,
       // to a NOP on pre-v8.3a architectures.
       if ((R::getArch() == REGISTERS_ARM64) &&
           prolog.savedRegisters[UNW_AARCH64_RA_SIGN_STATE].value &&
-          returnAddress != 0) {
+          returnAddress != 0) { 
 #if !defined(_LIBUNWIND_IS_NATIVE_ONLY)
         return UNW_ECROSSRASIGNING;
 #else

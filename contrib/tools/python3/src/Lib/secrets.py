@@ -43,7 +43,7 @@ def token_bytes(nbytes=None):
     """
     if nbytes is None:
         nbytes = DEFAULT_ENTROPY
-    return _sysrand.randbytes(nbytes)
+    return _sysrand.randbytes(nbytes) 
 
 def token_hex(nbytes=None):
     """Return a random text string, in hexadecimal.

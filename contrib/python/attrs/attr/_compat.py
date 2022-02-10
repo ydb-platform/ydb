@@ -28,15 +28,15 @@ if PY2:
     def isclass(klass):
         return isinstance(klass, (type, types.ClassType))
 
-    def new_class(name, bases, kwds, exec_body):
-        """
-        A minimal stub of types.new_class that we need for make_class.
-        """
-        ns = {}
-        exec_body(ns)
-
-        return type(name, bases, ns)
-
+    def new_class(name, bases, kwds, exec_body): 
+        """ 
+        A minimal stub of types.new_class that we need for make_class. 
+        """ 
+        ns = {} 
+        exec_body(ns) 
+ 
+        return type(name, bases, ns) 
+ 
     # TYPE is used in exceptions, repr(int) is different on Python 2 and 3.
     TYPE = "type"
 
@@ -100,29 +100,29 @@ if PY2:
         res.data.update(d)  # We blocked update, so we have to do it like this.
         return res
 
-    def just_warn(*args, **kw):  # pragma: no cover
-        """
-        We only warn on Python 3 because we are not aware of any concrete
-        consequences of not setting the cell on Python 2.
-        """
+    def just_warn(*args, **kw):  # pragma: no cover 
+        """ 
+        We only warn on Python 3 because we are not aware of any concrete 
+        consequences of not setting the cell on Python 2. 
+        """ 
 
 
-else:  # Python 3 and later.
-    from collections.abc import Mapping, Sequence  # noqa
-
-    def just_warn(*args, **kw):
-        """
-        We only warn on Python 3 because we are not aware of any concrete
-        consequences of not setting the cell on Python 2.
-        """
-        warnings.warn(
+else:  # Python 3 and later. 
+    from collections.abc import Mapping, Sequence  # noqa 
+ 
+    def just_warn(*args, **kw): 
+        """ 
+        We only warn on Python 3 because we are not aware of any concrete 
+        consequences of not setting the cell on Python 2. 
+        """ 
+        warnings.warn( 
             "Running interpreter doesn't sufficiently support code object "
             "introspection.  Some features like bare super() or accessing "
-            "__class__ will not work with slotted classes.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
-
+            "__class__ will not work with slotted classes.", 
+            RuntimeWarning, 
+            stacklevel=2, 
+        ) 
+ 
     def isclass(klass):
         return isinstance(klass, type)
 
@@ -131,8 +131,8 @@ else:  # Python 3 and later.
     def iteritems(d):
         return d.items()
 
-    new_class = types.new_class
-
+    new_class = types.new_class 
+ 
     def metadata_proxy(d):
         return types.MappingProxyType(dict(d))
 
@@ -143,7 +143,7 @@ def make_set_closure_cell():
     """
     # pypy makes this easy. (It also supports the logic below, but
     # why not do the easy/fast thing?)
-    if PYPY:
+    if PYPY: 
 
         def set_closure_cell(cell, value):
             cell.__setstate__((value,))

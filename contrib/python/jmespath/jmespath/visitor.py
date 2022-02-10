@@ -29,9 +29,9 @@ def _is_special_integer_case(x, y):
     # Also need to consider that:
     # >>> 0 in [True, False]
     # True
-    if type(x) is int and (x == 0 or x == 1):
+    if type(x) is int and (x == 0 or x == 1): 
         return y is True or y is False
-    elif type(y) is int and (y == 0 or y == 1):
+    elif type(y) is int and (y == 0 or y == 1): 
         return x is True or x is False
 
 
@@ -257,7 +257,7 @@ class TreeInterpreter(Visitor):
 
     def visit_not_expression(self, node, value):
         original_result = self.visit(node['children'][0], value)
-        if type(original_result) is int and original_result == 0:
+        if type(original_result) is int and original_result == 0: 
             # Special case for 0, !0 should be false, not true.
             # 0 is not a special cased integer in jmespath.
             return False

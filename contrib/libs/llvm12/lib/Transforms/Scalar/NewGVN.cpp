@@ -662,8 +662,8 @@ public:
          const DataLayout &DL)
       : F(F), DT(DT), TLI(TLI), AA(AA), MSSA(MSSA), AC(AC), DL(DL),
         PredInfo(std::make_unique<PredicateInfo>(F, *DT, *AC)),
-        SQ(DL, TLI, DT, AC, /*CtxI=*/nullptr, /*UseInstrInfo=*/false,
-           /*CanUseUndef=*/false) {}
+        SQ(DL, TLI, DT, AC, /*CtxI=*/nullptr, /*UseInstrInfo=*/false, 
+           /*CanUseUndef=*/false) {} 
 
   bool runGVN();
 
@@ -1248,7 +1248,7 @@ const UnknownExpression *NewGVN::createUnknownExpression(Instruction *I) const {
 const CallExpression *
 NewGVN::createCallExpression(CallInst *CI, const MemoryAccess *MA) const {
   // FIXME: Add operand bundles for calls.
-  // FIXME: Allow commutative matching for intrinsics.
+  // FIXME: Allow commutative matching for intrinsics. 
   auto *E =
       new (ExpressionAllocator) CallExpression(CI->getNumOperands(), CI, MA);
   setBasicExpressionInfo(CI, E);
@@ -1535,39 +1535,39 @@ NewGVN::performSymbolicPredicateInfoEvaluation(Instruction *I) const {
 
   LLVM_DEBUG(dbgs() << "Found predicate info from instruction !\n");
 
-  const Optional<PredicateConstraint> &Constraint = PI->getConstraint();
-  if (!Constraint)
+  const Optional<PredicateConstraint> &Constraint = PI->getConstraint(); 
+  if (!Constraint) 
     return nullptr;
 
-  CmpInst::Predicate Predicate = Constraint->Predicate;
-  Value *CmpOp0 = I->getOperand(0);
-  Value *CmpOp1 = Constraint->OtherOp;
+  CmpInst::Predicate Predicate = Constraint->Predicate; 
+  Value *CmpOp0 = I->getOperand(0); 
+  Value *CmpOp1 = Constraint->OtherOp; 
 
-  Value *FirstOp = lookupOperandLeader(CmpOp0);
-  Value *SecondOp = lookupOperandLeader(CmpOp1);
-  Value *AdditionallyUsedValue = CmpOp0;
+  Value *FirstOp = lookupOperandLeader(CmpOp0); 
+  Value *SecondOp = lookupOperandLeader(CmpOp1); 
+  Value *AdditionallyUsedValue = CmpOp0; 
 
   // Sort the ops.
   if (shouldSwapOperands(FirstOp, SecondOp)) {
     std::swap(FirstOp, SecondOp);
-    Predicate = CmpInst::getSwappedPredicate(Predicate);
-    AdditionallyUsedValue = CmpOp1;
+    Predicate = CmpInst::getSwappedPredicate(Predicate); 
+    AdditionallyUsedValue = CmpOp1; 
   }
 
-  if (Predicate == CmpInst::ICMP_EQ) {
-    addPredicateUsers(PI, I);
-    addAdditionalUsers(AdditionallyUsedValue, I);
-    return createVariableOrConstant(FirstOp);
+  if (Predicate == CmpInst::ICMP_EQ) { 
+    addPredicateUsers(PI, I); 
+    addAdditionalUsers(AdditionallyUsedValue, I); 
+    return createVariableOrConstant(FirstOp); 
   }
-
-  // Handle the special case of floating point.
-  if (Predicate == CmpInst::FCMP_OEQ && isa<ConstantFP>(FirstOp) &&
-      !cast<ConstantFP>(FirstOp)->isZero()) {
-    addPredicateUsers(PI, I);
-    addAdditionalUsers(AdditionallyUsedValue, I);
-    return createConstantExpression(cast<Constant>(FirstOp));
+ 
+  // Handle the special case of floating point. 
+  if (Predicate == CmpInst::FCMP_OEQ && isa<ConstantFP>(FirstOp) && 
+      !cast<ConstantFP>(FirstOp)->isZero()) { 
+    addPredicateUsers(PI, I); 
+    addAdditionalUsers(AdditionallyUsedValue, I); 
+    return createConstantExpression(cast<Constant>(FirstOp)); 
   }
-
+ 
   return nullptr;
 }
 
@@ -2876,7 +2876,7 @@ void NewGVN::cleanupTables() {
   }
 
   while (!TempInst.empty()) {
-    auto *I = TempInst.pop_back_val();
+    auto *I = TempInst.pop_back_val(); 
     I->deleteValue();
   }
 
@@ -3371,9 +3371,9 @@ bool NewGVN::runGVN() {
   for (auto &B : RPOT) {
     auto *Node = DT->getNode(B);
     if (Node->getNumChildren() > 1)
-      llvm::sort(*Node, [&](const DomTreeNode *A, const DomTreeNode *B) {
-        return RPOOrdering[A] < RPOOrdering[B];
-      });
+      llvm::sort(*Node, [&](const DomTreeNode *A, const DomTreeNode *B) { 
+        return RPOOrdering[A] < RPOOrdering[B]; 
+      }); 
   }
 
   // Now a standard depth first ordering of the domtree is equivalent to RPO.

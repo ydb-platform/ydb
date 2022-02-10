@@ -27,7 +27,7 @@ class RobotFileParser:
 
     def __init__(self, url=''):
         self.entries = []
-        self.sitemaps = []
+        self.sitemaps = [] 
         self.default_entry = None
         self.disallow_all = False
         self.allow_all = False
@@ -142,12 +142,12 @@ class RobotFileParser:
                             and numbers[1].strip().isdigit()):
                             entry.req_rate = RequestRate(int(numbers[0]), int(numbers[1]))
                         state = 2
-                elif line[0] == "sitemap":
-                    # According to http://www.sitemaps.org/protocol.html
-                    # "This directive is independent of the user-agent line,
-                    #  so it doesn't matter where you place it in your file."
-                    # Therefore we do not change the state of the parser.
-                    self.sitemaps.append(line[1])
+                elif line[0] == "sitemap": 
+                    # According to http://www.sitemaps.org/protocol.html 
+                    # "This directive is independent of the user-agent line, 
+                    #  so it doesn't matter where you place it in your file." 
+                    # Therefore we do not change the state of the parser. 
+                    self.sitemaps.append(line[1]) 
         if state == 2:
             self._add_entry(entry)
 
@@ -186,9 +186,9 @@ class RobotFileParser:
         for entry in self.entries:
             if entry.applies_to(useragent):
                 return entry.delay
-        if self.default_entry:
-            return self.default_entry.delay
-        return None
+        if self.default_entry: 
+            return self.default_entry.delay 
+        return None 
 
     def request_rate(self, useragent):
         if not self.mtime():
@@ -196,20 +196,20 @@ class RobotFileParser:
         for entry in self.entries:
             if entry.applies_to(useragent):
                 return entry.req_rate
-        if self.default_entry:
-            return self.default_entry.req_rate
-        return None
+        if self.default_entry: 
+            return self.default_entry.req_rate 
+        return None 
 
-    def site_maps(self):
-        if not self.sitemaps:
-            return None
-        return self.sitemaps
-
+    def site_maps(self): 
+        if not self.sitemaps: 
+            return None 
+        return self.sitemaps 
+ 
     def __str__(self):
         entries = self.entries
         if self.default_entry is not None:
             entries = entries + [self.default_entry]
-        return '\n\n'.join(map(str, entries))
+        return '\n\n'.join(map(str, entries)) 
 
 
 class RuleLine:

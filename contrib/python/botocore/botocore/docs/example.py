@@ -82,10 +82,10 @@ class BaseExampleDocumenter(ShapeDocumenter):
 
     def document_shape_type_structure(self, section, shape, history,
                                       include=None, exclude=None, **kwargs):
-        if not shape.members:
-            section.write('{}')
-            return
-
+        if not shape.members: 
+            section.write('{}') 
+            return 
+ 
         section = section.add_new_section('structure-value')
         self._start_nested_param(section, '{')
 
@@ -161,14 +161,14 @@ class BaseExampleDocumenter(ShapeDocumenter):
 class ResponseExampleDocumenter(BaseExampleDocumenter):
     EVENT_NAME = 'response-example'
 
-    def document_shape_type_event_stream(self, section, shape, history,
-                                         **kwargs):
-        section.write('EventStream(')
-        self.document_shape_type_structure(section, shape, history, **kwargs)
-        end_section = section.add_new_section('event-stream-end')
-        end_section.write(')')
+    def document_shape_type_event_stream(self, section, shape, history, 
+                                         **kwargs): 
+        section.write('EventStream(') 
+        self.document_shape_type_structure(section, shape, history, **kwargs) 
+        end_section = section.add_new_section('event-stream-end') 
+        end_section.write(')') 
 
-
+ 
 class RequestExampleDocumenter(BaseExampleDocumenter):
     EVENT_NAME = 'request-example'
 

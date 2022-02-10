@@ -219,27 +219,27 @@ bool NaryReassociatePass::doOneIteration(Function &F) {
   // Process the basic blocks in a depth first traversal of the dominator
   // tree. This order ensures that all bases of a candidate are in Candidates
   // when we process it.
-  SmallVector<WeakTrackingVH, 16> DeadInsts;
+  SmallVector<WeakTrackingVH, 16> DeadInsts; 
   for (const auto Node : depth_first(DT)) {
     BasicBlock *BB = Node->getBlock();
     for (auto I = BB->begin(); I != BB->end(); ++I) {
-      Instruction *OrigI = &*I;
-      const SCEV *OrigSCEV = nullptr;
-      if (Instruction *NewI = tryReassociate(OrigI, OrigSCEV)) {
-        Changed = true;
-        OrigI->replaceAllUsesWith(NewI);
-
-        // Add 'OrigI' to the list of dead instructions.
-        DeadInsts.push_back(WeakTrackingVH(OrigI));
-        // Add the rewritten instruction to SeenExprs; the original
-        // instruction is deleted.
-        const SCEV *NewSCEV = SE->getSCEV(NewI);
-        SeenExprs[NewSCEV].push_back(WeakTrackingVH(NewI));
-
+      Instruction *OrigI = &*I; 
+      const SCEV *OrigSCEV = nullptr; 
+      if (Instruction *NewI = tryReassociate(OrigI, OrigSCEV)) { 
+        Changed = true; 
+        OrigI->replaceAllUsesWith(NewI); 
+ 
+        // Add 'OrigI' to the list of dead instructions. 
+        DeadInsts.push_back(WeakTrackingVH(OrigI)); 
+        // Add the rewritten instruction to SeenExprs; the original 
+        // instruction is deleted. 
+        const SCEV *NewSCEV = SE->getSCEV(NewI); 
+        SeenExprs[NewSCEV].push_back(WeakTrackingVH(NewI)); 
+ 
         // Ideally, NewSCEV should equal OldSCEV because tryReassociate(I)
         // is equivalent to I. However, ScalarEvolution::getSCEV may
-        // weaken nsw causing NewSCEV not to equal OldSCEV. For example,
-        // suppose we reassociate
+        // weaken nsw causing NewSCEV not to equal OldSCEV. For example, 
+        // suppose we reassociate 
         //   I = &a[sext(i +nsw j)] // assuming sizeof(a[0]) = 4
         // to
         //   NewI = &a[sext(i)] + sext(j).
@@ -253,47 +253,47 @@ bool NaryReassociatePass::doOneIteration(Function &F) {
         // equivalence, we add I to SeenExprs[OldSCEV] as well so that we can
         // map both SCEV before and after tryReassociate(I) to I.
         //
-        // This improvement is exercised in @reassociate_gep_nsw in
-        // nary-gep.ll.
-        if (NewSCEV != OrigSCEV)
-          SeenExprs[OrigSCEV].push_back(WeakTrackingVH(NewI));
-      } else if (OrigSCEV)
-        SeenExprs[OrigSCEV].push_back(WeakTrackingVH(OrigI));
+        // This improvement is exercised in @reassociate_gep_nsw in 
+        // nary-gep.ll. 
+        if (NewSCEV != OrigSCEV) 
+          SeenExprs[OrigSCEV].push_back(WeakTrackingVH(NewI)); 
+      } else if (OrigSCEV) 
+        SeenExprs[OrigSCEV].push_back(WeakTrackingVH(OrigI)); 
     }
   }
-  // Delete all dead instructions from 'DeadInsts'.
-  // Please note ScalarEvolution is updated along the way.
-  RecursivelyDeleteTriviallyDeadInstructionsPermissive(
-      DeadInsts, TLI, nullptr, [this](Value *V) { SE->forgetValue(V); });
-
+  // Delete all dead instructions from 'DeadInsts'. 
+  // Please note ScalarEvolution is updated along the way. 
+  RecursivelyDeleteTriviallyDeadInstructionsPermissive( 
+      DeadInsts, TLI, nullptr, [this](Value *V) { SE->forgetValue(V); }); 
+ 
   return Changed;
 }
 
-Instruction *NaryReassociatePass::tryReassociate(Instruction * I,
-                                                 const SCEV *&OrigSCEV) {
-
-  if (!SE->isSCEVable(I->getType()))
-    return nullptr;
-
+Instruction *NaryReassociatePass::tryReassociate(Instruction * I, 
+                                                 const SCEV *&OrigSCEV) { 
+ 
+  if (!SE->isSCEVable(I->getType())) 
+    return nullptr; 
+ 
   switch (I->getOpcode()) {
   case Instruction::Add:
   case Instruction::Mul:
-    OrigSCEV = SE->getSCEV(I);
+    OrigSCEV = SE->getSCEV(I); 
     return tryReassociateBinaryOp(cast<BinaryOperator>(I));
   case Instruction::GetElementPtr:
-    OrigSCEV = SE->getSCEV(I);
+    OrigSCEV = SE->getSCEV(I); 
     return tryReassociateGEP(cast<GetElementPtrInst>(I));
   default:
-    return nullptr;
+    return nullptr; 
   }
-
-  llvm_unreachable("should not be reached");
-  return nullptr;
+ 
+  llvm_unreachable("should not be reached"); 
+  return nullptr; 
 }
 
 static bool isGEPFoldable(GetElementPtrInst *GEP,
                           const TargetTransformInfo *TTI) {
-  SmallVector<const Value *, 4> Indices(GEP->indices());
+  SmallVector<const Value *, 4> Indices(GEP->indices()); 
   return TTI->getGEPCost(GEP->getSourceElementType(), GEP->getPointerOperand(),
                          Indices) == TargetTransformInfo::TCC_Free;
 }
@@ -369,8 +369,8 @@ NaryReassociatePass::tryReassociateGEPAtIndex(GetElementPtrInst *GEP,
   // Replace the I-th index with LHS.
   IndexExprs[I] = SE->getSCEV(LHS);
   if (isKnownNonNegative(LHS, *DL, 0, AC, GEP, DT) &&
-      DL->getTypeSizeInBits(LHS->getType()).getFixedSize() <
-          DL->getTypeSizeInBits(GEP->getOperand(I)->getType()).getFixedSize()) {
+      DL->getTypeSizeInBits(LHS->getType()).getFixedSize() < 
+          DL->getTypeSizeInBits(GEP->getOperand(I)->getType()).getFixedSize()) { 
     // Zero-extend LHS if it is non-negative. InstCombine canonicalizes sext to
     // zext if the source operand is proved non-negative. We should do that
     // consistently so that CandidateExpr more likely appears before. See

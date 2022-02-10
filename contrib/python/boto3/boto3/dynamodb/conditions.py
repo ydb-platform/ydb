@@ -119,18 +119,18 @@ class AttributeBase(object):
         """Creates a condition where the attribute is greater than or equal
         to the low value and less than or equal to the high value.
 
-        :param low_value: The value that the attribute is greater than or equal to.
-        :param high_value: The value that the attribute is less than or equal to.
+        :param low_value: The value that the attribute is greater than or equal to. 
+        :param high_value: The value that the attribute is less than or equal to. 
         """
         return Between(self, low_value, high_value)
 
-    def __eq__(self, other):
-        return isinstance(other, type(self)) and self.name == other.name
+    def __eq__(self, other): 
+        return isinstance(other, type(self)) and self.name == other.name 
 
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-
+    def __ne__(self, other): 
+        return not self.__eq__(other) 
+ 
+ 
 class ConditionAttributeBase(ConditionBase, AttributeBase):
     """This base class is for conditions that can have attribute methods.
 
@@ -143,14 +143,14 @@ class ConditionAttributeBase(ConditionBase, AttributeBase):
         # in which can be used to generate its attribute base.
         AttributeBase.__init__(self, values[0].name)
 
-    def __eq__(self, other):
-        return ConditionBase.__eq__(self, other) and \
-               AttributeBase.__eq__(self, other)
+    def __eq__(self, other): 
+        return ConditionBase.__eq__(self, other) and \ 
+               AttributeBase.__eq__(self, other) 
 
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-
+    def __ne__(self, other): 
+        return not self.__eq__(other) 
+ 
+ 
 class ComparisonCondition(ConditionBase):
     expression_format = '{0} {operator} {1}'
 

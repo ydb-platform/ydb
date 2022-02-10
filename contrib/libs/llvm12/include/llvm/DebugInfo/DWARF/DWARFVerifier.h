@@ -27,14 +27,14 @@
 
 namespace llvm {
 class raw_ostream;
-struct DWARFAddressRange;
+struct DWARFAddressRange; 
 struct DWARFAttribute;
 class DWARFContext;
 class DWARFDataExtractor;
 class DWARFDebugAbbrev;
 class DataExtractor;
 struct DWARFSection;
-class DWARFUnit;
+class DWARFUnit; 
 
 /// A class that verifies DWARF debug information given a DWARF Context.
 class DWARFVerifier {

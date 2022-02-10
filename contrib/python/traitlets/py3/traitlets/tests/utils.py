@@ -1,5 +1,5 @@
-from subprocess import Popen, PIPE
-import sys
+from subprocess import Popen, PIPE 
+import sys 
 import os
 
 
@@ -38,5 +38,5 @@ def check_help_all_output(pkg, subcommand=None):
     assert rc == 0, err
     assert "Traceback" not in err
     assert "Options" in out
-    assert "Class options" in out
+    assert "Class options" in out 
     return out, err

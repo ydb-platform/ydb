@@ -5,15 +5,15 @@ See: http://www.delorie.com/gnu/docs/readline/rlman_13.html
 """
 from __future__ import unicode_literals
 from prompt_toolkit.enums import IncrementalSearchDirection, SEARCH_BUFFER
-from prompt_toolkit.selection import PasteMode
+from prompt_toolkit.selection import PasteMode 
 from six.moves import range
 import six
 
-from .completion import generate_completions, display_completions_like_readline
-from prompt_toolkit.document import Document
-from prompt_toolkit.enums import EditingMode
-from prompt_toolkit.key_binding.input_processor import KeyPress
-from prompt_toolkit.keys import Keys
+from .completion import generate_completions, display_completions_like_readline 
+from prompt_toolkit.document import Document 
+from prompt_toolkit.enums import EditingMode 
+from prompt_toolkit.key_binding.input_processor import KeyPress 
+from prompt_toolkit.keys import Keys 
 
 __all__ = (
     'get_by_name',
@@ -134,13 +134,13 @@ def accept_line(event):
 
 @register('previous-history')
 def previous_history(event):
-    " Move `back` through the history list, fetching the previous command.  "
+    " Move `back` through the history list, fetching the previous command.  " 
     event.current_buffer.history_backward(count=event.arg)
 
 
 @register('next-history')
 def next_history(event):
-    " Move `forward` through the history list, fetching the next command. "
+    " Move `forward` through the history list, fetching the next command. " 
     event.current_buffer.history_forward(count=event.arg)
 
 
@@ -163,13 +163,13 @@ def end_of_history(event):
 @register('reverse-search-history')
 def reverse_search_history(event):
     """
-    Search backward starting at the current line and moving `up` through
+    Search backward starting at the current line and moving `up` through 
     the history as necessary. This is an incremental search.
     """
     event.cli.current_search_state.direction = IncrementalSearchDirection.BACKWARD
     event.cli.push_focus(SEARCH_BUFFER)
 
-
+ 
 #
 # Commands for changing text
 #
@@ -267,16 +267,16 @@ def capitalize_word(event):
         words = buff.document.text_after_cursor[:pos]
         buff.insert_text(words.title(), overwrite=True)
 
-
-@register('quoted-insert')
-def quoted_insert(event):
-    """
-    Add the next character typed to the line verbatim. This is how to insert
-    key sequences like C-q, for example.
-    """
-    event.cli.quoted_insert = True
-
-
+ 
+@register('quoted-insert') 
+def quoted_insert(event): 
+    """ 
+    Add the next character typed to the line verbatim. This is how to insert 
+    key sequences like C-q, for example. 
+    """ 
+    event.cli.quoted_insert = True 
+ 
+ 
 #
 # Killing and yanking.
 #
@@ -316,13 +316,13 @@ def kill_word(event):
 
 
 @register('unix-word-rubout')
-def unix_word_rubout(event, WORD=True):
+def unix_word_rubout(event, WORD=True): 
     """
-    Kill the word behind point, using whitespace as a word boundary.
-    Usually bound to ControlW.
+    Kill the word behind point, using whitespace as a word boundary. 
+    Usually bound to ControlW. 
     """
     buff = event.current_buffer
-    pos = buff.document.find_start_of_previous_word(count=event.arg, WORD=WORD)
+    pos = buff.document.find_start_of_previous_word(count=event.arg, WORD=WORD) 
 
     if pos is None:
         # Nothing found? delete until the start of the document.  (The
@@ -344,15 +344,15 @@ def unix_word_rubout(event, WORD=True):
         event.cli.output.bell()
 
 
-@register('backward-kill-word')
-def backward_kill_word(event):
-    """
-    Kills the word before point, using "not a letter nor a digit" as a word boundary.
-    Usually bound to M-Del or M-Backspace.
-    """
-    unix_word_rubout(event, WORD=False)
-
-
+@register('backward-kill-word') 
+def backward_kill_word(event): 
+    """ 
+    Kills the word before point, using "not a letter nor a digit" as a word boundary. 
+    Usually bound to M-Del or M-Backspace. 
+    """ 
+    unix_word_rubout(event, WORD=False) 
+ 
+ 
 @register('delete-horizontal-space')
 def delete_horizontal_space(event):
     " Delete all spaces and tabs around point. "
@@ -387,7 +387,7 @@ def yank(event):
     Paste before cursor.
     """
     event.current_buffer.paste_clipboard_data(
-        event.cli.clipboard.get_data(), count=event.arg, paste_mode=PasteMode.EMACS)
+        event.cli.clipboard.get_data(), count=event.arg, paste_mode=PasteMode.EMACS) 
 
 @register('yank-nth-arg')
 def yank_nth_arg(event):
@@ -408,86 +408,86 @@ def yank_last_arg(event):
     n = (event.arg if event.arg_present else None)
     event.current_buffer.yank_last_arg(n)
 
-@register('yank-pop')
-def yank_pop(event):
-    """
-    Rotate the kill ring, and yank the new top. Only works following yank or
-    yank-pop.
-    """
-    buff = event.current_buffer
-    doc_before_paste = buff.document_before_paste
-    clipboard = event.cli.clipboard
-
-    if doc_before_paste is not None:
-        buff.document = doc_before_paste
-        clipboard.rotate()
-        buff.paste_clipboard_data(
-            clipboard.get_data(), paste_mode=PasteMode.EMACS)
-
+@register('yank-pop') 
+def yank_pop(event): 
+    """ 
+    Rotate the kill ring, and yank the new top. Only works following yank or 
+    yank-pop. 
+    """ 
+    buff = event.current_buffer 
+    doc_before_paste = buff.document_before_paste 
+    clipboard = event.cli.clipboard 
+ 
+    if doc_before_paste is not None: 
+        buff.document = doc_before_paste 
+        clipboard.rotate() 
+        buff.paste_clipboard_data( 
+            clipboard.get_data(), paste_mode=PasteMode.EMACS) 
+ 
 #
 # Completion.
 #
 
 @register('complete')
 def complete(event):
-    " Attempt to perform completion. "
-    display_completions_like_readline(event)
-
-
-@register('menu-complete')
-def menu_complete(event):
-    """
-    Generate completions, or go to the next completion. (This is the default
-    way of completing input in prompt_toolkit.)
-    """
+    " Attempt to perform completion. " 
+    display_completions_like_readline(event) 
+ 
+ 
+@register('menu-complete') 
+def menu_complete(event): 
+    """ 
+    Generate completions, or go to the next completion. (This is the default 
+    way of completing input in prompt_toolkit.) 
+    """ 
     generate_completions(event)
 
 
-@register('menu-complete-backward')
-def menu_complete_backward(event):
-    " Move backward through the list of possible completions. "
-    event.current_buffer.complete_previous()
-
+@register('menu-complete-backward') 
+def menu_complete_backward(event): 
+    " Move backward through the list of possible completions. " 
+    event.current_buffer.complete_previous() 
+ 
 #
-# Keyboard macros.
-#
-
-@register('start-kbd-macro')
-def start_kbd_macro(event):
-    """
-    Begin saving the characters typed into the current keyboard macro.
-    """
-    event.cli.input_processor.start_macro()
-
-
-@register('end-kbd-macro')
-def start_kbd_macro(event):
-    """
-    Stop saving the characters typed into the current keyboard macro and save
-    the definition.
-    """
-    event.cli.input_processor.end_macro()
-
-
-@register('call-last-kbd-macro')
-def start_kbd_macro(event):
-    """
-    Re-execute the last keyboard macro defined, by making the characters in the
-    macro appear as if typed at the keyboard.
-    """
-    event.cli.input_processor.call_macro()
-
-
-@register('print-last-kbd-macro')
-def print_last_kbd_macro(event):
-    " Print the last keboard macro. "
-    # TODO: Make the format suitable for the inputrc file.
-    def print_macro():
-        for k in event.cli.input_processor.macro:
-            print(k)
-    event.cli.run_in_terminal(print_macro)
-
-#
+# Keyboard macros. 
+# 
+ 
+@register('start-kbd-macro') 
+def start_kbd_macro(event): 
+    """ 
+    Begin saving the characters typed into the current keyboard macro. 
+    """ 
+    event.cli.input_processor.start_macro() 
+ 
+ 
+@register('end-kbd-macro') 
+def start_kbd_macro(event): 
+    """ 
+    Stop saving the characters typed into the current keyboard macro and save 
+    the definition. 
+    """ 
+    event.cli.input_processor.end_macro() 
+ 
+ 
+@register('call-last-kbd-macro') 
+def start_kbd_macro(event): 
+    """ 
+    Re-execute the last keyboard macro defined, by making the characters in the 
+    macro appear as if typed at the keyboard. 
+    """ 
+    event.cli.input_processor.call_macro() 
+ 
+ 
+@register('print-last-kbd-macro') 
+def print_last_kbd_macro(event): 
+    " Print the last keboard macro. " 
+    # TODO: Make the format suitable for the inputrc file. 
+    def print_macro(): 
+        for k in event.cli.input_processor.macro: 
+            print(k) 
+    event.cli.run_in_terminal(print_macro) 
+ 
+# 
 # Miscellaneous Commands.
 #
 
@@ -495,84 +495,84 @@ def print_last_kbd_macro(event):
 def undo(event):
     " Incremental undo. "
     event.current_buffer.undo()
-
-
-@register('insert-comment')
-def insert_comment(event):
-    """
-    Without numeric argument, comment all lines.
-    With numeric argument, uncomment all lines.
-    In any case accept the input.
-    """
-    buff = event.current_buffer
-
-    # Transform all lines.
-    if event.arg != 1:
-        def change(line):
-            return line[1:] if line.startswith('#') else line
-    else:
-        def change(line):
-            return '#' + line
-
-    buff.document = Document(
-        text='\n'.join(map(change, buff.text.splitlines())),
-        cursor_position=0)
-
-    # Accept input.
-    buff.accept_action.validate_and_handle(event.cli, buff)
-
-
-@register('vi-editing-mode')
-def vi_editing_mode(event):
-    " Switch to Vi editing mode. "
-    event.cli.editing_mode = EditingMode.VI
-
-
-@register('emacs-editing-mode')
-def emacs_editing_mode(event):
-    " Switch to Emacs editing mode. "
-    event.cli.editing_mode = EditingMode.EMACS
-
-
-@register('prefix-meta')
-def prefix_meta(event):
-    """
-    Metafy the next character typed. This is for keyboards without a meta key.
-
-    Sometimes people also want to bind other keys to Meta, e.g. 'jj'::
-
-        registry.add_key_binding('j', 'j', filter=ViInsertMode())(prefix_meta)
-    """
-    event.cli.input_processor.feed(KeyPress(Keys.Escape))
-
-
-@register('operate-and-get-next')
-def operate_and_get_next(event):
-    """
-    Accept the current line for execution and fetch the next line relative to
-    the current line from the history for editing.
-    """
-    buff = event.current_buffer
-    new_index = buff.working_index + 1
-
-    # Accept the current input. (This will also redraw the interface in the
-    # 'done' state.)
-    buff.accept_action.validate_and_handle(event.cli, buff)
-
-    # Set the new index at the start of the next run.
-    def set_working_index():
-        if new_index < len(buff._working_lines):
-            buff.working_index = new_index
-
-    event.cli.pre_run_callables.append(set_working_index)
-
-
-@register('edit-and-execute-command')
-def edit_and_execute(event):
-    """
-    Invoke an editor on the current command line, and accept the result.
-    """
-    buff = event.current_buffer
-
-    buff.open_in_editor(event.cli)
-    buff.accept_action.validate_and_handle(event.cli, buff)
+ 
+ 
+@register('insert-comment') 
+def insert_comment(event): 
+    """ 
+    Without numeric argument, comment all lines. 
+    With numeric argument, uncomment all lines. 
+    In any case accept the input. 
+    """ 
+    buff = event.current_buffer 
+ 
+    # Transform all lines. 
+    if event.arg != 1: 
+        def change(line): 
+            return line[1:] if line.startswith('#') else line 
+    else: 
+        def change(line): 
+            return '#' + line 
+ 
+    buff.document = Document( 
+        text='\n'.join(map(change, buff.text.splitlines())), 
+        cursor_position=0) 
+ 
+    # Accept input. 
+    buff.accept_action.validate_and_handle(event.cli, buff) 
+ 
+ 
+@register('vi-editing-mode') 
+def vi_editing_mode(event): 
+    " Switch to Vi editing mode. " 
+    event.cli.editing_mode = EditingMode.VI 
+ 
+ 
+@register('emacs-editing-mode') 
+def emacs_editing_mode(event): 
+    " Switch to Emacs editing mode. " 
+    event.cli.editing_mode = EditingMode.EMACS 
+ 
+ 
+@register('prefix-meta') 
+def prefix_meta(event): 
+    """ 
+    Metafy the next character typed. This is for keyboards without a meta key. 
+ 
+    Sometimes people also want to bind other keys to Meta, e.g. 'jj':: 
+ 
+        registry.add_key_binding('j', 'j', filter=ViInsertMode())(prefix_meta) 
+    """ 
+    event.cli.input_processor.feed(KeyPress(Keys.Escape)) 
+ 
+ 
+@register('operate-and-get-next') 
+def operate_and_get_next(event): 
+    """ 
+    Accept the current line for execution and fetch the next line relative to 
+    the current line from the history for editing. 
+    """ 
+    buff = event.current_buffer 
+    new_index = buff.working_index + 1 
+ 
+    # Accept the current input. (This will also redraw the interface in the 
+    # 'done' state.) 
+    buff.accept_action.validate_and_handle(event.cli, buff) 
+ 
+    # Set the new index at the start of the next run. 
+    def set_working_index(): 
+        if new_index < len(buff._working_lines): 
+            buff.working_index = new_index 
+ 
+    event.cli.pre_run_callables.append(set_working_index) 
+ 
+ 
+@register('edit-and-execute-command') 
+def edit_and_execute(event): 
+    """ 
+    Invoke an editor on the current command line, and accept the result. 
+    """ 
+    buff = event.current_buffer 
+ 
+    buff.open_in_editor(event.cli) 
+    buff.accept_action.validate_and_handle(event.cli, buff) 

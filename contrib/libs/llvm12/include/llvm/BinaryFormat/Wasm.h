@@ -48,7 +48,7 @@ struct WasmDylinkInfo {
   uint32_t MemoryAlignment;  // P2 alignment of memory
   uint32_t TableSize;  // Table size in elements
   uint32_t TableAlignment;  // P2 alignment of table
-  std::vector<StringRef> Needed; // Shared library dependencies
+  std::vector<StringRef> Needed; // Shared library dependencies 
 };
 
 struct WasmProducerInfo {
@@ -74,17 +74,17 @@ struct WasmLimits {
   uint64_t Maximum;
 };
 
-struct WasmTableType {
+struct WasmTableType { 
   uint8_t ElemType;
   WasmLimits Limits;
 };
 
-struct WasmTable {
-  uint32_t Index;
-  WasmTableType Type;
-  StringRef SymbolName; // from the "linking" section
-};
-
+struct WasmTable { 
+  uint32_t Index; 
+  WasmTableType Type; 
+  StringRef SymbolName; // from the "linking" section 
+}; 
+ 
 struct WasmInitExpr {
   uint8_t Opcode;
   union {
@@ -127,7 +127,7 @@ struct WasmImport {
   union {
     uint32_t SigIndex;
     WasmGlobalType Global;
-    WasmTableType Table;
+    WasmTableType Table; 
     WasmLimits Memory;
     WasmEventType Event;
   };
@@ -153,11 +153,11 @@ struct WasmFunction {
 
 struct WasmDataSegment {
   uint32_t InitFlags;
-  // Present if InitFlags & WASM_DATA_SEGMENT_HAS_MEMINDEX.
-  uint32_t MemoryIndex;
-  // Present if InitFlags & WASM_DATA_SEGMENT_IS_PASSIVE == 0.
-  WasmInitExpr Offset;
-
+  // Present if InitFlags & WASM_DATA_SEGMENT_HAS_MEMINDEX. 
+  uint32_t MemoryIndex; 
+  // Present if InitFlags & WASM_DATA_SEGMENT_IS_PASSIVE == 0. 
+  WasmInitExpr Offset; 
+ 
   ArrayRef<uint8_t> Content;
   StringRef Name; // from the "segment info" section
   uint32_t Alignment;
@@ -202,22 +202,22 @@ struct WasmSymbolInfo {
   // For symbols to be exported from the final module
   Optional<StringRef> ExportName;
   union {
-    // For function, table, or global symbols, the index in function, table, or
-    // global index space.
+    // For function, table, or global symbols, the index in function, table, or 
+    // global index space. 
     uint32_t ElementIndex;
     // For a data symbols, the address of the data relative to segment.
     WasmDataReference DataRef;
   };
 };
 
-enum class NameType {
-  FUNCTION,
-  GLOBAL,
-  DATA_SEGMENT,
-};
-
-struct WasmDebugName {
-  NameType Type;
+enum class NameType { 
+  FUNCTION, 
+  GLOBAL, 
+  DATA_SEGMENT, 
+}; 
+ 
+struct WasmDebugName { 
+  NameType Type; 
   uint32_t Index;
   StringRef Name;
 };
@@ -273,7 +273,7 @@ enum : unsigned {
   WASM_OPCODE_END = 0x0b,
   WASM_OPCODE_CALL = 0x10,
   WASM_OPCODE_LOCAL_GET = 0x20,
-  WASM_OPCODE_LOCAL_SET = 0x21,
+  WASM_OPCODE_LOCAL_SET = 0x21, 
   WASM_OPCODE_GLOBAL_GET = 0x23,
   WASM_OPCODE_GLOBAL_SET = 0x24,
   WASM_OPCODE_I32_STORE = 0x36,
@@ -310,8 +310,8 @@ enum : unsigned {
 };
 
 enum : unsigned {
-  WASM_DATA_SEGMENT_IS_PASSIVE = 0x01,
-  WASM_DATA_SEGMENT_HAS_MEMINDEX = 0x02,
+  WASM_DATA_SEGMENT_IS_PASSIVE = 0x01, 
+  WASM_DATA_SEGMENT_HAS_MEMINDEX = 0x02, 
 };
 
 // Feature policy prefixes used in the custom "target_features" section
@@ -323,10 +323,10 @@ enum : uint8_t {
 
 // Kind codes used in the custom "name" section
 enum : unsigned {
-  WASM_NAMES_FUNCTION = 1,
-  WASM_NAMES_LOCAL = 2,
-  WASM_NAMES_GLOBAL = 7,
-  WASM_NAMES_DATA_SEGMENT = 9,
+  WASM_NAMES_FUNCTION = 1, 
+  WASM_NAMES_LOCAL = 2, 
+  WASM_NAMES_GLOBAL = 7, 
+  WASM_NAMES_DATA_SEGMENT = 9, 
 };
 
 // Kind codes used in the custom "linking" section
@@ -341,8 +341,8 @@ enum : unsigned {
 enum : unsigned {
   WASM_COMDAT_DATA = 0x0,
   WASM_COMDAT_FUNCTION = 0x1,
-  // GLOBAL, EVENT, and TABLE are in here but LLVM doesn't use them yet.
-  WASM_COMDAT_SECTION = 0x5,
+  // GLOBAL, EVENT, and TABLE are in here but LLVM doesn't use them yet. 
+  WASM_COMDAT_SECTION = 0x5, 
 };
 
 // Kind codes used in the custom "linking" section in the WASM_SYMBOL_TABLE
@@ -352,7 +352,7 @@ enum WasmSymbolType : unsigned {
   WASM_SYMBOL_TYPE_GLOBAL = 0x2,
   WASM_SYMBOL_TYPE_SECTION = 0x3,
   WASM_SYMBOL_TYPE_EVENT = 0x4,
-  WASM_SYMBOL_TYPE_TABLE = 0x5,
+  WASM_SYMBOL_TYPE_TABLE = 0x5, 
 };
 
 // Kinds of event attributes.
@@ -388,7 +388,7 @@ enum class ValType {
   F32 = WASM_TYPE_F32,
   F64 = WASM_TYPE_F64,
   V128 = WASM_TYPE_V128,
-  FUNCREF = WASM_TYPE_FUNCREF,
+  FUNCREF = WASM_TYPE_FUNCREF, 
   EXTERNREF = WASM_TYPE_EXTERNREF,
 };
 

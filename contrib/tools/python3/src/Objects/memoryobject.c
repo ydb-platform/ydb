@@ -1,28 +1,28 @@
-/*
- * Memoryview object implementation
- * --------------------------------
- *
- *   This implementation is a complete rewrite contributed by Stefan Krah in
- *   Python 3.3.  Substantial credit goes to Antoine Pitrou (who had already
- *   fortified and rewritten the previous implementation) and Nick Coghlan
- *   (who came up with the idea of the ManagedBuffer) for analyzing the complex
- *   ownership rules.
- *
- */
+/* 
+ * Memoryview object implementation 
+ * -------------------------------- 
+ * 
+ *   This implementation is a complete rewrite contributed by Stefan Krah in 
+ *   Python 3.3.  Substantial credit goes to Antoine Pitrou (who had already 
+ *   fortified and rewritten the previous implementation) and Nick Coghlan 
+ *   (who came up with the idea of the ManagedBuffer) for analyzing the complex 
+ *   ownership rules. 
+ * 
+ */ 
 
 #include "Python.h"
-#include "pycore_abstract.h"   // _PyIndex_Check()
-#include "pycore_object.h"
+#include "pycore_abstract.h"   // _PyIndex_Check() 
+#include "pycore_object.h" 
 #include "pystrhex.h"
 #include <stddef.h>
 
-/*[clinic input]
-class memoryview "PyMemoryViewObject *" "&PyMemoryView_Type"
-[clinic start generated code]*/
-/*[clinic end generated code: output=da39a3ee5e6b4b0d input=e2e49d2192835219]*/
+/*[clinic input] 
+class memoryview "PyMemoryViewObject *" "&PyMemoryView_Type" 
+[clinic start generated code]*/ 
+/*[clinic end generated code: output=da39a3ee5e6b4b0d input=e2e49d2192835219]*/ 
 
-#include "clinic/memoryobject.c.h"
-
+#include "clinic/memoryobject.c.h" 
+ 
 /****************************************************************************/
 /*                           ManagedBuffer Object                           */
 /****************************************************************************/
@@ -156,10 +156,10 @@ PyTypeObject _PyManagedBuffer_Type = {
     sizeof(_PyManagedBufferObject),
     0,
     (destructor)mbuf_dealloc,                /* tp_dealloc */
-    0,                                       /* tp_vectorcall_offset */
+    0,                                       /* tp_vectorcall_offset */ 
     0,                                       /* tp_getattr */
     0,                                       /* tp_setattr */
-    0,                                       /* tp_as_async */
+    0,                                       /* tp_as_async */ 
     0,                                       /* tp_repr */
     0,                                       /* tp_as_number */
     0,                                       /* tp_as_sequence */
@@ -1057,8 +1057,8 @@ _memory_release(PyMemoryViewObject *self)
         return -1;
     }
 
-    PyErr_SetString(PyExc_SystemError,
-                    "_memory_release(): negative export count");
+    PyErr_SetString(PyExc_SystemError, 
+                    "_memory_release(): negative export count"); 
     return -1;
 }
 
@@ -1415,21 +1415,21 @@ error:
     return NULL;
 }
 
-static PyObject *
-memory_toreadonly(PyMemoryViewObject *self, PyObject *noargs)
-{
-    CHECK_RELEASED(self);
-    /* Even if self is already readonly, we still need to create a new
-     * object for .release() to work correctly.
-     */
-    self = (PyMemoryViewObject *) mbuf_add_view(self->mbuf, &self->view);
-    if (self != NULL) {
-        self->view.readonly = 1;
-    };
-    return (PyObject *) self;
-}
+static PyObject * 
+memory_toreadonly(PyMemoryViewObject *self, PyObject *noargs) 
+{ 
+    CHECK_RELEASED(self); 
+    /* Even if self is already readonly, we still need to create a new 
+     * object for .release() to work correctly. 
+     */ 
+    self = (PyMemoryViewObject *) mbuf_add_view(self->mbuf, &self->view); 
+    if (self != NULL) { 
+        self->view.readonly = 1; 
+    }; 
+    return (PyObject *) self; 
+} 
 
-
+ 
 /**************************************************************************/
 /*                               getbuffer                                */
 /**************************************************************************/
@@ -1691,8 +1691,8 @@ unpack_single(const char *ptr, const char *fmt)
     switch (fmt[0]) {
 
     /* signed integers and fast path for 'B' */
-    case 'B': uc = *((const unsigned char *)ptr); goto convert_uc;
-    case 'b': ld =   *((const signed char *)ptr); goto convert_ld;
+    case 'B': uc = *((const unsigned char *)ptr); goto convert_uc; 
+    case 'b': ld =   *((const signed char *)ptr); goto convert_ld; 
     case 'h': UNPACK_SINGLE(ld, ptr, short); goto convert_ld;
     case 'i': UNPACK_SINGLE(ld, ptr, int); goto convert_ld;
     case 'l': UNPACK_SINGLE(ld, ptr, long); goto convert_ld;
@@ -1972,7 +1972,7 @@ struct_get_unpacker(const char *fmt, Py_ssize_t itemsize)
     if (format == NULL)
         goto error;
 
-    structobj = PyObject_CallOneArg(Struct, format);
+    structobj = PyObject_CallOneArg(Struct, format); 
     if (structobj == NULL)
         goto error;
 
@@ -2011,7 +2011,7 @@ struct_unpack_single(const char *ptr, struct unpacker *x)
     PyObject *v;
 
     memcpy(x->item, ptr, x->itemsize);
-    v = PyObject_CallOneArg(x->unpack_from, x->mview);
+    v = PyObject_CallOneArg(x->unpack_from, x->mview); 
     if (v == NULL)
         return NULL;
 
@@ -2136,39 +2136,39 @@ memory_tolist(PyMemoryViewObject *mv, PyObject *noargs)
 }
 
 static PyObject *
-memory_tobytes(PyMemoryViewObject *self, PyObject *args, PyObject *kwds)
+memory_tobytes(PyMemoryViewObject *self, PyObject *args, PyObject *kwds) 
 {
-    static char *kwlist[] = {"order", NULL};
+    static char *kwlist[] = {"order", NULL}; 
     Py_buffer *src = VIEW_ADDR(self);
-    char *order = NULL;
-    char ord = 'C';
-    PyObject *bytes;
+    char *order = NULL; 
+    char ord = 'C'; 
+    PyObject *bytes; 
 
     CHECK_RELEASED(self);
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|z", kwlist, &order)) {
-        return NULL;
+    if (!PyArg_ParseTupleAndKeywords(args, kwds, "|z", kwlist, &order)) { 
+        return NULL; 
     }
 
-    if (order) {
-        if (strcmp(order, "F") == 0) {
-            ord = 'F';
-        }
-        else if (strcmp(order, "A") == 0) {
-            ord = 'A';
-        }
-        else if (strcmp(order, "C") != 0) {
-            PyErr_SetString(PyExc_ValueError,
-                "order must be 'C', 'F' or 'A'");
-            return NULL;
-        }
-    }
-
+    if (order) { 
+        if (strcmp(order, "F") == 0) { 
+            ord = 'F'; 
+        } 
+        else if (strcmp(order, "A") == 0) { 
+            ord = 'A'; 
+        } 
+        else if (strcmp(order, "C") != 0) { 
+            PyErr_SetString(PyExc_ValueError, 
+                "order must be 'C', 'F' or 'A'"); 
+            return NULL; 
+        } 
+    } 
+ 
     bytes = PyBytes_FromStringAndSize(NULL, src->len);
     if (bytes == NULL)
         return NULL;
 
-    if (PyBuffer_ToContiguous(PyBytes_AS_STRING(bytes), src, src->len, ord) < 0) {
+    if (PyBuffer_ToContiguous(PyBytes_AS_STRING(bytes), src, src->len, ord) < 0) { 
         Py_DECREF(bytes);
         return NULL;
     }
@@ -2176,33 +2176,33 @@ memory_tobytes(PyMemoryViewObject *self, PyObject *args, PyObject *kwds)
     return bytes;
 }
 
-/*[clinic input]
-memoryview.hex
-
-    sep: object = NULL
-        An optional single character or byte to separate hex bytes.
-    bytes_per_sep: int = 1
-        How many bytes between separators.  Positive values count from the
-        right, negative values count from the left.
-
-Return the data in the buffer as a str of hexadecimal numbers.
-
-Example:
->>> value = memoryview(b'\xb9\x01\xef')
->>> value.hex()
-'b901ef'
->>> value.hex(':')
-'b9:01:ef'
->>> value.hex(':', 2)
-'b9:01ef'
->>> value.hex(':', -2)
-'b901:ef'
-[clinic start generated code]*/
-
+/*[clinic input] 
+memoryview.hex 
+ 
+    sep: object = NULL 
+        An optional single character or byte to separate hex bytes. 
+    bytes_per_sep: int = 1 
+        How many bytes between separators.  Positive values count from the 
+        right, negative values count from the left. 
+ 
+Return the data in the buffer as a str of hexadecimal numbers. 
+ 
+Example: 
+>>> value = memoryview(b'\xb9\x01\xef') 
+>>> value.hex() 
+'b901ef' 
+>>> value.hex(':') 
+'b9:01:ef' 
+>>> value.hex(':', 2) 
+'b9:01ef' 
+>>> value.hex(':', -2) 
+'b901:ef' 
+[clinic start generated code]*/ 
+ 
 static PyObject *
-memoryview_hex_impl(PyMemoryViewObject *self, PyObject *sep,
-                    int bytes_per_sep)
-/*[clinic end generated code: output=430ca760f94f3ca7 input=539f6a3a5fb56946]*/
+memoryview_hex_impl(PyMemoryViewObject *self, PyObject *sep, 
+                    int bytes_per_sep) 
+/*[clinic end generated code: output=430ca760f94f3ca7 input=539f6a3a5fb56946]*/ 
 {
     Py_buffer *src = VIEW_ADDR(self);
     PyObject *bytes;
@@ -2211,21 +2211,21 @@ memoryview_hex_impl(PyMemoryViewObject *self, PyObject *sep,
     CHECK_RELEASED(self);
 
     if (MV_C_CONTIGUOUS(self->flags)) {
-        return _Py_strhex_with_sep(src->buf, src->len, sep, bytes_per_sep);
+        return _Py_strhex_with_sep(src->buf, src->len, sep, bytes_per_sep); 
     }
 
-    bytes = PyBytes_FromStringAndSize(NULL, src->len);
+    bytes = PyBytes_FromStringAndSize(NULL, src->len); 
     if (bytes == NULL)
         return NULL;
 
-    if (PyBuffer_ToContiguous(PyBytes_AS_STRING(bytes), src, src->len, 'C') < 0) {
-        Py_DECREF(bytes);
-        return NULL;
-    }
-
-    ret = _Py_strhex_with_sep(
-            PyBytes_AS_STRING(bytes), PyBytes_GET_SIZE(bytes),
-            sep, bytes_per_sep);
+    if (PyBuffer_ToContiguous(PyBytes_AS_STRING(bytes), src, src->len, 'C') < 0) { 
+        Py_DECREF(bytes); 
+        return NULL; 
+    } 
+ 
+    ret = _Py_strhex_with_sep( 
+            PyBytes_AS_STRING(bytes), PyBytes_GET_SIZE(bytes), 
+            sep, bytes_per_sep); 
     Py_DECREF(bytes);
 
     return ret;
@@ -2420,9 +2420,9 @@ is_multiindex(PyObject *key)
     size = PyTuple_GET_SIZE(key);
     for (i = 0; i < size; i++) {
         PyObject *x = PyTuple_GET_ITEM(key, i);
-        if (!_PyIndex_Check(x)) {
+        if (!_PyIndex_Check(x)) { 
             return 0;
-        }
+        } 
     }
     return 1;
 }
@@ -2459,7 +2459,7 @@ memory_subscript(PyMemoryViewObject *self, PyObject *key)
         }
     }
 
-    if (_PyIndex_Check(key)) {
+    if (_PyIndex_Check(key)) { 
         Py_ssize_t index;
         index = PyNumber_AsSsize_t(key, PyExc_IndexError);
         if (index == -1 && PyErr_Occurred())
@@ -2530,7 +2530,7 @@ memory_ass_sub(PyMemoryViewObject *self, PyObject *key, PyObject *value)
         }
     }
 
-    if (_PyIndex_Check(key)) {
+    if (_PyIndex_Check(key)) { 
         Py_ssize_t index;
         if (1 < view->ndim) {
             PyErr_SetString(PyExc_NotImplementedError,
@@ -2694,8 +2694,8 @@ unpack_cmp(const char *p, const char *q, char fmt,
     switch (fmt) {
 
     /* signed integers and fast path for 'B' */
-    case 'B': return *((const unsigned char *)p) == *((const unsigned char *)q);
-    case 'b': return *((const signed char *)p) == *((const signed char *)q);
+    case 'B': return *((const unsigned char *)p) == *((const unsigned char *)q); 
+    case 'b': return *((const signed char *)p) == *((const signed char *)q); 
     case 'h': CMP_SINGLE(p, q, short); return equal;
     case 'i': CMP_SINGLE(p, q, int); return equal;
     case 'l': CMP_SINGLE(p, q, long); return equal;
@@ -3127,13 +3127,13 @@ PyDoc_STRVAR(memory_release_doc,
 \n\
 Release the underlying buffer exposed by the memoryview object.");
 PyDoc_STRVAR(memory_tobytes_doc,
-"tobytes($self, /, order=None)\n--\n\
+"tobytes($self, /, order=None)\n--\n\ 
 \n\
-Return the data in the buffer as a byte string. Order can be {'C', 'F', 'A'}.\n\
-When order is 'C' or 'F', the data of the original array is converted to C or\n\
-Fortran order. For contiguous views, 'A' returns an exact copy of the physical\n\
-memory. In particular, in-memory Fortran order is preserved. For non-contiguous\n\
-views, the data is converted to C first. order=None is the same as order='C'.");
+Return the data in the buffer as a byte string. Order can be {'C', 'F', 'A'}.\n\ 
+When order is 'C' or 'F', the data of the original array is converted to C or\n\ 
+Fortran order. For contiguous views, 'A' returns an exact copy of the physical\n\ 
+memory. In particular, in-memory Fortran order is preserved. For non-contiguous\n\ 
+views, the data is converted to C first. order=None is the same as order='C'."); 
 PyDoc_STRVAR(memory_tolist_doc,
 "tolist($self, /)\n--\n\
 \n\
@@ -3142,18 +3142,18 @@ PyDoc_STRVAR(memory_cast_doc,
 "cast($self, /, format, *, shape)\n--\n\
 \n\
 Cast a memoryview to a new format or shape.");
-PyDoc_STRVAR(memory_toreadonly_doc,
-"toreadonly($self, /)\n--\n\
-\n\
-Return a readonly version of the memoryview.");
+PyDoc_STRVAR(memory_toreadonly_doc, 
+"toreadonly($self, /)\n--\n\ 
+\n\ 
+Return a readonly version of the memoryview."); 
 
 static PyMethodDef memory_methods[] = {
     {"release",     (PyCFunction)memory_release, METH_NOARGS, memory_release_doc},
-    {"tobytes",     (PyCFunction)(void(*)(void))memory_tobytes, METH_VARARGS|METH_KEYWORDS, memory_tobytes_doc},
-    MEMORYVIEW_HEX_METHODDEF
+    {"tobytes",     (PyCFunction)(void(*)(void))memory_tobytes, METH_VARARGS|METH_KEYWORDS, memory_tobytes_doc}, 
+    MEMORYVIEW_HEX_METHODDEF 
     {"tolist",      (PyCFunction)memory_tolist, METH_NOARGS, memory_tolist_doc},
-    {"cast",        (PyCFunction)(void(*)(void))memory_cast, METH_VARARGS|METH_KEYWORDS, memory_cast_doc},
-    {"toreadonly",  (PyCFunction)memory_toreadonly, METH_NOARGS, memory_toreadonly_doc},
+    {"cast",        (PyCFunction)(void(*)(void))memory_cast, METH_VARARGS|METH_KEYWORDS, memory_cast_doc}, 
+    {"toreadonly",  (PyCFunction)memory_toreadonly, METH_NOARGS, memory_toreadonly_doc}, 
     {"__enter__",   memory_enter, METH_NOARGS, NULL},
     {"__exit__",    memory_exit, METH_VARARGS, NULL},
     {NULL,          NULL}
@@ -3166,10 +3166,10 @@ PyTypeObject PyMemoryView_Type = {
     offsetof(PyMemoryViewObject, ob_array),   /* tp_basicsize */
     sizeof(Py_ssize_t),                       /* tp_itemsize */
     (destructor)memory_dealloc,               /* tp_dealloc */
-    0,                                        /* tp_vectorcall_offset */
+    0,                                        /* tp_vectorcall_offset */ 
     0,                                        /* tp_getattr */
     0,                                        /* tp_setattr */
-    0,                                        /* tp_as_async */
+    0,                                        /* tp_as_async */ 
     (reprfunc)memory_repr,                    /* tp_repr */
     0,                                        /* tp_as_number */
     &memory_as_sequence,                      /* tp_as_sequence */

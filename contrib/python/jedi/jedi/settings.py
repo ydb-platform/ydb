@@ -93,7 +93,7 @@ else:
                                     'jedi')
 cache_directory = os.path.expanduser(_cache_directory)
 """
-The path where the cache is stored.
+The path where the cache is stored. 
 
 On Linux, this defaults to ``~/.cache/jedi/``, on OS X to
 ``~/Library/Caches/Jedi/`` and on Windows to ``%APPDATA%\\Jedi\\Jedi\\``.
@@ -144,8 +144,8 @@ Check for `isinstance` and other information to infer a type.
 """
 
 auto_import_modules = [
-    'hashlib',  # hashlib is mostly using setattr, which jedi doesn't understand
-    'gi',  # This third-party repository (GTK stuff) doesn't really work with jedi
+    'hashlib',  # hashlib is mostly using setattr, which jedi doesn't understand 
+    'gi',  # This third-party repository (GTK stuff) doesn't really work with jedi 
 ]
 """
 Modules that are not analyzed but imported, although they contain Python code.

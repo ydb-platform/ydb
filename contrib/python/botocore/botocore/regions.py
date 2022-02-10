@@ -115,19 +115,19 @@ class EndpointResolver(BaseEndpointResolver):
                     result.append(endpoint_name)
         return result
 
-    def construct_endpoint(self, service_name, region_name=None, partition_name=None):
-        if partition_name is not None:
-            valid_partition = None
-            for partition in self._endpoint_data['partitions']:
-                if partition['partition'] == partition_name:
-                    valid_partition = partition
-
-            if valid_partition is not None:
-                result = self._endpoint_for_partition(valid_partition, service_name,
-                             region_name, True)
-                return result
-            return None
-
+    def construct_endpoint(self, service_name, region_name=None, partition_name=None): 
+        if partition_name is not None: 
+            valid_partition = None 
+            for partition in self._endpoint_data['partitions']: 
+                if partition['partition'] == partition_name: 
+                    valid_partition = partition 
+ 
+            if valid_partition is not None: 
+                result = self._endpoint_for_partition(valid_partition, service_name, 
+                             region_name, True) 
+                return result 
+            return None 
+ 
         # Iterate over each partition until a match is found.
         for partition in self._endpoint_data['partitions']:
             result = self._endpoint_for_partition(
@@ -135,8 +135,8 @@ class EndpointResolver(BaseEndpointResolver):
             if result:
                 return result
 
-    def _endpoint_for_partition(self, partition, service_name, region_name,
-            force_partition=False):
+    def _endpoint_for_partition(self, partition, service_name, region_name, 
+            force_partition=False): 
         # Get the service from the partition, or an empty template.
         service_data = partition['services'].get(
             service_name, DEFAULT_SERVICE_DATA)
@@ -151,7 +151,7 @@ class EndpointResolver(BaseEndpointResolver):
             return self._resolve(
                 partition, service_name, service_data, region_name)
         # Check to see if the endpoint provided is valid for the partition.
-        if self._region_match(partition, region_name) or force_partition:
+        if self._region_match(partition, region_name) or force_partition: 
             # Use the partition endpoint if set and not regionalized.
             partition_endpoint = service_data.get('partitionEndpoint')
             is_regionalized = service_data.get('isRegionalized', True)

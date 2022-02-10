@@ -6,6 +6,6 @@ OWNER(orivej g:python-contrib)
 
 PEERDIR(
     library/python/certifi
-)
-
+) 
+ 
 END()

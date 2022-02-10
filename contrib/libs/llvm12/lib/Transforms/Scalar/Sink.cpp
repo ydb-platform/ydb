@@ -99,7 +99,7 @@ static bool IsAcceptableTarget(Instruction *Inst, BasicBlock *SuccToSinkTo,
       return false;
   }
 
-  return true;
+  return true; 
 }
 
 /// SinkInstruction - Determine whether it is safe to sink the specified machine
@@ -130,37 +130,37 @@ static bool SinkInstruction(Instruction *Inst,
   // decide.
   BasicBlock *SuccToSinkTo = nullptr;
 
-  // Find the nearest common dominator of all users as the candidate.
-  BasicBlock *BB = Inst->getParent();
-  for (Use &U : Inst->uses()) {
-    Instruction *UseInst = cast<Instruction>(U.getUser());
-    BasicBlock *UseBlock = UseInst->getParent();
-    // Don't worry about dead users.
-    if (!DT.isReachableFromEntry(UseBlock))
-      continue;
-    if (PHINode *PN = dyn_cast<PHINode>(UseInst)) {
-      // PHI nodes use the operand in the predecessor block, not the block with
-      // the PHI.
-      unsigned Num = PHINode::getIncomingValueNumForOperand(U.getOperandNo());
-      UseBlock = PN->getIncomingBlock(Num);
-    }
-    if (SuccToSinkTo)
-      SuccToSinkTo = DT.findNearestCommonDominator(SuccToSinkTo, UseBlock);
-    else
-      SuccToSinkTo = UseBlock;
-    // The current basic block needs to dominate the candidate.
-    if (!DT.dominates(BB, SuccToSinkTo))
-      return false;
+  // Find the nearest common dominator of all users as the candidate. 
+  BasicBlock *BB = Inst->getParent(); 
+  for (Use &U : Inst->uses()) { 
+    Instruction *UseInst = cast<Instruction>(U.getUser()); 
+    BasicBlock *UseBlock = UseInst->getParent(); 
+    // Don't worry about dead users. 
+    if (!DT.isReachableFromEntry(UseBlock)) 
+      continue; 
+    if (PHINode *PN = dyn_cast<PHINode>(UseInst)) { 
+      // PHI nodes use the operand in the predecessor block, not the block with 
+      // the PHI. 
+      unsigned Num = PHINode::getIncomingValueNumForOperand(U.getOperandNo()); 
+      UseBlock = PN->getIncomingBlock(Num); 
+    } 
+    if (SuccToSinkTo) 
+      SuccToSinkTo = DT.findNearestCommonDominator(SuccToSinkTo, UseBlock); 
+    else 
+      SuccToSinkTo = UseBlock; 
+    // The current basic block needs to dominate the candidate. 
+    if (!DT.dominates(BB, SuccToSinkTo)) 
+      return false; 
   }
 
-  if (SuccToSinkTo) {
-    // The nearest common dominator may be in a parent loop of BB, which may not
-    // be beneficial. Find an ancestor.
-    while (SuccToSinkTo != BB &&
-           !IsAcceptableTarget(Inst, SuccToSinkTo, DT, LI))
-      SuccToSinkTo = DT.getNode(SuccToSinkTo)->getIDom()->getBlock();
-    if (SuccToSinkTo == BB)
-      SuccToSinkTo = nullptr;
+  if (SuccToSinkTo) { 
+    // The nearest common dominator may be in a parent loop of BB, which may not 
+    // be beneficial. Find an ancestor. 
+    while (SuccToSinkTo != BB && 
+           !IsAcceptableTarget(Inst, SuccToSinkTo, DT, LI)) 
+      SuccToSinkTo = DT.getNode(SuccToSinkTo)->getIDom()->getBlock(); 
+    if (SuccToSinkTo == BB) 
+      SuccToSinkTo = nullptr; 
   }
 
   // If we couldn't find a block to sink to, ignore this instruction.

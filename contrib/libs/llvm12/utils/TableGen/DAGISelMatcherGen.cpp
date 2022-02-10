@@ -282,9 +282,9 @@ void MatcherGen::EmitLeafMatchCode(const TreePatternNode *N) {
     // check to ensure that this gets folded into the normal top-level
     // OpcodeSwitch.
     if (N == Pattern.getSrcPattern()) {
-      MVT VT = N->getSimpleType(0);
-      StringRef Name = VT.isScalableVector() ? "splat_vector" : "build_vector";
-      const SDNodeInfo &NI = CGP.getSDNodeInfo(CGP.getSDNodeNamed(Name));
+      MVT VT = N->getSimpleType(0); 
+      StringRef Name = VT.isScalableVector() ? "splat_vector" : "build_vector"; 
+      const SDNodeInfo &NI = CGP.getSDNodeInfo(CGP.getSDNodeNamed(Name)); 
       AddMatcher(new CheckOpcodeMatcher(NI));
     }
     return AddMatcher(new CheckImmAllOnesVMatcher());
@@ -294,9 +294,9 @@ void MatcherGen::EmitLeafMatchCode(const TreePatternNode *N) {
     // check to ensure that this gets folded into the normal top-level
     // OpcodeSwitch.
     if (N == Pattern.getSrcPattern()) {
-      MVT VT = N->getSimpleType(0);
-      StringRef Name = VT.isScalableVector() ? "splat_vector" : "build_vector";
-      const SDNodeInfo &NI = CGP.getSDNodeInfo(CGP.getSDNodeNamed(Name));
+      MVT VT = N->getSimpleType(0); 
+      StringRef Name = VT.isScalableVector() ? "splat_vector" : "build_vector"; 
+      const SDNodeInfo &NI = CGP.getSDNodeInfo(CGP.getSDNodeNamed(Name)); 
       AddMatcher(new CheckOpcodeMatcher(NI));
     }
     return AddMatcher(new CheckImmAllZerosVMatcher());
@@ -748,7 +748,7 @@ void MatcherGen::EmitResultLeafAsOperand(const TreePatternNode *N,
     }
   }
 
-  errs() << "unhandled leaf node:\n";
+  errs() << "unhandled leaf node:\n"; 
   N->dump();
 }
 

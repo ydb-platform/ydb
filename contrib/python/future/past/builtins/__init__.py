@@ -59,9 +59,9 @@ from past import utils
 if utils.PY3:
     # We only import names that shadow the builtins on Py3. No other namespace
     # pollution on Py3.
-
+ 
     # Only shadow builtins on Py3; no new names
-    __all__ = ['filter', 'map', 'range', 'reduce', 'zip',
+    __all__ = ['filter', 'map', 'range', 'reduce', 'zip', 
                'basestring', 'dict', 'str', 'long', 'unicode',
                'apply', 'chr', 'cmp', 'execfile', 'intern', 'raw_input',
                'reload', 'unichr', 'xrange'

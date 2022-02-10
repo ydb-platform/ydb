@@ -4,7 +4,7 @@
 
     Multi-Dialect Lexer for Modula-2.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -227,8 +227,8 @@ class Modula2Lexer(RegexLexer):
             (r'[0-9A-F]+H', Number.Hex),
         ],
         'string_literals': [
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double), 
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single), 
         ],
         'digraph_operators': [
             # Dot Product Operator
@@ -1546,34 +1546,34 @@ class Modula2Lexer(RegexLexer):
                 # substitute lexemes when in Algol mode
                 if self.algol_publication_mode:
                     if value == '#':
-                        value = '≠'
+                        value = '≠' 
                     elif value == '<=':
-                        value = '≤'
+                        value = '≤' 
                     elif value == '>=':
-                        value = '≥'
+                        value = '≥' 
                     elif value == '==':
-                        value = '≡'
+                        value = '≡' 
                     elif value == '*.':
-                        value = '•'
+                        value = '•' 
 
             # return result
             yield index, token, value
-
-    def analyse_text(text):
-        """It's Pascal-like, but does not use FUNCTION -- uses PROCEDURE
-        instead."""
-
-        # Check if this looks like Pascal, if not, bail out early
-        if not ('(*' in text and '*)' in text and ':=' in text):
-            return
-
-        result = 0
-        # Procedure is in Modula2
-        if re.search(r'\bPROCEDURE\b', text):
-            result += 0.6
-
-        # FUNCTION is only valid in Pascal, but not in Modula2
-        if re.search(r'\bFUNCTION\b', text):
-            result = 0.0
-
-        return result
+ 
+    def analyse_text(text): 
+        """It's Pascal-like, but does not use FUNCTION -- uses PROCEDURE 
+        instead.""" 
+ 
+        # Check if this looks like Pascal, if not, bail out early 
+        if not ('(*' in text and '*)' in text and ':=' in text): 
+            return 
+ 
+        result = 0 
+        # Procedure is in Modula2 
+        if re.search(r'\bPROCEDURE\b', text): 
+            result += 0.6 
+ 
+        # FUNCTION is only valid in Pascal, but not in Modula2 
+        if re.search(r'\bFUNCTION\b', text): 
+            result = 0.0 
+ 
+        return result 

@@ -18,7 +18,7 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCParser/MCAsmLexer.h"
-#include "llvm/Support/Compiler.h"
+#include "llvm/Support/Compiler.h" 
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/SaveAndRestore.h"
 #include <cassert>
@@ -64,12 +64,12 @@ int AsmLexer::getNextChar() {
   return (unsigned char)*CurPtr++;
 }
 
-int AsmLexer::peekNextChar() {
-  if (CurPtr == CurBuf.end())
-    return EOF;
-  return (unsigned char)*CurPtr;
-}
-
+int AsmLexer::peekNextChar() { 
+  if (CurPtr == CurBuf.end()) 
+    return EOF; 
+  return (unsigned char)*CurPtr; 
+} 
+ 
 /// The leading integral digit sequence and dot should have already been
 /// consumed, some or all of the fractional digit sequence *can* have been
 /// consumed.
@@ -278,34 +278,34 @@ static unsigned doHexLookAhead(const char *&CurPtr, unsigned DefaultRadix,
   return DefaultRadix;
 }
 
-static const char *findLastDigit(const char *CurPtr, unsigned DefaultRadix) {
-  while (hexDigitValue(*CurPtr) < DefaultRadix) {
-    ++CurPtr;
-  }
-  return CurPtr;
-}
-
-static AsmToken intToken(StringRef Ref, APInt &Value) {
+static const char *findLastDigit(const char *CurPtr, unsigned DefaultRadix) { 
+  while (hexDigitValue(*CurPtr) < DefaultRadix) { 
+    ++CurPtr; 
+  } 
+  return CurPtr; 
+} 
+ 
+static AsmToken intToken(StringRef Ref, APInt &Value) { 
   if (Value.isIntN(64))
     return AsmToken(AsmToken::Integer, Ref, Value);
   return AsmToken(AsmToken::BigNum, Ref, Value);
 }
 
-static std::string radixName(unsigned Radix) {
-  switch (Radix) {
-  case 2:
-    return "binary";
-  case 8:
-    return "octal";
-  case 10:
-    return "decimal";
-  case 16:
-    return "hexadecimal";
-  default:
-    return "base-" + std::to_string(Radix);
-  }
-}
-
+static std::string radixName(unsigned Radix) { 
+  switch (Radix) { 
+  case 2: 
+    return "binary"; 
+  case 8: 
+    return "octal"; 
+  case 10: 
+    return "decimal"; 
+  case 16: 
+    return "hexadecimal"; 
+  default: 
+    return "base-" + std::to_string(Radix); 
+  } 
+} 
+ 
 /// LexDigit: First character is [0-9].
 ///   Local Label: [0-9][:]
 ///   Forward/Backward Label: [0-9][fb]
@@ -314,113 +314,113 @@ static std::string radixName(unsigned Radix) {
 ///   Hex integer: 0x[0-9a-fA-F]+ or [0x]?[0-9][0-9a-fA-F]*[hH]
 ///   Decimal integer: [1-9][0-9]*
 AsmToken AsmLexer::LexDigit() {
-  // MASM-flavor binary integer: [01]+[yY] (if DefaultRadix < 16, [bByY])
-  // MASM-flavor octal integer: [0-7]+[oOqQ]
-  // MASM-flavor decimal integer: [0-9]+[tT] (if DefaultRadix < 16, [dDtT])
+  // MASM-flavor binary integer: [01]+[yY] (if DefaultRadix < 16, [bByY]) 
+  // MASM-flavor octal integer: [0-7]+[oOqQ] 
+  // MASM-flavor decimal integer: [0-9]+[tT] (if DefaultRadix < 16, [dDtT]) 
   // MASM-flavor hexadecimal integer: [0-9][0-9a-fA-F]*[hH]
   if (LexMasmIntegers && isdigit(CurPtr[-1])) {
-    const char *FirstNonBinary =
-        (CurPtr[-1] != '0' && CurPtr[-1] != '1') ? CurPtr - 1 : nullptr;
-    const char *FirstNonDecimal =
-        (CurPtr[-1] < '0' || CurPtr[-1] > '9') ? CurPtr - 1 : nullptr;
+    const char *FirstNonBinary = 
+        (CurPtr[-1] != '0' && CurPtr[-1] != '1') ? CurPtr - 1 : nullptr; 
+    const char *FirstNonDecimal = 
+        (CurPtr[-1] < '0' || CurPtr[-1] > '9') ? CurPtr - 1 : nullptr; 
     const char *OldCurPtr = CurPtr;
     while (isHexDigit(*CurPtr)) {
-      switch (*CurPtr) {
-      default:
-        if (!FirstNonDecimal) {
-          FirstNonDecimal = CurPtr;
-        }
-        LLVM_FALLTHROUGH;
-      case '9':
-      case '8':
-      case '7':
-      case '6':
-      case '5':
-      case '4':
-      case '3':
-      case '2':
-        if (!FirstNonBinary) {
-          FirstNonBinary = CurPtr;
-        }
-        break;
-      case '1':
-      case '0':
-        break;
-      }
+      switch (*CurPtr) { 
+      default: 
+        if (!FirstNonDecimal) { 
+          FirstNonDecimal = CurPtr; 
+        } 
+        LLVM_FALLTHROUGH; 
+      case '9': 
+      case '8': 
+      case '7': 
+      case '6': 
+      case '5': 
+      case '4': 
+      case '3': 
+      case '2': 
+        if (!FirstNonBinary) { 
+          FirstNonBinary = CurPtr; 
+        } 
+        break; 
+      case '1': 
+      case '0': 
+        break; 
+      } 
       ++CurPtr;
     }
-    if (*CurPtr == '.') {
-      // MASM float literals (other than hex floats) always contain a ".", and
-      // are always written in decimal.
-      ++CurPtr;
-      return LexFloatLiteral();
-    }
+    if (*CurPtr == '.') { 
+      // MASM float literals (other than hex floats) always contain a ".", and 
+      // are always written in decimal. 
+      ++CurPtr; 
+      return LexFloatLiteral(); 
+    } 
 
-    if (LexMasmHexFloats && (*CurPtr == 'r' || *CurPtr == 'R')) {
-      ++CurPtr;
-      return AsmToken(AsmToken::Real, StringRef(TokStart, CurPtr - TokStart));
-    }
-
+    if (LexMasmHexFloats && (*CurPtr == 'r' || *CurPtr == 'R')) { 
+      ++CurPtr; 
+      return AsmToken(AsmToken::Real, StringRef(TokStart, CurPtr - TokStart)); 
+    } 
+ 
     unsigned Radix = 0;
     if (*CurPtr == 'h' || *CurPtr == 'H') {
       // hexadecimal number
       ++CurPtr;
       Radix = 16;
-    } else if (*CurPtr == 't' || *CurPtr == 'T') {
-      // decimal number
-      ++CurPtr;
-      Radix = 10;
-    } else if (*CurPtr == 'o' || *CurPtr == 'O' || *CurPtr == 'q' ||
-               *CurPtr == 'Q') {
-      // octal number
-      ++CurPtr;
-      Radix = 8;
-    } else if (*CurPtr == 'y' || *CurPtr == 'Y') {
-      // binary number
-      ++CurPtr;
-      Radix = 2;
-    } else if (FirstNonDecimal && FirstNonDecimal + 1 == CurPtr &&
-               DefaultRadix < 14 &&
-               (*FirstNonDecimal == 'd' || *FirstNonDecimal == 'D')) {
-      Radix = 10;
+    } else if (*CurPtr == 't' || *CurPtr == 'T') { 
+      // decimal number 
+      ++CurPtr; 
+      Radix = 10; 
+    } else if (*CurPtr == 'o' || *CurPtr == 'O' || *CurPtr == 'q' || 
+               *CurPtr == 'Q') { 
+      // octal number 
+      ++CurPtr; 
+      Radix = 8; 
+    } else if (*CurPtr == 'y' || *CurPtr == 'Y') { 
+      // binary number 
+      ++CurPtr; 
+      Radix = 2; 
+    } else if (FirstNonDecimal && FirstNonDecimal + 1 == CurPtr && 
+               DefaultRadix < 14 && 
+               (*FirstNonDecimal == 'd' || *FirstNonDecimal == 'D')) { 
+      Radix = 10; 
     } else if (FirstNonBinary && FirstNonBinary + 1 == CurPtr &&
-               DefaultRadix < 12 &&
-               (*FirstNonBinary == 'b' || *FirstNonBinary == 'B')) {
+               DefaultRadix < 12 && 
+               (*FirstNonBinary == 'b' || *FirstNonBinary == 'B')) { 
       Radix = 2;
-    }
+    } 
 
-    if (Radix) {
+    if (Radix) { 
       StringRef Result(TokStart, CurPtr - TokStart);
       APInt Value(128, 0, true);
 
       if (Result.drop_back().getAsInteger(Radix, Value))
-        return ReturnError(TokStart, "invalid " + radixName(Radix) + " number");
+        return ReturnError(TokStart, "invalid " + radixName(Radix) + " number"); 
 
       // MSVC accepts and ignores type suffices on integer literals.
       SkipIgnoredIntegerSuffix(CurPtr);
 
       return intToken(Result, Value);
-    }
+    } 
 
-    // default-radix integers, or floating point numbers, fall through
+    // default-radix integers, or floating point numbers, fall through 
     CurPtr = OldCurPtr;
   }
 
-  // MASM default-radix integers: [0-9a-fA-F]+
-  // (All other integer literals have a radix specifier.)
-  if (LexMasmIntegers && UseMasmDefaultRadix) {
-    CurPtr = findLastDigit(CurPtr, 16);
-    StringRef Result(TokStart, CurPtr - TokStart);
-
-    APInt Value(128, 0, true);
-    if (Result.getAsInteger(DefaultRadix, Value)) {
-      return ReturnError(TokStart,
-                         "invalid " + radixName(DefaultRadix) + " number");
-    }
-
-    return intToken(Result, Value);
-  }
-
+  // MASM default-radix integers: [0-9a-fA-F]+ 
+  // (All other integer literals have a radix specifier.) 
+  if (LexMasmIntegers && UseMasmDefaultRadix) { 
+    CurPtr = findLastDigit(CurPtr, 16); 
+    StringRef Result(TokStart, CurPtr - TokStart); 
+ 
+    APInt Value(128, 0, true); 
+    if (Result.getAsInteger(DefaultRadix, Value)) { 
+      return ReturnError(TokStart, 
+                         "invalid " + radixName(DefaultRadix) + " number"); 
+    } 
+ 
+    return intToken(Result, Value); 
+  } 
+ 
   // Decimal integer: [1-9][0-9]*
   if (CurPtr[-1] != '0' || CurPtr[0] == '.') {
     unsigned Radix = doHexLookAhead(CurPtr, 10, LexMasmIntegers);
@@ -435,9 +435,9 @@ AsmToken AsmLexer::LexDigit() {
     StringRef Result(TokStart, CurPtr - TokStart);
 
     APInt Value(128, 0, true);
-    if (Result.getAsInteger(Radix, Value)) {
-      return ReturnError(TokStart, "invalid " + radixName(Radix) + " number");
-    }
+    if (Result.getAsInteger(Radix, Value)) { 
+      return ReturnError(TokStart, "invalid " + radixName(Radix) + " number"); 
+    } 
 
     // The darwin/x86 (and x86-64) assembler accepts and ignores type
     // suffices on integer literals.
@@ -510,7 +510,7 @@ AsmToken AsmLexer::LexDigit() {
   unsigned Radix = doHexLookAhead(CurPtr, 8, LexMasmIntegers);
   StringRef Result(TokStart, CurPtr - TokStart);
   if (Result.getAsInteger(Radix, Value))
-    return ReturnError(TokStart, "invalid " + radixName(Radix) + " number");
+    return ReturnError(TokStart, "invalid " + radixName(Radix) + " number"); 
 
   // Consume the [hH].
   if (Radix == 16)
@@ -527,24 +527,24 @@ AsmToken AsmLexer::LexDigit() {
 AsmToken AsmLexer::LexSingleQuote() {
   int CurChar = getNextChar();
 
-  if (LexMasmStrings) {
-    while (CurChar != EOF) {
-      if (CurChar != '\'') {
-        CurChar = getNextChar();
-      } else if (peekNextChar() == '\'') {
-        // In MASM single-quote strings, doubled single-quotes mean an escaped
-        // single quote, so should be lexed in.
-        getNextChar();
-        CurChar = getNextChar();
-      } else {
-        break;
-      }
-    }
-    if (CurChar == EOF)
-      return ReturnError(TokStart, "unterminated string constant");
-    return AsmToken(AsmToken::String, StringRef(TokStart, CurPtr - TokStart));
-  }
-
+  if (LexMasmStrings) { 
+    while (CurChar != EOF) { 
+      if (CurChar != '\'') { 
+        CurChar = getNextChar(); 
+      } else if (peekNextChar() == '\'') { 
+        // In MASM single-quote strings, doubled single-quotes mean an escaped 
+        // single quote, so should be lexed in. 
+        getNextChar(); 
+        CurChar = getNextChar(); 
+      } else { 
+        break; 
+      } 
+    } 
+    if (CurChar == EOF) 
+      return ReturnError(TokStart, "unterminated string constant"); 
+    return AsmToken(AsmToken::String, StringRef(TokStart, CurPtr - TokStart)); 
+  } 
+ 
   if (CurChar == '\\')
     CurChar = getNextChar();
 
@@ -579,24 +579,24 @@ AsmToken AsmLexer::LexSingleQuote() {
 /// LexQuote: String: "..."
 AsmToken AsmLexer::LexQuote() {
   int CurChar = getNextChar();
-  if (LexMasmStrings) {
-    while (CurChar != EOF) {
-      if (CurChar != '"') {
-        CurChar = getNextChar();
-      } else if (peekNextChar() == '"') {
-        // In MASM double-quoted strings, doubled double-quotes mean an escaped
-        // double quote, so should be lexed in.
-        getNextChar();
-        CurChar = getNextChar();
-      } else {
-        break;
-      }
-    }
-    if (CurChar == EOF)
-      return ReturnError(TokStart, "unterminated string constant");
-    return AsmToken(AsmToken::String, StringRef(TokStart, CurPtr - TokStart));
-  }
-
+  if (LexMasmStrings) { 
+    while (CurChar != EOF) { 
+      if (CurChar != '"') { 
+        CurChar = getNextChar(); 
+      } else if (peekNextChar() == '"') { 
+        // In MASM double-quoted strings, doubled double-quotes mean an escaped 
+        // double quote, so should be lexed in. 
+        getNextChar(); 
+        CurChar = getNextChar(); 
+      } else { 
+        break; 
+      } 
+    } 
+    if (CurChar == EOF) 
+      return ReturnError(TokStart, "unterminated string constant"); 
+    return AsmToken(AsmToken::String, StringRef(TokStart, CurPtr - TokStart)); 
+  } 
+ 
   // TODO: does gas allow multiline string constants?
   while (CurChar != '"') {
     if (CurChar == '\\') {
@@ -715,7 +715,7 @@ AsmToken AsmLexer::LexToken() {
   if (CurChar == EOF && !IsAtStartOfStatement && EndStatementAtEOF) {
     IsAtStartOfLine = true;
     IsAtStartOfStatement = true;
-    return AsmToken(AsmToken::EndOfStatement, StringRef(TokStart, 0));
+    return AsmToken(AsmToken::EndOfStatement, StringRef(TokStart, 0)); 
   }
   IsAtStartOfLine = false;
   bool OldIsAtStartOfStatement = IsAtStartOfStatement;

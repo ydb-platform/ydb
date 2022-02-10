@@ -329,7 +329,7 @@ void IntrinsicLowering::LowerIntrinsicCall(CallInst *CI) {
     break;
 
   case Intrinsic::assume:
-  case Intrinsic::experimental_noalias_scope_decl:
+  case Intrinsic::experimental_noalias_scope_decl: 
   case Intrinsic::var_annotation:
     break;   // Strip out these intrinsics
 

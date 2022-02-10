@@ -12,11 +12,11 @@ LICENSE(Apache-2.0 WITH LLVM-exception)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12
-    contrib/libs/llvm12/include
-    contrib/libs/llvm12/lib/Analysis
-    contrib/libs/llvm12/lib/IR
-    contrib/libs/llvm12/lib/Support
+    contrib/libs/llvm12 
+    contrib/libs/llvm12/include 
+    contrib/libs/llvm12/lib/Analysis 
+    contrib/libs/llvm12/lib/IR 
+    contrib/libs/llvm12/lib/Support 
 )
 
 ADDINCL(
@@ -63,7 +63,7 @@ SRCS(
     LCSSA.cpp
     LibCallsShrinkWrap.cpp
     Local.cpp
-    LoopPeel.cpp
+    LoopPeel.cpp 
     LoopRotationUtils.cpp
     LoopSimplify.cpp
     LoopUnroll.cpp
@@ -74,7 +74,7 @@ SRCS(
     LowerInvoke.cpp
     LowerMemIntrinsics.cpp
     LowerSwitch.cpp
-    MatrixUtils.cpp
+    MatrixUtils.cpp 
     Mem2Reg.cpp
     MetaRenamer.cpp
     ModuleUtils.cpp

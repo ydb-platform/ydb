@@ -12,18 +12,18 @@
 # language governing permissions and limitations under the License.
 import logging
 import threading
-import heapq
+import heapq 
 
 
-from botocore.compat import six
-
+from botocore.compat import six 
+ 
 from s3transfer.compat import seekable
 from s3transfer.exceptions import RetriesExceededError
 from s3transfer.futures import IN_MEMORY_DOWNLOAD_TAG
-from s3transfer.utils import S3_RETRYABLE_DOWNLOAD_ERRORS
+from s3transfer.utils import S3_RETRYABLE_DOWNLOAD_ERRORS 
 from s3transfer.utils import get_callbacks
 from s3transfer.utils import invoke_progress_callbacks
-from s3transfer.utils import calculate_num_parts
+from s3transfer.utils import calculate_num_parts 
 from s3transfer.utils import calculate_range_parameter
 from s3transfer.utils import FunctionContainer
 from s3transfer.utils import CountCallbackInvoker
@@ -98,7 +98,7 @@ class DownloadOutputManager(object):
         self._transfer_coordinator.submit(
             self._io_executor,
             self.get_io_write_task(fileobj, data, offset)
-        )
+        ) 
 
     def get_io_write_task(self, fileobj, data, offset):
         """Get an IO write task for the requested set of data
@@ -164,7 +164,7 @@ class DownloadFilenameOutputManager(DownloadOutputManager):
     def get_fileobj_for_io_writes(self, transfer_future):
         fileobj = transfer_future.meta.call_args.fileobj
         self._final_filename = fileobj
-        self._temp_filename = self._osutil.get_temp_filename(fileobj)
+        self._temp_filename = self._osutil.get_temp_filename(fileobj) 
         self._temp_fileobj = self._get_temp_fileobj()
         return self._temp_fileobj
 
@@ -419,7 +419,7 @@ class DownloadSubmissionTask(SubmissionTask):
 
         # Determine the number of parts
         part_size = config.multipart_chunksize
-        num_parts = calculate_num_parts(transfer_future.meta.size, part_size)
+        num_parts = calculate_num_parts(transfer_future.meta.size, part_size) 
 
         # Get any associated tags for the get object task.
         get_object_tag = download_output_manager.get_download_task_tag()
@@ -507,7 +507,7 @@ class GetObjectTask(Task):
         last_exception = None
         for i in range(max_attempts):
             try:
-                current_index = start_index
+                current_index = start_index 
                 response = client.get_object(
                     Bucket=bucket, Key=key, **extra_args)
                 streaming_body = StreamReaderProgress(
@@ -531,7 +531,7 @@ class GetObjectTask(Task):
                     else:
                         return
                 return
-            except S3_RETRYABLE_DOWNLOAD_ERRORS as e:
+            except S3_RETRYABLE_DOWNLOAD_ERRORS as e: 
                 logger.debug("Retrying exception caught (%s), "
                              "retrying request, (attempt %s / %s)", e, i,
                              max_attempts, exc_info=True)

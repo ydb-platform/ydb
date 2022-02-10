@@ -12,14 +12,14 @@
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Triple.h"
-#include "llvm/BinaryFormat/MachO.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
+#include "llvm/BinaryFormat/MachO.h" 
+#include "llvm/IR/LLVMContext.h" 
+#include "llvm/IR/Module.h" 
 #include "llvm/Object/Binary.h"
-#include "llvm/Object/IRObjectFile.h"
+#include "llvm/Object/IRObjectFile.h" 
 #include "llvm/Object/MachO.h"
 #include "llvm/Object/MachOUniversal.h"
-#include "llvm/Object/MachOUniversalWriter.h"
+#include "llvm/Object/MachOUniversalWriter.h" 
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Option/Arg.h"
 #include "llvm/Option/ArgList.h"
@@ -34,7 +34,7 @@ using namespace llvm;
 using namespace llvm::object;
 
 static const StringRef ToolName = "llvm-lipo";
-static LLVMContext LLVMCtx;
+static LLVMContext LLVMCtx; 
 
 LLVM_ATTRIBUTE_NORETURN static void reportError(Twine Message) {
   WithColor::error(errs(), ToolName) << Message << "\n";
@@ -42,15 +42,15 @@ LLVM_ATTRIBUTE_NORETURN static void reportError(Twine Message) {
   exit(EXIT_FAILURE);
 }
 
-LLVM_ATTRIBUTE_NORETURN static void reportError(Error E) {
-  assert(E);
-  std::string Buf;
-  raw_string_ostream OS(Buf);
-  logAllUnhandledErrors(std::move(E), OS);
-  OS.flush();
-  reportError(Buf);
-}
-
+LLVM_ATTRIBUTE_NORETURN static void reportError(Error E) { 
+  assert(E); 
+  std::string Buf; 
+  raw_string_ostream OS(Buf); 
+  logAllUnhandledErrors(std::move(E), OS); 
+  OS.flush(); 
+  reportError(Buf); 
+} 
+ 
 LLVM_ATTRIBUTE_NORETURN static void reportError(StringRef File, Error E) {
   assert(E);
   std::string Buf;
@@ -118,18 +118,18 @@ struct Config {
   LipoAction ActionToPerform;
 };
 
-static Slice createSliceFromArchive(const Archive &A) {
-  Expected<Slice> ArchiveOrSlice = Slice::create(A, &LLVMCtx);
-  if (!ArchiveOrSlice)
-    reportError(A.getFileName(), ArchiveOrSlice.takeError());
-  return *ArchiveOrSlice;
+static Slice createSliceFromArchive(const Archive &A) { 
+  Expected<Slice> ArchiveOrSlice = Slice::create(A, &LLVMCtx); 
+  if (!ArchiveOrSlice) 
+    reportError(A.getFileName(), ArchiveOrSlice.takeError()); 
+  return *ArchiveOrSlice; 
 }
 
-static Slice createSliceFromIR(const IRObjectFile &IRO, unsigned Align) {
-  Expected<Slice> IROrErr = Slice::create(IRO, Align);
-  if (!IROrErr)
-    reportError(IRO.getFileName(), IROrErr.takeError());
-  return *IROrErr;
+static Slice createSliceFromIR(const IRObjectFile &IRO, unsigned Align) { 
+  Expected<Slice> IROrErr = Slice::create(IRO, Align); 
+  if (!IROrErr) 
+    reportError(IRO.getFileName(), IROrErr.takeError()); 
+  return *IROrErr; 
 }
 
 } // end namespace
@@ -319,20 +319,20 @@ static SmallVector<OwningBinary<Binary>, 1>
 readInputBinaries(ArrayRef<InputFile> InputFiles) {
   SmallVector<OwningBinary<Binary>, 1> InputBinaries;
   for (const InputFile &IF : InputFiles) {
-    Expected<OwningBinary<Binary>> BinaryOrErr =
-        createBinary(IF.FileName, &LLVMCtx);
+    Expected<OwningBinary<Binary>> BinaryOrErr = 
+        createBinary(IF.FileName, &LLVMCtx); 
     if (!BinaryOrErr)
       reportError(IF.FileName, BinaryOrErr.takeError());
     const Binary *B = BinaryOrErr->getBinary();
-    if (!B->isArchive() && !B->isMachO() && !B->isMachOUniversalBinary() &&
-        !B->isIR())
+    if (!B->isArchive() && !B->isMachO() && !B->isMachOUniversalBinary() && 
+        !B->isIR()) 
       reportError("File " + IF.FileName + " has unsupported binary format");
-    if (IF.ArchType && (B->isMachO() || B->isArchive() || B->isIR())) {
-      const auto S = B->isMachO()
-                         ? Slice(*cast<MachOObjectFile>(B))
-                         : B->isArchive()
-                               ? createSliceFromArchive(*cast<Archive>(B))
-                               : createSliceFromIR(*cast<IRObjectFile>(B), 0);
+    if (IF.ArchType && (B->isMachO() || B->isArchive() || B->isIR())) { 
+      const auto S = B->isMachO() 
+                         ? Slice(*cast<MachOObjectFile>(B)) 
+                         : B->isArchive() 
+                               ? createSliceFromArchive(*cast<Archive>(B)) 
+                               : createSliceFromIR(*cast<IRObjectFile>(B), 0); 
       const auto SpecifiedCPUType = MachO::getCPUTypeFromArchitecture(
                                         MachO::getArchitectureFromName(
                                             Triple(*IF.ArchType).getArchName()))
@@ -384,53 +384,53 @@ static void printBinaryArchs(const Binary *Binary, raw_ostream &OS) {
   // Prints trailing space for compatibility with cctools lipo.
   if (auto UO = dyn_cast<MachOUniversalBinary>(Binary)) {
     for (const auto &O : UO->objects()) {
-      // Order here is important, because both MachOObjectFile and
-      // IRObjectFile can be created with a binary that has embedded bitcode.
+      // Order here is important, because both MachOObjectFile and 
+      // IRObjectFile can be created with a binary that has embedded bitcode. 
       Expected<std::unique_ptr<MachOObjectFile>> MachOObjOrError =
           O.getAsObjectFile();
       if (MachOObjOrError) {
-        OS << Slice(*(MachOObjOrError->get())).getArchString() << " ";
+        OS << Slice(*(MachOObjOrError->get())).getArchString() << " "; 
         continue;
       }
-      Expected<std::unique_ptr<IRObjectFile>> IROrError =
-          O.getAsIRObject(LLVMCtx);
-      if (IROrError) {
-        consumeError(MachOObjOrError.takeError());
-        Expected<Slice> SliceOrErr = Slice::create(**IROrError, O.getAlign());
-        if (!SliceOrErr) {
-          reportError(Binary->getFileName(), SliceOrErr.takeError());
-          continue;
-        }
-        OS << SliceOrErr.get().getArchString() << " ";
-        continue;
-      }
+      Expected<std::unique_ptr<IRObjectFile>> IROrError = 
+          O.getAsIRObject(LLVMCtx); 
+      if (IROrError) { 
+        consumeError(MachOObjOrError.takeError()); 
+        Expected<Slice> SliceOrErr = Slice::create(**IROrError, O.getAlign()); 
+        if (!SliceOrErr) { 
+          reportError(Binary->getFileName(), SliceOrErr.takeError()); 
+          continue; 
+        } 
+        OS << SliceOrErr.get().getArchString() << " "; 
+        continue; 
+      } 
       Expected<std::unique_ptr<Archive>> ArchiveOrError = O.getAsArchive();
       if (ArchiveOrError) {
         consumeError(MachOObjOrError.takeError());
-        consumeError(IROrError.takeError());
-        OS << createSliceFromArchive(**ArchiveOrError).getArchString() << " ";
+        consumeError(IROrError.takeError()); 
+        OS << createSliceFromArchive(**ArchiveOrError).getArchString() << " "; 
         continue;
       }
       consumeError(ArchiveOrError.takeError());
       reportError(Binary->getFileName(), MachOObjOrError.takeError());
-      reportError(Binary->getFileName(), IROrError.takeError());
+      reportError(Binary->getFileName(), IROrError.takeError()); 
     }
     OS << "\n";
     return;
   }
-
-  if (const auto *MachO = dyn_cast<MachOObjectFile>(Binary)) {
-    OS << Slice(*MachO).getArchString() << " \n";
-    return;
-  }
-
-  // This should be always the case, as this is tested in readInputBinaries
-  const auto *IR = cast<IRObjectFile>(Binary);
-  Expected<Slice> SliceOrErr = createSliceFromIR(*IR, 0);
-  if (!SliceOrErr)
-    reportError(IR->getFileName(), SliceOrErr.takeError());
-  
-  OS << SliceOrErr->getArchString() << " \n";
+ 
+  if (const auto *MachO = dyn_cast<MachOObjectFile>(Binary)) { 
+    OS << Slice(*MachO).getArchString() << " \n"; 
+    return; 
+  } 
+ 
+  // This should be always the case, as this is tested in readInputBinaries 
+  const auto *IR = cast<IRObjectFile>(Binary); 
+  Expected<Slice> SliceOrErr = createSliceFromIR(*IR, 0); 
+  if (!SliceOrErr) 
+    reportError(IR->getFileName(), SliceOrErr.takeError()); 
+   
+  OS << SliceOrErr->getArchString() << " \n"; 
 }
 
 LLVM_ATTRIBUTE_NORETURN
@@ -480,23 +480,23 @@ static void thinSlice(ArrayRef<OwningBinary<Binary>> InputBinaries,
   auto *UO = cast<MachOUniversalBinary>(InputBinaries.front().getBinary());
   Expected<std::unique_ptr<MachOObjectFile>> Obj =
       UO->getMachOObjectForArch(ArchType);
-  Expected<std::unique_ptr<IRObjectFile>> IRObj =
-      UO->getIRObjectForArch(ArchType, LLVMCtx);
+  Expected<std::unique_ptr<IRObjectFile>> IRObj = 
+      UO->getIRObjectForArch(ArchType, LLVMCtx); 
   Expected<std::unique_ptr<Archive>> Ar = UO->getArchiveForArch(ArchType);
-  if (!Obj && !IRObj && !Ar)
+  if (!Obj && !IRObj && !Ar) 
     reportError("fat input file " + UO->getFileName() +
                 " does not contain the specified architecture " + ArchType +
                 " to thin it to");
-  Binary *B;
-  // Order here is important, because both Obj and IRObj will be valid with a
-  // binary that has embedded bitcode.
-  if (Obj)
-    B = Obj->get();
-  else if (IRObj)
-    B = IRObj->get();
-  else
-    B = Ar->get();
-
+  Binary *B; 
+  // Order here is important, because both Obj and IRObj will be valid with a 
+  // binary that has embedded bitcode. 
+  if (Obj) 
+    B = Obj->get(); 
+  else if (IRObj) 
+    B = IRObj->get(); 
+  else 
+    B = Ar->get(); 
+ 
   Expected<std::unique_ptr<FileOutputBuffer>> OutFileOrError =
       FileOutputBuffer::create(OutputFileName,
                                B->getMemoryBufferRef().getBufferSize(),
@@ -538,8 +538,8 @@ static void updateAlignments(Range &Slices,
 static void checkUnusedAlignments(ArrayRef<Slice> Slices,
                                   const StringMap<const uint32_t> &Alignments) {
   auto HasArch = [&](StringRef Arch) {
-    return llvm::any_of(Slices,
-                        [Arch](Slice S) { return S.getArchString() == Arch; });
+    return llvm::any_of(Slices, 
+                        [Arch](Slice S) { return S.getArchString() == Arch; }); 
   };
   for (StringRef Arch : Alignments.keys())
     if (!HasArch(Arch))
@@ -550,47 +550,47 @@ static void checkUnusedAlignments(ArrayRef<Slice> Slices,
 
 // Updates vector ExtractedObjects with the MachOObjectFiles extracted from
 // Universal Binary files to transfer ownership.
-static SmallVector<Slice, 2>
-buildSlices(ArrayRef<OwningBinary<Binary>> InputBinaries,
-            const StringMap<const uint32_t> &Alignments,
-            SmallVectorImpl<std::unique_ptr<SymbolicFile>> &ExtractedObjects) {
+static SmallVector<Slice, 2> 
+buildSlices(ArrayRef<OwningBinary<Binary>> InputBinaries, 
+            const StringMap<const uint32_t> &Alignments, 
+            SmallVectorImpl<std::unique_ptr<SymbolicFile>> &ExtractedObjects) { 
   SmallVector<Slice, 2> Slices;
   for (auto &IB : InputBinaries) {
     const Binary *InputBinary = IB.getBinary();
     if (auto UO = dyn_cast<MachOUniversalBinary>(InputBinary)) {
       for (const auto &O : UO->objects()) {
-        // Order here is important, because both MachOObjectFile and
-        // IRObjectFile can be created with a binary that has embedded bitcode.
+        // Order here is important, because both MachOObjectFile and 
+        // IRObjectFile can be created with a binary that has embedded bitcode. 
         Expected<std::unique_ptr<MachOObjectFile>> BinaryOrError =
             O.getAsObjectFile();
-        if (BinaryOrError) {
-          Slices.emplace_back(*(BinaryOrError.get()), O.getAlign());
-          ExtractedObjects.push_back(std::move(BinaryOrError.get()));
-          continue;
-        }
-        Expected<std::unique_ptr<IRObjectFile>> IROrError =
-            O.getAsIRObject(LLVMCtx);
-        if (IROrError) {
-          consumeError(BinaryOrError.takeError());
-          Slice S = createSliceFromIR(**IROrError, O.getAlign());
-          ExtractedObjects.emplace_back(std::move(IROrError.get()));
-          Slices.emplace_back(std::move(S));
-          continue;
-        }
-        reportError(InputBinary->getFileName(), BinaryOrError.takeError());
+        if (BinaryOrError) { 
+          Slices.emplace_back(*(BinaryOrError.get()), O.getAlign()); 
+          ExtractedObjects.push_back(std::move(BinaryOrError.get())); 
+          continue; 
+        } 
+        Expected<std::unique_ptr<IRObjectFile>> IROrError = 
+            O.getAsIRObject(LLVMCtx); 
+        if (IROrError) { 
+          consumeError(BinaryOrError.takeError()); 
+          Slice S = createSliceFromIR(**IROrError, O.getAlign()); 
+          ExtractedObjects.emplace_back(std::move(IROrError.get())); 
+          Slices.emplace_back(std::move(S)); 
+          continue; 
+        } 
+        reportError(InputBinary->getFileName(), BinaryOrError.takeError()); 
       }
-    } else if (const auto *O = dyn_cast<MachOObjectFile>(InputBinary)) {
-      Slices.emplace_back(*O);
-    } else if (const auto *A = dyn_cast<Archive>(InputBinary)) {
-      Slices.push_back(createSliceFromArchive(*A));
-    } else if (const auto *IRO = dyn_cast<IRObjectFile>(InputBinary)) {
-      // Original Apple's lipo set the alignment to 0
-      Expected<Slice> SliceOrErr = Slice::create(*IRO, 0);
-      if (!SliceOrErr) {
-        reportError(InputBinary->getFileName(), SliceOrErr.takeError());
-        continue;
-      }
-      Slices.emplace_back(std::move(SliceOrErr.get()));
+    } else if (const auto *O = dyn_cast<MachOObjectFile>(InputBinary)) { 
+      Slices.emplace_back(*O); 
+    } else if (const auto *A = dyn_cast<Archive>(InputBinary)) { 
+      Slices.push_back(createSliceFromArchive(*A)); 
+    } else if (const auto *IRO = dyn_cast<IRObjectFile>(InputBinary)) { 
+      // Original Apple's lipo set the alignment to 0 
+      Expected<Slice> SliceOrErr = Slice::create(*IRO, 0); 
+      if (!SliceOrErr) { 
+        reportError(InputBinary->getFileName(), SliceOrErr.takeError()); 
+        continue; 
+      } 
+      Slices.emplace_back(std::move(SliceOrErr.get())); 
     } else {
       llvm_unreachable("Unexpected binary format");
     }
@@ -606,16 +606,16 @@ static void createUniversalBinary(ArrayRef<OwningBinary<Binary>> InputBinaries,
   assert(InputBinaries.size() >= 1 && "Incorrect number of input binaries");
   assert(!OutputFileName.empty() && "Create expects a single output file");
 
-  SmallVector<std::unique_ptr<SymbolicFile>, 1> ExtractedObjects;
+  SmallVector<std::unique_ptr<SymbolicFile>, 1> ExtractedObjects; 
   SmallVector<Slice, 1> Slices =
       buildSlices(InputBinaries, Alignments, ExtractedObjects);
   checkArchDuplicates(Slices);
   checkUnusedAlignments(Slices, Alignments);
 
-  llvm::stable_sort(Slices);
-  if (Error E = writeUniversalBinary(Slices, OutputFileName))
-    reportError(std::move(E));
-
+  llvm::stable_sort(Slices); 
+  if (Error E = writeUniversalBinary(Slices, OutputFileName)) 
+    reportError(std::move(E)); 
+ 
   exit(EXIT_SUCCESS);
 }
 
@@ -634,7 +634,7 @@ static void extractSlice(ArrayRef<OwningBinary<Binary>> InputBinaries,
                 " must be a fat file when the -extract option is specified");
   }
 
-  SmallVector<std::unique_ptr<SymbolicFile>, 2> ExtractedObjects;
+  SmallVector<std::unique_ptr<SymbolicFile>, 2> ExtractedObjects; 
   SmallVector<Slice, 2> Slices =
       buildSlices(InputBinaries, Alignments, ExtractedObjects);
   erase_if(Slices, [ArchType](const Slice &S) {
@@ -645,10 +645,10 @@ static void extractSlice(ArrayRef<OwningBinary<Binary>> InputBinaries,
     reportError(
         "fat input file " + InputBinaries.front().getBinary()->getFileName() +
         " does not contain the specified architecture " + ArchType);
-
-  llvm::stable_sort(Slices);
-  if (Error E = writeUniversalBinary(Slices, OutputFileName))
-    reportError(std::move(E));
+ 
+  llvm::stable_sort(Slices); 
+  if (Error E = writeUniversalBinary(Slices, OutputFileName)) 
+    reportError(std::move(E)); 
   exit(EXIT_SUCCESS);
 }
 
@@ -664,7 +664,7 @@ buildReplacementSlices(ArrayRef<OwningBinary<Binary>> ReplacementBinaries,
     if (!O)
       reportError("replacement file: " + ReplacementBinary->getFileName() +
                   " is a fat file (must be a thin file)");
-    Slice S(*O);
+    Slice S(*O); 
     auto Entry = Slices.try_emplace(S.getArchString(), S);
     if (!Entry.second)
       reportError("-replace " + S.getArchString() +
@@ -696,7 +696,7 @@ static void replaceSlices(ArrayRef<OwningBinary<Binary>> InputBinaries,
 
   StringMap<Slice> ReplacementSlices =
       buildReplacementSlices(ReplacementBinaries, Alignments);
-  SmallVector<std::unique_ptr<SymbolicFile>, 2> ExtractedObjects;
+  SmallVector<std::unique_ptr<SymbolicFile>, 2> ExtractedObjects; 
   SmallVector<Slice, 2> Slices =
       buildSlices(InputBinaries, Alignments, ExtractedObjects);
 
@@ -715,10 +715,10 @@ static void replaceSlices(ArrayRef<OwningBinary<Binary>> InputBinaries,
                 " does not contain that architecture");
 
   checkUnusedAlignments(Slices, Alignments);
-
-  llvm::stable_sort(Slices);
-  if (Error E = writeUniversalBinary(Slices, OutputFileName))
-    reportError(std::move(E));
+ 
+  llvm::stable_sort(Slices); 
+  if (Error E = writeUniversalBinary(Slices, OutputFileName)) 
+    reportError(std::move(E)); 
   exit(EXIT_SUCCESS);
 }
 

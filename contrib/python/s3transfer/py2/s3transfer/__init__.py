@@ -143,7 +143,7 @@ from s3transfer.exceptions import RetriesExceededError, S3UploadFailedError
 
 
 __author__ = 'Amazon Web Services'
-__version__ = '0.4.2'
+__version__ = '0.4.2' 
 
 
 class NullHandler(logging.Handler):
@@ -609,8 +609,8 @@ class S3Transfer(object):
         'SSECustomerKey',
         'SSECustomerKeyMD5',
         'SSEKMSKeyId',
-        'SSEKMSEncryptionContext',
-        'Tagging',
+        'SSEKMSEncryptionContext', 
+        'Tagging', 
     ]
 
     def __init__(self, client, config=None, osutil=None):

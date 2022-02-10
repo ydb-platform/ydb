@@ -99,7 +99,7 @@ class DeferredCallable(object):
         self.kwargs = {}
 
     def __call__(self):
-        return self.func(*self.args, **self.kwargs)
+        return self.func(*self.args, **self.kwargs) 
 
     def with_args(self, *args, **kwargs):
         self.args = args

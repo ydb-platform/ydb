@@ -38,7 +38,7 @@ class FixApply(fixer_base.BaseFix):
         # PATTERN above but I don't know how to do it so...
         if args:
             if (args.type == self.syms.argument and
-                args.children[0].value in {'**', '*'}):
+                args.children[0].value in {'**', '*'}): 
                 return  # Make no change.
         if kwds and (kwds.type == self.syms.argument and
                      kwds.children[0].value == '**'):

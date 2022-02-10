@@ -4,8 +4,8 @@
 extern "C" {
 #endif
 
-#include <stdarg.h>               // va_list
-
+#include <stdarg.h>               // va_list 
+ 
 /* Error handling definitions */
 
 PyAPI_FUNC(void) PyErr_SetNone(PyObject *);
@@ -23,12 +23,12 @@ PyAPI_FUNC(void) PyErr_GetExcInfo(PyObject **, PyObject **, PyObject **);
 PyAPI_FUNC(void) PyErr_SetExcInfo(PyObject *, PyObject *, PyObject *);
 #endif
 
-/* Defined in Python/pylifecycle.c
-
-   The Py_FatalError() function is replaced with a macro which logs
-   automatically the name of the current function, unless the Py_LIMITED_API
-   macro is defined. */
-PyAPI_FUNC(void) _Py_NO_RETURN Py_FatalError(const char *message);
+/* Defined in Python/pylifecycle.c 
+ 
+   The Py_FatalError() function is replaced with a macro which logs 
+   automatically the name of the current function, unless the Py_LIMITED_API 
+   macro is defined. */ 
+PyAPI_FUNC(void) _Py_NO_RETURN Py_FatalError(const char *message); 
 
 #if defined(Py_DEBUG) || defined(Py_LIMITED_API)
 #define _PyErr_OCCURRED() PyErr_Occurred()
@@ -60,11 +60,11 @@ PyAPI_FUNC(void) PyException_SetContext(PyObject *, PyObject *);
      PyType_FastSubclass((PyTypeObject*)(x), Py_TPFLAGS_BASE_EXC_SUBCLASS))
 
 #define PyExceptionInstance_Check(x)                    \
-    PyType_FastSubclass(Py_TYPE(x), Py_TPFLAGS_BASE_EXC_SUBCLASS)
+    PyType_FastSubclass(Py_TYPE(x), Py_TPFLAGS_BASE_EXC_SUBCLASS) 
 
-PyAPI_FUNC(const char *) PyExceptionClass_Name(PyObject *);
+PyAPI_FUNC(const char *) PyExceptionClass_Name(PyObject *); 
 
-#define PyExceptionInstance_Class(x) ((PyObject*)Py_TYPE(x))
+#define PyExceptionInstance_Class(x) ((PyObject*)Py_TYPE(x)) 
 
 
 /* Predefined exceptions */
@@ -314,12 +314,12 @@ PyAPI_FUNC(int) PyOS_snprintf(char *str, size_t size, const char  *format, ...)
 PyAPI_FUNC(int) PyOS_vsnprintf(char *str, size_t size, const char  *format, va_list va)
                         Py_GCC_ATTRIBUTE((format(printf, 3, 0)));
 
-#ifndef Py_LIMITED_API
-#  define Py_CPYTHON_ERRORS_H
-#  include  "cpython/pyerrors.h"
-#  undef Py_CPYTHON_ERRORS_H
-#endif
-
+#ifndef Py_LIMITED_API 
+#  define Py_CPYTHON_ERRORS_H 
+#  include  "cpython/pyerrors.h" 
+#  undef Py_CPYTHON_ERRORS_H 
+#endif 
+ 
 #ifdef __cplusplus
 }
 #endif

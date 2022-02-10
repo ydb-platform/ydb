@@ -1,7 +1,7 @@
 /* -*- Mode: C; c-file-style: "python" -*- */
 
 #include <Python.h>
-#include "pycore_dtoa.h"
+#include "pycore_dtoa.h" 
 #include <locale.h>
 
 /* Case-insensitive string match used for nan and inf detection; t should be
@@ -352,15 +352,15 @@ PyOS_string_to_double(const char *s,
     else if (!endptr && (fail_pos == s || *fail_pos != '\0'))
         PyErr_Format(PyExc_ValueError,
                       "could not convert string to float: "
-                      "'%.200s'", s);
+                      "'%.200s'", s); 
     else if (fail_pos == s)
         PyErr_Format(PyExc_ValueError,
                       "could not convert string to float: "
-                      "'%.200s'", s);
+                      "'%.200s'", s); 
     else if (errno == ERANGE && fabs(x) >= 1.0 && overflow_exception)
         PyErr_Format(overflow_exception,
                       "value too large to convert to float: "
-                      "'%.200s'", s);
+                      "'%.200s'", s); 
     else
         result = x;
 
@@ -793,7 +793,7 @@ _PyOS_ascii_formatd(char       *buffer,
 
 /* The fallback code to use if _Py_dg_dtoa is not available. */
 
-char * PyOS_double_to_string(double val,
+char * PyOS_double_to_string(double val, 
                                          char format_code,
                                          int precision,
                                          int flags,
@@ -1240,7 +1240,7 @@ format_float_short(double d, char format_code,
 }
 
 
-char * PyOS_double_to_string(double val,
+char * PyOS_double_to_string(double val, 
                                          char format_code,
                                          int precision,
                                          int flags,

@@ -1,6 +1,6 @@
-All contributions towards Jedi are MIT licensed.
-
--------------------------------------------------------------------------------
+All contributions towards Jedi are MIT licensed. 
+ 
+------------------------------------------------------------------------------- 
 The MIT License (MIT)
 
 Copyright (c) <2013> <David Halter and others, see AUTHORS.txt>

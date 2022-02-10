@@ -20,7 +20,7 @@ LICENSE(
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12
+    contrib/libs/llvm12 
 )
 
 NO_UTIL()
@@ -30,7 +30,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/Frontend/OpenACC -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/Frontend/OpenACC/ACC.td --write-if-changed -o
         llvm/Frontend/OpenACC/ACC.h.inc -d llvm/Frontend/OpenACC/ACC.h.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/Frontend/Directive/DirectiveBase.td llvm/Frontend/OpenACC/ACC.td
     OUTPUT_INCLUDES llvm/ADT/BitmaskEnum.h
     OUT_NOAUTO llvm/Frontend/OpenACC/ACC.h.inc llvm/Frontend/OpenACC/ACC.h.inc.d
@@ -41,7 +41,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/Frontend/OpenMP -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/Frontend/OpenMP/OMP.td --write-if-changed -o
         llvm/Frontend/OpenMP/OMP.h.inc -d llvm/Frontend/OpenMP/OMP.h.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/Frontend/Directive/DirectiveBase.td llvm/Frontend/OpenMP/OMP.td
     OUTPUT_INCLUDES llvm/ADT/BitmaskEnum.h
     OUT_NOAUTO llvm/Frontend/OpenMP/OMP.h.inc llvm/Frontend/OpenMP/OMP.h.inc.d
@@ -51,7 +51,7 @@ RUN_PROGRAM(
     contrib/libs/llvm12/utils/TableGen -gen-attrs -I ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR
         -Iinclude -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Attributes.td --write-if-changed -o
         llvm/IR/Attributes.inc -d llvm/IR/Attributes.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/IR/Attributes.td
     OUT_NOAUTO llvm/IR/Attributes.inc llvm/IR/Attributes.inc.d
 )
@@ -61,7 +61,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicEnums.inc -d llvm/IR/IntrinsicEnums.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -77,7 +77,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicImpl.inc -d llvm/IR/IntrinsicImpl.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -93,7 +93,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsAArch64.h -d llvm/IR/IntrinsicsAArch64.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -109,7 +109,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsAMDGPU.h -d llvm/IR/IntrinsicsAMDGPU.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -125,7 +125,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsARM.h -d llvm/IR/IntrinsicsARM.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -141,7 +141,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsBPF.h -d llvm/IR/IntrinsicsBPF.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -157,7 +157,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsHexagon.h -d llvm/IR/IntrinsicsHexagon.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -173,7 +173,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsMips.h -d llvm/IR/IntrinsicsMips.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -189,7 +189,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsNVPTX.h -d llvm/IR/IntrinsicsNVPTX.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -205,7 +205,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsPowerPC.h -d llvm/IR/IntrinsicsPowerPC.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -221,7 +221,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsR600.h -d llvm/IR/IntrinsicsR600.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -237,7 +237,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsRISCV.h -d llvm/IR/IntrinsicsRISCV.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -253,7 +253,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsS390.h -d llvm/IR/IntrinsicsS390.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -269,7 +269,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsVE.h -d llvm/IR/IntrinsicsVE.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -277,15 +277,15 @@ RUN_PROGRAM(
         llvm/IR/IntrinsicsRISCV.td llvm/IR/IntrinsicsSystemZ.td llvm/IR/IntrinsicsVE.td
         llvm/IR/IntrinsicsVEVL.gen.td llvm/IR/IntrinsicsWebAssembly.td llvm/IR/IntrinsicsX86.td
         llvm/IR/IntrinsicsXCore.td
-    OUT_NOAUTO llvm/IR/IntrinsicsVE.h llvm/IR/IntrinsicsVE.h.d
-)
-
-RUN_PROGRAM(
+    OUT_NOAUTO llvm/IR/IntrinsicsVE.h llvm/IR/IntrinsicsVE.h.d 
+) 
+ 
+RUN_PROGRAM( 
     contrib/libs/llvm12/utils/TableGen -gen-intrinsic-enums -intrinsic-prefix=wasm -I
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsWebAssembly.h -d llvm/IR/IntrinsicsWebAssembly.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -301,7 +301,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsX86.h -d llvm/IR/IntrinsicsX86.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -317,7 +317,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/include/llvm/IR -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/IR/Intrinsics.td --write-if-changed -o
         llvm/IR/IntrinsicsXCore.h -d llvm/IR/IntrinsicsXCore.h.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/CodeGen/SDNodeProperties.td llvm/CodeGen/ValueTypes.td llvm/IR/Intrinsics.td
         llvm/IR/IntrinsicsAArch64.td llvm/IR/IntrinsicsAMDGPU.td llvm/IR/IntrinsicsARM.td
         llvm/IR/IntrinsicsBPF.td llvm/IR/IntrinsicsHexagon.td llvm/IR/IntrinsicsHexagonDep.td
@@ -334,7 +334,7 @@ RUN_PROGRAM(
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/Frontend/OpenACC/ACC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Frontend/OpenACC/ACC.cpp -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Frontend/OpenACC/ACC.cpp.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/Frontend/Directive/DirectiveBase.td llvm/Frontend/OpenACC/ACC.td
     OUTPUT_INCLUDES llvm/ADT/StringRef.h llvm/ADT/StringSwitch.h llvm/Frontend/OpenACC/ACC.h.inc
         llvm/Support/ErrorHandling.h
@@ -348,7 +348,7 @@ RUN_PROGRAM(
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include llvm/Frontend/OpenMP/OMP.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMP.cpp -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Frontend/OpenMP/OMP.cpp.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN llvm/Frontend/Directive/DirectiveBase.td llvm/Frontend/OpenMP/OMP.td
     OUTPUT_INCLUDES llvm/ADT/StringRef.h llvm/ADT/StringSwitch.h llvm/Frontend/OpenMP/OMP.h.inc
         llvm/Support/ErrorHandling.h
@@ -363,7 +363,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenAsmMatcher.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenAsmMatcher.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -420,7 +420,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenAsmWriter.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenAsmWriter.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -476,7 +476,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenAsmWriter1.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenAsmWriter1.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -532,7 +532,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenCallingConv.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenCallingConv.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -588,7 +588,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenDAGISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenDAGISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -644,7 +644,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenDisassemblerTables.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenDisassemblerTables.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -702,7 +702,7 @@ RUN_PROGRAM(
         --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenExegesis.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenExegesis.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -758,7 +758,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenFastISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenFastISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -814,7 +814,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenGlobalISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenGlobalISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -870,7 +870,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenInstrInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenInstrInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -926,7 +926,7 @@ RUN_PROGRAM(
         --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenMCCodeEmitter.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenMCCodeEmitter.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -983,7 +983,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenMCPseudoLowering.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenMCPseudoLowering.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -1039,7 +1039,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenPostLegalizeGICombiner.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenPostLegalizeGICombiner.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -1097,7 +1097,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenPostLegalizeGILowering.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenPostLegalizeGILowering.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -1155,7 +1155,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenPreLegalizeGICombiner.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenPreLegalizeGICombiner.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -1200,7 +1200,7 @@ RUN_PROGRAM(
         llvm/Target/GlobalISel/Target.td llvm/Target/Target.td llvm/Target/TargetCallingConv.td
         llvm/Target/TargetInstrPredicate.td llvm/Target/TargetItinerary.td llvm/Target/TargetPfmCounters.td
         llvm/Target/TargetSchedule.td llvm/Target/TargetSelectionDAG.td
-    OUTPUT_INCLUDES llvm/ADT/SparseBitVector.h
+    OUTPUT_INCLUDES llvm/ADT/SparseBitVector.h 
     OUT_NOAUTO
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenPreLegalizeGICombiner.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenPreLegalizeGICombiner.inc.d
@@ -1213,7 +1213,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenRegisterBank.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenRegisterBank.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -1260,16 +1260,16 @@ RUN_PROGRAM(
         llvm/Target/TargetSchedule.td llvm/Target/TargetSelectionDAG.td
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenRegisterBank.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenRegisterBank.inc.d
-)
-
-RUN_PROGRAM(
+) 
+ 
+RUN_PROGRAM( 
     contrib/libs/llvm12/utils/TableGen -gen-register-info -I
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target/AArch64 -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include -I ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenRegisterInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenRegisterInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -1326,7 +1326,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenSubtargetInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenSubtargetInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -1383,7 +1383,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/AArch64/AArch64.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenSystemOperands.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/AArch64/AArch64GenSystemOperands.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/AArch64/AArch64.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64CallingConvention.td
         contrib/libs/llvm12/lib/Target/AArch64/AArch64Combine.td
@@ -1438,7 +1438,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/ARM/ARM.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenAsmMatcher.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenAsmMatcher.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1479,7 +1479,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/ARM/ARM.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenAsmWriter.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenAsmWriter.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1519,7 +1519,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/ARM/ARM.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenCallingConv.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenCallingConv.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1560,7 +1560,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/ARM/ARM.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenDAGISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenDAGISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1601,7 +1601,7 @@ RUN_PROGRAM(
         --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenDisassemblerTables.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenDisassemblerTables.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1643,7 +1643,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/ARM/ARM.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenFastISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenFastISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1683,7 +1683,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/ARM/ARM.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenGlobalISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenGlobalISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1723,7 +1723,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/ARM/ARM.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenInstrInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenInstrInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1763,7 +1763,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/ARM/ARM.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenMCCodeEmitter.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenMCCodeEmitter.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1805,7 +1805,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/ARM/ARM.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenMCPseudoLowering.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenMCPseudoLowering.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1846,7 +1846,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/ARM/ARM.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenRegisterBank.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenRegisterBank.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1887,7 +1887,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/ARM/ARM.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenRegisterInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenRegisterInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1928,7 +1928,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/ARM/ARM.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenSubtargetInfo.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenSubtargetInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -1970,7 +1970,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/ARM/ARM.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenSystemRegister.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM/ARMGenSystemRegister.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/ARM/ARM.td contrib/libs/llvm12/lib/Target/ARM/ARMCallingConv.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrCDE.td
         contrib/libs/llvm12/lib/Target/ARM/ARMInstrFormats.td
@@ -2010,7 +2010,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/BPF/BPF.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenAsmMatcher.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenAsmMatcher.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/BPF/BPF.td contrib/libs/llvm12/lib/Target/BPF/BPFCallingConv.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrFormats.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrInfo.td
@@ -2036,7 +2036,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/BPF/BPF.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenAsmWriter.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenAsmWriter.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/BPF/BPF.td contrib/libs/llvm12/lib/Target/BPF/BPFCallingConv.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrFormats.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrInfo.td
@@ -2061,7 +2061,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/BPF/BPF.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenCallingConv.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenCallingConv.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/BPF/BPF.td contrib/libs/llvm12/lib/Target/BPF/BPFCallingConv.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrFormats.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrInfo.td
@@ -2087,7 +2087,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/BPF/BPF.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenDAGISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenDAGISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/BPF/BPF.td contrib/libs/llvm12/lib/Target/BPF/BPFCallingConv.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrFormats.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrInfo.td
@@ -2113,7 +2113,7 @@ RUN_PROGRAM(
         --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenDisassemblerTables.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenDisassemblerTables.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/BPF/BPF.td contrib/libs/llvm12/lib/Target/BPF/BPFCallingConv.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrFormats.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrInfo.td
@@ -2140,7 +2140,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/BPF/BPF.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenInstrInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenInstrInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/BPF/BPF.td contrib/libs/llvm12/lib/Target/BPF/BPFCallingConv.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrFormats.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrInfo.td
@@ -2165,7 +2165,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/BPF/BPF.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenMCCodeEmitter.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenMCCodeEmitter.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/BPF/BPF.td contrib/libs/llvm12/lib/Target/BPF/BPFCallingConv.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrFormats.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrInfo.td
@@ -2192,7 +2192,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/BPF/BPF.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenRegisterInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenRegisterInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/BPF/BPF.td contrib/libs/llvm12/lib/Target/BPF/BPFCallingConv.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrFormats.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrInfo.td
@@ -2218,7 +2218,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/BPF/BPF.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenSubtargetInfo.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/BPF/BPFGenSubtargetInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/BPF/BPF.td contrib/libs/llvm12/lib/Target/BPF/BPFCallingConv.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrFormats.td
         contrib/libs/llvm12/lib/Target/BPF/BPFInstrInfo.td
@@ -2244,7 +2244,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/NVPTX/NVPTX.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/NVPTX/NVPTXGenAsmWriter.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/NVPTX/NVPTXGenAsmWriter.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/NVPTX/NVPTX.td contrib/libs/llvm12/lib/Target/NVPTX/NVPTXInstrFormats.td
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTXInstrInfo.td
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTXIntrinsics.td
@@ -2270,7 +2270,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTX.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/NVPTX/NVPTXGenDAGISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/NVPTX/NVPTXGenDAGISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/NVPTX/NVPTX.td contrib/libs/llvm12/lib/Target/NVPTX/NVPTXInstrFormats.td
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTXInstrInfo.td
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTXIntrinsics.td
@@ -2295,7 +2295,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/NVPTX/NVPTX.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/NVPTX/NVPTXGenInstrInfo.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/NVPTX/NVPTXGenInstrInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/NVPTX/NVPTX.td contrib/libs/llvm12/lib/Target/NVPTX/NVPTXInstrFormats.td
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTXInstrInfo.td
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTXIntrinsics.td
@@ -2321,7 +2321,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTX.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/NVPTX/NVPTXGenRegisterInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/NVPTX/NVPTXGenRegisterInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/NVPTX/NVPTX.td contrib/libs/llvm12/lib/Target/NVPTX/NVPTXInstrFormats.td
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTXInstrInfo.td
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTXIntrinsics.td
@@ -2348,7 +2348,7 @@ RUN_PROGRAM(
         --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/NVPTX/NVPTXGenSubtargetInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/NVPTX/NVPTXGenSubtargetInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/NVPTX/NVPTX.td contrib/libs/llvm12/lib/Target/NVPTX/NVPTXInstrFormats.td
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTXInstrInfo.td
         contrib/libs/llvm12/lib/Target/NVPTX/NVPTXIntrinsics.td
@@ -2375,7 +2375,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenAsmMatcher.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenAsmMatcher.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2424,7 +2424,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenAsmWriter.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenAsmWriter.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2472,7 +2472,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenCallingConv.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenCallingConv.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2520,7 +2520,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenDAGISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenDAGISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2568,7 +2568,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenDisassemblerTables.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenDisassemblerTables.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2617,7 +2617,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/PowerPC/PPC.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenExegesis.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenExegesis.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2665,7 +2665,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenFastISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenFastISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2713,7 +2713,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenGlobalISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenGlobalISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2761,7 +2761,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenInstrInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenInstrInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2800,16 +2800,16 @@ RUN_PROGRAM(
         llvm/Target/TargetPfmCounters.td llvm/Target/TargetSchedule.td llvm/Target/TargetSelectionDAG.td
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenInstrInfo.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenInstrInfo.inc.d
-)
-
-RUN_PROGRAM(
+) 
+ 
+RUN_PROGRAM( 
     contrib/libs/llvm12/utils/TableGen -gen-emitter -I ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC
         -Iinclude -I${ARCADIA_ROOT}/contrib/libs/llvm12/include -I
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/PowerPC/PPC.td
         --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenMCCodeEmitter.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenMCCodeEmitter.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2858,7 +2858,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenRegisterBank.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenRegisterBank.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2897,16 +2897,16 @@ RUN_PROGRAM(
         llvm/Target/TargetPfmCounters.td llvm/Target/TargetSchedule.td llvm/Target/TargetSelectionDAG.td
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenRegisterBank.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenRegisterBank.inc.d
-)
-
-RUN_PROGRAM(
+) 
+ 
+RUN_PROGRAM( 
     contrib/libs/llvm12/utils/TableGen -gen-register-info -I
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include -I ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenRegisterInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenRegisterInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -2955,7 +2955,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenSubtargetInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/PowerPC/PPCGenSubtargetInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/PowerPC/GISel/PPCRegisterBanks.td
         contrib/libs/llvm12/lib/Target/PowerPC/P9InstrResources.td
         contrib/libs/llvm12/lib/Target/PowerPC/PPC.td contrib/libs/llvm12/lib/Target/PowerPC/PPCCallingConv.td
@@ -3003,7 +3003,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/X86/X86.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenAsmMatcher.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenAsmMatcher.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3061,7 +3061,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/X86/X86.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenAsmWriter.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenAsmWriter.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3119,7 +3119,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/X86/X86.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenAsmWriter1.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenAsmWriter1.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3176,7 +3176,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/X86/X86.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenCallingConv.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenCallingConv.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3234,7 +3234,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/X86/X86.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenDAGISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenDAGISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3292,7 +3292,7 @@ RUN_PROGRAM(
         --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenDisassemblerTables.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenDisassemblerTables.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3350,7 +3350,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/X86/X86.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenEVEX2VEXTables.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenEVEX2VEXTables.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3407,7 +3407,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/X86/X86.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenExegesis.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenExegesis.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3464,7 +3464,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/X86/X86.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenFastISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenFastISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3521,7 +3521,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/X86/X86.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenGlobalISel.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenGlobalISel.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3579,7 +3579,7 @@ RUN_PROGRAM(
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenInstrInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenInstrInfo.inc.d
         --long-string-literals=0
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3637,7 +3637,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/X86/X86.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenRegisterBank.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenRegisterBank.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3695,7 +3695,7 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/Target/X86/X86.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenRegisterInfo.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenRegisterInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3753,7 +3753,7 @@ RUN_PROGRAM(
         ${ARCADIA_ROOT}/contrib/libs/llvm12/lib/Target contrib/libs/llvm12/lib/Target/X86/X86.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenSubtargetInfo.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/X86/X86GenSubtargetInfo.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/lib/Target/X86/X86.td contrib/libs/llvm12/lib/Target/X86/X86CallingConv.td
         contrib/libs/llvm12/lib/Target/X86/X86Instr3DNow.td contrib/libs/llvm12/lib/Target/X86/X86InstrAMX.td
         contrib/libs/llvm12/lib/Target/X86/X86InstrAVX512.td
@@ -3812,8 +3812,8 @@ RUN_PROGRAM(
         contrib/libs/llvm12/lib/ToolDrivers/llvm-dlltool/Options.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/ToolDrivers/llvm-dlltool/Options.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/ToolDrivers/llvm-dlltool/Options.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
-    IN contrib/libs/llvm12/lib/ToolDrivers/llvm-dlltool/Options.td llvm/Option/OptParser.td
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
+    IN contrib/libs/llvm12/lib/ToolDrivers/llvm-dlltool/Options.td llvm/Option/OptParser.td 
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/ToolDrivers/llvm-dlltool/Options.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/ToolDrivers/llvm-dlltool/Options.inc.d
 )
@@ -3824,8 +3824,8 @@ RUN_PROGRAM(
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include contrib/libs/llvm12/lib/ToolDrivers/llvm-lib/Options.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/ToolDrivers/llvm-lib/Options.inc
         -d ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/ToolDrivers/llvm-lib/Options.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
-    IN contrib/libs/llvm12/lib/ToolDrivers/llvm-lib/Options.td llvm/Option/OptParser.td
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
+    IN contrib/libs/llvm12/lib/ToolDrivers/llvm-lib/Options.td llvm/Option/OptParser.td 
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/ToolDrivers/llvm-lib/Options.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/ToolDrivers/llvm-lib/Options.inc.d
 )
@@ -3836,8 +3836,8 @@ RUN_PROGRAM(
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include contrib/libs/llvm12/tools/dsymutil/Options.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/dsymutil/Options.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/dsymutil/Options.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
-    IN contrib/libs/llvm12/tools/dsymutil/Options.td llvm/Option/OptParser.td
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
+    IN contrib/libs/llvm12/tools/dsymutil/Options.td llvm/Option/OptParser.td 
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/dsymutil/Options.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/dsymutil/Options.inc.d
 )
@@ -3848,8 +3848,8 @@ RUN_PROGRAM(
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include contrib/libs/llvm12/tools/llvm-cvtres/Opts.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-cvtres/Opts.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-cvtres/Opts.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
-    IN contrib/libs/llvm12/tools/llvm-cvtres/Opts.td llvm/Option/OptParser.td
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
+    IN contrib/libs/llvm12/tools/llvm-cvtres/Opts.td llvm/Option/OptParser.td 
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-cvtres/Opts.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-cvtres/Opts.inc.d
 )
@@ -3860,8 +3860,8 @@ RUN_PROGRAM(
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include contrib/libs/llvm12/tools/llvm-lipo/LipoOpts.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-lipo/LipoOpts.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-lipo/LipoOpts.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
-    IN contrib/libs/llvm12/tools/llvm-lipo/LipoOpts.td llvm/Option/OptParser.td
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
+    IN contrib/libs/llvm12/tools/llvm-lipo/LipoOpts.td llvm/Option/OptParser.td 
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-lipo/LipoOpts.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-lipo/LipoOpts.inc.d
 )
@@ -3872,8 +3872,8 @@ RUN_PROGRAM(
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include contrib/libs/llvm12/tools/llvm-ml/Opts.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-ml/Opts.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-ml/Opts.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
-    IN contrib/libs/llvm12/tools/llvm-ml/Opts.td llvm/Option/OptParser.td
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
+    IN contrib/libs/llvm12/tools/llvm-ml/Opts.td llvm/Option/OptParser.td 
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-ml/Opts.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-ml/Opts.inc.d
 )
@@ -3884,8 +3884,8 @@ RUN_PROGRAM(
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include contrib/libs/llvm12/tools/llvm-mt/Opts.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-mt/Opts.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-mt/Opts.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
-    IN contrib/libs/llvm12/tools/llvm-mt/Opts.td llvm/Option/OptParser.td
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
+    IN contrib/libs/llvm12/tools/llvm-mt/Opts.td llvm/Option/OptParser.td 
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-mt/Opts.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-mt/Opts.inc.d
 )
@@ -3897,8 +3897,8 @@ RUN_PROGRAM(
         contrib/libs/llvm12/tools/llvm-objcopy/BitcodeStripOpts.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/BitcodeStripOpts.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/BitcodeStripOpts.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
-    IN contrib/libs/llvm12/tools/llvm-objcopy/BitcodeStripOpts.td llvm/Option/OptParser.td
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
+    IN contrib/libs/llvm12/tools/llvm-objcopy/BitcodeStripOpts.td llvm/Option/OptParser.td 
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/BitcodeStripOpts.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/BitcodeStripOpts.inc.d
 )
@@ -3910,8 +3910,8 @@ RUN_PROGRAM(
         contrib/libs/llvm12/tools/llvm-objcopy/InstallNameToolOpts.td --write-if-changed -o
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/InstallNameToolOpts.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/InstallNameToolOpts.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
-    IN contrib/libs/llvm12/tools/llvm-objcopy/InstallNameToolOpts.td llvm/Option/OptParser.td
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
+    IN contrib/libs/llvm12/tools/llvm-objcopy/InstallNameToolOpts.td llvm/Option/OptParser.td 
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/InstallNameToolOpts.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/InstallNameToolOpts.inc.d
 )
@@ -3922,7 +3922,7 @@ RUN_PROGRAM(
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include contrib/libs/llvm12/tools/llvm-objcopy/ObjcopyOpts.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/ObjcopyOpts.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/ObjcopyOpts.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/tools/llvm-objcopy/CommonOpts.td
         contrib/libs/llvm12/tools/llvm-objcopy/ObjcopyOpts.td llvm/Option/OptParser.td
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/ObjcopyOpts.inc
@@ -3935,35 +3935,35 @@ RUN_PROGRAM(
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include contrib/libs/llvm12/tools/llvm-objcopy/StripOpts.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/StripOpts.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/StripOpts.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
     IN contrib/libs/llvm12/tools/llvm-objcopy/CommonOpts.td
         contrib/libs/llvm12/tools/llvm-objcopy/StripOpts.td llvm/Option/OptParser.td
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/StripOpts.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-objcopy/StripOpts.inc.d
 )
 
-RUN_PROGRAM(
+RUN_PROGRAM( 
     contrib/libs/llvm12/utils/TableGen -gen-opt-parser-defs -I
         ${ARCADIA_ROOT}/contrib/libs/llvm12/tools/llvm-rc -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include contrib/libs/llvm12/tools/llvm-rc/Opts.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-rc/Opts.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-rc/Opts.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
-    IN contrib/libs/llvm12/tools/llvm-rc/Opts.td llvm/Option/OptParser.td
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
+    IN contrib/libs/llvm12/tools/llvm-rc/Opts.td llvm/Option/OptParser.td 
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-rc/Opts.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-rc/Opts.inc.d
-)
-
-RUN_PROGRAM(
+) 
+ 
+RUN_PROGRAM( 
     contrib/libs/llvm12/utils/TableGen -gen-opt-parser-defs -I
         ${ARCADIA_ROOT}/contrib/libs/llvm12/tools/llvm-symbolizer -Iinclude
         -I${ARCADIA_ROOT}/contrib/libs/llvm12/include contrib/libs/llvm12/tools/llvm-symbolizer/Opts.td
         --write-if-changed -o ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-symbolizer/Opts.inc -d
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-symbolizer/Opts.inc.d
-    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12
-    IN contrib/libs/llvm12/tools/llvm-symbolizer/Opts.td llvm/Option/OptParser.td
+    CWD ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12 
+    IN contrib/libs/llvm12/tools/llvm-symbolizer/Opts.td llvm/Option/OptParser.td 
     OUT_NOAUTO ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-symbolizer/Opts.inc
         ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/tools/llvm-symbolizer/Opts.inc.d
-)
-
+) 
+ 
 END()

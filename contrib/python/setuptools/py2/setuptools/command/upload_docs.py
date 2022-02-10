@@ -16,15 +16,15 @@ import shutil
 import itertools
 import functools
 
-from setuptools.extern import six
-from setuptools.extern.six.moves import http_client, urllib
+from setuptools.extern import six 
+from setuptools.extern.six.moves import http_client, urllib 
 
 from pkg_resources import iter_entry_points
 from .upload import upload
 
 
 def _encode(s):
-    errors = 'strict' if six.PY2 else 'surrogateescape'
+    errors = 'strict' if six.PY2 else 'surrogateescape' 
     return s.encode('utf-8', errors)
 
 
@@ -68,8 +68,8 @@ class upload_docs(upload):
         else:
             self.ensure_dirname('upload_dir')
             self.target_dir = self.upload_dir
-        if 'pypi.python.org' in self.repository:
-            log.warn("Upload_docs command is deprecated. Use RTD instead.")
+        if 'pypi.python.org' in self.repository: 
+            log.warn("Upload_docs command is deprecated. Use RTD instead.") 
         self.announce('Using upload directory %s' % self.target_dir)
 
     def create_zipfile(self, filename):
@@ -153,7 +153,7 @@ class upload_docs(upload):
         # set up the authentication
         credentials = _encode(self.username + ':' + self.password)
         credentials = standard_b64encode(credentials)
-        if not six.PY2:
+        if not six.PY2: 
             credentials = credentials.decode('ascii')
         auth = "Basic " + credentials
 

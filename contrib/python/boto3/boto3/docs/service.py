@@ -28,12 +28,12 @@ class ServiceDocumenter(BaseServiceDocumenter):
     EXAMPLE_PATH = os.path.join(os.path.dirname(boto3.__file__), 'examples')
 
     def __init__(self, service_name, session):
-        super(ServiceDocumenter, self).__init__(
-            service_name=service_name,
-            # I know that this is an internal attribute, but the botocore session
-            # is needed to load the paginator and waiter models.
-            session=session._session,
-        )
+        super(ServiceDocumenter, self).__init__( 
+            service_name=service_name, 
+            # I know that this is an internal attribute, but the botocore session 
+            # is needed to load the paginator and waiter models. 
+            session=session._session, 
+        ) 
         self._boto3_session = session
         self._client = self._boto3_session.client(service_name)
         self._service_resource = None

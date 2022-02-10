@@ -47,18 +47,18 @@
       "output_token": "NextToken",
       "limit_key": "MaxRecords",
       "result_key": "Tags"
-    },
-    "DescribeLoadBalancerTargetGroups": {
-      "input_token": "NextToken",
-      "limit_key": "MaxRecords",
-      "output_token": "NextToken",
-      "result_key": "LoadBalancerTargetGroups"
-    },
-    "DescribeLoadBalancers": {
-      "input_token": "NextToken",
-      "limit_key": "MaxRecords",
-      "output_token": "NextToken",
-      "result_key": "LoadBalancers"
+    }, 
+    "DescribeLoadBalancerTargetGroups": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxRecords", 
+      "output_token": "NextToken", 
+      "result_key": "LoadBalancerTargetGroups" 
+    }, 
+    "DescribeLoadBalancers": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxRecords", 
+      "output_token": "NextToken", 
+      "result_key": "LoadBalancers" 
     }
   }
 }

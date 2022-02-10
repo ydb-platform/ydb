@@ -124,7 +124,7 @@ extern char &LoopSimplifyID;
 
 /// This function returns a new pass that downgrades the debug info in the
 /// module to line tables only.
-ModulePass *createStripNonLineTableDebugLegacyPass();
+ModulePass *createStripNonLineTableDebugLegacyPass(); 
 
 //===----------------------------------------------------------------------===//
 //

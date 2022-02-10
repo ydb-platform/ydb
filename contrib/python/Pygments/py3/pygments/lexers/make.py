@@ -4,7 +4,7 @@
 
     Lexers for Makefiles and similar.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -56,7 +56,7 @@ class MakefileLexer(Lexer):
                 ins.append((len(done), [(0, Comment, line)]))
             else:
                 done += line
-        yield from do_insertions(ins, lex.get_tokens_unprocessed(done))
+        yield from do_insertions(ins, lex.get_tokens_unprocessed(done)) 
 
     def analyse_text(text):
         # Many makefiles have $(BIG_CAPS) style variables
@@ -91,8 +91,8 @@ class BaseMakefileLexer(RegexLexer):
             (r'([\w${}().-]+)(\s*)([!?:+]?=)([ \t]*)((?:.*\\\n)+|.*\n)',
              bygroups(Name.Variable, Text, Operator, Text, using(BashLexer))),
             # strings
-            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double),
-            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single),
+            (r'"(\\\\|\\[^\\]|[^"\\])*"', String.Double), 
+            (r"'(\\\\|\\[^\\]|[^'\\])*'", String.Single), 
             # targets
             (r'([^\n:]+)(:+)([ \t]*)', bygroups(Name.Function, Operator, Text),
              'block-header'),
@@ -194,12 +194,12 @@ class CMakeLexer(RegexLexer):
     }
 
     def analyse_text(text):
-        exp = (
-            r'^[ \t]*CMAKE_MINIMUM_REQUIRED[ \t]*'
-            r'\([ \t]*VERSION[ \t]*\d+(\.\d+)*[ \t]*'
-            r'([ \t]FATAL_ERROR)?[ \t]*\)[ \t]*'
-            r'(#[^\n]*)?$'
-       )
+        exp = ( 
+            r'^[ \t]*CMAKE_MINIMUM_REQUIRED[ \t]*' 
+            r'\([ \t]*VERSION[ \t]*\d+(\.\d+)*[ \t]*' 
+            r'([ \t]FATAL_ERROR)?[ \t]*\)[ \t]*' 
+            r'(#[^\n]*)?$' 
+       ) 
         if re.search(exp, text, flags=re.MULTILINE | re.IGNORECASE):
             return 0.8
         return 0.0

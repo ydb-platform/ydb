@@ -299,9 +299,9 @@ FunctionPass *llvm::createLegacyDivergenceAnalysisPass() {
 }
 
 void LegacyDivergenceAnalysis::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequiredTransitive<DominatorTreeWrapperPass>();
-  AU.addRequiredTransitive<PostDominatorTreeWrapperPass>();
-  AU.addRequiredTransitive<LoopInfoWrapperPass>();
+  AU.addRequiredTransitive<DominatorTreeWrapperPass>(); 
+  AU.addRequiredTransitive<PostDominatorTreeWrapperPass>(); 
+  AU.addRequiredTransitive<LoopInfoWrapperPass>(); 
   AU.setPreservesAll();
 }
 

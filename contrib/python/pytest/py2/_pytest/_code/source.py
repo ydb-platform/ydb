@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -128,8 +128,8 @@ class Source(object):
         else:
             source = str(self)
         try:
-            ast.parse(source)
-        except (SyntaxError, ValueError, TypeError):
+            ast.parse(source) 
+        except (SyntaxError, ValueError, TypeError): 
             return False
         else:
             return True
@@ -199,9 +199,9 @@ def compile_(source, filename=None, mode="exec", flags=0, dont_inherit=0):
 
 def getfslineno(obj):
     """ Return source location (path, lineno) for the given object.
-    If the source cannot be determined return ("", -1).
-
-    The line number is 0-based.
+    If the source cannot be determined return ("", -1). 
+ 
+    The line number is 0-based. 
     """
     from .code import Code
 
@@ -235,7 +235,7 @@ def getfslineno(obj):
 def findsource(obj):
     try:
         sourcelines, lineno = inspect.findsource(obj)
-    except Exception:
+    except Exception: 
         return None, -1
     source = Source()
     source.lines = [line.rstrip() for line in sourcelines]

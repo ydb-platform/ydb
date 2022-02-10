@@ -83,8 +83,8 @@
     }
   },
   "shapes":{
-    "ApproximateSecondsBeforeTimedOut":{"type":"long"},
-    "BinaryBlob":{"type":"blob"},
+    "ApproximateSecondsBeforeTimedOut":{"type":"long"}, 
+    "BinaryBlob":{"type":"blob"}, 
     "CertificateValidationException":{
       "type":"structure",
       "members":{
@@ -245,10 +245,10 @@
           "shape":"LastUpdatedAt",
           "documentation":"<p>The time, in milliseconds since the epoch, when the job execution was last updated. </p>"
         },
-        "approximateSecondsBeforeTimedOut":{
-          "shape":"ApproximateSecondsBeforeTimedOut",
-          "documentation":"<p>The estimated number of seconds that remain before the job execution status will be changed to <code>TIMED_OUT</code>.</p>"
-        },
+        "approximateSecondsBeforeTimedOut":{ 
+          "shape":"ApproximateSecondsBeforeTimedOut", 
+          "documentation":"<p>The estimated number of seconds that remain before the job execution status will be changed to <code>TIMED_OUT</code>.</p>" 
+        }, 
         "versionNumber":{
           "shape":"VersionNumber",
           "documentation":"<p>The version of the job execution. Job execution versions are incremented each time they are updated by a device.</p>"
@@ -289,7 +289,7 @@
         "IN_PROGRESS",
         "SUCCEEDED",
         "FAILED",
-        "TIMED_OUT",
+        "TIMED_OUT", 
         "REJECTED",
         "REMOVED",
         "CANCELED"
@@ -375,10 +375,10 @@
         "statusDetails":{
           "shape":"DetailsMap",
           "documentation":"<p>A collection of name/value pairs that describe the status of the job execution. If not specified, the statusDetails are unchanged.</p>"
-        },
-        "stepTimeoutInMinutes":{
-          "shape":"StepTimeoutInMinutes",
-          "documentation":"<p>Specifies the amount of time this device has to finish execution of this job. If the job execution status is not set to a terminal state before this timer expires, or before the timer is reset (by calling <code>UpdateJobExecution</code>, setting the status to <code>IN_PROGRESS</code> and specifying a new timeout value in field <code>stepTimeoutInMinutes</code>) the job execution status will be automatically set to <code>TIMED_OUT</code>. Note that setting this timeout has no effect on that job execution timeout which may have been specified when the job was created (<code>CreateJob</code> using field <code>timeoutConfig</code>).</p>"
+        }, 
+        "stepTimeoutInMinutes":{ 
+          "shape":"StepTimeoutInMinutes", 
+          "documentation":"<p>Specifies the amount of time this device has to finish execution of this job. If the job execution status is not set to a terminal state before this timer expires, or before the timer is reset (by calling <code>UpdateJobExecution</code>, setting the status to <code>IN_PROGRESS</code> and specifying a new timeout value in field <code>stepTimeoutInMinutes</code>) the job execution status will be automatically set to <code>TIMED_OUT</code>. Note that setting this timeout has no effect on that job execution timeout which may have been specified when the job was created (<code>CreateJob</code> using field <code>timeoutConfig</code>).</p>" 
         }
       }
     },
@@ -392,7 +392,7 @@
       }
     },
     "StartedAt":{"type":"long"},
-    "StepTimeoutInMinutes":{"type":"long"},
+    "StepTimeoutInMinutes":{"type":"long"}, 
     "TerminalStateException":{
       "type":"structure",
       "members":{
@@ -413,11 +413,11 @@
       "members":{
         "message":{
           "shape":"errorMessage",
-          "documentation":"<p>The message associated with the exception.</p>"
-        },
-        "payload":{
-          "shape":"BinaryBlob",
-          "documentation":"<p>The payload associated with the exception.</p>"
+          "documentation":"<p>The message associated with the exception.</p>" 
+        }, 
+        "payload":{ 
+          "shape":"BinaryBlob", 
+          "documentation":"<p>The payload associated with the exception.</p>" 
         }
       },
       "documentation":"<p>The rate exceeds the limit.</p>",
@@ -452,10 +452,10 @@
           "shape":"DetailsMap",
           "documentation":"<p> Optional. A collection of name/value pairs that describe the status of the job execution. If not specified, the statusDetails are unchanged.</p>"
         },
-        "stepTimeoutInMinutes":{
-          "shape":"StepTimeoutInMinutes",
-          "documentation":"<p>Specifies the amount of time this device has to finish execution of this job. If the job execution status is not set to a terminal state before this timer expires, or before the timer is reset (by again calling <code>UpdateJobExecution</code>, setting the status to <code>IN_PROGRESS</code> and specifying a new timeout value in this field) the job execution status will be automatically set to <code>TIMED_OUT</code>. Note that setting or resetting this timeout has no effect on that job execution timeout which may have been specified when the job was created (<code>CreateJob</code> using field <code>timeoutConfig</code>).</p>"
-        },
+        "stepTimeoutInMinutes":{ 
+          "shape":"StepTimeoutInMinutes", 
+          "documentation":"<p>Specifies the amount of time this device has to finish execution of this job. If the job execution status is not set to a terminal state before this timer expires, or before the timer is reset (by again calling <code>UpdateJobExecution</code>, setting the status to <code>IN_PROGRESS</code> and specifying a new timeout value in this field) the job execution status will be automatically set to <code>TIMED_OUT</code>. Note that setting or resetting this timeout has no effect on that job execution timeout which may have been specified when the job was created (<code>CreateJob</code> using field <code>timeoutConfig</code>).</p>" 
+        }, 
         "expectedVersion":{
           "shape":"ExpectedVersion",
           "documentation":"<p>Optional. The expected current version of the job execution. Each time you update the job execution, its version is incremented. If the version of the job execution stored in Jobs does not match, the update is rejected with a VersionMismatch error, and an ErrorResponse that contains the current job execution status data is returned. (This makes it unnecessary to perform a separate DescribeJobExecution request in order to obtain the job execution status data.)</p>"

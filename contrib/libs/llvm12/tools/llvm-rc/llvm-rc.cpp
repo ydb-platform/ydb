@@ -92,12 +92,12 @@ int main(int Argc, const char **Argv) {
   opt::InputArgList InputArgs = T.ParseArgs(ArgsArr, MAI, MAC);
 
   // The tool prints nothing when invoked with no command-line arguments.
-  if (InputArgs.hasArg(OPT_help)) {
+  if (InputArgs.hasArg(OPT_help)) { 
     T.PrintHelp(outs(), "rc [options] file...", "Resource Converter", false);
     return 0;
   }
 
-  const bool BeVerbose = InputArgs.hasArg(OPT_verbose);
+  const bool BeVerbose = InputArgs.hasArg(OPT_verbose); 
 
   std::vector<std::string> InArgsInfo = InputArgs.getAllArgValues(OPT_INPUT);
   if (DashDash != Argv + Argc)
@@ -141,14 +141,14 @@ int main(int Argc, const char **Argv) {
   SmallString<128> InputFile(InArgsInfo[0]);
   llvm::sys::fs::make_absolute(InputFile);
   Params.InputFilePath = InputFile;
-  Params.Include = InputArgs.getAllArgValues(OPT_includepath);
-  Params.NoInclude = InputArgs.getAllArgValues(OPT_noinclude);
+  Params.Include = InputArgs.getAllArgValues(OPT_includepath); 
+  Params.NoInclude = InputArgs.getAllArgValues(OPT_noinclude); 
 
-  if (InputArgs.hasArg(OPT_codepage)) {
-    if (InputArgs.getLastArgValue(OPT_codepage)
+  if (InputArgs.hasArg(OPT_codepage)) { 
+    if (InputArgs.getLastArgValue(OPT_codepage) 
             .getAsInteger(10, Params.CodePage))
       fatalError("Invalid code page: " +
-                 InputArgs.getLastArgValue(OPT_codepage));
+                 InputArgs.getLastArgValue(OPT_codepage)); 
     switch (Params.CodePage) {
     case CpAcp:
     case CpWin1252:
@@ -161,10 +161,10 @@ int main(int Argc, const char **Argv) {
   }
 
   std::unique_ptr<ResourceFileWriter> Visitor;
-  bool IsDryRun = InputArgs.hasArg(OPT_dry_run);
+  bool IsDryRun = InputArgs.hasArg(OPT_dry_run); 
 
   if (!IsDryRun) {
-    auto OutArgsInfo = InputArgs.getAllArgValues(OPT_fileout);
+    auto OutArgsInfo = InputArgs.getAllArgValues(OPT_fileout); 
     if (OutArgsInfo.empty()) {
       SmallString<128> OutputFile = InputFile;
       llvm::sys::path::replace_extension(OutputFile, "res");
@@ -182,17 +182,17 @@ int main(int Argc, const char **Argv) {
       fatalError("Error opening output file '" + OutArgsInfo[0] +
                  "': " + EC.message());
     Visitor = std::make_unique<ResourceFileWriter>(Params, std::move(FOut));
-    Visitor->AppendNull = InputArgs.hasArg(OPT_add_null);
+    Visitor->AppendNull = InputArgs.hasArg(OPT_add_null); 
 
     ExitOnErr(NullResource().visit(Visitor.get()));
 
     // Set the default language; choose en-US arbitrarily.
     unsigned PrimaryLangId = 0x09, SubLangId = 0x01;
-    if (InputArgs.hasArg(OPT_lang_id)) {
+    if (InputArgs.hasArg(OPT_lang_id)) { 
       unsigned LangId;
-      if (InputArgs.getLastArgValue(OPT_lang_id).getAsInteger(16, LangId))
+      if (InputArgs.getLastArgValue(OPT_lang_id).getAsInteger(16, LangId)) 
         fatalError("Invalid language id: " +
-                   InputArgs.getLastArgValue(OPT_lang_id));
+                   InputArgs.getLastArgValue(OPT_lang_id)); 
       PrimaryLangId = LangId & 0x3ff;
       SubLangId = LangId >> 10;
     }

@@ -59,7 +59,7 @@ bool CSEConfigFull::shouldCSEOpc(unsigned Opc) {
   case TargetOpcode::G_UNMERGE_VALUES:
   case TargetOpcode::G_TRUNC:
   case TargetOpcode::G_PTR_ADD:
-  case TargetOpcode::G_EXTRACT:
+  case TargetOpcode::G_EXTRACT: 
     return true;
   }
   return false;
@@ -367,21 +367,21 @@ GISelInstProfileBuilder::addNodeIDFlag(unsigned Flag) const {
   return *this;
 }
 
-const GISelInstProfileBuilder &
-GISelInstProfileBuilder::addNodeIDReg(Register Reg) const {
-  LLT Ty = MRI.getType(Reg);
-  if (Ty.isValid())
-    addNodeIDRegType(Ty);
-
-  if (const RegClassOrRegBank &RCOrRB = MRI.getRegClassOrRegBank(Reg)) {
-    if (const auto *RB = RCOrRB.dyn_cast<const RegisterBank *>())
-      addNodeIDRegType(RB);
-    else if (const auto *RC = RCOrRB.dyn_cast<const TargetRegisterClass *>())
-      addNodeIDRegType(RC);
-  }
-  return *this;
-}
-
+const GISelInstProfileBuilder & 
+GISelInstProfileBuilder::addNodeIDReg(Register Reg) const { 
+  LLT Ty = MRI.getType(Reg); 
+  if (Ty.isValid()) 
+    addNodeIDRegType(Ty); 
+ 
+  if (const RegClassOrRegBank &RCOrRB = MRI.getRegClassOrRegBank(Reg)) { 
+    if (const auto *RB = RCOrRB.dyn_cast<const RegisterBank *>()) 
+      addNodeIDRegType(RB); 
+    else if (const auto *RC = RCOrRB.dyn_cast<const TargetRegisterClass *>()) 
+      addNodeIDRegType(RC); 
+  } 
+  return *this; 
+} 
+ 
 const GISelInstProfileBuilder &GISelInstProfileBuilder::addNodeIDMachineOperand(
     const MachineOperand &MO) const {
   if (MO.isReg()) {
@@ -389,8 +389,8 @@ const GISelInstProfileBuilder &GISelInstProfileBuilder::addNodeIDMachineOperand(
     if (!MO.isDef())
       addNodeIDRegNum(Reg);
 
-    // Profile the register properties.
-    addNodeIDReg(Reg);
+    // Profile the register properties. 
+    addNodeIDReg(Reg); 
     assert(!MO.isImplicit() && "Unhandled case");
   } else if (MO.isImm())
     ID.AddInteger(MO.getImm());

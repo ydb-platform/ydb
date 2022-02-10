@@ -4,10 +4,10 @@ LICENSE(BSD-3-Clause)
 
 OWNER(orivej g:python-contrib)
 
-VERSION(0.13.9)
+VERSION(0.13.9) 
 
 PEERDIR(
-    contrib/python/decorator
+    contrib/python/decorator 
     contrib/python/ipython
 )
 
@@ -29,10 +29,10 @@ NO_CHECK_IMPORTS(
     ipdb.stdout
 )
 
-RESOURCE_FILES(
-    PREFIX contrib/python/ipdb/
-    .dist-info/METADATA
-    .dist-info/top_level.txt
-)
-
+RESOURCE_FILES( 
+    PREFIX contrib/python/ipdb/ 
+    .dist-info/METADATA 
+    .dist-info/top_level.txt 
+) 
+ 
 END()

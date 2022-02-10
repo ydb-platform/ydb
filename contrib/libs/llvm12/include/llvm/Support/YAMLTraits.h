@@ -26,9 +26,9 @@
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/Endian.h"
 #include "llvm/Support/Regex.h"
-#include "llvm/Support/SMLoc.h"
+#include "llvm/Support/SMLoc.h" 
 #include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/VersionTuple.h"
+#include "llvm/Support/VersionTuple.h" 
 #include "llvm/Support/YAMLParser.h"
 #include "llvm/Support/raw_ostream.h"
 #include <cassert>
@@ -70,7 +70,7 @@ struct MappingTraits {
   // Must provide:
   // static void mapping(IO &io, T &fields);
   // Optionally may provide:
-  // static std::string validate(IO &io, T &fields);
+  // static std::string validate(IO &io, T &fields); 
   //
   // The optional flow flag will cause generated YAML to use a flow mapping
   // (e.g. { a: 0, b: 1 }):
@@ -92,7 +92,7 @@ template <class T, class Context> struct MappingContextTraits {
   // Must provide:
   // static void mapping(IO &io, T &fields, Context &Ctx);
   // Optionally may provide:
-  // static std::string validate(IO &io, T &fields, Context &Ctx);
+  // static std::string validate(IO &io, T &fields, Context &Ctx); 
   //
   // The optional flow flag will cause generated YAML to use a flow mapping
   // (e.g. { a: 0, b: 1 }):
@@ -430,7 +430,7 @@ template <class T> struct has_MappingTraits<T, EmptyContext> {
 
 // Test if MappingContextTraits<T>::validate() is defined on type T.
 template <class T, class Context> struct has_MappingValidateTraits {
-  using Signature_validate = std::string (*)(class IO &, T &, Context &);
+  using Signature_validate = std::string (*)(class IO &, T &, Context &); 
 
   template <typename U>
   static char test(SameType<Signature_validate, &U::validate>*);
@@ -444,7 +444,7 @@ template <class T, class Context> struct has_MappingValidateTraits {
 
 // Test if MappingTraits<T>::validate() is defined on type T.
 template <class T> struct has_MappingValidateTraits<T, EmptyContext> {
-  using Signature_validate = std::string (*)(class IO &, T &);
+  using Signature_validate = std::string (*)(class IO &, T &); 
 
   template <typename U>
   static char test(SameType<Signature_validate, &U::validate> *);
@@ -646,7 +646,7 @@ inline bool isNull(StringRef S) {
 }
 
 inline bool isBool(StringRef S) {
-  // FIXME: using parseBool is causing multiple tests to fail.
+  // FIXME: using parseBool is causing multiple tests to fail. 
   return S.equals("true") || S.equals("True") || S.equals("TRUE") ||
          S.equals("false") || S.equals("False") || S.equals("FALSE");
 }
@@ -799,7 +799,7 @@ public:
   virtual NodeKind getNodeKind() = 0;
 
   virtual void setError(const Twine &) = 0;
-  virtual void setAllowUnknownKeys(bool Allow);
+  virtual void setAllowUnknownKeys(bool Allow); 
 
   template <typename T>
   void enumCase(T &Val, const char* Str, const T ConstVal) {
@@ -913,7 +913,7 @@ private:
   template <typename T, typename Context>
   void processKeyWithDefault(const char *Key, Optional<T> &Val,
                              const Optional<T> &DefaultValue, bool Required,
-                             Context &Ctx);
+                             Context &Ctx); 
 
   template <typename T, typename Context>
   void processKeyWithDefault(const char *Key, T &Val, const T &DefaultValue,
@@ -1051,7 +1051,7 @@ yamlize(IO &io, T &Val, bool, Context &Ctx) {
   else
     io.beginMapping();
   if (io.outputting()) {
-    std::string Err = MappingTraits<T>::validate(io, Val);
+    std::string Err = MappingTraits<T>::validate(io, Val); 
     if (!Err.empty()) {
       errs() << Err << "\n";
       assert(Err.empty() && "invalid struct trying to be written as yaml");
@@ -1059,7 +1059,7 @@ yamlize(IO &io, T &Val, bool, Context &Ctx) {
   }
   detail::doMapping(io, Val, Ctx);
   if (!io.outputting()) {
-    std::string Err = MappingTraits<T>::validate(io, Val);
+    std::string Err = MappingTraits<T>::validate(io, Val); 
     if (!Err.empty())
       io.setError(Err);
   }
@@ -1481,10 +1481,10 @@ private:
 
     static bool classof(const MapHNode *) { return true; }
 
-    using NameToNodeAndLoc =
-        StringMap<std::pair<std::unique_ptr<HNode>, SMRange>>;
+    using NameToNodeAndLoc = 
+        StringMap<std::pair<std::unique_ptr<HNode>, SMRange>>; 
 
-    NameToNodeAndLoc Mapping;
+    NameToNodeAndLoc Mapping; 
     SmallVector<std::string, 6> ValidKeys;
   };
 
@@ -1506,12 +1506,12 @@ private:
   std::unique_ptr<Input::HNode> createHNodes(Node *node);
   void setError(HNode *hnode, const Twine &message);
   void setError(Node *node, const Twine &message);
-  void setError(const SMRange &Range, const Twine &message);
+  void setError(const SMRange &Range, const Twine &message); 
 
-  void reportWarning(HNode *hnode, const Twine &message);
-  void reportWarning(Node *hnode, const Twine &message);
-  void reportWarning(const SMRange &Range, const Twine &message);
-
+  void reportWarning(HNode *hnode, const Twine &message); 
+  void reportWarning(Node *hnode, const Twine &message); 
+  void reportWarning(const SMRange &Range, const Twine &message); 
+ 
 public:
   // These are only used by operator>>. They could be private
   // if those templated things could be made friends.
@@ -1521,8 +1521,8 @@ public:
   /// Returns the current node that's being parsed by the YAML Parser.
   const Node *getCurrentNode() const;
 
-  void setAllowUnknownKeys(bool Allow) override;
-
+  void setAllowUnknownKeys(bool Allow) override; 
+ 
 private:
   SourceMgr                           SrcMgr; // must be before Strm
   std::unique_ptr<llvm::yaml::Stream> Strm;
@@ -1533,7 +1533,7 @@ private:
   std::vector<bool>                   BitValuesUsed;
   HNode *CurrentNode = nullptr;
   bool                                ScalarMatchFound = false;
-  bool AllowUnknownKeys = false;
+  bool AllowUnknownKeys = false; 
 };
 
 ///
@@ -1593,7 +1593,7 @@ public:
 private:
   void output(StringRef s);
   void outputUpToEndOfLine(StringRef s);
-  void newLineCheck(bool EmptySequence = false);
+  void newLineCheck(bool EmptySequence = false); 
   void outputNewLine();
   void paddedKey(StringRef key);
   void flowKey(StringRef Key);
@@ -1628,42 +1628,42 @@ private:
   StringRef PaddingBeforeContainer;
 };
 
-template <typename T, typename Context>
-void IO::processKeyWithDefault(const char *Key, Optional<T> &Val,
-                               const Optional<T> &DefaultValue, bool Required,
-                               Context &Ctx) {
-  assert(DefaultValue.hasValue() == false &&
-         "Optional<T> shouldn't have a value!");
-  void *SaveInfo;
-  bool UseDefault = true;
-  const bool sameAsDefault = outputting() && !Val.hasValue();
-  if (!outputting() && !Val.hasValue())
-    Val = T();
-  if (Val.hasValue() &&
-      this->preflightKey(Key, Required, sameAsDefault, UseDefault, SaveInfo)) {
-
-    // When reading an Optional<X> key from a YAML description, we allow the
-    // special "<none>" value, which can be used to specify that no value was
-    // requested, i.e. the DefaultValue will be assigned. The DefaultValue is
-    // usually None.
-    bool IsNone = false;
-    if (!outputting())
-      if (auto *Node = dyn_cast<ScalarNode>(((Input *)this)->getCurrentNode()))
-        // We use rtrim to ignore possible white spaces that might exist when a
-        // comment is present on the same line.
-        IsNone = Node->getRawValue().rtrim(' ') == "<none>";
-
-    if (IsNone)
-      Val = DefaultValue;
-    else
-      yamlize(*this, Val.getValue(), Required, Ctx);
-    this->postflightKey(SaveInfo);
-  } else {
-    if (UseDefault)
-      Val = DefaultValue;
-  }
-}
-
+template <typename T, typename Context> 
+void IO::processKeyWithDefault(const char *Key, Optional<T> &Val, 
+                               const Optional<T> &DefaultValue, bool Required, 
+                               Context &Ctx) { 
+  assert(DefaultValue.hasValue() == false && 
+         "Optional<T> shouldn't have a value!"); 
+  void *SaveInfo; 
+  bool UseDefault = true; 
+  const bool sameAsDefault = outputting() && !Val.hasValue(); 
+  if (!outputting() && !Val.hasValue()) 
+    Val = T(); 
+  if (Val.hasValue() && 
+      this->preflightKey(Key, Required, sameAsDefault, UseDefault, SaveInfo)) { 
+ 
+    // When reading an Optional<X> key from a YAML description, we allow the 
+    // special "<none>" value, which can be used to specify that no value was 
+    // requested, i.e. the DefaultValue will be assigned. The DefaultValue is 
+    // usually None. 
+    bool IsNone = false; 
+    if (!outputting()) 
+      if (auto *Node = dyn_cast<ScalarNode>(((Input *)this)->getCurrentNode())) 
+        // We use rtrim to ignore possible white spaces that might exist when a 
+        // comment is present on the same line. 
+        IsNone = Node->getRawValue().rtrim(' ') == "<none>"; 
+ 
+    if (IsNone) 
+      Val = DefaultValue; 
+    else 
+      yamlize(*this, Val.getValue(), Required, Ctx); 
+    this->postflightKey(SaveInfo); 
+  } else { 
+    if (UseDefault) 
+      Val = DefaultValue; 
+  } 
+} 
+ 
 /// YAML I/O does conversion based on types. But often native data types
 /// are just a typedef of built in intergral types (e.g. int).  But the C++
 /// type matching system sees through the typedef and all the typedefed types
@@ -1724,12 +1724,12 @@ struct ScalarTraits<Hex64> {
   static QuotingType mustQuote(StringRef) { return QuotingType::None; }
 };
 
-template <> struct ScalarTraits<VersionTuple> {
-  static void output(const VersionTuple &Value, void *, llvm::raw_ostream &Out);
-  static StringRef input(StringRef, void *, VersionTuple &);
-  static QuotingType mustQuote(StringRef) { return QuotingType::None; }
-};
-
+template <> struct ScalarTraits<VersionTuple> { 
+  static void output(const VersionTuple &Value, void *, llvm::raw_ostream &Out); 
+  static StringRef input(StringRef, void *, VersionTuple &); 
+  static QuotingType mustQuote(StringRef) { return QuotingType::None; } 
+}; 
+ 
 // Define non-member operator>> so that Input can stream in a document list.
 template <typename T>
 inline std::enable_if_t<has_DocumentListTraits<T>::value, Input &>

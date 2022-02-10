@@ -28,7 +28,7 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
-#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SetVector.h" 
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/ValueHandle.h"
@@ -47,7 +47,7 @@ class Function;
 /// it is queried.
 class PhiValues {
 public:
-  using ValueSet = SmallSetVector<Value *, 4>;
+  using ValueSet = SmallSetVector<Value *, 4>; 
 
   /// Construct an empty PhiValues.
   PhiValues(const Function &F) : F(F) {}
@@ -77,7 +77,7 @@ public:
                   FunctionAnalysisManager::Invalidator &);
 
 private:
-  using ConstValueSet = SmallSetVector<const Value *, 4>;
+  using ConstValueSet = SmallSetVector<const Value *, 4>; 
 
   /// The next depth number to be used by processPhi.
   unsigned int NextDepthNumber = 1;

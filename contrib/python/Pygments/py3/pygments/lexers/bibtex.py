@@ -4,7 +4,7 @@
 
     Lexers for BibTeX bibliography data and styles
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -26,13 +26,13 @@ class BibTeXLexer(ExtendedRegexLexer):
     """
 
     name = 'BibTeX'
-    aliases = ['bibtex', 'bib']
+    aliases = ['bibtex', 'bib'] 
     filenames = ['*.bib']
     mimetypes = ["text/x-bibtex"]
     flags = re.IGNORECASE
 
     ALLOWED_CHARS = r'@!$&*+\-./:;<>?\[\\\]^`|~'
-    IDENTIFIER = '[{}][{}]*'.format('a-z_' + ALLOWED_CHARS, r'\w' + ALLOWED_CHARS)
+    IDENTIFIER = '[{}][{}]*'.format('a-z_' + ALLOWED_CHARS, r'\w' + ALLOWED_CHARS) 
 
     def open_brace_callback(self, match, ctx):
         opening_brace = match.group()
@@ -154,6 +154,6 @@ class BSTLexer(RegexLexer):
         ],
         'whitespace': [
             (r'\s+', Whitespace),
-            ('%.*?$', Comment.Single),
+            ('%.*?$', Comment.Single), 
         ],
     }

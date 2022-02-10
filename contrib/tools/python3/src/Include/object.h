@@ -1,6 +1,6 @@
 #ifndef Py_OBJECT_H
 #define Py_OBJECT_H
-
+ 
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -27,7 +27,7 @@ of data it contains.  An object's type is fixed when it is created.
 Types themselves are represented as objects; an object contains a
 pointer to the corresponding type object.  The type itself has a type
 pointer pointing to the object representing the type 'type', which
-contains a pointer to itself!.
+contains a pointer to itself!. 
 
 Objects do not float around in memory; once allocated an object keeps
 the same size and address.  Objects that must hold variable-size data
@@ -52,8 +52,8 @@ A standard interface exists for objects that contain an array of items
 whose size is determined when the object is allocated.
 */
 
-/* Py_DEBUG implies Py_REF_DEBUG. */
-#if defined(Py_DEBUG) && !defined(Py_REF_DEBUG)
+/* Py_DEBUG implies Py_REF_DEBUG. */ 
+#if defined(Py_DEBUG) && !defined(Py_REF_DEBUG) 
 #define Py_REF_DEBUG
 #endif
 
@@ -61,9 +61,9 @@ whose size is determined when the object is allocated.
 #error Py_LIMITED_API is incompatible with Py_DEBUG, Py_TRACE_REFS, and Py_REF_DEBUG
 #endif
 
-/* PyTypeObject structure is defined in cpython/object.h.
-   In Py_LIMITED_API, PyTypeObject is an opaque structure. */
-typedef struct _typeobject PyTypeObject;
+/* PyTypeObject structure is defined in cpython/object.h. 
+   In Py_LIMITED_API, PyTypeObject is an opaque structure. */ 
+typedef struct _typeobject PyTypeObject; 
 
 #ifdef Py_TRACE_REFS
 /* Define pointers to support a doubly-linked list of all live heap objects. */
@@ -105,46 +105,46 @@ typedef struct _typeobject PyTypeObject;
 typedef struct _object {
     _PyObject_HEAD_EXTRA
     Py_ssize_t ob_refcnt;
-    PyTypeObject *ob_type;
+    PyTypeObject *ob_type; 
 } PyObject;
 
-/* Cast argument to PyObject* type. */
-#define _PyObject_CAST(op) ((PyObject*)(op))
-#define _PyObject_CAST_CONST(op) ((const PyObject*)(op))
-
+/* Cast argument to PyObject* type. */ 
+#define _PyObject_CAST(op) ((PyObject*)(op)) 
+#define _PyObject_CAST_CONST(op) ((const PyObject*)(op)) 
+ 
 typedef struct {
     PyObject ob_base;
     Py_ssize_t ob_size; /* Number of items in variable part */
 } PyVarObject;
 
-/* Cast argument to PyVarObject* type. */
-#define _PyVarObject_CAST(op) ((PyVarObject*)(op))
+/* Cast argument to PyVarObject* type. */ 
+#define _PyVarObject_CAST(op) ((PyVarObject*)(op)) 
 
-#define Py_REFCNT(ob)           (_PyObject_CAST(ob)->ob_refcnt)
-#define Py_TYPE(ob)             (_PyObject_CAST(ob)->ob_type)
-#define Py_SIZE(ob)             (_PyVarObject_CAST(ob)->ob_size)
+#define Py_REFCNT(ob)           (_PyObject_CAST(ob)->ob_refcnt) 
+#define Py_TYPE(ob)             (_PyObject_CAST(ob)->ob_type) 
+#define Py_SIZE(ob)             (_PyVarObject_CAST(ob)->ob_size) 
 
-static inline int _Py_IS_TYPE(const PyObject *ob, const PyTypeObject *type) {
-    return ob->ob_type == type;
-}
-#define Py_IS_TYPE(ob, type) _Py_IS_TYPE(_PyObject_CAST_CONST(ob), type)
-
-static inline void _Py_SET_REFCNT(PyObject *ob, Py_ssize_t refcnt) {
-    ob->ob_refcnt = refcnt;
-}
-#define Py_SET_REFCNT(ob, refcnt) _Py_SET_REFCNT(_PyObject_CAST(ob), refcnt)
-
-static inline void _Py_SET_TYPE(PyObject *ob, PyTypeObject *type) {
-    ob->ob_type = type;
-}
-#define Py_SET_TYPE(ob, type) _Py_SET_TYPE(_PyObject_CAST(ob), type)
-
-static inline void _Py_SET_SIZE(PyVarObject *ob, Py_ssize_t size) {
-    ob->ob_size = size;
-}
-#define Py_SET_SIZE(ob, size) _Py_SET_SIZE(_PyVarObject_CAST(ob), size)
-
-
+static inline int _Py_IS_TYPE(const PyObject *ob, const PyTypeObject *type) { 
+    return ob->ob_type == type; 
+} 
+#define Py_IS_TYPE(ob, type) _Py_IS_TYPE(_PyObject_CAST_CONST(ob), type) 
+ 
+static inline void _Py_SET_REFCNT(PyObject *ob, Py_ssize_t refcnt) { 
+    ob->ob_refcnt = refcnt; 
+} 
+#define Py_SET_REFCNT(ob, refcnt) _Py_SET_REFCNT(_PyObject_CAST(ob), refcnt) 
+ 
+static inline void _Py_SET_TYPE(PyObject *ob, PyTypeObject *type) { 
+    ob->ob_type = type; 
+} 
+#define Py_SET_TYPE(ob, type) _Py_SET_TYPE(_PyObject_CAST(ob), type) 
+ 
+static inline void _Py_SET_SIZE(PyVarObject *ob, Py_ssize_t size) { 
+    ob->ob_size = size; 
+} 
+#define Py_SET_SIZE(ob, size) _Py_SET_SIZE(_PyVarObject_CAST(ob), size) 
+ 
+ 
 /*
 Type objects contain a string containing the type name (to help somewhat
 in debugging), the allocation parameters (see PyObject_New() and
@@ -190,8 +190,8 @@ typedef PyObject *(*iternextfunc) (PyObject *);
 typedef PyObject *(*descrgetfunc) (PyObject *, PyObject *, PyObject *);
 typedef int (*descrsetfunc) (PyObject *, PyObject *, PyObject *);
 typedef int (*initproc)(PyObject *, PyObject *, PyObject *);
-typedef PyObject *(*newfunc)(PyTypeObject *, PyObject *, PyObject *);
-typedef PyObject *(*allocfunc)(PyTypeObject *, Py_ssize_t);
+typedef PyObject *(*newfunc)(PyTypeObject *, PyObject *, PyObject *); 
+typedef PyObject *(*allocfunc)(PyTypeObject *, Py_ssize_t); 
 
 typedef struct{
     int slot;    /* slot id, see below */
@@ -211,31 +211,31 @@ PyAPI_FUNC(PyObject*) PyType_FromSpec(PyType_Spec*);
 PyAPI_FUNC(PyObject*) PyType_FromSpecWithBases(PyType_Spec*, PyObject*);
 #endif
 #if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03040000
-PyAPI_FUNC(void*) PyType_GetSlot(PyTypeObject*, int);
+PyAPI_FUNC(void*) PyType_GetSlot(PyTypeObject*, int); 
 #endif
-#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03090000
-PyAPI_FUNC(PyObject*) PyType_FromModuleAndSpec(PyObject *, PyType_Spec *, PyObject *);
-PyAPI_FUNC(PyObject *) PyType_GetModule(struct _typeobject *);
-PyAPI_FUNC(void *) PyType_GetModuleState(struct _typeobject *);
-#endif
+#if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03090000 
+PyAPI_FUNC(PyObject*) PyType_FromModuleAndSpec(PyObject *, PyType_Spec *, PyObject *); 
+PyAPI_FUNC(PyObject *) PyType_GetModule(struct _typeobject *); 
+PyAPI_FUNC(void *) PyType_GetModuleState(struct _typeobject *); 
+#endif 
 
 /* Generic type check */
-PyAPI_FUNC(int) PyType_IsSubtype(PyTypeObject *, PyTypeObject *);
+PyAPI_FUNC(int) PyType_IsSubtype(PyTypeObject *, PyTypeObject *); 
 #define PyObject_TypeCheck(ob, tp) \
-    (Py_IS_TYPE(ob, tp) || PyType_IsSubtype(Py_TYPE(ob), (tp)))
+    (Py_IS_TYPE(ob, tp) || PyType_IsSubtype(Py_TYPE(ob), (tp))) 
 
-PyAPI_DATA(PyTypeObject) PyType_Type; /* built-in 'type' */
-PyAPI_DATA(PyTypeObject) PyBaseObject_Type; /* built-in 'object' */
-PyAPI_DATA(PyTypeObject) PySuper_Type; /* built-in 'super' */
+PyAPI_DATA(PyTypeObject) PyType_Type; /* built-in 'type' */ 
+PyAPI_DATA(PyTypeObject) PyBaseObject_Type; /* built-in 'object' */ 
+PyAPI_DATA(PyTypeObject) PySuper_Type; /* built-in 'super' */ 
 
-PyAPI_FUNC(unsigned long) PyType_GetFlags(PyTypeObject*);
+PyAPI_FUNC(unsigned long) PyType_GetFlags(PyTypeObject*); 
 
-PyAPI_FUNC(int) PyType_Ready(PyTypeObject *);
-PyAPI_FUNC(PyObject *) PyType_GenericAlloc(PyTypeObject *, Py_ssize_t);
-PyAPI_FUNC(PyObject *) PyType_GenericNew(PyTypeObject *,
+PyAPI_FUNC(int) PyType_Ready(PyTypeObject *); 
+PyAPI_FUNC(PyObject *) PyType_GenericAlloc(PyTypeObject *, Py_ssize_t); 
+PyAPI_FUNC(PyObject *) PyType_GenericNew(PyTypeObject *, 
                                                PyObject *, PyObject *);
 PyAPI_FUNC(unsigned int) PyType_ClearCache(void);
-PyAPI_FUNC(void) PyType_Modified(PyTypeObject *);
+PyAPI_FUNC(void) PyType_Modified(PyTypeObject *); 
 
 /* Generic operations on objects */
 PyAPI_FUNC(PyObject *) PyObject_Repr(PyObject *);
@@ -252,7 +252,7 @@ PyAPI_FUNC(int) PyObject_SetAttr(PyObject *, PyObject *, PyObject *);
 PyAPI_FUNC(int) PyObject_HasAttr(PyObject *, PyObject *);
 PyAPI_FUNC(PyObject *) PyObject_SelfIter(PyObject *);
 PyAPI_FUNC(PyObject *) PyObject_GenericGetAttr(PyObject *, PyObject *);
-PyAPI_FUNC(int) PyObject_GenericSetAttr(PyObject *, PyObject *, PyObject *);
+PyAPI_FUNC(int) PyObject_GenericSetAttr(PyObject *, PyObject *, PyObject *); 
 #if !defined(Py_LIMITED_API) || Py_LIMITED_API+0 >= 0x03030000
 PyAPI_FUNC(int) PyObject_GenericSetDict(PyObject *, PyObject *, void *);
 #endif
@@ -279,14 +279,14 @@ PyAPI_FUNC(void) Py_ReprLeave(PyObject *);
 #define Py_PRINT_RAW    1       /* No string quotes etc. */
 
 /*
-Type flags (tp_flags)
+Type flags (tp_flags) 
 
-These flags are used to change expected features and behavior for a
-particular type.
+These flags are used to change expected features and behavior for a 
+particular type. 
 
 Arbitration of the flag bit positions will need to be coordinated among
 all extension writers who publicly release their extensions (this will
-be fewer than you might expect!).
+be fewer than you might expect!). 
 
 Most flags were removed as of Python 3.0 to make room for new flags.  (Some
 flags are not for backwards compatibility but to indicate the presence of an
@@ -304,20 +304,20 @@ given type object has a specified feature.
 /* Set if the type allows subclassing */
 #define Py_TPFLAGS_BASETYPE (1UL << 10)
 
-/* Set if the type implements the vectorcall protocol (PEP 590) */
-#ifndef Py_LIMITED_API
-#define Py_TPFLAGS_HAVE_VECTORCALL (1UL << 11)
-// Backwards compatibility alias for API that was provisional in Python 3.8
-#define _Py_TPFLAGS_HAVE_VECTORCALL Py_TPFLAGS_HAVE_VECTORCALL
-#endif
-
+/* Set if the type implements the vectorcall protocol (PEP 590) */ 
+#ifndef Py_LIMITED_API 
+#define Py_TPFLAGS_HAVE_VECTORCALL (1UL << 11) 
+// Backwards compatibility alias for API that was provisional in Python 3.8 
+#define _Py_TPFLAGS_HAVE_VECTORCALL Py_TPFLAGS_HAVE_VECTORCALL 
+#endif 
+ 
 /* Set if the type is 'ready' -- fully initialized */
 #define Py_TPFLAGS_READY (1UL << 12)
 
 /* Set while the type is being 'readied', to prevent recursive ready calls */
 #define Py_TPFLAGS_READYING (1UL << 13)
 
-/* Objects support garbage collection (see objimpl.h) */
+/* Objects support garbage collection (see objimpl.h) */ 
 #define Py_TPFLAGS_HAVE_GC (1UL << 14)
 
 /* These two bits are preserved for Stackless Python, next after this is 17 */
@@ -327,9 +327,9 @@ given type object has a specified feature.
 #define Py_TPFLAGS_HAVE_STACKLESS_EXTENSION 0
 #endif
 
-/* Objects behave like an unbound method */
-#define Py_TPFLAGS_METHOD_DESCRIPTOR (1UL << 17)
-
+/* Objects behave like an unbound method */ 
+#define Py_TPFLAGS_METHOD_DESCRIPTOR (1UL << 17) 
+ 
 /* Objects support type attribute cache */
 #define Py_TPFLAGS_HAVE_VERSION_TAG   (1UL << 18)
 #define Py_TPFLAGS_VALID_VERSION_TAG  (1UL << 19)
@@ -355,11 +355,11 @@ given type object has a specified feature.
 /* NOTE: The following flags reuse lower bits (removed as part of the
  * Python 3.0 transition). */
 
-/* The following flag is kept for compatibility. Starting with 3.8,
- * binary compatibility of C extensions across feature releases of
- * Python is not supported anymore, except when using the stable ABI.
- */
-
+/* The following flag is kept for compatibility. Starting with 3.8, 
+ * binary compatibility of C extensions across feature releases of 
+ * Python is not supported anymore, except when using the stable ABI. 
+ */ 
+ 
 /* Type structure has tp_finalize member (3.4) */
 #define Py_TPFLAGS_HAVE_FINALIZE (1UL << 0)
 
@@ -394,48 +394,48 @@ you can count such references to the type object.)
 
 #ifdef Py_REF_DEBUG
 PyAPI_DATA(Py_ssize_t) _Py_RefTotal;
-PyAPI_FUNC(void) _Py_NegativeRefcount(const char *filename, int lineno,
-                                      PyObject *op);
+PyAPI_FUNC(void) _Py_NegativeRefcount(const char *filename, int lineno, 
+                                      PyObject *op); 
 #endif /* Py_REF_DEBUG */
 
 PyAPI_FUNC(void) _Py_Dealloc(PyObject *);
+ 
+static inline void _Py_INCREF(PyObject *op) 
+{ 
+#ifdef Py_REF_DEBUG 
+    _Py_RefTotal++; 
+#endif 
+    op->ob_refcnt++; 
+} 
+ 
+#define Py_INCREF(op) _Py_INCREF(_PyObject_CAST(op)) 
+ 
+static inline void _Py_DECREF( 
+#ifdef Py_REF_DEBUG 
+    const char *filename, int lineno, 
+#endif 
+    PyObject *op) 
+{ 
+#ifdef Py_REF_DEBUG 
+    _Py_RefTotal--; 
+#endif 
+    if (--op->ob_refcnt != 0) { 
+#ifdef Py_REF_DEBUG 
+        if (op->ob_refcnt < 0) { 
+            _Py_NegativeRefcount(filename, lineno, op); 
+        } 
+#endif
+    } 
+    else { 
+        _Py_Dealloc(op); 
+    } 
+} 
 
-static inline void _Py_INCREF(PyObject *op)
-{
-#ifdef Py_REF_DEBUG
-    _Py_RefTotal++;
-#endif
-    op->ob_refcnt++;
-}
-
-#define Py_INCREF(op) _Py_INCREF(_PyObject_CAST(op))
-
-static inline void _Py_DECREF(
-#ifdef Py_REF_DEBUG
-    const char *filename, int lineno,
-#endif
-    PyObject *op)
-{
-#ifdef Py_REF_DEBUG
-    _Py_RefTotal--;
-#endif
-    if (--op->ob_refcnt != 0) {
-#ifdef Py_REF_DEBUG
-        if (op->ob_refcnt < 0) {
-            _Py_NegativeRefcount(filename, lineno, op);
-        }
-#endif
-    }
-    else {
-        _Py_Dealloc(op);
-    }
-}
-
-#ifdef Py_REF_DEBUG
-#  define Py_DECREF(op) _Py_DECREF(__FILE__, __LINE__, _PyObject_CAST(op))
-#else
-#  define Py_DECREF(op) _Py_DECREF(_PyObject_CAST(op))
-#endif
+#ifdef Py_REF_DEBUG 
+#  define Py_DECREF(op) _Py_DECREF(__FILE__, __LINE__, _PyObject_CAST(op)) 
+#else 
+#  define Py_DECREF(op) _Py_DECREF(_PyObject_CAST(op)) 
+#endif 
 
 
 /* Safely decref `op` and set `op` to NULL, especially useful in tp_clear
@@ -474,31 +474,31 @@ static inline void _Py_DECREF(
  */
 #define Py_CLEAR(op)                            \
     do {                                        \
-        PyObject *_py_tmp = _PyObject_CAST(op); \
+        PyObject *_py_tmp = _PyObject_CAST(op); \ 
         if (_py_tmp != NULL) {                  \
             (op) = NULL;                        \
             Py_DECREF(_py_tmp);                 \
         }                                       \
     } while (0)
 
-/* Function to use in case the object pointer can be NULL: */
-static inline void _Py_XINCREF(PyObject *op)
-{
-    if (op != NULL) {
-        Py_INCREF(op);
-    }
-}
+/* Function to use in case the object pointer can be NULL: */ 
+static inline void _Py_XINCREF(PyObject *op) 
+{ 
+    if (op != NULL) { 
+        Py_INCREF(op); 
+    } 
+} 
 
-#define Py_XINCREF(op) _Py_XINCREF(_PyObject_CAST(op))
+#define Py_XINCREF(op) _Py_XINCREF(_PyObject_CAST(op)) 
 
-static inline void _Py_XDECREF(PyObject *op)
-{
-    if (op != NULL) {
-        Py_DECREF(op);
-    }
-}
+static inline void _Py_XDECREF(PyObject *op) 
+{ 
+    if (op != NULL) { 
+        Py_DECREF(op); 
+    } 
+} 
 
-#define Py_XDECREF(op) _Py_XDECREF(_PyObject_CAST(op))
+#define Py_XDECREF(op) _Py_XDECREF(_PyObject_CAST(op)) 
 
 /*
 These are provided as conveniences to Python runtime embedders, so that
@@ -610,38 +610,38 @@ it carefully, it may save lots of calls to Py_INCREF() and Py_DECREF() at
 times.
 */
 
-#ifndef Py_LIMITED_API
-#  define Py_CPYTHON_OBJECT_H
-#  include  "cpython/object.h"
-#  undef Py_CPYTHON_OBJECT_H
-#endif
+#ifndef Py_LIMITED_API 
+#  define Py_CPYTHON_OBJECT_H 
+#  include  "cpython/object.h" 
+#  undef Py_CPYTHON_OBJECT_H 
+#endif 
 
 
-static inline int
-PyType_HasFeature(PyTypeObject *type, unsigned long feature)
+static inline int 
+PyType_HasFeature(PyTypeObject *type, unsigned long feature) 
 {
-    unsigned long flags;
-#ifdef Py_LIMITED_API
-    // PyTypeObject is opaque in the limited C API
-    flags = PyType_GetFlags(type);
-#else
-    flags = type->tp_flags;
-#endif
-    return ((flags & feature) != 0);
+    unsigned long flags; 
+#ifdef Py_LIMITED_API 
+    // PyTypeObject is opaque in the limited C API 
+    flags = PyType_GetFlags(type); 
+#else 
+    flags = type->tp_flags; 
+#endif 
+    return ((flags & feature) != 0); 
 }
 
-#define PyType_FastSubclass(type, flag) PyType_HasFeature(type, flag)
+#define PyType_FastSubclass(type, flag) PyType_HasFeature(type, flag) 
 
-static inline int _PyType_Check(PyObject *op) {
-    return PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_TYPE_SUBCLASS);
-}
-#define PyType_Check(op) _PyType_Check(_PyObject_CAST(op))
+static inline int _PyType_Check(PyObject *op) { 
+    return PyType_FastSubclass(Py_TYPE(op), Py_TPFLAGS_TYPE_SUBCLASS); 
+} 
+#define PyType_Check(op) _PyType_Check(_PyObject_CAST(op)) 
 
-static inline int _PyType_CheckExact(PyObject *op) {
-    return Py_IS_TYPE(op, &PyType_Type);
-}
-#define PyType_CheckExact(op) _PyType_CheckExact(_PyObject_CAST(op))
-
+static inline int _PyType_CheckExact(PyObject *op) { 
+    return Py_IS_TYPE(op, &PyType_Type); 
+} 
+#define PyType_CheckExact(op) _PyType_CheckExact(_PyObject_CAST(op)) 
+ 
 #ifdef __cplusplus
 }
 #endif

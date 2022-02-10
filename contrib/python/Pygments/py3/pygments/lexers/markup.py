@@ -4,7 +4,7 @@
 
     Lexers for non-HTML markup languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -23,7 +23,7 @@ from pygments.util import get_bool_opt, ClassNotFound
 __all__ = ['BBCodeLexer', 'MoinWikiLexer', 'RstLexer', 'TexLexer', 'GroffLexer',
            'MozPreprocHashLexer', 'MozPreprocPercentLexer',
            'MozPreprocXulLexer', 'MozPreprocJavascriptLexer',
-           'MozPreprocCssLexer', 'MarkdownLexer', 'TiddlyWiki5Lexer']
+           'MozPreprocCssLexer', 'MarkdownLexer', 'TiddlyWiki5Lexer'] 
 
 
 class BBCodeLexer(RegexLexer):
@@ -121,7 +121,7 @@ class RstLexer(RegexLexer):
         .. versionadded:: 0.8
     """
     name = 'reStructuredText'
-    aliases = ['restructuredtext', 'rst', 'rest']
+    aliases = ['restructuredtext', 'rst', 'rest'] 
     filenames = ['*.rst', '*.rest']
     mimetypes = ["text/x-rst", "text/prs.fallenstein.rst"]
     flags = re.MULTILINE
@@ -164,11 +164,11 @@ class RstLexer(RegexLexer):
                 code += line[indention_size:]
             else:
                 code += line
-        yield from do_insertions(ins, lexer.get_tokens_unprocessed(code))
+        yield from do_insertions(ins, lexer.get_tokens_unprocessed(code)) 
 
     # from docutils.parsers.rst.states
-    closers = '\'")]}>\u2019\u201d\xbb!?'
-    unicode_delimiters = '\u2010\u2011\u2012\u2013\u2014\u00a0'
+    closers = '\'")]}>\u2019\u201d\xbb!?' 
+    unicode_delimiters = '\u2010\u2011\u2012\u2013\u2014\u00a0' 
     end_string_suffix = (r'((?=$)|(?=[-/:.,; \n\x00%s%s]))'
                          % (re.escape(unicode_delimiters),
                             re.escape(closers)))
@@ -202,7 +202,7 @@ class RstLexer(RegexLexer):
              bygroups(Text, Operator, using(this, state='inline'))),
             # Sourcecode directives
             (r'^( *\.\.)(\s*)((?:source)?code(?:-block)?)(::)([ \t]*)([^\n]+)'
-             r'(\n[ \t]*\n)([ \t]+)(.*)(\n)((?:(?:\8.*)?\n)+)',
+             r'(\n[ \t]*\n)([ \t]+)(.*)(\n)((?:(?:\8.*)?\n)+)', 
              _handle_sourcecode),
             # A directive
             (r'^( *\.\.)(\s*)([\w:-]+?)(::)(?:([ \t]*)(.*))',
@@ -220,14 +220,14 @@ class RstLexer(RegexLexer):
                       Punctuation, Text, using(this, state='inline'))),
             # Comments
             (r'^ *\.\..*(\n( +.*\n|\n)+)?', Comment.Preproc),
-            # Field list marker
-            (r'^( *)(:(?:\\\\|\\:|[^:\n])+:(?=\s))([ \t]*)',
-             bygroups(Text, Name.Class, Text)),
+            # Field list marker 
+            (r'^( *)(:(?:\\\\|\\:|[^:\n])+:(?=\s))([ \t]*)', 
+             bygroups(Text, Name.Class, Text)), 
             # Definition list
             (r'^(\S.*(?<!::)\n)((?:(?: +.*)\n)+)',
              bygroups(using(this, state='inline'), using(this, state='inline'))),
             # Code blocks
-            (r'(::)(\n[ \t]*\n)([ \t]+)(.*)(\n)((?:(?:\3.*)?\n)+)',
+            (r'(::)(\n[ \t]*\n)([ \t]+)(.*)(\n)((?:(?:\3.*)?\n)+)', 
              bygroups(String.Escape, Text, String, String, Text, String)),
             include('inline'),
         ],
@@ -460,7 +460,7 @@ class MozPreprocXulLexer(DelegatingLexer):
     mimetypes = []
 
     def __init__(self, **options):
-        super().__init__(XmlLexer, MozPreprocHashLexer, **options)
+        super().__init__(XmlLexer, MozPreprocHashLexer, **options) 
 
 
 class MozPreprocJavascriptLexer(DelegatingLexer):
@@ -476,7 +476,7 @@ class MozPreprocJavascriptLexer(DelegatingLexer):
     mimetypes = []
 
     def __init__(self, **options):
-        super().__init__(JavascriptLexer, MozPreprocHashLexer, **options)
+        super().__init__(JavascriptLexer, MozPreprocHashLexer, **options) 
 
 
 class MozPreprocCssLexer(DelegatingLexer):
@@ -492,7 +492,7 @@ class MozPreprocCssLexer(DelegatingLexer):
     mimetypes = []
 
     def __init__(self, **options):
-        super().__init__(CssLexer, MozPreprocPercentLexer, **options)
+        super().__init__(CssLexer, MozPreprocPercentLexer, **options) 
 
 
 class MarkdownLexer(RegexLexer):
@@ -501,9 +501,9 @@ class MarkdownLexer(RegexLexer):
 
     .. versionadded:: 2.2
     """
-    name = 'Markdown'
-    aliases = ['markdown', 'md']
-    filenames = ['*.md', '*.markdown']
+    name = 'Markdown' 
+    aliases = ['markdown', 'md'] 
+    filenames = ['*.md', '*.markdown'] 
     mimetypes = ["text/x-markdown"]
     flags = re.MULTILINE
 
@@ -514,9 +514,9 @@ class MarkdownLexer(RegexLexer):
         from pygments.lexers import get_lexer_by_name
 
         # section header
-        yield match.start(1), String.Backtick, match.group(1)
-        yield match.start(2), String.Backtick, match.group(2)
-        yield match.start(3), Text           , match.group(3)
+        yield match.start(1), String.Backtick, match.group(1) 
+        yield match.start(2), String.Backtick, match.group(2) 
+        yield match.start(3), Text           , match.group(3) 
 
         # lookup lexer if wanted and existing
         lexer = None
@@ -531,67 +531,67 @@ class MarkdownLexer(RegexLexer):
         if lexer is None:
             yield match.start(4), String, code
         else:
-            yield from do_insertions([], lexer.get_tokens_unprocessed(code))
+            yield from do_insertions([], lexer.get_tokens_unprocessed(code)) 
 
-        yield match.start(5), String.Backtick, match.group(5)
+        yield match.start(5), String.Backtick, match.group(5) 
 
     tokens = {
         'root': [
-            # heading with '#' prefix (atx-style)
-            (r'(^#[^#].+)(\n)', bygroups(Generic.Heading, Text)),
-            # subheading with '#' prefix (atx-style)
-            (r'(^#{2,6}[^#].+)(\n)', bygroups(Generic.Subheading, Text)),
-            # heading with '=' underlines (Setext-style)
-            (r'^(.+)(\n)(=+)(\n)', bygroups(Generic.Heading, Text, Generic.Heading, Text)),
-            # subheading with '-' underlines (Setext-style)
-            (r'^(.+)(\n)(-+)(\n)', bygroups(Generic.Subheading, Text, Generic.Subheading, Text)),
+            # heading with '#' prefix (atx-style) 
+            (r'(^#[^#].+)(\n)', bygroups(Generic.Heading, Text)), 
+            # subheading with '#' prefix (atx-style) 
+            (r'(^#{2,6}[^#].+)(\n)', bygroups(Generic.Subheading, Text)), 
+            # heading with '=' underlines (Setext-style) 
+            (r'^(.+)(\n)(=+)(\n)', bygroups(Generic.Heading, Text, Generic.Heading, Text)), 
+            # subheading with '-' underlines (Setext-style) 
+            (r'^(.+)(\n)(-+)(\n)', bygroups(Generic.Subheading, Text, Generic.Subheading, Text)), 
             # task list
             (r'^(\s*)([*-] )(\[[ xX]\])( .+\n)',
             bygroups(Text, Keyword, Keyword, using(this, state='inline'))),
-            # bulleted list
+            # bulleted list 
             (r'^(\s*)([*-])(\s)(.+\n)',
             bygroups(Text, Keyword, Text, using(this, state='inline'))),
-            # numbered list
+            # numbered list 
             (r'^(\s*)([0-9]+\.)( .+\n)',
             bygroups(Text, Keyword, using(this, state='inline'))),
             # quote
             (r'^(\s*>\s)(.+\n)', bygroups(Keyword, Generic.Emph)),
-            # code block fenced by 3 backticks
-            (r'^(\s*```\n[\w\W]*?^\s*```$\n)', String.Backtick),
+            # code block fenced by 3 backticks 
+            (r'^(\s*```\n[\w\W]*?^\s*```$\n)', String.Backtick), 
             # code block with language
-            (r'^(\s*```)(\w+)(\n)([\w\W]*?)(^\s*```$\n)', _handle_codeblock),
+            (r'^(\s*```)(\w+)(\n)([\w\W]*?)(^\s*```$\n)', _handle_codeblock), 
 
             include('inline'),
         ],
         'inline': [
             # escape
             (r'\\.', Text),
-            # inline code
-            (r'([^`]?)(`[^`\n]+`)', bygroups(Text, String.Backtick)),
-            # warning: the following rules eat outer tags.
-            # eg. **foo _bar_ baz** => foo and baz are not recognized as bold
-            # bold fenced by '**'
-            (r'([^\*]?)(\*\*[^* \n][^*\n]*\*\*)', bygroups(Text, Generic.Strong)),
-            # bold fenced by '__'
-            (r'([^_]?)(__[^_ \n][^_\n]*__)', bygroups(Text, Generic.Strong)),
-            # italics fenced by '*'
-            (r'([^\*]?)(\*[^* \n][^*\n]*\*)', bygroups(Text, Generic.Emph)),
-            # italics fenced by '_'
-            (r'([^_]?)(_[^_ \n][^_\n]*_)', bygroups(Text, Generic.Emph)),
+            # inline code 
+            (r'([^`]?)(`[^`\n]+`)', bygroups(Text, String.Backtick)), 
+            # warning: the following rules eat outer tags. 
+            # eg. **foo _bar_ baz** => foo and baz are not recognized as bold 
+            # bold fenced by '**' 
+            (r'([^\*]?)(\*\*[^* \n][^*\n]*\*\*)', bygroups(Text, Generic.Strong)), 
+            # bold fenced by '__' 
+            (r'([^_]?)(__[^_ \n][^_\n]*__)', bygroups(Text, Generic.Strong)), 
+            # italics fenced by '*' 
+            (r'([^\*]?)(\*[^* \n][^*\n]*\*)', bygroups(Text, Generic.Emph)), 
+            # italics fenced by '_' 
+            (r'([^_]?)(_[^_ \n][^_\n]*_)', bygroups(Text, Generic.Emph)), 
             # strikethrough
-            (r'([^~]?)(~~[^~ \n][^~\n]*~~)', bygroups(Text, Generic.Deleted)),
+            (r'([^~]?)(~~[^~ \n][^~\n]*~~)', bygroups(Text, Generic.Deleted)), 
             # mentions and topics (twitter and github stuff)
             (r'[@#][\w/:]+', Name.Entity),
             # (image?) links eg: ![Image of Yaktocat](https://octodex.github.com/images/yaktocat.png)
-            (r'(!?\[)([^]]+)(\])(\()([^)]+)(\))',
-             bygroups(Text, Name.Tag, Text, Text, Name.Attribute, Text)),
+            (r'(!?\[)([^]]+)(\])(\()([^)]+)(\))', 
+             bygroups(Text, Name.Tag, Text, Text, Name.Attribute, Text)), 
             # reference-style links, e.g.:
             #   [an example][id]
             #   [id]: http://example.com/
-            (r'(\[)([^]]+)(\])(\[)([^]]*)(\])',
-             bygroups(Text, Name.Tag, Text, Text, Name.Label, Text)),
-            (r'^(\s*\[)([^]]*)(\]:\s*)(.+)',
-             bygroups(Text, Name.Label, Text, Name.Attribute)),
+            (r'(\[)([^]]+)(\])(\[)([^]]*)(\])', 
+             bygroups(Text, Name.Tag, Text, Text, Name.Label, Text)), 
+            (r'^(\s*\[)([^]]*)(\]:\s*)(.+)', 
+             bygroups(Text, Name.Label, Text, Name.Attribute)), 
 
             # general text, must come last!
             (r'[^\\\s]+', Text),
@@ -602,161 +602,161 @@ class MarkdownLexer(RegexLexer):
     def __init__(self, **options):
         self.handlecodeblocks = get_bool_opt(options, 'handlecodeblocks', True)
         RegexLexer.__init__(self, **options)
-
-
-class TiddlyWiki5Lexer(RegexLexer):
-    """
-    For `TiddlyWiki5 <https://tiddlywiki.com/#TiddlerFiles>`_ markup.
-
-    .. versionadded:: 2.7
-    """
-    name = 'tiddler'
-    aliases = ['tid']
-    filenames = ['*.tid']
-    mimetypes = ["text/vnd.tiddlywiki"]
-    flags = re.MULTILINE
-
-    def _handle_codeblock(self, match):
-        """
-        match args: 1:backticks, 2:lang_name, 3:newline, 4:code, 5:backticks
-        """
-        from pygments.lexers import get_lexer_by_name
-
-        # section header
-        yield match.start(1), String, match.group(1)
-        yield match.start(2), String, match.group(2)
-        yield match.start(3), Text,   match.group(3)
-
-        # lookup lexer if wanted and existing
-        lexer = None
-        if self.handlecodeblocks:
-            try:
-                lexer = get_lexer_by_name(match.group(2).strip())
-            except ClassNotFound:
-                pass
-        code = match.group(4)
-
-        # no lexer for this language. handle it like it was a code block
-        if lexer is None:
-            yield match.start(4), String, code
-            return
-
-        yield from do_insertions([], lexer.get_tokens_unprocessed(code))
-
-        yield match.start(5), String, match.group(5)
-
-    def _handle_cssblock(self, match):
-        """
-        match args: 1:style tag 2:newline, 3:code, 4:closing style tag
-        """
-        from pygments.lexers import get_lexer_by_name
-
-        # section header
-        yield match.start(1), String, match.group(1)
-        yield match.start(2), String, match.group(2)
-
-        lexer = None
-        if self.handlecodeblocks:
-            try:
-                lexer = get_lexer_by_name('css')
-            except ClassNotFound:
-                pass
-        code = match.group(3)
-
-        # no lexer for this language. handle it like it was a code block
-        if lexer is None:
-            yield match.start(3), String, code
-            return
-
-        yield from do_insertions([], lexer.get_tokens_unprocessed(code))
-
-        yield match.start(4), String, match.group(4)
-
-    tokens = {
-        'root': [
-            # title in metadata section
-            (r'^(title)(:\s)(.+\n)', bygroups(Keyword, Text, Generic.Heading)),
-            # headings
-            (r'^(!)([^!].+\n)', bygroups(Generic.Heading, Text)),
-            (r'^(!{2,6})(.+\n)', bygroups(Generic.Subheading, Text)),
-            # bulleted or numbered lists or single-line block quotes
-            # (can be mixed)
-            (r'^(\s*)([*#>]+)(\s*)(.+\n)',
-             bygroups(Text, Keyword, Text, using(this, state='inline'))),
-            # multi-line block quotes
-            (r'^(<<<.*\n)([\w\W]*?)(^<<<.*$)', bygroups(String, Text, String)),
-            # table header
-            (r'^(\|.*?\|h)$', bygroups(Generic.Strong)),
-            # table footer or caption
-            (r'^(\|.*?\|[cf])$', bygroups(Generic.Emph)),
-            # table class
-            (r'^(\|.*?\|k)$', bygroups(Name.Tag)),
-            # definitions
-            (r'^(;.*)$', bygroups(Generic.Strong)),
-            # text block
-            (r'^(```\n)([\w\W]*?)(^```$)', bygroups(String, Text, String)),
-            # code block with language
-            (r'^(```)(\w+)(\n)([\w\W]*?)(^```$)', _handle_codeblock),
-            # CSS style block
-            (r'^(<style>)(\n)([\w\W]*?)(^</style>$)', _handle_cssblock),
-
-            include('keywords'),
-            include('inline'),
-        ],
-        'keywords': [
-            (words((
-                '\\define', '\\end', 'caption', 'created', 'modified', 'tags',
-                'title', 'type'), prefix=r'^', suffix=r'\b'),
-             Keyword),
-        ],
-        'inline': [
-            # escape
-            (r'\\.', Text),
-            # created or modified date
-            (r'\d{17}', Number.Integer),
-            # italics
-            (r'(\s)(//[^/]+//)((?=\W|\n))',
-             bygroups(Text, Generic.Emph, Text)),
-            # superscript
-            (r'(\s)(\^\^[^\^]+\^\^)', bygroups(Text, Generic.Emph)),
-            # subscript
-            (r'(\s)(,,[^,]+,,)', bygroups(Text, Generic.Emph)),
-            # underscore
-            (r'(\s)(__[^_]+__)', bygroups(Text, Generic.Strong)),
-            # bold
-            (r"(\s)(''[^']+'')((?=\W|\n))",
-             bygroups(Text, Generic.Strong, Text)),
-            # strikethrough
-            (r'(\s)(~~[^~]+~~)((?=\W|\n))',
-             bygroups(Text, Generic.Deleted, Text)),
-            # TiddlyWiki variables
-            (r'<<[^>]+>>', Name.Tag),
-            (r'\$\$[^$]+\$\$', Name.Tag),
-            (r'\$\([^)]+\)\$', Name.Tag),
-            # TiddlyWiki style or class
-            (r'^@@.*$', Name.Tag),
-            # HTML tags
-            (r'</?[^>]+>', Name.Tag),
-            # inline code
-            (r'`[^`]+`', String.Backtick),
-            # HTML escaped symbols
-            (r'&\S*?;', String.Regex),
-            # Wiki links
-            (r'(\[{2})([^]\|]+)(\]{2})', bygroups(Text, Name.Tag, Text)),
-            # External links
-            (r'(\[{2})([^]\|]+)(\|)([^]\|]+)(\]{2})',
-            bygroups(Text, Name.Tag, Text, Name.Attribute, Text)),
-            # Transclusion
-            (r'(\{{2})([^}]+)(\}{2})', bygroups(Text, Name.Tag, Text)),
-            # URLs
-            (r'(\b.?.?tps?://[^\s"]+)', bygroups(Name.Attribute)),
-
-            # general text, must come last!
-            (r'[\w]+', Text),
-            (r'.', Text)
-        ],
-    }
-
-    def __init__(self, **options):
-        self.handlecodeblocks = get_bool_opt(options, 'handlecodeblocks', True)
-        RegexLexer.__init__(self, **options)
+ 
+ 
+class TiddlyWiki5Lexer(RegexLexer): 
+    """ 
+    For `TiddlyWiki5 <https://tiddlywiki.com/#TiddlerFiles>`_ markup. 
+ 
+    .. versionadded:: 2.7 
+    """ 
+    name = 'tiddler' 
+    aliases = ['tid'] 
+    filenames = ['*.tid'] 
+    mimetypes = ["text/vnd.tiddlywiki"] 
+    flags = re.MULTILINE 
+ 
+    def _handle_codeblock(self, match): 
+        """ 
+        match args: 1:backticks, 2:lang_name, 3:newline, 4:code, 5:backticks 
+        """ 
+        from pygments.lexers import get_lexer_by_name 
+ 
+        # section header 
+        yield match.start(1), String, match.group(1) 
+        yield match.start(2), String, match.group(2) 
+        yield match.start(3), Text,   match.group(3) 
+ 
+        # lookup lexer if wanted and existing 
+        lexer = None 
+        if self.handlecodeblocks: 
+            try: 
+                lexer = get_lexer_by_name(match.group(2).strip()) 
+            except ClassNotFound: 
+                pass 
+        code = match.group(4) 
+ 
+        # no lexer for this language. handle it like it was a code block 
+        if lexer is None: 
+            yield match.start(4), String, code 
+            return 
+ 
+        yield from do_insertions([], lexer.get_tokens_unprocessed(code)) 
+ 
+        yield match.start(5), String, match.group(5) 
+ 
+    def _handle_cssblock(self, match): 
+        """ 
+        match args: 1:style tag 2:newline, 3:code, 4:closing style tag 
+        """ 
+        from pygments.lexers import get_lexer_by_name 
+ 
+        # section header 
+        yield match.start(1), String, match.group(1) 
+        yield match.start(2), String, match.group(2) 
+ 
+        lexer = None 
+        if self.handlecodeblocks: 
+            try: 
+                lexer = get_lexer_by_name('css') 
+            except ClassNotFound: 
+                pass 
+        code = match.group(3) 
+ 
+        # no lexer for this language. handle it like it was a code block 
+        if lexer is None: 
+            yield match.start(3), String, code 
+            return 
+ 
+        yield from do_insertions([], lexer.get_tokens_unprocessed(code)) 
+ 
+        yield match.start(4), String, match.group(4) 
+ 
+    tokens = { 
+        'root': [ 
+            # title in metadata section 
+            (r'^(title)(:\s)(.+\n)', bygroups(Keyword, Text, Generic.Heading)), 
+            # headings 
+            (r'^(!)([^!].+\n)', bygroups(Generic.Heading, Text)), 
+            (r'^(!{2,6})(.+\n)', bygroups(Generic.Subheading, Text)), 
+            # bulleted or numbered lists or single-line block quotes 
+            # (can be mixed) 
+            (r'^(\s*)([*#>]+)(\s*)(.+\n)', 
+             bygroups(Text, Keyword, Text, using(this, state='inline'))), 
+            # multi-line block quotes 
+            (r'^(<<<.*\n)([\w\W]*?)(^<<<.*$)', bygroups(String, Text, String)), 
+            # table header 
+            (r'^(\|.*?\|h)$', bygroups(Generic.Strong)), 
+            # table footer or caption 
+            (r'^(\|.*?\|[cf])$', bygroups(Generic.Emph)), 
+            # table class 
+            (r'^(\|.*?\|k)$', bygroups(Name.Tag)), 
+            # definitions 
+            (r'^(;.*)$', bygroups(Generic.Strong)), 
+            # text block 
+            (r'^(```\n)([\w\W]*?)(^```$)', bygroups(String, Text, String)), 
+            # code block with language 
+            (r'^(```)(\w+)(\n)([\w\W]*?)(^```$)', _handle_codeblock), 
+            # CSS style block 
+            (r'^(<style>)(\n)([\w\W]*?)(^</style>$)', _handle_cssblock), 
+ 
+            include('keywords'), 
+            include('inline'), 
+        ], 
+        'keywords': [ 
+            (words(( 
+                '\\define', '\\end', 'caption', 'created', 'modified', 'tags', 
+                'title', 'type'), prefix=r'^', suffix=r'\b'), 
+             Keyword), 
+        ], 
+        'inline': [ 
+            # escape 
+            (r'\\.', Text), 
+            # created or modified date 
+            (r'\d{17}', Number.Integer), 
+            # italics 
+            (r'(\s)(//[^/]+//)((?=\W|\n))', 
+             bygroups(Text, Generic.Emph, Text)), 
+            # superscript 
+            (r'(\s)(\^\^[^\^]+\^\^)', bygroups(Text, Generic.Emph)), 
+            # subscript 
+            (r'(\s)(,,[^,]+,,)', bygroups(Text, Generic.Emph)), 
+            # underscore 
+            (r'(\s)(__[^_]+__)', bygroups(Text, Generic.Strong)), 
+            # bold 
+            (r"(\s)(''[^']+'')((?=\W|\n))", 
+             bygroups(Text, Generic.Strong, Text)), 
+            # strikethrough 
+            (r'(\s)(~~[^~]+~~)((?=\W|\n))', 
+             bygroups(Text, Generic.Deleted, Text)), 
+            # TiddlyWiki variables 
+            (r'<<[^>]+>>', Name.Tag), 
+            (r'\$\$[^$]+\$\$', Name.Tag), 
+            (r'\$\([^)]+\)\$', Name.Tag), 
+            # TiddlyWiki style or class 
+            (r'^@@.*$', Name.Tag), 
+            # HTML tags 
+            (r'</?[^>]+>', Name.Tag), 
+            # inline code 
+            (r'`[^`]+`', String.Backtick), 
+            # HTML escaped symbols 
+            (r'&\S*?;', String.Regex), 
+            # Wiki links 
+            (r'(\[{2})([^]\|]+)(\]{2})', bygroups(Text, Name.Tag, Text)), 
+            # External links 
+            (r'(\[{2})([^]\|]+)(\|)([^]\|]+)(\]{2})', 
+            bygroups(Text, Name.Tag, Text, Name.Attribute, Text)), 
+            # Transclusion 
+            (r'(\{{2})([^}]+)(\}{2})', bygroups(Text, Name.Tag, Text)), 
+            # URLs 
+            (r'(\b.?.?tps?://[^\s"]+)', bygroups(Name.Attribute)), 
+ 
+            # general text, must come last! 
+            (r'[\w]+', Text), 
+            (r'.', Text) 
+        ], 
+    } 
+ 
+    def __init__(self, **options): 
+        self.handlecodeblocks = get_bool_opt(options, 'handlecodeblocks', True) 
+        RegexLexer.__init__(self, **options) 

@@ -4,13 +4,13 @@
 
     Lexers for the Pawn languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
 from pygments.lexer import RegexLexer
 from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
-    Number, Punctuation
+    Number, Punctuation 
 from pygments.util import get_bool_opt
 
 __all__ = ['SourcePawnLexer', 'PawnLexer']
@@ -84,25 +84,25 @@ class SourcePawnLexer(RegexLexer):
         ]
     }
 
-    SM_TYPES = {'Action', 'bool', 'Float', 'Plugin', 'String', 'any',
-                'AdminFlag', 'OverrideType', 'OverrideRule', 'ImmunityType',
-                'GroupId', 'AdminId', 'AdmAccessMode', 'AdminCachePart',
-                'CookieAccess', 'CookieMenu', 'CookieMenuAction', 'NetFlow',
-                'ConVarBounds', 'QueryCookie', 'ReplySource',
-                'ConVarQueryResult', 'ConVarQueryFinished', 'Function',
-                'Action', 'Identity', 'PluginStatus', 'PluginInfo', 'DBResult',
-                'DBBindType', 'DBPriority', 'PropType', 'PropFieldType',
-                'MoveType', 'RenderMode', 'RenderFx', 'EventHookMode',
-                'EventHook', 'FileType', 'FileTimeMode', 'PathType',
-                'ParamType', 'ExecType', 'DialogType', 'Handle', 'KvDataTypes',
-                'NominateResult', 'MapChange', 'MenuStyle', 'MenuAction',
-                'MenuSource', 'RegexError', 'SDKCallType', 'SDKLibrary',
-                'SDKFuncConfSource', 'SDKType', 'SDKPassMethod', 'RayType',
-                'TraceEntityFilter', 'ListenOverride', 'SortOrder', 'SortType',
-                'SortFunc2D', 'APLRes', 'FeatureType', 'FeatureStatus',
-                'SMCResult', 'SMCError', 'TFClassType', 'TFTeam', 'TFCond',
-                'TFResourceType', 'Timer', 'TopMenuAction', 'TopMenuObjectType',
-                'TopMenuPosition', 'TopMenuObject', 'UserMsg'}
+    SM_TYPES = {'Action', 'bool', 'Float', 'Plugin', 'String', 'any', 
+                'AdminFlag', 'OverrideType', 'OverrideRule', 'ImmunityType', 
+                'GroupId', 'AdminId', 'AdmAccessMode', 'AdminCachePart', 
+                'CookieAccess', 'CookieMenu', 'CookieMenuAction', 'NetFlow', 
+                'ConVarBounds', 'QueryCookie', 'ReplySource', 
+                'ConVarQueryResult', 'ConVarQueryFinished', 'Function', 
+                'Action', 'Identity', 'PluginStatus', 'PluginInfo', 'DBResult', 
+                'DBBindType', 'DBPriority', 'PropType', 'PropFieldType', 
+                'MoveType', 'RenderMode', 'RenderFx', 'EventHookMode', 
+                'EventHook', 'FileType', 'FileTimeMode', 'PathType', 
+                'ParamType', 'ExecType', 'DialogType', 'Handle', 'KvDataTypes', 
+                'NominateResult', 'MapChange', 'MenuStyle', 'MenuAction', 
+                'MenuSource', 'RegexError', 'SDKCallType', 'SDKLibrary', 
+                'SDKFuncConfSource', 'SDKType', 'SDKPassMethod', 'RayType', 
+                'TraceEntityFilter', 'ListenOverride', 'SortOrder', 'SortType', 
+                'SortFunc2D', 'APLRes', 'FeatureType', 'FeatureStatus', 
+                'SMCResult', 'SMCError', 'TFClassType', 'TFTeam', 'TFCond', 
+                'TFResourceType', 'Timer', 'TopMenuAction', 'TopMenuObjectType', 
+                'TopMenuPosition', 'TopMenuObject', 'UserMsg'} 
 
     def __init__(self, **options):
         self.smhighlighting = get_bool_opt(options,
@@ -194,9 +194,9 @@ class PawnLexer(RegexLexer):
             (r'.*?\n', Comment),
         ]
     }
-
-    def analyse_text(text):
-        """This is basically C. There is a keyword which doesn't exist in C
-        though and is nearly unique to this language."""
-        if 'tagof' in text:
-            return 0.01
+ 
+    def analyse_text(text): 
+        """This is basically C. There is a keyword which doesn't exist in C 
+        though and is nearly unique to this language.""" 
+        if 'tagof' in text: 
+            return 0.01 

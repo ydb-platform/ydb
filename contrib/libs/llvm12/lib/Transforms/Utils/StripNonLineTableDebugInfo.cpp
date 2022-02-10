@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Transforms/Utils/StripNonLineTableDebugInfo.h"
+#include "llvm/Transforms/Utils/StripNonLineTableDebugInfo.h" 
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
@@ -18,11 +18,11 @@ namespace {
 /// This pass strips all debug info that is not related line tables.
 /// The result will be the same as if the program where compiled with
 /// -gline-tables-only.
-struct StripNonLineTableDebugLegacyPass : public ModulePass {
+struct StripNonLineTableDebugLegacyPass : public ModulePass { 
   static char ID; // Pass identification, replacement for typeid
-  StripNonLineTableDebugLegacyPass() : ModulePass(ID) {
-    initializeStripNonLineTableDebugLegacyPassPass(
-        *PassRegistry::getPassRegistry());
+  StripNonLineTableDebugLegacyPass() : ModulePass(ID) { 
+    initializeStripNonLineTableDebugLegacyPassPass( 
+        *PassRegistry::getPassRegistry()); 
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
@@ -35,17 +35,17 @@ struct StripNonLineTableDebugLegacyPass : public ModulePass {
 };
 }
 
-char StripNonLineTableDebugLegacyPass::ID = 0;
-INITIALIZE_PASS(StripNonLineTableDebugLegacyPass,
-                "strip-nonlinetable-debuginfo",
+char StripNonLineTableDebugLegacyPass::ID = 0; 
+INITIALIZE_PASS(StripNonLineTableDebugLegacyPass, 
+                "strip-nonlinetable-debuginfo", 
                 "Strip all debug info except linetables", false, false)
 
-ModulePass *llvm::createStripNonLineTableDebugLegacyPass() {
-  return new StripNonLineTableDebugLegacyPass();
+ModulePass *llvm::createStripNonLineTableDebugLegacyPass() { 
+  return new StripNonLineTableDebugLegacyPass(); 
 }
-
-PreservedAnalyses
-StripNonLineTableDebugInfoPass::run(Module &M, ModuleAnalysisManager &AM) {
-  llvm::stripNonLineTableDebugInfo(M);
-  return PreservedAnalyses::all();
-}
+ 
+PreservedAnalyses 
+StripNonLineTableDebugInfoPass::run(Module &M, ModuleAnalysisManager &AM) { 
+  llvm::stripNonLineTableDebugInfo(M); 
+  return PreservedAnalyses::all(); 
+} 

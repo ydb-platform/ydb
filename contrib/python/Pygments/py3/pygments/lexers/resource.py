@@ -4,7 +4,7 @@
 
     Lexer for resource definition files.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -24,8 +24,8 @@ class ResourceLexer(RegexLexer):
     .. versionadded:: 2.0
     """
     name = 'ResourceBundle'
-    aliases = ['resourcebundle', 'resource']
-    filenames = []
+    aliases = ['resourcebundle', 'resource'] 
+    filenames = [] 
 
     _types = (':table', ':array', ':string', ':bin', ':import', ':intvector',
               ':int', ':alias')

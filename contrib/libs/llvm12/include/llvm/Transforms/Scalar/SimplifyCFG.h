@@ -23,7 +23,7 @@
 
 #include "llvm/IR/Function.h"
 #include "llvm/IR/PassManager.h"
-#include "llvm/Transforms/Utils/SimplifyCFGOptions.h"
+#include "llvm/Transforms/Utils/SimplifyCFGOptions.h" 
 
 namespace llvm {
 
@@ -41,7 +41,7 @@ public:
   /// rather than optimal IR. That is, by default we bypass transformations that
   /// are likely to improve performance but make analysis for other passes more
   /// difficult.
-  SimplifyCFGPass();
+  SimplifyCFGPass(); 
 
   /// Construct a pass with optional optimizations.
   SimplifyCFGPass(const SimplifyCFGOptions &PassOptions);

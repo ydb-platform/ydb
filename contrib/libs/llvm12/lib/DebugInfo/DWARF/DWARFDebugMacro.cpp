@@ -40,7 +40,7 @@ void DWARFDebugMacro::dump(raw_ostream &OS) const {
   unsigned IndLevel = 0;
   for (const auto &Macros : MacroLists) {
     OS << format("0x%08" PRIx64 ":\n", Macros.Offset);
-    if (Macros.IsDebugMacro)
+    if (Macros.IsDebugMacro) 
       Macros.Header.dumpMacroHeader(OS);
     for (const Entry &E : Macros.Macros) {
       // There should not be DW_MACINFO_end_file when IndLevel is Zero. However,
@@ -52,10 +52,10 @@ void DWARFDebugMacro::dump(raw_ostream &OS) const {
         OS << "  ";
       IndLevel += (E.Type == DW_MACINFO_start_file);
       // Based on which version we are handling choose appropriate macro forms.
-      if (Macros.IsDebugMacro)
-        WithColor(OS, HighlightColor::Macro).get()
-            << (Macros.Header.Version < 5 ? GnuMacroString(E.Type)
-                                          : MacroString(E.Type));
+      if (Macros.IsDebugMacro) 
+        WithColor(OS, HighlightColor::Macro).get() 
+            << (Macros.Header.Version < 5 ? GnuMacroString(E.Type) 
+                                          : MacroString(E.Type)); 
       else
         WithColor(OS, HighlightColor::Macro).get() << MacinfoString(E.Type);
       switch (E.Type) {
@@ -69,9 +69,9 @@ void DWARFDebugMacro::dump(raw_ostream &OS) const {
         // DW_MACRO_start_file == DW_MACINFO_start_file
         // DW_MACRO_end_file   == DW_MACINFO_end_file
         // For readability/uniformity we are using DW_MACRO_*.
-        //
-        // The GNU .debug_macro extension's entries have the same encoding
-        // as DWARF 5's DW_MACRO_* entries, so we only use the latter here.
+        // 
+        // The GNU .debug_macro extension's entries have the same encoding 
+        // as DWARF 5's DW_MACRO_* entries, so we only use the latter here. 
       case DW_MACRO_define:
       case DW_MACRO_undef:
       case DW_MACRO_define_strp:
@@ -102,7 +102,7 @@ void DWARFDebugMacro::dump(raw_ostream &OS) const {
 }
 
 Error DWARFDebugMacro::parseImpl(
-    Optional<DWARFUnitVector::compile_unit_range> Units,
+    Optional<DWARFUnitVector::compile_unit_range> Units, 
     Optional<DataExtractor> StringExtractor, DWARFDataExtractor Data,
     bool IsMacro) {
   uint64_t Offset = 0;
@@ -123,7 +123,7 @@ Error DWARFDebugMacro::parseImpl(
       MacroLists.emplace_back();
       M = &MacroLists.back();
       M->Offset = Offset;
-      M->IsDebugMacro = IsMacro;
+      M->IsDebugMacro = IsMacro; 
       if (IsMacro) {
         auto Err = M->Header.parseMacroHeader(Data, &Offset);
         if (Err)

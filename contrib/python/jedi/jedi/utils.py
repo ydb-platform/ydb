@@ -5,21 +5,21 @@ Utilities for end-users.
 from __future__ import absolute_import
 import __main__
 from collections import namedtuple
-import logging
-import traceback
+import logging 
+import traceback 
 import re
 import os
 import sys
 
-from parso import split_lines
-
+from parso import split_lines 
+ 
 from jedi import Interpreter
-from jedi.api.helpers import get_on_completion_name
+from jedi.api.helpers import get_on_completion_name 
 
 
-READLINE_DEBUG = False
-
-
+READLINE_DEBUG = False 
+ 
+ 
 def setup_readline(namespace_module=__main__):
     """
     Install Jedi completer to :mod:`readline`.
@@ -61,13 +61,13 @@ def setup_readline(namespace_module=__main__):
     bash).
 
     """
-    if READLINE_DEBUG:
-        logging.basicConfig(
-            filename='/tmp/jedi.log',
-            filemode='a',
-            level=logging.DEBUG
-        )
-
+    if READLINE_DEBUG: 
+        logging.basicConfig( 
+            filename='/tmp/jedi.log', 
+            filemode='a', 
+            level=logging.DEBUG 
+        ) 
+ 
     class JediRL(object):
         def complete(self, text, state):
             """
@@ -83,22 +83,22 @@ def setup_readline(namespace_module=__main__):
                 sys.path.insert(0, os.getcwd())
                 # Calling python doesn't have a path, so add to sys.path.
                 try:
-                    logging.debug("Start REPL completion: " + repr(text))
+                    logging.debug("Start REPL completion: " + repr(text)) 
                     interpreter = Interpreter(text, [namespace_module.__dict__])
 
-                    lines = split_lines(text)
-                    position = (len(lines), len(lines[-1]))
-                    name = get_on_completion_name(
-                        interpreter._module_node,
-                        lines,
-                        position
-                    )
-                    before = text[:len(text) - len(name)]
+                    lines = split_lines(text) 
+                    position = (len(lines), len(lines[-1])) 
+                    name = get_on_completion_name( 
+                        interpreter._module_node, 
+                        lines, 
+                        position 
+                    ) 
+                    before = text[:len(text) - len(name)] 
                     completions = interpreter.completions()
-                    logging.debug("REPL completions: %s", completions)
-                except:
-                    logging.error("REPL Completion error:\n" + traceback.format_exc())
-                    raise
+                    logging.debug("REPL completions: %s", completions) 
+                except: 
+                    logging.error("REPL Completion error:\n" + traceback.format_exc()) 
+                    raise 
                 finally:
                     sys.path.pop(0)
 
@@ -109,14 +109,14 @@ def setup_readline(namespace_module=__main__):
                 return None
 
     try:
-        # Need to import this one as well to make sure it's executed before
-        # this code. This didn't use to be an issue until 3.3. Starting with
-        # 3.4 this is different, it always overwrites the completer if it's not
-        # already imported here.
-        import rlcompleter  # noqa: F401
+        # Need to import this one as well to make sure it's executed before 
+        # this code. This didn't use to be an issue until 3.3. Starting with 
+        # 3.4 this is different, it always overwrites the completer if it's not 
+        # already imported here. 
+        import rlcompleter  # noqa: F401 
         import readline
     except ImportError:
-        print("Jedi: Module readline not available.")
+        print("Jedi: Module readline not available.") 
     else:
         readline.set_completer(JediRL().complete)
         readline.parse_and_bind("tab: complete")
@@ -138,5 +138,5 @@ def version_info():
     """
     Version = namedtuple('Version', 'major, minor, micro')
     from jedi import __version__
-    tupl = re.findall(r'[a-z]+|\d+', __version__)
+    tupl = re.findall(r'[a-z]+|\d+', __version__) 
     return Version(*[x if i == 3 else int(x) for i, x in enumerate(tupl)])

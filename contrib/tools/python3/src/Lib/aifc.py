@@ -138,7 +138,7 @@ import struct
 import builtins
 import warnings
 
-__all__ = ["Error", "open"]
+__all__ = ["Error", "open"] 
 
 class Error(Exception):
     pass

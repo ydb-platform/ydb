@@ -18,7 +18,7 @@
 #include "llvm/Analysis/CaptureTracking.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/Statistic.h"
+#include "llvm/ADT/Statistic.h" 
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/CFG.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -30,13 +30,13 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "capture-tracking"
-
-STATISTIC(NumCaptured,          "Number of pointers maybe captured");
-STATISTIC(NumNotCaptured,       "Number of pointers not captured");
-STATISTIC(NumCapturedBefore,    "Number of pointers maybe captured before");
-STATISTIC(NumNotCapturedBefore, "Number of pointers not captured before");
-
+#define DEBUG_TYPE "capture-tracking" 
+ 
+STATISTIC(NumCaptured,          "Number of pointers maybe captured"); 
+STATISTIC(NumNotCaptured,       "Number of pointers not captured"); 
+STATISTIC(NumCapturedBefore,    "Number of pointers maybe captured before"); 
+STATISTIC(NumNotCapturedBefore, "Number of pointers not captured before"); 
+ 
 /// The default value for MaxUsesToExplore argument. It's relatively small to
 /// keep the cost of analysis reasonable for clients like BasicAliasAnalysis,
 /// where the results can't be cached.
@@ -202,10 +202,10 @@ bool llvm::PointerMayBeCaptured(const Value *V,
 
   SimpleCaptureTracker SCT(ReturnCaptures);
   PointerMayBeCaptured(V, &SCT, MaxUsesToExplore);
-  if (SCT.Captured)
-    ++NumCaptured;
-  else
-    ++NumNotCaptured;
+  if (SCT.Captured) 
+    ++NumCaptured; 
+  else 
+    ++NumNotCaptured; 
   return SCT.Captured;
 }
 
@@ -234,10 +234,10 @@ bool llvm::PointerMayBeCapturedBefore(const Value *V, bool ReturnCaptures,
 
   CapturesBefore CB(ReturnCaptures, I, DT, IncludeI);
   PointerMayBeCaptured(V, &CB, MaxUsesToExplore);
-  if (CB.Captured)
-    ++NumCapturedBefore;
-  else
-    ++NumNotCapturedBefore;
+  if (CB.Captured) 
+    ++NumCapturedBefore; 
+  else 
+    ++NumNotCapturedBefore; 
   return CB.Captured;
 }
 
@@ -256,20 +256,20 @@ void llvm::PointerMayBeCaptured(const Value *V, CaptureTracker *Tracker,
     for (const Use &U : V->uses()) {
       // If there are lots of uses, conservatively say that the value
       // is captured to avoid taking too much compile time.
-      if (Count++ >= MaxUsesToExplore) {
-        Tracker->tooManyUses();
-        return false;
-      }
+      if (Count++ >= MaxUsesToExplore) { 
+        Tracker->tooManyUses(); 
+        return false; 
+      } 
       if (!Visited.insert(&U).second)
         continue;
       if (!Tracker->shouldExplore(&U))
         continue;
       Worklist.push_back(&U);
     }
-    return true;
+    return true; 
   };
-  if (!AddUses(V))
-    return;
+  if (!AddUses(V)) 
+    return; 
 
   while (!Worklist.empty()) {
     const Use *U = Worklist.pop_back_val();
@@ -289,12 +289,12 @@ void llvm::PointerMayBeCaptured(const Value *V, CaptureTracker *Tracker,
       // The pointer is not captured if returned pointer is not captured.
       // NOTE: CaptureTracking users should not assume that only functions
       // marked with nocapture do not capture. This means that places like
-      // getUnderlyingObject in ValueTracking or DecomposeGEPExpression
+      // getUnderlyingObject in ValueTracking or DecomposeGEPExpression 
       // in BasicAA also need to know about this property.
       if (isIntrinsicReturningPointerAliasingArgumentWithoutCapturing(Call,
                                                                       true)) {
-        if (!AddUses(Call))
-          return;
+        if (!AddUses(Call)) 
+          return; 
         break;
       }
 
@@ -312,11 +312,11 @@ void llvm::PointerMayBeCaptured(const Value *V, CaptureTracker *Tracker,
       // that loading a value from a pointer does not cause the pointer to be
       // captured, even though the loaded value might be the pointer itself
       // (think of self-referential objects).
-      if (Call->isDataOperand(U) &&
-          !Call->doesNotCapture(Call->getDataOperandNo(U))) {
-        // The parameter is not marked 'nocapture' - captured.
-        if (Tracker->captured(U))
-          return;
+      if (Call->isDataOperand(U) && 
+          !Call->doesNotCapture(Call->getDataOperandNo(U))) { 
+        // The parameter is not marked 'nocapture' - captured. 
+        if (Tracker->captured(U)) 
+          return; 
       }
       break;
     }
@@ -330,9 +330,9 @@ void llvm::PointerMayBeCaptured(const Value *V, CaptureTracker *Tracker,
       // "va-arg" from a pointer does not cause it to be captured.
       break;
     case Instruction::Store:
-      // Stored the pointer - conservatively assume it may be captured.
-      // Volatile stores make the address observable.
-      if (U->getOperandNo() == 0 || cast<StoreInst>(I)->isVolatile())
+      // Stored the pointer - conservatively assume it may be captured. 
+      // Volatile stores make the address observable. 
+      if (U->getOperandNo() == 0 || cast<StoreInst>(I)->isVolatile()) 
         if (Tracker->captured(U))
           return;
       break;
@@ -343,7 +343,7 @@ void llvm::PointerMayBeCaptured(const Value *V, CaptureTracker *Tracker,
       // but the value being stored is.
       // Volatile stores make the address observable.
       auto *ARMWI = cast<AtomicRMWInst>(I);
-      if (U->getOperandNo() == 1 || ARMWI->isVolatile())
+      if (U->getOperandNo() == 1 || ARMWI->isVolatile()) 
         if (Tracker->captured(U))
           return;
       break;
@@ -355,7 +355,7 @@ void llvm::PointerMayBeCaptured(const Value *V, CaptureTracker *Tracker,
       // but the value being stored is.
       // Volatile stores make the address observable.
       auto *ACXI = cast<AtomicCmpXchgInst>(I);
-      if (U->getOperandNo() == 1 || U->getOperandNo() == 2 ||
+      if (U->getOperandNo() == 1 || U->getOperandNo() == 2 || 
           ACXI->isVolatile())
         if (Tracker->captured(U))
           return;
@@ -367,18 +367,18 @@ void llvm::PointerMayBeCaptured(const Value *V, CaptureTracker *Tracker,
     case Instruction::Select:
     case Instruction::AddrSpaceCast:
       // The original value is not captured via this if the new value isn't.
-      if (!AddUses(I))
-        return;
+      if (!AddUses(I)) 
+        return; 
       break;
     case Instruction::ICmp: {
-      unsigned Idx = U->getOperandNo();
+      unsigned Idx = U->getOperandNo(); 
       unsigned OtherIdx = 1 - Idx;
       if (auto *CPN = dyn_cast<ConstantPointerNull>(I->getOperand(OtherIdx))) {
         // Don't count comparisons of a no-alias return value against null as
         // captures. This allows us to ignore comparisons of malloc results
         // with null, for example.
         if (CPN->getType()->getAddressSpace() == 0)
-          if (isNoAliasCall(U->get()->stripPointerCasts()))
+          if (isNoAliasCall(U->get()->stripPointerCasts())) 
             break;
         if (!I->getFunction()->nullPointerIsDefined()) {
           auto *O = I->getOperand(Idx)->stripPointerCastsSameRepresentation();
@@ -411,44 +411,44 @@ void llvm::PointerMayBeCaptured(const Value *V, CaptureTracker *Tracker,
 
   // All uses examined.
 }
-
-bool llvm::isNonEscapingLocalObject(
-    const Value *V, SmallDenseMap<const Value *, bool, 8> *IsCapturedCache) {
-  SmallDenseMap<const Value *, bool, 8>::iterator CacheIt;
-  if (IsCapturedCache) {
-    bool Inserted;
-    std::tie(CacheIt, Inserted) = IsCapturedCache->insert({V, false});
-    if (!Inserted)
-      // Found cached result, return it!
-      return CacheIt->second;
-  }
-
-  // If this is a local allocation, check to see if it escapes.
-  if (isa<AllocaInst>(V) || isNoAliasCall(V)) {
-    // Set StoreCaptures to True so that we can assume in our callers that the
-    // pointer is not the result of a load instruction. Currently
-    // PointerMayBeCaptured doesn't have any special analysis for the
-    // StoreCaptures=false case; if it did, our callers could be refined to be
-    // more precise.
-    auto Ret = !PointerMayBeCaptured(V, false, /*StoreCaptures=*/true);
-    if (IsCapturedCache)
-      CacheIt->second = Ret;
-    return Ret;
-  }
-
-  // If this is an argument that corresponds to a byval or noalias argument,
-  // then it has not escaped before entering the function.  Check if it escapes
-  // inside the function.
-  if (const Argument *A = dyn_cast<Argument>(V))
-    if (A->hasByValAttr() || A->hasNoAliasAttr()) {
-      // Note even if the argument is marked nocapture, we still need to check
-      // for copies made inside the function. The nocapture attribute only
-      // specifies that there are no copies made that outlive the function.
-      auto Ret = !PointerMayBeCaptured(V, false, /*StoreCaptures=*/true);
-      if (IsCapturedCache)
-        CacheIt->second = Ret;
-      return Ret;
-    }
-
-  return false;
-}
+ 
+bool llvm::isNonEscapingLocalObject( 
+    const Value *V, SmallDenseMap<const Value *, bool, 8> *IsCapturedCache) { 
+  SmallDenseMap<const Value *, bool, 8>::iterator CacheIt; 
+  if (IsCapturedCache) { 
+    bool Inserted; 
+    std::tie(CacheIt, Inserted) = IsCapturedCache->insert({V, false}); 
+    if (!Inserted) 
+      // Found cached result, return it! 
+      return CacheIt->second; 
+  } 
+ 
+  // If this is a local allocation, check to see if it escapes. 
+  if (isa<AllocaInst>(V) || isNoAliasCall(V)) { 
+    // Set StoreCaptures to True so that we can assume in our callers that the 
+    // pointer is not the result of a load instruction. Currently 
+    // PointerMayBeCaptured doesn't have any special analysis for the 
+    // StoreCaptures=false case; if it did, our callers could be refined to be 
+    // more precise. 
+    auto Ret = !PointerMayBeCaptured(V, false, /*StoreCaptures=*/true); 
+    if (IsCapturedCache) 
+      CacheIt->second = Ret; 
+    return Ret; 
+  } 
+ 
+  // If this is an argument that corresponds to a byval or noalias argument, 
+  // then it has not escaped before entering the function.  Check if it escapes 
+  // inside the function. 
+  if (const Argument *A = dyn_cast<Argument>(V)) 
+    if (A->hasByValAttr() || A->hasNoAliasAttr()) { 
+      // Note even if the argument is marked nocapture, we still need to check 
+      // for copies made inside the function. The nocapture attribute only 
+      // specifies that there are no copies made that outlive the function. 
+      auto Ret = !PointerMayBeCaptured(V, false, /*StoreCaptures=*/true); 
+      if (IsCapturedCache) 
+        CacheIt->second = Ret; 
+      return Ret; 
+    } 
+ 
+  return false; 
+} 

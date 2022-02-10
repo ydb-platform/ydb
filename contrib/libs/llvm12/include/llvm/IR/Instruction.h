@@ -263,11 +263,11 @@ public:
   //===--------------------------------------------------------------------===//
 
   /// Return true if this instruction has any metadata attached to it.
-  bool hasMetadata() const { return DbgLoc || Value::hasMetadata(); }
+  bool hasMetadata() const { return DbgLoc || Value::hasMetadata(); } 
 
   /// Return true if this instruction has metadata attached to it other than a
   /// debug location.
-  bool hasMetadataOtherThanDebugLoc() const { return Value::hasMetadata(); }
+  bool hasMetadataOtherThanDebugLoc() const { return Value::hasMetadata(); } 
 
   /// Return true if this instruction has the given type of metadata attached.
   bool hasMetadata(unsigned KindID) const {
@@ -306,7 +306,7 @@ public:
   /// debug location.
   void getAllMetadataOtherThanDebugLoc(
       SmallVectorImpl<std::pair<unsigned, MDNode *>> &MDs) const {
-    Value::getAllMetadata(MDs);
+    Value::getAllMetadata(MDs); 
   }
 
   /// Fills the AAMDNodes structure with AA metadata from this instruction.
@@ -347,11 +347,11 @@ public:
   }
   /// @}
 
-  /// Adds an !annotation metadata node with \p Annotation to this instruction.
-  /// If this instruction already has !annotation metadata, append \p Annotation
-  /// to the existing node.
-  void addAnnotationMetadata(StringRef Annotation);
-
+  /// Adds an !annotation metadata node with \p Annotation to this instruction. 
+  /// If this instruction already has !annotation metadata, append \p Annotation 
+  /// to the existing node. 
+  void addAnnotationMetadata(StringRef Annotation); 
+ 
   /// Sets the metadata on this instruction from the AAMDNodes structure.
   void setAAMetadata(const AAMDNodes &N);
 
@@ -501,20 +501,20 @@ public:
   /// merged DebugLoc.
   void applyMergedLocation(const DILocation *LocA, const DILocation *LocB);
 
-  /// Updates the debug location given that the instruction has been hoisted
-  /// from a block to a predecessor of that block.
-  /// Note: it is undefined behavior to call this on an instruction not
-  /// currently inserted into a function.
-  void updateLocationAfterHoist();
-
-  /// Drop the instruction's debug location. This does not guarantee removal
-  /// of the !dbg source location attachment, as it must set a line 0 location
-  /// with scope information attached on call instructions. To guarantee
-  /// removal of the !dbg attachment, use the \ref setDebugLoc() API.
-  /// Note: it is undefined behavior to call this on an instruction not
-  /// currently inserted into a function.
-  void dropLocation();
-
+  /// Updates the debug location given that the instruction has been hoisted 
+  /// from a block to a predecessor of that block. 
+  /// Note: it is undefined behavior to call this on an instruction not 
+  /// currently inserted into a function. 
+  void updateLocationAfterHoist(); 
+ 
+  /// Drop the instruction's debug location. This does not guarantee removal 
+  /// of the !dbg source location attachment, as it must set a line 0 location 
+  /// with scope information attached on call instructions. To guarantee 
+  /// removal of the !dbg attachment, use the \ref setDebugLoc() API. 
+  /// Note: it is undefined behavior to call this on an instruction not 
+  /// currently inserted into a function. 
+  void dropLocation(); 
+ 
 private:
   // These are all implemented in Metadata.cpp.
   MDNode *getMetadataImpl(unsigned KindID) const;
@@ -546,7 +546,7 @@ public:
   /// In LLVM, these are the commutative operators, plus SetEQ and SetNE, when
   /// applied to any type.
   ///
-  bool isCommutative() const LLVM_READONLY;
+  bool isCommutative() const LLVM_READONLY; 
   static bool isCommutative(unsigned Opcode) {
     switch (Opcode) {
     case Add: case FAdd:
@@ -640,10 +640,10 @@ public:
   /// generated program.
   bool isSafeToRemove() const;
 
-  /// Return true if the instruction will return (unwinding is considered as
-  /// a form of returning control flow here).
-  bool willReturn() const;
-
+  /// Return true if the instruction will return (unwinding is considered as 
+  /// a form of returning control flow here). 
+  bool willReturn() const; 
+ 
   /// Return true if the instruction is a variety of EH-block.
   bool isEHPad() const {
     switch (getOpcode()) {
@@ -661,29 +661,29 @@ public:
   /// llvm.lifetime.end marker.
   bool isLifetimeStartOrEnd() const;
 
-  /// Return true if the instruction is a DbgInfoIntrinsic or PseudoProbeInst.
-  bool isDebugOrPseudoInst() const;
-
+  /// Return true if the instruction is a DbgInfoIntrinsic or PseudoProbeInst. 
+  bool isDebugOrPseudoInst() const; 
+ 
   /// Return a pointer to the next non-debug instruction in the same basic
-  /// block as 'this', or nullptr if no such instruction exists. Skip any pseudo
-  /// operations if \c SkipPseudoOp is true.
-  const Instruction *
-  getNextNonDebugInstruction(bool SkipPseudoOp = false) const;
-  Instruction *getNextNonDebugInstruction(bool SkipPseudoOp = false) {
+  /// block as 'this', or nullptr if no such instruction exists. Skip any pseudo 
+  /// operations if \c SkipPseudoOp is true. 
+  const Instruction * 
+  getNextNonDebugInstruction(bool SkipPseudoOp = false) const; 
+  Instruction *getNextNonDebugInstruction(bool SkipPseudoOp = false) { 
     return const_cast<Instruction *>(
-        static_cast<const Instruction *>(this)->getNextNonDebugInstruction(
-            SkipPseudoOp));
+        static_cast<const Instruction *>(this)->getNextNonDebugInstruction( 
+            SkipPseudoOp)); 
   }
 
   /// Return a pointer to the previous non-debug instruction in the same basic
-  /// block as 'this', or nullptr if no such instruction exists. Skip any pseudo
-  /// operations if \c SkipPseudoOp is true.
-  const Instruction *
-  getPrevNonDebugInstruction(bool SkipPseudoOp = false) const;
-  Instruction *getPrevNonDebugInstruction(bool SkipPseudoOp = false) {
+  /// block as 'this', or nullptr if no such instruction exists. Skip any pseudo 
+  /// operations if \c SkipPseudoOp is true. 
+  const Instruction * 
+  getPrevNonDebugInstruction(bool SkipPseudoOp = false) const; 
+  Instruction *getPrevNonDebugInstruction(bool SkipPseudoOp = false) { 
     return const_cast<Instruction *>(
-        static_cast<const Instruction *>(this)->getPrevNonDebugInstruction(
-            SkipPseudoOp));
+        static_cast<const Instruction *>(this)->getPrevNonDebugInstruction( 
+            SkipPseudoOp)); 
   }
 
   /// Create a copy of 'this' instruction that is identical in all ways except

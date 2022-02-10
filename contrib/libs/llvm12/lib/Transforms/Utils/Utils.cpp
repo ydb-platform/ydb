@@ -34,17 +34,17 @@ void llvm::initializeTransformUtils(PassRegistry &Registry) {
   initializeLibCallsShrinkWrapLegacyPassPass(Registry);
   initializeLoopSimplifyPass(Registry);
   initializeLowerInvokeLegacyPassPass(Registry);
-  initializeLowerSwitchLegacyPassPass(Registry);
+  initializeLowerSwitchLegacyPassPass(Registry); 
   initializeNameAnonGlobalLegacyPassPass(Registry);
   initializePromoteLegacyPassPass(Registry);
-  initializeStripNonLineTableDebugLegacyPassPass(Registry);
-  initializeUnifyFunctionExitNodesLegacyPassPass(Registry);
+  initializeStripNonLineTableDebugLegacyPassPass(Registry); 
+  initializeUnifyFunctionExitNodesLegacyPassPass(Registry); 
   initializeMetaRenamerPass(Registry);
-  initializeStripGCRelocatesLegacyPass(Registry);
+  initializeStripGCRelocatesLegacyPass(Registry); 
   initializePredicateInfoPrinterLegacyPassPass(Registry);
   initializeInjectTLIMappingsLegacyPass(Registry);
   initializeFixIrreduciblePass(Registry);
-  initializeUnifyLoopExitsLegacyPassPass(Registry);
+  initializeUnifyLoopExitsLegacyPassPass(Registry); 
   initializeUniqueInternalLinkageNamesLegacyPassPass(Registry);
 }
 

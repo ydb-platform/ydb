@@ -3,13 +3,13 @@ OWNER(g:contrib g:python-contrib)
 RECURSE(
     absl-py
     adblockparser
-    aenum
+    aenum 
     ago
     aio-pika
     aioboto3
     aiobotocore
     aioch
-    aiochclient
+    aiochclient 
     aiodns
     aiodocker
     aiofiles
@@ -17,29 +17,29 @@ RECURSE(
     aiogram
     aiographite
     aiohttp
-    aiohttp-apispec
+    aiohttp-apispec 
     aiohttp-cors
     aiohttp-jinja2
     aiohttp-remotes
     aiohttp-retry
     aiohttp-swagger
-    aiohttp-xmlrpc
-    aioitertools
+    aiohttp-xmlrpc 
+    aioitertools 
     aiojobs
     aiomysql
     aiopg
     aioredis
-    aioredis-lock
+    aioredis-lock 
     aioresponses
     aiormq
-    aiosignal
+    aiosignal 
     aiosmtpd
     aiosmtplib
     aiosocksy
     aiosqlite
     aiotg
     aiounittest
-    aiozipkin
+    aiozipkin 
     aiozk
     alabaster
     alembic
@@ -50,18 +50,18 @@ RECURSE(
     antlr4
     ansiwrap
     anyconfig
-    anyio
+    anyio 
     anytree
     apipkg
     apispec
     apispec-flask-restful
     appdirs
-    APScheduler
+    APScheduler 
     apsw
     aresponses
     argcomplete
     argon2-cffi
-    argon2-cffi-bindings
+    argon2-cffi-bindings 
     argparse-addons
     arq
     arrow
@@ -69,7 +69,7 @@ RECURSE(
     asgiref
     asn1crypto
     astroid
-    asttokens
+    asttokens 
     astunparse
     async-generator
     async-lru
@@ -77,27 +77,27 @@ RECURSE(
     asyncio-pool
     asyncmc
     asyncpg
-    asyncssh
+    asyncssh 
     asynctest
     asyncwhois
     atomicwrites
-    atpublic
+    atpublic 
     AttrDict
     attrs
     Authlib
     autobahn
     Automat
-    awscli
+    awscli 
     Babel
-    backcall
+    backcall 
     backports_abc
     backports.csv
-    backports.functools-lru-cache
+    backports.functools-lru-cache 
     backports.lzma
-    backports.shutil-get-terminal-size
-    backports.ssl_match_hostname
-    backports.tempfile
-    backports.weakref
+    backports.shutil-get-terminal-size 
+    backports.ssl_match_hostname 
+    backports.tempfile 
+    backports.weakref 
     banal
     bandit
     bcrypt
@@ -113,48 +113,48 @@ RECURSE(
     black
     bleach
     blinker
-    blis
-    bokeh
+    blis 
+    bokeh 
     boltons
     boolean.py
     bootstrapped
-    boto
+    boto 
     boto3
     botocore
     braceexpand
     bravado
-    bravado-core
+    bravado-core 
     bsddb3
     bson
     bz2file
     cached-property
-    cachelib
+    cachelib 
     cachetools
-    catalogue
+    catalogue 
     cattrs
     cbor2
     cchardet
     celery
-    celery-mock
-    Cerberus
+    celery-mock 
+    Cerberus 
     certifi
     certipy
     cffi
     channels
     chardet
-    charset-normalizer
+    charset-normalizer 
     channels
     chart-studio
-    CherryPy
+    CherryPy 
     cherrypy-cors
     ciso8601
     clang
     clang/example
     cli-helpers
     click
-    click-didyoumean
-    click-plugins
-    click-repl
+    click-didyoumean 
+    click-plugins 
+    click-repl 
     clickhouse-cityhash
     clickhouse-driver
     clickhouse-sqlalchemy
@@ -169,7 +169,7 @@ RECURSE(
     ConfigArgParse
     configobj
     configparser
-    confluent-kafka
+    confluent-kafka 
     constantly
     contextdecorator
     contextlib2
@@ -188,7 +188,7 @@ RECURSE(
     curlify
     cx-Oracle
     cycler
-    cymem
+    cymem 
     cytoolz
     czipfile
     daphne
@@ -199,21 +199,21 @@ RECURSE(
     datadiff
     dateparser
     dateutil
-    DAWG-Python
-    dbf_light
+    DAWG-Python 
+    dbf_light 
     debian-inspector
     decorator
     deepdiff
-    deepmerge
-    defusedxml
+    deepmerge 
+    defusedxml 
     demjson
-    Deprecated
-    dictpath
+    Deprecated 
+    dictpath 
     diff-match-patch
     directio
     distro
     django
-    django-admin-inline-paginator
+    django-admin-inline-paginator 
     django-admin-rangefilter
     django-admin-view-permission
     django-advanced-filters
@@ -221,18 +221,18 @@ RECURSE(
     django-alive
     django-autoconfig
     django-appconf
-    django-bootstrap3
+    django-bootstrap3 
     django-braces
     django-bulk-update
     django-cachalot
     django-cache-memoize
-    django-celery-beat
+    django-celery-beat 
     django-celery-email
     django-celery-results
     django-closuretree
     django-constance
     django-cors-headers
-    django-cors-middleware
+    django-cors-middleware 
     django-crispy-forms
     django-cron
     django-csp
@@ -271,7 +271,7 @@ RECURSE(
     django-mptt
     django-mptt-admin
     django-nested-inline
-    django-netfields
+    django-netfields 
     django-ninja
     django-object-actions
     django-opentracing
@@ -298,12 +298,12 @@ RECURSE(
     django-sortedm2m
     django-storages
     django-tastypie
-    django-test-migrations
-    django-timezone-field
+    django-test-migrations 
+    django-timezone-field 
     django-treebeard
     django-waffle
-    django-webpack-loader
-    django-webtest
+    django-webpack-loader 
+    django-webtest 
     django-whatever
     django-widget-tweaks
     djangorestframework
@@ -319,14 +319,14 @@ RECURSE(
     docstring-parser
     docutils
     dohq-teamcity
-    dominate
+    dominate 
     dotmap
     dparse
     dpath
     dpkt
     drf-extensions
     drf_ujson
-    drf-yasg
+    drf-yasg 
     easywebdav
     ecdsa
     edera
@@ -343,12 +343,12 @@ RECURSE(
     ephem
     escapism
     etcd3
-    excel-formulas-calculator
+    excel-formulas-calculator 
     execnet
-    executing
-    ExifRead
+    executing 
+    ExifRead 
     extractcode
-    fabric
+    fabric 
     face
     facebook-business
     factory-boy
@@ -364,7 +364,7 @@ RECURSE(
     fastdtw
     fasteners
     fastjsonschema
-    fastsnmp
+    fastsnmp 
     faulthandler
     fbprophet
     feedparser
@@ -378,11 +378,11 @@ RECURSE(
     flake8-commas
     flake8-docstrings
     flake8-polyfill
-    flake8-quotes
-    flake8-string-format
+    flake8-quotes 
+    flake8-string-format 
     flaky
     Flask
-    Flask-Admin
+    Flask-Admin 
     flask-appconfig
     Flask-Babel
     Flask-Bootstrap
@@ -402,13 +402,13 @@ RECURSE(
     Flask-Principal
     Flask-Pydantic
     Flask-PyMongo
-    Flask-RESTful
+    Flask-RESTful 
     flask-restplus
     flask-restx
     Flask-Script
     flask-shell-ipython
     Flask-Shelve
-    Flask-SQLAlchemy
+    Flask-SQLAlchemy 
     Flask-SSLify
     flask-swagger
     flask-swagger-ui
@@ -419,8 +419,8 @@ RECURSE(
     flex
     flup
     frozendict
-    frozenlist
-    fsspec
+    frozenlist 
+    fsspec 
     ftfy
     funcparserlib
     funcsigs
@@ -429,11 +429,11 @@ RECURSE(
     future
     futures
     gast
-    gcovr
-    GDAL
+    gcovr 
+    GDAL 
     gemfileparser
     gensim
-    GeoAlchemy2
+    GeoAlchemy2 
     geobuf
     geoindex
     gevent
@@ -458,9 +458,9 @@ RECURSE(
     grafanalib
     graphene
     graphene-django
-    graphene-sqlalchemy
-    graphql-core
-    graphql-relay
+    graphene-sqlalchemy 
+    graphql-core 
+    graphql-relay 
     graphviz
     greenify
     greenlet
@@ -470,11 +470,11 @@ RECURSE(
     gunicorn
     h11
     h2
-    h3
+    h3 
     h5py
     hammock
     hexdump
-    hijri-converter
+    hijri-converter 
     hiredis
     hjson
     holidays
@@ -484,11 +484,11 @@ RECURSE(
     html2text
     html5lib
     httmock
-    http-parser
+    http-parser 
     httpagentparser
-    httpcore
+    httpcore 
     httplib2
-    httpretty
+    httpretty 
     httptools
     httpx
     humanfriendly
@@ -496,11 +496,11 @@ RECURSE(
     humongous
     hurry.filesize
     Hydra
-    hypercorn
+    hypercorn 
     hyperframe
     hyperlink
     hyperopt
-    hypothesis
+    hypothesis 
     ibm-db
     icalendar
     idna
@@ -510,16 +510,16 @@ RECURSE(
     IMAPClient
     imgkit
     implicit
-    importlib-metadata
+    importlib-metadata 
     importlib-resources
     incremental
-    infi.clickhouse-orm
+    infi.clickhouse-orm 
     inflect
-    inflection
+    inflection 
     influxdb
-    iniconfig
+    iniconfig 
     iniherit
-    Inject
+    Inject 
     inlinestyler
     intbitset
     intspan
@@ -530,24 +530,24 @@ RECURSE(
     ipdb
     ipykernel
     ipython
-    ipython-genutils
+    ipython-genutils 
     ipython-sql
     ipywidgets
-    iso3166
-    iso8601
+    iso3166 
+    iso8601 
     isodate
     isort
     itsdangerous
     jaeger-client
-    janus
+    janus 
     jaraco.functools
     javaproperties
     jdcal
     jedi
     Jinja2
     jinja2-time
-    jmespath
-    joblib
+    jmespath 
+    joblib 
     jmespath
     json-rpc
     json2html
@@ -557,7 +557,7 @@ RECURSE(
     jsonpath-rw
     jsonpickle
     jsonpointer
-    jsonref
+    jsonref 
     jsonschema
     jsonstreams
     juggler_sdk
@@ -574,9 +574,9 @@ RECURSE(
     Keras-Preprocessing
     kiwisolver
     kombu
-    korean-lunar-calendar
+    korean-lunar-calendar 
     kubernetes
-    langcodes
+    langcodes 
     lark-parser
     lazy
     lazy-object-proxy
@@ -586,7 +586,7 @@ RECURSE(
     license-expression
     line_profiler
     linecache2
-    llist
+    llist 
     lmdb
     localshop
     lockfile
@@ -594,27 +594,27 @@ RECURSE(
     loguru
     logutils
     luigi
-    LunarCalendar
+    LunarCalendar 
     lunardate
-    lunr
+    lunr 
     lxml
     lz4
-    M2Crypto
+    M2Crypto 
     m3u8
-    Mako
+    Mako 
     marisa_trie
     markdown2
     Markdown
     MarkupSafe
     marshmallow
     marshmallow_dataclass
-    marshmallow-enum
+    marshmallow-enum 
     marshmallow-mongoengine
     marshmallow-oneofschema
     marshmallow-sqlalchemy
-    marshmallow-union
+    marshmallow-union 
     matplotlib
-    matplotlib-inline
+    matplotlib-inline 
     mccabe
     mecab-python3
     meld3
@@ -626,8 +626,8 @@ RECURSE(
     mkdocs-material
     mock
     model-mommy
-    Momoko
-    MongoDBProxy
+    Momoko 
+    MongoDBProxy 
     mongoengine
     mongolock
     mongomock
@@ -643,14 +643,14 @@ RECURSE(
     msgpack
     mujson
     multidict
-    multitasking
+    multitasking 
     munch
-    murmurhash
+    murmurhash 
     mutablerecords
     mypy
     mypy-extensions
     mypy-protobuf
-    mypy-zope
+    mypy-zope 
     MySQL-python
     mysqlclient-python
     namedlist
@@ -660,7 +660,7 @@ RECURSE(
     nbformat
     ncclient
     ndg-httpsclient
-    nest-asyncio
+    nest-asyncio 
     nested-diff
     netaddr
     netifaces
@@ -669,14 +669,14 @@ RECURSE(
     normality
     nose
     notebook
-    num2words
+    num2words 
     numpy
     oauth2client
     oauthlib
     objgraph
     observable
     odfpy
-    Office365-REST-Python-Client
+    Office365-REST-Python-Client 
     olefile
     openapi-codec
     openapi-core
@@ -690,8 +690,8 @@ RECURSE(
     opentracing-async-instrumentation
     opentracing-instrumentation
     opt-einsum
-    option
-    ordered-set
+    option 
+    ordered-set 
     orderedmultidict
     orderedset
     os-fast-reservoir
@@ -699,7 +699,7 @@ RECURSE(
     packaging
     paginate
     pamela
-    pampy
+    pampy 
     pamqp
     panamap
     panamap_proto
@@ -713,8 +713,8 @@ RECURSE(
     parse-type
     parsedatetime
     parsel
-    Parsley
-    parso
+    Parsley 
+    parso 
     partd
     passlib
     patch
@@ -723,7 +723,7 @@ RECURSE(
     pathlib2
     pathspec
     pathtools
-    pathy
+    pathy 
     patsy
     paypalrestsdk
     pdbpp
@@ -737,38 +737,38 @@ RECURSE(
     pgcli
     PGPy
     pgspecial
-    phonenumbers
+    phonenumbers 
     pickleshare
-    pika
+    pika 
     Pillow
-    pip
+    pip 
     pkginfo
-    platformdirs
+    platformdirs 
     plotly
     plotly/_plotly_utils
     pluggy
     plugincode
-    plumbum
+    plumbum 
     ply
     plyvel
     polib
     portalocker
     portpicker
-    ppdeep
+    ppdeep 
     pq
     pql
     prance
     premailer
-    preshed
+    preshed 
     pretend
     prettytable
     priority
     progressbar2
-    prometheus-client
-    prometheus-flask-exporter
-    promise
-    prompt-toolkit
-    prophet
+    prometheus-client 
+    prometheus-flask-exporter 
+    promise 
+    prompt-toolkit 
+    prophet 
     protobuf
     protobuf_std
     protobuf_to_dict
@@ -778,15 +778,15 @@ RECURSE(
     ptpython
     ptyprocess
     publicsuffix2
-    pure-eval
+    pure-eval 
     pure-python-adb
     pure-sasl
     py
     py-asciimath
     py-expression-eval
-    py-radix
+    py-radix 
     py3c
-    py4j
+    py4j 
     pyaes
     pyahocorasick
     pyaml
@@ -794,18 +794,18 @@ RECURSE(
     pyasn1-modules
     pybreaker
     pycares
-    pycbrf
+    pycbrf 
     pycodestyle
     pycollada
     pycountry
     pycparser
     pycrypto
-    pycryptodome
+    pycryptodome 
     pycurl
     pycurl/example
     pydantic
     pydash
-    PyDispatcher
+    PyDispatcher 
     pyDOE
     pydocstyle
     pydot
@@ -822,33 +822,33 @@ RECURSE(
     pygtrie
     PyHamcrest
     pyjavaproperties
-    PyJWT
+    PyJWT 
     pykdtree
     pyketama
     pylev
     pylint
     pylxd
-    pylzma
+    pylzma 
     pymaven-patch
-    PyMeeus
+    PyMeeus 
     pymongo
-    pymorphy2
-    pymorphy2-dicts-ru
+    pymorphy2 
+    pymorphy2-dicts-ru 
     pymqi
-    PyMySQL
+    PyMySQL 
     pynacl
     pynetbox
     pyodbc
     pyOpenSSL
     pyparsing
-    PyPDF2
+    PyPDF2 
     pyperclip
     PyPika
     pyproj
-    pyre2
+    pyre2 
     pyrepl
     pyresample
-    pyrsistent
+    pyrsistent 
     pysctp
     pysendfile
     pyserial
@@ -862,7 +862,7 @@ RECURSE(
     pytest-asyncio
     pytest-bdd
     pytest-datadir
-    pytest-datafixtures
+    pytest-datafixtures 
     pytest-django
     pytest-falcon
     pytest-falcon-client
@@ -873,11 +873,11 @@ RECURSE(
     pytest-forked
     pytest-freezegun
     pytest-httpretty
-    pytest-lazy-fixture
+    pytest-lazy-fixture 
     pytest-localserver
-    pytest-mock
+    pytest-mock 
     pytest-randomly
-    pytest-responsemock
+    pytest-responsemock 
     pytest-responses
     pytest-server-fixtures
     pytest-shutil
@@ -888,11 +888,11 @@ RECURSE(
     pytest-xdist
     pytest-xprocess
     python-crfsuite
-    python-crontab
+    python-crontab 
     python-daemon
     python-datemath
-    python-debian
-    python-decouple
+    python-debian 
+    python-decouple 
     python-docx
     python-dotenv
     python-editor
@@ -900,8 +900,8 @@ RECURSE(
     python-gnupg
     python-hglib
     python-i18n
-    python-jose
-    python-json-logger
+    python-jose 
+    python-json-logger 
     python-ldap
     python-libarchive
     python-magic
@@ -909,24 +909,24 @@ RECURSE(
     python-mimeparse
     python-multipart
     python-pptx
-    python-prctl
+    python-prctl 
     python-rapidjson
     python-saml
     python-slugify
     python-telegram-bot
-    python-utils
+    python-utils 
     python3-saml
     pytils
     pytracemalloc
     pytz
     pyudev
     pyusb
-    PyWavelets
+    PyWavelets 
     PyYAML
     pyzmq
     qemu
     qrcode
-    quart
+    quart 
     queuelib
     rarfile
     ratelimit
@@ -937,27 +937,27 @@ RECURSE(
     redis
     redis-cache-lock
     regex
-    reportlab
-    repoze.lru
-    repr
+    reportlab 
+    repoze.lru 
+    repr 
     requests
     requests-file
-    requests-mock
+    requests-mock 
     requests-oauthlib
-    requests-toolbelt
-    requests-unixsocket
+    requests-toolbelt 
+    requests-unixsocket 
     responses
     respx
     retry
     retrying
     rfc3986
     rfc3986-validator
-    RPi.GPIO
-    RPI-ST7789
+    RPi.GPIO 
+    RPI-ST7789 
     rsa
     rstr
     ruamel.std.pathlib
-    ruamel.yaml
+    ruamel.yaml 
     Rx
     s3-tests
     s3transfer
@@ -965,7 +965,7 @@ RECURSE(
     salt-pepper
     saneyaml
     sanic
-    sanic-routing
+    sanic-routing 
     sanic-testing
     scales
     scancode-toolkit
@@ -973,15 +973,15 @@ RECURSE(
     schedule
     schema
     schematics
-    schwifty
+    schwifty 
     scikit-image
     scikit-learn
     scipy
     scour
     scp
-    Scrapy
+    Scrapy 
     seaborn
-    selectors2
+    selectors2 
     selenium
     semantic-version
     semver
@@ -991,62 +991,62 @@ RECURSE(
     service-identity
     setproctitle
     setuptools
-    sgmllib3k
+    sgmllib3k 
     sh
-    Shapely
-    shortuuid
+    Shapely 
+    shortuuid 
     simplediff
     simplegeneric
     simplejson
     singledispatch
     six
     skynet_pyro4
-    slack-sdk
+    slack-sdk 
     slackclient
     smart-open
-    smmap
+    smmap 
     snappy
     sniffio
     snowballstemmer
-    sobol-seq
+    sobol-seq 
     sockjs
-    soft-webauthn
+    soft-webauthn 
     sortedcontainers
-    soupsieve
-    spacy
-    spacy-legacy
-    spacy-loggers
+    soupsieve 
+    spacy 
+    spacy-legacy 
+    spacy-loggers 
     sparse-dot-topn
     spdx-tools
-    spidev
+    spidev 
     spintop-openhtf
     splunk-sdk-python
     sqlalchemy
     SQLAlchemy-Continuum
-    sqlalchemy-stubs
+    sqlalchemy-stubs 
     SQLAlchemy-Utils
     sqlparse
     sqltap
     srptools
-    srsly
+    srsly 
     sshpubkeys
     sshtunnel
-    stack-data
+    stack-data 
     starlette
     statsd
     statsmodels
     stevedore
     StrEnum
-    structlog
+    structlog 
     subprocess32
     subword-nmt
-    suds-jurko
+    suds-jurko 
     supervenn
     supervisor
     svn
-    swagger-spec-validator
+    swagger-spec-validator 
     sympy
-    sysv-ipc
+    sysv-ipc 
     tableauserverclient
     tablib
     tabulate
@@ -1062,16 +1062,16 @@ RECURSE(
     textdata
     texttable
     textwrap3
-    thinc
+    thinc 
     threadloop
     thrift
     timelib
     timeout-decorator
-    tinycss2
+    tinycss2 
     tinyrpc
     tldextract
     toml
-    tomli
+    tomli 
     toolz
     toposort
     toredis
@@ -1087,16 +1087,16 @@ RECURSE(
     transliterate
     trollius
     trollsift
-    Twiggy
+    Twiggy 
     twiggy-goodies
-    Twisted
+    Twisted 
     txaio
     txredisapi
     typecode
     typed-argument-parser
     typed-ast
-    typeguard
-    typer
+    typeguard 
+    typer 
     typing
     typing-extensions
     typing-inspect
@@ -1108,11 +1108,11 @@ RECURSE(
     ulid2
     umalqurra
     umongo
-    unicodecsv
-    Unidecode
+    unicodecsv 
+    Unidecode 
     unidiff
     uplink
-    uritemplate
+    uritemplate 
     uritools
     urllib3
     urlpy
@@ -1128,13 +1128,13 @@ RECURSE(
     vcrpy
     viberbot
     vine
-    visitor
+    visitor 
     voluptuous
-    w3lib
+    w3lib 
     waitress
     walrus
-    Wand
-    wasabi
+    Wand 
+    wasabi 
     watchdog
     watchgod
     wcwidth
@@ -1152,21 +1152,21 @@ RECURSE(
     Werkzeug
     wheel
     whitenoise
-    whodap
-    wmctrl
+    whodap 
+    wmctrl 
     wrapt
     ws4py
-    wsgi-intercept
+    wsgi-intercept 
     wsgi-profiler
     wsproto
-    wtf-peewee
+    wtf-peewee 
     WTForms
     WTForms-JSON
     wurlitzer
-    xhtml2pdf
-    xlrd
+    xhtml2pdf 
+    xlrd 
     XlsxWriter
-    xlutils
+    xlutils 
     xlwt
     xmlsec
     xmltodict
@@ -1174,25 +1174,25 @@ RECURSE(
     yandex-pgmigrate
     yappi
     yarl
-    yfinance
+    yfinance 
     youtube-dl
     yoyo-migrations
     yt-dlp
     zake
     zeep
-    zero-downtime-migrations
-    zope.event
-    zope.interface
-    zope.schema
+    zero-downtime-migrations 
+    zope.event 
+    zope.interface 
+    zope.schema 
     zstandard
 )
 
-IF (OS_WINDOWS)
-    RECURSE(
-        win_unicode_console
-    )
-ENDIF()
-
+IF (OS_WINDOWS) 
+    RECURSE( 
+        win_unicode_console 
+    ) 
+ENDIF() 
+ 
 IF (OS_DARWIN)
     RECURSE(
         appnope

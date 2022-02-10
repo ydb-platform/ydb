@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2020 Stefan Krah. All rights reserved.
+ * Copyright (c) 2008-2020 Stefan Krah. All rights reserved. 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,8 +26,8 @@
  */
 
 
-#ifndef LIBMPDEC_CRT_H_
-#define LIBMPDEC_CRT_H_
+#ifndef LIBMPDEC_CRT_H_ 
+#define LIBMPDEC_CRT_H_ 
 
 
 #include "mpdecimal.h"
@@ -43,4 +43,4 @@ void crt3(mpd_uint_t *x1, mpd_uint_t *x2, mpd_uint_t *x3, mpd_size_t nmemb);
 MPD_PRAGMA(MPD_HIDE_SYMBOLS_END) /* restore previous scope rules */
 
 
-#endif /* LIBMPDEC_CRT_H_ */
+#endif /* LIBMPDEC_CRT_H_ */ 

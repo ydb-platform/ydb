@@ -18,15 +18,15 @@
 
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/ProfileData/InstrProf.h"
-#include <memory>
-#include <vector>
+#include <memory> 
+#include <vector> 
 
 namespace llvm {
 
-class Function;
-class Instruction;
-class Value;
-
+class Function; 
+class Instruction; 
+class Value; 
+ 
 /// Utility analysis that determines what values are worth profiling.
 /// The actual logic is inside the ValueProfileCollectorImpl, whose job is to
 /// populate the Candidates vector.

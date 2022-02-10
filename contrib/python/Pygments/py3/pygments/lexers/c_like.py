@@ -4,7 +4,7 @@
 
     Lexers for other C-like languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -13,14 +13,14 @@ import re
 from pygments.lexer import RegexLexer, include, bygroups, inherit, words, \
     default
 from pygments.token import Text, Comment, Operator, Keyword, Name, String, \
-    Number, Punctuation, Whitespace
+    Number, Punctuation, Whitespace 
 
 from pygments.lexers.c_cpp import CLexer, CppLexer
 from pygments.lexers import _mql_builtins
 
 __all__ = ['PikeLexer', 'NesCLexer', 'ClayLexer', 'ECLexer', 'ValaLexer',
-           'CudaLexer', 'SwigLexer', 'MqlLexer', 'ArduinoLexer', 'CharmciLexer',
-           'OmgIdlLexer']
+           'CudaLexer', 'SwigLexer', 'MqlLexer', 'ArduinoLexer', 'CharmciLexer', 
+           'OmgIdlLexer'] 
 
 
 class PikeLexer(CppLexer):
@@ -172,7 +172,7 @@ class ECLexer(CLexer):
             (r'(class)(\s+)', bygroups(Keyword, Whitespace), 'classname'),
             (r'(null|value|this)\b', Name.Builtin),
             inherit,
-        ]
+        ] 
     }
 
 
@@ -286,23 +286,23 @@ class CudaLexer(CLexer):
     aliases = ['cuda', 'cu']
     mimetypes = ['text/x-cuda']
 
-    function_qualifiers = {'__device__', '__global__', '__host__',
-                           '__noinline__', '__forceinline__'}
-    variable_qualifiers = {'__device__', '__constant__', '__shared__',
-                           '__restrict__'}
-    vector_types = {'char1', 'uchar1', 'char2', 'uchar2', 'char3', 'uchar3',
-                    'char4', 'uchar4', 'short1', 'ushort1', 'short2', 'ushort2',
-                    'short3', 'ushort3', 'short4', 'ushort4', 'int1', 'uint1',
-                    'int2', 'uint2', 'int3', 'uint3', 'int4', 'uint4', 'long1',
-                    'ulong1', 'long2', 'ulong2', 'long3', 'ulong3', 'long4',
-                    'ulong4', 'longlong1', 'ulonglong1', 'longlong2',
-                    'ulonglong2', 'float1', 'float2', 'float3', 'float4',
-                    'double1', 'double2', 'dim3'}
-    variables = {'gridDim', 'blockIdx', 'blockDim', 'threadIdx', 'warpSize'}
-    functions = {'__threadfence_block', '__threadfence', '__threadfence_system',
-                 '__syncthreads', '__syncthreads_count', '__syncthreads_and',
-                 '__syncthreads_or'}
-    execution_confs = {'<<<', '>>>'}
+    function_qualifiers = {'__device__', '__global__', '__host__', 
+                           '__noinline__', '__forceinline__'} 
+    variable_qualifiers = {'__device__', '__constant__', '__shared__', 
+                           '__restrict__'} 
+    vector_types = {'char1', 'uchar1', 'char2', 'uchar2', 'char3', 'uchar3', 
+                    'char4', 'uchar4', 'short1', 'ushort1', 'short2', 'ushort2', 
+                    'short3', 'ushort3', 'short4', 'ushort4', 'int1', 'uint1', 
+                    'int2', 'uint2', 'int3', 'uint3', 'int4', 'uint4', 'long1', 
+                    'ulong1', 'long2', 'ulong2', 'long3', 'ulong3', 'long4', 
+                    'ulong4', 'longlong1', 'ulonglong1', 'longlong2', 
+                    'ulonglong2', 'float1', 'float2', 'float3', 'float4', 
+                    'double1', 'double2', 'dim3'} 
+    variables = {'gridDim', 'blockIdx', 'blockDim', 'threadIdx', 'warpSize'} 
+    functions = {'__threadfence_block', '__threadfence', '__threadfence_system', 
+                 '__syncthreads', '__syncthreads_count', '__syncthreads_and', 
+                 '__syncthreads_or'} 
+    execution_confs = {'<<<', '>>>'} 
 
     def get_tokens_unprocessed(self, text):
         for index, token, value in CLexer.get_tokens_unprocessed(self, text):
@@ -335,11 +335,11 @@ class SwigLexer(CppLexer):
     priority = 0.04  # Lower than C/C++ and Objective C/C++
 
     tokens = {
-        'root': [
-            # Match it here so it won't be matched as a function in the rest of root
-            (r'\$\**\&?\w+', Name),
-            inherit
-        ],
+        'root': [ 
+            # Match it here so it won't be matched as a function in the rest of root 
+            (r'\$\**\&?\w+', Name), 
+            inherit 
+        ], 
         'statements': [
             # SWIG directives
             (r'(%[a-z_][a-z0-9_]*)', Name.Function),
@@ -352,7 +352,7 @@ class SwigLexer(CppLexer):
     }
 
     # This is a far from complete set of SWIG directives
-    swig_directives = {
+    swig_directives = { 
         # Most common directives
         '%apply', '%define', '%director', '%enddef', '%exception', '%extend',
         '%feature', '%fragment', '%ignore', '%immutable', '%import', '%include',
@@ -371,7 +371,7 @@ class SwigLexer(CppLexer):
         '%pythoncallback', '%pythoncode', '%pythondynamic', '%pythonmaybecall',
         '%pythonnondynamic', '%pythonprepend', '%refobject', '%shadow', '%sizeof',
         '%trackobjects', '%types', '%unrefobject', '%varargs', '%warn',
-        '%warnfilter'}
+        '%warnfilter'} 
 
     def analyse_text(text):
         rv = 0
@@ -429,13 +429,13 @@ class ArduinoLexer(CppLexer):
     mimetypes = ['text/x-arduino']
 
     # Language sketch main structure functions
-    structure = {'setup', 'loop'}
+    structure = {'setup', 'loop'} 
 
     # Language operators
-    operators = {'not', 'or', 'and', 'xor'}
+    operators = {'not', 'or', 'and', 'xor'} 
 
     # Language 'variables'
-    variables = {
+    variables = { 
         'DIGITAL_MESSAGE', 'FIRMATA_STRING', 'ANALOG_MESSAGE', 'REPORT_DIGITAL',
         'REPORT_ANALOG', 'INPUT_PULLUP', 'SET_PIN_MODE', 'INTERNAL2V56', 'SYSTEM_RESET',
         'LED_BUILTIN', 'INTERNAL1V1', 'SYSEX_START', 'INTERNAL', 'EXTERNAL', 'HIGH',
@@ -452,10 +452,10 @@ class ArduinoLexer(CppLexer):
         'signed', 'inline', 'delete', '_Bool', 'complex', '_Complex', '_Imaginary',
         'atomic_bool', 'atomic_char', 'atomic_schar', 'atomic_uchar', 'atomic_short',
         'atomic_ushort', 'atomic_int', 'atomic_uint', 'atomic_long', 'atomic_ulong',
-        'atomic_llong', 'atomic_ullong', 'PROGMEM'}
+        'atomic_llong', 'atomic_ullong', 'PROGMEM'} 
 
     # Language shipped functions and class ( )
-    functions = {
+    functions = { 
         'KeyboardController', 'MouseController', 'SoftwareSerial', 'EthernetServer',
         'EthernetClient', 'LiquidCrystal', 'RobotControl', 'GSMVoiceCall',
         'EthernetUDP', 'EsploraTFT', 'HttpClient', 'RobotMotor', 'WiFiClient',
@@ -517,13 +517,13 @@ class ArduinoLexer(CppLexer):
         'cos', 'sin', 'pow', 'map', 'abs', 'max', 'min', 'get', 'run', 'put',
         'isAlphaNumeric', 'isAlpha', 'isAscii', 'isWhitespace', 'isControl', 'isDigit',
         'isGraph', 'isLowerCase', 'isPrintable', 'isPunct', 'isSpace', 'isUpperCase',
-        'isHexadecimalDigit'}
+        'isHexadecimalDigit'} 
 
     # do not highlight
-    suppress_highlight = {
+    suppress_highlight = { 
         'namespace', 'template', 'mutable', 'using', 'asm', 'typeid',
         'typename', 'this', 'alignof', 'constexpr', 'decltype', 'noexcept',
-        'static_assert', 'thread_local', 'restrict'}
+        'static_assert', 'thread_local', 'restrict'} 
 
     def get_tokens_unprocessed(self, text):
         for index, token, value in CppLexer.get_tokens_unprocessed(self, text):
@@ -555,7 +555,7 @@ class CharmciLexer(CppLexer):
     mimetypes = []
 
     tokens = {
-        'keywords': [
+        'keywords': [ 
             (r'(module)(\s+)', bygroups(Keyword, Text), 'classname'),
             (words(('mainmodule', 'mainchare', 'chare', 'array', 'group',
                     'nodegroup', 'message', 'conditional')), Keyword),
@@ -569,96 +569,96 @@ class CharmciLexer(CppLexer):
             inherit,
         ],
     }
-
-
-class OmgIdlLexer(CLexer):
-    """
-    Lexer for `Object Management Group Interface Definition Language <https://www.omg.org/spec/IDL/About-IDL/>`_.
-
-    .. versionadded:: 2.9
-    """
-
-    name = 'OMG Interface Definition Language'
-    aliases = ['omg-idl']
-    filenames = ['*.idl', '*.pidl']
-    mimetypes = []
-
-    scoped_name = r'((::)?\w+)+'
-
-    tokens = {
-        'values': [
-            (words(('true', 'false'), prefix=r'(?i)', suffix=r'\b'), Number),
-            (r'([Ll]?)(")', bygroups(String.Affix, String.Double), 'string'),
-            (r'([Ll]?)(\')(\\[^\']+)(\')',
-                bygroups(String.Affix, String.Char, String.Escape, String.Char)),
-            (r'([Ll]?)(\')(\\\')(\')',
-                bygroups(String.Affix, String.Char, String.Escape, String.Char)),
-            (r'([Ll]?)(\'.\')', bygroups(String.Affix, String.Char)),
-            (r'[+-]?\d+(\.\d*)?[Ee][+-]?\d+', Number.Float),
-            (r'[+-]?(\d+\.\d*)|(\d*\.\d+)([Ee][+-]?\d+)?', Number.Float),
-            (r'(?i)[+-]?0x[0-9a-f]+', Number.Hex),
-            (r'[+-]?[1-9]\d*', Number.Integer),
-            (r'[+-]?0[0-7]*', Number.Oct),
-            (r'[\+\-\*\/%^&\|~]', Operator),
-            (words(('<<', '>>')), Operator),
-            (scoped_name, Name),
-            (r'[{};:,<>\[\]]', Punctuation),
-        ],
-        'annotation_params': [
-            include('whitespace'),
-            (r'\(', Punctuation, '#push'),
-            include('values'),
-            (r'=', Punctuation),
-            (r'\)', Punctuation, '#pop'),
-        ],
-        'annotation_params_maybe': [
-            (r'\(', Punctuation, 'annotation_params'),
-            include('whitespace'),
-            default('#pop'),
-        ],
-        'annotation_appl': [
-            (r'@' + scoped_name, Name.Decorator, 'annotation_params_maybe'),
-        ],
-        'enum': [
-            include('whitespace'),
-            (r'[{,]', Punctuation),
-            (r'\w+', Name.Constant),
-            include('annotation_appl'),
-            (r'\}', Punctuation, '#pop'),
-        ],
-        'root': [
-            include('whitespace'),
-            (words((
-                'typedef', 'const',
-                'in', 'out', 'inout', 'local',
-            ), prefix=r'(?i)', suffix=r'\b'), Keyword.Declaration),
-            (words((
-                'void', 'any', 'native', 'bitfield',
-                'unsigned', 'boolean', 'char', 'wchar', 'octet', 'short', 'long',
-                'int8', 'uint8', 'int16', 'int32', 'int64', 'uint16', 'uint32', 'uint64',
-                'float', 'double', 'fixed',
-                'sequence', 'string', 'wstring', 'map',
-            ), prefix=r'(?i)', suffix=r'\b'), Keyword.Type),
-            (words((
-                '@annotation', 'struct', 'union', 'bitset', 'interface',
-                'exception', 'valuetype', 'eventtype', 'component',
-            ), prefix=r'(?i)', suffix=r'(\s+)(\w+)'), bygroups(Keyword, Whitespace, Name.Class)),
-            (words((
-                'abstract', 'alias', 'attribute', 'case', 'connector',
-                'consumes', 'context', 'custom', 'default', 'emits', 'factory',
-                'finder', 'getraises', 'home', 'import', 'manages', 'mirrorport',
-                'multiple', 'Object', 'oneway', 'primarykey', 'private', 'port',
-                'porttype', 'provides', 'public', 'publishes', 'raises',
-                'readonly', 'setraises', 'supports', 'switch', 'truncatable',
-                'typeid', 'typename', 'typeprefix', 'uses', 'ValueBase',
-            ), prefix=r'(?i)', suffix=r'\b'), Keyword),
-            (r'(?i)(enum|bitmask)(\s+)(\w+)',
-                bygroups(Keyword, Whitespace, Name.Class), 'enum'),
-            (r'(?i)(module)(\s+)(\w+)',
-                bygroups(Keyword.Namespace, Whitespace, Name.Namespace)),
-            (r'(\w+)(\s*)(=)', bygroups(Name.Constant, Whitespace, Operator)),
-            (r'[\(\)]', Punctuation),
-            include('values'),
-            include('annotation_appl'),
-        ],
-    }
+ 
+ 
+class OmgIdlLexer(CLexer): 
+    """ 
+    Lexer for `Object Management Group Interface Definition Language <https://www.omg.org/spec/IDL/About-IDL/>`_. 
+ 
+    .. versionadded:: 2.9 
+    """ 
+ 
+    name = 'OMG Interface Definition Language' 
+    aliases = ['omg-idl'] 
+    filenames = ['*.idl', '*.pidl'] 
+    mimetypes = [] 
+ 
+    scoped_name = r'((::)?\w+)+' 
+ 
+    tokens = { 
+        'values': [ 
+            (words(('true', 'false'), prefix=r'(?i)', suffix=r'\b'), Number), 
+            (r'([Ll]?)(")', bygroups(String.Affix, String.Double), 'string'), 
+            (r'([Ll]?)(\')(\\[^\']+)(\')', 
+                bygroups(String.Affix, String.Char, String.Escape, String.Char)), 
+            (r'([Ll]?)(\')(\\\')(\')', 
+                bygroups(String.Affix, String.Char, String.Escape, String.Char)), 
+            (r'([Ll]?)(\'.\')', bygroups(String.Affix, String.Char)), 
+            (r'[+-]?\d+(\.\d*)?[Ee][+-]?\d+', Number.Float), 
+            (r'[+-]?(\d+\.\d*)|(\d*\.\d+)([Ee][+-]?\d+)?', Number.Float), 
+            (r'(?i)[+-]?0x[0-9a-f]+', Number.Hex), 
+            (r'[+-]?[1-9]\d*', Number.Integer), 
+            (r'[+-]?0[0-7]*', Number.Oct), 
+            (r'[\+\-\*\/%^&\|~]', Operator), 
+            (words(('<<', '>>')), Operator), 
+            (scoped_name, Name), 
+            (r'[{};:,<>\[\]]', Punctuation), 
+        ], 
+        'annotation_params': [ 
+            include('whitespace'), 
+            (r'\(', Punctuation, '#push'), 
+            include('values'), 
+            (r'=', Punctuation), 
+            (r'\)', Punctuation, '#pop'), 
+        ], 
+        'annotation_params_maybe': [ 
+            (r'\(', Punctuation, 'annotation_params'), 
+            include('whitespace'), 
+            default('#pop'), 
+        ], 
+        'annotation_appl': [ 
+            (r'@' + scoped_name, Name.Decorator, 'annotation_params_maybe'), 
+        ], 
+        'enum': [ 
+            include('whitespace'), 
+            (r'[{,]', Punctuation), 
+            (r'\w+', Name.Constant), 
+            include('annotation_appl'), 
+            (r'\}', Punctuation, '#pop'), 
+        ], 
+        'root': [ 
+            include('whitespace'), 
+            (words(( 
+                'typedef', 'const', 
+                'in', 'out', 'inout', 'local', 
+            ), prefix=r'(?i)', suffix=r'\b'), Keyword.Declaration), 
+            (words(( 
+                'void', 'any', 'native', 'bitfield', 
+                'unsigned', 'boolean', 'char', 'wchar', 'octet', 'short', 'long', 
+                'int8', 'uint8', 'int16', 'int32', 'int64', 'uint16', 'uint32', 'uint64', 
+                'float', 'double', 'fixed', 
+                'sequence', 'string', 'wstring', 'map', 
+            ), prefix=r'(?i)', suffix=r'\b'), Keyword.Type), 
+            (words(( 
+                '@annotation', 'struct', 'union', 'bitset', 'interface', 
+                'exception', 'valuetype', 'eventtype', 'component', 
+            ), prefix=r'(?i)', suffix=r'(\s+)(\w+)'), bygroups(Keyword, Whitespace, Name.Class)), 
+            (words(( 
+                'abstract', 'alias', 'attribute', 'case', 'connector', 
+                'consumes', 'context', 'custom', 'default', 'emits', 'factory', 
+                'finder', 'getraises', 'home', 'import', 'manages', 'mirrorport', 
+                'multiple', 'Object', 'oneway', 'primarykey', 'private', 'port', 
+                'porttype', 'provides', 'public', 'publishes', 'raises', 
+                'readonly', 'setraises', 'supports', 'switch', 'truncatable', 
+                'typeid', 'typename', 'typeprefix', 'uses', 'ValueBase', 
+            ), prefix=r'(?i)', suffix=r'\b'), Keyword), 
+            (r'(?i)(enum|bitmask)(\s+)(\w+)', 
+                bygroups(Keyword, Whitespace, Name.Class), 'enum'), 
+            (r'(?i)(module)(\s+)(\w+)', 
+                bygroups(Keyword.Namespace, Whitespace, Name.Namespace)), 
+            (r'(\w+)(\s*)(=)', bygroups(Name.Constant, Whitespace, Operator)), 
+            (r'[\(\)]', Punctuation), 
+            include('values'), 
+            include('annotation_appl'), 
+        ], 
+    } 

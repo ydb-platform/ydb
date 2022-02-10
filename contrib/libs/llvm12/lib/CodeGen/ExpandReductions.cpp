@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // This pass implements IR expansion for reduction intrinsics, allowing targets
-// to enable the intrinsics until just before codegen.
+// to enable the intrinsics until just before codegen. 
 //
 //===----------------------------------------------------------------------===//
 
@@ -30,49 +30,49 @@ namespace {
 
 unsigned getOpcode(Intrinsic::ID ID) {
   switch (ID) {
-  case Intrinsic::vector_reduce_fadd:
+  case Intrinsic::vector_reduce_fadd: 
     return Instruction::FAdd;
-  case Intrinsic::vector_reduce_fmul:
+  case Intrinsic::vector_reduce_fmul: 
     return Instruction::FMul;
-  case Intrinsic::vector_reduce_add:
+  case Intrinsic::vector_reduce_add: 
     return Instruction::Add;
-  case Intrinsic::vector_reduce_mul:
+  case Intrinsic::vector_reduce_mul: 
     return Instruction::Mul;
-  case Intrinsic::vector_reduce_and:
+  case Intrinsic::vector_reduce_and: 
     return Instruction::And;
-  case Intrinsic::vector_reduce_or:
+  case Intrinsic::vector_reduce_or: 
     return Instruction::Or;
-  case Intrinsic::vector_reduce_xor:
+  case Intrinsic::vector_reduce_xor: 
     return Instruction::Xor;
-  case Intrinsic::vector_reduce_smax:
-  case Intrinsic::vector_reduce_smin:
-  case Intrinsic::vector_reduce_umax:
-  case Intrinsic::vector_reduce_umin:
+  case Intrinsic::vector_reduce_smax: 
+  case Intrinsic::vector_reduce_smin: 
+  case Intrinsic::vector_reduce_umax: 
+  case Intrinsic::vector_reduce_umin: 
     return Instruction::ICmp;
-  case Intrinsic::vector_reduce_fmax:
-  case Intrinsic::vector_reduce_fmin:
+  case Intrinsic::vector_reduce_fmax: 
+  case Intrinsic::vector_reduce_fmin: 
     return Instruction::FCmp;
   default:
     llvm_unreachable("Unexpected ID");
   }
 }
 
-RecurKind getRK(Intrinsic::ID ID) {
+RecurKind getRK(Intrinsic::ID ID) { 
   switch (ID) {
-  case Intrinsic::vector_reduce_smax:
-    return RecurKind::SMax;
-  case Intrinsic::vector_reduce_smin:
-    return RecurKind::SMin;
-  case Intrinsic::vector_reduce_umax:
-    return RecurKind::UMax;
-  case Intrinsic::vector_reduce_umin:
-    return RecurKind::UMin;
-  case Intrinsic::vector_reduce_fmax:
-    return RecurKind::FMax;
-  case Intrinsic::vector_reduce_fmin:
-    return RecurKind::FMin;
+  case Intrinsic::vector_reduce_smax: 
+    return RecurKind::SMax; 
+  case Intrinsic::vector_reduce_smin: 
+    return RecurKind::SMin; 
+  case Intrinsic::vector_reduce_umax: 
+    return RecurKind::UMax; 
+  case Intrinsic::vector_reduce_umin: 
+    return RecurKind::UMin; 
+  case Intrinsic::vector_reduce_fmax: 
+    return RecurKind::FMax; 
+  case Intrinsic::vector_reduce_fmin: 
+    return RecurKind::FMin; 
   default:
-    return RecurKind::None;
+    return RecurKind::None; 
   }
 }
 
@@ -83,19 +83,19 @@ bool expandReductions(Function &F, const TargetTransformInfo *TTI) {
     if (auto *II = dyn_cast<IntrinsicInst>(&I)) {
       switch (II->getIntrinsicID()) {
       default: break;
-      case Intrinsic::vector_reduce_fadd:
-      case Intrinsic::vector_reduce_fmul:
-      case Intrinsic::vector_reduce_add:
-      case Intrinsic::vector_reduce_mul:
-      case Intrinsic::vector_reduce_and:
-      case Intrinsic::vector_reduce_or:
-      case Intrinsic::vector_reduce_xor:
-      case Intrinsic::vector_reduce_smax:
-      case Intrinsic::vector_reduce_smin:
-      case Intrinsic::vector_reduce_umax:
-      case Intrinsic::vector_reduce_umin:
-      case Intrinsic::vector_reduce_fmax:
-      case Intrinsic::vector_reduce_fmin:
+      case Intrinsic::vector_reduce_fadd: 
+      case Intrinsic::vector_reduce_fmul: 
+      case Intrinsic::vector_reduce_add: 
+      case Intrinsic::vector_reduce_mul: 
+      case Intrinsic::vector_reduce_and: 
+      case Intrinsic::vector_reduce_or: 
+      case Intrinsic::vector_reduce_xor: 
+      case Intrinsic::vector_reduce_smax: 
+      case Intrinsic::vector_reduce_smin: 
+      case Intrinsic::vector_reduce_umax: 
+      case Intrinsic::vector_reduce_umin: 
+      case Intrinsic::vector_reduce_fmax: 
+      case Intrinsic::vector_reduce_fmin: 
         if (TTI->shouldExpandReduction(II))
           Worklist.push_back(II);
 
@@ -108,7 +108,7 @@ bool expandReductions(Function &F, const TargetTransformInfo *TTI) {
     FastMathFlags FMF =
         isa<FPMathOperator>(II) ? II->getFastMathFlags() : FastMathFlags{};
     Intrinsic::ID ID = II->getIntrinsicID();
-    RecurKind RK = getRK(ID);
+    RecurKind RK = getRK(ID); 
 
     Value *Rdx = nullptr;
     IRBuilder<> Builder(II);
@@ -116,57 +116,57 @@ bool expandReductions(Function &F, const TargetTransformInfo *TTI) {
     Builder.setFastMathFlags(FMF);
     switch (ID) {
     default: llvm_unreachable("Unexpected intrinsic!");
-    case Intrinsic::vector_reduce_fadd:
-    case Intrinsic::vector_reduce_fmul: {
+    case Intrinsic::vector_reduce_fadd: 
+    case Intrinsic::vector_reduce_fmul: { 
       // FMFs must be attached to the call, otherwise it's an ordered reduction
       // and it can't be handled by generating a shuffle sequence.
       Value *Acc = II->getArgOperand(0);
       Value *Vec = II->getArgOperand(1);
       if (!FMF.allowReassoc())
-        Rdx = getOrderedReduction(Builder, Acc, Vec, getOpcode(ID), RK);
+        Rdx = getOrderedReduction(Builder, Acc, Vec, getOpcode(ID), RK); 
       else {
         if (!isPowerOf2_32(
                 cast<FixedVectorType>(Vec->getType())->getNumElements()))
           continue;
 
-        Rdx = getShuffleReduction(Builder, Vec, getOpcode(ID), RK);
+        Rdx = getShuffleReduction(Builder, Vec, getOpcode(ID), RK); 
         Rdx = Builder.CreateBinOp((Instruction::BinaryOps)getOpcode(ID),
                                   Acc, Rdx, "bin.rdx");
       }
       break;
     }
-    case Intrinsic::vector_reduce_add:
-    case Intrinsic::vector_reduce_mul:
-    case Intrinsic::vector_reduce_and:
-    case Intrinsic::vector_reduce_or:
-    case Intrinsic::vector_reduce_xor:
-    case Intrinsic::vector_reduce_smax:
-    case Intrinsic::vector_reduce_smin:
-    case Intrinsic::vector_reduce_umax:
-    case Intrinsic::vector_reduce_umin: {
+    case Intrinsic::vector_reduce_add: 
+    case Intrinsic::vector_reduce_mul: 
+    case Intrinsic::vector_reduce_and: 
+    case Intrinsic::vector_reduce_or: 
+    case Intrinsic::vector_reduce_xor: 
+    case Intrinsic::vector_reduce_smax: 
+    case Intrinsic::vector_reduce_smin: 
+    case Intrinsic::vector_reduce_umax: 
+    case Intrinsic::vector_reduce_umin: { 
       Value *Vec = II->getArgOperand(0);
       if (!isPowerOf2_32(
               cast<FixedVectorType>(Vec->getType())->getNumElements()))
         continue;
 
-      Rdx = getShuffleReduction(Builder, Vec, getOpcode(ID), RK);
+      Rdx = getShuffleReduction(Builder, Vec, getOpcode(ID), RK); 
       break;
     }
-    case Intrinsic::vector_reduce_fmax:
-    case Intrinsic::vector_reduce_fmin: {
-      // FIXME: We only expand 'fast' reductions here because the underlying
-      //        code in createMinMaxOp() assumes that comparisons use 'fast'
-      //        semantics.
-      Value *Vec = II->getArgOperand(0);
-      if (!isPowerOf2_32(
-              cast<FixedVectorType>(Vec->getType())->getNumElements()) ||
-          !FMF.isFast())
-        continue;
-
-      Rdx = getShuffleReduction(Builder, Vec, getOpcode(ID), RK);
-      break;
+    case Intrinsic::vector_reduce_fmax: 
+    case Intrinsic::vector_reduce_fmin: { 
+      // FIXME: We only expand 'fast' reductions here because the underlying 
+      //        code in createMinMaxOp() assumes that comparisons use 'fast' 
+      //        semantics. 
+      Value *Vec = II->getArgOperand(0); 
+      if (!isPowerOf2_32( 
+              cast<FixedVectorType>(Vec->getType())->getNumElements()) || 
+          !FMF.isFast()) 
+        continue; 
+ 
+      Rdx = getShuffleReduction(Builder, Vec, getOpcode(ID), RK); 
+      break; 
     }
-    }
+    } 
     II->replaceAllUsesWith(Rdx);
     II->eraseFromParent();
     Changed = true;

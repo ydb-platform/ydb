@@ -24,7 +24,7 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/IR/ProfileSummary.h"
 #include "llvm/ProfileData/InstrProf.h"
-#include "llvm/ProfileData/SampleProf.h"
+#include "llvm/ProfileData/SampleProf.h" 
 #include "llvm/Support/Error.h"
 #include <algorithm>
 #include <cstdint>
@@ -41,8 +41,8 @@ class FunctionSamples;
 
 } // end namespace sampleprof
 
-inline const char *getHotSectionPrefix() { return "hot"; }
-inline const char *getUnlikelySectionPrefix() { return "unlikely"; }
+inline const char *getHotSectionPrefix() { return "hot"; } 
+inline const char *getUnlikelySectionPrefix() { return "unlikely"; } 
 
 class ProfileSummaryBuilder {
 private:
@@ -97,8 +97,8 @@ public:
 
   void addRecord(const sampleprof::FunctionSamples &FS,
                  bool isCallsiteSample = false);
-  std::unique_ptr<ProfileSummary> computeSummaryForProfiles(
-      const StringMap<sampleprof::FunctionSamples> &Profiles);
+  std::unique_ptr<ProfileSummary> computeSummaryForProfiles( 
+      const StringMap<sampleprof::FunctionSamples> &Profiles); 
   std::unique_ptr<ProfileSummary> getSummary();
 };
 

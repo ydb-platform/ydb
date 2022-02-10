@@ -108,7 +108,7 @@ public:
 
   unsigned getUniqueID() const { return ID; }
 
-  void createOutputDIE() { NewUnit.emplace(OrigUnit.getUnitDIE().getTag()); }
+  void createOutputDIE() { NewUnit.emplace(OrigUnit.getUnitDIE().getTag()); } 
 
   DIE *getOutputUnitDIE() const {
     if (NewUnit)
@@ -127,11 +127,11 @@ public:
   DIEInfo &getInfo(unsigned Idx) { return Info[Idx]; }
   const DIEInfo &getInfo(unsigned Idx) const { return Info[Idx]; }
 
-  DIEInfo &getInfo(const DWARFDie &Die) {
-    unsigned Idx = getOrigUnit().getDIEIndex(Die);
-    return Info[Idx];
-  }
-
+  DIEInfo &getInfo(const DWARFDie &Die) { 
+    unsigned Idx = getOrigUnit().getDIEIndex(Die); 
+    return Info[Idx]; 
+  } 
+ 
   uint64_t getStartOffset() const { return StartOffset; }
   uint64_t getNextUnitOffset() const { return NextUnitOffset; }
   void setStartOffset(uint64_t DebugInfoSize) { StartOffset = DebugInfoSize; }
@@ -166,7 +166,7 @@ public:
   /// Compute the end offset for this unit. Must be called after the CU's DIEs
   /// have been cloned.  \returns the next unit offset (which is also the
   /// current debug_info section size).
-  uint64_t computeNextUnitOffset(uint16_t DwarfVersion);
+  uint64_t computeNextUnitOffset(uint16_t DwarfVersion); 
 
   /// Keep track of a forward reference to DIE \p Die in \p RefUnit by \p
   /// Attr. The attribute should be fixed up later to point to the absolute

@@ -53,10 +53,10 @@ static cl::opt<bool> VerifyPredicateInfo(
 DEBUG_COUNTER(RenameCounter, "predicateinfo-rename",
               "Controls which variables are renamed with predicateinfo");
 
-// Maximum number of conditions considered for renaming for each branch/assume.
-// This limits renaming of deep and/or chains.
-static const unsigned MaxCondsPerBranch = 8;
-
+// Maximum number of conditions considered for renaming for each branch/assume. 
+// This limits renaming of deep and/or chains. 
+static const unsigned MaxCondsPerBranch = 8; 
+ 
 namespace {
 // Given a predicate info that is a type of branching terminator, get the
 // branching block.
@@ -371,13 +371,13 @@ void PredicateInfoBuilder::convertUsesToDFSOrdered(
   }
 }
 
-bool shouldRename(Value *V) {
-  // Only want real values, not constants.  Additionally, operands with one use
-  // are only being used in the comparison, which means they will not be useful
-  // for us to consider for predicateinfo.
-  return (isa<Instruction>(V) || isa<Argument>(V)) && !V->hasOneUse();
-}
-
+bool shouldRename(Value *V) { 
+  // Only want real values, not constants.  Additionally, operands with one use 
+  // are only being used in the comparison, which means they will not be useful 
+  // for us to consider for predicateinfo. 
+  return (isa<Instruction>(V) || isa<Argument>(V)) && !V->hasOneUse(); 
+} 
+ 
 // Collect relevant operations from Comparison that we may want to insert copies
 // for.
 void collectCmpOps(CmpInst *Comparison, SmallVectorImpl<Value *> &CmpOperands) {
@@ -385,9 +385,9 @@ void collectCmpOps(CmpInst *Comparison, SmallVectorImpl<Value *> &CmpOperands) {
   auto *Op1 = Comparison->getOperand(1);
   if (Op0 == Op1)
     return;
-
-  CmpOperands.push_back(Op0);
-  CmpOperands.push_back(Op1);
+ 
+  CmpOperands.push_back(Op0); 
+  CmpOperands.push_back(Op1); 
 }
 
 // Add Op, PB to the list of value infos for Op, and mark Op to be renamed.
@@ -405,31 +405,31 @@ void PredicateInfoBuilder::addInfoFor(SmallVectorImpl<Value *> &OpsToRename,
 void PredicateInfoBuilder::processAssume(
     IntrinsicInst *II, BasicBlock *AssumeBB,
     SmallVectorImpl<Value *> &OpsToRename) {
-  SmallVector<Value *, 4> Worklist;
-  SmallPtrSet<Value *, 4> Visited;
-  Worklist.push_back(II->getOperand(0));
-  while (!Worklist.empty()) {
-    Value *Cond = Worklist.pop_back_val();
-    if (!Visited.insert(Cond).second)
-      continue;
-    if (Visited.size() > MaxCondsPerBranch)
-      break;
+  SmallVector<Value *, 4> Worklist; 
+  SmallPtrSet<Value *, 4> Visited; 
+  Worklist.push_back(II->getOperand(0)); 
+  while (!Worklist.empty()) { 
+    Value *Cond = Worklist.pop_back_val(); 
+    if (!Visited.insert(Cond).second) 
+      continue; 
+    if (Visited.size() > MaxCondsPerBranch) 
+      break; 
 
-    Value *Op0, *Op1;
-    if (match(Cond, m_LogicalAnd(m_Value(Op0), m_Value(Op1)))) {
-      Worklist.push_back(Op1);
-      Worklist.push_back(Op0);
-    }
-
-    SmallVector<Value *, 4> Values;
-    Values.push_back(Cond);
-    if (auto *Cmp = dyn_cast<CmpInst>(Cond))
-      collectCmpOps(Cmp, Values);
-
-    for (Value *V : Values) {
-      if (shouldRename(V)) {
-        auto *PA = new PredicateAssume(V, II, Cond);
-        addInfoFor(OpsToRename, V, PA);
+    Value *Op0, *Op1; 
+    if (match(Cond, m_LogicalAnd(m_Value(Op0), m_Value(Op1)))) { 
+      Worklist.push_back(Op1); 
+      Worklist.push_back(Op0); 
+    } 
+ 
+    SmallVector<Value *, 4> Values; 
+    Values.push_back(Cond); 
+    if (auto *Cmp = dyn_cast<CmpInst>(Cond)) 
+      collectCmpOps(Cmp, Values); 
+ 
+    for (Value *V : Values) { 
+      if (shouldRename(V)) { 
+        auto *PA = new PredicateAssume(V, II, Cond); 
+        addInfoFor(OpsToRename, V, PA); 
       }
     }
   }
@@ -443,44 +443,44 @@ void PredicateInfoBuilder::processBranch(
   BasicBlock *FirstBB = BI->getSuccessor(0);
   BasicBlock *SecondBB = BI->getSuccessor(1);
 
-  for (BasicBlock *Succ : {FirstBB, SecondBB}) {
-    bool TakenEdge = Succ == FirstBB;
-    // Don't try to insert on a self-edge. This is mainly because we will
-    // eliminate during renaming anyway.
-    if (Succ == BranchBB)
-      continue;
-
-    SmallVector<Value *, 4> Worklist;
-    SmallPtrSet<Value *, 4> Visited;
-    Worklist.push_back(BI->getCondition());
-    while (!Worklist.empty()) {
-      Value *Cond = Worklist.pop_back_val();
-      if (!Visited.insert(Cond).second)
+  for (BasicBlock *Succ : {FirstBB, SecondBB}) { 
+    bool TakenEdge = Succ == FirstBB; 
+    // Don't try to insert on a self-edge. This is mainly because we will 
+    // eliminate during renaming anyway. 
+    if (Succ == BranchBB) 
+      continue; 
+ 
+    SmallVector<Value *, 4> Worklist; 
+    SmallPtrSet<Value *, 4> Visited; 
+    Worklist.push_back(BI->getCondition()); 
+    while (!Worklist.empty()) { 
+      Value *Cond = Worklist.pop_back_val(); 
+      if (!Visited.insert(Cond).second) 
         continue;
-      if (Visited.size() > MaxCondsPerBranch)
-        break;
+      if (Visited.size() > MaxCondsPerBranch) 
+        break; 
 
-      Value *Op0, *Op1;
-      if (TakenEdge ? match(Cond, m_LogicalAnd(m_Value(Op0), m_Value(Op1)))
-                    : match(Cond, m_LogicalOr(m_Value(Op0), m_Value(Op1)))) {
-        Worklist.push_back(Op1);
-        Worklist.push_back(Op0);
-      }
-
-      SmallVector<Value *, 4> Values;
-      Values.push_back(Cond);
-      if (auto *Cmp = dyn_cast<CmpInst>(Cond))
-        collectCmpOps(Cmp, Values);
-
-      for (Value *V : Values) {
-        if (shouldRename(V)) {
-          PredicateBase *PB =
-              new PredicateBranch(V, BranchBB, Succ, Cond, TakenEdge);
-          addInfoFor(OpsToRename, V, PB);
-          if (!Succ->getSinglePredecessor())
-            EdgeUsesOnly.insert({BranchBB, Succ});
-        }
-      }
+      Value *Op0, *Op1; 
+      if (TakenEdge ? match(Cond, m_LogicalAnd(m_Value(Op0), m_Value(Op1))) 
+                    : match(Cond, m_LogicalOr(m_Value(Op0), m_Value(Op1)))) { 
+        Worklist.push_back(Op1); 
+        Worklist.push_back(Op0); 
+      } 
+ 
+      SmallVector<Value *, 4> Values; 
+      Values.push_back(Cond); 
+      if (auto *Cmp = dyn_cast<CmpInst>(Cond)) 
+        collectCmpOps(Cmp, Values); 
+ 
+      for (Value *V : Values) { 
+        if (shouldRename(V)) { 
+          PredicateBase *PB = 
+              new PredicateBranch(V, BranchBB, Succ, Cond, TakenEdge); 
+          addInfoFor(OpsToRename, V, PB); 
+          if (!Succ->getSinglePredecessor()) 
+            EdgeUsesOnly.insert({BranchBB, Succ}); 
+        } 
+      } 
     }
   }
 }
@@ -799,56 +799,56 @@ PredicateInfo::~PredicateInfo() {
   }
 }
 
-Optional<PredicateConstraint> PredicateBase::getConstraint() const {
-  switch (Type) {
-  case PT_Assume:
-  case PT_Branch: {
-    bool TrueEdge = true;
-    if (auto *PBranch = dyn_cast<PredicateBranch>(this))
-      TrueEdge = PBranch->TrueEdge;
-
-    if (Condition == RenamedOp) {
-      return {{CmpInst::ICMP_EQ,
-               TrueEdge ? ConstantInt::getTrue(Condition->getType())
-                        : ConstantInt::getFalse(Condition->getType())}};
-    }
-
-    CmpInst *Cmp = dyn_cast<CmpInst>(Condition);
-    if (!Cmp) {
-      // TODO: Make this an assertion once RenamedOp is fully accurate.
-      return None;
-    }
-
-    CmpInst::Predicate Pred;
-    Value *OtherOp;
-    if (Cmp->getOperand(0) == RenamedOp) {
-      Pred = Cmp->getPredicate();
-      OtherOp = Cmp->getOperand(1);
-    } else if (Cmp->getOperand(1) == RenamedOp) {
-      Pred = Cmp->getSwappedPredicate();
-      OtherOp = Cmp->getOperand(0);
-    } else {
-      // TODO: Make this an assertion once RenamedOp is fully accurate.
-      return None;
-    }
-
-    // Invert predicate along false edge.
-    if (!TrueEdge)
-      Pred = CmpInst::getInversePredicate(Pred);
-
-    return {{Pred, OtherOp}};
-  }
-  case PT_Switch:
-    if (Condition != RenamedOp) {
-      // TODO: Make this an assertion once RenamedOp is fully accurate.
-      return None;
-    }
-
-    return {{CmpInst::ICMP_EQ, cast<PredicateSwitch>(this)->CaseValue}};
-  }
-  llvm_unreachable("Unknown predicate type");
-}
-
+Optional<PredicateConstraint> PredicateBase::getConstraint() const { 
+  switch (Type) { 
+  case PT_Assume: 
+  case PT_Branch: { 
+    bool TrueEdge = true; 
+    if (auto *PBranch = dyn_cast<PredicateBranch>(this)) 
+      TrueEdge = PBranch->TrueEdge; 
+ 
+    if (Condition == RenamedOp) { 
+      return {{CmpInst::ICMP_EQ, 
+               TrueEdge ? ConstantInt::getTrue(Condition->getType()) 
+                        : ConstantInt::getFalse(Condition->getType())}}; 
+    } 
+ 
+    CmpInst *Cmp = dyn_cast<CmpInst>(Condition); 
+    if (!Cmp) { 
+      // TODO: Make this an assertion once RenamedOp is fully accurate. 
+      return None; 
+    } 
+ 
+    CmpInst::Predicate Pred; 
+    Value *OtherOp; 
+    if (Cmp->getOperand(0) == RenamedOp) { 
+      Pred = Cmp->getPredicate(); 
+      OtherOp = Cmp->getOperand(1); 
+    } else if (Cmp->getOperand(1) == RenamedOp) { 
+      Pred = Cmp->getSwappedPredicate(); 
+      OtherOp = Cmp->getOperand(0); 
+    } else { 
+      // TODO: Make this an assertion once RenamedOp is fully accurate. 
+      return None; 
+    } 
+ 
+    // Invert predicate along false edge. 
+    if (!TrueEdge) 
+      Pred = CmpInst::getInversePredicate(Pred); 
+ 
+    return {{Pred, OtherOp}}; 
+  } 
+  case PT_Switch: 
+    if (Condition != RenamedOp) { 
+      // TODO: Make this an assertion once RenamedOp is fully accurate. 
+      return None; 
+    } 
+ 
+    return {{CmpInst::ICMP_EQ, cast<PredicateSwitch>(this)->CaseValue}}; 
+  } 
+  llvm_unreachable("Unknown predicate type"); 
+} 
+ 
 void PredicateInfo::verifyPredicateInfo() const {}
 
 char PredicateInfoPrinterLegacyPass::ID = 0;

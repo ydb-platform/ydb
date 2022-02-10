@@ -1,4 +1,4 @@
-# Copyright 2001-2019 by Vinay Sajip. All Rights Reserved.
+# Copyright 2001-2019 by Vinay Sajip. All Rights Reserved. 
 #
 # Permission to use, copy, modify, and distribute this software and its
 # documentation for any purpose and without fee is hereby granted,
@@ -19,7 +19,7 @@ Configuration functions for the logging package for Python. The core package
 is based on PEP 282 and comments thereto in comp.lang.python, and influenced
 by Apache's log4j system.
 
-Copyright (C) 2001-2019 Vinay Sajip. All Rights Reserved.
+Copyright (C) 2001-2019 Vinay Sajip. All Rights Reserved. 
 
 To use, simply 'import logging' and log away!
 """
@@ -143,7 +143,7 @@ def _install_handlers(cp, formatters):
         kwargs = section.get("kwargs", '{}')
         kwargs = eval(kwargs, vars(logging))
         h = klass(*args, **kwargs)
-        h.name = hand
+        h.name = hand 
         if "level" in section:
             level = section["level"]
             h.setLevel(level)
@@ -174,10 +174,10 @@ def _handle_existing_loggers(existing, child_loggers, disable_existing):
     for log in existing:
         logger = root.manager.loggerDict[log]
         if log in child_loggers:
-            if not isinstance(logger, logging.PlaceHolder):
-                logger.setLevel(logging.NOTSET)
-                logger.handlers = []
-                logger.propagate = True
+            if not isinstance(logger, logging.PlaceHolder): 
+                logger.setLevel(logging.NOTSET) 
+                logger.handlers = [] 
+                logger.propagate = True 
         else:
             logger.disabled = disable_existing
 
@@ -448,7 +448,7 @@ class BaseConfigurator(object):
             value = ConvertingList(value)
             value.configurator = self
         elif not isinstance(value, ConvertingTuple) and\
-                 isinstance(value, tuple) and not hasattr(value, '_fields'):
+                 isinstance(value, tuple) and not hasattr(value, '_fields'): 
             value = ConvertingTuple(value)
             value.configurator = self
         elif isinstance(value, str): # str for py3k
@@ -668,19 +668,19 @@ class DictConfigurator(BaseConfigurator):
             dfmt = config.get('datefmt', None)
             style = config.get('style', '%')
             cname = config.get('class', None)
-
+ 
             if not cname:
                 c = logging.Formatter
             else:
                 c = _resolve(cname)
-
-            # A TypeError would be raised if "validate" key is passed in with a formatter callable
-            # that does not accept "validate" as a parameter
-            if 'validate' in config:  # if user hasn't mentioned it, the default will be fine
-                result = c(fmt, dfmt, style, config['validate'])
-            else:
-                result = c(fmt, dfmt, style)
-
+ 
+            # A TypeError would be raised if "validate" key is passed in with a formatter callable 
+            # that does not accept "validate" as a parameter 
+            if 'validate' in config:  # if user hasn't mentioned it, the default will be fine 
+                result = c(fmt, dfmt, style, config['validate']) 
+            else: 
+                result = c(fmt, dfmt, style) 
+ 
         return result
 
     def configure_filter(self, config):

@@ -107,7 +107,7 @@ findAffectedValues(CallInst *CI,
           AddAffected(A);
           AddAffected(B);
         // (A << C) or (A >>_s C) or (A >>_u C) where C is some constant.
-        } else if (match(V, m_Shift(m_Value(A), m_ConstantInt()))) {
+        } else if (match(V, m_Shift(m_Value(A), m_ConstantInt()))) { 
           AddAffected(A);
         }
       };
@@ -115,14 +115,14 @@ findAffectedValues(CallInst *CI,
       AddAffectedFromEq(A);
       AddAffectedFromEq(B);
     }
-
-    Value *X;
-    // Handle (A + C1) u< C2, which is the canonical form of A > C3 && A < C4,
-    // and recognized by LVI at least.
-    if (Pred == ICmpInst::ICMP_ULT &&
-        match(A, m_Add(m_Value(X), m_ConstantInt())) &&
-        match(B, m_ConstantInt()))
-      AddAffected(X);
+ 
+    Value *X; 
+    // Handle (A + C1) u< C2, which is the canonical form of A > C3 && A < C4, 
+    // and recognized by LVI at least. 
+    if (Pred == ICmpInst::ICMP_ULT && 
+        match(A, m_Add(m_Value(X), m_ConstantInt())) && 
+        match(B, m_ConstantInt())) 
+      AddAffected(X); 
   }
 }
 
@@ -163,11 +163,11 @@ void AssumptionCache::unregisterAssumption(CallInst *CI) {
       AffectedValues.erase(AVI);
   }
 
-  erase_value(AssumeHandles, CI);
+  erase_value(AssumeHandles, CI); 
 }
 
 void AssumptionCache::AffectedValueCallbackVH::deleted() {
-  AC->AffectedValues.erase(getValPtr());
+  AC->AffectedValues.erase(getValPtr()); 
   // 'this' now dangles!
 }
 
@@ -178,7 +178,7 @@ void AssumptionCache::transferAffectedValuesInCache(Value *OV, Value *NV) {
     return;
 
   for (auto &A : AVI->second)
-    if (!llvm::is_contained(NAVV, A))
+    if (!llvm::is_contained(NAVV, A)) 
       NAVV.push_back(A);
   AffectedValues.erase(OV);
 }

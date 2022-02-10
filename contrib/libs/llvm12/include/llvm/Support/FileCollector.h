@@ -27,35 +27,35 @@ namespace llvm {
 class FileCollectorFileSystem;
 class Twine;
 
-class FileCollectorBase {
-public:
-  FileCollectorBase();
-  virtual ~FileCollectorBase();
-
-  void addFile(const Twine &file);
-  void addDirectory(const Twine &Dir);
-
-protected:
-  bool markAsSeen(StringRef Path) {
-    if (Path.empty())
-      return false;
-    return Seen.insert(Path).second;
-  }
-
-  virtual void addFileImpl(StringRef SrcPath) = 0;
-
-  virtual llvm::vfs::directory_iterator
-  addDirectoryImpl(const llvm::Twine &Dir,
-                   IntrusiveRefCntPtr<vfs::FileSystem> FS,
-                   std::error_code &EC) = 0;
-
-  /// Synchronizes access to internal data structures.
-  std::mutex Mutex;
-
-  /// Tracks already seen files so they can be skipped.
-  StringSet<> Seen;
-};
-
+class FileCollectorBase { 
+public: 
+  FileCollectorBase(); 
+  virtual ~FileCollectorBase(); 
+ 
+  void addFile(const Twine &file); 
+  void addDirectory(const Twine &Dir); 
+ 
+protected: 
+  bool markAsSeen(StringRef Path) { 
+    if (Path.empty()) 
+      return false; 
+    return Seen.insert(Path).second; 
+  } 
+ 
+  virtual void addFileImpl(StringRef SrcPath) = 0; 
+ 
+  virtual llvm::vfs::directory_iterator 
+  addDirectoryImpl(const llvm::Twine &Dir, 
+                   IntrusiveRefCntPtr<vfs::FileSystem> FS, 
+                   std::error_code &EC) = 0; 
+ 
+  /// Synchronizes access to internal data structures. 
+  std::mutex Mutex; 
+ 
+  /// Tracks already seen files so they can be skipped. 
+  StringSet<> Seen; 
+}; 
+ 
 /// Captures file system interaction and generates data to be later replayed
 /// with the RedirectingFileSystem.
 ///
@@ -74,29 +74,29 @@ protected:
 ///
 /// In order to preserve the relative topology of files we use their real paths
 /// as relative paths inside of the Root.
-class FileCollector : public FileCollectorBase {
+class FileCollector : public FileCollectorBase { 
 public:
-  /// Helper utility that encapsulates the logic for canonicalizing a virtual
-  /// path and a path to copy from.
-  class PathCanonicalizer {
-  public:
-    struct PathStorage {
-      SmallString<256> CopyFrom;
-      SmallString<256> VirtualPath;
-    };
-
-    /// Canonicalize a pair of virtual and real paths.
-    PathStorage canonicalize(StringRef SrcPath);
-
-  private:
-    /// Replace with a (mostly) real path, or don't modify. Resolves symlinks
-    /// in the directory, using \a CachedDirs to avoid redundant lookups, but
-    /// leaves the filename as a possible symlink.
-    void updateWithRealPath(SmallVectorImpl<char> &Path);
-
-    StringMap<std::string> CachedDirs;
-  };
-
+  /// Helper utility that encapsulates the logic for canonicalizing a virtual 
+  /// path and a path to copy from. 
+  class PathCanonicalizer { 
+  public: 
+    struct PathStorage { 
+      SmallString<256> CopyFrom; 
+      SmallString<256> VirtualPath; 
+    }; 
+ 
+    /// Canonicalize a pair of virtual and real paths. 
+    PathStorage canonicalize(StringRef SrcPath); 
+ 
+  private: 
+    /// Replace with a (mostly) real path, or don't modify. Resolves symlinks 
+    /// in the directory, using \a CachedDirs to avoid redundant lookups, but 
+    /// leaves the filename as a possible symlink. 
+    void updateWithRealPath(SmallVectorImpl<char> &Path); 
+ 
+    StringMap<std::string> CachedDirs; 
+  }; 
+ 
   /// \p Root is the directory where collected files are will be stored.
   /// \p OverlayRoot is VFS mapping root.
   /// \p Root directory gets created in copyFiles unless it already exists.
@@ -129,12 +129,12 @@ private:
   }
 
 protected:
-  void addFileImpl(StringRef SrcPath) override;
+  void addFileImpl(StringRef SrcPath) override; 
 
   llvm::vfs::directory_iterator
   addDirectoryImpl(const llvm::Twine &Dir,
-                   IntrusiveRefCntPtr<vfs::FileSystem> FS,
-                   std::error_code &EC) override;
+                   IntrusiveRefCntPtr<vfs::FileSystem> FS, 
+                   std::error_code &EC) override; 
 
   /// The directory where collected files are copied to in copyFiles().
   const std::string Root;
@@ -145,8 +145,8 @@ protected:
   /// The yaml mapping writer.
   vfs::YAMLVFSWriter VFSWriter;
 
-  /// Helper utility for canonicalizing paths.
-  PathCanonicalizer Canonicalizer;
+  /// Helper utility for canonicalizing paths. 
+  PathCanonicalizer Canonicalizer; 
 };
 
 } // end namespace llvm

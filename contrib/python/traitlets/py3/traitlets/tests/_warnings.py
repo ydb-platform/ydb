@@ -3,13 +3,13 @@
 
 __all__ = ['all_warnings', 'expected_warnings']
 
-import inspect
-import os
-import re
+import inspect 
+import os 
+import re 
 import sys
 import warnings
-from contextlib import contextmanager
-from unittest import mock
+from contextlib import contextmanager 
+from unittest import mock 
 
 
 @contextmanager
@@ -55,27 +55,27 @@ def all_warnings():
         except AttributeError:
             pass
 
-    with warnings.catch_warnings(record=True) as w, \
-            mock.patch.dict(os.environ, {'TRAITLETS_ALL_DEPRECATIONS': '1'}):
+    with warnings.catch_warnings(record=True) as w, \ 
+            mock.patch.dict(os.environ, {'TRAITLETS_ALL_DEPRECATIONS': '1'}): 
         warnings.simplefilter("always")
         yield w
 
 
 @contextmanager
 def expected_warnings(matching):
-    r"""Context for use in testing to catch known warnings matching regexes
-
+    r"""Context for use in testing to catch known warnings matching regexes 
+ 
     Parameters
     ----------
     matching : list of strings or compiled regexes
         Regexes for the desired warning to catch
-
+ 
     Examples
     --------
     >>> from skimage import data, img_as_ubyte, img_as_float
-    >>> with expected_warnings(["precision loss"]):
+    >>> with expected_warnings(["precision loss"]): 
     ...     d = img_as_ubyte(img_as_float(data.coins()))
-
+ 
     Notes
     -----
     Uses `all_warnings` to ensure all warnings are raised.
@@ -95,7 +95,7 @@ def expected_warnings(matching):
         # enter context
         yield w
         # exited user context, check the recorded warnings
-        remaining = [m for m in matching if not r'\A\Z' in m.split('|')]
+        remaining = [m for m in matching if not r'\A\Z' in m.split('|')] 
         for warn in w:
             found = False
             for match in matching:

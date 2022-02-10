@@ -1,8 +1,8 @@
 # -*- coding: utf_8 -*-
-from collections import OrderedDict
-
-FREQUENCIES = OrderedDict(
-    [
+from collections import OrderedDict 
+ 
+FREQUENCIES = OrderedDict( 
+    [ 
         (
             "English",
             [
@@ -1241,4 +1241,4 @@ FREQUENCIES = OrderedDict(
             ],
         ),
     ]
-)
+) 

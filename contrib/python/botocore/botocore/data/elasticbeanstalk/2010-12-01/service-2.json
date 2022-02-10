@@ -41,18 +41,18 @@
       ],
       "documentation":"<p>Applies a scheduled managed action immediately. A managed action can be applied only if its status is <code>Scheduled</code>. Get the status and action ID of a managed action with <a>DescribeEnvironmentManagedActions</a>.</p>"
     },
-    "AssociateEnvironmentOperationsRole":{
-      "name":"AssociateEnvironmentOperationsRole",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"AssociateEnvironmentOperationsRoleMessage"},
-      "errors":[
-        {"shape":"InsufficientPrivilegesException"}
-      ],
-      "documentation":"<p>Add or change the operations role used by an environment. After this call is made, Elastic Beanstalk uses the associated operations role for permissions to downstream services during subsequent calls acting on this environment. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/iam-operationsrole.html\">Operations roles</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p>"
-    },
+    "AssociateEnvironmentOperationsRole":{ 
+      "name":"AssociateEnvironmentOperationsRole", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"AssociateEnvironmentOperationsRoleMessage"}, 
+      "errors":[ 
+        {"shape":"InsufficientPrivilegesException"} 
+      ], 
+      "documentation":"<p>Add or change the operations role used by an environment. After this call is made, Elastic Beanstalk uses the associated operations role for permissions to downstream services during subsequent calls acting on this environment. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/iam-operationsrole.html\">Operations roles</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p>" 
+    }, 
     "CheckDNSAvailability":{
       "name":"CheckDNSAvailability",
       "http":{
@@ -81,7 +81,7 @@
         {"shape":"TooManyEnvironmentsException"},
         {"shape":"InsufficientPrivilegesException"}
       ],
-      "documentation":"<p>Create or update a group of environments that each run a separate component of a single application. Takes a list of version labels that specify application source bundles for each of the environments to create or update. The name of each environment and other required information must be included in the source bundles in an environment manifest named <code>env.yaml</code>. See <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-mgmt-compose.html\">Compose Environments</a> for details.</p>"
+      "documentation":"<p>Create or update a group of environments that each run a separate component of a single application. Takes a list of version labels that specify application source bundles for each of the environments to create or update. The name of each environment and other required information must be included in the source bundles in an environment manifest named <code>env.yaml</code>. See <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-mgmt-compose.html\">Compose Environments</a> for details.</p>" 
     },
     "CreateApplication":{
       "name":"CreateApplication",
@@ -97,7 +97,7 @@
       "errors":[
         {"shape":"TooManyApplicationsException"}
       ],
-      "documentation":"<p>Creates an application that has one configuration template named <code>default</code> and no application versions.</p>"
+      "documentation":"<p>Creates an application that has one configuration template named <code>default</code> and no application versions.</p>" 
     },
     "CreateApplicationVersion":{
       "name":"CreateApplicationVersion",
@@ -117,7 +117,7 @@
         {"shape":"S3LocationNotInServiceRegionException"},
         {"shape":"CodeBuildNotInServiceRegionException"}
       ],
-      "documentation":"<p>Creates an application version for the specified application. You can create an application version from a source bundle in Amazon S3, a commit in AWS CodeCommit, or the output of an AWS CodeBuild build as follows:</p> <p>Specify a commit in an AWS CodeCommit repository with <code>SourceBuildInformation</code>.</p> <p>Specify a build in an AWS CodeBuild with <code>SourceBuildInformation</code> and <code>BuildConfiguration</code>.</p> <p>Specify a source bundle in S3 with <code>SourceBundle</code> </p> <p>Omit both <code>SourceBuildInformation</code> and <code>SourceBundle</code> to use the default sample application.</p> <note> <p>After you create an application version with a specified Amazon S3 bucket and key location, you can't change that Amazon S3 location. If you change the Amazon S3 location, you receive an exception when you attempt to launch an environment from the application version.</p> </note>"
+      "documentation":"<p>Creates an application version for the specified application. You can create an application version from a source bundle in Amazon S3, a commit in AWS CodeCommit, or the output of an AWS CodeBuild build as follows:</p> <p>Specify a commit in an AWS CodeCommit repository with <code>SourceBuildInformation</code>.</p> <p>Specify a build in an AWS CodeBuild with <code>SourceBuildInformation</code> and <code>BuildConfiguration</code>.</p> <p>Specify a source bundle in S3 with <code>SourceBundle</code> </p> <p>Omit both <code>SourceBuildInformation</code> and <code>SourceBundle</code> to use the default sample application.</p> <note> <p>After you create an application version with a specified Amazon S3 bucket and key location, you can't change that Amazon S3 location. If you change the Amazon S3 location, you receive an exception when you attempt to launch an environment from the application version.</p> </note>" 
     },
     "CreateConfigurationTemplate":{
       "name":"CreateConfigurationTemplate",
@@ -135,7 +135,7 @@
         {"shape":"TooManyBucketsException"},
         {"shape":"TooManyConfigurationTemplatesException"}
       ],
-      "documentation":"<p>Creates an AWS Elastic Beanstalk configuration template, associated with a specific Elastic Beanstalk application. You define application configuration settings in a configuration template. You can then use the configuration template to deploy different versions of the application with the same configuration settings.</p> <p>Templates aren't associated with any environment. The <code>EnvironmentName</code> response element is always <code>null</code>.</p> <p>Related Topics</p> <ul> <li> <p> <a>DescribeConfigurationOptions</a> </p> </li> <li> <p> <a>DescribeConfigurationSettings</a> </p> </li> <li> <p> <a>ListAvailableSolutionStacks</a> </p> </li> </ul>"
+      "documentation":"<p>Creates an AWS Elastic Beanstalk configuration template, associated with a specific Elastic Beanstalk application. You define application configuration settings in a configuration template. You can then use the configuration template to deploy different versions of the application with the same configuration settings.</p> <p>Templates aren't associated with any environment. The <code>EnvironmentName</code> response element is always <code>null</code>.</p> <p>Related Topics</p> <ul> <li> <p> <a>DescribeConfigurationOptions</a> </p> </li> <li> <p> <a>DescribeConfigurationSettings</a> </p> </li> <li> <p> <a>ListAvailableSolutionStacks</a> </p> </li> </ul>" 
     },
     "CreateEnvironment":{
       "name":"CreateEnvironment",
@@ -152,7 +152,7 @@
         {"shape":"TooManyEnvironmentsException"},
         {"shape":"InsufficientPrivilegesException"}
       ],
-      "documentation":"<p>Launches an AWS Elastic Beanstalk environment for the specified application using the specified configuration.</p>"
+      "documentation":"<p>Launches an AWS Elastic Beanstalk environment for the specified application using the specified configuration.</p>" 
     },
     "CreatePlatformVersion":{
       "name":"CreatePlatformVersion",
@@ -435,7 +435,7 @@
         {"shape":"InvalidRequestException"},
         {"shape":"ElasticBeanstalkServiceException"}
       ],
-      "documentation":"<p>Retrieves detailed information about the health of instances in your AWS Elastic Beanstalk. This operation requires <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced.html\">enhanced health reporting</a>.</p>"
+      "documentation":"<p>Retrieves detailed information about the health of instances in your AWS Elastic Beanstalk. This operation requires <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced.html\">enhanced health reporting</a>.</p>" 
     },
     "DescribePlatformVersion":{
       "name":"DescribePlatformVersion",
@@ -452,20 +452,20 @@
         {"shape":"InsufficientPrivilegesException"},
         {"shape":"ElasticBeanstalkServiceException"}
       ],
-      "documentation":"<p>Describes a platform version. Provides full details. Compare to <a>ListPlatformVersions</a>, which provides summary information about a list of platform versions.</p> <p>For definitions of platform version and other platform-related terms, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/platforms-glossary.html\">AWS Elastic Beanstalk Platforms Glossary</a>.</p>"
+      "documentation":"<p>Describes a platform version. Provides full details. Compare to <a>ListPlatformVersions</a>, which provides summary information about a list of platform versions.</p> <p>For definitions of platform version and other platform-related terms, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/platforms-glossary.html\">AWS Elastic Beanstalk Platforms Glossary</a>.</p>" 
     },
-    "DisassociateEnvironmentOperationsRole":{
-      "name":"DisassociateEnvironmentOperationsRole",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"DisassociateEnvironmentOperationsRoleMessage"},
-      "errors":[
-        {"shape":"InsufficientPrivilegesException"}
-      ],
-      "documentation":"<p>Disassociate the operations role from an environment. After this call is made, Elastic Beanstalk uses the caller's permissions for permissions to downstream services during subsequent calls acting on this environment. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/iam-operationsrole.html\">Operations roles</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p>"
-    },
+    "DisassociateEnvironmentOperationsRole":{ 
+      "name":"DisassociateEnvironmentOperationsRole", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"DisassociateEnvironmentOperationsRoleMessage"}, 
+      "errors":[ 
+        {"shape":"InsufficientPrivilegesException"} 
+      ], 
+      "documentation":"<p>Disassociate the operations role from an environment. After this call is made, Elastic Beanstalk uses the caller's permissions for permissions to downstream services during subsequent calls acting on this environment. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/iam-operationsrole.html\">Operations roles</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p>" 
+    }, 
     "ListAvailableSolutionStacks":{
       "name":"ListAvailableSolutionStacks",
       "http":{
@@ -478,19 +478,19 @@
       },
       "documentation":"<p>Returns a list of the available solution stack names, with the public version first and then in reverse chronological order.</p>"
     },
-    "ListPlatformBranches":{
-      "name":"ListPlatformBranches",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"ListPlatformBranchesRequest"},
-      "output":{
-        "shape":"ListPlatformBranchesResult",
-        "resultWrapper":"ListPlatformBranchesResult"
-      },
-      "documentation":"<p>Lists the platform branches available for your account in an AWS Region. Provides summary information about each platform branch.</p> <p>For definitions of platform branch and other platform-related terms, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/platforms-glossary.html\">AWS Elastic Beanstalk Platforms Glossary</a>.</p>"
-    },
+    "ListPlatformBranches":{ 
+      "name":"ListPlatformBranches", 
+      "http":{ 
+        "method":"POST", 
+        "requestUri":"/" 
+      }, 
+      "input":{"shape":"ListPlatformBranchesRequest"}, 
+      "output":{ 
+        "shape":"ListPlatformBranchesResult", 
+        "resultWrapper":"ListPlatformBranchesResult" 
+      }, 
+      "documentation":"<p>Lists the platform branches available for your account in an AWS Region. Provides summary information about each platform branch.</p> <p>For definitions of platform branch and other platform-related terms, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/platforms-glossary.html\">AWS Elastic Beanstalk Platforms Glossary</a>.</p>" 
+    }, 
     "ListPlatformVersions":{
       "name":"ListPlatformVersions",
       "http":{
@@ -506,7 +506,7 @@
         {"shape":"InsufficientPrivilegesException"},
         {"shape":"ElasticBeanstalkServiceException"}
       ],
-      "documentation":"<p>Lists the platform versions available for your account in an AWS Region. Provides summary information about each platform version. Compare to <a>DescribePlatformVersion</a>, which provides full details about a single platform version.</p> <p>For definitions of platform version and other platform-related terms, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/platforms-glossary.html\">AWS Elastic Beanstalk Platforms Glossary</a>.</p>"
+      "documentation":"<p>Lists the platform versions available for your account in an AWS Region. Provides summary information about each platform version. Compare to <a>DescribePlatformVersion</a>, which provides full details about a single platform version.</p> <p>For definitions of platform version and other platform-related terms, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/platforms-glossary.html\">AWS Elastic Beanstalk Platforms Glossary</a>.</p>" 
     },
     "ListTagsForResource":{
       "name":"ListTagsForResource",
@@ -524,7 +524,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ResourceTypeNotSupportedException"}
       ],
-      "documentation":"<p>Return the tags applied to an AWS Elastic Beanstalk resource. The response contains a list of tag key-value pairs.</p> <p>Elastic Beanstalk supports tagging of all of its resources. For details about resource tagging, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/applications-tagging-resources.html\">Tagging Application Resources</a>.</p>"
+      "documentation":"<p>Return the tags applied to an AWS Elastic Beanstalk resource. The response contains a list of tag key-value pairs.</p> <p>Elastic Beanstalk supports tagging of all of its resources. For details about resource tagging, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/applications-tagging-resources.html\">Tagging Application Resources</a>.</p>" 
     },
     "RebuildEnvironment":{
       "name":"RebuildEnvironment",
@@ -684,7 +684,7 @@
         {"shape":"ResourceNotFoundException"},
         {"shape":"ResourceTypeNotSupportedException"}
       ],
-      "documentation":"<p>Update the list of tags applied to an AWS Elastic Beanstalk resource. Two lists can be passed: <code>TagsToAdd</code> for tags to add or update, and <code>TagsToRemove</code>.</p> <p>Elastic Beanstalk supports tagging of all of its resources. For details about resource tagging, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/applications-tagging-resources.html\">Tagging Application Resources</a>.</p> <p>If you create a custom IAM user policy to control permission to this operation, specify one of the following two virtual actions (or both) instead of the API operation name:</p> <dl> <dt>elasticbeanstalk:AddTags</dt> <dd> <p>Controls permission to call <code>UpdateTagsForResource</code> and pass a list of tags to add in the <code>TagsToAdd</code> parameter.</p> </dd> <dt>elasticbeanstalk:RemoveTags</dt> <dd> <p>Controls permission to call <code>UpdateTagsForResource</code> and pass a list of tag keys to remove in the <code>TagsToRemove</code> parameter.</p> </dd> </dl> <p>For details about creating a custom user policy, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/AWSHowTo.iam.managed-policies.html#AWSHowTo.iam.policies\">Creating a Custom User Policy</a>.</p>"
+      "documentation":"<p>Update the list of tags applied to an AWS Elastic Beanstalk resource. Two lists can be passed: <code>TagsToAdd</code> for tags to add or update, and <code>TagsToRemove</code>.</p> <p>Elastic Beanstalk supports tagging of all of its resources. For details about resource tagging, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/applications-tagging-resources.html\">Tagging Application Resources</a>.</p> <p>If you create a custom IAM user policy to control permission to this operation, specify one of the following two virtual actions (or both) instead of the API operation name:</p> <dl> <dt>elasticbeanstalk:AddTags</dt> <dd> <p>Controls permission to call <code>UpdateTagsForResource</code> and pass a list of tags to add in the <code>TagsToAdd</code> parameter.</p> </dd> <dt>elasticbeanstalk:RemoveTags</dt> <dd> <p>Controls permission to call <code>UpdateTagsForResource</code> and pass a list of tag keys to remove in the <code>TagsToRemove</code> parameter.</p> </dd> </dl> <p>For details about creating a custom user policy, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/AWSHowTo.iam.managed-policies.html#AWSHowTo.iam.policies\">Creating a Custom User Policy</a>.</p>" 
     },
     "ValidateConfigurationSettings":{
       "name":"ValidateConfigurationSettings",
@@ -849,10 +849,10 @@
         },
         "VersionLifecycleConfig":{
           "shape":"ApplicationVersionLifecycleConfig",
-          "documentation":"<p>Defines lifecycle settings for application versions.</p>"
+          "documentation":"<p>Defines lifecycle settings for application versions.</p>" 
         }
       },
-      "documentation":"<p>The resource lifecycle configuration for an application. Defines lifecycle settings for resources that belong to the application, and the service role that AWS Elastic Beanstalk assumes in order to apply lifecycle settings. The version lifecycle configuration defines lifecycle settings for application versions.</p>"
+      "documentation":"<p>The resource lifecycle configuration for an application. Defines lifecycle settings for resources that belong to the application, and the service role that AWS Elastic Beanstalk assumes in order to apply lifecycle settings. The version lifecycle configuration defines lifecycle settings for application versions.</p>" 
     },
     "ApplicationResourceLifecycleDescriptionMessage":{
       "type":"structure",
@@ -1008,24 +1008,24 @@
       },
       "documentation":"<p>The result message containing information about the managed action.</p>"
     },
-    "AssociateEnvironmentOperationsRoleMessage":{
-      "type":"structure",
-      "required":[
-        "EnvironmentName",
-        "OperationsRole"
-      ],
-      "members":{
-        "EnvironmentName":{
-          "shape":"EnvironmentName",
-          "documentation":"<p>The name of the environment to which to set the operations role.</p>"
-        },
-        "OperationsRole":{
-          "shape":"OperationsRole",
-          "documentation":"<p>The Amazon Resource Name (ARN) of an existing IAM role to be used as the environment's operations role.</p>"
-        }
-      },
-      "documentation":"<p>Request to add or change the operations role used by an environment.</p>"
-    },
+    "AssociateEnvironmentOperationsRoleMessage":{ 
+      "type":"structure", 
+      "required":[ 
+        "EnvironmentName", 
+        "OperationsRole" 
+      ], 
+      "members":{ 
+        "EnvironmentName":{ 
+          "shape":"EnvironmentName", 
+          "documentation":"<p>The name of the environment to which to set the operations role.</p>" 
+        }, 
+        "OperationsRole":{ 
+          "shape":"OperationsRole", 
+          "documentation":"<p>The Amazon Resource Name (ARN) of an existing IAM role to be used as the environment's operations role.</p>" 
+        } 
+      }, 
+      "documentation":"<p>Request to add or change the operations role used by an environment.</p>" 
+    }, 
     "AutoCreateApplication":{"type":"boolean"},
     "AutoScalingGroup":{
       "type":"structure",
@@ -1051,8 +1051,8 @@
     },
     "BoxedBoolean":{"type":"boolean"},
     "BoxedInt":{"type":"integer"},
-    "BranchName":{"type":"string"},
-    "BranchOrder":{"type":"integer"},
+    "BranchName":{"type":"string"}, 
+    "BranchOrder":{"type":"integer"}, 
     "BuildConfiguration":{
       "type":"structure",
       "required":[
@@ -1102,11 +1102,11 @@
         },
         "Nice":{
           "shape":"NullableDouble",
-          "documentation":"<p>Available on Linux environments only.</p> <p>Percentage of time that the CPU has spent in the <code>Nice</code> state over the last 10 seconds.</p>"
+          "documentation":"<p>Available on Linux environments only.</p> <p>Percentage of time that the CPU has spent in the <code>Nice</code> state over the last 10 seconds.</p>" 
         },
         "System":{
           "shape":"NullableDouble",
-          "documentation":"<p>Available on Linux environments only.</p> <p>Percentage of time that the CPU has spent in the <code>System</code> state over the last 10 seconds.</p>"
+          "documentation":"<p>Available on Linux environments only.</p> <p>Percentage of time that the CPU has spent in the <code>System</code> state over the last 10 seconds.</p>" 
         },
         "Idle":{
           "shape":"NullableDouble",
@@ -1114,19 +1114,19 @@
         },
         "IOWait":{
           "shape":"NullableDouble",
-          "documentation":"<p>Available on Linux environments only.</p> <p>Percentage of time that the CPU has spent in the <code>I/O Wait</code> state over the last 10 seconds.</p>"
+          "documentation":"<p>Available on Linux environments only.</p> <p>Percentage of time that the CPU has spent in the <code>I/O Wait</code> state over the last 10 seconds.</p>" 
         },
         "IRQ":{
           "shape":"NullableDouble",
-          "documentation":"<p>Available on Linux environments only.</p> <p>Percentage of time that the CPU has spent in the <code>IRQ</code> state over the last 10 seconds.</p>"
+          "documentation":"<p>Available on Linux environments only.</p> <p>Percentage of time that the CPU has spent in the <code>IRQ</code> state over the last 10 seconds.</p>" 
         },
         "SoftIRQ":{
           "shape":"NullableDouble",
-          "documentation":"<p>Available on Linux environments only.</p> <p>Percentage of time that the CPU has spent in the <code>SoftIRQ</code> state over the last 10 seconds.</p>"
-        },
-        "Privileged":{
-          "shape":"NullableDouble",
-          "documentation":"<p>Available on Windows environments only.</p> <p>Percentage of time that the CPU has spent in the <code>Privileged</code> state over the last 10 seconds.</p>"
+          "documentation":"<p>Available on Linux environments only.</p> <p>Percentage of time that the CPU has spent in the <code>SoftIRQ</code> state over the last 10 seconds.</p>" 
+        }, 
+        "Privileged":{ 
+          "shape":"NullableDouble", 
+          "documentation":"<p>Available on Windows environments only.</p> <p>Percentage of time that the CPU has spent in the <code>Privileged</code> state over the last 10 seconds.</p>" 
         }
       },
       "documentation":"<p>CPU utilization metrics for an instance.</p>"
@@ -1187,7 +1187,7 @@
         },
         "GroupName":{
           "shape":"GroupName",
-          "documentation":"<p>The name of the group to which the target environments belong. Specify a group name only if the environment name defined in each target environment's manifest ends with a + (plus) character. See <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-cfg-manifest.html\">Environment Manifest (env.yaml)</a> for details.</p>"
+          "documentation":"<p>The name of the group to which the target environments belong. Specify a group name only if the environment name defined in each target environment's manifest ends with a + (plus) character. See <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-cfg-manifest.html\">Environment Manifest (env.yaml)</a> for details.</p>" 
         },
         "VersionLabels":{
           "shape":"VersionLabels",
@@ -1278,11 +1278,11 @@
       "members":{
         "ResourceName":{
           "shape":"ResourceName",
-          "documentation":"<p>A unique resource name for the option setting. Use it for a time–based scaling configuration option.</p>"
+          "documentation":"<p>A unique resource name for the option setting. Use it for a time–based scaling configuration option.</p>" 
         },
         "Namespace":{
           "shape":"OptionNamespace",
-          "documentation":"<p>A unique namespace that identifies the option's associated AWS resource.</p>"
+          "documentation":"<p>A unique namespace that identifies the option's associated AWS resource.</p>" 
         },
         "OptionName":{
           "shape":"ConfigurationOptionName",
@@ -1293,7 +1293,7 @@
           "documentation":"<p>The current value for the configuration option.</p>"
         }
       },
-      "documentation":"<p>A specification identifying an individual configuration option along with its current value. For a list of possible namespaces and option values, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/command-options.html\">Option Values</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>. </p>"
+      "documentation":"<p>A specification identifying an individual configuration option along with its current value. For a list of possible namespaces and option values, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/command-options.html\">Option Values</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>. </p>" 
     },
     "ConfigurationOptionSettingsList":{
       "type":"list",
@@ -1317,7 +1317,7 @@
         },
         "PlatformArn":{
           "shape":"PlatformArn",
-          "documentation":"<p>The ARN of the platform version.</p>"
+          "documentation":"<p>The ARN of the platform version.</p>" 
         },
         "Options":{
           "shape":"ConfigurationOptionDescriptionsList",
@@ -1335,7 +1335,7 @@
         },
         "PlatformArn":{
           "shape":"PlatformArn",
-          "documentation":"<p>The ARN of the platform version.</p>"
+          "documentation":"<p>The ARN of the platform version.</p>" 
         },
         "ApplicationName":{
           "shape":"ApplicationName",
@@ -1411,19 +1411,19 @@
       "members":{
         "ApplicationName":{
           "shape":"ApplicationName",
-          "documentation":"<p>The name of the application. Must be unique within your account.</p>"
+          "documentation":"<p>The name of the application. Must be unique within your account.</p>" 
         },
         "Description":{
           "shape":"Description",
-          "documentation":"<p>Your description of the application.</p>"
+          "documentation":"<p>Your description of the application.</p>" 
         },
         "ResourceLifecycleConfig":{
           "shape":"ApplicationResourceLifecycleConfig",
-          "documentation":"<p>Specifies an application resource lifecycle configuration to prevent your application from accumulating too many versions.</p>"
-        },
-        "Tags":{
-          "shape":"Tags",
-          "documentation":"<p>Specifies the tags applied to the application.</p> <p>Elastic Beanstalk applies these tags only to the application. Environments that you create in the application don't inherit the tags.</p>"
+          "documentation":"<p>Specifies an application resource lifecycle configuration to prevent your application from accumulating too many versions.</p>" 
+        }, 
+        "Tags":{ 
+          "shape":"Tags", 
+          "documentation":"<p>Specifies the tags applied to the application.</p> <p>Elastic Beanstalk applies these tags only to the application. Environments that you create in the application don't inherit the tags.</p>" 
         }
       },
       "documentation":"<p>Request to create an application.</p>"
@@ -1445,7 +1445,7 @@
         },
         "Description":{
           "shape":"Description",
-          "documentation":"<p>A description of this application version.</p>"
+          "documentation":"<p>A description of this application version.</p>" 
         },
         "SourceBuildInformation":{
           "shape":"SourceBuildInformation",
@@ -1466,10 +1466,10 @@
         "Process":{
           "shape":"ApplicationVersionProccess",
           "documentation":"<p>Pre-processes and validates the environment manifest (<code>env.yaml</code>) and configuration files (<code>*.config</code> files in the <code>.ebextensions</code> folder) in the source bundle. Validating configuration files can identify issues prior to deploying the application version to an environment.</p> <p>You must turn processing on for application versions that you create using AWS CodeBuild or AWS CodeCommit. For application versions built from a source bundle in Amazon S3, processing is optional.</p> <note> <p>The <code>Process</code> option validates Elastic Beanstalk configuration files. It doesn't validate your application's configuration files, like proxy server or Docker configuration.</p> </note>"
-        },
-        "Tags":{
-          "shape":"Tags",
-          "documentation":"<p>Specifies the tags applied to the application version.</p> <p>Elastic Beanstalk applies these tags only to the application version. Environments that use the application version don't inherit the tags.</p>"
+        }, 
+        "Tags":{ 
+          "shape":"Tags", 
+          "documentation":"<p>Specifies the tags applied to the application version.</p> <p>Elastic Beanstalk applies these tags only to the application version. Environments that use the application version don't inherit the tags.</p>" 
         }
       },
       "documentation":"<p/>"
@@ -1483,39 +1483,39 @@
       "members":{
         "ApplicationName":{
           "shape":"ApplicationName",
-          "documentation":"<p>The name of the Elastic Beanstalk application to associate with this configuration template.</p>"
+          "documentation":"<p>The name of the Elastic Beanstalk application to associate with this configuration template.</p>" 
         },
         "TemplateName":{
           "shape":"ConfigurationTemplateName",
-          "documentation":"<p>The name of the configuration template.</p> <p>Constraint: This name must be unique per application.</p>"
+          "documentation":"<p>The name of the configuration template.</p> <p>Constraint: This name must be unique per application.</p>" 
         },
         "SolutionStackName":{
           "shape":"SolutionStackName",
-          "documentation":"<p>The name of an Elastic Beanstalk solution stack (platform version) that this configuration uses. For example, <code>64bit Amazon Linux 2013.09 running Tomcat 7 Java 7</code>. A solution stack specifies the operating system, runtime, and application server for a configuration template. It also determines the set of configuration options as well as the possible and default values. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/concepts.platforms.html\">Supported Platforms</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p> <p>You must specify <code>SolutionStackName</code> if you don't specify <code>PlatformArn</code>, <code>EnvironmentId</code>, or <code>SourceConfiguration</code>.</p> <p>Use the <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/api/API_ListAvailableSolutionStacks.html\"> <code>ListAvailableSolutionStacks</code> </a> API to obtain a list of available solution stacks.</p>"
+          "documentation":"<p>The name of an Elastic Beanstalk solution stack (platform version) that this configuration uses. For example, <code>64bit Amazon Linux 2013.09 running Tomcat 7 Java 7</code>. A solution stack specifies the operating system, runtime, and application server for a configuration template. It also determines the set of configuration options as well as the possible and default values. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/concepts.platforms.html\">Supported Platforms</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p> <p>You must specify <code>SolutionStackName</code> if you don't specify <code>PlatformArn</code>, <code>EnvironmentId</code>, or <code>SourceConfiguration</code>.</p> <p>Use the <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/api/API_ListAvailableSolutionStacks.html\"> <code>ListAvailableSolutionStacks</code> </a> API to obtain a list of available solution stacks.</p>" 
         },
         "PlatformArn":{
           "shape":"PlatformArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the custom platform. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/custom-platforms.html\"> Custom Platforms</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p> <note> <p>If you specify <code>PlatformArn</code>, then don't specify <code>SolutionStackName</code>.</p> </note>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the custom platform. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/custom-platforms.html\"> Custom Platforms</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p> <note> <p>If you specify <code>PlatformArn</code>, then don't specify <code>SolutionStackName</code>.</p> </note>" 
         },
         "SourceConfiguration":{
           "shape":"SourceConfiguration",
-          "documentation":"<p>An Elastic Beanstalk configuration template to base this one on. If specified, Elastic Beanstalk uses the configuration values from the specified configuration template to create a new configuration.</p> <p>Values specified in <code>OptionSettings</code> override any values obtained from the <code>SourceConfiguration</code>.</p> <p>You must specify <code>SourceConfiguration</code> if you don't specify <code>PlatformArn</code>, <code>EnvironmentId</code>, or <code>SolutionStackName</code>.</p> <p>Constraint: If both solution stack name and source configuration are specified, the solution stack of the source configuration template must match the specified solution stack name.</p>"
+          "documentation":"<p>An Elastic Beanstalk configuration template to base this one on. If specified, Elastic Beanstalk uses the configuration values from the specified configuration template to create a new configuration.</p> <p>Values specified in <code>OptionSettings</code> override any values obtained from the <code>SourceConfiguration</code>.</p> <p>You must specify <code>SourceConfiguration</code> if you don't specify <code>PlatformArn</code>, <code>EnvironmentId</code>, or <code>SolutionStackName</code>.</p> <p>Constraint: If both solution stack name and source configuration are specified, the solution stack of the source configuration template must match the specified solution stack name.</p>" 
         },
         "EnvironmentId":{
           "shape":"EnvironmentId",
-          "documentation":"<p>The ID of an environment whose settings you want to use to create the configuration template. You must specify <code>EnvironmentId</code> if you don't specify <code>PlatformArn</code>, <code>SolutionStackName</code>, or <code>SourceConfiguration</code>.</p>"
+          "documentation":"<p>The ID of an environment whose settings you want to use to create the configuration template. You must specify <code>EnvironmentId</code> if you don't specify <code>PlatformArn</code>, <code>SolutionStackName</code>, or <code>SourceConfiguration</code>.</p>" 
         },
         "Description":{
           "shape":"Description",
-          "documentation":"<p>An optional description for this configuration.</p>"
+          "documentation":"<p>An optional description for this configuration.</p>" 
         },
         "OptionSettings":{
           "shape":"ConfigurationOptionSettingsList",
-          "documentation":"<p>Option values for the Elastic Beanstalk configuration, such as the instance type. If specified, these values override the values obtained from the solution stack or the source configuration template. For a complete list of Elastic Beanstalk configuration options, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/command-options.html\">Option Values</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p>"
-        },
-        "Tags":{
-          "shape":"Tags",
-          "documentation":"<p>Specifies the tags applied to the configuration template.</p>"
+          "documentation":"<p>Option values for the Elastic Beanstalk configuration, such as the instance type. If specified, these values override the values obtained from the solution stack or the source configuration template. For a complete list of Elastic Beanstalk configuration options, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/command-options.html\">Option Values</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p>" 
+        }, 
+        "Tags":{ 
+          "shape":"Tags", 
+          "documentation":"<p>Specifies the tags applied to the configuration template.</p>" 
         }
       },
       "documentation":"<p>Request to create a configuration template.</p>"
@@ -1526,47 +1526,47 @@
       "members":{
         "ApplicationName":{
           "shape":"ApplicationName",
-          "documentation":"<p>The name of the application that is associated with this environment.</p>"
+          "documentation":"<p>The name of the application that is associated with this environment.</p>" 
         },
         "EnvironmentName":{
           "shape":"EnvironmentName",
-          "documentation":"<p>A unique name for the environment.</p> <p>Constraint: Must be from 4 to 40 characters in length. The name can contain only letters, numbers, and hyphens. It can't start or end with a hyphen. This name must be unique within a region in your account. If the specified name already exists in the region, Elastic Beanstalk returns an <code>InvalidParameterValue</code> error. </p> <p>If you don't specify the <code>CNAMEPrefix</code> parameter, the environment name becomes part of the CNAME, and therefore part of the visible URL for your application.</p>"
+          "documentation":"<p>A unique name for the environment.</p> <p>Constraint: Must be from 4 to 40 characters in length. The name can contain only letters, numbers, and hyphens. It can't start or end with a hyphen. This name must be unique within a region in your account. If the specified name already exists in the region, Elastic Beanstalk returns an <code>InvalidParameterValue</code> error. </p> <p>If you don't specify the <code>CNAMEPrefix</code> parameter, the environment name becomes part of the CNAME, and therefore part of the visible URL for your application.</p>" 
         },
         "GroupName":{
           "shape":"GroupName",
-          "documentation":"<p>The name of the group to which the target environment belongs. Specify a group name only if the environment's name is specified in an environment manifest and not with the environment name parameter. See <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-cfg-manifest.html\">Environment Manifest (env.yaml)</a> for details.</p>"
+          "documentation":"<p>The name of the group to which the target environment belongs. Specify a group name only if the environment's name is specified in an environment manifest and not with the environment name parameter. See <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-cfg-manifest.html\">Environment Manifest (env.yaml)</a> for details.</p>" 
         },
         "Description":{
           "shape":"Description",
-          "documentation":"<p>Your description for this environment.</p>"
+          "documentation":"<p>Your description for this environment.</p>" 
         },
         "CNAMEPrefix":{
           "shape":"DNSCnamePrefix",
-          "documentation":"<p>If specified, the environment attempts to use this value as the prefix for the CNAME in your Elastic Beanstalk environment URL. If not specified, the CNAME is generated automatically by appending a random alphanumeric string to the environment name.</p>"
+          "documentation":"<p>If specified, the environment attempts to use this value as the prefix for the CNAME in your Elastic Beanstalk environment URL. If not specified, the CNAME is generated automatically by appending a random alphanumeric string to the environment name.</p>" 
         },
         "Tier":{
           "shape":"EnvironmentTier",
-          "documentation":"<p>Specifies the tier to use in creating this environment. The environment tier that you choose determines whether Elastic Beanstalk provisions resources to support a web application that handles HTTP(S) requests or a web application that handles background-processing tasks.</p>"
+          "documentation":"<p>Specifies the tier to use in creating this environment. The environment tier that you choose determines whether Elastic Beanstalk provisions resources to support a web application that handles HTTP(S) requests or a web application that handles background-processing tasks.</p>" 
         },
         "Tags":{
           "shape":"Tags",
-          "documentation":"<p>Specifies the tags applied to resources in the environment.</p>"
+          "documentation":"<p>Specifies the tags applied to resources in the environment.</p>" 
         },
         "VersionLabel":{
           "shape":"VersionLabel",
-          "documentation":"<p>The name of the application version to deploy.</p> <p>Default: If not specified, Elastic Beanstalk attempts to deploy the sample application.</p>"
+          "documentation":"<p>The name of the application version to deploy.</p> <p>Default: If not specified, Elastic Beanstalk attempts to deploy the sample application.</p>" 
         },
         "TemplateName":{
           "shape":"ConfigurationTemplateName",
-          "documentation":"<p>The name of the Elastic Beanstalk configuration template to use with the environment.</p> <note> <p>If you specify <code>TemplateName</code>, then don't specify <code>SolutionStackName</code>.</p> </note>"
+          "documentation":"<p>The name of the Elastic Beanstalk configuration template to use with the environment.</p> <note> <p>If you specify <code>TemplateName</code>, then don't specify <code>SolutionStackName</code>.</p> </note>" 
         },
         "SolutionStackName":{
           "shape":"SolutionStackName",
-          "documentation":"<p>The name of an Elastic Beanstalk solution stack (platform version) to use with the environment. If specified, Elastic Beanstalk sets the configuration values to the default values associated with the specified solution stack. For a list of current solution stacks, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/platforms/platforms-supported.html\">Elastic Beanstalk Supported Platforms</a> in the <i>AWS Elastic Beanstalk Platforms</i> guide.</p> <note> <p>If you specify <code>SolutionStackName</code>, don't specify <code>PlatformArn</code> or <code>TemplateName</code>.</p> </note>"
+          "documentation":"<p>The name of an Elastic Beanstalk solution stack (platform version) to use with the environment. If specified, Elastic Beanstalk sets the configuration values to the default values associated with the specified solution stack. For a list of current solution stacks, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/platforms/platforms-supported.html\">Elastic Beanstalk Supported Platforms</a> in the <i>AWS Elastic Beanstalk Platforms</i> guide.</p> <note> <p>If you specify <code>SolutionStackName</code>, don't specify <code>PlatformArn</code> or <code>TemplateName</code>.</p> </note>" 
         },
         "PlatformArn":{
           "shape":"PlatformArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the custom platform to use with the environment. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/custom-platforms.html\">Custom Platforms</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p> <note> <p>If you specify <code>PlatformArn</code>, don't specify <code>SolutionStackName</code>.</p> </note>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the custom platform to use with the environment. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/custom-platforms.html\">Custom Platforms</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p> <note> <p>If you specify <code>PlatformArn</code>, don't specify <code>SolutionStackName</code>.</p> </note>" 
         },
         "OptionSettings":{
           "shape":"ConfigurationOptionSettingsList",
@@ -1575,10 +1575,10 @@
         "OptionsToRemove":{
           "shape":"OptionsSpecifierList",
           "documentation":"<p>A list of custom user-defined configuration options to remove from the configuration set for this new environment.</p>"
-        },
-        "OperationsRole":{
-          "shape":"OperationsRole",
-          "documentation":"<p>The Amazon Resource Name (ARN) of an existing IAM role to be used as the environment's operations role. If specified, Elastic Beanstalk uses the operations role for permissions to downstream services during this call and during subsequent calls acting on this environment. To specify an operations role, you must have the <code>iam:PassRole</code> permission for the role. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/iam-operationsrole.html\">Operations roles</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p>"
+        }, 
+        "OperationsRole":{ 
+          "shape":"OperationsRole", 
+          "documentation":"<p>The Amazon Resource Name (ARN) of an existing IAM role to be used as the environment's operations role. If specified, Elastic Beanstalk uses the operations role for permissions to downstream services during this call and during subsequent calls acting on this environment. To specify an operations role, you must have the <code>iam:PassRole</code> permission for the role. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/iam-operationsrole.html\">Operations roles</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p>" 
         }
       },
       "documentation":"<p/>"
@@ -1610,10 +1610,10 @@
         "OptionSettings":{
           "shape":"ConfigurationOptionSettingsList",
           "documentation":"<p>The configuration option settings to apply to the builder environment.</p>"
-        },
-        "Tags":{
-          "shape":"Tags",
-          "documentation":"<p>Specifies the tags applied to the new platform version.</p> <p>Elastic Beanstalk applies these tags only to the platform version. Environments that you create using the platform version don't inherit the tags.</p>"
+        }, 
+        "Tags":{ 
+          "shape":"Tags", 
+          "documentation":"<p>Specifies the tags applied to the new platform version.</p> <p>Elastic Beanstalk applies these tags only to the platform version. Environments that you create using the platform version don't inherit the tags.</p>" 
         }
       },
       "documentation":"<p>Request to create a new platform version.</p>"
@@ -1902,7 +1902,7 @@
         },
         "HealthStatus":{
           "shape":"String",
-          "documentation":"<p>The <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">health status</a> of the environment. For example, <code>Ok</code>.</p>"
+          "documentation":"<p>The <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">health status</a> of the environment. For example, <code>Ok</code>.</p>" 
         },
         "Status":{
           "shape":"EnvironmentHealth",
@@ -1910,7 +1910,7 @@
         },
         "Color":{
           "shape":"String",
-          "documentation":"<p>The <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">health color</a> of the environment.</p>"
+          "documentation":"<p>The <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">health color</a> of the environment.</p>" 
         },
         "Causes":{
           "shape":"Causes",
@@ -1947,7 +1947,7 @@
           "documentation":"<p>The pagination token returned by a previous request.</p>"
         },
         "MaxItems":{
-          "shape":"ManagedActionHistoryMaxItems",
+          "shape":"ManagedActionHistoryMaxItems", 
           "documentation":"<p>The maximum number of items to return for a single request.</p>"
         }
       },
@@ -2072,7 +2072,7 @@
         },
         "PlatformArn":{
           "shape":"PlatformArn",
-          "documentation":"<p>The ARN of a custom platform version. If specified, AWS Elastic Beanstalk restricts the returned descriptions to those associated with this custom platform version.</p>"
+          "documentation":"<p>The ARN of a custom platform version. If specified, AWS Elastic Beanstalk restricts the returned descriptions to those associated with this custom platform version.</p>" 
         },
         "RequestId":{
           "shape":"RequestId",
@@ -2128,7 +2128,7 @@
       "members":{
         "InstanceHealthList":{
           "shape":"InstanceHealthList",
-          "documentation":"<p>Detailed health information about each instance.</p> <p>The output differs slightly between Linux and Windows environments. There is a difference in the members that are supported under the <code>&lt;CPUUtilization&gt;</code> type.</p>"
+          "documentation":"<p>Detailed health information about each instance.</p> <p>The output differs slightly between Linux and Windows environments. There is a difference in the members that are supported under the <code>&lt;CPUUtilization&gt;</code> type.</p>" 
         },
         "RefreshedAt":{
           "shape":"RefreshedAt",
@@ -2146,7 +2146,7 @@
       "members":{
         "PlatformArn":{
           "shape":"PlatformArn",
-          "documentation":"<p>The ARN of the platform version.</p>"
+          "documentation":"<p>The ARN of the platform version.</p>" 
         }
       }
     },
@@ -2155,7 +2155,7 @@
       "members":{
         "PlatformDescription":{
           "shape":"PlatformDescription",
-          "documentation":"<p>Detailed information about the platform version.</p>"
+          "documentation":"<p>Detailed information about the platform version.</p>" 
         }
       }
     },
@@ -2163,17 +2163,17 @@
       "type":"string",
       "max":200
     },
-    "DisassociateEnvironmentOperationsRoleMessage":{
-      "type":"structure",
-      "required":["EnvironmentName"],
-      "members":{
-        "EnvironmentName":{
-          "shape":"EnvironmentName",
-          "documentation":"<p>The name of the environment from which to disassociate the operations role.</p>"
-        }
-      },
-      "documentation":"<p>Request to disassociate the operations role from an environment.</p>"
-    },
+    "DisassociateEnvironmentOperationsRoleMessage":{ 
+      "type":"structure", 
+      "required":["EnvironmentName"], 
+      "members":{ 
+        "EnvironmentName":{ 
+          "shape":"EnvironmentName", 
+          "documentation":"<p>The name of the environment from which to disassociate the operations role.</p>" 
+        } 
+      }, 
+      "documentation":"<p>Request to disassociate the operations role from an environment.</p>" 
+    }, 
     "Ec2InstanceId":{"type":"string"},
     "ElasticBeanstalkServiceException":{
       "type":"structure",
@@ -2213,7 +2213,7 @@
         },
         "PlatformArn":{
           "shape":"PlatformArn",
-          "documentation":"<p>The ARN of the platform version.</p>"
+          "documentation":"<p>The ARN of the platform version.</p>" 
         },
         "TemplateName":{
           "shape":"ConfigurationTemplateName",
@@ -2249,11 +2249,11 @@
         },
         "Health":{
           "shape":"EnvironmentHealth",
-          "documentation":"<p>Describes the health status of the environment. AWS Elastic Beanstalk indicates the failure levels for a running environment:</p> <ul> <li> <p> <code>Red</code>: Indicates the environment is not responsive. Occurs when three or more consecutive failures occur for an environment.</p> </li> <li> <p> <code>Yellow</code>: Indicates that something is wrong. Occurs when two consecutive failures occur for an environment.</p> </li> <li> <p> <code>Green</code>: Indicates the environment is healthy and fully functional.</p> </li> <li> <p> <code>Grey</code>: Default health for a new environment. The environment is not fully launched and health checks have not started or health checks are suspended during an <code>UpdateEnvironment</code> or <code>RestartEnvironment</code> request.</p> </li> </ul> <p> Default: <code>Grey</code> </p>"
+          "documentation":"<p>Describes the health status of the environment. AWS Elastic Beanstalk indicates the failure levels for a running environment:</p> <ul> <li> <p> <code>Red</code>: Indicates the environment is not responsive. Occurs when three or more consecutive failures occur for an environment.</p> </li> <li> <p> <code>Yellow</code>: Indicates that something is wrong. Occurs when two consecutive failures occur for an environment.</p> </li> <li> <p> <code>Green</code>: Indicates the environment is healthy and fully functional.</p> </li> <li> <p> <code>Grey</code>: Default health for a new environment. The environment is not fully launched and health checks have not started or health checks are suspended during an <code>UpdateEnvironment</code> or <code>RestartEnvironment</code> request.</p> </li> </ul> <p> Default: <code>Grey</code> </p>" 
         },
         "HealthStatus":{
           "shape":"EnvironmentHealthStatus",
-          "documentation":"<p>Returns the health status of the application running in your environment. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">Health Colors and Statuses</a>.</p>"
+          "documentation":"<p>Returns the health status of the application running in your environment. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">Health Colors and Statuses</a>.</p>" 
         },
         "Resources":{
           "shape":"EnvironmentResourcesDescription",
@@ -2270,10 +2270,10 @@
         "EnvironmentArn":{
           "shape":"EnvironmentArn",
           "documentation":"<p>The environment's Amazon Resource Name (ARN), which can be used in other API requests that require an ARN.</p>"
-        },
-        "OperationsRole":{
-          "shape":"OperationsRole",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the environment's operations role. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/iam-operationsrole.html\">Operations roles</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p>"
+        }, 
+        "OperationsRole":{ 
+          "shape":"OperationsRole", 
+          "documentation":"<p>The Amazon Resource Name (ARN) of the environment's operations role. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/iam-operationsrole.html\">Operations roles</a> in the <i>AWS Elastic Beanstalk Developer Guide</i>.</p>" 
         }
       },
       "documentation":"<p>Describes the properties of an environment.</p>"
@@ -2358,7 +2358,7 @@
         },
         "Message":{
           "shape":"Message",
-          "documentation":"<p>The retrieved information. Currently contains a presigned Amazon S3 URL. The files are deleted after 15 minutes.</p> <p>Anyone in possession of this URL can access the files before they are deleted. Make the URL available only to trusted parties.</p>"
+          "documentation":"<p>The retrieved information. Currently contains a presigned Amazon S3 URL. The files are deleted after 15 minutes.</p> <p>Anyone in possession of this URL can access the files before they are deleted. Make the URL available only to trusted parties.</p>" 
         }
       },
       "documentation":"<p>The information retrieved from the Amazon EC2 instances.</p>"
@@ -2386,7 +2386,7 @@
           "documentation":"<p>The name of the linked environment (the dependency).</p>"
         }
       },
-      "documentation":"<p>A link to another environment, defined in the environment's manifest. Links provide connection information in system properties that can be used to connect to another environment in the same group. See <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-cfg-manifest.html\">Environment Manifest (env.yaml)</a> for details.</p>"
+      "documentation":"<p>A link to another environment, defined in the environment's manifest. Links provide connection information in system properties that can be used to connect to another environment in the same group. See <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-cfg-manifest.html\">Environment Manifest (env.yaml)</a> for details.</p>" 
     },
     "EnvironmentLinks":{
       "type":"list",
@@ -2420,10 +2420,10 @@
           "shape":"LaunchConfigurationList",
           "documentation":"<p>The Auto Scaling launch configurations in use by this environment.</p>"
         },
-        "LaunchTemplates":{
-          "shape":"LaunchTemplateList",
-          "documentation":"<p>The Amazon EC2 launch templates in use by this environment.</p>"
-        },
+        "LaunchTemplates":{ 
+          "shape":"LaunchTemplateList", 
+          "documentation":"<p>The Amazon EC2 launch templates in use by this environment.</p>" 
+        }, 
         "LoadBalancers":{
           "shape":"LoadBalancerList",
           "documentation":"<p>The LoadBalancers in use by this environment.</p>"
@@ -2462,11 +2462,11 @@
     "EnvironmentStatus":{
       "type":"string",
       "enum":[
-        "Aborting",
+        "Aborting", 
         "Launching",
         "Updating",
-        "LinkingFrom",
-        "LinkingTo",
+        "LinkingFrom", 
+        "LinkingTo", 
         "Ready",
         "Terminating",
         "Terminated"
@@ -2477,11 +2477,11 @@
       "members":{
         "Name":{
           "shape":"String",
-          "documentation":"<p>The name of this environment tier.</p> <p>Valid values:</p> <ul> <li> <p>For <i>Web server tier</i> – <code>WebServer</code> </p> </li> <li> <p>For <i>Worker tier</i> – <code>Worker</code> </p> </li> </ul>"
+          "documentation":"<p>The name of this environment tier.</p> <p>Valid values:</p> <ul> <li> <p>For <i>Web server tier</i> – <code>WebServer</code> </p> </li> <li> <p>For <i>Worker tier</i> – <code>Worker</code> </p> </li> </ul>" 
         },
         "Type":{
           "shape":"String",
-          "documentation":"<p>The type of this environment tier.</p> <p>Valid values:</p> <ul> <li> <p>For <i>Web server tier</i> – <code>Standard</code> </p> </li> <li> <p>For <i>Worker tier</i> – <code>SQS/HTTP</code> </p> </li> </ul>"
+          "documentation":"<p>The type of this environment tier.</p> <p>Valid values:</p> <ul> <li> <p>For <i>Web server tier</i> – <code>Standard</code> </p> </li> <li> <p>For <i>Worker tier</i> – <code>SQS/HTTP</code> </p> </li> </ul>" 
         },
         "Version":{
           "shape":"String",
@@ -2520,7 +2520,7 @@
         },
         "PlatformArn":{
           "shape":"PlatformArn",
-          "documentation":"<p>The ARN of the platform version.</p>"
+          "documentation":"<p>The ARN of the platform version.</p>" 
         },
         "RequestId":{
           "shape":"RequestId",
@@ -2640,7 +2640,7 @@
           "documentation":"<p> <b>Red.</b> The health agent is reporting a very high number of request failures or other issues for an instance or environment.</p>"
         }
       },
-      "documentation":"<p>Represents summary information about the health of an instance. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">Health Colors and Statuses</a>.</p>"
+      "documentation":"<p>Represents summary information about the health of an instance. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">Health Colors and Statuses</a>.</p>" 
     },
     "InstanceId":{
       "type":"string",
@@ -2748,20 +2748,20 @@
       "type":"list",
       "member":{"shape":"LaunchConfiguration"}
     },
-    "LaunchTemplate":{
-      "type":"structure",
-      "members":{
-        "Id":{
-          "shape":"ResourceId",
-          "documentation":"<p>The ID of the launch template.</p>"
-        }
-      },
-      "documentation":"<p>Describes an Amazon EC2 launch template.</p>"
-    },
-    "LaunchTemplateList":{
-      "type":"list",
-      "member":{"shape":"LaunchTemplate"}
-    },
+    "LaunchTemplate":{ 
+      "type":"structure", 
+      "members":{ 
+        "Id":{ 
+          "shape":"ResourceId", 
+          "documentation":"<p>The ID of the launch template.</p>" 
+        } 
+      }, 
+      "documentation":"<p>Describes an Amazon EC2 launch template.</p>" 
+    }, 
+    "LaunchTemplateList":{ 
+      "type":"list", 
+      "member":{"shape":"LaunchTemplate"} 
+    }, 
     "LaunchedAt":{"type":"timestamp"},
     "ListAvailableSolutionStacksResultMessage":{
       "type":"structure",
@@ -2777,50 +2777,50 @@
       },
       "documentation":"<p>A list of available AWS Elastic Beanstalk solution stacks.</p>"
     },
-    "ListPlatformBranchesRequest":{
-      "type":"structure",
-      "members":{
-        "Filters":{
-          "shape":"SearchFilters",
-          "documentation":"<p>Criteria for restricting the resulting list of platform branches. The filter is evaluated as a logical conjunction (AND) of the separate <code>SearchFilter</code> terms.</p> <p>The following list shows valid attribute values for each of the <code>SearchFilter</code> terms. Most operators take a single value. The <code>in</code> and <code>not_in</code> operators can take multiple values.</p> <ul> <li> <p> <code>Attribute = BranchName</code>:</p> <ul> <li> <p> <code>Operator</code>: <code>=</code> | <code>!=</code> | <code>begins_with</code> | <code>ends_with</code> | <code>contains</code> | <code>in</code> | <code>not_in</code> </p> </li> </ul> </li> <li> <p> <code>Attribute = LifecycleState</code>:</p> <ul> <li> <p> <code>Operator</code>: <code>=</code> | <code>!=</code> | <code>in</code> | <code>not_in</code> </p> </li> <li> <p> <code>Values</code>: <code>beta</code> | <code>supported</code> | <code>deprecated</code> | <code>retired</code> </p> </li> </ul> </li> <li> <p> <code>Attribute = PlatformName</code>:</p> <ul> <li> <p> <code>Operator</code>: <code>=</code> | <code>!=</code> | <code>begins_with</code> | <code>ends_with</code> | <code>contains</code> | <code>in</code> | <code>not_in</code> </p> </li> </ul> </li> <li> <p> <code>Attribute = TierType</code>:</p> <ul> <li> <p> <code>Operator</code>: <code>=</code> | <code>!=</code> </p> </li> <li> <p> <code>Values</code>: <code>WebServer/Standard</code> | <code>Worker/SQS/HTTP</code> </p> </li> </ul> </li> </ul> <p>Array size: limited to 10 <code>SearchFilter</code> objects.</p> <p>Within each <code>SearchFilter</code> item, the <code>Values</code> array is limited to 10 items.</p>"
-        },
-        "MaxRecords":{
-          "shape":"PlatformBranchMaxRecords",
-          "documentation":"<p>The maximum number of platform branch values returned in one call.</p>"
-        },
-        "NextToken":{
-          "shape":"Token",
-          "documentation":"<p>For a paginated request. Specify a token from a previous response page to retrieve the next response page. All other parameter values must be identical to the ones specified in the initial request.</p> <p>If no <code>NextToken</code> is specified, the first page is retrieved.</p>"
-        }
-      }
-    },
-    "ListPlatformBranchesResult":{
-      "type":"structure",
-      "members":{
-        "PlatformBranchSummaryList":{
-          "shape":"PlatformBranchSummaryList",
-          "documentation":"<p>Summary information about the platform branches.</p>"
-        },
-        "NextToken":{
-          "shape":"Token",
-          "documentation":"<p>In a paginated request, if this value isn't <code>null</code>, it's the token that you can pass in a subsequent request to get the next response page.</p>"
-        }
-      }
-    },
+    "ListPlatformBranchesRequest":{ 
+      "type":"structure", 
+      "members":{ 
+        "Filters":{ 
+          "shape":"SearchFilters", 
+          "documentation":"<p>Criteria for restricting the resulting list of platform branches. The filter is evaluated as a logical conjunction (AND) of the separate <code>SearchFilter</code> terms.</p> <p>The following list shows valid attribute values for each of the <code>SearchFilter</code> terms. Most operators take a single value. The <code>in</code> and <code>not_in</code> operators can take multiple values.</p> <ul> <li> <p> <code>Attribute = BranchName</code>:</p> <ul> <li> <p> <code>Operator</code>: <code>=</code> | <code>!=</code> | <code>begins_with</code> | <code>ends_with</code> | <code>contains</code> | <code>in</code> | <code>not_in</code> </p> </li> </ul> </li> <li> <p> <code>Attribute = LifecycleState</code>:</p> <ul> <li> <p> <code>Operator</code>: <code>=</code> | <code>!=</code> | <code>in</code> | <code>not_in</code> </p> </li> <li> <p> <code>Values</code>: <code>beta</code> | <code>supported</code> | <code>deprecated</code> | <code>retired</code> </p> </li> </ul> </li> <li> <p> <code>Attribute = PlatformName</code>:</p> <ul> <li> <p> <code>Operator</code>: <code>=</code> | <code>!=</code> | <code>begins_with</code> | <code>ends_with</code> | <code>contains</code> | <code>in</code> | <code>not_in</code> </p> </li> </ul> </li> <li> <p> <code>Attribute = TierType</code>:</p> <ul> <li> <p> <code>Operator</code>: <code>=</code> | <code>!=</code> </p> </li> <li> <p> <code>Values</code>: <code>WebServer/Standard</code> | <code>Worker/SQS/HTTP</code> </p> </li> </ul> </li> </ul> <p>Array size: limited to 10 <code>SearchFilter</code> objects.</p> <p>Within each <code>SearchFilter</code> item, the <code>Values</code> array is limited to 10 items.</p>" 
+        }, 
+        "MaxRecords":{ 
+          "shape":"PlatformBranchMaxRecords", 
+          "documentation":"<p>The maximum number of platform branch values returned in one call.</p>" 
+        }, 
+        "NextToken":{ 
+          "shape":"Token", 
+          "documentation":"<p>For a paginated request. Specify a token from a previous response page to retrieve the next response page. All other parameter values must be identical to the ones specified in the initial request.</p> <p>If no <code>NextToken</code> is specified, the first page is retrieved.</p>" 
+        } 
+      } 
+    }, 
+    "ListPlatformBranchesResult":{ 
+      "type":"structure", 
+      "members":{ 
+        "PlatformBranchSummaryList":{ 
+          "shape":"PlatformBranchSummaryList", 
+          "documentation":"<p>Summary information about the platform branches.</p>" 
+        }, 
+        "NextToken":{ 
+          "shape":"Token", 
+          "documentation":"<p>In a paginated request, if this value isn't <code>null</code>, it's the token that you can pass in a subsequent request to get the next response page.</p>" 
+        } 
+      } 
+    }, 
     "ListPlatformVersionsRequest":{
       "type":"structure",
       "members":{
         "Filters":{
           "shape":"PlatformFilters",
-          "documentation":"<p>Criteria for restricting the resulting list of platform versions. The filter is interpreted as a logical conjunction (AND) of the separate <code>PlatformFilter</code> terms.</p>"
+          "documentation":"<p>Criteria for restricting the resulting list of platform versions. The filter is interpreted as a logical conjunction (AND) of the separate <code>PlatformFilter</code> terms.</p>" 
         },
         "MaxRecords":{
           "shape":"PlatformMaxRecords",
-          "documentation":"<p>The maximum number of platform version values returned in one call.</p>"
+          "documentation":"<p>The maximum number of platform version values returned in one call.</p>" 
         },
         "NextToken":{
           "shape":"Token",
-          "documentation":"<p>For a paginated request. Specify a token from a previous response page to retrieve the next response page. All other parameter values must be identical to the ones specified in the initial request.</p> <p>If no <code>NextToken</code> is specified, the first page is retrieved.</p>"
+          "documentation":"<p>For a paginated request. Specify a token from a previous response page to retrieve the next response page. All other parameter values must be identical to the ones specified in the initial request.</p> <p>If no <code>NextToken</code> is specified, the first page is retrieved.</p>" 
         }
       }
     },
@@ -2829,11 +2829,11 @@
       "members":{
         "PlatformSummaryList":{
           "shape":"PlatformSummaryList",
-          "documentation":"<p>Summary information about the platform versions.</p>"
+          "documentation":"<p>Summary information about the platform versions.</p>" 
         },
         "NextToken":{
           "shape":"Token",
-          "documentation":"<p>In a paginated request, if this value isn't <code>null</code>, it's the token that you can pass in a subsequent request to get the next response page.</p>"
+          "documentation":"<p>In a paginated request, if this value isn't <code>null</code>, it's the token that you can pass in a subsequent request to get the next response page.</p>" 
         }
       }
     },
@@ -2843,7 +2843,7 @@
       "members":{
         "ResourceArn":{
           "shape":"ResourceArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the resouce for which a tag list is requested.</p> <p>Must be the ARN of an Elastic Beanstalk resource.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the resouce for which a tag list is requested.</p> <p>Must be the ARN of an Elastic Beanstalk resource.</p>" 
         }
       }
     },
@@ -2973,11 +2973,11 @@
       "max":100,
       "min":1
     },
-    "ManagedActionHistoryMaxItems":{
-      "type":"integer",
-      "max":100,
-      "min":1
-    },
+    "ManagedActionHistoryMaxItems":{ 
+      "type":"integer", 
+      "max":100, 
+      "min":1 
+    }, 
     "ManagedActionInvalidStateException":{
       "type":"structure",
       "members":{
@@ -3066,11 +3066,11 @@
       },
       "exception":true
     },
-    "OperationsRole":{
-      "type":"string",
-      "max":256,
-      "min":1
-    },
+    "OperationsRole":{ 
+      "type":"string", 
+      "max":256, 
+      "min":1 
+    }, 
     "OptionNamespace":{"type":"string"},
     "OptionRestrictionMaxLength":{"type":"integer"},
     "OptionRestrictionMaxValue":{"type":"integer"},
@@ -3112,149 +3112,149 @@
       "member":{"shape":"OptionSpecification"}
     },
     "PlatformArn":{"type":"string"},
-    "PlatformBranchLifecycleState":{"type":"string"},
-    "PlatformBranchMaxRecords":{
-      "type":"integer",
-      "min":1
-    },
-    "PlatformBranchSummary":{
-      "type":"structure",
-      "members":{
-        "PlatformName":{
-          "shape":"PlatformName",
-          "documentation":"<p>The name of the platform to which this platform branch belongs.</p>"
-        },
-        "BranchName":{
-          "shape":"BranchName",
-          "documentation":"<p>The name of the platform branch.</p>"
-        },
-        "LifecycleState":{
-          "shape":"PlatformBranchLifecycleState",
-          "documentation":"<p>The support life cycle state of the platform branch.</p> <p>Possible values: <code>beta</code> | <code>supported</code> | <code>deprecated</code> | <code>retired</code> </p>"
-        },
-        "BranchOrder":{
-          "shape":"BranchOrder",
-          "documentation":"<p>An ordinal number that designates the order in which platform branches have been added to a platform. This can be helpful, for example, if your code calls the <code>ListPlatformBranches</code> action and then displays a list of platform branches.</p> <p>A larger <code>BranchOrder</code> value designates a newer platform branch within the platform.</p>"
-        },
-        "SupportedTierList":{
-          "shape":"SupportedTierList",
-          "documentation":"<p>The environment tiers that platform versions in this branch support.</p> <p>Possible values: <code>WebServer/Standard</code> | <code>Worker/SQS/HTTP</code> </p>"
-        }
-      },
-      "documentation":"<p>Summary information about a platform branch.</p>"
-    },
-    "PlatformBranchSummaryList":{
-      "type":"list",
-      "member":{"shape":"PlatformBranchSummary"}
-    },
+    "PlatformBranchLifecycleState":{"type":"string"}, 
+    "PlatformBranchMaxRecords":{ 
+      "type":"integer", 
+      "min":1 
+    }, 
+    "PlatformBranchSummary":{ 
+      "type":"structure", 
+      "members":{ 
+        "PlatformName":{ 
+          "shape":"PlatformName", 
+          "documentation":"<p>The name of the platform to which this platform branch belongs.</p>" 
+        }, 
+        "BranchName":{ 
+          "shape":"BranchName", 
+          "documentation":"<p>The name of the platform branch.</p>" 
+        }, 
+        "LifecycleState":{ 
+          "shape":"PlatformBranchLifecycleState", 
+          "documentation":"<p>The support life cycle state of the platform branch.</p> <p>Possible values: <code>beta</code> | <code>supported</code> | <code>deprecated</code> | <code>retired</code> </p>" 
+        }, 
+        "BranchOrder":{ 
+          "shape":"BranchOrder", 
+          "documentation":"<p>An ordinal number that designates the order in which platform branches have been added to a platform. This can be helpful, for example, if your code calls the <code>ListPlatformBranches</code> action and then displays a list of platform branches.</p> <p>A larger <code>BranchOrder</code> value designates a newer platform branch within the platform.</p>" 
+        }, 
+        "SupportedTierList":{ 
+          "shape":"SupportedTierList", 
+          "documentation":"<p>The environment tiers that platform versions in this branch support.</p> <p>Possible values: <code>WebServer/Standard</code> | <code>Worker/SQS/HTTP</code> </p>" 
+        } 
+      }, 
+      "documentation":"<p>Summary information about a platform branch.</p>" 
+    }, 
+    "PlatformBranchSummaryList":{ 
+      "type":"list", 
+      "member":{"shape":"PlatformBranchSummary"} 
+    }, 
     "PlatformCategory":{"type":"string"},
     "PlatformDescription":{
       "type":"structure",
       "members":{
         "PlatformArn":{
           "shape":"PlatformArn",
-          "documentation":"<p>The ARN of the platform version.</p>"
+          "documentation":"<p>The ARN of the platform version.</p>" 
         },
         "PlatformOwner":{
           "shape":"PlatformOwner",
-          "documentation":"<p>The AWS account ID of the person who created the platform version.</p>"
+          "documentation":"<p>The AWS account ID of the person who created the platform version.</p>" 
         },
         "PlatformName":{
           "shape":"PlatformName",
-          "documentation":"<p>The name of the platform version.</p>"
+          "documentation":"<p>The name of the platform version.</p>" 
         },
         "PlatformVersion":{
           "shape":"PlatformVersion",
-          "documentation":"<p>The version of the platform version.</p>"
+          "documentation":"<p>The version of the platform version.</p>" 
         },
         "SolutionStackName":{
           "shape":"SolutionStackName",
-          "documentation":"<p>The name of the solution stack used by the platform version.</p>"
+          "documentation":"<p>The name of the solution stack used by the platform version.</p>" 
         },
         "PlatformStatus":{
           "shape":"PlatformStatus",
-          "documentation":"<p>The status of the platform version.</p>"
+          "documentation":"<p>The status of the platform version.</p>" 
         },
         "DateCreated":{
           "shape":"CreationDate",
-          "documentation":"<p>The date when the platform version was created.</p>"
+          "documentation":"<p>The date when the platform version was created.</p>" 
         },
         "DateUpdated":{
           "shape":"UpdateDate",
-          "documentation":"<p>The date when the platform version was last updated.</p>"
+          "documentation":"<p>The date when the platform version was last updated.</p>" 
         },
         "PlatformCategory":{
           "shape":"PlatformCategory",
-          "documentation":"<p>The category of the platform version.</p>"
+          "documentation":"<p>The category of the platform version.</p>" 
         },
         "Description":{
           "shape":"Description",
-          "documentation":"<p>The description of the platform version.</p>"
+          "documentation":"<p>The description of the platform version.</p>" 
         },
         "Maintainer":{
           "shape":"Maintainer",
-          "documentation":"<p>Information about the maintainer of the platform version.</p>"
+          "documentation":"<p>Information about the maintainer of the platform version.</p>" 
         },
         "OperatingSystemName":{
           "shape":"OperatingSystemName",
-          "documentation":"<p>The operating system used by the platform version.</p>"
+          "documentation":"<p>The operating system used by the platform version.</p>" 
         },
         "OperatingSystemVersion":{
           "shape":"OperatingSystemVersion",
-          "documentation":"<p>The version of the operating system used by the platform version.</p>"
+          "documentation":"<p>The version of the operating system used by the platform version.</p>" 
         },
         "ProgrammingLanguages":{
           "shape":"PlatformProgrammingLanguages",
-          "documentation":"<p>The programming languages supported by the platform version.</p>"
+          "documentation":"<p>The programming languages supported by the platform version.</p>" 
         },
         "Frameworks":{
           "shape":"PlatformFrameworks",
-          "documentation":"<p>The frameworks supported by the platform version.</p>"
+          "documentation":"<p>The frameworks supported by the platform version.</p>" 
         },
         "CustomAmiList":{
           "shape":"CustomAmiList",
-          "documentation":"<p>The custom AMIs supported by the platform version.</p>"
+          "documentation":"<p>The custom AMIs supported by the platform version.</p>" 
         },
         "SupportedTierList":{
           "shape":"SupportedTierList",
-          "documentation":"<p>The tiers supported by the platform version.</p>"
+          "documentation":"<p>The tiers supported by the platform version.</p>" 
         },
         "SupportedAddonList":{
           "shape":"SupportedAddonList",
-          "documentation":"<p>The additions supported by the platform version.</p>"
-        },
-        "PlatformLifecycleState":{
-          "shape":"PlatformLifecycleState",
-          "documentation":"<p>The state of the platform version in its lifecycle.</p> <p>Possible values: <code>Recommended</code> | <code>null</code> </p> <p>If a null value is returned, the platform version isn't the recommended one for its branch. Each platform branch has a single recommended platform version, typically the most recent one.</p>"
-        },
-        "PlatformBranchName":{
-          "shape":"BranchName",
-          "documentation":"<p>The platform branch to which the platform version belongs.</p>"
-        },
-        "PlatformBranchLifecycleState":{
-          "shape":"PlatformBranchLifecycleState",
-          "documentation":"<p>The state of the platform version's branch in its lifecycle.</p> <p>Possible values: <code>Beta</code> | <code>Supported</code> | <code>Deprecated</code> | <code>Retired</code> </p>"
+          "documentation":"<p>The additions supported by the platform version.</p>" 
+        }, 
+        "PlatformLifecycleState":{ 
+          "shape":"PlatformLifecycleState", 
+          "documentation":"<p>The state of the platform version in its lifecycle.</p> <p>Possible values: <code>Recommended</code> | <code>null</code> </p> <p>If a null value is returned, the platform version isn't the recommended one for its branch. Each platform branch has a single recommended platform version, typically the most recent one.</p>" 
+        }, 
+        "PlatformBranchName":{ 
+          "shape":"BranchName", 
+          "documentation":"<p>The platform branch to which the platform version belongs.</p>" 
+        }, 
+        "PlatformBranchLifecycleState":{ 
+          "shape":"PlatformBranchLifecycleState", 
+          "documentation":"<p>The state of the platform version's branch in its lifecycle.</p> <p>Possible values: <code>Beta</code> | <code>Supported</code> | <code>Deprecated</code> | <code>Retired</code> </p>" 
         }
       },
-      "documentation":"<p>Detailed information about a platform version.</p>"
+      "documentation":"<p>Detailed information about a platform version.</p>" 
     },
     "PlatformFilter":{
       "type":"structure",
       "members":{
         "Type":{
           "shape":"PlatformFilterType",
-          "documentation":"<p>The platform version attribute to which the filter values are applied.</p> <p>Valid values: <code>PlatformName</code> | <code>PlatformVersion</code> | <code>PlatformStatus</code> | <code>PlatformBranchName</code> | <code>PlatformLifecycleState</code> | <code>PlatformOwner</code> | <code>SupportedTier</code> | <code>SupportedAddon</code> | <code>ProgrammingLanguageName</code> | <code>OperatingSystemName</code> </p>"
+          "documentation":"<p>The platform version attribute to which the filter values are applied.</p> <p>Valid values: <code>PlatformName</code> | <code>PlatformVersion</code> | <code>PlatformStatus</code> | <code>PlatformBranchName</code> | <code>PlatformLifecycleState</code> | <code>PlatformOwner</code> | <code>SupportedTier</code> | <code>SupportedAddon</code> | <code>ProgrammingLanguageName</code> | <code>OperatingSystemName</code> </p>" 
         },
         "Operator":{
           "shape":"PlatformFilterOperator",
-          "documentation":"<p>The operator to apply to the <code>Type</code> with each of the <code>Values</code>.</p> <p>Valid values: <code>=</code> | <code>!=</code> | <code>&lt;</code> | <code>&lt;=</code> | <code>&gt;</code> | <code>&gt;=</code> | <code>contains</code> | <code>begins_with</code> | <code>ends_with</code> </p>"
+          "documentation":"<p>The operator to apply to the <code>Type</code> with each of the <code>Values</code>.</p> <p>Valid values: <code>=</code> | <code>!=</code> | <code>&lt;</code> | <code>&lt;=</code> | <code>&gt;</code> | <code>&gt;=</code> | <code>contains</code> | <code>begins_with</code> | <code>ends_with</code> </p>" 
         },
         "Values":{
           "shape":"PlatformFilterValueList",
-          "documentation":"<p>The list of values applied to the filtering platform version attribute. Only one value is supported for all current operators.</p> <p>The following list shows valid filter values for some filter attributes.</p> <ul> <li> <p> <code>PlatformStatus</code>: <code>Creating</code> | <code>Failed</code> | <code>Ready</code> | <code>Deleting</code> | <code>Deleted</code> </p> </li> <li> <p> <code>PlatformLifecycleState</code>: <code>recommended</code> </p> </li> <li> <p> <code>SupportedTier</code>: <code>WebServer/Standard</code> | <code>Worker/SQS/HTTP</code> </p> </li> <li> <p> <code>SupportedAddon</code>: <code>Log/S3</code> | <code>Monitoring/Healthd</code> | <code>WorkerDaemon/SQSD</code> </p> </li> </ul>"
+          "documentation":"<p>The list of values applied to the filtering platform version attribute. Only one value is supported for all current operators.</p> <p>The following list shows valid filter values for some filter attributes.</p> <ul> <li> <p> <code>PlatformStatus</code>: <code>Creating</code> | <code>Failed</code> | <code>Ready</code> | <code>Deleting</code> | <code>Deleted</code> </p> </li> <li> <p> <code>PlatformLifecycleState</code>: <code>recommended</code> </p> </li> <li> <p> <code>SupportedTier</code>: <code>WebServer/Standard</code> | <code>Worker/SQS/HTTP</code> </p> </li> <li> <p> <code>SupportedAddon</code>: <code>Log/S3</code> | <code>Monitoring/Healthd</code> | <code>WorkerDaemon/SQSD</code> </p> </li> </ul>" 
         }
       },
-      "documentation":"<p>Describes criteria to restrict the results when listing platform versions.</p> <p>The filter is evaluated as follows: <code>Type Operator Values[1]</code> </p>"
+      "documentation":"<p>Describes criteria to restrict the results when listing platform versions.</p> <p>The filter is evaluated as follows: <code>Type Operator Values[1]</code> </p>" 
     },
     "PlatformFilterOperator":{"type":"string"},
     "PlatformFilterType":{"type":"string"},
@@ -3279,13 +3279,13 @@
           "documentation":"<p>The version of the framework.</p>"
         }
       },
-      "documentation":"<p>A framework supported by the platform.</p>"
+      "documentation":"<p>A framework supported by the platform.</p>" 
     },
     "PlatformFrameworks":{
       "type":"list",
       "member":{"shape":"PlatformFramework"}
     },
-    "PlatformLifecycleState":{"type":"string"},
+    "PlatformLifecycleState":{"type":"string"}, 
     "PlatformMaxRecords":{
       "type":"integer",
       "min":1
@@ -3325,54 +3325,54 @@
       "members":{
         "PlatformArn":{
           "shape":"PlatformArn",
-          "documentation":"<p>The ARN of the platform version.</p>"
+          "documentation":"<p>The ARN of the platform version.</p>" 
         },
         "PlatformOwner":{
           "shape":"PlatformOwner",
-          "documentation":"<p>The AWS account ID of the person who created the platform version.</p>"
+          "documentation":"<p>The AWS account ID of the person who created the platform version.</p>" 
         },
         "PlatformStatus":{
           "shape":"PlatformStatus",
-          "documentation":"<p>The status of the platform version. You can create an environment from the platform version once it is ready.</p>"
+          "documentation":"<p>The status of the platform version. You can create an environment from the platform version once it is ready.</p>" 
         },
         "PlatformCategory":{
           "shape":"PlatformCategory",
-          "documentation":"<p>The category of platform version.</p>"
+          "documentation":"<p>The category of platform version.</p>" 
         },
         "OperatingSystemName":{
           "shape":"OperatingSystemName",
-          "documentation":"<p>The operating system used by the platform version.</p>"
+          "documentation":"<p>The operating system used by the platform version.</p>" 
         },
         "OperatingSystemVersion":{
           "shape":"OperatingSystemVersion",
-          "documentation":"<p>The version of the operating system used by the platform version.</p>"
+          "documentation":"<p>The version of the operating system used by the platform version.</p>" 
         },
         "SupportedTierList":{
           "shape":"SupportedTierList",
-          "documentation":"<p>The tiers in which the platform version runs.</p>"
+          "documentation":"<p>The tiers in which the platform version runs.</p>" 
         },
         "SupportedAddonList":{
           "shape":"SupportedAddonList",
-          "documentation":"<p>The additions associated with the platform version.</p>"
-        },
-        "PlatformLifecycleState":{
-          "shape":"PlatformLifecycleState",
-          "documentation":"<p>The state of the platform version in its lifecycle.</p> <p>Possible values: <code>recommended</code> | empty</p> <p>If an empty value is returned, the platform version is supported but isn't the recommended one for its branch.</p>"
-        },
-        "PlatformVersion":{
-          "shape":"PlatformVersion",
-          "documentation":"<p>The version string of the platform version.</p>"
-        },
-        "PlatformBranchName":{
-          "shape":"BranchName",
-          "documentation":"<p>The platform branch to which the platform version belongs.</p>"
-        },
-        "PlatformBranchLifecycleState":{
-          "shape":"PlatformBranchLifecycleState",
-          "documentation":"<p>The state of the platform version's branch in its lifecycle.</p> <p>Possible values: <code>beta</code> | <code>supported</code> | <code>deprecated</code> | <code>retired</code> </p>"
+          "documentation":"<p>The additions associated with the platform version.</p>" 
+        }, 
+        "PlatformLifecycleState":{ 
+          "shape":"PlatformLifecycleState", 
+          "documentation":"<p>The state of the platform version in its lifecycle.</p> <p>Possible values: <code>recommended</code> | empty</p> <p>If an empty value is returned, the platform version is supported but isn't the recommended one for its branch.</p>" 
+        }, 
+        "PlatformVersion":{ 
+          "shape":"PlatformVersion", 
+          "documentation":"<p>The version string of the platform version.</p>" 
+        }, 
+        "PlatformBranchName":{ 
+          "shape":"BranchName", 
+          "documentation":"<p>The platform branch to which the platform version belongs.</p>" 
+        }, 
+        "PlatformBranchLifecycleState":{ 
+          "shape":"PlatformBranchLifecycleState", 
+          "documentation":"<p>The state of the platform version's branch in its lifecycle.</p> <p>Possible values: <code>beta</code> | <code>supported</code> | <code>deprecated</code> | <code>retired</code> </p>" 
         }
       },
-      "documentation":"<p>Summary information about a platform version.</p>"
+      "documentation":"<p>Summary information about a platform version.</p>" 
     },
     "PlatformSummaryList":{
       "type":"list",
@@ -3507,7 +3507,7 @@
       "members":{
         "ResourceArn":{
           "shape":"ResourceArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the resource for which a tag list was requested.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the resource for which a tag list was requested.</p>" 
         },
         "ResourceTags":{
           "shape":"TagList",
@@ -3617,35 +3617,35 @@
       "exception":true
     },
     "SampleTimestamp":{"type":"timestamp"},
-    "SearchFilter":{
-      "type":"structure",
-      "members":{
-        "Attribute":{
-          "shape":"SearchFilterAttribute",
-          "documentation":"<p>The result attribute to which the filter values are applied. Valid values vary by API action.</p>"
-        },
-        "Operator":{
-          "shape":"SearchFilterOperator",
-          "documentation":"<p>The operator to apply to the <code>Attribute</code> with each of the <code>Values</code>. Valid values vary by <code>Attribute</code>.</p>"
-        },
-        "Values":{
-          "shape":"SearchFilterValues",
-          "documentation":"<p>The list of values applied to the <code>Attribute</code> and <code>Operator</code> attributes. Number of values and valid values vary by <code>Attribute</code>.</p>"
-        }
-      },
-      "documentation":"<p>Describes criteria to restrict a list of results.</p> <p>For operators that apply a single value to the attribute, the filter is evaluated as follows: <code>Attribute Operator Values[1]</code> </p> <p>Some operators, e.g. <code>in</code>, can apply multiple values. In this case, the filter is evaluated as a logical union (OR) of applications of the operator to the attribute with each one of the values: <code>(Attribute Operator Values[1]) OR (Attribute Operator Values[2]) OR ...</code> </p> <p>The valid values for attributes of <code>SearchFilter</code> depend on the API action. For valid values, see the reference page for the API action you're calling that takes a <code>SearchFilter</code> parameter.</p>"
-    },
-    "SearchFilterAttribute":{"type":"string"},
-    "SearchFilterOperator":{"type":"string"},
-    "SearchFilterValue":{"type":"string"},
-    "SearchFilterValues":{
-      "type":"list",
-      "member":{"shape":"SearchFilterValue"}
-    },
-    "SearchFilters":{
-      "type":"list",
-      "member":{"shape":"SearchFilter"}
-    },
+    "SearchFilter":{ 
+      "type":"structure", 
+      "members":{ 
+        "Attribute":{ 
+          "shape":"SearchFilterAttribute", 
+          "documentation":"<p>The result attribute to which the filter values are applied. Valid values vary by API action.</p>" 
+        }, 
+        "Operator":{ 
+          "shape":"SearchFilterOperator", 
+          "documentation":"<p>The operator to apply to the <code>Attribute</code> with each of the <code>Values</code>. Valid values vary by <code>Attribute</code>.</p>" 
+        }, 
+        "Values":{ 
+          "shape":"SearchFilterValues", 
+          "documentation":"<p>The list of values applied to the <code>Attribute</code> and <code>Operator</code> attributes. Number of values and valid values vary by <code>Attribute</code>.</p>" 
+        } 
+      }, 
+      "documentation":"<p>Describes criteria to restrict a list of results.</p> <p>For operators that apply a single value to the attribute, the filter is evaluated as follows: <code>Attribute Operator Values[1]</code> </p> <p>Some operators, e.g. <code>in</code>, can apply multiple values. In this case, the filter is evaluated as a logical union (OR) of applications of the operator to the attribute with each one of the values: <code>(Attribute Operator Values[1]) OR (Attribute Operator Values[2]) OR ...</code> </p> <p>The valid values for attributes of <code>SearchFilter</code> depend on the API action. For valid values, see the reference page for the API action you're calling that takes a <code>SearchFilter</code> parameter.</p>" 
+    }, 
+    "SearchFilterAttribute":{"type":"string"}, 
+    "SearchFilterOperator":{"type":"string"}, 
+    "SearchFilterValue":{"type":"string"}, 
+    "SearchFilterValues":{ 
+      "type":"list", 
+      "member":{"shape":"SearchFilterValue"} 
+    }, 
+    "SearchFilters":{ 
+      "type":"list", 
+      "member":{"shape":"SearchFilter"} 
+    }, 
     "SingleInstanceHealth":{
       "type":"structure",
       "members":{
@@ -3655,11 +3655,11 @@
         },
         "HealthStatus":{
           "shape":"String",
-          "documentation":"<p>Returns the health status of the specified instance. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">Health Colors and Statuses</a>.</p>"
+          "documentation":"<p>Returns the health status of the specified instance. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">Health Colors and Statuses</a>.</p>" 
         },
         "Color":{
           "shape":"String",
-          "documentation":"<p>Represents the color indicator that gives you information about the health of the EC2 instance. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">Health Colors and Statuses</a>.</p>"
+          "documentation":"<p>Represents the color indicator that gives you information about the health of the EC2 instance. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-status.html\">Health Colors and Statuses</a>.</p>" 
         },
         "Causes":{
           "shape":"Causes",
@@ -3758,7 +3758,7 @@
           "documentation":"<p>The name of the configuration template.</p>"
         }
       },
-      "documentation":"<p>A specification for an environment configuration.</p>"
+      "documentation":"<p>A specification for an environment configuration.</p>" 
     },
     "SourceLocation":{
       "type":"string",
@@ -3844,7 +3844,7 @@
         },
         "LoadAverage":{
           "shape":"LoadAverage",
-          "documentation":"<p>Load average in the last 1-minute, 5-minute, and 15-minute periods. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-metrics.html#health-enhanced-metrics-os\">Operating System Metrics</a>.</p>"
+          "documentation":"<p>Load average in the last 1-minute, 5-minute, and 15-minute periods. For more information, see <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/health-enhanced-metrics.html#health-enhanced-metrics-os\">Operating System Metrics</a>.</p>" 
         }
       },
       "documentation":"<p>CPU utilization and load average metrics for an Amazon EC2 instance.</p>"
@@ -3899,7 +3899,7 @@
         },
         "TerminateResources":{
           "shape":"TerminateEnvironmentResources",
-          "documentation":"<p>Indicates whether the associated AWS resources should shut down when the environment is terminated:</p> <ul> <li> <p> <code>true</code>: The specified environment as well as the associated AWS resources, such as Auto Scaling group and LoadBalancer, are terminated.</p> </li> <li> <p> <code>false</code>: AWS Elastic Beanstalk resource management is removed from the environment, but the AWS resources continue to operate.</p> </li> </ul> <p> For more information, see the <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/ug/\"> AWS Elastic Beanstalk User Guide. </a> </p> <p> Default: <code>true</code> </p> <p> Valid Values: <code>true</code> | <code>false</code> </p>"
+          "documentation":"<p>Indicates whether the associated AWS resources should shut down when the environment is terminated:</p> <ul> <li> <p> <code>true</code>: The specified environment as well as the associated AWS resources, such as Auto Scaling group and LoadBalancer, are terminated.</p> </li> <li> <p> <code>false</code>: AWS Elastic Beanstalk resource management is removed from the environment, but the AWS resources continue to operate.</p> </li> </ul> <p> For more information, see the <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/ug/\"> AWS Elastic Beanstalk User Guide. </a> </p> <p> Default: <code>true</code> </p> <p> Valid Values: <code>true</code> | <code>false</code> </p>" 
         },
         "ForceTerminate":{
           "shape":"ForceTerminate",
@@ -4108,7 +4108,7 @@
         },
         "GroupName":{
           "shape":"GroupName",
-          "documentation":"<p>The name of the group to which the target environment belongs. Specify a group name only if the environment's name is specified in an environment manifest and not with the environment name or environment ID parameters. See <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-cfg-manifest.html\">Environment Manifest (env.yaml)</a> for details.</p>"
+          "documentation":"<p>The name of the group to which the target environment belongs. Specify a group name only if the environment's name is specified in an environment manifest and not with the environment name or environment ID parameters. See <a href=\"https://docs.aws.amazon.com/elasticbeanstalk/latest/dg/environment-cfg-manifest.html\">Environment Manifest (env.yaml)</a> for details.</p>" 
         },
         "Description":{
           "shape":"Description",
@@ -4151,15 +4151,15 @@
       "members":{
         "ResourceArn":{
           "shape":"ResourceArn",
-          "documentation":"<p>The Amazon Resource Name (ARN) of the resouce to be updated.</p> <p>Must be the ARN of an Elastic Beanstalk resource.</p>"
+          "documentation":"<p>The Amazon Resource Name (ARN) of the resouce to be updated.</p> <p>Must be the ARN of an Elastic Beanstalk resource.</p>" 
         },
         "TagsToAdd":{
           "shape":"TagList",
-          "documentation":"<p>A list of tags to add or update. If a key of an existing tag is added, the tag's value is updated.</p> <p>Specify at least one of these parameters: <code>TagsToAdd</code>, <code>TagsToRemove</code>.</p>"
+          "documentation":"<p>A list of tags to add or update. If a key of an existing tag is added, the tag's value is updated.</p> <p>Specify at least one of these parameters: <code>TagsToAdd</code>, <code>TagsToRemove</code>.</p>" 
         },
         "TagsToRemove":{
           "shape":"TagKeyList",
-          "documentation":"<p>A list of tag keys to remove. If a tag key doesn't exist, it is silently ignored.</p> <p>Specify at least one of these parameters: <code>TagsToAdd</code>, <code>TagsToRemove</code>.</p>"
+          "documentation":"<p>A list of tag keys to remove. If a tag key doesn't exist, it is silently ignored.</p> <p>Specify at least one of these parameters: <code>TagsToAdd</code>, <code>TagsToRemove</code>.</p>" 
         }
       }
     },
@@ -4239,5 +4239,5 @@
     },
     "VirtualizationType":{"type":"string"}
   },
-  "documentation":"<fullname>AWS Elastic Beanstalk</fullname> <p>AWS Elastic Beanstalk makes it easy for you to create, deploy, and manage scalable, fault-tolerant applications running on the Amazon Web Services cloud.</p> <p>For more information about this product, go to the <a href=\"http://aws.amazon.com/elasticbeanstalk/\">AWS Elastic Beanstalk</a> details page. The location of the latest AWS Elastic Beanstalk WSDL is <a href=\"https://elasticbeanstalk.s3.amazonaws.com/doc/2010-12-01/AWSElasticBeanstalk.wsdl\">https://elasticbeanstalk.s3.amazonaws.com/doc/2010-12-01/AWSElasticBeanstalk.wsdl</a>. To install the Software Development Kits (SDKs), Integrated Development Environment (IDE) Toolkits, and command line tools that enable you to access the API, go to <a href=\"http://aws.amazon.com/tools/\">Tools for Amazon Web Services</a>.</p> <p> <b>Endpoints</b> </p> <p>For a list of region-specific endpoints that AWS Elastic Beanstalk supports, go to <a href=\"https://docs.aws.amazon.com/general/latest/gr/rande.html#elasticbeanstalk_region\">Regions and Endpoints</a> in the <i>Amazon Web Services Glossary</i>.</p>"
+  "documentation":"<fullname>AWS Elastic Beanstalk</fullname> <p>AWS Elastic Beanstalk makes it easy for you to create, deploy, and manage scalable, fault-tolerant applications running on the Amazon Web Services cloud.</p> <p>For more information about this product, go to the <a href=\"http://aws.amazon.com/elasticbeanstalk/\">AWS Elastic Beanstalk</a> details page. The location of the latest AWS Elastic Beanstalk WSDL is <a href=\"https://elasticbeanstalk.s3.amazonaws.com/doc/2010-12-01/AWSElasticBeanstalk.wsdl\">https://elasticbeanstalk.s3.amazonaws.com/doc/2010-12-01/AWSElasticBeanstalk.wsdl</a>. To install the Software Development Kits (SDKs), Integrated Development Environment (IDE) Toolkits, and command line tools that enable you to access the API, go to <a href=\"http://aws.amazon.com/tools/\">Tools for Amazon Web Services</a>.</p> <p> <b>Endpoints</b> </p> <p>For a list of region-specific endpoints that AWS Elastic Beanstalk supports, go to <a href=\"https://docs.aws.amazon.com/general/latest/gr/rande.html#elasticbeanstalk_region\">Regions and Endpoints</a> in the <i>Amazon Web Services Glossary</i>.</p>" 
 }

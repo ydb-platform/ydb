@@ -35,7 +35,7 @@
 
 namespace llvm {
 
-class AAResults;
+class AAResults; 
 class BasicBlock;
 class BinaryOperator;
 class BranchInst;
@@ -48,8 +48,8 @@ class IntrinsicInst;
 class LazyValueInfo;
 class LoadInst;
 class PHINode;
-class SelectInst;
-class SwitchInst;
+class SelectInst; 
+class SwitchInst; 
 class TargetLibraryInfo;
 class Value;
 
@@ -86,7 +86,7 @@ enum ConstantPreference { WantInteger, WantBlockAddress };
 class JumpThreadingPass : public PassInfoMixin<JumpThreadingPass> {
   TargetLibraryInfo *TLI;
   LazyValueInfo *LVI;
-  AAResults *AA;
+  AAResults *AA; 
   DomTreeUpdater *DTU;
   std::unique_ptr<BlockFrequencyInfo> BFI;
   std::unique_ptr<BranchProbabilityInfo> BPI;
@@ -100,16 +100,16 @@ class JumpThreadingPass : public PassInfoMixin<JumpThreadingPass> {
 
   unsigned BBDupThreshold;
   unsigned DefaultBBDupThreshold;
-  bool InsertFreezeWhenUnfoldingSelect;
+  bool InsertFreezeWhenUnfoldingSelect; 
 
 public:
-  JumpThreadingPass(bool InsertFreezeWhenUnfoldingSelect = false, int T = -1);
+  JumpThreadingPass(bool InsertFreezeWhenUnfoldingSelect = false, int T = -1); 
 
   // Glue for old PM.
-  bool runImpl(Function &F, TargetLibraryInfo *TLI, LazyValueInfo *LVI,
-               AAResults *AA, DomTreeUpdater *DTU, bool HasProfileData,
-               std::unique_ptr<BlockFrequencyInfo> BFI,
-               std::unique_ptr<BranchProbabilityInfo> BPI);
+  bool runImpl(Function &F, TargetLibraryInfo *TLI, LazyValueInfo *LVI, 
+               AAResults *AA, DomTreeUpdater *DTU, bool HasProfileData, 
+               std::unique_ptr<BlockFrequencyInfo> BFI, 
+               std::unique_ptr<BranchProbabilityInfo> BPI); 
 
   PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
 
@@ -118,65 +118,65 @@ public:
     BPI.reset();
   }
 
-  void findLoopHeaders(Function &F);
-  bool processBlock(BasicBlock *BB);
-  bool maybeMergeBasicBlockIntoOnlyPred(BasicBlock *BB);
-  void updateSSA(BasicBlock *BB, BasicBlock *NewBB,
+  void findLoopHeaders(Function &F); 
+  bool processBlock(BasicBlock *BB); 
+  bool maybeMergeBasicBlockIntoOnlyPred(BasicBlock *BB); 
+  void updateSSA(BasicBlock *BB, BasicBlock *NewBB, 
                  DenseMap<Instruction *, Value *> &ValueMapping);
-  DenseMap<Instruction *, Value *> cloneInstructions(BasicBlock::iterator BI,
+  DenseMap<Instruction *, Value *> cloneInstructions(BasicBlock::iterator BI, 
                                                      BasicBlock::iterator BE,
                                                      BasicBlock *NewBB,
                                                      BasicBlock *PredBB);
-  bool tryThreadEdge(BasicBlock *BB,
+  bool tryThreadEdge(BasicBlock *BB, 
                      const SmallVectorImpl<BasicBlock *> &PredBBs,
                      BasicBlock *SuccBB);
-  void threadEdge(BasicBlock *BB, const SmallVectorImpl<BasicBlock *> &PredBBs,
+  void threadEdge(BasicBlock *BB, const SmallVectorImpl<BasicBlock *> &PredBBs, 
                   BasicBlock *SuccBB);
-  bool duplicateCondBranchOnPHIIntoPred(
+  bool duplicateCondBranchOnPHIIntoPred( 
       BasicBlock *BB, const SmallVectorImpl<BasicBlock *> &PredBBs);
 
-  bool computeValueKnownInPredecessorsImpl(
+  bool computeValueKnownInPredecessorsImpl( 
       Value *V, BasicBlock *BB, jumpthreading::PredValueInfo &Result,
       jumpthreading::ConstantPreference Preference,
       DenseSet<Value *> &RecursionSet, Instruction *CxtI = nullptr);
   bool
-  computeValueKnownInPredecessors(Value *V, BasicBlock *BB,
+  computeValueKnownInPredecessors(Value *V, BasicBlock *BB, 
                                   jumpthreading::PredValueInfo &Result,
                                   jumpthreading::ConstantPreference Preference,
                                   Instruction *CxtI = nullptr) {
     DenseSet<Value *> RecursionSet;
-    return computeValueKnownInPredecessorsImpl(V, BB, Result, Preference,
+    return computeValueKnownInPredecessorsImpl(V, BB, Result, Preference, 
                                                RecursionSet, CxtI);
   }
 
-  Constant *evaluateOnPredecessorEdge(BasicBlock *BB, BasicBlock *PredPredBB,
+  Constant *evaluateOnPredecessorEdge(BasicBlock *BB, BasicBlock *PredPredBB, 
                                       Value *cond);
-  bool maybethreadThroughTwoBasicBlocks(BasicBlock *BB, Value *Cond);
-  void threadThroughTwoBasicBlocks(BasicBlock *PredPredBB, BasicBlock *PredBB,
+  bool maybethreadThroughTwoBasicBlocks(BasicBlock *BB, Value *Cond); 
+  void threadThroughTwoBasicBlocks(BasicBlock *PredPredBB, BasicBlock *PredBB, 
                                    BasicBlock *BB, BasicBlock *SuccBB);
-  bool processThreadableEdges(Value *Cond, BasicBlock *BB,
+  bool processThreadableEdges(Value *Cond, BasicBlock *BB, 
                               jumpthreading::ConstantPreference Preference,
                               Instruction *CxtI = nullptr);
 
-  bool processBranchOnPHI(PHINode *PN);
-  bool processBranchOnXOR(BinaryOperator *BO);
-  bool processImpliedCondition(BasicBlock *BB);
+  bool processBranchOnPHI(PHINode *PN); 
+  bool processBranchOnXOR(BinaryOperator *BO); 
+  bool processImpliedCondition(BasicBlock *BB); 
 
-  bool simplifyPartiallyRedundantLoad(LoadInst *LI);
-  void unfoldSelectInstr(BasicBlock *Pred, BasicBlock *BB, SelectInst *SI,
+  bool simplifyPartiallyRedundantLoad(LoadInst *LI); 
+  void unfoldSelectInstr(BasicBlock *Pred, BasicBlock *BB, SelectInst *SI, 
                          PHINode *SIUse, unsigned Idx);
 
-  bool tryToUnfoldSelect(CmpInst *CondCmp, BasicBlock *BB);
-  bool tryToUnfoldSelect(SwitchInst *SI, BasicBlock *BB);
-  bool tryToUnfoldSelectInCurrBB(BasicBlock *BB);
+  bool tryToUnfoldSelect(CmpInst *CondCmp, BasicBlock *BB); 
+  bool tryToUnfoldSelect(SwitchInst *SI, BasicBlock *BB); 
+  bool tryToUnfoldSelectInCurrBB(BasicBlock *BB); 
 
-  bool processGuards(BasicBlock *BB);
-  bool threadGuard(BasicBlock *BB, IntrinsicInst *Guard, BranchInst *BI);
+  bool processGuards(BasicBlock *BB); 
+  bool threadGuard(BasicBlock *BB, IntrinsicInst *Guard, BranchInst *BI); 
 
 private:
-  BasicBlock *splitBlockPreds(BasicBlock *BB, ArrayRef<BasicBlock *> Preds,
+  BasicBlock *splitBlockPreds(BasicBlock *BB, ArrayRef<BasicBlock *> Preds, 
                               const char *Suffix);
-  void updateBlockFreqAndEdgeWeight(BasicBlock *PredBB, BasicBlock *BB,
+  void updateBlockFreqAndEdgeWeight(BasicBlock *PredBB, BasicBlock *BB, 
                                     BasicBlock *NewBB, BasicBlock *SuccBB);
   /// Check if the block has profile metadata for its outgoing edges.
   bool doesBlockHaveProfileData(BasicBlock *BB);

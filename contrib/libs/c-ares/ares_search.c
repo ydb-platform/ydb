@@ -62,7 +62,7 @@ void ares_search(ares_channel channel, const char *name, int dnsclass,
   /* If name only yields one domain to search, then we don't have
    * to keep extra state, so just do an ares_query().
    */
-  status = ares__single_domain(channel, name, &s);
+  status = ares__single_domain(channel, name, &s); 
   if (status != ARES_SUCCESS)
     {
       callback(arg, status, 0, NULL, 0);
@@ -124,7 +124,7 @@ void ares_search(ares_channel channel, const char *name, int dnsclass,
       /* Try the name as-is last; start with the first search domain. */
       squery->next_domain = 1;
       squery->trying_as_is = 0;
-      status = ares__cat_domain(name, channel->domains[0], &s);
+      status = ares__cat_domain(name, channel->domains[0], &s); 
       if (status == ARES_SUCCESS)
         {
           ares_query(channel, s, dnsclass, type, search_callback, squery);
@@ -172,7 +172,7 @@ static void search_callback(void *arg, int status, int timeouts,
       if (squery->next_domain < channel->ndomains)
         {
           /* Try the next domain. */
-          status = ares__cat_domain(squery->name,
+          status = ares__cat_domain(squery->name, 
                               channel->domains[squery->next_domain], &s);
           if (status != ARES_SUCCESS)
             end_squery(squery, status, NULL, 0);
@@ -211,7 +211,7 @@ static void end_squery(struct search_query *squery, int status,
 }
 
 /* Concatenate two domains. */
-int ares__cat_domain(const char *name, const char *domain, char **s)
+int ares__cat_domain(const char *name, const char *domain, char **s) 
 {
   size_t nlen = strlen(name);
   size_t dlen = strlen(domain);
@@ -230,7 +230,7 @@ int ares__cat_domain(const char *name, const char *domain, char **s)
  * the string we should query, in an allocated buffer.  If not, set *s
  * to NULL.
  */
-int ares__single_domain(ares_channel channel, const char *name, char **s)
+int ares__single_domain(ares_channel channel, const char *name, char **s) 
 {
   size_t len = strlen(name);
   const char *hostaliases;

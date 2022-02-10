@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2008-2020 Stefan Krah. All rights reserved.
+ * Copyright (c) 2008-2020 Stefan Krah. All rights reserved. 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -26,8 +26,8 @@
  */
 
 
-#ifndef LIBMPDEC_TRANSPOSE_H_
-#define LIBMPDEC_TRANSPOSE_H_
+#ifndef LIBMPDEC_TRANSPOSE_H_ 
+#define LIBMPDEC_TRANSPOSE_H_ 
 
 
 #include "mpdecimal.h"
@@ -58,4 +58,4 @@ static inline void pointerswap(mpd_uint_t **a, mpd_uint_t **b)
 MPD_PRAGMA(MPD_HIDE_SYMBOLS_END) /* restore previous scope rules */
 
 
-#endif /* LIBMPDEC_TRANSPOSE_H_ */
+#endif /* LIBMPDEC_TRANSPOSE_H_ */ 

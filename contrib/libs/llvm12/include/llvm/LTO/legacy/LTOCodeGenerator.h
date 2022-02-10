@@ -100,7 +100,7 @@ struct LTOCodeGenerator {
   void setFileType(CodeGenFileType FT) { FileType = FT; }
 
   void setCpu(StringRef MCpu) { this->MCpu = std::string(MCpu); }
-  void setAttrs(std::vector<std::string> MAttrs) { this->MAttrs = MAttrs; }
+  void setAttrs(std::vector<std::string> MAttrs) { this->MAttrs = MAttrs; } 
   void setOptLevel(unsigned OptLevel);
 
   void setShouldInternalize(bool Value) { ShouldInternalize = Value; }
@@ -152,7 +152,7 @@ struct LTOCodeGenerator {
   /// \note It is up to the linker to remove the intermediate output file.  Do
   /// not try to remove the object file in LTOCodeGenerator's destructor as we
   /// don't who (LTOCodeGenerator or the output file) will last longer.
-  bool compile_to_file(const char **Name);
+  bool compile_to_file(const char **Name); 
 
   /// As with compile_to_file(), this function compiles the merged module into
   /// single output file. Instead of returning the output file path to the
@@ -160,12 +160,12 @@ struct LTOCodeGenerator {
   /// to the caller. This function should delete the intermediate file once
   /// its content is brought to memory. Return NULL if the compilation was not
   /// successful.
-  std::unique_ptr<MemoryBuffer> compile();
+  std::unique_ptr<MemoryBuffer> compile(); 
 
   /// Optimizes the merged module.  Returns true on success.
   ///
   /// Calls \a verifyMergedModuleOnce().
-  bool optimize();
+  bool optimize(); 
 
   /// Compiles the merged optimized module into a single output file. It brings
   /// the output to a buffer, and returns the buffer to the caller. Return NULL
@@ -185,8 +185,8 @@ struct LTOCodeGenerator {
   /// assume builtins are present on the target.
   void setFreestanding(bool Enabled) { Freestanding = Enabled; }
 
-  void setDisableVerify(bool Value) { DisableVerify = Value; }
-
+  void setDisableVerify(bool Value) { DisableVerify = Value; } 
+ 
   void setDiagnosticHandler(lto_diagnostic_handler_t, void *);
 
   LLVMContext &getContext() { return Context; }
@@ -232,7 +232,7 @@ private:
   std::vector<std::string> CodegenOptions;
   std::string FeatureStr;
   std::string MCpu;
-  std::vector<std::string> MAttrs;
+  std::vector<std::string> MAttrs; 
   std::string NativeObjectPath;
   TargetOptions Options;
   CodeGenOpt::Level CGOptLevel = CodeGenOpt::Default;
@@ -248,7 +248,7 @@ private:
   std::unique_ptr<ToolOutputFile> DiagnosticOutputFile;
   bool Freestanding = false;
   std::unique_ptr<ToolOutputFile> StatsFile = nullptr;
-  bool DisableVerify = false;
+  bool DisableVerify = false; 
 };
 }
 #endif

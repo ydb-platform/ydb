@@ -1,34 +1,34 @@
 {
   "pagination": {
-    "DescribeAccountLimits": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "result_key": "AccountLimits"
-    },
-    "DescribeChangeSet": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "result_key": "Changes",
-      "non_aggregate_keys": [
-        "ChangeSetName",
-        "ChangeSetId",
-        "StackId",
-        "StackName",
-        "Description",
-        "Parameters",
-        "CreationTime",
-        "ExecutionStatus",
-        "Status",
-        "StatusReason",
-        "NotificationARNs",
-        "RollbackConfiguration",
-        "Capabilities",
-        "Tags",
-        "ParentChangeSetId",
-        "IncludeNestedStacks",
-        "RootChangeSetId"
-      ]
-    },
+    "DescribeAccountLimits": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "result_key": "AccountLimits" 
+    }, 
+    "DescribeChangeSet": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "result_key": "Changes", 
+      "non_aggregate_keys": [ 
+        "ChangeSetName", 
+        "ChangeSetId", 
+        "StackId", 
+        "StackName", 
+        "Description", 
+        "Parameters", 
+        "CreationTime", 
+        "ExecutionStatus", 
+        "Status", 
+        "StatusReason", 
+        "NotificationARNs", 
+        "RollbackConfiguration", 
+        "Capabilities", 
+        "Tags", 
+        "ParentChangeSetId", 
+        "IncludeNestedStacks", 
+        "RootChangeSetId" 
+      ] 
+    }, 
     "DescribeStackEvents": {
       "input_token": "NextToken",
       "output_token": "NextToken",
@@ -39,17 +39,17 @@
       "output_token": "NextToken",
       "result_key": "Stacks"
     },
-    "ListChangeSets": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "result_key": "Summaries"
-    },
-    "ListStackInstances": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxResults",
-      "result_key": "Summaries"
-    },
+    "ListChangeSets": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "result_key": "Summaries" 
+    }, 
+    "ListStackInstances": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "result_key": "Summaries" 
+    }, 
     "ListStackResources": {
       "input_token": "NextToken",
       "output_token": "NextToken",
@@ -60,24 +60,24 @@
       "output_token": "NextToken",
       "result_key": "StackSummaries"
     },
-    "ListStackSetOperationResults": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxResults",
-      "result_key": "Summaries"
-    },
-    "ListStackSetOperations": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxResults",
-      "result_key": "Summaries"
-    },
-    "ListStackSets": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "limit_key": "MaxResults",
-      "result_key": "Summaries"
-    },
+    "ListStackSetOperationResults": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "result_key": "Summaries" 
+    }, 
+    "ListStackSetOperations": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "result_key": "Summaries" 
+    }, 
+    "ListStackSets": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "result_key": "Summaries" 
+    }, 
     "ListExports": {
       "input_token": "NextToken",
       "output_token": "NextToken",
@@ -87,12 +87,12 @@
       "input_token": "NextToken",
       "output_token": "NextToken",
       "result_key": "Imports"
-    },
-    "ListTypes": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "TypeSummaries"
+    }, 
+    "ListTypes": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "output_token": "NextToken", 
+      "result_key": "TypeSummaries" 
     }
   }
 }

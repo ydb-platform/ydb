@@ -15,12 +15,12 @@
       "input_token": "PaginationToken",
       "output_token": "PaginationToken",
       "result_key": "TagValues"
-    },
-    "GetComplianceSummary": {
-      "input_token": "PaginationToken",
-      "limit_key": "MaxResults",
-      "output_token": "PaginationToken",
-      "result_key": "SummaryList"
+    }, 
+    "GetComplianceSummary": { 
+      "input_token": "PaginationToken", 
+      "limit_key": "MaxResults", 
+      "output_token": "PaginationToken", 
+      "result_key": "SummaryList" 
     }
   }
 }

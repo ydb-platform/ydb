@@ -372,7 +372,7 @@ BCECmpBlock visitCmpBlock(Value *const Val, BasicBlock *const Block,
   } else {
     // In this case, we expect a constant incoming value (the comparison is
     // chained).
-    const auto *const Const = cast<ConstantInt>(Val);
+    const auto *const Const = cast<ConstantInt>(Val); 
     LLVM_DEBUG(dbgs() << "const\n");
     if (!Const->isZero()) return {};
     LLVM_DEBUG(dbgs() << "false\n");
@@ -624,17 +624,17 @@ static BasicBlock *mergeComparisons(ArrayRef<BCECmpBlock> Comparisons,
   Value *IsEqual = nullptr;
   LLVM_DEBUG(dbgs() << "Merging " << Comparisons.size() << " comparisons -> "
                     << BB->getName() << "\n");
-
-  // If there is one block that requires splitting, we do it now, i.e.
-  // just before we know we will collapse the chain. The instructions
-  // can be executed before any of the instructions in the chain.
-  const auto ToSplit = llvm::find_if(
-      Comparisons, [](const BCECmpBlock &B) { return B.RequireSplit; });
-  if (ToSplit != Comparisons.end()) {
-    LLVM_DEBUG(dbgs() << "Splitting non_BCE work to header\n");
-    ToSplit->split(BB, AA);
-  }
-
+ 
+  // If there is one block that requires splitting, we do it now, i.e. 
+  // just before we know we will collapse the chain. The instructions 
+  // can be executed before any of the instructions in the chain. 
+  const auto ToSplit = llvm::find_if( 
+      Comparisons, [](const BCECmpBlock &B) { return B.RequireSplit; }); 
+  if (ToSplit != Comparisons.end()) { 
+    LLVM_DEBUG(dbgs() << "Splitting non_BCE work to header\n"); 
+    ToSplit->split(BB, AA); 
+  } 
+ 
   if (Comparisons.size() == 1) {
     LLVM_DEBUG(dbgs() << "Only one comparison, updating branches\n");
     Value *const LhsLoad =

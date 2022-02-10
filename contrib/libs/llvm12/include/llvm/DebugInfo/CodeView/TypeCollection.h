@@ -17,7 +17,7 @@
 #define LLVM_DEBUGINFO_CODEVIEW_TYPECOLLECTION_H
 
 #include "llvm/ADT/StringRef.h"
-#include "llvm/DebugInfo/CodeView/CVRecord.h"
+#include "llvm/DebugInfo/CodeView/CVRecord.h" 
 #include "llvm/DebugInfo/CodeView/TypeIndex.h"
 
 namespace llvm {

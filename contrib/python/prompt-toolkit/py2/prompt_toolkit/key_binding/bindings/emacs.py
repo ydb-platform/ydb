@@ -3,12 +3,12 @@ from __future__ import unicode_literals
 from prompt_toolkit.buffer import SelectionType, indent, unindent
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.enums import IncrementalSearchDirection, SEARCH_BUFFER, SYSTEM_BUFFER
-from prompt_toolkit.filters import Condition, EmacsMode, HasSelection, EmacsInsertMode, HasFocus, HasArg
+from prompt_toolkit.filters import Condition, EmacsMode, HasSelection, EmacsInsertMode, HasFocus, HasArg 
 from prompt_toolkit.completion import CompleteEvent
 
 from .scroll import scroll_page_up, scroll_page_down
 from .named_commands import get_by_name
-from ..registry import Registry, ConditionalRegistry
+from ..registry import Registry, ConditionalRegistry 
 
 __all__ = (
     'load_emacs_bindings',
@@ -18,14 +18,14 @@ __all__ = (
 )
 
 
-def load_emacs_bindings():
+def load_emacs_bindings(): 
     """
     Some e-macs extensions.
     """
     # Overview of Readline emacs commands:
     # http://www.catonmat.net/download/readline-emacs-editing-mode-cheat-sheet.pdf
-    registry = ConditionalRegistry(Registry(), EmacsMode())
-    handle = registry.add_binding
+    registry = ConditionalRegistry(Registry(), EmacsMode()) 
+    handle = registry.add_binding 
 
     insert_mode = EmacsInsertMode()
     has_selection = HasSelection()
@@ -57,9 +57,9 @@ def load_emacs_bindings():
     handle(Keys.Escape, 'f')(get_by_name('forward-word'))
     handle(Keys.Escape, 'l', filter=insert_mode)(get_by_name('downcase-word'))
     handle(Keys.Escape, 'u', filter=insert_mode)(get_by_name('uppercase-word'))
-    handle(Keys.Escape, 'y', filter=insert_mode)(get_by_name('yank-pop'))
-    handle(Keys.Escape, Keys.ControlH, filter=insert_mode)(get_by_name('backward-kill-word'))
-    handle(Keys.Escape, Keys.Backspace, filter=insert_mode)(get_by_name('backward-kill-word'))
+    handle(Keys.Escape, 'y', filter=insert_mode)(get_by_name('yank-pop')) 
+    handle(Keys.Escape, Keys.ControlH, filter=insert_mode)(get_by_name('backward-kill-word')) 
+    handle(Keys.Escape, Keys.Backspace, filter=insert_mode)(get_by_name('backward-kill-word')) 
     handle(Keys.Escape, '\\', filter=insert_mode)(get_by_name('delete-horizontal-space'))
 
     handle(Keys.ControlUnderscore, save_before=(lambda e: False), filter=insert_mode)(
@@ -75,18 +75,18 @@ def load_emacs_bindings():
     handle(Keys.Escape, '.', filter=insert_mode)(get_by_name('yank-last-arg'))
     handle(Keys.Escape, '_', filter=insert_mode)(get_by_name('yank-last-arg'))
     handle(Keys.Escape, Keys.ControlY, filter=insert_mode)(get_by_name('yank-nth-arg'))
-    handle(Keys.Escape, '#', filter=insert_mode)(get_by_name('insert-comment'))
-    handle(Keys.ControlO)(get_by_name('operate-and-get-next'))
+    handle(Keys.Escape, '#', filter=insert_mode)(get_by_name('insert-comment')) 
+    handle(Keys.ControlO)(get_by_name('operate-and-get-next')) 
 
-    # ControlQ does a quoted insert. Not that for vt100 terminals, you have to
-    # disable flow control by running ``stty -ixon``, otherwise Ctrl-Q and
-    # Ctrl-S are captured by the terminal.
-    handle(Keys.ControlQ, filter= ~has_selection)(get_by_name('quoted-insert'))
-
-    handle(Keys.ControlX, '(')(get_by_name('start-kbd-macro'))
-    handle(Keys.ControlX, ')')(get_by_name('end-kbd-macro'))
-    handle(Keys.ControlX, 'e')(get_by_name('call-last-kbd-macro'))
-
+    # ControlQ does a quoted insert. Not that for vt100 terminals, you have to 
+    # disable flow control by running ``stty -ixon``, otherwise Ctrl-Q and 
+    # Ctrl-S are captured by the terminal. 
+    handle(Keys.ControlQ, filter= ~has_selection)(get_by_name('quoted-insert')) 
+ 
+    handle(Keys.ControlX, '(')(get_by_name('start-kbd-macro')) 
+    handle(Keys.ControlX, ')')(get_by_name('end-kbd-macro')) 
+    handle(Keys.ControlX, 'e')(get_by_name('call-last-kbd-macro')) 
+ 
     @handle(Keys.ControlN)
     def _(event):
         " Next line. "
@@ -144,13 +144,13 @@ def load_emacs_bindings():
     @handle(Keys.ControlSquareClose, Keys.Any)
     def _(event):
         " When Ctl-] + a character is pressed. go to that character. "
-        # Also named 'character-search'
+        # Also named 'character-search' 
         character_search(event.current_buffer, event.data, event.arg)
 
     @handle(Keys.Escape, Keys.ControlSquareClose, Keys.Any)
     def _(event):
         " Like Ctl-], but backwards. "
-        # Also named 'character-search-backward'
+        # Also named 'character-search-backward' 
         character_search(event.current_buffer, event.data, -event.arg)
 
     @handle(Keys.Escape, 'a')
@@ -296,26 +296,26 @@ def load_emacs_bindings():
 
         unindent(buffer, from_, to + 1, count=event.arg)
 
-    return registry
+    return registry 
 
-
-def load_emacs_open_in_editor_bindings():
+ 
+def load_emacs_open_in_editor_bindings(): 
     """
     Pressing C-X C-E will open the buffer in an external editor.
     """
-    registry = Registry()
+    registry = Registry() 
 
-    registry.add_binding(Keys.ControlX, Keys.ControlE,
-                         filter=EmacsMode() & ~HasSelection())(
-         get_by_name('edit-and-execute-command'))
+    registry.add_binding(Keys.ControlX, Keys.ControlE, 
+                         filter=EmacsMode() & ~HasSelection())( 
+         get_by_name('edit-and-execute-command')) 
 
-    return registry
+    return registry 
 
-
-def load_emacs_system_bindings():
-    registry = ConditionalRegistry(Registry(), EmacsMode())
-    handle = registry.add_binding
-
+ 
+def load_emacs_system_bindings(): 
+    registry = ConditionalRegistry(Registry(), EmacsMode()) 
+    handle = registry.add_binding 
+ 
     has_focus = HasFocus(SYSTEM_BUFFER)
 
     @handle(Keys.Escape, '!', filter= ~has_focus)
@@ -347,13 +347,13 @@ def load_emacs_system_bindings():
         # Focus previous buffer again.
         event.cli.pop_focus()
 
-    return registry
+    return registry 
 
 
-def load_emacs_search_bindings(get_search_state=None):
-    registry = ConditionalRegistry(Registry(), EmacsMode())
-    handle = registry.add_binding
-
+def load_emacs_search_bindings(get_search_state=None): 
+    registry = ConditionalRegistry(Registry(), EmacsMode()) 
+    handle = registry.add_binding 
+ 
     has_focus = HasFocus(SEARCH_BUFFER)
 
     assert get_search_state is None or callable(get_search_state)
@@ -375,7 +375,7 @@ def load_emacs_search_bindings(get_search_state=None):
         event.cli.pop_focus()
 
     @handle(Keys.ControlJ, filter=has_focus)
-    @handle(Keys.Escape, filter=has_focus, eager=True)
+    @handle(Keys.Escape, filter=has_focus, eager=True) 
     def _(event):
         """
         When enter pressed in isearch, quit isearch mode. (Multiline
@@ -433,20 +433,20 @@ def load_emacs_search_bindings(get_search_state=None):
     def _(event):
         incremental_search(event.cli, IncrementalSearchDirection.FORWARD, count=event.arg)
 
-    return registry
+    return registry 
 
-
-def load_extra_emacs_page_navigation_bindings():
+ 
+def load_extra_emacs_page_navigation_bindings(): 
     """
     Key bindings, for scrolling up and down through pages.
     This are separate bindings, because GNU readline doesn't have them.
     """
-    registry = ConditionalRegistry(Registry(), EmacsMode())
-    handle = registry.add_binding
+    registry = ConditionalRegistry(Registry(), EmacsMode()) 
+    handle = registry.add_binding 
 
     handle(Keys.ControlV)(scroll_page_down)
     handle(Keys.PageDown)(scroll_page_down)
     handle(Keys.Escape, 'v')(scroll_page_up)
     handle(Keys.PageUp)(scroll_page_up)
-
-    return registry
+ 
+    return registry 

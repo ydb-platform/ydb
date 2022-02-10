@@ -52,8 +52,8 @@ public:
     IRSymbolMapper::ManglingOptions MO;
   };
 
-  using NotifyCompiledFunction = std::function<void(
-      MaterializationResponsibility &R, ThreadSafeModule TSM)>;
+  using NotifyCompiledFunction = std::function<void( 
+      MaterializationResponsibility &R, ThreadSafeModule TSM)>; 
 
   IRCompileLayer(ExecutionSession &ES, ObjectLayer &BaseLayer,
                  std::unique_ptr<IRCompiler> Compile);
@@ -62,8 +62,8 @@ public:
 
   void setNotifyCompiled(NotifyCompiledFunction NotifyCompiled);
 
-  void emit(std::unique_ptr<MaterializationResponsibility> R,
-            ThreadSafeModule TSM) override;
+  void emit(std::unique_ptr<MaterializationResponsibility> R, 
+            ThreadSafeModule TSM) override; 
 
 private:
   mutable std::mutex IRLayerMutex;

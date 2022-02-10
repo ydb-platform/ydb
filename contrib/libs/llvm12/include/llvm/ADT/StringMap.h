@@ -85,12 +85,12 @@ protected:
   void init(unsigned Size);
 
 public:
-  static constexpr uintptr_t TombstoneIntVal =
-      static_cast<uintptr_t>(-1)
-      << PointerLikeTypeTraits<StringMapEntryBase *>::NumLowBitsAvailable;
-
+  static constexpr uintptr_t TombstoneIntVal = 
+      static_cast<uintptr_t>(-1) 
+      << PointerLikeTypeTraits<StringMapEntryBase *>::NumLowBitsAvailable; 
+ 
   static StringMapEntryBase *getTombstoneVal() {
-    return reinterpret_cast<StringMapEntryBase *>(TombstoneIntVal);
+    return reinterpret_cast<StringMapEntryBase *>(TombstoneIntVal); 
   }
 
   unsigned getNumBuckets() const { return NumBuckets; }

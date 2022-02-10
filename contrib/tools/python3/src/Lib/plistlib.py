@@ -46,7 +46,7 @@ Parse Plist example:
     print(pl["aKey"])
 """
 __all__ = [
-    "InvalidFileException", "FMT_XML", "FMT_BINARY", "load", "dump", "loads", "dumps", "UID"
+    "InvalidFileException", "FMT_XML", "FMT_BINARY", "load", "dump", "loads", "dumps", "UID" 
 ]
 
 import binascii
@@ -65,33 +65,33 @@ PlistFormat = enum.Enum('PlistFormat', 'FMT_XML FMT_BINARY', module=__name__)
 globals().update(PlistFormat.__members__)
 
 
-class UID:
-    def __init__(self, data):
-        if not isinstance(data, int):
-            raise TypeError("data must be an int")
-        if data >= 1 << 64:
-            raise ValueError("UIDs cannot be >= 2**64")
-        if data < 0:
-            raise ValueError("UIDs must be positive")
-        self.data = data
-
-    def __index__(self):
-        return self.data
-
-    def __repr__(self):
-        return "%s(%s)" % (self.__class__.__name__, repr(self.data))
-
-    def __reduce__(self):
-        return self.__class__, (self.data,)
-
-    def __eq__(self, other):
-        if not isinstance(other, UID):
-            return NotImplemented
-        return self.data == other.data
-
-    def __hash__(self):
-        return hash(self.data)
-
+class UID: 
+    def __init__(self, data): 
+        if not isinstance(data, int): 
+            raise TypeError("data must be an int") 
+        if data >= 1 << 64: 
+            raise ValueError("UIDs cannot be >= 2**64") 
+        if data < 0: 
+            raise ValueError("UIDs must be positive") 
+        self.data = data 
+ 
+    def __index__(self): 
+        return self.data 
+ 
+    def __repr__(self): 
+        return "%s(%s)" % (self.__class__.__name__, repr(self.data)) 
+ 
+    def __reduce__(self): 
+        return self.__class__, (self.data,) 
+ 
+    def __eq__(self, other): 
+        if not isinstance(other, UID): 
+            return NotImplemented 
+        return self.data == other.data 
+ 
+    def __hash__(self): 
+        return hash(self.data) 
+ 
 #
 # XML support
 #
@@ -162,7 +162,7 @@ def _escape(text):
     return text
 
 class _PlistParser:
-    def __init__(self, dict_type):
+    def __init__(self, dict_type): 
         self.stack = []
         self.current_key = None
         self.root = None
@@ -173,16 +173,16 @@ class _PlistParser:
         self.parser.StartElementHandler = self.handle_begin_element
         self.parser.EndElementHandler = self.handle_end_element
         self.parser.CharacterDataHandler = self.handle_data
-        self.parser.EntityDeclHandler = self.handle_entity_decl
+        self.parser.EntityDeclHandler = self.handle_entity_decl 
         self.parser.ParseFile(fileobj)
         return self.root
 
-    def handle_entity_decl(self, entity_name, is_parameter_entity, value, base, system_id, public_id, notation_name):
-        # Reject plist files with entity declarations to avoid XML vulnerabilies in expat.
-        # Regular plist files don't contain those declerations, and Apple's plutil tool does not
-        # accept them either.
-        raise InvalidFileException("XML entity declarations are not supported in plist files")
-
+    def handle_entity_decl(self, entity_name, is_parameter_entity, value, base, system_id, public_id, notation_name): 
+        # Reject plist files with entity declarations to avoid XML vulnerabilies in expat. 
+        # Regular plist files don't contain those declerations, and Apple's plutil tool does not 
+        # accept them either. 
+        raise InvalidFileException("XML entity declarations are not supported in plist files") 
+ 
     def handle_begin_element(self, element, attrs):
         self.data = []
         handler = getattr(self, "begin_" + element, None)
@@ -252,11 +252,11 @@ class _PlistParser:
         self.add_object(False)
 
     def end_integer(self):
-        raw = self.get_data()
-        if raw.startswith('0x') or raw.startswith('0X'):
-            self.add_object(int(raw, 16))
-        else:
-            self.add_object(int(raw))
+        raw = self.get_data() 
+        if raw.startswith('0x') or raw.startswith('0X'): 
+            self.add_object(int(raw, 16)) 
+        else: 
+            self.add_object(int(raw)) 
 
     def end_real(self):
         self.add_object(float(self.get_data()))
@@ -265,7 +265,7 @@ class _PlistParser:
         self.add_object(self.get_data())
 
     def end_data(self):
-        self.add_object(_decode_base64(self.get_data()))
+        self.add_object(_decode_base64(self.get_data())) 
 
     def end_date(self):
         self.add_object(_date_from_string(self.get_data()))
@@ -452,7 +452,7 @@ class _BinaryPlistParser:
 
     see also: http://opensource.apple.com/source/CF/CF-744.18/CFBinaryPList.c
     """
-    def __init__(self, dict_type):
+    def __init__(self, dict_type): 
         self._dict_type = dict_type
 
     def parse(self, fp):
@@ -477,7 +477,7 @@ class _BinaryPlistParser:
             return self._read_object(top_object)
 
         except (OSError, IndexError, struct.error, OverflowError,
-                ValueError):
+                ValueError): 
             raise InvalidFileException()
 
     def _get_size(self, tokenL):
@@ -493,7 +493,7 @@ class _BinaryPlistParser:
     def _read_ints(self, n, size):
         data = self._fp.read(size * n)
         if size in _BINARY_FORMAT:
-            return struct.unpack(f'>{n}{_BINARY_FORMAT[size]}', data)
+            return struct.unpack(f'>{n}{_BINARY_FORMAT[size]}', data) 
         else:
             if not size or len(data) != size * n:
                 raise InvalidFileException()
@@ -552,27 +552,27 @@ class _BinaryPlistParser:
 
         elif tokenH == 0x40:  # data
             s = self._get_size(tokenL)
-            result = self._fp.read(s)
-            if len(result) != s:
-                raise InvalidFileException()
+            result = self._fp.read(s) 
+            if len(result) != s: 
+                raise InvalidFileException() 
 
         elif tokenH == 0x50:  # ascii string
             s = self._get_size(tokenL)
-            data = self._fp.read(s)
-            if len(data) != s:
-                raise InvalidFileException()
-            result = data.decode('ascii')
+            data = self._fp.read(s) 
+            if len(data) != s: 
+                raise InvalidFileException() 
+            result = data.decode('ascii') 
 
         elif tokenH == 0x60:  # unicode string
-            s = self._get_size(tokenL) * 2
-            data = self._fp.read(s)
-            if len(data) != s:
-                raise InvalidFileException()
-            result = data.decode('utf-16be')
+            s = self._get_size(tokenL) * 2 
+            data = self._fp.read(s) 
+            if len(data) != s: 
+                raise InvalidFileException() 
+            result = data.decode('utf-16be') 
 
-        elif tokenH == 0x80:  # UID
-            # used by Key-Archiver plist files
-            result = UID(int.from_bytes(self._fp.read(1 + tokenL), 'big'))
+        elif tokenH == 0x80:  # UID 
+            # used by Key-Archiver plist files 
+            result = UID(int.from_bytes(self._fp.read(1 + tokenL), 'big')) 
 
         elif tokenH == 0xA0:  # array
             s = self._get_size(tokenL)
@@ -593,11 +593,11 @@ class _BinaryPlistParser:
             obj_refs = self._read_refs(s)
             result = self._dict_type()
             self._objects[ref] = result
-            try:
-                for k, o in zip(key_refs, obj_refs):
-                    result[self._read_object(k)] = self._read_object(o)
-            except TypeError:
-                raise InvalidFileException()
+            try: 
+                for k, o in zip(key_refs, obj_refs): 
+                    result[self._read_object(k)] = self._read_object(o) 
+            except TypeError: 
+                raise InvalidFileException() 
         else:
             raise InvalidFileException()
 
@@ -611,7 +611,7 @@ def _count_to_size(count):
     elif count < 1 << 16:
         return 2
 
-    elif count < 1 << 32:
+    elif count < 1 << 32: 
         return 4
 
     else:
@@ -786,20 +786,20 @@ class _BinaryPlistWriter (object):
 
             self._fp.write(t)
 
-        elif isinstance(value, UID):
-            if value.data < 0:
-                raise ValueError("UIDs must be positive")
-            elif value.data < 1 << 8:
-                self._fp.write(struct.pack('>BB', 0x80, value))
-            elif value.data < 1 << 16:
-                self._fp.write(struct.pack('>BH', 0x81, value))
-            elif value.data < 1 << 32:
-                self._fp.write(struct.pack('>BL', 0x83, value))
-            elif value.data < 1 << 64:
-                self._fp.write(struct.pack('>BQ', 0x87, value))
-            else:
-                raise OverflowError(value)
-
+        elif isinstance(value, UID): 
+            if value.data < 0: 
+                raise ValueError("UIDs must be positive") 
+            elif value.data < 1 << 8: 
+                self._fp.write(struct.pack('>BB', 0x80, value)) 
+            elif value.data < 1 << 16: 
+                self._fp.write(struct.pack('>BH', 0x81, value)) 
+            elif value.data < 1 << 32: 
+                self._fp.write(struct.pack('>BL', 0x83, value)) 
+            elif value.data < 1 << 64: 
+                self._fp.write(struct.pack('>BQ', 0x87, value)) 
+            else: 
+                raise OverflowError(value) 
+ 
         elif isinstance(value, (list, tuple)):
             refs = [self._getrefnum(o) for o in value]
             s = len(refs)
@@ -853,8 +853,8 @@ _FORMATS={
 }
 
 
-def load(fp, *, fmt=None, dict_type=dict):
-    """Read a .plist file. 'fp' should be a readable and binary file object.
+def load(fp, *, fmt=None, dict_type=dict): 
+    """Read a .plist file. 'fp' should be a readable and binary file object. 
     Return the unpacked root object (which usually is a dictionary).
     """
     if fmt is None:
@@ -871,21 +871,21 @@ def load(fp, *, fmt=None, dict_type=dict):
     else:
         P = _FORMATS[fmt]['parser']
 
-    p = P(dict_type=dict_type)
+    p = P(dict_type=dict_type) 
     return p.parse(fp)
 
 
-def loads(value, *, fmt=None, dict_type=dict):
+def loads(value, *, fmt=None, dict_type=dict): 
     """Read a .plist file from a bytes object.
     Return the unpacked root object (which usually is a dictionary).
     """
     fp = BytesIO(value)
-    return load(fp, fmt=fmt, dict_type=dict_type)
+    return load(fp, fmt=fmt, dict_type=dict_type) 
 
 
 def dump(value, fp, *, fmt=FMT_XML, sort_keys=True, skipkeys=False):
-    """Write 'value' to a .plist file. 'fp' should be a writable,
-    binary file object.
+    """Write 'value' to a .plist file. 'fp' should be a writable, 
+    binary file object. 
     """
     if fmt not in _FORMATS:
         raise ValueError("Unsupported format: %r"%(fmt,))

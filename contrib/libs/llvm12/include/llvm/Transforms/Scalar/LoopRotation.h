@@ -29,14 +29,14 @@ namespace llvm {
 /// A simple loop rotation transformation.
 class LoopRotatePass : public PassInfoMixin<LoopRotatePass> {
 public:
-  LoopRotatePass(bool EnableHeaderDuplication = true,
-                 bool PrepareForLTO = false);
+  LoopRotatePass(bool EnableHeaderDuplication = true, 
+                 bool PrepareForLTO = false); 
   PreservedAnalyses run(Loop &L, LoopAnalysisManager &AM,
                         LoopStandardAnalysisResults &AR, LPMUpdater &U);
 
 private:
   const bool EnableHeaderDuplication;
-  const bool PrepareForLTO;
+  const bool PrepareForLTO; 
 };
 }
 

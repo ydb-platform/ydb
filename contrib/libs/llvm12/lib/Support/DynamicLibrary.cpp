@@ -39,7 +39,7 @@ public:
   HandleSet() : Process(nullptr) {}
   ~HandleSet();
 
-  HandleList::iterator Find(void *Handle) { return find(Handles, Handle); }
+  HandleList::iterator Find(void *Handle) { return find(Handles, Handle); } 
 
   bool Contains(void *Handle) {
     return Handle == Process || Find(Handle) != Handles.end();

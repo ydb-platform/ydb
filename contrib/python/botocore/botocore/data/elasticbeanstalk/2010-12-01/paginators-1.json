@@ -5,30 +5,30 @@
       "output_token": "NextToken",
       "limit_key": "MaxRecords",
       "result_key": "Events"
-    },
-    "DescribeApplicationVersions": {
-      "input_token": "NextToken",
-      "limit_key": "MaxRecords",
-      "output_token": "NextToken",
-      "result_key": "ApplicationVersions"
-    },
-    "DescribeEnvironmentManagedActionHistory": {
-      "input_token": "NextToken",
-      "limit_key": "MaxItems",
-      "output_token": "NextToken",
-      "result_key": "ManagedActionHistoryItems"
-    },
-    "DescribeEnvironments": {
-      "input_token": "NextToken",
-      "limit_key": "MaxRecords",
-      "output_token": "NextToken",
-      "result_key": "Environments"
-    },
-    "ListPlatformVersions": {
-      "input_token": "NextToken",
-      "limit_key": "MaxRecords",
-      "output_token": "NextToken",
-      "result_key": "PlatformSummaryList"
+    }, 
+    "DescribeApplicationVersions": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxRecords", 
+      "output_token": "NextToken", 
+      "result_key": "ApplicationVersions" 
+    }, 
+    "DescribeEnvironmentManagedActionHistory": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxItems", 
+      "output_token": "NextToken", 
+      "result_key": "ManagedActionHistoryItems" 
+    }, 
+    "DescribeEnvironments": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxRecords", 
+      "output_token": "NextToken", 
+      "result_key": "Environments" 
+    }, 
+    "ListPlatformVersions": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxRecords", 
+      "output_token": "NextToken", 
+      "result_key": "PlatformSummaryList" 
     }
   }
 }

@@ -16,8 +16,8 @@
 import sys
 import grpc
 
-from src.proto.grpc.reflection.v1alpha import reflection_pb2 as _reflection_pb2
-from src.proto.grpc.reflection.v1alpha import reflection_pb2_grpc as _reflection_pb2_grpc
+from src.proto.grpc.reflection.v1alpha import reflection_pb2 as _reflection_pb2 
+from src.proto.grpc.reflection.v1alpha import reflection_pb2_grpc as _reflection_pb2_grpc 
 
 from grpc_reflection.v1alpha._base import BaseReflectionServicer
 

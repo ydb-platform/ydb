@@ -372,7 +372,7 @@ class DartLexer(RegexLexer):
             (r'\b(bool|double|dynamic|int|num|Object|String|void)\b', Keyword.Type),
             (r'\b(false|null|true)\b', Keyword.Constant),
             (r'[~!%^&*+=|?:<>/-]|as\b', Operator),
-            (r'@[a-zA-Z_$]\w*', Name.Decorator),
+            (r'@[a-zA-Z_$]\w*', Name.Decorator), 
             (r'[a-zA-Z_$]\w*:', Name.Label),
             (r'[a-zA-Z_$]\w*', Name),
             (r'[(){}\[\],.;]', Punctuation),
@@ -1457,20 +1457,20 @@ class EarlGreyLexer(RegexLexer):
             (r'8r[0-7]+', Number.Oct),
             (r'2r[01]+', Number.Bin),
             (r'16r[a-fA-F0-9]+', Number.Hex),
-            (r'([3-79]|[12][0-9]|3[0-6])r[a-zA-Z\d]+(\.[a-zA-Z\d]+)?',
-             Number.Radix),
+            (r'([3-79]|[12][0-9]|3[0-6])r[a-zA-Z\d]+(\.[a-zA-Z\d]+)?', 
+             Number.Radix), 
             (r'\d+', Number.Integer)
         ],
     }
 
-
+ 
 class JuttleLexer(RegexLexer):
     """
     For `Juttle`_ source code.
 
     .. _Juttle: https://github.com/juttle/juttle
 
-    .. versionadded:: 2.2
+    .. versionadded:: 2.2 
     """
 
     name = 'Juttle'
@@ -1505,24 +1505,24 @@ class JuttleLexer(RegexLexer):
              r'(\d+(\.\d*)?|\.\d+)(ms|[smhdwMy])?):', String.Moment),
             (r':\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2}(\.\d*)?)?'
              r'(Z|[+-]\d{2}:\d{2}|[+-]\d{4})?:', String.Moment),
-            (r':((\d+(\.\d*)?|\.\d+)[ ]+)?(millisecond|second|minute|hour|'
-             r'day|week|month|year)[s]?'
-             r'(([ ]+and[ ]+(\d+[ ]+)?(millisecond|second|minute|hour|'
-             r'day|week|month|year)[s]?)'
+            (r':((\d+(\.\d*)?|\.\d+)[ ]+)?(millisecond|second|minute|hour|' 
+             r'day|week|month|year)[s]?' 
+             r'(([ ]+and[ ]+(\d+[ ]+)?(millisecond|second|minute|hour|' 
+             r'day|week|month|year)[s]?)' 
              r'|[ ]+(ago|from[ ]+now))*:', String.Moment),
             (r'\+\+|--|~|&&|\?|:|\|\||\\(?=\n)|'
              r'(==?|!=?|[-<>+*%&|^/])=?', Operator, 'slashstartsregex'),
             (r'[{(\[;,]', Punctuation, 'slashstartsregex'),
             (r'[})\].]', Punctuation),
             (r'(import|return|continue|if|else)\b', Keyword, 'slashstartsregex'),
-            (r'(var|const|function|reducer|sub|input)\b', Keyword.Declaration,
-             'slashstartsregex'),
+            (r'(var|const|function|reducer|sub|input)\b', Keyword.Declaration, 
+             'slashstartsregex'), 
             (r'(batch|emit|filter|head|join|keep|pace|pass|put|read|reduce|remove|'
-             r'sequence|skip|sort|split|tail|unbatch|uniq|view|write)\b',
-             Keyword.Reserved),
+             r'sequence|skip|sort|split|tail|unbatch|uniq|view|write)\b', 
+             Keyword.Reserved), 
             (r'(true|false|null|Infinity)\b', Keyword.Constant),
-            (r'(Array|Date|Juttle|Math|Number|Object|RegExp|String)\b',
-             Name.Builtin),
+            (r'(Array|Date|Juttle|Math|Number|Object|RegExp|String)\b', 
+             Name.Builtin), 
             (JS_IDENT, Name.Other),
             (r'[0-9][0-9]*\.[0-9]+([eE][0-9]+)?[fd]?', Number.Float),
             (r'[0-9]+', Number.Integer),

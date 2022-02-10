@@ -7,7 +7,7 @@ And then, for example::
 
     for i in range(10**15):
         pass
-
+ 
     for (a, b) in zip(range(10**15), range(-10**15, 0)):
         pass
 

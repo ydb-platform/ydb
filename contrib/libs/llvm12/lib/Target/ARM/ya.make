@@ -12,28 +12,28 @@ LICENSE(Apache-2.0 WITH LLVM-exception)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/libs/llvm12
-    contrib/libs/llvm12/include
-    contrib/libs/llvm12/lib/Analysis
-    contrib/libs/llvm12/lib/CodeGen
-    contrib/libs/llvm12/lib/CodeGen/AsmPrinter
-    contrib/libs/llvm12/lib/CodeGen/GlobalISel
-    contrib/libs/llvm12/lib/CodeGen/SelectionDAG
-    contrib/libs/llvm12/lib/IR
-    contrib/libs/llvm12/lib/MC
-    contrib/libs/llvm12/lib/Support
-    contrib/libs/llvm12/lib/Target
-    contrib/libs/llvm12/lib/Target/ARM/MCTargetDesc
-    contrib/libs/llvm12/lib/Target/ARM/TargetInfo
-    contrib/libs/llvm12/lib/Target/ARM/Utils
-    contrib/libs/llvm12/lib/Transforms/CFGuard
-    contrib/libs/llvm12/lib/Transforms/Scalar
-    contrib/libs/llvm12/lib/Transforms/Utils
+    contrib/libs/llvm12 
+    contrib/libs/llvm12/include 
+    contrib/libs/llvm12/lib/Analysis 
+    contrib/libs/llvm12/lib/CodeGen 
+    contrib/libs/llvm12/lib/CodeGen/AsmPrinter 
+    contrib/libs/llvm12/lib/CodeGen/GlobalISel 
+    contrib/libs/llvm12/lib/CodeGen/SelectionDAG 
+    contrib/libs/llvm12/lib/IR 
+    contrib/libs/llvm12/lib/MC 
+    contrib/libs/llvm12/lib/Support 
+    contrib/libs/llvm12/lib/Target 
+    contrib/libs/llvm12/lib/Target/ARM/MCTargetDesc 
+    contrib/libs/llvm12/lib/Target/ARM/TargetInfo 
+    contrib/libs/llvm12/lib/Target/ARM/Utils 
+    contrib/libs/llvm12/lib/Transforms/CFGuard 
+    contrib/libs/llvm12/lib/Transforms/Scalar 
+    contrib/libs/llvm12/lib/Transforms/Utils 
 )
 
 ADDINCL(
-    ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM
-    contrib/libs/llvm12/lib/Target/ARM
+    ${ARCADIA_BUILD_ROOT}/contrib/libs/llvm12/lib/Target/ARM 
+    contrib/libs/llvm12/lib/Target/ARM 
 )
 
 NO_COMPILER_WARNINGS()
@@ -46,7 +46,7 @@ SRCS(
     ARMBaseInstrInfo.cpp
     ARMBaseRegisterInfo.cpp
     ARMBasicBlockInfo.cpp
-    ARMBlockPlacement.cpp
+    ARMBlockPlacement.cpp 
     ARMCallLowering.cpp
     ARMCallingConv.cpp
     ARMConstantIslandPass.cpp
@@ -69,7 +69,7 @@ SRCS(
     ARMParallelDSP.cpp
     ARMRegisterBankInfo.cpp
     ARMRegisterInfo.cpp
-    ARMSLSHardening.cpp
+    ARMSLSHardening.cpp 
     ARMSelectionDAGInfo.cpp
     ARMSubtarget.cpp
     ARMTargetMachine.cpp

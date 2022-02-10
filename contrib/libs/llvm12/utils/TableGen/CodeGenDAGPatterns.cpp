@@ -507,9 +507,9 @@ bool TypeInfer::EnforceSmallerThan(TypeSetByHwMode &Small,
     // Always treat non-scalable MVTs as smaller than scalable MVTs for the
     // purposes of ordering.
     auto ASize = std::make_tuple(A.isScalableVector(), A.getScalarSizeInBits(),
-                                 A.getSizeInBits().getKnownMinSize());
+                                 A.getSizeInBits().getKnownMinSize()); 
     auto BSize = std::make_tuple(B.isScalableVector(), B.getScalarSizeInBits(),
-                                 B.getSizeInBits().getKnownMinSize());
+                                 B.getSizeInBits().getKnownMinSize()); 
     return ASize < BSize;
   };
   auto SameKindLE = [](MVT A, MVT B) -> bool {
@@ -520,10 +520,10 @@ bool TypeInfer::EnforceSmallerThan(TypeSetByHwMode &Small,
         std::make_tuple(B.isVector(), B.isScalableVector()))
       return false;
 
-    return std::make_tuple(A.getScalarSizeInBits(),
-                           A.getSizeInBits().getKnownMinSize()) <=
-           std::make_tuple(B.getScalarSizeInBits(),
-                           B.getSizeInBits().getKnownMinSize());
+    return std::make_tuple(A.getScalarSizeInBits(), 
+                           A.getSizeInBits().getKnownMinSize()) <= 
+           std::make_tuple(B.getScalarSizeInBits(), 
+                           B.getSizeInBits().getKnownMinSize()); 
   };
 
   for (unsigned M : Modes) {
@@ -730,14 +730,14 @@ bool TypeInfer::EnforceSameSize(TypeSetByHwMode &A, TypeSetByHwMode &B) {
   if (B.empty())
     Changed |= EnforceAny(B);
 
-  auto NoSize = [](const SmallSet<TypeSize, 2> &Sizes, MVT T) -> bool {
+  auto NoSize = [](const SmallSet<TypeSize, 2> &Sizes, MVT T) -> bool { 
     return !Sizes.count(T.getSizeInBits());
   };
 
   for (unsigned M : union_modes(A, B)) {
     TypeSetByHwMode::SetType &AS = A.get(M);
     TypeSetByHwMode::SetType &BS = B.get(M);
-    SmallSet<TypeSize, 2> AN, BN;
+    SmallSet<TypeSize, 2> AN, BN; 
 
     for (MVT T : AS)
       AN.insert(T.getSizeInBits());
@@ -873,7 +873,7 @@ bool TreePredicateFn::hasPredCode() const {
 }
 
 std::string TreePredicateFn::getPredCode() const {
-  std::string Code;
+  std::string Code; 
 
   if (!isLoad() && !isStore() && !isAtomic()) {
     Record *MemoryVT = getMemoryVT();
@@ -2390,7 +2390,7 @@ bool TreePatternNode::ApplyTypeConstraints(TreePattern &TP, bool NotRegisters) {
         MVT::SimpleValueType VT = P.second.SimpleTy;
         if (VT == MVT::iPTR || VT == MVT::iPTRAny)
           continue;
-        unsigned Size = MVT(VT).getFixedSizeInBits();
+        unsigned Size = MVT(VT).getFixedSizeInBits(); 
         // Make sure that the value is representable for this type.
         if (Size >= 32)
           continue;
@@ -3088,7 +3088,7 @@ CodeGenDAGPatterns::CodeGenDAGPatterns(RecordKeeper &R,
   VerifyInstructionFlags();
 }
 
-Record *CodeGenDAGPatterns::getSDNodeNamed(StringRef Name) const {
+Record *CodeGenDAGPatterns::getSDNodeNamed(StringRef Name) const { 
   Record *N = Records.getDef(Name);
   if (!N || !N->isSubClassOf("SDNode"))
     PrintFatalError("Error getting SDNode '" + Name + "'!");
@@ -3591,9 +3591,9 @@ static bool hasNullFragReference(DagInit *DI) {
   if (Operator->getName() == "null_frag") return true;
   // If any of the arguments reference the null fragment, return true.
   for (unsigned i = 0, e = DI->getNumArgs(); i != e; ++i) {
-    if (auto Arg = dyn_cast<DefInit>(DI->getArg(i)))
-      if (Arg->getDef()->getName() == "null_frag")
-        return true;
+    if (auto Arg = dyn_cast<DefInit>(DI->getArg(i))) 
+      if (Arg->getDef()->getName() == "null_frag") 
+        return true; 
     DagInit *Arg = dyn_cast<DagInit>(DI->getArg(i));
     if (Arg && hasNullFragReference(Arg))
       return true;
@@ -3701,11 +3701,11 @@ void CodeGenDAGPatterns::parseInstructionPattern(
   for (unsigned i = 0; i != NumResults; ++i) {
     if (i == CGI.Operands.size()) {
       const std::string &OpName =
-          llvm::find_if(
-              InstResults,
-              [](const std::pair<std::string, TreePatternNodePtr> &P) {
-                return P.second;
-              })
+          llvm::find_if( 
+              InstResults, 
+              [](const std::pair<std::string, TreePatternNodePtr> &P) { 
+                return P.second; 
+              }) 
               ->first;
 
       I.error("'" + OpName + "' set but does not appear in operand list!");
@@ -4294,7 +4294,7 @@ void CodeGenDAGPatterns::ExpandHwModeBasedTypes() {
 
     std::vector<Predicate> Preds = P.Predicates;
     const std::vector<Predicate> &MC = ModeChecks[Mode];
-    llvm::append_range(Preds, MC);
+    llvm::append_range(Preds, MC); 
     PatternsToMatch.emplace_back(P.getSrcRecord(), Preds, std::move(NewSrc),
                                  std::move(NewDst), P.getDstRegs(),
                                  P.getAddedComplexity(), Record::getNewUID(),

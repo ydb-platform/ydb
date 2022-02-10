@@ -7,10 +7,10 @@ import distutils.filelist
 import platform
 import types
 import functools
-from importlib import import_module
+from importlib import import_module 
 import inspect
 
-from setuptools.extern import six
+from setuptools.extern import six 
 
 import setuptools
 
@@ -21,20 +21,20 @@ if you think you need this functionality.
 """
 
 
-def _get_mro(cls):
-    """
-    Returns the bases classes for cls sorted by the MRO.
-
-    Works around an issue on Jython where inspect.getmro will not return all
-    base classes if multiple classes share the same name. Instead, this
-    function will return a tuple containing the class itself, and the contents
-    of cls.__bases__. See https://github.com/pypa/setuptools/issues/1024.
-    """
-    if platform.python_implementation() == "Jython":
-        return (cls,) + cls.__bases__
-    return inspect.getmro(cls)
-
-
+def _get_mro(cls): 
+    """ 
+    Returns the bases classes for cls sorted by the MRO. 
+ 
+    Works around an issue on Jython where inspect.getmro will not return all 
+    base classes if multiple classes share the same name. Instead, this 
+    function will return a tuple containing the class itself, and the contents 
+    of cls.__bases__. See https://github.com/pypa/setuptools/issues/1024. 
+    """ 
+    if platform.python_implementation() == "Jython": 
+        return (cls,) + cls.__bases__ 
+    return inspect.getmro(cls) 
+ 
+ 
 def get_unpatched(item):
     lookup = (
         get_unpatched_class if isinstance(item, six.class_types) else
@@ -52,7 +52,7 @@ def get_unpatched_class(cls):
     """
     external_bases = (
         cls
-        for cls in _get_mro(cls)
+        for cls in _get_mro(cls) 
         if not cls.__module__.startswith('setuptools')
     )
     base = next(external_bases)
@@ -84,7 +84,7 @@ def patch_all():
         warehouse = 'https://upload.pypi.org/legacy/'
         distutils.config.PyPIRCCommand.DEFAULT_REPOSITORY = warehouse
 
-    _patch_distribution_metadata()
+    _patch_distribution_metadata() 
 
     # Install Distribution throughout the distutils
     for module in distutils.dist, distutils.core, distutils.cmd:
@@ -101,11 +101,11 @@ def patch_all():
     patch_for_msvc_specialized_compiler()
 
 
-def _patch_distribution_metadata():
-    """Patch write_pkg_file and read_pkg_file for higher metadata standards"""
-    for attr in ('write_pkg_file', 'read_pkg_file', 'get_metadata_version'):
-        new_val = getattr(setuptools.dist, attr)
-        setattr(distutils.dist.DistributionMetadata, attr, new_val)
+def _patch_distribution_metadata(): 
+    """Patch write_pkg_file and read_pkg_file for higher metadata standards""" 
+    for attr in ('write_pkg_file', 'read_pkg_file', 'get_metadata_version'): 
+        new_val = getattr(setuptools.dist, attr) 
+        setattr(distutils.dist.DistributionMetadata, attr, new_val) 
 
 
 def patch_func(replacement, target_mod, func_name):

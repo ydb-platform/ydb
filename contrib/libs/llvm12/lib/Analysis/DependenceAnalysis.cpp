@@ -653,16 +653,16 @@ static AliasResult underlyingObjectsAlias(AAResults *AA,
                                           const MemoryLocation &LocB) {
   // Check the original locations (minus size) for noalias, which can happen for
   // tbaa, incompatible underlying object locations, etc.
-  MemoryLocation LocAS =
-      MemoryLocation::getBeforeOrAfter(LocA.Ptr, LocA.AATags);
-  MemoryLocation LocBS =
-      MemoryLocation::getBeforeOrAfter(LocB.Ptr, LocB.AATags);
+  MemoryLocation LocAS = 
+      MemoryLocation::getBeforeOrAfter(LocA.Ptr, LocA.AATags); 
+  MemoryLocation LocBS = 
+      MemoryLocation::getBeforeOrAfter(LocB.Ptr, LocB.AATags); 
   if (AA->alias(LocAS, LocBS) == NoAlias)
     return NoAlias;
 
   // Check the underlying objects are the same
-  const Value *AObj = getUnderlyingObject(LocA.Ptr);
-  const Value *BObj = getUnderlyingObject(LocB.Ptr);
+  const Value *AObj = getUnderlyingObject(LocA.Ptr); 
+  const Value *BObj = getUnderlyingObject(LocB.Ptr); 
 
   // If the underlying objects are the same, they must alias
   if (AObj == BObj)
@@ -873,8 +873,8 @@ void DependenceInfo::removeMatchingExtensions(Subscript *Pair) {
   const SCEV *Dst = Pair->Dst;
   if ((isa<SCEVZeroExtendExpr>(Src) && isa<SCEVZeroExtendExpr>(Dst)) ||
       (isa<SCEVSignExtendExpr>(Src) && isa<SCEVSignExtendExpr>(Dst))) {
-    const SCEVIntegralCastExpr *SrcCast = cast<SCEVIntegralCastExpr>(Src);
-    const SCEVIntegralCastExpr *DstCast = cast<SCEVIntegralCastExpr>(Dst);
+    const SCEVIntegralCastExpr *SrcCast = cast<SCEVIntegralCastExpr>(Src); 
+    const SCEVIntegralCastExpr *DstCast = cast<SCEVIntegralCastExpr>(Dst); 
     const SCEV *SrcCastOp = SrcCast->getOperand();
     const SCEV *DstCastOp = DstCast->getOperand();
     if (SrcCastOp->getType() == DstCastOp->getType()) {
@@ -971,8 +971,8 @@ bool DependenceInfo::isKnownPredicate(ICmpInst::Predicate Pred, const SCEV *X,
          isa<SCEVSignExtendExpr>(Y)) ||
         (isa<SCEVZeroExtendExpr>(X) &&
          isa<SCEVZeroExtendExpr>(Y))) {
-      const SCEVIntegralCastExpr *CX = cast<SCEVIntegralCastExpr>(X);
-      const SCEVIntegralCastExpr *CY = cast<SCEVIntegralCastExpr>(Y);
+      const SCEVIntegralCastExpr *CX = cast<SCEVIntegralCastExpr>(X); 
+      const SCEVIntegralCastExpr *CY = cast<SCEVIntegralCastExpr>(Y); 
       const SCEV *Xop = CX->getOperand();
       const SCEV *Yop = CY->getOperand();
       if (Xop->getType() == Yop->getType()) {
@@ -1531,18 +1531,18 @@ bool DependenceInfo::exactSIVtest(const SCEV *SrcCoeff, const SCEV *DstCoeff,
   // test(BM/G, LM-X) and test(-BM/G, X-UM)
   APInt TMUL = BM.sdiv(G);
   if (TMUL.sgt(0)) {
-    TL = APIntOps::smax(TL, ceilingOfQuotient(-X, TMUL));
+    TL = APIntOps::smax(TL, ceilingOfQuotient(-X, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t    TL = " << TL << "\n");
     if (UMvalid) {
-      TU = APIntOps::smin(TU, floorOfQuotient(UM - X, TMUL));
+      TU = APIntOps::smin(TU, floorOfQuotient(UM - X, TMUL)); 
       LLVM_DEBUG(dbgs() << "\t    TU = " << TU << "\n");
     }
   }
   else {
-    TU = APIntOps::smin(TU, floorOfQuotient(-X, TMUL));
+    TU = APIntOps::smin(TU, floorOfQuotient(-X, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t    TU = " << TU << "\n");
     if (UMvalid) {
-      TL = APIntOps::smax(TL, ceilingOfQuotient(UM - X, TMUL));
+      TL = APIntOps::smax(TL, ceilingOfQuotient(UM - X, TMUL)); 
       LLVM_DEBUG(dbgs() << "\t    TL = " << TL << "\n");
     }
   }
@@ -1550,18 +1550,18 @@ bool DependenceInfo::exactSIVtest(const SCEV *SrcCoeff, const SCEV *DstCoeff,
   // test(AM/G, LM-Y) and test(-AM/G, Y-UM)
   TMUL = AM.sdiv(G);
   if (TMUL.sgt(0)) {
-    TL = APIntOps::smax(TL, ceilingOfQuotient(-Y, TMUL));
+    TL = APIntOps::smax(TL, ceilingOfQuotient(-Y, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t    TL = " << TL << "\n");
     if (UMvalid) {
-      TU = APIntOps::smin(TU, floorOfQuotient(UM - Y, TMUL));
+      TU = APIntOps::smin(TU, floorOfQuotient(UM - Y, TMUL)); 
       LLVM_DEBUG(dbgs() << "\t    TU = " << TU << "\n");
     }
   }
   else {
-    TU = APIntOps::smin(TU, floorOfQuotient(-Y, TMUL));
+    TU = APIntOps::smin(TU, floorOfQuotient(-Y, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t    TU = " << TU << "\n");
     if (UMvalid) {
-      TL = APIntOps::smax(TL, ceilingOfQuotient(UM - Y, TMUL));
+      TL = APIntOps::smax(TL, ceilingOfQuotient(UM - Y, TMUL)); 
       LLVM_DEBUG(dbgs() << "\t    TL = " << TL << "\n");
     }
   }
@@ -1580,11 +1580,11 @@ bool DependenceInfo::exactSIVtest(const SCEV *SrcCoeff, const SCEV *DstCoeff,
   LLVM_DEBUG(dbgs() << "\t    exploring LT direction\n");
   TMUL = AM - BM;
   if (TMUL.sgt(0)) {
-    TL = APIntOps::smax(TL, ceilingOfQuotient(X - Y + 1, TMUL));
+    TL = APIntOps::smax(TL, ceilingOfQuotient(X - Y + 1, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t\t    TL = " << TL << "\n");
   }
   else {
-    TU = APIntOps::smin(TU, floorOfQuotient(X - Y + 1, TMUL));
+    TU = APIntOps::smin(TU, floorOfQuotient(X - Y + 1, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t\t    TU = " << TU << "\n");
   }
   if (TL.sle(TU)) {
@@ -1597,20 +1597,20 @@ bool DependenceInfo::exactSIVtest(const SCEV *SrcCoeff, const SCEV *DstCoeff,
   TL = SaveTL;
   LLVM_DEBUG(dbgs() << "\t    exploring EQ direction\n");
   if (TMUL.sgt(0)) {
-    TL = APIntOps::smax(TL, ceilingOfQuotient(X - Y, TMUL));
+    TL = APIntOps::smax(TL, ceilingOfQuotient(X - Y, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t\t    TL = " << TL << "\n");
   }
   else {
-    TU = APIntOps::smin(TU, floorOfQuotient(X - Y, TMUL));
+    TU = APIntOps::smin(TU, floorOfQuotient(X - Y, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t\t    TU = " << TU << "\n");
   }
   TMUL = BM - AM;
   if (TMUL.sgt(0)) {
-    TL = APIntOps::smax(TL, ceilingOfQuotient(Y - X, TMUL));
+    TL = APIntOps::smax(TL, ceilingOfQuotient(Y - X, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t\t    TL = " << TL << "\n");
   }
   else {
-    TU = APIntOps::smin(TU, floorOfQuotient(Y - X, TMUL));
+    TU = APIntOps::smin(TU, floorOfQuotient(Y - X, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t\t    TU = " << TU << "\n");
   }
   if (TL.sle(TU)) {
@@ -1623,11 +1623,11 @@ bool DependenceInfo::exactSIVtest(const SCEV *SrcCoeff, const SCEV *DstCoeff,
   TL = SaveTL;
   LLVM_DEBUG(dbgs() << "\t    exploring GT direction\n");
   if (TMUL.sgt(0)) {
-    TL = APIntOps::smax(TL, ceilingOfQuotient(Y - X + 1, TMUL));
+    TL = APIntOps::smax(TL, ceilingOfQuotient(Y - X + 1, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t\t    TL = " << TL << "\n");
   }
   else {
-    TU = APIntOps::smin(TU, floorOfQuotient(Y - X + 1, TMUL));
+    TU = APIntOps::smin(TU, floorOfQuotient(Y - X + 1, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t\t    TU = " << TU << "\n");
   }
   if (TL.sle(TU)) {
@@ -1939,18 +1939,18 @@ bool DependenceInfo::exactRDIVtest(const SCEV *SrcCoeff, const SCEV *DstCoeff,
   // test(BM/G, LM-X) and test(-BM/G, X-UM)
   APInt TMUL = BM.sdiv(G);
   if (TMUL.sgt(0)) {
-    TL = APIntOps::smax(TL, ceilingOfQuotient(-X, TMUL));
+    TL = APIntOps::smax(TL, ceilingOfQuotient(-X, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t    TL = " << TL << "\n");
     if (SrcUMvalid) {
-      TU = APIntOps::smin(TU, floorOfQuotient(SrcUM - X, TMUL));
+      TU = APIntOps::smin(TU, floorOfQuotient(SrcUM - X, TMUL)); 
       LLVM_DEBUG(dbgs() << "\t    TU = " << TU << "\n");
     }
   }
   else {
-    TU = APIntOps::smin(TU, floorOfQuotient(-X, TMUL));
+    TU = APIntOps::smin(TU, floorOfQuotient(-X, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t    TU = " << TU << "\n");
     if (SrcUMvalid) {
-      TL = APIntOps::smax(TL, ceilingOfQuotient(SrcUM - X, TMUL));
+      TL = APIntOps::smax(TL, ceilingOfQuotient(SrcUM - X, TMUL)); 
       LLVM_DEBUG(dbgs() << "\t    TL = " << TL << "\n");
     }
   }
@@ -1958,18 +1958,18 @@ bool DependenceInfo::exactRDIVtest(const SCEV *SrcCoeff, const SCEV *DstCoeff,
   // test(AM/G, LM-Y) and test(-AM/G, Y-UM)
   TMUL = AM.sdiv(G);
   if (TMUL.sgt(0)) {
-    TL = APIntOps::smax(TL, ceilingOfQuotient(-Y, TMUL));
+    TL = APIntOps::smax(TL, ceilingOfQuotient(-Y, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t    TL = " << TL << "\n");
     if (DstUMvalid) {
-      TU = APIntOps::smin(TU, floorOfQuotient(DstUM - Y, TMUL));
+      TU = APIntOps::smin(TU, floorOfQuotient(DstUM - Y, TMUL)); 
       LLVM_DEBUG(dbgs() << "\t    TU = " << TU << "\n");
     }
   }
   else {
-    TU = APIntOps::smin(TU, floorOfQuotient(-Y, TMUL));
+    TU = APIntOps::smin(TU, floorOfQuotient(-Y, TMUL)); 
     LLVM_DEBUG(dbgs() << "\t    TU = " << TU << "\n");
     if (DstUMvalid) {
-      TL = APIntOps::smax(TL, ceilingOfQuotient(DstUM - Y, TMUL));
+      TL = APIntOps::smax(TL, ceilingOfQuotient(DstUM - Y, TMUL)); 
       LLVM_DEBUG(dbgs() << "\t    TL = " << TL << "\n");
     }
   }

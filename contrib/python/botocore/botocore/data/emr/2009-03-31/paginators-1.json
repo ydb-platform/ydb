@@ -29,26 +29,26 @@
       "input_token": "Marker",
       "output_token": "Marker",
       "result_key": "InstanceFleets"
-    },
-    "ListSecurityConfigurations": {
-      "input_token": "Marker",
-      "output_token": "Marker",
-      "result_key": "SecurityConfigurations"
-    },
-    "ListNotebookExecutions": {
-      "input_token": "Marker",
-      "output_token": "Marker",
-      "result_key": "NotebookExecutions"
-    },
-    "ListStudioSessionMappings": {
-      "input_token": "Marker",
-      "output_token": "Marker",
-      "result_key": "SessionMappings"
-    },
-    "ListStudios": {
-      "input_token": "Marker",
-      "output_token": "Marker",
-      "result_key": "Studios"
+    }, 
+    "ListSecurityConfigurations": { 
+      "input_token": "Marker", 
+      "output_token": "Marker", 
+      "result_key": "SecurityConfigurations" 
+    }, 
+    "ListNotebookExecutions": { 
+      "input_token": "Marker", 
+      "output_token": "Marker", 
+      "result_key": "NotebookExecutions" 
+    }, 
+    "ListStudioSessionMappings": { 
+      "input_token": "Marker", 
+      "output_token": "Marker", 
+      "result_key": "SessionMappings" 
+    }, 
+    "ListStudios": { 
+      "input_token": "Marker", 
+      "output_token": "Marker", 
+      "result_key": "Studios" 
     }
   }
 }

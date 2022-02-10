@@ -75,35 +75,35 @@ bool X86LoadValueInjectionRetHardeningPass::runOnMachineFunction(
 
   bool Modified = false;
   for (auto &MBB : MF) {
-    for (auto MBBI = MBB.begin(); MBBI != MBB.end(); ++MBBI) {
-      if (MBBI->getOpcode() != X86::RETQ)
-        continue;
+    for (auto MBBI = MBB.begin(); MBBI != MBB.end(); ++MBBI) { 
+      if (MBBI->getOpcode() != X86::RETQ) 
+        continue; 
 
-      unsigned ClobberReg = TRI->findDeadCallerSavedReg(MBB, MBBI);
-      if (ClobberReg != X86::NoRegister) {
-        BuildMI(MBB, MBBI, DebugLoc(), TII->get(X86::POP64r))
-            .addReg(ClobberReg, RegState::Define)
-            .setMIFlag(MachineInstr::FrameDestroy);
-        BuildMI(MBB, MBBI, DebugLoc(), TII->get(X86::LFENCE));
-        BuildMI(MBB, MBBI, DebugLoc(), TII->get(X86::JMP64r))
-            .addReg(ClobberReg);
-        MBB.erase(MBBI);
-      } else {
-        // In case there is no available scratch register, we can still read
-        // from RSP to assert that RSP points to a valid page. The write to RSP
-        // is also helpful because it verifies that the stack's write
-        // permissions are intact.
-        MachineInstr *Fence =
-            BuildMI(MBB, MBBI, DebugLoc(), TII->get(X86::LFENCE));
-        addRegOffset(BuildMI(MBB, Fence, DebugLoc(), TII->get(X86::SHL64mi)),
-                     X86::RSP, false, 0)
-            .addImm(0)
-            ->addRegisterDead(X86::EFLAGS, TRI);
-      }
+      unsigned ClobberReg = TRI->findDeadCallerSavedReg(MBB, MBBI); 
+      if (ClobberReg != X86::NoRegister) { 
+        BuildMI(MBB, MBBI, DebugLoc(), TII->get(X86::POP64r)) 
+            .addReg(ClobberReg, RegState::Define) 
+            .setMIFlag(MachineInstr::FrameDestroy); 
+        BuildMI(MBB, MBBI, DebugLoc(), TII->get(X86::LFENCE)); 
+        BuildMI(MBB, MBBI, DebugLoc(), TII->get(X86::JMP64r)) 
+            .addReg(ClobberReg); 
+        MBB.erase(MBBI); 
+      } else { 
+        // In case there is no available scratch register, we can still read 
+        // from RSP to assert that RSP points to a valid page. The write to RSP 
+        // is also helpful because it verifies that the stack's write 
+        // permissions are intact. 
+        MachineInstr *Fence = 
+            BuildMI(MBB, MBBI, DebugLoc(), TII->get(X86::LFENCE)); 
+        addRegOffset(BuildMI(MBB, Fence, DebugLoc(), TII->get(X86::SHL64mi)), 
+                     X86::RSP, false, 0) 
+            .addImm(0) 
+            ->addRegisterDead(X86::EFLAGS, TRI); 
+      } 
 
-      ++NumFences;
-      Modified = true;
-      break;
+      ++NumFences; 
+      Modified = true; 
+      break; 
     }
   }
 

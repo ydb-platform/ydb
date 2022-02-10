@@ -28,9 +28,9 @@ def is_matchable_type(expected_type):
     if isinstance(expected_type, six.class_types):
         return True
 
-    if isinstance(expected_type, tuple) and \
-       expected_type and \
-       all(map(is_matchable_type, expected_type)):
-        return True
-
+    if isinstance(expected_type, tuple) and \ 
+       expected_type and \ 
+       all(map(is_matchable_type, expected_type)): 
+        return True 
+ 
     return False

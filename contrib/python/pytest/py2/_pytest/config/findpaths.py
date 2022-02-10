@@ -1,10 +1,10 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 import os
 
 import py
 
 from .exceptions import UsageError
-from _pytest.outcomes import fail
+from _pytest.outcomes import fail 
 
 
 def exists(path, ignore=EnvironmentError):
@@ -33,24 +33,24 @@ def getcfg(args, config=None):
             for inibasename in inibasenames:
                 p = base.join(inibasename)
                 if exists(p):
-                    try:
-                        iniconfig = py.iniconfig.IniConfig(p)
-                    except py.iniconfig.ParseError as exc:
-                        raise UsageError(str(exc))
+                    try: 
+                        iniconfig = py.iniconfig.IniConfig(p) 
+                    except py.iniconfig.ParseError as exc: 
+                        raise UsageError(str(exc)) 
 
                     if (
                         inibasename == "setup.cfg"
                         and "tool:pytest" in iniconfig.sections
                     ):
                         return base, p, iniconfig["tool:pytest"]
-                    elif "pytest" in iniconfig.sections:
-                        if inibasename == "setup.cfg" and config is not None:
-
-                            fail(
-                                CFG_PYTEST_SECTION.format(filename=inibasename),
-                                pytrace=False,
-                            )
-                        return base, p, iniconfig["pytest"]
+                    elif "pytest" in iniconfig.sections: 
+                        if inibasename == "setup.cfg" and config is not None: 
+ 
+                            fail( 
+                                CFG_PYTEST_SECTION.format(filename=inibasename), 
+                                pytrace=False, 
+                            ) 
+                        return base, p, iniconfig["pytest"] 
                     elif inibasename == "pytest.ini":
                         # allowed to be empty
                         return base, p, {}
@@ -114,40 +114,40 @@ def determine_setup(inifile, args, rootdir_cmd_arg=None, config=None):
                 if is_cfg_file and section == "pytest" and config is not None:
                     from _pytest.deprecated import CFG_PYTEST_SECTION
 
-                    fail(
-                        CFG_PYTEST_SECTION.format(filename=str(inifile)), pytrace=False
+                    fail( 
+                        CFG_PYTEST_SECTION.format(filename=str(inifile)), pytrace=False 
                     )
                 break
             except KeyError:
                 inicfg = None
-        if rootdir_cmd_arg is None:
-            rootdir = get_common_ancestor(dirs)
+        if rootdir_cmd_arg is None: 
+            rootdir = get_common_ancestor(dirs) 
     else:
         ancestor = get_common_ancestor(dirs)
         rootdir, inifile, inicfg = getcfg([ancestor], config=config)
-        if rootdir is None and rootdir_cmd_arg is None:
-            for possible_rootdir in ancestor.parts(reverse=True):
-                if possible_rootdir.join("setup.py").exists():
-                    rootdir = possible_rootdir
+        if rootdir is None and rootdir_cmd_arg is None: 
+            for possible_rootdir in ancestor.parts(reverse=True): 
+                if possible_rootdir.join("setup.py").exists(): 
+                    rootdir = possible_rootdir 
                     break
             else:
-                if dirs != [ancestor]:
-                    rootdir, inifile, inicfg = getcfg(dirs, config=config)
+                if dirs != [ancestor]: 
+                    rootdir, inifile, inicfg = getcfg(dirs, config=config) 
                 if rootdir is None:
-                    if config is not None:
-                        cwd = config.invocation_dir
-                    else:
-                        cwd = py.path.local()
-                    rootdir = get_common_ancestor([cwd, ancestor])
+                    if config is not None: 
+                        cwd = config.invocation_dir 
+                    else: 
+                        cwd = py.path.local() 
+                    rootdir = get_common_ancestor([cwd, ancestor]) 
                     is_fs_root = os.path.splitdrive(str(rootdir))[1] == "/"
                     if is_fs_root:
                         rootdir = ancestor
     if rootdir_cmd_arg:
-        rootdir = py.path.local(os.path.expandvars(rootdir_cmd_arg))
-        if not rootdir.isdir():
+        rootdir = py.path.local(os.path.expandvars(rootdir_cmd_arg)) 
+        if not rootdir.isdir(): 
             raise UsageError(
                 "Directory '{}' not found. Check your '--rootdir' option.".format(
-                    rootdir
+                    rootdir 
                 )
             )
     return rootdir, inifile, inicfg or {}

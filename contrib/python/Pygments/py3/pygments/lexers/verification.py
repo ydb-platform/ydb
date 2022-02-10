@@ -4,13 +4,13 @@
 
     Lexer for Intermediate Verification Languages (IVLs).
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
 from pygments.lexer import RegexLexer, include, words
 from pygments.token import Comment, Operator, Keyword, Name, Number, \
-    Punctuation, Text, Generic
+    Punctuation, Text, Generic 
 
 __all__ = ['BoogieLexer', 'SilverLexer']
 
@@ -28,9 +28,9 @@ class BoogieLexer(RegexLexer):
     tokens = {
         'root': [
             # Whitespace and Comments
-            (r'\n', Text),
-            (r'\s+', Text),
-            (r'\\\n', Text),  # line continuation
+            (r'\n', Text), 
+            (r'\s+', Text), 
+            (r'\\\n', Text),  # line continuation 
             (r'//[/!](.*?)\n', Comment.Doc),
             (r'//(.*?)\n', Comment.Single),
             (r'/\*', Comment.Multiline, 'comment'),
@@ -45,7 +45,7 @@ class BoogieLexer(RegexLexer):
             (words(('bool', 'int', 'ref'), suffix=r'\b'), Keyword.Type),
             include('numbers'),
             (r"(>=|<=|:=|!=|==>|&&|\|\||[+/\-=>*<\[\]])", Operator),
-            (r'\{.*?\}', Generic.Emph), #triggers
+            (r'\{.*?\}', Generic.Emph), #triggers 
             (r"([{}():;,.])", Punctuation),
             # Identifier
             (r'[a-zA-Z_]\w*', Name),
@@ -75,9 +75,9 @@ class SilverLexer(RegexLexer):
     tokens = {
         'root': [
             # Whitespace and Comments
-            (r'\n', Text),
-            (r'\s+', Text),
-            (r'\\\n', Text),  # line continuation
+            (r'\n', Text), 
+            (r'\s+', Text), 
+            (r'\\\n', Text),  # line continuation 
             (r'//[/!](.*?)\n', Comment.Doc),
             (r'//(.*?)\n', Comment.Single),
             (r'/\*', Comment.Multiline, 'comment'),
@@ -85,18 +85,18 @@ class SilverLexer(RegexLexer):
             (words((
                 'result', 'true', 'false', 'null', 'method', 'function',
                 'predicate', 'program', 'domain', 'axiom', 'var', 'returns',
-                'field', 'define', 'fold', 'unfold', 'inhale', 'exhale', 'new', 'assert',
+                'field', 'define', 'fold', 'unfold', 'inhale', 'exhale', 'new', 'assert', 
                 'assume', 'goto', 'while', 'if', 'elseif', 'else', 'fresh',
                 'constraining', 'Seq', 'Set', 'Multiset', 'union', 'intersection',
                 'setminus', 'subset', 'unfolding', 'in', 'old', 'forall', 'exists',
                 'acc', 'wildcard', 'write', 'none', 'epsilon', 'perm', 'unique',
                 'apply', 'package', 'folding', 'label', 'forperm'),
              suffix=r'\b'), Keyword),
-            (words(('requires', 'ensures', 'invariant'), suffix=r'\b'), Name.Decorator),
-            (words(('Int', 'Perm', 'Bool', 'Ref', 'Rational'), suffix=r'\b'), Keyword.Type),
+            (words(('requires', 'ensures', 'invariant'), suffix=r'\b'), Name.Decorator), 
+            (words(('Int', 'Perm', 'Bool', 'Ref', 'Rational'), suffix=r'\b'), Keyword.Type), 
             include('numbers'),
             (r'[!%&*+=|?:<>/\-\[\]]', Operator),
-            (r'\{.*?\}', Generic.Emph), #triggers
+            (r'\{.*?\}', Generic.Emph), #triggers 
             (r'([{}():;,.])', Punctuation),
             # Identifier
             (r'[\w$]\w*', Name),

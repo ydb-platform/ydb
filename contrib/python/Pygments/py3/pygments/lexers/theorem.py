@@ -4,7 +4,7 @@
 
     Lexers for theorem-proving languages.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -29,8 +29,8 @@ class CoqLexer(RegexLexer):
     filenames = ['*.v']
     mimetypes = ['text/x-coq']
 
-    flags = re.UNICODE
-
+    flags = re.UNICODE 
+ 
     keywords1 = (
         # Vernacular commands
         'Section', 'Module', 'End', 'Require', 'Import', 'Export', 'Variable',
@@ -56,7 +56,7 @@ class CoqLexer(RegexLexer):
     )
     keywords3 = (
         # Sorts
-        'Type', 'Prop', 'SProp',
+        'Type', 'Prop', 'SProp', 
     )
     keywords4 = (
         # Tactics
@@ -96,8 +96,8 @@ class CoqLexer(RegexLexer):
         '<->', '=', '>', '>]', r'>\}', r'\?', r'\?\?', r'\[', r'\[<', r'\[>',
         r'\[\|', ']', '_', '`', r'\{', r'\{<', r'\|', r'\|]', r'\}', '~', '=>',
         r'/\\', r'\\/', r'\{\|', r'\|\}',
-        # 'Π', 'Σ', # Not defined in the standard library
-        'λ', '¬', '∧', '∨', '∀', '∃', '→', '↔', '≠', '≤', '≥',
+        # 'Π', 'Σ', # Not defined in the standard library 
+        'λ', '¬', '∧', '∨', '∀', '∃', '→', '↔', '≠', '≤', '≥', 
     )
     operators = r'[!$%&*+\./:<=>?@^|~-]'
     prefix_syms = r'[!?~]'
@@ -127,15 +127,15 @@ class CoqLexer(RegexLexer):
             (r'0[bB][01][01_]*', Number.Bin),
             (r'-?\d[\d_]*(.[\d_]*)?([eE][+\-]?\d[\d_]*)', Number.Float),
 
-            (r"'(?:(\\[\\\"'ntbr ])|(\\[0-9]{3})|(\\x[0-9a-fA-F]{2}))'", String.Char),
-
+            (r"'(?:(\\[\\\"'ntbr ])|(\\[0-9]{3})|(\\x[0-9a-fA-F]{2}))'", String.Char), 
+ 
             (r"'.'", String.Char),
             (r"'", Keyword),  # a stray quote is another syntax element
 
             (r'"', String.Double, 'string'),
 
             (r'[~?][a-z][\w\']*:', Name),
-            (r'\S', Name.Builtin.Pseudo),
+            (r'\S', Name.Builtin.Pseudo), 
         ],
         'comment': [
             (r'[^(*)]+', Comment),
@@ -159,8 +159,8 @@ class CoqLexer(RegexLexer):
     }
 
     def analyse_text(text):
-        if 'Qed' in text and 'Proof' in text:
-            return 1
+        if 'Qed' in text and 'Proof' in text: 
+            return 1 
 
 
 class IsabelleLexer(RegexLexer):
@@ -393,72 +393,72 @@ class LeanLexer(RegexLexer):
 
     flags = re.MULTILINE | re.UNICODE
 
-    tokens = {
-        'root': [
-            (r'\s+', Text),
-            (r'/--', String.Doc, 'docstring'),
-            (r'/-', Comment, 'comment'),
-            (r'--.*?$', Comment.Single),
-            (words((
-                'import', 'renaming', 'hiding',
-                'namespace',
-                'local',
-                'private', 'protected', 'section',
-                'include', 'omit', 'section',
-                'protected', 'export',
-                'open',
-                'attribute',
-            ), prefix=r'\b', suffix=r'\b'), Keyword.Namespace),
-            (words((
-                'lemma', 'theorem', 'def', 'definition', 'example',
-                'axiom', 'axioms', 'constant', 'constants',
-                'universe', 'universes',
-                'inductive', 'coinductive', 'structure', 'extends',
-                'class', 'instance',
-                'abbreviation',
+    tokens = { 
+        'root': [ 
+            (r'\s+', Text), 
+            (r'/--', String.Doc, 'docstring'), 
+            (r'/-', Comment, 'comment'), 
+            (r'--.*?$', Comment.Single), 
+            (words(( 
+                'import', 'renaming', 'hiding', 
+                'namespace', 
+                'local', 
+                'private', 'protected', 'section', 
+                'include', 'omit', 'section', 
+                'protected', 'export', 
+                'open', 
+                'attribute', 
+            ), prefix=r'\b', suffix=r'\b'), Keyword.Namespace), 
+            (words(( 
+                'lemma', 'theorem', 'def', 'definition', 'example', 
+                'axiom', 'axioms', 'constant', 'constants', 
+                'universe', 'universes', 
+                'inductive', 'coinductive', 'structure', 'extends', 
+                'class', 'instance', 
+                'abbreviation', 
 
-                'noncomputable theory',
+                'noncomputable theory', 
 
-                'noncomputable', 'mutual', 'meta',
+                'noncomputable', 'mutual', 'meta', 
 
-                'attribute',
+                'attribute', 
 
-                'parameter', 'parameters',
-                'variable', 'variables',
+                'parameter', 'parameters', 
+                'variable', 'variables', 
 
-                'reserve', 'precedence',
-                'postfix', 'prefix', 'notation', 'infix', 'infixl', 'infixr',
-
-                'begin', 'by', 'end',
-
-                'set_option',
-                'run_cmd',
-            ), prefix=r'\b', suffix=r'\b'), Keyword.Declaration),
-            (r'@\[[^\]]*\]', Keyword.Declaration),
-            (words((
-                'forall', 'fun', 'Pi', 'from', 'have', 'show', 'assume', 'suffices',
-                'let', 'if', 'else', 'then', 'in', 'with', 'calc', 'match',
-                'do'
-            ), prefix=r'\b', suffix=r'\b'), Keyword),
-            (words(('sorry', 'admit'), prefix=r'\b', suffix=r'\b'), Generic.Error),
-            (words(('Sort', 'Prop', 'Type'), prefix=r'\b', suffix=r'\b'), Keyword.Type),
-            (words((
-                '#eval', '#check', '#reduce', '#exit',
-                '#print', '#help',
-            ), suffix=r'\b'), Keyword),
-            (words((
-                '(', ')', ':', '{', '}', '[', ']', '⟨', '⟩', '‹', '›', '⦃', '⦄', ':=', ',',
-            )), Operator),
-            (r'[A-Za-z_\u03b1-\u03ba\u03bc-\u03fb\u1f00-\u1ffe\u2100-\u214f]'
-             r'[.A-Za-z_\'\u03b1-\u03ba\u03bc-\u03fb\u1f00-\u1ffe\u2070-\u2079'
-             r'\u207f-\u2089\u2090-\u209c\u2100-\u214f0-9]*', Name),
-            (r'0x[A-Za-z0-9]+', Number.Integer),
-            (r'0b[01]+', Number.Integer),
+                'reserve', 'precedence', 
+                'postfix', 'prefix', 'notation', 'infix', 'infixl', 'infixr', 
+ 
+                'begin', 'by', 'end', 
+ 
+                'set_option', 
+                'run_cmd', 
+            ), prefix=r'\b', suffix=r'\b'), Keyword.Declaration), 
+            (r'@\[[^\]]*\]', Keyword.Declaration), 
+            (words(( 
+                'forall', 'fun', 'Pi', 'from', 'have', 'show', 'assume', 'suffices', 
+                'let', 'if', 'else', 'then', 'in', 'with', 'calc', 'match', 
+                'do' 
+            ), prefix=r'\b', suffix=r'\b'), Keyword), 
+            (words(('sorry', 'admit'), prefix=r'\b', suffix=r'\b'), Generic.Error), 
+            (words(('Sort', 'Prop', 'Type'), prefix=r'\b', suffix=r'\b'), Keyword.Type), 
+            (words(( 
+                '#eval', '#check', '#reduce', '#exit', 
+                '#print', '#help', 
+            ), suffix=r'\b'), Keyword), 
+            (words(( 
+                '(', ')', ':', '{', '}', '[', ']', '⟨', '⟩', '‹', '›', '⦃', '⦄', ':=', ',', 
+            )), Operator), 
+            (r'[A-Za-z_\u03b1-\u03ba\u03bc-\u03fb\u1f00-\u1ffe\u2100-\u214f]' 
+             r'[.A-Za-z_\'\u03b1-\u03ba\u03bc-\u03fb\u1f00-\u1ffe\u2070-\u2079' 
+             r'\u207f-\u2089\u2090-\u209c\u2100-\u214f0-9]*', Name), 
+            (r'0x[A-Za-z0-9]+', Number.Integer), 
+            (r'0b[01]+', Number.Integer), 
             (r'\d+', Number.Integer),
             (r'"', String.Double, 'string'),
-            (r"'(?:(\\[\\\"'nt])|(\\x[0-9a-fA-F]{2})|(\\u[0-9a-fA-F]{4})|.)'", String.Char),
-            (r'[~?][a-z][\w\']*:', Name.Variable),
-            (r'\S', Name.Builtin.Pseudo),
+            (r"'(?:(\\[\\\"'nt])|(\\x[0-9a-fA-F]{2})|(\\u[0-9a-fA-F]{4})|.)'", String.Char), 
+            (r'[~?][a-z][\w\']*:', Name.Variable), 
+            (r'\S', Name.Builtin.Pseudo), 
         ],
         'comment': [
             (r'[^/-]', Comment.Multiline),
@@ -466,14 +466,14 @@ class LeanLexer(RegexLexer):
             (r'-/', Comment.Multiline, '#pop'),
             (r'[/-]', Comment.Multiline)
         ],
-        'docstring': [
-            (r'[^/-]', String.Doc),
-            (r'-/', String.Doc, '#pop'),
-            (r'[/-]', String.Doc)
-        ],
+        'docstring': [ 
+            (r'[^/-]', String.Doc), 
+            (r'-/', String.Doc, '#pop'), 
+            (r'[/-]', String.Doc) 
+        ], 
         'string': [
             (r'[^\\"]+', String.Double),
-            (r"(?:(\\[\\\"'nt])|(\\x[0-9a-fA-F]{2})|(\\u[0-9a-fA-F]{4}))", String.Escape),
+            (r"(?:(\\[\\\"'nt])|(\\x[0-9a-fA-F]{2})|(\\u[0-9a-fA-F]{4}))", String.Escape), 
             ('"', String.Double, '#pop'),
         ],
     }

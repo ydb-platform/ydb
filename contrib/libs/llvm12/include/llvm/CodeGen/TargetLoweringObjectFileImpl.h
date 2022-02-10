@@ -28,7 +28,7 @@ namespace llvm {
 
 class GlobalValue;
 class MachineModuleInfo;
-class MachineFunction;
+class MachineFunction; 
 class MCContext;
 class MCExpr;
 class MCSection;
@@ -45,7 +45,7 @@ protected:
       MCSymbolRefExpr::VK_None;
 
 public:
-  TargetLoweringObjectFileELF();
+  TargetLoweringObjectFileELF(); 
   ~TargetLoweringObjectFileELF() override = default;
 
   void Initialize(MCContext &Ctx, const TargetMachine &TM) override;
@@ -70,8 +70,8 @@ public:
 
   MCSection *getSectionForJumpTable(const Function &F,
                                     const TargetMachine &TM) const override;
-  MCSection *getSectionForLSDA(const Function &F,
-                               const TargetMachine &TM) const override;
+  MCSection *getSectionForLSDA(const Function &F, 
+                               const TargetMachine &TM) const override; 
 
   MCSection *
   getSectionForMachineBasicBlock(const Function &F,
@@ -104,9 +104,9 @@ public:
                                        const GlobalValue *RHS,
                                        const TargetMachine &TM) const override;
 
-  const MCExpr *lowerDSOLocalEquivalent(const DSOLocalEquivalent *Equiv,
-                                        const TargetMachine &TM) const override;
-
+  const MCExpr *lowerDSOLocalEquivalent(const DSOLocalEquivalent *Equiv, 
+                                        const TargetMachine &TM) const override; 
+ 
   MCSection *getSectionForCommandLines() const override;
 };
 
@@ -155,7 +155,7 @@ public:
 
 class TargetLoweringObjectFileCOFF : public TargetLoweringObjectFile {
   mutable unsigned NextUniqueID = 0;
-  const TargetMachine *TM = nullptr;
+  const TargetMachine *TM = nullptr; 
 
 public:
   ~TargetLoweringObjectFileCOFF() override = default;
@@ -190,9 +190,9 @@ public:
   MCSection *getSectionForConstant(const DataLayout &DL, SectionKind Kind,
                                    const Constant *C,
                                    Align &Alignment) const override;
-
-private:
-  void emitLinkerDirectives(MCStreamer &Streamer, Module &M) const;
+ 
+private: 
+  void emitLinkerDirectives(MCStreamer &Streamer, Module &M) const; 
 };
 
 class TargetLoweringObjectFileWasm : public TargetLoweringObjectFile {
@@ -227,10 +227,10 @@ public:
   TargetLoweringObjectFileXCOFF() = default;
   ~TargetLoweringObjectFileXCOFF() override = default;
 
-  static bool ShouldEmitEHBlock(const MachineFunction *MF);
-
-  static MCSymbol *getEHInfoTableSymbol(const MachineFunction *MF);
-
+  static bool ShouldEmitEHBlock(const MachineFunction *MF); 
+ 
+  static MCSymbol *getEHInfoTableSymbol(const MachineFunction *MF); 
+ 
   void Initialize(MCContext &Ctx, const TargetMachine &TM) override;
 
   bool shouldPutJumpTableInFunctionSection(bool UsesLabelDifference,
@@ -260,13 +260,13 @@ public:
                                    const Constant *C,
                                    Align &Alignment) const override;
 
-  static XCOFF::StorageClass getStorageClassForGlobal(const GlobalValue *GV);
+  static XCOFF::StorageClass getStorageClassForGlobal(const GlobalValue *GV); 
 
   MCSection *
   getSectionForFunctionDescriptor(const Function *F,
                                   const TargetMachine &TM) const override;
-  MCSection *getSectionForTOCEntry(const MCSymbol *Sym,
-                                   const TargetMachine &TM) const override;
+  MCSection *getSectionForTOCEntry(const MCSymbol *Sym, 
+                                   const TargetMachine &TM) const override; 
 
   /// For external functions, this will always return a function descriptor
   /// csect.
@@ -278,7 +278,7 @@ public:
   MCSymbol *getTargetSymbol(const GlobalValue *GV,
                             const TargetMachine &TM) const override;
 
-  MCSymbol *getFunctionEntryPointSymbol(const GlobalValue *Func,
+  MCSymbol *getFunctionEntryPointSymbol(const GlobalValue *Func, 
                                         const TargetMachine &TM) const override;
 };
 

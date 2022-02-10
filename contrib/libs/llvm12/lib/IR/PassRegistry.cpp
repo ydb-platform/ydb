@@ -40,12 +40,12 @@ PassRegistry::~PassRegistry() = default;
 
 const PassInfo *PassRegistry::getPassInfo(const void *TI) const {
   sys::SmartScopedReader<true> Guard(Lock);
-  return PassInfoMap.lookup(TI);
+  return PassInfoMap.lookup(TI); 
 }
 
 const PassInfo *PassRegistry::getPassInfo(StringRef Arg) const {
   sys::SmartScopedReader<true> Guard(Lock);
-  return PassInfoStringMap.lookup(Arg);
+  return PassInfoStringMap.lookup(Arg); 
 }
 
 //===----------------------------------------------------------------------===//

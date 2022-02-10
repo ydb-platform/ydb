@@ -58,10 +58,10 @@ ModulePass *createSVEIntrinsicOptsPass();
 InstructionSelector *
 createAArch64InstructionSelector(const AArch64TargetMachine &,
                                  AArch64Subtarget &, AArch64RegisterBankInfo &);
-FunctionPass *createAArch64PreLegalizerCombiner(bool IsOptNone);
-FunctionPass *createAArch64PostLegalizerCombiner(bool IsOptNone);
-FunctionPass *createAArch64PostLegalizerLowering();
-FunctionPass *createAArch64PostSelectOptimize();
+FunctionPass *createAArch64PreLegalizerCombiner(bool IsOptNone); 
+FunctionPass *createAArch64PostLegalizerCombiner(bool IsOptNone); 
+FunctionPass *createAArch64PostLegalizerLowering(); 
+FunctionPass *createAArch64PostSelectOptimize(); 
 FunctionPass *createAArch64StackTaggingPass(bool IsOptNone);
 FunctionPass *createAArch64StackTaggingPreRAPass();
 
@@ -82,8 +82,8 @@ void initializeAArch64LoadStoreOptPass(PassRegistry&);
 void initializeAArch64SIMDInstrOptPass(PassRegistry&);
 void initializeAArch64PreLegalizerCombinerPass(PassRegistry&);
 void initializeAArch64PostLegalizerCombinerPass(PassRegistry &);
-void initializeAArch64PostLegalizerLoweringPass(PassRegistry &);
-void initializeAArch64PostSelectOptimizePass(PassRegistry &);
+void initializeAArch64PostLegalizerLoweringPass(PassRegistry &); 
+void initializeAArch64PostSelectOptimizePass(PassRegistry &); 
 void initializeAArch64PromoteConstantPass(PassRegistry&);
 void initializeAArch64RedundantCopyEliminationPass(PassRegistry&);
 void initializeAArch64StorePairSuppressPass(PassRegistry&);

@@ -50,7 +50,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Scalar/LoopReroll.h"
+#include "llvm/Transforms/Scalar/LoopReroll.h" 
 #include "llvm/Transforms/Utils.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/Local.h"
@@ -162,12 +162,12 @@ namespace {
     IL_End
   };
 
-  class LoopRerollLegacyPass : public LoopPass {
+  class LoopRerollLegacyPass : public LoopPass { 
   public:
     static char ID; // Pass ID, replacement for typeid
 
-    LoopRerollLegacyPass() : LoopPass(ID) {
-      initializeLoopRerollLegacyPassPass(*PassRegistry::getPassRegistry());
+    LoopRerollLegacyPass() : LoopPass(ID) { 
+      initializeLoopRerollLegacyPassPass(*PassRegistry::getPassRegistry()); 
     }
 
     bool runOnLoop(Loop *L, LPPassManager &LPM) override;
@@ -176,16 +176,16 @@ namespace {
       AU.addRequired<TargetLibraryInfoWrapperPass>();
       getLoopAnalysisUsage(AU);
     }
-  };
+  }; 
 
-  class LoopReroll {
-  public:
-    LoopReroll(AliasAnalysis *AA, LoopInfo *LI, ScalarEvolution *SE,
-               TargetLibraryInfo *TLI, DominatorTree *DT, bool PreserveLCSSA)
-        : AA(AA), LI(LI), SE(SE), TLI(TLI), DT(DT),
-          PreserveLCSSA(PreserveLCSSA) {}
-    bool runOnLoop(Loop *L);
-
+  class LoopReroll { 
+  public: 
+    LoopReroll(AliasAnalysis *AA, LoopInfo *LI, ScalarEvolution *SE, 
+               TargetLibraryInfo *TLI, DominatorTree *DT, bool PreserveLCSSA) 
+        : AA(AA), LI(LI), SE(SE), TLI(TLI), DT(DT), 
+          PreserveLCSSA(PreserveLCSSA) {} 
+    bool runOnLoop(Loop *L); 
+ 
   protected:
     AliasAnalysis *AA;
     LoopInfo *LI;
@@ -494,16 +494,16 @@ namespace {
 
 } // end anonymous namespace
 
-char LoopRerollLegacyPass::ID = 0;
+char LoopRerollLegacyPass::ID = 0; 
 
-INITIALIZE_PASS_BEGIN(LoopRerollLegacyPass, "loop-reroll", "Reroll loops",
-                      false, false)
+INITIALIZE_PASS_BEGIN(LoopRerollLegacyPass, "loop-reroll", "Reroll loops", 
+                      false, false) 
 INITIALIZE_PASS_DEPENDENCY(LoopPass)
 INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
-INITIALIZE_PASS_END(LoopRerollLegacyPass, "loop-reroll", "Reroll loops", false,
-                    false)
+INITIALIZE_PASS_END(LoopRerollLegacyPass, "loop-reroll", "Reroll loops", false, 
+                    false) 
 
-Pass *llvm::createLoopRerollPass() { return new LoopRerollLegacyPass; }
+Pass *llvm::createLoopRerollPass() { return new LoopRerollLegacyPass; } 
 
 // Returns true if the provided instruction is used outside the given loop.
 // This operates like Instruction::isUsedOutsideOfBlock, but considers PHIs in
@@ -1081,12 +1081,12 @@ bool LoopReroll::DAGRootTracker::collectUsedInstructions(SmallInstructionSet &Po
   DenseSet<Instruction*> V;
   collectInLoopUserSet(LoopIncs, Exclude, PossibleRedSet, V);
   for (auto *I : V) {
-    if (I->mayHaveSideEffects()) {
-      LLVM_DEBUG(dbgs() << "LRR: Aborting - "
-                        << "An instruction which does not belong to any root "
-                        << "sets must not have side effects: " << *I);
-      return false;
-    }
+    if (I->mayHaveSideEffects()) { 
+      LLVM_DEBUG(dbgs() << "LRR: Aborting - " 
+                        << "An instruction which does not belong to any root " 
+                        << "sets must not have side effects: " << *I); 
+      return false; 
+    } 
     Uses[I].set(IL_All);
   }
 
@@ -1102,7 +1102,7 @@ LoopReroll::DAGRootTracker::nextInstr(int Val, UsesTy &In,
                                       UsesTy::iterator *StartI) {
   UsesTy::iterator I = StartI ? *StartI : In.begin();
   while (I != In.end() && (I->second.test(Val) == 0 ||
-                           Exclude.contains(I->first)))
+                           Exclude.contains(I->first))) 
     ++I;
   return I;
 }
@@ -1660,7 +1660,7 @@ bool LoopReroll::reroll(Instruction *IV, Loop *L, BasicBlock *Header,
   return true;
 }
 
-bool LoopReroll::runOnLoop(Loop *L) {
+bool LoopReroll::runOnLoop(Loop *L) { 
   BasicBlock *Header = L->getHeader();
   LLVM_DEBUG(dbgs() << "LRR: F[" << Header->getParent()->getName() << "] Loop %"
                     << Header->getName() << " (" << L->getNumBlocks()
@@ -1709,26 +1709,26 @@ bool LoopReroll::runOnLoop(Loop *L) {
 
   return Changed;
 }
-
-bool LoopRerollLegacyPass::runOnLoop(Loop *L, LPPassManager &LPM) {
-  if (skipLoop(L))
-    return false;
-
-  auto *AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
-  auto *LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
-  auto *SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
-  auto *TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(
-      *L->getHeader()->getParent());
-  auto *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-  bool PreserveLCSSA = mustPreserveAnalysisID(LCSSAID);
-
-  return LoopReroll(AA, LI, SE, TLI, DT, PreserveLCSSA).runOnLoop(L);
-}
-
-PreservedAnalyses LoopRerollPass::run(Loop &L, LoopAnalysisManager &AM,
-                                      LoopStandardAnalysisResults &AR,
-                                      LPMUpdater &U) {
-  return LoopReroll(&AR.AA, &AR.LI, &AR.SE, &AR.TLI, &AR.DT, true).runOnLoop(&L)
-             ? getLoopPassPreservedAnalyses()
-             : PreservedAnalyses::all();
-}
+ 
+bool LoopRerollLegacyPass::runOnLoop(Loop *L, LPPassManager &LPM) { 
+  if (skipLoop(L)) 
+    return false; 
+ 
+  auto *AA = &getAnalysis<AAResultsWrapperPass>().getAAResults(); 
+  auto *LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo(); 
+  auto *SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE(); 
+  auto *TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI( 
+      *L->getHeader()->getParent()); 
+  auto *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree(); 
+  bool PreserveLCSSA = mustPreserveAnalysisID(LCSSAID); 
+ 
+  return LoopReroll(AA, LI, SE, TLI, DT, PreserveLCSSA).runOnLoop(L); 
+} 
+ 
+PreservedAnalyses LoopRerollPass::run(Loop &L, LoopAnalysisManager &AM, 
+                                      LoopStandardAnalysisResults &AR, 
+                                      LPMUpdater &U) { 
+  return LoopReroll(&AR.AA, &AR.LI, &AR.SE, &AR.TLI, &AR.DT, true).runOnLoop(&L) 
+             ? getLoopPassPreservedAnalyses() 
+             : PreservedAnalyses::all(); 
+} 

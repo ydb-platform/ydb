@@ -14,7 +14,7 @@ OWNER(
 PEERDIR(
     contrib/libs/grpc/grpc
     contrib/python/six
-    contrib/libs/grpc/src/proto/grpc/reflection/v1alpha
+    contrib/libs/grpc/src/proto/grpc/reflection/v1alpha 
 )
 
 IF (PYTHON2)

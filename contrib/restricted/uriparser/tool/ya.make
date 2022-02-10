@@ -2,17 +2,17 @@
 
 PROGRAM(uriparse)
 
-OWNER(
-    kikht
-    shindo
-    g:cpp-contrib
-    g:mds
-)
+OWNER( 
+    kikht 
+    shindo 
+    g:cpp-contrib 
+    g:mds 
+) 
 
 LICENSE(BSD-3-Clause)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/restricted/uriparser
 )

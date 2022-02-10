@@ -33,18 +33,18 @@ Bug tracking: <a href="http://orc.apache.org/bugs">Apache Jira</a>
 
 The subdirectories are:
 * c++ - the c++ reader and writer
-* cmake_modules - the cmake modules
+* cmake_modules - the cmake modules 
 * docker - docker scripts to build and test on various linuxes
 * examples - various ORC example files that are used to test compatibility
 * java - the java reader and writer
 * proto - the protocol buffer definition for the ORC metadata
 * site - the website and documentation
-* snap - the script to build [snaps](https://snapcraft.io/) of the ORC tools
+* snap - the script to build [snaps](https://snapcraft.io/) of the ORC tools 
 * tools - the c++ tools for reading and inspecting ORC files
 
 ### Building
 
-* Install java 1.8 or higher
+* Install java 1.8 or higher 
 * Install maven 3 or higher
 * Install cmake
 
@@ -81,7 +81,7 @@ To build a release version without debug information:
 To build only the Java library:
 ```shell
 % cd java
-% ./mvnw package
+% ./mvnw package 
 
 ```
 

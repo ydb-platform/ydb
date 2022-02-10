@@ -95,7 +95,7 @@ private:
     if (Offset >= getLength())
       return make_error<BinaryStreamError>(stream_error_code::stream_too_short);
     ++Offset;
-    auto Iter = llvm::lower_bound(ItemEndOffsets, Offset);
+    auto Iter = llvm::lower_bound(ItemEndOffsets, Offset); 
     size_t Idx = std::distance(ItemEndOffsets.begin(), Iter);
     assert(Idx < Items.size() && "binary search for offset failed");
     return Idx;

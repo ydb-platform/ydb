@@ -5,27 +5,27 @@
 
 
 from copy import deepcopy
-import logging
+import logging 
 import warnings
 
-from .loader import Config, LazyConfigValue, DeferredConfig, _is_section_key
-from traitlets.traitlets import (
-    Any,
-    HasTraits,
-    Instance,
-    Container,
-    Dict,
-    observe,
-    observe_compat,
-    default,
-    validate,
-)
-from traitlets.utils.text import indent, wrap_paragraphs
-from textwrap import dedent
+from .loader import Config, LazyConfigValue, DeferredConfig, _is_section_key 
+from traitlets.traitlets import ( 
+    Any, 
+    HasTraits, 
+    Instance, 
+    Container, 
+    Dict, 
+    observe, 
+    observe_compat, 
+    default, 
+    validate, 
+) 
+from traitlets.utils.text import indent, wrap_paragraphs 
+from textwrap import dedent 
 
 
-
-
+ 
+ 
 #-----------------------------------------------------------------------------
 # Helper classes for Configurables
 #-----------------------------------------------------------------------------
@@ -84,17 +84,17 @@ class Configurable(HasTraits):
         # load kwarg traits, other than config
         super(Configurable, self).__init__(**kwargs)
 
-        # record traits set by config
-        config_override_names = set()
-        def notice_config_override(change):
-            """Record traits set by both config and kwargs.
-
-            They will need to be overridden again after loading config.
-            """
-            if change.name in kwargs:
-                config_override_names.add(change.name)
-        self.observe(notice_config_override)
-
+        # record traits set by config 
+        config_override_names = set() 
+        def notice_config_override(change): 
+            """Record traits set by both config and kwargs. 
+ 
+            They will need to be overridden again after loading config. 
+            """ 
+            if change.name in kwargs: 
+                config_override_names.add(change.name) 
+        self.observe(notice_config_override) 
+ 
         # load config
         if config is not None:
             # We used to deepcopy, but for now we are trying to just save
@@ -108,12 +108,12 @@ class Configurable(HasTraits):
         else:
             # allow _config_default to return something
             self._load_config(self.config)
-        self.unobserve(notice_config_override)
+        self.unobserve(notice_config_override) 
 
-        for name in config_override_names:
-            setattr(self, name, kwargs[name])
+        for name in config_override_names: 
+            setattr(self, name, kwargs[name]) 
 
-
+ 
     #-------------------------------------------------------------------------
     # Static trait notifiations
     #-------------------------------------------------------------------------
@@ -134,7 +134,7 @@ class Configurable(HasTraits):
         If I am Bar and my parent is Foo, and their parent is Tim,
         this will return merge following config sections, in this order::
 
-            [Bar, Foo.Bar, Tim.Foo.Bar]
+            [Bar, Foo.Bar, Tim.Foo.Bar] 
 
         With the last item being the highest priority.
         """
@@ -169,9 +169,9 @@ class Configurable(HasTraits):
                         # without having to copy the initial value
                         initial = getattr(self, name)
                         config_value = config_value.get_value(initial)
-                    elif isinstance(config_value, DeferredConfig):
-                        # DeferredConfig tends to come from CLI/environment variables
-                        config_value = config_value.get_value(traits[name])
+                    elif isinstance(config_value, DeferredConfig): 
+                        # DeferredConfig tends to come from CLI/environment variables 
+                        config_value = config_value.get_value(traits[name]) 
                     # We have to do a deepcopy here if we don't deepcopy the entire
                     # config object. If we don't, a mutable config_value will be
                     # shared by all instances, effectively making it a class attribute.
@@ -183,11 +183,11 @@ class Configurable(HasTraits):
                     else:
                         warn = lambda msg: warnings.warn(msg, stacklevel=9)
                     matches = get_close_matches(name, traits)
-                    msg = "Config option `{option}` not recognized by `{klass}`.".format(
+                    msg = "Config option `{option}` not recognized by `{klass}`.".format( 
                         option=name, klass=self.__class__.__name__)
 
                     if len(matches) == 1:
-                        msg += "  Did you mean `{matches}`?".format(matches=matches[0])
+                        msg += "  Did you mean `{matches}`?".format(matches=matches[0]) 
                     elif len(matches) >= 1:
                         msg +="  Did you mean one of: `{matches}`?".format(matches=', '.join(sorted(matches)))
                     warn(msg)
@@ -235,54 +235,54 @@ class Configurable(HasTraits):
         """
         assert inst is None or isinstance(inst, cls)
         final_help = []
-        base_classes = ', '.join(p.__name__ for p in cls.__bases__)
-        final_help.append('%s(%s) options' % (cls.__name__, base_classes))
-        final_help.append(len(final_help[0])*'-')
+        base_classes = ', '.join(p.__name__ for p in cls.__bases__) 
+        final_help.append('%s(%s) options' % (cls.__name__, base_classes)) 
+        final_help.append(len(final_help[0])*'-') 
         for k, v in sorted(cls.class_traits(config=True).items()):
             help = cls.class_get_trait_help(v, inst)
             final_help.append(help)
         return '\n'.join(final_help)
 
     @classmethod
-    def class_get_trait_help(cls, trait, inst=None, helptext=None):
-        """Get the helptext string for a single trait.
+    def class_get_trait_help(cls, trait, inst=None, helptext=None): 
+        """Get the helptext string for a single trait. 
 
-        :param inst:
-            If given, it's current trait values will be used in place of
-            the class default.
-        :param helptext:
-            If not given, uses the `help` attribute of the current trait.
+        :param inst: 
+            If given, it's current trait values will be used in place of 
+            the class default. 
+        :param helptext: 
+            If not given, uses the `help` attribute of the current trait. 
         """
         assert inst is None or isinstance(inst, cls)
         lines = []
-        header = "--%s.%s" % (cls.__name__, trait.name)
-        if isinstance(trait, (Container, Dict)):
-            multiplicity = trait.metadata.get('multiplicity', 'append')
-            if isinstance(trait, Dict):
-                sample_value = '<key-1>=<value-1>'
-            else:
-                sample_value = '<%s-item-1>' % trait.__class__.__name__.lower()
-            if multiplicity == 'append':
-                header = "%s=%s..." % (header, sample_value)
-            else:
-                header = "%s %s..." % (header, sample_value)
-        else:
-            header = '%s=<%s>' % (header, trait.__class__.__name__)
-        #header = "--%s.%s=<%s>" % (cls.__name__, trait.name, trait.__class__.__name__)
+        header = "--%s.%s" % (cls.__name__, trait.name) 
+        if isinstance(trait, (Container, Dict)): 
+            multiplicity = trait.metadata.get('multiplicity', 'append') 
+            if isinstance(trait, Dict): 
+                sample_value = '<key-1>=<value-1>' 
+            else: 
+                sample_value = '<%s-item-1>' % trait.__class__.__name__.lower() 
+            if multiplicity == 'append': 
+                header = "%s=%s..." % (header, sample_value) 
+            else: 
+                header = "%s %s..." % (header, sample_value) 
+        else: 
+            header = '%s=<%s>' % (header, trait.__class__.__name__) 
+        #header = "--%s.%s=<%s>" % (cls.__name__, trait.name, trait.__class__.__name__) 
         lines.append(header)
-
-        if helptext is None:
-            helptext = trait.help
-        if helptext != '':
-            helptext = '\n'.join(wrap_paragraphs(helptext, 76))
-            lines.append(indent(helptext))
-
-        if 'Enum' in trait.__class__.__name__:
-            # include Enum choices
-            lines.append(indent('Choices: %s' % trait.info()))
-
+ 
+        if helptext is None: 
+            helptext = trait.help 
+        if helptext != '': 
+            helptext = '\n'.join(wrap_paragraphs(helptext, 76)) 
+            lines.append(indent(helptext)) 
+ 
+        if 'Enum' in trait.__class__.__name__: 
+            # include Enum choices 
+            lines.append(indent('Choices: %s' % trait.info())) 
+ 
         if inst is not None:
-            lines.append(indent("Current: %r" % (getattr(inst, trait.name),)))
+            lines.append(indent("Current: %r" % (getattr(inst, trait.name),))) 
         else:
             try:
                 dvr = trait.default_value_repr()
@@ -290,8 +290,8 @@ class Configurable(HasTraits):
                 dvr = None # ignore defaults we can't construct
             if dvr is not None:
                 if len(dvr) > 64:
-                    dvr = dvr[:61] + "..."
-                lines.append(indent("Default: %s" % dvr))
+                    dvr = dvr[:61] + "..." 
+                lines.append(indent("Default: %s" % dvr)) 
 
         return '\n'.join(lines)
 
@@ -301,41 +301,41 @@ class Configurable(HasTraits):
         print(cls.class_get_help(inst))
 
     @classmethod
-    def _defining_class(cls, trait, classes):
-        """Get the class that defines a trait
-
-        For reducing redundant help output in config files.
-        Returns the current class if:
-        - the trait is defined on this class, or
-        - the class where it is defined would not be in the config file
-
-        Parameters
-        ----------
-        trait : Trait
-            The trait to look for
-        classes : list
-            The list of other classes to consider for redundancy.
-            Will return `cls` even if it is not defined on `cls`
-            if the defining class is not in `classes`.
-        """
-        defining_cls = cls
-        for parent in cls.mro():
-            if issubclass(parent, Configurable) and \
-            parent in classes and \
-            parent.class_own_traits(config=True).get(trait.name, None) is trait:
-                defining_cls = parent
-        return defining_cls
-
-    @classmethod
-    def class_config_section(cls, classes=None):
-        """Get the config section for this class.
-
-        Parameters
-        ----------
-        classes : list, optional
-            The list of other classes in the config file.
-            Used to reduce redundant information.
-        """
+    def _defining_class(cls, trait, classes): 
+        """Get the class that defines a trait 
+ 
+        For reducing redundant help output in config files. 
+        Returns the current class if: 
+        - the trait is defined on this class, or 
+        - the class where it is defined would not be in the config file 
+ 
+        Parameters 
+        ---------- 
+        trait : Trait 
+            The trait to look for 
+        classes : list 
+            The list of other classes to consider for redundancy. 
+            Will return `cls` even if it is not defined on `cls` 
+            if the defining class is not in `classes`. 
+        """ 
+        defining_cls = cls 
+        for parent in cls.mro(): 
+            if issubclass(parent, Configurable) and \ 
+            parent in classes and \ 
+            parent.class_own_traits(config=True).get(trait.name, None) is trait: 
+                defining_cls = parent 
+        return defining_cls 
+ 
+    @classmethod 
+    def class_config_section(cls, classes=None): 
+        """Get the config section for this class. 
+ 
+        Parameters 
+        ---------- 
+        classes : list, optional 
+            The list of other classes in the config file. 
+            Used to reduce redundant information. 
+        """ 
         def c(s):
             """return a commented, wrapped block."""
             s = '\n\n'.join(wrap_paragraphs(s, 78))
@@ -343,14 +343,14 @@ class Configurable(HasTraits):
             return '## ' + s.replace('\n', '\n#  ')
 
         # section header
-        breaker = '#' + '-' * 78
-        parent_classes = ', '.join(
-            p.__name__ for p in cls.__bases__
-            if issubclass(p, Configurable)
-        )
-
+        breaker = '#' + '-' * 78 
+        parent_classes = ', '.join( 
+            p.__name__ for p in cls.__bases__ 
+            if issubclass(p, Configurable) 
+        ) 
+ 
         s = "# %s(%s) configuration" % (cls.__name__, parent_classes)
-        lines = [breaker, s, breaker]
+        lines = [breaker, s, breaker] 
         # get the description trait
         desc = cls.class_traits().get('description')
         if desc:
@@ -362,29 +362,29 @@ class Configurable(HasTraits):
             lines.append(c(desc))
             lines.append('')
 
-        for name, trait in sorted(cls.class_traits(config=True).items()):
-            default_repr = trait.default_value_repr()
-
-            if classes:
-                defining_class = cls._defining_class(trait, classes)
-            else:
-                defining_class = cls
-            if defining_class is cls:
-                # cls owns the trait, show full help
-                if trait.help:
-                    lines.append(c(trait.help))
-                if 'Enum' in type(trait).__name__:
-                    # include Enum choices
-                    lines.append('#  Choices: %s' % trait.info())
-                lines.append('#  Default: %s' % default_repr)
-            else:
-                # Trait appears multiple times and isn't defined here.
-                # Truncate help to first line + "See also Original.trait"
-                if trait.help:
-                    lines.append(c(trait.help.split('\n', 1)[0]))
-                lines.append('#  See also: %s.%s' % (defining_class.__name__, name))
-
-            lines.append('# c.%s.%s = %s' % (cls.__name__, name, default_repr))
+        for name, trait in sorted(cls.class_traits(config=True).items()): 
+            default_repr = trait.default_value_repr() 
+ 
+            if classes: 
+                defining_class = cls._defining_class(trait, classes) 
+            else: 
+                defining_class = cls 
+            if defining_class is cls: 
+                # cls owns the trait, show full help 
+                if trait.help: 
+                    lines.append(c(trait.help)) 
+                if 'Enum' in type(trait).__name__: 
+                    # include Enum choices 
+                    lines.append('#  Choices: %s' % trait.info()) 
+                lines.append('#  Default: %s' % default_repr) 
+            else: 
+                # Trait appears multiple times and isn't defined here. 
+                # Truncate help to first line + "See also Original.trait" 
+                if trait.help: 
+                    lines.append(c(trait.help.split('\n', 1)[0])) 
+                lines.append('#  See also: %s.%s' % (defining_class.__name__, name)) 
+ 
+            lines.append('# c.%s.%s = %s' % (cls.__name__, name, default_repr)) 
             lines.append('')
         return '\n'.join(lines)
 
@@ -396,7 +396,7 @@ class Configurable(HasTraits):
         """
         lines = []
         classname = cls.__name__
-        for k, trait in sorted(cls.class_traits(config=True).items()):
+        for k, trait in sorted(cls.class_traits(config=True).items()): 
             ttype = trait.__class__.__name__
 
             termline = classname + '.' + trait.name
@@ -404,7 +404,7 @@ class Configurable(HasTraits):
             # Choices or type
             if 'Enum' in ttype:
                 # include Enum choices
-                termline += ' : ' + trait.info_rst()
+                termline += ' : ' + trait.info_rst() 
             else:
                 termline += ' : ' + ttype
             lines.append(termline)
@@ -418,12 +418,12 @@ class Configurable(HasTraits):
                 if len(dvr) > 64:
                     dvr = dvr[:61]+'...'
                 # Double up backslashes, so they get to the rendered docs
-                dvr = dvr.replace("\\n", "\\\\n")
-                lines.append(indent("Default: ``%s``" % dvr))
-                lines.append("")
+                dvr = dvr.replace("\\n", "\\\\n") 
+                lines.append(indent("Default: ``%s``" % dvr)) 
+                lines.append("") 
 
             help = trait.help or 'No description'
-            lines.append(indent(dedent(help)))
+            lines.append(indent(dedent(help))) 
 
             # Blank line
             lines.append('')
@@ -439,39 +439,39 @@ class LoggingConfigurable(Configurable):
     is to get the logger from the currently running Application.
     """
 
-    log = Any(help="Logger or LoggerAdapter instance")
-
-    @validate("log")
-    def _validate_log(self, proposal):
-        if not isinstance(proposal.value, (logging.Logger, logging.LoggerAdapter)):
-            # warn about unsupported type, but be lenient to allow for duck typing
-            warnings.warn(
-                f"{self.__class__.__name__}.log should be a Logger or LoggerAdapter,"
-                f" got {proposal.value}."
-            )
-        return proposal.value
-
-    @default("log")
+    log = Any(help="Logger or LoggerAdapter instance") 
+ 
+    @validate("log") 
+    def _validate_log(self, proposal): 
+        if not isinstance(proposal.value, (logging.Logger, logging.LoggerAdapter)): 
+            # warn about unsupported type, but be lenient to allow for duck typing 
+            warnings.warn( 
+                f"{self.__class__.__name__}.log should be a Logger or LoggerAdapter," 
+                f" got {proposal.value}." 
+            ) 
+        return proposal.value 
+ 
+    @default("log") 
     def _log_default(self):
-        if isinstance(self.parent, LoggingConfigurable):
-            return self.parent.log
+        if isinstance(self.parent, LoggingConfigurable): 
+            return self.parent.log 
         from traitlets import log
         return log.get_logger()
 
-    def _get_log_handler(self):
-        """Return the default Handler
+    def _get_log_handler(self): 
+        """Return the default Handler 
 
-        Returns None if none can be found
-        """
-        logger = self.log
-        if isinstance(logger, logging.LoggerAdapter):
-            logger = logger.logger
-        if not getattr(logger, "handlers", None):
-            # no handlers attribute or empty handlers list
-            return None
-        return logger.handlers[0]
-
-
+        Returns None if none can be found 
+        """ 
+        logger = self.log 
+        if isinstance(logger, logging.LoggerAdapter): 
+            logger = logger.logger 
+        if not getattr(logger, "handlers", None): 
+            # no handlers attribute or empty handlers list 
+            return None 
+        return logger.handlers[0] 
+ 
+ 
 class SingletonConfigurable(LoggingConfigurable):
     """A configurable that only allows one instance.
 
@@ -547,8 +547,8 @@ class SingletonConfigurable(LoggingConfigurable):
             return cls._instance
         else:
             raise MultipleInstanceError(
-                "An incompatible sibling of '%s' is already instanciated"
-                " as singleton: %s" % (cls.__name__, type(cls._instance).__name__)
+                "An incompatible sibling of '%s' is already instanciated" 
+                " as singleton: %s" % (cls.__name__, type(cls._instance).__name__) 
             )
 
     @classmethod

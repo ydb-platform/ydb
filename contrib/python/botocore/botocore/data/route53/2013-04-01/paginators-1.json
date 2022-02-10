@@ -28,22 +28,22 @@
         "NextRecordType",
         "NextRecordIdentifier"
       ]
-    },
-    "ListVPCAssociationAuthorizations": {
-      "input_token": "NextToken",
-      "output_token": "NextToken",
-      "non_aggregate_keys": [
-        "HostedZoneId"
-      ],
-      "result_key": [
-        "VPCs"
-      ]
-    },
-    "ListQueryLoggingConfigs": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "QueryLoggingConfigs"
+    }, 
+    "ListVPCAssociationAuthorizations": { 
+      "input_token": "NextToken", 
+      "output_token": "NextToken", 
+      "non_aggregate_keys": [ 
+        "HostedZoneId" 
+      ], 
+      "result_key": [ 
+        "VPCs" 
+      ] 
+    }, 
+    "ListQueryLoggingConfigs": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "output_token": "NextToken", 
+      "result_key": "QueryLoggingConfigs" 
     }
   }
 }

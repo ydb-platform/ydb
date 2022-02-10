@@ -7,9 +7,9 @@
 
 //====--- OMPGridValues.h - Language-specific address spaces --*- C++ -*-====//
 //
-// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
-// See https://llvm.org/LICENSE.txt for license information.
-// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions. 
+// See https://llvm.org/LICENSE.txt for license information. 
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception 
 //
 //===----------------------------------------------------------------------===//
 ///
@@ -35,30 +35,30 @@ namespace omp {
 ///        use the new array name.
 ///
 /// Example usage in clang:
-///   const unsigned slot_size =
-///   ctx.GetTargetInfo().getGridValue(llvm::omp::GVIDX::GV_Warp_Size);
+///   const unsigned slot_size = 
+///   ctx.GetTargetInfo().getGridValue(llvm::omp::GVIDX::GV_Warp_Size); 
 ///
 /// Example usage in libomptarget/deviceRTLs:
-///   #include "llvm/Frontend/OpenMP/OMPGridValues.h"
+///   #include "llvm/Frontend/OpenMP/OMPGridValues.h" 
 ///   #ifdef __AMDGPU__
 ///     #define GRIDVAL AMDGPUGpuGridValues
 ///   #else
 ///     #define GRIDVAL NVPTXGpuGridValues
 ///   #endif
 ///   ... Then use this reference for GV_Warp_Size in the deviceRTL source.
-///   llvm::omp::GRIDVAL[llvm::omp::GVIDX::GV_Warp_Size]
+///   llvm::omp::GRIDVAL[llvm::omp::GVIDX::GV_Warp_Size] 
 ///
 /// Example usage in libomptarget hsa plugin:
-///   #include "llvm/Frontend/OpenMP/OMPGridValues.h"
+///   #include "llvm/Frontend/OpenMP/OMPGridValues.h" 
 ///   #define GRIDVAL AMDGPUGpuGridValues
 ///   ... Then use this reference to access GV_Warp_Size in the hsa plugin.
-///   llvm::omp::GRIDVAL[llvm::omp::GVIDX::GV_Warp_Size]
+///   llvm::omp::GRIDVAL[llvm::omp::GVIDX::GV_Warp_Size] 
 ///
 /// Example usage in libomptarget cuda plugin:
-///    #include "llvm/Frontend/OpenMP/OMPGridValues.h"
+///    #include "llvm/Frontend/OpenMP/OMPGridValues.h" 
 ///    #define GRIDVAL NVPTXGpuGridValues
 ///   ... Then use this reference to access GV_Warp_Size in the cuda plugin.
-///    llvm::omp::GRIDVAL[llvm::omp::GVIDX::GV_Warp_Size]
+///    llvm::omp::GRIDVAL[llvm::omp::GVIDX::GV_Warp_Size] 
 ///
 enum GVIDX {
   /// The maximum number of workers in a kernel.

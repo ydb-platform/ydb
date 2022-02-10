@@ -6,7 +6,7 @@ This module is designed to be used as follows::
 And then, for example::
 
     assert isinstance(range(5), list)
-
+ 
 The list-producing functions this brings in are::
 
 - ``filter``
@@ -19,7 +19,7 @@ The list-producing functions this brings in are::
 
 from __future__ import division, absolute_import, print_function
 
-from itertools import chain, starmap
+from itertools import chain, starmap 
 import itertools       # since zip_longest doesn't exist on Py2
 from past.types import basestring
 from past.utils import PY3
@@ -36,7 +36,7 @@ if PY3:
     def oldfilter(*args):
         """
         filter(function or None, sequence) -> list, tuple, or string
-
+ 
         Return those items of sequence for which function(item) is true.
         If function is None, return the items that are true.  If sequence
         is a tuple or string, return the same type, else return a list.
@@ -56,7 +56,7 @@ if PY3:
     def oldmap(func, *iterables):
         """
         map(function, sequence[, sequence, ...]) -> list
-
+ 
         Return a list of the results of applying the function to the
         items of the argument sequence(s).  If more than one sequence is
         given, the function is called with an argument list consisting of
@@ -64,7 +64,7 @@ if PY3:
         missing values when not all sequences have the same length.  If
         the function is None, return a list of the items of the sequence
         (or a list of tuples if more than one sequence).
-
+ 
         Test cases:
         >>> oldmap(None, 'hello world')
         ['h', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd']
@@ -72,7 +72,7 @@ if PY3:
         >>> oldmap(None, range(4))
         [0, 1, 2, 3]
 
-        More test cases are in test_past.test_builtins.
+        More test cases are in test_past.test_builtins. 
         """
         zipped = itertools.zip_longest(*iterables)
         l = list(zipped)
@@ -102,22 +102,22 @@ if PY3:
         #         PyObject *it;           /* the iterator object */
         #         int saw_StopIteration;  /* bool:  did the iterator end? */
         #     } sequence;
-        #
+        # 
         #     PyObject *func, *result;
         #     sequence *seqs = NULL, *sqp;
         #     Py_ssize_t n, len;
         #     register int i, j;
-        #
+        # 
         #     n = PyTuple_Size(args);
         #     if (n < 2) {
         #         PyErr_SetString(PyExc_TypeError,
         #                         "map() requires at least two args");
         #         return NULL;
         #     }
-        #
+        # 
         #     func = PyTuple_GetItem(args, 0);
         #     n--;
-        #
+        # 
         #     if (func == Py_None) {
         #         if (PyErr_WarnPy3k("map(None, ...) not supported in 3.x; "
         #                            "use list(...)", 1) < 0)
@@ -127,7 +127,7 @@ if PY3:
         #             return PySequence_List(PyTuple_GetItem(args, 1));
         #         }
         #     }
-        #
+        # 
         #     /* Get space for sequence descriptors.  Must NULL out the iterator
         #      * pointers so that jumping to Fail_2 later doesn't see trash.
         #      */
@@ -139,7 +139,7 @@ if PY3:
         #         seqs[i].it = (PyObject*)NULL;
         #         seqs[i].saw_StopIteration = 0;
         #     }
-        #
+        # 
         #     /* Do a first pass to obtain iterators for the arguments, and set len
         #      * to the largest of their lengths.
         #      */
@@ -147,7 +147,7 @@ if PY3:
         #     for (i = 0, sqp = seqs; i < n; ++i, ++sqp) {
         #         PyObject *curseq;
         #         Py_ssize_t curlen;
-        #
+        # 
         #         /* Get iterator. */
         #         curseq = PyTuple_GetItem(args, i+1);
         #         sqp->it = PyObject_GetIter(curseq);
@@ -159,27 +159,27 @@ if PY3:
         #             PyErr_SetString(PyExc_TypeError, errbuf);
         #             goto Fail_2;
         #         }
-        #
+        # 
         #         /* Update len. */
         #         curlen = _PyObject_LengthHint(curseq, 8);
         #         if (curlen > len)
         #             len = curlen;
         #     }
-        #
+        # 
         #     /* Get space for the result list. */
         #     if ((result = (PyObject *) PyList_New(len)) == NULL)
         #         goto Fail_2;
-        #
+        # 
         #     /* Iterate over the sequences until all have stopped. */
         #     for (i = 0; ; ++i) {
         #         PyObject *alist, *item=NULL, *value;
         #         int numactive = 0;
-        #
+        # 
         #         if (func == Py_None && n == 1)
         #             alist = NULL;
         #         else if ((alist = PyTuple_New(n)) == NULL)
         #             goto Fail_1;
-        #
+        # 
         #         for (j = 0, sqp = seqs; j < n; ++j, ++sqp) {
         #             if (sqp->saw_StopIteration) {
         #                 Py_INCREF(Py_None);
@@ -204,15 +204,15 @@ if PY3:
         #             else
         #                 break;
         #         }
-        #
+        # 
         #         if (!alist)
         #             alist = item;
-        #
+        # 
         #         if (numactive == 0) {
         #             Py_DECREF(alist);
         #             break;
         #         }
-        #
+        # 
         #         if (func == Py_None)
         #             value = alist;
         #         else {
@@ -230,12 +230,12 @@ if PY3:
         #         else if (PyList_SetItem(result, i, value) < 0)
         #             goto Fail_1;
         #     }
-        #
+        # 
         #     if (i < len && PyList_SetSlice(result, i, len, NULL) < 0)
         #         goto Fail_1;
-        #
+        # 
         #     goto Succeed;
-        #
+        # 
         # Fail_1:
         #     Py_DECREF(result);
         # Fail_2:

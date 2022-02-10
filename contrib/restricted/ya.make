@@ -9,7 +9,7 @@ RECURSE(
     alsa-lib
     avahi
     aws
-    blis
+    blis 
     boost
     cityhash-1.0.2
     cmph
@@ -40,7 +40,7 @@ RECURSE(
     libtorrent
     liburcu
     libxsmm
-    llhttp
+    llhttp 
     mpg123
     murmurhash
     nfs_ganesha

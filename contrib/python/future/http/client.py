@@ -77,9 +77,9 @@ except ImportError:
 # These may not be available on all versions of Python 2.6.x or 2.7.x
 try:
     from httplib import (
-                         _CS_IDLE,
-                         _CS_REQ_STARTED,
-                         _CS_REQ_SENT,
+                         _CS_IDLE, 
+                         _CS_REQ_STARTED, 
+                         _CS_REQ_SENT, 
                          _MAXLINE,
                          _MAXHEADERS,
                          _is_legal_header_name,

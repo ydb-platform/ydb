@@ -13,16 +13,16 @@
 // pass. It should be easy to create an analysis pass around it if there
 // is a need (but D45420 needs to happen first).
 //
-
+ 
 #include "llvm/Transforms/Vectorize/LoopVectorizationLegality.h"
 #include "llvm/Analysis/Loads.h"
 #include "llvm/Analysis/LoopInfo.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Analysis/TargetLibraryInfo.h" 
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Analysis/VectorUtils.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/PatternMatch.h"
-#include "llvm/Transforms/Utils/SizeOpts.h"
+#include "llvm/Transforms/Utils/SizeOpts.h" 
 #include "llvm/Transforms/Vectorize/LoopVectorize.h"
 
 using namespace llvm;
@@ -66,7 +66,7 @@ bool LoopVectorizeHints::Hint::validate(unsigned Val) {
     return (Val <= 1);
   case HK_ISVECTORIZED:
   case HK_PREDICATE:
-  case HK_SCALABLE:
+  case HK_SCALABLE: 
     return (Val == 0 || Val == 1);
   }
   return false;
@@ -79,8 +79,8 @@ LoopVectorizeHints::LoopVectorizeHints(const Loop *L,
       Interleave("interleave.count", InterleaveOnlyWhenForced, HK_UNROLL),
       Force("vectorize.enable", FK_Undefined, HK_FORCE),
       IsVectorized("isvectorized", 0, HK_ISVECTORIZED),
-      Predicate("vectorize.predicate.enable", FK_Undefined, HK_PREDICATE),
-      Scalable("vectorize.scalable.enable", false, HK_SCALABLE), TheLoop(L),
+      Predicate("vectorize.predicate.enable", FK_Undefined, HK_PREDICATE), 
+      Scalable("vectorize.scalable.enable", false, HK_SCALABLE), TheLoop(L), 
       ORE(ORE) {
   // Populate values with existing loop metadata.
   getHintsFromMetadata();
@@ -93,8 +93,8 @@ LoopVectorizeHints::LoopVectorizeHints(const Loop *L,
     // If the vectorization width and interleaving count are both 1 then
     // consider the loop to have been already vectorized because there's
     // nothing more that we can do.
-    IsVectorized.Value =
-        getWidth() == ElementCount::getFixed(1) && Interleave.Value == 1;
+    IsVectorized.Value = 
+        getWidth() == ElementCount::getFixed(1) && Interleave.Value == 1; 
   LLVM_DEBUG(if (InterleaveOnlyWhenForced && Interleave.Value == 1) dbgs()
              << "LV: Interleaving disabled by the pass manager\n");
 }
@@ -167,7 +167,7 @@ void LoopVectorizeHints::emitRemarkWithHints() const {
       if (Force.Value == LoopVectorizeHints::FK_Enabled) {
         R << " (Force=" << NV("Force", true);
         if (Width.Value != 0)
-          R << ", Vector Width=" << NV("VectorWidth", getWidth());
+          R << ", Vector Width=" << NV("VectorWidth", getWidth()); 
         if (Interleave.Value != 0)
           R << ", Interleave Count=" << NV("InterleaveCount", Interleave.Value);
         R << ")";
@@ -178,11 +178,11 @@ void LoopVectorizeHints::emitRemarkWithHints() const {
 }
 
 const char *LoopVectorizeHints::vectorizeAnalysisPassName() const {
-  if (getWidth() == ElementCount::getFixed(1))
+  if (getWidth() == ElementCount::getFixed(1)) 
     return LV_NAME;
   if (getForce() == LoopVectorizeHints::FK_Disabled)
     return LV_NAME;
-  if (getForce() == LoopVectorizeHints::FK_Undefined && getWidth().isZero())
+  if (getForce() == LoopVectorizeHints::FK_Undefined && getWidth().isZero()) 
     return LV_NAME;
   return OptimizationRemarkAnalysis::AlwaysPrint;
 }
@@ -233,8 +233,8 @@ void LoopVectorizeHints::setHint(StringRef Name, Metadata *Arg) {
     return;
   unsigned Val = C->getZExtValue();
 
-  Hint *Hints[] = {&Width,        &Interleave, &Force,
-                   &IsVectorized, &Predicate,  &Scalable};
+  Hint *Hints[] = {&Width,        &Interleave, &Force, 
+                   &IsVectorized, &Predicate,  &Scalable}; 
   for (auto H : Hints) {
     if (Name == H->Name) {
       if (H->validate(Val))
@@ -419,11 +419,11 @@ int LoopVectorizationLegality::isConsecutivePtr(Value *Ptr) {
   const ValueToValueMap &Strides =
       getSymbolicStrides() ? *getSymbolicStrides() : ValueToValueMap();
 
-  Function *F = TheLoop->getHeader()->getParent();
-  bool OptForSize = F->hasOptSize() ||
-                    llvm::shouldOptimizeForSize(TheLoop->getHeader(), PSI, BFI,
-                                                PGSOQueryType::IRPass);
-  bool CanAddPredicate = !OptForSize;
+  Function *F = TheLoop->getHeader()->getParent(); 
+  bool OptForSize = F->hasOptSize() || 
+                    llvm::shouldOptimizeForSize(TheLoop->getHeader(), PSI, BFI, 
+                                                PGSOQueryType::IRPass); 
+  bool CanAddPredicate = !OptForSize; 
   int Stride = getPtrStride(PSE, Ptr, TheLoop, Strides, CanAddPredicate, false);
   if (Stride == 1 || Stride == -1)
     return Stride;
@@ -435,7 +435,7 @@ bool LoopVectorizationLegality::isUniform(Value *V) {
 }
 
 bool LoopVectorizationLegality::canVectorizeOuterLoop() {
-  assert(!TheLoop->isInnermost() && "We are not vectorizing an outer loop.");
+  assert(!TheLoop->isInnermost() && "We are not vectorizing an outer loop."); 
   // Store the result and return it at the end instead of exiting early, in case
   // allowExtraAnalysis is used to report multiple reasons for not vectorizing.
   bool Result = true;
@@ -779,7 +779,7 @@ bool LoopVectorizationLegality::canVectorizeInstrs() {
         // supported on the target.
         if (ST->getMetadata(LLVMContext::MD_nontemporal)) {
           // Arbitrarily try a vector of 2 elements.
-          auto *VecTy = FixedVectorType::get(T, /*NumElts=*/2);
+          auto *VecTy = FixedVectorType::get(T, /*NumElts=*/2); 
           assert(VecTy && "did not find vectorized version of stored type");
           if (!TTI->isLegalNTStore(VecTy, ST->getAlign())) {
             reportVectorizationFailure(
@@ -794,7 +794,7 @@ bool LoopVectorizationLegality::canVectorizeInstrs() {
         if (LD->getMetadata(LLVMContext::MD_nontemporal)) {
           // For nontemporal loads, check that a nontemporal vector version is
           // supported on the target (arbitrarily try a vector of 2 elements).
-          auto *VecTy = FixedVectorType::get(I.getType(), /*NumElts=*/2);
+          auto *VecTy = FixedVectorType::get(I.getType(), /*NumElts=*/2); 
           assert(VecTy && "did not find vectorized version of load type");
           if (!TTI->isLegalNTLoad(VecTy, LD->getAlign())) {
             reportVectorizationFailure(
@@ -923,9 +923,9 @@ bool LoopVectorizationLegality::blockNeedsPredication(BasicBlock *BB) {
 }
 
 bool LoopVectorizationLegality::blockCanBePredicated(
-    BasicBlock *BB, SmallPtrSetImpl<Value *> &SafePtrs,
-    SmallPtrSetImpl<const Instruction *> &MaskedOp,
-    SmallPtrSetImpl<Instruction *> &ConditionalAssumes) const {
+    BasicBlock *BB, SmallPtrSetImpl<Value *> &SafePtrs, 
+    SmallPtrSetImpl<const Instruction *> &MaskedOp, 
+    SmallPtrSetImpl<Instruction *> &ConditionalAssumes) const { 
   for (Instruction &I : *BB) {
     // Check that we don't have a constant expression that can trap as operand.
     for (Value *Operand : I.operands()) {
@@ -941,19 +941,19 @@ bool LoopVectorizationLegality::blockCanBePredicated(
       continue;
     }
 
-    // Do not let llvm.experimental.noalias.scope.decl block the vectorization.
-    // TODO: there might be cases that it should block the vectorization. Let's
-    // ignore those for now.
-    if (isa<NoAliasScopeDeclInst>(&I))
-      continue;
-
+    // Do not let llvm.experimental.noalias.scope.decl block the vectorization. 
+    // TODO: there might be cases that it should block the vectorization. Let's 
+    // ignore those for now. 
+    if (isa<NoAliasScopeDeclInst>(&I)) 
+      continue; 
+ 
     // We might be able to hoist the load.
     if (I.mayReadFromMemory()) {
       auto *LI = dyn_cast<LoadInst>(&I);
       if (!LI)
         return false;
       if (!SafePtrs.count(LI->getPointerOperand())) {
-        MaskedOp.insert(LI);
+        MaskedOp.insert(LI); 
         continue;
       }
     }
@@ -1012,7 +1012,7 @@ bool LoopVectorizationLegality::canVectorizeWithIfConvert() {
     ScalarEvolution &SE = *PSE.getSE();
     for (Instruction &I : *BB) {
       LoadInst *LI = dyn_cast<LoadInst>(&I);
-      if (LI && !LI->getType()->isVectorTy() && !mustSuppressSpeculation(*LI) &&
+      if (LI && !LI->getType()->isVectorTy() && !mustSuppressSpeculation(*LI) && 
           isDereferenceableAndAlignedInLoop(LI, TheLoop, SE, *DT))
         SafePointers.insert(LI->getPointerOperand());
     }
@@ -1032,8 +1032,8 @@ bool LoopVectorizationLegality::canVectorizeWithIfConvert() {
 
     // We must be able to predicate all blocks that need to be predicated.
     if (blockNeedsPredication(BB)) {
-      if (!blockCanBePredicated(BB, SafePointers, MaskedOp,
-                                ConditionalAssumes)) {
+      if (!blockCanBePredicated(BB, SafePointers, MaskedOp, 
+                                ConditionalAssumes)) { 
         reportVectorizationFailure(
             "Control flow cannot be substituted for a select",
             "control flow cannot be substituted for a select",
@@ -1058,7 +1058,7 @@ bool LoopVectorizationLegality::canVectorizeWithIfConvert() {
 // Helper function to canVectorizeLoopNestCFG.
 bool LoopVectorizationLegality::canVectorizeLoopCFG(Loop *Lp,
                                                     bool UseVPlanNativePath) {
-  assert((UseVPlanNativePath || Lp->isInnermost()) &&
+  assert((UseVPlanNativePath || Lp->isInnermost()) && 
          "VPlan-native path is not enabled.");
 
   // TODO: ORE should be improved to show more accurate information when an
@@ -1094,14 +1094,14 @@ bool LoopVectorizationLegality::canVectorizeLoopCFG(Loop *Lp,
       return false;
   }
 
-  // We currently must have a single "exit block" after the loop. Note that
-  // multiple "exiting blocks" inside the loop are allowed, provided they all
-  // reach the single exit block.
-  // TODO: This restriction can be relaxed in the near future, it's here solely
-  // to allow separation of changes for review. We need to generalize the phi
-  // update logic in a number of places.
-  if (!Lp->getUniqueExitBlock()) {
-    reportVectorizationFailure("The loop must have a unique exit block",
+  // We currently must have a single "exit block" after the loop. Note that 
+  // multiple "exiting blocks" inside the loop are allowed, provided they all 
+  // reach the single exit block. 
+  // TODO: This restriction can be relaxed in the near future, it's here solely 
+  // to allow separation of changes for review. We need to generalize the phi 
+  // update logic in a number of places. 
+  if (!Lp->getUniqueExitBlock()) { 
+    reportVectorizationFailure("The loop must have a unique exit block", 
         "loop control flow is not understood by vectorizer",
         "CFGNotUnderstood", ORE, TheLoop);
     if (DoExtraAnalysis)
@@ -1159,7 +1159,7 @@ bool LoopVectorizationLegality::canVectorize(bool UseVPlanNativePath) {
 
   // Specific checks for outer loops. We skip the remaining legal checks at this
   // point because they don't support outer loops.
-  if (!TheLoop->isInnermost()) {
+  if (!TheLoop->isInnermost()) { 
     assert(UseVPlanNativePath && "VPlan-native path is not enabled.");
 
     if (!canVectorizeOuterLoop()) {
@@ -1176,7 +1176,7 @@ bool LoopVectorizationLegality::canVectorize(bool UseVPlanNativePath) {
     return Result;
   }
 
-  assert(TheLoop->isInnermost() && "Inner loop expected.");
+  assert(TheLoop->isInnermost() && "Inner loop expected."); 
   // Check if we can if-convert non-single-bb loops.
   unsigned NumBlocks = TheLoop->getNumBlocks();
   if (NumBlocks != 1 && !canVectorizeWithIfConvert()) {
@@ -1251,10 +1251,10 @@ bool LoopVectorizationLegality::prepareToFoldTailByMasking() {
       Instruction *UI = cast<Instruction>(U);
       if (TheLoop->contains(UI))
         continue;
-      LLVM_DEBUG(
-          dbgs()
-          << "LV: Cannot fold tail by masking, loop has an outside user for "
-          << *UI << "\n");
+      LLVM_DEBUG( 
+          dbgs() 
+          << "LV: Cannot fold tail by masking, loop has an outside user for " 
+          << *UI << "\n"); 
       return false;
     }
   }
@@ -1262,25 +1262,25 @@ bool LoopVectorizationLegality::prepareToFoldTailByMasking() {
   // The list of pointers that we can safely read and write to remains empty.
   SmallPtrSet<Value *, 8> SafePointers;
 
-  SmallPtrSet<const Instruction *, 8> TmpMaskedOp;
-  SmallPtrSet<Instruction *, 8> TmpConditionalAssumes;
-
+  SmallPtrSet<const Instruction *, 8> TmpMaskedOp; 
+  SmallPtrSet<Instruction *, 8> TmpConditionalAssumes; 
+ 
   // Check and mark all blocks for predication, including those that ordinarily
   // do not need predication such as the header block.
   for (BasicBlock *BB : TheLoop->blocks()) {
-    if (!blockCanBePredicated(BB, SafePointers, TmpMaskedOp,
-                              TmpConditionalAssumes)) {
-      LLVM_DEBUG(dbgs() << "LV: Cannot fold tail by masking as requested.\n");
+    if (!blockCanBePredicated(BB, SafePointers, TmpMaskedOp, 
+                              TmpConditionalAssumes)) { 
+      LLVM_DEBUG(dbgs() << "LV: Cannot fold tail by masking as requested.\n"); 
       return false;
     }
   }
 
   LLVM_DEBUG(dbgs() << "LV: can fold tail by masking.\n");
-
-  MaskedOp.insert(TmpMaskedOp.begin(), TmpMaskedOp.end());
-  ConditionalAssumes.insert(TmpConditionalAssumes.begin(),
-                            TmpConditionalAssumes.end());
-
+ 
+  MaskedOp.insert(TmpMaskedOp.begin(), TmpMaskedOp.end()); 
+  ConditionalAssumes.insert(TmpConditionalAssumes.begin(), 
+                            TmpConditionalAssumes.end()); 
+ 
   return true;
 }
 

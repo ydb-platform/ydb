@@ -1507,8 +1507,8 @@ void AtomicExpand::expandAtomicLoadToLibcall(LoadInst *I) {
   bool expanded = expandAtomicOpToLibcall(
       I, Size, I->getAlign(), I->getPointerOperand(), nullptr, nullptr,
       I->getOrdering(), AtomicOrdering::NotAtomic, Libcalls);
-  if (!expanded)
-    report_fatal_error("expandAtomicOpToLibcall shouldn't fail for Load");
+  if (!expanded) 
+    report_fatal_error("expandAtomicOpToLibcall shouldn't fail for Load"); 
 }
 
 void AtomicExpand::expandAtomicStoreToLibcall(StoreInst *I) {
@@ -1520,8 +1520,8 @@ void AtomicExpand::expandAtomicStoreToLibcall(StoreInst *I) {
   bool expanded = expandAtomicOpToLibcall(
       I, Size, I->getAlign(), I->getPointerOperand(), I->getValueOperand(),
       nullptr, I->getOrdering(), AtomicOrdering::NotAtomic, Libcalls);
-  if (!expanded)
-    report_fatal_error("expandAtomicOpToLibcall shouldn't fail for Store");
+  if (!expanded) 
+    report_fatal_error("expandAtomicOpToLibcall shouldn't fail for Store"); 
 }
 
 void AtomicExpand::expandAtomicCASToLibcall(AtomicCmpXchgInst *I) {
@@ -1535,8 +1535,8 @@ void AtomicExpand::expandAtomicCASToLibcall(AtomicCmpXchgInst *I) {
       I, Size, I->getAlign(), I->getPointerOperand(), I->getNewValOperand(),
       I->getCompareOperand(), I->getSuccessOrdering(), I->getFailureOrdering(),
       Libcalls);
-  if (!expanded)
-    report_fatal_error("expandAtomicOpToLibcall shouldn't fail for CAS");
+  if (!expanded) 
+    report_fatal_error("expandAtomicOpToLibcall shouldn't fail for CAS"); 
 }
 
 static ArrayRef<RTLIB::Libcall> GetRMWLibcall(AtomicRMWInst::BinOp Op) {
@@ -1685,11 +1685,11 @@ bool AtomicExpand::expandAtomicOpToLibcall(
     return false;
   }
 
-  if (!TLI->getLibcallName(RTLibType)) {
-    // This target does not implement the requested atomic libcall so give up.
-    return false;
-  }
-
+  if (!TLI->getLibcallName(RTLibType)) { 
+    // This target does not implement the requested atomic libcall so give up. 
+    return false; 
+  } 
+ 
   // Build up the function call. There's two kinds. First, the sized
   // variants.  These calls are going to be one of the following (with
   // N=1,2,4,8,16):

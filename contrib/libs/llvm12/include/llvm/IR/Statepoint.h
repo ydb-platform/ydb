@@ -143,7 +143,7 @@ public:
   /// Return an end iterator of the arguments to the underlying call
   const_op_iterator actual_arg_end() const {
     auto I = actual_arg_begin() + actual_arg_size();
-    assert((arg_end() - I) == 2);
+    assert((arg_end() - I) == 2); 
     return I;
   }
   /// range adapter for actual call arguments
@@ -154,12 +154,12 @@ public:
   const_op_iterator gc_transition_args_begin() const {
     if (auto Opt = getOperandBundle(LLVMContext::OB_gc_transition))
       return Opt->Inputs.begin();
-    return arg_end();
+    return arg_end(); 
   }
   const_op_iterator gc_transition_args_end() const {
     if (auto Opt = getOperandBundle(LLVMContext::OB_gc_transition))
       return Opt->Inputs.end();
-    return arg_end();
+    return arg_end(); 
   }
 
   /// range adapter for GC transition arguments
@@ -170,12 +170,12 @@ public:
   const_op_iterator deopt_begin() const {
     if (auto Opt = getOperandBundle(LLVMContext::OB_deopt))
       return Opt->Inputs.begin();
-    return arg_end();
+    return arg_end(); 
   }
   const_op_iterator deopt_end() const {
     if (auto Opt = getOperandBundle(LLVMContext::OB_deopt))
       return Opt->Inputs.end();
-    return arg_end();
+    return arg_end(); 
   }
 
   /// range adapter for vm state arguments
@@ -188,7 +188,7 @@ public:
   const_op_iterator gc_args_begin() const {
     if (auto Opt = getOperandBundle(LLVMContext::OB_gc_live))
       return Opt->Inputs.begin();
-    return arg_end();
+    return arg_end(); 
   }
 
   /// Return an end iterator for the gc argument range

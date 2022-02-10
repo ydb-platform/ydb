@@ -11,24 +11,24 @@
       "output_token": "NextToken",
       "input_token": "NextToken",
       "limit_key": "MaxResults"
-    },
-    "DescribeReservedElasticsearchInstanceOfferings": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "ReservedElasticsearchInstanceOfferings"
-    },
-    "DescribeReservedElasticsearchInstances": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "ReservedElasticsearchInstances"
-    },
-    "GetUpgradeHistory": {
-      "input_token": "NextToken",
-      "limit_key": "MaxResults",
-      "output_token": "NextToken",
-      "result_key": "UpgradeHistories"
+    }, 
+    "DescribeReservedElasticsearchInstanceOfferings": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "output_token": "NextToken", 
+      "result_key": "ReservedElasticsearchInstanceOfferings" 
+    }, 
+    "DescribeReservedElasticsearchInstances": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "output_token": "NextToken", 
+      "result_key": "ReservedElasticsearchInstances" 
+    }, 
+    "GetUpgradeHistory": { 
+      "input_token": "NextToken", 
+      "limit_key": "MaxResults", 
+      "output_token": "NextToken", 
+      "result_key": "UpgradeHistories" 
     }
   }
 }

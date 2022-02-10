@@ -4,7 +4,7 @@
 
     Lexers for IDL.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -31,7 +31,7 @@ class IDLLexer(RegexLexer):
 
     _RESERVED = (
         'and', 'begin', 'break', 'case', 'common', 'compile_opt',
-        'continue', 'do', 'else', 'end', 'endcase', 'endelse',
+        'continue', 'do', 'else', 'end', 'endcase', 'endelse', 
         'endfor', 'endforeach', 'endif', 'endrep', 'endswitch',
         'endwhile', 'eq', 'for', 'foreach', 'forward_function',
         'function', 'ge', 'goto', 'gt', 'if', 'inherits', 'le',
@@ -267,14 +267,14 @@ class IDLLexer(RegexLexer):
             (r'.', Text),
         ]
     }
-
-    def analyse_text(text):
-        """endelse seems to be unique to IDL, endswitch is rare at least."""
-        result = 0
-
-        if 'endelse' in text:
-            result += 0.2
-        if 'endswitch' in text:
-            result += 0.01
-
-        return result
+ 
+    def analyse_text(text): 
+        """endelse seems to be unique to IDL, endswitch is rare at least.""" 
+        result = 0 
+ 
+        if 'endelse' in text: 
+            result += 0.2 
+        if 'endswitch' in text: 
+            result += 0.01 
+ 
+        return result 

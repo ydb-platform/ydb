@@ -4,7 +4,7 @@ import sys
 import _collections_abc
 from collections import deque
 from functools import wraps
-from types import MethodType, GenericAlias
+from types import MethodType, GenericAlias 
 
 __all__ = ["asynccontextmanager", "contextmanager", "closing", "nullcontext",
            "AbstractContextManager", "AbstractAsyncContextManager",
@@ -16,8 +16,8 @@ class AbstractContextManager(abc.ABC):
 
     """An abstract base class for context managers."""
 
-    __class_getitem__ = classmethod(GenericAlias)
-
+    __class_getitem__ = classmethod(GenericAlias) 
+ 
     def __enter__(self):
         """Return `self` upon entering the runtime context."""
         return self
@@ -38,8 +38,8 @@ class AbstractAsyncContextManager(abc.ABC):
 
     """An abstract base class for asynchronous context managers."""
 
-    __class_getitem__ = classmethod(GenericAlias)
-
+    __class_getitem__ = classmethod(GenericAlias) 
+ 
     async def __aenter__(self):
         """Return `self` upon entering the runtime context."""
         return self
@@ -98,19 +98,19 @@ class _GeneratorContextManagerBase:
         # See http://bugs.python.org/issue19404 for more details.
 
     def _recreate_cm(self):
-        # _GCMB instances are one-shot context managers, so the
+        # _GCMB instances are one-shot context managers, so the 
         # CM must be recreated each time a decorated function is
         # called
         return self.__class__(self.func, self.args, self.kwds)
 
-
-class _GeneratorContextManager(
-    _GeneratorContextManagerBase,
-    AbstractContextManager,
-    ContextDecorator,
-):
-    """Helper for @contextmanager decorator."""
-
+ 
+class _GeneratorContextManager( 
+    _GeneratorContextManagerBase, 
+    AbstractContextManager, 
+    ContextDecorator, 
+): 
+    """Helper for @contextmanager decorator.""" 
+ 
     def __enter__(self):
         # do not keep args and kwds alive unnecessarily
         # they are only needed for recreation, which is not possible anymore
@@ -120,8 +120,8 @@ class _GeneratorContextManager(
         except StopIteration:
             raise RuntimeError("generator didn't yield") from None
 
-    def __exit__(self, typ, value, traceback):
-        if typ is None:
+    def __exit__(self, typ, value, traceback): 
+        if typ is None: 
             try:
                 next(self.gen)
             except StopIteration:
@@ -132,9 +132,9 @@ class _GeneratorContextManager(
             if value is None:
                 # Need to force instantiation so we can reliably
                 # tell if we get the same exception back
-                value = typ()
+                value = typ() 
             try:
-                self.gen.throw(typ, value, traceback)
+                self.gen.throw(typ, value, traceback) 
             except StopIteration as exc:
                 # Suppress StopIteration *unless* it's the same exception that
                 # was passed to throw().  This prevents a StopIteration
@@ -144,39 +144,39 @@ class _GeneratorContextManager(
                 # Don't re-raise the passed in exception. (issue27122)
                 if exc is value:
                     return False
-                # Avoid suppressing if a StopIteration exception
+                # Avoid suppressing if a StopIteration exception 
                 # was passed to throw() and later wrapped into a RuntimeError
-                # (see PEP 479 for sync generators; async generators also
-                # have this behavior). But do this only if the exception wrapped
-                # by the RuntimeError is actually Stop(Async)Iteration (see
-                # issue29692).
-                if (
-                    isinstance(value, StopIteration)
-                    and exc.__cause__ is value
-                ):
+                # (see PEP 479 for sync generators; async generators also 
+                # have this behavior). But do this only if the exception wrapped 
+                # by the RuntimeError is actually Stop(Async)Iteration (see 
+                # issue29692). 
+                if ( 
+                    isinstance(value, StopIteration) 
+                    and exc.__cause__ is value 
+                ): 
                     return False
                 raise
-            except BaseException as exc:
+            except BaseException as exc: 
                 # only re-raise if it's *not* the exception that was
                 # passed to throw(), because __exit__() must not raise
                 # an exception unless __exit__() itself failed.  But throw()
                 # has to raise the exception to signal propagation, so this
                 # fixes the impedance mismatch between the throw() protocol
                 # and the __exit__() protocol.
-                if exc is not value:
-                    raise
-                return False
+                if exc is not value: 
+                    raise 
+                return False 
             raise RuntimeError("generator didn't stop after throw()")
 
 
 class _AsyncGeneratorContextManager(_GeneratorContextManagerBase,
                                     AbstractAsyncContextManager):
-    """Helper for @asynccontextmanager decorator."""
+    """Helper for @asynccontextmanager decorator.""" 
 
     async def __aenter__(self):
-        # do not keep args and kwds alive unnecessarily
-        # they are only needed for recreation, which is not possible anymore
-        del self.args, self.kwds, self.func
+        # do not keep args and kwds alive unnecessarily 
+        # they are only needed for recreation, which is not possible anymore 
+        del self.args, self.kwds, self.func 
         try:
             return await self.gen.__anext__()
         except StopAsyncIteration:
@@ -187,48 +187,48 @@ class _AsyncGeneratorContextManager(_GeneratorContextManagerBase,
             try:
                 await self.gen.__anext__()
             except StopAsyncIteration:
-                return False
+                return False 
             else:
                 raise RuntimeError("generator didn't stop")
         else:
             if value is None:
-                # Need to force instantiation so we can reliably
-                # tell if we get the same exception back
+                # Need to force instantiation so we can reliably 
+                # tell if we get the same exception back 
                 value = typ()
             try:
                 await self.gen.athrow(typ, value, traceback)
             except StopAsyncIteration as exc:
-                # Suppress StopIteration *unless* it's the same exception that
-                # was passed to throw().  This prevents a StopIteration
-                # raised inside the "with" statement from being suppressed.
+                # Suppress StopIteration *unless* it's the same exception that 
+                # was passed to throw().  This prevents a StopIteration 
+                # raised inside the "with" statement from being suppressed. 
                 return exc is not value
             except RuntimeError as exc:
-                # Don't re-raise the passed in exception. (issue27122)
+                # Don't re-raise the passed in exception. (issue27122) 
                 if exc is value:
                     return False
-                # Avoid suppressing if a Stop(Async)Iteration exception
-                # was passed to athrow() and later wrapped into a RuntimeError
+                # Avoid suppressing if a Stop(Async)Iteration exception 
+                # was passed to athrow() and later wrapped into a RuntimeError 
                 # (see PEP 479 for sync generators; async generators also
                 # have this behavior). But do this only if the exception wrapped
                 # by the RuntimeError is actully Stop(Async)Iteration (see
                 # issue29692).
-                if (
-                    isinstance(value, (StopIteration, StopAsyncIteration))
-                    and exc.__cause__ is value
-                ):
-                    return False
+                if ( 
+                    isinstance(value, (StopIteration, StopAsyncIteration)) 
+                    and exc.__cause__ is value 
+                ): 
+                    return False 
                 raise
             except BaseException as exc:
-                # only re-raise if it's *not* the exception that was
-                # passed to throw(), because __exit__() must not raise
-                # an exception unless __exit__() itself failed.  But throw()
-                # has to raise the exception to signal propagation, so this
-                # fixes the impedance mismatch between the throw() protocol
-                # and the __exit__() protocol.
+                # only re-raise if it's *not* the exception that was 
+                # passed to throw(), because __exit__() must not raise 
+                # an exception unless __exit__() itself failed.  But throw() 
+                # has to raise the exception to signal propagation, so this 
+                # fixes the impedance mismatch between the throw() protocol 
+                # and the __exit__() protocol. 
                 if exc is not value:
                     raise
-                return False
-            raise RuntimeError("generator didn't stop after athrow()")
+                return False 
+            raise RuntimeError("generator didn't stop after athrow()") 
 
 
 def contextmanager(func):
@@ -397,10 +397,10 @@ class _BaseExitStack:
 
     @staticmethod
     def _create_exit_wrapper(cm, cm_exit):
-        return MethodType(cm_exit, cm)
+        return MethodType(cm_exit, cm) 
 
     @staticmethod
-    def _create_cb_wrapper(callback, /, *args, **kwds):
+    def _create_cb_wrapper(callback, /, *args, **kwds): 
         def _exit_wrapper(exc_type, exc, tb):
             callback(*args, **kwds)
         return _exit_wrapper
@@ -449,7 +449,7 @@ class _BaseExitStack:
         self._push_cm_exit(cm, _exit)
         return result
 
-    def callback(self, callback, /, *args, **kwds):
+    def callback(self, callback, /, *args, **kwds): 
         """Registers an arbitrary callback and arguments.
 
         Cannot suppress exceptions.
@@ -496,10 +496,10 @@ class ExitStack(_BaseExitStack, AbstractContextManager):
             # Context may not be correct, so find the end of the chain
             while 1:
                 exc_context = new_exc.__context__
-                if exc_context is None or exc_context is old_exc:
+                if exc_context is None or exc_context is old_exc: 
                     # Context is already set correctly (see issue 20317)
                     return
-                if exc_context is frame_exc:
+                if exc_context is frame_exc: 
                     break
                 new_exc = exc_context
             # Change the end of the chain to point to the exception
@@ -556,10 +556,10 @@ class AsyncExitStack(_BaseExitStack, AbstractAsyncContextManager):
 
     @staticmethod
     def _create_async_exit_wrapper(cm, cm_exit):
-        return MethodType(cm_exit, cm)
+        return MethodType(cm_exit, cm) 
 
     @staticmethod
-    def _create_async_cb_wrapper(callback, /, *args, **kwds):
+    def _create_async_cb_wrapper(callback, /, *args, **kwds): 
         async def _exit_wrapper(exc_type, exc, tb):
             await callback(*args, **kwds)
         return _exit_wrapper
@@ -594,7 +594,7 @@ class AsyncExitStack(_BaseExitStack, AbstractAsyncContextManager):
             self._push_async_cm_exit(exit, exit_method)
         return exit  # Allow use as a decorator
 
-    def push_async_callback(self, callback, /, *args, **kwds):
+    def push_async_callback(self, callback, /, *args, **kwds): 
         """Registers an arbitrary coroutine function and arguments.
 
         Cannot suppress exceptions.
@@ -630,10 +630,10 @@ class AsyncExitStack(_BaseExitStack, AbstractAsyncContextManager):
             # Context may not be correct, so find the end of the chain
             while 1:
                 exc_context = new_exc.__context__
-                if exc_context is None or exc_context is old_exc:
+                if exc_context is None or exc_context is old_exc: 
                     # Context is already set correctly (see issue 20317)
                     return
-                if exc_context is frame_exc:
+                if exc_context is frame_exc: 
                     break
                 new_exc = exc_context
             # Change the end of the chain to point to the exception

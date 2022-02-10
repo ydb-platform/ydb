@@ -26,34 +26,34 @@
 #ifndef LLVM_ANALYSIS_LINT_H
 #define LLVM_ANALYSIS_LINT_H
 
-#include "llvm/IR/PassManager.h"
-
+#include "llvm/IR/PassManager.h" 
+ 
 namespace llvm {
 
 class FunctionPass;
 class Module;
 class Function;
 
-FunctionPass *createLintLegacyPassPass();
+FunctionPass *createLintLegacyPassPass(); 
 
-/// Lint a module.
+/// Lint a module. 
 ///
 /// This should only be used for debugging, because it plays games with
 /// PassManagers and stuff.
-void lintModule(const Module &M);
+void lintModule(const Module &M); 
 
-// Lint a function.
-void lintFunction(const Function &F);
+// Lint a function. 
+void lintFunction(const Function &F); 
 
-class LintPass : public PassInfoMixin<LintPass> {
-public:
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-};
+class LintPass : public PassInfoMixin<LintPass> { 
+public: 
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM); 
+}; 
 
-} // namespace llvm
+} // namespace llvm 
 
-#endif // LLVM_ANALYSIS_LINT_H
-
+#endif // LLVM_ANALYSIS_LINT_H 
+ 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif

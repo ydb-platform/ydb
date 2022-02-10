@@ -44,11 +44,11 @@ bool ProvenanceAnalysis::relatedSelect(const SelectInst *A,
   // check: just check for relations between the values on corresponding arms.
   if (const SelectInst *SB = dyn_cast<SelectInst>(B))
     if (A->getCondition() == SB->getCondition())
-      return related(A->getTrueValue(), SB->getTrueValue()) ||
-             related(A->getFalseValue(), SB->getFalseValue());
+      return related(A->getTrueValue(), SB->getTrueValue()) || 
+             related(A->getFalseValue(), SB->getFalseValue()); 
 
   // Check both arms of the Select node individually.
-  return related(A->getTrueValue(), B) || related(A->getFalseValue(), B);
+  return related(A->getTrueValue(), B) || related(A->getFalseValue(), B); 
 }
 
 bool ProvenanceAnalysis::relatedPHI(const PHINode *A,
@@ -60,7 +60,7 @@ bool ProvenanceAnalysis::relatedPHI(const PHINode *A,
     if (PNB->getParent() == A->getParent()) {
       for (unsigned i = 0, e = A->getNumIncomingValues(); i != e; ++i)
         if (related(A->getIncomingValue(i),
-                    PNB->getIncomingValueForBlock(A->getIncomingBlock(i))))
+                    PNB->getIncomingValueForBlock(A->getIncomingBlock(i)))) 
           return true;
       return false;
     }
@@ -68,7 +68,7 @@ bool ProvenanceAnalysis::relatedPHI(const PHINode *A,
   // Check each unique source of the PHI node against B.
   SmallPtrSet<const Value *, 4> UniqueSrc;
   for (Value *PV1 : A->incoming_values()) {
-    if (UniqueSrc.insert(PV1).second && related(PV1, B))
+    if (UniqueSrc.insert(PV1).second && related(PV1, B)) 
       return true;
   }
 
@@ -109,7 +109,7 @@ static bool IsStoredObjCPointer(const Value *P) {
   return false;
 }
 
-bool ProvenanceAnalysis::relatedCheck(const Value *A, const Value *B) {
+bool ProvenanceAnalysis::relatedCheck(const Value *A, const Value *B) { 
   // Ask regular AliasAnalysis, for a first approximation.
   switch (AA->alias(A, B)) {
   case NoAlias:
@@ -156,9 +156,9 @@ bool ProvenanceAnalysis::relatedCheck(const Value *A, const Value *B) {
   return true;
 }
 
-bool ProvenanceAnalysis::related(const Value *A, const Value *B) {
-  A = GetUnderlyingObjCPtrCached(A, UnderlyingObjCPtrCache);
-  B = GetUnderlyingObjCPtrCached(B, UnderlyingObjCPtrCache);
+bool ProvenanceAnalysis::related(const Value *A, const Value *B) { 
+  A = GetUnderlyingObjCPtrCached(A, UnderlyingObjCPtrCache); 
+  B = GetUnderlyingObjCPtrCached(B, UnderlyingObjCPtrCache); 
 
   // Quick check.
   if (A == B)
@@ -173,7 +173,7 @@ bool ProvenanceAnalysis::related(const Value *A, const Value *B) {
   if (!Pair.second)
     return Pair.first->second;
 
-  bool Result = relatedCheck(A, B);
+  bool Result = relatedCheck(A, B); 
   CachedResults[ValuePairTy(A, B)] = Result;
   return Result;
 }

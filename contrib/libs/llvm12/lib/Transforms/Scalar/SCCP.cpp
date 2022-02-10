@@ -23,7 +23,7 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PointerIntPair.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SetVector.h" 
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
@@ -34,7 +34,7 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/ValueLattice.h"
 #include "llvm/Analysis/ValueLatticeUtils.h"
-#include "llvm/Analysis/ValueTracking.h"
+#include "llvm/Analysis/ValueTracking.h" 
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
@@ -105,7 +105,7 @@ bool isConstant(const ValueLatticeElement &LV) {
 // ValueLatticeElement::isOverdefined() and is intended to be used in the
 // transition to ValueLatticeElement.
 bool isOverdefined(const ValueLatticeElement &LV) {
-  return !LV.isUnknownOrUndef() && !isConstant(LV);
+  return !LV.isUnknownOrUndef() && !isConstant(LV); 
 }
 
 //===----------------------------------------------------------------------===//
@@ -234,7 +234,7 @@ public:
       for (unsigned i = 0, e = STy->getNumElements(); i != e; ++i)
         TrackedMultipleRetVals.insert(
             std::make_pair(std::make_pair(F, i), ValueLatticeElement()));
-    } else if (!F->getReturnType()->isVoidTy())
+    } else if (!F->getReturnType()->isVoidTy()) 
       TrackedRetVals.insert(std::make_pair(F, ValueLatticeElement()));
   }
 
@@ -276,7 +276,7 @@ public:
 
   // isEdgeFeasible - Return true if the control flow edge from the 'From' basic
   // block to the 'To' basic block is currently feasible.
-  bool isEdgeFeasible(BasicBlock *From, BasicBlock *To) const;
+  bool isEdgeFeasible(BasicBlock *From, BasicBlock *To) const; 
 
   std::vector<ValueLatticeElement> getStructLatticeValueFor(Value *V) const {
     std::vector<ValueLatticeElement> StructValues;
@@ -542,14 +542,14 @@ private:
 
     auto Iter = AdditionalUsers.find(I);
     if (Iter != AdditionalUsers.end()) {
-      // Copy additional users before notifying them of changes, because new
-      // users may be added, potentially invalidating the iterator.
-      SmallVector<Instruction *, 2> ToNotify;
+      // Copy additional users before notifying them of changes, because new 
+      // users may be added, potentially invalidating the iterator. 
+      SmallVector<Instruction *, 2> ToNotify; 
       for (User *U : Iter->second)
         if (auto *UI = dyn_cast<Instruction>(U))
-          ToNotify.push_back(UI);
-      for (Instruction *UI : ToNotify)
-        OperandChangedState(UI);
+          ToNotify.push_back(UI); 
+      for (Instruction *UI : ToNotify) 
+        OperandChangedState(UI); 
     }
   }
   void handleCallOverdefined(CallBase &CB);
@@ -654,30 +654,30 @@ void SCCPSolver::getFeasibleSuccessors(Instruction &TI,
       Succs[0] = true;
       return;
     }
-    const ValueLatticeElement &SCValue = getValueState(SI->getCondition());
-    if (ConstantInt *CI = getConstantInt(SCValue)) {
-      Succs[SI->findCaseValue(CI)->getSuccessorIndex()] = true;
+    const ValueLatticeElement &SCValue = getValueState(SI->getCondition()); 
+    if (ConstantInt *CI = getConstantInt(SCValue)) { 
+      Succs[SI->findCaseValue(CI)->getSuccessorIndex()] = true; 
+      return; 
+    } 
+
+    // TODO: Switch on undef is UB. Stop passing false once the rest of LLVM 
+    // is ready. 
+    if (SCValue.isConstantRange(/*UndefAllowed=*/false)) { 
+      const ConstantRange &Range = SCValue.getConstantRange(); 
+      for (const auto &Case : SI->cases()) { 
+        const APInt &CaseValue = Case.getCaseValue()->getValue(); 
+        if (Range.contains(CaseValue)) 
+          Succs[Case.getSuccessorIndex()] = true; 
+      } 
+ 
+      // TODO: Determine whether default case is reachable. 
+      Succs[SI->case_default()->getSuccessorIndex()] = true; 
       return;
     }
 
-    // TODO: Switch on undef is UB. Stop passing false once the rest of LLVM
-    // is ready.
-    if (SCValue.isConstantRange(/*UndefAllowed=*/false)) {
-      const ConstantRange &Range = SCValue.getConstantRange();
-      for (const auto &Case : SI->cases()) {
-        const APInt &CaseValue = Case.getCaseValue()->getValue();
-        if (Range.contains(CaseValue))
-          Succs[Case.getSuccessorIndex()] = true;
-      }
-
-      // TODO: Determine whether default case is reachable.
-      Succs[SI->case_default()->getSuccessorIndex()] = true;
-      return;
-    }
-
-    // Overdefined or unknown condition? All destinations are executable!
-    if (!SCValue.isUnknownOrUndef())
-      Succs.assign(TI.getNumSuccessors(), true);
+    // Overdefined or unknown condition? All destinations are executable! 
+    if (!SCValue.isUnknownOrUndef()) 
+      Succs.assign(TI.getNumSuccessors(), true); 
     return;
   }
 
@@ -723,7 +723,7 @@ void SCCPSolver::getFeasibleSuccessors(Instruction &TI,
 
 // isEdgeFeasible - Return true if the control flow edge from the 'From' basic
 // block to the 'To' basic block is currently feasible.
-bool SCCPSolver::isEdgeFeasible(BasicBlock *From, BasicBlock *To) const {
+bool SCCPSolver::isEdgeFeasible(BasicBlock *From, BasicBlock *To) const { 
   // Check if we've called markEdgeExecutable on the edge yet. (We could
   // be more aggressive and try to consider edges which haven't been marked
   // yet, but there isn't any need.)
@@ -848,16 +848,16 @@ void SCCPSolver::visitCastInst(CastInst &I) {
     auto &LV = getValueState(&I);
     ConstantRange OpRange = OpSt.getConstantRange();
     Type *DestTy = I.getDestTy();
-    // Vectors where all elements have the same known constant range are treated
-    // as a single constant range in the lattice. When bitcasting such vectors,
-    // there is a mis-match between the width of the lattice value (single
-    // constant range) and the original operands (vector). Go to overdefined in
-    // that case.
-    if (I.getOpcode() == Instruction::BitCast &&
-        I.getOperand(0)->getType()->isVectorTy() &&
-        OpRange.getBitWidth() < DL.getTypeSizeInBits(DestTy))
-      return (void)markOverdefined(&I);
-
+    // Vectors where all elements have the same known constant range are treated 
+    // as a single constant range in the lattice. When bitcasting such vectors, 
+    // there is a mis-match between the width of the lattice value (single 
+    // constant range) and the original operands (vector). Go to overdefined in 
+    // that case. 
+    if (I.getOpcode() == Instruction::BitCast && 
+        I.getOperand(0)->getType()->isVectorTy() && 
+        OpRange.getBitWidth() < DL.getTypeSizeInBits(DestTy)) 
+      return (void)markOverdefined(&I); 
+ 
     ConstantRange Res =
         OpRange.castOp(I.getOpcode(), DL.getTypeSizeInBits(DestTy));
     mergeInValue(LV, &I, ValueLatticeElement::getRange(Res));
@@ -1138,9 +1138,9 @@ static ValueLatticeElement getValueFromMetadata(const Instruction *I) {
     if (I->getType()->isIntegerTy())
       return ValueLatticeElement::getRange(
           getConstantRangeFromMetadata(*Ranges));
-  if (I->hasMetadata(LLVMContext::MD_nonnull))
-    return ValueLatticeElement::getNot(
-        ConstantPointerNull::get(cast<PointerType>(I->getType())));
+  if (I->hasMetadata(LLVMContext::MD_nonnull)) 
+    return ValueLatticeElement::getNot( 
+        ConstantPointerNull::get(cast<PointerType>(I->getType()))); 
   return ValueLatticeElement::getOverdefined();
 }
 
@@ -1293,33 +1293,33 @@ void SCCPSolver::handleCallResult(CallBase &CB) {
       auto *PI = getPredicateInfoFor(&CB);
       assert(PI && "Missing predicate info for ssa.copy");
 
-      const Optional<PredicateConstraint> &Constraint = PI->getConstraint();
-      if (!Constraint) {
+      const Optional<PredicateConstraint> &Constraint = PI->getConstraint(); 
+      if (!Constraint) { 
         mergeInValue(ValueState[&CB], &CB, CopyOfVal);
         return;
       }
 
-      CmpInst::Predicate Pred = Constraint->Predicate;
-      Value *OtherOp = Constraint->OtherOp;
+      CmpInst::Predicate Pred = Constraint->Predicate; 
+      Value *OtherOp = Constraint->OtherOp; 
 
-      // Wait until OtherOp is resolved.
-      if (getValueState(OtherOp).isUnknown()) {
-        addAdditionalUser(OtherOp, &CB);
+      // Wait until OtherOp is resolved. 
+      if (getValueState(OtherOp).isUnknown()) { 
+        addAdditionalUser(OtherOp, &CB); 
         return;
       }
 
-      // TODO: Actually filp MayIncludeUndef for the created range to false,
-      // once most places in the optimizer respect the branches on
-      // undef/poison are UB rule. The reason why the new range cannot be
-      // undef is as follows below:
-      // The new range is based on a branch condition. That guarantees that
-      // neither of the compare operands can be undef in the branch targets,
-      // unless we have conditions that are always true/false (e.g. icmp ule
-      // i32, %a, i32_max). For the latter overdefined/empty range will be
-      // inferred, but the branch will get folded accordingly anyways.
-      bool MayIncludeUndef = !isa<PredicateAssume>(PI);
+      // TODO: Actually filp MayIncludeUndef for the created range to false, 
+      // once most places in the optimizer respect the branches on 
+      // undef/poison are UB rule. The reason why the new range cannot be 
+      // undef is as follows below: 
+      // The new range is based on a branch condition. That guarantees that 
+      // neither of the compare operands can be undef in the branch targets, 
+      // unless we have conditions that are always true/false (e.g. icmp ule 
+      // i32, %a, i32_max). For the latter overdefined/empty range will be 
+      // inferred, but the branch will get folded accordingly anyways. 
+      bool MayIncludeUndef = !isa<PredicateAssume>(PI); 
 
-      ValueLatticeElement CondVal = getValueState(OtherOp);
+      ValueLatticeElement CondVal = getValueState(OtherOp); 
       ValueLatticeElement &IV = ValueState[&CB];
       if (CondVal.isConstantRange() || CopyOfVal.isConstantRange()) {
         auto ImposedCR =
@@ -1343,47 +1343,47 @@ void SCCPSolver::handleCallResult(CallBase &CB) {
         if (!CopyOfCR.contains(NewCR) && CopyOfCR.getSingleMissingElement())
           NewCR = CopyOfCR;
 
-        addAdditionalUser(OtherOp, &CB);
+        addAdditionalUser(OtherOp, &CB); 
         mergeInValue(
             IV, &CB,
-            ValueLatticeElement::getRange(NewCR, MayIncludeUndef));
+            ValueLatticeElement::getRange(NewCR, MayIncludeUndef)); 
         return;
       } else if (Pred == CmpInst::ICMP_EQ && CondVal.isConstant()) {
         // For non-integer values or integer constant expressions, only
         // propagate equal constants.
-        addAdditionalUser(OtherOp, &CB);
+        addAdditionalUser(OtherOp, &CB); 
         mergeInValue(IV, &CB, CondVal);
         return;
-      } else if (Pred == CmpInst::ICMP_NE && CondVal.isConstant() &&
-                 !MayIncludeUndef) {
-        // Propagate inequalities.
-        addAdditionalUser(OtherOp, &CB);
-        mergeInValue(IV, &CB,
-                     ValueLatticeElement::getNot(CondVal.getConstant()));
-        return;
+      } else if (Pred == CmpInst::ICMP_NE && CondVal.isConstant() && 
+                 !MayIncludeUndef) { 
+        // Propagate inequalities. 
+        addAdditionalUser(OtherOp, &CB); 
+        mergeInValue(IV, &CB, 
+                     ValueLatticeElement::getNot(CondVal.getConstant())); 
+        return; 
       }
 
       return (void)mergeInValue(IV, &CB, CopyOfVal);
     }
-
-    if (ConstantRange::isIntrinsicSupported(II->getIntrinsicID())) {
-      // Compute result range for intrinsics supported by ConstantRange.
-      // Do this even if we don't know a range for all operands, as we may
-      // still know something about the result range, e.g. of abs(x).
-      SmallVector<ConstantRange, 2> OpRanges;
-      for (Value *Op : II->args()) {
-        const ValueLatticeElement &State = getValueState(Op);
-        if (State.isConstantRange())
-          OpRanges.push_back(State.getConstantRange());
-        else
-          OpRanges.push_back(
-              ConstantRange::getFull(Op->getType()->getScalarSizeInBits()));
-      }
-
-      ConstantRange Result =
-          ConstantRange::intrinsic(II->getIntrinsicID(), OpRanges);
-      return (void)mergeInValue(II, ValueLatticeElement::getRange(Result));
-    }
+ 
+    if (ConstantRange::isIntrinsicSupported(II->getIntrinsicID())) { 
+      // Compute result range for intrinsics supported by ConstantRange. 
+      // Do this even if we don't know a range for all operands, as we may 
+      // still know something about the result range, e.g. of abs(x). 
+      SmallVector<ConstantRange, 2> OpRanges; 
+      for (Value *Op : II->args()) { 
+        const ValueLatticeElement &State = getValueState(Op); 
+        if (State.isConstantRange()) 
+          OpRanges.push_back(State.getConstantRange()); 
+        else 
+          OpRanges.push_back( 
+              ConstantRange::getFull(Op->getType()->getScalarSizeInBits())); 
+      } 
+ 
+      ConstantRange Result = 
+          ConstantRange::intrinsic(II->getIntrinsicID(), OpRanges); 
+      return (void)mergeInValue(II, ValueLatticeElement::getRange(Result)); 
+    } 
   }
 
   // The common case is that we aren't tracking the callee, either because we
@@ -1453,7 +1453,7 @@ void SCCPSolver::Solve() {
 
     // Process the basic block work list.
     while (!BBWorkList.empty()) {
-      BasicBlock *BB = BBWorkList.pop_back_val();
+      BasicBlock *BB = BBWorkList.pop_back_val(); 
 
       LLVM_DEBUG(dbgs() << "\nPopped off BBWL: " << *BB << '\n');
 
@@ -1481,7 +1481,7 @@ void SCCPSolver::Solve() {
 /// This scan also checks for values that use undefs. It conservatively marks
 /// them as overdefined.
 bool SCCPSolver::ResolvedUndefsIn(Function &F) {
-  bool MadeChange = false;
+  bool MadeChange = false; 
   for (BasicBlock &BB : F) {
     if (!BBExecutable.count(&BB))
       continue;
@@ -1507,10 +1507,10 @@ bool SCCPSolver::ResolvedUndefsIn(Function &F) {
         // more precise than this but it isn't worth bothering.
         for (unsigned i = 0, e = STy->getNumElements(); i != e; ++i) {
           ValueLatticeElement &LV = getStructValueState(&I, i);
-          if (LV.isUnknownOrUndef()) {
+          if (LV.isUnknownOrUndef()) { 
             markOverdefined(LV, &I);
-            MadeChange = true;
-          }
+            MadeChange = true; 
+          } 
         }
         continue;
       }
@@ -1537,7 +1537,7 @@ bool SCCPSolver::ResolvedUndefsIn(Function &F) {
       }
 
       markOverdefined(&I);
-      MadeChange = true;
+      MadeChange = true; 
     }
 
     // Check to see if we have a branch or switch on an undefined value.  If so
@@ -1554,8 +1554,8 @@ bool SCCPSolver::ResolvedUndefsIn(Function &F) {
       if (isa<UndefValue>(BI->getCondition())) {
         BI->setCondition(ConstantInt::getFalse(BI->getContext()));
         markEdgeExecutable(&BB, TI->getSuccessor(1));
-        MadeChange = true;
-        continue;
+        MadeChange = true; 
+        continue; 
       }
 
       // Otherwise, it is a branch on a symbolic value which is currently
@@ -1564,7 +1564,7 @@ bool SCCPSolver::ResolvedUndefsIn(Function &F) {
       // FIXME: Distinguish between dead code and an LLVM "undef" value.
       BasicBlock *DefaultSuccessor = TI->getSuccessor(1);
       if (markEdgeExecutable(&BB, DefaultSuccessor))
-        MadeChange = true;
+        MadeChange = true; 
 
       continue;
     }
@@ -1583,8 +1583,8 @@ bool SCCPSolver::ResolvedUndefsIn(Function &F) {
       if (isa<UndefValue>(IBR->getAddress())) {
         IBR->setAddress(BlockAddress::get(IBR->getSuccessor(0)));
         markEdgeExecutable(&BB, IBR->getSuccessor(0));
-        MadeChange = true;
-        continue;
+        MadeChange = true; 
+        continue; 
       }
 
       // Otherwise, it is a branch on a symbolic value which is currently
@@ -1594,7 +1594,7 @@ bool SCCPSolver::ResolvedUndefsIn(Function &F) {
       // we can assume the branch has undefined behavior instead.
       BasicBlock *DefaultSuccessor = IBR->getSuccessor(0);
       if (markEdgeExecutable(&BB, DefaultSuccessor))
-        MadeChange = true;
+        MadeChange = true; 
 
       continue;
     }
@@ -1609,8 +1609,8 @@ bool SCCPSolver::ResolvedUndefsIn(Function &F) {
       if (isa<UndefValue>(SI->getCondition())) {
         SI->setCondition(SI->case_begin()->getCaseValue());
         markEdgeExecutable(&BB, SI->case_begin()->getCaseSuccessor());
-        MadeChange = true;
-        continue;
+        MadeChange = true; 
+        continue; 
       }
 
       // Otherwise, it is a branch on a symbolic value which is currently
@@ -1619,13 +1619,13 @@ bool SCCPSolver::ResolvedUndefsIn(Function &F) {
       // FIXME: Distinguish between dead code and an LLVM "undef" value.
       BasicBlock *DefaultSuccessor = SI->case_begin()->getCaseSuccessor();
       if (markEdgeExecutable(&BB, DefaultSuccessor))
-        MadeChange = true;
+        MadeChange = true; 
 
       continue;
     }
   }
 
-  return MadeChange;
+  return MadeChange; 
 }
 
 static bool tryToReplaceWithConstant(SCCPSolver &Solver, Value *V) {
@@ -1747,7 +1747,7 @@ static bool runSCCP(Function &F, const DataLayout &DL,
       LLVM_DEBUG(dbgs() << "  BasicBlock Dead:" << BB);
 
       ++NumDeadBlocks;
-      NumInstRemoved += removeAllNonTerminatorAndEHPadInstructions(&BB).first;
+      NumInstRemoved += removeAllNonTerminatorAndEHPadInstructions(&BB).first; 
 
       MadeChanges = true;
       continue;
@@ -1870,68 +1870,68 @@ static void findReturnsToZap(Function &F,
   }
 }
 
-static bool removeNonFeasibleEdges(const SCCPSolver &Solver, BasicBlock *BB,
-                                   DomTreeUpdater &DTU) {
-  SmallPtrSet<BasicBlock *, 8> FeasibleSuccessors;
-  bool HasNonFeasibleEdges = false;
-  for (BasicBlock *Succ : successors(BB)) {
-    if (Solver.isEdgeFeasible(BB, Succ))
-      FeasibleSuccessors.insert(Succ);
-    else
-      HasNonFeasibleEdges = true;
-  }
-
-  // All edges feasible, nothing to do.
-  if (!HasNonFeasibleEdges)
-    return false;
-
-  // SCCP can only determine non-feasible edges for br, switch and indirectbr.
-  Instruction *TI = BB->getTerminator();
-  assert((isa<BranchInst>(TI) || isa<SwitchInst>(TI) ||
-          isa<IndirectBrInst>(TI)) &&
-         "Terminator must be a br, switch or indirectbr");
-
-  if (FeasibleSuccessors.size() == 1) {
-    // Replace with an unconditional branch to the only feasible successor.
-    BasicBlock *OnlyFeasibleSuccessor = *FeasibleSuccessors.begin();
-    SmallVector<DominatorTree::UpdateType, 8> Updates;
-    bool HaveSeenOnlyFeasibleSuccessor = false;
-    for (BasicBlock *Succ : successors(BB)) {
-      if (Succ == OnlyFeasibleSuccessor && !HaveSeenOnlyFeasibleSuccessor) {
-        // Don't remove the edge to the only feasible successor the first time
-        // we see it. We still do need to remove any multi-edges to it though.
-        HaveSeenOnlyFeasibleSuccessor = true;
-        continue;
-      }
-
-      Succ->removePredecessor(BB);
-      Updates.push_back({DominatorTree::Delete, BB, Succ});
+static bool removeNonFeasibleEdges(const SCCPSolver &Solver, BasicBlock *BB, 
+                                   DomTreeUpdater &DTU) { 
+  SmallPtrSet<BasicBlock *, 8> FeasibleSuccessors; 
+  bool HasNonFeasibleEdges = false; 
+  for (BasicBlock *Succ : successors(BB)) { 
+    if (Solver.isEdgeFeasible(BB, Succ)) 
+      FeasibleSuccessors.insert(Succ); 
+    else 
+      HasNonFeasibleEdges = true; 
+  } 
+ 
+  // All edges feasible, nothing to do. 
+  if (!HasNonFeasibleEdges) 
+    return false; 
+ 
+  // SCCP can only determine non-feasible edges for br, switch and indirectbr. 
+  Instruction *TI = BB->getTerminator(); 
+  assert((isa<BranchInst>(TI) || isa<SwitchInst>(TI) || 
+          isa<IndirectBrInst>(TI)) && 
+         "Terminator must be a br, switch or indirectbr"); 
+ 
+  if (FeasibleSuccessors.size() == 1) { 
+    // Replace with an unconditional branch to the only feasible successor. 
+    BasicBlock *OnlyFeasibleSuccessor = *FeasibleSuccessors.begin(); 
+    SmallVector<DominatorTree::UpdateType, 8> Updates; 
+    bool HaveSeenOnlyFeasibleSuccessor = false; 
+    for (BasicBlock *Succ : successors(BB)) { 
+      if (Succ == OnlyFeasibleSuccessor && !HaveSeenOnlyFeasibleSuccessor) { 
+        // Don't remove the edge to the only feasible successor the first time 
+        // we see it. We still do need to remove any multi-edges to it though. 
+        HaveSeenOnlyFeasibleSuccessor = true; 
+        continue; 
+      } 
+ 
+      Succ->removePredecessor(BB); 
+      Updates.push_back({DominatorTree::Delete, BB, Succ}); 
     }
-
-    BranchInst::Create(OnlyFeasibleSuccessor, BB);
-    TI->eraseFromParent();
-    DTU.applyUpdatesPermissive(Updates);
-  } else if (FeasibleSuccessors.size() > 1) {
-    SwitchInstProfUpdateWrapper SI(*cast<SwitchInst>(TI));
-    SmallVector<DominatorTree::UpdateType, 8> Updates;
-    for (auto CI = SI->case_begin(); CI != SI->case_end();) {
-      if (FeasibleSuccessors.contains(CI->getCaseSuccessor())) {
-        ++CI;
-        continue;
-      }
-
-      BasicBlock *Succ = CI->getCaseSuccessor();
-      Succ->removePredecessor(BB);
-      Updates.push_back({DominatorTree::Delete, BB, Succ});
-      SI.removeCase(CI);
-      // Don't increment CI, as we removed a case.
+ 
+    BranchInst::Create(OnlyFeasibleSuccessor, BB); 
+    TI->eraseFromParent(); 
+    DTU.applyUpdatesPermissive(Updates); 
+  } else if (FeasibleSuccessors.size() > 1) { 
+    SwitchInstProfUpdateWrapper SI(*cast<SwitchInst>(TI)); 
+    SmallVector<DominatorTree::UpdateType, 8> Updates; 
+    for (auto CI = SI->case_begin(); CI != SI->case_end();) { 
+      if (FeasibleSuccessors.contains(CI->getCaseSuccessor())) { 
+        ++CI; 
+        continue; 
+      } 
+ 
+      BasicBlock *Succ = CI->getCaseSuccessor(); 
+      Succ->removePredecessor(BB); 
+      Updates.push_back({DominatorTree::Delete, BB, Succ}); 
+      SI.removeCase(CI); 
+      // Don't increment CI, as we removed a case. 
     }
-
-    DTU.applyUpdatesPermissive(Updates);
+ 
+    DTU.applyUpdatesPermissive(Updates); 
   } else {
-    llvm_unreachable("Must have at least one feasible successor");
+    llvm_unreachable("Must have at least one feasible successor"); 
   }
-  return true;
+  return true; 
 }
 
 bool llvm::runIPSCCP(
@@ -1983,12 +1983,12 @@ bool llvm::runIPSCCP(
   while (ResolvedUndefs) {
     LLVM_DEBUG(dbgs() << "RESOLVING UNDEFS\n");
     ResolvedUndefs = false;
-    for (Function &F : M) {
-      if (Solver.ResolvedUndefsIn(F))
+    for (Function &F : M) { 
+      if (Solver.ResolvedUndefsIn(F)) 
         ResolvedUndefs = true;
-    }
-    if (ResolvedUndefs)
-      Solver.Solve();
+    } 
+    if (ResolvedUndefs) 
+      Solver.Solve(); 
   }
 
   bool MadeChanges = false;
@@ -2002,35 +2002,35 @@ bool llvm::runIPSCCP(
 
     SmallVector<BasicBlock *, 512> BlocksToErase;
 
-    if (Solver.isBlockExecutable(&F.front())) {
-      bool ReplacedPointerArg = false;
-      for (Argument &Arg : F.args()) {
-        if (!Arg.use_empty() && tryToReplaceWithConstant(Solver, &Arg)) {
-          ReplacedPointerArg |= Arg.getType()->isPointerTy();
+    if (Solver.isBlockExecutable(&F.front())) { 
+      bool ReplacedPointerArg = false; 
+      for (Argument &Arg : F.args()) { 
+        if (!Arg.use_empty() && tryToReplaceWithConstant(Solver, &Arg)) { 
+          ReplacedPointerArg |= Arg.getType()->isPointerTy(); 
           ++IPNumArgsElimed;
         }
       }
 
-      // If we replaced an argument, the argmemonly and
-      // inaccessiblemem_or_argmemonly attributes do not hold any longer. Remove
-      // them from both the function and callsites.
-      if (ReplacedPointerArg) {
-        AttrBuilder AttributesToRemove;
-        AttributesToRemove.addAttribute(Attribute::ArgMemOnly);
-        AttributesToRemove.addAttribute(Attribute::InaccessibleMemOrArgMemOnly);
-        F.removeAttributes(AttributeList::FunctionIndex, AttributesToRemove);
-
-        for (User *U : F.users()) {
-          auto *CB = dyn_cast<CallBase>(U);
-          if (!CB || CB->getCalledFunction() != &F)
-            continue;
-
-          CB->removeAttributes(AttributeList::FunctionIndex,
-                               AttributesToRemove);
-        }
-      }
-    }
-
+      // If we replaced an argument, the argmemonly and 
+      // inaccessiblemem_or_argmemonly attributes do not hold any longer. Remove 
+      // them from both the function and callsites. 
+      if (ReplacedPointerArg) { 
+        AttrBuilder AttributesToRemove; 
+        AttributesToRemove.addAttribute(Attribute::ArgMemOnly); 
+        AttributesToRemove.addAttribute(Attribute::InaccessibleMemOrArgMemOnly); 
+        F.removeAttributes(AttributeList::FunctionIndex, AttributesToRemove); 
+ 
+        for (User *U : F.users()) { 
+          auto *CB = dyn_cast<CallBase>(U); 
+          if (!CB || CB->getCalledFunction() != &F) 
+            continue; 
+ 
+          CB->removeAttributes(AttributeList::FunctionIndex, 
+                               AttributesToRemove); 
+        } 
+      } 
+    } 
+ 
     SmallPtrSet<Value *, 32> InsertedValues;
     for (BasicBlock &BB : F) {
       if (!Solver.isBlockExecutable(&BB)) {
@@ -2063,10 +2063,10 @@ bool llvm::runIPSCCP(
                                             /*UseLLVMTrap=*/false,
                                             /*PreserveLCSSA=*/false, &DTU);
 
-    for (BasicBlock &BB : F)
-      MadeChanges |= removeNonFeasibleEdges(Solver, &BB, DTU);
+    for (BasicBlock &BB : F) 
+      MadeChanges |= removeNonFeasibleEdges(Solver, &BB, DTU); 
 
-    for (BasicBlock *DeadBB : BlocksToErase)
+    for (BasicBlock *DeadBB : BlocksToErase) 
       DTU.deleteBB(DeadBB);
 
     for (BasicBlock &BB : F) {
@@ -2099,47 +2099,47 @@ bool llvm::runIPSCCP(
 
   for (const auto &I : Solver.getTrackedRetVals()) {
     Function *F = I.first;
-    const ValueLatticeElement &ReturnValue = I.second;
-
-    // If there is a known constant range for the return value, add !range
-    // metadata to the function's call sites.
-    if (ReturnValue.isConstantRange() &&
-        !ReturnValue.getConstantRange().isSingleElement()) {
-      // Do not add range metadata if the return value may include undef.
-      if (ReturnValue.isConstantRangeIncludingUndef())
-        continue;
-
-      auto &CR = ReturnValue.getConstantRange();
-      for (User *User : F->users()) {
-        auto *CB = dyn_cast<CallBase>(User);
-        if (!CB || CB->getCalledFunction() != F)
-          continue;
-
-        // Limit to cases where the return value is guaranteed to be neither
-        // poison nor undef. Poison will be outside any range and currently
-        // values outside of the specified range cause immediate undefined
-        // behavior.
-        if (!isGuaranteedNotToBeUndefOrPoison(CB, nullptr, CB))
-          continue;
-
-        // Do not touch existing metadata for now.
-        // TODO: We should be able to take the intersection of the existing
-        // metadata and the inferred range.
-        if (CB->getMetadata(LLVMContext::MD_range))
-          continue;
-
-        LLVMContext &Context = CB->getParent()->getContext();
-        Metadata *RangeMD[] = {
-            ConstantAsMetadata::get(ConstantInt::get(Context, CR.getLower())),
-            ConstantAsMetadata::get(ConstantInt::get(Context, CR.getUpper()))};
-        CB->setMetadata(LLVMContext::MD_range, MDNode::get(Context, RangeMD));
-      }
+    const ValueLatticeElement &ReturnValue = I.second; 
+ 
+    // If there is a known constant range for the return value, add !range 
+    // metadata to the function's call sites. 
+    if (ReturnValue.isConstantRange() && 
+        !ReturnValue.getConstantRange().isSingleElement()) { 
+      // Do not add range metadata if the return value may include undef. 
+      if (ReturnValue.isConstantRangeIncludingUndef()) 
+        continue; 
+ 
+      auto &CR = ReturnValue.getConstantRange(); 
+      for (User *User : F->users()) { 
+        auto *CB = dyn_cast<CallBase>(User); 
+        if (!CB || CB->getCalledFunction() != F) 
+          continue; 
+ 
+        // Limit to cases where the return value is guaranteed to be neither 
+        // poison nor undef. Poison will be outside any range and currently 
+        // values outside of the specified range cause immediate undefined 
+        // behavior. 
+        if (!isGuaranteedNotToBeUndefOrPoison(CB, nullptr, CB)) 
+          continue; 
+ 
+        // Do not touch existing metadata for now. 
+        // TODO: We should be able to take the intersection of the existing 
+        // metadata and the inferred range. 
+        if (CB->getMetadata(LLVMContext::MD_range)) 
+          continue; 
+ 
+        LLVMContext &Context = CB->getParent()->getContext(); 
+        Metadata *RangeMD[] = { 
+            ConstantAsMetadata::get(ConstantInt::get(Context, CR.getLower())), 
+            ConstantAsMetadata::get(ConstantInt::get(Context, CR.getUpper()))}; 
+        CB->setMetadata(LLVMContext::MD_range, MDNode::get(Context, RangeMD)); 
+      } 
       continue;
-    }
-    if (F->getReturnType()->isVoidTy())
-      continue;
-    if (isConstant(ReturnValue) || ReturnValue.isUnknownOrUndef())
-      findReturnsToZap(*F, ReturnsToZap, Solver);
+    } 
+    if (F->getReturnType()->isVoidTy()) 
+      continue; 
+    if (isConstant(ReturnValue) || ReturnValue.isUnknownOrUndef()) 
+      findReturnsToZap(*F, ReturnsToZap, Solver); 
   }
 
   for (auto F : Solver.getMRVFunctionsTracked()) {
@@ -2151,29 +2151,29 @@ bool llvm::runIPSCCP(
   }
 
   // Zap all returns which we've identified as zap to change.
-  SmallSetVector<Function *, 8> FuncZappedReturn;
+  SmallSetVector<Function *, 8> FuncZappedReturn; 
   for (unsigned i = 0, e = ReturnsToZap.size(); i != e; ++i) {
     Function *F = ReturnsToZap[i]->getParent()->getParent();
     ReturnsToZap[i]->setOperand(0, UndefValue::get(F->getReturnType()));
-    // Record all functions that are zapped.
-    FuncZappedReturn.insert(F);
+    // Record all functions that are zapped. 
+    FuncZappedReturn.insert(F); 
   }
 
-  // Remove the returned attribute for zapped functions and the
-  // corresponding call sites.
-  for (Function *F : FuncZappedReturn) {
-    for (Argument &A : F->args())
-      F->removeParamAttr(A.getArgNo(), Attribute::Returned);
-    for (Use &U : F->uses()) {
-      // Skip over blockaddr users.
-      if (isa<BlockAddress>(U.getUser()))
-        continue;
-      CallBase *CB = cast<CallBase>(U.getUser());
-      for (Use &Arg : CB->args())
-        CB->removeParamAttr(CB->getArgOperandNo(&Arg), Attribute::Returned);
-    }
-  }
-
+  // Remove the returned attribute for zapped functions and the 
+  // corresponding call sites. 
+  for (Function *F : FuncZappedReturn) { 
+    for (Argument &A : F->args()) 
+      F->removeParamAttr(A.getArgNo(), Attribute::Returned); 
+    for (Use &U : F->uses()) { 
+      // Skip over blockaddr users. 
+      if (isa<BlockAddress>(U.getUser())) 
+        continue; 
+      CallBase *CB = cast<CallBase>(U.getUser()); 
+      for (Use &Arg : CB->args()) 
+        CB->removeParamAttr(CB->getArgOperandNo(&Arg), Attribute::Returned); 
+    } 
+  } 
+ 
   // If we inferred constant or undef values for globals variables, we can
   // delete the global and any stores that remain to it.
   for (auto &I : make_early_inc_range(Solver.getTrackedGlobals())) {

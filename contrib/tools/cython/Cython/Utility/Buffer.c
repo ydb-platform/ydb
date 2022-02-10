@@ -298,7 +298,7 @@ static void __Pyx_BufFmt_RaiseUnexpectedChar(char ch) {
 
 static const char* __Pyx_BufFmt_DescribeTypeChar(char ch, int is_complex) {
   switch (ch) {
-    case '?': return "'bool'";
+    case '?': return "'bool'"; 
     case 'c': return "'char'";
     case 'b': return "'signed char'";
     case 'B': return "'unsigned char'";
@@ -343,7 +343,7 @@ static size_t __Pyx_BufFmt_TypeCharToStandardSize(char ch, int is_complex) {
 
 static size_t __Pyx_BufFmt_TypeCharToNativeSize(char ch, int is_complex) {
   switch (ch) {
-    case '?': case 'c': case 'b': case 'B': case 's': case 'p': return 1;
+    case '?': case 'c': case 'b': case 'B': case 's': case 'p': return 1; 
     case 'h': case 'H': return sizeof(short);
     case 'i': case 'I': return sizeof(int);
     case 'l': case 'L': return sizeof(long);
@@ -432,7 +432,7 @@ static char __Pyx_BufFmt_TypeCharToGroup(char ch, int is_complex) {
     case 'b': case 'h': case 'i':
     case 'l': case 'q': case 's': case 'p':
         return 'I';
-    case '?': case 'B': case 'H': case 'I': case 'L': case 'Q':
+    case '?': case 'B': case 'H': case 'I': case 'L': case 'Q': 
         return 'U';
     case 'f': case 'd': case 'g':
         return (is_complex ? 'C' : 'R');
@@ -602,8 +602,8 @@ static PyObject *
 __pyx_buffmt_parse_array(__Pyx_BufFmt_Context* ctx, const char** tsp)
 {
     const char *ts = *tsp;
-    int i = 0, number, ndim;
-
+    int i = 0, number, ndim; 
+ 
     ++ts;
     if (ctx->new_count != 1) {
         PyErr_SetString(PyExc_ValueError,
@@ -614,9 +614,9 @@ __pyx_buffmt_parse_array(__Pyx_BufFmt_Context* ctx, const char** tsp)
     /* Process the previous element */
     if (__Pyx_BufFmt_ProcessTypeChunk(ctx) == -1) return NULL;
 
-    // store ndim now, as field advanced by __Pyx_BufFmt_ProcessTypeChunk call
-    ndim = ctx->head->field->type->ndim;
-
+    // store ndim now, as field advanced by __Pyx_BufFmt_ProcessTypeChunk call 
+    ndim = ctx->head->field->type->ndim; 
+ 
     /* Parse all numbers in the format string */
     while (*ts && *ts != ')') {
         // ignore space characters (not using isspace() due to C/C++ problem on MacOS-X)
@@ -755,12 +755,12 @@ static const char* __Pyx_BufFmt_CheckString(__Pyx_BufFmt_Context* ctx, const cha
           return NULL;
         }
         CYTHON_FALLTHROUGH;
-      case '?': case 'c': case 'b': case 'B': case 'h': case 'H': case 'i': case 'I':
+      case '?': case 'c': case 'b': case 'B': case 'h': case 'H': case 'i': case 'I': 
       case 'l': case 'L': case 'q': case 'Q':
       case 'f': case 'd': case 'g':
       case 'O': case 'p':
-        if ((ctx->enc_type == *ts) && (got_Z == ctx->is_complex) &&
-            (ctx->enc_packmode == ctx->new_packmode) && (!ctx->is_valid_array)) {
+        if ((ctx->enc_type == *ts) && (got_Z == ctx->is_complex) && 
+            (ctx->enc_packmode == ctx->new_packmode) && (!ctx->is_valid_array)) { 
           /* Continue pooling same type */
           ctx->enc_count += ctx->new_count;
           ctx->new_count = 1;

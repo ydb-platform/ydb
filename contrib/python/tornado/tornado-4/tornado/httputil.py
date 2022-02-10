@@ -31,11 +31,11 @@ import numbers
 import re
 import time
 
-try:
-    from collections.abc import MutableMapping
-except ImportError:
-    from collections import MutableMapping
-
+try: 
+    from collections.abc import MutableMapping 
+except ImportError: 
+    from collections import MutableMapping 
+ 
 from tornado.escape import native_str, parse_qs_bytes, utf8
 from tornado.log import gen_log
 from tornado.util import ObjectDict, PY3
@@ -108,7 +108,7 @@ class _NormalizedHeaderCache(dict):
 _normalized_headers = _NormalizedHeaderCache(1000)
 
 
-class HTTPHeaders(MutableMapping):
+class HTTPHeaders(MutableMapping): 
     """A dictionary that maintains ``Http-Header-Case`` for all keys.
 
     Supports multiple values per key via a pair of new methods,

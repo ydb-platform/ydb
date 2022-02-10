@@ -4,10 +4,10 @@ LICENSE(MIT)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2016)
-
-ORIGINAL_SOURCE(https://www.nayuki.io/page/fast-md5-hash-implementation-in-x86-assembly)
-
+VERSION(2016) 
+ 
+ORIGINAL_SOURCE(https://www.nayuki.io/page/fast-md5-hash-implementation-in-x86-assembly) 
+ 
 OWNER(
     pg
     g:contrib

@@ -7,7 +7,7 @@ OWNER(
     g:cpp-contrib
 )
 
-VERSION(1.16.1)
+VERSION(1.16.1) 
 
 ORIGINAL_SOURCE(https://c-ares.haxx.se/download/c-ares-1.16.1.tar.gz)
 
@@ -51,10 +51,10 @@ ENDIF()
 SRCS(
     ares__close_sockets.c
     ares__get_hostent.c
-    ares__parse_into_addrinfo.c
+    ares__parse_into_addrinfo.c 
     ares__read_line.c
-    ares__readaddrinfo.c
-    ares__sortaddrinfo.c
+    ares__readaddrinfo.c 
+    ares__sortaddrinfo.c 
     ares__timeval.c
     ares_android.c
     ares_cancel.c
@@ -66,8 +66,8 @@ SRCS(
     ares_fds.c
     ares_free_hostent.c
     ares_free_string.c
-    ares_freeaddrinfo.c
-    ares_getaddrinfo.c
+    ares_freeaddrinfo.c 
+    ares_getaddrinfo.c 
     ares_getenv.c
     ares_gethostbyaddr.c
     ares_gethostbyname.c

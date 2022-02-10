@@ -206,12 +206,12 @@ namespace llvm {
                                  unsigned Encoding,
                                  DINode::DIFlags Flags = DINode::FlagZero);
 
-    /// Create debugging information entry for a string
-    /// type.
-    /// \param Name        Type name.
-    /// \param SizeInBits  Size of the type.
-    DIStringType *createStringType(StringRef Name, uint64_t SizeInBits);
-
+    /// Create debugging information entry for a string 
+    /// type. 
+    /// \param Name        Type name. 
+    /// \param SizeInBits  Size of the type. 
+    DIStringType *createStringType(StringRef Name, uint64_t SizeInBits); 
+ 
     /// Create debugging information entry for a qualified
     /// type, e.g. 'const int'.
     /// \param Tag         Tag identifing type, e.g. dwarf::TAG_volatile_type
@@ -501,24 +501,24 @@ namespace llvm {
     /// \param AlignInBits  Alignment.
     /// \param Ty           Element type.
     /// \param Subscripts   Subscripts.
-    /// \param DataLocation The location of the raw data of a descriptor-based
-    ///                     Fortran array, either a DIExpression* or
-    ///                     a DIVariable*.
-    /// \param Associated   The associated attribute of a descriptor-based
-    ///                     Fortran array, either a DIExpression* or
-    ///                     a DIVariable*.
-    /// \param Allocated    The allocated attribute of a descriptor-based
-    ///                     Fortran array, either a DIExpression* or
-    ///                     a DIVariable*.
-    /// \param Rank         The rank attribute of a descriptor-based
-    ///                     Fortran array, either a DIExpression* or
-    ///                     a DIVariable*.
-    DICompositeType *createArrayType(
-        uint64_t Size, uint32_t AlignInBits, DIType *Ty, DINodeArray Subscripts,
-        PointerUnion<DIExpression *, DIVariable *> DataLocation = nullptr,
-        PointerUnion<DIExpression *, DIVariable *> Associated = nullptr,
-        PointerUnion<DIExpression *, DIVariable *> Allocated = nullptr,
-        PointerUnion<DIExpression *, DIVariable *> Rank = nullptr);
+    /// \param DataLocation The location of the raw data of a descriptor-based 
+    ///                     Fortran array, either a DIExpression* or 
+    ///                     a DIVariable*. 
+    /// \param Associated   The associated attribute of a descriptor-based 
+    ///                     Fortran array, either a DIExpression* or 
+    ///                     a DIVariable*. 
+    /// \param Allocated    The allocated attribute of a descriptor-based 
+    ///                     Fortran array, either a DIExpression* or 
+    ///                     a DIVariable*. 
+    /// \param Rank         The rank attribute of a descriptor-based 
+    ///                     Fortran array, either a DIExpression* or 
+    ///                     a DIVariable*. 
+    DICompositeType *createArrayType( 
+        uint64_t Size, uint32_t AlignInBits, DIType *Ty, DINodeArray Subscripts, 
+        PointerUnion<DIExpression *, DIVariable *> DataLocation = nullptr, 
+        PointerUnion<DIExpression *, DIVariable *> Associated = nullptr, 
+        PointerUnion<DIExpression *, DIVariable *> Allocated = nullptr, 
+        PointerUnion<DIExpression *, DIVariable *> Rank = nullptr); 
 
     /// Create debugging information entry for a vector type.
     /// \param Size         Array size.
@@ -605,12 +605,12 @@ namespace llvm {
     DISubrange *getOrCreateSubrange(Metadata *Count, Metadata *LowerBound,
                                     Metadata *UpperBound, Metadata *Stride);
 
-    DIGenericSubrange *
-    getOrCreateGenericSubrange(DIGenericSubrange::BoundType Count,
-                               DIGenericSubrange::BoundType LowerBound,
-                               DIGenericSubrange::BoundType UpperBound,
-                               DIGenericSubrange::BoundType Stride);
-
+    DIGenericSubrange * 
+    getOrCreateGenericSubrange(DIGenericSubrange::BoundType Count, 
+                               DIGenericSubrange::BoundType LowerBound, 
+                               DIGenericSubrange::BoundType UpperBound, 
+                               DIGenericSubrange::BoundType Stride); 
+ 
     /// Create a new descriptor for the specified variable.
     /// \param Context     Variable scope.
     /// \param Name        Name of the variable.
@@ -779,18 +779,18 @@ namespace llvm {
     ///                    definitions as they would appear on a command line.
     /// \param IncludePath The path to the module map file.
     /// \param APINotesFile The path to an API notes file for this module.
-    /// \param File        Source file of the module.
+    /// \param File        Source file of the module. 
     ///                    Used for Fortran modules.
-    /// \param LineNo      Source line number of the module.
-    ///                    Used for Fortran modules.
-    /// \param IsDecl      This is a module declaration; default to false;
-    ///                    when set to true, only Scope and Name are required
-    ///                    as this entry is just a hint for the debugger to find
-    ///                    the corresponding definition in the global scope.
+    /// \param LineNo      Source line number of the module. 
+    ///                    Used for Fortran modules. 
+    /// \param IsDecl      This is a module declaration; default to false; 
+    ///                    when set to true, only Scope and Name are required 
+    ///                    as this entry is just a hint for the debugger to find 
+    ///                    the corresponding definition in the global scope. 
     DIModule *createModule(DIScope *Scope, StringRef Name,
                            StringRef ConfigurationMacros, StringRef IncludePath,
                            StringRef APINotesFile = {}, DIFile *File = nullptr,
-                           unsigned LineNo = 0, bool IsDecl = false);
+                           unsigned LineNo = 0, bool IsDecl = false); 
 
     /// This creates a descriptor for a lexical block with a new file
     /// attached. This merely extends the existing

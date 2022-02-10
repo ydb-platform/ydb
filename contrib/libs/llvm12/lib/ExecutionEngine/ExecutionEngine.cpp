@@ -471,7 +471,7 @@ EngineBuilder::EngineBuilder() : EngineBuilder(nullptr) {}
 
 EngineBuilder::EngineBuilder(std::unique_ptr<Module> M)
     : M(std::move(M)), WhichEngine(EngineKind::Either), ErrorStr(nullptr),
-      OptLevel(CodeGenOpt::Default), MemMgr(nullptr), Resolver(nullptr) {
+      OptLevel(CodeGenOpt::Default), MemMgr(nullptr), Resolver(nullptr) { 
 // IR module verification is enabled by default in debug builds, and disabled
 // by default in release builds.
 #ifndef NDEBUG
@@ -534,7 +534,7 @@ ExecutionEngine *EngineBuilder::create(TargetMachine *TM) {
     }
 
     ExecutionEngine *EE = nullptr;
-    if (ExecutionEngine::MCJITCtor)
+    if (ExecutionEngine::MCJITCtor) 
       EE = ExecutionEngine::MCJITCtor(std::move(M), ErrorStr, std::move(MemMgr),
                                       std::move(Resolver), std::move(TheTM));
 

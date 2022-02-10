@@ -1530,75 +1530,75 @@ migrations:
     - yweb/yasap/pdb/tools/add_card_owners
     - zootopia/analytics/drive/source/drive/operations/support/registrations/reg_quality
     - zootopia/analytics/ml/features/geo_features/faster_surge_features
-  F405:
-    ignore:
-    - F405
-    prefixes:
-    - adfox/infra/registrator
-    - adfox/infra/registrator/lib
-    - ads/libs/py_ml_factors/matrixnet
-    - ads/nirvana/xfactor-yt
-    - ads/tools/mx_feature_remapper
-    - alice/analytics/utils/marty/run_nirvana_instance
-    - cloud/ai/speechkit/stt/tests/data_pipeline/join
-    - devtools/signer/signer
-    - dict/lm/sources/lib/launcher
-    - dict/ontodb/isa/libshorttext/converter/stemmer
-    - dict/ontodb/report/common
-    - dict/ontodb/utils/export_src_codes
-    - dj/nirvana/nirvana_make
-    - edadeal/analytics/scripts/CashbackReport/CashbackReportLib
-    - edadeal/analytics/scripts/CashbackReport/CashbackReportLib/CashbackReportLib
-    - extsearch/geo/recommender/runtime/config/generation
-    - library/python/cyson
-    - library/python/cyson/cyson
-    - mail/freezing_tests/active_users_aggregation
-    - maps/analyzer/tools/online_jams/pylib
-    - market/seo/offer_base
-    - mediapers/feature_machine/nirvana/script_runner
-    - mlp/mail/aspam/nirvana_operations/conveyor/build_prod_graph/inbound
-    - mlp/mail/aspam/nirvana_operations/conveyor/build_prod_graph/outbound
-    - mlp/mail/aspam/nirvana_operations/conveyor/calc_dsats
-    - modadvert/programs/cv_app/tools/create_yt_env/it
-    - modadvert/programs/grep_img_rejects/it
-    - modadvert/programs/multik/it
+  F405: 
+    ignore: 
+    - F405 
+    prefixes: 
+    - adfox/infra/registrator 
+    - adfox/infra/registrator/lib 
+    - ads/libs/py_ml_factors/matrixnet 
+    - ads/nirvana/xfactor-yt 
+    - ads/tools/mx_feature_remapper 
+    - alice/analytics/utils/marty/run_nirvana_instance 
+    - cloud/ai/speechkit/stt/tests/data_pipeline/join 
+    - devtools/signer/signer 
+    - dict/lm/sources/lib/launcher 
+    - dict/ontodb/isa/libshorttext/converter/stemmer 
+    - dict/ontodb/report/common 
+    - dict/ontodb/utils/export_src_codes 
+    - dj/nirvana/nirvana_make 
+    - edadeal/analytics/scripts/CashbackReport/CashbackReportLib 
+    - edadeal/analytics/scripts/CashbackReport/CashbackReportLib/CashbackReportLib 
+    - extsearch/geo/recommender/runtime/config/generation 
+    - library/python/cyson 
+    - library/python/cyson/cyson 
+    - mail/freezing_tests/active_users_aggregation 
+    - maps/analyzer/tools/online_jams/pylib 
+    - market/seo/offer_base 
+    - mediapers/feature_machine/nirvana/script_runner 
+    - mlp/mail/aspam/nirvana_operations/conveyor/build_prod_graph/inbound 
+    - mlp/mail/aspam/nirvana_operations/conveyor/build_prod_graph/outbound 
+    - mlp/mail/aspam/nirvana_operations/conveyor/calc_dsats 
+    - modadvert/programs/cv_app/tools/create_yt_env/it 
+    - modadvert/programs/grep_img_rejects/it 
+    - modadvert/programs/multik/it 
     - passport/backend/api/tests/views/bundle/change_avatar
-    - quality/ab_testing/cofe/projects/alice/sesame/v1_1
-    - quality/functionality/chats/feedback/src/feedback/core
-    - quality/functionality/chats/feedback/src/feedback/core/celery_tasks
-    - quality/neural_net/bert/bert/utils/distributed
-    - quality/user_sessions/py_amon/cbir
-    - quality/user_sessions/py_amon/images
-    - repo/yeoman/data/lib
-    - repo/yeoman/stats/lib
-    - sandbox/projects/tycoon/TycoonAdverts
-    - search/base_search/tools/explain_l1
-    - search/mon/rviewer/app
-    - search/mon/rviewer/modules
-    - search/mon/rviewer/modules/clients
-    - search/rpslimiter/storage/src/model
-    - skynet/kernel
-    - skynet/kernel/util/sys/user
-    - travel/avia/avia_api
-    - travel/avia/avia_api/avia/settings
-    - travel/avia/avia_api/tests
-    - vcs/svn/flat
-    - vcs/svn/hooks/test
-    - voicetech/asr/cloud_engine/cli/nirvana/aggregate_kenlm_outputs
-    - voicetech/asr/cloud_engine/cli/nirvana/aggregate_subword_lm_outputs
-    - voicetech/asr/cloud_engine/cli/nirvana/build_lm
-    - voicetech/asr/cloud_engine/cli/nirvana/make_kenlm_lingware
-    - voicetech/asr/cloud_engine/cli/nirvana/make_subword_lm_lingware
-    - voicetech/asr/cloud_engine/cli/nirvana/merge_lingwares
-    - voicetech/asr/cloud_engine/cli/nirvana/select_best_kenlm
-    - voicetech/asr/core/lib/subword_ngram_lm/nirvana/build_freq_table
-    - voicetech/asr/core/lib/subword_ngram_lm/nirvana/build_mixture_model
-    - voicetech/asr/core/lib/subword_ngram_lm/nirvana/build_model
-    - voicetech/asr/core/lib/subword_ngram_lm/nirvana/fit_lambda
-    - voicetech/asr/core/lib/subword_ngram_lm/nirvana/fit_vocabulary
-    - voicetech/asr/tools/language_model/tests/test_linear_merge
-    - yweb/tellurium/tools/store_history_to_yt
-    - yweb/tellurium/ui
+    - quality/ab_testing/cofe/projects/alice/sesame/v1_1 
+    - quality/functionality/chats/feedback/src/feedback/core 
+    - quality/functionality/chats/feedback/src/feedback/core/celery_tasks 
+    - quality/neural_net/bert/bert/utils/distributed 
+    - quality/user_sessions/py_amon/cbir 
+    - quality/user_sessions/py_amon/images 
+    - repo/yeoman/data/lib 
+    - repo/yeoman/stats/lib 
+    - sandbox/projects/tycoon/TycoonAdverts 
+    - search/base_search/tools/explain_l1 
+    - search/mon/rviewer/app 
+    - search/mon/rviewer/modules 
+    - search/mon/rviewer/modules/clients 
+    - search/rpslimiter/storage/src/model 
+    - skynet/kernel 
+    - skynet/kernel/util/sys/user 
+    - travel/avia/avia_api 
+    - travel/avia/avia_api/avia/settings 
+    - travel/avia/avia_api/tests 
+    - vcs/svn/flat 
+    - vcs/svn/hooks/test 
+    - voicetech/asr/cloud_engine/cli/nirvana/aggregate_kenlm_outputs 
+    - voicetech/asr/cloud_engine/cli/nirvana/aggregate_subword_lm_outputs 
+    - voicetech/asr/cloud_engine/cli/nirvana/build_lm 
+    - voicetech/asr/cloud_engine/cli/nirvana/make_kenlm_lingware 
+    - voicetech/asr/cloud_engine/cli/nirvana/make_subword_lm_lingware 
+    - voicetech/asr/cloud_engine/cli/nirvana/merge_lingwares 
+    - voicetech/asr/cloud_engine/cli/nirvana/select_best_kenlm 
+    - voicetech/asr/core/lib/subword_ngram_lm/nirvana/build_freq_table 
+    - voicetech/asr/core/lib/subword_ngram_lm/nirvana/build_mixture_model 
+    - voicetech/asr/core/lib/subword_ngram_lm/nirvana/build_model 
+    - voicetech/asr/core/lib/subword_ngram_lm/nirvana/fit_lambda 
+    - voicetech/asr/core/lib/subword_ngram_lm/nirvana/fit_vocabulary 
+    - voicetech/asr/tools/language_model/tests/test_linear_merge 
+    - yweb/tellurium/tools/store_history_to_yt 
+    - yweb/tellurium/ui 
   no_lint:
     ignore:
     - '*'

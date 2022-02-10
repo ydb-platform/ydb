@@ -47,13 +47,13 @@ public:
   const MLModelRunner &getModelRunner() const { return *ModelRunner.get(); }
 
 protected:
-  std::unique_ptr<InlineAdvice> getAdviceImpl(CallBase &CB) override;
+  std::unique_ptr<InlineAdvice> getAdviceImpl(CallBase &CB) override; 
 
-  std::unique_ptr<InlineAdvice> getMandatoryAdvice(CallBase &CB,
-                                                   bool Advice) override;
-
-  virtual std::unique_ptr<MLInlineAdvice> getMandatoryAdviceImpl(CallBase &CB);
-
+  std::unique_ptr<InlineAdvice> getMandatoryAdvice(CallBase &CB, 
+                                                   bool Advice) override; 
+ 
+  virtual std::unique_ptr<MLInlineAdvice> getMandatoryAdviceImpl(CallBase &CB); 
+ 
   virtual std::unique_ptr<MLInlineAdvice>
   getAdviceFromModel(CallBase &CB, OptimizationRemarkEmitter &ORE);
 
@@ -113,7 +113,7 @@ private:
 } // namespace llvm
 
 #endif // LLVM_ANALYSIS_MLINLINEADVISOR_H
-
+ 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif

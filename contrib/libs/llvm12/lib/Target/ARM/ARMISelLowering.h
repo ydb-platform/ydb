@@ -216,37 +216,37 @@ class VectorType;
       VMULLs,       // ...signed
       VMULLu,       // ...unsigned
 
-      VQDMULH,      // MVE vqdmulh instruction
-
+      VQDMULH,      // MVE vqdmulh instruction 
+ 
       // MVE reductions
       VADDVs,       // sign- or zero-extend the elements of a vector to i32,
       VADDVu,       //   add them all together, and return an i32 of their sum
-      VADDVps,      // Same as VADDV[su] but with a v4i1 predicate mask
-      VADDVpu,
+      VADDVps,      // Same as VADDV[su] but with a v4i1 predicate mask 
+      VADDVpu, 
       VADDLVs,      // sign- or zero-extend elements to i64 and sum, returning
       VADDLVu,      //   the low and high 32-bit halves of the sum
-      VADDLVAs,     // Same as VADDLV[su] but also add an input accumulator
+      VADDLVAs,     // Same as VADDLV[su] but also add an input accumulator 
       VADDLVAu,     //   provided as low and high halves
-      VADDLVps,     // Same as VADDLV[su] but with a v4i1 predicate mask
-      VADDLVpu,
-      VADDLVAps,    // Same as VADDLVp[su] but with a v4i1 predicate mask
-      VADDLVApu,
-      VMLAVs,       // sign- or zero-extend the elements of two vectors to i32, multiply them
-      VMLAVu,       //   and add the results together, returning an i32 of their sum
-      VMLAVps,      // Same as VMLAV[su] with a v4i1 predicate mask
-      VMLAVpu,
-      VMLALVs,      // Same as VMLAV but with i64, returning the low and
-      VMLALVu,      //   high 32-bit halves of the sum
-      VMLALVps,     // Same as VMLALV[su] with a v4i1 predicate mask
-      VMLALVpu,
-      VMLALVAs,     // Same as VMLALV but also add an input accumulator
-      VMLALVAu,     //   provided as low and high halves
-      VMLALVAps,    // Same as VMLALVA[su] with a v4i1 predicate mask
-      VMLALVApu,
-      VMINVu,        // Find minimum unsigned value of a vector and register
-      VMINVs,        // Find minimum signed value of a vector and register
-      VMAXVu,        // Find maximum unsigned value of a vector and register
-      VMAXVs,        // Find maximum signed value of a vector and register
+      VADDLVps,     // Same as VADDLV[su] but with a v4i1 predicate mask 
+      VADDLVpu, 
+      VADDLVAps,    // Same as VADDLVp[su] but with a v4i1 predicate mask 
+      VADDLVApu, 
+      VMLAVs,       // sign- or zero-extend the elements of two vectors to i32, multiply them 
+      VMLAVu,       //   and add the results together, returning an i32 of their sum 
+      VMLAVps,      // Same as VMLAV[su] with a v4i1 predicate mask 
+      VMLAVpu, 
+      VMLALVs,      // Same as VMLAV but with i64, returning the low and 
+      VMLALVu,      //   high 32-bit halves of the sum 
+      VMLALVps,     // Same as VMLALV[su] with a v4i1 predicate mask 
+      VMLALVpu, 
+      VMLALVAs,     // Same as VMLALV but also add an input accumulator 
+      VMLALVAu,     //   provided as low and high halves 
+      VMLALVAps,    // Same as VMLALVA[su] with a v4i1 predicate mask 
+      VMLALVApu, 
+      VMINVu,        // Find minimum unsigned value of a vector and register 
+      VMINVs,        // Find minimum signed value of a vector and register 
+      VMAXVu,        // Find maximum unsigned value of a vector and register 
+      VMAXVs,        // Find maximum signed value of a vector and register 
 
       SMULWB,       // Signed multiply word by half word, bottom
       SMULWT,       // Signed multiply word by half word, top
@@ -285,8 +285,8 @@ class VectorType;
       // Vector AND with NOT of immediate
       VBICIMM,
 
-      // Pseudo vector bitwise select
-      VBSP,
+      // Pseudo vector bitwise select 
+      VBSP, 
 
       // Pseudo-instruction representing a memory copy using ldm/stm
       // instructions.

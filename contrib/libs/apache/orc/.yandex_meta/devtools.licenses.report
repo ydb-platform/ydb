@@ -122,18 +122,18 @@ BELONGS ya.make
     Files with this license:
         NOTICE [4:5]
 
-SKIP     BSD-3-Clause         65f1885a6e62550129cec1b1c92228b7
-BELONGS ya.make
-# for snappy
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: BSD-3-Clause
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
-    Files with this license:
-        LICENSE [277:301]
-
+SKIP     BSD-3-Clause         65f1885a6e62550129cec1b1c92228b7 
+BELONGS ya.make 
+# for snappy 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: BSD-3-Clause 
+        Score           : 100.00 
+        Match type      : TEXT 
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause 
+    Files with this license: 
+        LICENSE [277:301] 
+ 
 SKIP     LicenseRef-scancode-unknown-license-reference 82b9c91a8f717463c6871d82aa2b1ff8
 BELONGS ya.make
     # notice about sub-components that have other licenses 
@@ -162,30 +162,30 @@ FILE_INCLUDE NOTICE found in files: c++/src/RLEV2Util.cc at line 3, c++/src/RleE
         c++/src/RLEV2Util.cc [2:16]
         c++/src/RleEncoderV2.cc [2:16]
 
-SKIP     MIT                  8e611cb87fefb343bbd1b4b132671868
-BELONGS ya.make
-# for the site
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        LICENSE [254:270]
-
-SKIP     Zlib                 aa58f308323ed48be51ebc4b5d89fdbf
-BELONGS ya.make
-# for zlib
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: Zlib
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib
-    Files with this license:
-        LICENSE [307:324]
-
+SKIP     MIT                  8e611cb87fefb343bbd1b4b132671868 
+BELONGS ya.make 
+# for the site 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: MIT 
+        Score           : 100.00 
+        Match type      : TEXT 
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
+    Files with this license: 
+        LICENSE [254:270] 
+ 
+SKIP     Zlib                 aa58f308323ed48be51ebc4b5d89fdbf 
+BELONGS ya.make 
+# for zlib 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: Zlib 
+        Score           : 100.00 
+        Match type      : TEXT 
+        Links           : http://www.gzip.org/zlib/zlib_license.html, http://www.zlib.net/, https://spdx.org/licenses/Zlib 
+    Files with this license: 
+        LICENSE [307:324] 
+ 
 KEEP     Apache-2.0           be1ae92e2816e00bcf72d9b9a768ac9d
 BELONGS ya.make
 FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LICENSE at line 112, LICENSE at line 117, LICENSE at line 120, LICENSE at line 142
@@ -198,18 +198,18 @@ FILE_INCLUDE NOTICE found in files: LICENSE at line 107, LICENSE at line 110, LI
     Files with this license:
         LICENSE [2:202]
 
-SKIP     Protobuf-License     c6508a22f2888f82ca0962122f6bf026
-BELONGS ya.make
-# for protobuf
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-protobuf
-        Score           : 100.00
-        Match type      : TEXT
-        Links           : http://protobuf.googlecode.com/svn/trunk/COPYING.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/protobuf.LICENSE
-    Files with this license:
-        LICENSE [216:245]
-
+SKIP     Protobuf-License     c6508a22f2888f82ca0962122f6bf026 
+BELONGS ya.make 
+# for protobuf 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LicenseRef-scancode-protobuf 
+        Score           : 100.00 
+        Match type      : TEXT 
+        Links           : http://protobuf.googlecode.com/svn/trunk/COPYING.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/protobuf.LICENSE 
+    Files with this license: 
+        LICENSE [216:245] 
+ 
 KEEP     Apache-2.0           cf6155521a56fa3ce6c29b457f7a2535
 BELONGS ya.make
 FILE_INCLUDE NOTICE found in files: c++/src/Adaptor.cc at line 3, c++/src/RLE.cc at line 3, c++/src/RLEV2Util.hh at line 3, c++/src/RLEv1.hh at line 3, c++/src/RLEv2.hh at line 3
@@ -225,28 +225,28 @@ FILE_INCLUDE NOTICE found in files: c++/src/Adaptor.cc at line 3, c++/src/RLE.cc
         c++/src/RLEV2Util.hh [2:16]
         c++/src/RLEv1.hh [2:16]
         c++/src/RLEv2.hh [2:16]
-
-SKIP     LicenseRef-scancode-bsd-3-clause-devine d62bead38797bd9e07e7e2167662d6b2
-BELONGS ya.make
-# for orc.threeten
-    Note: matched license text is too long. Read it in the source files.
-    Scancode info:
-        Original SPDX id: LicenseRef-scancode-bsd-3-clause-devine
-        Score           : 27.57
-        Match type      : TEXT
-        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-3-clause-devine.LICENSE
-    Files with this license:
-        LICENSE [361:366]
-
-SKIP     MIT                  ef6e2d996c0ee4ccd03144f93e445032
-BELONGS ya.make
-# for the site
-    License text:
-          that are licensed under the MIT License (MIT):
-    Scancode info:
-        Original SPDX id: MIT
-        Score           : 100.00
-        Match type      : NOTICE
-        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
-    Files with this license:
-        LICENSE [250:250]
+ 
+SKIP     LicenseRef-scancode-bsd-3-clause-devine d62bead38797bd9e07e7e2167662d6b2 
+BELONGS ya.make 
+# for orc.threeten 
+    Note: matched license text is too long. Read it in the source files. 
+    Scancode info: 
+        Original SPDX id: LicenseRef-scancode-bsd-3-clause-devine 
+        Score           : 27.57 
+        Match type      : TEXT 
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/bsd-3-clause-devine.LICENSE 
+    Files with this license: 
+        LICENSE [361:366] 
+ 
+SKIP     MIT                  ef6e2d996c0ee4ccd03144f93e445032 
+BELONGS ya.make 
+# for the site 
+    License text: 
+          that are licensed under the MIT License (MIT): 
+    Scancode info: 
+        Original SPDX id: MIT 
+        Score           : 100.00 
+        Match type      : NOTICE 
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT 
+    Files with this license: 
+        LICENSE [250:250] 

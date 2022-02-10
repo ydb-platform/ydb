@@ -4,7 +4,7 @@
 
     Lexers for the Dylan language.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -31,27 +31,27 @@ class DylanLexer(RegexLexer):
 
     flags = re.IGNORECASE
 
-    builtins = {
+    builtins = { 
         'subclass', 'abstract', 'block', 'concrete', 'constant', 'class',
         'compiler-open', 'compiler-sideways', 'domain', 'dynamic',
         'each-subclass', 'exception', 'exclude', 'function', 'generic',
         'handler', 'inherited', 'inline', 'inline-only', 'instance',
         'interface', 'import', 'keyword', 'library', 'macro', 'method',
         'module', 'open', 'primary', 'required', 'sealed', 'sideways',
-        'singleton', 'slot', 'thread', 'variable', 'virtual'}
+        'singleton', 'slot', 'thread', 'variable', 'virtual'} 
 
-    keywords = {
+    keywords = { 
         'above', 'afterwards', 'begin', 'below', 'by', 'case', 'cleanup',
         'create', 'define', 'else', 'elseif', 'end', 'export', 'finally',
         'for', 'from', 'if', 'in', 'let', 'local', 'otherwise', 'rename',
         'select', 'signal', 'then', 'to', 'unless', 'until', 'use', 'when',
-        'while'}
+        'while'} 
 
-    operators = {
+    operators = { 
         '~', '+', '-', '*', '|', '^', '=', '==', '~=', '~==', '<', '<=',
-        '>', '>=', '&', '|'}
+        '>', '>=', '&', '|'} 
 
-    functions = {
+    functions = { 
         'abort', 'abs', 'add', 'add!', 'add-method', 'add-new', 'add-new!',
         'all-superclasses', 'always', 'any?', 'applicable-method?', 'apply',
         'aref', 'aref-setter', 'as', 'as-lowercase', 'as-lowercase!',
@@ -85,7 +85,7 @@ class DylanLexer(RegexLexer):
         'subtype?', 'table-protocol', 'tail', 'tail-setter', 'third',
         'third-setter', 'truncate', 'truncate/', 'type-error-expected-type',
         'type-error-value', 'type-for-copy', 'type-union', 'union', 'values',
-        'vector', 'zero?'}
+        'vector', 'zero?'} 
 
     valid_name = '\\\\?[\\w!&*<>|^$%@\\-+~?/=]+'
 
@@ -276,11 +276,11 @@ class DylanConsoleLexer(Lexer):
                 curcode += line[end:]
             else:
                 if curcode:
-                    yield from do_insertions(insertions,
-                                             dylexer.get_tokens_unprocessed(curcode))
+                    yield from do_insertions(insertions, 
+                                             dylexer.get_tokens_unprocessed(curcode)) 
                     curcode = ''
                     insertions = []
                 yield match.start(), Generic.Output, line
         if curcode:
-            yield from do_insertions(insertions,
-                                     dylexer.get_tokens_unprocessed(curcode))
+            yield from do_insertions(insertions, 
+                                     dylexer.get_tokens_unprocessed(curcode)) 

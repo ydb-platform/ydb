@@ -37,7 +37,7 @@
 
 namespace llvm {
 
-class AAResults;
+class AAResults; 
 class AllocaInst;
 class AtomicCmpXchgInst;
 class AtomicRMWInst;
@@ -62,7 +62,7 @@ class FunctionLoweringInfo;
 class GCFunctionInfo;
 class GCRelocateInst;
 class GCResultInst;
-class GCStatepointInst;
+class GCStatepointInst; 
 class IndirectBrInst;
 class InvokeInst;
 class LandingPadInst;
@@ -388,7 +388,7 @@ public:
 
   SelectionDAG &DAG;
   const DataLayout *DL = nullptr;
-  AAResults *AA = nullptr;
+  AAResults *AA = nullptr; 
   const TargetLibraryInfo *LibInfo;
 
   class SDAGSwitchLowering : public SwitchCG::SwitchLowering {
@@ -442,7 +442,7 @@ public:
         SL(std::make_unique<SDAGSwitchLowering>(this, funcinfo)), FuncInfo(funcinfo),
         SwiftError(swifterror) {}
 
-  void init(GCFunctionInfo *gfi, AAResults *AA,
+  void init(GCFunctionInfo *gfi, AAResults *AA, 
             const TargetLibraryInfo *li);
 
   /// Clear out the current SelectionDAG and the associated state and prepare
@@ -685,7 +685,7 @@ private:
   void visitAdd(const User &I)  { visitBinary(I, ISD::ADD); }
   void visitFAdd(const User &I) { visitBinary(I, ISD::FADD); }
   void visitSub(const User &I)  { visitBinary(I, ISD::SUB); }
-  void visitFSub(const User &I) { visitBinary(I, ISD::FSUB); }
+  void visitFSub(const User &I) { visitBinary(I, ISD::FSUB); } 
   void visitMul(const User &I)  { visitBinary(I, ISD::MUL); }
   void visitFMul(const User &I) { visitBinary(I, ISD::FMUL); }
   void visitURem(const User &I) { visitBinary(I, ISD::UREM); }
@@ -740,7 +740,7 @@ private:
   void visitFence(const FenceInst &I);
   void visitPHI(const PHINode &I);
   void visitCall(const CallInst &I);
-  bool visitMemCmpBCmpCall(const CallInst &I);
+  bool visitMemCmpBCmpCall(const CallInst &I); 
   bool visitMemPCpyCall(const CallInst &I);
   bool visitMemChrCall(const CallInst &I);
   bool visitStrCpyCall(const CallInst &I, bool isStpcpy);
@@ -759,7 +759,7 @@ private:
   void visitIntrinsicCall(const CallInst &I, unsigned Intrinsic);
   void visitTargetIntrinsic(const CallInst &I, unsigned Intrinsic);
   void visitConstrainedFPIntrinsic(const ConstrainedFPIntrinsic &FPI);
-  void visitVectorPredicationIntrinsic(const VPIntrinsic &VPIntrin);
+  void visitVectorPredicationIntrinsic(const VPIntrinsic &VPIntrin); 
 
   void visitVAStart(const CallInst &I);
   void visitVAArg(const VAArgInst &I);
@@ -896,7 +896,7 @@ struct RegsForValue {
   }
 
   /// Return a list of registers and their sizes.
-  SmallVector<std::pair<unsigned, TypeSize>, 4> getRegsAndSizes() const;
+  SmallVector<std::pair<unsigned, TypeSize>, 4> getRegsAndSizes() const; 
 };
 
 } // end namespace llvm

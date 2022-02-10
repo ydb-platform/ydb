@@ -17,21 +17,21 @@
 #define LLVM_CODEGEN_SWITCHLOWERINGUTILS_H
 
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/CodeGen/ISDOpcodes.h"
+#include "llvm/CodeGen/ISDOpcodes.h" 
 #include "llvm/CodeGen/SelectionDAGNodes.h"
-#include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/InstrTypes.h" 
 #include "llvm/Support/BranchProbability.h"
-#include <vector>
+#include <vector> 
 
 namespace llvm {
 
-class BlockFrequencyInfo;
-class ConstantInt;
+class BlockFrequencyInfo; 
+class ConstantInt; 
 class FunctionLoweringInfo;
 class MachineBasicBlock;
-class ProfileSummaryInfo;
-class TargetLowering;
-class TargetMachine;
+class ProfileSummaryInfo; 
+class TargetLowering; 
+class TargetMachine; 
 
 namespace SwitchCG {
 

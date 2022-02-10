@@ -59,7 +59,7 @@ class _NamedIntConstant(int):
         self.name = name
         return self
 
-    def __repr__(self):
+    def __repr__(self): 
         return self.name
 
 MAXREPEAT = _NamedIntConstant(MAXREPEAT, 'MAXREPEAT')

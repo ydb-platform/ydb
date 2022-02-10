@@ -217,7 +217,7 @@ void llvm_execute_on_thread_async(
     return heavyweight_hardware_concurrency();
   }
 
-  /// Returns a default thread strategy where all available hardware resources
+  /// Returns a default thread strategy where all available hardware resources 
   /// are to be used, except for those initially excluded by an affinity mask.
   /// This function takes affinity into consideration. Returns 1 when LLVM is
   /// configured with LLVM_ENABLE_THREADS=OFF.
@@ -227,16 +227,16 @@ void llvm_execute_on_thread_async(
     return S;
   }
 
-  /// Returns an optimal thread strategy to execute specified amount of tasks.
-  /// This strategy should prevent us from creating too many threads if we
-  /// occasionaly have an unexpectedly small amount of tasks.
-  inline ThreadPoolStrategy optimal_concurrency(unsigned TaskCount = 0) {
-    ThreadPoolStrategy S;
-    S.Limit = true;
-    S.ThreadsRequested = TaskCount;
-    return S;
-  }
-
+  /// Returns an optimal thread strategy to execute specified amount of tasks. 
+  /// This strategy should prevent us from creating too many threads if we 
+  /// occasionaly have an unexpectedly small amount of tasks. 
+  inline ThreadPoolStrategy optimal_concurrency(unsigned TaskCount = 0) { 
+    ThreadPoolStrategy S; 
+    S.Limit = true; 
+    S.ThreadsRequested = TaskCount; 
+    return S; 
+  } 
+ 
   /// Return the current thread id, as used in various OS system calls.
   /// Note that not all platforms guarantee that the value returned will be
   /// unique across the entire system, so portable code should not assume

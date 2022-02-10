@@ -392,7 +392,7 @@ static void collectLeaves(Value *Root, SmallVectorImpl<Instruction *> &Leaves) {
         break;
 
       // Push incoming values to the worklist.
-      append_range(Worklist, PN->incoming_values());
+      append_range(Worklist, PN->incoming_values()); 
 
       continue;
     }
@@ -401,7 +401,7 @@ static void collectLeaves(Value *Root, SmallVectorImpl<Instruction *> &Leaves) {
       if (BO->getOpcode() == Instruction::Add) {
         // Simple case. Single use, just push its operands to the worklist.
         if (BO->hasNUses(BO == Root ? 2 : 1)) {
-          append_range(Worklist, BO->operands());
+          append_range(Worklist, BO->operands()); 
           continue;
         }
 
@@ -424,7 +424,7 @@ static void collectLeaves(Value *Root, SmallVectorImpl<Instruction *> &Leaves) {
             continue;
 
           // The phi forms a loop with this Add, push its operands.
-          append_range(Worklist, BO->operands());
+          append_range(Worklist, BO->operands()); 
         }
       }
     }

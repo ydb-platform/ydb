@@ -1,7 +1,7 @@
 """
-apipkg: control the exported namespace of a Python package.
+apipkg: control the exported namespace of a Python package. 
 
-see https://pypi.python.org/pypi/apipkg
+see https://pypi.python.org/pypi/apipkg 
 
 (c) holger krekel, 2009 - MIT license
 """
@@ -37,9 +37,9 @@ def distribution_version(name):
         return dist.version
 
 
-def initpkg(pkgname, exportdefs, attr=None, eager=False):
+def initpkg(pkgname, exportdefs, attr=None, eager=False): 
     """ initialize given package from the export definitions. """
-    attr = attr or {}
+    attr = attr or {} 
     oldmod = sys.modules.get(pkgname)
     d = {}
     f = getattr(oldmod, "__file__", None)
@@ -64,14 +64,14 @@ def initpkg(pkgname, exportdefs, attr=None, eager=False):
     sys.modules[pkgname] = mod
     # eagerload in bypthon to avoid their monkeypatching breaking packages
     if "bpython" in sys.modules or eager:
-        for module in list(sys.modules.values()):
+        for module in list(sys.modules.values()): 
             if isinstance(module, ApiModule):
                 module.__dict__
     return mod
 
 
 def importobj(modpath, attrname):
-    """imports a module, then resolves the attrname on it"""
+    """imports a module, then resolves the attrname on it""" 
     module = __import__(modpath, None, None, ["__doc__"])
     if not attrname:
         return module
@@ -84,7 +84,7 @@ def importobj(modpath, attrname):
 
 
 class ApiModule(ModuleType):
-    """the magical lazy-loading module standing"""
+    """the magical lazy-loading module standing""" 
 
     def __docget(self):
         try:
@@ -130,12 +130,12 @@ class ApiModule(ModuleType):
                     self.__map__[name] = (modpath, attrname)
 
     def __repr__(self):
-        repr_list = []
+        repr_list = [] 
         if hasattr(self, "__version__"):
-            repr_list.append("version=" + repr(self.__version__))
+            repr_list.append("version=" + repr(self.__version__)) 
         if hasattr(self, "__file__"):
             repr_list.append("from " + repr(self.__file__))
-        if repr_list:
+        if repr_list: 
             return "<ApiModule {!r} {}>".format(self.__name__, " ".join(repr_list))
         return "<ApiModule {!r}>".format(self.__name__)
 

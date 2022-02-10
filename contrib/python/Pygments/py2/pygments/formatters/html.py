@@ -435,7 +435,7 @@ class HtmlFormatter(Formatter):
         self.linenostep = abs(get_int_opt(options, 'linenostep', 1))
         self.linenospecial = abs(get_int_opt(options, 'linenospecial', 0))
         self.nobackground = get_bool_opt(options, 'nobackground', False)
-        self.lineseparator = options.get('lineseparator', u'\n')
+        self.lineseparator = options.get('lineseparator', u'\n') 
         self.lineanchors = options.get('lineanchors', '')
         self.linespans = options.get('linespans', '')
         self.anchorlinenos = options.get('anchorlinenos', False)

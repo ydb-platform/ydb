@@ -606,9 +606,9 @@ unsigned ARMFastISel::ARMMaterializeGV(const GlobalValue *GV, MVT VT) {
     }
   }
 
-  if ((Subtarget->isTargetELF() && Subtarget->isGVInGOT(GV)) ||
-      (Subtarget->isTargetMachO() && IsIndirect) ||
-      Subtarget->genLongCalls()) {
+  if ((Subtarget->isTargetELF() && Subtarget->isGVInGOT(GV)) || 
+      (Subtarget->isTargetMachO() && IsIndirect) || 
+      Subtarget->genLongCalls()) { 
     MachineInstrBuilder MIB;
     unsigned NewDestReg = createResultReg(TLI.getRegClassFor(VT));
     if (isThumb2)
@@ -2175,7 +2175,7 @@ bool ARMFastISel::SelectRet(const Instruction *I) {
 
 unsigned ARMFastISel::ARMSelectCallOp(bool UseReg) {
   if (UseReg)
-    return isThumb2 ? gettBLXrOpcode(*MF) : getBLXOpcode(*MF);
+    return isThumb2 ? gettBLXrOpcode(*MF) : getBLXOpcode(*MF); 
   else
     return isThumb2 ? ARM::tBL : ARM::BL;
 }
@@ -2266,11 +2266,11 @@ bool ARMFastISel::ARMEmitLibcall(const Instruction *I, RTLIB::Libcall Call) {
   // BL / BLX don't take a predicate, but tBL / tBLX do.
   if (isThumb2)
     MIB.add(predOps(ARMCC::AL));
-  if (Subtarget->genLongCalls()) {
-    CalleeReg =
-        constrainOperandRegClass(TII.get(CallOpc), CalleeReg, isThumb2 ? 2 : 0);
+  if (Subtarget->genLongCalls()) { 
+    CalleeReg = 
+        constrainOperandRegClass(TII.get(CallOpc), CalleeReg, isThumb2 ? 2 : 0); 
     MIB.addReg(CalleeReg);
-  } else
+  } else 
     MIB.addExternalSymbol(TLI.getLibcallName(Call));
 
   // Add implicit physical register uses to the call.
@@ -2408,11 +2408,11 @@ bool ARMFastISel::SelectCall(const Instruction *I,
   // ARM calls don't take a predicate, but tBL / tBLX do.
   if(isThumb2)
     MIB.add(predOps(ARMCC::AL));
-  if (UseReg) {
-    CalleeReg =
-        constrainOperandRegClass(TII.get(CallOpc), CalleeReg, isThumb2 ? 2 : 0);
+  if (UseReg) { 
+    CalleeReg = 
+        constrainOperandRegClass(TII.get(CallOpc), CalleeReg, isThumb2 ? 2 : 0); 
     MIB.addReg(CalleeReg);
-  } else if (!IntrMemName)
+  } else if (!IntrMemName) 
     MIB.addGlobalAddress(GV, 0, 0);
   else
     MIB.addExternalSymbol(IntrMemName, 0);

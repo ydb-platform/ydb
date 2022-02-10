@@ -1838,16 +1838,16 @@ protected:
 
 template<class SF>
 static SUnit *popFromQueueImpl(std::vector<SUnit *> &Q, SF &Picker) {
-  unsigned BestIdx = 0;
-  // Only compute the cost for the first 1000 items in the queue, to avoid
-  // excessive compile-times for very large queues.
-  for (unsigned I = 1, E = std::min(Q.size(), (decltype(Q.size()))1000); I != E;
-       I++)
-    if (Picker(Q[BestIdx], Q[I]))
-      BestIdx = I;
-  SUnit *V = Q[BestIdx];
-  if (BestIdx + 1 != Q.size())
-    std::swap(Q[BestIdx], Q.back());
+  unsigned BestIdx = 0; 
+  // Only compute the cost for the first 1000 items in the queue, to avoid 
+  // excessive compile-times for very large queues. 
+  for (unsigned I = 1, E = std::min(Q.size(), (decltype(Q.size()))1000); I != E; 
+       I++) 
+    if (Picker(Q[BestIdx], Q[I])) 
+      BestIdx = I; 
+  SUnit *V = Q[BestIdx]; 
+  if (BestIdx + 1 != Q.size()) 
+    std::swap(Q[BestIdx], Q.back()); 
   Q.pop_back();
   return V;
 }

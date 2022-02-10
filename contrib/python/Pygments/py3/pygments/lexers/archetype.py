@@ -13,7 +13,7 @@
     Contributed by Thomas Beale <https://github.com/wolandscat>,
     <https://bitbucket.org/thomas_beale>.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -57,7 +57,7 @@ class AtomsLexer(RegexLexer):
             (r'P((\d*(\.\d+)?[YyMmWwDd]){1,3}(T(\d*(\.\d+)?[HhMmSs]){,3})?|'
              r'T(\d*(\.\d+)?[HhMmSs]){,3})', Literal.Date),
             (r'[+-]?(\d+\.\d*|\.\d+|\d+)[eE][+-]?\d+', Number.Float),
-            (r'[+-]?\d*\.\d+%?', Number.Float),
+            (r'[+-]?\d*\.\d+%?', Number.Float), 
             (r'0x[0-9a-fA-F]+', Number.Hex),
             (r'[+-]?\d+%?', Number.Integer),
         ],
@@ -211,9 +211,9 @@ class CadlLexer(AtomsLexer):
             (r'(not)\W', Operator),
             (r'(matches|is_in)\W', Operator),
             # is_in / not is_in char
-            ('(\u2208|\u2209)', Operator),
+            ('(\u2208|\u2209)', Operator), 
             # there_exists / not there_exists / for_all / and / or
-            ('(\u2203|\u2204|\u2200|\u2227|\u2228|\u22BB|\223C)',
+            ('(\u2203|\u2204|\u2200|\u2227|\u2228|\u22BB|\223C)', 
              Operator),
             # regex in slot or as string constraint
             (r'(\{)(\s*)(/[^}]+/)(\s*)(\})',

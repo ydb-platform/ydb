@@ -4,7 +4,7 @@
 
     Basic style object.
 
-    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-2021 by the Pygments team, see AUTHORS. 
     :license: BSD, see LICENSE for details.
 """
 
@@ -134,7 +134,7 @@ class StyleMeta(type):
             color = _ansimap[color]
         bgcolor = t[4]
         if bgcolor in _deprecated_ansicolors:
-            bgcolor = _deprecated_ansicolors[bgcolor]
+            bgcolor = _deprecated_ansicolors[bgcolor] 
         if bgcolor in ansicolors:
             bgansicolor = bgcolor
             bgcolor = _ansimap[bgcolor]
@@ -167,7 +167,7 @@ class StyleMeta(type):
         return len(cls._styles)
 
 
-class Style(metaclass=StyleMeta):
+class Style(metaclass=StyleMeta): 
 
     #: overall background color (``None`` means transparent)
     background_color = '#ffffff'
@@ -175,18 +175,18 @@ class Style(metaclass=StyleMeta):
     #: highlight background color
     highlight_color = '#ffffcc'
 
-    #: line number font color
-    line_number_color = 'inherit'
-
-    #: line number background color
-    line_number_background_color = 'transparent'
-
-    #: special line number font color
-    line_number_special_color = '#000000'
-
-    #: special line number background color
-    line_number_special_background_color = '#ffffc0'
-
+    #: line number font color 
+    line_number_color = 'inherit' 
+ 
+    #: line number background color 
+    line_number_background_color = 'transparent' 
+ 
+    #: special line number font color 
+    line_number_special_color = '#000000' 
+ 
+    #: special line number background color 
+    line_number_special_background_color = '#ffffc0' 
+ 
     #: Style definitions for individual token types.
     styles = {}
 

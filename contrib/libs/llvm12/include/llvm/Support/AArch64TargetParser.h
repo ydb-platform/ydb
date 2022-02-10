@@ -69,10 +69,10 @@ enum ArchExtKind : uint64_t {
   AEK_I8MM =        1 << 30,
   AEK_F32MM =       1ULL << 31,
   AEK_F64MM =       1ULL << 32,
-  AEK_LS64 =        1ULL << 33,
-  AEK_BRBE =        1ULL << 34,
-  AEK_PAUTH =       1ULL << 35,
-  AEK_FLAGM =       1ULL << 36,
+  AEK_LS64 =        1ULL << 33, 
+  AEK_BRBE =        1ULL << 34, 
+  AEK_PAUTH =       1ULL << 35, 
+  AEK_FLAGM =       1ULL << 36, 
 };
 
 enum class ArchKind {
@@ -115,7 +115,7 @@ const ArchKind ArchKinds[] = {
 };
 
 // FIXME: These should be moved to TargetTuple once it exists
-bool getExtensionFeatures(uint64_t Extensions,
+bool getExtensionFeatures(uint64_t Extensions, 
                           std::vector<StringRef> &Features);
 bool getArchFeatures(ArchKind AK, std::vector<StringRef> &Features);
 
@@ -128,7 +128,7 @@ StringRef getArchExtFeature(StringRef ArchExt);
 
 // Information by Name
 unsigned getDefaultFPU(StringRef CPU, ArchKind AK);
-uint64_t getDefaultExtensions(StringRef CPU, ArchKind AK);
+uint64_t getDefaultExtensions(StringRef CPU, ArchKind AK); 
 StringRef getDefaultCPU(StringRef Arch);
 ArchKind getCPUArchKind(StringRef CPU);
 

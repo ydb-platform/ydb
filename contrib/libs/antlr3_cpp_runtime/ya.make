@@ -5,8 +5,8 @@ LIBRARY()
 # directory: runtime/Cpp
 # revision: a4d1928e03b2b3f74579e54a6211cd1d695001b9
 
-VERSION(2016-03-31-a4d1928e03b2b3f74579e54a6211cd1d695001b9)
-
+VERSION(2016-03-31-a4d1928e03b2b3f74579e54a6211cd1d695001b9) 
+ 
 LICENSE(
     BSD-3-Clause AND
     Unicode-Mappings

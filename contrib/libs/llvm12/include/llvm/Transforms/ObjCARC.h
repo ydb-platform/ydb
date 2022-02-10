@@ -21,8 +21,8 @@
 #ifndef LLVM_TRANSFORMS_OBJCARC_H
 #define LLVM_TRANSFORMS_OBJCARC_H
 
-#include "llvm/IR/PassManager.h"
-
+#include "llvm/IR/PassManager.h" 
+ 
 namespace llvm {
 
 class Pass;
@@ -51,22 +51,22 @@ Pass *createObjCARCContractPass();
 //
 Pass *createObjCARCOptPass();
 
-struct ObjCARCOptPass : public PassInfoMixin<ObjCARCOptPass> {
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-};
-
-struct ObjCARCContractPass : public PassInfoMixin<ObjCARCContractPass> {
-  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM);
-};
-
-struct ObjCARCAPElimPass : public PassInfoMixin<ObjCARCAPElimPass> {
-  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
-};
-
-struct ObjCARCExpandPass : public PassInfoMixin<ObjCARCExpandPass> {
-  PreservedAnalyses run(Function &M, FunctionAnalysisManager &AM);
-};
-
+struct ObjCARCOptPass : public PassInfoMixin<ObjCARCOptPass> { 
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM); 
+}; 
+ 
+struct ObjCARCContractPass : public PassInfoMixin<ObjCARCContractPass> { 
+  PreservedAnalyses run(Function &F, FunctionAnalysisManager &AM); 
+}; 
+ 
+struct ObjCARCAPElimPass : public PassInfoMixin<ObjCARCAPElimPass> { 
+  PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM); 
+}; 
+ 
+struct ObjCARCExpandPass : public PassInfoMixin<ObjCARCExpandPass> { 
+  PreservedAnalyses run(Function &M, FunctionAnalysisManager &AM); 
+}; 
+ 
 } // End llvm namespace
 
 #endif

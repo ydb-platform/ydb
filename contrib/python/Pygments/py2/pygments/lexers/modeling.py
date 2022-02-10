@@ -62,8 +62,8 @@ class ModelicaLexer(RegexLexer):
              r'transpose|vector|zeros)\b', Name.Builtin),
             (r'(algorithm|annotation|break|connect|constant|constrainedby|der|'
              r'discrete|each|else|elseif|elsewhen|encapsulated|enumeration|'
-             r'equation|exit|expandable|extends|external|firstTick|final|flow|for|if|'
-             r'import|impure|in|initial|inner|input|interval|loop|nondiscrete|outer|'
+             r'equation|exit|expandable|extends|external|firstTick|final|flow|for|if|' 
+             r'import|impure|in|initial|inner|input|interval|loop|nondiscrete|outer|' 
              r'output|parameter|partial|protected|public|pure|redeclare|'
              r'replaceable|return|stream|then|when|while)\b',
              Keyword.Reserved),

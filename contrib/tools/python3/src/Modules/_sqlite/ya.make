@@ -19,10 +19,10 @@ IF (USE_SYSTEM_PYTHON)
     )
 ENDIF()
 
-CFLAGS(
-    -DMODULE_NAME=\"sqlite3\"
-)
-
+CFLAGS( 
+    -DMODULE_NAME=\"sqlite3\" 
+) 
+ 
 PYTHON3_ADDINCL()
 
 NO_COMPILER_WARNINGS()

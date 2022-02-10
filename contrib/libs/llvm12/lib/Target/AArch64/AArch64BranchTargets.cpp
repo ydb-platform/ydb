@@ -16,7 +16,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "AArch64MachineFunctionInfo.h"
+#include "AArch64MachineFunctionInfo.h" 
 #include "AArch64Subtarget.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
@@ -58,13 +58,13 @@ FunctionPass *llvm::createAArch64BranchTargetsPass() {
 }
 
 bool AArch64BranchTargets::runOnMachineFunction(MachineFunction &MF) {
-  if (!MF.getInfo<AArch64FunctionInfo>()->branchTargetEnforcement())
+  if (!MF.getInfo<AArch64FunctionInfo>()->branchTargetEnforcement()) 
     return false;
 
   LLVM_DEBUG(
       dbgs() << "********** AArch64 Branch Targets  **********\n"
              << "********** Function: " << MF.getName() << '\n');
-  const Function &F = MF.getFunction();
+  const Function &F = MF.getFunction(); 
 
   // LLVM does not consider basic blocks which are the targets of jump tables
   // to be address-taken (the address can't escape anywhere else), but they are

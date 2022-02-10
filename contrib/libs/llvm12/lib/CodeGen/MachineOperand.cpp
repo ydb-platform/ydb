@@ -85,7 +85,7 @@ void MachineOperand::substVirtReg(Register Reg, unsigned SubIdx,
 }
 
 void MachineOperand::substPhysReg(MCRegister Reg, const TargetRegisterInfo &TRI) {
-  assert(Register::isPhysicalRegister(Reg));
+  assert(Register::isPhysicalRegister(Reg)); 
   if (getSubReg()) {
     Reg = TRI.getSubReg(Reg, getSubReg());
     // Note that getSubReg() may return 0 if the sub-register doesn't exist.
@@ -153,25 +153,25 @@ void MachineOperand::removeRegFromUses() {
 /// ChangeToImmediate - Replace this operand with a new immediate operand of
 /// the specified value.  If an operand is known to be an immediate already,
 /// the setImm method should be used.
-void MachineOperand::ChangeToImmediate(int64_t ImmVal, unsigned TargetFlags) {
+void MachineOperand::ChangeToImmediate(int64_t ImmVal, unsigned TargetFlags) { 
   assert((!isReg() || !isTied()) && "Cannot change a tied operand into an imm");
 
   removeRegFromUses();
 
   OpKind = MO_Immediate;
   Contents.ImmVal = ImmVal;
-  setTargetFlags(TargetFlags);
+  setTargetFlags(TargetFlags); 
 }
 
-void MachineOperand::ChangeToFPImmediate(const ConstantFP *FPImm,
-                                         unsigned TargetFlags) {
+void MachineOperand::ChangeToFPImmediate(const ConstantFP *FPImm, 
+                                         unsigned TargetFlags) { 
   assert((!isReg() || !isTied()) && "Cannot change a tied operand into an imm");
 
   removeRegFromUses();
 
   OpKind = MO_FPImmediate;
   Contents.CFP = FPImm;
-  setTargetFlags(TargetFlags);
+  setTargetFlags(TargetFlags); 
 }
 
 void MachineOperand::ChangeToES(const char *SymName,
@@ -200,7 +200,7 @@ void MachineOperand::ChangeToGA(const GlobalValue *GV, int64_t Offset,
   setTargetFlags(TargetFlags);
 }
 
-void MachineOperand::ChangeToMCSymbol(MCSymbol *Sym, unsigned TargetFlags) {
+void MachineOperand::ChangeToMCSymbol(MCSymbol *Sym, unsigned TargetFlags) { 
   assert((!isReg() || !isTied()) &&
          "Cannot change a tied operand into an MCSymbol");
 
@@ -208,10 +208,10 @@ void MachineOperand::ChangeToMCSymbol(MCSymbol *Sym, unsigned TargetFlags) {
 
   OpKind = MO_MCSymbol;
   Contents.Sym = Sym;
-  setTargetFlags(TargetFlags);
+  setTargetFlags(TargetFlags); 
 }
 
-void MachineOperand::ChangeToFrameIndex(int Idx, unsigned TargetFlags) {
+void MachineOperand::ChangeToFrameIndex(int Idx, unsigned TargetFlags) { 
   assert((!isReg() || !isTied()) &&
          "Cannot change a tied operand into a FrameIndex");
 
@@ -219,7 +219,7 @@ void MachineOperand::ChangeToFrameIndex(int Idx, unsigned TargetFlags) {
 
   OpKind = MO_FrameIndex;
   setIndex(Idx);
-  setTargetFlags(TargetFlags);
+  setTargetFlags(TargetFlags); 
 }
 
 void MachineOperand::ChangeToTargetIndex(unsigned Idx, int64_t Offset,
@@ -420,11 +420,11 @@ static const char *getTargetIndexName(const MachineFunction &MF, int Index) {
   return nullptr;
 }
 
-const char *MachineOperand::getTargetIndexName() const {
-  const MachineFunction *MF = getMFIfAvailable(*this);
-  return MF ? ::getTargetIndexName(*MF, this->getIndex()) : nullptr;
-}
-
+const char *MachineOperand::getTargetIndexName() const { 
+  const MachineFunction *MF = getMFIfAvailable(*this); 
+  return MF ? ::getTargetIndexName(*MF, this->getIndex()) : nullptr; 
+} 
+ 
 static const char *getTargetFlagName(const TargetInstrInfo *TII, unsigned TF) {
   auto Flags = TII->getSerializableDirectMachineOperandTargetFlags();
   for (const auto &I : Flags) {
@@ -833,7 +833,7 @@ void MachineOperand::print(raw_ostream &OS, ModuleSlotTracker &MST,
     OS << "target-index(";
     const char *Name = "<unknown>";
     if (const MachineFunction *MF = getMFIfAvailable(*this))
-      if (const auto *TargetIndexName = ::getTargetIndexName(*MF, getIndex()))
+      if (const auto *TargetIndexName = ::getTargetIndexName(*MF, getIndex())) 
         Name = TargetIndexName;
     OS << Name << ')';
     printOperandOffset(OS, getOffset());
@@ -1152,7 +1152,7 @@ void MachineMemOperand::print(raw_ostream &OS, ModuleSlotTracker &MST,
       const MIRFormatter *Formatter = TII->getMIRFormatter();
       // FIXME: This is not necessarily the correct MIR serialization format for
       // a custom pseudo source value, but at least it allows
-      // MIR printing to work on a target with custom pseudo source
+      // MIR printing to work on a target with custom pseudo source 
       // values.
       OS << "custom \"";
       Formatter->printCustomPseudoSourceValue(OS, MST, *PVal);
@@ -1162,10 +1162,10 @@ void MachineMemOperand::print(raw_ostream &OS, ModuleSlotTracker &MST,
     }
   }
   MachineOperand::printOperandOffset(OS, getOffset());
-  if (getAlign() != getSize())
-    OS << ", align " << getAlign().value();
-  if (getAlign() != getBaseAlign())
-    OS << ", basealign " << getBaseAlign().value();
+  if (getAlign() != getSize()) 
+    OS << ", align " << getAlign().value(); 
+  if (getAlign() != getBaseAlign()) 
+    OS << ", basealign " << getBaseAlign().value(); 
   auto AAInfo = getAAInfo();
   if (AAInfo.TBAA) {
     OS << ", !tbaa ";

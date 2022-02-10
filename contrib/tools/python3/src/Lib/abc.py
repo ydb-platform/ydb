@@ -11,8 +11,8 @@ def abstractmethod(funcobj):
     class that has a metaclass derived from ABCMeta cannot be
     instantiated unless all of its abstract methods are overridden.
     The abstract methods can be called using any of the normal
-    'super' call mechanisms.  abstractmethod() may be used to declare
-    abstract methods for properties and descriptors.
+    'super' call mechanisms.  abstractmethod() may be used to declare 
+    abstract methods for properties and descriptors. 
 
     Usage:
 
@@ -28,14 +28,14 @@ def abstractmethod(funcobj):
 class abstractclassmethod(classmethod):
     """A decorator indicating abstract classmethods.
 
-    Deprecated, use 'classmethod' with 'abstractmethod' instead:
-
-        class C(ABC):
-            @classmethod
-            @abstractmethod
-            def my_abstract_classmethod(cls, ...):
-                ...
-
+    Deprecated, use 'classmethod' with 'abstractmethod' instead: 
+ 
+        class C(ABC): 
+            @classmethod 
+            @abstractmethod 
+            def my_abstract_classmethod(cls, ...): 
+                ... 
+ 
     """
 
     __isabstractmethod__ = True
@@ -48,14 +48,14 @@ class abstractclassmethod(classmethod):
 class abstractstaticmethod(staticmethod):
     """A decorator indicating abstract staticmethods.
 
-    Deprecated, use 'staticmethod' with 'abstractmethod' instead:
-
-        class C(ABC):
-            @staticmethod
-            @abstractmethod
-            def my_abstract_staticmethod(...):
-                ...
-
+    Deprecated, use 'staticmethod' with 'abstractmethod' instead: 
+ 
+        class C(ABC): 
+            @staticmethod 
+            @abstractmethod 
+            def my_abstract_staticmethod(...): 
+                ... 
+ 
     """
 
     __isabstractmethod__ = True
@@ -68,14 +68,14 @@ class abstractstaticmethod(staticmethod):
 class abstractproperty(property):
     """A decorator indicating abstract properties.
 
-    Deprecated, use 'property' with 'abstractmethod' instead:
-
-        class C(ABC):
-            @property
-            @abstractmethod
-            def my_abstract_property(self):
-                ...
-
+    Deprecated, use 'property' with 'abstractmethod' instead: 
+ 
+        class C(ABC): 
+            @property 
+            @abstractmethod 
+            def my_abstract_property(self): 
+                ... 
+ 
     """
 
     __isabstractmethod__ = True

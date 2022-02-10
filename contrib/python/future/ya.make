@@ -4,7 +4,7 @@ LICENSE(MIT)
 
 OWNER(g:python-contrib)
 
-VERSION(0.18.2)
+VERSION(0.18.2) 
 
 NO_CHECK_IMPORTS(
     future.backports.email.policy  # email backport is incomplete in v0.16.0.
@@ -72,7 +72,7 @@ PY_SRCS(
     future/builtins/disabled.py
     future/builtins/iterators.py
     future/builtins/misc.py
-    future/builtins/new_min_max.py
+    future/builtins/new_min_max.py 
     future/builtins/newnext.py
     future/builtins/newround.py
     future/builtins/newsuper.py

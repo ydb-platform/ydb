@@ -37,7 +37,7 @@ class GasLexer(RegexLexer):
     char = r'[\w$.@-]'
     identifier = r'(?:[a-zA-Z$_]' + char + r'*|\.' + char + '+)'
     number = r'(?:0[xX][a-zA-Z0-9]+|\d+)'
-    register = '%' + identifier
+    register = '%' + identifier 
 
     tokens = {
         'root': [
@@ -53,7 +53,7 @@ class GasLexer(RegexLexer):
             (string, String),
             ('@' + identifier, Name.Attribute),
             (number, Number.Integer),
-            (register, Name.Variable),
+            (register, Name.Variable), 
             (r'[\r\n]+', Text, '#pop'),
             (r'[;#].*?\n', Comment, '#pop'),
 
@@ -74,7 +74,7 @@ class GasLexer(RegexLexer):
             (identifier, Name.Constant),
             (number, Number.Integer),
             # Registers
-            (register, Name.Variable),
+            (register, Name.Variable), 
             # Numeric constants
             ('$'+number, Number.Integer),
             (r"$'(.|\\')'", String.Char),
@@ -457,10 +457,10 @@ class NasmLexer(RegexLexer):
     filenames = ['*.asm', '*.ASM']
     mimetypes = ['text/x-nasm']
 
-    # Tasm uses the same file endings, but TASM is not as common as NASM, so
-    # we prioritize NASM higher by default
-    priority = 1.0
-
+    # Tasm uses the same file endings, but TASM is not as common as NASM, so 
+    # we prioritize NASM higher by default 
+    priority = 1.0 
+ 
     identifier = r'[a-z$._?][\w$.?#@~]*'
     hexn = r'(?:0x[0-9a-f]+|$0[0-9a-f]*|[0-9]+[0-9a-f]*h)'
     octn = r'[0-7]+q'
@@ -526,12 +526,12 @@ class NasmLexer(RegexLexer):
         ],
     }
 
-    def analyse_text(text):
-        # Probably TASM
-        if re.match(r'PROC', text, re.IGNORECASE):
-            return False
+    def analyse_text(text): 
+        # Probably TASM 
+        if re.match(r'PROC', text, re.IGNORECASE): 
+            return False 
 
-
+ 
 class NasmObjdumpLexer(ObjdumpLexer):
     """
     For the output of 'objdump -d -M intel'.
@@ -625,12 +625,12 @@ class TasmLexer(RegexLexer):
         ],
     }
 
-    def analyse_text(text):
-        # See above
-        if re.match(r'PROC', text, re.I):
-            return True
+    def analyse_text(text): 
+        # See above 
+        if re.match(r'PROC', text, re.I): 
+            return True 
 
-
+ 
 class Ca65Lexer(RegexLexer):
     """
     For ca65 assembler sources.

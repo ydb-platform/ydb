@@ -4,7 +4,7 @@
 #define ABIFLAGS ""
 #define PREFIX "/var/empty"
 #define EXEC_PREFIX "/var/empty"
-#define VERSION "3.9"
+#define VERSION "3.9" 
 #define VPATH ""
 #define BLAKE2_USE_SSE
 #define USE_ZLIB_CRC32
@@ -19,8 +19,8 @@
 #endif
 #endif
 
-#define PLATLIBDIR "lib"
-
+#define PLATLIBDIR "lib" 
+ 
 #if defined(__linux__)
 #include "pyconfig-linux.h"
 #endif

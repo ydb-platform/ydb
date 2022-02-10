@@ -113,9 +113,9 @@ public:
     JumpTables[Idx].MBBs.clear();
   }
 
-  /// RemoveMBBFromJumpTables - If MBB is present in any jump tables, remove it.
-  bool RemoveMBBFromJumpTables(MachineBasicBlock *MBB);
-
+  /// RemoveMBBFromJumpTables - If MBB is present in any jump tables, remove it. 
+  bool RemoveMBBFromJumpTables(MachineBasicBlock *MBB); 
+ 
   /// ReplaceMBBInJumpTables - If Old is the target of any jump tables, update
   /// the jump tables to branch to New instead.
   bool ReplaceMBBInJumpTables(MachineBasicBlock *Old, MachineBasicBlock *New);

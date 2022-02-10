@@ -1,31 +1,31 @@
 from __future__ import absolute_import
 
-import hashlib
-import inspect
-import os
-import re
-import sys
+import hashlib 
+import inspect 
+import os 
+import re 
+import sys 
 
 from distutils.core import Distribution, Extension
 from distutils.command.build_ext import build_ext
 
 import Cython
-from ..Compiler.Main import Context, default_options
+from ..Compiler.Main import Context, default_options 
 
-from ..Compiler.Visitor import CythonTransform, EnvTransform
-from ..Compiler.ParseTreeTransforms import SkipDeclarations
+from ..Compiler.Visitor import CythonTransform, EnvTransform 
+from ..Compiler.ParseTreeTransforms import SkipDeclarations 
 from ..Compiler.TreeFragment import parse_from_strings
 from ..Compiler.StringEncoding import _unicode
 from .Dependencies import strip_string_literals, cythonize, cached_function
-from ..Compiler import Pipeline
+from ..Compiler import Pipeline 
 from ..Utils import get_cython_cache_dir
 import cython as cython_module
 
 
-IS_PY3 = sys.version_info >= (3,)
-
+IS_PY3 = sys.version_info >= (3,) 
+ 
 # A utility function to convert user-supplied ASCII strings to unicode.
-if not IS_PY3:
+if not IS_PY3: 
     def to_unicode(s):
         if isinstance(s, bytes):
             return s.decode('ascii')
@@ -34,18 +34,18 @@ if not IS_PY3:
 else:
     to_unicode = lambda x: x
 
-if sys.version_info < (3, 5):
-    import imp
-    def load_dynamic(name, module_path):
-        return imp.load_dynamic(name, module_path)
-else:
-    import importlib.util as _importlib_util
-    def load_dynamic(name, module_path):
-        spec = _importlib_util.spec_from_file_location(name, module_path)
-        module = _importlib_util.module_from_spec(spec)
-        # sys.modules[name] = module
-        spec.loader.exec_module(module)
-        return module
+if sys.version_info < (3, 5): 
+    import imp 
+    def load_dynamic(name, module_path): 
+        return imp.load_dynamic(name, module_path) 
+else: 
+    import importlib.util as _importlib_util 
+    def load_dynamic(name, module_path): 
+        spec = _importlib_util.spec_from_file_location(name, module_path) 
+        module = _importlib_util.module_from_spec(spec) 
+        # sys.modules[name] = module 
+        spec.loader.exec_module(module) 
+        return module 
 
 class UnboundSymbols(EnvTransform, SkipDeclarations):
     def __init__(self):
@@ -131,7 +131,7 @@ def _create_context(cython_include_dirs):
 _cython_inline_cache = {}
 _cython_inline_default_context = _create_context(('.',))
 
-
+ 
 def _populate_unbound(kwds, unbound_symbols, locals=None, globals=None):
     for symbol in unbound_symbols:
         if symbol not in kwds:
@@ -148,12 +148,12 @@ def _populate_unbound(kwds, unbound_symbols, locals=None, globals=None):
             else:
                 print("Couldn't find %r" % symbol)
 
-
-def _inline_key(orig_code, arg_sigs, language_level):
-    key = orig_code, arg_sigs, sys.version_info, sys.executable, language_level, Cython.__version__
-    return hashlib.sha1(_unicode(key).encode('utf-8')).hexdigest()
-
-
+ 
+def _inline_key(orig_code, arg_sigs, language_level): 
+    key = orig_code, arg_sigs, sys.version_info, sys.executable, language_level, Cython.__version__ 
+    return hashlib.sha1(_unicode(key).encode('utf-8')).hexdigest() 
+ 
+ 
 def cython_inline(code, get_type=unsafe_type,
                   lib_dir=os.path.join(get_cython_cache_dir(), 'inline'),
                   cython_include_dirs=None, cython_compiler_directives=None,
@@ -163,20 +163,20 @@ def cython_inline(code, get_type=unsafe_type,
         get_type = lambda x: 'object'
     ctx = _create_context(tuple(cython_include_dirs)) if cython_include_dirs else _cython_inline_default_context
 
-    cython_compiler_directives = dict(cython_compiler_directives) if cython_compiler_directives else {}
-    if language_level is None and 'language_level' not in cython_compiler_directives:
-        language_level = '3str'
-    if language_level is not None:
-        cython_compiler_directives['language_level'] = language_level
-
+    cython_compiler_directives = dict(cython_compiler_directives) if cython_compiler_directives else {} 
+    if language_level is None and 'language_level' not in cython_compiler_directives: 
+        language_level = '3str' 
+    if language_level is not None: 
+        cython_compiler_directives['language_level'] = language_level 
+ 
     # Fast path if this has been called in this session.
     _unbound_symbols = _cython_inline_cache.get(code)
     if _unbound_symbols is not None:
         _populate_unbound(kwds, _unbound_symbols, locals, globals)
         args = sorted(kwds.items())
         arg_sigs = tuple([(get_type(value, ctx), arg) for arg, value in args])
-        key_hash = _inline_key(code, arg_sigs, language_level)
-        invoke = _cython_inline_cache.get((code, arg_sigs, key_hash))
+        key_hash = _inline_key(code, arg_sigs, language_level) 
+        invoke = _cython_inline_cache.get((code, arg_sigs, key_hash)) 
         if invoke is not None:
             arg_list = [arg[1] for arg in args]
             return invoke(*arg_list)
@@ -204,8 +204,8 @@ def cython_inline(code, get_type=unsafe_type,
             del kwds[name]
     arg_names = sorted(kwds)
     arg_sigs = tuple([(get_type(kwds[arg], ctx), arg) for arg in arg_names])
-    key_hash = _inline_key(orig_code, arg_sigs, language_level)
-    module_name = "_cython_inline_" + key_hash
+    key_hash = _inline_key(orig_code, arg_sigs, language_level) 
+    module_name = "_cython_inline_" + key_hash 
 
     if module_name in sys.modules:
         module = sys.modules[module_name]
@@ -270,13 +270,13 @@ def __invoke(%(params)s):
             build_extension.build_lib  = lib_dir
             build_extension.run()
 
-        module = load_dynamic(module_name, module_path)
+        module = load_dynamic(module_name, module_path) 
 
-    _cython_inline_cache[orig_code, arg_sigs, key_hash] = module.__invoke
+    _cython_inline_cache[orig_code, arg_sigs, key_hash] = module.__invoke 
     arg_list = [kwds[arg] for arg in arg_names]
     return module.__invoke(*arg_list)
 
-
+ 
 # Cached suffix used by cython_inline above.  None should get
 # overridden with actual value upon the first cython_inline invocation
 cython_inline.so_ext = None

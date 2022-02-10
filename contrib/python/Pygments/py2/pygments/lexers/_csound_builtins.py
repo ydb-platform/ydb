@@ -7,51 +7,51 @@
     :license: BSD, see LICENSE for details.
 """
 
-# Opcodes in Csound 6.13.0 using:
-#   python3 -c "
-#   import re
-#   from subprocess import Popen, PIPE
-#   output = Popen(['csound', '--list-opcodes0'], stderr=PIPE, text=True).communicate()[1]
-#   opcodes = output[re.search(r'^\$', output, re.M).end() : re.search(r'^\d+ opcodes\$', output, re.M).start()].split()
-#   output = Popen(['csound', '--list-opcodes2'], stderr=PIPE, text=True).communicate()[1]
-#   all_opcodes = output[re.search(r'^\$', output, re.M).end() : re.search(r'^\d+ opcodes\$', output, re.M).start()].split()
+# Opcodes in Csound 6.13.0 using: 
+#   python3 -c " 
+#   import re 
+#   from subprocess import Popen, PIPE 
+#   output = Popen(['csound', '--list-opcodes0'], stderr=PIPE, text=True).communicate()[1] 
+#   opcodes = output[re.search(r'^\$', output, re.M).end() : re.search(r'^\d+ opcodes\$', output, re.M).start()].split() 
+#   output = Popen(['csound', '--list-opcodes2'], stderr=PIPE, text=True).communicate()[1] 
+#   all_opcodes = output[re.search(r'^\$', output, re.M).end() : re.search(r'^\d+ opcodes\$', output, re.M).start()].split() 
 #   deprecated_opcodes = [opcode for opcode in all_opcodes if opcode not in opcodes]
-#   # Remove opcodes that csound.py treats as keywords.
-#   keyword_opcodes = [
-#       'cggoto',   # https://csound.com/docs/manual/cggoto.html
-#       'cigoto',   # https://csound.com/docs/manual/cigoto.html
-#       'cingoto',  # (undocumented)
-#       'ckgoto',   # https://csound.com/docs/manual/ckgoto.html
-#       'cngoto',   # https://csound.com/docs/manual/cngoto.html
-#       'cnkgoto',  # (undocumented)
-#       'endin',    # https://csound.com/docs/manual/endin.html
-#       'endop',    # https://csound.com/docs/manual/endop.html
-#       'goto',     # https://csound.com/docs/manual/goto.html
-#       'igoto',    # https://csound.com/docs/manual/igoto.html
-#       'instr',    # https://csound.com/docs/manual/instr.html
-#       'kgoto',    # https://csound.com/docs/manual/kgoto.html
-#       'loop_ge',  # https://csound.com/docs/manual/loop_ge.html
-#       'loop_gt',  # https://csound.com/docs/manual/loop_gt.html
-#       'loop_le',  # https://csound.com/docs/manual/loop_le.html
-#       'loop_lt',  # https://csound.com/docs/manual/loop_lt.html
-#       'opcode',   # https://csound.com/docs/manual/opcode.html
-#       'reinit',   # https://csound.com/docs/manual/reinit.html
-#       'return',   # https://csound.com/docs/manual/return.html
-#       'rireturn', # https://csound.com/docs/manual/rireturn.html
-#       'rigoto',   # https://csound.com/docs/manual/rigoto.html
-#       'tigoto',   # https://csound.com/docs/manual/tigoto.html
-#       'timout'    # https://csound.com/docs/manual/timout.html
-#   ]
-#   opcodes = [opcode for opcode in opcodes if opcode not in keyword_opcodes]
-#   newline = '\n'
-#   print(f'''OPCODES = set(\'''
-#   {newline.join(opcodes)}
+#   # Remove opcodes that csound.py treats as keywords. 
+#   keyword_opcodes = [ 
+#       'cggoto',   # https://csound.com/docs/manual/cggoto.html 
+#       'cigoto',   # https://csound.com/docs/manual/cigoto.html 
+#       'cingoto',  # (undocumented) 
+#       'ckgoto',   # https://csound.com/docs/manual/ckgoto.html 
+#       'cngoto',   # https://csound.com/docs/manual/cngoto.html 
+#       'cnkgoto',  # (undocumented) 
+#       'endin',    # https://csound.com/docs/manual/endin.html 
+#       'endop',    # https://csound.com/docs/manual/endop.html 
+#       'goto',     # https://csound.com/docs/manual/goto.html 
+#       'igoto',    # https://csound.com/docs/manual/igoto.html 
+#       'instr',    # https://csound.com/docs/manual/instr.html 
+#       'kgoto',    # https://csound.com/docs/manual/kgoto.html 
+#       'loop_ge',  # https://csound.com/docs/manual/loop_ge.html 
+#       'loop_gt',  # https://csound.com/docs/manual/loop_gt.html 
+#       'loop_le',  # https://csound.com/docs/manual/loop_le.html 
+#       'loop_lt',  # https://csound.com/docs/manual/loop_lt.html 
+#       'opcode',   # https://csound.com/docs/manual/opcode.html 
+#       'reinit',   # https://csound.com/docs/manual/reinit.html 
+#       'return',   # https://csound.com/docs/manual/return.html 
+#       'rireturn', # https://csound.com/docs/manual/rireturn.html 
+#       'rigoto',   # https://csound.com/docs/manual/rigoto.html 
+#       'tigoto',   # https://csound.com/docs/manual/tigoto.html 
+#       'timout'    # https://csound.com/docs/manual/timout.html 
+#   ] 
+#   opcodes = [opcode for opcode in opcodes if opcode not in keyword_opcodes] 
+#   newline = '\n' 
+#   print(f'''OPCODES = set(\''' 
+#   {newline.join(opcodes)} 
 #   \'''.split())
 #
 #   DEPRECATED_OPCODES = set(\'''
-#   {newline.join(deprecated_opcodes)}
+#   {newline.join(deprecated_opcodes)} 
 #   \'''.split())
-#   ''')
+#   ''') 
 #   "
 
 OPCODES = set('''
@@ -173,7 +173,7 @@ STKBowed
 STKBrass
 STKClarinet
 STKDrummer
-STKFMVoices
+STKFMVoices 
 STKFlute
 STKHevyMetl
 STKMandolin
@@ -205,7 +205,7 @@ alwayson
 ampdb
 ampdbfs
 ampmidi
-ampmidicurve
+ampmidicurve 
 ampmidid
 areson
 aresonk
@@ -422,17 +422,17 @@ flashtxt
 flooper
 flooper2
 floor
-fluidAllOut
-fluidCCi
-fluidCCk
-fluidControl
-fluidEngine
-fluidInfo
-fluidLoad
-fluidNote
-fluidOut
-fluidProgramSelect
-fluidSetInterpMethod
+fluidAllOut 
+fluidCCi 
+fluidCCk 
+fluidControl 
+fluidEngine 
+fluidInfo 
+fluidLoad 
+fluidNote 
+fluidOut 
+fluidProgramSelect 
+fluidSetInterpMethod 
 fmanal
 fmax
 fmb3
@@ -507,7 +507,7 @@ grain
 grain2
 grain3
 granule
-gtf
+gtf 
 guiro
 harmon
 harmon2
@@ -615,10 +615,10 @@ la_i_multiply_mc
 la_i_multiply_mr
 la_i_multiply_vc
 la_i_multiply_vr
-la_i_norm1_mc
-la_i_norm1_mr
-la_i_norm1_vc
-la_i_norm1_vr
+la_i_norm1_mc 
+la_i_norm1_mr 
+la_i_norm1_vc 
+la_i_norm1_vr 
 la_i_norm_euclid_mc
 la_i_norm_euclid_mr
 la_i_norm_euclid_vc
@@ -713,10 +713,10 @@ la_k_multiply_mc
 la_k_multiply_mr
 la_k_multiply_vc
 la_k_multiply_vr
-la_k_norm1_mc
-la_k_norm1_mr
-la_k_norm1_vc
-la_k_norm1_vr
+la_k_norm1_mc 
+la_k_norm1_mr 
+la_k_norm1_vc 
+la_k_norm1_vr 
 la_k_norm_euclid_mc
 la_k_norm_euclid_mr
 la_k_norm_euclid_vc
@@ -916,8 +916,8 @@ nrpn
 nsamp
 nstance
 nstrnum
-nstrstr
-ntof
+nstrstr 
+ntof 
 ntom
 ntrpol
 nxtpow2
@@ -1354,7 +1354,7 @@ strfromurl
 strget
 strindex
 strindexk
-string2array
+string2array 
 strlen
 strlenk
 strlower
@@ -1606,7 +1606,7 @@ DEPRECATED_OPCODES = set('''
 array
 bformdec
 bformenc
-changed
+changed 
 copy2ftab
 copy2ttab
 hrtfer
@@ -1616,7 +1616,7 @@ maxtab
 mintab
 pop
 pop_f
-ptableiw
+ptableiw 
 push
 push_f
 scalet
@@ -1635,7 +1635,7 @@ spectrum
 stack
 sumtab
 tabgen
-tableiw
+tableiw 
 tabmap
 tabmap_i
 tabslice

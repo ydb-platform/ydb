@@ -1,53 +1,53 @@
 {
   "pagination": {
-    "DescribeCertificates": {
-      "input_token": "Marker",
-      "output_token": "Marker",
-      "limit_key": "MaxRecords",
-      "result_key": "Certificates"
-    },
-    "DescribeDBClusterBacktracks": {
-      "input_token": "Marker",
-      "output_token": "Marker",
-      "limit_key": "MaxRecords",
-      "result_key": "DBClusterBacktracks"
-    },
-    "DescribeDBClusterParameterGroups": {
-      "input_token": "Marker",
-      "output_token": "Marker",
-      "limit_key": "MaxRecords",
-      "result_key": "DBClusterParameterGroups"
-    },
-    "DescribeDBClusterParameters": {
-      "input_token": "Marker",
-      "output_token": "Marker",
-      "limit_key": "MaxRecords",
-      "result_key": "Parameters"
-    },
+    "DescribeCertificates": { 
+      "input_token": "Marker", 
+      "output_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "result_key": "Certificates" 
+    }, 
+    "DescribeDBClusterBacktracks": { 
+      "input_token": "Marker", 
+      "output_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "result_key": "DBClusterBacktracks" 
+    }, 
+    "DescribeDBClusterParameterGroups": { 
+      "input_token": "Marker", 
+      "output_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "result_key": "DBClusterParameterGroups" 
+    }, 
+    "DescribeDBClusterParameters": { 
+      "input_token": "Marker", 
+      "output_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "result_key": "Parameters" 
+    }, 
     "DescribeDBClusterSnapshots": {
       "input_token": "Marker",
       "output_token": "Marker",
       "limit_key": "MaxRecords",
       "result_key": "DBClusterSnapshots"
     },
-    "DescribeDBClusters": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "DBClusters"
-    },
+    "DescribeDBClusters": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "DBClusters" 
+    }, 
     "DescribeDBEngineVersions": {
       "input_token": "Marker",
       "output_token": "Marker",
       "limit_key": "MaxRecords",
       "result_key": "DBEngineVersions"
     },
-    "DescribeDBInstanceAutomatedBackups": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "DBInstanceAutomatedBackups"
-    },
+    "DescribeDBInstanceAutomatedBackups": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "DBInstanceAutomatedBackups" 
+    }, 
     "DescribeDBInstances": {
       "input_token": "Marker",
       "output_token": "Marker",
@@ -90,12 +90,12 @@
       "limit_key": "MaxRecords",
       "result_key": "DBSubnetGroups"
     },
-    "DescribeEngineDefaultClusterParameters": {
-      "input_token": "Marker",
-      "output_token": "EngineDefaults.Marker",
-      "limit_key": "MaxRecords",
-      "result_key": "EngineDefaults.Parameters"
-    },
+    "DescribeEngineDefaultClusterParameters": { 
+      "input_token": "Marker", 
+      "output_token": "EngineDefaults.Marker", 
+      "limit_key": "MaxRecords", 
+      "result_key": "EngineDefaults.Parameters" 
+    }, 
     "DescribeEngineDefaultParameters": {
       "input_token": "Marker",
       "output_token": "EngineDefaults.Marker",
@@ -114,12 +114,12 @@
       "limit_key": "MaxRecords",
       "result_key": "Events"
     },
-    "DescribeGlobalClusters": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "GlobalClusters"
-    },
+    "DescribeGlobalClusters": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "GlobalClusters" 
+    }, 
     "DescribeOptionGroupOptions": {
       "input_token": "Marker",
       "output_token": "Marker",
@@ -138,12 +138,12 @@
       "limit_key": "MaxRecords",
       "result_key": "OrderableDBInstanceOptions"
     },
-    "DescribePendingMaintenanceActions": {
-      "input_token": "Marker",
-      "output_token": "Marker",
-      "limit_key": "MaxRecords",
-      "result_key": "PendingMaintenanceActions"
-    },
+    "DescribePendingMaintenanceActions": { 
+      "input_token": "Marker", 
+      "output_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "result_key": "PendingMaintenanceActions" 
+    }, 
     "DescribeReservedDBInstances": {
       "input_token": "Marker",
       "output_token": "Marker",
@@ -156,66 +156,66 @@
       "limit_key": "MaxRecords",
       "result_key": "ReservedDBInstancesOfferings"
     },
-    "DescribeSourceRegions": {
-      "input_token": "Marker",
-      "output_token": "Marker",
-      "limit_key": "MaxRecords",
-      "result_key": "SourceRegions"
-    },
+    "DescribeSourceRegions": { 
+      "input_token": "Marker", 
+      "output_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "result_key": "SourceRegions" 
+    }, 
     "DownloadDBLogFilePortion": {
       "input_token": "Marker",
       "output_token": "Marker",
       "limit_key": "NumberOfLines",
       "more_results": "AdditionalDataPending",
       "result_key": "LogFileData"
-    },
-    "DescribeDBClusterEndpoints": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "DBClusterEndpoints"
-    },
-    "DescribeCustomAvailabilityZones": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "CustomAvailabilityZones"
-    },
-    "DescribeInstallationMedia": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "InstallationMedia"
-    },
-    "DescribeDBProxies": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "DBProxies"
-    },
-    "DescribeDBProxyTargetGroups": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "TargetGroups"
-    },
-    "DescribeDBProxyTargets": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "Targets"
-    },
-    "DescribeExportTasks": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "ExportTasks"
-    },
-    "DescribeDBProxyEndpoints": {
-      "input_token": "Marker",
-      "limit_key": "MaxRecords",
-      "output_token": "Marker",
-      "result_key": "DBProxyEndpoints"
+    }, 
+    "DescribeDBClusterEndpoints": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "DBClusterEndpoints" 
+    }, 
+    "DescribeCustomAvailabilityZones": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "CustomAvailabilityZones" 
+    }, 
+    "DescribeInstallationMedia": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "InstallationMedia" 
+    }, 
+    "DescribeDBProxies": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "DBProxies" 
+    }, 
+    "DescribeDBProxyTargetGroups": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "TargetGroups" 
+    }, 
+    "DescribeDBProxyTargets": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "Targets" 
+    }, 
+    "DescribeExportTasks": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "ExportTasks" 
+    }, 
+    "DescribeDBProxyEndpoints": { 
+      "input_token": "Marker", 
+      "limit_key": "MaxRecords", 
+      "output_token": "Marker", 
+      "result_key": "DBProxyEndpoints" 
     }
   }
 }

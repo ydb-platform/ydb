@@ -72,7 +72,7 @@
 #            type information
 #    0.4.0 - added win32_ver() and modified the platform() output for WinXX
 #    0.3.4 - fixed a bug in _follow_symlinks()
-#    0.3.3 - fixed popen() and "file" command invocation bugs
+#    0.3.3 - fixed popen() and "file" command invocation bugs 
 #    0.3.2 - added architecture() API and support for it in platform()
 #    0.3.1 - fixed syscmd_ver() RE to support Windows NT
 #    0.3.0 - added system alias support
@@ -113,12 +113,12 @@ __copyright__ = """
 __version__ = '1.0.8'
 
 import collections
-import os
-import re
-import sys
-import subprocess
-import functools
-import itertools
+import os 
+import re 
+import sys 
+import subprocess 
+import functools 
+import itertools 
 
 ### Globals & Constants
 
@@ -159,7 +159,7 @@ _libc_search = re.compile(b'(__libc_init)'
                           b'|'
                           br'(libc(_\w+)?\.so(?:\.(\d[0-9.]*))?)', re.ASCII)
 
-def libc_ver(executable=None, lib='', version='', chunksize=16384):
+def libc_ver(executable=None, lib='', version='', chunksize=16384): 
 
     """ Tries to determine the libc version that the file executable
         (which defaults to the Python interpreter) is linked against.
@@ -174,19 +174,19 @@ def libc_ver(executable=None, lib='', version='', chunksize=16384):
         The file is read and scanned in chunks of chunksize bytes.
 
     """
-    if executable is None:
-        try:
-            ver = os.confstr('CS_GNU_LIBC_VERSION')
-            # parse 'glibc 2.28' as ('glibc', '2.28')
-            parts = ver.split(maxsplit=1)
-            if len(parts) == 2:
-                return tuple(parts)
-        except (AttributeError, ValueError, OSError):
-            # os.confstr() or CS_GNU_LIBC_VERSION value not available
-            pass
-
-        executable = sys.executable
-
+    if executable is None: 
+        try: 
+            ver = os.confstr('CS_GNU_LIBC_VERSION') 
+            # parse 'glibc 2.28' as ('glibc', '2.28') 
+            parts = ver.split(maxsplit=1) 
+            if len(parts) == 2: 
+                return tuple(parts) 
+        except (AttributeError, ValueError, OSError): 
+            # os.confstr() or CS_GNU_LIBC_VERSION value not available 
+            pass 
+ 
+        executable = sys.executable 
+ 
     V = _comparable_version
     if hasattr(os.path, 'realpath'):
         # Python 2.2 introduced os.path.realpath(); it is used
@@ -239,7 +239,7 @@ def _norm_version(version, build=''):
     if build:
         l.append(build)
     try:
-        strings = list(map(str, map(int, l)))
+        strings = list(map(str, map(int, l))) 
     except ValueError:
         strings = l
     version = '.'.join(strings[:3])
@@ -276,16 +276,16 @@ def _syscmd_ver(system='', release='', version='',
         return system, release, version
 
     # Try some common cmd strings
-    import subprocess
+    import subprocess 
     for cmd in ('ver', 'command /c ver', 'cmd /c ver'):
         try:
-            info = subprocess.check_output(cmd,
-                                           stdin=subprocess.DEVNULL,
-                                           stderr=subprocess.DEVNULL,
-                                           text=True,
-                                           shell=True)
-        except (OSError, subprocess.CalledProcessError) as why:
-            #print('Command %s failed: %s' % (cmd, why))
+            info = subprocess.check_output(cmd, 
+                                           stdin=subprocess.DEVNULL, 
+                                           stderr=subprocess.DEVNULL, 
+                                           text=True, 
+                                           shell=True) 
+        except (OSError, subprocess.CalledProcessError) as why: 
+            #print('Command %s failed: %s' % (cmd, why)) 
             continue
         else:
             break
@@ -336,27 +336,27 @@ _WIN32_SERVER_RELEASES = {
     (6, None): "post2012ServerR2",
 }
 
-def win32_is_iot():
-    return win32_edition() in ('IoTUAP', 'NanoServer', 'WindowsCoreHeadless', 'IoTEdgeOS')
-
-def win32_edition():
-    try:
-        try:
-            import winreg
-        except ImportError:
-            import _winreg as winreg
-    except ImportError:
-        pass
-    else:
-        try:
-            cvkey = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion'
-            with winreg.OpenKeyEx(winreg.HKEY_LOCAL_MACHINE, cvkey) as key:
-                return winreg.QueryValueEx(key, 'EditionId')[0]
-        except OSError:
-            pass
-
-    return None
-
+def win32_is_iot(): 
+    return win32_edition() in ('IoTUAP', 'NanoServer', 'WindowsCoreHeadless', 'IoTEdgeOS') 
+ 
+def win32_edition(): 
+    try: 
+        try: 
+            import winreg 
+        except ImportError: 
+            import _winreg as winreg 
+    except ImportError: 
+        pass 
+    else: 
+        try: 
+            cvkey = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion' 
+            with winreg.OpenKeyEx(winreg.HKEY_LOCAL_MACHINE, cvkey) as key: 
+                return winreg.QueryValueEx(key, 'EditionId')[0] 
+        except OSError: 
+            pass 
+ 
+    return None 
+ 
 def win32_ver(release='', version='', csd='', ptype=''):
     try:
         from sys import getwindowsversion
@@ -364,20 +364,20 @@ def win32_ver(release='', version='', csd='', ptype=''):
         return release, version, csd, ptype
 
     winver = getwindowsversion()
-    try:
-        major, minor, build = map(int, _syscmd_ver()[2].split('.'))
-    except ValueError:
-        major, minor, build = winver.platform_version or winver[:3]
-    version = '{0}.{1}.{2}'.format(major, minor, build)
+    try: 
+        major, minor, build = map(int, _syscmd_ver()[2].split('.')) 
+    except ValueError: 
+        major, minor, build = winver.platform_version or winver[:3] 
+    version = '{0}.{1}.{2}'.format(major, minor, build) 
 
-    release = (_WIN32_CLIENT_RELEASES.get((major, minor)) or
-               _WIN32_CLIENT_RELEASES.get((major, None)) or
+    release = (_WIN32_CLIENT_RELEASES.get((major, minor)) or 
+               _WIN32_CLIENT_RELEASES.get((major, None)) or 
                release)
 
     # getwindowsversion() reflect the compatibility mode Python is
     # running under, and so the service pack value is only going to be
     # valid if the versions match.
-    if winver[:2] == (major, minor):
+    if winver[:2] == (major, minor): 
         try:
             csd = 'SP{}'.format(winver.service_pack_major)
         except AttributeError:
@@ -386,24 +386,24 @@ def win32_ver(release='', version='', csd='', ptype=''):
 
     # VER_NT_SERVER = 3
     if getattr(winver, 'product_type', None) == 3:
-        release = (_WIN32_SERVER_RELEASES.get((major, minor)) or
-                   _WIN32_SERVER_RELEASES.get((major, None)) or
+        release = (_WIN32_SERVER_RELEASES.get((major, minor)) or 
+                   _WIN32_SERVER_RELEASES.get((major, None)) or 
                    release)
 
     try:
-        try:
-            import winreg
-        except ImportError:
-            import _winreg as winreg
-    except ImportError:
+        try: 
+            import winreg 
+        except ImportError: 
+            import _winreg as winreg 
+    except ImportError: 
         pass
-    else:
-        try:
-            cvkey = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion'
-            with winreg.OpenKeyEx(winreg.HKEY_LOCAL_MACHINE, cvkey) as key:
-                ptype = winreg.QueryValueEx(key, 'CurrentType')[0]
-        except OSError:
-            pass
+    else: 
+        try: 
+            cvkey = r'SOFTWARE\Microsoft\Windows NT\CurrentVersion' 
+            with winreg.OpenKeyEx(winreg.HKEY_LOCAL_MACHINE, cvkey) as key: 
+                ptype = winreg.QueryValueEx(key, 'CurrentType')[0] 
+        except OSError: 
+            pass 
 
     return release, version, csd, ptype
 
@@ -432,7 +432,7 @@ def _mac_ver_xml():
 
 def mac_ver(release='', versioninfo=('', '', ''), machine=''):
 
-    """ Get macOS version information and return it as tuple (release,
+    """ Get macOS version information and return it as tuple (release, 
         versioninfo, machine) with versioninfo being a tuple (version,
         dev_stage, non_release_version).
 
@@ -504,7 +504,7 @@ def system_alias(system, release, version):
         where it would otherwise cause confusion.
 
     """
-    if system == 'SunOS':
+    if system == 'SunOS': 
         # Sun's OS
         if release < '5':
             # These releases use the old name SunOS
@@ -540,9 +540,9 @@ def system_alias(system, release, version):
         # In case one of the other tricks
         system = 'Windows'
 
-    # bpo-35516: Don't replace Darwin with macOS since input release and
-    # version arguments can be different than the currently running version.
-
+    # bpo-35516: Don't replace Darwin with macOS since input release and 
+    # version arguments can be different than the currently running version. 
+ 
     return system, release, version
 
 ### Various internal helpers
@@ -618,24 +618,24 @@ def _syscmd_file(target, default=''):
     if sys.platform in ('dos', 'win32', 'win16'):
         # XXX Others too ?
         return default
-
-    import subprocess
+ 
+    import subprocess 
     target = _follow_symlinks(target)
-    # "file" output is locale dependent: force the usage of the C locale
-    # to get deterministic behavior.
-    env = dict(os.environ, LC_ALL='C')
+    # "file" output is locale dependent: force the usage of the C locale 
+    # to get deterministic behavior. 
+    env = dict(os.environ, LC_ALL='C') 
     try:
-        # -b: do not prepend filenames to output lines (brief mode)
-        output = subprocess.check_output(['file', '-b', target],
-                                         stderr=subprocess.DEVNULL,
-                                         env=env)
-    except (OSError, subprocess.CalledProcessError):
+        # -b: do not prepend filenames to output lines (brief mode) 
+        output = subprocess.check_output(['file', '-b', target], 
+                                         stderr=subprocess.DEVNULL, 
+                                         env=env) 
+    except (OSError, subprocess.CalledProcessError): 
         return default
-    if not output:
+    if not output: 
         return default
-    # With the C locale, the output should be mostly ASCII-compatible.
-    # Decode from Latin-1 to prevent Unicode decode error.
-    return output.decode('latin-1')
+    # With the C locale, the output should be mostly ASCII-compatible. 
+    # Decode from Latin-1 to prevent Unicode decode error. 
+    return output.decode('latin-1') 
 
 ### Information about the used architecture
 
@@ -672,8 +672,8 @@ def architecture(executable=sys.executable, bits='', linkage=''):
     # else is given as default.
     if not bits:
         import struct
-        size = struct.calcsize('P')
-        bits = str(size * 8) + 'bit'
+        size = struct.calcsize('P') 
+        bits = str(size * 8) + 'bit' 
 
     # Get data from the 'file' system command
     if executable:
@@ -693,7 +693,7 @@ def architecture(executable=sys.executable, bits='', linkage=''):
                 linkage = l
         return bits, linkage
 
-    if 'executable' not in fileout and 'shared object' not in fileout:
+    if 'executable' not in fileout and 'shared object' not in fileout: 
         # Format not supported
         return bits, linkage
 
@@ -725,103 +725,103 @@ def architecture(executable=sys.executable, bits='', linkage=''):
 
     return bits, linkage
 
-
-def _get_machine_win32():
-    # Try to use the PROCESSOR_* environment variables
-    # available on Win XP and later; see
-    # http://support.microsoft.com/kb/888731 and
-    # http://www.geocities.com/rick_lively/MANUALS/ENV/MSWIN/PROCESSI.HTM
-
-    # WOW64 processes mask the native architecture
-    return (
-        os.environ.get('PROCESSOR_ARCHITEW6432', '') or
-        os.environ.get('PROCESSOR_ARCHITECTURE', '')
-    )
-
-
-class _Processor:
-    @classmethod
-    def get(cls):
-        func = getattr(cls, f'get_{sys.platform}', cls.from_subprocess)
-        return func() or ''
-
-    def get_win32():
-        return os.environ.get('PROCESSOR_IDENTIFIER', _get_machine_win32())
-
-    def get_OpenVMS():
-        try:
-            import vms_lib
-        except ImportError:
-            pass
-        else:
-            csid, cpu_number = vms_lib.getsyi('SYI$_CPU', 0)
-            return 'Alpha' if cpu_number >= 128 else 'VAX'
-
-    def from_subprocess():
-        """
-        Fall back to `uname -p`
-        """
-        try:
-            return subprocess.check_output(
-                ['uname', '-p'],
-                stderr=subprocess.DEVNULL,
-                text=True,
-            ).strip()
-        except (OSError, subprocess.CalledProcessError):
-            pass
-
-
-def _unknown_as_blank(val):
-    return '' if val == 'unknown' else val
-
-
+ 
+def _get_machine_win32(): 
+    # Try to use the PROCESSOR_* environment variables 
+    # available on Win XP and later; see 
+    # http://support.microsoft.com/kb/888731 and 
+    # http://www.geocities.com/rick_lively/MANUALS/ENV/MSWIN/PROCESSI.HTM 
+ 
+    # WOW64 processes mask the native architecture 
+    return ( 
+        os.environ.get('PROCESSOR_ARCHITEW6432', '') or 
+        os.environ.get('PROCESSOR_ARCHITECTURE', '') 
+    ) 
+ 
+ 
+class _Processor: 
+    @classmethod 
+    def get(cls): 
+        func = getattr(cls, f'get_{sys.platform}', cls.from_subprocess) 
+        return func() or '' 
+ 
+    def get_win32(): 
+        return os.environ.get('PROCESSOR_IDENTIFIER', _get_machine_win32()) 
+ 
+    def get_OpenVMS(): 
+        try: 
+            import vms_lib 
+        except ImportError: 
+            pass 
+        else: 
+            csid, cpu_number = vms_lib.getsyi('SYI$_CPU', 0) 
+            return 'Alpha' if cpu_number >= 128 else 'VAX' 
+ 
+    def from_subprocess(): 
+        """ 
+        Fall back to `uname -p` 
+        """ 
+        try: 
+            return subprocess.check_output( 
+                ['uname', '-p'], 
+                stderr=subprocess.DEVNULL, 
+                text=True, 
+            ).strip() 
+        except (OSError, subprocess.CalledProcessError): 
+            pass 
+ 
+ 
+def _unknown_as_blank(val): 
+    return '' if val == 'unknown' else val 
+ 
+ 
 ### Portable uname() interface
 
-class uname_result(
-    collections.namedtuple(
-        "uname_result_base",
-        "system node release version machine")
-        ):
-    """
-    A uname_result that's largely compatible with a
-    simple namedtuple except that 'processor' is
-    resolved late and cached to avoid calling "uname"
-    except when needed.
-    """
+class uname_result( 
+    collections.namedtuple( 
+        "uname_result_base", 
+        "system node release version machine") 
+        ): 
+    """ 
+    A uname_result that's largely compatible with a 
+    simple namedtuple except that 'processor' is 
+    resolved late and cached to avoid calling "uname" 
+    except when needed. 
+    """ 
 
-    @functools.cached_property
-    def processor(self):
-        return _unknown_as_blank(_Processor.get())
-
-    def __iter__(self):
-        return itertools.chain(
-            super().__iter__(),
-            (self.processor,)
-        )
-
-    @classmethod
-    def _make(cls, iterable):
-        # override factory to affect length check
-        num_fields = len(cls._fields)
-        result = cls.__new__(cls, *iterable)
-        if len(result) != num_fields + 1:
-            msg = f'Expected {num_fields} arguments, got {len(result)}'
-            raise TypeError(msg)
-        return result
-
-    def __getitem__(self, key):
-        return tuple(self)[key]
-
-    def __len__(self):
-        return len(tuple(iter(self)))
-
-    def __reduce__(self):
-        return uname_result, tuple(self)[:len(self._fields)]
-
-
+    @functools.cached_property 
+    def processor(self): 
+        return _unknown_as_blank(_Processor.get()) 
+ 
+    def __iter__(self): 
+        return itertools.chain( 
+            super().__iter__(), 
+            (self.processor,) 
+        ) 
+ 
+    @classmethod 
+    def _make(cls, iterable): 
+        # override factory to affect length check 
+        num_fields = len(cls._fields) 
+        result = cls.__new__(cls, *iterable) 
+        if len(result) != num_fields + 1: 
+            msg = f'Expected {num_fields} arguments, got {len(result)}' 
+            raise TypeError(msg) 
+        return result 
+ 
+    def __getitem__(self, key): 
+        return tuple(self)[key] 
+ 
+    def __len__(self): 
+        return len(tuple(iter(self))) 
+ 
+    def __reduce__(self): 
+        return uname_result, tuple(self)[:len(self._fields)] 
+ 
+ 
 _uname_cache = None
 
-
+ 
 def uname():
 
     """ Fairly portable uname interface. Returns a tuple
@@ -841,24 +841,24 @@ def uname():
 
     # Get some infos from the builtin os.uname API...
     try:
-        system, node, release, version, machine = infos = os.uname()
+        system, node, release, version, machine = infos = os.uname() 
     except AttributeError:
-        system = sys.platform
-        node = _node()
-        release = version = machine = ''
-        infos = ()
+        system = sys.platform 
+        node = _node() 
+        release = version = machine = '' 
+        infos = () 
 
-    if not any(infos):
-        # uname is not available
+    if not any(infos): 
+        # uname is not available 
 
         # Try win32_ver() on win32 platforms
         if system == 'win32':
             release, version, csd, ptype = win32_ver()
-            machine = machine or _get_machine_win32()
+            machine = machine or _get_machine_win32() 
 
         # Try the 'ver' system command available on some
         # platforms
-        if not (release and version):
+        if not (release and version): 
             system, release, version = _syscmd_ver(system)
             # Normalize system to what win32_ver() normally returns
             # (_syscmd_ver() tends to return the vendor name as well)
@@ -904,9 +904,9 @@ def uname():
         system = 'Windows'
         release = 'Vista'
 
-    vals = system, node, release, version, machine
-    # Replace 'unknown' values with the more portable ''
-    _uname_cache = uname_result(*map(_unknown_as_blank, vals))
+    vals = system, node, release, version, machine 
+    # Replace 'unknown' values with the more portable '' 
+    _uname_cache = uname_result(*map(_unknown_as_blank, vals)) 
     return _uname_cache
 
 ### Direct interfaces to some of the uname() return values
@@ -1215,13 +1215,13 @@ def platform(aliased=0, terse=0):
     if aliased:
         system, release, version = system_alias(system, release, version)
 
-    if system == 'Darwin':
-        # macOS (darwin kernel)
-        macos_release = mac_ver()[0]
-        if macos_release:
-            system = 'macOS'
-            release = macos_release
-
+    if system == 'Darwin': 
+        # macOS (darwin kernel) 
+        macos_release = mac_ver()[0] 
+        if macos_release: 
+            system = 'macOS' 
+            release = macos_release 
+ 
     if system == 'Windows':
         # MS platforms
         rel, vers, csd, ptype = win32_ver(version)
@@ -1231,11 +1231,11 @@ def platform(aliased=0, terse=0):
             platform = _platform(system, release, version, csd)
 
     elif system in ('Linux',):
-        # check for libc vs. glibc
-        libcname, libcversion = libc_ver()
-        platform = _platform(system, release, machine, processor,
-                             'with',
-                             libcname+libcversion)
+        # check for libc vs. glibc 
+        libcname, libcversion = libc_ver() 
+        platform = _platform(system, release, machine, processor, 
+                             'with', 
+                             libcname+libcversion) 
     elif system == 'Java':
         # Java platforms
         r, v, vminfo, (os_name, os_version, os_arch) = java_ver()

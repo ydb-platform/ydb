@@ -139,28 +139,28 @@ static void doList(opt::InputArgList& Args) {
   fatalOpenError(std::move(Err), B->getBufferIdentifier());
 }
 
-static Expected<COFF::MachineTypes> getCOFFFileMachine(MemoryBufferRef MB) {
+static Expected<COFF::MachineTypes> getCOFFFileMachine(MemoryBufferRef MB) { 
   std::error_code EC;
   auto Obj = object::COFFObjectFile::create(MB);
-  if (!Obj)
-    return Obj.takeError();
+  if (!Obj) 
+    return Obj.takeError(); 
 
   uint16_t Machine = (*Obj)->getMachine();
   if (Machine != COFF::IMAGE_FILE_MACHINE_I386 &&
       Machine != COFF::IMAGE_FILE_MACHINE_AMD64 &&
       Machine != COFF::IMAGE_FILE_MACHINE_ARMNT &&
       Machine != COFF::IMAGE_FILE_MACHINE_ARM64) {
-    return createStringError(inconvertibleErrorCode(),
-                             "unknown machine: " + std::to_string(Machine));
+    return createStringError(inconvertibleErrorCode(), 
+                             "unknown machine: " + std::to_string(Machine)); 
   }
 
   return static_cast<COFF::MachineTypes>(Machine);
 }
 
-static Expected<COFF::MachineTypes> getBitcodeFileMachine(MemoryBufferRef MB) {
+static Expected<COFF::MachineTypes> getBitcodeFileMachine(MemoryBufferRef MB) { 
   Expected<std::string> TripleStr = getBitcodeTargetTriple(MB);
-  if (!TripleStr)
-    return TripleStr.takeError();
+  if (!TripleStr) 
+    return TripleStr.takeError(); 
 
   switch (Triple(*TripleStr).getArch()) {
   case Triple::x86:
@@ -172,8 +172,8 @@ static Expected<COFF::MachineTypes> getBitcodeFileMachine(MemoryBufferRef MB) {
   case Triple::aarch64:
     return COFF::IMAGE_FILE_MACHINE_ARM64;
   default:
-    return createStringError(inconvertibleErrorCode(),
-                             "unknown arch in target triple: " + *TripleStr);
+    return createStringError(inconvertibleErrorCode(), 
+                             "unknown arch in target triple: " + *TripleStr); 
   }
 }
 
@@ -193,7 +193,7 @@ static void appendFile(std::vector<NewArchiveMember> &Members,
 
   // If a user attempts to add an archive to another archive, llvm-lib doesn't
   // handle the first archive file as a single file. Instead, it extracts all
-  // members from the archive and add them to the second archive. This behavior
+  // members from the archive and add them to the second archive. This behavior 
   // is for compatibility with Microsoft's lib command.
   if (Magic == file_magic::archive) {
     Error Err = Error::success();
@@ -225,17 +225,17 @@ static void appendFile(std::vector<NewArchiveMember> &Members,
   // in writeArchive() which needs to support many tools, can't assume the
   // input is COFF, and doesn't have a good way to report errors.
   if (Magic == file_magic::coff_object || Magic == file_magic::bitcode) {
-    Expected<COFF::MachineTypes> MaybeFileMachine =
-        (Magic == file_magic::coff_object) ? getCOFFFileMachine(MB)
-                                           : getBitcodeFileMachine(MB);
-    if (!MaybeFileMachine) {
-      handleAllErrors(MaybeFileMachine.takeError(), [&](const ErrorInfoBase &EIB) {
-        llvm::errs() << MB.getBufferIdentifier() << ": " << EIB.message()
-                     << "\n";
-      });
-      exit(1);
-    }
-    COFF::MachineTypes FileMachine = *MaybeFileMachine;
+    Expected<COFF::MachineTypes> MaybeFileMachine = 
+        (Magic == file_magic::coff_object) ? getCOFFFileMachine(MB) 
+                                           : getBitcodeFileMachine(MB); 
+    if (!MaybeFileMachine) { 
+      handleAllErrors(MaybeFileMachine.takeError(), [&](const ErrorInfoBase &EIB) { 
+        llvm::errs() << MB.getBufferIdentifier() << ": " << EIB.message() 
+                     << "\n"; 
+      }); 
+      exit(1); 
+    } 
+    COFF::MachineTypes FileMachine = *MaybeFileMachine; 
 
     // FIXME: Once lld-link rejects multiple resource .obj files:
     // Call convertResToCOFF() on .res files and add the resulting

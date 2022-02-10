@@ -85,15 +85,15 @@ def _find_vc2017():
 
     return None, None
 
-PLAT_SPEC_TO_RUNTIME = {
-    'x86' : 'x86',
-    'x86_amd64' : 'x64',
-    'x86_arm' : 'arm',
-    'x86_arm64' : 'arm64'
-}
-
+PLAT_SPEC_TO_RUNTIME = { 
+    'x86' : 'x86', 
+    'x86_amd64' : 'x64', 
+    'x86_arm' : 'arm', 
+    'x86_arm64' : 'arm64' 
+} 
+ 
 def _find_vcvarsall(plat_spec):
-    # bpo-38597: Removed vcruntime return value
+    # bpo-38597: Removed vcruntime return value 
     _, best_dir = _find_vc2017()
 
     if not best_dir:
@@ -108,7 +108,7 @@ def _find_vcvarsall(plat_spec):
         log.debug("%s cannot be found", vcvarsall)
         return None, None
 
-    return vcvarsall, None
+    return vcvarsall, None 
 
 def _get_vc_env(plat_spec):
     if os.getenv("DISTUTILS_USE_SDK"):
@@ -117,7 +117,7 @@ def _get_vc_env(plat_spec):
             for key, value in os.environ.items()
         }
 
-    vcvarsall, _ = _find_vcvarsall(plat_spec)
+    vcvarsall, _ = _find_vcvarsall(plat_spec) 
     if not vcvarsall:
         raise DistutilsPlatformError("Unable to find vcvarsall.bat")
 
@@ -163,8 +163,8 @@ def _find_exe(exe, paths=None):
 PLAT_TO_VCVARS = {
     'win32' : 'x86',
     'win-amd64' : 'x86_amd64',
-    'win-arm32' : 'x86_arm',
-    'win-arm64' : 'x86_arm64'
+    'win-arm32' : 'x86_arm', 
+    'win-arm64' : 'x86_arm64' 
 }
 
 class MSVCCompiler(CCompiler) :
@@ -240,11 +240,11 @@ class MSVCCompiler(CCompiler) :
                 self.add_library_dir(dir.rstrip(os.sep))
 
         self.preprocess_options = None
-        # bpo-38597: Always compile with dynamic linking
-        # Future releases of Python 3.x will include all past
-        # versions of vcruntime*.dll for compatibility.
+        # bpo-38597: Always compile with dynamic linking 
+        # Future releases of Python 3.x will include all past 
+        # versions of vcruntime*.dll for compatibility. 
         self.compile_options = [
-            '/nologo', '/Ox', '/W3', '/GL', '/DNDEBUG', '/MD'
+            '/nologo', '/Ox', '/W3', '/GL', '/DNDEBUG', '/MD' 
         ]
 
         self.compile_options_debug = [

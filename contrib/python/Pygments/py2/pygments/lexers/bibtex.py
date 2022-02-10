@@ -33,7 +33,7 @@ class BibTeXLexer(ExtendedRegexLexer):
     flags = re.IGNORECASE
 
     ALLOWED_CHARS = r'@!$&*+\-./:;<>?\[\\\]^`|~'
-    IDENTIFIER = '[{}][{}]*'.format('a-z_' + ALLOWED_CHARS, r'\w' + ALLOWED_CHARS)
+    IDENTIFIER = '[{}][{}]*'.format('a-z_' + ALLOWED_CHARS, r'\w' + ALLOWED_CHARS) 
 
     def open_brace_callback(self, match, ctx):
         opening_brace = match.group()

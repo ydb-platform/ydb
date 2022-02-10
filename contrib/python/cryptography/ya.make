@@ -4,7 +4,7 @@ LICENSE(BSD-3-Clause)
 
 OWNER(g:python-contrib)
 
-VERSION(3.3.2)
+VERSION(3.3.2) 
 
 IF (PYTHON2)
     PEERDIR(

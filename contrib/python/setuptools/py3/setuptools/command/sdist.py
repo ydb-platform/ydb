@@ -31,16 +31,16 @@ class sdist(sdist_add_defaults, orig.sdist):
         ('dist-dir=', 'd',
          "directory to put the source distribution archive(s) in "
          "[default: dist]"),
-        ('owner=', 'u',
-         "Owner name used when creating a tar file [default: current user]"),
-        ('group=', 'g',
-         "Group name used when creating a tar file [default: current group]"),
+        ('owner=', 'u', 
+         "Owner name used when creating a tar file [default: current user]"), 
+        ('group=', 'g', 
+         "Group name used when creating a tar file [default: current group]"), 
     ]
 
     negative_opt = {}
 
-    README_EXTENSIONS = ['', '.rst', '.txt', '.md']
-    READMES = tuple('README{0}'.format(ext) for ext in README_EXTENSIONS)
+    README_EXTENSIONS = ['', '.rst', '.txt', '.md'] 
+    READMES = tuple('README{0}'.format(ext) for ext in README_EXTENSIONS) 
 
     def run(self):
         self.run_command('egg_info')
@@ -100,44 +100,44 @@ class sdist(sdist_add_defaults, orig.sdist):
             if orig_val is not NoValue:
                 setattr(os, 'link', orig_val)
 
-    def _add_defaults_optional(self):
-        super()._add_defaults_optional()
-        if os.path.isfile('pyproject.toml'):
-            self.filelist.append('pyproject.toml')
-
+    def _add_defaults_optional(self): 
+        super()._add_defaults_optional() 
+        if os.path.isfile('pyproject.toml'): 
+            self.filelist.append('pyproject.toml') 
+ 
     def _add_defaults_python(self):
         """getting python files"""
         if self.distribution.has_pure_modules():
             build_py = self.get_finalized_command('build_py')
             self.filelist.extend(build_py.get_source_files())
-            self._add_data_files(self._safe_data_files(build_py))
+            self._add_data_files(self._safe_data_files(build_py)) 
 
-    def _safe_data_files(self, build_py):
-        """
-        Since the ``sdist`` class is also used to compute the MANIFEST
-        (via :obj:`setuptools.command.egg_info.manifest_maker`),
-        there might be recursion problems when trying to obtain the list of
-        data_files and ``include_package_data=True`` (which in turn depends on
-        the files included in the MANIFEST).
-
-        To avoid that, ``manifest_maker`` should be able to overwrite this
-        method and avoid recursive attempts to build/analyze the MANIFEST.
-        """
-        return build_py.data_files
-
-    def _add_data_files(self, data_files):
-        """
-        Add data files as found in build_py.data_files.
-        """
-        self.filelist.extend(
-            os.path.join(src_dir, name)
-            for _, src_dir, _, filenames in data_files
-            for name in filenames
-        )
-
+    def _safe_data_files(self, build_py): 
+        """ 
+        Since the ``sdist`` class is also used to compute the MANIFEST 
+        (via :obj:`setuptools.command.egg_info.manifest_maker`), 
+        there might be recursion problems when trying to obtain the list of 
+        data_files and ``include_package_data=True`` (which in turn depends on 
+        the files included in the MANIFEST). 
+ 
+        To avoid that, ``manifest_maker`` should be able to overwrite this 
+        method and avoid recursive attempts to build/analyze the MANIFEST. 
+        """ 
+        return build_py.data_files 
+ 
+    def _add_data_files(self, data_files): 
+        """ 
+        Add data files as found in build_py.data_files. 
+        """ 
+        self.filelist.extend( 
+            os.path.join(src_dir, name) 
+            for _, src_dir, _, filenames in data_files 
+            for name in filenames 
+        ) 
+ 
     def _add_defaults_data_files(self):
         try:
-            super()._add_defaults_data_files()
+            super()._add_defaults_data_files() 
         except TypeError:
             log.warn("data_files contains unexpected objects")
 
@@ -183,11 +183,11 @@ class sdist(sdist_add_defaults, orig.sdist):
         manifest = open(self.manifest, 'rb')
         for line in manifest:
             # The manifest must contain UTF-8. See #303.
-            try:
-                line = line.decode('UTF-8')
-            except UnicodeDecodeError:
-                log.warn("%r not UTF-8 decodable -- skipping" % line)
-                continue
+            try: 
+                line = line.decode('UTF-8') 
+            except UnicodeDecodeError: 
+                log.warn("%r not UTF-8 decodable -- skipping" % line) 
+                continue 
             # ignore comments and blank lines
             line = line.strip()
             if line.startswith('#') or not line:

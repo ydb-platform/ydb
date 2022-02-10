@@ -114,7 +114,7 @@ bool socketSecureHandler::Good() {
 int socketSecureHandler::Connect(const TAddrList& addrs, TDuration Timeout) {
     IsValid_ = false;
 
-    int ret = socketRegularHandler::Connect(addrs, Timeout);
+    int ret = socketRegularHandler::Connect(addrs, Timeout); 
     if (ret)
         return ret;
 

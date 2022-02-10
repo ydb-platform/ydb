@@ -282,8 +282,8 @@ namespace {
 
                 if (ev & POLLERR) {
                     status = EIO;
-                } else if (ev & POLLHUP && pfd.events & POLLOUT) {
-                    // Only write operations may cause EPIPE
+                } else if (ev & POLLHUP && pfd.events & POLLOUT) { 
+                    // Only write operations may cause EPIPE 
                     status = EPIPE;
                 } else if (ev & POLLNVAL) {
                     status = EINVAL;

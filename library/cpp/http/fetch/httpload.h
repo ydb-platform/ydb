@@ -24,7 +24,7 @@ class socketAbstractHandler {
 public:
     virtual bool Good() = 0;
 
-    virtual int Connect(const TAddrList& addrs, TDuration Timeout) = 0;
+    virtual int Connect(const TAddrList& addrs, TDuration Timeout) = 0; 
 
     virtual void Disconnect() = 0;
 
@@ -123,7 +123,7 @@ public:
     }
 
     int Connect(const TAddrList& addrs, TDuration Timeout) override {
-        return Socket_.Connect(addrs, Timeout);
+        return Socket_.Connect(addrs, Timeout); 
     }
 
     void Disconnect() override {
@@ -234,7 +234,7 @@ protected:
     httpDigestHandler Digest_;
 
     void clearReader();
-    bool doSetHost(const TAddrList& addrs);
+    bool doSetHost(const TAddrList& addrs); 
     bool doStartRequest();
 
 public:
@@ -250,17 +250,17 @@ public:
     bool startRequest(const char* url,
                       const char* url_to_merge = nullptr,
                       bool persistent = false,
-                      const TAddrList& addrs = TAddrList());
+                      const TAddrList& addrs = TAddrList()); 
 
-    // deprecated v4-only
-    bool startRequest(const char* url,
-                      const char* url_to_merge,
+    // deprecated v4-only 
+    bool startRequest(const char* url, 
+                      const char* url_to_merge, 
                       bool persistent,
                       ui32 ip);
-
+ 
     bool startRequest(const THttpURL& url,
                       bool persistent = false,
-                      const TAddrList& addrs = TAddrList());
+                      const TAddrList& addrs = TAddrList()); 
 
     bool setHost(const char* host_url,
                  const TAddrList& addrs = TAddrList());

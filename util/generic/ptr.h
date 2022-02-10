@@ -940,12 +940,12 @@ struct THash<TSharedPtr<T, C, D>>: THash<const T*> {
     }
 };
 
-template <class T, class D = TDelete> 
-using TAtomicSharedPtr = TSharedPtr<T, TAtomicCounter, D>; 
+template <class T, class D = TDelete>
+using TAtomicSharedPtr = TSharedPtr<T, TAtomicCounter, D>;
 
 // use with great care. if in doubt, use TAtomicSharedPtr instead
-template <class T, class D = TDelete> 
-using TSimpleSharedPtr = TSharedPtr<T, TSimpleCounter, D>; 
+template <class T, class D = TDelete>
+using TSimpleSharedPtr = TSharedPtr<T, TSimpleCounter, D>;
 
 template <typename T, typename C, typename... Args>
 [[nodiscard]] TSharedPtr<T, C> MakeShared(Args&&... args) {

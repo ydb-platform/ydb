@@ -71,12 +71,12 @@ public:
         : TBase(src)
     {
     }
- 
+
     inline TVector(TSelf&& src) noexcept
         : TBase(std::forward<TSelf>(src))
-    { 
-    } 
- 
+    {
+    }
+
     template <class TIter>
     inline TVector(TIter first, TIter last)
         : TBase(first, last)
@@ -87,12 +87,12 @@ public:
         TBase::operator=(src);
         return *this;
     }
- 
-    inline TSelf& operator=(TSelf&& src) noexcept { 
+
+    inline TSelf& operator=(TSelf&& src) noexcept {
         TBase::operator=(std::forward<TSelf>(src));
-        return *this; 
-    } 
- 
+        return *this;
+    }
+
     inline TSelf& operator=(std::initializer_list<T> il) {
         this->assign(il.begin(), il.end());
         return *this;

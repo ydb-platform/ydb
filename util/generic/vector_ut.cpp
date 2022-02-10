@@ -35,39 +35,39 @@ class TYVectorTest: public TTestBase {
 private:
     void TestConstructorsAndAssignments() {
         using container = TVector<int>;
- 
+
         container c1;
         c1.push_back(100);
         c1.push_back(200);
- 
+
         container c2(c1);
- 
+
         UNIT_ASSERT_VALUES_EQUAL(2, c1.size());
         UNIT_ASSERT_VALUES_EQUAL(2, c2.size());
         UNIT_ASSERT_VALUES_EQUAL(100, c1.at(0));
         UNIT_ASSERT_VALUES_EQUAL(200, c2.at(1));
- 
+
         container c3(std::move(c1));
- 
+
         UNIT_ASSERT_VALUES_EQUAL(0, c1.size());
         UNIT_ASSERT_VALUES_EQUAL(2, c3.size());
         UNIT_ASSERT_VALUES_EQUAL(100, c3.at(0));
- 
+
         c2.push_back(300);
         c3 = c2;
- 
+
         UNIT_ASSERT_VALUES_EQUAL(3, c2.size());
         UNIT_ASSERT_VALUES_EQUAL(3, c3.size());
         UNIT_ASSERT_VALUES_EQUAL(300, c3.at(2));
- 
+
         c2.push_back(400);
         c3 = std::move(c2);
- 
+
         UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
         UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
         UNIT_ASSERT_VALUES_EQUAL(400, c3.at(3));
     }
- 
+
     inline void TestTildeEmptyToNull() {
         TVector<int> v;
         UNIT_ASSERT_EQUAL(nullptr, v.data());

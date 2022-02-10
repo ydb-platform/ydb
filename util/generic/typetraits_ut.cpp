@@ -272,8 +272,8 @@ namespace {
         enum { IsConstant = false };
         enum { IsPointer = false };
         enum { IsReference = false };
-        enum { IsLvalueReference = false }; 
-        enum { IsRvalueReference = false }; 
+        enum { IsLvalueReference = false };
+        enum { IsRvalueReference = false };
         enum { IsArray = false };
         enum { IsClassType = false };
         enum { IsVoid = true };
@@ -332,16 +332,16 @@ namespace {
     struct TTypeTraitsExpected<TNonPodClass&>: public TTypeTraitsExpected<TNonPodClass> {
         enum { IsClassType = false };
         enum { IsReference = true };
-        enum { IsLvalueReference = true }; 
+        enum { IsLvalueReference = true };
     };
 
     template <>
     struct TTypeTraitsExpected<TNonPodClass&&>: public TTypeTraitsExpected<TNonPodClass> {
-        enum { IsClassType = false }; 
-        enum { IsReference = true }; 
-        enum { IsRvalueReference = true }; 
-    }; 
- 
+        enum { IsClassType = false };
+        enum { IsReference = true };
+        enum { IsRvalueReference = true };
+    };
+
     template <>
     struct TTypeTraitsExpected<const TNonPodClass&>: public TTypeTraitsExpected<TNonPodClass&> {
     };
@@ -357,17 +357,17 @@ namespace {
     struct TTypeTraitsExpected<float&>: public TTypeTraitsExpected<float*> {
         enum { IsPointer = false };
         enum { IsReference = true };
-        enum { IsLvalueReference = true }; 
+        enum { IsLvalueReference = true };
     };
 
     template <>
     struct TTypeTraitsExpected<float&&>: public TTypeTraitsExpected<float*> {
-        enum { IsPointer = false }; 
-        enum { IsReference = true }; 
-        enum { IsRvalueReference = true }; 
-    }; 
- 
-    template <> 
+        enum { IsPointer = false };
+        enum { IsReference = true };
+        enum { IsRvalueReference = true };
+    };
+
+    template <>
     struct TTypeTraitsExpected<const float&>: public TTypeTraitsExpected<float&> {
     };
 

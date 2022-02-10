@@ -5,74 +5,74 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <utility>
- 
+
 Y_UNIT_TEST_SUITE(TYQueueTest) {
     Y_UNIT_TEST(ConstructorsAndAssignments) {
-        { 
+        {
             using container = TQueue<int>;
- 
-            container c1; 
+
+            container c1;
             UNIT_ASSERT(!c1);
-            c1.push(100); 
-            c1.push(200); 
+            c1.push(100);
+            c1.push(200);
             UNIT_ASSERT(c1);
- 
-            container c2(c1); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(2, c1.size()); 
-            UNIT_ASSERT_VALUES_EQUAL(2, c2.size()); 
- 
+
+            container c2(c1);
+
+            UNIT_ASSERT_VALUES_EQUAL(2, c1.size());
+            UNIT_ASSERT_VALUES_EQUAL(2, c2.size());
+
             container c3(std::move(c1));
- 
-            UNIT_ASSERT_VALUES_EQUAL(0, c1.size()); 
-            UNIT_ASSERT_VALUES_EQUAL(2, c3.size()); 
- 
-            c2.push(300); 
-            c3 = c2; 
- 
-            UNIT_ASSERT_VALUES_EQUAL(3, c2.size()); 
-            UNIT_ASSERT_VALUES_EQUAL(3, c3.size()); 
- 
-            c2.push(400); 
+
+            UNIT_ASSERT_VALUES_EQUAL(0, c1.size());
+            UNIT_ASSERT_VALUES_EQUAL(2, c3.size());
+
+            c2.push(300);
+            c3 = c2;
+
+            UNIT_ASSERT_VALUES_EQUAL(3, c2.size());
+            UNIT_ASSERT_VALUES_EQUAL(3, c3.size());
+
+            c2.push(400);
             c3 = std::move(c2);
- 
-            UNIT_ASSERT_VALUES_EQUAL(0, c2.size()); 
-            UNIT_ASSERT_VALUES_EQUAL(4, c3.size()); 
-        } 
- 
-        { 
+
+            UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
+            UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
+        }
+
+        {
             using container = TPriorityQueue<int>;
- 
-            container c1; 
+
+            container c1;
             UNIT_ASSERT(!c1);
-            c1.push(100); 
-            c1.push(200); 
+            c1.push(100);
+            c1.push(200);
             UNIT_ASSERT(c1);
- 
-            container c2(c1); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(2, c1.size()); 
-            UNIT_ASSERT_VALUES_EQUAL(2, c2.size()); 
- 
+
+            container c2(c1);
+
+            UNIT_ASSERT_VALUES_EQUAL(2, c1.size());
+            UNIT_ASSERT_VALUES_EQUAL(2, c2.size());
+
             container c3(std::move(c1));
- 
-            UNIT_ASSERT_VALUES_EQUAL(0, c1.size()); 
-            UNIT_ASSERT_VALUES_EQUAL(2, c3.size()); 
- 
-            c2.push(300); 
-            c3 = c2; 
- 
-            UNIT_ASSERT_VALUES_EQUAL(3, c2.size()); 
-            UNIT_ASSERT_VALUES_EQUAL(3, c3.size()); 
- 
-            c2.push(400); 
+
+            UNIT_ASSERT_VALUES_EQUAL(0, c1.size());
+            UNIT_ASSERT_VALUES_EQUAL(2, c3.size());
+
+            c2.push(300);
+            c3 = c2;
+
+            UNIT_ASSERT_VALUES_EQUAL(3, c2.size());
+            UNIT_ASSERT_VALUES_EQUAL(3, c3.size());
+
+            c2.push(400);
             c3 = std::move(c2);
- 
-            UNIT_ASSERT_VALUES_EQUAL(0, c2.size()); 
-            UNIT_ASSERT_VALUES_EQUAL(4, c3.size()); 
-        } 
-    } 
- 
+
+            UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
+            UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
+        }
+    }
+
     Y_UNIT_TEST(pqueue1) {
         TPriorityQueue<int, TDeque<int>, TLess<int>> q;
 

@@ -198,71 +198,71 @@ Y_UNIT_TEST_SUITE(YSetTest) {
             container c1;
             c1.insert(100);
             c1.insert(200);
- 
+
             container c2(c1);
- 
+
             UNIT_ASSERT_VALUES_EQUAL(2, c1.size());
             UNIT_ASSERT_VALUES_EQUAL(2, c2.size());
             UNIT_ASSERT(c1.contains(100));
             UNIT_ASSERT(c2.contains(200));
- 
+
             container c3(std::move(c1));
- 
+
             UNIT_ASSERT_VALUES_EQUAL(0, c1.size());
             UNIT_ASSERT_VALUES_EQUAL(2, c3.size());
             UNIT_ASSERT(c3.contains(100));
- 
+
             c2.insert(300);
             c3 = c2;
- 
+
             UNIT_ASSERT_VALUES_EQUAL(3, c2.size());
             UNIT_ASSERT_VALUES_EQUAL(3, c3.size());
             UNIT_ASSERT(c3.contains(300));
- 
+
             c2.insert(400);
             c3 = std::move(c2);
- 
+
             UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
             UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
             UNIT_ASSERT(c3.contains(400));
         }
- 
+
         {
             using container = TMultiSet<int>;
- 
+
             container c1;
             c1.insert(100);
             c1.insert(200);
- 
+
             container c2(c1);
- 
+
             UNIT_ASSERT_VALUES_EQUAL(2, c1.size());
             UNIT_ASSERT_VALUES_EQUAL(2, c2.size());
             UNIT_ASSERT(c1.find(100) != c1.end());
             UNIT_ASSERT(c2.find(200) != c2.end());
- 
+
             container c3(std::move(c1));
- 
+
             UNIT_ASSERT_VALUES_EQUAL(0, c1.size());
             UNIT_ASSERT_VALUES_EQUAL(2, c3.size());
             UNIT_ASSERT(c3.find(100) != c3.end());
- 
+
             c2.insert(300);
             c3 = c2;
- 
+
             UNIT_ASSERT_VALUES_EQUAL(3, c2.size());
             UNIT_ASSERT_VALUES_EQUAL(3, c3.size());
             UNIT_ASSERT(c3.find(300) != c3.end());
- 
+
             c2.insert(400);
             c3 = std::move(c2);
- 
+
             UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
             UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
             UNIT_ASSERT(c3.find(400) != c3.end());
         }
-    } 
- 
+    }
+
     struct TKey {
         TKey()
             : m_data(0)

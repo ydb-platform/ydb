@@ -1,14 +1,14 @@
 PY23_LIBRARY()
- 
-OWNER(orivej) 
- 
+
+OWNER(orivej)
+
 TEST_SRCS(test_ctypes.py)
- 
-PEERDIR( 
+
+PEERDIR(
     library/python/symbols/python
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     py2

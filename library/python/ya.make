@@ -214,9 +214,9 @@ RECURSE(
     ylock/tests
     zipatch
 )
- 
+
 IF (NOT MUSL)
     RECURSE(
-        yt/example 
-    ) 
-ENDIF() 
+        yt/example
+    )
+ENDIF()

@@ -32,25 +32,25 @@ struct connectdata;
 #define MAXNUM_SIZE 16
 
 typedef enum {
-  /* await and buffer all hexadecimal digits until we get one that isn't a 
-     hexadecimal digit. When done, we go CHUNK_LF */ 
+  /* await and buffer all hexadecimal digits until we get one that isn't a
+     hexadecimal digit. When done, we go CHUNK_LF */
   CHUNK_HEX,
 
-  /* wait for LF, ignore all else */ 
-  CHUNK_LF, 
+  /* wait for LF, ignore all else */
+  CHUNK_LF,
 
   /* We eat the amount of data specified. When done, we move on to the
      POST_CR state. */
   CHUNK_DATA,
 
-  /* POSTLF should get a CR and then a LF and nothing else, then move back to 
-     HEX as the CRLF combination marks the end of a chunk. A missing CR is no 
-     big deal. */ 
+  /* POSTLF should get a CR and then a LF and nothing else, then move back to
+     HEX as the CRLF combination marks the end of a chunk. A missing CR is no
+     big deal. */
   CHUNK_POSTLF,
 
-  /* Used to mark that we're out of the game.  NOTE: that there's a 'dataleft' 
-     field in the struct that will tell how many bytes that were not passed to 
-     the client in the end of the last buffer! */ 
+  /* Used to mark that we're out of the game.  NOTE: that there's a 'dataleft'
+     field in the struct that will tell how many bytes that were not passed to
+     the client in the end of the last buffer! */
   CHUNK_STOP,
 
   /* At this point optional trailer headers can be found, unless the next line
@@ -65,7 +65,7 @@ typedef enum {
      signalled If this is an empty trailer CHUNKE_STOP will be signalled.
      Otherwise the trailer will be broadcasted via Curl_client_write() and the
      next state will be CHUNK_TRAILER */
-  CHUNK_TRAILER_POSTCR 
+  CHUNK_TRAILER_POSTCR
 } ChunkyState;
 
 typedef enum {
@@ -80,13 +80,13 @@ typedef enum {
   CHUNKE_LAST
 } CHUNKcode;
 
-const char *Curl_chunked_strerror(CHUNKcode code); 
- 
+const char *Curl_chunked_strerror(CHUNKcode code);
+
 struct Curl_chunker {
   char hexbuffer[ MAXNUM_SIZE + 1];
   int hexindex;
   ChunkyState state;
-  curl_off_t datasize; 
+  curl_off_t datasize;
   size_t dataleft; /* untouched data amount at the end of the last buffer */
 };
 

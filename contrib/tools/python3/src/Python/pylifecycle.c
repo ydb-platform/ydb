@@ -199,7 +199,7 @@ init_importlib_external(PyThreadState *tstate)
     if (value == NULL) {
         _PyErr_Print(tstate);
         return _PyStatus_ERR("external importer setup failed");
-    } 
+    }
     Py_DECREF(value);
 
     value = PyImport_ImportModule("__res");

@@ -238,8 +238,8 @@
 /* Define to 1 if you have the IoctlSocket camel case function. */
 /* #undef HAVE_IOCTLSOCKET_CAMEL */
 
-/* Define to 1 if you have a working IoctlSocket camel case FIONBIO 
-   function. */ 
+/* Define to 1 if you have a working IoctlSocket camel case FIONBIO
+   function. */
 /* #undef HAVE_IOCTLSOCKET_CAMEL_FIONBIO */
 
 /* Define to 1 if you have the <io.h> header file. */
@@ -560,7 +560,7 @@
 #define PACKAGE "curl"
 
 /* Define to the address where bug reports for this package should be sent. */
-#define PACKAGE_BUGREPORT \ 
+#define PACKAGE_BUGREPORT \
   "a suitable curl mailing list => https://curl.se/mail/"
 
 /* Define to the full name of this package. */
@@ -599,9 +599,9 @@
 /* The size of `short', as computed by sizeof. */
 #define SIZEOF_SHORT 2
 
-/* Define to the size of `long', as computed by sizeof. */ 
-#define SIZEOF_LONG 8 
- 
+/* Define to the size of `long', as computed by sizeof. */
+#define SIZEOF_LONG 8
+
 /* The size of `size_t', as computed by sizeof. */
 #define SIZEOF_SIZE_T 8
 
@@ -630,7 +630,7 @@
 /* #undef USE_OPENSSL */
 
 /* if SSL is enabled */
-/* #undef USE_OPENSSL */ 
+/* #undef USE_OPENSSL */
 
 /* to enable SSPI support */
 /* #undef USE_WINDOWS_SSPI */

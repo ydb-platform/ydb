@@ -25,32 +25,32 @@
 #include <curl/curl.h>
 #include "urldata.h"
 #include "share.h"
-#include "psl.h" 
-#include "vtls/vtls.h" 
+#include "psl.h"
+#include "vtls/vtls.h"
 #include "curl_memory.h"
 
 /* The last #include file should be: */
 #include "memdebug.h"
 
-struct Curl_share * 
+struct Curl_share *
 curl_share_init(void)
 {
   struct Curl_share *share = calloc(1, sizeof(struct Curl_share));
-  if(share) { 
+  if(share) {
     share->specifier |= (1<<CURL_LOCK_DATA_SHARE);
 
-    if(Curl_mk_dnscache(&share->hostcache)) { 
-      free(share); 
-      return NULL; 
-    } 
-  } 
- 
+    if(Curl_mk_dnscache(&share->hostcache)) {
+      free(share);
+      return NULL;
+    }
+  }
+
   return share;
 }
 
 #undef curl_share_setopt
 CURLSHcode
-curl_share_setopt(struct Curl_share *share, CURLSHoption option, ...) 
+curl_share_setopt(struct Curl_share *share, CURLSHoption option, ...)
 {
   va_list param;
   int type;
@@ -71,14 +71,14 @@ curl_share_setopt(struct Curl_share *share, CURLSHoption option, ...)
     /* this is a type this share will share */
     type = va_arg(param, int);
 
-    switch(type) { 
+    switch(type) {
     case CURL_LOCK_DATA_DNS:
       break;
 
     case CURL_LOCK_DATA_COOKIE:
 #if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_COOKIES)
       if(!share->cookies) {
-        share->cookies = Curl_cookie_init(NULL, NULL, NULL, TRUE); 
+        share->cookies = Curl_cookie_init(NULL, NULL, NULL, TRUE);
         if(!share->cookies)
           res = CURLSHE_NOMEM;
       }
@@ -103,16 +103,16 @@ curl_share_setopt(struct Curl_share *share, CURLSHoption option, ...)
       break;
 
     case CURL_LOCK_DATA_CONNECT:
-      if(Curl_conncache_init(&share->conn_cache, 103)) 
-        res = CURLSHE_NOMEM; 
+      if(Curl_conncache_init(&share->conn_cache, 103))
+        res = CURLSHE_NOMEM;
       break;
 
-    case CURL_LOCK_DATA_PSL: 
-#ifndef USE_LIBPSL 
-      res = CURLSHE_NOT_BUILT_IN; 
-#endif 
-      break; 
- 
+    case CURL_LOCK_DATA_PSL:
+#ifndef USE_LIBPSL
+      res = CURLSHE_NOT_BUILT_IN;
+#endif
+      break;
+
     default:
       res = CURLSHE_BAD_OPTION;
     }
@@ -124,7 +124,7 @@ curl_share_setopt(struct Curl_share *share, CURLSHoption option, ...)
     /* this is a type this share will no longer share */
     type = va_arg(param, int);
     share->specifier &= ~(1<<type);
-    switch(type) { 
+    switch(type) {
     case CURL_LOCK_DATA_DNS:
       break;
 
@@ -182,7 +182,7 @@ curl_share_setopt(struct Curl_share *share, CURLSHoption option, ...)
 }
 
 CURLSHcode
-curl_share_cleanup(struct Curl_share *share) 
+curl_share_cleanup(struct Curl_share *share)
 {
   if(share == NULL)
     return CURLSHE_INVALID;
@@ -197,12 +197,12 @@ curl_share_cleanup(struct Curl_share *share)
     return CURLSHE_IN_USE;
   }
 
-  Curl_conncache_close_all_connections(&share->conn_cache); 
-  Curl_conncache_destroy(&share->conn_cache); 
-  Curl_hash_destroy(&share->hostcache); 
+  Curl_conncache_close_all_connections(&share->conn_cache);
+  Curl_conncache_destroy(&share->conn_cache);
+  Curl_hash_destroy(&share->hostcache);
 
 #if !defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_COOKIES)
-  Curl_cookie_cleanup(share->cookies); 
+  Curl_cookie_cleanup(share->cookies);
 #endif
 
 #ifdef USE_SSL
@@ -214,8 +214,8 @@ curl_share_cleanup(struct Curl_share *share)
   }
 #endif
 
-  Curl_psl_destroy(&share->psl); 
- 
+  Curl_psl_destroy(&share->psl);
+
   if(share->unlockfunc)
     share->unlockfunc(NULL, CURL_LOCK_DATA_SHARE, share->clientdata);
   free(share);
@@ -225,7 +225,7 @@ curl_share_cleanup(struct Curl_share *share)
 
 
 CURLSHcode
-Curl_share_lock(struct Curl_easy *data, curl_lock_data type, 
+Curl_share_lock(struct Curl_easy *data, curl_lock_data type,
                 curl_lock_access accesstype)
 {
   struct Curl_share *share = data->share;
@@ -243,7 +243,7 @@ Curl_share_lock(struct Curl_easy *data, curl_lock_data type,
 }
 
 CURLSHcode
-Curl_share_unlock(struct Curl_easy *data, curl_lock_data type) 
+Curl_share_unlock(struct Curl_easy *data, curl_lock_data type)
 {
   struct Curl_share *share = data->share;
 

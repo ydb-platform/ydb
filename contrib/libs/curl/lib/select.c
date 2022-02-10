@@ -43,10 +43,10 @@
 #include <dos.h>  /* delay() */
 #endif
 
-#ifdef __VXWORKS__ 
-#include <strings.h>  /* bzero() in FD_SET */ 
-#endif 
- 
+#ifdef __VXWORKS__
+#include <strings.h>  /* bzero() in FD_SET */
+#endif
+
 #include <curl/curl.h>
 
 #include "urldata.h"
@@ -57,7 +57,7 @@
 
 /*
  * Internal function used for waiting a specific amount of ms
- * in Curl_socket_check() and Curl_poll() when no file descriptor 
+ * in Curl_socket_check() and Curl_poll() when no file descriptor
  * is provided to wait on, just being used to delay execution.
  * WinSock select() and poll() timeout mechanisms need a valid
  * socket descriptor in a not null file descriptor set to work.
@@ -227,7 +227,7 @@ int Curl_select(curl_socket_t maxfd,   /* highest socket number */
  * and a file descriptor is too large for FD_SETSIZE.
  *
  * A negative timeout value makes this function wait indefinitely,
- * unless no valid file descriptor is given, when this happens the 
+ * unless no valid file descriptor is given, when this happens the
  * negative timeout is ignored and the function times out immediately.
  *
  * Return values:
@@ -255,7 +255,7 @@ int Curl_socket_check(curl_socket_t readfd0, /* two sockets to read from */
     return Curl_wait_ms(timeout_ms);
   }
 
-  /* Avoid initial timestamp, avoid Curl_now() call, when elapsed 
+  /* Avoid initial timestamp, avoid Curl_now() call, when elapsed
      time in this function does not need to be measured. This happens
      when function is called with a zero timeout or a negative timeout
      value indicating a blocking call should be performed. */
@@ -315,7 +315,7 @@ int Curl_socket_check(curl_socket_t readfd0, /* two sockets to read from */
  * select() is used instead.  An error is returned if select() is
  * being used and a file descriptor is too large for FD_SETSIZE.
  * A negative timeout value makes this function wait indefinitely,
- * unless no valid file descriptor is given, when this happens the 
+ * unless no valid file descriptor is given, when this happens the
  * negative timeout is ignored and the function times out immediately.
  *
  * Return values:
@@ -350,7 +350,7 @@ int Curl_poll(struct pollfd ufds[], unsigned int nfds, timediff_t timeout_ms)
     return Curl_wait_ms(timeout_ms);
   }
 
-  /* Avoid initial timestamp, avoid Curl_now() call, when elapsed 
+  /* Avoid initial timestamp, avoid Curl_now() call, when elapsed
      time in this function does not need to be measured. This happens
      when function is called with a zero timeout or a negative timeout
      value indicating a blocking call should be performed. */
@@ -414,8 +414,8 @@ int Curl_poll(struct pollfd ufds[], unsigned int nfds, timediff_t timeout_ms)
   */
   r = Curl_select(maxfd, &fds_read, &fds_write, &fds_err, timeout_ms);
   if(r <= 0)
-    return r; 
- 
+    return r;
+
   r = 0;
   for(i = 0; i < nfds; i++) {
     ufds[i].revents = 0;
@@ -457,13 +457,13 @@ int Curl_poll(struct pollfd ufds[], unsigned int nfds, timediff_t timeout_ms)
  *
  * Return values are the same as select's.
  */
-int tpf_select_libcurl(int maxfds, fd_set *reads, fd_set *writes, 
-                       fd_set *excepts, struct timeval *tv) 
+int tpf_select_libcurl(int maxfds, fd_set *reads, fd_set *writes,
+                       fd_set *excepts, struct timeval *tv)
 {
    int rc;
 
    rc = tpf_select_bsd(maxfds, reads, writes, excepts, tv);
    tpf_process_signals();
-   return rc; 
+   return rc;
 }
 #endif /* TPF */

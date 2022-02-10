@@ -1,666 +1,666 @@
 OPTION	DOTNAME
 .text$	SEGMENT ALIGN(256) 'CODE'
- 
- 
+
+
 PUBLIC	Camellia_EncryptBlock
- 
+
 ALIGN	16
 Camellia_EncryptBlock	PROC PUBLIC
- 
-	mov	eax,128 
-	sub	eax,ecx 
-	mov	ecx,3 
-	adc	ecx,0 
+
+	mov	eax,128
+	sub	eax,ecx
+	mov	ecx,3
+	adc	ecx,0
 	jmp	$L$enc_rounds
- 
+
 Camellia_EncryptBlock	ENDP
- 
+
 PUBLIC	Camellia_EncryptBlock_Rounds
- 
-ALIGN	16 
+
+ALIGN	16
 $L$enc_rounds::
 Camellia_EncryptBlock_Rounds	PROC PUBLIC
 	mov	QWORD PTR[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD PTR[16+rsp],rsi
-	mov	rax,rsp 
+	mov	rax,rsp
 $L$SEH_begin_Camellia_EncryptBlock_Rounds::
-	mov	rdi,rcx 
-	mov	rsi,rdx 
-	mov	rdx,r8 
-	mov	rcx,r9 
- 
- 
- 
-	push	rbx 
- 
-	push	rbp 
- 
-	push	r13 
- 
-	push	r14 
- 
-	push	r15 
- 
+	mov	rdi,rcx
+	mov	rsi,rdx
+	mov	rdx,r8
+	mov	rcx,r9
+
+
+
+	push	rbx
+
+	push	rbp
+
+	push	r13
+
+	push	r14
+
+	push	r15
+
 $L$enc_prologue::
- 
- 
-	mov	r13,rcx 
-	mov	r14,rdx 
- 
-	shl	edi,6 
+
+
+	mov	r13,rcx
+	mov	r14,rdx
+
+	shl	edi,6
 	lea	rbp,QWORD PTR[$L$Camellia_SBOX]
 	lea	r15,QWORD PTR[rdi*1+r14]
- 
+
 	mov	r8d,DWORD PTR[rsi]
 	mov	r9d,DWORD PTR[4+rsi]
 	mov	r10d,DWORD PTR[8+rsi]
-	bswap	r8d 
+	bswap	r8d
 	mov	r11d,DWORD PTR[12+rsi]
-	bswap	r9d 
-	bswap	r10d 
-	bswap	r11d 
- 
-	call	_x86_64_Camellia_encrypt 
- 
-	bswap	r8d 
-	bswap	r9d 
-	bswap	r10d 
+	bswap	r9d
+	bswap	r10d
+	bswap	r11d
+
+	call	_x86_64_Camellia_encrypt
+
+	bswap	r8d
+	bswap	r9d
+	bswap	r10d
 	mov	DWORD PTR[r13],r8d
-	bswap	r11d 
+	bswap	r11d
 	mov	DWORD PTR[4+r13],r9d
 	mov	DWORD PTR[8+r13],r10d
 	mov	DWORD PTR[12+r13],r11d
- 
+
 	mov	r15,QWORD PTR[rsp]
- 
+
 	mov	r14,QWORD PTR[8+rsp]
- 
+
 	mov	r13,QWORD PTR[16+rsp]
- 
+
 	mov	rbp,QWORD PTR[24+rsp]
- 
+
 	mov	rbx,QWORD PTR[32+rsp]
- 
+
 	lea	rsp,QWORD PTR[40+rsp]
- 
+
 $L$enc_epilogue::
 	mov	rdi,QWORD PTR[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD PTR[16+rsp]
-	DB	0F3h,0C3h		;repret 
- 
+	DB	0F3h,0C3h		;repret
+
 $L$SEH_end_Camellia_EncryptBlock_Rounds::
 Camellia_EncryptBlock_Rounds	ENDP
- 
- 
-ALIGN	16 
+
+
+ALIGN	16
 _x86_64_Camellia_encrypt	PROC PRIVATE
 
 	xor	r9d,DWORD PTR[r14]
 	xor	r8d,DWORD PTR[4+r14]
 	xor	r11d,DWORD PTR[8+r14]
 	xor	r10d,DWORD PTR[12+r14]
-ALIGN	16 
+ALIGN	16
 $L$eloop::
 	mov	ebx,DWORD PTR[16+r14]
 	mov	eax,DWORD PTR[20+r14]
- 
-	xor	eax,r8d 
-	xor	ebx,r9d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+
+	xor	eax,r8d
+	xor	ebx,r9d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[24+r14]
 	mov	eax,DWORD PTR[28+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r10d,ecx 
-	xor	r11d,ecx 
-	xor	r11d,edx 
-	xor	eax,r10d 
-	xor	ebx,r11d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r10d,ecx
+	xor	r11d,ecx
+	xor	r11d,edx
+	xor	eax,r10d
+	xor	ebx,r11d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[32+r14]
 	mov	eax,DWORD PTR[36+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r8d,ecx 
-	xor	r9d,ecx 
-	xor	r9d,edx 
-	xor	eax,r8d 
-	xor	ebx,r9d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r8d,ecx
+	xor	r9d,ecx
+	xor	r9d,edx
+	xor	eax,r8d
+	xor	ebx,r9d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[40+r14]
 	mov	eax,DWORD PTR[44+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r10d,ecx 
-	xor	r11d,ecx 
-	xor	r11d,edx 
-	xor	eax,r10d 
-	xor	ebx,r11d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r10d,ecx
+	xor	r11d,ecx
+	xor	r11d,edx
+	xor	eax,r10d
+	xor	ebx,r11d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[48+r14]
 	mov	eax,DWORD PTR[52+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r8d,ecx 
-	xor	r9d,ecx 
-	xor	r9d,edx 
-	xor	eax,r8d 
-	xor	ebx,r9d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r8d,ecx
+	xor	r9d,ecx
+	xor	r9d,edx
+	xor	eax,r8d
+	xor	ebx,r9d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[56+r14]
 	mov	eax,DWORD PTR[60+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r10d,ecx 
-	xor	r11d,ecx 
-	xor	r11d,edx 
-	xor	eax,r10d 
-	xor	ebx,r11d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r10d,ecx
+	xor	r11d,ecx
+	xor	r11d,edx
+	xor	eax,r10d
+	xor	ebx,r11d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[64+r14]
 	mov	eax,DWORD PTR[68+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r8d,ecx 
-	xor	r9d,ecx 
-	xor	r9d,edx 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r8d,ecx
+	xor	r9d,ecx
+	xor	r9d,edx
 	lea	r14,QWORD PTR[64+r14]
-	cmp	r14,r15 
+	cmp	r14,r15
 	mov	edx,DWORD PTR[8+r14]
 	mov	ecx,DWORD PTR[12+r14]
 	je	$L$edone
- 
-	and	eax,r8d 
-	or	edx,r11d 
-	rol	eax,1 
-	xor	r10d,edx 
-	xor	r9d,eax 
-	and	ecx,r10d 
-	or	ebx,r9d 
-	rol	ecx,1 
-	xor	r8d,ebx 
-	xor	r11d,ecx 
+
+	and	eax,r8d
+	or	edx,r11d
+	rol	eax,1
+	xor	r10d,edx
+	xor	r9d,eax
+	and	ecx,r10d
+	or	ebx,r9d
+	rol	ecx,1
+	xor	r8d,ebx
+	xor	r11d,ecx
 	jmp	$L$eloop
- 
-ALIGN	16 
+
+ALIGN	16
 $L$edone::
-	xor	eax,r10d 
-	xor	ebx,r11d 
-	xor	ecx,r8d 
-	xor	edx,r9d 
- 
-	mov	r8d,eax 
-	mov	r9d,ebx 
-	mov	r10d,ecx 
-	mov	r11d,edx 
- 
+	xor	eax,r10d
+	xor	ebx,r11d
+	xor	ecx,r8d
+	xor	edx,r9d
+
+	mov	r8d,eax
+	mov	r9d,ebx
+	mov	r10d,ecx
+	mov	r11d,edx
+
 DB	0f3h,0c3h
- 
+
 _x86_64_Camellia_encrypt	ENDP
- 
- 
+
+
 PUBLIC	Camellia_DecryptBlock
- 
-ALIGN	16 
+
+ALIGN	16
 Camellia_DecryptBlock	PROC PUBLIC
 
-	mov	eax,128 
-	sub	eax,ecx 
-	mov	ecx,3 
-	adc	ecx,0 
+	mov	eax,128
+	sub	eax,ecx
+	mov	ecx,3
+	adc	ecx,0
 	jmp	$L$dec_rounds
- 
+
 Camellia_DecryptBlock	ENDP
- 
+
 PUBLIC	Camellia_DecryptBlock_Rounds
- 
-ALIGN	16 
+
+ALIGN	16
 $L$dec_rounds::
 Camellia_DecryptBlock_Rounds	PROC PUBLIC
 	mov	QWORD PTR[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD PTR[16+rsp],rsi
-	mov	rax,rsp 
+	mov	rax,rsp
 $L$SEH_begin_Camellia_DecryptBlock_Rounds::
-	mov	rdi,rcx 
-	mov	rsi,rdx 
-	mov	rdx,r8 
-	mov	rcx,r9 
- 
- 
- 
-	push	rbx 
- 
-	push	rbp 
- 
-	push	r13 
- 
-	push	r14 
- 
-	push	r15 
- 
+	mov	rdi,rcx
+	mov	rsi,rdx
+	mov	rdx,r8
+	mov	rcx,r9
+
+
+
+	push	rbx
+
+	push	rbp
+
+	push	r13
+
+	push	r14
+
+	push	r15
+
 $L$dec_prologue::
- 
- 
-	mov	r13,rcx 
-	mov	r15,rdx 
- 
-	shl	edi,6 
+
+
+	mov	r13,rcx
+	mov	r15,rdx
+
+	shl	edi,6
 	lea	rbp,QWORD PTR[$L$Camellia_SBOX]
 	lea	r14,QWORD PTR[rdi*1+r15]
- 
+
 	mov	r8d,DWORD PTR[rsi]
 	mov	r9d,DWORD PTR[4+rsi]
 	mov	r10d,DWORD PTR[8+rsi]
-	bswap	r8d 
+	bswap	r8d
 	mov	r11d,DWORD PTR[12+rsi]
-	bswap	r9d 
-	bswap	r10d 
-	bswap	r11d 
- 
-	call	_x86_64_Camellia_decrypt 
- 
-	bswap	r8d 
-	bswap	r9d 
-	bswap	r10d 
+	bswap	r9d
+	bswap	r10d
+	bswap	r11d
+
+	call	_x86_64_Camellia_decrypt
+
+	bswap	r8d
+	bswap	r9d
+	bswap	r10d
 	mov	DWORD PTR[r13],r8d
-	bswap	r11d 
+	bswap	r11d
 	mov	DWORD PTR[4+r13],r9d
 	mov	DWORD PTR[8+r13],r10d
 	mov	DWORD PTR[12+r13],r11d
- 
+
 	mov	r15,QWORD PTR[rsp]
- 
+
 	mov	r14,QWORD PTR[8+rsp]
- 
+
 	mov	r13,QWORD PTR[16+rsp]
- 
+
 	mov	rbp,QWORD PTR[24+rsp]
- 
+
 	mov	rbx,QWORD PTR[32+rsp]
- 
+
 	lea	rsp,QWORD PTR[40+rsp]
- 
+
 $L$dec_epilogue::
 	mov	rdi,QWORD PTR[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD PTR[16+rsp]
-	DB	0F3h,0C3h		;repret 
- 
+	DB	0F3h,0C3h		;repret
+
 $L$SEH_end_Camellia_DecryptBlock_Rounds::
 Camellia_DecryptBlock_Rounds	ENDP
- 
- 
-ALIGN	16 
+
+
+ALIGN	16
 _x86_64_Camellia_decrypt	PROC PRIVATE
 
 	xor	r9d,DWORD PTR[r14]
 	xor	r8d,DWORD PTR[4+r14]
 	xor	r11d,DWORD PTR[8+r14]
 	xor	r10d,DWORD PTR[12+r14]
-ALIGN	16 
+ALIGN	16
 $L$dloop::
 	mov	ebx,DWORD PTR[((-8))+r14]
 	mov	eax,DWORD PTR[((-4))+r14]
- 
-	xor	eax,r8d 
-	xor	ebx,r9d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+
+	xor	eax,r8d
+	xor	ebx,r9d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[((-16))+r14]
 	mov	eax,DWORD PTR[((-12))+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r10d,ecx 
-	xor	r11d,ecx 
-	xor	r11d,edx 
-	xor	eax,r10d 
-	xor	ebx,r11d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r10d,ecx
+	xor	r11d,ecx
+	xor	r11d,edx
+	xor	eax,r10d
+	xor	ebx,r11d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[((-24))+r14]
 	mov	eax,DWORD PTR[((-20))+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r8d,ecx 
-	xor	r9d,ecx 
-	xor	r9d,edx 
-	xor	eax,r8d 
-	xor	ebx,r9d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r8d,ecx
+	xor	r9d,ecx
+	xor	r9d,edx
+	xor	eax,r8d
+	xor	ebx,r9d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[((-32))+r14]
 	mov	eax,DWORD PTR[((-28))+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r10d,ecx 
-	xor	r11d,ecx 
-	xor	r11d,edx 
-	xor	eax,r10d 
-	xor	ebx,r11d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r10d,ecx
+	xor	r11d,ecx
+	xor	r11d,edx
+	xor	eax,r10d
+	xor	ebx,r11d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[((-40))+r14]
 	mov	eax,DWORD PTR[((-36))+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r8d,ecx 
-	xor	r9d,ecx 
-	xor	r9d,edx 
-	xor	eax,r8d 
-	xor	ebx,r9d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r8d,ecx
+	xor	r9d,ecx
+	xor	r9d,edx
+	xor	eax,r8d
+	xor	ebx,r9d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[((-48))+r14]
 	mov	eax,DWORD PTR[((-44))+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r10d,ecx 
-	xor	r11d,ecx 
-	xor	r11d,edx 
-	xor	eax,r10d 
-	xor	ebx,r11d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r10d,ecx
+	xor	r11d,ecx
+	xor	r11d,edx
+	xor	eax,r10d
+	xor	ebx,r11d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[((-56))+r14]
 	mov	eax,DWORD PTR[((-52))+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r8d,ecx 
-	xor	r9d,ecx 
-	xor	r9d,edx 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r8d,ecx
+	xor	r9d,ecx
+	xor	r9d,edx
 	lea	r14,QWORD PTR[((-64))+r14]
-	cmp	r14,r15 
+	cmp	r14,r15
 	mov	edx,DWORD PTR[r14]
 	mov	ecx,DWORD PTR[4+r14]
 	je	$L$ddone
- 
-	and	eax,r8d 
-	or	edx,r11d 
-	rol	eax,1 
-	xor	r10d,edx 
-	xor	r9d,eax 
-	and	ecx,r10d 
-	or	ebx,r9d 
-	rol	ecx,1 
-	xor	r8d,ebx 
-	xor	r11d,ecx 
- 
+
+	and	eax,r8d
+	or	edx,r11d
+	rol	eax,1
+	xor	r10d,edx
+	xor	r9d,eax
+	and	ecx,r10d
+	or	ebx,r9d
+	rol	ecx,1
+	xor	r8d,ebx
+	xor	r11d,ecx
+
 	jmp	$L$dloop
- 
-ALIGN	16 
+
+ALIGN	16
 $L$ddone::
-	xor	ecx,r10d 
-	xor	edx,r11d 
-	xor	eax,r8d 
-	xor	ebx,r9d 
- 
-	mov	r8d,ecx 
-	mov	r9d,edx 
-	mov	r10d,eax 
-	mov	r11d,ebx 
- 
+	xor	ecx,r10d
+	xor	edx,r11d
+	xor	eax,r8d
+	xor	ebx,r9d
+
+	mov	r8d,ecx
+	mov	r9d,edx
+	mov	r10d,eax
+	mov	r11d,ebx
+
 DB	0f3h,0c3h
- 
+
 _x86_64_Camellia_decrypt	ENDP
 PUBLIC	Camellia_Ekeygen
- 
-ALIGN	16 
+
+ALIGN	16
 Camellia_Ekeygen	PROC PUBLIC
 	mov	QWORD PTR[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD PTR[16+rsp],rsi
-	mov	rax,rsp 
+	mov	rax,rsp
 $L$SEH_begin_Camellia_Ekeygen::
-	mov	rdi,rcx 
-	mov	rsi,rdx 
-	mov	rdx,r8 
- 
- 
- 
-	push	rbx 
- 
-	push	rbp 
- 
-	push	r13 
- 
-	push	r14 
- 
-	push	r15 
- 
+	mov	rdi,rcx
+	mov	rsi,rdx
+	mov	rdx,r8
+
+
+
+	push	rbx
+
+	push	rbp
+
+	push	r13
+
+	push	r14
+
+	push	r15
+
 $L$key_prologue::
- 
-	mov	r15d,edi 
-	mov	r13,rdx 
- 
+
+	mov	r15d,edi
+	mov	r13,rdx
+
 	mov	r8d,DWORD PTR[rsi]
 	mov	r9d,DWORD PTR[4+rsi]
 	mov	r10d,DWORD PTR[8+rsi]
 	mov	r11d,DWORD PTR[12+rsi]
- 
-	bswap	r8d 
-	bswap	r9d 
-	bswap	r10d 
-	bswap	r11d 
+
+	bswap	r8d
+	bswap	r9d
+	bswap	r10d
+	bswap	r11d
 	mov	DWORD PTR[r13],r9d
 	mov	DWORD PTR[4+r13],r8d
 	mov	DWORD PTR[8+r13],r11d
 	mov	DWORD PTR[12+r13],r10d
-	cmp	r15,128 
+	cmp	r15,128
 	je	$L$1st128
- 
+
 	mov	r8d,DWORD PTR[16+rsi]
 	mov	r9d,DWORD PTR[20+rsi]
-	cmp	r15,192 
+	cmp	r15,192
 	je	$L$1st192
 	mov	r10d,DWORD PTR[24+rsi]
 	mov	r11d,DWORD PTR[28+rsi]
 	jmp	$L$1st256
 $L$1st192::
-	mov	r10d,r8d 
-	mov	r11d,r9d 
-	not	r10d 
-	not	r11d 
+	mov	r10d,r8d
+	mov	r11d,r9d
+	not	r10d
+	not	r11d
 $L$1st256::
-	bswap	r8d 
-	bswap	r9d 
-	bswap	r10d 
-	bswap	r11d 
+	bswap	r8d
+	bswap	r9d
+	bswap	r10d
+	bswap	r11d
 	mov	DWORD PTR[32+r13],r9d
 	mov	DWORD PTR[36+r13],r8d
 	mov	DWORD PTR[40+r13],r11d
@@ -669,258 +669,258 @@ $L$1st256::
 	xor	r8d,DWORD PTR[4+r13]
 	xor	r11d,DWORD PTR[8+r13]
 	xor	r10d,DWORD PTR[12+r13]
- 
+
 $L$1st128::
 	lea	r14,QWORD PTR[$L$Camellia_SIGMA]
 	lea	rbp,QWORD PTR[$L$Camellia_SBOX]
- 
+
 	mov	ebx,DWORD PTR[r14]
 	mov	eax,DWORD PTR[4+r14]
-	xor	eax,r8d 
-	xor	ebx,r9d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	eax,r8d
+	xor	ebx,r9d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[8+r14]
 	mov	eax,DWORD PTR[12+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r10d,ecx 
-	xor	r11d,ecx 
-	xor	r11d,edx 
-	xor	eax,r10d 
-	xor	ebx,r11d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r10d,ecx
+	xor	r11d,ecx
+	xor	r11d,edx
+	xor	eax,r10d
+	xor	ebx,r11d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[16+r14]
 	mov	eax,DWORD PTR[20+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r8d,ecx 
-	xor	r9d,ecx 
-	xor	r9d,edx 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r8d,ecx
+	xor	r9d,ecx
+	xor	r9d,edx
 	xor	r9d,DWORD PTR[r13]
 	xor	r8d,DWORD PTR[4+r13]
 	xor	r11d,DWORD PTR[8+r13]
 	xor	r10d,DWORD PTR[12+r13]
-	xor	eax,r8d 
-	xor	ebx,r9d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	eax,r8d
+	xor	ebx,r9d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[24+r14]
 	mov	eax,DWORD PTR[28+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r10d,ecx 
-	xor	r11d,ecx 
-	xor	r11d,edx 
-	xor	eax,r10d 
-	xor	ebx,r11d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r10d,ecx
+	xor	r11d,ecx
+	xor	r11d,edx
+	xor	eax,r10d
+	xor	ebx,r11d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[32+r14]
 	mov	eax,DWORD PTR[36+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r8d,ecx 
-	xor	r9d,ecx 
-	xor	r9d,edx 
-	cmp	r15,128 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r8d,ecx
+	xor	r9d,ecx
+	xor	r9d,edx
+	cmp	r15,128
 	jne	$L$2nd256
- 
+
 	lea	r13,QWORD PTR[128+r13]
-	shl	r8,32 
-	shl	r10,32 
-	or	r8,r9 
-	or	r10,r11 
+	shl	r8,32
+	shl	r10,32
+	or	r8,r9
+	or	r10,r11
 	mov	rax,QWORD PTR[((-128))+r13]
 	mov	rbx,QWORD PTR[((-120))+r13]
 	mov	QWORD PTR[((-112))+r13],r8
 	mov	QWORD PTR[((-104))+r13],r10
-	mov	r11,rax 
-	shl	rax,15 
-	mov	r9,rbx 
-	shr	r9,49 
-	shr	r11,49 
-	or	rax,r9 
-	shl	rbx,15 
-	or	rbx,r11 
+	mov	r11,rax
+	shl	rax,15
+	mov	r9,rbx
+	shr	r9,49
+	shr	r11,49
+	or	rax,r9
+	shl	rbx,15
+	or	rbx,r11
 	mov	QWORD PTR[((-96))+r13],rax
 	mov	QWORD PTR[((-88))+r13],rbx
-	mov	r11,r8 
-	shl	r8,15 
-	mov	r9,r10 
-	shr	r9,49 
-	shr	r11,49 
-	or	r8,r9 
-	shl	r10,15 
-	or	r10,r11 
+	mov	r11,r8
+	shl	r8,15
+	mov	r9,r10
+	shr	r9,49
+	shr	r11,49
+	or	r8,r9
+	shl	r10,15
+	or	r10,r11
 	mov	QWORD PTR[((-80))+r13],r8
 	mov	QWORD PTR[((-72))+r13],r10
-	mov	r11,r8 
-	shl	r8,15 
-	mov	r9,r10 
-	shr	r9,49 
-	shr	r11,49 
-	or	r8,r9 
-	shl	r10,15 
-	or	r10,r11 
+	mov	r11,r8
+	shl	r8,15
+	mov	r9,r10
+	shr	r9,49
+	shr	r11,49
+	or	r8,r9
+	shl	r10,15
+	or	r10,r11
 	mov	QWORD PTR[((-64))+r13],r8
 	mov	QWORD PTR[((-56))+r13],r10
-	mov	r11,rax 
-	shl	rax,30 
-	mov	r9,rbx 
-	shr	r9,34 
-	shr	r11,34 
-	or	rax,r9 
-	shl	rbx,30 
-	or	rbx,r11 
+	mov	r11,rax
+	shl	rax,30
+	mov	r9,rbx
+	shr	r9,34
+	shr	r11,34
+	or	rax,r9
+	shl	rbx,30
+	or	rbx,r11
 	mov	QWORD PTR[((-48))+r13],rax
 	mov	QWORD PTR[((-40))+r13],rbx
-	mov	r11,r8 
-	shl	r8,15 
-	mov	r9,r10 
-	shr	r9,49 
-	shr	r11,49 
-	or	r8,r9 
-	shl	r10,15 
-	or	r10,r11 
+	mov	r11,r8
+	shl	r8,15
+	mov	r9,r10
+	shr	r9,49
+	shr	r11,49
+	or	r8,r9
+	shl	r10,15
+	or	r10,r11
 	mov	QWORD PTR[((-32))+r13],r8
-	mov	r11,rax 
-	shl	rax,15 
-	mov	r9,rbx 
-	shr	r9,49 
-	shr	r11,49 
-	or	rax,r9 
-	shl	rbx,15 
-	or	rbx,r11 
+	mov	r11,rax
+	shl	rax,15
+	mov	r9,rbx
+	shr	r9,49
+	shr	r11,49
+	or	rax,r9
+	shl	rbx,15
+	or	rbx,r11
 	mov	QWORD PTR[((-24))+r13],rbx
-	mov	r11,r8 
-	shl	r8,15 
-	mov	r9,r10 
-	shr	r9,49 
-	shr	r11,49 
-	or	r8,r9 
-	shl	r10,15 
-	or	r10,r11 
+	mov	r11,r8
+	shl	r8,15
+	mov	r9,r10
+	shr	r9,49
+	shr	r11,49
+	or	r8,r9
+	shl	r10,15
+	or	r10,r11
 	mov	QWORD PTR[((-16))+r13],r8
 	mov	QWORD PTR[((-8))+r13],r10
-	mov	r11,rax 
-	shl	rax,17 
-	mov	r9,rbx 
-	shr	r9,47 
-	shr	r11,47 
-	or	rax,r9 
-	shl	rbx,17 
-	or	rbx,r11 
+	mov	r11,rax
+	shl	rax,17
+	mov	r9,rbx
+	shr	r9,47
+	shr	r11,47
+	or	rax,r9
+	shl	rbx,17
+	or	rbx,r11
 	mov	QWORD PTR[r13],rax
 	mov	QWORD PTR[8+r13],rbx
-	mov	r11,rax 
-	shl	rax,17 
-	mov	r9,rbx 
-	shr	r9,47 
-	shr	r11,47 
-	or	rax,r9 
-	shl	rbx,17 
-	or	rbx,r11 
+	mov	r11,rax
+	shl	rax,17
+	mov	r9,rbx
+	shr	r9,47
+	shr	r11,47
+	or	rax,r9
+	shl	rbx,17
+	or	rbx,r11
 	mov	QWORD PTR[16+r13],rax
 	mov	QWORD PTR[24+r13],rbx
-	mov	r11,r8 
-	shl	r8,34 
-	mov	r9,r10 
-	shr	r9,30 
-	shr	r11,30 
-	or	r8,r9 
-	shl	r10,34 
-	or	r10,r11 
+	mov	r11,r8
+	shl	r8,34
+	mov	r9,r10
+	shr	r9,30
+	shr	r11,30
+	or	r8,r9
+	shl	r10,34
+	or	r10,r11
 	mov	QWORD PTR[32+r13],r8
 	mov	QWORD PTR[40+r13],r10
-	mov	r11,rax 
-	shl	rax,17 
-	mov	r9,rbx 
-	shr	r9,47 
-	shr	r11,47 
-	or	rax,r9 
-	shl	rbx,17 
-	or	rbx,r11 
+	mov	r11,rax
+	shl	rax,17
+	mov	r9,rbx
+	shr	r9,47
+	shr	r11,47
+	or	rax,r9
+	shl	rbx,17
+	or	rbx,r11
 	mov	QWORD PTR[48+r13],rax
 	mov	QWORD PTR[56+r13],rbx
-	mov	r11,r8 
-	shl	r8,17 
-	mov	r9,r10 
-	shr	r9,47 
-	shr	r11,47 
-	or	r8,r9 
-	shl	r10,17 
-	or	r10,r11 
+	mov	r11,r8
+	shl	r8,17
+	mov	r9,r10
+	shr	r9,47
+	shr	r11,47
+	or	r8,r9
+	shl	r10,17
+	or	r10,r11
 	mov	QWORD PTR[64+r13],r8
 	mov	QWORD PTR[72+r13],r10
-	mov	eax,3 
+	mov	eax,3
 	jmp	$L$done
-ALIGN	16 
+ALIGN	16
 $L$2nd256::
 	mov	DWORD PTR[48+r13],r9d
 	mov	DWORD PTR[52+r13],r8d
@@ -930,60 +930,60 @@ $L$2nd256::
 	xor	r8d,DWORD PTR[36+r13]
 	xor	r11d,DWORD PTR[40+r13]
 	xor	r10d,DWORD PTR[44+r13]
-	xor	eax,r8d 
-	xor	ebx,r9d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	eax,r8d
+	xor	ebx,r9d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[40+r14]
 	mov	eax,DWORD PTR[44+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r10d,ecx 
-	xor	r11d,ecx 
-	xor	r11d,edx 
-	xor	eax,r10d 
-	xor	ebx,r11d 
-	movzx	esi,ah 
-	movzx	edi,bl 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r10d,ecx
+	xor	r11d,ecx
+	xor	r11d,edx
+	xor	eax,r10d
+	xor	ebx,r11d
+	movzx	esi,ah
+	movzx	edi,bl
 	mov	edx,DWORD PTR[2052+rsi*8+rbp]
 	mov	ecx,DWORD PTR[rdi*8+rbp]
-	movzx	esi,al 
-	shr	eax,16 
-	movzx	edi,bh 
+	movzx	esi,al
+	shr	eax,16
+	movzx	edi,bh
 	xor	edx,DWORD PTR[4+rsi*8+rbp]
-	shr	ebx,16 
+	shr	ebx,16
 	xor	ecx,DWORD PTR[4+rdi*8+rbp]
-	movzx	esi,ah 
-	movzx	edi,bl 
+	movzx	esi,ah
+	movzx	edi,bl
 	xor	edx,DWORD PTR[rsi*8+rbp]
 	xor	ecx,DWORD PTR[2052+rdi*8+rbp]
-	movzx	esi,al 
-	movzx	edi,bh 
+	movzx	esi,al
+	movzx	edi,bh
 	xor	edx,DWORD PTR[2048+rsi*8+rbp]
 	xor	ecx,DWORD PTR[2048+rdi*8+rbp]
 	mov	ebx,DWORD PTR[48+r14]
 	mov	eax,DWORD PTR[52+r14]
-	xor	ecx,edx 
-	ror	edx,8 
-	xor	r8d,ecx 
-	xor	r9d,ecx 
-	xor	r9d,edx 
+	xor	ecx,edx
+	ror	edx,8
+	xor	r8d,ecx
+	xor	r9d,ecx
+	xor	r9d,edx
 	mov	rax,QWORD PTR[r13]
 	mov	rbx,QWORD PTR[8+r13]
 	mov	rcx,QWORD PTR[32+r13]
@@ -991,189 +991,189 @@ $L$2nd256::
 	mov	r14,QWORD PTR[48+r13]
 	mov	r15,QWORD PTR[56+r13]
 	lea	r13,QWORD PTR[128+r13]
-	shl	r8,32 
-	shl	r10,32 
-	or	r8,r9 
-	or	r10,r11 
+	shl	r8,32
+	shl	r10,32
+	or	r8,r9
+	or	r10,r11
 	mov	QWORD PTR[((-112))+r13],r8
 	mov	QWORD PTR[((-104))+r13],r10
-	mov	r11,rcx 
-	shl	rcx,15 
-	mov	r9,rdx 
-	shr	r9,49 
-	shr	r11,49 
-	or	rcx,r9 
-	shl	rdx,15 
-	or	rdx,r11 
+	mov	r11,rcx
+	shl	rcx,15
+	mov	r9,rdx
+	shr	r9,49
+	shr	r11,49
+	or	rcx,r9
+	shl	rdx,15
+	or	rdx,r11
 	mov	QWORD PTR[((-96))+r13],rcx
 	mov	QWORD PTR[((-88))+r13],rdx
-	mov	r11,r14 
-	shl	r14,15 
-	mov	r9,r15 
-	shr	r9,49 
-	shr	r11,49 
-	or	r14,r9 
-	shl	r15,15 
-	or	r15,r11 
+	mov	r11,r14
+	shl	r14,15
+	mov	r9,r15
+	shr	r9,49
+	shr	r11,49
+	or	r14,r9
+	shl	r15,15
+	or	r15,r11
 	mov	QWORD PTR[((-80))+r13],r14
 	mov	QWORD PTR[((-72))+r13],r15
-	mov	r11,rcx 
-	shl	rcx,15 
-	mov	r9,rdx 
-	shr	r9,49 
-	shr	r11,49 
-	or	rcx,r9 
-	shl	rdx,15 
-	or	rdx,r11 
+	mov	r11,rcx
+	shl	rcx,15
+	mov	r9,rdx
+	shr	r9,49
+	shr	r11,49
+	or	rcx,r9
+	shl	rdx,15
+	or	rdx,r11
 	mov	QWORD PTR[((-64))+r13],rcx
 	mov	QWORD PTR[((-56))+r13],rdx
-	mov	r11,r8 
-	shl	r8,30 
-	mov	r9,r10 
-	shr	r9,34 
-	shr	r11,34 
-	or	r8,r9 
-	shl	r10,30 
-	or	r10,r11 
+	mov	r11,r8
+	shl	r8,30
+	mov	r9,r10
+	shr	r9,34
+	shr	r11,34
+	or	r8,r9
+	shl	r10,30
+	or	r10,r11
 	mov	QWORD PTR[((-48))+r13],r8
 	mov	QWORD PTR[((-40))+r13],r10
-	mov	r11,rax 
-	shl	rax,45 
-	mov	r9,rbx 
-	shr	r9,19 
-	shr	r11,19 
-	or	rax,r9 
-	shl	rbx,45 
-	or	rbx,r11 
+	mov	r11,rax
+	shl	rax,45
+	mov	r9,rbx
+	shr	r9,19
+	shr	r11,19
+	or	rax,r9
+	shl	rbx,45
+	or	rbx,r11
 	mov	QWORD PTR[((-32))+r13],rax
 	mov	QWORD PTR[((-24))+r13],rbx
-	mov	r11,r14 
-	shl	r14,30 
-	mov	r9,r15 
-	shr	r9,34 
-	shr	r11,34 
-	or	r14,r9 
-	shl	r15,30 
-	or	r15,r11 
+	mov	r11,r14
+	shl	r14,30
+	mov	r9,r15
+	shr	r9,34
+	shr	r11,34
+	or	r14,r9
+	shl	r15,30
+	or	r15,r11
 	mov	QWORD PTR[((-16))+r13],r14
 	mov	QWORD PTR[((-8))+r13],r15
-	mov	r11,rax 
-	shl	rax,15 
-	mov	r9,rbx 
-	shr	r9,49 
-	shr	r11,49 
-	or	rax,r9 
-	shl	rbx,15 
-	or	rbx,r11 
+	mov	r11,rax
+	shl	rax,15
+	mov	r9,rbx
+	shr	r9,49
+	shr	r11,49
+	or	rax,r9
+	shl	rbx,15
+	or	rbx,r11
 	mov	QWORD PTR[r13],rax
 	mov	QWORD PTR[8+r13],rbx
-	mov	r11,rcx 
-	shl	rcx,30 
-	mov	r9,rdx 
-	shr	r9,34 
-	shr	r11,34 
-	or	rcx,r9 
-	shl	rdx,30 
-	or	rdx,r11 
+	mov	r11,rcx
+	shl	rcx,30
+	mov	r9,rdx
+	shr	r9,34
+	shr	r11,34
+	or	rcx,r9
+	shl	rdx,30
+	or	rdx,r11
 	mov	QWORD PTR[16+r13],rcx
 	mov	QWORD PTR[24+r13],rdx
-	mov	r11,r8 
-	shl	r8,30 
-	mov	r9,r10 
-	shr	r9,34 
-	shr	r11,34 
-	or	r8,r9 
-	shl	r10,30 
-	or	r10,r11 
+	mov	r11,r8
+	shl	r8,30
+	mov	r9,r10
+	shr	r9,34
+	shr	r11,34
+	or	r8,r9
+	shl	r10,30
+	or	r10,r11
 	mov	QWORD PTR[32+r13],r8
 	mov	QWORD PTR[40+r13],r10
-	mov	r11,rax 
-	shl	rax,17 
-	mov	r9,rbx 
-	shr	r9,47 
-	shr	r11,47 
-	or	rax,r9 
-	shl	rbx,17 
-	or	rbx,r11 
+	mov	r11,rax
+	shl	rax,17
+	mov	r9,rbx
+	shr	r9,47
+	shr	r11,47
+	or	rax,r9
+	shl	rbx,17
+	or	rbx,r11
 	mov	QWORD PTR[48+r13],rax
 	mov	QWORD PTR[56+r13],rbx
-	mov	r11,r14 
-	shl	r14,32 
-	mov	r9,r15 
-	shr	r9,32 
-	shr	r11,32 
-	or	r14,r9 
-	shl	r15,32 
-	or	r15,r11 
+	mov	r11,r14
+	shl	r14,32
+	mov	r9,r15
+	shr	r9,32
+	shr	r11,32
+	or	r14,r9
+	shl	r15,32
+	or	r15,r11
 	mov	QWORD PTR[64+r13],r14
 	mov	QWORD PTR[72+r13],r15
-	mov	r11,rcx 
-	shl	rcx,34 
-	mov	r9,rdx 
-	shr	r9,30 
-	shr	r11,30 
-	or	rcx,r9 
-	shl	rdx,34 
-	or	rdx,r11 
+	mov	r11,rcx
+	shl	rcx,34
+	mov	r9,rdx
+	shr	r9,30
+	shr	r11,30
+	or	rcx,r9
+	shl	rdx,34
+	or	rdx,r11
 	mov	QWORD PTR[80+r13],rcx
 	mov	QWORD PTR[88+r13],rdx
-	mov	r11,r14 
-	shl	r14,17 
-	mov	r9,r15 
-	shr	r9,47 
-	shr	r11,47 
-	or	r14,r9 
-	shl	r15,17 
-	or	r15,r11 
+	mov	r11,r14
+	shl	r14,17
+	mov	r9,r15
+	shr	r9,47
+	shr	r11,47
+	or	r14,r9
+	shl	r15,17
+	or	r15,r11
 	mov	QWORD PTR[96+r13],r14
 	mov	QWORD PTR[104+r13],r15
-	mov	r11,rax 
-	shl	rax,34 
-	mov	r9,rbx 
-	shr	r9,30 
-	shr	r11,30 
-	or	rax,r9 
-	shl	rbx,34 
-	or	rbx,r11 
+	mov	r11,rax
+	shl	rax,34
+	mov	r9,rbx
+	shr	r9,30
+	shr	r11,30
+	or	rax,r9
+	shl	rbx,34
+	or	rbx,r11
 	mov	QWORD PTR[112+r13],rax
 	mov	QWORD PTR[120+r13],rbx
-	mov	r11,r8 
-	shl	r8,51 
-	mov	r9,r10 
-	shr	r9,13 
-	shr	r11,13 
-	or	r8,r9 
-	shl	r10,51 
-	or	r10,r11 
+	mov	r11,r8
+	shl	r8,51
+	mov	r9,r10
+	shr	r9,13
+	shr	r11,13
+	or	r8,r9
+	shl	r10,51
+	or	r10,r11
 	mov	QWORD PTR[128+r13],r8
 	mov	QWORD PTR[136+r13],r10
-	mov	eax,4 
+	mov	eax,4
 $L$done::
 	mov	r15,QWORD PTR[rsp]
- 
+
 	mov	r14,QWORD PTR[8+rsp]
- 
+
 	mov	r13,QWORD PTR[16+rsp]
- 
+
 	mov	rbp,QWORD PTR[24+rsp]
- 
+
 	mov	rbx,QWORD PTR[32+rsp]
- 
+
 	lea	rsp,QWORD PTR[40+rsp]
- 
+
 $L$key_epilogue::
 	mov	rdi,QWORD PTR[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD PTR[16+rsp]
-	DB	0F3h,0C3h		;repret 
- 
+	DB	0F3h,0C3h		;repret
+
 $L$SEH_end_Camellia_Ekeygen::
 Camellia_Ekeygen	ENDP
-ALIGN	64 
+ALIGN	64
 $L$Camellia_SIGMA::
 	DD	03bcc908bh,0a09e667fh,04caa73b2h,0b67ae858h
 	DD	0e94f82beh,0c6ef372fh,0f1d36f1ch,054ff53a5h
 	DD	0de682d1dh,010e527fah,0b3e6c1fdh,0b05688c2h
-	DD	0,0,0,0 
+	DD	0,0,0,0
 $L$Camellia_SBOX::
 	DD	070707000h,070700070h
 	DD	082828200h,02c2c002ch
@@ -1688,308 +1688,308 @@ $L$Camellia_SBOX::
 	DD	000010101h,040004040h
 	DD	0003d3d3dh,04f004f4fh
 PUBLIC	Camellia_cbc_encrypt
- 
-ALIGN	16 
+
+ALIGN	16
 Camellia_cbc_encrypt	PROC PUBLIC
 	mov	QWORD PTR[8+rsp],rdi	;WIN64 prologue
 	mov	QWORD PTR[16+rsp],rsi
-	mov	rax,rsp 
+	mov	rax,rsp
 $L$SEH_begin_Camellia_cbc_encrypt::
-	mov	rdi,rcx 
-	mov	rsi,rdx 
-	mov	rdx,r8 
-	mov	rcx,r9 
+	mov	rdi,rcx
+	mov	rsi,rdx
+	mov	rdx,r8
+	mov	rcx,r9
 	mov	r8,QWORD PTR[40+rsp]
 	mov	r9,QWORD PTR[48+rsp]
- 
- 
- 
-	cmp	rdx,0 
+
+
+
+	cmp	rdx,0
 	je	$L$cbc_abort
-	push	rbx 
- 
-	push	rbp 
- 
-	push	r12 
- 
-	push	r13 
- 
-	push	r14 
- 
-	push	r15 
- 
+	push	rbx
+
+	push	rbp
+
+	push	r12
+
+	push	r13
+
+	push	r14
+
+	push	r15
+
 $L$cbc_prologue::
- 
-	mov	rbp,rsp 
- 
-	sub	rsp,64 
-	and	rsp,-64 
- 
- 
- 
+
+	mov	rbp,rsp
+
+	sub	rsp,64
+	and	rsp,-64
+
+
+
 	lea	r10,QWORD PTR[((-64-63))+rcx]
-	sub	r10,rsp 
-	neg	r10 
+	sub	r10,rsp
+	neg	r10
 	and	r10,03C0h
-	sub	rsp,r10 
- 
- 
-	mov	r12,rdi 
-	mov	r13,rsi 
-	mov	rbx,r8 
-	mov	r14,rcx 
+	sub	rsp,r10
+
+
+	mov	r12,rdi
+	mov	r13,rsi
+	mov	rbx,r8
+	mov	r14,rcx
 	mov	r15d,DWORD PTR[272+rcx]
- 
+
 	mov	QWORD PTR[40+rsp],r8
 	mov	QWORD PTR[48+rsp],rbp
- 
- 
+
+
 $L$cbc_body::
 	lea	rbp,QWORD PTR[$L$Camellia_SBOX]
- 
-	mov	ecx,32 
-ALIGN	4 
+
+	mov	ecx,32
+ALIGN	4
 $L$cbc_prefetch_sbox::
 	mov	rax,QWORD PTR[rbp]
 	mov	rsi,QWORD PTR[32+rbp]
 	mov	rdi,QWORD PTR[64+rbp]
 	mov	r11,QWORD PTR[96+rbp]
 	lea	rbp,QWORD PTR[128+rbp]
-	loop	$L$cbc_prefetch_sbox 
-	sub	rbp,4096 
-	shl	r15,6 
-	mov	rcx,rdx 
+	loop	$L$cbc_prefetch_sbox
+	sub	rbp,4096
+	shl	r15,6
+	mov	rcx,rdx
 	lea	r15,QWORD PTR[r15*1+r14]
- 
-	cmp	r9d,0 
+
+	cmp	r9d,0
 	je	$L$CBC_DECRYPT
- 
-	and	rdx,-16 
-	and	rcx,15 
+
+	and	rdx,-16
+	and	rcx,15
 	lea	rdx,QWORD PTR[rdx*1+r12]
 	mov	QWORD PTR[rsp],r14
 	mov	QWORD PTR[8+rsp],rdx
 	mov	QWORD PTR[16+rsp],rcx
- 
-	cmp	rdx,r12 
+
+	cmp	rdx,r12
 	mov	r8d,DWORD PTR[rbx]
 	mov	r9d,DWORD PTR[4+rbx]
 	mov	r10d,DWORD PTR[8+rbx]
 	mov	r11d,DWORD PTR[12+rbx]
 	je	$L$cbc_enc_tail
 	jmp	$L$cbc_eloop
- 
-ALIGN	16 
+
+ALIGN	16
 $L$cbc_eloop::
 	xor	r8d,DWORD PTR[r12]
 	xor	r9d,DWORD PTR[4+r12]
 	xor	r10d,DWORD PTR[8+r12]
-	bswap	r8d 
+	bswap	r8d
 	xor	r11d,DWORD PTR[12+r12]
-	bswap	r9d 
-	bswap	r10d 
-	bswap	r11d 
- 
-	call	_x86_64_Camellia_encrypt 
- 
+	bswap	r9d
+	bswap	r10d
+	bswap	r11d
+
+	call	_x86_64_Camellia_encrypt
+
 	mov	r14,QWORD PTR[rsp]
-	bswap	r8d 
+	bswap	r8d
 	mov	rdx,QWORD PTR[8+rsp]
-	bswap	r9d 
+	bswap	r9d
 	mov	rcx,QWORD PTR[16+rsp]
-	bswap	r10d 
+	bswap	r10d
 	mov	DWORD PTR[r13],r8d
-	bswap	r11d 
+	bswap	r11d
 	mov	DWORD PTR[4+r13],r9d
 	mov	DWORD PTR[8+r13],r10d
 	lea	r12,QWORD PTR[16+r12]
 	mov	DWORD PTR[12+r13],r11d
-	cmp	r12,rdx 
+	cmp	r12,rdx
 	lea	r13,QWORD PTR[16+r13]
 	jne	$L$cbc_eloop
- 
-	cmp	rcx,0 
+
+	cmp	rcx,0
 	jne	$L$cbc_enc_tail
- 
+
 	mov	r13,QWORD PTR[40+rsp]
 	mov	DWORD PTR[r13],r8d
 	mov	DWORD PTR[4+r13],r9d
 	mov	DWORD PTR[8+r13],r10d
 	mov	DWORD PTR[12+r13],r11d
 	jmp	$L$cbc_done
- 
-ALIGN	16 
+
+ALIGN	16
 $L$cbc_enc_tail::
-	xor	rax,rax 
+	xor	rax,rax
 	mov	QWORD PTR[((0+24))+rsp],rax
 	mov	QWORD PTR[((8+24))+rsp],rax
 	mov	QWORD PTR[16+rsp],rax
- 
+
 $L$cbc_enc_pushf::
-	pushfq 
-	cld 
-	mov	rsi,r12 
+	pushfq
+	cld
+	mov	rsi,r12
 	lea	rdi,QWORD PTR[((8+24))+rsp]
 	DD	09066A4F3h
-	popfq 
+	popfq
 $L$cbc_enc_popf::
- 
+
 	lea	r12,QWORD PTR[24+rsp]
 	lea	rax,QWORD PTR[((16+24))+rsp]
 	mov	QWORD PTR[8+rsp],rax
 	jmp	$L$cbc_eloop
- 
-ALIGN	16 
+
+ALIGN	16
 $L$CBC_DECRYPT::
-	xchg	r15,r14 
-	add	rdx,15 
-	and	rcx,15 
-	and	rdx,-16 
+	xchg	r15,r14
+	add	rdx,15
+	and	rcx,15
+	and	rdx,-16
 	mov	QWORD PTR[rsp],r14
 	lea	rdx,QWORD PTR[rdx*1+r12]
 	mov	QWORD PTR[8+rsp],rdx
 	mov	QWORD PTR[16+rsp],rcx
- 
+
 	mov	rax,QWORD PTR[rbx]
 	mov	rbx,QWORD PTR[8+rbx]
 	jmp	$L$cbc_dloop
-ALIGN	16 
+ALIGN	16
 $L$cbc_dloop::
 	mov	r8d,DWORD PTR[r12]
 	mov	r9d,DWORD PTR[4+r12]
 	mov	r10d,DWORD PTR[8+r12]
-	bswap	r8d 
+	bswap	r8d
 	mov	r11d,DWORD PTR[12+r12]
-	bswap	r9d 
+	bswap	r9d
 	mov	QWORD PTR[((0+24))+rsp],rax
-	bswap	r10d 
+	bswap	r10d
 	mov	QWORD PTR[((8+24))+rsp],rbx
-	bswap	r11d 
- 
-	call	_x86_64_Camellia_decrypt 
- 
+	bswap	r11d
+
+	call	_x86_64_Camellia_decrypt
+
 	mov	r14,QWORD PTR[rsp]
 	mov	rdx,QWORD PTR[8+rsp]
 	mov	rcx,QWORD PTR[16+rsp]
- 
-	bswap	r8d 
+
+	bswap	r8d
 	mov	rax,QWORD PTR[r12]
-	bswap	r9d 
+	bswap	r9d
 	mov	rbx,QWORD PTR[8+r12]
-	bswap	r10d 
+	bswap	r10d
 	xor	r8d,DWORD PTR[((0+24))+rsp]
-	bswap	r11d 
+	bswap	r11d
 	xor	r9d,DWORD PTR[((4+24))+rsp]
 	xor	r10d,DWORD PTR[((8+24))+rsp]
 	lea	r12,QWORD PTR[16+r12]
 	xor	r11d,DWORD PTR[((12+24))+rsp]
-	cmp	r12,rdx 
+	cmp	r12,rdx
 	je	$L$cbc_ddone
- 
+
 	mov	DWORD PTR[r13],r8d
 	mov	DWORD PTR[4+r13],r9d
 	mov	DWORD PTR[8+r13],r10d
 	mov	DWORD PTR[12+r13],r11d
- 
+
 	lea	r13,QWORD PTR[16+r13]
 	jmp	$L$cbc_dloop
- 
-ALIGN	16 
+
+ALIGN	16
 $L$cbc_ddone::
 	mov	rdx,QWORD PTR[40+rsp]
-	cmp	rcx,0 
+	cmp	rcx,0
 	jne	$L$cbc_dec_tail
- 
+
 	mov	DWORD PTR[r13],r8d
 	mov	DWORD PTR[4+r13],r9d
 	mov	DWORD PTR[8+r13],r10d
 	mov	DWORD PTR[12+r13],r11d
- 
+
 	mov	QWORD PTR[rdx],rax
 	mov	QWORD PTR[8+rdx],rbx
 	jmp	$L$cbc_done
-ALIGN	16 
+ALIGN	16
 $L$cbc_dec_tail::
 	mov	DWORD PTR[((0+24))+rsp],r8d
 	mov	DWORD PTR[((4+24))+rsp],r9d
 	mov	DWORD PTR[((8+24))+rsp],r10d
 	mov	DWORD PTR[((12+24))+rsp],r11d
- 
+
 $L$cbc_dec_pushf::
-	pushfq 
-	cld 
+	pushfq
+	cld
 	lea	rsi,QWORD PTR[((8+24))+rsp]
 	lea	rdi,QWORD PTR[r13]
 	DD	09066A4F3h
-	popfq 
+	popfq
 $L$cbc_dec_popf::
- 
+
 	mov	QWORD PTR[rdx],rax
 	mov	QWORD PTR[8+rdx],rbx
 	jmp	$L$cbc_done
- 
-ALIGN	16 
+
+ALIGN	16
 $L$cbc_done::
 	mov	rcx,QWORD PTR[48+rsp]
- 
+
 	mov	r15,QWORD PTR[rcx]
- 
+
 	mov	r14,QWORD PTR[8+rcx]
- 
+
 	mov	r13,QWORD PTR[16+rcx]
- 
+
 	mov	r12,QWORD PTR[24+rcx]
- 
+
 	mov	rbp,QWORD PTR[32+rcx]
- 
+
 	mov	rbx,QWORD PTR[40+rcx]
- 
+
 	lea	rsp,QWORD PTR[48+rcx]
- 
+
 $L$cbc_abort::
 	mov	rdi,QWORD PTR[8+rsp]	;WIN64 epilogue
 	mov	rsi,QWORD PTR[16+rsp]
-	DB	0F3h,0C3h		;repret 
- 
+	DB	0F3h,0C3h		;repret
+
 $L$SEH_end_Camellia_cbc_encrypt::
 Camellia_cbc_encrypt	ENDP
- 
-DB	67,97,109,101,108,108,105,97,32,102,111,114,32,120,56,54 
-DB	95,54,52,32,98,121,32,60,97,112,112,114,111,64,111,112 
-DB	101,110,115,115,108,46,111,114,103,62,0 
+
+DB	67,97,109,101,108,108,105,97,32,102,111,114,32,120,56,54
+DB	95,54,52,32,98,121,32,60,97,112,112,114,111,64,111,112
+DB	101,110,115,115,108,46,111,114,103,62,0
 EXTERN	__imp_RtlVirtualUnwind:NEAR
- 
-ALIGN	16 
+
+ALIGN	16
 common_se_handler	PROC PRIVATE
-	push	rsi 
-	push	rdi 
-	push	rbx 
-	push	rbp 
-	push	r12 
-	push	r13 
-	push	r14 
-	push	r15 
-	pushfq 
+	push	rsi
+	push	rdi
+	push	rbx
+	push	rbp
+	push	r12
+	push	r13
+	push	r14
+	push	r15
+	pushfq
 	lea	rsp,QWORD PTR[((-64))+rsp]
- 
+
 	mov	rax,QWORD PTR[120+r8]
 	mov	rbx,QWORD PTR[248+r8]
- 
+
 	mov	rsi,QWORD PTR[8+r9]
 	mov	r11,QWORD PTR[56+r9]
- 
+
 	mov	r10d,DWORD PTR[r11]
 	lea	r10,QWORD PTR[r10*1+rsi]
-	cmp	rbx,r10 
+	cmp	rbx,r10
 	jb	$L$in_prologue
- 
+
 	mov	rax,QWORD PTR[152+r8]
- 
+
 	mov	r10d,DWORD PTR[4+r11]
 	lea	r10,QWORD PTR[r10*1+rsi]
-	cmp	rbx,r10 
+	cmp	rbx,r10
 	jae	$L$in_prologue
- 
+
 	lea	rax,QWORD PTR[40+rax]
 	mov	rbx,QWORD PTR[((-8))+rax]
 	mov	rbp,QWORD PTR[((-16))+rax]
@@ -2001,70 +2001,70 @@ common_se_handler	PROC PRIVATE
 	mov	QWORD PTR[224+r8],r13
 	mov	QWORD PTR[232+r8],r14
 	mov	QWORD PTR[240+r8],r15
- 
+
 $L$in_prologue::
 	mov	rdi,QWORD PTR[8+rax]
 	mov	rsi,QWORD PTR[16+rax]
 	mov	QWORD PTR[152+r8],rax
 	mov	QWORD PTR[168+r8],rsi
 	mov	QWORD PTR[176+r8],rdi
- 
+
 	jmp	$L$common_seh_exit
 common_se_handler	ENDP
- 
- 
-ALIGN	16 
+
+
+ALIGN	16
 cbc_se_handler	PROC PRIVATE
-	push	rsi 
-	push	rdi 
-	push	rbx 
-	push	rbp 
-	push	r12 
-	push	r13 
-	push	r14 
-	push	r15 
-	pushfq 
+	push	rsi
+	push	rdi
+	push	rbx
+	push	rbp
+	push	r12
+	push	r13
+	push	r14
+	push	r15
+	pushfq
 	lea	rsp,QWORD PTR[((-64))+rsp]
- 
+
 	mov	rax,QWORD PTR[120+r8]
 	mov	rbx,QWORD PTR[248+r8]
- 
+
 	lea	r10,QWORD PTR[$L$cbc_prologue]
-	cmp	rbx,r10 
+	cmp	rbx,r10
 	jb	$L$in_cbc_prologue
- 
+
 	lea	r10,QWORD PTR[$L$cbc_body]
-	cmp	rbx,r10 
+	cmp	rbx,r10
 	jb	$L$in_cbc_frame_setup
- 
+
 	mov	rax,QWORD PTR[152+r8]
- 
+
 	lea	r10,QWORD PTR[$L$cbc_abort]
-	cmp	rbx,r10 
+	cmp	rbx,r10
 	jae	$L$in_cbc_prologue
- 
- 
+
+
 	lea	r10,QWORD PTR[$L$cbc_enc_pushf]
-	cmp	rbx,r10 
+	cmp	rbx,r10
 	jbe	$L$in_cbc_no_flag
 	lea	rax,QWORD PTR[8+rax]
 	lea	r10,QWORD PTR[$L$cbc_enc_popf]
-	cmp	rbx,r10 
+	cmp	rbx,r10
 	jb	$L$in_cbc_no_flag
 	lea	rax,QWORD PTR[((-8))+rax]
 	lea	r10,QWORD PTR[$L$cbc_dec_pushf]
-	cmp	rbx,r10 
+	cmp	rbx,r10
 	jbe	$L$in_cbc_no_flag
 	lea	rax,QWORD PTR[8+rax]
 	lea	r10,QWORD PTR[$L$cbc_dec_popf]
-	cmp	rbx,r10 
+	cmp	rbx,r10
 	jb	$L$in_cbc_no_flag
 	lea	rax,QWORD PTR[((-8))+rax]
- 
+
 $L$in_cbc_no_flag::
 	mov	rax,QWORD PTR[48+rax]
 	lea	rax,QWORD PTR[48+rax]
- 
+
 $L$in_cbc_frame_setup::
 	mov	rbx,QWORD PTR[((-8))+rax]
 	mov	rbp,QWORD PTR[((-16))+rax]
@@ -2078,24 +2078,24 @@ $L$in_cbc_frame_setup::
 	mov	QWORD PTR[224+r8],r13
 	mov	QWORD PTR[232+r8],r14
 	mov	QWORD PTR[240+r8],r15
- 
+
 $L$in_cbc_prologue::
 	mov	rdi,QWORD PTR[8+rax]
 	mov	rsi,QWORD PTR[16+rax]
 	mov	QWORD PTR[152+r8],rax
 	mov	QWORD PTR[168+r8],rsi
 	mov	QWORD PTR[176+r8],rdi
- 
-ALIGN	4 
+
+ALIGN	4
 $L$common_seh_exit::
- 
+
 	mov	rdi,QWORD PTR[40+r9]
-	mov	rsi,r8 
-	mov	ecx,154 
+	mov	rsi,r8
+	mov	ecx,154
 	DD	0a548f3fch
- 
-	mov	rsi,r9 
-	xor	rcx,rcx 
+
+	mov	rsi,r9
+	xor	rcx,rcx
 	mov	rdx,QWORD PTR[8+rsi]
 	mov	r8,QWORD PTR[rsi]
 	mov	r9,QWORD PTR[16+rsi]
@@ -2107,57 +2107,57 @@ $L$common_seh_exit::
 	mov	QWORD PTR[48+rsp],r12
 	mov	QWORD PTR[56+rsp],rcx
 	call	QWORD PTR[__imp_RtlVirtualUnwind]
- 
-	mov	eax,1 
+
+	mov	eax,1
 	lea	rsp,QWORD PTR[64+rsp]
-	popfq 
-	pop	r15 
-	pop	r14 
-	pop	r13 
-	pop	r12 
-	pop	rbp 
-	pop	rbx 
-	pop	rdi 
-	pop	rsi 
-	DB	0F3h,0C3h		;repret 
+	popfq
+	pop	r15
+	pop	r14
+	pop	r13
+	pop	r12
+	pop	rbp
+	pop	rbx
+	pop	rdi
+	pop	rsi
+	DB	0F3h,0C3h		;repret
 cbc_se_handler	ENDP
- 
+
 .text$	ENDS
 .pdata	SEGMENT READONLY ALIGN(4)
-ALIGN	4 
+ALIGN	4
 	DD	imagerel $L$SEH_begin_Camellia_EncryptBlock_Rounds
 	DD	imagerel $L$SEH_end_Camellia_EncryptBlock_Rounds
 	DD	imagerel $L$SEH_info_Camellia_EncryptBlock_Rounds
- 
+
 	DD	imagerel $L$SEH_begin_Camellia_DecryptBlock_Rounds
 	DD	imagerel $L$SEH_end_Camellia_DecryptBlock_Rounds
 	DD	imagerel $L$SEH_info_Camellia_DecryptBlock_Rounds
- 
+
 	DD	imagerel $L$SEH_begin_Camellia_Ekeygen
 	DD	imagerel $L$SEH_end_Camellia_Ekeygen
 	DD	imagerel $L$SEH_info_Camellia_Ekeygen
- 
+
 	DD	imagerel $L$SEH_begin_Camellia_cbc_encrypt
 	DD	imagerel $L$SEH_end_Camellia_cbc_encrypt
 	DD	imagerel $L$SEH_info_Camellia_cbc_encrypt
- 
+
 .pdata	ENDS
 .xdata	SEGMENT READONLY ALIGN(8)
-ALIGN	8 
+ALIGN	8
 $L$SEH_info_Camellia_EncryptBlock_Rounds::
-DB	9,0,0,0 
+DB	9,0,0,0
 	DD	imagerel common_se_handler
 	DD	imagerel $L$enc_prologue,imagerel $L$enc_epilogue
 $L$SEH_info_Camellia_DecryptBlock_Rounds::
-DB	9,0,0,0 
+DB	9,0,0,0
 	DD	imagerel common_se_handler
 	DD	imagerel $L$dec_prologue,imagerel $L$dec_epilogue
 $L$SEH_info_Camellia_Ekeygen::
-DB	9,0,0,0 
+DB	9,0,0,0
 	DD	imagerel common_se_handler
 	DD	imagerel $L$key_prologue,imagerel $L$key_epilogue
 $L$SEH_info_Camellia_cbc_encrypt::
-DB	9,0,0,0 
+DB	9,0,0,0
 	DD	imagerel cbc_se_handler
 
 .xdata	ENDS

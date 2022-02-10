@@ -29,16 +29,16 @@
 #include "llist.h"
 
 /* Hash function prototype */
-typedef size_t (*hash_function) (void *key, 
+typedef size_t (*hash_function) (void *key,
                                  size_t key_length,
                                  size_t slots_num);
 
 /*
    Comparator function prototype. Compares two keys.
 */
-typedef size_t (*comp_function) (void *key1, 
+typedef size_t (*comp_function) (void *key1,
                                  size_t key1_len,
-                                 void *key2, 
+                                 void *key2,
                                  size_t key2_len);
 
 typedef void (*Curl_hash_dtor)(void *);
@@ -60,7 +60,7 @@ struct Curl_hash_element {
   struct Curl_llist_element list;
   void   *ptr;
   size_t key_len;
-  char   key[1]; /* allocated memory following the struct */ 
+  char   key[1]; /* allocated memory following the struct */
 };
 
 struct Curl_hash_iterator {
@@ -85,8 +85,8 @@ void Curl_hash_destroy(struct Curl_hash *h);
 void Curl_hash_clean(struct Curl_hash *h);
 void Curl_hash_clean_with_criterium(struct Curl_hash *h, void *user,
                                     int (*comp)(void *, void *));
-size_t Curl_hash_str(void *key, size_t key_length, size_t slots_num); 
-size_t Curl_str_key_compare(void *k1, size_t key1_len, void *k2, 
+size_t Curl_hash_str(void *key, size_t key_length, size_t slots_num);
+size_t Curl_str_key_compare(void *k1, size_t key1_len, void *k2,
                             size_t key2_len);
 void Curl_hash_start_iterate(struct Curl_hash *hash,
                              struct Curl_hash_iterator *iter);

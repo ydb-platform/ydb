@@ -32,11 +32,11 @@ def _apiwarn(startversion, msg, stacklevel=2, function=None):
     msg = "%s (since version %s)" %(msg, startversion)
     warn(msg, stacklevel=stacklevel+1, function=function)
 
- 
+
 def warn(msg, stacklevel=1, function=None):
     if function is not None:
-        import inspect 
-        filename = inspect.getfile(function) 
+        import inspect
+        filename = inspect.getfile(function)
         lineno = py.code.getrawcode(function).co_firstlineno
     else:
         try:
@@ -69,11 +69,11 @@ def warn(msg, stacklevel=1, function=None):
             filename = module
     path = py.path.local(filename)
     warning = DeprecationWarning(msg, path, lineno)
-    import warnings 
-    warnings.warn_explicit(warning, category=Warning, 
+    import warnings
+    warnings.warn_explicit(warning, category=Warning,
         filename=str(warning.path),
         lineno=warning.lineno,
-        registry=warnings.__dict__.setdefault( 
+        registry=warnings.__dict__.setdefault(
             "__warningsregistry__", {})
     )
 

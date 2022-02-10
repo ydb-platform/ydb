@@ -22,11 +22,11 @@
 
 #include "curl_setup.h"
 
-/*********************************************************************** 
- * Only for builds using asynchronous name resolves 
- **********************************************************************/ 
-#ifdef CURLRES_ASYNCH 
- 
+/***********************************************************************
+ * Only for builds using asynchronous name resolves
+ **********************************************************************/
+#ifdef CURLRES_ASYNCH
+
 #ifdef HAVE_NETINET_IN_H
 #include <netinet/in.h>
 #endif
@@ -71,13 +71,13 @@ CURLcode Curl_addrinfo_callback(struct connectdata *conn,
                                 struct Curl_addrinfo *ai)
 {
   struct Curl_dns_entry *dns = NULL;
-  CURLcode result = CURLE_OK; 
+  CURLcode result = CURLE_OK;
 
   conn->async.status = status;
 
   if(CURL_ASYNC_SUCCESS == status) {
     if(ai) {
-      struct Curl_easy *data = conn->data; 
+      struct Curl_easy *data = conn->data;
 
       if(data->share)
         Curl_share_lock(data, CURL_LOCK_DATA_DNS, CURL_LOCK_ACCESS_SINGLE);
@@ -91,11 +91,11 @@ CURLcode Curl_addrinfo_callback(struct connectdata *conn,
       if(!dns) {
         /* failed to store, cleanup and return error */
         Curl_freeaddrinfo(ai);
-        result = CURLE_OUT_OF_MEMORY; 
+        result = CURLE_OUT_OF_MEMORY;
       }
     }
     else {
-      result = CURLE_OUT_OF_MEMORY; 
+      result = CURLE_OUT_OF_MEMORY;
     }
   }
 
@@ -106,9 +106,9 @@ CURLcode Curl_addrinfo_callback(struct connectdata *conn,
     async struct */
   conn->async.done = TRUE;
 
-  /* IPv4: The input hostent struct will be freed by ares when we return from 
+  /* IPv4: The input hostent struct will be freed by ares when we return from
      this function */
-  return result; 
+  return result;
 }
 
 /*

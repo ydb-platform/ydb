@@ -1,9 +1,9 @@
-PY23_LIBRARY() 
- 
+PY23_LIBRARY()
+
 LICENSE(Service-Py23-Proxy)
 
 OWNER(g:python-contrib)
- 
+
 IF (PYTHON2)
     PEERDIR(contrib/python/pluggy/py2)
 ELSE()
@@ -11,8 +11,8 @@ ELSE()
 ENDIF()
 
 NO_LINT()
- 
-END() 
+
+END()
 
 RECURSE(
     py2

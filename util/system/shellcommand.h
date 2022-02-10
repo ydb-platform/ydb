@@ -8,7 +8,7 @@
 #include <util/generic/maybe.h>
 #include <util/stream/input.h>
 #include <util/stream/output.h>
-#include "file.h" 
+#include "file.h"
 #include "getpid.h"
 #include "thread.h"
 #include "mutex.h"
@@ -31,12 +31,12 @@ public:
 #endif
     };
 
-    enum EHandleMode { 
-        HANDLE_INHERIT, 
-        HANDLE_PIPE, 
-        HANDLE_STREAM 
-    }; 
- 
+    enum EHandleMode {
+        HANDLE_INHERIT,
+        HANDLE_PIPE,
+        HANDLE_STREAM
+    };
+
 public:
     inline TShellCommandOptions() noexcept
         : ClearSignalMask(false)
@@ -48,7 +48,7 @@ public:
         , DetachSession(true)
         , CloseStreams(false)
         , ShouldCloseInput(true)
-        , InputMode(HANDLE_INHERIT) 
+        , InputMode(HANDLE_INHERIT)
         , OutputMode(HANDLE_STREAM)
         , ErrorMode(HANDLE_STREAM)
         , InputStream(nullptr)
@@ -131,11 +131,11 @@ public:
      */
     inline TShellCommandOptions& SetInputStream(IInputStream* stream) {
         InputStream = stream;
-        if (InputStream == nullptr) { 
-            InputMode = HANDLE_INHERIT; 
-        } else { 
-            InputMode = HANDLE_STREAM; 
-        } 
+        if (InputStream == nullptr) {
+            InputMode = HANDLE_INHERIT;
+        } else {
+            InputMode = HANDLE_STREAM;
+        }
         return *this;
     }
 
@@ -236,7 +236,7 @@ public:
         return *this;
     }
 
-    /** 
+    /**
      * @brief specifies pure function to be called in the child process after fork, before calling execve
      * @note currently ignored on windows
      * @param function function to be called after fork
@@ -248,17 +248,17 @@ public:
     }
 
     /**
-     * @brief create a pipe for child input 
-     * Write end of the pipe will be accessible via TShellCommand::GetInputHandle 
-     * 
-     * @return self 
-     */ 
-    inline TShellCommandOptions& PipeInput() { 
-        InputMode = HANDLE_PIPE; 
-        InputStream = nullptr; 
-        return *this; 
-    } 
- 
+     * @brief create a pipe for child input
+     * Write end of the pipe will be accessible via TShellCommand::GetInputHandle
+     *
+     * @return self
+     */
+    inline TShellCommandOptions& PipeInput() {
+        InputMode = HANDLE_PIPE;
+        InputStream = nullptr;
+        return *this;
+    }
+
     inline TShellCommandOptions& PipeOutput() {
         OutputMode = HANDLE_PIPE;
         OutputStream = nullptr;
@@ -271,30 +271,30 @@ public:
         return *this;
     }
 
-    /** 
-     * @brief set if child should inherit output handle 
-     * 
-     * @param inherit if child should inherit output handle 
-     * 
-     * @return self 
-     */ 
-    inline TShellCommandOptions& SetInheritOutput(bool inherit) { 
+    /**
+     * @brief set if child should inherit output handle
+     *
+     * @param inherit if child should inherit output handle
+     *
+     * @return self
+     */
+    inline TShellCommandOptions& SetInheritOutput(bool inherit) {
         OutputMode = inherit ? HANDLE_INHERIT : HANDLE_STREAM;
-        return *this; 
-    } 
- 
-    /** 
-     * @brief set if child should inherit stderr handle 
-     * 
-     * @param inherit if child should inherit error output handle 
-     * 
-     * @return self 
-     */ 
-    inline TShellCommandOptions& SetInheritError(bool inherit) { 
+        return *this;
+    }
+
+    /**
+     * @brief set if child should inherit stderr handle
+     *
+     * @param inherit if child should inherit error output handle
+     *
+     * @return self
+     */
+    inline TShellCommandOptions& SetInheritError(bool inherit) {
         ErrorMode = inherit ? HANDLE_INHERIT : HANDLE_STREAM;
-        return *this; 
-    } 
- 
+        return *this;
+    }
+
 public:
     bool ClearSignalMask = false;
     bool CloseAllFdsOnExec = false;
@@ -417,25 +417,25 @@ public:
     /**
      * @brief return the file handle that provides input to the child process
      *
-     * @return input file handle 
-     */ 
-    TFileHandle& GetInputHandle(); 
- 
-    /** 
+     * @return input file handle
+     */
+    TFileHandle& GetInputHandle();
+
+    /**
      * @brief return the file handle that provides output from the child process
      *
-     * @return output file handle 
-     */ 
-    TFileHandle& GetOutputHandle(); 
- 
-    /** 
+     * @return output file handle
+     */
+    TFileHandle& GetOutputHandle();
+
+    /**
      * @brief return the file handle that provides error output from the child process
      *
-     * @return error file handle 
-     */ 
-    TFileHandle& GetErrorHandle(); 
- 
-    /** 
+     * @return error file handle
+     */
+    TFileHandle& GetErrorHandle();
+
+    /**
      * @brief run the execution
      *
      * @return self

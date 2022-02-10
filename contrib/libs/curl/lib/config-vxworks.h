@@ -75,7 +75,7 @@
 /* #undef CURL_EXTERN_SYMBOL */
 
 /* Use Windows LDAP implementation */
-/* #undef USE_WIN32_LDAP */ 
+/* #undef USE_WIN32_LDAP */
 
 /* your Entropy Gathering Daemon socket pathname */
 /* #undef EGD_SOCKET */

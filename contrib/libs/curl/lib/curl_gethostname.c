@@ -49,7 +49,7 @@
  */
 
 int Curl_gethostname(char * const name, GETHOSTNAME_TYPE_ARG2 namelen)
-{ 
+{
 #ifndef HAVE_GETHOSTNAME
 
   /* Allow compilation and return failure when unavailable */
@@ -59,7 +59,7 @@ int Curl_gethostname(char * const name, GETHOSTNAME_TYPE_ARG2 namelen)
 
 #else
   int err;
-  char *dot; 
+  char *dot;
 
 #ifdef DEBUGBUILD
 

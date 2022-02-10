@@ -2,10 +2,10 @@ from _pytest.compat import final
 
 
 @final
-class UsageError(Exception): 
+class UsageError(Exception):
     """Error in pytest usage or invocation."""
- 
- 
-class PrintHelp(Exception): 
+
+
+class PrintHelp(Exception):
     """Raised when pytest should print its help to skip the rest of the
-    argument parsing and validation.""" 
+    argument parsing and validation."""

@@ -185,7 +185,7 @@ def pytest_configure(config):
     global pytest_config
     pytest_config = config
 
-    config.option.continue_on_collection_errors = True 
+    config.option.continue_on_collection_errors = True
 
     config.addinivalue_line("markers", "ya:external")
 
@@ -523,9 +523,9 @@ def pytest_collectreport(report):
             sys.stderr.write(yatest_lib.tools.to_utf8(report.longrepr))
 
 
-@pytest.mark.tryfirst 
-def pytest_pyfunc_call(pyfuncitem): 
-    testfunction = pyfuncitem.obj 
+@pytest.mark.tryfirst
+def pytest_pyfunc_call(pyfuncitem):
+    testfunction = pyfuncitem.obj
     iscoroutinefunction = getattr(inspect, "iscoroutinefunction", None)
     if iscoroutinefunction is not None and iscoroutinefunction(testfunction):
         msg = "Coroutine functions are not natively supported and have been skipped.\n"
@@ -538,9 +538,9 @@ def pytest_pyfunc_call(pyfuncitem):
     funcargs = pyfuncitem.funcargs
     testargs = {arg: funcargs[arg] for arg in pyfuncitem._fixtureinfo.argnames}
     pyfuncitem.retval = testfunction(**testargs)
-    return True 
- 
- 
+    return True
+
+
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     def logreport(report, result, call):
@@ -575,8 +575,8 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
     result = None
-    if hasattr(item, 'retval') and item.retval is not None: 
-        result = item.retval 
+    if hasattr(item, 'retval') and item.retval is not None:
+        result = item.retval
         if not pytest_config.from_ya_test:
             ti = TestItem(rep, result, pytest_config.option.test_suffix)
             tr = pytest_config.pluginmanager.getplugin('terminalreporter')
@@ -584,13 +584,13 @@ def pytest_runtest_makereport(item, call):
     logreport(rep, result, call)
 
 
-def pytest_make_parametrize_id(config, val, argname): 
-    # Avoid <, > symbols in canondata file names 
-    if inspect.isfunction(val) and val.__name__ == "<lambda>": 
-        return str(argname) 
-    return None 
- 
- 
+def pytest_make_parametrize_id(config, val, argname):
+    # Avoid <, > symbols in canondata file names
+    if inspect.isfunction(val) and val.__name__ == "<lambda>":
+        return str(argname)
+    return None
+
+
 def get_formatted_error(report):
     if isinstance(report.longrepr, tuple):
         text = ""
@@ -692,7 +692,7 @@ class TestItem(object):
         return self._error
 
     def set_error(self, entry, marker='bad'):
-        if isinstance(entry, _pytest.reports.BaseReport): 
+        if isinstance(entry, _pytest.reports.BaseReport):
             self._error = get_formatted_error(entry)
         else:
             self._error = "[[{}]]{}".format(yatest_lib.tools.to_str(marker), yatest_lib.tools.to_str(entry))
@@ -827,9 +827,9 @@ class TraceReportGenerator(object):
         self.trace('subtest-started', message)
 
     def on_finish_test_case(self, test_item, duration_only=False):
-        if test_item.result is not None: 
+        if test_item.result is not None:
             try:
-                result = canon.serialize(test_item.result) 
+                result = canon.serialize(test_item.result)
             except Exception as e:
                 yatest_logger.exception("Error while serializing test results")
                 test_item.set_error("Invalid test result: {}".format(e))

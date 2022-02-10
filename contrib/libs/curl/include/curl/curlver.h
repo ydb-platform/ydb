@@ -52,10 +52,10 @@
    This 6-digit (24 bits) hexadecimal number does not show pre-release number,
    and it is always a greater number in a more recent release. It makes
    comparisons with greater than and less than work.
- 
-   Note: This define is the full hex number and _does not_ use the 
-   CURL_VERSION_BITS() macro since curl's own configure script greps for it 
-   and needs it to contain the full number. 
+
+   Note: This define is the full hex number and _does not_ use the
+   CURL_VERSION_BITS() macro since curl's own configure script greps for it
+   and needs it to contain the full number.
 */
 #define LIBCURL_VERSION_NUM 0x074a00
 
@@ -64,14 +64,14 @@
  * timestamp is not stored in git, as the timestamp is properly set in the
  * tarballs by the maketgz script.
  *
- * The format of the date follows this template: 
+ * The format of the date follows this template:
  *
- * "2007-11-23" 
+ * "2007-11-23"
  */
 #define LIBCURL_TIMESTAMP "2020-12-09"
 
 #define CURL_VERSION_BITS(x,y,z) ((x)<<16|(y)<<8|(z))
-#define CURL_AT_LEAST_VERSION(x,y,z) \ 
-  (LIBCURL_VERSION_NUM >= CURL_VERSION_BITS(x, y, z)) 
- 
+#define CURL_AT_LEAST_VERSION(x,y,z) \
+  (LIBCURL_VERSION_NUM >= CURL_VERSION_BITS(x, y, z))
+
 #endif /* CURLINC_CURLVER_H */

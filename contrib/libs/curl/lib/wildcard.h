@@ -25,12 +25,12 @@
 #include "curl_setup.h"
 
 #ifndef CURL_DISABLE_FTP
-#include "llist.h" 
- 
+#include "llist.h"
+
 /* list of wildcard process states */
 typedef enum {
-  CURLWC_CLEAR = 0, 
-  CURLWC_INIT = 1, 
+  CURLWC_CLEAR = 0,
+  CURLWC_INIT = 1,
   CURLWC_MATCHING, /* library is trying to get list of addresses for
                       downloading */
   CURLWC_DOWNLOADING,
@@ -49,7 +49,7 @@ struct WildcardData {
   char *path; /* path to the directory, where we trying wildcard-match */
   char *pattern; /* wildcard pattern */
   struct Curl_llist filelist; /* llist with struct Curl_fileinfo */
-  void *protdata; /* pointer to protocol specific temporary data */ 
+  void *protdata; /* pointer to protocol specific temporary data */
   wildcard_dtor dtor;
   void *customptr;  /* for CURLOPT_CHUNK_DATA pointer */
 };
@@ -57,7 +57,7 @@ struct WildcardData {
 CURLcode Curl_wildcard_init(struct WildcardData *wc);
 void Curl_wildcard_dtor(struct WildcardData *wc);
 
-struct Curl_easy; 
+struct Curl_easy;
 
 #else
 /* FTP is disabled */

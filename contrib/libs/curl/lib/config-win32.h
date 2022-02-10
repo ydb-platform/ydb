@@ -53,11 +53,11 @@
 #define HAVE_GETOPT_H 1
 #endif
 
-/* Define to 1 if you have the <inttypes.h> header file. */ 
-#if defined(_MSC_VER) && (_MSC_VER >= 1800) 
-#define HAVE_INTTYPES_H 1 
-#endif 
- 
+/* Define to 1 if you have the <inttypes.h> header file. */
+#if defined(_MSC_VER) && (_MSC_VER >= 1800)
+#define HAVE_INTTYPES_H 1
+#endif
+
 /* Define if you have the <io.h> header file. */
 #define HAVE_IO_H 1
 
@@ -89,11 +89,11 @@
 /* Define if you have the <ssl.h> header file. */
 /* #define HAVE_SSL_H 1 */
 
-/* Define to 1 if you have the <stdbool.h> header file. */ 
-#if defined(_MSC_VER) && (_MSC_VER >= 1800) 
-#define HAVE_STDBOOL_H 1 
-#endif 
- 
+/* Define to 1 if you have the <stdbool.h> header file. */
+#if defined(_MSC_VER) && (_MSC_VER >= 1800)
+#define HAVE_STDBOOL_H 1
+#endif
+
 /* Define if you have the <stdlib.h> header file. */
 #define HAVE_STDLIB_H 1
 
@@ -167,11 +167,11 @@
 /* Define if you can safely include both <sys/time.h> and <time.h>. */
 /* #define TIME_WITH_SYS_TIME 1 */
 
-/* Define to 1 if bool is an available type. */ 
-#if defined(_MSC_VER) && (_MSC_VER >= 1800) 
-#define HAVE_BOOL_T 1 
-#endif 
- 
+/* Define to 1 if bool is an available type. */
+#if defined(_MSC_VER) && (_MSC_VER >= 1800)
+#define HAVE_BOOL_T 1
+#endif
+
 /* ---------------------------------------------------------------- */
 /*                             FUNCTIONS                            */
 /* ---------------------------------------------------------------- */
@@ -268,8 +268,8 @@
 #define HAVE_STRSTR 1
 
 /* Define if you have the strtoll function. */
-#if defined(__MINGW32__) || defined(__WATCOMC__) || defined(__POCC__) || \ 
-    (defined(_MSC_VER) && (_MSC_VER >= 1800)) 
+#if defined(__MINGW32__) || defined(__WATCOMC__) || defined(__POCC__) || \
+    (defined(_MSC_VER) && (_MSC_VER >= 1800))
 #define HAVE_STRTOLL 1
 #endif
 
@@ -402,9 +402,9 @@
 /* Define to the size of `short', as computed by sizeof. */
 #define SIZEOF_SHORT 2
 
-/* Define to the size of `long', as computed by sizeof. */ 
-#define SIZEOF_LONG 4 
- 
+/* Define to the size of `long', as computed by sizeof. */
+#define SIZEOF_LONG 4
+
 /* Define to the size of `size_t', as computed by sizeof. */
 #if defined(_WIN64)
 #  define SIZEOF_SIZE_T 8
@@ -412,9 +412,9 @@
 #  define SIZEOF_SIZE_T 4
 #endif
 
-/* Define to the size of `curl_off_t', as computed by sizeof. */ 
-#define SIZEOF_CURL_OFF_T 8 
- 
+/* Define to the size of `curl_off_t', as computed by sizeof. */
+#define SIZEOF_CURL_OFF_T 8
+
 /* ---------------------------------------------------------------- */
 /*               BSD-style lwIP TCP/IP stack SPECIFIC               */
 /* ---------------------------------------------------------------- */
@@ -490,9 +490,9 @@
 #endif
 
 /* Define if the compiler supports the 'long long' data type. */
-#if defined(__MINGW32__) || defined(__WATCOMC__)      || \ 
-    (defined(_MSC_VER)     && (_MSC_VER     >= 1310)) || \ 
-    (defined(__BORLANDC__) && (__BORLANDC__ >= 0x561)) 
+#if defined(__MINGW32__) || defined(__WATCOMC__)      || \
+    (defined(_MSC_VER)     && (_MSC_VER     >= 1310)) || \
+    (defined(__BORLANDC__) && (__BORLANDC__ >= 0x561))
 #define HAVE_LONGLONG 1
 #endif
 
@@ -502,7 +502,7 @@
 #define _CRT_NONSTDC_NO_DEPRECATE 1
 #endif
 
-/* VS2005 and later default size for time_t is 64-bit, unless 
+/* VS2005 and later default size for time_t is 64-bit, unless
    _USE_32BIT_TIME_T has been defined to get a 32-bit time_t. */
 #if defined(_MSC_VER) && (_MSC_VER >= 1400)
 #  ifndef _USE_32BIT_TIME_T
@@ -512,39 +512,39 @@
 #  endif
 #endif
 
-/* Define some minimum and default build targets for Visual Studio */ 
-#if defined(_MSC_VER) 
-   /* Officially, Microsoft's Windows SDK versions 6.X does not support Windows 
-      2000 as a supported build target. VS2008 default installations provides 
-      an embedded Windows SDK v6.0A along with the claim that Windows 2000 is a 
-      valid build target for VS2008. Popular belief is that binaries built with 
-      VS2008 using Windows SDK versions v6.X and Windows 2000 as a build target 
-      are functional. */ 
+/* Define some minimum and default build targets for Visual Studio */
+#if defined(_MSC_VER)
+   /* Officially, Microsoft's Windows SDK versions 6.X does not support Windows
+      2000 as a supported build target. VS2008 default installations provides
+      an embedded Windows SDK v6.0A along with the claim that Windows 2000 is a
+      valid build target for VS2008. Popular belief is that binaries built with
+      VS2008 using Windows SDK versions v6.X and Windows 2000 as a build target
+      are functional. */
 #  define VS2008_MIN_TARGET 0x0500
 
-   /* The minimum build target for VS2012 is Vista unless Update 1 is installed 
-      and the v110_xp toolset is chosen. */ 
-#  if defined(_USING_V110_SDK71_) 
-#    define VS2012_MIN_TARGET 0x0501 
-#  else 
-#    define VS2012_MIN_TARGET 0x0600 
-#  endif 
- 
-   /* VS2008 default build target is Windows Vista. We override default target 
-      to be Windows XP. */ 
-#  define VS2008_DEF_TARGET 0x0501 
- 
-   /* VS2012 default build target is Windows Vista unless Update 1 is installed 
-      and the v110_xp toolset is chosen. */ 
-#  if defined(_USING_V110_SDK71_) 
-#    define VS2012_DEF_TARGET 0x0501 
-#  else 
-#    define VS2012_DEF_TARGET 0x0600 
-#  endif 
+   /* The minimum build target for VS2012 is Vista unless Update 1 is installed
+      and the v110_xp toolset is chosen. */
+#  if defined(_USING_V110_SDK71_)
+#    define VS2012_MIN_TARGET 0x0501
+#  else
+#    define VS2012_MIN_TARGET 0x0600
+#  endif
+
+   /* VS2008 default build target is Windows Vista. We override default target
+      to be Windows XP. */
+#  define VS2008_DEF_TARGET 0x0501
+
+   /* VS2012 default build target is Windows Vista unless Update 1 is installed
+      and the v110_xp toolset is chosen. */
+#  if defined(_USING_V110_SDK71_)
+#    define VS2012_DEF_TARGET 0x0501
+#  else
+#    define VS2012_DEF_TARGET 0x0600
+#  endif
 #endif
 
 /* VS2008 default target settings and minimum build target check. */
-#if defined(_MSC_VER) && (_MSC_VER >= 1500) && (_MSC_VER <= 1600) 
+#if defined(_MSC_VER) && (_MSC_VER >= 1500) && (_MSC_VER <= 1600)
 #  ifndef _WIN32_WINNT
 #    define _WIN32_WINNT VS2008_DEF_TARGET
 #  endif
@@ -556,24 +556,24 @@
 #  endif
 #endif
 
-/* VS2012 default target settings and minimum build target check. */ 
-#if defined(_MSC_VER) && (_MSC_VER >= 1700) 
-#  ifndef _WIN32_WINNT 
-#    define _WIN32_WINNT VS2012_DEF_TARGET 
-#  endif 
-#  ifndef WINVER 
-#    define WINVER VS2012_DEF_TARGET 
-#  endif 
-#  if (_WIN32_WINNT < VS2012_MIN_TARGET) || (WINVER < VS2012_MIN_TARGET) 
-#    if defined(_USING_V110_SDK71_) 
-#      error VS2012 does not support Windows build targets prior to Windows XP 
-#    else 
-#      error VS2012 does not support Windows build targets prior to Windows \ 
-Vista 
-#    endif 
-#  endif 
-#endif 
- 
+/* VS2012 default target settings and minimum build target check. */
+#if defined(_MSC_VER) && (_MSC_VER >= 1700)
+#  ifndef _WIN32_WINNT
+#    define _WIN32_WINNT VS2012_DEF_TARGET
+#  endif
+#  ifndef WINVER
+#    define WINVER VS2012_DEF_TARGET
+#  endif
+#  if (_WIN32_WINNT < VS2012_MIN_TARGET) || (WINVER < VS2012_MIN_TARGET)
+#    if defined(_USING_V110_SDK71_)
+#      error VS2012 does not support Windows build targets prior to Windows XP
+#    else
+#      error VS2012 does not support Windows build targets prior to Windows \
+Vista
+#    endif
+#  endif
+#endif
+
 /* When no build target is specified Pelles C 5.00 and later default build
    target is Windows Vista. We override default target to be Windows 2000. */
 #if defined(__POCC__) && (__POCC__ >= 500)
@@ -631,8 +631,8 @@ Vista
 /* Define if struct sockaddr_in6 has the sin6_scope_id member. */
 #define HAVE_SOCKADDR_IN6_SIN6_SCOPE_ID 1
 
-#if defined(HAVE_WINSOCK2_H) && defined(_WIN32_WINNT) && \ 
-    (_WIN32_WINNT >= 0x0600) 
+#if defined(HAVE_WINSOCK2_H) && defined(_WIN32_WINNT) && \
+    (_WIN32_WINNT >= 0x0600)
 #define HAVE_STRUCT_POLLFD 1
 #endif
 
@@ -673,7 +673,7 @@ Vista
  */
 
 /* Define to enable c-ares asynchronous DNS lookups. */
-/* #define USE_ARES 1 */ 
+/* #define USE_ARES 1 */
 
 /* Default define to enable threaded asynchronous DNS lookups. */
 #if !defined(USE_SYNC_DNS) && !defined(USE_ARES) && \
@@ -690,39 +690,39 @@ Vista
 /* ---------------------------------------------------------------- */
 
 #if defined(CURL_HAS_NOVELL_LDAPSDK) || defined(CURL_HAS_MOZILLA_LDAPSDK)
-#undef USE_WIN32_LDAP 
+#undef USE_WIN32_LDAP
 #define HAVE_LDAP_SSL_H 1
 #define HAVE_LDAP_URL_PARSE 1
 #elif defined(CURL_HAS_OPENLDAP_LDAPSDK)
-#undef USE_WIN32_LDAP 
+#undef USE_WIN32_LDAP
 #define HAVE_LDAP_URL_PARSE 1
 #else
 #undef HAVE_LDAP_URL_PARSE
-#define HAVE_LDAP_SSL 1 
-#define USE_WIN32_LDAP 1 
+#define HAVE_LDAP_SSL 1
+#define USE_WIN32_LDAP 1
 #endif
 
-#if defined(__WATCOMC__) && defined(USE_WIN32_LDAP) 
+#if defined(__WATCOMC__) && defined(USE_WIN32_LDAP)
 #if __WATCOMC__ < 1280
 #define WINBERAPI  __declspec(cdecl)
 #define WINLDAPAPI __declspec(cdecl)
 #endif
 #endif
 
-#if defined(__POCC__) && defined(USE_WIN32_LDAP) 
+#if defined(__POCC__) && defined(USE_WIN32_LDAP)
 #  define CURL_DISABLE_LDAP 1
 #endif
 
-/* Define to use the Windows crypto library. */ 
+/* Define to use the Windows crypto library. */
 #if !defined(CURL_WINDOWS_APP)
-#define USE_WIN32_CRYPTO 
+#define USE_WIN32_CRYPTO
 #endif
- 
+
 /* On MinGW the ADDRESS_FAMILY typedef was committed alongside LUP_SECURE,
    so we use it to check for the presence of the typedef. */
 #include <ws2tcpip.h>
 #if !defined(__MINGW32__) || defined(LUP_SECURE)
-/* Define to use Unix sockets. */ 
+/* Define to use Unix sockets. */
 #define USE_UNIX_SOCKETS
 #if !defined(UNIX_PATH_MAX)
   /* Replicating logic present in afunix.h of newer Windows 10 SDK versions */
@@ -732,9 +732,9 @@ Vista
     ADDRESS_FAMILY sun_family;
     char sun_path[UNIX_PATH_MAX];
   } SOCKADDR_UN, *PSOCKADDR_UN;
-#endif 
 #endif
- 
+#endif
+
 /* ---------------------------------------------------------------- */
 /*                       ADDITIONAL DEFINITIONS                     */
 /* ---------------------------------------------------------------- */
@@ -761,7 +761,7 @@ Vista
 /* If you want to build curl with the built-in manual */
 #define USE_MANUAL 1
 
-#if defined(__POCC__) || defined(USE_IPV6) 
+#if defined(__POCC__) || defined(USE_IPV6)
 #  define ENABLE_IPV6 1
 #endif
 

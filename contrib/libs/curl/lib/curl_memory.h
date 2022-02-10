@@ -28,9 +28,9 @@
  * File curl_memory.h must be included by _all_ *.c source files
  * that use memory related functions strdup, malloc, calloc, realloc
  * or free, and given source file is used to build libcurl library.
- * It should be included immediately before memdebug.h as the last files 
- * included to avoid undesired interaction with other memory function 
- * headers in dependent libraries. 
+ * It should be included immediately before memdebug.h as the last files
+ * included to avoid undesired interaction with other memory function
+ * headers in dependent libraries.
  *
  * There is nearly no exception to above rule. All libcurl source
  * files in 'lib' subdirectory as well as those living deep inside
@@ -70,7 +70,7 @@
  *
  * Programs and libraries in 'tests' subdirectories have specific
  * purposes and needs, and as such each one will use whatever fits
- * best, depending additionally whether it links with libcurl or not. 
+ * best, depending additionally whether it links with libcurl or not.
  *
  * Caveat emptor. Proper curlx_* separation is a work in progress
  * the same as CURLX_NO_MEMORY_CALLBACKS usage, some adjustments may
@@ -83,20 +83,20 @@
 
 #ifndef CURLX_NO_MEMORY_CALLBACKS
 
-#ifndef CURL_DID_MEMORY_FUNC_TYPEDEFS /* only if not already done */ 
-/* 
- * The following memory function replacement typedef's are COPIED from 
- * curl/curl.h and MUST match the originals. We copy them to avoid having to 
- * include curl/curl.h here. We avoid that include since it includes stdio.h 
- * and other headers that may get messed up with defines done here. 
- */ 
-typedef void *(*curl_malloc_callback)(size_t size); 
-typedef void (*curl_free_callback)(void *ptr); 
-typedef void *(*curl_realloc_callback)(void *ptr, size_t size); 
-typedef char *(*curl_strdup_callback)(const char *str); 
-typedef void *(*curl_calloc_callback)(size_t nmemb, size_t size); 
-#define CURL_DID_MEMORY_FUNC_TYPEDEFS 
-#endif 
+#ifndef CURL_DID_MEMORY_FUNC_TYPEDEFS /* only if not already done */
+/*
+ * The following memory function replacement typedef's are COPIED from
+ * curl/curl.h and MUST match the originals. We copy them to avoid having to
+ * include curl/curl.h here. We avoid that include since it includes stdio.h
+ * and other headers that may get messed up with defines done here.
+ */
+typedef void *(*curl_malloc_callback)(size_t size);
+typedef void (*curl_free_callback)(void *ptr);
+typedef void *(*curl_realloc_callback)(void *ptr, size_t size);
+typedef char *(*curl_strdup_callback)(const char *str);
+typedef void *(*curl_calloc_callback)(size_t nmemb, size_t size);
+#define CURL_DID_MEMORY_FUNC_TYPEDEFS
+#endif
 
 extern curl_malloc_callback Curl_cmalloc;
 extern curl_free_callback Curl_cfree;

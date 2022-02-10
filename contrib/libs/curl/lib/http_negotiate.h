@@ -25,8 +25,8 @@
 #if !defined(CURL_DISABLE_HTTP) && defined(USE_SPNEGO)
 
 /* this is for Negotiate header input */
-CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy, 
-                              const char *header); 
+CURLcode Curl_input_negotiate(struct connectdata *conn, bool proxy,
+                              const char *header);
 
 /* this is for creating Negotiate header output */
 CURLcode Curl_output_negotiate(struct connectdata *conn, bool proxy);

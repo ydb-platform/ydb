@@ -40,13 +40,13 @@
  * of 'long' the conversion function to use is strtol().
  */
 
-typedef enum { 
-  CURL_OFFT_OK,    /* parsed fine */ 
-  CURL_OFFT_FLOW,  /* over or underflow */ 
-  CURL_OFFT_INVAL  /* nothing was parsed */ 
-} CURLofft; 
+typedef enum {
+  CURL_OFFT_OK,    /* parsed fine */
+  CURL_OFFT_FLOW,  /* over or underflow */
+  CURL_OFFT_INVAL  /* nothing was parsed */
+} CURLofft;
 
-CURLofft curlx_strtoofft(const char *str, char **endp, int base, 
-                         curl_off_t *num); 
+CURLofft curlx_strtoofft(const char *str, char **endp, int base,
+                         curl_off_t *num);
 
 #endif /* HEADER_CURL_STRTOOFFT_H */

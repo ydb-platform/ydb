@@ -24,8 +24,8 @@
 
 #include "curl_setup.h"
 
-void Curl_infof(struct Curl_easy *, const char *fmt, ...); 
-void Curl_failf(struct Curl_easy *, const char *fmt, ...); 
+void Curl_infof(struct Curl_easy *, const char *fmt, ...);
+void Curl_failf(struct Curl_easy *, const char *fmt, ...);
 
 #if defined(CURL_DISABLE_VERBOSE_STRINGS)
 
@@ -34,7 +34,7 @@ void Curl_failf(struct Curl_easy *, const char *fmt, ...);
 #elif defined(HAVE_VARIADIC_MACROS_GCC)
 #define infof(x...)  Curl_nop_stmt
 #else
-#error "missing VARIADIC macro define, fix and rebuild!" 
+#error "missing VARIADIC macro define, fix and rebuild!"
 #endif
 
 #else /* CURL_DISABLE_VERBOSE_STRINGS */
@@ -50,10 +50,10 @@ void Curl_failf(struct Curl_easy *, const char *fmt, ...);
 #define CLIENTWRITE_BOTH   (CLIENTWRITE_BODY|CLIENTWRITE_HEADER)
 
 CURLcode Curl_client_write(struct connectdata *conn, int type, char *ptr,
-                           size_t len) WARN_UNUSED_RESULT; 
+                           size_t len) WARN_UNUSED_RESULT;
 
-bool Curl_recv_has_postponed_data(struct connectdata *conn, int sockindex); 
- 
+bool Curl_recv_has_postponed_data(struct connectdata *conn, int sockindex);
+
 /* internal read-function, does plain socket only */
 CURLcode Curl_read_plain(curl_socket_t sockfd,
                          char *buf,
@@ -82,8 +82,8 @@ CURLcode Curl_write_plain(struct connectdata *conn,
                           ssize_t *written);
 
 /* the function used to output verbose information */
-int Curl_debug(struct Curl_easy *data, curl_infotype type, 
-               char *ptr, size_t size); 
+int Curl_debug(struct Curl_easy *data, curl_infotype type,
+               char *ptr, size_t size);
 
 
 #endif /* HEADER_CURL_SENDF_H */

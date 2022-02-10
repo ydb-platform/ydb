@@ -9,7 +9,7 @@ import logging
 import tempfile
 import subprocess
 import errno
-import distutils.version 
+import distutils.version
 
 import six
 
@@ -27,7 +27,7 @@ from . import environment
 MAX_OUT_LEN = 1000 * 1000  # 1 mb
 MAX_MESSAGE_LEN = 1500
 SANITIZER_ERROR_PATTERN = br": ([A-Z][\w]+Sanitizer)"
-GLIBC_PATTERN = re.compile(r"\S+@GLIBC_([0-9.]+)") 
+GLIBC_PATTERN = re.compile(r"\S+@GLIBC_([0-9.]+)")
 yatest_logger = logging.getLogger("ya.test")
 
 
@@ -696,13 +696,13 @@ def _run_readelf(binary_path):
 
 
 def check_glibc_version(binary_path):
-    lucid_glibc_version = distutils.version.LooseVersion("2.11") 
- 
+    lucid_glibc_version = distutils.version.LooseVersion("2.11")
+
     for l in _run_readelf(binary_path).split('\n'):
-        match = GLIBC_PATTERN.search(l) 
-        if not match: 
-            continue 
-        assert distutils.version.LooseVersion(match.group(1)) <= lucid_glibc_version, match.group(0) 
+        match = GLIBC_PATTERN.search(l)
+        if not match:
+            continue
+        assert distutils.version.LooseVersion(match.group(1)) <= lucid_glibc_version, match.group(0)
 
 
 def backtrace_to_html(bt_filename, output):

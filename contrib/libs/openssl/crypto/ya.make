@@ -1,5 +1,5 @@
-LIBRARY() 
- 
+LIBRARY()
+
 LICENSE(
     Apache-2.0 AND
     BSD-2-Clause AND
@@ -12,25 +12,25 @@ LICENSE(
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
- 
+
 OWNER(
     somov
     g:cpp-contrib
 )
 
-PEERDIR( 
-    contrib/libs/zlib 
-) 
- 
-ADDINCL( 
-    contrib/libs/openssl 
-    contrib/libs/openssl/crypto 
-    contrib/libs/openssl/crypto/ec/curve448 
-    contrib/libs/openssl/crypto/ec/curve448/arch_32 
-    contrib/libs/openssl/crypto/modes 
-    contrib/libs/openssl/include 
-) 
- 
+PEERDIR(
+    contrib/libs/zlib
+)
+
+ADDINCL(
+    contrib/libs/openssl
+    contrib/libs/openssl/crypto
+    contrib/libs/openssl/crypto/ec/curve448
+    contrib/libs/openssl/crypto/ec/curve448/arch_32
+    contrib/libs/openssl/crypto/modes
+    contrib/libs/openssl/include
+)
+
 IF (OS_LINUX)
     IF (ARCH_ARM64)
         SET(LINUX_ARM64 yes)
@@ -81,15 +81,15 @@ NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
-CFLAGS( 
-    -DOPENSSL_BN_ASM_MONT 
-    -DOPENSSL_CPUID_OBJ 
-    -DSHA1_ASM 
-    -DSHA256_ASM 
-    -DSHA512_ASM 
+CFLAGS(
+    -DOPENSSL_BN_ASM_MONT
+    -DOPENSSL_CPUID_OBJ
+    -DSHA1_ASM
+    -DSHA256_ASM
+    -DSHA512_ASM
     -DZLIB
-) 
- 
+)
+
 IF (NOT IOS_ARM64 AND NOT DARWIN_ARM64)
     CFLAGS(
         -DDSO_NONE
@@ -116,38 +116,38 @@ IF (NOT IOS_ARMV7 AND NOT ANDROID_ARMV7 AND NOT LINUX_ARMV7)
     )
 ENDIF()
 
-IF (NOT OS_WINDOWS) 
-    CFLAGS( 
-        -DENGINESDIR=\"/usr/local/lib/engines-1.1\" 
-        -DOPENSSLDIR=\"/usr/local/ssl\" 
-    ) 
-ENDIF() 
- 
-IF (OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 OR OS_WINDOWS AND ARCH_X86_64) 
-    CFLAGS( 
-        -DGHASH_ASM 
-        -DL_ENDIAN 
-        -DMD5_ASM 
-        -DOPENSSL_BN_ASM_GF2m 
-        -DOPENSSL_BN_ASM_MONT5 
-        -DOPENSSL_IA32_SSE2 
-        -DRC4_ASM 
-        -DX25519_ASM 
-    ) 
-ENDIF() 
- 
-IF (OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64) 
+IF (NOT OS_WINDOWS)
+    CFLAGS(
+        -DENGINESDIR=\"/usr/local/lib/engines-1.1\"
+        -DOPENSSLDIR=\"/usr/local/ssl\"
+    )
+ENDIF()
+
+IF (OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 OR OS_WINDOWS AND ARCH_X86_64)
+    CFLAGS(
+        -DGHASH_ASM
+        -DL_ENDIAN
+        -DMD5_ASM
+        -DOPENSSL_BN_ASM_GF2m
+        -DOPENSSL_BN_ASM_MONT5
+        -DOPENSSL_IA32_SSE2
+        -DRC4_ASM
+        -DX25519_ASM
+    )
+ENDIF()
+
+IF (OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64)
     CFLAGS(
         -DOPENSSL_USE_NODELETE
     )
-ENDIF() 
- 
-IF (OS_DARWIN AND ARCH_X86_64) 
+ENDIF()
+
+IF (OS_DARWIN AND ARCH_X86_64)
     CFLAGS(
         -D_REENTRANT
     )
-ENDIF() 
- 
+ENDIF()
+
 IF (OS_DARWIN AND ARCH_ARM64)
     CFLAGS(
         -DL_ENDIAN
@@ -168,35 +168,35 @@ IF (OS_WINDOWS)
             -DOPENSSLDIR="\"C:\\\\Program\ Files\ \(x86\)\\\\Common\ Files\\\\SSL\""
         )
     ENDIF()
-    CFLAGS( 
-        -DOPENSSL_SYS_WIN32 
-        -DUNICODE 
-        -DWIN32_LEAN_AND_MEAN 
-        -D_CRT_SECURE_NO_DEPRECATE 
-        -D_UNICODE 
-        -D_WINSOCK_DEPRECATED_NO_WARNINGS 
-        /GF 
-    ) 
-ENDIF() 
- 
+    CFLAGS(
+        -DOPENSSL_SYS_WIN32
+        -DUNICODE
+        -DWIN32_LEAN_AND_MEAN
+        -D_CRT_SECURE_NO_DEPRECATE
+        -D_UNICODE
+        -D_WINSOCK_DEPRECATED_NO_WARNINGS
+        /GF
+    )
+ENDIF()
+
 IF (SANITIZER_TYPE == memory)
     CFLAGS(
         -DPURIFY
     )
-ENDIF() 
- 
-IF (MUSL) 
+ENDIF()
+
+IF (MUSL)
     CFLAGS(
         -DOPENSSL_NO_ASYNC
     )
-ENDIF() 
- 
-IF (ARCH_TYPE_32) 
+ENDIF()
+
+IF (ARCH_TYPE_32)
     CFLAGS(
         -DOPENSSL_NO_EC_NISTP_64_GCC_128
     )
-ENDIF() 
- 
+ENDIF()
+
 IF (ARCH_X86_64 AND NOT MSVC)
     SET_APPEND(
         SFLAGS
@@ -210,7 +210,7 @@ IF (OS_WINDOWS)
     SET_COMPILE_OUTPUTS_MODIFIERS(NOREL)
 ENDIF()
 
-SRCS( 
+SRCS(
     aes/aes_cbc.c
     aes/aes_cfb.c
     aes/aes_ecb.c
@@ -810,8 +810,8 @@ SRCS(
     x509v3/v3_tlsf.c
     x509v3/v3_utl.c
     x509v3/v3err.c
-) 
- 
+)
+
 IF (NOT WINDOWS_I686)
     SRCS(
         ec/ecp_nistz256.c
@@ -1453,4 +1453,4 @@ IF (OS_ANDROID AND ARCH_ARM64)
     )
 ENDIF()
 
-END() 
+END()

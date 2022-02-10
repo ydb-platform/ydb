@@ -23,15 +23,15 @@
  ***************************************************************************/
 #include "curl_setup.h"
 
-/* IPv6 address scopes. */ 
-#define IPV6_SCOPE_GLOBAL       0       /* Global scope. */ 
-#define IPV6_SCOPE_LINKLOCAL    1       /* Link-local scope. */ 
-#define IPV6_SCOPE_SITELOCAL    2       /* Site-local scope (deprecated). */ 
-#define IPV6_SCOPE_UNIQUELOCAL  3       /* Unique local */ 
-#define IPV6_SCOPE_NODELOCAL    4       /* Loopback. */ 
- 
-unsigned int Curl_ipv6_scope(const struct sockaddr *sa); 
- 
+/* IPv6 address scopes. */
+#define IPV6_SCOPE_GLOBAL       0       /* Global scope. */
+#define IPV6_SCOPE_LINKLOCAL    1       /* Link-local scope. */
+#define IPV6_SCOPE_SITELOCAL    2       /* Site-local scope (deprecated). */
+#define IPV6_SCOPE_UNIQUELOCAL  3       /* Unique local */
+#define IPV6_SCOPE_NODELOCAL    4       /* Loopback. */
+
+unsigned int Curl_ipv6_scope(const struct sockaddr *sa);
+
 typedef enum {
   IF2IP_NOT_FOUND = 0, /* Interface not found */
   IF2IP_AF_NOT_SUPPORTED = 1, /* Int. exists but has no address for this af */
@@ -40,7 +40,7 @@ typedef enum {
 
 if2ip_result_t Curl_if2ip(int af, unsigned int remote_scope,
                           unsigned int local_scope_id, const char *interf,
-                          char *buf, int buf_size); 
+                          char *buf, int buf_size);
 
 #ifdef __INTERIX
 

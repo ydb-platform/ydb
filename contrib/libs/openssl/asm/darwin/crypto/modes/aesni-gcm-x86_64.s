@@ -1,6 +1,6 @@
-.text	 
- 
- 
+.text	
+
+
 .p2align	5
 _aesni_ctr32_ghash_6x:
 
@@ -310,13 +310,13 @@ L$6x_done:
 	vpxor	16+8(%rsp),%xmm8,%xmm8
 	vpxor	%xmm4,%xmm8,%xmm8
 
-	.byte	0xf3,0xc3 
- 
- 
-.globl	_aesni_gcm_decrypt 
- 
+	.byte	0xf3,0xc3
+
+
+.globl	_aesni_gcm_decrypt
+
 .p2align	5
-_aesni_gcm_decrypt: 
+_aesni_gcm_decrypt:
 
 	xorq	%r10,%r10
 	cmpq	$0x60,%rdx
@@ -412,8 +412,8 @@ L$dec_no_key_aliasing:
 
 L$gcm_dec_abort:
 	movq	%r10,%rax
-	.byte	0xf3,0xc3 
- 
+	.byte	0xf3,0xc3
+
 
 
 .p2align	5

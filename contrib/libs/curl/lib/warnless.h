@@ -26,9 +26,9 @@
 #include <curl/curl.h> /* for curl_socket_t */
 #endif
 
-#define CURLX_FUNCTION_CAST(target_type, func) \ 
-  (target_type)(void (*) (void))(func) 
- 
+#define CURLX_FUNCTION_CAST(target_type, func) \
+  (target_type)(void (*) (void))(func)
+
 unsigned short curlx_ultous(unsigned long ulnum);
 
 unsigned char curlx_ultouc(unsigned long ulnum);
@@ -37,8 +37,8 @@ int curlx_ultosi(unsigned long ulnum);
 
 int curlx_uztosi(size_t uznum);
 
-curl_off_t curlx_uztoso(size_t uznum); 
- 
+curl_off_t curlx_uztoso(size_t uznum);
+
 unsigned long curlx_uztoul(size_t uznum);
 
 unsigned int curlx_uztoui(size_t uznum);
@@ -55,8 +55,8 @@ size_t curlx_sotouz(curl_off_t sonum);
 
 int curlx_sztosi(ssize_t sznum);
 
-unsigned short curlx_uitous(unsigned int uinum); 
- 
+unsigned short curlx_uitous(unsigned int uinum);
+
 size_t curlx_sitouz(int sinum);
 
 #ifdef USE_WINSOCK
@@ -67,21 +67,21 @@ curl_socket_t curlx_sitosk(int i);
 
 #endif /* USE_WINSOCK */
 
-#if defined(WIN32) || defined(_WIN32) 
- 
-ssize_t curlx_read(int fd, void *buf, size_t count); 
- 
-ssize_t curlx_write(int fd, const void *buf, size_t count); 
- 
-#ifndef BUILDING_WARNLESS_C 
-#  undef  read 
-#  define read(fd, buf, count)  curlx_read(fd, buf, count) 
-#  undef  write 
-#  define write(fd, buf, count) curlx_write(fd, buf, count) 
-#endif 
- 
-#endif /* WIN32 || _WIN32 */ 
- 
+#if defined(WIN32) || defined(_WIN32)
+
+ssize_t curlx_read(int fd, void *buf, size_t count);
+
+ssize_t curlx_write(int fd, const void *buf, size_t count);
+
+#ifndef BUILDING_WARNLESS_C
+#  undef  read
+#  define read(fd, buf, count)  curlx_read(fd, buf, count)
+#  undef  write
+#  define write(fd, buf, count) curlx_write(fd, buf, count)
+#endif
+
+#endif /* WIN32 || _WIN32 */
+
 #if defined(__INTEL_COMPILER) && defined(__unix__)
 
 int curlx_FD_ISSET(int fd, fd_set *fdset);

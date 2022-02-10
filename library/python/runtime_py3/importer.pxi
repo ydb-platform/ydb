@@ -1,7 +1,7 @@
 import marshal
 import sys
 from _codecs import utf_8_decode, utf_8_encode
-from _frozen_importlib import _call_with_frames_removed, spec_from_loader, BuiltinImporter 
+from _frozen_importlib import _call_with_frames_removed, spec_from_loader, BuiltinImporter
 from _frozen_importlib_external import _os, _path_isfile, _path_isdir, _path_isabs, path_sep, _path_join, _path_split
 from _io import FileIO
 
@@ -186,7 +186,7 @@ class ResourceImporter(object):
         else:
             self.arcadia_source_finder = None
 
-        for p in list(self.memory) + list(sys.builtin_module_names): 
+        for p in list(self.memory) + list(sys.builtin_module_names):
             for pp in iter_prefixes(p):
                 k = pp + '.__init__'
                 if k not in self.memory:
@@ -207,27 +207,27 @@ class ResourceImporter(object):
 
     def find_spec(self, fullname, path=None, target=None):
         try:
-            is_package = self.is_package(fullname) 
+            is_package = self.is_package(fullname)
         except ImportError:
             return None
-        return spec_from_loader(fullname, self, is_package=is_package) 
+        return spec_from_loader(fullname, self, is_package=is_package)
 
-    def find_module(self, fullname, path=None): 
-        """For backward compatibility.""" 
-        spec = self.find_spec(fullname, path) 
-        return spec.loader if spec is not None else None 
- 
-    def create_module(self, spec): 
-        """Use default semantics for module creation.""" 
- 
-    def exec_module(self, module): 
-        code = self.get_code(module.__name__) 
+    def find_module(self, fullname, path=None):
+        """For backward compatibility."""
+        spec = self.find_spec(fullname, path)
+        return spec.loader if spec is not None else None
+
+    def create_module(self, spec):
+        """Use default semantics for module creation."""
+
+    def exec_module(self, module):
+        code = self.get_code(module.__name__)
         module.__file__ = code.co_filename
         if self.is_package(module.__name__):
             module.__path__= [executable + path_sep + module.__name__.replace('.', path_sep)]
         # exec(code, module.__dict__)
-        _call_with_frames_removed(exec, code, module.__dict__) 
- 
+        _call_with_frames_removed(exec, code, module.__dict__)
+
     # PEP-302 extension 1 of 3: data loader.
     def get_data(self, path):
         path = _b(path)
@@ -263,7 +263,7 @@ class ResourceImporter(object):
             abspath = resfs_resolve(relpath)
             if abspath:
                 return _s(file_bytes(abspath))
-        data = resfs_read(mod_path(fullname)) 
+        data = resfs_read(mod_path(fullname))
         return _s(data) if data else ''
 
     def get_code(self, fullname):
@@ -281,8 +281,8 @@ class ResourceImporter(object):
 
         yapyc_path = path + b'.yapyc3'
         yapyc_data = resfs_read(yapyc_path, builtin=True)
-        if yapyc_data: 
-            return marshal.loads(yapyc_data) 
+        if yapyc_data:
+            return marshal.loads(yapyc_data)
         else:
             py_data = resfs_read(path, builtin=True)
             if py_data:
@@ -385,14 +385,14 @@ class _ResfsResourceReader:
                 yield _s(res_or_subdir)
 
 
-class BuiltinSubmoduleImporter(BuiltinImporter): 
-    @classmethod 
-    def find_spec(cls, fullname, path=None, target=None): 
-        if path is not None: 
-            return super().find_spec(fullname, None, target) 
-        else: 
-            return None 
- 
+class BuiltinSubmoduleImporter(BuiltinImporter):
+    @classmethod
+    def find_spec(cls, fullname, path=None, target=None):
+        if path is not None:
+            return super().find_spec(fullname, None, target)
+        else:
+            return None
+
 
 class ArcadiaSourceFinder:
     """

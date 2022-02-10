@@ -16,7 +16,7 @@
 #   include "curl_config-win.h"
 #else
 #   include "curl_config-linux.h"
-#endif 
+#endif
 
 #if defined(_musl_)
 #   include "curl_config-musl.h"

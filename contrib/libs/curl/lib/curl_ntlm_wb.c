@@ -22,14 +22,14 @@
 
 #include "curl_setup.h"
 
-#if !defined(CURL_DISABLE_HTTP) && defined(USE_NTLM) && \ 
-    defined(NTLM_WB_ENABLED) 
+#if !defined(CURL_DISABLE_HTTP) && defined(USE_NTLM) && \
+    defined(NTLM_WB_ENABLED)
 
 /*
  * NTLM details:
  *
- * https://davenport.sourceforge.io/ntlm.html 
- * https://www.innovation.ch/java/ntlm.html 
+ * https://davenport.sourceforge.io/ntlm.html
+ * https://www.innovation.ch/java/ntlm.html
  */
 
 #define DEBUG_ME 0
@@ -40,23 +40,23 @@
 #ifdef HAVE_SIGNAL_H
 #include <signal.h>
 #endif
-#ifdef HAVE_PWD_H 
-#include <pwd.h> 
-#endif 
+#ifdef HAVE_PWD_H
+#include <pwd.h>
+#endif
 
 #include "urldata.h"
 #include "sendf.h"
 #include "select.h"
-#include "vauth/ntlm.h" 
-#include "curl_ntlm_core.h" 
+#include "vauth/ntlm.h"
+#include "curl_ntlm_core.h"
 #include "curl_ntlm_wb.h"
 #include "url.h"
 #include "strerror.h"
-#include "strdup.h" 
+#include "strdup.h"
 #include "strcase.h"
 
-/* The last 3 #include files should be in this order */ 
-#include "curl_printf.h" 
+/* The last 3 #include files should be in this order */
+#include "curl_printf.h"
 #include "curl_memory.h"
 #include "memdebug.h"
 
@@ -121,10 +121,10 @@ static CURLcode ntlm_wb_init(struct Curl_easy *data, struct ntlmdata *ntlm,
   char *slash, *domain = NULL;
   const char *ntlm_auth = NULL;
   char *ntlm_auth_alloc = NULL;
-#if defined(HAVE_GETPWUID_R) && defined(HAVE_GETEUID) 
-  struct passwd pw, *pw_res; 
-  char pwbuf[1024]; 
-#endif 
+#if defined(HAVE_GETPWUID_R) && defined(HAVE_GETEUID)
+  struct passwd pw, *pw_res;
+  char pwbuf[1024];
+#endif
   char buffer[STRERROR_LEN];
 
 #if defined(CURL_DISABLE_VERBOSE_STRINGS)
@@ -137,34 +137,34 @@ static CURLcode ntlm_wb_init(struct Curl_easy *data, struct ntlmdata *ntlm,
     return CURLE_OK;
 
   username = userp;
-  /* The real ntlm_auth really doesn't like being invoked with an 
-     empty username. It won't make inferences for itself, and expects 
-     the client to do so (mostly because it's really designed for 
-     servers like squid to use for auth, and client support is an 
-     afterthought for it). So try hard to provide a suitable username 
-     if we don't already have one. But if we can't, provide the 
-     empty one anyway. Perhaps they have an implementation of the 
-     ntlm_auth helper which *doesn't* need it so we might as well try */ 
-  if(!username || !username[0]) { 
-    username = getenv("NTLMUSER"); 
-    if(!username || !username[0]) 
-      username = getenv("LOGNAME"); 
-    if(!username || !username[0]) 
-      username = getenv("USER"); 
-#if defined(HAVE_GETPWUID_R) && defined(HAVE_GETEUID) 
-    if((!username || !username[0]) && 
-       !getpwuid_r(geteuid(), &pw, pwbuf, sizeof(pwbuf), &pw_res) && 
-       pw_res) { 
-      username = pw.pw_name; 
-    } 
-#endif 
-    if(!username || !username[0]) 
-      username = userp; 
-  } 
+  /* The real ntlm_auth really doesn't like being invoked with an
+     empty username. It won't make inferences for itself, and expects
+     the client to do so (mostly because it's really designed for
+     servers like squid to use for auth, and client support is an
+     afterthought for it). So try hard to provide a suitable username
+     if we don't already have one. But if we can't, provide the
+     empty one anyway. Perhaps they have an implementation of the
+     ntlm_auth helper which *doesn't* need it so we might as well try */
+  if(!username || !username[0]) {
+    username = getenv("NTLMUSER");
+    if(!username || !username[0])
+      username = getenv("LOGNAME");
+    if(!username || !username[0])
+      username = getenv("USER");
+#if defined(HAVE_GETPWUID_R) && defined(HAVE_GETEUID)
+    if((!username || !username[0]) &&
+       !getpwuid_r(geteuid(), &pw, pwbuf, sizeof(pwbuf), &pw_res) &&
+       pw_res) {
+      username = pw.pw_name;
+    }
+#endif
+    if(!username || !username[0])
+      username = userp;
+  }
   slash = strpbrk(username, "\\/");
   if(slash) {
-    domain = strdup(username); 
-    if(!domain) 
+    domain = strdup(username);
+    if(!domain)
       return CURLE_OUT_OF_MEMORY;
     slash = domain + (slash - username);
     *slash = '\0';
@@ -245,23 +245,23 @@ static CURLcode ntlm_wb_init(struct Curl_easy *data, struct ntlmdata *ntlm,
   sclose(sockfds[1]);
   ntlm->ntlm_auth_hlpr_socket = sockfds[0];
   ntlm->ntlm_auth_hlpr_pid = child_pid;
-  free(domain); 
-  free(ntlm_auth_alloc); 
+  free(domain);
+  free(ntlm_auth_alloc);
   return CURLE_OK;
 
 done:
-  free(domain); 
-  free(ntlm_auth_alloc); 
+  free(domain);
+  free(ntlm_auth_alloc);
   return CURLE_REMOTE_ACCESS_DENIED;
 }
 
-/* if larger than this, something is seriously wrong */ 
-#define MAX_NTLM_WB_RESPONSE 100000 
- 
+/* if larger than this, something is seriously wrong */
+#define MAX_NTLM_WB_RESPONSE 100000
+
 static CURLcode ntlm_wb_response(struct Curl_easy *data, struct ntlmdata *ntlm,
                                  const char *input, curlntlm state)
 {
-  size_t len_in = strlen(input), len_out = 0; 
+  size_t len_in = strlen(input), len_out = 0;
   struct dynbuf b;
   char *ptr = NULL;
   unsigned char *buf = (unsigned char *)data->state.buffer;
@@ -280,7 +280,7 @@ static CURLcode ntlm_wb_response(struct Curl_easy *data, struct ntlmdata *ntlm,
     len_in -= written;
   }
   /* Read one line */
-  while(1) { 
+  while(1) {
     ssize_t size =
       sread(ntlm->ntlm_auth_hlpr_socket, buf, data->set.buffer_size);
     if(size == -1) {
@@ -290,26 +290,26 @@ static CURLcode ntlm_wb_response(struct Curl_easy *data, struct ntlmdata *ntlm,
     }
     else if(size == 0)
       goto done;
- 
+
     if(Curl_dyn_addn(&b, buf, size))
       goto done;
- 
+
     len_out = Curl_dyn_len(&b);
     ptr = Curl_dyn_ptr(&b);
     if(len_out && ptr[len_out - 1] == '\n') {
       ptr[len_out - 1] = '\0';
       break; /* done! */
-    } 
+    }
     /* loop */
   }
- 
+
   /* Samba/winbind installed but not configured */
   if(state == NTLMSTATE_TYPE1 &&
-     len_out == 3 && 
+     len_out == 3 &&
      ptr[0] == 'P' && ptr[1] == 'W')
-    goto done; 
+    goto done;
   /* invalid response */
-  if(len_out < 4) 
+  if(len_out < 4)
     goto done;
   if(state == NTLMSTATE_TYPE1 &&
      (ptr[0]!='Y' || ptr[1]!='R' || ptr[2]!=' '))
@@ -322,7 +322,7 @@ static CURLcode ntlm_wb_response(struct Curl_easy *data, struct ntlmdata *ntlm,
   ntlm->response = strdup(ptr + 3);
   Curl_dyn_free(&b);
   if(!ntlm->response)
-    return CURLE_OUT_OF_MEMORY; 
+    return CURLE_OUT_OF_MEMORY;
   return CURLE_OK;
 done:
   Curl_dyn_free(&b);
@@ -396,7 +396,7 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
   if(proxy) {
 #ifndef CURL_DISABLE_PROXY
     allocuserpwd = &data->state.aptr.proxyuserpwd;
-    userp = conn->http_proxy.user; 
+    userp = conn->http_proxy.user;
     ntlm = &conn->proxyntlm;
     state = &conn->proxy_ntlm_state;
     authp = &conn->data->state.authproxy;
@@ -415,17 +415,17 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
 
   /* not set means empty */
   if(!userp)
-    userp = ""; 
+    userp = "";
 
   switch(*state) {
   case NTLMSTATE_TYPE1:
   default:
     /* Use Samba's 'winbind' daemon to support NTLM authentication,
-     * by delegating the NTLM challenge/response protocol to a helper 
+     * by delegating the NTLM challenge/response protocol to a helper
      * in ntlm_auth.
      * http://devel.squid-cache.org/ntlm/squid_helper_protocol.html
-     * https://www.samba.org/samba/docs/man/manpages-3/winbindd.8.html 
-     * https://www.samba.org/samba/docs/man/manpages-3/ntlm_auth.1.html 
+     * https://www.samba.org/samba/docs/man/manpages-3/winbindd.8.html
+     * https://www.samba.org/samba/docs/man/manpages-3/ntlm_auth.1.html
      * Preprocessor symbol 'NTLM_WB_ENABLED' is defined when this
      * feature is enabled and 'NTLM_WB_FILE' symbol holds absolute
      * filename of ntlm_auth helper.
@@ -440,14 +440,14 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
     if(res)
       return res;
 
-    free(*allocuserpwd); 
+    free(*allocuserpwd);
     *allocuserpwd = aprintf("%sAuthorization: NTLM %s\r\n",
                             proxy ? "Proxy-" : "",
                             ntlm->response);
     DEBUG_OUT(fprintf(stderr, "**** Header %s\n ", *allocuserpwd));
     Curl_safefree(ntlm->response);
-    if(!*allocuserpwd) 
-      return CURLE_OUT_OF_MEMORY; 
+    if(!*allocuserpwd)
+      return CURLE_OUT_OF_MEMORY;
     break;
 
   case NTLMSTATE_TYPE2: {
@@ -459,7 +459,7 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
     if(res)
       return res;
 
-    free(*allocuserpwd); 
+    free(*allocuserpwd);
     *allocuserpwd = aprintf("%sAuthorization: NTLM %s\r\n",
                             proxy ? "Proxy-" : "",
                             ntlm->response);
@@ -467,8 +467,8 @@ CURLcode Curl_output_ntlm_wb(struct connectdata *conn, bool proxy)
     *state = NTLMSTATE_TYPE3; /* we sent a type-3 */
     authp->done = TRUE;
     Curl_http_auth_cleanup_ntlm_wb(conn);
-    if(!*allocuserpwd) 
-      return CURLE_OUT_OF_MEMORY; 
+    if(!*allocuserpwd)
+      return CURLE_OUT_OF_MEMORY;
     break;
   }
   case NTLMSTATE_TYPE3:
@@ -491,4 +491,4 @@ void Curl_http_auth_cleanup_ntlm_wb(struct connectdata *conn)
   ntlm_wb_cleanup(&conn->proxyntlm);
 }
 
-#endif /* !CURL_DISABLE_HTTP && USE_NTLM && NTLM_WB_ENABLED */ 
+#endif /* !CURL_DISABLE_HTTP && USE_NTLM && NTLM_WB_ENABLED */

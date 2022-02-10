@@ -1,6 +1,6 @@
 ENABLE(PYBUILD_NO_PY)
 
-PY3_LIBRARY() 
+PY3_LIBRARY()
 
 OWNER(g:contrib orivej)
 
@@ -16,7 +16,7 @@ PEERDIR(
 )
 
 PY_SRCS(
-    TOP_LEVEL 
+    TOP_LEVEL
     __future__.py
     _aix_support.py
     _bootlocale.py

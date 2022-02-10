@@ -10,10 +10,10 @@ import py
 from py._code.assertion import _format_explanation, BuiltinAssertionError
 
 
-def _is_ast_expr(node): 
-    return isinstance(node, ast.expr) 
-def _is_ast_stmt(node): 
-    return isinstance(node, ast.stmt) 
+def _is_ast_expr(node):
+    return isinstance(node, ast.expr)
+def _is_ast_stmt(node):
+    return isinstance(node, ast.stmt)
 
 
 class Failure(Exception):

@@ -1,5 +1,5 @@
 """
-pylib: rapid testing and development utils 
+pylib: rapid testing and development utils
 
 this module uses apipkg.py for lazy-loading sub modules
 and classes.  The initpkg-dictionary  below specifies
@@ -8,25 +8,25 @@ dictionary or an import path.
 
 (c) Holger Krekel and others, 2004-2014
 """
-from py._error import error 
+from py._error import error
 
-try: 
-    from py._vendored_packages import apipkg 
-    lib_not_mangled_by_packagers = True 
-    vendor_prefix = '._vendored_packages.' 
-except ImportError: 
-    import apipkg 
-    lib_not_mangled_by_packagers = False 
-    vendor_prefix = '' 
+try:
+    from py._vendored_packages import apipkg
+    lib_not_mangled_by_packagers = True
+    vendor_prefix = '._vendored_packages.'
+except ImportError:
+    import apipkg
+    lib_not_mangled_by_packagers = False
+    vendor_prefix = ''
 
-try: 
-    from ._version import version as __version__ 
-except ImportError: 
-    # broken installation, we don't even try 
-    __version__ = "unknown" 
+try:
+    from ._version import version as __version__
+except ImportError:
+    # broken installation, we don't even try
+    __version__ = "unknown"
 
- 
-apipkg.initpkg(__name__, attr={'_apipkg': apipkg, 'error': error}, exportdefs={ 
+
+apipkg.initpkg(__name__, attr={'_apipkg': apipkg, 'error': error}, exportdefs={
     # access to all standard lib modules
     'std': '._std:std',
 
@@ -46,13 +46,13 @@ apipkg.initpkg(__name__, attr={'_apipkg': apipkg, 'error': error}, exportdefs={
     },
 
     'apipkg' : {
-        'initpkg'   : vendor_prefix + 'apipkg:initpkg', 
-        'ApiModule' : vendor_prefix + 'apipkg:ApiModule', 
+        'initpkg'   : vendor_prefix + 'apipkg:initpkg',
+        'ApiModule' : vendor_prefix + 'apipkg:ApiModule',
     },
 
     'iniconfig' : {
-        'IniConfig'      : vendor_prefix + 'iniconfig:IniConfig', 
-        'ParseError'     : vendor_prefix + 'iniconfig:ParseError', 
+        'IniConfig'      : vendor_prefix + 'iniconfig:IniConfig',
+        'ParseError'     : vendor_prefix + 'iniconfig:ParseError',
     },
 
     'path' : {

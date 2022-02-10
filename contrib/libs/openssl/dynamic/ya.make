@@ -1,4 +1,4 @@
-DLL_FOR(contrib/libs/openssl) 
+DLL_FOR(contrib/libs/openssl)
 
 OWNER(
     somov

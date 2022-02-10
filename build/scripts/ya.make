@@ -31,7 +31,7 @@ TEST_SRCS(
     fail_module_cmd.py
     fetch_from.py
     fetch_from_external.py
-    fetch_from_mds.py 
+    fetch_from_mds.py
     fetch_from_npm.py
     fetch_from_sandbox.py
     fetch_resource.py

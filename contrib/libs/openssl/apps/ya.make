@@ -1,80 +1,80 @@
-PROGRAM(openssl) 
- 
+PROGRAM(openssl)
+
 OWNER(
     somov
     g:cpp-contrib
 )
- 
+
 LICENSE(
     OpenSSL AND
     Public-Domain
 )
- 
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-PEERDIR( 
-    contrib/libs/openssl 
+PEERDIR(
+    contrib/libs/openssl
     contrib/libs/openssl/crypto
-) 
- 
-ADDINCL( 
-    contrib/libs/openssl 
-    contrib/libs/openssl/apps 
-    contrib/libs/openssl/include 
-) 
- 
+)
+
+ADDINCL(
+    contrib/libs/openssl
+    contrib/libs/openssl/apps
+    contrib/libs/openssl/include
+)
+
 NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
-CFLAGS( 
+CFLAGS(
     -DAESNI_ASM
-    -DECP_NISTZ256_ASM 
-    -DKECCAK1600_ASM 
-    -DOPENSSL_BN_ASM_MONT 
-    -DOPENSSL_CPUID_OBJ 
+    -DECP_NISTZ256_ASM
+    -DKECCAK1600_ASM
+    -DOPENSSL_BN_ASM_MONT
+    -DOPENSSL_CPUID_OBJ
     -DOPENSSL_PIC
-    -DPOLY1305_ASM 
-    -DSHA1_ASM 
-    -DSHA256_ASM 
-    -DSHA512_ASM 
-    -DVPAES_ASM 
+    -DPOLY1305_ASM
+    -DSHA1_ASM
+    -DSHA256_ASM
+    -DSHA512_ASM
+    -DVPAES_ASM
     -DZLIB
-) 
- 
-IF (OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64) 
-    CFLAGS( 
-        -DENGINESDIR=\"/usr/local/lib/engines-1.1\" 
-        -DOPENSSLDIR=\"/usr/local/ssl\" 
-    ) 
-ENDIF() 
- 
-IF (OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 OR OS_WINDOWS AND ARCH_X86_64) 
-    CFLAGS( 
-        -DGHASH_ASM 
-        -DL_ENDIAN 
-        -DMD5_ASM 
-        -DOPENSSL_BN_ASM_GF2m 
-        -DOPENSSL_BN_ASM_MONT5 
-        -DOPENSSL_IA32_SSE2 
-        -DPADLOCK_ASM 
-        -DRC4_ASM 
-        -DX25519_ASM 
-    ) 
-ENDIF() 
- 
-IF (OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64) 
+)
+
+IF (OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64)
+    CFLAGS(
+        -DENGINESDIR=\"/usr/local/lib/engines-1.1\"
+        -DOPENSSLDIR=\"/usr/local/ssl\"
+    )
+ENDIF()
+
+IF (OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_X86_64 OR OS_WINDOWS AND ARCH_X86_64)
+    CFLAGS(
+        -DGHASH_ASM
+        -DL_ENDIAN
+        -DMD5_ASM
+        -DOPENSSL_BN_ASM_GF2m
+        -DOPENSSL_BN_ASM_MONT5
+        -DOPENSSL_IA32_SSE2
+        -DPADLOCK_ASM
+        -DRC4_ASM
+        -DX25519_ASM
+    )
+ENDIF()
+
+IF (OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64)
     CFLAGS(
         -DOPENSSL_USE_NODELETE
     )
-ENDIF() 
- 
-IF (OS_DARWIN AND ARCH_X86_64) 
+ENDIF()
+
+IF (OS_DARWIN AND ARCH_X86_64)
     CFLAGS(
         -D_REENTRANT
     )
-ENDIF() 
- 
+ENDIF()
+
 IF (OS_DARWIN AND ARCH_ARM64)
     CFLAGS(
         -DL_ENDIAN
@@ -95,18 +95,18 @@ IF (OS_WINDOWS)
             -DOPENSSLDIR="\"C:\\\\Program\ Files\ \(x86\)\\\\Common\ Files\\\\SSL\""
         )
     ENDIF()
-    CFLAGS( 
-        -DOPENSSL_SYS_WIN32 
-        -DUNICODE 
-        -DWIN32_LEAN_AND_MEAN 
-        -D_CRT_SECURE_NO_DEPRECATE 
-        -D_UNICODE 
-        -D_WINSOCK_DEPRECATED_NO_WARNINGS 
-        /GF 
-    ) 
-ENDIF() 
- 
-SRCS( 
+    CFLAGS(
+        -DOPENSSL_SYS_WIN32
+        -DUNICODE
+        -DWIN32_LEAN_AND_MEAN
+        -D_CRT_SECURE_NO_DEPRECATE
+        -D_UNICODE
+        -D_WINSOCK_DEPRECATED_NO_WARNINGS
+        /GF
+    )
+ENDIF()
+
+SRCS(
     app_rand.c
     apps.c
     asn1pars.c
@@ -160,12 +160,12 @@ SRCS(
     verify.c
     version.c
     x509.c
-) 
- 
+)
+
 IF (OS_WINDOWS)
-    SRCS( 
+    SRCS(
         win32_init.c
-    ) 
-ENDIF() 
- 
-END() 
+    )
+ENDIF()
+
+END()

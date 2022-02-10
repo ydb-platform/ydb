@@ -31,19 +31,19 @@
 #include "warnless.h"
 #include "non-ascii.h"
 #include "escape.h"
-#include "strdup.h" 
-/* The last 3 #include files should be in this order */ 
-#include "curl_printf.h" 
-#include "curl_memory.h" 
+#include "strdup.h"
+/* The last 3 #include files should be in this order */
+#include "curl_printf.h"
+#include "curl_memory.h"
 #include "memdebug.h"
 
 /* Portable character check (remember EBCDIC). Do not use isalnum() because
    its behavior is altered by the current locale.
-   See https://tools.ietf.org/html/rfc3986#section-2.3 
+   See https://tools.ietf.org/html/rfc3986#section-2.3
 */
-bool Curl_isunreserved(unsigned char in) 
+bool Curl_isunreserved(unsigned char in)
 {
-  switch(in) { 
+  switch(in) {
     case '0': case '1': case '2': case '3': case '4':
     case '5': case '6': case '7': case '8': case '9':
     case 'a': case 'b': case 'c': case 'd': case 'e':
@@ -76,24 +76,24 @@ char *curl_unescape(const char *string, int length)
   return curl_easy_unescape(NULL, string, length, NULL);
 }
 
-char *curl_easy_escape(struct Curl_easy *data, const char *string, 
-                       int inlength) 
+char *curl_easy_escape(struct Curl_easy *data, const char *string,
+                       int inlength)
 {
   size_t length;
-  CURLcode result; 
+  CURLcode result;
   struct dynbuf d;
 
-  if(inlength < 0) 
-    return NULL; 
- 
+  if(inlength < 0)
+    return NULL;
+
   Curl_dyn_init(&d, CURL_MAX_INPUT_LENGTH * 3);
- 
+
   length = (inlength?(size_t)inlength:strlen(string));
   if(!length)
     return strdup("");
 
   while(length--) {
-    unsigned char in = *string; /* we need to treat the characters unsigned */ 
+    unsigned char in = *string; /* we need to treat the characters unsigned */
 
     if(Curl_isunreserved(in)) {
       /* append this */
@@ -103,8 +103,8 @@ char *curl_easy_escape(struct Curl_easy *data, const char *string,
     else {
       /* encode it */
       char encoded[4];
-      result = Curl_convert_to_network(data, (char *)&in, 1); 
-      if(result) { 
+      result = Curl_convert_to_network(data, (char *)&in, 1);
+      if(result) {
         /* Curl_convert_to_network calls failf if unsuccessful */
         Curl_dyn_free(&d);
         return NULL;
@@ -126,8 +126,8 @@ char *curl_easy_escape(struct Curl_easy *data, const char *string,
  * Returns a pointer to a malloced string in *ostring with length given in
  * *olen. If length == 0, the length is assumed to be strlen(string).
  *
- * 'data' can be set to NULL but then this function can't convert network 
- * data to host for non-ascii. 
+ * 'data' can be set to NULL but then this function can't convert network
+ * data to host for non-ascii.
  *
  * ctrl options:
  * - REJECT_NADA: accept everything
@@ -139,16 +139,16 @@ char *curl_easy_escape(struct Curl_easy *data, const char *string,
  * invokes that used TRUE/FALSE (0 and 1).
  */
 
-CURLcode Curl_urldecode(struct Curl_easy *data, 
+CURLcode Curl_urldecode(struct Curl_easy *data,
                         const char *string, size_t length,
                         char **ostring, size_t *olen,
                         enum urlreject ctrl)
 {
   size_t alloc;
   char *ns;
-  size_t strindex = 0; 
+  size_t strindex = 0;
   unsigned long hex;
-  CURLcode result = CURLE_OK; 
+  CURLcode result = CURLE_OK;
 
   DEBUGASSERT(string);
   DEBUGASSERT(ctrl >= REJECT_NADA); /* crash on TRUE/FALSE */
@@ -160,7 +160,7 @@ CURLcode Curl_urldecode(struct Curl_easy *data,
     return CURLE_OUT_OF_MEMORY;
 
   while(--alloc > 0) {
-    unsigned char in = *string; 
+    unsigned char in = *string;
     if(('%' == in) && (alloc > 2) &&
        ISXDIGIT(string[1]) && ISXDIGIT(string[2])) {
       /* this is two hexadecimal digits following a '%' */
@@ -174,19 +174,19 @@ CURLcode Curl_urldecode(struct Curl_easy *data,
 
       in = curlx_ultouc(hex); /* this long is never bigger than 255 anyway */
 
-      if(data) { 
-        result = Curl_convert_from_network(data, (char *)&in, 1); 
-        if(result) { 
-          /* Curl_convert_from_network calls failf if unsuccessful */ 
-          free(ns); 
-          return result; 
-        } 
+      if(data) {
+        result = Curl_convert_from_network(data, (char *)&in, 1);
+        if(result) {
+          /* Curl_convert_from_network calls failf if unsuccessful */
+          free(ns);
+          return result;
+        }
       }
 
-      string += 2; 
-      alloc -= 2; 
+      string += 2;
+      alloc -= 2;
     }
- 
+
     if(((ctrl == REJECT_CTRL) && (in < 0x20)) ||
        ((ctrl == REJECT_ZERO) && (in == 0))) {
       free(ns);
@@ -196,14 +196,14 @@ CURLcode Curl_urldecode(struct Curl_easy *data,
     ns[strindex++] = in;
     string++;
   }
-  ns[strindex] = 0; /* terminate it */ 
+  ns[strindex] = 0; /* terminate it */
 
   if(olen)
     /* store output size */
     *olen = strindex;
 
-  /* store output string */ 
-  *ostring = ns; 
+  /* store output string */
+  *ostring = ns;
 
   return CURLE_OK;
 }
@@ -214,26 +214,26 @@ CURLcode Curl_urldecode(struct Curl_easy *data,
  * If length == 0, the length is assumed to be strlen(string).
  * If olen == NULL, no output length is stored.
  */
-char *curl_easy_unescape(struct Curl_easy *data, const char *string, 
-                         int length, int *olen) 
+char *curl_easy_unescape(struct Curl_easy *data, const char *string,
+                         int length, int *olen)
 {
   char *str = NULL;
-  if(length >= 0) { 
-    size_t inputlen = length; 
-    size_t outputlen; 
-    CURLcode res = Curl_urldecode(data, string, inputlen, &str, &outputlen, 
+  if(length >= 0) {
+    size_t inputlen = length;
+    size_t outputlen;
+    CURLcode res = Curl_urldecode(data, string, inputlen, &str, &outputlen,
                                   REJECT_NADA);
-    if(res) 
-      return NULL; 
- 
-    if(olen) { 
-      if(outputlen <= (size_t) INT_MAX) 
-        *olen = curlx_uztosi(outputlen); 
-      else 
-        /* too large to return in an int, fail! */ 
-        Curl_safefree(str); 
-    } 
-  } 
+    if(res)
+      return NULL;
+
+    if(olen) {
+      if(outputlen <= (size_t) INT_MAX)
+        *olen = curlx_uztosi(outputlen);
+      else
+        /* too large to return in an int, fail! */
+        Curl_safefree(str);
+    }
+  }
   return str;
 }
 
@@ -242,5 +242,5 @@ char *curl_easy_unescape(struct Curl_easy *data, const char *string,
    the library's memory system */
 void curl_free(void *p)
 {
-  free(p); 
+  free(p);
 }

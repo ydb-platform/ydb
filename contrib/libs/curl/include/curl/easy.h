@@ -69,7 +69,7 @@ CURL_EXTERN CURLcode curl_easy_getinfo(CURL *curl, CURLINFO info, ...);
  * curl_easy_duphandle() for each new thread to avoid a series of identical
  * curl_easy_setopt() invokes in every thread.
  */
-CURL_EXTERN CURL *curl_easy_duphandle(CURL *curl); 
+CURL_EXTERN CURL *curl_easy_duphandle(CURL *curl);
 
 /*
  * NAME curl_easy_reset()
@@ -106,16 +106,16 @@ CURL_EXTERN CURLcode curl_easy_recv(CURL *curl, void *buffer, size_t buflen,
 CURL_EXTERN CURLcode curl_easy_send(CURL *curl, const void *buffer,
                                     size_t buflen, size_t *n);
 
- 
-/* 
- * NAME curl_easy_upkeep() 
- * 
- * DESCRIPTION 
- * 
- * Performs connection upkeep for the given session handle. 
- */ 
-CURL_EXTERN CURLcode curl_easy_upkeep(CURL *curl); 
- 
+
+/*
+ * NAME curl_easy_upkeep()
+ *
+ * DESCRIPTION
+ *
+ * Performs connection upkeep for the given session handle.
+ */
+CURL_EXTERN CURLcode curl_easy_upkeep(CURL *curl);
+
 #ifdef  __cplusplus
 }
 #endif

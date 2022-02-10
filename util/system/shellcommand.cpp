@@ -204,7 +204,7 @@ private:
     TString InternalError;
     TThread* WatchThread;
     TMutex TerminateMutex;
-    TFileHandle InputHandle; 
+    TFileHandle InputHandle;
     TFileHandle OutputHandle;
     TFileHandle ErrorHandle;
 
@@ -248,12 +248,12 @@ private:
         TRealPipeHandle InputPipeFd[2];
         // pipes are closed by automatic dtor
         void PrepareParents() {
-            if (OutputPipeFd[1].IsOpen()) { 
-                OutputPipeFd[1].Close(); 
-            } 
-            if (ErrorPipeFd[1].IsOpen()) { 
-                ErrorPipeFd[1].Close(); 
-            } 
+            if (OutputPipeFd[1].IsOpen()) {
+                OutputPipeFd[1].Close();
+            }
+            if (ErrorPipeFd[1].IsOpen()) {
+                ErrorPipeFd[1].Close();
+            }
             if (InputPipeFd[1].IsOpen()) {
                 InputPipeFd[0].Close();
             }
@@ -300,7 +300,7 @@ public:
         , DetachSession(options.DetachSession)
         , CloseStreams(options.CloseStreams)
         , ShouldCloseInput(options.ShouldCloseInput)
-        , InputMode(options.InputMode) 
+        , InputMode(options.InputMode)
         , OutputMode(options.OutputMode)
         , ErrorMode(options.ErrorMode)
         , User(options.User)
@@ -308,10 +308,10 @@ public:
         , Nice(options.Nice)
         , FuncAfterFork(options.FuncAfterFork)
     {
-        if (InputStream) { 
-            // TODO change usages to call SetInputStream instead of directly assigning to InputStream 
-            InputMode = TShellCommandOptions::HANDLE_STREAM; 
-        } 
+        if (InputStream) {
+            // TODO change usages to call SetInputStream instead of directly assigning to InputStream
+            InputMode = TShellCommandOptions::HANDLE_STREAM;
+        }
     }
 
     inline ~TImpl() {
@@ -374,10 +374,10 @@ public:
 #endif
     }
 
-    inline TFileHandle& GetInputHandle() { 
-        return InputHandle; 
-    } 
- 
+    inline TFileHandle& GetInputHandle() {
+        return InputHandle;
+    }
+
     inline TFileHandle& GetOutputHandle() {
         return OutputHandle;
     }
@@ -521,31 +521,31 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
     startup_info.dwFlags = STARTF_USESTDHANDLES;
 
     if (OutputMode != TShellCommandOptions::HANDLE_INHERIT) {
-        if (!SetHandleInformation(pipes.OutputPipeFd[1], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT)) { 
-            ythrow TSystemError() << "cannot set handle info"; 
-        } 
-    } 
+        if (!SetHandleInformation(pipes.OutputPipeFd[1], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT)) {
+            ythrow TSystemError() << "cannot set handle info";
+        }
+    }
     if (ErrorMode != TShellCommandOptions::HANDLE_INHERIT) {
-        if (!SetHandleInformation(pipes.ErrorPipeFd[1], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT)) { 
-            ythrow TSystemError() << "cannot set handle info"; 
-        } 
-    } 
-    if (InputMode != TShellCommandOptions::HANDLE_INHERIT) { 
+        if (!SetHandleInformation(pipes.ErrorPipeFd[1], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT)) {
+            ythrow TSystemError() << "cannot set handle info";
+        }
+    }
+    if (InputMode != TShellCommandOptions::HANDLE_INHERIT) {
         if (!SetHandleInformation(pipes.InputPipeFd[0], HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT))
             ythrow TSystemError() << "cannot set handle info";
-    } 
+    }
 
     // A sockets do not work as std streams for some reason
     if (OutputMode != TShellCommandOptions::HANDLE_INHERIT) {
-        startup_info.hStdOutput = pipes.OutputPipeFd[1]; 
-    } else { 
-        startup_info.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE); 
-    } 
+        startup_info.hStdOutput = pipes.OutputPipeFd[1];
+    } else {
+        startup_info.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+    }
     if (ErrorMode != TShellCommandOptions::HANDLE_INHERIT) {
-        startup_info.hStdError = pipes.ErrorPipeFd[1]; 
-    } else { 
-        startup_info.hStdError = GetStdHandle(STD_ERROR_HANDLE); 
-    } 
+        startup_info.hStdError = pipes.ErrorPipeFd[1];
+    } else {
+        startup_info.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+    }
     if (InputMode != TShellCommandOptions::HANDLE_INHERIT) {
         startup_info.hStdInput = pipes.InputPipeFd[0];
     } else {
@@ -691,7 +691,7 @@ void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* 
         TFileHandle sIn(0);
         TFileHandle sOut(1);
         TFileHandle sErr(2);
-        if (InputMode != TShellCommandOptions::HANDLE_INHERIT) { 
+        if (InputMode != TShellCommandOptions::HANDLE_INHERIT) {
             pipes.InputPipeFd[1].Close();
             TFileHandle sInNew(pipes.InputPipeFd[0]);
             sIn.LinkTo(sInNew);
@@ -702,19 +702,19 @@ void TShellCommand::TImpl::OnFork(TPipes& pipes, sigset_t oldmask, char* const* 
             /// @todo in case of real need - reopen /dev/null
         }
         if (OutputMode != TShellCommandOptions::HANDLE_INHERIT) {
-            pipes.OutputPipeFd[0].Close(); 
-            TFileHandle sOutNew(pipes.OutputPipeFd[1]); 
-            sOut.LinkTo(sOutNew); 
-            sOut.Release(); 
-            sOutNew.Release(); 
-        } 
+            pipes.OutputPipeFd[0].Close();
+            TFileHandle sOutNew(pipes.OutputPipeFd[1]);
+            sOut.LinkTo(sOutNew);
+            sOut.Release();
+            sOutNew.Release();
+        }
         if (ErrorMode != TShellCommandOptions::HANDLE_INHERIT) {
-            pipes.ErrorPipeFd[0].Close(); 
-            TFileHandle sErrNew(pipes.ErrorPipeFd[1]); 
-            sErr.LinkTo(sErrNew); 
-            sErr.Release(); 
-            sErrNew.Release(); 
-        } 
+            pipes.ErrorPipeFd[0].Close();
+            TFileHandle sErrNew(pipes.ErrorPipeFd[1]);
+            sErr.LinkTo(sErrNew);
+            sErr.Release();
+            sErrNew.Release();
+        }
 
         if (WorkDir.size()) {
             NFs::SetCurrentWorkingDirectory(WorkDir);
@@ -764,11 +764,11 @@ void TShellCommand::TImpl::Run() {
 
     if (OutputMode != TShellCommandOptions::HANDLE_INHERIT) {
         TRealPipeHandle::Pipe(pipes.OutputPipeFd[0], pipes.OutputPipeFd[1], CloseOnExec);
-    } 
+    }
     if (ErrorMode != TShellCommandOptions::HANDLE_INHERIT) {
         TRealPipeHandle::Pipe(pipes.ErrorPipeFd[0], pipes.ErrorPipeFd[1], CloseOnExec);
-    } 
-    if (InputMode != TShellCommandOptions::HANDLE_INHERIT) { 
+    }
+    if (InputMode != TShellCommandOptions::HANDLE_INHERIT) {
         TRealPipeHandle::Pipe(pipes.InputPipeFd[0], pipes.InputPipeFd[1], CloseOnExec);
     }
 
@@ -844,11 +844,11 @@ void TShellCommand::TImpl::Run() {
         return;
     }
 
-    if (InputMode == TShellCommandOptions::HANDLE_PIPE) { 
-        TFileHandle inputHandle(pipes.InputPipeFd[1].Release()); 
-        InputHandle.Swap(inputHandle); 
-    } 
- 
+    if (InputMode == TShellCommandOptions::HANDLE_PIPE) {
+        TFileHandle inputHandle(pipes.InputPipeFd[1].Release());
+        InputHandle.Swap(inputHandle);
+    }
+
     if (OutputMode == TShellCommandOptions::HANDLE_PIPE) {
         TFileHandle outputHandle(pipes.OutputPipeFd[0].Release());
         OutputHandle.Swap(outputHandle);
@@ -868,7 +868,7 @@ void TShellCommand::TImpl::Run() {
     } else {
         Communicate(processInfo);
     }
- 
+
     pipes.ReleaseParents(); // not needed
 }
 
@@ -887,19 +887,19 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
 
     IInputStream*& input = pi->Parent->InputStream;
 
-#if defined(_unix_) 
-    // not really needed, io is done via poll 
-    if (pi->OutputFd.IsOpen()) { 
-        SetNonBlock(pi->OutputFd); 
-    } 
-    if (pi->ErrorFd.IsOpen()) { 
-        SetNonBlock(pi->ErrorFd); 
-    } 
-    if (pi->InputFd.IsOpen()) { 
-        SetNonBlock(pi->InputFd); 
-    } 
-#endif 
- 
+#if defined(_unix_)
+    // not really needed, io is done via poll
+    if (pi->OutputFd.IsOpen()) {
+        SetNonBlock(pi->OutputFd);
+    }
+    if (pi->ErrorFd.IsOpen()) {
+        SetNonBlock(pi->ErrorFd);
+    }
+    if (pi->InputFd.IsOpen()) {
+        SetNonBlock(pi->InputFd);
+    }
+#endif
+
     try {
 #if defined(_win_)
         TPipePump pumps[3] = {0};
@@ -1163,10 +1163,10 @@ TProcessId TShellCommand::GetPid() const {
     return Impl->GetPid();
 }
 
-TFileHandle& TShellCommand::GetInputHandle() { 
-    return Impl->GetInputHandle(); 
-} 
- 
+TFileHandle& TShellCommand::GetInputHandle() {
+    return Impl->GetInputHandle();
+}
+
 TFileHandle& TShellCommand::GetOutputHandle() {
     return Impl->GetOutputHandle();
 }

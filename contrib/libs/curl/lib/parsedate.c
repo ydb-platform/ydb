@@ -78,7 +78,7 @@
 #include <limits.h>
 
 #include <curl/curl.h>
-#include "strcase.h" 
+#include "strcase.h"
 #include "warnless.h"
 #include "parsedate.h"
 
@@ -125,7 +125,7 @@ struct tzinfo {
 #define tDAYZONE -60       /* offset for daylight savings time */
 static const struct tzinfo tz[]= {
   {"GMT", 0},              /* Greenwich Mean */
-  {"UT",  0},              /* Universal Time */ 
+  {"UT",  0},              /* Universal Time */
   {"UTC", 0},              /* Universal (Coordinated) */
   {"WET", 0},              /* Western European */
   {"BST", 0 tDAYZONE},     /* British Summer */
@@ -172,20 +172,20 @@ static const struct tzinfo tz[]= {
      RFC 1123) had their signs wrong. Here we use the correct signs to match
      actual military usage.
    */
-  {"A",  1 * 60},         /* Alpha */ 
-  {"B",  2 * 60},         /* Bravo */ 
-  {"C",  3 * 60},         /* Charlie */ 
-  {"D",  4 * 60},         /* Delta */ 
-  {"E",  5 * 60},         /* Echo */ 
-  {"F",  6 * 60},         /* Foxtrot */ 
-  {"G",  7 * 60},         /* Golf */ 
-  {"H",  8 * 60},         /* Hotel */ 
-  {"I",  9 * 60},         /* India */ 
+  {"A",  1 * 60},         /* Alpha */
+  {"B",  2 * 60},         /* Bravo */
+  {"C",  3 * 60},         /* Charlie */
+  {"D",  4 * 60},         /* Delta */
+  {"E",  5 * 60},         /* Echo */
+  {"F",  6 * 60},         /* Foxtrot */
+  {"G",  7 * 60},         /* Golf */
+  {"H",  8 * 60},         /* Hotel */
+  {"I",  9 * 60},         /* India */
   /* "J", Juliet is not used as a timezone, to indicate the observer's local
      time */
-  {"K", 10 * 60},         /* Kilo */ 
-  {"L", 11 * 60},         /* Lima */ 
-  {"M", 12 * 60},         /* Mike */ 
+  {"K", 10 * 60},         /* Kilo */
+  {"L", 11 * 60},         /* Lima */
+  {"M", 12 * 60},         /* Mike */
   {"N",  -1 * 60},         /* November */
   {"O",  -2 * 60},         /* Oscar */
   {"P",  -3 * 60},         /* Papa */
@@ -210,14 +210,14 @@ static int checkday(const char *check, size_t len)
 {
   int i;
   const char * const *what;
-  bool found = FALSE; 
+  bool found = FALSE;
   if(len > 3)
     what = &weekday[0];
   else
     what = &Curl_wkday[0];
-  for(i = 0; i<7; i++) { 
-    if(strcasecompare(check, what[0])) { 
-      found = TRUE; 
+  for(i = 0; i<7; i++) {
+    if(strcasecompare(check, what[0])) {
+      found = TRUE;
       break;
     }
     what++;
@@ -229,12 +229,12 @@ static int checkmonth(const char *check)
 {
   int i;
   const char * const *what;
-  bool found = FALSE; 
+  bool found = FALSE;
 
   what = &Curl_month[0];
-  for(i = 0; i<12; i++) { 
-    if(strcasecompare(check, what[0])) { 
-      found = TRUE; 
+  for(i = 0; i<12; i++) {
+    if(strcasecompare(check, what[0])) {
+      found = TRUE;
       break;
     }
     what++;
@@ -249,12 +249,12 @@ static int checktz(const char *check)
 {
   unsigned int i;
   const struct tzinfo *what;
-  bool found = FALSE; 
+  bool found = FALSE;
 
   what = tz;
-  for(i = 0; i< sizeof(tz)/sizeof(tz[0]); i++) { 
-    if(strcasecompare(check, what->name)) { 
-      found = TRUE; 
+  for(i = 0; i< sizeof(tz)/sizeof(tz[0]); i++) {
+    if(strcasecompare(check, what->name)) {
+      found = TRUE;
       break;
     }
     what++;
@@ -306,20 +306,20 @@ static time_t time2epoch(int sec, int min, int hour,
 static int parsedate(const char *date, time_t *output)
 {
   time_t t = 0;
-  int wdaynum = -1;  /* day of the week number, 0-6 (mon-sun) */ 
-  int monnum = -1;   /* month of the year number, 0-11 */ 
-  int mdaynum = -1; /* day of month, 1 - 31 */ 
-  int hournum = -1; 
-  int minnum = -1; 
-  int secnum = -1; 
-  int yearnum = -1; 
-  int tzoff = -1; 
+  int wdaynum = -1;  /* day of the week number, 0-6 (mon-sun) */
+  int monnum = -1;   /* month of the year number, 0-11 */
+  int mdaynum = -1; /* day of month, 1 - 31 */
+  int hournum = -1;
+  int minnum = -1;
+  int secnum = -1;
+  int yearnum = -1;
+  int tzoff = -1;
   enum assume dignext = DATE_MDAY;
   const char *indate = date; /* save the original pointer */
   int part = 0; /* max 6 parts */
 
   while(*date && (part < 6)) {
-    bool found = FALSE; 
+    bool found = FALSE;
 
     skip(&date);
 
@@ -327,11 +327,11 @@ static int parsedate(const char *date, time_t *output)
       /* a name coming up */
       char buf[32]="";
       size_t len;
-      if(sscanf(date, "%31[ABCDEFGHIJKLMNOPQRSTUVWXYZ" 
-                          "abcdefghijklmnopqrstuvwxyz]", buf)) 
-        len = strlen(buf); 
-      else 
-        len = 0; 
+      if(sscanf(date, "%31[ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                          "abcdefghijklmnopqrstuvwxyz]", buf))
+        len = strlen(buf);
+      else
+        len = 0;
 
       if(wdaynum == -1) {
         wdaynum = checkday(buf, len);
@@ -360,17 +360,17 @@ static int parsedate(const char *date, time_t *output)
       /* a digit */
       int val;
       char *end;
-      int len = 0; 
+      int len = 0;
       if((secnum == -1) &&
-         (3 == sscanf(date, "%02d:%02d:%02d%n", 
-                      &hournum, &minnum, &secnum, &len))) { 
+         (3 == sscanf(date, "%02d:%02d:%02d%n",
+                      &hournum, &minnum, &secnum, &len))) {
         /* time stamp! */
-        date += len; 
+        date += len;
       }
       else if((secnum == -1) &&
-              (2 == sscanf(date, "%02d:%02d%n", &hournum, &minnum, &len))) { 
+              (2 == sscanf(date, "%02d:%02d%n", &hournum, &minnum, &len))) {
         /* time stamp without seconds */
-        date += len; 
+        date += len;
         secnum = 0;
       }
       else {
@@ -378,20 +378,20 @@ static int parsedate(const char *date, time_t *output)
         int error;
         int old_errno;
 
-        old_errno = errno; 
-        errno = 0; 
+        old_errno = errno;
+        errno = 0;
         lval = strtol(date, &end, 10);
-        error = errno; 
-        if(errno != old_errno) 
-          errno = old_errno; 
+        error = errno;
+        if(errno != old_errno)
+          errno = old_errno;
 
         if(error)
           return PARSEDATE_FAIL;
 
-#if LONG_MAX != INT_MAX 
+#if LONG_MAX != INT_MAX
         if((lval > (long)INT_MAX) || (lval < (long)INT_MIN))
           return PARSEDATE_FAIL;
-#endif 
+#endif
 
         val = curlx_sltosi(lval);
 
@@ -412,7 +412,7 @@ static int parsedate(const char *date, time_t *output)
           tzoff = (val/100 * 60 + val%100)*60;
 
           /* the + and - prefix indicates the local time compared to GMT,
-             this we need their reversed math to get what we want */ 
+             this we need their reversed math to get what we want */
           tzoff = date[-1]=='+'?-tzoff:tzoff;
         }
 
@@ -438,7 +438,7 @@ static int parsedate(const char *date, time_t *output)
         if(!found && (dignext == DATE_YEAR) && (yearnum == -1)) {
           yearnum = val;
           found = TRUE;
-          if(yearnum < 100) { 
+          if(yearnum < 100) {
             if(yearnum > 70)
               yearnum += 1900;
             else
@@ -467,60 +467,60 @@ static int parsedate(const char *date, time_t *output)
     /* lacks vital info, fail */
     return PARSEDATE_FAIL;
 
-#ifdef HAVE_TIME_T_UNSIGNED 
-  if(yearnum < 1970) { 
-    /* only positive numbers cannot return earlier */ 
-    *output = TIME_T_MIN; 
-    return PARSEDATE_SOONER; 
-  } 
-#endif 
- 
-#if (SIZEOF_TIME_T < 5) 
- 
-#ifdef HAVE_TIME_T_UNSIGNED 
-  /* an unsigned 32 bit time_t can only hold dates to 2106 */ 
-  if(yearnum > 2105) { 
-    *output = TIME_T_MAX; 
-    return PARSEDATE_LATER; 
-  } 
-#else 
-  /* a signed 32 bit time_t can only hold dates to the beginning of 2038 */ 
-  if(yearnum > 2037) {
-    *output = TIME_T_MAX; 
-    return PARSEDATE_LATER;
-  }
-  if(yearnum < 1903) { 
-    *output = TIME_T_MIN; 
+#ifdef HAVE_TIME_T_UNSIGNED
+  if(yearnum < 1970) {
+    /* only positive numbers cannot return earlier */
+    *output = TIME_T_MIN;
     return PARSEDATE_SOONER;
   }
-#endif 
+#endif
 
-#else 
-  /* The Gregorian calendar was introduced 1582 */ 
-  if(yearnum < 1583) 
-    return PARSEDATE_FAIL; 
-#endif 
- 
+#if (SIZEOF_TIME_T < 5)
+
+#ifdef HAVE_TIME_T_UNSIGNED
+  /* an unsigned 32 bit time_t can only hold dates to 2106 */
+  if(yearnum > 2105) {
+    *output = TIME_T_MAX;
+    return PARSEDATE_LATER;
+  }
+#else
+  /* a signed 32 bit time_t can only hold dates to the beginning of 2038 */
+  if(yearnum > 2037) {
+    *output = TIME_T_MAX;
+    return PARSEDATE_LATER;
+  }
+  if(yearnum < 1903) {
+    *output = TIME_T_MIN;
+    return PARSEDATE_SOONER;
+  }
+#endif
+
+#else
+  /* The Gregorian calendar was introduced 1582 */
+  if(yearnum < 1583)
+    return PARSEDATE_FAIL;
+#endif
+
   if((mdaynum > 31) || (monnum > 11) ||
      (hournum > 23) || (minnum > 59) || (secnum > 60))
     return PARSEDATE_FAIL; /* clearly an illegal date */
 
   /* time2epoch() returns a time_t. time_t is often 32 bits, sometimes even on
-     architectures that feature 64 bit 'long' but ultimately time_t is the 
-     correct data type to use. 
+     architectures that feature 64 bit 'long' but ultimately time_t is the
+     correct data type to use.
   */
   t = time2epoch(secnum, minnum, hournum, mdaynum, monnum, yearnum);
 
-  /* Add the time zone diff between local time zone and GMT. */ 
-  if(tzoff == -1) 
-    tzoff = 0; 
+  /* Add the time zone diff between local time zone and GMT. */
+  if(tzoff == -1)
+    tzoff = 0;
 
-  if((tzoff > 0) && (t > TIME_T_MAX - tzoff)) { 
-    *output = TIME_T_MAX; 
-    return PARSEDATE_LATER; /* time_t overflow */ 
-  } 
+  if((tzoff > 0) && (t > TIME_T_MAX - tzoff)) {
+    *output = TIME_T_MAX;
+    return PARSEDATE_LATER; /* time_t overflow */
+  }
 
-  t += tzoff; 
+  t += tzoff;
 
   *output = t;
 
@@ -538,14 +538,14 @@ static int parsedate(const char *date, time_t *output)
 
 time_t curl_getdate(const char *p, const time_t *now)
 {
-  time_t parsed = -1; 
+  time_t parsed = -1;
   int rc = parsedate(p, &parsed);
   (void)now; /* legacy argument from the past that we ignore */
 
-  if(rc == PARSEDATE_OK) { 
-    if(parsed == -1) 
-      /* avoid returning -1 for a working scenario */ 
-      parsed++; 
+  if(rc == PARSEDATE_OK) {
+    if(parsed == -1)
+      /* avoid returning -1 for a working scenario */
+      parsed++;
     return parsed;
   }
   /* everything else is fail */

@@ -31,7 +31,7 @@ char *Curl_inet_ntop(int af, const void *addr, char *buf, size_t size);
 #include <arpa/inet.h>
 #endif
 #define Curl_inet_ntop(af,addr,buf,size) \
-        inet_ntop(af, addr, buf, (curl_socklen_t)size) 
+        inet_ntop(af, addr, buf, (curl_socklen_t)size)
 #endif
 
 #endif /* HEADER_CURL_INET_NTOP_H */

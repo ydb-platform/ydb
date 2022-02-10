@@ -58,8 +58,8 @@ struct pingpong {
                      server */
   size_t sendleft; /* number of bytes left to send from the sendthis buffer */
   size_t sendsize; /* total size of the sendthis buffer */
-  struct curltime response; /* set to Curl_now() when a command has been sent 
-                               off, used to time-out response reading */ 
+  struct curltime response; /* set to Curl_now() when a command has been sent
+                               off, used to time-out response reading */
   timediff_t response_time; /* When no timeout is given, this is the amount of
                                milliseconds we await for a server response. */
   struct connectdata *conn; /* points to the connectdata struct that this
@@ -99,7 +99,7 @@ timediff_t Curl_pp_state_timeout(struct pingpong *pp, bool disconnecting);
  *
  * Curl_pp_sendf()
  *
- * Send the formatted string as a command to a pingpong server. Note that 
+ * Send the formatted string as a command to a pingpong server. Note that
  * the string should not have any CRLF appended, as this function will
  * append the necessary things itself.
  *
@@ -112,7 +112,7 @@ CURLcode Curl_pp_sendf(struct pingpong *pp,
  *
  * Curl_pp_vsendf()
  *
- * Send the formatted string as a command to a pingpong server. Note that 
+ * Send the formatted string as a command to a pingpong server. Note that
  * the string should not have any CRLF appended, as this function will
  * append the necessary things itself.
  *

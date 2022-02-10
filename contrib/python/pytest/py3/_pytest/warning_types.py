@@ -3,30 +3,30 @@ from typing import Generic
 from typing import Type
 from typing import TypeVar
 
-import attr 
- 
-from _pytest.compat import final
- 
+import attr
 
-class PytestWarning(UserWarning): 
+from _pytest.compat import final
+
+
+class PytestWarning(UserWarning):
     """Base class for all warnings emitted by pytest."""
- 
+
     __module__ = "pytest"
- 
+
 
 @final
 class PytestAssertRewriteWarning(PytestWarning):
     """Warning emitted by the pytest assert rewrite module."""
- 
+
     __module__ = "pytest"
- 
+
 
 @final
 class PytestCacheWarning(PytestWarning):
     """Warning emitted by the cache plugin in various situations."""
- 
+
     __module__ = "pytest"
- 
+
 
 @final
 class PytestConfigWarning(PytestWarning):
@@ -50,24 +50,24 @@ class PytestDeprecationWarning(PytestWarning, DeprecationWarning):
 
 
 @final
-class PytestExperimentalApiWarning(PytestWarning, FutureWarning): 
+class PytestExperimentalApiWarning(PytestWarning, FutureWarning):
     """Warning category used to denote experiments in pytest.
- 
+
     Use sparingly as the API might change or even be removed completely in a
     future version.
-    """ 
- 
+    """
+
     __module__ = "pytest"
 
-    @classmethod 
+    @classmethod
     def simple(cls, apiname: str) -> "PytestExperimentalApiWarning":
-        return cls( 
-            "{apiname} is an experimental api that may change over time".format( 
-                apiname=apiname 
-            ) 
-        ) 
- 
- 
+        return cls(
+            "{apiname} is an experimental api that may change over time".format(
+                apiname=apiname
+            )
+        )
+
+
 @final
 class PytestUnhandledCoroutineWarning(PytestWarning):
     """Warning emitted for an unhandled coroutine.
@@ -116,17 +116,17 @@ _W = TypeVar("_W", bound=PytestWarning)
 
 
 @final
-@attr.s 
+@attr.s
 class UnformattedWarning(Generic[_W]):
     """A warning meant to be formatted during runtime.
- 
+
     This is used to hold warnings that need to format their message at runtime,
     as opposed to a direct message.
-    """ 
- 
+    """
+
     category = attr.ib(type=Type["_W"])
     template = attr.ib(type=str)
- 
+
     def format(self, **kwargs: Any) -> _W:
         """Return an instance of the warning category, formatted with given kwargs."""
-        return self.category(self.template.format(**kwargs)) 
+        return self.category(self.template.format(**kwargs))

@@ -1,8 +1,8 @@
 """Interactive debugging with PDB, the Python Debugger."""
 import argparse
 import functools
-import os 
-import sys 
+import os
+import sys
 import types
 from typing import Any
 from typing import Callable
@@ -13,59 +13,59 @@ from typing import Tuple
 from typing import Type
 from typing import TYPE_CHECKING
 from typing import Union
- 
-from _pytest import outcomes 
+
+from _pytest import outcomes
 from _pytest._code import ExceptionInfo
 from _pytest.config import Config
 from _pytest.config import ConftestImportFailure
-from _pytest.config import hookimpl 
+from _pytest.config import hookimpl
 from _pytest.config import PytestPluginManager
 from _pytest.config.argparsing import Parser
 from _pytest.config.exceptions import UsageError
 from _pytest.nodes import Node
 from _pytest.reports import BaseReport
- 
+
 if TYPE_CHECKING:
     from _pytest.capture import CaptureManager
     from _pytest.runner import CallInfo
- 
 
-def import_readline(): 
-    try: 
-        import readline 
-    except ImportError: 
-        sys.path.append('/usr/lib/python2.7/lib-dynload') 
- 
-    try: 
-        import readline 
-    except ImportError as e: 
-        print('can not import readline:', e) 
- 
-        import subprocess 
-        try: 
-            subprocess.check_call('stty icrnl'.split()) 
-        except OSError as e: 
-            print('can not restore Enter, use Control+J:', e) 
- 
- 
-def tty(): 
-    if os.isatty(1): 
-        return 
- 
+
+def import_readline():
+    try:
+        import readline
+    except ImportError:
+        sys.path.append('/usr/lib/python2.7/lib-dynload')
+
+    try:
+        import readline
+    except ImportError as e:
+        print('can not import readline:', e)
+
+        import subprocess
+        try:
+            subprocess.check_call('stty icrnl'.split())
+        except OSError as e:
+            print('can not restore Enter, use Control+J:', e)
+
+
+def tty():
+    if os.isatty(1):
+        return
+
     fd = os.open('/dev/tty', os.O_RDWR)
-    os.dup2(fd, 0) 
-    os.dup2(fd, 1) 
-    os.dup2(fd, 2) 
+    os.dup2(fd, 0)
+    os.dup2(fd, 1)
+    os.dup2(fd, 2)
     os.close(fd)
- 
-    old_sys_path = sys.path 
-    sys.path = list(sys.path) 
-    try: 
-        import_readline() 
-    finally: 
-        sys.path = old_sys_path 
- 
- 
+
+    old_sys_path = sys.path
+    sys.path = list(sys.path)
+    try:
+        import_readline()
+    finally:
+        sys.path = old_sys_path
+
+
 def _validate_usepdb_cls(value: str) -> Tuple[str, str]:
     """Validate syntax of --pdbcls option."""
     try:
@@ -78,59 +78,59 @@ def _validate_usepdb_cls(value: str) -> Tuple[str, str]:
 
 
 def pytest_addoption(parser: Parser) -> None:
-    group = parser.getgroup("general") 
-    group._addoption( 
-        "--pdb", 
-        dest="usepdb", 
-        action="store_true", 
-        help="start the interactive Python debugger on errors or KeyboardInterrupt.", 
-    ) 
-    group._addoption( 
-        "--pdbcls", 
-        dest="usepdb_cls", 
-        metavar="modulename:classname", 
+    group = parser.getgroup("general")
+    group._addoption(
+        "--pdb",
+        dest="usepdb",
+        action="store_true",
+        help="start the interactive Python debugger on errors or KeyboardInterrupt.",
+    )
+    group._addoption(
+        "--pdbcls",
+        dest="usepdb_cls",
+        metavar="modulename:classname",
         type=_validate_usepdb_cls,
-        help="start a custom interactive Python debugger on errors. " 
-        "For example: --pdbcls=IPython.terminal.debugger:TerminalPdb", 
-    ) 
-    group._addoption( 
-        "--trace", 
-        dest="trace", 
-        action="store_true", 
-        help="Immediately break when running each test.", 
-    ) 
- 
- 
+        help="start a custom interactive Python debugger on errors. "
+        "For example: --pdbcls=IPython.terminal.debugger:TerminalPdb",
+    )
+    group._addoption(
+        "--trace",
+        dest="trace",
+        action="store_true",
+        help="Immediately break when running each test.",
+    )
+
+
 def pytest_configure(config: Config) -> None:
     import pdb
 
-    if config.getvalue("trace"): 
-        config.pluginmanager.register(PdbTrace(), "pdbtrace") 
-    if config.getvalue("usepdb"): 
-        config.pluginmanager.register(PdbInvoke(), "pdbinvoke") 
- 
-    pytestPDB._saved.append( 
+    if config.getvalue("trace"):
+        config.pluginmanager.register(PdbTrace(), "pdbtrace")
+    if config.getvalue("usepdb"):
+        config.pluginmanager.register(PdbInvoke(), "pdbinvoke")
+
+    pytestPDB._saved.append(
         (pdb.set_trace, pytestPDB._pluginmanager, pytestPDB._config)
-    ) 
-    pdb.set_trace = pytestPDB.set_trace 
-    pytestPDB._pluginmanager = config.pluginmanager 
-    pytestPDB._config = config 
- 
-    # NOTE: not using pytest_unconfigure, since it might get called although 
-    #       pytest_configure was not (if another plugin raises UsageError). 
+    )
+    pdb.set_trace = pytestPDB.set_trace
+    pytestPDB._pluginmanager = config.pluginmanager
+    pytestPDB._config = config
+
+    # NOTE: not using pytest_unconfigure, since it might get called although
+    #       pytest_configure was not (if another plugin raises UsageError).
     def fin() -> None:
-        ( 
-            pdb.set_trace, 
-            pytestPDB._pluginmanager, 
-            pytestPDB._config, 
-        ) = pytestPDB._saved.pop() 
- 
-    config._cleanup.append(fin) 
- 
- 
+        (
+            pdb.set_trace,
+            pytestPDB._pluginmanager,
+            pytestPDB._config,
+        ) = pytestPDB._saved.pop()
+
+    config._cleanup.append(fin)
+
+
 class pytestPDB:
     """Pseudo PDB that defers to the real pdb."""
- 
+
     _pluginmanager: Optional[PytestPluginManager] = None
     _config: Optional[Config] = None
     _saved: List[
@@ -138,8 +138,8 @@ class pytestPDB:
     ] = []
     _recursive_debug = 0
     _wrapped_pdb_cls: Optional[Tuple[Type[Any], Type[Any]]] = None
- 
-    @classmethod 
+
+    @classmethod
     def _is_capturing(cls, capman: Optional["CaptureManager"]) -> Union[str, bool]:
         if capman:
             return capman.is_capturing()
@@ -186,20 +186,20 @@ class pytestPDB:
 
     @classmethod
     def _get_pdb_wrapper_class(cls, pdb_cls, capman: Optional["CaptureManager"]):
-        import _pytest.config 
- 
+        import _pytest.config
+
         # Type ignored because mypy doesn't support "dynamic"
         # inheritance like this.
         class PytestPdbWrapper(pdb_cls):  # type: ignore[valid-type,misc]
             _pytest_capman = capman
             _continued = False
- 
+
             def do_debug(self, arg):
                 cls._recursive_debug += 1
                 ret = super().do_debug(arg)
                 cls._recursive_debug -= 1
                 return ret
- 
+
             def do_continue(self, arg):
                 ret = super().do_continue(arg)
                 if cls._recursive_debug == 0:
@@ -211,8 +211,8 @@ class pytestPDB:
                     capturing = pytestPDB._is_capturing(capman)
                     if capturing:
                         if capturing == "global":
-                            tw.sep(">", "PDB continue (IO-capturing resumed)") 
-                        else: 
+                            tw.sep(">", "PDB continue (IO-capturing resumed)")
+                        else:
                             tw.sep(
                                 ">",
                                 "PDB continue (IO-capturing resumed for %s)"
@@ -226,18 +226,18 @@ class pytestPDB:
                 cls._pluginmanager.hook.pytest_leave_pdb(config=cls._config, pdb=self)
                 self._continued = True
                 return ret
- 
+
             do_c = do_cont = do_continue
- 
+
             def do_quit(self, arg):
                 """Raise Exit outcome when quit command is used in pdb.
- 
+
                 This is a bit of a hack - it would be better if BdbQuit
                 could be handled, but this would require to wrap the
                 whole pytest run, and adjust the report etc.
                 """
                 ret = super().do_quit(arg)
- 
+
                 if cls._recursive_debug == 0:
                     outcomes.exit("Quitting debugger")
 
@@ -282,11 +282,11 @@ class pytestPDB:
             capman = cls._pluginmanager.getplugin("capturemanager")
         if capman:
             capman.suspend(in_=True)
- 
+
         if cls._config:
             tw = _pytest.config.create_terminal_writer(cls._config)
             tw.line()
- 
+
             if cls._recursive_debug == 0:
                 # Handle header similar to pdb.set_trace in py37+.
                 header = kwargs.pop("header", None)
@@ -304,7 +304,7 @@ class pytestPDB:
                         )
                     else:
                         tw.sep(">", f"PDB {method}")
- 
+
         _pdb = cls._import_pdb_cls(capman)(**kwargs)
 
         if cls._pluginmanager:
@@ -324,36 +324,36 @@ class PdbInvoke:
     def pytest_exception_interact(
         self, node: Node, call: "CallInfo[Any]", report: BaseReport
     ) -> None:
-        capman = node.config.pluginmanager.getplugin("capturemanager") 
-        if capman: 
-            capman.suspend_global_capture(in_=True) 
-            out, err = capman.read_global_capture() 
-            sys.stdout.write(out) 
-            sys.stdout.write(err) 
-        tty() 
+        capman = node.config.pluginmanager.getplugin("capturemanager")
+        if capman:
+            capman.suspend_global_capture(in_=True)
+            out, err = capman.read_global_capture()
+            sys.stdout.write(out)
+            sys.stdout.write(err)
+        tty()
         assert call.excinfo is not None
-        _enter_pdb(node, call.excinfo, report) 
- 
+        _enter_pdb(node, call.excinfo, report)
+
     def pytest_internalerror(self, excinfo: ExceptionInfo[BaseException]) -> None:
-        tb = _postmortem_traceback(excinfo) 
-        post_mortem(tb) 
- 
- 
+        tb = _postmortem_traceback(excinfo)
+        post_mortem(tb)
+
+
 class PdbTrace:
-    @hookimpl(hookwrapper=True) 
+    @hookimpl(hookwrapper=True)
     def pytest_pyfunc_call(self, pyfuncitem) -> Generator[None, None, None]:
         wrap_pytest_function_for_tracing(pyfuncitem)
-        yield 
- 
- 
+        yield
+
+
 def wrap_pytest_function_for_tracing(pyfuncitem):
     """Change the Python function object of the given Function item by a
     wrapper which actually enters pdb before calling the python function
     itself, effectively leaving the user in the pdb prompt in the first
     statement of the function."""
     _pdb = pytestPDB._init_pdb("runcall")
-    testfunction = pyfuncitem.obj 
- 
+    testfunction = pyfuncitem.obj
+
     # we can't just return `partial(pdb.runcall, testfunction)` because (on
     # python < 3.7.4) runcall's first param is `func`, which means we'd get
     # an exception if one of the kwargs to testfunction was called `func`.
@@ -361,7 +361,7 @@ def wrap_pytest_function_for_tracing(pyfuncitem):
     def wrapper(*args, **kwargs):
         func = functools.partial(testfunction, *args, **kwargs)
         _pdb.runcall(func)
- 
+
     pyfuncitem.obj = wrapper
 
 
@@ -375,53 +375,53 @@ def maybe_wrap_pytest_function_for_tracing(pyfuncitem):
 def _enter_pdb(
     node: Node, excinfo: ExceptionInfo[BaseException], rep: BaseReport
 ) -> BaseReport:
-    # XXX we re-use the TerminalReporter's terminalwriter 
-    # because this seems to avoid some encoding related troubles 
-    # for not completely clear reasons. 
-    tw = node.config.pluginmanager.getplugin("terminalreporter")._tw 
-    tw.line() 
- 
-    showcapture = node.config.option.showcapture 
- 
-    for sectionname, content in ( 
-        ("stdout", rep.capstdout), 
-        ("stderr", rep.capstderr), 
-        ("log", rep.caplog), 
-    ): 
-        if showcapture in (sectionname, "all") and content: 
-            tw.sep(">", "captured " + sectionname) 
-            if content[-1:] == "\n": 
-                content = content[:-1] 
-            tw.line(content) 
- 
-    tw.sep(">", "traceback") 
-    rep.toterminal(tw) 
-    tw.sep(">", "entering PDB") 
-    tb = _postmortem_traceback(excinfo) 
+    # XXX we re-use the TerminalReporter's terminalwriter
+    # because this seems to avoid some encoding related troubles
+    # for not completely clear reasons.
+    tw = node.config.pluginmanager.getplugin("terminalreporter")._tw
+    tw.line()
+
+    showcapture = node.config.option.showcapture
+
+    for sectionname, content in (
+        ("stdout", rep.capstdout),
+        ("stderr", rep.capstderr),
+        ("log", rep.caplog),
+    ):
+        if showcapture in (sectionname, "all") and content:
+            tw.sep(">", "captured " + sectionname)
+            if content[-1:] == "\n":
+                content = content[:-1]
+            tw.line(content)
+
+    tw.sep(">", "traceback")
+    rep.toterminal(tw)
+    tw.sep(">", "entering PDB")
+    tb = _postmortem_traceback(excinfo)
     rep._pdbshown = True  # type: ignore[attr-defined]
     post_mortem(tb)
-    return rep 
- 
- 
+    return rep
+
+
 def _postmortem_traceback(excinfo: ExceptionInfo[BaseException]) -> types.TracebackType:
     from doctest import UnexpectedException
 
-    if isinstance(excinfo.value, UnexpectedException): 
-        # A doctest.UnexpectedException is not useful for post_mortem. 
-        # Use the underlying exception instead: 
-        return excinfo.value.exc_info[2] 
+    if isinstance(excinfo.value, UnexpectedException):
+        # A doctest.UnexpectedException is not useful for post_mortem.
+        # Use the underlying exception instead:
+        return excinfo.value.exc_info[2]
     elif isinstance(excinfo.value, ConftestImportFailure):
         # A config.ConftestImportFailure is not useful for post_mortem.
         # Use the underlying exception instead:
         return excinfo.value.excinfo[2]
-    else: 
+    else:
         assert excinfo._excinfo is not None
-        return excinfo._excinfo[2] 
- 
- 
+        return excinfo._excinfo[2]
+
+
 def post_mortem(t: types.TracebackType) -> None:
     p = pytestPDB._init_pdb("post_mortem")
-    p.reset() 
-    p.interaction(None, t) 
+    p.reset()
+    p.interaction(None, t)
     if p.quitting:
         outcomes.exit("Quitting debugger")

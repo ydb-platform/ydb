@@ -90,7 +90,7 @@ public:
     void SetFormatter(TLogFormatter formatter) noexcept;
 
     template <class T>
-    inline TLogElement operator<<(const T& t) const { 
+    inline TLogElement operator<<(const T& t) const {
         TLogElement ret(this);
         ret << t;
         return ret;

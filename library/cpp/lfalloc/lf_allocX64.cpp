@@ -115,13 +115,13 @@ extern "C" void* realloc(void* old_ptr, size_t new_size) {
     return new_ptr;
 }
 
-extern "C" size_t malloc_usable_size(void* ptr) { 
-    if (ptr == nullptr) { 
-        return 0; 
-    } 
-    return LFGetSize(ptr); 
-} 
- 
+extern "C" size_t malloc_usable_size(void* ptr) {
+    if (ptr == nullptr) {
+        return 0;
+    }
+    return LFGetSize(ptr);
+}
+
 NMalloc::TMallocInfo NMalloc::MallocInfo() {
     NMalloc::TMallocInfo r;
 #if defined(LFALLOC_DBG)

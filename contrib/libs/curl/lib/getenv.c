@@ -29,8 +29,8 @@
 
 static char *GetEnv(const char *variable)
 {
-#if defined(_WIN32_WCE) || defined(CURL_WINDOWS_APP) 
-  (void)variable; 
+#if defined(_WIN32_WCE) || defined(CURL_WINDOWS_APP)
+  (void)variable;
   return NULL;
 #elif defined(WIN32)
   /* This uses Windows API instead of C runtime getenv() to get the environment

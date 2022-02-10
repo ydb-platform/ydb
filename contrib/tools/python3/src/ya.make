@@ -35,12 +35,12 @@ ELSEIF (OS_WINDOWS)
         Shlwapi.lib
         Winmm.lib
     )
- 
+
     CFLAGS(
         -DPY3_DLLNAME="L\"python3\""
     )
 
-    DISABLE(MSVC_INLINE_OPTIMIZED) 
+    DISABLE(MSVC_INLINE_OPTIMIZED)
 ENDIF()
 
 NO_COMPILER_WARNINGS()

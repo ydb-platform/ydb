@@ -3,11 +3,11 @@ RECURSE(
     big_integer/ut
     crypto
     crypto/ut
-    holders 
-    holders/ut 
+    holders
+    holders/ut
     io
     io/ut
-    method 
-    method/ut 
+    method
+    method/ut
     init
 )

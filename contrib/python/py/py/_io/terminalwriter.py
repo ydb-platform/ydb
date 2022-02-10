@@ -5,10 +5,10 @@ Helper functions for writing to terminals and files.
 """
 
 
-import sys, os, unicodedata 
+import sys, os, unicodedata
 import py
 py3k = sys.version_info[0] >= 3
-py33 = sys.version_info >= (3, 3) 
+py33 = sys.version_info >= (3, 3)
 from py.builtin import text, bytes
 
 win32_and_ctypes = False
@@ -25,21 +25,21 @@ if sys.platform == "win32":
 
 
 def _getdimensions():
-    if py33: 
-        import shutil 
-        size = shutil.get_terminal_size() 
-        return size.lines, size.columns 
-    else: 
-        import termios, fcntl, struct 
-        call = fcntl.ioctl(1, termios.TIOCGWINSZ, "\000" * 8) 
-        height, width = struct.unpack("hhhh", call)[:2] 
-        return height, width 
+    if py33:
+        import shutil
+        size = shutil.get_terminal_size()
+        return size.lines, size.columns
+    else:
+        import termios, fcntl, struct
+        call = fcntl.ioctl(1, termios.TIOCGWINSZ, "\000" * 8)
+        height, width = struct.unpack("hhhh", call)[:2]
+        return height, width
 
 
 def get_terminal_width():
-    width = 0 
+    width = 0
     try:
-        _, width = _getdimensions() 
+        _, width = _getdimensions()
     except py.builtin._sysex:
         raise
     except:
@@ -59,21 +59,21 @@ def get_terminal_width():
 
 terminal_width = get_terminal_width()
 
-char_width = { 
-    'A': 1,   # "Ambiguous" 
-    'F': 2,   # Fullwidth 
-    'H': 1,   # Halfwidth 
-    'N': 1,   # Neutral 
-    'Na': 1,  # Narrow 
-    'W': 2,   # Wide 
-} 
- 
- 
-def get_line_width(text): 
-    text = unicodedata.normalize('NFC', text) 
-    return sum(char_width.get(unicodedata.east_asian_width(c), 1) for c in text) 
- 
- 
+char_width = {
+    'A': 1,   # "Ambiguous"
+    'F': 2,   # Fullwidth
+    'H': 1,   # Halfwidth
+    'N': 1,   # Neutral
+    'Na': 1,  # Narrow
+    'W': 2,   # Wide
+}
+
+
+def get_line_width(text):
+    text = unicodedata.normalize('NFC', text)
+    return sum(char_width.get(unicodedata.east_asian_width(c), 1) for c in text)
+
+
 # XXX unify with _escaped func below
 def ansi_print(text, esc, file=None, newline=True, flush=False):
     if file is None:
@@ -152,7 +152,7 @@ class TerminalWriter(object):
             if stringio:
                 self.stringio = file = py.io.TextIO()
             else:
-                from sys import stdout as file 
+                from sys import stdout as file
         elif py.builtin.callable(file) and not (
              hasattr(file, "write") and hasattr(file, "flush")):
             file = WriteFile(file, encoding=encoding)
@@ -162,42 +162,42 @@ class TerminalWriter(object):
         self._file = file
         self.hasmarkup = should_do_markup(file)
         self._lastlen = 0
-        self._chars_on_current_line = 0 
-        self._width_of_current_line = 0 
+        self._chars_on_current_line = 0
+        self._width_of_current_line = 0
 
-    @property 
-    def fullwidth(self): 
-        if hasattr(self, '_terminal_width'): 
-            return self._terminal_width 
-        return get_terminal_width() 
- 
-    @fullwidth.setter 
-    def fullwidth(self, value): 
-        self._terminal_width = value 
- 
-    @property 
-    def chars_on_current_line(self): 
-        """Return the number of characters written so far in the current line. 
- 
-        Please note that this count does not produce correct results after a reline() call, 
-        see #164. 
- 
-        .. versionadded:: 1.5.0 
- 
-        :rtype: int 
-        """ 
-        return self._chars_on_current_line 
- 
-    @property 
-    def width_of_current_line(self): 
-        """Return an estimate of the width so far in the current line. 
- 
-        .. versionadded:: 1.6.0 
- 
-        :rtype: int 
-        """ 
-        return self._width_of_current_line 
- 
+    @property
+    def fullwidth(self):
+        if hasattr(self, '_terminal_width'):
+            return self._terminal_width
+        return get_terminal_width()
+
+    @fullwidth.setter
+    def fullwidth(self, value):
+        self._terminal_width = value
+
+    @property
+    def chars_on_current_line(self):
+        """Return the number of characters written so far in the current line.
+
+        Please note that this count does not produce correct results after a reline() call,
+        see #164.
+
+        .. versionadded:: 1.5.0
+
+        :rtype: int
+        """
+        return self._chars_on_current_line
+
+    @property
+    def width_of_current_line(self):
+        """Return an estimate of the width so far in the current line.
+
+        .. versionadded:: 1.6.0
+
+        :rtype: int
+        """
+        return self._width_of_current_line
+
     def _escaped(self, text, esc):
         if esc and self.hasmarkup:
             text = (''.join(['\x1b[%sm' % cod for cod in esc])  +
@@ -248,27 +248,27 @@ class TerminalWriter(object):
         if msg:
             if not isinstance(msg, (bytes, text)):
                 msg = text(msg)
- 
-            self._update_chars_on_current_line(msg) 
- 
+
+            self._update_chars_on_current_line(msg)
+
             if self.hasmarkup and kw:
                 markupmsg = self.markup(msg, **kw)
             else:
                 markupmsg = msg
             write_out(self._file, markupmsg)
 
-    def _update_chars_on_current_line(self, text_or_bytes): 
-        newline = b'\n' if isinstance(text_or_bytes, bytes) else '\n' 
-        current_line = text_or_bytes.rsplit(newline, 1)[-1] 
-        if isinstance(current_line, bytes): 
-            current_line = current_line.decode('utf-8', errors='replace') 
-        if newline in text_or_bytes: 
-            self._chars_on_current_line = len(current_line) 
-            self._width_of_current_line = get_line_width(current_line) 
-        else: 
-            self._chars_on_current_line += len(current_line) 
-            self._width_of_current_line += get_line_width(current_line) 
- 
+    def _update_chars_on_current_line(self, text_or_bytes):
+        newline = b'\n' if isinstance(text_or_bytes, bytes) else '\n'
+        current_line = text_or_bytes.rsplit(newline, 1)[-1]
+        if isinstance(current_line, bytes):
+            current_line = current_line.decode('utf-8', errors='replace')
+        if newline in text_or_bytes:
+            self._chars_on_current_line = len(current_line)
+            self._width_of_current_line = get_line_width(current_line)
+        else:
+            self._chars_on_current_line += len(current_line)
+            self._width_of_current_line += get_line_width(current_line)
+
     def line(self, s='', **kw):
         self.write(s, **kw)
         self._checkfill(s)
@@ -292,9 +292,9 @@ class Win32ConsoleWriter(TerminalWriter):
         if msg:
             if not isinstance(msg, (bytes, text)):
                 msg = text(msg)
- 
-            self._update_chars_on_current_line(msg) 
- 
+
+            self._update_chars_on_current_line(msg)
+
             oldcolors = None
             if self.hasmarkup and kw:
                 handle = GetStdHandle(STD_OUTPUT_HANDLE)

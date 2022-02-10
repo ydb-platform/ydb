@@ -25,8 +25,8 @@ public:
         } else {
             WriteIncBin(constname, filename, data);
         }
-        WriteFooter(constname); 
-        WriteSymbolSize(constname); 
+        WriteFooter(constname);
+        WriteSymbolSize(constname);
     }
 
 private:
@@ -36,21 +36,21 @@ private:
         AsmOut << "SECTION .rodata\n";
     }
 
-    void WriteFooter(TStringBuf constname) { 
-        AsmOut << AsmPrefix << constname << "Size:\n"; 
-        AsmOut << "dd " << AsmPrefix << constname << ".end - " << AsmPrefix << constname << "\n"; 
+    void WriteFooter(TStringBuf constname) {
+        AsmOut << AsmPrefix << constname << "Size:\n";
+        AsmOut << "dd " << AsmPrefix << constname << ".end - " << AsmPrefix << constname << "\n";
     }
 
-    void WriteSymbolSize(TStringBuf constname) { 
+    void WriteSymbolSize(TStringBuf constname) {
         AsmOut << "%ifidn __OUTPUT_FORMAT__,elf64\n";
-        AsmOut << "size " << AsmPrefix << constname << " " << AsmPrefix << constname << ".end - " << AsmPrefix << constname << "\n"; 
+        AsmOut << "size " << AsmPrefix << constname << " " << AsmPrefix << constname << ".end - " << AsmPrefix << constname << "\n";
         AsmOut << "size " << AsmPrefix << constname << "Size 4\n";
         AsmOut << "%endif\n";
     }
 
     void WriteIncBin(TStringBuf constname, TStringBuf filename, const TString& data) {
         AsmOut << AsmPrefix << constname << ":\nincbin \"" << Basename(filename) << "\"\n";
-        AsmOut << ".end:\n"; 
+        AsmOut << ".end:\n";
         TFixedBufferFileOutput out(filename.data());
         out << data;
     }
@@ -62,7 +62,7 @@ private:
             AsmOut << IntToString<10, unsigned char>(c) << ",";
         }
         AsmOut << IntToString<10, unsigned char>(static_cast<unsigned char>(data[data.size() - 1])) << "\n";
-        AsmOut << ".end:\n"; 
+        AsmOut << ".end:\n";
     }
 
     TString Basename(TStringBuf origin) {

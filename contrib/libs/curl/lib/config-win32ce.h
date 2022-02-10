@@ -343,9 +343,9 @@
 /* The size of `short', as computed by sizeof. */
 #define SIZEOF_SHORT 2
 
-/* Define to the size of `long', as computed by sizeof. */ 
-#define SIZEOF_LONG 4 
- 
+/* Define to the size of `long', as computed by sizeof. */
+#define SIZEOF_LONG 4
+
 /* The size of `size_t', as computed by sizeof. */
 #if defined(_WIN64)
 #  define SIZEOF_SIZE_T 8
@@ -379,7 +379,7 @@
 #define _CRT_NONSTDC_NO_DEPRECATE 1
 #endif
 
-/* VS2005 and later default size for time_t is 64-bit, unless */ 
+/* VS2005 and later default size for time_t is 64-bit, unless */
 /* _USE_32BIT_TIME_T has been defined to get a 32-bit time_t. */
 #if defined(_MSC_VER) && (_MSC_VER >= 1400)
 #  ifndef _USE_32BIT_TIME_T
@@ -409,7 +409,7 @@
 /*                           LDAP SUPPORT                           */
 /* ---------------------------------------------------------------- */
 
-#define USE_WIN32_LDAP 1 
+#define USE_WIN32_LDAP 1
 #undef HAVE_LDAP_URL_PARSE
 
 /* ---------------------------------------------------------------- */
@@ -443,6 +443,6 @@
 #define ENOMEM 2
 #define EAGAIN 3
 
-extern int stat(const char *path, struct stat *buffer); 
+extern int stat(const char *path, struct stat *buffer);
 
 #endif /* HEADER_CURL_CONFIG_WIN32CE_H */

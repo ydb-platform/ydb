@@ -54,11 +54,11 @@
 #include <curl/curl.h>
 #include "transfer.h"
 #include "sendf.h"
-#include "escape.h" 
+#include "escape.h"
 #include "progress.h"
 #include "dict.h"
 #include "curl_printf.h"
-#include "strcase.h" 
+#include "strcase.h"
 #include "curl_memory.h"
 /* The last #include file should be: */
 #include "memdebug.h"
@@ -88,43 +88,43 @@ const struct Curl_handler Curl_handler_dict = {
   ZERO_NULL,                            /* perform_getsock */
   ZERO_NULL,                            /* disconnect */
   ZERO_NULL,                            /* readwrite */
-  ZERO_NULL,                            /* connection_check */ 
+  ZERO_NULL,                            /* connection_check */
   PORT_DICT,                            /* defport */
   CURLPROTO_DICT,                       /* protocol */
   CURLPROTO_DICT,                       /* family */
   PROTOPT_NONE | PROTOPT_NOURLQUERY     /* flags */
 };
 
-static char *unescape_word(struct Curl_easy *data, const char *inputbuff) 
+static char *unescape_word(struct Curl_easy *data, const char *inputbuff)
 {
-  char *newp = NULL; 
+  char *newp = NULL;
   char *dictp;
-  size_t len; 
+  size_t len;
 
   CURLcode result = Curl_urldecode(data, inputbuff, 0, &newp, &len,
                                    REJECT_NADA);
-  if(!newp || result) 
+  if(!newp || result)
     return NULL;
 
-  dictp = malloc(len*2 + 1); /* add one for terminating zero */ 
+  dictp = malloc(len*2 + 1); /* add one for terminating zero */
   if(dictp) {
-    char *ptr; 
-    char ch; 
-    int olen = 0; 
+    char *ptr;
+    char ch;
+    int olen = 0;
     /* According to RFC2229 section 2.2, these letters need to be escaped with
        \[letter] */
     for(ptr = newp;
-        (ch = *ptr) != 0; 
+        (ch = *ptr) != 0;
         ptr++) {
-      if((ch <= 32) || (ch == 127) || 
-          (ch == '\'') || (ch == '\"') || (ch == '\\')) { 
+      if((ch <= 32) || (ch == 127) ||
+          (ch == '\'') || (ch == '\"') || (ch == '\\')) {
         dictp[olen++] = '\\';
       }
-      dictp[olen++] = ch; 
+      dictp[olen++] = ch;
     }
-    dictp[olen] = 0; 
+    dictp[olen] = 0;
   }
-  free(newp); 
+  free(newp);
   return dictp;
 }
 
@@ -182,11 +182,11 @@ static CURLcode dict_do(struct connectdata *conn, bool *done)
   char *strategy = NULL;
   char *nthdef = NULL; /* This is not part of the protocol, but required
                           by RFC 2229 */
-  CURLcode result = CURLE_OK; 
-  struct Curl_easy *data = conn->data; 
+  CURLcode result = CURLE_OK;
+  struct Curl_easy *data = conn->data;
   curl_socket_t sockfd = conn->sock[FIRSTSOCKET];
 
-  char *path = data->state.up.path; 
+  char *path = data->state.up.path;
 
   *done = TRUE; /* unconditionally */
 
@@ -194,9 +194,9 @@ static CURLcode dict_do(struct connectdata *conn, bool *done)
     /* AUTH is missing */
   }
 
-  if(strncasecompare(path, DICT_MATCH, sizeof(DICT_MATCH)-1) || 
-     strncasecompare(path, DICT_MATCH2, sizeof(DICT_MATCH2)-1) || 
-     strncasecompare(path, DICT_MATCH3, sizeof(DICT_MATCH3)-1)) { 
+  if(strncasecompare(path, DICT_MATCH, sizeof(DICT_MATCH)-1) ||
+     strncasecompare(path, DICT_MATCH2, sizeof(DICT_MATCH2)-1) ||
+     strncasecompare(path, DICT_MATCH3, sizeof(DICT_MATCH3)-1)) {
 
     word = strchr(path, ':');
     if(word) {
@@ -217,7 +217,7 @@ static CURLcode dict_do(struct connectdata *conn, bool *done)
 
     if((word == NULL) || (*word == (char)0)) {
       infof(data, "lookup word is missing\n");
-      word = (char *)"default"; 
+      word = (char *)"default";
     }
     if((database == NULL) || (*database == (char)0)) {
       database = (char *)"!";
@@ -249,9 +249,9 @@ static CURLcode dict_do(struct connectdata *conn, bool *done)
     }
     Curl_setup_transfer(data, FIRSTSOCKET, -1, FALSE, -1); /* no upload */
   }
-  else if(strncasecompare(path, DICT_DEFINE, sizeof(DICT_DEFINE)-1) || 
-          strncasecompare(path, DICT_DEFINE2, sizeof(DICT_DEFINE2)-1) || 
-          strncasecompare(path, DICT_DEFINE3, sizeof(DICT_DEFINE3)-1)) { 
+  else if(strncasecompare(path, DICT_DEFINE, sizeof(DICT_DEFINE)-1) ||
+          strncasecompare(path, DICT_DEFINE2, sizeof(DICT_DEFINE2)-1) ||
+          strncasecompare(path, DICT_DEFINE3, sizeof(DICT_DEFINE3)-1)) {
 
     word = strchr(path, ':');
     if(word) {
@@ -268,7 +268,7 @@ static CURLcode dict_do(struct connectdata *conn, bool *done)
 
     if((word == NULL) || (*word == (char)0)) {
       infof(data, "lookup word is missing\n");
-      word = (char *)"default"; 
+      word = (char *)"default";
     }
     if((database == NULL) || (*database == (char)0)) {
       database = (char *)"!";

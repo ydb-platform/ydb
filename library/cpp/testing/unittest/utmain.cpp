@@ -727,10 +727,10 @@ int NUnitTest::RunMain(int argc, char** argv) {
                     ++i;
                     listFile = MakeHolder<TFixedBufferFileOutput>(argv[i]);
                     listStream = listFile.Get();
-                } else if (strcmp(name, "--test-param") == 0) { 
-                    ++i; 
-                    TString param(argv[i]); 
-                    size_t assign = param.find('='); 
+                } else if (strcmp(name, "--test-param") == 0) {
+                    ++i;
+                    TString param(argv[i]);
+                    size_t assign = param.find('=');
                     Singleton<::NPrivate::TTestEnv>()->AddTestParam(param.substr(0, assign), param.substr(assign + 1));
                 } else if (TString(name).StartsWith("--")) {
                     return DoUsage(argv[0]), 1;

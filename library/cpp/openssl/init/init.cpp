@@ -44,11 +44,11 @@ namespace {
         };
 
         inline TInitSsl() {
-            OPENSSL_init_crypto(OPENSSL_INIT_NO_ATEXIT, nullptr); 
+            OPENSSL_init_crypto(OPENSSL_INIT_NO_ATEXIT, nullptr);
         }
 
         inline ~TInitSsl() {
-            OPENSSL_cleanup(); 
+            OPENSSL_cleanup();
         }
 
         static void LockingFunction(int mode, int n, const char* /*file*/, int /*line*/) {
@@ -62,5 +62,5 @@ namespace {
 }
 
 void InitOpenSSL() {
-    (void)SingletonWithPriority<TInitSsl, 0>(); 
+    (void)SingletonWithPriority<TInitSsl, 0>();
 }

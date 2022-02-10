@@ -803,8 +803,8 @@ public:
     inline void push_back(TCharType c) {
         // TODO
         append(c);
-    } 
- 
+    }
+
     template <class T>
     TBasicString& operator+=(const T& s) {
         return append(s);

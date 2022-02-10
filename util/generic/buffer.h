@@ -101,7 +101,7 @@ public:
     inline void Append(char ch) {
         if (Len_ == Pos_) {
             Reserve(Len_ + 1);
-        } 
+        }
 
         *(Data() + Pos_++) = ch;
     }
@@ -142,7 +142,7 @@ public:
     inline void Reserve(size_t len) {
         if (len > Len_) {
             DoReserve(len);
-        } 
+        }
     }
 
     inline void ReserveExactNeverCallMeInSaneCode(size_t len) {

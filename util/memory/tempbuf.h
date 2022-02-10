@@ -65,7 +65,7 @@ private:
     static constexpr size_t TypedSize(const size_t size) noexcept {
         return size / sizeof(T);
     }
- 
+
 public:
     TTempArray() = default;
 

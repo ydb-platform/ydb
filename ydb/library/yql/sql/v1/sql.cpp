@@ -982,19 +982,19 @@ private:
     TNodePtr SubExpr(const TRule_xor_subexpr& node, const TTrailingQuestions& tail);
 
     TNodePtr SubExpr(const TRule_mul_subexpr& node, const TTrailingQuestions& tail) {
-        // mul_subexpr: con_subexpr (DOUBLE_PIPE con_subexpr)*;
+        // mul_subexpr: con_subexpr (DOUBLE_PIPE con_subexpr)*; 
         auto getNode = [](const TRule_mul_subexpr::TBlock2& b) -> const TRule_con_subexpr& { return b.GetRule_con_subexpr2(); };
         return BinOper("Concat", node.GetRule_con_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
     }
 
     TNodePtr SubExpr(const TRule_add_subexpr& node, const TTrailingQuestions& tail) {
-        // add_subexpr: mul_subexpr ((ASTERISK | SLASH | PERCENT) mul_subexpr)*;
+        // add_subexpr: mul_subexpr ((ASTERISK | SLASH | PERCENT) mul_subexpr)*; 
         auto getNode = [](const TRule_add_subexpr::TBlock2& b) -> const TRule_mul_subexpr& { return b.GetRule_mul_subexpr2(); };
         return BinOpList(node.GetRule_mul_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
     }
 
     TNodePtr SubExpr(const TRule_bit_subexpr& node, const TTrailingQuestions& tail) {
-        // bit_subexpr: add_subexpr ((PLUS | MINUS) add_subexpr)*;
+        // bit_subexpr: add_subexpr ((PLUS | MINUS) add_subexpr)*; 
         auto getNode = [](const TRule_bit_subexpr::TBlock2& b) -> const TRule_add_subexpr& { return b.GetRule_add_subexpr2(); };
         return BinOpList(node.GetRule_add_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
     }
@@ -1034,19 +1034,19 @@ private:
     }
 
     TNodePtr SubExpr(const TRule_eq_subexpr& node, const TTrailingQuestions& tail) {
-        // eq_subexpr: neq_subexpr ((LESS | LESS_OR_EQ | GREATER | GREATER_OR_EQ) neq_subexpr)*;
+        // eq_subexpr: neq_subexpr ((LESS | LESS_OR_EQ | GREATER | GREATER_OR_EQ) neq_subexpr)*; 
         auto getNode = [](const TRule_eq_subexpr::TBlock2& b) -> const TRule_neq_subexpr& { return b.GetRule_neq_subexpr2(); };
         return BinOpList(node.GetRule_neq_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
     }
 
     TNodePtr SubExpr(const TRule_or_subexpr& node, const TTrailingQuestions& tail) {
-        // or_subexpr: and_subexpr (AND and_subexpr)*;
+        // or_subexpr: and_subexpr (AND and_subexpr)*; 
         auto getNode = [](const TRule_or_subexpr::TBlock2& b) -> const TRule_and_subexpr& { return b.GetRule_and_subexpr2(); };
         return BinOper("And", node.GetRule_and_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
     }
 
     TNodePtr SubExpr(const TRule_and_subexpr& node, const TTrailingQuestions& tail) {
-        // and_subexpr: xor_subexpr (XOR xor_subexpr)*;
+        // and_subexpr: xor_subexpr (XOR xor_subexpr)*; 
         auto getNode = [](const TRule_and_subexpr::TBlock2& b) -> const TRule_xor_subexpr& { return b.GetRule_xor_subexpr2(); };
         return BinOper("Xor", node.GetRule_xor_subexpr1(), getNode, node.GetBlock2().begin(), node.GetBlock2().end(), tail);
     }
@@ -4581,10 +4581,10 @@ TNodePtr TSqlExpression::CaseRule(const TRule_case_expr& rule) {
 }
 
 TMaybe<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, const TTrailingQuestions& tail) {
-    // atom_expr:
-    //     literal_value
-    //   | bind_parameter
-    //   | lambda
+    // atom_expr: 
+    //     literal_value 
+    //   | bind_parameter 
+    //   | lambda 
     //   | cast_expr
     //   | exists_expr
     //   | case_expr
@@ -4594,7 +4594,7 @@ TMaybe<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, const
     //   | list_literal
     //   | dict_literal
     //   | struct_literal
-    // ;
+    // ; 
     if (node.Alt_case() != TRule_atom_expr::kAltAtomExpr2 && tail.Count) {
         UnexpectedQuestionToken(tail);
         return {};
@@ -4878,7 +4878,7 @@ bool TSqlExpression::SqlLambdaExprBody(TContext& ctx, const TRule_lambda_body& n
 }
 
 TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQuestions& tail) {
-    // con_subexpr: unary_subexpr | unary_op unary_subexpr;
+    // con_subexpr: unary_subexpr | unary_op unary_subexpr; 
     switch (node.Alt_case()) {
         case TRule_con_subexpr::kAltConSubexpr1:
             return UnaryExpr(node.GetAlt_con_subexpr1().GetRule_unary_subexpr1(), tail);
@@ -4909,7 +4909,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
 }
 
 TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQuestions& tail) {
-    // xor_subexpr: eq_subexpr cond_expr?;
+    // xor_subexpr: eq_subexpr cond_expr?; 
     TNodePtr res(SubExpr(node.GetRule_eq_subexpr1(), node.HasBlock2() ? TTrailingQuestions{} : tail));
     if (!res) {
         return {};
@@ -5232,7 +5232,7 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
                 Ctx.IncrementMonCounter("sql_binary_operations", "Divide");
                 if (!Ctx.Scoped->PragmaClassicDivision && partialResult) {
                     partialResult = new TCallNodeImpl(pos, "SafeCast", {std::move(partialResult), BuildDataType(pos, "Double")});
-                }
+                } 
                 break;
             case SQLv1LexerTokens::TOKEN_PERCENT:
                 opName = "%";
@@ -5880,10 +5880,10 @@ TSourcePtr TSqlSelect::JoinSource(const TRule_join_source& node) {
 }
 
 bool TSqlSelect::SelectTerm(TVector<TNodePtr>& terms, const TRule_result_column& node) {
-    // result_column:
-    //     opt_id_prefix ASTERISK
+    // result_column: 
+    //     opt_id_prefix ASTERISK 
     //   | expr ((AS an_id) | an_id_pure)?
-    // ;
+    // ; 
     switch (node.Alt_case()) {
         case TRule_result_column::kAltResultColumn1: {
             auto alt = node.GetAlt_result_column1();
@@ -9157,7 +9157,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         }
     }
 
-    const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf";
+    const bool withConfigure = prefix || normalizedPragma == "file" || normalizedPragma == "folder" || normalizedPragma == "udf"; 
     static const THashSet<TStringBuf> lexicalScopePragmas = {"classicdivision", "strictjoinkeytypes", "disablestrictjoinkeytypes"};
     const bool hasLexicalScope = withConfigure || lexicalScopePragmas.contains(normalizedPragma);
     for (auto pragmaValue : pragmaValues) {
@@ -9197,7 +9197,7 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
     }
 
     if (prefix.empty()) {
-        if (!TopLevel && !hasLexicalScope) {
+        if (!TopLevel && !hasLexicalScope) { 
             Error() << "This pragma '" << pragma << "' is not allowed to be used in actions or subqueries";
             Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
             return{};
@@ -9435,13 +9435,13 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                 return {};
             }
             Ctx.Error(Ctx.Pos()) << *values[0].GetLiteral();
-        } else if (normalizedPragma == "classicdivision") {
+        } else if (normalizedPragma == "classicdivision") { 
             if (values.size() != 1 || !values[0].GetLiteral() || !TryFromString(*values[0].GetLiteral(), Ctx.Scoped->PragmaClassicDivision)) {
                 Error() << "Expected boolean literal as a single argument for: " << pragma;
-                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
-                return {};
-            }
-            Ctx.IncrementMonCounter("sql_pragma", "ClassicDivision");
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue"); 
+                return {}; 
+            } 
+            Ctx.IncrementMonCounter("sql_pragma", "ClassicDivision"); 
         } else if (normalizedPragma == "disableunordered") {
             Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
                 << "Use of deprecated DisableUnordered pragma. It will be dropped soon";

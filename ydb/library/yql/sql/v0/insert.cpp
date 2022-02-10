@@ -155,7 +155,7 @@ public:
             }
             tuple = L(tuple, rowValues);
         }
-        return Y("EnsurePersistable", Q(tuple));
+        return Y("EnsurePersistable", Q(tuple)); 
     }
 
     TNodePtr DoClone() const final {

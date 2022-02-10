@@ -4671,12 +4671,12 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map[LeftName] = std::bind(&OptimizeDirection<false>, _1);
     map[RightName] = std::bind(&OptimizeDirection<true>, _1);
 
-    map["Apply"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
+    map["Apply"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) { 
         auto ret = FoldYsonParseAfterSerialize(node);
         if (ret != node) {
             return ret;
-        }
-
+        } 
+ 
         ret = FoldYson2ParseAfterSerialize(node);
         if (ret != node) {
             return ret;
@@ -4685,8 +4685,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         ret = FoldYsonSeralizeAfterParse(node);
         if (ret != node) {
             return ret;
-        }
-
+        } 
+ 
         ret = FoldYson2SeralizeAfterParse(node);
         if (ret != node) {
             return ret;
@@ -4703,7 +4703,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         return node;
-    };
+    }; 
 
     map["Switch"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         TExprNode::TPtr flatMap;

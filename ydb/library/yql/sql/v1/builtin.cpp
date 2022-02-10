@@ -1646,9 +1646,9 @@ public:
     }
 
     void DoUpdateState() const override {
-        State.Set(ENodeState::Const, false);
-    }
-
+        State.Set(ENodeState::Const, false); 
+    } 
+ 
     TNodePtr DoClone() const final {
         return new TTableRow<Join>(Pos, ArgsCount);
     }
@@ -2316,13 +2316,13 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         const TString& functionName,
         const TString& factoryName,
         EAggrFuncTypeCallback type = NORMAL,
-        const TString& functionNameOverride = TString(),
-        const TVector<EAggregateMode>& validModes = {}) {
+        const TString& functionNameOverride = TString(), 
+        const TVector<EAggregateMode>& validModes = {}) { 
 
     const TString realFunctionName = functionNameOverride.empty() ? functionName : functionNameOverride;
-    return [functionName, realFunctionName, factoryName, type, validModes] (TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory) -> INode::TPtr {
-        if (!validModes.empty()) {
-            if (!IsIn(validModes, aggMode)) {
+    return [functionName, realFunctionName, factoryName, type, validModes] (TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory) -> INode::TPtr { 
+        if (!validModes.empty()) { 
+            if (!IsIn(validModes, aggMode)) { 
                 TString errorText;
                 if (TVector{EAggregateMode::OverWindow} == validModes) {
                     errorText = TStringBuilder()
@@ -2331,9 +2331,9 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
                     errorText = TStringBuilder()
                         << "Can't use " << functionName << " in " << ToString(aggMode) << " aggregation mode";
                 }
-                return INode::TPtr(new TInvalidBuiltin(pos, errorText));
-            }
-        }
+                return INode::TPtr(new TInvalidBuiltin(pos, errorText)); 
+            } 
+        } 
         TAggregationPtr factory = nullptr;
         switch (type) {
         case NORMAL:
@@ -2389,15 +2389,15 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
     };
 }
 
-TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
-        const TString& functionName,
-        const TString& factoryName,
-        const TVector<EAggregateMode>& validModes,
-        EAggrFuncTypeCallback type = NORMAL,
-        const TString& functionNameOverride = TString()) {
-    return BuildAggrFuncFactoryCallback(functionName, factoryName, type, functionNameOverride, validModes);
-}
-
+TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback( 
+        const TString& functionName, 
+        const TString& factoryName, 
+        const TVector<EAggregateMode>& validModes, 
+        EAggrFuncTypeCallback type = NORMAL, 
+        const TString& functionNameOverride = TString()) { 
+    return BuildAggrFuncFactoryCallback(functionName, factoryName, type, functionNameOverride, validModes); 
+} 
+ 
 template<typename TType>
 TBuiltinFactoryCallback BuildSimpleBuiltinFactoryCallback() {
     return [] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
@@ -2459,53 +2459,53 @@ TNodePtr MakePair(TPosition pos, const TVector<TNodePtr>& args) {
     });
 }
 
-struct TBuiltinFuncData {
-    const TBuiltinFactoryCallbackMap BuiltinFuncs;
-    const TAggrFuncFactoryCallbackMap AggrFuncs;
-    const TCoreFuncMap CoreFuncs;
+struct TBuiltinFuncData { 
+    const TBuiltinFactoryCallbackMap BuiltinFuncs; 
+    const TAggrFuncFactoryCallbackMap AggrFuncs; 
+    const TCoreFuncMap CoreFuncs; 
 
-    TBuiltinFuncData():
-        BuiltinFuncs(MakeBuiltinFuncs()),
-        AggrFuncs(MakeAggrFuncs()),
+    TBuiltinFuncData(): 
+        BuiltinFuncs(MakeBuiltinFuncs()), 
+        AggrFuncs(MakeAggrFuncs()), 
         CoreFuncs(MakeCoreFuncs())
-    {
-    }
+    { 
+    } 
 
-    TBuiltinFactoryCallbackMap MakeBuiltinFuncs() {
-        TBuiltinFactoryCallbackMap builtinFuncs = {
-            // Branching
-            {"if", BuildSimpleBuiltinFactoryCallback<TYqlIf<false>>()},
-            {"ifstrict", BuildSimpleBuiltinFactoryCallback<TYqlIf<true>>() },
+    TBuiltinFactoryCallbackMap MakeBuiltinFuncs() { 
+        TBuiltinFactoryCallbackMap builtinFuncs = { 
+            // Branching 
+            {"if", BuildSimpleBuiltinFactoryCallback<TYqlIf<false>>()}, 
+            {"ifstrict", BuildSimpleBuiltinFactoryCallback<TYqlIf<true>>() }, 
 
-            // String builtins
-            {"len", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)},
-            {"length", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)},
-            {"charlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)},
-            {"characterlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)},
+            // String builtins 
+            {"len", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)}, 
+            {"length", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)}, 
+            {"charlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)}, 
+            {"characterlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Size", 1, 1)}, 
             {"substring", BuildNamedBuiltinFactoryCallback<TYqlSubstring>("Substring")},
             {"find", BuildNamedBuiltinFactoryCallback<TYqlSubstring>("Find")},
             {"rfind", BuildNamedBuiltinFactoryCallback<TYqlSubstring>("RFind")},
-            {"byteat", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ByteAt", 2, 2) },
+            {"byteat", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ByteAt", 2, 2) }, 
             {"startswith", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StartsWith", 2, 2)},
             {"endswith", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EndsWith", 2, 2)},
 
-            // Numeric builtins
-            {"abs", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Abs", 1, 1) },
-            {"tobytes", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToBytes", 1, 1) },
-            {"frombytes", BuildSimpleBuiltinFactoryCallback<TFromBytes>() },
+            // Numeric builtins 
+            {"abs", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Abs", 1, 1) }, 
+            {"tobytes", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ToBytes", 1, 1) }, 
+            {"frombytes", BuildSimpleBuiltinFactoryCallback<TFromBytes>() }, 
 
-            // Compare builtins
-            {"minof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Min", 1, -1)},
-            {"maxof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Max", 1, -1)},
-            {"greatest", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Max", 1, -1)},
-            {"least", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Min", 1, -1)},
-            {"in", BuildSimpleBuiltinFactoryCallback<TYqlIn>()},
+            // Compare builtins 
+            {"minof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Min", 1, -1)}, 
+            {"maxof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Max", 1, -1)}, 
+            {"greatest", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Max", 1, -1)}, 
+            {"least", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Min", 1, -1)}, 
+            {"in", BuildSimpleBuiltinFactoryCallback<TYqlIn>()}, 
 
-            // List builtins
+            // List builtins 
             {"aslist", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsList", 0, -1)},
             {"asliststrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsListStrict", 0, -1) },
-            {"listlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},
-            {"listhasitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("HasItems", 1, 1)},
+            {"listlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)}, 
+            {"listhasitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("HasItems", 1, 1)}, 
             {"listextend", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListExtend", 0, -1)},
             {"listextendstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListExtendStrict", 0, -1)},
             {"listunionall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListUnionAll", 0, -1) },
@@ -2517,11 +2517,11 @@ struct TBuiltinFuncData {
             {"listtake", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTake", 2, 2)},
             {"listhead", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListHead", 1, 1)},
             {"listlast", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListLast", 1, 1)},
-            {"listsort", BuildBoolBuiltinFactoryCallback<TListSortBuiltin>(true)},
-            {"listsortasc", BuildBoolBuiltinFactoryCallback<TListSortBuiltin>(true)},
-            {"listsortdesc", BuildBoolBuiltinFactoryCallback<TListSortBuiltin>(false)},
-            {"listmap", BuildBoolBuiltinFactoryCallback<TListMapBuiltin>(false)},
-            {"listflatmap", BuildBoolBuiltinFactoryCallback<TListMapBuiltin>(true)},
+            {"listsort", BuildBoolBuiltinFactoryCallback<TListSortBuiltin>(true)}, 
+            {"listsortasc", BuildBoolBuiltinFactoryCallback<TListSortBuiltin>(true)}, 
+            {"listsortdesc", BuildBoolBuiltinFactoryCallback<TListSortBuiltin>(false)}, 
+            {"listmap", BuildBoolBuiltinFactoryCallback<TListMapBuiltin>(false)}, 
+            {"listflatmap", BuildBoolBuiltinFactoryCallback<TListMapBuiltin>(true)}, 
             {"listfilter", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListFilter")},
             {"listany", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListAny", 1, 1)},
             {"listall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListAll", 1, 1)},
@@ -2531,10 +2531,10 @@ struct TBuiltinFuncData {
             {"listsum", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListSum", 1, 1)},
             {"listavg", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListAvg", 1, 1)},
             {"listconcat", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListConcat", 1, 2)},
-            {"listextract", BuildSimpleBuiltinFactoryCallback<TListExtractBuiltin>()},
-            {"listuniq", BuildSimpleBuiltinFactoryCallback<TListUniqBuiltin>()},
-            {"listcreate", BuildSimpleBuiltinFactoryCallback<TListCreateBuiltin>()},
-            {"listfromrange", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFromRange", 2, 3) },
+            {"listextract", BuildSimpleBuiltinFactoryCallback<TListExtractBuiltin>()}, 
+            {"listuniq", BuildSimpleBuiltinFactoryCallback<TListUniqBuiltin>()}, 
+            {"listcreate", BuildSimpleBuiltinFactoryCallback<TListCreateBuiltin>()}, 
+            {"listfromrange", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFromRange", 2, 3) }, 
             {"listreplicate", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Replicate", 2, 2) },
             {"listtakewhile", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListTakeWhile") },
             {"listskipwhile", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListSkipWhile") },
@@ -2544,10 +2544,10 @@ struct TBuiltinFuncData {
             {"listnotnull", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListNotNull", 1, 1)},
             {"listflatten", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFlatten", 1, 1)},
 
-            // Dict builtins
+            // Dict builtins 
             {"dictlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},
             {"dicthasitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("HasItems", 1, 1)},
-            {"dictcreate", BuildSimpleBuiltinFactoryCallback<TDictCreateBuiltin>()},
+            {"dictcreate", BuildSimpleBuiltinFactoryCallback<TDictCreateBuiltin>()}, 
             {"setcreate", BuildSimpleBuiltinFactoryCallback<TSetCreateBuiltin>()},
             {"asdict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDict", 0, -1)},
             {"asdictstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDictStrict", 0, -1)},
@@ -2557,114 +2557,114 @@ struct TBuiltinFuncData {
             {"tomultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false>>("Many")},
             {"tosorteddict", BuildNamedBuiltinFactoryCallback<TYqlToDict<true>>("One")},
             {"tosortedmultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<true>>("Many")},
-            {"dictkeys", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictKeys", 1, 1) },
-            {"dictpayloads", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictPayloads", 1, 1) },
-            {"dictitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictItems", 1, 1) },
-            {"dictlookup", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Lookup", 2, 2) },
+            {"dictkeys", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictKeys", 1, 1) }, 
+            {"dictpayloads", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictPayloads", 1, 1) }, 
+            {"dictitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictItems", 1, 1) }, 
+            {"dictlookup", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Lookup", 2, 2) }, 
             {"dictcontains", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Contains", 2, 2) },
 
-            // Atom builtins
-            {"asatom", BuildSimpleBuiltinFactoryCallback<TYqlAsAtom>()},
+            // Atom builtins 
+            {"asatom", BuildSimpleBuiltinFactoryCallback<TYqlAsAtom>()}, 
             {"secureparam", BuildNamedBuiltinFactoryCallback<TYqlAtom>("SecureParam")},
 
             {"void", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Void", 0, 0)},
             {"emptylist", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyList", 0, 0)},
             {"emptydict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDict", 0, 0)},
             {"callable", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Callable", 2, 2)},
-            {"way", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Way", 1, 1) },
-            {"variant", BuildSimpleBuiltinFactoryCallback<TYqlVariant>() },
+            {"way", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Way", 1, 1) }, 
+            {"variant", BuildSimpleBuiltinFactoryCallback<TYqlVariant>() }, 
             {"enum", BuildSimpleBuiltinFactoryCallback<TYqlEnum>() },
             {"asvariant", BuildSimpleBuiltinFactoryCallback<TYqlAsVariant>() },
             {"asenum", BuildSimpleBuiltinFactoryCallback<TYqlAsEnum>() },
-            {"astagged", BuildSimpleBuiltinFactoryCallback<TYqlAsTagged>() },
-            {"untag", BuildSimpleBuiltinFactoryCallback<TYqlUntag>() },
-            {"parsetype", BuildSimpleBuiltinFactoryCallback<TYqlParseType>() },
-            {"ensuretype", BuildSimpleBuiltinFactoryCallback<TYqlTypeAssert<true>>() },
-            {"ensureconvertibleto", BuildSimpleBuiltinFactoryCallback<TYqlTypeAssert<false>>() },
-            {"ensure", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Ensure", 2, 3) },
-            {"evaluateexpr", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateExpr", 1, 1) },
-            {"evaluateatom", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateAtom", 1, 1) },
-            {"evaluatetype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateType", 1, 1) },
-            {"unwrap", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Unwrap", 1, 2) },
-            {"just", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Just", 1, 1) },
-            {"nothing", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Nothing", 1, 1) },
-            {"formattype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatType", 1, 1) },
-            {"typeof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeOf", 1, 1) },
-            {"instanceof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("InstanceOf", 1, 1) },
-            {"datatype", BuildSimpleBuiltinFactoryCallback<TYqlDataType>() },
-            {"optionaltype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("OptionalType", 1, 1) },
-            {"listtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListType", 1, 1) },
-            {"streamtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StreamType", 1, 1) },
-            {"dicttype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictType", 2, 2) },
-            {"tupletype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TupleType", 0, -1) },
-            {"generictype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("GenericType", 0, 0) },
-            {"unittype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("UnitType", 0, 0) },
-            {"voidtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VoidType", 0, 0) },
-            {"resourcetype", BuildSimpleBuiltinFactoryCallback<TYqlResourceType>() },
-            {"taggedtype", BuildSimpleBuiltinFactoryCallback<TYqlTaggedType>() },
-            {"varianttype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantType", 1, 1) },
-            {"callabletype", BuildSimpleBuiltinFactoryCallback<TYqlCallableType>() },
-            {"optionalitemtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("OptionalItemType", 1, 1) },
-            {"listitemtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListItemType", 1, 1) },
-            {"streamitemtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StreamItemType", 1, 1) },
-            {"dictkeytype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictKeyType", 1, 1) },
-            {"dictpayloadtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictPayloadType", 1, 1) },
-            {"tupleelementtype", BuildSimpleBuiltinFactoryCallback<TYqlTupleElementType>() },
-            {"structmembertype", BuildSimpleBuiltinFactoryCallback<TYqlStructMemberType>() },
-            {"callableresulttype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableResultType", 1, 1) },
-            {"callableargumenttype", BuildSimpleBuiltinFactoryCallback<TYqlCallableArgumentType>() },
-            {"variantunderlyingtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantUnderlyingType", 1, 1) },
-            {"fromysonsimpletype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromYsonSimpleType", 2, 2) },
-            {"currentutcdate", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDate", 0, -1) },
-            {"currentutcdatetime", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDatetime", 0, -1) },
-            {"currentutctimestamp", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcTimestamp", 0, -1) },
+            {"astagged", BuildSimpleBuiltinFactoryCallback<TYqlAsTagged>() }, 
+            {"untag", BuildSimpleBuiltinFactoryCallback<TYqlUntag>() }, 
+            {"parsetype", BuildSimpleBuiltinFactoryCallback<TYqlParseType>() }, 
+            {"ensuretype", BuildSimpleBuiltinFactoryCallback<TYqlTypeAssert<true>>() }, 
+            {"ensureconvertibleto", BuildSimpleBuiltinFactoryCallback<TYqlTypeAssert<false>>() }, 
+            {"ensure", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Ensure", 2, 3) }, 
+            {"evaluateexpr", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateExpr", 1, 1) }, 
+            {"evaluateatom", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateAtom", 1, 1) }, 
+            {"evaluatetype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateType", 1, 1) }, 
+            {"unwrap", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Unwrap", 1, 2) }, 
+            {"just", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Just", 1, 1) }, 
+            {"nothing", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Nothing", 1, 1) }, 
+            {"formattype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatType", 1, 1) }, 
+            {"typeof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeOf", 1, 1) }, 
+            {"instanceof", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("InstanceOf", 1, 1) }, 
+            {"datatype", BuildSimpleBuiltinFactoryCallback<TYqlDataType>() }, 
+            {"optionaltype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("OptionalType", 1, 1) }, 
+            {"listtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListType", 1, 1) }, 
+            {"streamtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StreamType", 1, 1) }, 
+            {"dicttype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictType", 2, 2) }, 
+            {"tupletype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TupleType", 0, -1) }, 
+            {"generictype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("GenericType", 0, 0) }, 
+            {"unittype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("UnitType", 0, 0) }, 
+            {"voidtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VoidType", 0, 0) }, 
+            {"resourcetype", BuildSimpleBuiltinFactoryCallback<TYqlResourceType>() }, 
+            {"taggedtype", BuildSimpleBuiltinFactoryCallback<TYqlTaggedType>() }, 
+            {"varianttype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantType", 1, 1) }, 
+            {"callabletype", BuildSimpleBuiltinFactoryCallback<TYqlCallableType>() }, 
+            {"optionalitemtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("OptionalItemType", 1, 1) }, 
+            {"listitemtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListItemType", 1, 1) }, 
+            {"streamitemtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StreamItemType", 1, 1) }, 
+            {"dictkeytype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictKeyType", 1, 1) }, 
+            {"dictpayloadtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictPayloadType", 1, 1) }, 
+            {"tupleelementtype", BuildSimpleBuiltinFactoryCallback<TYqlTupleElementType>() }, 
+            {"structmembertype", BuildSimpleBuiltinFactoryCallback<TYqlStructMemberType>() }, 
+            {"callableresulttype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableResultType", 1, 1) }, 
+            {"callableargumenttype", BuildSimpleBuiltinFactoryCallback<TYqlCallableArgumentType>() }, 
+            {"variantunderlyingtype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantUnderlyingType", 1, 1) }, 
+            {"fromysonsimpletype", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FromYsonSimpleType", 2, 2) }, 
+            {"currentutcdate", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDate", 0, -1) }, 
+            {"currentutcdatetime", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDatetime", 0, -1) }, 
+            {"currentutctimestamp", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcTimestamp", 0, -1) }, 
             { "currenttzdate", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(1, "CurrentTzDate", 1, -1) },
             { "currenttzdatetime", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(1, "CurrentTzDatetime", 1, -1) },
             { "currenttztimestamp", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(1, "CurrentTzTimestamp", 1, -1) },
-            {"currentoperationid", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentOperationId", 0, 0) },
-            {"currentoperationsharedid", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentOperationSharedId", 0, 0) },
-            {"currentauthenticateduser", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentAuthenticatedUser", 0, 0) },
-            {"addtimezone", BuildSimpleBuiltinFactoryCallback<TYqlAddTimezone>() },
-            {"removetimezone", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("RemoveTimezone", 1, 1) },
+            {"currentoperationid", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentOperationId", 0, 0) }, 
+            {"currentoperationsharedid", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentOperationSharedId", 0, 0) }, 
+            {"currentauthenticateduser", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentAuthenticatedUser", 0, 0) }, 
+            {"addtimezone", BuildSimpleBuiltinFactoryCallback<TYqlAddTimezone>() }, 
+            {"removetimezone", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("RemoveTimezone", 1, 1) }, 
             {"pickle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Pickle", 1, 1) },
             {"stablepickle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StablePickle", 1, 1) },
             {"unpickle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Unpickle", 2, 2) },
 
-            {"typehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeHandle", 1, 1) },
-            {"parsetypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ParseTypeHandle", 1, 1) },
-            {"typekind", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeKind", 1, 1) },
-            {"datatypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DataTypeComponents", 1, 1) },
-            {"datatypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DataTypeHandle", 1, 1) },
-            {"optionaltypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("OptionalTypeHandle", 1, 1) },
-            {"listtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTypeHandle", 1, 1) },
-            {"streamtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StreamTypeHandle", 1, 1) },
-            {"tupletypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TupleTypeComponents", 1, 1) },
-            {"tupletypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TupleTypeHandle", 1, 1) },
-            {"structtypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructTypeComponents", 1, 1) },
-            {"structtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructTypeHandle", 1, 1) },
-            {"dicttypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictTypeComponents", 1, 1) },
-            {"dicttypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictTypeHandle", 2, 2) },
-            {"resourcetypetag", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ResourceTypeTag", 1, 1) },
-            {"resourcetypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ResourceTypeHandle", 1, 1) },
-            {"taggedtypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TaggedTypeComponents", 1, 1) },
-            {"taggedtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TaggedTypeHandle", 2, 2) },
-            {"varianttypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantTypeHandle", 1, 1) },
-            {"voidtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VoidTypeHandle", 0, 0) },
-            {"nulltypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("NullTypeHandle", 0, 0) },
+            {"typehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeHandle", 1, 1) }, 
+            {"parsetypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ParseTypeHandle", 1, 1) }, 
+            {"typekind", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TypeKind", 1, 1) }, 
+            {"datatypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DataTypeComponents", 1, 1) }, 
+            {"datatypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DataTypeHandle", 1, 1) }, 
+            {"optionaltypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("OptionalTypeHandle", 1, 1) }, 
+            {"listtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListTypeHandle", 1, 1) }, 
+            {"streamtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StreamTypeHandle", 1, 1) }, 
+            {"tupletypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TupleTypeComponents", 1, 1) }, 
+            {"tupletypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TupleTypeHandle", 1, 1) }, 
+            {"structtypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructTypeComponents", 1, 1) }, 
+            {"structtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StructTypeHandle", 1, 1) }, 
+            {"dicttypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictTypeComponents", 1, 1) }, 
+            {"dicttypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictTypeHandle", 2, 2) }, 
+            {"resourcetypetag", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ResourceTypeTag", 1, 1) }, 
+            {"resourcetypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ResourceTypeHandle", 1, 1) }, 
+            {"taggedtypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TaggedTypeComponents", 1, 1) }, 
+            {"taggedtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("TaggedTypeHandle", 2, 2) }, 
+            {"varianttypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantTypeHandle", 1, 1) }, 
+            {"voidtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VoidTypeHandle", 0, 0) }, 
+            {"nulltypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("NullTypeHandle", 0, 0) }, 
             {"emptylisttypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyListTypeHandle", 0, 0) },
             {"emptydicttypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDictTypeHandle", 0, 0) },
-            {"callabletypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeComponents", 1, 1) },
-            {"callableargument", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableArgument", 1, 3) },
-            {"callabletypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeHandle", 2, 4) },
-            {"formatcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatCode", 1, 1) },
+            {"callabletypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeComponents", 1, 1) }, 
+            {"callableargument", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableArgument", 1, 3) }, 
+            {"callabletypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeHandle", 2, 4) }, 
+            {"formatcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatCode", 1, 1) }, 
             {"worldcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("WorldCode", 0, 0) },
-            {"atomcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AtomCode", 1, 1) },
-            {"listcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListCode", 0, -1) },
-            {"funccode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FuncCode", 1, -1) },
-            {"lambdacode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("LambdaCode", 1, 2) },
-            {"evaluatecode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateCode", 1, 1) },
-            {"reprcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ReprCode", 1, 1) },
-            {"quotecode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("QuoteCode", 1, 1) },
+            {"atomcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AtomCode", 1, 1) }, 
+            {"listcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListCode", 0, -1) }, 
+            {"funccode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FuncCode", 1, -1) }, 
+            {"lambdacode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("LambdaCode", 1, 2) }, 
+            {"evaluatecode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateCode", 1, 1) }, 
+            {"reprcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ReprCode", 1, 1) }, 
+            {"quotecode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("QuoteCode", 1, 1) }, 
             {"lambdaargumentscount", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("LambdaArgumentsCount", 1, 1) },
             {"subqueryextend", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SubqueryExtend", 1, -1) },
             {"subqueryunionall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SubqueryUnionAll", 1, -1) },
@@ -2677,8 +2677,8 @@ struct TBuiltinFuncData {
             {"subqueryorderby", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryOrderBy<SubqueryOrderBy>>() },
             {"subqueryassumeorderby", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryOrderBy<SubqueryAssumeOrderBy>>() },
 
-            // Tuple builtins
-            {"astuple", BuildSimpleBuiltinFactoryCallback<TTupleNode>()},
+            // Tuple builtins 
+            {"astuple", BuildSimpleBuiltinFactoryCallback<TTupleNode>()}, 
 
             // Struct builtins
             {"trymember", BuildNamedBuiltinFactoryCallback<TTryMember>("TryMember")},
@@ -2691,54 +2691,54 @@ struct TBuiltinFuncData {
             {"staticmap", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticMap", 2, 2) },
             {"staticzip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StaticZip", 1, -1) },
 
-            // File builtins
+            // File builtins 
             {"filepath", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FilePath")},
             {"filecontent", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FileContent")},
             {"folderpath", BuildNamedBuiltinFactoryCallback<TYqlAtom>("FolderPath") },
             {"files", BuildNamedBuiltinFactoryCallback<TYqlAtom>("Files")},
-            {"parsefile", BuildSimpleBuiltinFactoryCallback<TYqlParseFileOp>()},
+            {"parsefile", BuildSimpleBuiltinFactoryCallback<TYqlParseFileOp>()}, 
 
-            // Misc builtins
-            {"coalesce", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Coalesce", 1, -1)},
-            {"nvl", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Coalesce", 1, -1) },
-            {"nanvl", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Nanvl", 2, 2) },
-            {"likely", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Likely", 1, -1)},
-            {"random", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "Random", 1, -1)},
-            {"randomnumber", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "RandomNumber", 1, -1)},
-            {"randomuuid", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "RandomUuid", 1, -1) },
-            {"tablepath", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("TablePath") },
+            // Misc builtins 
+            {"coalesce", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Coalesce", 1, -1)}, 
+            {"nvl", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Coalesce", 1, -1) }, 
+            {"nanvl", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Nanvl", 2, 2) }, 
+            {"likely", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Likely", 1, -1)}, 
+            {"random", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "Random", 1, -1)}, 
+            {"randomnumber", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "RandomNumber", 1, -1)}, 
+            {"randomuuid", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "RandomUuid", 1, -1) }, 
+            {"tablepath", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("TablePath") }, 
             {"tablerecordindex", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("TableRecord") },
             {"tablerow", BuildSimpleBuiltinFactoryCallback<TTableRow<false>>() },
             {"jointablerow", BuildSimpleBuiltinFactoryCallback<TTableRow<true>>() },
             {"tablerows", BuildSimpleBuiltinFactoryCallback<TTableRows>() },
-            {"weakfield", BuildSimpleBuiltinFactoryCallback<TWeakFieldOp>()},
+            {"weakfield", BuildSimpleBuiltinFactoryCallback<TWeakFieldOp>()}, 
 
-            // Hint builtins
-            {"grouping", BuildSimpleBuiltinFactoryCallback<TGroupingNode>()},
+            // Hint builtins 
+            {"grouping", BuildSimpleBuiltinFactoryCallback<TGroupingNode>()}, 
 
-            // Window funcitons
-            {"rownumber", BuildNamedArgcBuiltinFactoryCallback<TWinRowNumber>("RowNumber", 0, 0)},
+            // Window funcitons 
+            {"rownumber", BuildNamedArgcBuiltinFactoryCallback<TWinRowNumber>("RowNumber", 0, 0)}, 
             {"rank", BuildNamedArgcBuiltinFactoryCallback<TWinRank>("Rank", 0, 1)},
             {"denserank", BuildNamedArgcBuiltinFactoryCallback<TWinRank>("DenseRank", 0, 1)},
             {"lead", BuildNamedArgcBuiltinFactoryCallback<TWinLeadLag>("Lead", 1, 2)},
             {"lag", BuildNamedArgcBuiltinFactoryCallback<TWinLeadLag>("Lag", 1, 2)},
-
+ 
             // Session window
             {"sessionwindow", BuildSimpleBuiltinFactoryCallback<TSessionWindow>()},
             {"sessionstart", BuildSimpleBuiltinFactoryCallback<TSessionStart<true>>()},
             {"sessionstate", BuildSimpleBuiltinFactoryCallback<TSessionStart<false>>()},
 
-            // Hopping intervals time functions
-            {"hopstart", BuildSimpleBuiltinFactoryCallback<THoppingTime<true>>()},
-            {"hopend", BuildSimpleBuiltinFactoryCallback<THoppingTime<false>>()},
-        };
-        return builtinFuncs;
-    }
-
-    TAggrFuncFactoryCallbackMap MakeAggrFuncs() {
-        constexpr auto OverWindow = EAggregateMode::OverWindow;
-
-        TAggrFuncFactoryCallbackMap aggrFuncs = {
+            // Hopping intervals time functions 
+            {"hopstart", BuildSimpleBuiltinFactoryCallback<THoppingTime<true>>()}, 
+            {"hopend", BuildSimpleBuiltinFactoryCallback<THoppingTime<false>>()}, 
+        }; 
+        return builtinFuncs; 
+    } 
+ 
+    TAggrFuncFactoryCallbackMap MakeAggrFuncs() { 
+        constexpr auto OverWindow = EAggregateMode::OverWindow; 
+ 
+        TAggrFuncFactoryCallbackMap aggrFuncs = { 
             {"min", BuildAggrFuncFactoryCallback("Min", "min_traits_factory")},
             {"max", BuildAggrFuncFactoryCallback("Max", "max_traits_factory")},
 
@@ -2828,29 +2828,29 @@ struct TBuiltinFuncData {
 
             {"udaf", BuildAggrFuncFactoryCallback("UDAF", "udaf_traits_factory", UDAF)},
 
-            // Window functions
-            {"firstvalue", BuildAggrFuncFactoryCallback("FirstValue", "first_value_traits_factory", {OverWindow})},
-            {"lastvalue", BuildAggrFuncFactoryCallback("LastValue", "last_value_traits_factory", {OverWindow})},
-            {"firstvalueignorenulls", BuildAggrFuncFactoryCallback("FirstValueIgnoreNulls", "first_value_ignore_nulls_traits_factory", {OverWindow})},
-            {"lastvalueignorenulls", BuildAggrFuncFactoryCallback("LastValueIgnoreNulls", "last_value_ignore_nulls_traits_factory", {OverWindow})},
+            // Window functions 
+            {"firstvalue", BuildAggrFuncFactoryCallback("FirstValue", "first_value_traits_factory", {OverWindow})}, 
+            {"lastvalue", BuildAggrFuncFactoryCallback("LastValue", "last_value_traits_factory", {OverWindow})}, 
+            {"firstvalueignorenulls", BuildAggrFuncFactoryCallback("FirstValueIgnoreNulls", "first_value_ignore_nulls_traits_factory", {OverWindow})}, 
+            {"lastvalueignorenulls", BuildAggrFuncFactoryCallback("LastValueIgnoreNulls", "last_value_ignore_nulls_traits_factory", {OverWindow})}, 
         };
-        return aggrFuncs;
-    }
+        return aggrFuncs; 
+    } 
 
-    TCoreFuncMap MakeCoreFuncs() {
-        TCoreFuncMap coreFuncs = {
-            {"listindexof", { "IndexOf", 2, 2}},
-            {"testbit", { "TestBit", 2, 2}},
-            {"setbit", { "SetBit", 2, 2}},
-            {"clearbit", { "ClearBit", 2, 2}},
-            {"flipbit", { "FlipBit", 2, 2 }},
-            {"toset", { "ToSet", 1, 1 }},
-            {"setisdisjoint", { "SetIsDisjoint", 2, 2}},
-            {"setintersection", { "SetIntersection", 2, 3}},
-            {"setincludes", { "SetIncludes", 2, 2}},
-            {"setunion", { "SetUnion", 2, 3}},
-            {"setdifference", { "SetDifference", 2, 2}},
-            {"setsymmetricdifference", { "SetSymmetricDifference", 2, 3}},
+    TCoreFuncMap MakeCoreFuncs() { 
+        TCoreFuncMap coreFuncs = { 
+            {"listindexof", { "IndexOf", 2, 2}}, 
+            {"testbit", { "TestBit", 2, 2}}, 
+            {"setbit", { "SetBit", 2, 2}}, 
+            {"clearbit", { "ClearBit", 2, 2}}, 
+            {"flipbit", { "FlipBit", 2, 2 }}, 
+            {"toset", { "ToSet", 1, 1 }}, 
+            {"setisdisjoint", { "SetIsDisjoint", 2, 2}}, 
+            {"setintersection", { "SetIntersection", 2, 3}}, 
+            {"setincludes", { "SetIncludes", 2, 2}}, 
+            {"setunion", { "SetUnion", 2, 3}}, 
+            {"setdifference", { "SetDifference", 2, 2}}, 
+            {"setsymmetricdifference", { "SetSymmetricDifference", 2, 3}}, 
             {"listaggregate", { "ListAggregate", 2, 2}},
             {"dictaggregate", { "DictAggregate", 2, 2}},
             {"aggregatetransforminput", { "AggregateTransformInput", 2, 2}},
@@ -2865,19 +2865,19 @@ struct TBuiltinFuncData {
             {"forcerenamemembers", { "ForceRenameMembers", 2, 2}},
             {"spreadmembers", { "SpreadMembers", 2, 2}},
             {"forcespreadmembers", { "ForceSpreadMembers", 2, 2}},
-        };
-        return coreFuncs;
-    }
-};
+        }; 
+        return coreFuncs; 
+    } 
+}; 
 
-TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVector<TNodePtr>& args,
+TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVector<TNodePtr>& args, 
     const TString& originalNameSpace, EAggregateMode aggMode, bool* mustUseNamed, bool warnOnYqlNameSpace) {
-
-    const TBuiltinFuncData* funcData = Singleton<TBuiltinFuncData>();
-    const TBuiltinFactoryCallbackMap& builtinFuncs = funcData->BuiltinFuncs;
-    const TAggrFuncFactoryCallbackMap& aggrFuncs = funcData->AggrFuncs;
-    const TCoreFuncMap& coreFuncs = funcData->CoreFuncs;
-
+ 
+    const TBuiltinFuncData* funcData = Singleton<TBuiltinFuncData>(); 
+    const TBuiltinFactoryCallbackMap& builtinFuncs = funcData->BuiltinFuncs; 
+    const TAggrFuncFactoryCallbackMap& aggrFuncs = funcData->AggrFuncs; 
+    const TCoreFuncMap& coreFuncs = funcData->CoreFuncs; 
+ 
     for (auto& arg: args) {
         if (!arg) {
             return nullptr;

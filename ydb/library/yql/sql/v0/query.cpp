@@ -1192,10 +1192,10 @@ public:
         return {};
     }
 
-    void DoUpdateState() const override {
-        State.Set(ENodeState::Const);
-    }
-
+    void DoUpdateState() const override { 
+        State.Set(ENodeState::Const); 
+    } 
+ 
 private:
     TVector<TString> Args;
     TVector<TNodePtr> ExprSeq;

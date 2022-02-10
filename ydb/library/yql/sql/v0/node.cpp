@@ -121,10 +121,10 @@ bool INode::IsAggregated() const {
     return HasState(ENodeState::Aggregated);
 }
 
-bool INode::IsAggregationKey() const {
-    return HasState(ENodeState::AggregationKey);
-}
-
+bool INode::IsAggregationKey() const { 
+    return HasState(ENodeState::AggregationKey); 
+} 
+ 
 bool INode::IsOverWindow() const {
     return HasState(ENodeState::OverWindow);
 }
@@ -1710,7 +1710,7 @@ void ISource::FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNode
         return;
     } else if (orderBy.size() == 1) {
         auto& sortSpec = orderBy.front();
-        expr = Y("EnsurePersistable", sortSpec->OrderExpr);
+        expr = Y("EnsurePersistable", sortSpec->OrderExpr); 
         sortDirection = Y("Bool", Q(sortSpec->Ascending ? "true" : "false"));
     } else {
         auto exprList = Y();
@@ -1718,7 +1718,7 @@ void ISource::FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNode
         for (const auto& sortSpec: orderBy) {
             const auto asc = sortSpec->Ascending;
             sortDirection = L(sortDirection, Y("Bool", Q(asc ? "true" : "false")));
-            exprList = L(exprList, Y("EnsurePersistable", sortSpec->OrderExpr));
+            exprList = L(exprList, Y("EnsurePersistable", sortSpec->OrderExpr)); 
         }
         sortDirection = Q(sortDirection);
         expr = Q(exprList);

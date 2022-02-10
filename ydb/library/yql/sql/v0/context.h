@@ -147,7 +147,7 @@ namespace NSQLTranslationV0 {
         bool PragmaDirectRead = false;
         bool PragmaYsonAutoConvert = false;
         bool PragmaYsonStrict = false;
-        bool PragmaClassicDivision = true;
+        bool PragmaClassicDivision = true; 
         bool PragmaPullUpFlatMapOverJoin = true;
         bool EnableSystemColumns = true;
         ui32 ResultRowsLimit = 0;

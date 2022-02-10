@@ -6144,28 +6144,28 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    IGraphTransformer::TStatus PersistableAssertWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
+    IGraphTransformer::TStatus PersistableAssertWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) { 
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) { 
+            return IGraphTransformer::TStatus::Error; 
+        } 
 
         if (!EnsureComputable(input->Head(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         auto nodePtr = input->HeadPtr();
-        if (!nodePtr->IsPersistable()) {
+        if (!nodePtr->IsPersistable()) { 
             auto issue = TIssue(ctx.Expr.GetPosition(nodePtr->Pos()), "Persistable required. Atom, key, world, datasink, datasource, callable, resource, stream and lambda are not persistable");
-            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_NON_PERSISTABLE_ENTITY, issue);
-            if (!ctx.Expr.AddWarning(issue)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-        }
-
-        output = nodePtr;
-        return IGraphTransformer::TStatus::Repeat;
-    }
-
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_NON_PERSISTABLE_ENTITY, issue); 
+            if (!ctx.Expr.AddWarning(issue)) { 
+                return IGraphTransformer::TStatus::Error; 
+            } 
+        } 
+ 
+        output = nodePtr; 
+        return IGraphTransformer::TStatus::Repeat; 
+    } 
+ 
     IGraphTransformer::TStatus PersistableReprWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -12967,7 +12967,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["MatchType"] = &MatchTypeWrapper;
         Functions["IfType"] = &IfTypeWrapper;
         Functions["EnsureType"] = &TypeAssertWrapper<true>;
-        Functions["EnsurePersistable"] = &PersistableAssertWrapper;
+        Functions["EnsurePersistable"] = &PersistableAssertWrapper; 
         Functions["PersistableRepr"] = &PersistableReprWrapper;
         Functions["EnsureConvertibleTo"] = &TypeAssertWrapper<false>;
         Functions["EnsureTupleSize"] = &TupleSizeAssertWrapper;

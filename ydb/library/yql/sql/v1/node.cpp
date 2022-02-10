@@ -108,10 +108,10 @@ bool INode::IsAggregated() const {
     return HasState(ENodeState::Aggregated);
 }
 
-bool INode::IsAggregationKey() const {
-    return HasState(ENodeState::AggregationKey);
-}
-
+bool INode::IsAggregationKey() const { 
+    return HasState(ENodeState::AggregationKey); 
+} 
+ 
 bool INode::IsOverWindow() const {
     return HasState(ENodeState::OverWindow);
 }

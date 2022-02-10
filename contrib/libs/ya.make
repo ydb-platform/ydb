@@ -105,7 +105,7 @@ RECURSE(
     hiredis
     httpd24
     hwloc
-    hyperscan 
+    hyperscan
     i18n
     i18n/ut
     icu
@@ -213,7 +213,7 @@ RECURSE(
     lmdbxx/check
     lmdbxx/example
     lua
-    lua-cjson 
+    lua-cjson
     luajit_21
     lz4
     lz4/generated
@@ -360,7 +360,7 @@ RECURSE(
     xz
     yajl
     yaml
-    yaml-cpp 
+    yaml-cpp
     zeromq
     zlib
     zlib-ng-develop

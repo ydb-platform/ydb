@@ -11,7 +11,7 @@
 
 namespace NPire {
     using TChar = Pire::Char;
-    using Pire::MaxChar; 
+    using Pire::MaxChar;
 
     // Scanner classes
     using TScanner = Pire::Scanner;

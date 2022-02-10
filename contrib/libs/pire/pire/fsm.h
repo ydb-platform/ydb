@@ -81,7 +81,7 @@ namespace Pire {
 		Fsm operator & (const Fsm& rhs) const { Fsm a(*this); return a &= rhs; }
 		Fsm operator * ()               const { Fsm a(*this); return a.Iterate(); }
 		Fsm operator ~ ()               const { Fsm a(*this); return a.Complement(); }
-		Fsm operator * (size_t count) const; 
+		Fsm operator * (size_t count) const;
 
 		// === Raw FSM construction ===
 		
@@ -94,7 +94,7 @@ namespace Pire {
 		/// Completely removes given transition
 		void Disconnect(size_t from, size_t to);
 
-		/// Creates an FSM which matches any prefix of any word current FSM matches. 
+		/// Creates an FSM which matches any prefix of any word current FSM matches.
 		void MakePrefix();
 
 		/// Creates an FSM which matches any suffix of any word current FSM matches.

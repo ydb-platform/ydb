@@ -574,7 +574,7 @@ Fsm& Fsm::Complement()
 	return *this;
 }
 
-Fsm Fsm::operator *(size_t count) const 
+Fsm Fsm::operator *(size_t count) const
 {
 	Fsm ret;
 	while (count--)

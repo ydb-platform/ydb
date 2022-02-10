@@ -1,50 +1,50 @@
-/* 
+/*
  * Copyright (c) 2015-2017, Intel Corporation
- * 
- * Redistribution and use in source and binary forms, with or without 
- * modification, are permitted provided that the following conditions are met: 
- * 
- *  * Redistributions of source code must retain the above copyright notice, 
- *    this list of conditions and the following disclaimer. 
- *  * Redistributions in binary form must reproduce the above copyright 
- *    notice, this list of conditions and the following disclaimer in the 
- *    documentation and/or other materials provided with the distribution. 
- *  * Neither the name of Intel Corporation nor the names of its contributors 
- *    may be used to endorse or promote products derived from this software 
- *    without specific prior written permission. 
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" 
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE 
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE 
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF 
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) 
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
- * POSSIBILITY OF SUCH DAMAGE. 
- */ 
- 
-#include "fdr.h" 
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *  * Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ *  * Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *  * Neither the name of Intel Corporation nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+#include "fdr.h"
 #include "fdr_confirm.h"
 #include "fdr_confirm_runtime.h"
-#include "fdr_internal.h" 
+#include "fdr_internal.h"
 #include "fdr_loadval.h"
 #include "flood_runtime.h"
 #include "scratch.h"
 #include "teddy.h"
-#include "teddy_internal.h" 
+#include "teddy_internal.h"
 #include "util/arch.h"
 #include "util/simd_utils.h"
 #include "util/uniform_ops.h"
- 
+
 /** \brief number of bytes processed in each iteration */
 #define ITER_BYTES          16
- 
+
 /** \brief total zone buffer size */
 #define ZONE_TOTAL_SIZE     64
- 
+
 /** \brief maximum number of allowed zones */
 #define ZONE_MAX            3
 
@@ -821,61 +821,61 @@ static const FDRFUNCTYPE funcs[] = {
     fdr_exec_teddy_msks4_pck,
 };
 
-#define FAKE_HISTORY_SIZE 16 
-static const u8 fake_history[FAKE_HISTORY_SIZE]; 
- 
+#define FAKE_HISTORY_SIZE 16
+static const u8 fake_history[FAKE_HISTORY_SIZE];
+
 hwlm_error_t fdrExec(const struct FDR *fdr, const u8 *buf, size_t len,
                      size_t start, HWLMCallback cb,
                      struct hs_scratch *scratch, hwlm_group_t groups) {
     // We guarantee (for safezone construction) that it is safe to read 16
     // bytes before the end of the history buffer.
     const u8 *hbuf = fake_history + FAKE_HISTORY_SIZE;
- 
-    const struct FDR_Runtime_Args a = { 
-        buf, 
-        len, 
+
+    const struct FDR_Runtime_Args a = {
+        buf,
+        len,
         hbuf,
-        0, 
-        start, 
-        cb, 
+        0,
+        start,
+        cb,
         scratch,
-        nextFloodDetect(buf, len, FLOOD_BACKOFF_START), 
-        0 
-    }; 
-    if (unlikely(a.start_offset >= a.len)) { 
-        return HWLM_SUCCESS; 
-    } else { 
-        assert(funcs[fdr->engineID]); 
+        nextFloodDetect(buf, len, FLOOD_BACKOFF_START),
+        0
+    };
+    if (unlikely(a.start_offset >= a.len)) {
+        return HWLM_SUCCESS;
+    } else {
+        assert(funcs[fdr->engineID]);
         return funcs[fdr->engineID](fdr, &a, groups);
-    } 
-} 
- 
-hwlm_error_t fdrExecStreaming(const struct FDR *fdr, const u8 *hbuf, 
-                              size_t hlen, const u8 *buf, size_t len, 
+    }
+}
+
+hwlm_error_t fdrExecStreaming(const struct FDR *fdr, const u8 *hbuf,
+                              size_t hlen, const u8 *buf, size_t len,
                               size_t start, HWLMCallback cb,
                               struct hs_scratch *scratch,
                               hwlm_group_t groups) {
-    struct FDR_Runtime_Args a = { 
-        buf, 
-        len, 
-        hbuf, 
-        hlen, 
-        start, 
-        cb, 
+    struct FDR_Runtime_Args a = {
+        buf,
+        len,
+        hbuf,
+        hlen,
+        start,
+        cb,
         scratch,
-        nextFloodDetect(buf, len, FLOOD_BACKOFF_START), 
+        nextFloodDetect(buf, len, FLOOD_BACKOFF_START),
         /* we are guaranteed to always have 16 initialised bytes at the end of
          * the history buffer (they may be garbage). */
         hbuf ? unaligned_load_u64a(hbuf + hlen - sizeof(u64a)) : (u64a)0
-    }; 
- 
-    hwlm_error_t ret; 
-    if (unlikely(a.start_offset >= a.len)) { 
-        ret = HWLM_SUCCESS; 
-    } else { 
-        assert(funcs[fdr->engineID]); 
+    };
+
+    hwlm_error_t ret;
+    if (unlikely(a.start_offset >= a.len)) {
+        ret = HWLM_SUCCESS;
+    } else {
+        assert(funcs[fdr->engineID]);
         ret = funcs[fdr->engineID](fdr, &a, groups);
-    } 
- 
-    return ret; 
-} 
+    }
+
+    return ret;
+}

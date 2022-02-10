@@ -103,23 +103,23 @@ public:
 			}
 	}
 
-	Char Translate(Char ch) const 
-	{ 
-		return m_letters[static_cast<size_t>(ch)]; 
-	} 
- 
-	Action NextTranslated(State& s, unsigned char c) const 
-	{ 
-		Transition x = reinterpret_cast<const Transition*>(s.m_state)[c]; 
-		s.m_state += SignExtend(x.shift); 
-		++s.m_counter; 
- 
-		return x.action; 
-	} 
- 
+	Char Translate(Char ch) const
+	{
+		return m_letters[static_cast<size_t>(ch)];
+	}
+
+	Action NextTranslated(State& s, unsigned char c) const
+	{
+		Transition x = reinterpret_cast<const Transition*>(s.m_state)[c];
+		s.m_state += SignExtend(x.shift);
+		++s.m_counter;
+
+		return x.action;
+	}
+
 	Action Next(State& s, Char c) const
 	{
-		return NextTranslated(s, Translate(c)); 
+		return NextTranslated(s, Translate(c));
 	}
 
 	Action Next(const State& current, State& n, Char c) const

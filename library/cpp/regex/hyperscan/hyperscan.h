@@ -1,34 +1,34 @@
-#pragma once 
- 
-#include <contrib/libs/hyperscan/src/hs.h> 
- 
-#include <util/generic/ptr.h> 
-#include <util/generic/strbuf.h> 
-#include <util/generic/vector.h> 
-#include <util/generic/yexception.h> 
+#pragma once
+
+#include <contrib/libs/hyperscan/src/hs.h>
+
+#include <util/generic/ptr.h>
+#include <util/generic/strbuf.h>
+#include <util/generic/vector.h>
+#include <util/generic/yexception.h>
 #include <util/system/cpu_id.h>
- 
-namespace NHyperscan { 
+
+namespace NHyperscan {
     using TCPUFeatures = decltype(hs_platform_info_t::cpu_features);
     constexpr TCPUFeatures CPU_FEATURES_AVX2 = HS_CPU_FEATURES_AVX2;
     constexpr TCPUFeatures CPU_FEATURES_AVX512 = HS_CPU_FEATURES_AVX512 | HS_CPU_FEATURES_AVX2;
 
     template<typename TNativeDeleter, TNativeDeleter NativeDeleter>
-    class TDeleter { 
-    public: 
+    class TDeleter {
+    public:
         template<typename T>
-        static void Destroy(T* ptr) { 
-            NativeDeleter(ptr); 
-        } 
-    }; 
- 
-    using TDatabase = THolder<hs_database_t, TDeleter<decltype(&hs_free_database), &hs_free_database>>; 
- 
-    using TScratch = THolder<hs_scratch_t, TDeleter<decltype(&hs_free_scratch), &hs_free_scratch>>; 
- 
+        static void Destroy(T* ptr) {
+            NativeDeleter(ptr);
+        }
+    };
+
+    using TDatabase = THolder<hs_database_t, TDeleter<decltype(&hs_free_database), &hs_free_database>>;
+
+    using TScratch = THolder<hs_scratch_t, TDeleter<decltype(&hs_free_scratch), &hs_free_scratch>>;
+
     class TCompileException : public yexception {
-    }; 
- 
+    };
+
 
     namespace NPrivate {
         enum class ERuntime {
@@ -116,16 +116,16 @@ namespace NHyperscan {
             const TImpl& impl);
     }
 
-    TDatabase Compile(const TStringBuf& regex, unsigned int flags); 
- 
+    TDatabase Compile(const TStringBuf& regex, unsigned int flags);
+
     TDatabase Compile(const TStringBuf& regex, unsigned int flags, TCPUFeatures cpuFeatures);
 
-    TDatabase CompileMulti( 
+    TDatabase CompileMulti(
         const TVector<const char*>& regexs,
         const TVector<unsigned int>& flags,
         const TVector<unsigned int>& ids,
         const TVector<const hs_expr_ext_t*>* extendedParameters = nullptr);
- 
+
     TDatabase CompileMulti(
         const TVector<const char*>& regexs,
         const TVector<unsigned int>& flags,
@@ -133,28 +133,28 @@ namespace NHyperscan {
         TCPUFeatures cpuFeatures,
         const TVector<const hs_expr_ext_t*>* extendedParameters = nullptr);
 
-    TScratch MakeScratch(const TDatabase& db); 
- 
-    void GrowScratch(TScratch& scratch, const TDatabase& db); 
- 
-    TScratch CloneScratch(const TScratch& scratch); 
- 
+    TScratch MakeScratch(const TDatabase& db);
+
+    void GrowScratch(TScratch& scratch, const TDatabase& db);
+
+    TScratch CloneScratch(const TScratch& scratch);
+
     template<typename TCallback>
-    void Scan( 
-        const TDatabase& db, 
-        const TScratch& scratch, 
-        const TStringBuf& text, 
+    void Scan(
+        const TDatabase& db,
+        const TScratch& scratch,
+        const TStringBuf& text,
         TCallback& callback // applied to index of matched regex
-    ) { 
+    ) {
         NPrivate::Scan<TCallback>(db, scratch, text, callback, *Singleton<NPrivate::TImpl>());
-    } 
- 
-    bool Matches( 
-        const TDatabase& db, 
-        const TScratch& scratch, 
+    }
+
+    bool Matches(
+        const TDatabase& db,
+        const TScratch& scratch,
         const TStringBuf& text);
- 
+
     TString Serialize(const TDatabase& db);
- 
-    TDatabase Deserialize(const TStringBuf& serialization); 
-} 
+
+    TDatabase Deserialize(const TStringBuf& serialization);
+}

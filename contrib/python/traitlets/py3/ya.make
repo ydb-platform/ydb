@@ -3,7 +3,7 @@
 PY3_LIBRARY()
 
 PROVIDES(python_traitlets)
-
+ 
 OWNER(borman nslus g:python-contrib)
 
 VERSION(5.1.1)

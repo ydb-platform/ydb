@@ -5,7 +5,7 @@ PY23_LIBRARY()
 OWNER(borman g:python-contrib)
 
 VERSION(0.7.0)
-
+ 
 LICENSE(ISC)
 
 NO_LINT()

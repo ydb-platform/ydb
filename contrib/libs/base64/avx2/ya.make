@@ -10,7 +10,7 @@ LICENSE(
     BSD-2-Clause AND
     MIT
 )
-
+ 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 NO_UTIL()

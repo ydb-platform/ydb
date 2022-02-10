@@ -8,7 +8,7 @@ LICENSE(
     BSD-3-Clause AND
     MIT
 )
-
+ 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 OWNER(

@@ -7,7 +7,7 @@ OWNER(g:python-contrib borman)
 VERSION(4.4.2)
 
 NO_LINT()
-
+ 
 PY_SRCS(
     TOP_LEVEL
     decorator.py

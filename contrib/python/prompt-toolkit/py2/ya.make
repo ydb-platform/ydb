@@ -1,7 +1,7 @@
 PY2_LIBRARY()
 
 OWNER(blinkov nslus g:python-contrib)
-
+ 
 VERSION(1.0.18)
 
 LICENSE(BSD-3-Clause)

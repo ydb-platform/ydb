@@ -135,8 +135,8 @@ bool TProtoBuilder::WriteData(const TVector<NDqProto::TData>& rows, const std::f
         for (const auto& item : buffer) {
             if (!func(item)) {
                 return false;
-            } 
-        } 
+            }
+        }
     }
     return true;
 }

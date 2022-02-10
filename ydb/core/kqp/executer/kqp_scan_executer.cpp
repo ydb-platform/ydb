@@ -794,26 +794,26 @@ private:
                     protoTaskMeta.AddKeyColumnTypes(keyColumn.Type);
                 }
 
-                switch (tableInfo.TableKind) { 
-                    case ETableKind::Unknown: 
-                    case ETableKind::SysView: { 
-                        protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC); 
-                        break; 
-                    } 
-                    case ETableKind::Datashard: { 
-                        if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) { 
-                            protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW); 
-                        } else { 
-                            protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC); 
-                        } 
-                        break; 
-                    } 
-                    case ETableKind::Olap: { 
-                        protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW); 
-                        break; 
-                    } 
-                } 
- 
+                switch (tableInfo.TableKind) {
+                    case ETableKind::Unknown:
+                    case ETableKind::SysView: {
+                        protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+                        break;
+                    }
+                    case ETableKind::Datashard: {
+                        if (AppData()->FeatureFlags.GetEnableArrowFormatAtDatashard()) {
+                            protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+                        } else {
+                            protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::CELLVEC);
+                        }
+                        break;
+                    }
+                    case ETableKind::Olap: {
+                        protoTaskMeta.SetDataFormat(NKikimrTxDataShard::EScanDataFormat::ARROW);
+                        break;
+                    }
+                }
+
                 for (bool skipNullKey : stageInfo.Meta.SkipNullKeys) {
                     protoTaskMeta.AddSkipNullKeys(skipNullKey);
                 }

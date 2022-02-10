@@ -103,15 +103,15 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
     }
 
     TVector<std::pair<TString, NScheme::TTypeId>> GetResultYqlSchema() const override {
-        TVector<NTable::TTag> columnIds; 
-        columnIds.reserve(ResultSchema->num_fields()); 
-        for (const auto& field: ResultSchema->fields()) { 
-            TString name = TStringBuilder() << field->name(); 
-            columnIds.emplace_back(IndexInfo.GetColumnId(name)); 
-        } 
-        return IndexInfo.GetColumns(columnIds); 
-    } 
- 
+        TVector<NTable::TTag> columnIds;
+        columnIds.reserve(ResultSchema->num_fields());
+        for (const auto& field: ResultSchema->fields()) {
+            TString name = TStringBuilder() << field->name();
+            columnIds.emplace_back(IndexInfo.GetColumnId(name));
+        }
+        return IndexInfo.GetColumns(columnIds);
+    }
+
     TVector<std::pair<TString, NScheme::TTypeId>> GetKeyYqlSchema() const override {
         return IndexInfo.GetPK();
     }

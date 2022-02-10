@@ -11,10 +11,10 @@
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
-#include <library/cpp/actors/core/log.h> 
- 
+#include <library/cpp/actors/core/log.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
- 
+
 namespace NKikimrTxDataShard {
     class TKqpTransaction_TScanTaskMeta;
 }
@@ -22,70 +22,70 @@ namespace NKikimrTxDataShard {
 namespace NKikimr {
 namespace NMiniKQL {
 
-std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& value, NScheme::TTypeId type); 
- 
-class IKqpTableReader : public TSimpleRefCount<IKqpTableReader> { 
+std::pair<ui64, ui64> GetUnboxedValueSizeForTests(const NUdf::TUnboxedValue& value, NScheme::TTypeId type);
+
+class IKqpTableReader : public TSimpleRefCount<IKqpTableReader> {
 public:
-    virtual ~IKqpTableReader() = default; 
+    virtual ~IKqpTableReader() = default;
 
-    virtual NUdf::EFetchStatus Next(NUdf::TUnboxedValue& result) = 0; 
-    virtual EFetchResult Next(NUdf::TUnboxedValue* const* output) = 0; 
-}; 
+    virtual NUdf::EFetchStatus Next(NUdf::TUnboxedValue& result) = 0;
+    virtual EFetchResult Next(NUdf::TUnboxedValue* const* output) = 0;
+};
 
-class TKqpScanComputeContext : public TKqpComputeContextBase { 
-public: 
-    class TScanData { 
-    public: 
-        TScanData(TScanData&&) = default; // needed to create TMap<ui32, TScanData> Scans 
-        TScanData(const TTableId& tableId, const TTableRange& range, const TSmallVec<TColumn>& columns, 
-            const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys); 
+class TKqpScanComputeContext : public TKqpComputeContextBase {
+public:
+    class TScanData {
+    public:
+        TScanData(TScanData&&) = default; // needed to create TMap<ui32, TScanData> Scans
+        TScanData(const TTableId& tableId, const TTableRange& range, const TSmallVec<TColumn>& columns,
+            const TSmallVec<TColumn>& systemColumns, const TSmallVec<bool>& skipNullKeys);
 
         TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, NYql::NDqProto::EDqStatsMode statsMode);
 
-        ~TScanData() { 
-            TString msg = TStringBuilder() << "Buffer in TScanData was not cleared, data is leaking: " 
-                    << "Queue of UnboxedValues must be emptied under allocator using Clear method, but has " << RowBatches.size() << " elements!"; 
-            if (!RowBatches.empty()) { 
-                LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, msg); 
-            } 
-            Y_VERIFY_DEBUG_S(RowBatches.empty(), msg); 
-        } 
- 
-        const TSmallVec<TColumn>& GetColumns() const { 
-            return Columns; 
-        } 
-
-        const TSmallVec<TColumn>& GetSystemColumns() const { 
-            return SystemColumns; 
+        ~TScanData() {
+            TString msg = TStringBuilder() << "Buffer in TScanData was not cleared, data is leaking: "
+                    << "Queue of UnboxedValues must be emptied under allocator using Clear method, but has " << RowBatches.size() << " elements!";
+            if (!RowBatches.empty()) {
+                LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, msg);
+            }
+            Y_VERIFY_DEBUG_S(RowBatches.empty(), msg);
         }
 
-        ui64 AddRows(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory); 
+        const TSmallVec<TColumn>& GetColumns() const {
+            return Columns;
+        }
 
-        ui64 AddRows(const arrow::RecordBatch& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory); 
- 
-        NUdf::TUnboxedValue TakeRow(); 
+        const TSmallVec<TColumn>& GetSystemColumns() const {
+            return SystemColumns;
+        }
 
-        bool IsEmpty() const { 
-            return RowBatches.empty(); 
-        } 
+        ui64 AddRows(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
 
-        ui64 GetStoredBytes() const { 
-            return StoredBytes; 
-        } 
+        ui64 AddRows(const arrow::RecordBatch& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory);
 
-        void Finish() { 
-            Finished = true; 
-        } 
+        NUdf::TUnboxedValue TakeRow();
 
-        bool IsFinished() const { 
-            return Finished; 
-        } 
+        bool IsEmpty() const {
+            return RowBatches.empty();
+        }
 
-        void Clear() { 
-            RowBatches.clear(); 
-        } 
+        ui64 GetStoredBytes() const {
+            return StoredBytes;
+        }
 
-    public: 
+        void Finish() {
+            Finished = true;
+        }
+
+        bool IsFinished() const {
+            return Finished;
+        }
+
+        void Clear() {
+            RowBatches.clear();
+        }
+
+    public:
         ui64 TaskId = 0;
         TTableId TableId;
         TString TablePath;
@@ -114,18 +114,18 @@ public:
         std::unique_ptr<TBasicStats> BasicStats;
         std::unique_ptr<TProfileStats> ProfileStats;
 
-    private: 
-        struct RowBatch { 
-            TUnboxedValueVector Batch; 
-            TMaybe<ui64> ShardId; 
-            ui64 CurrentRow = 0; 
-        }; 
+    private:
+        struct RowBatch {
+            TUnboxedValueVector Batch;
+            TMaybe<ui64> ShardId;
+            ui64 CurrentRow = 0;
+        };
 
-        TSmallVec<TColumn> Columns; 
-        TSmallVec<TColumn> SystemColumns; 
-        TQueue<RowBatch> RowBatches; 
-        ui64 StoredBytes = 0; 
-        bool Finished = false; 
+        TSmallVec<TColumn> Columns;
+        TSmallVec<TColumn> SystemColumns;
+        TQueue<RowBatch> RowBatches;
+        ui64 StoredBytes = 0;
+        bool Finished = false;
     };
 
 public:
@@ -144,12 +144,12 @@ public:
     TMap<ui32, TScanData>& GetTableScans();
     const TMap<ui32, TScanData>& GetTableScans() const;
 
-    void Clear() { 
-        for (auto& scan: Scans) { 
-            scan.second.Clear(); 
-        } 
-        Scans.clear(); 
-    } 
+    void Clear() {
+        for (auto& scan: Scans) {
+            scan.second.Clear();
+        }
+        Scans.clear();
+    }
 
 private:
     const NYql::NDqProto::EDqStatsMode StatsMode;

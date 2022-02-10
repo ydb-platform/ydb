@@ -772,7 +772,7 @@ public:
     void Push(NKikimr::NMiniKQL::TUnboxedValueVector&& batch, i64 space) override {
         auto inputType = GetInputType();
         NDqProto::TSourcePushRequest data;
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0); 
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0);
         *data.MutableData() = dataSerializer.Serialize(batch, static_cast<NKikimr::NMiniKQL::TType*>(inputType));
         data.SetSpace(space);
 

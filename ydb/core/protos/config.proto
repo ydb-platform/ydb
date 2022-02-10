@@ -661,10 +661,10 @@ message TFeatureFlags {
     optional bool EnableMvccSnapshotReads = 46 [default = false];
     optional Tribool EnableMvcc = 47 [default = VALUE_TRUE];
     optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = false];
-    optional bool EnableArrowFormatAtDatashard = 49 [default = false]; 
+    optional bool EnableArrowFormatAtDatashard = 49 [default = false];
     optional bool Enable3x3RequestsForMirror3DCMinLatencyPut = 50 [default = false];
     optional bool EnableBackgroundCompaction = 51 [default = true];
-    optional bool EnableArrowFormatInChannels = 52 [default = false]; 
+    optional bool EnableArrowFormatInChannels = 52 [default = false];
     optional bool EnableBackgroundCompactionServerless = 53 [default = false];
     optional bool EnableNotNullColumns = 54 [default = false];
     optional bool EnableTtlOnAsyncIndexedTables = 55 [default = false];

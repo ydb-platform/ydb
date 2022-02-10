@@ -98,7 +98,7 @@ public:
             ScanData = &ComputeCtx.GetTableScan(0);
 
             columns.reserve(Meta->ColumnsSize());
-            for (const auto& column : ScanData->GetColumns()) { 
+            for (const auto& column : ScanData->GetColumns()) {
                 NMiniKQL::TKqpScanComputeContext::TColumn c;
                 c.Tag = column.Tag;
                 c.Type = column.Type;
@@ -242,35 +242,35 @@ private:
 
         auto& msg = *ev->Get();
 
-        ui64 bytes = 0; 
-        ui64 rowsCount = 0; 
-        { 
-            auto guard = TaskRunner->BindAllocator(); 
-            switch (msg.GetDataFormat()) { 
-                case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED: 
-                case NKikimrTxDataShard::EScanDataFormat::CELLVEC: { 
-                    if (!msg.Rows.empty()) { 
-                        bytes = ScanData->AddRows(msg.Rows, {}, TaskRunner->GetHolderFactory()); 
-                        rowsCount = msg.Rows.size(); 
-                    } 
-                    break; 
-                } 
-                case NKikimrTxDataShard::EScanDataFormat::ARROW: { 
-                    if(msg.ArrowBatch != nullptr) { 
-                        bytes = ScanData->AddRows(*msg.ArrowBatch, {}, TaskRunner->GetHolderFactory()); 
-                        rowsCount = msg.ArrowBatch->num_rows(); 
-                    } 
-                    break; 
-                } 
-            } 
-        } 
+        ui64 bytes = 0;
+        ui64 rowsCount = 0;
+        {
+            auto guard = TaskRunner->BindAllocator();
+            switch (msg.GetDataFormat()) {
+                case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
+                case NKikimrTxDataShard::EScanDataFormat::CELLVEC: {
+                    if (!msg.Rows.empty()) {
+                        bytes = ScanData->AddRows(msg.Rows, {}, TaskRunner->GetHolderFactory());
+                        rowsCount = msg.Rows.size();
+                    }
+                    break;
+                }
+                case NKikimrTxDataShard::EScanDataFormat::ARROW: {
+                    if(msg.ArrowBatch != nullptr) {
+                        bytes = ScanData->AddRows(*msg.ArrowBatch, {}, TaskRunner->GetHolderFactory());
+                        rowsCount = msg.ArrowBatch->num_rows();
+                    }
+                    break;
+                }
+            }
+        }
 
-        CA_LOG_D("Got sysview scandata, rows: " << rowsCount << ", bytes: " << bytes 
+        CA_LOG_D("Got sysview scandata, rows: " << rowsCount << ", bytes: " << bytes
             << ", finished: " << msg.Finished << ", from: " << SysViewActorId);
 
         if (msg.Finished) {
             CA_LOG_D("Finishing rows buffer");
-            ScanData->Finish(); 
+            ScanData->Finish();
         }
 
         if (Y_UNLIKELY(ScanData->ProfileStats)) {
@@ -283,8 +283,8 @@ private:
             }
         }
 
-        ui64 freeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes() 
-            ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes() 
+        ui64 freeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes()
+            ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes()
             : 0;
 
         if (freeSpace > 0) {

@@ -6,7 +6,7 @@ OWNER(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow 
+    contrib/libs/apache/arrow
     ydb/core/util
     ydb/library/mkql_proto
     ydb/library/yql/minikql/comp_nodes
@@ -19,7 +19,7 @@ PEERDIR(
 )
 
 SRCS(
-    dq_arrow_helpers.cpp 
+    dq_arrow_helpers.cpp
     dq_columns_resolve.cpp
     dq_compute.cpp
     dq_input_channel.cpp

@@ -73,7 +73,7 @@ public:
         , OutputType(outputType)
         , BasicStats(ChannelId)
         , ProfileStats(collectProfileStats ? &BasicStats : nullptr)
-        , DataSerializer(typeEnv, holderFactory, transportVersion) 
+        , DataSerializer(typeEnv, holderFactory, transportVersion)
         , MaxStoredBytes(maxStoredBytes)
         , MaxChunkBytes(maxChunkBytes)
         , LogFunc(logFunc) {}

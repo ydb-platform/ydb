@@ -54,8 +54,8 @@ struct TDataRow {
     std::string Utf8;
     std::string Json;
     std::string Yson;
-    ui16 Date; 
-    ui32 Datetime; 
+    ui16 Date;
+    ui32 Datetime;
     i64 Timestamp;
     i64 Interval;
     ui64 Decimal[2];
@@ -96,12 +96,12 @@ struct TDataRow {
             arrow::field("ui64", arrow::uint64()),
             arrow::field("f32", arrow::float32()),
             arrow::field("f64", arrow::float64()),
-            arrow::field("string", arrow::binary()), 
+            arrow::field("string", arrow::binary()),
             arrow::field("utf8", arrow::utf8()),
             arrow::field("json", arrow::binary()),
             arrow::field("yson", arrow::binary()),
-            arrow::field("date", arrow::uint16()), 
-            arrow::field("datetime", arrow::uint32()), 
+            arrow::field("date", arrow::uint16()),
+            arrow::field("datetime", arrow::uint32()),
             arrow::field("ts", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
             arrow::field("ival", arrow::duration(arrow::TimeUnit::TimeUnit::MICRO)),
             arrow::field("dec", arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
@@ -110,8 +110,8 @@ struct TDataRow {
         return std::make_shared<arrow::Schema>(fields);
     }
 
-    static TVector<std::pair<TString, TTypeId>> MakeYdbSchema() { 
-        TVector<std::pair<TString, TTypeId>> columns = { 
+    static TVector<std::pair<TString, TTypeId>> MakeYdbSchema() {
+        TVector<std::pair<TString, TTypeId>> columns = {
             {"bool", NTypeIds::Bool },
             {"i8", NTypeIds::Int8 },
             {"i16", NTypeIds::Int16 },
@@ -153,8 +153,8 @@ struct TDataRow {
         Cells[12] = TCell(Utf8.data(), Utf8.size());
         Cells[13] = TCell(Json.data(), Json.size());
         Cells[14] = TCell(Yson.data(), Yson.size());
-        Cells[15] = TCell::Make<ui16>(Date); 
-        Cells[16] = TCell::Make<ui32>(Datetime); 
+        Cells[15] = TCell::Make<ui16>(Date);
+        Cells[16] = TCell::Make<ui32>(Datetime);
         Cells[17] = TCell::Make<i64>(Timestamp);
         Cells[18] = TCell::Make<i64>(Interval);
         Cells[19] = TCell((const char *)&Decimal[0], 16);
@@ -193,8 +193,8 @@ std::vector<TDataRow> ToVector(const std::shared_ptr<T>& table) {
     auto arj = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 13));
     auto ary = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 14));
 
-    auto ard = std::static_pointer_cast<arrow::UInt16Array>(GetColumn(*table, 15)); 
-    auto ardt = std::static_pointer_cast<arrow::UInt32Array>(GetColumn(*table, 16)); 
+    auto ard = std::static_pointer_cast<arrow::UInt16Array>(GetColumn(*table, 15));
+    auto ardt = std::static_pointer_cast<arrow::UInt32Array>(GetColumn(*table, 16));
     auto arts = std::static_pointer_cast<arrow::TimestampArray>(GetColumn(*table, 17));
     auto arival = std::static_pointer_cast<arrow::DurationArray>(GetColumn(*table, 18));
 
@@ -270,8 +270,8 @@ public:
         std::shared_ptr<arrow::BinaryArray> arj;
         std::shared_ptr<arrow::BinaryArray> ary;
 
-        std::shared_ptr<arrow::UInt16Array> ard; 
-        std::shared_ptr<arrow::UInt32Array> ardt; 
+        std::shared_ptr<arrow::UInt16Array> ard;
+        std::shared_ptr<arrow::UInt32Array> ardt;
         std::shared_ptr<arrow::TimestampArray> arts;
         std::shared_ptr<arrow::DurationArray> arival;
 
@@ -337,8 +337,8 @@ private:
     arrow::StringBuilder Butf;
     arrow::BinaryBuilder Bj;
     arrow::BinaryBuilder By;
-    arrow::UInt16Builder Bd; 
-    arrow::UInt32Builder Bdt; 
+    arrow::UInt16Builder Bd;
+    arrow::UInt32Builder Bdt;
     arrow::TimestampBuilder Bts;
     arrow::DurationBuilder Bival;
     arrow::Decimal128Builder Bdec;
@@ -566,7 +566,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
             }
         } rowWriter;
 
-        NArrow::TArrowToYdbConverter toYdbConverter(TDataRow::MakeYdbSchema(), rowWriter); 
+        NArrow::TArrowToYdbConverter toYdbConverter(TDataRow::MakeYdbSchema(), rowWriter);
         TString errStr;
         bool ok = toYdbConverter.Process(*batch, errStr);
         UNIT_ASSERT(ok);

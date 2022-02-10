@@ -3,7 +3,7 @@ RECURSE(
     dns
     dns/example
     engine
-    engine/stack/ut 
+    engine/stack/ut
     listener
     test
     ut

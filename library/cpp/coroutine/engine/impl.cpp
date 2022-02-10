@@ -1,8 +1,8 @@
 #include "impl.h"
 
-#include "stack/stack_allocator.h" 
-#include "stack/stack_guards.h" 
- 
+#include "stack/stack_allocator.h"
+#include "stack/stack_guards.h"
+
 #include <util/generic/scope.h>
 #include <util/thread/singleton.h>
 #include <util/stream/format.h>
@@ -18,15 +18,15 @@ void TCont::TJoinWait::Wake() noexcept {
     Cont_.ReSchedule();
 }
 
-TCont::TCont(NCoro::NStack::IAllocator& allocator, 
-             uint32_t stackSize, 
-             TContExecutor& executor, 
+TCont::TCont(NCoro::NStack::IAllocator& allocator,
+             uint32_t stackSize,
+             TContExecutor& executor,
              NCoro::TTrampoline::TFunc func,
-             const char* name) noexcept 
+             const char* name) noexcept
     : Executor_(executor)
     , Name_(name)
     , Trampoline_(
-        allocator, 
+        allocator,
         stackSize,
         std::move(func),
         this
@@ -117,11 +117,11 @@ void TCont::ReSchedule() noexcept {
 
 
 TContExecutor::TContExecutor(
-    uint32_t defaultStackSize, 
+    uint32_t defaultStackSize,
     THolder<IPollerFace> poller,
     NCoro::IScheduleCallback* scheduleCallback,
     NCoro::IEnterPollerCallback* enterPollerCallback,
-    NCoro::NStack::EGuard defaultGuard, 
+    NCoro::NStack::EGuard defaultGuard,
     TMaybe<NCoro::NStack::TPoolAllocatorSettings> poolSettings,
     NCoro::ITime* time
 )
@@ -130,9 +130,9 @@ TContExecutor::TContExecutor(
     , DefaultStackSize_(defaultStackSize)
     , Poller_(std::move(poller))
     , Time_(time)
-{ 
-    StackAllocator_ = NCoro::NStack::GetAllocator(poolSettings, defaultGuard); 
-} 
+{
+    StackAllocator_ = NCoro::NStack::GetAllocator(poolSettings, defaultGuard);
+}
 
 TContExecutor::~TContExecutor() {
     Y_VERIFY(Allocated_ == 0, "leaked %u coroutines", (ui32)Allocated_);
@@ -253,10 +253,10 @@ TCont* TContExecutor::CreateOwned(
     return cont;
 }
 
-NCoro::NStack::TAllocatorStats TContExecutor::GetAllocatorStats() const noexcept { 
-    return StackAllocator_->GetStackStats(); 
-} 
- 
+NCoro::NStack::TAllocatorStats TContExecutor::GetAllocatorStats() const noexcept {
+    return StackAllocator_->GetStackStats();
+}
+
 void TContExecutor::Release(TCont* cont) noexcept {
     delete cont;
     Allocated_ -= 1;

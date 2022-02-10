@@ -1,8 +1,8 @@
 #pragma once
 
-#include "stack/stack_common.h" 
-#include "stack/stack.h" 
- 
+#include "stack/stack_common.h"
+#include "stack/stack.h"
+
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/system/context.h>
@@ -17,8 +17,8 @@ typedef void (*TContFunc)(TCont*, void*);
 
 namespace NCoro {
 
-    namespace NStack { 
-        class IAllocator; 
+    namespace NStack {
+        class IAllocator;
     }
 
     class TTrampoline : public ITrampoLine, TNonCopyable {
@@ -26,8 +26,8 @@ namespace NCoro {
         typedef std::function<void (TCont*)> TFunc;
 
         TTrampoline(
-            NCoro::NStack::IAllocator& allocator, 
-            uint32_t stackSize, 
+            NCoro::NStack::IAllocator& allocator,
+            uint32_t stackSize,
             TFunc f,
             TCont* cont
         ) noexcept;
@@ -51,7 +51,7 @@ namespace NCoro {
     private:
         const char* ContName() const noexcept;
     private:
-        NStack::TStackHolder Stack_; 
+        NStack::TStackHolder Stack_;
         const TContClosure Clo_;
         TExceptionSafeContext Ctx_;
         TFunc Func_;

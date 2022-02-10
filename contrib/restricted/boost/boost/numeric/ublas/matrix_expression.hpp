@@ -2244,8 +2244,8 @@ namespace boost { namespace numeric { namespace ublas {
                 if (it2_ != it2_end_)
                     if (it2_.index1 () <= i_)
                         ++ it2_;
-                if (it2_ != it2_end_) {
-                    index2 = it2_.index1 ();
+                if (it2_ != it2_end_) { 
+                    index2 = it2_.index1 (); 
                 }
                 i_ = (std::min) (index1, index2);
             }

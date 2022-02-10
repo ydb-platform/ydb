@@ -81,7 +81,7 @@ public:
     return std::experimental::suspend_always();
   }
 
-  auto final_suspend() noexcept
+  auto final_suspend() noexcept 
   {
     return std::experimental::suspend_always();
   }
@@ -146,7 +146,7 @@ public:
   }
 #endif // !defined(BOOST_ASIO_DISABLE_AWAITEE_RECYCLING)
 
-  auto initial_suspend() noexcept
+  auto initial_suspend() noexcept 
   {
     return std::experimental::suspend_never();
   }
@@ -160,7 +160,7 @@ public:
       return false;
     }
 
-    void await_suspend(coroutine_handle<void>) noexcept
+    void await_suspend(coroutine_handle<void>) noexcept 
     {
       this_->wake_caller();
     }
@@ -170,12 +170,12 @@ public:
     }
   };
 
-  auto final_suspend() noexcept
+  auto final_suspend() noexcept 
   {
     return final_suspender{this};
   }
 
-  void set_except(std::exception_ptr e) noexcept
+  void set_except(std::exception_ptr e) noexcept 
   {
     pending_exception_ = e;
   }

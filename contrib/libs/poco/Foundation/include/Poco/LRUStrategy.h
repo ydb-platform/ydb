@@ -87,7 +87,7 @@ public:
 		}
 	}
 
-	void onClear(const void*, const EventArgs& /*args*/)
+	void onClear(const void*, const EventArgs& /*args*/) 
 	{
 		_keys.clear();
 		_keyIndex.clear();

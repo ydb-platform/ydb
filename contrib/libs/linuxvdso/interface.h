@@ -21,6 +21,6 @@ namespace NVdso {
     };
 
     size_t Enumerate(TSymbol* s, size_t len);
-
-    void* Function(const char* name, const char* version);
+ 
+    void* Function(const char* name, const char* version); 
 }

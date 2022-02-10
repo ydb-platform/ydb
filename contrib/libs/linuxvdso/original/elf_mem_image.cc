@@ -191,7 +191,7 @@ void ElfMemImage::Init(const void *base) {
   strsize_   = 0;
   verdefnum_ = 0;
   link_base_ = ~0L;  // Sentinel: PT_LOAD .p_vaddr can't possibly be this.
-  if (!base || base == kInvalidBase) {
+  if (!base || base == kInvalidBase) { 
     return;
   }
   const intptr_t base_as_uintptr_t = reinterpret_cast<uintptr_t>(base);

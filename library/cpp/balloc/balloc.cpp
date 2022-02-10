@@ -2,7 +2,7 @@
 #include <errno.h>
 
 namespace NBalloc {
-
+ 
     static constexpr size_t ALIVE_SIGNATURE = 0xaULL << 56;
     static constexpr size_t DISABLED_SIGNATURE = 0xbULL << 56;
     static constexpr size_t SIGNATURE_MASK = 0xfULL << 56;

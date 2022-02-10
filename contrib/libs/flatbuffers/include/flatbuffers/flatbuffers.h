@@ -194,34 +194,34 @@ template<typename T, typename IT> struct VectorIterator {
   VectorIterator operator+(const uoffset_t &offset) const {
     return VectorIterator(data_ + offset * IndirectHelper<T>::element_stride,
                           0);
-  }
-
+  } 
+ 
   VectorIterator &operator+=(const uoffset_t &offset) {
-    data_ += offset * IndirectHelper<T>::element_stride;
-    return *this;
-  }
-
-  VectorIterator &operator--() {
-    data_ -= IndirectHelper<T>::element_stride;
-    return *this;
-  }
-
-  VectorIterator operator--(int) {
+    data_ += offset * IndirectHelper<T>::element_stride; 
+    return *this; 
+  } 
+ 
+  VectorIterator &operator--() { 
+    data_ -= IndirectHelper<T>::element_stride; 
+    return *this; 
+  } 
+ 
+  VectorIterator operator--(int) { 
     VectorIterator temp(data_, 0);
-    data_ -= IndirectHelper<T>::element_stride;
-    return temp;
-  }
-
+    data_ -= IndirectHelper<T>::element_stride; 
+    return temp; 
+  } 
+ 
   VectorIterator operator-(const uoffset_t &offset) const {
     return VectorIterator(data_ - offset * IndirectHelper<T>::element_stride,
                           0);
-  }
-
+  } 
+ 
   VectorIterator &operator-=(const uoffset_t &offset) {
-    data_ -= offset * IndirectHelper<T>::element_stride;
-    return *this;
-  }
-
+    data_ -= offset * IndirectHelper<T>::element_stride; 
+    return *this; 
+  } 
+ 
  private:
   const uint8_t *data_;
 };

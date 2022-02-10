@@ -30,7 +30,7 @@ SRCS(
 )
 
 END()
- 
-RECURSE( 
-    stack/benchmark 
-) 
+
+RECURSE(
+    stack/benchmark
+)

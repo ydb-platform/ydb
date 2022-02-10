@@ -21,7 +21,7 @@
 #include "json_vdiskinfo.h"
 #include "json_pdiskinfo.h"
 #include "json_describe.h"
-#include "json_hotkeys.h" 
+#include "json_hotkeys.h"
 #include "json_sysinfo.h"
 #include "json_tabletinfo.h"
 #include "json_hiveinfo.h"
@@ -180,7 +180,7 @@ public:
             JsonHandlers["/json/vdiskinfo"] = new TJsonHandler<TJsonVDiskInfo>;
             JsonHandlers["/json/pdiskinfo"] = new TJsonHandler<TJsonPDiskInfo>;
             JsonHandlers["/json/describe"] = new TJsonHandler<TJsonDescribe>;
-            JsonHandlers["/json/hotkeys"] = new TJsonHandler<TJsonHotkeys>; 
+            JsonHandlers["/json/hotkeys"] = new TJsonHandler<TJsonHotkeys>;
             JsonHandlers["/json/sysinfo"] = new TJsonHandler<TJsonSysInfo>;
             JsonHandlers["/json/tabletinfo"] = new TJsonHandler<TJsonTabletInfo>;
             JsonHandlers["/json/hiveinfo"] = new TJsonHandler<TJsonHiveInfo>;

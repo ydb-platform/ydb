@@ -593,7 +593,7 @@ public:
     THttpConfig::SocketAddressType Address;
     TString WorkerName;
     THPTimer Timer;
-    bool Secure = false; 
+    bool Secure = false;
 
     bool IsConnectionClose() const {
         if (Connection.empty()) {

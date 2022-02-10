@@ -29,7 +29,7 @@ class TJsonQuery : public TActorBootstrapped<TJsonQuery> {
     ui32 Timeout = 0;
     TVector<Ydb::ResultSet> ResultSets;
     TString Action;
-    TString Stats; 
+    TString Stats;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -67,7 +67,7 @@ public:
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 60000);
         TString query = params.Get("query");
         TString database = params.Get("database");
-        Stats = params.Get("stats"); 
+        Stats = params.Get("stats");
         Action = params.Get("action");
         if (query.empty() && Event->Get()->Request.GetMethod() == HTTP_METHOD_POST) {
             TStringBuf content = Event->Get()->Request.GetPostContent();
@@ -83,7 +83,7 @@ public:
                     if (success) {
                         query = requestData["query"].GetStringSafe({});
                         database = requestData["database"].GetStringSafe({});
-                        Stats = requestData["stats"].GetStringSafe({}); 
+                        Stats = requestData["stats"].GetStringSafe({});
                         Action = requestData["action"].GetStringSafe({});
                     }
                 }
@@ -107,9 +107,9 @@ public:
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
             request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         }
-        if (Stats == "profile") { 
+        if (Stats == "profile") {
             request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE);
-        } 
+        }
         if (database) {
             request.SetDatabase(database);
         }
@@ -185,16 +185,16 @@ private:
 
             case NYdb::TTypeParser::ETypeKind::Optional:
                 valueParser.OpenOptional();
-                if (valueParser.IsNull()) { 
-                    return NJson::JSON_NULL; 
-                } 
-                switch(valueParser.GetKind()) { 
-                    case NYdb::TTypeParser::ETypeKind::Primitive: 
+                if (valueParser.IsNull()) {
+                    return NJson::JSON_NULL;
+                }
+                switch(valueParser.GetKind()) {
+                    case NYdb::TTypeParser::ETypeKind::Primitive:
                         return ColumnPrimitiveValueToJsonValue(valueParser);
-                    case NYdb::TTypeParser::ETypeKind::Decimal: 
-                        return valueParser.GetDecimal().ToString(); 
-                    default: 
-                        return NJson::JSON_UNDEFINED; 
+                    case NYdb::TTypeParser::ETypeKind::Decimal:
+                        return valueParser.GetDecimal().ToString();
+                    default:
+                        return NJson::JSON_UNDEFINED;
                 }
 
             default:
@@ -208,10 +208,10 @@ private:
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             const auto& response = record.GetResponse();
             out << Viewer->GetHTTPOKJSON();
-            if (!Stats.empty()) { 
-                out << "{\"result\":"; 
-            } 
-            if (response.ResultsSize() > 0) { 
+            if (!Stats.empty()) {
+                out << "{\"result\":";
+            }
+            if (response.ResultsSize() > 0) {
                 const auto &result = response.GetResults();
                 if (result.empty()) {
                     out << "[]";
@@ -231,43 +231,43 @@ private:
                     }
                 }
             } else if (ResultSets.size() > 0) {
-                out << "["; 
-                bool comma = false; 
+                out << "[";
+                bool comma = false;
                 for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
                     NYdb::TResultSet resultSet(*it);
                     const auto& columnsMeta = resultSet.GetColumnsMeta();
                     NYdb::TResultSetParser rsParser(resultSet);
                     while (rsParser.TryNextRow()) {
-                        if (comma) { 
-                            out << ","; 
-                        } 
-                        out << "{"; 
+                        if (comma) {
+                            out << ",";
+                        }
+                        out << "{";
                         for (size_t columnNum = 0; columnNum < columnsMeta.size(); ++columnNum) {
                             const NYdb::TColumn& columnMeta = columnsMeta[columnNum];
-                            out << "\"" << TProtoToJson::EscapeJsonString(columnMeta.Name) << "\":"; 
-                            out << NJson::WriteJson(ColumnValueToJsonValue(rsParser.ColumnParser(columnNum)), false); 
-                            if (columnNum + 1 < columnsMeta.size()) { 
-                                out << ","; 
-                            } 
+                            out << "\"" << TProtoToJson::EscapeJsonString(columnMeta.Name) << "\":";
+                            out << NJson::WriteJson(ColumnValueToJsonValue(rsParser.ColumnParser(columnNum)), false);
+                            if (columnNum + 1 < columnsMeta.size()) {
+                                out << ",";
+                            }
                         }
-                        out << "}"; 
-                        comma = true; 
+                        out << "}";
+                        comma = true;
                     }
                 }
-                out << ']'; 
-            } else if (response.HasQueryPlan()) { 
-                if (Action == "explain-ast") { 
-                    out << "{\"ast\":\"" << TProtoToJson::EscapeJsonString(response.GetQueryAst()) << "\"}"; 
-                } else { 
-                    out << response.GetQueryPlan(); 
-                } 
+                out << ']';
+            } else if (response.HasQueryPlan()) {
+                if (Action == "explain-ast") {
+                    out << "{\"ast\":\"" << TProtoToJson::EscapeJsonString(response.GetQueryAst()) << "\"}";
+                } else {
+                    out << response.GetQueryPlan();
+                }
             }
-            if (!Stats.empty()) { 
-                out << ",\"stats\":"; 
-                TStringStream json; 
-                TProtoToJson::ProtoToJson(json, response.GetQueryStats(), JsonSettings); 
-                out << json.Str() << "}"; 
-            } 
+            if (!Stats.empty()) {
+                out << ",\"stats\":";
+                TStringStream json;
+                TProtoToJson::ProtoToJson(json, response.GetQueryStats(), JsonSettings);
+                out << json.Str() << "}";
+            }
         } else {
             out << "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: Close\r\n\r\n";
 

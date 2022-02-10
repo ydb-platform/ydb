@@ -1128,10 +1128,10 @@ void TDataShard::EnableKeyAccessSampling(const TActorContext &ctx, TInstant unti
         CurrentKeySampler = EnabledKeySampler;
         StartedKeyAccessSamplingAt = AppData(ctx)->TimeProvider->Now();
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Started key access sampling at datashard: " << TabletID());
-    } else { 
-        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Extended key access sampling at datashard: " << TabletID()); 
+    } else {
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Extended key access sampling at datashard: " << TabletID());
     }
-    StopKeyAccessSamplingAt = until; 
+    StopKeyAccessSamplingAt = until;
 }
 
 bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
@@ -2248,21 +2248,21 @@ void TDataShard::Handle(TEvDataShard::TEvGetDataHistogramRequest::TPtr &ev,
 {
     auto *response = new TEvDataShard::TEvGetDataHistogramResponse;
     response->Record.MutableStatus()->SetCode(Ydb::StatusIds::SUCCESS);
-    const auto& rec = ev->Get()->Record; 
+    const auto& rec = ev->Get()->Record;
 
-    if (rec.GetCollectKeySampleMs() > 0) { 
-        EnableKeyAccessSampling(ctx, 
-            AppData(ctx)->TimeProvider->Now() + TDuration::MilliSeconds(rec.GetCollectKeySampleMs())); 
-    } 
- 
-    if (rec.GetActualData()) { 
-        if (CurrentKeySampler == DisabledKeySampler) { 
-            // datashard stores expired stats 
-            ctx.Send(ev->Sender, response); 
-            return; 
-        } 
-    } 
- 
+    if (rec.GetCollectKeySampleMs() > 0) {
+        EnableKeyAccessSampling(ctx,
+            AppData(ctx)->TimeProvider->Now() + TDuration::MilliSeconds(rec.GetCollectKeySampleMs()));
+    }
+
+    if (rec.GetActualData()) {
+        if (CurrentKeySampler == DisabledKeySampler) {
+            // datashard stores expired stats
+            ctx.Send(ev->Sender, response);
+            return;
+        }
+    }
+
     auto &reg = *AppData(ctx)->TypeRegistry;
     for (const auto &pr : TableInfos) {
         const auto &tinfo = *pr.second;

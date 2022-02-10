@@ -49,7 +49,7 @@ struct TEvHttpProxy {
         bool Secure = false;
         TString CertificateFile;
         TString PrivateKeyFile;
-        TString SslCertificatePem; 
+        TString SslCertificatePem;
 
         TEvAddListeningPort(TIpPort port)
             : Port(port)

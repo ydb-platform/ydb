@@ -25,7 +25,7 @@ SRCS(
     json_describe.h
     json_healthcheck.h
     json_hiveinfo.h
-    json_hotkeys.h 
+    json_hotkeys.h
     json_labeledcounters.h
     json_metainfo.h
     json_netinfo.h

@@ -113,7 +113,7 @@ protected:
                     }
                     CurrentRequest->Address = Address;
                     CurrentRequest->WorkerName = Endpoint.WorkerName;
-                    CurrentRequest->Secure = Endpoint.Secure; 
+                    CurrentRequest->Secure = Endpoint.Secure;
                 }
                 if (!CurrentRequest->EnsureEnoughSpaceAvailable()) {
                     LOG_DEBUG_S(ctx, HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - not enough space available");

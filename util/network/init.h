@@ -43,9 +43,9 @@ struct sockaddr_un {
     #define NETDB_INTERNAL -1
     #define NETDB_SUCCESS 0
 
-#endif 
- 
-#if defined(_win_) || defined(_darwin_) 
+#endif
+
+#if defined(_win_) || defined(_darwin_)
     #ifndef MSG_NOSIGNAL
         #define MSG_NOSIGNAL 0
     #endif

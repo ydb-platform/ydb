@@ -5,7 +5,7 @@
 #include <util/stream/printf.h>
 #include <util/system/mem_info.h>
 #include <util/system/yassert.h>
-#include <inttypes.h> 
+#include <inttypes.h>
 #include <cstdio>
 
 namespace {

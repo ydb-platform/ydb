@@ -122,7 +122,7 @@ JOIN_SRCS(
     generic/serialized_enum.cpp
     generic/set.cpp
     generic/singleton.cpp
-    generic/size_literals.cpp 
+    generic/size_literals.cpp
     generic/stack.cpp
     generic/store_policy.cpp
     generic/strbuf.cpp

@@ -9,7 +9,7 @@ RECURSE(
     blocking_counter
     blocking_counter/ut
     blocking_queue
-    cancellation 
+    cancellation
     chunk_queue
     chunk_queue/ut
     cron
@@ -20,7 +20,7 @@ RECURSE(
     fair_lock/ut
     future
     future/perf
-    future/subscription 
+    future/subscription
     future/ut
     hot_swap
     hot_swap/ut

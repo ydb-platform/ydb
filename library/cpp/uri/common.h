@@ -103,9 +103,9 @@ namespace NUri {
             SchemeHTTP,
             SchemeHTTPS,
             SchemeFTP,
-            SchemeFILE, 
-            SchemeWS, 
-            SchemeWSS 
+            SchemeFILE,
+            SchemeWS,
+            SchemeWSS
             // add schemes above this line
             ,
             SchemeUnknown

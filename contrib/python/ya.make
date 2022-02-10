@@ -931,7 +931,7 @@ RECURSE(
     rarfile
     ratelimit
     raven
-    razdel 
+    razdel
     rdflib
     readabilipy
     redis

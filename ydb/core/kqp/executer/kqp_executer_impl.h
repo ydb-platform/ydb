@@ -250,7 +250,7 @@ protected:
 
             LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
             bool sent = this->Send(computeActorId, channelsInfoEv.Release());
-            Y_VERIFY_DEBUG_S(sent, "Failed to send event to " << computeActorId.ToString());
+            YQL_ENSURE(sent, "Failed to send event to " << computeActorId.ToString());
         }
     }
 

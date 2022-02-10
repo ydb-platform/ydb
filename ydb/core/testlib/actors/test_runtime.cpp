@@ -244,16 +244,16 @@ namespace NActors {
     }
 
     void TTestActorRuntime::InitNodeImpl(TNodeDataBase* node, size_t) {
-        node->LogSettings->Append(
-            NActorsServices::EServiceCommon_MIN,
-            NActorsServices::EServiceCommon_MAX,
-            NActorsServices::EServiceCommon_Name
-        );
-        node->LogSettings->Append(
-            NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            NKikimrServices::EServiceKikimr_Name
-        );
+        node->LogSettings->Append( 
+            NActorsServices::EServiceCommon_MIN, 
+            NActorsServices::EServiceCommon_MAX, 
+            NActorsServices::EServiceCommon_Name 
+        ); 
+        node->LogSettings->Append( 
+            NKikimrServices::EServiceKikimr_MIN, 
+            NKikimrServices::EServiceKikimr_MAX, 
+            NKikimrServices::EServiceKikimr_Name 
+        ); 
         // turn off some noisy components
         TString explanation;
         node->LogSettings->SetLevel(NLog::PRI_CRIT, NKikimrServices::BS_PROXY_DISCOVER, explanation);

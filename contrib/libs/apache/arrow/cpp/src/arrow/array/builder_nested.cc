@@ -123,24 +123,24 @@ Status MapBuilder::AppendNulls(int64_t length) {
   return Status::OK();
 }
 
-Status MapBuilder::AppendEmptyValue() {
-  DCHECK_EQ(item_builder_->length(), key_builder_->length());
-  RETURN_NOT_OK(AdjustStructBuilderLength());
-  RETURN_NOT_OK(list_builder_->AppendEmptyValue());
-  length_ = list_builder_->length();
-  null_count_ = list_builder_->null_count();
-  return Status::OK();
-}
-
-Status MapBuilder::AppendEmptyValues(int64_t length) {
-  DCHECK_EQ(item_builder_->length(), key_builder_->length());
-  RETURN_NOT_OK(AdjustStructBuilderLength());
-  RETURN_NOT_OK(list_builder_->AppendEmptyValues(length));
-  length_ = list_builder_->length();
-  null_count_ = list_builder_->null_count();
-  return Status::OK();
-}
-
+Status MapBuilder::AppendEmptyValue() { 
+  DCHECK_EQ(item_builder_->length(), key_builder_->length()); 
+  RETURN_NOT_OK(AdjustStructBuilderLength()); 
+  RETURN_NOT_OK(list_builder_->AppendEmptyValue()); 
+  length_ = list_builder_->length(); 
+  null_count_ = list_builder_->null_count(); 
+  return Status::OK(); 
+} 
+ 
+Status MapBuilder::AppendEmptyValues(int64_t length) { 
+  DCHECK_EQ(item_builder_->length(), key_builder_->length()); 
+  RETURN_NOT_OK(AdjustStructBuilderLength()); 
+  RETURN_NOT_OK(list_builder_->AppendEmptyValues(length)); 
+  length_ = list_builder_->length(); 
+  null_count_ = list_builder_->null_count(); 
+  return Status::OK(); 
+} 
+ 
 Status MapBuilder::AdjustStructBuilderLength() {
   // If key/item builders have been appended, adjust struct builder length
   // to match. Struct and key are non-nullable, append all valid values.
@@ -213,18 +213,18 @@ Status FixedSizeListBuilder::ValidateOverflow(int64_t new_elements) {
   return Status::OK();
 }
 
-Status FixedSizeListBuilder::AppendEmptyValue() {
-  RETURN_NOT_OK(Reserve(1));
-  UnsafeAppendToBitmap(true);
-  return value_builder_->AppendEmptyValues(list_size_);
-}
-
-Status FixedSizeListBuilder::AppendEmptyValues(int64_t length) {
-  RETURN_NOT_OK(Reserve(length));
-  UnsafeAppendToBitmap(length, true);
-  return value_builder_->AppendEmptyValues(list_size_ * length);
-}
-
+Status FixedSizeListBuilder::AppendEmptyValue() { 
+  RETURN_NOT_OK(Reserve(1)); 
+  UnsafeAppendToBitmap(true); 
+  return value_builder_->AppendEmptyValues(list_size_); 
+} 
+ 
+Status FixedSizeListBuilder::AppendEmptyValues(int64_t length) { 
+  RETURN_NOT_OK(Reserve(length)); 
+  UnsafeAppendToBitmap(length, true); 
+  return value_builder_->AppendEmptyValues(list_size_ * length); 
+} 
+ 
 Status FixedSizeListBuilder::Resize(int64_t capacity) {
   RETURN_NOT_OK(CheckCapacity(capacity));
   return ArrayBuilder::Resize(capacity);

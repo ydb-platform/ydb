@@ -38,7 +38,7 @@ TString FormatYearAnd(string_view fmt, CivilSecond cs) {
   const CivilSecond ncs(NormalizeYear(cs.year()), cs.month(), cs.day(),
                         cs.hour(), cs.minute(), cs.second());
   const TimeZone utc = UTCTimeZone();
-  return StrCat(cs.year(), FormatTime(fmt, FromCivil(ncs, utc), utc));
+  return StrCat(cs.year(), FormatTime(fmt, FromCivil(ncs, utc), utc)); 
 }
 
 template <typename CivilT>

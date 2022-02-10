@@ -36,9 +36,9 @@ public:
   StringView(const char *Str) : First(Str), Last(Str + std::strlen(Str)) {}
   StringView() : First(nullptr), Last(nullptr) {}
 
-  StringView substr(size_t Pos, size_t Len = npos) const {
-    assert(Pos <= size());
-    return StringView(begin() + Pos, std::min(Len, size() - Pos));
+  StringView substr(size_t Pos, size_t Len = npos) const { 
+    assert(Pos <= size()); 
+    return StringView(begin() + Pos, std::min(Len, size() - Pos)); 
   }
 
   size_t find(char C, size_t From = 0) const {

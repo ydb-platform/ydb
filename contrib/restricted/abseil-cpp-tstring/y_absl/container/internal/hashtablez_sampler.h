@@ -47,7 +47,7 @@
 #include "y_absl/base/internal/per_thread_tls.h"
 #include "y_absl/base/optimization.h"
 #include "y_absl/container/internal/have_sse.h"
-#include "y_absl/profiling/internal/sample_recorder.h"
+#include "y_absl/profiling/internal/sample_recorder.h" 
 #include "y_absl/synchronization/mutex.h"
 #include "y_absl/utility/utility.h"
 
@@ -58,7 +58,7 @@ namespace container_internal {
 // Stores information about a sampled hashtable.  All mutations to this *must*
 // be made through `Record*` functions below.  All reads from this *must* only
 // occur in the callback to `HashtablezSampler::Iterate`.
-struct HashtablezInfo : public profiling_internal::Sample<HashtablezInfo> {
+struct HashtablezInfo : public profiling_internal::Sample<HashtablezInfo> { 
   // Constructs the object but does not fill in any fields.
   HashtablezInfo();
   ~HashtablezInfo();
@@ -80,7 +80,7 @@ struct HashtablezInfo : public profiling_internal::Sample<HashtablezInfo> {
   std::atomic<size_t> hashes_bitwise_or;
   std::atomic<size_t> hashes_bitwise_and;
   std::atomic<size_t> hashes_bitwise_xor;
-  std::atomic<size_t> max_reserve;
+  std::atomic<size_t> max_reserve; 
 
   // All of the fields below are set by `PrepareForSampling`, they must not be
   // mutated in `Record*` functions.  They are logically `const` in that sense.
@@ -91,7 +91,7 @@ struct HashtablezInfo : public profiling_internal::Sample<HashtablezInfo> {
   y_absl::Time create_time;
   int32_t depth;
   void* stack[kMaxStackDepth];
-  size_t inline_element_size;
+  size_t inline_element_size; 
 };
 
 inline void RecordRehashSlow(HashtablezInfo* info, size_t total_probe_length) {
@@ -109,18 +109,18 @@ inline void RecordRehashSlow(HashtablezInfo* info, size_t total_probe_length) {
       std::memory_order_relaxed);
 }
 
-inline void RecordReservationSlow(HashtablezInfo* info,
-                                  size_t target_capacity) {
-  info->max_reserve.store(
-      (std::max)(info->max_reserve.load(std::memory_order_relaxed),
-                 target_capacity),
-      std::memory_order_relaxed);
-}
-
-inline void RecordClearedReservationSlow(HashtablezInfo* info) {
-  info->max_reserve.store(0, std::memory_order_relaxed);
-}
-
+inline void RecordReservationSlow(HashtablezInfo* info, 
+                                  size_t target_capacity) { 
+  info->max_reserve.store( 
+      (std::max)(info->max_reserve.load(std::memory_order_relaxed), 
+                 target_capacity), 
+      std::memory_order_relaxed); 
+} 
+ 
+inline void RecordClearedReservationSlow(HashtablezInfo* info) { 
+  info->max_reserve.store(0, std::memory_order_relaxed); 
+} 
+ 
 inline void RecordStorageChangedSlow(HashtablezInfo* info, size_t size,
                                      size_t capacity) {
   info->size.store(size, std::memory_order_relaxed);
@@ -144,7 +144,7 @@ inline void RecordEraseSlow(HashtablezInfo* info) {
       std::memory_order_relaxed);
 }
 
-HashtablezInfo* SampleSlow(int64_t* next_sample, size_t inline_element_size);
+HashtablezInfo* SampleSlow(int64_t* next_sample, size_t inline_element_size); 
 void UnsampleSlow(HashtablezInfo* info);
 
 #if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
@@ -184,16 +184,16 @@ class HashtablezInfoHandle {
     RecordRehashSlow(info_, total_probe_length);
   }
 
-  inline void RecordReservation(size_t target_capacity) {
-    if (ABSL_PREDICT_TRUE(info_ == nullptr)) return;
-    RecordReservationSlow(info_, target_capacity);
-  }
-
-  inline void RecordClearedReservation() {
-    if (ABSL_PREDICT_TRUE(info_ == nullptr)) return;
-    RecordClearedReservationSlow(info_);
-  }
-
+  inline void RecordReservation(size_t target_capacity) { 
+    if (ABSL_PREDICT_TRUE(info_ == nullptr)) return; 
+    RecordReservationSlow(info_, target_capacity); 
+  } 
+ 
+  inline void RecordClearedReservation() { 
+    if (ABSL_PREDICT_TRUE(info_ == nullptr)) return; 
+    RecordClearedReservationSlow(info_); 
+  } 
+ 
   inline void RecordInsert(size_t hash, size_t distance_from_desired) {
     if (ABSL_PREDICT_TRUE(info_ == nullptr)) return;
     RecordInsertSlow(info_, hash, distance_from_desired);
@@ -223,8 +223,8 @@ class HashtablezInfoHandle {
 
   inline void RecordStorageChanged(size_t /*size*/, size_t /*capacity*/) {}
   inline void RecordRehash(size_t /*total_probe_length*/) {}
-  inline void RecordReservation(size_t /*target_capacity*/) {}
-  inline void RecordClearedReservation() {}
+  inline void RecordReservation(size_t /*target_capacity*/) {} 
+  inline void RecordClearedReservation() {} 
   inline void RecordInsert(size_t /*hash*/, size_t /*distance_from_desired*/) {}
   inline void RecordErase() {}
 
@@ -239,24 +239,24 @@ extern ABSL_PER_THREAD_TLS_KEYWORD int64_t global_next_sample;
 
 // Returns an RAII sampling handle that manages registration and unregistation
 // with the global sampler.
-inline HashtablezInfoHandle Sample(
-    size_t inline_element_size ABSL_ATTRIBUTE_UNUSED) {
+inline HashtablezInfoHandle Sample( 
+    size_t inline_element_size ABSL_ATTRIBUTE_UNUSED) { 
 #if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
   if (ABSL_PREDICT_TRUE(--global_next_sample > 0)) {
     return HashtablezInfoHandle(nullptr);
   }
-  return HashtablezInfoHandle(
-      SampleSlow(&global_next_sample, inline_element_size));
+  return HashtablezInfoHandle( 
+      SampleSlow(&global_next_sample, inline_element_size)); 
 #else
   return HashtablezInfoHandle(nullptr);
 #endif  // !ABSL_PER_THREAD_TLS
 }
 
-using HashtablezSampler =
-    ::y_absl::profiling_internal::SampleRecorder<HashtablezInfo>;
+using HashtablezSampler = 
+    ::y_absl::profiling_internal::SampleRecorder<HashtablezInfo>; 
 
-// Returns a global Sampler.
-HashtablezSampler& GlobalHashtablezSampler();
+// Returns a global Sampler. 
+HashtablezSampler& GlobalHashtablezSampler(); 
 
 // Enables or disables sampling for Swiss tables.
 void SetHashtablezEnabled(bool enabled);

@@ -2,15 +2,15 @@
 
 #include <util/system/yassert.h>
 
-#include <library/cpp/testing/common/probe.h>
-
+#include <library/cpp/testing/common/probe.h> 
+ 
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
-namespace testing {
-    using NTesting::TProbe;
-    using NTesting::TProbeState;
-    using NTesting::TCoercibleToProbe;
+namespace testing { 
+    using NTesting::TProbe; 
+    using NTesting::TProbeState; 
+    using NTesting::TCoercibleToProbe; 
 
     // A helper functor which extracts from probe-like objectss their state.
     struct TProbableTraits {
@@ -43,13 +43,13 @@ namespace testing {
 
     MATCHER(IsAlive, "is alive") {
         Y_UNUSED(result_listener);
-        const auto& state = TProbableTraits::ExtractState(arg);
+        const auto& state = TProbableTraits::ExtractState(arg); 
         return state.Destructors < state.Constructors + state.CopyConstructors + state.CopyAssignments;
     }
 
     MATCHER(IsDead, "is dead") {
         Y_UNUSED(result_listener);
-        const auto& state = TProbableTraits::ExtractState(arg);
+        const auto& state = TProbableTraits::ExtractState(arg); 
         return state.Destructors == state.Constructors + state.CopyConstructors + state.CopyAssignments;
     }
 
@@ -57,25 +57,25 @@ namespace testing {
         PrintToString(copyCount) + " copy constructors and " + \
         PrintToString(moveCount) + " move constructors were called") {
         Y_UNUSED(result_listener);
-        const auto& state = TProbableTraits::ExtractState(arg);
+        const auto& state = TProbableTraits::ExtractState(arg); 
         return state.CopyConstructors == copyCount && state.MoveConstructors == moveCount;
     }
 
     MATCHER(NoCopies, "no copies were made") {
         Y_UNUSED(result_listener);
-        const auto& state = TProbableTraits::ExtractState(arg);
+        const auto& state = TProbableTraits::ExtractState(arg); 
         return 0 == state.CopyConstructors && 0 == state.CopyAssignments;
     }
 
     MATCHER(NoMoves, "no moves were made") {
         Y_UNUSED(result_listener);
-        const auto& state = TProbableTraits::ExtractState(arg);
+        const auto& state = TProbableTraits::ExtractState(arg); 
         return 0 == state.MoveConstructors && 0 == state.MoveAssignments;
     }
 
     MATCHER(NoAssignments, "no assignments were made") {
         Y_UNUSED(result_listener);
-        const auto& state = TProbableTraits::ExtractState(arg);
+        const auto& state = TProbableTraits::ExtractState(arg); 
         return 0 == state.CopyAssignments && 0 == state.MoveAssignments;
     }
 }

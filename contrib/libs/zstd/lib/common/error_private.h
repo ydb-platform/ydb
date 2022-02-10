@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Yann Collet, Facebook, Inc.
+ * Copyright (c) Yann Collet, Facebook, Inc. 
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -21,10 +21,10 @@ extern "C" {
 /* ****************************************
 *  Dependencies
 ******************************************/
-#include "../zstd_errors.h"  /* enum list */
+#include "../zstd_errors.h"  /* enum list */ 
 #include "compiler.h"
 #include "debug.h"
-#include "zstd_deps.h"       /* size_t */
+#include "zstd_deps.h"       /* size_t */ 
 
 
 /* ****************************************

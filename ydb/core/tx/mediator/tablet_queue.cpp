@@ -119,7 +119,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             evx.Record.SetBucket(HashBucket);
             evx.Record.SetTimeBarrier(CommitedStep);
             TAllocChunkSerializer serializer;
-            const bool success = evx.SerializeToArcadiaStream(&serializer);
+            const bool success = evx.SerializeToArcadiaStream(&serializer); 
             Y_VERIFY(success);
             TIntrusivePtr<TEventSerializedData> data = serializer.Release(evx.IsExtendedFormat());
 

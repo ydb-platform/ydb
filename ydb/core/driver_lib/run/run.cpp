@@ -958,16 +958,16 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         logConfig.GetDefaultSamplingRate(),
         logConfig.GetTimeThresholdMs()));
 
-    LogSettings->Append(
-        NActorsServices::EServiceCommon_MIN,
-        NActorsServices::EServiceCommon_MAX,
-        NActorsServices::EServiceCommon_Name
-    );
-    LogSettings->Append(
-        NKikimrServices::EServiceKikimr_MIN,
-        NKikimrServices::EServiceKikimr_MAX,
-        NKikimrServices::EServiceKikimr_Name
-    );
+    LogSettings->Append( 
+        NActorsServices::EServiceCommon_MIN, 
+        NActorsServices::EServiceCommon_MAX, 
+        NActorsServices::EServiceCommon_Name 
+    ); 
+    LogSettings->Append( 
+        NKikimrServices::EServiceKikimr_MIN, 
+        NKikimrServices::EServiceKikimr_MAX, 
+        NKikimrServices::EServiceKikimr_Name 
+    ); 
 
     LogSettings->ClusterName = logConfig.HasClusterName() ? logConfig.GetClusterName() : "";
 

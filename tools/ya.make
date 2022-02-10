@@ -9,7 +9,7 @@ RECURSE(
     blender
     bmdump
     bstr
-    c++filt
+    c++filt 
     calendar_extractor
     check_formula_md5
     check_json

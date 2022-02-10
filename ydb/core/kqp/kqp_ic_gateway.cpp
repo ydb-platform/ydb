@@ -748,7 +748,7 @@ public:
                 return;
             }
 
-            case TEvTxUserProxy::TResultStatus::ExecError:
+            case TEvTxUserProxy::TResultStatus::ExecError: 
                 switch (response.GetSchemeShardStatus()) {
                     case NKikimrScheme::EStatus::StatusMultipleModifications: {
                         Promise.SetValue(ResultFromIssues<TResult>(TIssuesIds::KIKIMR_MULTIPLE_SCHEME_MODIFICATIONS,
@@ -766,7 +766,7 @@ public:
                     default:
                         break;
                 }
-                break;
+                break; 
 
             default:
                 break;

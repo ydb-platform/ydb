@@ -16,18 +16,18 @@ CFLAGS(
     -DBOOST_CONTEXT_SOURCE
 )
 
-# https://www.boost.org/doc/libs/1_74_0/libs/context/doc/html/context/stack/sanitizers.html
-IF (SANITIZER_TYPE == "address")
-    CFLAGS(
-        GLOBAL -DBOOST_USE_UCONTEXT
-        GLOBAL -DBOOST_USE_ASAN
-    )
-    SRCS(
-        src/continuation.cpp
-        src/fiber.cpp
-    )
-ENDIF()
-
+# https://www.boost.org/doc/libs/1_74_0/libs/context/doc/html/context/stack/sanitizers.html 
+IF (SANITIZER_TYPE == "address") 
+    CFLAGS( 
+        GLOBAL -DBOOST_USE_UCONTEXT 
+        GLOBAL -DBOOST_USE_ASAN 
+    ) 
+    SRCS( 
+        src/continuation.cpp 
+        src/fiber.cpp 
+    ) 
+ENDIF() 
+ 
 IF (OS_WINDOWS)
     IF (ARCH_X86_64 OR ARCH_I386)
         MASMFLAGS('-DBOOST_CONTEXT_EXPORT= /safeseh')

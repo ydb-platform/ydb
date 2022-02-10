@@ -18,7 +18,7 @@
 #include <memory>
 
 #include "absl/container/inlined_vector.h"
-#include "absl/strings/internal/cord_rep_btree.h"
+#include "absl/strings/internal/cord_rep_btree.h" 
 #include "absl/strings/internal/cord_rep_flat.h"
 #include "absl/strings/internal/cord_rep_ring.h"
 
@@ -26,12 +26,12 @@ namespace absl {
 ABSL_NAMESPACE_BEGIN
 namespace cord_internal {
 
-ABSL_CONST_INIT std::atomic<bool> cord_btree_enabled(kCordEnableBtreeDefault);
+ABSL_CONST_INIT std::atomic<bool> cord_btree_enabled(kCordEnableBtreeDefault); 
 ABSL_CONST_INIT std::atomic<bool> cord_ring_buffer_enabled(
     kCordEnableRingBufferDefault);
 ABSL_CONST_INIT std::atomic<bool> shallow_subcords_enabled(
     kCordShallowSubcordsDefault);
-ABSL_CONST_INIT std::atomic<bool> cord_btree_exhaustive_validation(false);
+ABSL_CONST_INIT std::atomic<bool> cord_btree_exhaustive_validation(false); 
 
 void CordRep::Destroy(CordRep* rep) {
   assert(rep != nullptr);
@@ -52,9 +52,9 @@ void CordRep::Destroy(CordRep* rep) {
         rep = left;
         continue;
       }
-    } else if (rep->tag == BTREE) {
-      CordRepBtree::Destroy(rep->btree());
-      rep = nullptr;
+    } else if (rep->tag == BTREE) { 
+      CordRepBtree::Destroy(rep->btree()); 
+      rep = nullptr; 
     } else if (rep->tag == RING) {
       CordRepRing::Destroy(rep->ring());
       rep = nullptr;

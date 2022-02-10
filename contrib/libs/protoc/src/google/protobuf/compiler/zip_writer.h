@@ -30,11 +30,11 @@
 
 // Author: kenton@google.com (Kenton Varda)
 
-#include <cstdint>
+#include <cstdint> 
 #include <vector>
-
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/io/zero_copy_stream.h>
+ 
+#include <google/protobuf/stubs/common.h> 
+#include <google/protobuf/io/zero_copy_stream.h> 
 
 namespace google {
 namespace protobuf {
@@ -45,15 +45,15 @@ class ZipWriter {
   ZipWriter(io::ZeroCopyOutputStream* raw_output);
   ~ZipWriter();
 
-  bool Write(const TProtoStringType& filename, const TProtoStringType& contents);
+  bool Write(const TProtoStringType& filename, const TProtoStringType& contents); 
   bool WriteDirectory();
 
  private:
   struct FileInfo {
-    TProtoStringType name;
-    uint32_t offset;
-    uint32_t size;
-    uint32_t crc32;
+    TProtoStringType name; 
+    uint32_t offset; 
+    uint32_t size; 
+    uint32_t crc32; 
   };
 
   io::ZeroCopyOutputStream* raw_output_;

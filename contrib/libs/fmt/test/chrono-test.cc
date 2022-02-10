@@ -13,8 +13,8 @@
 
 #include <iomanip>
 
-#include "gtest-extra.h"
-
+#include "gtest-extra.h" 
+ 
 std::tm make_tm() {
   auto time = std::tm();
   time.tm_mday = 1;
@@ -95,17 +95,17 @@ TEST(TimeTest, GMTime) {
   EXPECT_TRUE(EqualTime(tm, fmt::gmtime(t)));
 }
 
-TEST(TimeTest, TimePoint) {
-  std::chrono::system_clock::time_point point = std::chrono::system_clock::now();
-
-  std::time_t t = std::chrono::system_clock::to_time_t(point);
-  std::tm tm = *std::localtime(&t);
-  char strftime_output[256];
-  std::strftime(strftime_output, sizeof(strftime_output), "It is %Y-%m-%d %H:%M:%S", &tm);
-
-  EXPECT_EQ(strftime_output, fmt::format("It is {:%Y-%m-%d %H:%M:%S}", point));
-}
-
+TEST(TimeTest, TimePoint) { 
+  std::chrono::system_clock::time_point point = std::chrono::system_clock::now(); 
+ 
+  std::time_t t = std::chrono::system_clock::to_time_t(point); 
+  std::tm tm = *std::localtime(&t); 
+  char strftime_output[256]; 
+  std::strftime(strftime_output, sizeof(strftime_output), "It is %Y-%m-%d %H:%M:%S", &tm); 
+ 
+  EXPECT_EQ(strftime_output, fmt::format("It is {:%Y-%m-%d %H:%M:%S}", point)); 
+} 
+ 
 #define EXPECT_TIME(spec, time, duration)                 \
   {                                                       \
     std::locale loc("ja_JP.utf8");                        \

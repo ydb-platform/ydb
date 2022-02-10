@@ -46,7 +46,7 @@ namespace NPage {
                 bool Null;
                 ui8 Flg;
             };
-        } Y_PACKED;
+        } Y_PACKED; 
 
         struct TVersion {
             ui64 Step_;
@@ -60,7 +60,7 @@ namespace NPage {
                 Step_ = v.Step;
                 TxId_ = v.TxId;
             }
-        } Y_PACKED;
+        } Y_PACKED; 
 
         struct TDelta {
             ui64 TxId_;
@@ -141,11 +141,11 @@ namespace NPage {
                     return nullptr;
                 }
             }
-        } Y_PACKED;
+        } Y_PACKED; 
 
         struct TExtra {
             TRowId BaseRow;
-        } Y_PACKED;
+        } Y_PACKED; 
 
 #pragma pack(pop)
 

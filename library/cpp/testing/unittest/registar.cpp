@@ -81,20 +81,20 @@ struct TDiffColorizer {
     {
     }
 
-    TString Special(TStringBuf str) const {
-        return ToString(Colors.YellowColor()) + str;
+    TString Special(TStringBuf str) const { 
+        return ToString(Colors.YellowColor()) + str; 
     }
 
-    TString Common(TArrayRef<const char> str) const {
-        return ToString(Colors.OldColor()) + TString(str.begin(), str.end());
+    TString Common(TArrayRef<const char> str) const { 
+        return ToString(Colors.OldColor()) + TString(str.begin(), str.end()); 
     }
 
-    TString Left(TArrayRef<const char> str) const {
-        return ToString(GetLeftColor()) + TString(str.begin(), str.end());
+    TString Left(TArrayRef<const char> str) const { 
+        return ToString(GetLeftColor()) + TString(str.begin(), str.end()); 
     }
 
-    TString Right(TArrayRef<const char> str) const {
-        return ToString(GetRightColor()) + TString(str.begin(), str.end());
+    TString Right(TArrayRef<const char> str) const { 
+        return ToString(GetRightColor()) + TString(str.begin(), str.end()); 
     }
 
     TStringBuf GetLeftColor() const {
@@ -114,21 +114,21 @@ struct TTraceDiffFormatter {
     {
     }
 
-    TString Special(TStringBuf str) const {
-        return ToString(str);
+    TString Special(TStringBuf str) const { 
+        return ToString(str); 
     }
 
-    TString Common(TArrayRef<const char> str) const {
+    TString Common(TArrayRef<const char> str) const { 
         return TString(str.begin(), str.end());
     }
 
-    TString Left(TArrayRef<const char> str) const {
+    TString Left(TArrayRef<const char> str) const { 
         return NUnitTest::GetFormatTag("good") +
                TString(str.begin(), str.end()) +
                NUnitTest::GetResetTag();
     }
 
-    TString Right(TArrayRef<const char> str) const {
+    TString Right(TArrayRef<const char> str) const { 
         return NUnitTest::GetFormatTag("bad") +
                TString(str.begin(), str.end()) +
                NUnitTest::GetResetTag();

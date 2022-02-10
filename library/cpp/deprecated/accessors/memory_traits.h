@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/array_ref.h>
+#include <util/generic/array_ref.h> 
 #include <util/memory/blob.h>
 #include <util/memory/tempbuf.h>
 #include <util/generic/buffer.h>
@@ -133,14 +133,14 @@ struct TMemoryTraits<TString>: public TElementDependentMemoryTraits<char> {
 };
 
 template <>
-struct TMemoryTraits<TUtf16String>: public TElementDependentMemoryTraits<wchar16> {
+struct TMemoryTraits<TUtf16String>: public TElementDependentMemoryTraits<wchar16> { 
     enum {
         OwnsMemory = true
     };
 };
 
 template <typename T>
-struct TMemoryTraits<TArrayRef<T>>: public TElementDependentMemoryTraits<T> {
+struct TMemoryTraits<TArrayRef<T>>: public TElementDependentMemoryTraits<T> { 
     enum {
         OwnsMemory = false
     };
@@ -161,7 +161,7 @@ struct TMemoryTraits<TStringBuf>: public TElementDependentMemoryTraits<char> {
 };
 
 template <>
-struct TMemoryTraits<TWtringBuf>: public TElementDependentMemoryTraits<wchar16> {
+struct TMemoryTraits<TWtringBuf>: public TElementDependentMemoryTraits<wchar16> { 
     enum {
         OwnsMemory = false
     };

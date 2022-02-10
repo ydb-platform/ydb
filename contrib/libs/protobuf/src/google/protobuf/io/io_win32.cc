@@ -29,28 +29,28 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // Author: laszlocsomor@google.com (Laszlo Csomor)
-//  Based on original Protocol Buffers design by
-//  Sanjay Ghemawat, Jeff Dean, and others.
-
-// Implementation for long-path-aware open/mkdir/access/etc. on Windows, as well
-// as for the supporting utility functions.
+//  Based on original Protocol Buffers design by 
+//  Sanjay Ghemawat, Jeff Dean, and others. 
+ 
+// Implementation for long-path-aware open/mkdir/access/etc. on Windows, as well 
+// as for the supporting utility functions. 
 //
 // These functions convert the input path to an absolute Windows path
-// with "\\?\" prefix, then pass that to _wopen/_wmkdir/_waccess/etc.
+// with "\\?\" prefix, then pass that to _wopen/_wmkdir/_waccess/etc. 
 // (declared in <io.h>) respectively. This allows working with files/directories
 // whose paths are longer than MAX_PATH (260 chars).
 //
 // This file is only used on Windows, it's empty on other platforms.
 
-#if defined(_WIN32) && !defined(_XBOX_ONE)
+#if defined(_WIN32) && !defined(_XBOX_ONE) 
 
 // Comment this out to fall back to using the ANSI versions (open, mkdir, ...)
 // instead of the Unicode ones (_wopen, _wmkdir, ...). Doing so can be useful to
 // debug failing tests if that's caused by the long path support.
 #define SUPPORT_LONGPATHS
 
-#include <google/protobuf/io/io_win32.h>
-
+#include <google/protobuf/io/io_win32.h> 
+ 
 #include <ctype.h>
 #include <direct.h>
 #include <errno.h>
@@ -59,25 +59,25 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <wctype.h>
-
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN 1
-#endif
-
+ 
+#ifndef WIN32_LEAN_AND_MEAN 
+#define WIN32_LEAN_AND_MEAN 1 
+#endif 
+ 
 #include <windows.h>
 
 #include <memory>
 #include <sstream>
-#include <string>
+#include <string> 
 #include <vector>
 
 namespace google {
 namespace protobuf {
-namespace io {
+namespace io { 
 namespace win32 {
 namespace {
 
-using string = TProtoStringType;
+using string = TProtoStringType; 
 using std::wstring;
 
 template <typename char_type>
@@ -95,11 +95,11 @@ struct CharTraits<wchar_t> {
   static bool is_alpha(wchar_t ch) { return iswalpha(ch); }
 };
 
-template <typename char_type>
-bool null_or_empty(const char_type* s) {
-  return s == nullptr || *s == 0;
-}
-
+template <typename char_type> 
+bool null_or_empty(const char_type* s) { 
+  return s == nullptr || *s == 0; 
+} 
+ 
 // Returns true if the path starts with a drive letter, e.g. "c:".
 // Note that this won't check for the "\" after the drive letter, so this also
 // returns true for "c:foo" (which is "c:\${PWD}\foo").
@@ -132,7 +132,7 @@ bool is_drive_relative(const char_type* path) {
   return has_drive_letter(path) && (path[2] == 0 || !is_separator(path[2]));
 }
 
-wstring join_paths(const wstring& path1, const wstring& path2) {
+wstring join_paths(const wstring& path1, const wstring& path2) { 
   if (path1.empty() || is_path_absolute(path2.c_str()) ||
       has_longpath_prefix(path2.c_str())) {
     return path2;
@@ -141,29 +141,29 @@ wstring join_paths(const wstring& path1, const wstring& path2) {
     return path1;
   }
 
-  if (is_separator(path1[path1.size() - 1])) {
-    return is_separator(path2[0]) ? (path1 + path2.substr(1))
+  if (is_separator(path1[path1.size() - 1])) { 
+    return is_separator(path2[0]) ? (path1 + path2.substr(1)) 
                                        : (path1 + path2);
   } else {
-    return is_separator(path2[0]) ? (path1 + path2)
-                                       : (path1 + L'\\' + path2);
+    return is_separator(path2[0]) ? (path1 + path2) 
+                                       : (path1 + L'\\' + path2); 
   }
 }
 
-wstring normalize(wstring path) {
+wstring normalize(wstring path) { 
   if (has_longpath_prefix(path.c_str())) {
     path = path.substr(4);
   }
 
-  static const wstring dot(L".");
-  static const wstring dotdot(L"..");
-  const WCHAR* p = path.c_str();
+  static const wstring dot(L"."); 
+  static const wstring dotdot(L".."); 
+  const WCHAR* p = path.c_str(); 
 
-  std::vector<wstring> segments;
+  std::vector<wstring> segments; 
   int segment_start = -1;
   // Find the path segments in `path` (separated by "/").
   for (int i = 0;; ++i) {
-    if (!is_separator(p[i]) && p[i] != L'\0') {
+    if (!is_separator(p[i]) && p[i] != L'\0') { 
       // The current character does not end a segment, so start one unless it's
       // already started.
       if (segment_start < 0) {
@@ -172,7 +172,7 @@ wstring normalize(wstring path) {
     } else if (segment_start >= 0 && i > segment_start) {
       // The current character is "/" or "\0", so this ends a segment.
       // Add that to `segments` if there's anything to add; handle "." and "..".
-      wstring segment(p, segment_start, i - segment_start);
+      wstring segment(p, segment_start, i - segment_start); 
       segment_start = -1;
       if (segment == dotdot) {
         if (!segments.empty() &&
@@ -183,7 +183,7 @@ wstring normalize(wstring path) {
         segments.push_back(segment);
       }
     }
-    if (p[i] == L'\0') {
+    if (p[i] == L'\0') { 
       break;
     }
   }
@@ -192,62 +192,62 @@ wstring normalize(wstring path) {
   // form of it, e.g. "c:\..").
   if (segments.size() == 1 && segments[0].size() == 2 &&
       has_drive_letter(segments[0].c_str())) {
-    return segments[0] + L'\\';
+    return segments[0] + L'\\'; 
   }
 
   // Join all segments.
   bool first = true;
-  std::wstringstream result;
-  for (int i = 0; i < segments.size(); ++i) {
+  std::wstringstream result; 
+  for (int i = 0; i < segments.size(); ++i) { 
     if (!first) {
-      result << L'\\';
+      result << L'\\'; 
     }
     first = false;
-    result << segments[i];
+    result << segments[i]; 
   }
   // Preserve trailing separator if the input contained it.
-  if (!path.empty() && is_separator(p[path.size() - 1])) {
-    result << L'\\';
+  if (!path.empty() && is_separator(p[path.size() - 1])) { 
+    result << L'\\'; 
   }
-  return result.str();
+  return result.str(); 
 }
 
-bool as_windows_path(const char* path, wstring* result) {
-  if (null_or_empty(path)) {
+bool as_windows_path(const char* path, wstring* result) { 
+  if (null_or_empty(path)) { 
     result->clear();
     return true;
   }
-  wstring wpath;
-  if (!strings::utf8_to_wcs(path, &wpath)) {
+  wstring wpath; 
+  if (!strings::utf8_to_wcs(path, &wpath)) { 
     return false;
   }
-  if (has_longpath_prefix(wpath.c_str())) {
-    *result = wpath;
-    return true;
-  }
-  if (is_separator(path[0]) || is_drive_relative(path)) {
-    return false;
-  }
+  if (has_longpath_prefix(wpath.c_str())) { 
+    *result = wpath; 
+    return true; 
+  } 
+  if (is_separator(path[0]) || is_drive_relative(path)) { 
+    return false; 
+  } 
 
-
-  if (!is_path_absolute(wpath.c_str())) {
-    int size = ::GetCurrentDirectoryW(0, nullptr);
-    if (size == 0 && GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
-      return false;
-    }
-    std::unique_ptr<WCHAR[]> wcwd(new WCHAR[size]);
-    ::GetCurrentDirectoryW(size, wcwd.get());
-    wpath = join_paths(wcwd.get(), wpath);
+ 
+  if (!is_path_absolute(wpath.c_str())) { 
+    int size = ::GetCurrentDirectoryW(0, nullptr); 
+    if (size == 0 && GetLastError() != ERROR_INSUFFICIENT_BUFFER) { 
+      return false; 
+    } 
+    std::unique_ptr<WCHAR[]> wcwd(new WCHAR[size]); 
+    ::GetCurrentDirectoryW(size, wcwd.get()); 
+    wpath = join_paths(wcwd.get(), wpath); 
   }
-  wpath = normalize(wpath);
-  if (!has_longpath_prefix(wpath.c_str())) {
+  wpath = normalize(wpath); 
+  if (!has_longpath_prefix(wpath.c_str())) { 
     // Add the "\\?\" prefix unconditionally. This way we prevent the Win32 API
     // from processing the path and "helpfully" removing trailing dots from the
     // path, for example.
     // See https://github.com/bazelbuild/bazel/issues/2935
-    wpath = wstring(L"\\\\?\\") + wpath;
+    wpath = wstring(L"\\\\?\\") + wpath; 
   }
-  *result = wpath;
+  *result = wpath; 
   return true;
 }
 
@@ -320,27 +320,27 @@ int stat(const char* path, struct _stat* buffer) {
 
 FILE* fopen(const char* path, const char* mode) {
 #ifdef SUPPORT_LONGPATHS
-  if (null_or_empty(path)) {
-    errno = EINVAL;
-    return nullptr;
-  }
+  if (null_or_empty(path)) { 
+    errno = EINVAL; 
+    return nullptr; 
+  } 
   wstring wpath;
   if (!as_windows_path(path, &wpath)) {
     errno = ENOENT;
-    return nullptr;
+    return nullptr; 
   }
-  wstring wmode;
-  if (!strings::utf8_to_wcs(mode, &wmode)) {
-    errno = EINVAL;
-    return nullptr;
-  }
-  return ::_wfopen(wpath.c_str(), wmode.c_str());
+  wstring wmode; 
+  if (!strings::utf8_to_wcs(mode, &wmode)) { 
+    errno = EINVAL; 
+    return nullptr; 
+  } 
+  return ::_wfopen(wpath.c_str(), wmode.c_str()); 
 #else
   return ::fopen(path, mode);
 #endif
 }
 
-int close(int fd) { return ::_close(fd); }
+int close(int fd) { return ::_close(fd); } 
 
 int dup(int fd) { return ::_dup(fd); }
 
@@ -356,115 +356,115 @@ int write(int fd, const void* buffer, size_t size) {
   return ::_write(fd, buffer, size);
 }
 
-wstring testonly_utf8_to_winpath(const char* path) {
+wstring testonly_utf8_to_winpath(const char* path) { 
   wstring wpath;
-  return as_windows_path(path, &wpath) ? wpath : wstring();
+  return as_windows_path(path, &wpath) ? wpath : wstring(); 
 }
 
-ExpandWildcardsResult ExpandWildcards(
-    const string& path, std::function<void(const string&)> consume) {
-  if (path.find_first_of("*?") == string::npos) {
-    // There are no wildcards in the path, we don't need to expand it.
-    consume(path);
-    return ExpandWildcardsResult::kSuccess;
-  }
-
-  wstring wpath;
-  if (!as_windows_path(path.c_str(), &wpath)) {
-    return ExpandWildcardsResult::kErrorInputPathConversion;
-  }
-
-  static const wstring kDot = L".";
-  static const wstring kDotDot = L"..";
-  WIN32_FIND_DATAW metadata;
-  HANDLE handle = ::FindFirstFileW(wpath.c_str(), &metadata);
-  if (handle == INVALID_HANDLE_VALUE) {
-    // The pattern does not match any files (or directories).
-    return ExpandWildcardsResult::kErrorNoMatchingFile;
-  }
-
-  string::size_type pos = path.find_last_of("\\/");
-  string dirname;
-  if (pos != string::npos) {
-    dirname = path.substr(0, pos + 1);
-  }
-
-  ExpandWildcardsResult matched = ExpandWildcardsResult::kErrorNoMatchingFile;
-  do {
-    // Ignore ".", "..", and directories.
-    if ((metadata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 &&
-        kDot != metadata.cFileName && kDotDot != metadata.cFileName) {
-      matched = ExpandWildcardsResult::kSuccess;
-      string filename;
-      if (!strings::wcs_to_utf8(metadata.cFileName, &filename)) {
-        return ExpandWildcardsResult::kErrorOutputPathConversion;
-      }
-
-      if (dirname.empty()) {
-        consume(filename);
-      } else {
-        consume(dirname + filename);
-      }
-    }
-  } while (::FindNextFileW(handle, &metadata));
-  FindClose(handle);
-  return matched;
-}
-
-namespace strings {
-
-bool wcs_to_mbs(const WCHAR* s, string* out, bool outUtf8) {
-  if (null_or_empty(s)) {
-    out->clear();
-    return true;
-  }
-  BOOL usedDefaultChar = FALSE;
-  SetLastError(0);
-  int size = WideCharToMultiByte(
-      outUtf8 ? CP_UTF8 : CP_ACP, 0, s, -1, nullptr, 0, nullptr,
-      outUtf8 ? nullptr : &usedDefaultChar);
-  if ((size == 0 && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-      || usedDefaultChar) {
-    return false;
-  }
-  std::unique_ptr<CHAR[]> astr(new CHAR[size]);
-  WideCharToMultiByte(
-      outUtf8 ? CP_UTF8 : CP_ACP, 0, s, -1, astr.get(), size, nullptr, nullptr);
-  out->assign(astr.get());
-  return true;
-}
-
-bool mbs_to_wcs(const char* s, wstring* out, bool inUtf8) {
-  if (null_or_empty(s)) {
-    out->clear();
-    return true;
-  }
-
-  SetLastError(0);
-  int size =
-      MultiByteToWideChar(inUtf8 ? CP_UTF8 : CP_ACP, 0, s, -1, nullptr, 0);
-  if (size == 0 && GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
-    return false;
-  }
-  std::unique_ptr<WCHAR[]> wstr(new WCHAR[size]);
-  MultiByteToWideChar(
-      inUtf8 ? CP_UTF8 : CP_ACP, 0, s, -1, wstr.get(), size + 1);
-  out->assign(wstr.get());
-  return true;
-}
-
-bool utf8_to_wcs(const char* input, wstring* out) {
-  return mbs_to_wcs(input, out, true);
-}
-
-bool wcs_to_utf8(const wchar_t* input, string* out) {
-  return wcs_to_mbs(input, out, true);
-}
-
-}  // namespace strings
+ExpandWildcardsResult ExpandWildcards( 
+    const string& path, std::function<void(const string&)> consume) { 
+  if (path.find_first_of("*?") == string::npos) { 
+    // There are no wildcards in the path, we don't need to expand it. 
+    consume(path); 
+    return ExpandWildcardsResult::kSuccess; 
+  } 
+ 
+  wstring wpath; 
+  if (!as_windows_path(path.c_str(), &wpath)) { 
+    return ExpandWildcardsResult::kErrorInputPathConversion; 
+  } 
+ 
+  static const wstring kDot = L"."; 
+  static const wstring kDotDot = L".."; 
+  WIN32_FIND_DATAW metadata; 
+  HANDLE handle = ::FindFirstFileW(wpath.c_str(), &metadata); 
+  if (handle == INVALID_HANDLE_VALUE) { 
+    // The pattern does not match any files (or directories). 
+    return ExpandWildcardsResult::kErrorNoMatchingFile; 
+  } 
+ 
+  string::size_type pos = path.find_last_of("\\/"); 
+  string dirname; 
+  if (pos != string::npos) { 
+    dirname = path.substr(0, pos + 1); 
+  } 
+ 
+  ExpandWildcardsResult matched = ExpandWildcardsResult::kErrorNoMatchingFile; 
+  do { 
+    // Ignore ".", "..", and directories. 
+    if ((metadata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 && 
+        kDot != metadata.cFileName && kDotDot != metadata.cFileName) { 
+      matched = ExpandWildcardsResult::kSuccess; 
+      string filename; 
+      if (!strings::wcs_to_utf8(metadata.cFileName, &filename)) { 
+        return ExpandWildcardsResult::kErrorOutputPathConversion; 
+      } 
+ 
+      if (dirname.empty()) { 
+        consume(filename); 
+      } else { 
+        consume(dirname + filename); 
+      } 
+    } 
+  } while (::FindNextFileW(handle, &metadata)); 
+  FindClose(handle); 
+  return matched; 
+} 
+ 
+namespace strings { 
+ 
+bool wcs_to_mbs(const WCHAR* s, string* out, bool outUtf8) { 
+  if (null_or_empty(s)) { 
+    out->clear(); 
+    return true; 
+  } 
+  BOOL usedDefaultChar = FALSE; 
+  SetLastError(0); 
+  int size = WideCharToMultiByte( 
+      outUtf8 ? CP_UTF8 : CP_ACP, 0, s, -1, nullptr, 0, nullptr, 
+      outUtf8 ? nullptr : &usedDefaultChar); 
+  if ((size == 0 && GetLastError() != ERROR_INSUFFICIENT_BUFFER) 
+      || usedDefaultChar) { 
+    return false; 
+  } 
+  std::unique_ptr<CHAR[]> astr(new CHAR[size]); 
+  WideCharToMultiByte( 
+      outUtf8 ? CP_UTF8 : CP_ACP, 0, s, -1, astr.get(), size, nullptr, nullptr); 
+  out->assign(astr.get()); 
+  return true; 
+} 
+ 
+bool mbs_to_wcs(const char* s, wstring* out, bool inUtf8) { 
+  if (null_or_empty(s)) { 
+    out->clear(); 
+    return true; 
+  } 
+ 
+  SetLastError(0); 
+  int size = 
+      MultiByteToWideChar(inUtf8 ? CP_UTF8 : CP_ACP, 0, s, -1, nullptr, 0); 
+  if (size == 0 && GetLastError() != ERROR_INSUFFICIENT_BUFFER) { 
+    return false; 
+  } 
+  std::unique_ptr<WCHAR[]> wstr(new WCHAR[size]); 
+  MultiByteToWideChar( 
+      inUtf8 ? CP_UTF8 : CP_ACP, 0, s, -1, wstr.get(), size + 1); 
+  out->assign(wstr.get()); 
+  return true; 
+} 
+ 
+bool utf8_to_wcs(const char* input, wstring* out) { 
+  return mbs_to_wcs(input, out, true); 
+} 
+ 
+bool wcs_to_utf8(const wchar_t* input, string* out) { 
+  return wcs_to_mbs(input, out, true); 
+} 
+ 
+}  // namespace strings 
 }  // namespace win32
-}  // namespace io
+}  // namespace io 
 }  // namespace protobuf
 }  // namespace google
 
-#endif  // defined(_WIN32)
+#endif  // defined(_WIN32) 

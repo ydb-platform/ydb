@@ -5,7 +5,7 @@ OWNER(
     g:kikimr
 )
 
-IF (OS_WINDOWS)
+IF (OS_WINDOWS) 
     CFLAGS(
         -DKIKIMR_DISABLE_S3_WRAPPER
     )

@@ -24,7 +24,7 @@ IF (USE_ARCADIA_PYTHON)
             library/python/symbols/uuid
         )
     ENDIF()
-    IF (MODULE_TAG == "PY2")
+    IF (MODULE_TAG == "PY2") 
         PEERDIR(
             contrib/tools/python/lib
             library/python/runtime

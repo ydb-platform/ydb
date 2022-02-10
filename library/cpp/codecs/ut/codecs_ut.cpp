@@ -1233,7 +1233,7 @@ private:
                 }
             }
 
-            codec.LearnByFreqs(TArrayRef<std::pair<char, ui64>>(freqs, Y_ARRAY_SIZE(freqs)));
+            codec.LearnByFreqs(TArrayRef<std::pair<char, ui64>>(freqs, Y_ARRAY_SIZE(freqs))); 
 
             for (ui32 i = 0; i < data.size(); ++i) {
                 outLearnByFreqs.emplace_back();

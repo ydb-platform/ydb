@@ -461,7 +461,7 @@ namespace NCodecs {
             BuildDecoder();
         }
 
-        void LearnByFreqs(const TArrayRef<std::pair<char, ui64>>& freqs) {
+        void LearnByFreqs(const TArrayRef<std::pair<char, ui64>>& freqs) { 
             TCodeTree tree;
 
             ui64 freqsArray[256];
@@ -584,7 +584,7 @@ namespace NCodecs {
         Impl->Learn(&in);
     }
 
-    void THuffmanCodec::LearnByFreqs(const TArrayRef<std::pair<char, ui64>>& freqs) {
+    void THuffmanCodec::LearnByFreqs(const TArrayRef<std::pair<char, ui64>>& freqs) { 
         Impl->LearnByFreqs(freqs);
         Trained = true;
     }

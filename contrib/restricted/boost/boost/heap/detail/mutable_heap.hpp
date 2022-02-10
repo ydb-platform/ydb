@@ -16,7 +16,7 @@
 #include <list>
 #include <utility>
 
-#include <boost/core/allocator_access.hpp>
+#include <boost/core/allocator_access.hpp> 
 #include <boost/iterator/iterator_adaptor.hpp>
 #include <boost/heap/detail/ordered_adaptor_iterator.hpp>
 
@@ -48,7 +48,7 @@ public:
 private:
     typedef std::pair<value_type, size_type> node_type;
 
-    typedef std::list<node_type, typename boost::allocator_rebind<allocator_type, node_type>::type> object_list;
+    typedef std::list<node_type, typename boost::allocator_rebind<allocator_type, node_type>::type> object_list; 
 
     typedef typename object_list::iterator list_iterator;
     typedef typename object_list::const_iterator const_list_iterator;

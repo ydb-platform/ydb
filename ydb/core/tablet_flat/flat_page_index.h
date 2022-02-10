@@ -34,7 +34,7 @@ namespace NPage {
             }
 
             bool Null;
-        } Y_PACKED;
+        } Y_PACKED; 
 
         struct TRecord : public TDataPageRecord<TRecord, TItem> {
             TRowId RowId_;
@@ -45,7 +45,7 @@ namespace NPage {
 
             inline void SetRowId(TRowId value) { RowId_ = value; }
             inline void SetPageId(TPageId value) { PageId_ = value; }
-        } Y_PACKED;
+        } Y_PACKED; 
 
 #pragma pack(pop)
 

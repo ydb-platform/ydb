@@ -78,26 +78,26 @@ struct StringHash {
   }
 };
 
-struct StringEq {
-  using is_transparent = void;
-  bool operator()(y_absl::string_view lhs, y_absl::string_view rhs) const {
-    return lhs == rhs;
-  }
-  bool operator()(const y_absl::Cord& lhs, const y_absl::Cord& rhs) const {
-    return lhs == rhs;
-  }
-  bool operator()(const y_absl::Cord& lhs, y_absl::string_view rhs) const {
-    return lhs == rhs;
-  }
-  bool operator()(y_absl::string_view lhs, const y_absl::Cord& rhs) const {
-    return lhs == rhs;
-  }
-};
-
+struct StringEq { 
+  using is_transparent = void; 
+  bool operator()(y_absl::string_view lhs, y_absl::string_view rhs) const { 
+    return lhs == rhs; 
+  } 
+  bool operator()(const y_absl::Cord& lhs, const y_absl::Cord& rhs) const { 
+    return lhs == rhs; 
+  } 
+  bool operator()(const y_absl::Cord& lhs, y_absl::string_view rhs) const { 
+    return lhs == rhs; 
+  } 
+  bool operator()(y_absl::string_view lhs, const y_absl::Cord& rhs) const { 
+    return lhs == rhs; 
+  } 
+}; 
+ 
 // Supports heterogeneous lookup for string-like elements.
 struct StringHashEq {
   using Hash = StringHash;
-  using Eq = StringEq;
+  using Eq = StringEq; 
 };
 
 template <>

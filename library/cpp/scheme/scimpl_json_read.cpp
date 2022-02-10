@@ -176,7 +176,7 @@ namespace NSc {
 
         void OnError(size_t off, TStringBuf reason) override {
             Error.Offset = off;
-            Error.Reason = reason;
+            Error.Reason = reason; 
         }
     };
 

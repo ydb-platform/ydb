@@ -7,11 +7,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html. 
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -153,10 +153,10 @@ CURLcode Curl_resolver_wait_resolv(struct connectdata *conn,
  * Each resolver backend must of course make sure to return data in the
  * correct format to comply with this.
  */
-struct Curl_addrinfo *Curl_resolver_getaddrinfo(struct connectdata *conn,
-                                                const char *hostname,
-                                                int port,
-                                                int *waitp);
+struct Curl_addrinfo *Curl_resolver_getaddrinfo(struct connectdata *conn, 
+                                                const char *hostname, 
+                                                int port, 
+                                                int *waitp); 
 
 #ifndef CURLRES_ASYNCH
 /* convert these functions if an asynch resolver isn't used */

@@ -28,8 +28,8 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
         case EVolatileState::Disconnected:
         case EVolatileState::Connecting:
             RegisterInDomains();
-            break;
-
+            break; 
+ 
         default:
             break;
         };
@@ -40,8 +40,8 @@ void TNodeInfo::ChangeVolatileState(EVolatileState state) {
         case EVolatileState::Connected:
         case EVolatileState::Disconnecting:
             DeregisterInDomains();
-            break;
-
+            break; 
+ 
         default:
             break;
         };

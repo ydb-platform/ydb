@@ -4,13 +4,13 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-OWNER(g:cpp-contrib)
+OWNER(g:cpp-contrib) 
 
 LICENSE(Apache-2.0)
 
 PEERDIR(
-    contrib/libs/protobuf
-    contrib/libs/protoc
+    contrib/libs/protobuf 
+    contrib/libs/protoc 
 )
 
 ADDINCL(

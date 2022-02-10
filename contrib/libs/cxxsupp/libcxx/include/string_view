@@ -277,9 +277,9 @@ public:
     basic_string_view& operator=(const basic_string_view&) _NOEXCEPT = default;
 
     _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY
-    basic_string_view(nullptr_t, size_t) = delete;
-
-    _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY
+    basic_string_view(nullptr_t, size_t) = delete; 
+ 
+    _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY 
     basic_string_view(const _CharT* __s, size_type __len) _NOEXCEPT
         : __data(__s), __size(__len)
     {
@@ -299,9 +299,9 @@ public:
 #endif
 
     _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY
-    basic_string_view(nullptr_t) = delete;
-
-    _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY
+    basic_string_view(nullptr_t) = delete; 
+ 
+    _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY 
     basic_string_view(const _CharT* __s)
         : __data(__s), __size(_VSTD::__char_traits_length_checked<_Traits>(__s)) {}
 
@@ -648,8 +648,8 @@ public:
             (data(), size(), __s, __pos, traits_type::length(__s));
     }
 
-//WARN: disabled std guards in order to allow using these options without switching to new std
-//#if _LIBCPP_STD_VER > 17
+//WARN: disabled std guards in order to allow using these options without switching to new std 
+//#if _LIBCPP_STD_VER > 17 
     constexpr _LIBCPP_INLINE_VISIBILITY
     bool starts_with(basic_string_view __s) const noexcept
     { return size() >= __s.size() && compare(0, __s.size(), __s) == 0; }
@@ -673,7 +673,7 @@ public:
     constexpr _LIBCPP_INLINE_VISIBILITY
     bool ends_with(const value_type* __s) const noexcept
     { return ends_with(basic_string_view(__s)); }
-//#endif
+//#endif 
 
 #if _LIBCPP_STD_VER > 20
     constexpr _LIBCPP_INLINE_VISIBILITY

@@ -192,7 +192,7 @@ namespace NFake {
 
         static TVector<TString> MakeComponentsNames() noexcept
         {
-            const auto begin = ui32(NKikimrServices::EServiceKikimr_MIN);
+            const auto begin = ui32(NKikimrServices::EServiceKikimr_MIN); 
             const auto end = ui32(NKikimrServices::EServiceKikimr_MAX) + 1;
 
             Y_VERIFY(end < 8192, "Looks like there is too many services");

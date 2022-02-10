@@ -49,8 +49,8 @@ namespace NMonitoring {
         template <typename T, typename U>
         bool TryStaticCast(U val, T& out) {
             static_assert(std::is_arithmetic_v<U>);
-            if constexpr (std::is_floating_point_v<T> || std::is_floating_point_v<U>) {
-                if (val > MaxFloor<T>() || val < -MaxFloor<T>()) {
+            if constexpr (std::is_floating_point_v<T> || std::is_floating_point_v<U>) { 
+                if (val > MaxFloor<T>() || val < -MaxFloor<T>()) { 
                     return false;
                 }
 

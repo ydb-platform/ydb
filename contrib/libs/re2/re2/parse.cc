@@ -23,13 +23,13 @@
 #include <algorithm>
 #include <map>
 #include <string>
-#include <vector>
+#include <vector> 
 
 #include "util/util.h"
 #include "util/logging.h"
 #include "util/strutil.h"
 #include "util/utf.h"
-#include "re2/pod_array.h"
+#include "re2/pod_array.h" 
 #include "re2/regexp.h"
 #include "re2/stringpiece.h"
 #include "re2/unicode_casefold.h"
@@ -44,13 +44,13 @@
 
 namespace re2 {
 
-// Controls the maximum repeat count permitted by the parser.
-static int maximum_repeat_count = 1000;
+// Controls the maximum repeat count permitted by the parser. 
+static int maximum_repeat_count = 1000; 
 
-void Regexp::FUZZING_ONLY_set_maximum_repeat_count(int i) {
-  maximum_repeat_count = i;
-}
-
+void Regexp::FUZZING_ONLY_set_maximum_repeat_count(int i) { 
+  maximum_repeat_count = i; 
+} 
+ 
 // Regular expression parse state.
 // The list of parsed regexps so far is maintained as a vector of
 // Regexp pointers called the stack.  Left parenthesis and vertical
@@ -93,7 +93,7 @@ class Regexp::ParseState {
   bool PushSimpleOp(RegexpOp op);
 
   // Pushes a ^ onto the stack.
-  bool PushCaret();
+  bool PushCaret(); 
 
   // Pushes a \b (word == true) or \B (word == false) onto the stack.
   bool PushWordBoundary(bool word);
@@ -423,7 +423,7 @@ bool Regexp::ParseState::PushLiteral(Rune r) {
 }
 
 // Pushes a ^ onto the stack.
-bool Regexp::ParseState::PushCaret() {
+bool Regexp::ParseState::PushCaret() { 
   if (flags_ & OneLine) {
     return PushSimpleOp(kRegexpBeginText);
   }
@@ -556,10 +556,10 @@ int RepetitionWalker::PostVisit(Regexp* re, int parent_arg, int pre_arg,
 }
 
 int RepetitionWalker::ShortVisit(Regexp* re, int parent_arg) {
-  // Should never be called: we use Walk(), not WalkExponential().
-#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION
+  // Should never be called: we use Walk(), not WalkExponential(). 
+#ifndef FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION 
   LOG(DFATAL) << "RepetitionWalker::ShortVisit called";
-#endif
+#endif 
   return 0;
 }
 
@@ -568,9 +568,9 @@ int RepetitionWalker::ShortVisit(Regexp* re, int parent_arg) {
 bool Regexp::ParseState::PushRepetition(int min, int max,
                                         const StringPiece& s,
                                         bool nongreedy) {
-  if ((max != -1 && max < min) ||
-      min > maximum_repeat_count ||
-      max > maximum_repeat_count) {
+  if ((max != -1 && max < min) || 
+      min > maximum_repeat_count || 
+      max > maximum_repeat_count) { 
     status_->set_code(kRegexpRepeatSize);
     status_->set_error_arg(s);
     return false;
@@ -593,7 +593,7 @@ bool Regexp::ParseState::PushRepetition(int min, int max,
   stacktop_ = re;
   if (min >= 2 || max >= 2) {
     RepetitionWalker w;
-    if (w.Walk(stacktop_, maximum_repeat_count) == 0) {
+    if (w.Walk(stacktop_, maximum_repeat_count) == 0) { 
       status_->set_code(kRegexpRepeatSize);
       status_->set_error_arg(s);
       return false;
@@ -613,7 +613,7 @@ bool Regexp::ParseState::DoLeftParen(const StringPiece& name) {
   Regexp* re = new Regexp(kLeftParen, flags_);
   re->cap_ = ++ncap_;
   if (name.data() != NULL)
-    re->name_ = new std::string(name);
+    re->name_ = new std::string(name); 
   return PushRegexp(re);
 }
 
@@ -687,7 +687,7 @@ bool Regexp::ParseState::DoRightParen() {
   if ((r1 = stacktop_) == NULL ||
       (r2 = r1->down_) == NULL ||
       r2->op() != kLeftParen) {
-    status_->set_code(kRegexpUnexpectedParen);
+    status_->set_code(kRegexpUnexpectedParen); 
     status_->set_error_arg(whole_regexp_);
     return false;
   }
@@ -804,7 +804,7 @@ void Regexp::RemoveLeadingString(Regexp* re, int n) {
   // limit on the size of a concatenation, so we should never
   // see more than two here.
   Regexp* stk[4];
-  size_t d = 0;
+  size_t d = 0; 
   while (re->op() == kRegexpConcat) {
     if (d < arraysize(stk))
       stk[d++] = re;
@@ -835,8 +835,8 @@ void Regexp::RemoveLeadingString(Regexp* re, int n) {
   }
 
   // If re is now empty, concatenations might simplify too.
-  while (d > 0) {
-    re = stk[--d];
+  while (d > 0) { 
+    re = stk[--d]; 
     Regexp** sub = re->sub();
     if (sub[0]->op() == kRegexpEmptyMatch) {
       sub[0]->Decref();
@@ -870,180 +870,180 @@ void Regexp::RemoveLeadingString(Regexp* re, int n) {
   }
 }
 
-// In the context of factoring alternations, a Splice is: a factored prefix or
-// merged character class computed by one iteration of one round of factoring;
-// the span of subexpressions of the alternation to be "spliced" (i.e. removed
-// and replaced); and, for a factored prefix, the number of suffixes after any
-// factoring that might have subsequently been performed on them. For a merged
-// character class, there are no suffixes, of course, so the field is ignored.
-struct Splice {
-  Splice(Regexp* prefix, Regexp** sub, int nsub)
-      : prefix(prefix),
-        sub(sub),
-        nsub(nsub),
-        nsuffix(-1) {}
-
-  Regexp* prefix;
-  Regexp** sub;
-  int nsub;
-  int nsuffix;
-};
-
-// Named so because it is used to implement an explicit stack, a Frame is: the
-// span of subexpressions of the alternation to be factored; the current round
-// of factoring; any Splices computed; and, for a factored prefix, an iterator
-// to the next Splice to be factored (i.e. in another Frame) because suffixes.
-struct Frame {
-  Frame(Regexp** sub, int nsub)
-      : sub(sub),
-        nsub(nsub),
-        round(0) {}
-
-  Regexp** sub;
-  int nsub;
-  int round;
-  std::vector<Splice> splices;
-  int spliceidx;
-};
-
-// Bundled into a class for friend access to Regexp without needing to declare
-// (or define) Splice in regexp.h.
-class FactorAlternationImpl {
- public:
-  static void Round1(Regexp** sub, int nsub,
-                     Regexp::ParseFlags flags,
-                     std::vector<Splice>* splices);
-  static void Round2(Regexp** sub, int nsub,
-                     Regexp::ParseFlags flags,
-                     std::vector<Splice>* splices);
-  static void Round3(Regexp** sub, int nsub,
-                     Regexp::ParseFlags flags,
-                     std::vector<Splice>* splices);
-};
-
+// In the context of factoring alternations, a Splice is: a factored prefix or 
+// merged character class computed by one iteration of one round of factoring; 
+// the span of subexpressions of the alternation to be "spliced" (i.e. removed 
+// and replaced); and, for a factored prefix, the number of suffixes after any 
+// factoring that might have subsequently been performed on them. For a merged 
+// character class, there are no suffixes, of course, so the field is ignored. 
+struct Splice { 
+  Splice(Regexp* prefix, Regexp** sub, int nsub) 
+      : prefix(prefix), 
+        sub(sub), 
+        nsub(nsub), 
+        nsuffix(-1) {} 
+ 
+  Regexp* prefix; 
+  Regexp** sub; 
+  int nsub; 
+  int nsuffix; 
+}; 
+ 
+// Named so because it is used to implement an explicit stack, a Frame is: the 
+// span of subexpressions of the alternation to be factored; the current round 
+// of factoring; any Splices computed; and, for a factored prefix, an iterator 
+// to the next Splice to be factored (i.e. in another Frame) because suffixes. 
+struct Frame { 
+  Frame(Regexp** sub, int nsub) 
+      : sub(sub), 
+        nsub(nsub), 
+        round(0) {} 
+ 
+  Regexp** sub; 
+  int nsub; 
+  int round; 
+  std::vector<Splice> splices; 
+  int spliceidx; 
+}; 
+ 
+// Bundled into a class for friend access to Regexp without needing to declare 
+// (or define) Splice in regexp.h. 
+class FactorAlternationImpl { 
+ public: 
+  static void Round1(Regexp** sub, int nsub, 
+                     Regexp::ParseFlags flags, 
+                     std::vector<Splice>* splices); 
+  static void Round2(Regexp** sub, int nsub, 
+                     Regexp::ParseFlags flags, 
+                     std::vector<Splice>* splices); 
+  static void Round3(Regexp** sub, int nsub, 
+                     Regexp::ParseFlags flags, 
+                     std::vector<Splice>* splices); 
+}; 
+ 
 // Factors common prefixes from alternation.
 // For example,
 //     ABC|ABD|AEF|BCX|BCY
 // simplifies to
 //     A(B(C|D)|EF)|BC(X|Y)
-// and thence to
+// and thence to 
 //     A(B[CD]|EF)|BC[XY]
 //
 // Rewrites sub to contain simplified list to alternate and returns
 // the new length of sub.  Adjusts reference counts accordingly
 // (incoming sub[i] decremented, outgoing sub[i] incremented).
-int Regexp::FactorAlternation(Regexp** sub, int nsub, ParseFlags flags) {
-  std::vector<Frame> stk;
-  stk.emplace_back(sub, nsub);
+int Regexp::FactorAlternation(Regexp** sub, int nsub, ParseFlags flags) { 
+  std::vector<Frame> stk; 
+  stk.emplace_back(sub, nsub); 
 
-  for (;;) {
-    auto& sub = stk.back().sub;
-    auto& nsub = stk.back().nsub;
-    auto& round = stk.back().round;
-    auto& splices = stk.back().splices;
-    auto& spliceidx = stk.back().spliceidx;
+  for (;;) { 
+    auto& sub = stk.back().sub; 
+    auto& nsub = stk.back().nsub; 
+    auto& round = stk.back().round; 
+    auto& splices = stk.back().splices; 
+    auto& spliceidx = stk.back().spliceidx; 
 
-    if (splices.empty()) {
-      // Advance to the next round of factoring. Note that this covers
-      // the initialised state: when splices is empty and round is 0.
-      round++;
-    } else if (spliceidx < static_cast<int>(splices.size())) {
-      // We have at least one more Splice to factor. Recurse logically.
-      stk.emplace_back(splices[spliceidx].sub, splices[spliceidx].nsub);
-      continue;
-    } else {
-      // We have no more Splices to factor. Apply them.
-      auto iter = splices.begin();
-      int out = 0;
-      for (int i = 0; i < nsub; ) {
-        // Copy until we reach where the next Splice begins.
-        while (sub + i < iter->sub)
-          sub[out++] = sub[i++];
-        switch (round) {
-          case 1:
-          case 2: {
-            // Assemble the Splice prefix and the suffixes.
-            Regexp* re[2];
-            re[0] = iter->prefix;
-            re[1] = Regexp::AlternateNoFactor(iter->sub, iter->nsuffix, flags);
-            sub[out++] = Regexp::Concat(re, 2, flags);
-            i += iter->nsub;
-            break;
-          }
-          case 3:
-            // Just use the Splice prefix.
-            sub[out++] = iter->prefix;
-            i += iter->nsub;
-            break;
-          default:
-            LOG(DFATAL) << "unknown round: " << round;
-            break;
-        }
-        // If we are done, copy until the end of sub.
-        if (++iter == splices.end()) {
-          while (i < nsub)
-            sub[out++] = sub[i++];
-        }
-      }
-      splices.clear();
-      nsub = out;
-      // Advance to the next round of factoring.
-      round++;
-    }
+    if (splices.empty()) { 
+      // Advance to the next round of factoring. Note that this covers 
+      // the initialised state: when splices is empty and round is 0. 
+      round++; 
+    } else if (spliceidx < static_cast<int>(splices.size())) { 
+      // We have at least one more Splice to factor. Recurse logically. 
+      stk.emplace_back(splices[spliceidx].sub, splices[spliceidx].nsub); 
+      continue; 
+    } else { 
+      // We have no more Splices to factor. Apply them. 
+      auto iter = splices.begin(); 
+      int out = 0; 
+      for (int i = 0; i < nsub; ) { 
+        // Copy until we reach where the next Splice begins. 
+        while (sub + i < iter->sub) 
+          sub[out++] = sub[i++]; 
+        switch (round) { 
+          case 1: 
+          case 2: { 
+            // Assemble the Splice prefix and the suffixes. 
+            Regexp* re[2]; 
+            re[0] = iter->prefix; 
+            re[1] = Regexp::AlternateNoFactor(iter->sub, iter->nsuffix, flags); 
+            sub[out++] = Regexp::Concat(re, 2, flags); 
+            i += iter->nsub; 
+            break; 
+          } 
+          case 3: 
+            // Just use the Splice prefix. 
+            sub[out++] = iter->prefix; 
+            i += iter->nsub; 
+            break; 
+          default: 
+            LOG(DFATAL) << "unknown round: " << round; 
+            break; 
+        } 
+        // If we are done, copy until the end of sub. 
+        if (++iter == splices.end()) { 
+          while (i < nsub) 
+            sub[out++] = sub[i++]; 
+        } 
+      } 
+      splices.clear(); 
+      nsub = out; 
+      // Advance to the next round of factoring. 
+      round++; 
+    } 
 
-    switch (round) {
-      case 1:
-        FactorAlternationImpl::Round1(sub, nsub, flags, &splices);
-        break;
-      case 2:
-        FactorAlternationImpl::Round2(sub, nsub, flags, &splices);
-        break;
-      case 3:
-        FactorAlternationImpl::Round3(sub, nsub, flags, &splices);
-        break;
-      case 4:
-        if (stk.size() == 1) {
-          // We are at the top of the stack. Just return.
-          return nsub;
-        } else {
-          // Pop the stack and set the number of suffixes.
-          // (Note that references will be invalidated!)
-          int nsuffix = nsub;
-          stk.pop_back();
-          stk.back().splices[stk.back().spliceidx].nsuffix = nsuffix;
-          ++stk.back().spliceidx;
-          continue;
-        }
-      default:
-        LOG(DFATAL) << "unknown round: " << round;
-        break;
-    }
+    switch (round) { 
+      case 1: 
+        FactorAlternationImpl::Round1(sub, nsub, flags, &splices); 
+        break; 
+      case 2: 
+        FactorAlternationImpl::Round2(sub, nsub, flags, &splices); 
+        break; 
+      case 3: 
+        FactorAlternationImpl::Round3(sub, nsub, flags, &splices); 
+        break; 
+      case 4: 
+        if (stk.size() == 1) { 
+          // We are at the top of the stack. Just return. 
+          return nsub; 
+        } else { 
+          // Pop the stack and set the number of suffixes. 
+          // (Note that references will be invalidated!) 
+          int nsuffix = nsub; 
+          stk.pop_back(); 
+          stk.back().splices[stk.back().spliceidx].nsuffix = nsuffix; 
+          ++stk.back().spliceidx; 
+          continue; 
+        } 
+      default: 
+        LOG(DFATAL) << "unknown round: " << round; 
+        break; 
+    } 
 
-    // Set spliceidx depending on whether we have Splices to factor.
-    if (splices.empty() || round == 3) {
-      spliceidx = static_cast<int>(splices.size());
-    } else {
-      spliceidx = 0;
-    }
-  }
-}
+    // Set spliceidx depending on whether we have Splices to factor. 
+    if (splices.empty() || round == 3) { 
+      spliceidx = static_cast<int>(splices.size()); 
+    } else { 
+      spliceidx = 0; 
+    } 
+  } 
+} 
 
-void FactorAlternationImpl::Round1(Regexp** sub, int nsub,
-                                   Regexp::ParseFlags flags,
-                                   std::vector<Splice>* splices) {
+void FactorAlternationImpl::Round1(Regexp** sub, int nsub, 
+                                   Regexp::ParseFlags flags, 
+                                   std::vector<Splice>* splices) { 
   // Round 1: Factor out common literal prefixes.
-  int start = 0;
-  Rune* rune = NULL;
+  int start = 0; 
+  Rune* rune = NULL; 
   int nrune = 0;
   Regexp::ParseFlags runeflags = Regexp::NoParseFlags;
-  for (int i = 0; i <= nsub; i++) {
-    // Invariant: sub[start:i] consists of regexps that all
-    // begin with rune[0:nrune].
+  for (int i = 0; i <= nsub; i++) { 
+    // Invariant: sub[start:i] consists of regexps that all 
+    // begin with rune[0:nrune]. 
     Rune* rune_i = NULL;
     int nrune_i = 0;
     Regexp::ParseFlags runeflags_i = Regexp::NoParseFlags;
-    if (i < nsub) {
-      rune_i = Regexp::LeadingString(sub[i], &nrune_i, &runeflags_i);
+    if (i < nsub) { 
+      rune_i = Regexp::LeadingString(sub[i], &nrune_i, &runeflags_i); 
       if (runeflags_i == runeflags) {
         int same = 0;
         while (same < nrune && same < nrune_i && rune[same] == rune_i[same])
@@ -1057,32 +1057,32 @@ void FactorAlternationImpl::Round1(Regexp** sub, int nsub,
     }
 
     // Found end of a run with common leading literal string:
-    // sub[start:i] all begin with rune[0:nrune],
-    // but sub[i] does not even begin with rune[0].
+    // sub[start:i] all begin with rune[0:nrune], 
+    // but sub[i] does not even begin with rune[0]. 
     if (i == start) {
       // Nothing to do - first iteration.
     } else if (i == start+1) {
       // Just one: don't bother factoring.
     } else {
-      Regexp* prefix = Regexp::LiteralString(rune, nrune, runeflags);
+      Regexp* prefix = Regexp::LiteralString(rune, nrune, runeflags); 
       for (int j = start; j < i; j++)
-        Regexp::RemoveLeadingString(sub[j], nrune);
-      splices->emplace_back(prefix, sub + start, i - start);
+        Regexp::RemoveLeadingString(sub[j], nrune); 
+      splices->emplace_back(prefix, sub + start, i - start); 
     }
 
-    // Prepare for next iteration (if there is one).
-    if (i < nsub) {
+    // Prepare for next iteration (if there is one). 
+    if (i < nsub) { 
       start = i;
       rune = rune_i;
       nrune = nrune_i;
       runeflags = runeflags_i;
     }
   }
-}
+} 
 
-void FactorAlternationImpl::Round2(Regexp** sub, int nsub,
-                                   Regexp::ParseFlags flags,
-                                   std::vector<Splice>* splices) {
+void FactorAlternationImpl::Round2(Regexp** sub, int nsub, 
+                                   Regexp::ParseFlags flags, 
+                                   std::vector<Splice>* splices) { 
   // Round 2: Factor out common simple prefixes,
   // just the first piece of each concatenation.
   // This will be good enough a lot of the time.
@@ -1091,15 +1091,15 @@ void FactorAlternationImpl::Round2(Regexp** sub, int nsub,
   // are not safe to factor because that collapses their
   // distinct paths through the automaton, which affects
   // correctness in some cases.
-  int start = 0;
+  int start = 0; 
   Regexp* first = NULL;
-  for (int i = 0; i <= nsub; i++) {
-    // Invariant: sub[start:i] consists of regexps that all
-    // begin with first.
+  for (int i = 0; i <= nsub; i++) { 
+    // Invariant: sub[start:i] consists of regexps that all 
+    // begin with first. 
     Regexp* first_i = NULL;
-    if (i < nsub) {
-      first_i = Regexp::LeadingRegexp(sub[i]);
-      if (first != NULL &&
+    if (i < nsub) { 
+      first_i = Regexp::LeadingRegexp(sub[i]); 
+      if (first != NULL && 
           // first must be an empty-width op
           // OR a char class, any char or any byte
           // OR a fixed repeat of a literal, char class, any char or any byte.
@@ -1117,60 +1117,60 @@ void FactorAlternationImpl::Round2(Regexp** sub, int nsub,
             (first->sub()[0]->op() == kRegexpLiteral ||
              first->sub()[0]->op() == kRegexpCharClass ||
              first->sub()[0]->op() == kRegexpAnyChar ||
-             first->sub()[0]->op() == kRegexpAnyByte))) &&
-          Regexp::Equal(first, first_i))
+             first->sub()[0]->op() == kRegexpAnyByte))) && 
+          Regexp::Equal(first, first_i)) 
         continue;
     }
 
     // Found end of a run with common leading regexp:
-    // sub[start:i] all begin with first,
-    // but sub[i] does not.
+    // sub[start:i] all begin with first, 
+    // but sub[i] does not. 
     if (i == start) {
       // Nothing to do - first iteration.
     } else if (i == start+1) {
       // Just one: don't bother factoring.
     } else {
-      Regexp* prefix = first->Incref();
+      Regexp* prefix = first->Incref(); 
       for (int j = start; j < i; j++)
-        sub[j] = Regexp::RemoveLeadingRegexp(sub[j]);
-      splices->emplace_back(prefix, sub + start, i - start);
+        sub[j] = Regexp::RemoveLeadingRegexp(sub[j]); 
+      splices->emplace_back(prefix, sub + start, i - start); 
     }
 
-    // Prepare for next iteration (if there is one).
-    if (i < nsub) {
+    // Prepare for next iteration (if there is one). 
+    if (i < nsub) { 
       start = i;
       first = first_i;
     }
   }
-}
+} 
 
-void FactorAlternationImpl::Round3(Regexp** sub, int nsub,
-                                   Regexp::ParseFlags flags,
-                                   std::vector<Splice>* splices) {
-  // Round 3: Merge runs of literals and/or character classes.
-  int start = 0;
-  Regexp* first = NULL;
-  for (int i = 0; i <= nsub; i++) {
-    // Invariant: sub[start:i] consists of regexps that all
-    // are either literals (i.e. runes) or character classes.
-    Regexp* first_i = NULL;
-    if (i < nsub) {
-      first_i = sub[i];
-      if (first != NULL &&
-          (first->op() == kRegexpLiteral ||
-           first->op() == kRegexpCharClass) &&
-          (first_i->op() == kRegexpLiteral ||
-           first_i->op() == kRegexpCharClass))
-        continue;
-    }
+void FactorAlternationImpl::Round3(Regexp** sub, int nsub, 
+                                   Regexp::ParseFlags flags, 
+                                   std::vector<Splice>* splices) { 
+  // Round 3: Merge runs of literals and/or character classes. 
+  int start = 0; 
+  Regexp* first = NULL; 
+  for (int i = 0; i <= nsub; i++) { 
+    // Invariant: sub[start:i] consists of regexps that all 
+    // are either literals (i.e. runes) or character classes. 
+    Regexp* first_i = NULL; 
+    if (i < nsub) { 
+      first_i = sub[i]; 
+      if (first != NULL && 
+          (first->op() == kRegexpLiteral || 
+           first->op() == kRegexpCharClass) && 
+          (first_i->op() == kRegexpLiteral || 
+           first_i->op() == kRegexpCharClass)) 
+        continue; 
+    } 
 
-    // Found end of a run of Literal/CharClass:
-    // sub[start:i] all are either one or the other,
-    // but sub[i] is not.
+    // Found end of a run of Literal/CharClass: 
+    // sub[start:i] all are either one or the other, 
+    // but sub[i] is not. 
     if (i == start) {
-      // Nothing to do - first iteration.
+      // Nothing to do - first iteration. 
     } else if (i == start+1) {
-      // Just one: don't bother factoring.
+      // Just one: don't bother factoring. 
     } else {
       CharClassBuilder ccb;
       for (int j = start; j < i; j++) {
@@ -1187,14 +1187,14 @@ void FactorAlternationImpl::Round3(Regexp** sub, int nsub,
         }
         re->Decref();
       }
-      Regexp* re = Regexp::NewCharClass(ccb.GetCharClass(), flags);
-      splices->emplace_back(re, sub + start, i - start);
+      Regexp* re = Regexp::NewCharClass(ccb.GetCharClass(), flags); 
+      splices->emplace_back(re, sub + start, i - start); 
     }
 
-    // Prepare for next iteration (if there is one).
-    if (i < nsub) {
-      start = i;
-      first = first_i;
+    // Prepare for next iteration (if there is one). 
+    if (i < nsub) { 
+      start = i; 
+      first = first_i; 
     }
   }
 }
@@ -1221,7 +1221,7 @@ void Regexp::ParseState::DoCollapse(RegexpOp op) {
     return;
 
   // Construct op (alternation or concatenation), flattening op of op.
-  PODArray<Regexp*> subs(n);
+  PODArray<Regexp*> subs(n); 
   next = NULL;
   int i = n;
   for (sub = stacktop_; sub != NULL && !IsMarker(sub->op()); sub = next) {
@@ -1236,7 +1236,7 @@ void Regexp::ParseState::DoCollapse(RegexpOp op) {
     }
   }
 
-  Regexp* re = ConcatOrAlternate(op, subs.data(), n, flags_, true);
+  Regexp* re = ConcatOrAlternate(op, subs.data(), n, flags_, true); 
   re->simple_ = re->ComputeSimple();
   re->down_ = next;
   stacktop_ = re;
@@ -1323,17 +1323,17 @@ bool Regexp::ParseState::MaybeConcatString(int r, ParseFlags flags) {
 
 // Lexing routines.
 
-// Parses a decimal integer, storing it in *np.
+// Parses a decimal integer, storing it in *np. 
 // Sets *s to span the remainder of the string.
 static bool ParseInteger(StringPiece* s, int* np) {
-  if (s->empty() || !isdigit((*s)[0] & 0xFF))
+  if (s->empty() || !isdigit((*s)[0] & 0xFF)) 
     return false;
   // Disallow leading zeros.
   if (s->size() >= 2 && (*s)[0] == '0' && isdigit((*s)[1] & 0xFF))
     return false;
   int n = 0;
   int c;
-  while (!s->empty() && isdigit(c = (*s)[0] & 0xFF)) {
+  while (!s->empty() && isdigit(c = (*s)[0] & 0xFF)) { 
     // Avoid overflow.
     if (n >= 100000000)
       return false;
@@ -1355,16 +1355,16 @@ static bool ParseInteger(StringPiece* s, int* np) {
 // s must NOT be edited unless MaybeParseRepetition returns true.
 static bool MaybeParseRepetition(StringPiece* sp, int* lo, int* hi) {
   StringPiece s = *sp;
-  if (s.empty() || s[0] != '{')
+  if (s.empty() || s[0] != '{') 
     return false;
   s.remove_prefix(1);  // '{'
   if (!ParseInteger(&s, lo))
     return false;
-  if (s.empty())
+  if (s.empty()) 
     return false;
   if (s[0] == ',') {
     s.remove_prefix(1);  // ','
-    if (s.empty())
+    if (s.empty()) 
       return false;
     if (s[0] == '}') {
       // {2,} means at least 2
@@ -1378,7 +1378,7 @@ static bool MaybeParseRepetition(StringPiece* sp, int* lo, int* hi) {
     // {2} means exactly two
     *hi = *lo;
   }
-  if (s.empty() || s[0] != '}')
+  if (s.empty() || s[0] != '}') 
     return false;
   s.remove_prefix(1);  // '}'
   *sp = s;
@@ -1393,7 +1393,7 @@ static bool MaybeParseRepetition(StringPiece* sp, int* lo, int* hi) {
 static int StringPieceToRune(Rune *r, StringPiece *sp, RegexpStatus* status) {
   // fullrune() takes int, not size_t. However, it just looks
   // at the leading byte and treats any length >= 4 the same.
-  if (fullrune(sp->data(), static_cast<int>(std::min(size_t{4}, sp->size())))) {
+  if (fullrune(sp->data(), static_cast<int>(std::min(size_t{4}, sp->size())))) { 
     int n = chartorune(r, sp->data());
     // Some copies of chartorune have a bug that accepts
     // encodings of values in (10FFFF, 1FFFFF] as valid.
@@ -1421,7 +1421,7 @@ static int StringPieceToRune(Rune *r, StringPiece *sp, RegexpStatus* status) {
 static bool IsValidUTF8(const StringPiece& s, RegexpStatus* status) {
   StringPiece t = s;
   Rune r;
-  while (!t.empty()) {
+  while (!t.empty()) { 
     if (StringPieceToRune(&r, &t, status) < 0)
       return false;
   }
@@ -1452,14 +1452,14 @@ static int UnHex(int c) {
 // Sets *rp to the named character.
 static bool ParseEscape(StringPiece* s, Rune* rp,
                         RegexpStatus* status, int rune_max) {
-  const char* begin = s->data();
-  if (s->empty() || (*s)[0] != '\\') {
+  const char* begin = s->data(); 
+  if (s->empty() || (*s)[0] != '\\') { 
     // Should not happen - caller always checks.
     status->set_code(kRegexpInternalError);
     status->set_error_arg(StringPiece());
     return false;
   }
-  if (s->size() == 1) {
+  if (s->size() == 1) { 
     status->set_code(kRegexpTrailingBackslash);
     status->set_error_arg(StringPiece());
     return false;
@@ -1490,16 +1490,16 @@ static bool ParseEscape(StringPiece* s, Rune* rp,
     case '6':
     case '7':
       // Single non-zero octal digit is a backreference; not supported.
-      if (s->empty() || (*s)[0] < '0' || (*s)[0] > '7')
+      if (s->empty() || (*s)[0] < '0' || (*s)[0] > '7') 
         goto BadEscape;
       FALLTHROUGH_INTENDED;
     case '0':
       // consume up to three octal digits; already have one.
       code = c - '0';
-      if (!s->empty() && '0' <= (c = (*s)[0]) && c <= '7') {
+      if (!s->empty() && '0' <= (c = (*s)[0]) && c <= '7') { 
         code = code * 8 + c - '0';
         s->remove_prefix(1);  // digit
-        if (!s->empty()) {
+        if (!s->empty()) { 
           c = (*s)[0];
           if ('0' <= c && c <= '7') {
             code = code * 8 + c - '0';
@@ -1514,7 +1514,7 @@ static bool ParseEscape(StringPiece* s, Rune* rp,
 
     // Hexadecimal escapes
     case 'x':
-      if (s->empty())
+      if (s->empty()) 
         goto BadEscape;
       if (StringPieceToRune(&c, s, status) < 0)
         return false;
@@ -1534,7 +1534,7 @@ static bool ParseEscape(StringPiece* s, Rune* rp,
           code = code * 16 + UnHex(c);
           if (code > rune_max)
             goto BadEscape;
-          if (s->empty())
+          if (s->empty()) 
             goto BadEscape;
           if (StringPieceToRune(&c, s, status) < 0)
             return false;
@@ -1545,7 +1545,7 @@ static bool ParseEscape(StringPiece* s, Rune* rp,
         return true;
       }
       // Easy case: two hex digits.
-      if (s->empty())
+      if (s->empty()) 
         goto BadEscape;
       if (StringPieceToRune(&c1, s, status) < 0)
         return false;
@@ -1595,7 +1595,7 @@ BadEscape:
   // Unrecognized escape sequence.
   status->set_code(kRegexpBadEscape);
   status->set_error_arg(
-      StringPiece(begin, static_cast<size_t>(s->data() - begin)));
+      StringPiece(begin, static_cast<size_t>(s->data() - begin))); 
   return false;
 }
 
@@ -1715,7 +1715,7 @@ const UGroup* MaybeParsePerlCCEscape(StringPiece* s, Regexp::ParseFlags parse_fl
     return NULL;
   // Could use StringPieceToRune, but there aren't
   // any non-ASCII Perl group names.
-  StringPiece name(s->data(), 2);
+  StringPiece name(s->data(), 2); 
   const UGroup *g = LookupPerlGroup(name);
   if (g == NULL)
     return NULL;
@@ -1755,8 +1755,8 @@ ParseStatus ParseUnicodeGroup(StringPiece* s, Regexp::ParseFlags parse_flags,
     return kParseError;
   if (c != '{') {
     // Name is the bit of string we just skipped over for c.
-    const char* p = seq.data() + 2;
-    name = StringPiece(p, static_cast<size_t>(s->data() - p));
+    const char* p = seq.data() + 2; 
+    name = StringPiece(p, static_cast<size_t>(s->data() - p)); 
   } else {
     // Name is in braces. Look for closing }
     size_t end = s->find('}', 0);
@@ -1767,16 +1767,16 @@ ParseStatus ParseUnicodeGroup(StringPiece* s, Regexp::ParseFlags parse_flags,
       status->set_error_arg(seq);
       return kParseError;
     }
-    name = StringPiece(s->data(), end);  // without '}'
+    name = StringPiece(s->data(), end);  // without '}' 
     s->remove_prefix(end + 1);  // with '}'
     if (!IsValidUTF8(name, status))
       return kParseError;
   }
 
   // Chop seq where s now begins.
-  seq = StringPiece(seq.data(), static_cast<size_t>(s->data() - seq.data()));
+  seq = StringPiece(seq.data(), static_cast<size_t>(s->data() - seq.data())); 
 
-  if (!name.empty() && name[0] == '^') {
+  if (!name.empty() && name[0] == '^') { 
     sign = -sign;
     name.remove_prefix(1);  // '^'
   }
@@ -1795,7 +1795,7 @@ ParseStatus ParseUnicodeGroup(StringPiece* s, Regexp::ParseFlags parse_flags,
   // Look up the group in the ICU Unicode data. Because ICU provides full
   // Unicode properties support, this could be more than a lookup by name.
   ::icu::UnicodeString ustr = ::icu::UnicodeString::fromUTF8(
-      std::string("\\p{") + std::string(name) + std::string("}"));
+      std::string("\\p{") + std::string(name) + std::string("}")); 
   UErrorCode uerr = U_ZERO_ERROR;
   ::icu::UnicodeSet uset(ustr, uerr);
   if (U_FAILURE(uerr)) {
@@ -1806,12 +1806,12 @@ ParseStatus ParseUnicodeGroup(StringPiece* s, Regexp::ParseFlags parse_flags,
 
   // Convert the UnicodeSet to a URange32 and UGroup that we can add.
   int nr = uset.getRangeCount();
-  PODArray<URange32> r(nr);
+  PODArray<URange32> r(nr); 
   for (int i = 0; i < nr; i++) {
     r[i].lo = uset.getRangeStart(i);
     r[i].hi = uset.getRangeEnd(i);
   }
-  UGroup g = {"", +1, 0, 0, r.data(), nr};
+  UGroup g = {"", +1, 0, 0, r.data(), nr}; 
   AddUGroup(cc, &g, sign, parse_flags);
 #endif
 
@@ -1862,7 +1862,7 @@ static ParseStatus ParseCCName(StringPiece* s, Regexp::ParseFlags parse_flags,
 bool Regexp::ParseState::ParseCCCharacter(StringPiece* s, Rune *rp,
                                           const StringPiece& whole_class,
                                           RegexpStatus* status) {
-  if (s->empty()) {
+  if (s->empty()) { 
     status->set_code(kRegexpMissingBracket);
     status->set_error_arg(whole_class);
     return false;
@@ -1870,7 +1870,7 @@ bool Regexp::ParseState::ParseCCCharacter(StringPiece* s, Rune *rp,
 
   // Allow regular escape sequences even though
   // many need not be escaped in this context.
-  if ((*s)[0] == '\\')
+  if ((*s)[0] == '\\') 
     return ParseEscape(s, rp, status, rune_max_);
 
   // Otherwise take the next rune.
@@ -1912,7 +1912,7 @@ bool Regexp::ParseState::ParseCharClass(StringPiece* s,
                                         Regexp** out_re,
                                         RegexpStatus* status) {
   StringPiece whole_class = *s;
-  if (s->empty() || (*s)[0] != '[') {
+  if (s->empty() || (*s)[0] != '[') { 
     // Caller checked this.
     status->set_code(kRegexpInternalError);
     status->set_error_arg(StringPiece());
@@ -1922,7 +1922,7 @@ bool Regexp::ParseState::ParseCharClass(StringPiece* s,
   Regexp* re = new Regexp(kRegexpCharClass, flags_ & ~FoldCase);
   re->ccb_ = new CharClassBuilder;
   s->remove_prefix(1);  // '['
-  if (!s->empty() && (*s)[0] == '^') {
+  if (!s->empty() && (*s)[0] == '^') { 
     s->remove_prefix(1);  // '^'
     negated = true;
     if (!(flags_ & ClassNL) || (flags_ & NeverNL)) {
@@ -1932,7 +1932,7 @@ bool Regexp::ParseState::ParseCharClass(StringPiece* s,
     }
   }
   bool first = true;  // ] is okay as first char in class
-  while (!s->empty() && ((*s)[0] != ']' || first)) {
+  while (!s->empty() && ((*s)[0] != ']' || first)) { 
     // - is only okay unescaped as first or last in class.
     // Except that Perl allows - anywhere.
     if ((*s)[0] == '-' && !first && !(flags_&PerlX) &&
@@ -2000,7 +2000,7 @@ bool Regexp::ParseState::ParseCharClass(StringPiece* s,
     // in the flags.
     re->ccb_->AddRangeFlags(rr.lo, rr.hi, flags_ | Regexp::ClassNL);
   }
-  if (s->empty()) {
+  if (s->empty()) { 
     status->set_code(kRegexpMissingBracket);
     status->set_error_arg(whole_class);
     re->Decref();
@@ -2017,7 +2017,7 @@ bool Regexp::ParseState::ParseCharClass(StringPiece* s,
 
 // Returns whether name is a valid capture name.
 static bool IsValidCaptureName(const StringPiece& name) {
-  if (name.empty())
+  if (name.empty()) 
     return false;
 
   // Historically, we effectively used [0-9A-Za-z_]+ to validate; that
@@ -2093,8 +2093,8 @@ bool Regexp::ParseState::ParsePerlFlags(StringPiece* s) {
     }
 
     // t is "P<name>...", t[end] == '>'
-    StringPiece capture(t.data()-2, end+3);  // "(?P<name>"
-    StringPiece name(t.data()+2, end-2);     // "name"
+    StringPiece capture(t.data()-2, end+3);  // "(?P<name>" 
+    StringPiece name(t.data()+2, end-2);     // "name" 
     if (!IsValidUTF8(name, status_))
       return false;
     if (!IsValidCaptureName(name)) {
@@ -2108,8 +2108,8 @@ bool Regexp::ParseState::ParsePerlFlags(StringPiece* s) {
       return false;
     }
 
-    s->remove_prefix(
-        static_cast<size_t>(capture.data() + capture.size() - s->data()));
+    s->remove_prefix( 
+        static_cast<size_t>(capture.data() + capture.size() - s->data())); 
     return true;
   }
 
@@ -2118,7 +2118,7 @@ bool Regexp::ParseState::ParsePerlFlags(StringPiece* s) {
   int nflags = flags_;
   Rune c;
   for (bool done = false; !done; ) {
-    if (t.empty())
+    if (t.empty()) 
       goto BadPerlOp;
     if (StringPieceToRune(&c, &t, status_) < 0)
       return false;
@@ -2193,7 +2193,7 @@ bool Regexp::ParseState::ParsePerlFlags(StringPiece* s) {
 BadPerlOp:
   status_->set_code(kRegexpBadPerlOp);
   status_->set_error_arg(
-      StringPiece(s->data(), static_cast<size_t>(t.data() - s->data())));
+      StringPiece(s->data(), static_cast<size_t>(t.data() - s->data()))); 
   return false;
 }
 
@@ -2201,7 +2201,7 @@ BadPerlOp:
 // into UTF8 encoding in string.
 // Can't use EncodingUtils::EncodeLatin1AsUTF8 because it is
 // deprecated and because it rejects code points 0x80-0x9F.
-void ConvertLatin1ToUTF8(const StringPiece& latin1, std::string* utf) {
+void ConvertLatin1ToUTF8(const StringPiece& latin1, std::string* utf) { 
   char buf[UTFmax];
 
   utf->clear();
@@ -2228,7 +2228,7 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
 
   // Convert regexp to UTF-8 (easier on the rest of the parser).
   if (global_flags & Latin1) {
-    std::string* tmp = new std::string;
+    std::string* tmp = new std::string; 
     ConvertLatin1ToUTF8(t, tmp);
     status->set_tmp(tmp);
     t = *tmp;
@@ -2236,7 +2236,7 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
 
   if (global_flags & Literal) {
     // Special parse loop for literal string.
-    while (!t.empty()) {
+    while (!t.empty()) { 
       Rune r;
       if (StringPieceToRune(&r, &t, status) < 0)
         return NULL;
@@ -2247,7 +2247,7 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
   }
 
   StringPiece lastunary = StringPiece();
-  while (!t.empty()) {
+  while (!t.empty()) { 
     StringPiece isunary = StringPiece();
     switch (t[0]) {
       default: {
@@ -2290,7 +2290,7 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
         break;
 
       case '^':  // Beginning of line.
-        if (!ps.PushCaret())
+        if (!ps.PushCaret()) 
           return NULL;
         t.remove_prefix(1);  // '^'
         break;
@@ -2331,18 +2331,18 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
         bool nongreedy = false;
         t.remove_prefix(1);  // '*' or '+' or '?'
         if (ps.flags() & PerlX) {
-          if (!t.empty() && t[0] == '?') {
+          if (!t.empty() && t[0] == '?') { 
             nongreedy = true;
             t.remove_prefix(1);  // '?'
           }
-          if (!lastunary.empty()) {
+          if (!lastunary.empty()) { 
             // In Perl it is not allowed to stack repetition operators:
             //   a** is a syntax error, not a double-star.
             // (and a++ means something else entirely, which we don't support!)
             status->set_code(kRegexpRepeatOp);
             status->set_error_arg(StringPiece(
-                lastunary.data(),
-                static_cast<size_t>(t.data() - lastunary.data())));
+                lastunary.data(), 
+                static_cast<size_t>(t.data() - lastunary.data()))); 
             return NULL;
           }
         }
@@ -2366,16 +2366,16 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
         }
         bool nongreedy = false;
         if (ps.flags() & PerlX) {
-          if (!t.empty() && t[0] == '?') {
+          if (!t.empty() && t[0] == '?') { 
             nongreedy = true;
             t.remove_prefix(1);  // '?'
           }
-          if (!lastunary.empty()) {
+          if (!lastunary.empty()) { 
             // Not allowed to stack repetition operators.
             status->set_code(kRegexpRepeatOp);
             status->set_error_arg(StringPiece(
-                lastunary.data(),
-                static_cast<size_t>(t.data() - lastunary.data())));
+                lastunary.data(), 
+                static_cast<size_t>(t.data() - lastunary.data()))); 
             return NULL;
           }
         }
@@ -2424,7 +2424,7 @@ Regexp* Regexp::Parse(const StringPiece& s, ParseFlags global_flags,
 
           if (t[1] == 'Q') {  // \Q ... \E: the ... is always literals
             t.remove_prefix(2);  // '\\', 'Q'
-            while (!t.empty()) {
+            while (!t.empty()) { 
               if (t.size() >= 2 && t[0] == '\\' && t[1] == 'E') {
                 t.remove_prefix(2);  // '\\', 'E'
                 break;

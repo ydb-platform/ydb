@@ -38,7 +38,7 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_NAMES_H__
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_NAMES_H__
 
-#include <string>
+#include <string> 
 
 namespace google {
 namespace protobuf {
@@ -46,7 +46,7 @@ namespace protobuf {
 class Descriptor;
 class EnumDescriptor;
 class FileDescriptor;
-class FieldDescriptor;
+class FieldDescriptor; 
 class ServiceDescriptor;
 
 namespace compiler {
@@ -57,42 +57,42 @@ namespace java {
 //
 // Returns:
 //   The fully-qualified Java class name.
-TProtoStringType ClassName(const Descriptor* descriptor);
+TProtoStringType ClassName(const Descriptor* descriptor); 
 
 // Requires:
 //   descriptor != NULL
 //
 // Returns:
 //   The fully-qualified Java class name.
-TProtoStringType ClassName(const EnumDescriptor* descriptor);
+TProtoStringType ClassName(const EnumDescriptor* descriptor); 
 
 // Requires:
 //   descriptor != NULL
 //
 // Returns:
 //   The fully-qualified Java class name.
-TProtoStringType ClassName(const FileDescriptor* descriptor);
+TProtoStringType ClassName(const FileDescriptor* descriptor); 
 
 // Requires:
 //   descriptor != NULL
 //
 // Returns:
 //   The fully-qualified Java class name.
-TProtoStringType ClassName(const ServiceDescriptor* descriptor);
+TProtoStringType ClassName(const ServiceDescriptor* descriptor); 
 
-// Requires:
-//   descriptor != NULL
-//
-// Returns:
-//   Java package name.
-TProtoStringType FileJavaPackage(const FileDescriptor* descriptor);
-
-// Requires:
-//   descriptor != NULL
-// Returns:
-//   Capitalized camel case name field name.
-TProtoStringType CapitalizedFieldName(const FieldDescriptor* descriptor);
-
+// Requires: 
+//   descriptor != NULL 
+// 
+// Returns: 
+//   Java package name. 
+TProtoStringType FileJavaPackage(const FileDescriptor* descriptor); 
+ 
+// Requires: 
+//   descriptor != NULL 
+// Returns: 
+//   Capitalized camel case name field name. 
+TProtoStringType CapitalizedFieldName(const FieldDescriptor* descriptor); 
+ 
 }  // namespace java
 }  // namespace compiler
 }  // namespace protobuf

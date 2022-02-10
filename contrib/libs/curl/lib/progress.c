@@ -5,11 +5,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html. 
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -164,13 +164,13 @@ void Curl_pgrsResetTransferSizes(struct Curl_easy *data)
 }
 
 /*
- *
- * Curl_pgrsTime(). Store the current time at the given label. This fetches a
- * fresh "now" and returns it.
- *
+ * 
+ * Curl_pgrsTime(). Store the current time at the given label. This fetches a 
+ * fresh "now" and returns it. 
+ * 
  * @unittest: 1399
  */
-struct curltime Curl_pgrsTime(struct Curl_easy *data, timerid timer)
+struct curltime Curl_pgrsTime(struct Curl_easy *data, timerid timer) 
 {
   struct curltime now = Curl_now();
   timediff_t *delta = NULL;
@@ -213,7 +213,7 @@ struct curltime Curl_pgrsTime(struct Curl_easy *data, timerid timer)
      * changing the t_starttransfer time.
      */
     if(data->progress.is_t_startransfer_set) {
-      return now;
+      return now; 
     }
     else {
       data->progress.is_t_startransfer_set = true;
@@ -232,7 +232,7 @@ struct curltime Curl_pgrsTime(struct Curl_easy *data, timerid timer)
       us = 1; /* make sure at least one microsecond passed */
     *delta += us;
   }
-  return now;
+  return now; 
 }
 
 void Curl_pgrsStartNow(struct Curl_easy *data)
@@ -240,8 +240,8 @@ void Curl_pgrsStartNow(struct Curl_easy *data)
   data->progress.speeder_c = 0; /* reset the progress meter display */
   data->progress.start = Curl_now();
   data->progress.is_t_startransfer_set = false;
-  data->progress.ul_limit_start = data->progress.start;
-  data->progress.dl_limit_start = data->progress.start;
+  data->progress.ul_limit_start = data->progress.start; 
+  data->progress.dl_limit_start = data->progress.start; 
   data->progress.downloaded = 0;
   data->progress.uploaded = 0;
   /* clear all bits except HIDE and HEADERS_OUT */
@@ -285,9 +285,9 @@ timediff_t Curl_pgrsLimitWaitTime(curl_off_t cursize,
    * stay below 'limit'.
    */
   if(size < CURL_OFF_T_MAX/1000)
-    minimum = (timediff_t) (CURL_OFF_T_C(1000) * size / limit);
+    minimum = (timediff_t) (CURL_OFF_T_C(1000) * size / limit); 
   else {
-    minimum = (timediff_t) (size / limit);
+    minimum = (timediff_t) (size / limit); 
     if(minimum < TIMEDIFF_T_MAX/1000)
       minimum *= 1000;
     else
@@ -597,13 +597,13 @@ int Curl_pgrsUpdate(struct connectdata *conn)
                                    data->progress.size_ul,
                                    data->progress.uploaded);
       Curl_set_in_callback(data, false);
-      if(result != CURL_PROGRESSFUNC_CONTINUE) {
-        if(result)
-          failf(data, "Callback aborted");
-        return result;
-      }
+      if(result != CURL_PROGRESSFUNC_CONTINUE) { 
+        if(result) 
+          failf(data, "Callback aborted"); 
+        return result; 
+      } 
     }
-    else if(data->set.fprogress) {
+    else if(data->set.fprogress) { 
       int result;
       /* The older deprecated callback is set, call that */
       Curl_set_in_callback(data, true);
@@ -613,11 +613,11 @@ int Curl_pgrsUpdate(struct connectdata *conn)
                                    (double)data->progress.size_ul,
                                    (double)data->progress.uploaded);
       Curl_set_in_callback(data, false);
-      if(result != CURL_PROGRESSFUNC_CONTINUE) {
-        if(result)
-          failf(data, "Callback aborted");
-        return result;
-      }
+      if(result != CURL_PROGRESSFUNC_CONTINUE) { 
+        if(result) 
+          failf(data, "Callback aborted"); 
+        return result; 
+      } 
     }
 
     if(showprogress)

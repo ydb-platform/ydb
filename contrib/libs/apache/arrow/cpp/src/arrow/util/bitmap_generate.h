@@ -62,9 +62,9 @@ void GenerateBits(uint8_t* bitmap, int64_t start_offset, int64_t length, Generat
 template <class Generator>
 void GenerateBitsUnrolled(uint8_t* bitmap, int64_t start_offset, int64_t length,
                           Generator&& g) {
-  static_assert(std::is_same<typename std::result_of<Generator && ()>::type, bool>::value,
-                "Functor passed to GenerateBitsUnrolled must return bool");
-
+  static_assert(std::is_same<typename std::result_of<Generator && ()>::type, bool>::value, 
+                "Functor passed to GenerateBitsUnrolled must return bool"); 
+ 
   if (length == 0) {
     return;
   }
@@ -77,7 +77,7 @@ void GenerateBitsUnrolled(uint8_t* bitmap, int64_t start_offset, int64_t length,
   if (bit_mask != 0x01) {
     current_byte = *cur & BitUtil::kPrecedingBitmask[start_bit_offset];
     while (bit_mask != 0 && remaining > 0) {
-      current_byte |= g() * bit_mask;
+      current_byte |= g() * bit_mask; 
       bit_mask = static_cast<uint8_t>(bit_mask << 1);
       --remaining;
     }
@@ -85,14 +85,14 @@ void GenerateBitsUnrolled(uint8_t* bitmap, int64_t start_offset, int64_t length,
   }
 
   int64_t remaining_bytes = remaining / 8;
-  uint8_t out_results[8];
+  uint8_t out_results[8]; 
   while (remaining_bytes-- > 0) {
-    for (int i = 0; i < 8; ++i) {
-      out_results[i] = g();
-    }
-    *cur++ = (out_results[0] | out_results[1] << 1 | out_results[2] << 2 |
-              out_results[3] << 3 | out_results[4] << 4 | out_results[5] << 5 |
-              out_results[6] << 6 | out_results[7] << 7);
+    for (int i = 0; i < 8; ++i) { 
+      out_results[i] = g(); 
+    } 
+    *cur++ = (out_results[0] | out_results[1] << 1 | out_results[2] << 2 | 
+              out_results[3] << 3 | out_results[4] << 4 | out_results[5] << 5 | 
+              out_results[6] << 6 | out_results[7] << 7); 
   }
 
   int64_t remaining_bits = remaining % 8;
@@ -100,7 +100,7 @@ void GenerateBitsUnrolled(uint8_t* bitmap, int64_t start_offset, int64_t length,
     current_byte = 0;
     bit_mask = 0x01;
     while (remaining_bits-- > 0) {
-      current_byte |= g() * bit_mask;
+      current_byte |= g() * bit_mask; 
       bit_mask = static_cast<uint8_t>(bit_mask << 1);
     }
     *cur++ = current_byte;

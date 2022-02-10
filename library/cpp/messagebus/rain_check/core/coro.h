@@ -25,7 +25,7 @@ namespace NRainCheck {
         ~TCoroTaskRunner() override;
 
     private:
-        static TContClosure ContClosure(TCoroTaskRunner* runner, TArrayRef<char> memRegion);
+        static TContClosure ContClosure(TCoroTaskRunner* runner, TArrayRef<char> memRegion); 
 
         bool ReplyReceived() override /* override */;
 

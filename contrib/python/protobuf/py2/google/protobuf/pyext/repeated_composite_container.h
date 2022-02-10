@@ -37,11 +37,11 @@
 #include <Python.h>
 
 #include <memory>
-#include <string>
+#include <string> 
 #include <vector>
 
-#include <google/protobuf/pyext/message.h>
-
+#include <google/protobuf/pyext/message.h> 
+ 
 namespace google {
 namespace protobuf {
 
@@ -52,9 +52,9 @@ namespace python {
 
 struct CMessageClass;
 
-// A RepeatedCompositeContainer always has a parent message.
-// The parent message also caches reference to items of the container.
-typedef struct RepeatedCompositeContainer : public ContainerBase {
+// A RepeatedCompositeContainer always has a parent message. 
+// The parent message also caches reference to items of the container. 
+typedef struct RepeatedCompositeContainer : public ContainerBase { 
   // The type used to create new child messages.
   CMessageClass* child_message_class;
 } RepeatedCompositeContainer;
@@ -65,7 +65,7 @@ namespace repeated_composite_container {
 
 // Builds a RepeatedCompositeContainer object, from a parent message and a
 // field descriptor.
-RepeatedCompositeContainer* NewContainer(
+RepeatedCompositeContainer* NewContainer( 
     CMessage* parent,
     const FieldDescriptor* parent_field_descriptor,
     CMessageClass *child_message_class);
@@ -107,6 +107,6 @@ int AssignSubscript(RepeatedCompositeContainer* self,
 }  // namespace repeated_composite_container
 }  // namespace python
 }  // namespace protobuf
-}  // namespace google
+}  // namespace google 
 
 #endif  // GOOGLE_PROTOBUF_PYTHON_CPP_REPEATED_COMPOSITE_CONTAINER_H__

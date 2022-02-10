@@ -5,11 +5,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2018 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 2018 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html. 
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -35,7 +35,7 @@
 #include "curl_base64.h"
 #include "connect.h"
 #include "strdup.h"
-#include "dynbuf.h"
+#include "dynbuf.h" 
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
 #include "curl_memory.h"
@@ -57,13 +57,13 @@ static const char * const errors[]={
   "Unexpected TYPE",
   "Unexpected CLASS",
   "No content",
-  "Bad ID",
-  "Name too long"
+  "Bad ID", 
+  "Name too long" 
 };
 
 static const char *doh_strerror(DOHcode code)
 {
-  if((code >= DOH_OK) && (code <= DOH_DNS_NAME_TOO_LONG))
+  if((code >= DOH_OK) && (code <= DOH_DNS_NAME_TOO_LONG)) 
     return errors[code];
   return "bad error code";
 }
@@ -75,50 +75,50 @@ static const char *doh_strerror(DOHcode code)
 #define UNITTEST static
 #endif
 
-/* @unittest 1655
- */
+/* @unittest 1655 
+ */ 
 UNITTEST DOHcode doh_encode(const char *host,
                             DNStype dnstype,
                             unsigned char *dnsp, /* buffer */
                             size_t len,  /* buffer size */
                             size_t *olen) /* output length */
 {
-  const size_t hostlen = strlen(host);
+  const size_t hostlen = strlen(host); 
   unsigned char *orig = dnsp;
   const char *hostp = host;
 
-  /* The expected output length is 16 bytes more than the length of
-   * the QNAME-encoding of the host name.
-   *
-   * A valid DNS name may not contain a zero-length label, except at
-   * the end.  For this reason, a name beginning with a dot, or
-   * containing a sequence of two or more consecutive dots, is invalid
-   * and cannot be encoded as a QNAME.
-   *
-   * If the host name ends with a trailing dot, the corresponding
-   * QNAME-encoding is one byte longer than the host name. If (as is
-   * also valid) the hostname is shortened by the omission of the
-   * trailing dot, then its QNAME-encoding will be two bytes longer
-   * than the host name.
-   *
-   * Each [ label, dot ] pair is encoded as [ length, label ],
-   * preserving overall length.  A final [ label ] without a dot is
-   * also encoded as [ length, label ], increasing overall length
-   * by one. The encoding is completed by appending a zero byte,
-   * representing the zero-length root label, again increasing
-   * the overall length by one.
-   */
-
-  size_t expected_len;
-  DEBUGASSERT(hostlen);
-  expected_len = 12 + 1 + hostlen + 4;
-  if(host[hostlen-1]!='.')
-    expected_len++;
-
-  if(expected_len > (256 + 16)) /* RFCs 1034, 1035 */
-    return DOH_DNS_NAME_TOO_LONG;
-
-  if(len < expected_len)
+  /* The expected output length is 16 bytes more than the length of 
+   * the QNAME-encoding of the host name. 
+   * 
+   * A valid DNS name may not contain a zero-length label, except at 
+   * the end.  For this reason, a name beginning with a dot, or 
+   * containing a sequence of two or more consecutive dots, is invalid 
+   * and cannot be encoded as a QNAME. 
+   * 
+   * If the host name ends with a trailing dot, the corresponding 
+   * QNAME-encoding is one byte longer than the host name. If (as is 
+   * also valid) the hostname is shortened by the omission of the 
+   * trailing dot, then its QNAME-encoding will be two bytes longer 
+   * than the host name. 
+   * 
+   * Each [ label, dot ] pair is encoded as [ length, label ], 
+   * preserving overall length.  A final [ label ] without a dot is 
+   * also encoded as [ length, label ], increasing overall length 
+   * by one. The encoding is completed by appending a zero byte, 
+   * representing the zero-length root label, again increasing 
+   * the overall length by one. 
+   */ 
+ 
+  size_t expected_len; 
+  DEBUGASSERT(hostlen); 
+  expected_len = 12 + 1 + hostlen + 4; 
+  if(host[hostlen-1]!='.') 
+    expected_len++; 
+ 
+  if(expected_len > (256 + 16)) /* RFCs 1034, 1035 */ 
+    return DOH_DNS_NAME_TOO_LONG; 
+ 
+  if(len < expected_len) 
     return DOH_TOO_SMALL_BUFFER;
 
   *dnsp++ = 0; /* 16 bit id */
@@ -134,53 +134,53 @@ UNITTEST DOHcode doh_encode(const char *host,
   *dnsp++ = '\0';
   *dnsp++ = '\0'; /* ARCOUNT */
 
-  /* encode each label and store it in the QNAME */
-  while(*hostp) {
-    size_t labellen;
+  /* encode each label and store it in the QNAME */ 
+  while(*hostp) { 
+    size_t labellen; 
     char *dot = strchr(hostp, '.');
-    if(dot)
+    if(dot) 
       labellen = dot - hostp;
     else
       labellen = strlen(hostp);
-    if((labellen > 63) || (!labellen)) {
-      /* label is too long or too short, error out */
+    if((labellen > 63) || (!labellen)) { 
+      /* label is too long or too short, error out */ 
       *olen = 0;
       return DOH_DNS_BAD_LABEL;
     }
-    /* label is non-empty, process it */
+    /* label is non-empty, process it */ 
     *dnsp++ = (unsigned char)labellen;
     memcpy(dnsp, hostp, labellen);
     dnsp += labellen;
-    hostp += labellen;
-    /* advance past dot, but only if there is one */
-    if(dot)
-      hostp++;
-  } /* next label */
+    hostp += labellen; 
+    /* advance past dot, but only if there is one */ 
+    if(dot) 
+      hostp++; 
+  } /* next label */ 
 
-  *dnsp++ = 0; /* append zero-length label for root */
-
-  /* There are assigned TYPE codes beyond 255: use range [1..65535]  */
-  *dnsp++ = (unsigned char)(255 & (dnstype>>8)); /* upper 8 bit TYPE */
-  *dnsp++ = (unsigned char)(255 & dnstype);      /* lower 8 bit TYPE */
-
+  *dnsp++ = 0; /* append zero-length label for root */ 
+ 
+  /* There are assigned TYPE codes beyond 255: use range [1..65535]  */ 
+  *dnsp++ = (unsigned char)(255 & (dnstype>>8)); /* upper 8 bit TYPE */ 
+  *dnsp++ = (unsigned char)(255 & dnstype);      /* lower 8 bit TYPE */ 
+ 
   *dnsp++ = '\0'; /* upper 8 bit CLASS */
   *dnsp++ = DNS_CLASS_IN; /* IN - "the Internet" */
 
   *olen = dnsp - orig;
-
-  /* verify that our estimation of length is valid, since
-   * this has led to buffer overflows in this function */
-  DEBUGASSERT(*olen == expected_len);
+ 
+  /* verify that our estimation of length is valid, since 
+   * this has led to buffer overflows in this function */ 
+  DEBUGASSERT(*olen == expected_len); 
   return DOH_OK;
 }
 
 static size_t
-doh_write_cb(const void *contents, size_t size, size_t nmemb, void *userp)
+doh_write_cb(const void *contents, size_t size, size_t nmemb, void *userp) 
 {
   size_t realsize = size * nmemb;
-  struct dynbuf *mem = (struct dynbuf *)userp;
+  struct dynbuf *mem = (struct dynbuf *)userp; 
 
-  if(Curl_dyn_addn(mem, contents, realsize))
+  if(Curl_dyn_addn(mem, contents, realsize)) 
     return 0;
 
   return realsize;
@@ -210,7 +210,7 @@ do {                                      \
   result = curl_easy_setopt(doh, x, y);   \
   if(result)                              \
     goto error;                           \
-} while(0)
+} while(0) 
 
 static CURLcode dohprobe(struct Curl_easy *data,
                          struct dnsprobe *p, DNStype dnstype,
@@ -230,7 +230,7 @@ static CURLcode dohprobe(struct Curl_easy *data,
   }
 
   p->dnstype = dnstype;
-  Curl_dyn_init(&p->serverdoh, DYN_DOH_RESPONSE);
+  Curl_dyn_init(&p->serverdoh, DYN_DOH_RESPONSE); 
 
   /* Note: this is code for sending the DoH request with GET but there's still
      no logic that actually enables this. We should either add that ability or
@@ -252,16 +252,16 @@ static CURLcode dohprobe(struct Curl_easy *data,
   }
 
   timeout_ms = Curl_timeleft(data, NULL, TRUE);
-  if(timeout_ms <= 0) {
-    result = CURLE_OPERATION_TIMEDOUT;
-    goto error;
-  }
+  if(timeout_ms <= 0) { 
+    result = CURLE_OPERATION_TIMEDOUT; 
+    goto error; 
+  } 
   /* Curl_open() is the internal version of curl_easy_init() */
   result = Curl_open(&doh);
   if(!result) {
     /* pass in the struct pointer via a local variable to please coverity and
        the gcc typecheck helpers */
-    struct dynbuf *resp = &p->serverdoh;
+    struct dynbuf *resp = &p->serverdoh; 
     ERROR_CHECK_SETOPT(CURLOPT_URL, url);
     ERROR_CHECK_SETOPT(CURLOPT_WRITEFUNCTION, doh_write_cb);
     ERROR_CHECK_SETOPT(CURLOPT_WRITEDATA, resp);
@@ -276,9 +276,9 @@ static CURLcode dohprobe(struct Curl_easy *data,
 #ifndef CURLDEBUG
     /* enforce HTTPS if not debug */
     ERROR_CHECK_SETOPT(CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
-#else
-    /* in debug mode, also allow http */
-    ERROR_CHECK_SETOPT(CURLOPT_PROTOCOLS, CURLPROTO_HTTP|CURLPROTO_HTTPS);
+#else 
+    /* in debug mode, also allow http */ 
+    ERROR_CHECK_SETOPT(CURLOPT_PROTOCOLS, CURLPROTO_HTTP|CURLPROTO_HTTPS); 
 #endif
     ERROR_CHECK_SETOPT(CURLOPT_TIMEOUT_MS, (long)timeout_ms);
     if(data->set.verbose)
@@ -292,29 +292,29 @@ static CURLcode dohprobe(struct Curl_easy *data,
       ERROR_CHECK_SETOPT(CURLOPT_SSL_FALSESTART, 1L);
     if(data->set.ssl.primary.verifyhost)
       ERROR_CHECK_SETOPT(CURLOPT_SSL_VERIFYHOST, 2L);
-#ifndef CURL_DISABLE_PROXY
+#ifndef CURL_DISABLE_PROXY 
     if(data->set.proxy_ssl.primary.verifyhost)
       ERROR_CHECK_SETOPT(CURLOPT_PROXY_SSL_VERIFYHOST, 2L);
-    if(data->set.proxy_ssl.primary.verifypeer)
-      ERROR_CHECK_SETOPT(CURLOPT_PROXY_SSL_VERIFYPEER, 1L);
-    if(data->set.str[STRING_SSL_CAFILE_PROXY]) {
-      ERROR_CHECK_SETOPT(CURLOPT_PROXY_CAINFO,
-        data->set.str[STRING_SSL_CAFILE_PROXY]);
-    }
-    if(data->set.str[STRING_SSL_CRLFILE_PROXY]) {
-      ERROR_CHECK_SETOPT(CURLOPT_PROXY_CRLFILE,
-        data->set.str[STRING_SSL_CRLFILE_PROXY]);
-    }
-    if(data->set.proxy_ssl.no_revoke)
-      ERROR_CHECK_SETOPT(CURLOPT_PROXY_SSL_OPTIONS, CURLSSLOPT_NO_REVOKE);
-    else if(data->set.proxy_ssl.revoke_best_effort)
-      ERROR_CHECK_SETOPT(CURLOPT_PROXY_SSL_OPTIONS,
-                         CURLSSLOPT_REVOKE_BEST_EFFORT);
-    if(data->set.str[STRING_SSL_CAPATH_PROXY]) {
-      ERROR_CHECK_SETOPT(CURLOPT_PROXY_CAPATH,
-        data->set.str[STRING_SSL_CAPATH_PROXY]);
-    }
-#endif
+    if(data->set.proxy_ssl.primary.verifypeer) 
+      ERROR_CHECK_SETOPT(CURLOPT_PROXY_SSL_VERIFYPEER, 1L); 
+    if(data->set.str[STRING_SSL_CAFILE_PROXY]) { 
+      ERROR_CHECK_SETOPT(CURLOPT_PROXY_CAINFO, 
+        data->set.str[STRING_SSL_CAFILE_PROXY]); 
+    } 
+    if(data->set.str[STRING_SSL_CRLFILE_PROXY]) { 
+      ERROR_CHECK_SETOPT(CURLOPT_PROXY_CRLFILE, 
+        data->set.str[STRING_SSL_CRLFILE_PROXY]); 
+    } 
+    if(data->set.proxy_ssl.no_revoke) 
+      ERROR_CHECK_SETOPT(CURLOPT_PROXY_SSL_OPTIONS, CURLSSLOPT_NO_REVOKE); 
+    else if(data->set.proxy_ssl.revoke_best_effort) 
+      ERROR_CHECK_SETOPT(CURLOPT_PROXY_SSL_OPTIONS, 
+                         CURLSSLOPT_REVOKE_BEST_EFFORT); 
+    if(data->set.str[STRING_SSL_CAPATH_PROXY]) { 
+      ERROR_CHECK_SETOPT(CURLOPT_PROXY_CAPATH, 
+        data->set.str[STRING_SSL_CAPATH_PROXY]); 
+    } 
+#endif 
     if(data->set.ssl.primary.verifypeer)
       ERROR_CHECK_SETOPT(CURLOPT_SSL_VERIFYPEER, 1L);
     if(data->set.ssl.primary.verifystatus)
@@ -343,16 +343,16 @@ static CURLcode dohprobe(struct Curl_easy *data,
     }
     if(data->set.ssl.no_revoke)
       ERROR_CHECK_SETOPT(CURLOPT_SSL_OPTIONS, CURLSSLOPT_NO_REVOKE);
-    else if(data->set.ssl.revoke_best_effort)
-      ERROR_CHECK_SETOPT(CURLOPT_SSL_OPTIONS, CURLSSLOPT_REVOKE_BEST_EFFORT);
+    else if(data->set.ssl.revoke_best_effort) 
+      ERROR_CHECK_SETOPT(CURLOPT_SSL_OPTIONS, CURLSSLOPT_REVOKE_BEST_EFFORT); 
     if(data->set.ssl.fsslctx)
       ERROR_CHECK_SETOPT(CURLOPT_SSL_CTX_FUNCTION, data->set.ssl.fsslctx);
     if(data->set.ssl.fsslctxp)
       ERROR_CHECK_SETOPT(CURLOPT_SSL_CTX_DATA, data->set.ssl.fsslctxp);
-    if(data->set.str[STRING_SSL_EC_CURVES]) {
-      ERROR_CHECK_SETOPT(CURLOPT_SSL_EC_CURVES,
-        data->set.str[STRING_SSL_EC_CURVES]);
-    }
+    if(data->set.str[STRING_SSL_EC_CURVES]) { 
+      ERROR_CHECK_SETOPT(CURLOPT_SSL_EC_CURVES, 
+        data->set.str[STRING_SSL_EC_CURVES]); 
+    } 
 
     doh->set.fmultidone = Curl_doh_done;
     doh->set.dohfor = data; /* identify for which transfer this is done */
@@ -369,7 +369,7 @@ static CURLcode dohprobe(struct Curl_easy *data,
 
   error:
   free(nurl);
-  Curl_close(&doh);
+  Curl_close(&doh); 
   return result;
 }
 
@@ -378,14 +378,14 @@ static CURLcode dohprobe(struct Curl_easy *data,
  * 'Curl_addrinfo *' with the address information.
  */
 
-struct Curl_addrinfo *Curl_doh(struct connectdata *conn,
-                               const char *hostname,
-                               int port,
-                               int *waitp)
+struct Curl_addrinfo *Curl_doh(struct connectdata *conn, 
+                               const char *hostname, 
+                               int port, 
+                               int *waitp) 
 {
   struct Curl_easy *data = conn->data;
   CURLcode result = CURLE_OK;
-  int slot;
+  int slot; 
   *waitp = TRUE; /* this never returns synchronously */
   (void)conn;
   (void)hostname;
@@ -394,7 +394,7 @@ struct Curl_addrinfo *Curl_doh(struct connectdata *conn,
   /* start clean, consider allocating this struct on demand */
   memset(&data->req.doh, 0, sizeof(struct dohdata));
 
-  conn->bits.doh = TRUE;
+  conn->bits.doh = TRUE; 
   data->req.doh.host = hostname;
   data->req.doh.port = port;
   data->req.doh.headers =
@@ -405,8 +405,8 @@ struct Curl_addrinfo *Curl_doh(struct connectdata *conn,
 
   if(conn->ip_version != CURL_IPRESOLVE_V6) {
     /* create IPv4 DOH request */
-    result = dohprobe(data, &data->req.doh.probe[DOH_PROBE_SLOT_IPADDR_V4],
-                      DNS_TYPE_A, hostname, data->set.str[STRING_DOH],
+    result = dohprobe(data, &data->req.doh.probe[DOH_PROBE_SLOT_IPADDR_V4], 
+                      DNS_TYPE_A, hostname, data->set.str[STRING_DOH], 
                       data->multi, data->req.doh.headers);
     if(result)
       goto error;
@@ -415,8 +415,8 @@ struct Curl_addrinfo *Curl_doh(struct connectdata *conn,
 
   if(conn->ip_version != CURL_IPRESOLVE_V4) {
     /* create IPv6 DOH request */
-    result = dohprobe(data, &data->req.doh.probe[DOH_PROBE_SLOT_IPADDR_V6],
-                      DNS_TYPE_AAAA, hostname, data->set.str[STRING_DOH],
+    result = dohprobe(data, &data->req.doh.probe[DOH_PROBE_SLOT_IPADDR_V6], 
+                      DNS_TYPE_AAAA, hostname, data->set.str[STRING_DOH], 
                       data->multi, data->req.doh.headers);
     if(result)
       goto error;
@@ -427,13 +427,13 @@ struct Curl_addrinfo *Curl_doh(struct connectdata *conn,
   error:
   curl_slist_free_all(data->req.doh.headers);
   data->req.doh.headers = NULL;
-  for(slot = 0; slot < DOH_PROBE_SLOTS; slot++) {
-    Curl_close(&data->req.doh.probe[slot].easy);
-  }
+  for(slot = 0; slot < DOH_PROBE_SLOTS; slot++) { 
+    Curl_close(&data->req.doh.probe[slot].easy); 
+  } 
   return NULL;
 }
 
-static DOHcode skipqname(const unsigned char *doh, size_t dohlen,
+static DOHcode skipqname(const unsigned char *doh, size_t dohlen, 
                          unsigned int *indexp)
 {
   unsigned char length;
@@ -457,24 +457,24 @@ static DOHcode skipqname(const unsigned char *doh, size_t dohlen,
   return DOH_OK;
 }
 
-static unsigned short get16bit(const unsigned char *doh, int index)
+static unsigned short get16bit(const unsigned char *doh, int index) 
 {
   return (unsigned short)((doh[index] << 8) | doh[index + 1]);
 }
 
-static unsigned int get32bit(const unsigned char *doh, int index)
+static unsigned int get32bit(const unsigned char *doh, int index) 
 {
-   /* make clang and gcc optimize this to bswap by incrementing
-      the pointer first. */
-   doh += index;
-
-   /* avoid undefined behaviour by casting to unsigned before shifting
-      24 bits, possibly into the sign bit. codegen is same, but
-      ub sanitizer won't be upset */
-  return ( (unsigned)doh[0] << 24) | (doh[1] << 16) |(doh[2] << 8) | doh[3];
+   /* make clang and gcc optimize this to bswap by incrementing 
+      the pointer first. */ 
+   doh += index; 
+ 
+   /* avoid undefined behaviour by casting to unsigned before shifting 
+      24 bits, possibly into the sign bit. codegen is same, but 
+      ub sanitizer won't be upset */ 
+  return ( (unsigned)doh[0] << 24) | (doh[1] << 16) |(doh[2] << 8) | doh[3]; 
 }
 
-static DOHcode store_a(const unsigned char *doh, int index, struct dohentry *d)
+static DOHcode store_a(const unsigned char *doh, int index, struct dohentry *d) 
 {
   /* silently ignore addresses over the limit */
   if(d->numaddr < DOH_MAX_ADDR) {
@@ -486,9 +486,9 @@ static DOHcode store_a(const unsigned char *doh, int index, struct dohentry *d)
   return DOH_OK;
 }
 
-static DOHcode store_aaaa(const unsigned char *doh,
-                          int index,
-                          struct dohentry *d)
+static DOHcode store_aaaa(const unsigned char *doh, 
+                          int index, 
+                          struct dohentry *d) 
 {
   /* silently ignore addresses over the limit */
   if(d->numaddr < DOH_MAX_ADDR) {
@@ -500,12 +500,12 @@ static DOHcode store_aaaa(const unsigned char *doh,
   return DOH_OK;
 }
 
-static DOHcode store_cname(const unsigned char *doh,
+static DOHcode store_cname(const unsigned char *doh, 
                            size_t dohlen,
                            unsigned int index,
                            struct dohentry *d)
 {
-  struct dynbuf *c;
+  struct dynbuf *c; 
   unsigned int loop = 128; /* a valid DNS name can never loop this much */
   unsigned char length;
 
@@ -523,7 +523,7 @@ static DOHcode store_cname(const unsigned char *doh,
       if((index + 1) >= dohlen)
         return DOH_DNS_OUT_OF_RANGE;
 
-      /* move to the new index */
+      /* move to the new index */ 
       newpos = (length & 0x3f) << 8 | doh[index + 1];
       index = newpos;
       continue;
@@ -534,15 +534,15 @@ static DOHcode store_cname(const unsigned char *doh,
       index++;
 
     if(length) {
-      if(Curl_dyn_len(c)) {
-        if(Curl_dyn_add(c, "."))
-          return DOH_OUT_OF_MEM;
+      if(Curl_dyn_len(c)) { 
+        if(Curl_dyn_add(c, ".")) 
+          return DOH_OUT_OF_MEM; 
       }
       if((index + length) > dohlen)
         return DOH_DNS_BAD_LABEL;
 
-      if(Curl_dyn_addn(c, &doh[index], length))
-        return DOH_OUT_OF_MEM;
+      if(Curl_dyn_addn(c, &doh[index], length)) 
+        return DOH_OUT_OF_MEM; 
       index += length;
     }
   } while(length && --loop);
@@ -552,7 +552,7 @@ static DOHcode store_cname(const unsigned char *doh,
   return DOH_OK;
 }
 
-static DOHcode rdata(const unsigned char *doh,
+static DOHcode rdata(const unsigned char *doh, 
                      size_t dohlen,
                      unsigned short rdlength,
                      unsigned short type,
@@ -585,9 +585,9 @@ static DOHcode rdata(const unsigned char *doh,
     if(rc)
       return rc;
     break;
-  case DNS_TYPE_DNAME:
-    /* explicit for clarity; just skip; rely on synthesized CNAME  */
-    break;
+  case DNS_TYPE_DNAME: 
+    /* explicit for clarity; just skip; rely on synthesized CNAME  */ 
+    break; 
   default:
     /* unsupported type, just skip it */
     break;
@@ -595,17 +595,17 @@ static DOHcode rdata(const unsigned char *doh,
   return DOH_OK;
 }
 
-UNITTEST void de_init(struct dohentry *de)
+UNITTEST void de_init(struct dohentry *de) 
 {
-  int i;
+  int i; 
   memset(de, 0, sizeof(*de));
   de->ttl = INT_MAX;
-  for(i = 0; i < DOH_MAX_CNAME; i++)
-    Curl_dyn_init(&de->cname[i], DYN_DOH_CNAME);
+  for(i = 0; i < DOH_MAX_CNAME; i++) 
+    Curl_dyn_init(&de->cname[i], DYN_DOH_CNAME); 
 }
 
 
-UNITTEST DOHcode doh_decode(const unsigned char *doh,
+UNITTEST DOHcode doh_decode(const unsigned char *doh, 
                             size_t dohlen,
                             DNStype dnstype,
                             struct dohentry *d)
@@ -652,10 +652,10 @@ UNITTEST DOHcode doh_decode(const unsigned char *doh,
       return DOH_DNS_OUT_OF_RANGE;
 
     type = get16bit(doh, index);
-    if((type != DNS_TYPE_CNAME)    /* may be synthesized from DNAME */
-       && (type != DNS_TYPE_DNAME) /* if present, accept and ignore */
-       && (type != dnstype))
-      /* Not the same type as was asked for nor CNAME nor DNAME */
+    if((type != DNS_TYPE_CNAME)    /* may be synthesized from DNAME */ 
+       && (type != DNS_TYPE_DNAME) /* if present, accept and ignore */ 
+       && (type != dnstype)) 
+      /* Not the same type as was asked for nor CNAME nor DNAME */ 
       return DOH_DNS_UNEXPECTED_TYPE;
     index += 2;
 
@@ -745,12 +745,12 @@ UNITTEST DOHcode doh_decode(const unsigned char *doh,
 
 #ifndef CURL_DISABLE_VERBOSE_STRINGS
 static void showdoh(struct Curl_easy *data,
-                    const struct dohentry *d)
+                    const struct dohentry *d) 
 {
   int i;
   infof(data, "TTL: %u seconds\n", d->ttl);
   for(i = 0; i < d->numaddr; i++) {
-    const struct dohaddr *a = &d->addr[i];
+    const struct dohaddr *a = &d->addr[i]; 
     if(a->type == DNS_TYPE_A) {
       infof(data, "DOH A: %u.%u.%u.%u\n",
             a->ip.v4[0], a->ip.v4[1],
@@ -776,7 +776,7 @@ static void showdoh(struct Curl_easy *data,
     }
   }
   for(i = 0; i < d->numcname; i++) {
-    infof(data, "CNAME: %s\n", Curl_dyn_ptr(&d->cname[i]));
+    infof(data, "CNAME: %s\n", Curl_dyn_ptr(&d->cname[i])); 
   }
 }
 #else
@@ -796,19 +796,19 @@ static void showdoh(struct Curl_easy *data,
  * must be an associated call later to Curl_freeaddrinfo().
  */
 
-static struct Curl_addrinfo *
+static struct Curl_addrinfo * 
 doh2ai(const struct dohentry *de, const char *hostname, int port)
 {
-  struct Curl_addrinfo *ai;
-  struct Curl_addrinfo *prevai = NULL;
-  struct Curl_addrinfo *firstai = NULL;
+  struct Curl_addrinfo *ai; 
+  struct Curl_addrinfo *prevai = NULL; 
+  struct Curl_addrinfo *firstai = NULL; 
   struct sockaddr_in *addr;
 #ifdef ENABLE_IPV6
   struct sockaddr_in6 *addr6;
 #endif
   CURLcode result = CURLE_OK;
   int i;
-  size_t hostlen = strlen(hostname) + 1; /* include zero terminator */
+  size_t hostlen = strlen(hostname) + 1; /* include zero terminator */ 
 
   if(!de)
     /* no input == no output! */
@@ -831,14 +831,14 @@ doh2ai(const struct dohentry *de, const char *hostname, int port)
       addrtype = AF_INET;
     }
 
-    ai = calloc(1, sizeof(struct Curl_addrinfo) + ss_size + hostlen);
+    ai = calloc(1, sizeof(struct Curl_addrinfo) + ss_size + hostlen); 
     if(!ai) {
       result = CURLE_OUT_OF_MEMORY;
       break;
     }
-    ai->ai_addr = (void *)((char *)ai + sizeof(struct Curl_addrinfo));
-    ai->ai_canonname = (void *)((char *)ai->ai_addr + ss_size);
-    memcpy(ai->ai_canonname, hostname, hostlen);
+    ai->ai_addr = (void *)((char *)ai + sizeof(struct Curl_addrinfo)); 
+    ai->ai_canonname = (void *)((char *)ai->ai_addr + ss_size); 
+    memcpy(ai->ai_canonname, hostname, hostlen); 
 
     if(!firstai)
       /* store the pointer we want to return from this function */
@@ -863,7 +863,7 @@ doh2ai(const struct dohentry *de, const char *hostname, int port)
       addr = (void *)ai->ai_addr; /* storage area for this info */
       DEBUGASSERT(sizeof(struct in_addr) == sizeof(de->addr[i].ip.v4));
       memcpy(&addr->sin_addr, &de->addr[i].ip.v4, sizeof(struct in_addr));
-      addr->sin_family = addrtype;
+      addr->sin_family = addrtype; 
       addr->sin_port = htons((unsigned short)port);
       break;
 
@@ -872,7 +872,7 @@ doh2ai(const struct dohentry *de, const char *hostname, int port)
       addr6 = (void *)ai->ai_addr; /* storage area for this info */
       DEBUGASSERT(sizeof(struct in6_addr) == sizeof(de->addr[i].ip.v6));
       memcpy(&addr6->sin6_addr, &de->addr[i].ip.v6, sizeof(struct in6_addr));
-      addr6->sin6_family = addrtype;
+      addr6->sin6_family = addrtype; 
       addr6->sin6_port = htons((unsigned short)port);
       break;
 #endif
@@ -900,54 +900,54 @@ UNITTEST void de_cleanup(struct dohentry *d)
 {
   int i = 0;
   for(i = 0; i < d->numcname; i++) {
-    Curl_dyn_free(&d->cname[i]);
+    Curl_dyn_free(&d->cname[i]); 
   }
 }
 
 CURLcode Curl_doh_is_resolved(struct connectdata *conn,
                               struct Curl_dns_entry **dnsp)
 {
-  CURLcode result;
+  CURLcode result; 
   struct Curl_easy *data = conn->data;
   *dnsp = NULL; /* defaults to no response */
 
-  if(!data->req.doh.probe[DOH_PROBE_SLOT_IPADDR_V4].easy &&
-     !data->req.doh.probe[DOH_PROBE_SLOT_IPADDR_V6].easy) {
+  if(!data->req.doh.probe[DOH_PROBE_SLOT_IPADDR_V4].easy && 
+     !data->req.doh.probe[DOH_PROBE_SLOT_IPADDR_V6].easy) { 
     failf(data, "Could not DOH-resolve: %s", conn->async.hostname);
     return conn->bits.proxy?CURLE_COULDNT_RESOLVE_PROXY:
       CURLE_COULDNT_RESOLVE_HOST;
   }
   else if(!data->req.doh.pending) {
-    DOHcode rc[DOH_PROBE_SLOTS] = {
-      DOH_OK, DOH_OK
-    };
+    DOHcode rc[DOH_PROBE_SLOTS] = { 
+      DOH_OK, DOH_OK 
+    }; 
     struct dohentry de;
-    int slot;
+    int slot; 
     /* remove DOH handles from multi handle and close them */
-    for(slot = 0; slot < DOH_PROBE_SLOTS; slot++) {
-      curl_multi_remove_handle(data->multi, data->req.doh.probe[slot].easy);
-      Curl_close(&data->req.doh.probe[slot].easy);
-    }
-    /* parse the responses, create the struct and return it! */
-    de_init(&de);
-    for(slot = 0; slot < DOH_PROBE_SLOTS; slot++) {
-      struct dnsprobe *p = &data->req.doh.probe[slot];
-      if(!p->dnstype)
-        continue;
-      rc[slot] = doh_decode(Curl_dyn_uptr(&p->serverdoh),
-                            Curl_dyn_len(&p->serverdoh),
-                            p->dnstype,
-                            &de);
-      Curl_dyn_free(&p->serverdoh);
-      if(rc[slot]) {
-        infof(data, "DOH: %s type %s for %s\n", doh_strerror(rc[slot]),
-              type2name(p->dnstype), data->req.doh.host);
-      }
-    } /* next slot */
+    for(slot = 0; slot < DOH_PROBE_SLOTS; slot++) { 
+      curl_multi_remove_handle(data->multi, data->req.doh.probe[slot].easy); 
+      Curl_close(&data->req.doh.probe[slot].easy); 
+    } 
+    /* parse the responses, create the struct and return it! */ 
+    de_init(&de); 
+    for(slot = 0; slot < DOH_PROBE_SLOTS; slot++) { 
+      struct dnsprobe *p = &data->req.doh.probe[slot]; 
+      if(!p->dnstype) 
+        continue; 
+      rc[slot] = doh_decode(Curl_dyn_uptr(&p->serverdoh), 
+                            Curl_dyn_len(&p->serverdoh), 
+                            p->dnstype, 
+                            &de); 
+      Curl_dyn_free(&p->serverdoh); 
+      if(rc[slot]) { 
+        infof(data, "DOH: %s type %s for %s\n", doh_strerror(rc[slot]), 
+              type2name(p->dnstype), data->req.doh.host); 
+      } 
+    } /* next slot */ 
 
-    result = CURLE_COULDNT_RESOLVE_HOST; /* until we know better */
-    if(!rc[DOH_PROBE_SLOT_IPADDR_V4] || !rc[DOH_PROBE_SLOT_IPADDR_V6]) {
-      /* we have an address, of one kind or other */
+    result = CURLE_COULDNT_RESOLVE_HOST; /* until we know better */ 
+    if(!rc[DOH_PROBE_SLOT_IPADDR_V4] || !rc[DOH_PROBE_SLOT_IPADDR_V6]) { 
+      /* we have an address, of one kind or other */ 
       struct Curl_dns_entry *dns;
       struct Curl_addrinfo *ai;
 
@@ -969,26 +969,26 @@ CURLcode Curl_doh_is_resolved(struct connectdata *conn,
       if(data->share)
         Curl_share_unlock(data, CURL_LOCK_DATA_DNS);
 
-      if(!dns) {
+      if(!dns) { 
         /* returned failure, bail out nicely */
         Curl_freeaddrinfo(ai);
-      }
+      } 
       else {
         conn->async.dns = dns;
         *dnsp = dns;
-        result = CURLE_OK;      /* address resolution OK */
+        result = CURLE_OK;      /* address resolution OK */ 
       }
-    } /* address processing done */
-
-    /* Now process any build-specific attributes retrieved from DNS */
-
-    /* All done */
+    } /* address processing done */ 
+ 
+    /* Now process any build-specific attributes retrieved from DNS */ 
+ 
+    /* All done */ 
     de_cleanup(&de);
-    return result;
+    return result; 
 
-  } /* !data->req.doh.pending */
+  } /* !data->req.doh.pending */ 
 
-  /* else wait for pending DOH transactions to complete */
+  /* else wait for pending DOH transactions to complete */ 
   return CURLE_OK;
 }
 

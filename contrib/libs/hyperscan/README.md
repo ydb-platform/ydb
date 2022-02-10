@@ -13,7 +13,7 @@ Hyperscan is typically used in a DPI library stack.
 # Documentation
 
 Information on building the Hyperscan library and using its API is available in
-the [Developer Reference Guide](http://intel.github.io/hyperscan/dev-reference/).
+the [Developer Reference Guide](http://intel.github.io/hyperscan/dev-reference/). 
 
 # License
 
@@ -32,7 +32,7 @@ branch.
 
 # Get Involved
 
-The official homepage for Hyperscan is at [www.hyperscan.io](https://www.hyperscan.io).
+The official homepage for Hyperscan is at [www.hyperscan.io](https://www.hyperscan.io). 
 
 If you have questions or comments, we encourage you to [join the mailing
 list](https://lists.01.org/mailman/listinfo/hyperscan). Bugs can be filed by

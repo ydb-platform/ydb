@@ -1,16 +1,16 @@
-## fast_float number parsing library: 4x faster than strtod
+## fast_float number parsing library: 4x faster than strtod 
 
 ![Ubuntu 20.04 CI (GCC 9)](https://github.com/lemire/fast_float/workflows/Ubuntu%2020.04%20CI%20(GCC%209)/badge.svg)
 ![Ubuntu 18.04 CI (GCC 7)](https://github.com/lemire/fast_float/workflows/Ubuntu%2018.04%20CI%20(GCC%207)/badge.svg)
 ![Alpine Linux](https://github.com/lemire/fast_float/workflows/Alpine%20Linux/badge.svg)
 ![MSYS2-CI](https://github.com/lemire/fast_float/workflows/MSYS2-CI/badge.svg)
 ![VS16-CLANG-CI](https://github.com/lemire/fast_float/workflows/VS16-CLANG-CI/badge.svg)
-[![VS16-CI](https://github.com/fastfloat/fast_float/actions/workflows/vs16-ci.yml/badge.svg)](https://github.com/fastfloat/fast_float/actions/workflows/vs16-ci.yml)
+[![VS16-CI](https://github.com/fastfloat/fast_float/actions/workflows/vs16-ci.yml/badge.svg)](https://github.com/fastfloat/fast_float/actions/workflows/vs16-ci.yml) 
 
 The fast_float library provides fast header-only implementations for the C++ from_chars
 functions for `float` and `double` types.  These functions convert ASCII strings representing
 decimal values (e.g., `1.3e10`) into binary types. We provide exact rounding (including
-round to even). In our experience, these `fast_float` functions many times faster than comparable number-parsing functions from existing C++ standard libraries.
+round to even). In our experience, these `fast_float` functions many times faster than comparable number-parsing functions from existing C++ standard libraries. 
 
 Specifically, `fast_float` provides the following two functions with a C++17-like syntax (the library itself only requires C++11):
 
@@ -69,7 +69,7 @@ The library seeks to follow the C++17 (see [20.19.3](http://eel.is/c++draft/char
 * The `from_chars` function does not skip leading white-space characters.
 * [A leading `+` sign](https://en.cppreference.com/w/cpp/utility/from_chars) is forbidden.
 * It is generally impossible to represent a decimal value exactly as binary floating-point number (`float` and `double` types). We seek the nearest value. We round to an even mantissa when we are in-between two binary floating-point numbers. 
-
+ 
 Furthermore, we have the following restrictions:
 * We only support `float` and `double` types at this time.
 * We only support the decimal format: we do not support hexadecimal strings.
@@ -79,61 +79,61 @@ We support Visual Studio, macOS, Linux, freeBSD. We support big and little endia
 
 
 
-## Using commas as decimal separator
-
-
-The C++ standard stipulate that `from_chars` has to be locale-independent. In
-particular, the decimal separator has to be the period (`.`). However, 
-some users still want to use the `fast_float` library with in a locale-dependent 
-manner. Using a separate function called `from_chars_advanced`, we allow the users
-to pass a `parse_options` instance which contains a custom decimal separator (e.g., 
-the comma). You may use it as follows.
-
-```C++
-#include "fast_float/fast_float.h"
-#include <iostream>
+## Using commas as decimal separator 
  
-int main() {
-    const std::string input =  "3,1416 xyz ";
-    double result;
-    fast_float::parse_options options{fast_float::chars_format::general, ','};
-    auto answer = fast_float::from_chars_advanced(input.data(), input.data()+input.size(), result, options);
-    if((answer.ec != std::errc()) || ((result != 3.1416))) { std::cerr << "parsing failure\n"; return EXIT_FAILURE; }
-    std::cout << "parsed the number " << result << std::endl;
-    return EXIT_SUCCESS;
-}
-```
-
-
-## Reference
-
-- Daniel Lemire, [Number Parsing at a Gigabyte per Second](https://arxiv.org/abs/2101.11408), Software: Pratice and Experience 51 (8), 2021.
-
-## Other programming languages
-
-- [There is an R binding](https://github.com/eddelbuettel/rcppfastfloat) called `rcppfastfloat`.
-- [There is a Rust port of the fast_float library](https://github.com/aldanor/fast-float-rust/) called `fast-float-rust`.
-- [There is a Java port of the fast_float library](https://github.com/wrandelshofer/FastDoubleParser) called `FastDoubleParser`.
-- [There is a C# port of the fast_float library](https://github.com/CarlVerret/csFastFloat) called `csFastFloat`.
-
-
+ 
+The C++ standard stipulate that `from_chars` has to be locale-independent. In 
+particular, the decimal separator has to be the period (`.`). However,  
+some users still want to use the `fast_float` library with in a locale-dependent  
+manner. Using a separate function called `from_chars_advanced`, we allow the users 
+to pass a `parse_options` instance which contains a custom decimal separator (e.g.,  
+the comma). You may use it as follows. 
+ 
+```C++ 
+#include "fast_float/fast_float.h" 
+#include <iostream> 
+  
+int main() { 
+    const std::string input =  "3,1416 xyz "; 
+    double result; 
+    fast_float::parse_options options{fast_float::chars_format::general, ','}; 
+    auto answer = fast_float::from_chars_advanced(input.data(), input.data()+input.size(), result, options); 
+    if((answer.ec != std::errc()) || ((result != 3.1416))) { std::cerr << "parsing failure\n"; return EXIT_FAILURE; } 
+    std::cout << "parsed the number " << result << std::endl; 
+    return EXIT_SUCCESS; 
+} 
+``` 
+ 
+ 
+## Reference 
+ 
+- Daniel Lemire, [Number Parsing at a Gigabyte per Second](https://arxiv.org/abs/2101.11408), Software: Pratice and Experience 51 (8), 2021. 
+ 
+## Other programming languages 
+ 
+- [There is an R binding](https://github.com/eddelbuettel/rcppfastfloat) called `rcppfastfloat`. 
+- [There is a Rust port of the fast_float library](https://github.com/aldanor/fast-float-rust/) called `fast-float-rust`. 
+- [There is a Java port of the fast_float library](https://github.com/wrandelshofer/FastDoubleParser) called `FastDoubleParser`. 
+- [There is a C# port of the fast_float library](https://github.com/CarlVerret/csFastFloat) called `csFastFloat`. 
+ 
+ 
 ## Relation With Other Work
 
 The fastfloat algorithm is part of the [LLVM standard libraries](https://github.com/llvm/llvm-project/commit/87c016078ad72c46505461e4ff8bfa04819fe7ba). 
 
-The fast_float library provides a performance similar to that of the [fast_double_parser](https://github.com/lemire/fast_double_parser) library but using an updated algorithm reworked from the ground up, and while offering an API more in line with the expectations of C++ programmers. The fast_double_parser library is part of the [Microsoft LightGBM machine-learning framework](https://github.com/microsoft/LightGBM).
+The fast_float library provides a performance similar to that of the [fast_double_parser](https://github.com/lemire/fast_double_parser) library but using an updated algorithm reworked from the ground up, and while offering an API more in line with the expectations of C++ programmers. The fast_double_parser library is part of the [Microsoft LightGBM machine-learning framework](https://github.com/microsoft/LightGBM). 
 
 ## Users
 
-The fast_float library is used by [Apache Arrow](https://github.com/apache/arrow/pull/8494) where it multiplied the number parsing speed by two or three times. It is also used by [Yandex ClickHouse](https://github.com/ClickHouse/ClickHouse) and by [Google Jsonnet](https://github.com/google/jsonnet).
+The fast_float library is used by [Apache Arrow](https://github.com/apache/arrow/pull/8494) where it multiplied the number parsing speed by two or three times. It is also used by [Yandex ClickHouse](https://github.com/ClickHouse/ClickHouse) and by [Google Jsonnet](https://github.com/google/jsonnet). 
 
 
 ## How fast is it?
 
 It can parse random floating-point numbers at a speed of 1 GB/s on some systems. We find that it is often twice as fast as the best available competitor, and many times faster than many standard-library implementations.
 
-<img src="http://lemire.me/blog/wp-content/uploads/2020/11/fastfloat_speed.png" width="400">
-
+<img src="http://lemire.me/blog/wp-content/uploads/2020/11/fastfloat_speed.png" width="400"> 
+ 
 ```
 $ ./build/benchmarks/benchmark 
 # parsing random integers in the range [0,1)
@@ -147,11 +147,11 @@ fastfloat                               :  1042.38 MB/s (+/- 9.9 %)    49.68 Mfl
 
 See https://github.com/lemire/simple_fastfloat_benchmark for our benchmarking code.
 
-
-## Video
-
-[![Go Systems 2020](http://img.youtube.com/vi/AVXgvlMeIm4/0.jpg)](http://www.youtube.com/watch?v=AVXgvlMeIm4)<br />
-
+ 
+## Video 
+ 
+[![Go Systems 2020](http://img.youtube.com/vi/AVXgvlMeIm4/0.jpg)](http://www.youtube.com/watch?v=AVXgvlMeIm4)<br /> 
+ 
 ## Using as a CMake dependency
 
 This library is header-only by design. The CMake file provides the `fast_float` target
@@ -171,7 +171,7 @@ Or you may want to retrieve the dependency automatically if you have a sufficien
 FetchContent_Declare(
   fast_float
   GIT_REPOSITORY https://github.com/lemire/fast_float.git
-  GIT_TAG tags/v1.1.2
+  GIT_TAG tags/v1.1.2 
   GIT_SHALLOW TRUE)
 
 FetchContent_MakeAvailable(fast_float)
@@ -179,19 +179,19 @@ target_link_libraries(myprogram PUBLIC fast_float)
 
 ```
 
-You should change the `GIT_TAG` line so that you recover the version you wish to use.
+You should change the `GIT_TAG` line so that you recover the version you wish to use. 
 
-## Using as single header
+## Using as single header 
 
-The script `script/amalgamate.py` may be used to generate a single header 
-version of the library if so desired.
-Just run the script from the root directory of this repository. 
-You can customize the license type and output file if desired as described in
-the command line help.
+The script `script/amalgamate.py` may be used to generate a single header  
+version of the library if so desired. 
+Just run the script from the root directory of this repository.  
+You can customize the license type and output file if desired as described in 
+the command line help. 
 
-You may directly download automatically generated single-header files:
+You may directly download automatically generated single-header files: 
 
-https://github.com/fastfloat/fast_float/releases/download/v1.1.2/fast_float.h
+https://github.com/fastfloat/fast_float/releases/download/v1.1.2/fast_float.h 
 
 ## Credit
 
@@ -201,18 +201,18 @@ invaluable feedback. Rémy Oudompheng first implemented a fast path we use in th
 
 The library includes code adapted from Google Wuffs (written by Nigel Tao) which was originally published 
 under the Apache 2.0 license.
-
-## License
-
-<sup>
-Licensed under either of <a href="LICENSE-APACHE">Apache License, Version
-2.0</a> or <a href="LICENSE-MIT">MIT license</a> at your option.
-</sup>
-
-<br>
-
-<sub>
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in this repository by you, as defined in the Apache-2.0 license,
-shall be dual licensed as above, without any additional terms or conditions.
-</sub>
+ 
+## License 
+ 
+<sup> 
+Licensed under either of <a href="LICENSE-APACHE">Apache License, Version 
+2.0</a> or <a href="LICENSE-MIT">MIT license</a> at your option. 
+</sup> 
+ 
+<br> 
+ 
+<sub> 
+Unless you explicitly state otherwise, any contribution intentionally submitted 
+for inclusion in this repository by you, as defined in the Apache-2.0 license, 
+shall be dual licensed as above, without any additional terms or conditions. 
+</sub> 

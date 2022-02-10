@@ -5,7 +5,7 @@
 #include <util/generic/list.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/util/yverify_stream.h>
-#include <google/protobuf/util/message_differencer.h>
+#include <google/protobuf/util/message_differencer.h> 
 
 namespace NKikimr {
 namespace NLocalDb {

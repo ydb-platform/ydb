@@ -140,7 +140,7 @@ BELONGS ya.make
     Files with this license:
         tld.c [3:21]
 
-KEEP     Custom-Punycode      831cf172ef44d622ecc83535c4c0da31
+KEEP     Custom-Punycode      831cf172ef44d622ecc83535c4c0da31 
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:

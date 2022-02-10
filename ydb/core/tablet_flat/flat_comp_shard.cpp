@@ -515,16 +515,16 @@ namespace NCompShard {
             Y_VERIFY(key, "Cannot find split key %" PRIu64, keyId);
 
             auto keyCells = key->GetCells();
-            if (keyCells.size() < nulls->Size()) {
-                for (size_t i = 0; i < keyCells.size(); ++i) {
+            if (keyCells.size() < nulls->Size()) { 
+                for (size_t i = 0; i < keyCells.size(); ++i) { 
                     keyCellsBuffer[i] = keyCells[i];
                 }
-                for (size_t i = keyCells.size(); i < nulls->Size(); ++i) {
+                for (size_t i = keyCells.size(); i < nulls->Size(); ++i) { 
                     keyCellsBuffer[i] = nulls->Defs[i];
                 }
                 keyCells = keyCellsBuffer;
             }
-            Y_VERIFY_DEBUG(keyCells.size() == nulls->Size());
+            Y_VERIFY_DEBUG(keyCells.size() == nulls->Size()); 
 
             return keyCells;
         };

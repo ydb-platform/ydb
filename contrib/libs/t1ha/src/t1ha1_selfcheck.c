@@ -1,8 +1,8 @@
 /*
- *  Copyright (c) 2016-2020 Positive Technologies, https://www.ptsecurity.com,
+ *  Copyright (c) 2016-2020 Positive Technologies, https://www.ptsecurity.com, 
  *  Fast Positive Hash.
  *
- *  Portions Copyright (c) 2010-2020 Leonid Yuriev <leo@yuriev.ru>,
+ *  Portions Copyright (c) 2010-2020 Leonid Yuriev <leo@yuriev.ru>, 
  *  The 1Hippeus project (t1h).
  *
  *  This software is provided 'as-is', without any express or implied
@@ -34,7 +34,7 @@
  *     hardware tricks).
  *  3. Not suitable for cryptography.
  *
- * The Future will (be) Positive. Всё будет хорошо.
+ * The Future will (be) Positive. Всё будет хорошо. 
  *
  * ACKNOWLEDGEMENT:
  * The t1ha was originally developed by Leonid Yuriev (Леонид Юрьев)

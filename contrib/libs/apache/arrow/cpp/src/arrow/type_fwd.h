@@ -29,20 +29,20 @@ namespace arrow {
 
 template <typename T>
 class Iterator;
-template <typename T>
-struct IterationTraits;
+template <typename T> 
+struct IterationTraits; 
 
 template <typename T>
 class Result;
 
 class Status;
 
-namespace internal {
-struct Empty;
-}  // namespace internal
-template <typename T = internal::Empty>
-class Future;
-
+namespace internal { 
+struct Empty; 
+}  // namespace internal 
+template <typename T = internal::Empty> 
+class Future; 
+ 
 namespace util {
 class Codec;
 }  // namespace util
@@ -60,7 +60,7 @@ class DataType;
 class Field;
 class FieldRef;
 class KeyValueMetadata;
-enum class Endianness;
+enum class Endianness; 
 class Schema;
 
 using DataTypeVector = std::vector<std::shared_ptr<DataType>>;
@@ -80,9 +80,9 @@ class RecordBatch;
 class RecordBatchReader;
 class Table;
 
-struct Datum;
-struct ValueDescr;
-
+struct Datum; 
+struct ValueDescr; 
+ 
 using ChunkedArrayVector = std::vector<std::shared_ptr<ChunkedArray>>;
 using RecordBatchVector = std::vector<std::shared_ptr<RecordBatch>>;
 using RecordBatchIterator = Iterator<std::shared_ptr<RecordBatch>>;
@@ -154,16 +154,16 @@ class StructBuilder;
 struct StructScalar;
 
 class Decimal128;
-class Decimal256;
+class Decimal256; 
 class DecimalType;
 class Decimal128Type;
-class Decimal256Type;
+class Decimal256Type; 
 class Decimal128Array;
-class Decimal256Array;
+class Decimal256Array; 
 class Decimal128Builder;
-class Decimal256Builder;
+class Decimal256Builder; 
 struct Decimal128Scalar;
-struct Decimal256Scalar;
+struct Decimal256Scalar; 
 
 struct UnionMode {
   enum type { SPARSE, DENSE };
@@ -262,9 +262,9 @@ class ExtensionType;
 class ExtensionArray;
 struct ExtensionScalar;
 
-class Tensor;
-class SparseTensor;
-
+class Tensor; 
+class SparseTensor; 
+ 
 // ----------------------------------------------------------------------
 
 struct Type {
@@ -345,15 +345,15 @@ struct Type {
     /// DAY_TIME interval in SQL style
     INTERVAL_DAY_TIME,
 
-    /// Precision- and scale-based decimal type with 128 bits.
-    DECIMAL128,
+    /// Precision- and scale-based decimal type with 128 bits. 
+    DECIMAL128, 
 
-    /// Defined for backward-compatibility.
-    DECIMAL = DECIMAL128,
-
-    /// Precision- and scale-based decimal type with 256 bits.
-    DECIMAL256,
-
+    /// Defined for backward-compatibility. 
+    DECIMAL = DECIMAL128, 
+ 
+    /// Precision- and scale-based decimal type with 256 bits. 
+    DECIMAL256, 
+ 
     /// A list of some logical data type
     LIST,
 
@@ -447,21 +447,21 @@ std::shared_ptr<DataType> ARROW_EXPORT date64();
 ARROW_EXPORT
 std::shared_ptr<DataType> fixed_size_binary(int32_t byte_width);
 
-/// \brief Create a DecimalType instance depending on the precision
-///
-/// If the precision is greater than 38, a Decimal256Type is returned,
-/// otherwise a Decimal128Type.
+/// \brief Create a DecimalType instance depending on the precision 
+/// 
+/// If the precision is greater than 38, a Decimal256Type is returned, 
+/// otherwise a Decimal128Type. 
 ARROW_EXPORT
 std::shared_ptr<DataType> decimal(int32_t precision, int32_t scale);
 
-/// \brief Create a Decimal128Type instance
-ARROW_EXPORT
-std::shared_ptr<DataType> decimal128(int32_t precision, int32_t scale);
-
-/// \brief Create a Decimal256Type instance
-ARROW_EXPORT
-std::shared_ptr<DataType> decimal256(int32_t precision, int32_t scale);
-
+/// \brief Create a Decimal128Type instance 
+ARROW_EXPORT 
+std::shared_ptr<DataType> decimal128(int32_t precision, int32_t scale); 
+ 
+/// \brief Create a Decimal256Type instance 
+ARROW_EXPORT 
+std::shared_ptr<DataType> decimal256(int32_t precision, int32_t scale); 
+ 
 /// \brief Create a ListType instance from its child Field type
 ARROW_EXPORT
 std::shared_ptr<DataType> list(const std::shared_ptr<Field>& value_type);
@@ -502,7 +502,7 @@ ARROW_EXPORT
 std::shared_ptr<DataType> fixed_size_list(const std::shared_ptr<DataType>& value_type,
                                           int32_t list_size);
 /// \brief Return a Duration instance (naming use _type to avoid namespace conflict with
-/// built in time classes).
+/// built in time classes). 
 std::shared_ptr<DataType> ARROW_EXPORT duration(TimeUnit::type unit);
 
 /// \brief Return a DayTimeIntervalType instance
@@ -638,17 +638,17 @@ std::shared_ptr<Field> ARROW_EXPORT
 field(std::string name, std::shared_ptr<DataType> type, bool nullable = true,
       std::shared_ptr<const KeyValueMetadata> metadata = NULLPTR);
 
-/// \brief Create a Field instance with metadata
-///
-/// The field will be assumed to be nullable.
-///
-/// \param name the field name
-/// \param type the field value type
-/// \param metadata any custom key-value metadata
-std::shared_ptr<Field> ARROW_EXPORT
-field(std::string name, std::shared_ptr<DataType> type,
-      std::shared_ptr<const KeyValueMetadata> metadata);
-
+/// \brief Create a Field instance with metadata 
+/// 
+/// The field will be assumed to be nullable. 
+/// 
+/// \param name the field name 
+/// \param type the field value type 
+/// \param metadata any custom key-value metadata 
+std::shared_ptr<Field> ARROW_EXPORT 
+field(std::string name, std::shared_ptr<DataType> type, 
+      std::shared_ptr<const KeyValueMetadata> metadata); 
+ 
 /// \brief Create a Schema instance
 ///
 /// \param fields the schema's fields
@@ -659,17 +659,17 @@ std::shared_ptr<Schema> schema(
     std::vector<std::shared_ptr<Field>> fields,
     std::shared_ptr<const KeyValueMetadata> metadata = NULLPTR);
 
-/// \brief Create a Schema instance
-///
-/// \param fields the schema's fields
-/// \param endianness the endianness of the data
-/// \param metadata any custom key-value metadata, default null
-/// \return schema shared_ptr to Schema
-ARROW_EXPORT
-std::shared_ptr<Schema> schema(
-    std::vector<std::shared_ptr<Field>> fields, Endianness endianness,
-    std::shared_ptr<const KeyValueMetadata> metadata = NULLPTR);
-
+/// \brief Create a Schema instance 
+/// 
+/// \param fields the schema's fields 
+/// \param endianness the endianness of the data 
+/// \param metadata any custom key-value metadata, default null 
+/// \return schema shared_ptr to Schema 
+ARROW_EXPORT 
+std::shared_ptr<Schema> schema( 
+    std::vector<std::shared_ptr<Field>> fields, Endianness endianness, 
+    std::shared_ptr<const KeyValueMetadata> metadata = NULLPTR); 
+ 
 /// @}
 
 /// Return the process-wide default memory pool.

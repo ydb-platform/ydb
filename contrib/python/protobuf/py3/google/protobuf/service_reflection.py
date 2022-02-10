@@ -49,14 +49,14 @@ class GeneratedServiceType(type):
 
   The protocol compiler currently uses this metaclass to create protocol service
   classes at runtime. Clients can also manually create their own classes at
-  runtime, as in this example::
+  runtime, as in this example:: 
 
-    mydescriptor = ServiceDescriptor(.....)
-    class MyProtoService(service.Service):
-      __metaclass__ = GeneratedServiceType
-      DESCRIPTOR = mydescriptor
-    myservice_instance = MyProtoService()
-    # ...
+    mydescriptor = ServiceDescriptor(.....) 
+    class MyProtoService(service.Service): 
+      __metaclass__ = GeneratedServiceType 
+      DESCRIPTOR = mydescriptor 
+    myservice_instance = MyProtoService() 
+    # ... 
   """
 
   _DESCRIPTOR_KEY = 'DESCRIPTOR'
@@ -76,11 +76,11 @@ class GeneratedServiceType(type):
     # when a service class is subclassed.
     if GeneratedServiceType._DESCRIPTOR_KEY not in dictionary:
       return
-
+ 
     descriptor = dictionary[GeneratedServiceType._DESCRIPTOR_KEY]
     service_builder = _ServiceBuilder(descriptor)
     service_builder.BuildService(cls)
-    cls.DESCRIPTOR = descriptor
+    cls.DESCRIPTOR = descriptor 
 
 
 class GeneratedServiceStubType(GeneratedServiceType):
@@ -108,7 +108,7 @@ class GeneratedServiceStubType(GeneratedServiceType):
     # when a service stub is subclassed.
     if GeneratedServiceStubType._DESCRIPTOR_KEY not in dictionary:
       return
-
+ 
     descriptor = dictionary[GeneratedServiceStubType._DESCRIPTOR_KEY]
     service_stub_builder = _ServiceStubBuilder(descriptor)
     service_stub_builder.BuildServiceStub(cls)

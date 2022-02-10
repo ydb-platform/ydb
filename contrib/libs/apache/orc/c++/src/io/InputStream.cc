@@ -115,7 +115,7 @@ namespace orc {
     return false;
   }
 
-  int64_t SeekableArrayInputStream::ByteCount() const {
+  int64_t SeekableArrayInputStream::ByteCount() const { 
     return static_cast<google::protobuf::int64>(position);
   }
 

@@ -24,8 +24,8 @@
 #include "absl/container/internal/have_sse.h"
 #include "absl/debugging/stacktrace.h"
 #include "absl/memory/memory.h"
-#include "absl/profiling/internal/exponential_biased.h"
-#include "absl/profiling/internal/sample_recorder.h"
+#include "absl/profiling/internal/exponential_biased.h" 
+#include "absl/profiling/internal/sample_recorder.h" 
 #include "absl/synchronization/mutex.h"
 
 namespace absl {
@@ -40,7 +40,7 @@ ABSL_CONST_INIT std::atomic<bool> g_hashtablez_enabled{
 ABSL_CONST_INIT std::atomic<int32_t> g_hashtablez_sample_parameter{1 << 10};
 
 #if defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
-ABSL_PER_THREAD_TLS_KEYWORD absl::profiling_internal::ExponentialBiased
+ABSL_PER_THREAD_TLS_KEYWORD absl::profiling_internal::ExponentialBiased 
     g_exponential_biased_generator;
 #endif
 
@@ -50,14 +50,14 @@ ABSL_PER_THREAD_TLS_KEYWORD absl::profiling_internal::ExponentialBiased
 ABSL_PER_THREAD_TLS_KEYWORD int64_t global_next_sample = 0;
 #endif  // defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
 
-HashtablezSampler& GlobalHashtablezSampler() {
+HashtablezSampler& GlobalHashtablezSampler() { 
   static auto* sampler = new HashtablezSampler();
   return *sampler;
 }
 
-// TODO(bradleybear): The comments at this constructors declaration say that the
-// fields are not initialized, but this definition does initialize the fields.
-// Something needs to be cleaned up.
+// TODO(bradleybear): The comments at this constructors declaration say that the 
+// fields are not initialized, but this definition does initialize the fields. 
+// Something needs to be cleaned up. 
 HashtablezInfo::HashtablezInfo() { PrepareForSampling(); }
 HashtablezInfo::~HashtablezInfo() = default;
 
@@ -71,7 +71,7 @@ void HashtablezInfo::PrepareForSampling() {
   hashes_bitwise_or.store(0, std::memory_order_relaxed);
   hashes_bitwise_and.store(~size_t{}, std::memory_order_relaxed);
   hashes_bitwise_xor.store(0, std::memory_order_relaxed);
-  max_reserve.store(0, std::memory_order_relaxed);
+  max_reserve.store(0, std::memory_order_relaxed); 
 
   create_time = absl::Now();
   // The inliner makes hardcoded skip_count difficult (especially when combined
@@ -101,12 +101,12 @@ static bool ShouldForceSampling() {
   return state == kForce;
 }
 
-HashtablezInfo* SampleSlow(int64_t* next_sample, size_t inline_element_size) {
+HashtablezInfo* SampleSlow(int64_t* next_sample, size_t inline_element_size) { 
   if (ABSL_PREDICT_FALSE(ShouldForceSampling())) {
     *next_sample = 1;
-    HashtablezInfo* result = GlobalHashtablezSampler().Register();
-    result->inline_element_size = inline_element_size;
-    return result;
+    HashtablezInfo* result = GlobalHashtablezSampler().Register(); 
+    result->inline_element_size = inline_element_size; 
+    return result; 
   }
 
 #if !defined(ABSL_INTERNAL_HASHTABLEZ_SAMPLE)
@@ -128,17 +128,17 @@ HashtablezInfo* SampleSlow(int64_t* next_sample, size_t inline_element_size) {
   // that case.
   if (first) {
     if (ABSL_PREDICT_TRUE(--*next_sample > 0)) return nullptr;
-    return SampleSlow(next_sample, inline_element_size);
+    return SampleSlow(next_sample, inline_element_size); 
   }
 
-  HashtablezInfo* result = GlobalHashtablezSampler().Register();
-  result->inline_element_size = inline_element_size;
-  return result;
+  HashtablezInfo* result = GlobalHashtablezSampler().Register(); 
+  result->inline_element_size = inline_element_size; 
+  return result; 
 #endif
 }
 
 void UnsampleSlow(HashtablezInfo* info) {
-  GlobalHashtablezSampler().Unregister(info);
+  GlobalHashtablezSampler().Unregister(info); 
 }
 
 void RecordInsertSlow(HashtablezInfo* info, size_t hash,
@@ -178,7 +178,7 @@ void SetHashtablezSampleParameter(int32_t rate) {
 
 void SetHashtablezMaxSamples(int32_t max) {
   if (max > 0) {
-    GlobalHashtablezSampler().SetMaxSamples(max);
+    GlobalHashtablezSampler().SetMaxSamples(max); 
   } else {
     ABSL_RAW_LOG(ERROR, "Invalid hashtablez max samples: %lld",
                  static_cast<long long>(max));  // NOLINT(runtime/int)

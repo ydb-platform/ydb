@@ -21,7 +21,7 @@ namespace NCodecs {
 
     void SaveCodecInfoToStream(IOutputStream& out, const TStaticCodecInfo& info) {
         TBufferOutput bout;
-        info.SerializeToArcadiaStream(&bout);
+        info.SerializeToArcadiaStream(&bout); 
         ui64 hash = DataSignature(bout.Buffer());
         out.Write(GetStaticCodecInfoMagic());
         ::Save(&out, hash);

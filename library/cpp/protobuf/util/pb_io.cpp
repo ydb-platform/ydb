@@ -3,9 +3,9 @@
 #include <library/cpp/binsaver/bin_saver.h>
 #include <library/cpp/string_utils/base64/base64.h>
 
-#include <google/protobuf/message.h>
-#include <google/protobuf/messagext.h>
-#include <google/protobuf/text_format.h>
+#include <google/protobuf/message.h> 
+#include <google/protobuf/messagext.h> 
+#include <google/protobuf/text_format.h> 
 
 #include <util/generic/string.h>
 #include <util/stream/file.h>
@@ -85,9 +85,9 @@ int operator&(NProtoBuf::Message& m, IBinSaver& f) {
     TStringStream ss;
     if (f.IsReading()) {
         f.Add(0, &ss.Str());
-        m.ParseFromArcadiaStream(&ss);
+        m.ParseFromArcadiaStream(&ss); 
     } else {
-        m.SerializeToArcadiaStream(&ss);
+        m.SerializeToArcadiaStream(&ss); 
         f.Add(0, &ss.Str());
     }
     return 0;

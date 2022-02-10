@@ -2,7 +2,7 @@
 #include "arrow_helpers.h"
 
 #include <contrib/libs/xxhash/xxhash.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h> 
 
 #include <type_traits>
 

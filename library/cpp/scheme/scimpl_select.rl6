@@ -263,7 +263,7 @@ namespace NSc {
         if (ctx.Selector.HasError || ctx.Selector.Depth > 1 || ctx.Selector.HasArray) {
             return NEscJ::EscapeJ<true>(rawKey);
         } else {
-            return ToString(rawKey);
+            return ToString(rawKey); 
         }
     }
 

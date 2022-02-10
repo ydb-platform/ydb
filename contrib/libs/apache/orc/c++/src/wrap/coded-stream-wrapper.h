@@ -28,7 +28,7 @@ DIAGNOSTIC_PUSH
   DIAGNOSTIC_IGNORE("-Wconversion")
 #endif
 
-#include <google/protobuf/io/coded_stream.h>
+#include <google/protobuf/io/coded_stream.h> 
 
 DIAGNOSTIC_POP
 

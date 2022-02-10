@@ -171,16 +171,16 @@ public:
     {
         AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
         AppData.DomainsInfo = MakeIntrusive<TDomainsInfo>();
-        LoggerSettings_->Append(
-            NActorsServices::EServiceCommon_MIN,
-            NActorsServices::EServiceCommon_MAX,
-            NActorsServices::EServiceCommon_Name
-        );
-        LoggerSettings_->Append(
-            NKikimrServices::EServiceKikimr_MIN,
+        LoggerSettings_->Append( 
+            NActorsServices::EServiceCommon_MIN, 
+            NActorsServices::EServiceCommon_MAX, 
+            NActorsServices::EServiceCommon_Name 
+        ); 
+        LoggerSettings_->Append( 
+            NKikimrServices::EServiceKikimr_MIN, 
             NKikimrServices::EServiceKikimr_MAX,
-            NKikimrServices::EServiceKikimr_Name
-        );
+            NKikimrServices::EServiceKikimr_Name 
+        ); 
         for (ui32 i = 0; i < numNodes; ++i) {
             PerNodeInfo.emplace(i + 1, TPerNodeInfo());
         }

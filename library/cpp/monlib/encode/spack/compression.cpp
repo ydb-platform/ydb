@@ -13,7 +13,7 @@
 #include <contrib/libs/xxhash/xxhash.h>
 #include <contrib/libs/zlib/zlib.h>
 #define ZSTD_STATIC_LINKING_ONLY
-#include <contrib/libs/zstd/include/zstd.h>
+#include <contrib/libs/zstd/include/zstd.h> 
 
 namespace NMonitoring {
     namespace {
@@ -29,12 +29,12 @@ namespace NMonitoring {
         constexpr size_t FRAME_SIZE_LIMIT = 2_MB;
         constexpr size_t DEFAULT_FRAME_LEN = 64_KB;
 
-        struct Y_PACKED TFrameHeader {
+        struct Y_PACKED TFrameHeader { 
             TCompressedSize CompressedSize;
             TUncompressedSize UncompressedSize;
         };
 
-        struct Y_PACKED TFrameFooter {
+        struct Y_PACKED TFrameFooter { 
             TCheckSum CheckSum;
         };
 

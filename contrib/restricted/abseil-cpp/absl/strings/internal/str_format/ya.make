@@ -6,8 +6,8 @@ OWNER(g:cpp-contrib)
 
 LICENSE(Apache-2.0)
 
-LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
-
+LICENSE_TEXTS(.yandex_meta/licenses.list.txt) 
+ 
 PEERDIR(
     contrib/restricted/abseil-cpp/absl/base
     contrib/restricted/abseil-cpp/absl/base/internal/raw_logging
@@ -16,7 +16,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/base/log_severity
     contrib/restricted/abseil-cpp/absl/numeric
     contrib/restricted/abseil-cpp/absl/strings
-    contrib/restricted/abseil-cpp/absl/strings/internal/absl_strings_internal
+    contrib/restricted/abseil-cpp/absl/strings/internal/absl_strings_internal 
 )
 
 ADDINCL(
@@ -32,12 +32,12 @@ CFLAGS(
 )
 
 SRCS(
-    arg.cc
-    bind.cc
-    extension.cc
-    float_conversion.cc
-    output.cc
-    parser.cc
+    arg.cc 
+    bind.cc 
+    extension.cc 
+    float_conversion.cc 
+    output.cc 
+    parser.cc 
 )
 
 END()

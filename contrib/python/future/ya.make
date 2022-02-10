@@ -137,7 +137,7 @@ PY_SRCS(
     past/utils/__init__.py
 )
 
-IF (MODULE_TAG == "PY2")
+IF (MODULE_TAG == "PY2") 
     PY_SRCS(
         TOP_LEVEL
         _dummy_thread/__init__.py

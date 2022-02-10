@@ -12,7 +12,7 @@
 #include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h> 
 
 namespace NKikimr {
 

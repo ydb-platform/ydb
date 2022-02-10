@@ -33,7 +33,7 @@ RESOURCE(
 END()
 
 RECURSE(
-    client
+    client 
     src/rw
     src/ut
     test_all

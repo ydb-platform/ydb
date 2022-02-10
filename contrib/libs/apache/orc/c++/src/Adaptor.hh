@@ -21,9 +21,9 @@
 
 /* #undef INT64_IS_LL */
 #define HAS_CONSTEXPR
-#ifndef _MSC_VER
+#ifndef _MSC_VER 
 #define HAS_PREAD
-#endif
+#endif 
 #define HAS_STRPTIME
 #define HAS_STOLL
 #define HAS_DIAGNOSTIC_PUSH

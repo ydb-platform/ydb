@@ -27,7 +27,7 @@
 
 #include <grpc/support/log.h>
 
-#error #include <uv.h>
+#error #include <uv.h> 
 
 uint16_t grpc_htons(uint16_t hostshort) { return htons(hostshort); }
 

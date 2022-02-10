@@ -7,11 +7,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html. 
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -72,8 +72,8 @@ typedef enum {
                             attempted to get added - again */
   CURLM_RECURSIVE_API_CALL, /* an api function was called from inside a
                                callback */
-  CURLM_WAKEUP_FAILURE,  /* wakeup is unavailable or failed */
-  CURLM_BAD_FUNCTION_ARGUMENT,  /* function called with a bad parameter */
+  CURLM_WAKEUP_FAILURE,  /* wakeup is unavailable or failed */ 
+  CURLM_BAD_FUNCTION_ARGUMENT,  /* function called with a bad parameter */ 
   CURLM_LAST
 } CURLMcode;
 
@@ -189,15 +189,15 @@ CURL_EXTERN CURLMcode curl_multi_poll(CURLM *multi_handle,
                                       int timeout_ms,
                                       int *ret);
 
-/*
- * Name:     curl_multi_wakeup()
- *
- * Desc:     wakes up a sleeping curl_multi_poll call.
- *
- * Returns:  CURLMcode type, general multi error code.
- */
-CURL_EXTERN CURLMcode curl_multi_wakeup(CURLM *multi_handle);
-
+/* 
+ * Name:     curl_multi_wakeup() 
+ * 
+ * Desc:     wakes up a sleeping curl_multi_poll call. 
+ * 
+ * Returns:  CURLMcode type, general multi error code. 
+ */ 
+CURL_EXTERN CURLMcode curl_multi_wakeup(CURLM *multi_handle); 
+ 
  /*
   * Name:    curl_multi_perform()
   *
@@ -267,7 +267,7 @@ CURL_EXTERN CURLMsg *curl_multi_info_read(CURLM *multi_handle,
  *          value into the equivalent human readable error string.  This is
  *          useful for printing meaningful error messages.
  *
- * Returns: A pointer to a null-terminated error message.
+ * Returns: A pointer to a null-terminated error message. 
  */
 CURL_EXTERN const char *curl_multi_strerror(CURLMcode);
 
@@ -346,55 +346,55 @@ CURL_EXTERN CURLMcode curl_multi_timeout(CURLM *multi_handle,
 
 typedef enum {
   /* This is the socket callback function pointer */
-  CURLOPT(CURLMOPT_SOCKETFUNCTION, CURLOPTTYPE_FUNCTIONPOINT, 1),
+  CURLOPT(CURLMOPT_SOCKETFUNCTION, CURLOPTTYPE_FUNCTIONPOINT, 1), 
 
   /* This is the argument passed to the socket callback */
-  CURLOPT(CURLMOPT_SOCKETDATA, CURLOPTTYPE_OBJECTPOINT, 2),
+  CURLOPT(CURLMOPT_SOCKETDATA, CURLOPTTYPE_OBJECTPOINT, 2), 
 
     /* set to 1 to enable pipelining for this multi handle */
-  CURLOPT(CURLMOPT_PIPELINING, CURLOPTTYPE_LONG, 3),
+  CURLOPT(CURLMOPT_PIPELINING, CURLOPTTYPE_LONG, 3), 
 
    /* This is the timer callback function pointer */
-  CURLOPT(CURLMOPT_TIMERFUNCTION, CURLOPTTYPE_FUNCTIONPOINT, 4),
+  CURLOPT(CURLMOPT_TIMERFUNCTION, CURLOPTTYPE_FUNCTIONPOINT, 4), 
 
   /* This is the argument passed to the timer callback */
-  CURLOPT(CURLMOPT_TIMERDATA, CURLOPTTYPE_OBJECTPOINT, 5),
+  CURLOPT(CURLMOPT_TIMERDATA, CURLOPTTYPE_OBJECTPOINT, 5), 
 
   /* maximum number of entries in the connection cache */
-  CURLOPT(CURLMOPT_MAXCONNECTS, CURLOPTTYPE_LONG, 6),
+  CURLOPT(CURLMOPT_MAXCONNECTS, CURLOPTTYPE_LONG, 6), 
 
   /* maximum number of (pipelining) connections to one host */
-  CURLOPT(CURLMOPT_MAX_HOST_CONNECTIONS, CURLOPTTYPE_LONG, 7),
+  CURLOPT(CURLMOPT_MAX_HOST_CONNECTIONS, CURLOPTTYPE_LONG, 7), 
 
   /* maximum number of requests in a pipeline */
-  CURLOPT(CURLMOPT_MAX_PIPELINE_LENGTH, CURLOPTTYPE_LONG, 8),
+  CURLOPT(CURLMOPT_MAX_PIPELINE_LENGTH, CURLOPTTYPE_LONG, 8), 
 
   /* a connection with a content-length longer than this
      will not be considered for pipelining */
-  CURLOPT(CURLMOPT_CONTENT_LENGTH_PENALTY_SIZE, CURLOPTTYPE_OFF_T, 9),
+  CURLOPT(CURLMOPT_CONTENT_LENGTH_PENALTY_SIZE, CURLOPTTYPE_OFF_T, 9), 
 
   /* a connection with a chunk length longer than this
      will not be considered for pipelining */
-  CURLOPT(CURLMOPT_CHUNK_LENGTH_PENALTY_SIZE, CURLOPTTYPE_OFF_T, 10),
+  CURLOPT(CURLMOPT_CHUNK_LENGTH_PENALTY_SIZE, CURLOPTTYPE_OFF_T, 10), 
 
-  /* a list of site names(+port) that are blocked from pipelining */
-  CURLOPT(CURLMOPT_PIPELINING_SITE_BL, CURLOPTTYPE_OBJECTPOINT, 11),
+  /* a list of site names(+port) that are blocked from pipelining */ 
+  CURLOPT(CURLMOPT_PIPELINING_SITE_BL, CURLOPTTYPE_OBJECTPOINT, 11), 
 
-  /* a list of server types that are blocked from pipelining */
-  CURLOPT(CURLMOPT_PIPELINING_SERVER_BL, CURLOPTTYPE_OBJECTPOINT, 12),
+  /* a list of server types that are blocked from pipelining */ 
+  CURLOPT(CURLMOPT_PIPELINING_SERVER_BL, CURLOPTTYPE_OBJECTPOINT, 12), 
 
   /* maximum number of open connections in total */
-  CURLOPT(CURLMOPT_MAX_TOTAL_CONNECTIONS, CURLOPTTYPE_LONG, 13),
+  CURLOPT(CURLMOPT_MAX_TOTAL_CONNECTIONS, CURLOPTTYPE_LONG, 13), 
 
    /* This is the server push callback function pointer */
-  CURLOPT(CURLMOPT_PUSHFUNCTION, CURLOPTTYPE_FUNCTIONPOINT, 14),
+  CURLOPT(CURLMOPT_PUSHFUNCTION, CURLOPTTYPE_FUNCTIONPOINT, 14), 
 
   /* This is the argument passed to the server push callback */
-  CURLOPT(CURLMOPT_PUSHDATA, CURLOPTTYPE_OBJECTPOINT, 15),
+  CURLOPT(CURLMOPT_PUSHDATA, CURLOPTTYPE_OBJECTPOINT, 15), 
 
-  /* maximum number of concurrent streams to support on a connection */
-  CURLOPT(CURLMOPT_MAX_CONCURRENT_STREAMS, CURLOPTTYPE_LONG, 16),
-
+  /* maximum number of concurrent streams to support on a connection */ 
+  CURLOPT(CURLMOPT_MAX_CONCURRENT_STREAMS, CURLOPTTYPE_LONG, 16), 
+ 
   CURLMOPT_LASTENTRY /* the last unused */
 } CURLMoption;
 
@@ -427,14 +427,14 @@ CURL_EXTERN CURLMcode curl_multi_assign(CURLM *multi_handle,
  * Name: curl_push_callback
  *
  * Desc: This callback gets called when a new stream is being pushed by the
- *       server. It approves or denies the new stream. It can also decide
- *       to completely fail the connection.
+ *       server. It approves or denies the new stream. It can also decide 
+ *       to completely fail the connection. 
  *
- * Returns: CURL_PUSH_OK, CURL_PUSH_DENY or CURL_PUSH_ERROROUT
+ * Returns: CURL_PUSH_OK, CURL_PUSH_DENY or CURL_PUSH_ERROROUT 
  */
-#define CURL_PUSH_OK       0
-#define CURL_PUSH_DENY     1
-#define CURL_PUSH_ERROROUT 2 /* added in 7.72.0 */
+#define CURL_PUSH_OK       0 
+#define CURL_PUSH_DENY     1 
+#define CURL_PUSH_ERROROUT 2 /* added in 7.72.0 */ 
 
 struct curl_pushheaders;  /* forward declaration only */
 

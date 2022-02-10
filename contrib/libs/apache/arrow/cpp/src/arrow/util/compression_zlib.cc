@@ -52,9 +52,9 @@ constexpr int GZIP_CODEC = 16;
 // Determine if this is libz or gzip from header.
 constexpr int DETECT_CODEC = 32;
 
-constexpr int kGZipMinCompressionLevel = 1;
-constexpr int kGZipMaxCompressionLevel = 9;
-
+constexpr int kGZipMinCompressionLevel = 1; 
+constexpr int kGZipMaxCompressionLevel = 9; 
+ 
 int CompressionWindowBitsForFormat(GZipFormat::type format) {
   int window_bits = WINDOW_BITS;
   switch (format) {
@@ -249,9 +249,9 @@ class GZipCompressor : public Compressor {
     //  again with the same value of the flush parameter and more output space
     //  (updated avail_out), until the flush is complete (deflate returns
     //  with non-zero avail_out)."
-    // "Note that Z_BUF_ERROR is not fatal, and deflate() can be called again
-    //  with more input and more output space to continue compressing."
-    return FlushResult{bytes_written, stream_.avail_out == 0};
+    // "Note that Z_BUF_ERROR is not fatal, and deflate() can be called again 
+    //  with more input and more output space to continue compressing." 
+    return FlushResult{bytes_written, stream_.avail_out == 0}; 
   }
 
   Result<EndResult> End(int64_t output_len, uint8_t* output) override {
@@ -471,9 +471,9 @@ class GZipCodec : public Codec {
   Compression::type compression_type() const override { return Compression::GZIP; }
 
   int compression_level() const override { return compression_level_; }
-  int minimum_compression_level() const override { return kGZipMinCompressionLevel; }
-  int maximum_compression_level() const override { return kGZipMaxCompressionLevel; }
-  int default_compression_level() const override { return kGZipDefaultCompressionLevel; }
+  int minimum_compression_level() const override { return kGZipMinCompressionLevel; } 
+  int maximum_compression_level() const override { return kGZipMaxCompressionLevel; } 
+  int default_compression_level() const override { return kGZipDefaultCompressionLevel; } 
 
  private:
   // zlib is stateful and the z_stream state variable must be initialized

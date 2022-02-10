@@ -7,11 +7,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html. 
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -109,7 +109,7 @@ void Curl_cookie_clearsess(struct CookieInfo *cookies);
 #define Curl_cookie_cleanup(x) Curl_nop_stmt
 #define Curl_flush_cookies(x,y) Curl_nop_stmt
 #else
-void Curl_flush_cookies(struct Curl_easy *data, bool cleanup);
+void Curl_flush_cookies(struct Curl_easy *data, bool cleanup); 
 void Curl_cookie_cleanup(struct CookieInfo *);
 struct CookieInfo *Curl_cookie_init(struct Curl_easy *data,
                                     const char *, struct CookieInfo *, bool);

@@ -1,7 +1,7 @@
 RESOURCES_LIBRARY()
 
-LICENSE(Service-Prebuilt-Tool)
-
+LICENSE(Service-Prebuilt-Tool) 
+ 
 OWNER(somov)
 
 IF (USE_LTO OR USE_THINLTO)

@@ -5,7 +5,7 @@
 #include "compiler.h"
 #include "sanitizers.h"
 
-#include <util/generic/array_ref.h>
+#include <util/generic/array_ref.h> 
 #include <util/generic/utility.h>
 #include <util/generic/yexception.h>
 
@@ -53,7 +53,7 @@ struct ITrampoLine {
 
 struct TContClosure {
     ITrampoLine* TrampoLine;
-    TArrayRef<char> Stack;
+    TArrayRef<char> Stack; 
     const char* ContName = nullptr;
 };
 
@@ -70,8 +70,8 @@ public:
         getcontext(&Ctx_);
 
         Ctx_.uc_link = 0;
-        Ctx_.uc_stack.ss_sp = (void*)c.Stack.data();
-        Ctx_.uc_stack.ss_size = c.Stack.size();
+        Ctx_.uc_stack.ss_sp = (void*)c.Stack.data(); 
+        Ctx_.uc_stack.ss_size = c.Stack.size(); 
         Ctx_.uc_stack.ss_flags = 0;
 
         extern void ContextTrampoLine(void* arg);

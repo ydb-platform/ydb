@@ -19,7 +19,7 @@
 
 #include <limits>
 
-#include "arrow/array/builder_time.h"
+#include "arrow/array/builder_time.h" 
 #include "arrow/compute/kernels/common.h"
 #include "arrow/compute/kernels/scalar_cast_internal.h"
 #include "arrow/util/bitmap_reader.h"
@@ -39,10 +39,10 @@ constexpr int64_t kMillisecondsInDay = 86400000;
 // From one timestamp to another
 
 template <typename in_type, typename out_type>
-Status ShiftTime(KernelContext* ctx, const util::DivideOrMultiply factor_op,
-                 const int64_t factor, const ArrayData& input, ArrayData* output) {
+Status ShiftTime(KernelContext* ctx, const util::DivideOrMultiply factor_op, 
+                 const int64_t factor, const ArrayData& input, ArrayData* output) { 
   const CastOptions& options = checked_cast<const CastState&>(*ctx->state()).options;
-  auto in_data = input.GetValues<in_type>(1);
+  auto in_data = input.GetValues<in_type>(1); 
   auto out_data = output->GetMutableValues<out_type>(1);
 
   if (factor == 1) {
@@ -55,10 +55,10 @@ Status ShiftTime(KernelContext* ctx, const util::DivideOrMultiply factor_op,
         out_data[i] = static_cast<out_type>(in_data[i] * factor);
       }
     } else {
-#define RAISE_OVERFLOW_CAST(VAL)                                          \
-  return Status::Invalid("Casting from ", input.type->ToString(), " to ", \
-                         output->type->ToString(), " would result in ",   \
-                         "out of bounds timestamp: ", VAL);
+#define RAISE_OVERFLOW_CAST(VAL)                                          \ 
+  return Status::Invalid("Casting from ", input.type->ToString(), " to ", \ 
+                         output->type->ToString(), " would result in ",   \ 
+                         "out of bounds timestamp: ", VAL); 
 
       int64_t max_val = std::numeric_limits<int64_t>::max() / factor;
       int64_t min_val = std::numeric_limits<int64_t>::min() / factor;
@@ -88,9 +88,9 @@ Status ShiftTime(KernelContext* ctx, const util::DivideOrMultiply factor_op,
         out_data[i] = static_cast<out_type>(in_data[i] / factor);
       }
     } else {
-#define RAISE_INVALID_CAST(VAL)                                           \
-  return Status::Invalid("Casting from ", input.type->ToString(), " to ", \
-                         output->type->ToString(), " would lose data: ", VAL);
+#define RAISE_INVALID_CAST(VAL)                                           \ 
+  return Status::Invalid("Casting from ", input.type->ToString(), " to ", \ 
+                         output->type->ToString(), " would lose data: ", VAL); 
 
       if (input.null_count != 0) {
         BitmapReader bit_reader(input.buffers[0]->data(), input.offset, input.length);
@@ -113,8 +113,8 @@ Status ShiftTime(KernelContext* ctx, const util::DivideOrMultiply factor_op,
 #undef RAISE_INVALID_CAST
     }
   }
-
-  return Status::OK();
+ 
+  return Status::OK(); 
 }
 
 // <TimestampType, TimestampType> and <DurationType, DurationType>
@@ -123,7 +123,7 @@ struct CastFunctor<
     O, I,
     enable_if_t<(is_timestamp_type<O>::value && is_timestamp_type<I>::value) ||
                 (is_duration_type<O>::value && is_duration_type<I>::value)>> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     DCHECK_EQ(batch[0].kind(), Datum::ARRAY);
 
     const ArrayData& input = *batch[0].array();
@@ -137,14 +137,14 @@ struct CastFunctor<
     // lengths to make this zero copy in the future but we leave it for now
 
     auto conversion = util::GetTimestampConversion(in_type.unit(), out_type.unit());
-    return ShiftTime<int64_t, int64_t>(ctx, conversion.first, conversion.second, input,
-                                       output);
+    return ShiftTime<int64_t, int64_t>(ctx, conversion.first, conversion.second, input, 
+                                       output); 
   }
 };
 
 template <>
 struct CastFunctor<Date32Type, TimestampType> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     DCHECK_EQ(batch[0].kind(), Datum::ARRAY);
 
     const ArrayData& input = *batch[0].array();
@@ -160,13 +160,13 @@ struct CastFunctor<Date32Type, TimestampType> {
     };
 
     const int64_t factor = kTimestampToDateFactors[static_cast<int>(in_type.unit())];
-    return ShiftTime<int64_t, int32_t>(ctx, util::DIVIDE, factor, input, output);
+    return ShiftTime<int64_t, int32_t>(ctx, util::DIVIDE, factor, input, output); 
   }
 };
 
 template <>
 struct CastFunctor<Date64Type, TimestampType> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     DCHECK_EQ(batch[0].kind(), Datum::ARRAY);
 
     const CastOptions& options = checked_cast<const CastState&>(*ctx->state()).options;
@@ -175,8 +175,8 @@ struct CastFunctor<Date64Type, TimestampType> {
     const auto& in_type = checked_cast<const TimestampType&>(*input.type);
 
     auto conversion = util::GetTimestampConversion(in_type.unit(), TimeUnit::MILLI);
-    RETURN_NOT_OK((ShiftTime<int64_t, int64_t>(ctx, conversion.first, conversion.second,
-                                               input, output)));
+    RETURN_NOT_OK((ShiftTime<int64_t, int64_t>(ctx, conversion.first, conversion.second, 
+                                               input, output))); 
 
     // Ensure that intraday milliseconds have been zeroed out
     auto out_data = output->GetMutableValues<int64_t>(1);
@@ -188,7 +188,7 @@ struct CastFunctor<Date64Type, TimestampType> {
         const int64_t remainder = out_data[i] % kMillisecondsInDay;
         if (ARROW_PREDICT_FALSE(!options.allow_time_truncate && bit_reader.IsSet() &&
                                 remainder > 0)) {
-          return Status::Invalid("Timestamp value had non-zero intraday milliseconds");
+          return Status::Invalid("Timestamp value had non-zero intraday milliseconds"); 
         }
         out_data[i] -= remainder;
         bit_reader.Next();
@@ -197,13 +197,13 @@ struct CastFunctor<Date64Type, TimestampType> {
       for (int64_t i = 0; i < input.length; ++i) {
         const int64_t remainder = out_data[i] % kMillisecondsInDay;
         if (ARROW_PREDICT_FALSE(!options.allow_time_truncate && remainder > 0)) {
-          return Status::Invalid("Timestamp value had non-zero intraday milliseconds");
+          return Status::Invalid("Timestamp value had non-zero intraday milliseconds"); 
         }
         out_data[i] -= remainder;
       }
     }
-
-    return Status::OK();
+ 
+    return Status::OK(); 
   }
 };
 
@@ -215,7 +215,7 @@ struct CastFunctor<O, I, enable_if_t<is_time_type<I>::value && is_time_type<O>::
   using in_t = typename I::c_type;
   using out_t = typename O::c_type;
 
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     DCHECK_EQ(batch[0].kind(), Datum::ARRAY);
 
     const ArrayData& input = *batch[0].array();
@@ -226,8 +226,8 @@ struct CastFunctor<O, I, enable_if_t<is_time_type<I>::value && is_time_type<O>::
     const auto& out_type = checked_cast<const O&>(*output->type);
     DCHECK_NE(in_type.unit(), out_type.unit()) << "Do not cast equal types";
     auto conversion = util::GetTimestampConversion(in_type.unit(), out_type.unit());
-    return ShiftTime<in_t, out_t>(ctx, conversion.first, conversion.second, input,
-                                  output);
+    return ShiftTime<in_t, out_t>(ctx, conversion.first, conversion.second, input, 
+                                  output); 
   }
 };
 
@@ -236,68 +236,68 @@ struct CastFunctor<O, I, enable_if_t<is_time_type<I>::value && is_time_type<O>::
 
 template <>
 struct CastFunctor<Date64Type, Date32Type> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     DCHECK_EQ(batch[0].kind(), Datum::ARRAY);
 
-    return ShiftTime<int32_t, int64_t>(ctx, util::MULTIPLY, kMillisecondsInDay,
-                                       *batch[0].array(), out->mutable_array());
+    return ShiftTime<int32_t, int64_t>(ctx, util::MULTIPLY, kMillisecondsInDay, 
+                                       *batch[0].array(), out->mutable_array()); 
   }
 };
 
 template <>
 struct CastFunctor<Date32Type, Date64Type> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     DCHECK_EQ(batch[0].kind(), Datum::ARRAY);
 
-    return ShiftTime<int64_t, int32_t>(ctx, util::DIVIDE, kMillisecondsInDay,
-                                       *batch[0].array(), out->mutable_array());
+    return ShiftTime<int64_t, int32_t>(ctx, util::DIVIDE, kMillisecondsInDay, 
+                                       *batch[0].array(), out->mutable_array()); 
   }
 };
 
 // ----------------------------------------------------------------------
-// date32, date64 to timestamp
-
-template <>
-struct CastFunctor<TimestampType, Date32Type> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
-    DCHECK_EQ(batch[0].kind(), Datum::ARRAY);
-
-    const auto& out_type = checked_cast<const TimestampType&>(*out->type());
-    // get conversion SECOND -> unit
-    auto conversion = util::GetTimestampConversion(TimeUnit::SECOND, out_type.unit());
-    DCHECK_EQ(conversion.first, util::MULTIPLY);
-
-    // multiply to achieve days -> unit
-    conversion.second *= kMillisecondsInDay / 1000;
-    return ShiftTime<int32_t, int64_t>(ctx, util::MULTIPLY, conversion.second,
-                                       *batch[0].array(), out->mutable_array());
-  }
-};
-
-template <>
-struct CastFunctor<TimestampType, Date64Type> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
-    DCHECK_EQ(batch[0].kind(), Datum::ARRAY);
-
-    const auto& out_type = checked_cast<const TimestampType&>(*out->type());
-
-    // date64 is ms since epoch
-    auto conversion = util::GetTimestampConversion(TimeUnit::MILLI, out_type.unit());
-    return ShiftTime<int64_t, int64_t>(ctx, conversion.first, conversion.second,
-                                       *batch[0].array(), out->mutable_array());
-  }
-};
-
-// ----------------------------------------------------------------------
+// date32, date64 to timestamp 
+ 
+template <> 
+struct CastFunctor<TimestampType, Date32Type> { 
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
+    DCHECK_EQ(batch[0].kind(), Datum::ARRAY); 
+ 
+    const auto& out_type = checked_cast<const TimestampType&>(*out->type()); 
+    // get conversion SECOND -> unit 
+    auto conversion = util::GetTimestampConversion(TimeUnit::SECOND, out_type.unit()); 
+    DCHECK_EQ(conversion.first, util::MULTIPLY); 
+ 
+    // multiply to achieve days -> unit 
+    conversion.second *= kMillisecondsInDay / 1000; 
+    return ShiftTime<int32_t, int64_t>(ctx, util::MULTIPLY, conversion.second, 
+                                       *batch[0].array(), out->mutable_array()); 
+  } 
+}; 
+ 
+template <> 
+struct CastFunctor<TimestampType, Date64Type> { 
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
+    DCHECK_EQ(batch[0].kind(), Datum::ARRAY); 
+ 
+    const auto& out_type = checked_cast<const TimestampType&>(*out->type()); 
+ 
+    // date64 is ms since epoch 
+    auto conversion = util::GetTimestampConversion(TimeUnit::MILLI, out_type.unit()); 
+    return ShiftTime<int64_t, int64_t>(ctx, conversion.first, conversion.second, 
+                                       *batch[0].array(), out->mutable_array()); 
+  } 
+}; 
+ 
+// ---------------------------------------------------------------------- 
 // String to Timestamp
 
 struct ParseTimestamp {
   template <typename OutValue, typename Arg0Value>
-  OutValue Call(KernelContext*, Arg0Value val, Status* st) const {
+  OutValue Call(KernelContext*, Arg0Value val, Status* st) const { 
     OutValue result = 0;
     if (ARROW_PREDICT_FALSE(!ParseValue(type, val.data(), val.size(), &result))) {
-      *st = Status::Invalid("Failed to parse string: '", val, "' as a scalar of type ",
-                            type.ToString());
+      *st = Status::Invalid("Failed to parse string: '", val, "' as a scalar of type ", 
+                            type.ToString()); 
     }
     return result;
   }
@@ -307,7 +307,7 @@ struct ParseTimestamp {
 
 template <typename I>
 struct CastFunctor<TimestampType, I, enable_if_t<is_base_binary_type<I>::value>> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     const auto& out_type = checked_cast<const TimestampType&>(*out->type());
     applicator::ScalarUnaryNotNullStateful<TimestampType, I, ParseTimestamp> kernel(
         ParseTimestamp{out_type});
@@ -318,7 +318,7 @@ struct CastFunctor<TimestampType, I, enable_if_t<is_base_binary_type<I>::value>>
 template <typename Type>
 void AddCrossUnitCast(CastFunction* func) {
   ScalarKernel kernel;
-  kernel.exec = TrivialScalarUnaryAsArraysExec(CastFunctor<Type, Type>::Exec);
+  kernel.exec = TrivialScalarUnaryAsArraysExec(CastFunctor<Type, Type>::Exec); 
   kernel.signature = KernelSignature::Make({InputType(Type::type_id)}, kOutputTargetType);
   DCHECK_OK(func->AddKernel(Type::type_id, std::move(kernel)));
 }
@@ -417,11 +417,11 @@ std::shared_ptr<CastFunction> GetTimestampCast() {
   AddZeroCopyCast(Type::INT64, /*in_type=*/int64(), kOutputTargetType, func.get());
 
   // From date types
-  // TODO: ARROW-8876, these casts are not directly tested
-  AddSimpleCast<Date32Type, TimestampType>(InputType(Type::DATE32), kOutputTargetType,
-                                           func.get());
-  AddSimpleCast<Date64Type, TimestampType>(InputType(Type::DATE64), kOutputTargetType,
-                                           func.get());
+  // TODO: ARROW-8876, these casts are not directly tested 
+  AddSimpleCast<Date32Type, TimestampType>(InputType(Type::DATE32), kOutputTargetType, 
+                                           func.get()); 
+  AddSimpleCast<Date64Type, TimestampType>(InputType(Type::DATE64), kOutputTargetType, 
+                                           func.get()); 
 
   // string -> timestamp
   AddSimpleCast<StringType, TimestampType>(utf8(), kOutputTargetType, func.get());

@@ -2,7 +2,7 @@
 
 #include <ydb/core/mind/defs.h>
 
-#include <google/protobuf/text_format.h>
+#include <google/protobuf/text_format.h> 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/counters.h>

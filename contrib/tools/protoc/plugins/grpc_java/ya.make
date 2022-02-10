@@ -10,7 +10,7 @@ ENDIF()
 IF (NOT PREBUILT)
     INCLUDE(${ARCADIA_ROOT}/contrib/tools/protoc/plugins/grpc_java/bin/ya.make)
 ENDIF()
-
+ 
 RECURSE(
     bin
 )

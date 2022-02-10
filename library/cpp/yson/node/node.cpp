@@ -244,11 +244,11 @@ bool TNode::IsUndefined() const
     return std::holds_alternative<TUndefined>(Value_);
 }
 
-bool TNode::HasValue() const
-{
-    return !IsNull() && !IsUndefined();
-}
-
+bool TNode::HasValue() const 
+{ 
+    return !IsNull() && !IsUndefined(); 
+} 
+ 
 bool TNode::Empty() const
 {
     switch (GetType()) {

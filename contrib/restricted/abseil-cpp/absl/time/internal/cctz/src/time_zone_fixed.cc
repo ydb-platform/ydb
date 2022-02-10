@@ -53,7 +53,7 @@ int Parse02d(const char* p) {
 }  // namespace
 
 bool FixedOffsetFromName(const std::string& name, seconds* offset) {
-  if (name == "UTC" || name == "UTC0") {
+  if (name == "UTC" || name == "UTC0") { 
     *offset = seconds::zero();
     return true;
   }

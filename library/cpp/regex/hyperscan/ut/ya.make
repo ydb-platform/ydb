@@ -1,9 +1,9 @@
-UNITTEST()
+UNITTEST() 
 
-PEERDIR(
-    library/cpp/regex/hyperscan
-)
-
+PEERDIR( 
+    library/cpp/regex/hyperscan 
+) 
+ 
 OWNER(g:antiinfra)
 
 SRCS(

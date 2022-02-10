@@ -36,8 +36,8 @@
 #define GOOGLE_PROTOBUF_COMPILER_CPP_STRING_FIELD_H__
 
 #include <map>
-#include <string>
-#include <google/protobuf/compiler/cpp/cpp_field.h>
+#include <string> 
+#include <google/protobuf/compiler/cpp/cpp_field.h> 
 
 namespace google {
 namespace protobuf {
@@ -54,7 +54,7 @@ class StringFieldGenerator : public FieldGenerator {
   void GeneratePrivateMembers(io::Printer* printer) const;
   void GenerateStaticMembers(io::Printer* printer) const;
   void GenerateAccessorDeclarations(io::Printer* printer) const;
-  void GenerateInlineAccessorDefinitions(io::Printer* printer) const;
+  void GenerateInlineAccessorDefinitions(io::Printer* printer) const; 
   void GenerateNonInlineAccessorDefinitions(io::Printer* printer) const;
   void GenerateClearingCode(io::Printer* printer) const;
   void GenerateMessageClearingCode(io::Printer* printer) const;
@@ -65,7 +65,7 @@ class StringFieldGenerator : public FieldGenerator {
   void GenerateDestructorCode(io::Printer* printer) const;
   void GenerateSerializeWithCachedSizesToArray(io::Printer* printer) const;
   void GenerateByteSize(io::Printer* printer) const;
-  void GenerateConstinitInitializer(io::Printer* printer) const;
+  void GenerateConstinitInitializer(io::Printer* printer) const; 
 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(StringFieldGenerator);
@@ -78,7 +78,7 @@ class StringOneofFieldGenerator : public StringFieldGenerator {
   ~StringOneofFieldGenerator();
 
   // implements FieldGenerator ---------------------------------------
-  void GenerateInlineAccessorDefinitions(io::Printer* printer) const;
+  void GenerateInlineAccessorDefinitions(io::Printer* printer) const; 
   void GenerateClearingCode(io::Printer* printer) const;
 
   // StringFieldGenerator, from which we inherit, overrides this so we need to
@@ -100,7 +100,7 @@ class RepeatedStringFieldGenerator : public FieldGenerator {
   // implements FieldGenerator ---------------------------------------
   void GeneratePrivateMembers(io::Printer* printer) const;
   void GenerateAccessorDeclarations(io::Printer* printer) const;
-  void GenerateInlineAccessorDefinitions(io::Printer* printer) const;
+  void GenerateInlineAccessorDefinitions(io::Printer* printer) const; 
   void GenerateClearingCode(io::Printer* printer) const;
   void GenerateMergingCode(io::Printer* printer) const;
   void GenerateSwappingCode(io::Printer* printer) const;
@@ -108,7 +108,7 @@ class RepeatedStringFieldGenerator : public FieldGenerator {
   void GenerateCopyConstructorCode(io::Printer* printer) const;
   void GenerateSerializeWithCachedSizesToArray(io::Printer* printer) const;
   void GenerateByteSize(io::Printer* printer) const;
-  void GenerateConstinitInitializer(io::Printer* printer) const;
+  void GenerateConstinitInitializer(io::Printer* printer) const; 
 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(RepeatedStringFieldGenerator);
@@ -117,6 +117,6 @@ class RepeatedStringFieldGenerator : public FieldGenerator {
 }  // namespace cpp
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google
+}  // namespace google 
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_CPP_STRING_FIELD_H__

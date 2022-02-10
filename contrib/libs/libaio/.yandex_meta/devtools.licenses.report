@@ -30,7 +30,7 @@
 # =======================
 
 KEEP     LGPL-2.1-only        06c4217e8353c11713418f4140ca72ad
-BELONGS dynamic/ya.make static/ya.make
+BELONGS dynamic/ya.make static/ya.make 
 FILE_INCLUDE COPYING found in files: COPYING at line 119
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
@@ -40,12 +40,12 @@ FILE_INCLUDE COPYING found in files: COPYING at line 119
         Links           : http://www.gnu.org/licenses/lgpl-2.1.html, http://www.gnu.org/licenses/lgpl-2.1.txt, https://spdx.org/licenses/LGPL-2.1-only
     Files with this license:
         COPYING [2:513]
-    Belongs difference:
-        + dynamic/ya.make static/ya.make
-        - ya.make
+    Belongs difference: 
+        + dynamic/ya.make static/ya.make 
+        - ya.make 
 
 KEEP     LGPL-2.0-or-later    343bafa2636ca498af257b49310b97ff
-BELONGS dynamic/ya.make static/ya.make
+BELONGS dynamic/ya.make static/ya.make 
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: LGPL-2.0-or-later
@@ -63,12 +63,12 @@ BELONGS dynamic/ya.make static/ya.make
         io_setup.c [5:17]
         io_submit.c [5:17]
         vsys_def.h [4:16]
-    Belongs difference:
-        + dynamic/ya.make static/ya.make
-        - ya.make
+    Belongs difference: 
+        + dynamic/ya.make static/ya.make 
+        - ya.make 
 
 KEEP     GPL-2.0-only         98ff2f7e77a4aad137064c2661d1bd44
-BELONGS dynamic/ya.make static/ya.make
+BELONGS dynamic/ya.make static/ya.make 
     License text:
          * This program is free software; you can redistribute it and/or modify
          * it under the terms of the GNU General Public License version 2 as
@@ -81,12 +81,12 @@ BELONGS dynamic/ya.make static/ya.make
     Files with this license:
         syscall-arm.h [6:8]
         syscall-arm64.h [6:8]
-    Belongs difference:
-        + dynamic/ya.make static/ya.make
-        - ya.make
+    Belongs difference: 
+        + dynamic/ya.make static/ya.make 
+        - ya.make 
 
 KEEP     LGPL-2.0-or-later    efd0b88f1751e46cb88598dd37b75a41
-BELONGS dynamic/ya.make static/ya.make
+BELONGS dynamic/ya.make static/ya.make 
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: LGPL-2.0-or-later
@@ -95,6 +95,6 @@ BELONGS dynamic/ya.make static/ya.make
         Links           : http://www.gnu.org/licenses/old-licenses/lgpl-2.0-standalone.html, http://www.gnu.org/licenses/old-licenses/lgpl-2.0.html, https://spdx.org/licenses/LGPL-2.0-or-later
     Files with this license:
         libaio.h [9:21]
-    Belongs difference:
-        + dynamic/ya.make static/ya.make
-        - ya.make
+    Belongs difference: 
+        + dynamic/ya.make static/ya.make 
+        - ya.make 

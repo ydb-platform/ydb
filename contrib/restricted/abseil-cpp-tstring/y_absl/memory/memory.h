@@ -97,7 +97,7 @@ struct MakeUniqueResult<T[N]> {
 // define make_unique.  Other supported compilers either just define __cplusplus
 // as 201103 but have make_unique (msvc), or have make_unique whenever
 // __cplusplus > 201103 (clang).
-#if defined(__cpp_lib_make_unique)
+#if defined(__cpp_lib_make_unique) 
 using std::make_unique;
 #else
 // -----------------------------------------------------------------------------
@@ -419,7 +419,7 @@ struct pointer_traits<T*> {
 //
 // A C++11 compatible implementation of C++17's std::allocator_traits.
 //
-#if __cplusplus >= 201703L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L)
+#if __cplusplus >= 201703L || (defined(_MSVC_LANG) && _MSVC_LANG >= 201703L) 
 using std::allocator_traits;
 #else  // __cplusplus >= 201703L
 template <typename Alloc>

@@ -82,10 +82,10 @@ namespace NKikimr {
         }
 
         static TVDiskEternalGuid Generate();
-
-        explicit operator bool() const {
-            return (Guid != 0);
-        }
+ 
+        explicit operator bool() const { 
+            return (Guid != 0); 
+        } 
     };
 
 } // NKikimr

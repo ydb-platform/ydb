@@ -131,7 +131,7 @@ void NBus::NPrivate::SetSockOptTcpCork(SOCKET s, bool value) {
 #endif
 }
 
-ssize_t NBus::NPrivate::SocketSend(SOCKET s, TArrayRef<const char> data) {
+ssize_t NBus::NPrivate::SocketSend(SOCKET s, TArrayRef<const char> data) { 
     int flags = 0;
 #if defined(_linux_) || defined(_freebsd_)
     flags |= MSG_NOSIGNAL;
@@ -143,7 +143,7 @@ ssize_t NBus::NPrivate::SocketSend(SOCKET s, TArrayRef<const char> data) {
     return r;
 }
 
-ssize_t NBus::NPrivate::SocketRecv(SOCKET s, TArrayRef<char> buffer) {
+ssize_t NBus::NPrivate::SocketRecv(SOCKET s, TArrayRef<char> buffer) { 
     int flags = 0;
 #if defined(_linux_) || defined(_freebsd_)
     flags |= MSG_NOSIGNAL;

@@ -29,12 +29,12 @@
 #ifndef PARSER_UTF8_VALIDATE_H
 #define PARSER_UTF8_VALIDATE_H
 
-#include <cstddef> // size_t
-
+#include <cstddef> // size_t 
+ 
 namespace ue2 {
 
 /** \brief Validate that the given expression is well-formed UTF-8.  */
-bool isValidUtf8(const char *expression, const size_t len);
+bool isValidUtf8(const char *expression, const size_t len); 
 
 } // namespace ue2
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018, Intel Corporation
+ * Copyright (c) 2015-2018, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -459,7 +459,7 @@ public:
     const_iterator end() const { return ordering.end(); }
 };
 
-typedef Bouquet<left_id> LeftfixBouquet;
+typedef Bouquet<left_id> LeftfixBouquet; 
 typedef Bouquet<suffix_id> SuffixBouquet;
 
 } // namespace
@@ -565,7 +565,7 @@ bool hasSameEngineType(const RoseVertexProps &u_prop,
  *
  * Parameters are vectors of literals + lag pairs.
  *
- * Note: if more constraints of when the leftfixes were going to be checked
+ * Note: if more constraints of when the leftfixes were going to be checked 
  * (mandatory lookarounds passing, offset checks), more merges may be allowed.
  */
 static
@@ -599,7 +599,7 @@ bool compatibleLiteralsForMerge(
     /* An engine requires that all accesses to it are ordered by offsets. (ie,
        we can not check an engine's state at offset Y, if we have already
        checked its status at offset X and X > Y). If we can not establish that
-       the literals used for triggering will satisfy this property, then it is
+       the literals used for triggering will satisfy this property, then it is 
        not safe to merge the engine. */
     for (const auto &ue : ulits) {
         const rose_literal_id &ul = *ue.first;
@@ -1437,19 +1437,19 @@ void mergeLeftfixesVariableLag(RoseBuildImpl &build) {
 
         assert(!parents.empty());
 
-#ifndef _WIN32
+#ifndef _WIN32 
         engine_groups[MergeKey(left, parents)].push_back(left);
-#else
-        // On windows, when passing MergeKey object into map 'engine_groups',
-        // it will not be copied, but will be freed along with
-        // engine_groups.clear().
-        // If we construct MergeKey object on the stack, it will be destructed
-        // on its life cycle ending, then on engine_groups.clear(), which
-        // will cause is_block_type_valid() assertion error in MergeKey
-        // destructor.
-        MergeKey *mk = new MergeKey(left, parents);
-        engine_groups[*mk].push_back(left);
-#endif
+#else 
+        // On windows, when passing MergeKey object into map 'engine_groups', 
+        // it will not be copied, but will be freed along with 
+        // engine_groups.clear(). 
+        // If we construct MergeKey object on the stack, it will be destructed 
+        // on its life cycle ending, then on engine_groups.clear(), which 
+        // will cause is_block_type_valid() assertion error in MergeKey 
+        // destructor. 
+        MergeKey *mk = new MergeKey(left, parents); 
+        engine_groups[*mk].push_back(left); 
+#endif 
     }
 
     vector<vector<left_id>> chunks;
@@ -1790,7 +1790,7 @@ u32 estimatedAccelStates(const RoseBuildImpl &tbi, const NGHolder &h) {
 }
 
 static
-void mergeNfaLeftfixes(RoseBuildImpl &tbi, LeftfixBouquet &roses) {
+void mergeNfaLeftfixes(RoseBuildImpl &tbi, LeftfixBouquet &roses) { 
     RoseGraph &g = tbi.g;
     DEBUG_PRINTF("%zu nfa rose merge candidates\n", roses.size());
 
@@ -1906,7 +1906,7 @@ void mergeSmallLeftfixes(RoseBuildImpl &tbi) {
 
     RoseGraph &g = tbi.g;
 
-    LeftfixBouquet nfa_leftfixes;
+    LeftfixBouquet nfa_leftfixes; 
 
     for (auto v : vertices_range(g)) {
         if (!g[v].left) {
@@ -1951,16 +1951,16 @@ void mergeSmallLeftfixes(RoseBuildImpl &tbi) {
             continue;
         }
 
-        nfa_leftfixes.insert(left, v);
+        nfa_leftfixes.insert(left, v); 
     }
 
-    deque<LeftfixBouquet> leftfix_groups;
-    chunkBouquets(nfa_leftfixes, leftfix_groups, MERGE_GROUP_SIZE_MAX);
-    nfa_leftfixes.clear();
-    DEBUG_PRINTF("chunked nfa leftfixes into %zu groups\n",
-                 leftfix_groups.size());
+    deque<LeftfixBouquet> leftfix_groups; 
+    chunkBouquets(nfa_leftfixes, leftfix_groups, MERGE_GROUP_SIZE_MAX); 
+    nfa_leftfixes.clear(); 
+    DEBUG_PRINTF("chunked nfa leftfixes into %zu groups\n", 
+                 leftfix_groups.size()); 
 
-    for (auto &group : leftfix_groups) {
+    for (auto &group : leftfix_groups) { 
         mergeNfaLeftfixes(tbi, group);
     }
 }

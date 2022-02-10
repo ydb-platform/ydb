@@ -854,7 +854,7 @@ const TVarIndexConstraintNode* TVarIndexConstraintNode::MakeCommon(const TVector
     TVarIndexConstraintNode::TMapType mapping;
     for (size_t i = 0; i < constraints.size(); ++i) {
         if (auto varIndex = constraints[i]->GetConstraint<TVarIndexConstraintNode>()) {
-            mapping.insert(varIndex->GetIndexMapping().begin(), varIndex->GetIndexMapping().end());
+            mapping.insert(varIndex->GetIndexMapping().begin(), varIndex->GetIndexMapping().end()); 
         }
     }
     if (mapping.empty()) {
@@ -1017,7 +1017,7 @@ const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const TVector<const
     TMultiConstraintNode::TMapType multiItems;
     for (auto c: constraints) {
         if (auto m = c->GetConstraint<TMultiConstraintNode>()) {
-            multiItems.insert(m->GetItems().begin(), m->GetItems().end());
+            multiItems.insert(m->GetItems().begin(), m->GetItems().end()); 
         } else if (!c->GetConstraint<TEmptyConstraintNode>()) {
             return nullptr;
         }

@@ -441,17 +441,17 @@ namespace NTable {
                         return true;
                     }
                     SeekState = ESeekState::PrepareBoots;
-                    [[fallthrough]];
+                    [[fallthrough]]; 
                 case ESeekState::PrepareBoots:
                     PrepareBoots();
                     SeekState = ESeekState::SeekBoots;
-                    [[fallthrough]];
+                    [[fallthrough]]; 
                 case ESeekState::SeekBoots:
                     if (!SeekBoots()) {
                         return true;
                     }
                     SeekState = ESeekState::Finished;
-                    [[fallthrough]];
+                    [[fallthrough]]; 
                 case ESeekState::Finished:
                     break;
             }

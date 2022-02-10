@@ -2903,9 +2903,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             )", key);
             NKikimrMiniKQL::TResult result;
             TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
             UNIT_ASSERT_VALUES_EQUAL(err, "");
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
         };
         fnWriteRow(TTestTxConfig::FakeHiveTablets, 0);
         fnWriteRow(TTestTxConfig::FakeHiveTablets+1, 0x80000000u);
@@ -3163,7 +3163,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         auto fnCheckSingleColumnKey = [](TString keyBuf, ui32 val) {
             TSerializedCellVec cells(keyBuf);
-            UNIT_ASSERT_VALUES_EQUAL(cells.GetCells().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cells.GetCells().size(), 1); 
             UNIT_ASSERT_VALUES_EQUAL(*(const ui32*)cells.GetCells()[0].Data(), val);
         };
 
@@ -3604,9 +3604,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             )", key);
             NKikimrMiniKQL::TResult result;
             TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
             UNIT_ASSERT_VALUES_EQUAL(err, "");
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
         };
         fnWriteRow(TTestTxConfig::FakeHiveTablets, 0);
         fnWriteRow(TTestTxConfig::FakeHiveTablets+1, 0x80000000u);
@@ -3695,7 +3695,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                         (return (AsList (SetResult 'TableInfo result) ))
                                     )
                 )", result, err);
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
             UNIT_ASSERT_VALUES_EQUAL(err, "");
 //            Cerr << result << Endl;
             //  Value { Struct { Optional { Struct { List { Struct { Optional { Uint32: 1001 } } Struct { Optional { Bytes: ".." } } } } } } }
@@ -7033,7 +7033,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TString serialized = TSerializedCellVec::Serialize(TArrayRef<const TCell>(cells));
         UNIT_ASSERT_VALUES_EQUAL_C(cells.empty(), serialized.empty(), "Empty/non-empty mismatch");
         TSerializedCellVec deserialized(serialized);
-        UNIT_ASSERT_VALUES_EQUAL_C(cells.size(), deserialized.GetCells().size(), "Sizes don't match");
+        UNIT_ASSERT_VALUES_EQUAL_C(cells.size(), deserialized.GetCells().size(), "Sizes don't match"); 
         for (size_t i = 0; i < cells.size(); ++i) {
             VerifyEqualCells(cells[i], deserialized.GetCells()[i]);
         }

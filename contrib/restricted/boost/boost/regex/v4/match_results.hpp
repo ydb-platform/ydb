@@ -62,7 +62,7 @@ public:
    typedef          const_iterator                                          iterator;
    typedef typename BOOST_REGEX_DETAIL_NS::regex_iterator_traits<
                                     BidiIterator>::difference_type          difference_type;
-   typedef          size_t                                                  size_type;
+   typedef          size_t                                                  size_type; 
    typedef          Allocator                                               allocator_type;
    typedef typename BOOST_REGEX_DETAIL_NS::regex_iterator_traits<
                                     BidiIterator>::value_type               char_type;

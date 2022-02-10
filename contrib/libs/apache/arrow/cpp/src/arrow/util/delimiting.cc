@@ -17,7 +17,7 @@
 
 #include "arrow/util/delimiting.h"
 #include "arrow/buffer.h"
-#include "arrow/util/logging.h"
+#include "arrow/util/logging.h" 
 
 namespace arrow {
 
@@ -61,35 +61,35 @@ class NewlineBoundaryFinder : public BoundaryFinder {
     return Status::OK();
   }
 
-  Status FindNth(util::string_view partial, util::string_view block, int64_t count,
-                 int64_t* out_pos, int64_t* num_found) override {
-    DCHECK(partial.find_first_of(newline_delimiters) == util::string_view::npos);
-
-    int64_t found = 0;
-    int64_t pos = kNoDelimiterFound;
-
-    auto cur_pos = block.find_first_of(newline_delimiters);
-    while (cur_pos != util::string_view::npos) {
-      if (block[cur_pos] == '\r' && cur_pos + 1 < block.length() &&
-          block[cur_pos + 1] == '\n') {
-        cur_pos += 2;
-      } else {
-        ++cur_pos;
-      }
-
-      pos = static_cast<int64_t>(cur_pos);
-      if (++found >= count) {
-        break;
-      }
-
-      cur_pos = block.find_first_of(newline_delimiters, cur_pos);
-    }
-
-    *out_pos = pos;
-    *num_found = found;
-    return Status::OK();
-  }
-
+  Status FindNth(util::string_view partial, util::string_view block, int64_t count, 
+                 int64_t* out_pos, int64_t* num_found) override { 
+    DCHECK(partial.find_first_of(newline_delimiters) == util::string_view::npos); 
+ 
+    int64_t found = 0; 
+    int64_t pos = kNoDelimiterFound; 
+ 
+    auto cur_pos = block.find_first_of(newline_delimiters); 
+    while (cur_pos != util::string_view::npos) { 
+      if (block[cur_pos] == '\r' && cur_pos + 1 < block.length() && 
+          block[cur_pos + 1] == '\n') { 
+        cur_pos += 2; 
+      } else { 
+        ++cur_pos; 
+      } 
+ 
+      pos = static_cast<int64_t>(cur_pos); 
+      if (++found >= count) { 
+        break; 
+      } 
+ 
+      cur_pos = block.find_first_of(newline_delimiters, cur_pos); 
+    } 
+ 
+    *out_pos = pos; 
+    *num_found = found; 
+    return Status::OK(); 
+  } 
+ 
  protected:
   static constexpr const char* newline_delimiters = "\r\n";
 };
@@ -168,26 +168,26 @@ Status Chunker::ProcessFinal(std::shared_ptr<Buffer> partial,
   return Status::OK();
 }
 
-Status Chunker::ProcessSkip(std::shared_ptr<Buffer> partial,
-                            std::shared_ptr<Buffer> block, bool final, int64_t* count,
-                            std::shared_ptr<Buffer>* rest) {
-  DCHECK_GT(*count, 0);
-  int64_t pos;
-  int64_t num_found;
-  ARROW_RETURN_NOT_OK(boundary_finder_->FindNth(
-      util::string_view(*partial), util::string_view(*block), *count, &pos, &num_found));
-  if (pos == BoundaryFinder::kNoDelimiterFound) {
-    return StraddlingTooLarge();
-  }
-  if (ARROW_PREDICT_FALSE(final && *count > num_found && block->size() != pos)) {
-    // Skip the last row in the final block which does not have a delimiter
-    ++num_found;
-    *rest = SliceBuffer(block, 0, 0);
-  } else {
-    *rest = SliceBuffer(block, pos);
-  }
-  *count -= num_found;
-  return Status::OK();
-}
-
+Status Chunker::ProcessSkip(std::shared_ptr<Buffer> partial, 
+                            std::shared_ptr<Buffer> block, bool final, int64_t* count, 
+                            std::shared_ptr<Buffer>* rest) { 
+  DCHECK_GT(*count, 0); 
+  int64_t pos; 
+  int64_t num_found; 
+  ARROW_RETURN_NOT_OK(boundary_finder_->FindNth( 
+      util::string_view(*partial), util::string_view(*block), *count, &pos, &num_found)); 
+  if (pos == BoundaryFinder::kNoDelimiterFound) { 
+    return StraddlingTooLarge(); 
+  } 
+  if (ARROW_PREDICT_FALSE(final && *count > num_found && block->size() != pos)) { 
+    // Skip the last row in the final block which does not have a delimiter 
+    ++num_found; 
+    *rest = SliceBuffer(block, 0, 0); 
+  } else { 
+    *rest = SliceBuffer(block, pos); 
+  } 
+  *count -= num_found; 
+  return Status::OK(); 
+} 
+ 
 }  // namespace arrow

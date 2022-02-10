@@ -668,13 +668,13 @@ namespace NStringSplitPrivate {
         }
 
         template <
-            typename Other,
+            typename Other, 
             typename = std::enable_if_t<
                 std::is_convertible<Other, TStringBufType>::value>>
-        bool operator==(const Other& toCompare) const {
-            return TStringBufType(*this) == TStringBufType(toCompare);
-        }
-
+        bool operator==(const Other& toCompare) const { 
+            return TStringBufType(*this) == TStringBufType(toCompare); 
+        } 
+ 
         TIterator TokenStart() const noexcept {
             return this->begin();
         }

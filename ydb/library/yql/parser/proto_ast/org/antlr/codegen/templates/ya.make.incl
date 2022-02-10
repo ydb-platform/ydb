@@ -7,7 +7,7 @@ SET(STG_INCLUDES
    util/stream/output.h
    util/stream/str.h
 
-   google/protobuf/message.h
+   google/protobuf/message.h 
 
    ydb/library/yql/parser/proto_ast/proto_ast.h
 )

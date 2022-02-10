@@ -109,19 +109,19 @@ class BaseListBuilder : public ArrayBuilder {
     return Status::OK();
   }
 
-  Status AppendEmptyValue() final { return Append(true); }
-
-  Status AppendEmptyValues(int64_t length) final {
-    ARROW_RETURN_NOT_OK(Reserve(length));
-    ARROW_RETURN_NOT_OK(ValidateOverflow(0));
-    UnsafeAppendToBitmap(length, true);
-    const int64_t num_values = value_builder_->length();
-    for (int64_t i = 0; i < length; ++i) {
-      offsets_builder_.UnsafeAppend(static_cast<offset_type>(num_values));
-    }
-    return Status::OK();
-  }
-
+  Status AppendEmptyValue() final { return Append(true); } 
+ 
+  Status AppendEmptyValues(int64_t length) final { 
+    ARROW_RETURN_NOT_OK(Reserve(length)); 
+    ARROW_RETURN_NOT_OK(ValidateOverflow(0)); 
+    UnsafeAppendToBitmap(length, true); 
+    const int64_t num_values = value_builder_->length(); 
+    for (int64_t i = 0; i < length; ++i) { 
+      offsets_builder_.UnsafeAppend(static_cast<offset_type>(num_values)); 
+    } 
+    return Status::OK(); 
+  } 
+ 
   Status FinishInternal(std::shared_ptr<ArrayData>* out) override {
     ARROW_RETURN_NOT_OK(AppendNextOffset());
 
@@ -271,10 +271,10 @@ class ARROW_EXPORT MapBuilder : public ArrayBuilder {
 
   Status AppendNulls(int64_t length) final;
 
-  Status AppendEmptyValue() final;
-
-  Status AppendEmptyValues(int64_t length) final;
-
+  Status AppendEmptyValue() final; 
+ 
+  Status AppendEmptyValues(int64_t length) final; 
+ 
   /// \brief Get builder to append keys.
   ///
   /// Append a key with this builder should be followed by appending
@@ -370,10 +370,10 @@ class ARROW_EXPORT FixedSizeListBuilder : public ArrayBuilder {
 
   Status ValidateOverflow(int64_t new_elements);
 
-  Status AppendEmptyValue() final;
-
-  Status AppendEmptyValues(int64_t length) final;
-
+  Status AppendEmptyValue() final; 
+ 
+  Status AppendEmptyValues(int64_t length) final; 
+ 
   ArrayBuilder* value_builder() const { return value_builder_.get(); }
 
   std::shared_ptr<DataType> type() const override {
@@ -431,42 +431,42 @@ class ARROW_EXPORT StructBuilder : public ArrayBuilder {
     return Status::OK();
   }
 
-  /// \brief Append a null value. Automatically appends an empty value to each child
+  /// \brief Append a null value. Automatically appends an empty value to each child 
   /// builder.
   Status AppendNull() final {
     for (const auto& field : children_) {
-      ARROW_RETURN_NOT_OK(field->AppendEmptyValue());
+      ARROW_RETURN_NOT_OK(field->AppendEmptyValue()); 
     }
     return Append(false);
   }
 
-  /// \brief Append multiple null values. Automatically appends empty values to each
+  /// \brief Append multiple null values. Automatically appends empty values to each 
   /// child builder.
-  Status AppendNulls(int64_t length) final {
-    for (const auto& field : children_) {
-      ARROW_RETURN_NOT_OK(field->AppendEmptyValues(length));
-    }
-    ARROW_RETURN_NOT_OK(Reserve(length));
-    UnsafeAppendToBitmap(length, false);
-    return Status::OK();
-  }
+  Status AppendNulls(int64_t length) final { 
+    for (const auto& field : children_) { 
+      ARROW_RETURN_NOT_OK(field->AppendEmptyValues(length)); 
+    } 
+    ARROW_RETURN_NOT_OK(Reserve(length)); 
+    UnsafeAppendToBitmap(length, false); 
+    return Status::OK(); 
+  } 
 
-  Status AppendEmptyValue() final {
-    for (const auto& field : children_) {
-      ARROW_RETURN_NOT_OK(field->AppendEmptyValue());
-    }
-    return Append(true);
-  }
-
-  Status AppendEmptyValues(int64_t length) final {
-    for (const auto& field : children_) {
-      ARROW_RETURN_NOT_OK(field->AppendEmptyValues(length));
-    }
-    ARROW_RETURN_NOT_OK(Reserve(length));
-    UnsafeAppendToBitmap(length, true);
-    return Status::OK();
-  }
-
+  Status AppendEmptyValue() final { 
+    for (const auto& field : children_) { 
+      ARROW_RETURN_NOT_OK(field->AppendEmptyValue()); 
+    } 
+    return Append(true); 
+  } 
+ 
+  Status AppendEmptyValues(int64_t length) final { 
+    for (const auto& field : children_) { 
+      ARROW_RETURN_NOT_OK(field->AppendEmptyValues(length)); 
+    } 
+    ARROW_RETURN_NOT_OK(Reserve(length)); 
+    UnsafeAppendToBitmap(length, true); 
+    return Status::OK(); 
+  } 
+ 
   void Reset() override;
 
   ArrayBuilder* field_builder(int i) const { return children_[i].get(); }

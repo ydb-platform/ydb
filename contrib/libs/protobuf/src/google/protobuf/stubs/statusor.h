@@ -32,8 +32,8 @@
 // object. StatusOr models the concept of an object that is either a
 // usable value, or an error Status explaining why such a value is
 // not present. To this end, StatusOr<T> does not allow its Status
-// value to be OkStatus(). Further, StatusOr<T*> does not allow the
-// contained pointer to be nullptr.
+// value to be OkStatus(). Further, StatusOr<T*> does not allow the 
+// contained pointer to be nullptr. 
 //
 // The primary use-case for StatusOr<T> is as the return value of a
 // function which may fail.
@@ -42,7 +42,7 @@
 //
 //  StatusOr<float> result = DoBigCalculationThatCouldFail();
 //  if (result.ok()) {
-//    float answer = result.value();
+//    float answer = result.value(); 
 //    printf("Big calculation yielded: %f", answer);
 //  } else {
 //    LOG(ERROR) << result.status();
@@ -52,7 +52,7 @@
 //
 //  StatusOr<Foo*> result = FooFactory::MakeNewFoo(arg);
 //  if (result.ok()) {
-//    std::unique_ptr<Foo> foo(result.value());
+//    std::unique_ptr<Foo> foo(result.value()); 
 //    foo->DoSomethingCool();
 //  } else {
 //    LOG(ERROR) << result.status();
@@ -62,7 +62,7 @@
 //
 //  StatusOr<Foo*> FooFactory::MakeNewFoo(int arg) {
 //    if (arg <= 0) {
-//      return InvalidArgumentError("Arg must be positive");
+//      return InvalidArgumentError("Arg must be positive"); 
 //    } else {
 //      return new Foo(arg);
 //    }
@@ -73,51 +73,51 @@
 #define GOOGLE_PROTOBUF_STUBS_STATUSOR_H_
 
 #include <new>
-#include <string>
+#include <string> 
 #include <utility>
 
-#include <google/protobuf/stubs/status.h>
+#include <google/protobuf/stubs/status.h> 
 
-#include <google/protobuf/port_def.inc>
-
+#include <google/protobuf/port_def.inc> 
+ 
 namespace google {
 namespace protobuf {
 namespace util {
-namespace statusor_internal {
+namespace statusor_internal { 
 
 template<typename T>
 class StatusOr {
   template<typename U> friend class StatusOr;
 
  public:
-  using value_type = T;
+  using value_type = T; 
 
-  // Construct a new StatusOr with Status::UNKNOWN status.
-  // Construct a new StatusOr with UnknownError() status.
-  explicit StatusOr();
-
+  // Construct a new StatusOr with Status::UNKNOWN status. 
+  // Construct a new StatusOr with UnknownError() status. 
+  explicit StatusOr(); 
+ 
   // Construct a new StatusOr with the given non-ok status. After calling
-  // this constructor, calls to value() will CHECK-fail.
+  // this constructor, calls to value() will CHECK-fail. 
   //
   // NOTE: Not explicit - we want to use StatusOr<T> as a return
   // value, so it is convenient and sensible to be able to do 'return
   // Status()' when the return type is StatusOr<T>.
   //
-  // REQUIRES: status != OkStatus(). This requirement is DCHECKed.
-  // In optimized builds, passing OkStatus() here will have the effect
+  // REQUIRES: status != OkStatus(). This requirement is DCHECKed. 
+  // In optimized builds, passing OkStatus() here will have the effect 
   // of passing PosixErrorSpace::EINVAL as a fallback.
   StatusOr(const Status& status);  // NOLINT
 
   // Construct a new StatusOr with the given value. If T is a plain pointer,
-  // value must not be nullptr. After calling this constructor, calls to
-  // value() will succeed, and calls to status() will return OK.
+  // value must not be nullptr. After calling this constructor, calls to 
+  // value() will succeed, and calls to status() will return OK. 
   //
   // NOTE: Not explicit - we want to use StatusOr<T> as a return type
   // so it is convenient and sensible to be able to do 'return T()'
   // when when the return type is StatusOr<T>.
   //
-  // REQUIRES: if T is a plain pointer, value != nullptr. This requirement is
-  // DCHECKed. In optimized builds, passing a null pointer here will have
+  // REQUIRES: if T is a plain pointer, value != nullptr. This requirement is 
+  // DCHECKed. In optimized builds, passing a null pointer here will have 
   // the effect of passing PosixErrorSpace::EINVAL as a fallback.
   StatusOr(const T& value);  // NOLINT
 
@@ -136,14 +136,14 @@ class StatusOr {
   StatusOr& operator=(const StatusOr<U>& other);
 
   // Returns a reference to our status. If this contains a T, then
-  // returns OkStatus().
+  // returns OkStatus(). 
   const Status& status() const;
 
   // Returns this->status().ok()
   bool ok() const;
 
   // Returns a reference to our current value, or CHECK-fails if !this->ok().
-  const T& value () const;
+  const T& value () const; 
 
  private:
   Status status_;
@@ -153,7 +153,7 @@ class StatusOr {
 ////////////////////////////////////////////////////////////////////////////////
 // Implementation details for StatusOr<T>
 
-class PROTOBUF_EXPORT StatusOrHelper {
+class PROTOBUF_EXPORT StatusOrHelper { 
  public:
   // Move type-agnostic error handling to the .cc.
   static void Crash(const util::Status& status);
@@ -165,22 +165,22 @@ class PROTOBUF_EXPORT StatusOrHelper {
 
 template<typename T>
 struct StatusOrHelper::Specialize {
-  // For non-pointer T, a reference can never be nullptr.
+  // For non-pointer T, a reference can never be nullptr. 
   static inline bool IsValueNull(const T& t) { return false; }
 };
 
 template<typename T>
 struct StatusOrHelper::Specialize<T*> {
-  static inline bool IsValueNull(const T* t) { return t == nullptr; }
+  static inline bool IsValueNull(const T* t) { return t == nullptr; } 
 };
 
-template <typename T>
-inline StatusOr<T>::StatusOr() : status_(util::UnknownError("")) {}
+template <typename T> 
+inline StatusOr<T>::StatusOr() : status_(util::UnknownError("")) {} 
 
 template<typename T>
 inline StatusOr<T>::StatusOr(const Status& status) {
   if (status.ok()) {
-    status_ = util::InternalError("OkStatus() is not a valid argument.");
+    status_ = util::InternalError("OkStatus() is not a valid argument."); 
   } else {
     status_ = status;
   }
@@ -188,10 +188,10 @@ inline StatusOr<T>::StatusOr(const Status& status) {
 
 template<typename T>
 inline StatusOr<T>::StatusOr(const T& value) {
-  if (StatusOrHelper::Specialize<T>::IsValueNull(value)) {
-    status_ = util::InternalError("nullptr is not a valid argument.");
+  if (StatusOrHelper::Specialize<T>::IsValueNull(value)) { 
+    status_ = util::InternalError("nullptr is not a valid argument."); 
   } else {
-    status_ = util::OkStatus();
+    status_ = util::OkStatus(); 
     value_ = value;
   }
 }
@@ -233,21 +233,21 @@ inline bool StatusOr<T>::ok() const {
 }
 
 template<typename T>
-inline const T& StatusOr<T>::value() const {
+inline const T& StatusOr<T>::value() const { 
   if (!status_.ok()) {
-    StatusOrHelper::Crash(status_);
+    StatusOrHelper::Crash(status_); 
   }
   return value_;
 }
-
-}  // namespace statusor_internal
-
-using ::google::protobuf::util::statusor_internal::StatusOr;
-
+ 
+}  // namespace statusor_internal 
+ 
+using ::google::protobuf::util::statusor_internal::StatusOr; 
+ 
 }  // namespace util
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
-
+#include <google/protobuf/port_undef.inc> 
+ 
 #endif  // GOOGLE_PROTOBUF_STUBS_STATUSOR_H_

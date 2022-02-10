@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Yann Collet, Facebook, Inc.
+ * Copyright (c) Yann Collet, Facebook, Inc. 
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -11,127 +11,127 @@
 #include "zstd_ldm.h"
 
 #include "../common/debug.h"
-#include <contrib/libs/xxhash/xxhash.h>
+#include <contrib/libs/xxhash/xxhash.h> 
 #include "zstd_fast.h"          /* ZSTD_fillHashTable() */
 #include "zstd_double_fast.h"   /* ZSTD_fillDoubleHashTable() */
-#include "zstd_ldm_geartab.h"
+#include "zstd_ldm_geartab.h" 
 
 #define LDM_BUCKET_SIZE_LOG 3
 #define LDM_MIN_MATCH_LENGTH 64
 #define LDM_HASH_RLOG 7
 
-typedef struct {
-    U64 rolling;
-    U64 stopMask;
-} ldmRollingHashState_t;
-
-/** ZSTD_ldm_gear_init():
- *
- * Initializes the rolling hash state such that it will honor the
- * settings in params. */
-static void ZSTD_ldm_gear_init(ldmRollingHashState_t* state, ldmParams_t const* params)
-{
-    unsigned maxBitsInMask = MIN(params->minMatchLength, 64);
-    unsigned hashRateLog = params->hashRateLog;
-
-    state->rolling = ~(U32)0;
-
-    /* The choice of the splitting criterion is subject to two conditions:
-     *   1. it has to trigger on average every 2^(hashRateLog) bytes;
-     *   2. ideally, it has to depend on a window of minMatchLength bytes.
-     *
-     * In the gear hash algorithm, bit n depends on the last n bytes;
-     * so in order to obtain a good quality splitting criterion it is
-     * preferable to use bits with high weight.
-     *
-     * To match condition 1 we use a mask with hashRateLog bits set
-     * and, because of the previous remark, we make sure these bits
-     * have the highest possible weight while still respecting
-     * condition 2.
-     */
-    if (hashRateLog > 0 && hashRateLog <= maxBitsInMask) {
-        state->stopMask = (((U64)1 << hashRateLog) - 1) << (maxBitsInMask - hashRateLog);
-    } else {
-        /* In this degenerate case we simply honor the hash rate. */
-        state->stopMask = ((U64)1 << hashRateLog) - 1;
-    }
-}
-
-/** ZSTD_ldm_gear_reset()
- * Feeds [data, data + minMatchLength) into the hash without registering any
- * splits. This effectively resets the hash state. This is used when skipping
- * over data, either at the beginning of a block, or skipping sections.
- */
-static void ZSTD_ldm_gear_reset(ldmRollingHashState_t* state,
-                                BYTE const* data, size_t minMatchLength)
-{
-    U64 hash = state->rolling;
-    size_t n = 0;
-
-#define GEAR_ITER_ONCE() do {                                  \
-        hash = (hash << 1) + ZSTD_ldm_gearTab[data[n] & 0xff]; \
-        n += 1;                                                \
-    } while (0)
-    while (n + 3 < minMatchLength) {
-        GEAR_ITER_ONCE();
-        GEAR_ITER_ONCE();
-        GEAR_ITER_ONCE();
-        GEAR_ITER_ONCE();
-    }
-    while (n < minMatchLength) {
-        GEAR_ITER_ONCE();
-    }
-#undef GEAR_ITER_ONCE
-}
-
-/** ZSTD_ldm_gear_feed():
- *
- * Registers in the splits array all the split points found in the first
- * size bytes following the data pointer. This function terminates when
- * either all the data has been processed or LDM_BATCH_SIZE splits are
- * present in the splits array.
- *
- * Precondition: The splits array must not be full.
- * Returns: The number of bytes processed. */
-static size_t ZSTD_ldm_gear_feed(ldmRollingHashState_t* state,
-                                 BYTE const* data, size_t size,
-                                 size_t* splits, unsigned* numSplits)
-{
-    size_t n;
-    U64 hash, mask;
-
-    hash = state->rolling;
-    mask = state->stopMask;
-    n = 0;
-
-#define GEAR_ITER_ONCE() do { \
-        hash = (hash << 1) + ZSTD_ldm_gearTab[data[n] & 0xff]; \
-        n += 1; \
-        if (UNLIKELY((hash & mask) == 0)) { \
-            splits[*numSplits] = n; \
-            *numSplits += 1; \
-            if (*numSplits == LDM_BATCH_SIZE) \
-                goto done; \
-        } \
-    } while (0)
-
-    while (n + 3 < size) {
-        GEAR_ITER_ONCE();
-        GEAR_ITER_ONCE();
-        GEAR_ITER_ONCE();
-        GEAR_ITER_ONCE();
-    }
-    while (n < size) {
-        GEAR_ITER_ONCE();
-    }
-
-#undef GEAR_ITER_ONCE
-
-done:
-    state->rolling = hash;
-    return n;
-}
-
+typedef struct { 
+    U64 rolling; 
+    U64 stopMask; 
+} ldmRollingHashState_t; 
+ 
+/** ZSTD_ldm_gear_init(): 
+ * 
+ * Initializes the rolling hash state such that it will honor the 
+ * settings in params. */ 
+static void ZSTD_ldm_gear_init(ldmRollingHashState_t* state, ldmParams_t const* params) 
+{ 
+    unsigned maxBitsInMask = MIN(params->minMatchLength, 64); 
+    unsigned hashRateLog = params->hashRateLog; 
+ 
+    state->rolling = ~(U32)0; 
+ 
+    /* The choice of the splitting criterion is subject to two conditions: 
+     *   1. it has to trigger on average every 2^(hashRateLog) bytes; 
+     *   2. ideally, it has to depend on a window of minMatchLength bytes. 
+     * 
+     * In the gear hash algorithm, bit n depends on the last n bytes; 
+     * so in order to obtain a good quality splitting criterion it is 
+     * preferable to use bits with high weight. 
+     * 
+     * To match condition 1 we use a mask with hashRateLog bits set 
+     * and, because of the previous remark, we make sure these bits 
+     * have the highest possible weight while still respecting 
+     * condition 2. 
+     */ 
+    if (hashRateLog > 0 && hashRateLog <= maxBitsInMask) { 
+        state->stopMask = (((U64)1 << hashRateLog) - 1) << (maxBitsInMask - hashRateLog); 
+    } else { 
+        /* In this degenerate case we simply honor the hash rate. */ 
+        state->stopMask = ((U64)1 << hashRateLog) - 1; 
+    } 
+} 
+ 
+/** ZSTD_ldm_gear_reset() 
+ * Feeds [data, data + minMatchLength) into the hash without registering any 
+ * splits. This effectively resets the hash state. This is used when skipping 
+ * over data, either at the beginning of a block, or skipping sections. 
+ */ 
+static void ZSTD_ldm_gear_reset(ldmRollingHashState_t* state, 
+                                BYTE const* data, size_t minMatchLength) 
+{ 
+    U64 hash = state->rolling; 
+    size_t n = 0; 
+ 
+#define GEAR_ITER_ONCE() do {                                  \ 
+        hash = (hash << 1) + ZSTD_ldm_gearTab[data[n] & 0xff]; \ 
+        n += 1;                                                \ 
+    } while (0) 
+    while (n + 3 < minMatchLength) { 
+        GEAR_ITER_ONCE(); 
+        GEAR_ITER_ONCE(); 
+        GEAR_ITER_ONCE(); 
+        GEAR_ITER_ONCE(); 
+    } 
+    while (n < minMatchLength) { 
+        GEAR_ITER_ONCE(); 
+    } 
+#undef GEAR_ITER_ONCE 
+} 
+ 
+/** ZSTD_ldm_gear_feed(): 
+ * 
+ * Registers in the splits array all the split points found in the first 
+ * size bytes following the data pointer. This function terminates when 
+ * either all the data has been processed or LDM_BATCH_SIZE splits are 
+ * present in the splits array. 
+ * 
+ * Precondition: The splits array must not be full. 
+ * Returns: The number of bytes processed. */ 
+static size_t ZSTD_ldm_gear_feed(ldmRollingHashState_t* state, 
+                                 BYTE const* data, size_t size, 
+                                 size_t* splits, unsigned* numSplits) 
+{ 
+    size_t n; 
+    U64 hash, mask; 
+ 
+    hash = state->rolling; 
+    mask = state->stopMask; 
+    n = 0; 
+ 
+#define GEAR_ITER_ONCE() do { \ 
+        hash = (hash << 1) + ZSTD_ldm_gearTab[data[n] & 0xff]; \ 
+        n += 1; \ 
+        if (UNLIKELY((hash & mask) == 0)) { \ 
+            splits[*numSplits] = n; \ 
+            *numSplits += 1; \ 
+            if (*numSplits == LDM_BATCH_SIZE) \ 
+                goto done; \ 
+        } \ 
+    } while (0) 
+ 
+    while (n + 3 < size) { 
+        GEAR_ITER_ONCE(); 
+        GEAR_ITER_ONCE(); 
+        GEAR_ITER_ONCE(); 
+        GEAR_ITER_ONCE(); 
+    } 
+    while (n < size) { 
+        GEAR_ITER_ONCE(); 
+    } 
+ 
+#undef GEAR_ITER_ONCE 
+ 
+done: 
+    state->rolling = hash; 
+    return n; 
+} 
+ 
 void ZSTD_ldm_adjustParameters(ldmParams_t* params,
                                ZSTD_compressionParameters const* cParams)
 {
@@ -181,12 +181,12 @@ static void ZSTD_ldm_insertEntry(ldmState_t* ldmState,
                                  size_t const hash, const ldmEntry_t entry,
                                  ldmParams_t const ldmParams)
 {
-    BYTE* const pOffset = ldmState->bucketOffsets + hash;
-    unsigned const offset = *pOffset;
+    BYTE* const pOffset = ldmState->bucketOffsets + hash; 
+    unsigned const offset = *pOffset; 
 
-    *(ZSTD_ldm_getBucket(ldmState, hash, ldmParams) + offset) = entry;
-    *pOffset = (BYTE)((offset + 1) & ((1u << ldmParams.bucketSizeLog) - 1));
-
+    *(ZSTD_ldm_getBucket(ldmState, hash, ldmParams) + offset) = entry; 
+    *pOffset = (BYTE)((offset + 1) & ((1u << ldmParams.bucketSizeLog) - 1)); 
+ 
 }
 
 /** ZSTD_ldm_countBackwardsMatch() :
@@ -195,10 +195,10 @@ static void ZSTD_ldm_insertEntry(ldmState_t* ldmState,
  *  We count only bytes where pMatch >= pBase and pIn >= pAnchor. */
 static size_t ZSTD_ldm_countBackwardsMatch(
             const BYTE* pIn, const BYTE* pAnchor,
-            const BYTE* pMatch, const BYTE* pMatchBase)
+            const BYTE* pMatch, const BYTE* pMatchBase) 
 {
     size_t matchLength = 0;
-    while (pIn > pAnchor && pMatch > pMatchBase && pIn[-1] == pMatch[-1]) {
+    while (pIn > pAnchor && pMatch > pMatchBase && pIn[-1] == pMatch[-1]) { 
         pIn--;
         pMatch--;
         matchLength++;
@@ -206,27 +206,27 @@ static size_t ZSTD_ldm_countBackwardsMatch(
     return matchLength;
 }
 
-/** ZSTD_ldm_countBackwardsMatch_2segments() :
- *  Returns the number of bytes that match backwards from pMatch,
- *  even with the backwards match spanning 2 different segments.
- *
- *  On reaching `pMatchBase`, start counting from mEnd */
-static size_t ZSTD_ldm_countBackwardsMatch_2segments(
-                    const BYTE* pIn, const BYTE* pAnchor,
-                    const BYTE* pMatch, const BYTE* pMatchBase,
-                    const BYTE* pExtDictStart, const BYTE* pExtDictEnd)
-{
-    size_t matchLength = ZSTD_ldm_countBackwardsMatch(pIn, pAnchor, pMatch, pMatchBase);
-    if (pMatch - matchLength != pMatchBase || pMatchBase == pExtDictStart) {
-        /* If backwards match is entirely in the extDict or prefix, immediately return */
-        return matchLength;
-    }
-    DEBUGLOG(7, "ZSTD_ldm_countBackwardsMatch_2segments: found 2-parts backwards match (length in prefix==%zu)", matchLength);
-    matchLength += ZSTD_ldm_countBackwardsMatch(pIn - matchLength, pAnchor, pExtDictEnd, pExtDictStart);
-    DEBUGLOG(7, "final backwards match length = %zu", matchLength);
-    return matchLength;
-}
-
+/** ZSTD_ldm_countBackwardsMatch_2segments() : 
+ *  Returns the number of bytes that match backwards from pMatch, 
+ *  even with the backwards match spanning 2 different segments. 
+ * 
+ *  On reaching `pMatchBase`, start counting from mEnd */ 
+static size_t ZSTD_ldm_countBackwardsMatch_2segments( 
+                    const BYTE* pIn, const BYTE* pAnchor, 
+                    const BYTE* pMatch, const BYTE* pMatchBase, 
+                    const BYTE* pExtDictStart, const BYTE* pExtDictEnd) 
+{ 
+    size_t matchLength = ZSTD_ldm_countBackwardsMatch(pIn, pAnchor, pMatch, pMatchBase); 
+    if (pMatch - matchLength != pMatchBase || pMatchBase == pExtDictStart) { 
+        /* If backwards match is entirely in the extDict or prefix, immediately return */ 
+        return matchLength; 
+    } 
+    DEBUGLOG(7, "ZSTD_ldm_countBackwardsMatch_2segments: found 2-parts backwards match (length in prefix==%zu)", matchLength); 
+    matchLength += ZSTD_ldm_countBackwardsMatch(pIn - matchLength, pAnchor, pExtDictEnd, pExtDictStart); 
+    DEBUGLOG(7, "final backwards match length = %zu", matchLength); 
+    return matchLength; 
+} 
+ 
 /** ZSTD_ldm_fillFastTables() :
  *
  *  Fills the relevant tables for the ZSTD_fast and ZSTD_dfast strategies.
@@ -265,41 +265,41 @@ static size_t ZSTD_ldm_fillFastTables(ZSTD_matchState_t* ms,
 }
 
 void ZSTD_ldm_fillHashTable(
-            ldmState_t* ldmState, const BYTE* ip,
+            ldmState_t* ldmState, const BYTE* ip, 
             const BYTE* iend, ldmParams_t const* params)
 {
-    U32 const minMatchLength = params->minMatchLength;
-    U32 const hBits = params->hashLog - params->bucketSizeLog;
-    BYTE const* const base = ldmState->window.base;
-    BYTE const* const istart = ip;
-    ldmRollingHashState_t hashState;
-    size_t* const splits = ldmState->splitIndices;
-    unsigned numSplits;
-
+    U32 const minMatchLength = params->minMatchLength; 
+    U32 const hBits = params->hashLog - params->bucketSizeLog; 
+    BYTE const* const base = ldmState->window.base; 
+    BYTE const* const istart = ip; 
+    ldmRollingHashState_t hashState; 
+    size_t* const splits = ldmState->splitIndices; 
+    unsigned numSplits; 
+ 
     DEBUGLOG(5, "ZSTD_ldm_fillHashTable");
-
-    ZSTD_ldm_gear_init(&hashState, params);
-    while (ip < iend) {
-        size_t hashed;
-        unsigned n;
-
-        numSplits = 0;
-        hashed = ZSTD_ldm_gear_feed(&hashState, ip, iend - ip, splits, &numSplits);
-
-        for (n = 0; n < numSplits; n++) {
-            if (ip + splits[n] >= istart + minMatchLength) {
-                BYTE const* const split = ip + splits[n] - minMatchLength;
-                U64 const xxhash = XXH64(split, minMatchLength, 0);
-                U32 const hash = (U32)(xxhash & (((U32)1 << hBits) - 1));
-                ldmEntry_t entry;
-
-                entry.offset = (U32)(split - base);
-                entry.checksum = (U32)(xxhash >> 32);
-                ZSTD_ldm_insertEntry(ldmState, hash, entry, *params);
-            }
-        }
-
-        ip += hashed;
+ 
+    ZSTD_ldm_gear_init(&hashState, params); 
+    while (ip < iend) { 
+        size_t hashed; 
+        unsigned n; 
+ 
+        numSplits = 0; 
+        hashed = ZSTD_ldm_gear_feed(&hashState, ip, iend - ip, splits, &numSplits); 
+ 
+        for (n = 0; n < numSplits; n++) { 
+            if (ip + splits[n] >= istart + minMatchLength) { 
+                BYTE const* const split = ip + splits[n] - minMatchLength; 
+                U64 const xxhash = XXH64(split, minMatchLength, 0); 
+                U32 const hash = (U32)(xxhash & (((U32)1 << hBits) - 1)); 
+                ldmEntry_t entry; 
+ 
+                entry.offset = (U32)(split - base); 
+                entry.checksum = (U32)(xxhash >> 32); 
+                ZSTD_ldm_insertEntry(ldmState, hash, entry, *params); 
+            } 
+        } 
+ 
+        ip += hashed; 
     }
 }
 
@@ -311,10 +311,10 @@ void ZSTD_ldm_fillHashTable(
  *  (after a long match, only update tables a limited amount). */
 static void ZSTD_ldm_limitTableUpdate(ZSTD_matchState_t* ms, const BYTE* anchor)
 {
-    U32 const curr = (U32)(anchor - ms->window.base);
-    if (curr > ms->nextToUpdate + 1024) {
+    U32 const curr = (U32)(anchor - ms->window.base); 
+    if (curr > ms->nextToUpdate + 1024) { 
         ms->nextToUpdate =
-            curr - MIN(512, curr - ms->nextToUpdate - 1024);
+            curr - MIN(512, curr - ms->nextToUpdate - 1024); 
     }
 }
 
@@ -325,7 +325,7 @@ static size_t ZSTD_ldm_generateSequences_internal(
     /* LDM parameters */
     int const extDict = ZSTD_window_hasExtDict(ldmState->window);
     U32 const minMatchLength = params->minMatchLength;
-    U32 const entsPerBucket = 1U << params->bucketSizeLog;
+    U32 const entsPerBucket = 1U << params->bucketSizeLog; 
     U32 const hBits = params->hashLog - params->bucketSizeLog;
     /* Prefix and extDict parameters */
     U32 const dictLimit = ldmState->window.dictLimit;
@@ -338,69 +338,69 @@ static size_t ZSTD_ldm_generateSequences_internal(
     /* Input bounds */
     BYTE const* const istart = (BYTE const*)src;
     BYTE const* const iend = istart + srcSize;
-    BYTE const* const ilimit = iend - HASH_READ_SIZE;
+    BYTE const* const ilimit = iend - HASH_READ_SIZE; 
     /* Input positions */
     BYTE const* anchor = istart;
     BYTE const* ip = istart;
-    /* Rolling hash state */
-    ldmRollingHashState_t hashState;
-    /* Arrays for staged-processing */
-    size_t* const splits = ldmState->splitIndices;
-    ldmMatchCandidate_t* const candidates = ldmState->matchCandidates;
-    unsigned numSplits;
+    /* Rolling hash state */ 
+    ldmRollingHashState_t hashState; 
+    /* Arrays for staged-processing */ 
+    size_t* const splits = ldmState->splitIndices; 
+    ldmMatchCandidate_t* const candidates = ldmState->matchCandidates; 
+    unsigned numSplits; 
 
-    if (srcSize < minMatchLength)
-        return iend - anchor;
-
-    /* Initialize the rolling hash state with the first minMatchLength bytes */
-    ZSTD_ldm_gear_init(&hashState, params);
-    ZSTD_ldm_gear_reset(&hashState, ip, minMatchLength);
-    ip += minMatchLength;
-
-    while (ip < ilimit) {
-        size_t hashed;
-        unsigned n;
-
-        numSplits = 0;
-        hashed = ZSTD_ldm_gear_feed(&hashState, ip, ilimit - ip,
-                                    splits, &numSplits);
-
-        for (n = 0; n < numSplits; n++) {
-            BYTE const* const split = ip + splits[n] - minMatchLength;
-            U64 const xxhash = XXH64(split, minMatchLength, 0);
-            U32 const hash = (U32)(xxhash & (((U32)1 << hBits) - 1));
-
-            candidates[n].split = split;
-            candidates[n].hash = hash;
-            candidates[n].checksum = (U32)(xxhash >> 32);
-            candidates[n].bucket = ZSTD_ldm_getBucket(ldmState, hash, *params);
-            PREFETCH_L1(candidates[n].bucket);
+    if (srcSize < minMatchLength) 
+        return iend - anchor; 
+ 
+    /* Initialize the rolling hash state with the first minMatchLength bytes */ 
+    ZSTD_ldm_gear_init(&hashState, params); 
+    ZSTD_ldm_gear_reset(&hashState, ip, minMatchLength); 
+    ip += minMatchLength; 
+ 
+    while (ip < ilimit) { 
+        size_t hashed; 
+        unsigned n; 
+ 
+        numSplits = 0; 
+        hashed = ZSTD_ldm_gear_feed(&hashState, ip, ilimit - ip, 
+                                    splits, &numSplits); 
+ 
+        for (n = 0; n < numSplits; n++) { 
+            BYTE const* const split = ip + splits[n] - minMatchLength; 
+            U64 const xxhash = XXH64(split, minMatchLength, 0); 
+            U32 const hash = (U32)(xxhash & (((U32)1 << hBits) - 1)); 
+ 
+            candidates[n].split = split; 
+            candidates[n].hash = hash; 
+            candidates[n].checksum = (U32)(xxhash >> 32); 
+            candidates[n].bucket = ZSTD_ldm_getBucket(ldmState, hash, *params); 
+            PREFETCH_L1(candidates[n].bucket); 
         }
 
-        for (n = 0; n < numSplits; n++) {
-            size_t forwardMatchLength = 0, backwardMatchLength = 0,
-                   bestMatchLength = 0, mLength;
-            U32 offset;
-            BYTE const* const split = candidates[n].split;
-            U32 const checksum = candidates[n].checksum;
-            U32 const hash = candidates[n].hash;
-            ldmEntry_t* const bucket = candidates[n].bucket;
-            ldmEntry_t const* cur;
-            ldmEntry_t const* bestEntry = NULL;
-            ldmEntry_t newEntry;
+        for (n = 0; n < numSplits; n++) { 
+            size_t forwardMatchLength = 0, backwardMatchLength = 0, 
+                   bestMatchLength = 0, mLength; 
+            U32 offset; 
+            BYTE const* const split = candidates[n].split; 
+            U32 const checksum = candidates[n].checksum; 
+            U32 const hash = candidates[n].hash; 
+            ldmEntry_t* const bucket = candidates[n].bucket; 
+            ldmEntry_t const* cur; 
+            ldmEntry_t const* bestEntry = NULL; 
+            ldmEntry_t newEntry; 
 
-            newEntry.offset = (U32)(split - base);
-            newEntry.checksum = checksum;
-
-            /* If a split point would generate a sequence overlapping with
-             * the previous one, we merely register it in the hash table and
-             * move on */
-            if (split < anchor) {
-                ZSTD_ldm_insertEntry(ldmState, hash, newEntry, *params);
-                continue;
-            }
-
-            for (cur = bucket; cur < bucket + entsPerBucket; cur++) {
+            newEntry.offset = (U32)(split - base); 
+            newEntry.checksum = checksum; 
+ 
+            /* If a split point would generate a sequence overlapping with 
+             * the previous one, we merely register it in the hash table and 
+             * move on */ 
+            if (split < anchor) { 
+                ZSTD_ldm_insertEntry(ldmState, hash, newEntry, *params); 
+                continue; 
+            } 
+ 
+            for (cur = bucket; cur < bucket + entsPerBucket; cur++) { 
                 size_t curForwardMatchLength, curBackwardMatchLength,
                        curTotalMatchLength;
                 if (cur->checksum != checksum || cur->offset <= lowestIndex) {
@@ -414,23 +414,23 @@ static size_t ZSTD_ldm_generateSequences_internal(
                         cur->offset < dictLimit ? dictEnd : iend;
                     BYTE const* const lowMatchPtr =
                         cur->offset < dictLimit ? dictStart : lowPrefixPtr;
-                    curForwardMatchLength =
-                        ZSTD_count_2segments(split, pMatch, iend, matchEnd, lowPrefixPtr);
+                    curForwardMatchLength = 
+                        ZSTD_count_2segments(split, pMatch, iend, matchEnd, lowPrefixPtr); 
                     if (curForwardMatchLength < minMatchLength) {
                         continue;
                     }
-                    curBackwardMatchLength = ZSTD_ldm_countBackwardsMatch_2segments(
-                            split, anchor, pMatch, lowMatchPtr, dictStart, dictEnd);
+                    curBackwardMatchLength = ZSTD_ldm_countBackwardsMatch_2segments( 
+                            split, anchor, pMatch, lowMatchPtr, dictStart, dictEnd); 
                 } else { /* !extDict */
                     BYTE const* const pMatch = base + cur->offset;
-                    curForwardMatchLength = ZSTD_count(split, pMatch, iend);
+                    curForwardMatchLength = ZSTD_count(split, pMatch, iend); 
                     if (curForwardMatchLength < minMatchLength) {
                         continue;
                     }
                     curBackwardMatchLength =
-                        ZSTD_ldm_countBackwardsMatch(split, anchor, pMatch, lowPrefixPtr);
+                        ZSTD_ldm_countBackwardsMatch(split, anchor, pMatch, lowPrefixPtr); 
                 }
-                curTotalMatchLength = curForwardMatchLength + curBackwardMatchLength;
+                curTotalMatchLength = curForwardMatchLength + curBackwardMatchLength; 
 
                 if (curTotalMatchLength > bestMatchLength) {
                     bestMatchLength = curTotalMatchLength;
@@ -440,52 +440,52 @@ static size_t ZSTD_ldm_generateSequences_internal(
                 }
             }
 
-            /* No match found -- insert an entry into the hash table
-             * and process the next candidate match */
-            if (bestEntry == NULL) {
-                ZSTD_ldm_insertEntry(ldmState, hash, newEntry, *params);
-                continue;
-            }
+            /* No match found -- insert an entry into the hash table 
+             * and process the next candidate match */ 
+            if (bestEntry == NULL) { 
+                ZSTD_ldm_insertEntry(ldmState, hash, newEntry, *params); 
+                continue; 
+            } 
 
-            /* Match found */
-            offset = (U32)(split - base) - bestEntry->offset;
-            mLength = forwardMatchLength + backwardMatchLength;
-            {
-                rawSeq* const seq = rawSeqStore->seq + rawSeqStore->size;
+            /* Match found */ 
+            offset = (U32)(split - base) - bestEntry->offset; 
+            mLength = forwardMatchLength + backwardMatchLength; 
+            { 
+                rawSeq* const seq = rawSeqStore->seq + rawSeqStore->size; 
 
-                /* Out of sequence storage */
-                if (rawSeqStore->size == rawSeqStore->capacity)
-                    return ERROR(dstSize_tooSmall);
-                seq->litLength = (U32)(split - backwardMatchLength - anchor);
-                seq->matchLength = (U32)mLength;
-                seq->offset = offset;
-                rawSeqStore->size++;
-            }
+                /* Out of sequence storage */ 
+                if (rawSeqStore->size == rawSeqStore->capacity) 
+                    return ERROR(dstSize_tooSmall); 
+                seq->litLength = (U32)(split - backwardMatchLength - anchor); 
+                seq->matchLength = (U32)mLength; 
+                seq->offset = offset; 
+                rawSeqStore->size++; 
+            } 
 
-            /* Insert the current entry into the hash table --- it must be
-             * done after the previous block to avoid clobbering bestEntry */
-            ZSTD_ldm_insertEntry(ldmState, hash, newEntry, *params);
-
-            anchor = split + forwardMatchLength;
-
-            /* If we find a match that ends after the data that we've hashed
-             * then we have a repeating, overlapping, pattern. E.g. all zeros.
-             * If one repetition of the pattern matches our `stopMask` then all
-             * repetitions will. We don't need to insert them all into out table,
-             * only the first one. So skip over overlapping matches.
-             * This is a major speed boost (20x) for compressing a single byte
-             * repeated, when that byte ends up in the table.
-             */
-            if (anchor > ip + hashed) {
-                ZSTD_ldm_gear_reset(&hashState, anchor - minMatchLength, minMatchLength);
+            /* Insert the current entry into the hash table --- it must be 
+             * done after the previous block to avoid clobbering bestEntry */ 
+            ZSTD_ldm_insertEntry(ldmState, hash, newEntry, *params); 
+ 
+            anchor = split + forwardMatchLength; 
+ 
+            /* If we find a match that ends after the data that we've hashed 
+             * then we have a repeating, overlapping, pattern. E.g. all zeros. 
+             * If one repetition of the pattern matches our `stopMask` then all 
+             * repetitions will. We don't need to insert them all into out table, 
+             * only the first one. So skip over overlapping matches. 
+             * This is a major speed boost (20x) for compressing a single byte 
+             * repeated, when that byte ends up in the table. 
+             */ 
+            if (anchor > ip + hashed) { 
+                ZSTD_ldm_gear_reset(&hashState, anchor - minMatchLength, minMatchLength); 
                 /* Continue the outer loop at anchor (ip + hashed == anchor). */
-                ip = anchor - hashed;
-                break;
-            }
+                ip = anchor - hashed; 
+                break; 
+            } 
         }
 
-        ip += hashed;
-    }
+        ip += hashed; 
+    } 
 
     return iend - anchor;
 }
@@ -535,7 +535,7 @@ size_t ZSTD_ldm_generateSequences(
 
         assert(chunkStart < iend);
         /* 1. Perform overflow correction if necessary. */
-        if (ZSTD_window_needOverflowCorrection(ldmState->window, 0, maxDist, ldmState->loadedDictEnd, chunkStart, chunkEnd)) {
+        if (ZSTD_window_needOverflowCorrection(ldmState->window, 0, maxDist, ldmState->loadedDictEnd, chunkStart, chunkEnd)) { 
             U32 const ldmHSize = 1U << params->hashLog;
             U32 const correction = ZSTD_window_correctOverflow(
                 &ldmState->window, /* cycleLog */ 0, maxDist, chunkStart);
@@ -640,23 +640,23 @@ static rawSeq maybeSplitSequence(rawSeqStore_t* rawSeqStore,
     return sequence;
 }
 
-void ZSTD_ldm_skipRawSeqStoreBytes(rawSeqStore_t* rawSeqStore, size_t nbBytes) {
-    U32 currPos = (U32)(rawSeqStore->posInSequence + nbBytes);
-    while (currPos && rawSeqStore->pos < rawSeqStore->size) {
-        rawSeq currSeq = rawSeqStore->seq[rawSeqStore->pos];
-        if (currPos >= currSeq.litLength + currSeq.matchLength) {
-            currPos -= currSeq.litLength + currSeq.matchLength;
-            rawSeqStore->pos++;
-        } else {
-            rawSeqStore->posInSequence = currPos;
-            break;
-        }
-    }
-    if (currPos == 0 || rawSeqStore->pos == rawSeqStore->size) {
-        rawSeqStore->posInSequence = 0;
-    }
-}
-
+void ZSTD_ldm_skipRawSeqStoreBytes(rawSeqStore_t* rawSeqStore, size_t nbBytes) { 
+    U32 currPos = (U32)(rawSeqStore->posInSequence + nbBytes); 
+    while (currPos && rawSeqStore->pos < rawSeqStore->size) { 
+        rawSeq currSeq = rawSeqStore->seq[rawSeqStore->pos]; 
+        if (currPos >= currSeq.litLength + currSeq.matchLength) { 
+            currPos -= currSeq.litLength + currSeq.matchLength; 
+            rawSeqStore->pos++; 
+        } else { 
+            rawSeqStore->posInSequence = currPos; 
+            break; 
+        } 
+    } 
+    if (currPos == 0 || rawSeqStore->pos == rawSeqStore->size) { 
+        rawSeqStore->posInSequence = 0; 
+    } 
+} 
+ 
 size_t ZSTD_ldm_blockCompress(rawSeqStore_t* rawSeqStore,
     ZSTD_matchState_t* ms, seqStore_t* seqStore, U32 rep[ZSTD_REP_NUM],
     ZSTD_paramSwitch_e useRowMatchFinder,
@@ -665,7 +665,7 @@ size_t ZSTD_ldm_blockCompress(rawSeqStore_t* rawSeqStore,
     const ZSTD_compressionParameters* const cParams = &ms->cParams;
     unsigned const minMatch = cParams->minMatch;
     ZSTD_blockCompressor const blockCompressor =
-        ZSTD_selectBlockCompressor(cParams->strategy, useRowMatchFinder, ZSTD_matchState_dictMode(ms));
+        ZSTD_selectBlockCompressor(cParams->strategy, useRowMatchFinder, ZSTD_matchState_dictMode(ms)); 
     /* Input bounds */
     BYTE const* const istart = (BYTE const*)src;
     BYTE const* const iend = istart + srcSize;
@@ -673,18 +673,18 @@ size_t ZSTD_ldm_blockCompress(rawSeqStore_t* rawSeqStore,
     BYTE const* ip = istart;
 
     DEBUGLOG(5, "ZSTD_ldm_blockCompress: srcSize=%zu", srcSize);
-    /* If using opt parser, use LDMs only as candidates rather than always accepting them */
-    if (cParams->strategy >= ZSTD_btopt) {
-        size_t lastLLSize;
-        ms->ldmSeqStore = rawSeqStore;
-        lastLLSize = blockCompressor(ms, seqStore, rep, src, srcSize);
-        ZSTD_ldm_skipRawSeqStoreBytes(rawSeqStore, srcSize);
-        return lastLLSize;
-    }
-
+    /* If using opt parser, use LDMs only as candidates rather than always accepting them */ 
+    if (cParams->strategy >= ZSTD_btopt) { 
+        size_t lastLLSize; 
+        ms->ldmSeqStore = rawSeqStore; 
+        lastLLSize = blockCompressor(ms, seqStore, rep, src, srcSize); 
+        ZSTD_ldm_skipRawSeqStoreBytes(rawSeqStore, srcSize); 
+        return lastLLSize; 
+    } 
+ 
     assert(rawSeqStore->pos <= rawSeqStore->size);
     assert(rawSeqStore->size <= rawSeqStore->capacity);
-    /* Loop through each sequence and apply the block compressor to the literals */
+    /* Loop through each sequence and apply the block compressor to the literals */ 
     while (rawSeqStore->pos < rawSeqStore->size && ip < iend) {
         /* maybeSplitSequence updates rawSeqStore->pos */
         rawSeq const sequence = maybeSplitSequence(rawSeqStore,

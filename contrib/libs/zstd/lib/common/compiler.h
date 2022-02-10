@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Yann Collet, Facebook, Inc.
+ * Copyright (c) Yann Collet, Facebook, Inc. 
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -41,17 +41,17 @@
 #endif
 
 /**
-  On MSVC qsort requires that functions passed into it use the __cdecl calling conversion(CC).
+  On MSVC qsort requires that functions passed into it use the __cdecl calling conversion(CC). 
   This explicitly marks such functions as __cdecl so that the code will still compile
-  if a CC other than __cdecl has been made the default.
-*/
-#if  defined(_MSC_VER)
-#  define WIN_CDECL __cdecl
-#else
-#  define WIN_CDECL
-#endif
-
-/**
+  if a CC other than __cdecl has been made the default. 
+*/ 
+#if  defined(_MSC_VER) 
+#  define WIN_CDECL __cdecl 
+#else 
+#  define WIN_CDECL 
+#endif 
+ 
+/** 
  * FORCE_INLINE_TEMPLATE is used to define C "templates", which take constant
  * parameters. They must be inlined for the compiler to eliminate the constant
  * branches.
@@ -92,7 +92,7 @@
 #  endif
 #endif
 
-
+ 
 /* target attribute */
 #if defined(__GNUC__) || defined(__ICCARM__)
 #  define TARGET_ATTRIBUTE(target) __attribute__((__target__(target)))
@@ -119,9 +119,9 @@
 #  elif defined(__GNUC__) && ( (__GNUC__ >= 4) || ( (__GNUC__ == 3) && (__GNUC_MINOR__ >= 1) ) )
 #    define PREFETCH_L1(ptr)  __builtin_prefetch((ptr), 0 /* rw==read */, 3 /* locality */)
 #    define PREFETCH_L2(ptr)  __builtin_prefetch((ptr), 0 /* rw==read */, 2 /* locality */)
-#  elif defined(__aarch64__)
-#    define PREFETCH_L1(ptr)  __asm__ __volatile__("prfm pldl1keep, %0" ::"Q"(*(ptr)))
-#    define PREFETCH_L2(ptr)  __asm__ __volatile__("prfm pldl2keep, %0" ::"Q"(*(ptr)))
+#  elif defined(__aarch64__) 
+#    define PREFETCH_L1(ptr)  __asm__ __volatile__("prfm pldl1keep, %0" ::"Q"(*(ptr))) 
+#    define PREFETCH_L2(ptr)  __asm__ __volatile__("prfm pldl2keep, %0" ::"Q"(*(ptr))) 
 #  else
 #    define PREFETCH_L1(ptr) (void)(ptr)  /* disabled */
 #    define PREFETCH_L2(ptr) (void)(ptr)  /* disabled */
@@ -175,19 +175,19 @@
 #  pragma warning(disable : 4324)        /* disable: C4324: padded structure */
 #endif
 
-/*Like DYNAMIC_BMI2 but for compile time determination of BMI2 support*/
-#ifndef STATIC_BMI2
-#  if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_I86))
-#    ifdef __AVX2__  //MSVC does not have a BMI2 specific flag, but every CPU that supports AVX2 also supports BMI2
-#       define STATIC_BMI2 1
-#    endif
-#  endif
-#endif
-
-#ifndef STATIC_BMI2
-    #define STATIC_BMI2 0
-#endif
-
+/*Like DYNAMIC_BMI2 but for compile time determination of BMI2 support*/ 
+#ifndef STATIC_BMI2 
+#  if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_I86)) 
+#    ifdef __AVX2__  //MSVC does not have a BMI2 specific flag, but every CPU that supports AVX2 also supports BMI2 
+#       define STATIC_BMI2 1 
+#    endif 
+#  endif 
+#endif 
+ 
+#ifndef STATIC_BMI2 
+    #define STATIC_BMI2 0 
+#endif 
+ 
 /* compile time determination of SIMD support */
 #if !defined(ZSTD_NO_INTRINSICS)
 #  if defined(__SSE2__) || defined(_M_AMD64) || (defined (_M_IX86) && defined(_M_IX86_FP) && (_M_IX86_FP >= 2))
@@ -202,15 +202,15 @@
 #  elif defined(ZSTD_ARCH_ARM_NEON)
 #    include <arm_neon.h>
 #  endif
-#endif
-
+#endif 
+ 
 /* C-language Attributes are added in C23. */
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ > 201710L) && defined(__has_c_attribute)
 # define ZSTD_HAS_C_ATTRIBUTE(x) __has_c_attribute(x)
 #else
 # define ZSTD_HAS_C_ATTRIBUTE(x) 0
-#endif
-
+#endif 
+ 
 /* Only use C++ attributes in C++. Some compilers report support for C++
  * attributes when compiling with C.
  */
@@ -218,8 +218,8 @@
 # define ZSTD_HAS_CPP_ATTRIBUTE(x) __has_cpp_attribute(x)
 #else
 # define ZSTD_HAS_CPP_ATTRIBUTE(x) 0
-#endif
-
+#endif 
+ 
 /* Define ZSTD_FALLTHROUGH macro for annotating switch case with the 'fallthrough' attribute.
  * - C23: https://en.cppreference.com/w/c/language/attributes/fallthrough
  * - CPP17: https://en.cppreference.com/w/cpp/language/attributes/fallthrough
@@ -273,63 +273,63 @@
 *  Sanitizer
 *****************************************************************/
 
-#if ZSTD_MEMORY_SANITIZER
-/* Not all platforms that support msan provide sanitizers/msan_interface.h.
- * We therefore declare the functions we need ourselves, rather than trying to
- * include the header file... */
-#include <stddef.h>  /* size_t */
-#define ZSTD_DEPS_NEED_STDINT
-#include "zstd_deps.h"  /* intptr_t */
-
-/* Make memory region fully initialized (without changing its contents). */
-void __msan_unpoison(const volatile void *a, size_t size);
-
-/* Make memory region fully uninitialized (without changing its contents).
-   This is a legacy interface that does not update origin information. Use
-   __msan_allocated_memory() instead. */
-void __msan_poison(const volatile void *a, size_t size);
-
-/* Returns the offset of the first (at least partially) poisoned byte in the
-   memory range, or -1 if the whole range is good. */
-intptr_t __msan_test_shadow(const volatile void *x, size_t size);
-#endif
-
-#if ZSTD_ADDRESS_SANITIZER
-/* Not all platforms that support asan provide sanitizers/asan_interface.h.
- * We therefore declare the functions we need ourselves, rather than trying to
- * include the header file... */
-#include <stddef.h>  /* size_t */
-
-/**
- * Marks a memory region (<c>[addr, addr+size)</c>) as unaddressable.
- *
- * This memory must be previously allocated by your program. Instrumented
- * code is forbidden from accessing addresses in this region until it is
- * unpoisoned. This function is not guaranteed to poison the entire region -
- * it could poison only a subregion of <c>[addr, addr+size)</c> due to ASan
- * alignment restrictions.
- *
- * \note This function is not thread-safe because no two threads can poison or
- * unpoison memory in the same memory region simultaneously.
- *
- * \param addr Start of memory region.
- * \param size Size of memory region. */
-void __asan_poison_memory_region(void const volatile *addr, size_t size);
-
-/**
- * Marks a memory region (<c>[addr, addr+size)</c>) as addressable.
- *
- * This memory must be previously allocated by your program. Accessing
- * addresses in this region is allowed until this region is poisoned again.
- * This function could unpoison a super-region of <c>[addr, addr+size)</c> due
- * to ASan alignment restrictions.
- *
- * \note This function is not thread-safe because no two threads can
- * poison or unpoison memory in the same memory region simultaneously.
- *
- * \param addr Start of memory region.
- * \param size Size of memory region. */
-void __asan_unpoison_memory_region(void const volatile *addr, size_t size);
-#endif
-
+#if ZSTD_MEMORY_SANITIZER 
+/* Not all platforms that support msan provide sanitizers/msan_interface.h. 
+ * We therefore declare the functions we need ourselves, rather than trying to 
+ * include the header file... */ 
+#include <stddef.h>  /* size_t */ 
+#define ZSTD_DEPS_NEED_STDINT 
+#include "zstd_deps.h"  /* intptr_t */ 
+ 
+/* Make memory region fully initialized (without changing its contents). */ 
+void __msan_unpoison(const volatile void *a, size_t size); 
+ 
+/* Make memory region fully uninitialized (without changing its contents). 
+   This is a legacy interface that does not update origin information. Use 
+   __msan_allocated_memory() instead. */ 
+void __msan_poison(const volatile void *a, size_t size); 
+ 
+/* Returns the offset of the first (at least partially) poisoned byte in the 
+   memory range, or -1 if the whole range is good. */ 
+intptr_t __msan_test_shadow(const volatile void *x, size_t size); 
+#endif 
+ 
+#if ZSTD_ADDRESS_SANITIZER 
+/* Not all platforms that support asan provide sanitizers/asan_interface.h. 
+ * We therefore declare the functions we need ourselves, rather than trying to 
+ * include the header file... */ 
+#include <stddef.h>  /* size_t */ 
+ 
+/** 
+ * Marks a memory region (<c>[addr, addr+size)</c>) as unaddressable. 
+ * 
+ * This memory must be previously allocated by your program. Instrumented 
+ * code is forbidden from accessing addresses in this region until it is 
+ * unpoisoned. This function is not guaranteed to poison the entire region - 
+ * it could poison only a subregion of <c>[addr, addr+size)</c> due to ASan 
+ * alignment restrictions. 
+ * 
+ * \note This function is not thread-safe because no two threads can poison or 
+ * unpoison memory in the same memory region simultaneously. 
+ * 
+ * \param addr Start of memory region. 
+ * \param size Size of memory region. */ 
+void __asan_poison_memory_region(void const volatile *addr, size_t size); 
+ 
+/** 
+ * Marks a memory region (<c>[addr, addr+size)</c>) as addressable. 
+ * 
+ * This memory must be previously allocated by your program. Accessing 
+ * addresses in this region is allowed until this region is poisoned again. 
+ * This function could unpoison a super-region of <c>[addr, addr+size)</c> due 
+ * to ASan alignment restrictions. 
+ * 
+ * \note This function is not thread-safe because no two threads can 
+ * poison or unpoison memory in the same memory region simultaneously. 
+ * 
+ * \param addr Start of memory region. 
+ * \param size Size of memory region. */ 
+void __asan_unpoison_memory_region(void const volatile *addr, size_t size); 
+#endif 
+ 
 #endif /* ZSTD_COMPILER_H */

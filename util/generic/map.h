@@ -16,7 +16,7 @@ class TMap: public std::map<K, V, Less, TReboundAllocator<A, std::pair<const K, 
     using TBase = std::map<K, V, Less, TReboundAllocator<A, std::pair<const K, V>>>;
 
 public:
-    using TBase::TBase;
+    using TBase::TBase; 
 
     inline explicit operator bool() const noexcept {
         return !this->empty();
@@ -32,7 +32,7 @@ class TMultiMap: public std::multimap<K, V, Less, TReboundAllocator<A, std::pair
     using TBase = std::multimap<K, V, Less, TReboundAllocator<A, std::pair<const K, V>>>;
 
 public:
-    using TBase::TBase;
+    using TBase::TBase; 
 
     inline explicit operator bool() const noexcept {
         return !this->empty();

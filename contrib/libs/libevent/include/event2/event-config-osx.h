@@ -366,7 +366,7 @@
 #define EVENT__LT_OBJDIR ".libs/"
 
 /* Numeric representation of the version */
-#define EVENT__NUMERIC_VERSION 0x02010c00
+#define EVENT__NUMERIC_VERSION 0x02010c00 
 
 /* Name of package */
 #define EVENT__PACKAGE "libevent"
@@ -378,7 +378,7 @@
 #define EVENT__PACKAGE_NAME ""
 
 /* Define to the full name and version of this package. */
-#define EVENT__PACKAGE_STRING "libevent 2.1.12-stable"
+#define EVENT__PACKAGE_STRING "libevent 2.1.12-stable" 
 
 /* Define to the one symbol short name of this package. */
 #define EVENT__PACKAGE_TARNAME ""
@@ -387,7 +387,7 @@
 #define EVENT__PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define EVENT__PACKAGE_VERSION "2.1.12-stable"
+#define EVENT__PACKAGE_VERSION "2.1.12-stable" 
 
 /* Define to necessary symbol if this constant uses a non-standard name on
    your system. */
@@ -424,7 +424,7 @@
 #define EVENT__TIME_WITH_SYS_TIME 1
 
 /* Version number of package */
-#define EVENT__VERSION "2.1.12-stable"
+#define EVENT__VERSION "2.1.12-stable" 
 
 /* Define to appropriate substitue if compiler doesnt have __func__ */
 /* #undef EVENT____func__ */

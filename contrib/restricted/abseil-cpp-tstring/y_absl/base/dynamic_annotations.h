@@ -446,7 +446,7 @@ ABSL_NAMESPACE_END
   __sanitizer_annotate_contiguous_container(beg, end, old_mid, new_mid)
 #define ABSL_ADDRESS_SANITIZER_REDZONE(name) \
   struct {                                   \
-    alignas(8) char x[8];                    \
+    alignas(8) char x[8];                    \ 
   } name
 
 #else

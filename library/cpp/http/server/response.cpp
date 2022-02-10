@@ -12,7 +12,7 @@ THttpResponse& THttpResponse::AddMultipleHeaders(const THttpHeaders& headers) {
 }
 
 THttpResponse& THttpResponse::SetContentType(const TStringBuf& contentType) {
-    Headers.AddOrReplaceHeader(THttpInputHeader("Content-Type", ToString(contentType)));
+    Headers.AddOrReplaceHeader(THttpInputHeader("Content-Type", ToString(contentType))); 
 
     return *this;
 }

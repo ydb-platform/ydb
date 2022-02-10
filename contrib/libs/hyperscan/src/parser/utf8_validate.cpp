@@ -60,7 +60,7 @@ bool isAllowedCodepoint(u32 val) {
     return true;
 }
 
-bool isValidUtf8(const char *expression, const size_t len) {
+bool isValidUtf8(const char *expression, const size_t len) { 
     if (!expression) {
         return true;
     }

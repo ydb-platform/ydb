@@ -1,7 +1,7 @@
-G_BENCHMARK()
-
-SRCS(
-    main.cpp
-)
-
-END()
+G_BENCHMARK() 
+ 
+SRCS( 
+    main.cpp 
+) 
+ 
+END() 

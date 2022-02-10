@@ -31,25 +31,25 @@
 #ifndef GOOGLE_PROTOBUF_STUBS_ONCE_H__
 #define GOOGLE_PROTOBUF_STUBS_ONCE_H__
 
-#include <mutex>
-#include <utility>
+#include <mutex> 
+#include <utility> 
 
-#include <google/protobuf/port_def.inc>
-
+#include <google/protobuf/port_def.inc> 
+ 
 namespace google {
 namespace protobuf {
-namespace internal {
+namespace internal { 
 
-using once_flag = std::once_flag;
-template <typename... Args>
-void call_once(Args&&... args ) {
-  std::call_once(std::forward<Args>(args)...);
+using once_flag = std::once_flag; 
+template <typename... Args> 
+void call_once(Args&&... args ) { 
+  std::call_once(std::forward<Args>(args)...); 
 }
 
-}  // namespace internal
+}  // namespace internal 
 }  // namespace protobuf
 }  // namespace google
 
-#include <google/protobuf/port_undef.inc>
-
+#include <google/protobuf/port_undef.inc> 
+ 
 #endif  // GOOGLE_PROTOBUF_STUBS_ONCE_H__

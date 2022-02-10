@@ -155,7 +155,7 @@ constexpr int128::operator unsigned __int128() const {
 #if defined(__clang__) && !defined(__ppc64__)
 inline int128::operator float() const { return static_cast<float>(v_); }
 
-inline int128::operator double() const { return static_cast<double>(v_); }
+inline int128::operator double() const { return static_cast<double>(v_); } 
 
 inline int128::operator long double() const {
   return static_cast<long double>(v_);
@@ -163,8 +163,8 @@ inline int128::operator long double() const {
 
 #else  // Clang on PowerPC
 // Forward declaration for conversion operators to floating point types.
-constexpr int128 operator-(int128 v);
-constexpr bool operator!=(int128 lhs, int128 rhs);
+constexpr int128 operator-(int128 v); 
+constexpr bool operator!=(int128 lhs, int128 rhs); 
 
 inline int128::operator float() const {
   // We must convert the absolute value and then negate as needed, because
@@ -199,45 +199,45 @@ inline int128::operator long double() const {
 
 // Comparison operators.
 
-constexpr bool operator==(int128 lhs, int128 rhs) {
+constexpr bool operator==(int128 lhs, int128 rhs) { 
   return static_cast<__int128>(lhs) == static_cast<__int128>(rhs);
 }
 
-constexpr bool operator!=(int128 lhs, int128 rhs) {
+constexpr bool operator!=(int128 lhs, int128 rhs) { 
   return static_cast<__int128>(lhs) != static_cast<__int128>(rhs);
 }
 
-constexpr bool operator<(int128 lhs, int128 rhs) {
+constexpr bool operator<(int128 lhs, int128 rhs) { 
   return static_cast<__int128>(lhs) < static_cast<__int128>(rhs);
 }
 
-constexpr bool operator>(int128 lhs, int128 rhs) {
+constexpr bool operator>(int128 lhs, int128 rhs) { 
   return static_cast<__int128>(lhs) > static_cast<__int128>(rhs);
 }
 
-constexpr bool operator<=(int128 lhs, int128 rhs) {
+constexpr bool operator<=(int128 lhs, int128 rhs) { 
   return static_cast<__int128>(lhs) <= static_cast<__int128>(rhs);
 }
 
-constexpr bool operator>=(int128 lhs, int128 rhs) {
+constexpr bool operator>=(int128 lhs, int128 rhs) { 
   return static_cast<__int128>(lhs) >= static_cast<__int128>(rhs);
 }
 
 // Unary operators.
 
-constexpr int128 operator-(int128 v) { return -static_cast<__int128>(v); }
+constexpr int128 operator-(int128 v) { return -static_cast<__int128>(v); } 
 
-constexpr bool operator!(int128 v) { return !static_cast<__int128>(v); }
+constexpr bool operator!(int128 v) { return !static_cast<__int128>(v); } 
 
-constexpr int128 operator~(int128 val) { return ~static_cast<__int128>(val); }
+constexpr int128 operator~(int128 val) { return ~static_cast<__int128>(val); } 
 
 // Arithmetic operators.
 
-constexpr int128 operator+(int128 lhs, int128 rhs) {
+constexpr int128 operator+(int128 lhs, int128 rhs) { 
   return static_cast<__int128>(lhs) + static_cast<__int128>(rhs);
 }
 
-constexpr int128 operator-(int128 lhs, int128 rhs) {
+constexpr int128 operator-(int128 lhs, int128 rhs) { 
   return static_cast<__int128>(lhs) - static_cast<__int128>(rhs);
 }
 
@@ -275,22 +275,22 @@ inline int128& int128::operator--() {
   return *this;
 }
 
-constexpr int128 operator|(int128 lhs, int128 rhs) {
+constexpr int128 operator|(int128 lhs, int128 rhs) { 
   return static_cast<__int128>(lhs) | static_cast<__int128>(rhs);
 }
 
-constexpr int128 operator&(int128 lhs, int128 rhs) {
+constexpr int128 operator&(int128 lhs, int128 rhs) { 
   return static_cast<__int128>(lhs) & static_cast<__int128>(rhs);
 }
 
-constexpr int128 operator^(int128 lhs, int128 rhs) {
+constexpr int128 operator^(int128 lhs, int128 rhs) { 
   return static_cast<__int128>(lhs) ^ static_cast<__int128>(rhs);
 }
 
-constexpr int128 operator<<(int128 lhs, int amount) {
+constexpr int128 operator<<(int128 lhs, int amount) { 
   return static_cast<__int128>(lhs) << amount;
 }
 
-constexpr int128 operator>>(int128 lhs, int amount) {
+constexpr int128 operator>>(int128 lhs, int amount) { 
   return static_cast<__int128>(lhs) >> amount;
 }

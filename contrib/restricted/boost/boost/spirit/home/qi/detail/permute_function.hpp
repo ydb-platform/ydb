@@ -64,7 +64,7 @@ namespace boost { namespace spirit { namespace qi { namespace detail
         bool* taken;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(permute_function& operator= (permute_function const&));
+        BOOST_DELETED_FUNCTION(permute_function& operator= (permute_function const&)); 
     };
 }}}}
 

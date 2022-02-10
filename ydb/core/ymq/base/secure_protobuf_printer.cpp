@@ -7,8 +7,8 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/singleton.h>
 
-#include <google/protobuf/message.h>
-#include <google/protobuf/text_format.h>
+#include <google/protobuf/message.h> 
+#include <google/protobuf/text_format.h> 
 
 namespace NKikimr::NSQS {
 

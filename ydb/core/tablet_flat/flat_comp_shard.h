@@ -102,10 +102,10 @@ namespace NCompShard {
     public:
         TSplitStatIterator(const TKeyNulls& nulls)
             : Nulls(nulls)
-            , InitQueue(TCmpHeapByFirstKey{Nulls})
-            , NextQueue(TCmpHeapByNextKey{Nulls})
-            , StartQueue(TCmpHeapByFirstKey{Nulls})
-            , StopQueue(TCmpHeapByLastKey{Nulls})
+            , InitQueue(TCmpHeapByFirstKey{Nulls}) 
+            , NextQueue(TCmpHeapByNextKey{Nulls}) 
+            , StartQueue(TCmpHeapByFirstKey{Nulls}) 
+            , StopQueue(TCmpHeapByLastKey{Nulls}) 
         { }
 
         void AddSlice(const TPart* part, const TSlice& slice, ui64 size) noexcept;

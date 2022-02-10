@@ -1,10 +1,10 @@
 #include "helpers.h"
 
-#include <google/protobuf/compiler/cpp/cpp_helpers.h>
-#include <google/protobuf/any.pb.h>
-#include <google/protobuf/duration.pb.h>
-#include <google/protobuf/empty.pb.h>
-#include <google/protobuf/timestamp.pb.h>
+#include <google/protobuf/compiler/cpp/cpp_helpers.h> 
+#include <google/protobuf/any.pb.h> 
+#include <google/protobuf/duration.pb.h> 
+#include <google/protobuf/empty.pb.h> 
+#include <google/protobuf/timestamp.pb.h> 
 
 #include <util/string/builder.h>
 #include <util/string/subst.h>

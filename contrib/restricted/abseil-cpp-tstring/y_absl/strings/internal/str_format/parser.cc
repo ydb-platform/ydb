@@ -34,67 +34,67 @@ namespace str_format_internal {
 using CC = FormatConversionCharInternal;
 using LM = LengthMod;
 
-// Abbreviations to fit in the table below.
-constexpr auto f_sign = Flags::kSignCol;
-constexpr auto f_alt = Flags::kAlt;
-constexpr auto f_pos = Flags::kShowPos;
-constexpr auto f_left = Flags::kLeft;
-constexpr auto f_zero = Flags::kZero;
-
+// Abbreviations to fit in the table below. 
+constexpr auto f_sign = Flags::kSignCol; 
+constexpr auto f_alt = Flags::kAlt; 
+constexpr auto f_pos = Flags::kShowPos; 
+constexpr auto f_left = Flags::kLeft; 
+constexpr auto f_zero = Flags::kZero; 
+ 
 ABSL_CONST_INIT const ConvTag kTags[256] = {
-    {},     {},    {},    {},    {},    {},     {},    {},     // 00-07
-    {},     {},    {},    {},    {},    {},     {},    {},     // 08-0f
-    {},     {},    {},    {},    {},    {},     {},    {},     // 10-17
-    {},     {},    {},    {},    {},    {},     {},    {},     // 18-1f
-    f_sign, {},    {},    f_alt, {},    {},     {},    {},     //  !"#$%&'
-    {},     {},    {},    f_pos, {},    f_left, {},    {},     // ()*+,-./
-    f_zero, {},    {},    {},    {},    {},     {},    {},     // 01234567
-    {},     {},    {},    {},    {},    {},     {},    {},     // 89:;<=>?
-    {},     CC::A, {},    {},    {},    CC::E,  CC::F, CC::G,  // @ABCDEFG
-    {},     {},    {},    {},    LM::L, {},     {},    {},     // HIJKLMNO
-    {},     {},    {},    {},    {},    {},     {},    {},     // PQRSTUVW
-    CC::X,  {},    {},    {},    {},    {},     {},    {},     // XYZ[\]^_
-    {},     CC::a, {},    CC::c, CC::d, CC::e,  CC::f, CC::g,  // `abcdefg
-    LM::h,  CC::i, LM::j, {},    LM::l, {},     CC::n, CC::o,  // hijklmno
-    CC::p,  LM::q, {},    CC::s, LM::t, CC::u,  {},    {},     // pqrstuvw
-    CC::x,  {},    LM::z, {},    {},    {},     {},    {},     // xyz{|}!
-    {},     {},    {},    {},    {},    {},     {},    {},     // 80-87
-    {},     {},    {},    {},    {},    {},     {},    {},     // 88-8f
-    {},     {},    {},    {},    {},    {},     {},    {},     // 90-97
-    {},     {},    {},    {},    {},    {},     {},    {},     // 98-9f
-    {},     {},    {},    {},    {},    {},     {},    {},     // a0-a7
-    {},     {},    {},    {},    {},    {},     {},    {},     // a8-af
-    {},     {},    {},    {},    {},    {},     {},    {},     // b0-b7
-    {},     {},    {},    {},    {},    {},     {},    {},     // b8-bf
-    {},     {},    {},    {},    {},    {},     {},    {},     // c0-c7
-    {},     {},    {},    {},    {},    {},     {},    {},     // c8-cf
-    {},     {},    {},    {},    {},    {},     {},    {},     // d0-d7
-    {},     {},    {},    {},    {},    {},     {},    {},     // d8-df
-    {},     {},    {},    {},    {},    {},     {},    {},     // e0-e7
-    {},     {},    {},    {},    {},    {},     {},    {},     // e8-ef
-    {},     {},    {},    {},    {},    {},     {},    {},     // f0-f7
-    {},     {},    {},    {},    {},    {},     {},    {},     // f8-ff
+    {},     {},    {},    {},    {},    {},     {},    {},     // 00-07 
+    {},     {},    {},    {},    {},    {},     {},    {},     // 08-0f 
+    {},     {},    {},    {},    {},    {},     {},    {},     // 10-17 
+    {},     {},    {},    {},    {},    {},     {},    {},     // 18-1f 
+    f_sign, {},    {},    f_alt, {},    {},     {},    {},     //  !"#$%&' 
+    {},     {},    {},    f_pos, {},    f_left, {},    {},     // ()*+,-./ 
+    f_zero, {},    {},    {},    {},    {},     {},    {},     // 01234567 
+    {},     {},    {},    {},    {},    {},     {},    {},     // 89:;<=>? 
+    {},     CC::A, {},    {},    {},    CC::E,  CC::F, CC::G,  // @ABCDEFG 
+    {},     {},    {},    {},    LM::L, {},     {},    {},     // HIJKLMNO 
+    {},     {},    {},    {},    {},    {},     {},    {},     // PQRSTUVW 
+    CC::X,  {},    {},    {},    {},    {},     {},    {},     // XYZ[\]^_ 
+    {},     CC::a, {},    CC::c, CC::d, CC::e,  CC::f, CC::g,  // `abcdefg 
+    LM::h,  CC::i, LM::j, {},    LM::l, {},     CC::n, CC::o,  // hijklmno 
+    CC::p,  LM::q, {},    CC::s, LM::t, CC::u,  {},    {},     // pqrstuvw 
+    CC::x,  {},    LM::z, {},    {},    {},     {},    {},     // xyz{|}! 
+    {},     {},    {},    {},    {},    {},     {},    {},     // 80-87 
+    {},     {},    {},    {},    {},    {},     {},    {},     // 88-8f 
+    {},     {},    {},    {},    {},    {},     {},    {},     // 90-97 
+    {},     {},    {},    {},    {},    {},     {},    {},     // 98-9f 
+    {},     {},    {},    {},    {},    {},     {},    {},     // a0-a7 
+    {},     {},    {},    {},    {},    {},     {},    {},     // a8-af 
+    {},     {},    {},    {},    {},    {},     {},    {},     // b0-b7 
+    {},     {},    {},    {},    {},    {},     {},    {},     // b8-bf 
+    {},     {},    {},    {},    {},    {},     {},    {},     // c0-c7 
+    {},     {},    {},    {},    {},    {},     {},    {},     // c8-cf 
+    {},     {},    {},    {},    {},    {},     {},    {},     // d0-d7 
+    {},     {},    {},    {},    {},    {},     {},    {},     // d8-df 
+    {},     {},    {},    {},    {},    {},     {},    {},     // e0-e7 
+    {},     {},    {},    {},    {},    {},     {},    {},     // e8-ef 
+    {},     {},    {},    {},    {},    {},     {},    {},     // f0-f7 
+    {},     {},    {},    {},    {},    {},     {},    {},     // f8-ff 
 };
 
 namespace {
 
 bool CheckFastPathSetting(const UnboundConversion& conv) {
-  bool width_precision_needed =
-      conv.width.value() >= 0 || conv.precision.value() >= 0;
-  if (width_precision_needed && conv.flags == Flags::kBasic) {
+  bool width_precision_needed = 
+      conv.width.value() >= 0 || conv.precision.value() >= 0; 
+  if (width_precision_needed && conv.flags == Flags::kBasic) { 
     fprintf(stderr,
             "basic=%d left=%d show_pos=%d sign_col=%d alt=%d zero=%d "
             "width=%d precision=%d\n",
-            conv.flags == Flags::kBasic ? 1 : 0,
-            FlagsContains(conv.flags, Flags::kLeft) ? 1 : 0,
-            FlagsContains(conv.flags, Flags::kShowPos) ? 1 : 0,
-            FlagsContains(conv.flags, Flags::kSignCol) ? 1 : 0,
-            FlagsContains(conv.flags, Flags::kAlt) ? 1 : 0,
-            FlagsContains(conv.flags, Flags::kZero) ? 1 : 0, conv.width.value(),
-            conv.precision.value());
-    return false;
+            conv.flags == Flags::kBasic ? 1 : 0, 
+            FlagsContains(conv.flags, Flags::kLeft) ? 1 : 0, 
+            FlagsContains(conv.flags, Flags::kShowPos) ? 1 : 0, 
+            FlagsContains(conv.flags, Flags::kSignCol) ? 1 : 0, 
+            FlagsContains(conv.flags, Flags::kAlt) ? 1 : 0, 
+            FlagsContains(conv.flags, Flags::kZero) ? 1 : 0, conv.width.value(), 
+            conv.precision.value()); 
+    return false; 
   }
-  return true;
+  return true; 
 }
 
 template <bool is_positional>
@@ -138,19 +138,19 @@ const char *ConsumeConversion(const char *pos, const char *const end,
   ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
 
   // We should start with the basic flag on.
-  assert(conv->flags == Flags::kBasic);
+  assert(conv->flags == Flags::kBasic); 
 
   // Any non alpha character makes this conversion not basic.
   // This includes flags (-+ #0), width (1-9, *) or precision (.).
   // All conversion characters and length modifiers are alpha characters.
   if (c < 'A') {
-    while (c <= '0') {
-      auto tag = GetTagForChar(c);
-      if (tag.is_flags()) {
-        conv->flags = conv->flags | tag.as_flags();
-        ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
-      } else {
-        break;
+    while (c <= '0') { 
+      auto tag = GetTagForChar(c); 
+      if (tag.is_flags()) { 
+        conv->flags = conv->flags | tag.as_flags(); 
+        ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR(); 
+      } else { 
+        break; 
       }
     }
 
@@ -163,10 +163,10 @@ const char *ConsumeConversion(const char *pos, const char *const end,
           *next_arg = -1;
           return ConsumeConversion<true>(original_pos, end, conv, next_arg);
         }
-        conv->flags = conv->flags | Flags::kNonBasic;
+        conv->flags = conv->flags | Flags::kNonBasic; 
         conv->width.set_value(maybe_width);
       } else if (c == '*') {
-        conv->flags = conv->flags | Flags::kNonBasic;
+        conv->flags = conv->flags | Flags::kNonBasic; 
         ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
         if (is_positional) {
           if (ABSL_PREDICT_FALSE(c < '1' || c > '9')) return nullptr;
@@ -180,7 +180,7 @@ const char *ConsumeConversion(const char *pos, const char *const end,
     }
 
     if (c == '.') {
-      conv->flags = conv->flags | Flags::kNonBasic;
+      conv->flags = conv->flags | Flags::kNonBasic; 
       ABSL_FORMAT_PARSER_INTERNAL_GET_CHAR();
       if (std::isdigit(c)) {
         conv->precision.set_value(parse_digits());

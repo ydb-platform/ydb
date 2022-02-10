@@ -35,7 +35,7 @@
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
-#include <google/protobuf/text_format.h>
+#include <google/protobuf/text_format.h> 
 
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <library/cpp/actors/interconnect/interconnect.h>

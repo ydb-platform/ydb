@@ -65,34 +65,34 @@ static size_t CEscapeString(const char* src, size_t src_len,
 //    Copies 'src' to result, escaping dangerous characters using
 //    C-style escape sequences.  'src' and 'dest' should not overlap.
 // ----------------------------------------------------------------------
-std::string CEscape(const StringPiece& src) {
+std::string CEscape(const StringPiece& src) { 
   const size_t dest_len = src.size() * 4 + 1; // Maximum possible expansion
   char* dest = new char[dest_len];
   const size_t used = CEscapeString(src.data(), src.size(),
                                     dest, dest_len);
-  std::string s = std::string(dest, used);
+  std::string s = std::string(dest, used); 
   delete[] dest;
   return s;
 }
 
-void PrefixSuccessor(std::string* prefix) {
+void PrefixSuccessor(std::string* prefix) { 
   // We can increment the last character in the string and be done
   // unless that character is 255, in which case we have to erase the
   // last character and increment the previous character, unless that
   // is 255, etc. If the string is empty or consists entirely of
   // 255's, we just return the empty string.
-  while (!prefix->empty()) {
-    char& c = prefix->back();
-    if (c == '\xff') {  // char literal avoids signed/unsigned.
-      prefix->pop_back();
+  while (!prefix->empty()) { 
+    char& c = prefix->back(); 
+    if (c == '\xff') {  // char literal avoids signed/unsigned. 
+      prefix->pop_back(); 
     } else {
-      ++c;
-      break;
+      ++c; 
+      break; 
     }
   }
 }
 
-static void StringAppendV(std::string* dst, const char* format, va_list ap) {
+static void StringAppendV(std::string* dst, const char* format, va_list ap) { 
   // First try with a small fixed size buffer
   char space[1024];
 
@@ -137,10 +137,10 @@ static void StringAppendV(std::string* dst, const char* format, va_list ap) {
   }
 }
 
-std::string StringPrintf(const char* format, ...) {
+std::string StringPrintf(const char* format, ...) { 
   va_list ap;
   va_start(ap, format);
-  std::string result;
+  std::string result; 
   StringAppendV(&result, format, ap);
   va_end(ap);
   return result;

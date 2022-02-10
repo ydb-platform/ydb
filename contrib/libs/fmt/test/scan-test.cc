@@ -5,10 +5,10 @@
 //
 // For the license information refer to format.h.
 
-#include "scan.h"
-
+#include "scan.h" 
+ 
 #include <time.h>
-
+ 
 #include <climits>
 
 #include <gmock/gmock.h>
@@ -75,7 +75,7 @@ template <> struct scanner<tm> {
     if (it != ctx.end() && *it == ':') ++it;
     auto end = it;
     while (end != ctx.end() && *end != '}') ++end;
-    format.reserve(detail::to_unsigned(end - it + 1));
+    format.reserve(detail::to_unsigned(end - it + 1)); 
     format.append(it, end);
     format.push_back('\0');
     return end;

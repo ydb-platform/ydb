@@ -32,10 +32,10 @@
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_EXTENSION_LITE_H__
 
 #include <map>
-#include <string>
+#include <string> 
 
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/compiler/java/java_extension.h>
+#include <google/protobuf/stubs/common.h> 
+#include <google/protobuf/compiler/java/java_extension.h> 
 
 namespace google {
 namespace protobuf {
@@ -62,7 +62,7 @@ class ImmutableExtensionLiteGenerator : public ExtensionGenerator {
  private:
   const FieldDescriptor* descriptor_;
   ClassNameResolver* name_resolver_;
-  TProtoStringType scope_;
+  TProtoStringType scope_; 
 
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ImmutableExtensionLiteGenerator);
 };
@@ -70,6 +70,6 @@ class ImmutableExtensionLiteGenerator : public ExtensionGenerator {
 }  // namespace java
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google
+}  // namespace google 
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_JAVA_EXTENSION_LITE_H__

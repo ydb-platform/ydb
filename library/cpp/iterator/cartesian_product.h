@@ -82,9 +82,9 @@ namespace NPrivate {
         public:
             using iterator = TIterator;
             using const_iterator = TIterator;
-            using value_type = typename TIterator::value_type;
-            using reference = typename TIterator::reference;
-            using const_reference = typename TIterator::reference;
+            using value_type = typename TIterator::value_type; 
+            using reference = typename TIterator::reference; 
+            using const_reference = typename TIterator::reference; 
 
             TIterator begin() const {
                 bool isEmpty = !((std::begin(*std::get<I>(Holders_).Ptr()) != std::end(*std::get<I>(Holders_).Ptr())) && ...);

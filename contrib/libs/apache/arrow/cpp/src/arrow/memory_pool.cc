@@ -18,32 +18,32 @@
 #include "arrow/memory_pool.h"
 
 #include <algorithm>  // IWYU pragma: keep
-#include <atomic>
-#include <cstdlib>   // IWYU pragma: keep
-#include <cstring>   // IWYU pragma: keep
-#include <iostream>  // IWYU pragma: keep
+#include <atomic> 
+#include <cstdlib>   // IWYU pragma: keep 
+#include <cstring>   // IWYU pragma: keep 
+#include <iostream>  // IWYU pragma: keep 
 #include <limits>
 #include <memory>
 
-#if defined(sun) || defined(__sun)
-#include <stdlib.h>
-#endif
-
-#include "arrow/buffer.h"
-#include "arrow/io/util_internal.h"
-#include "arrow/result.h"
+#if defined(sun) || defined(__sun) 
+#include <stdlib.h> 
+#endif 
+ 
+#include "arrow/buffer.h" 
+#include "arrow/io/util_internal.h" 
+#include "arrow/result.h" 
 #include "arrow/status.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/io_util.h"
+#include "arrow/util/bit_util.h" 
+#include "arrow/util/io_util.h" 
 #include "arrow/util/logging.h"  // IWYU pragma: keep
-#include "arrow/util/optional.h"
-#include "arrow/util/string.h"
-#include "arrow/util/thread_pool.h"
+#include "arrow/util/optional.h" 
+#include "arrow/util/string.h" 
+#include "arrow/util/thread_pool.h" 
 
-#ifdef __GLIBC__
-#include <malloc.h>
-#endif
-
+#ifdef __GLIBC__ 
+#include <malloc.h> 
+#endif 
+ 
 #ifdef ARROW_JEMALLOC
 // Needed to support jemalloc 3 and 4
 #define JEMALLOC_MANGLE
@@ -101,88 +101,88 @@ const char* je_arrow_malloc_conf =
 
 namespace arrow {
 
-namespace {
-
+namespace { 
+ 
 constexpr size_t kAlignment = 64;
 
-constexpr char kDefaultBackendEnvVar[] = "ARROW_DEFAULT_MEMORY_POOL";
+constexpr char kDefaultBackendEnvVar[] = "ARROW_DEFAULT_MEMORY_POOL"; 
 
-enum class MemoryPoolBackend : uint8_t { System, Jemalloc, Mimalloc };
-
-struct SupportedBackend {
-  const char* name;
-  MemoryPoolBackend backend;
-};
-
-// See ARROW-12248 for why we use static in-function singletons rather than
-// global constants below (in SupportedBackends() and UserSelectedBackend()).
-// In some contexts (especially R bindings) `default_memory_pool()` may be
-// called before all globals are initialized, and then the ARROW_DEFAULT_MEMORY_POOL
-// environment variable would be ignored.
-
-const std::vector<SupportedBackend>& SupportedBackends() {
-  static std::vector<SupportedBackend> backends = {
-  // ARROW-12316: Apple => mimalloc first, then jemalloc
-  //              non-Apple => jemalloc first, then mimalloc
-#if defined(ARROW_JEMALLOC) && !defined(__APPLE__)
-    {"jemalloc", MemoryPoolBackend::Jemalloc},
-#endif
-#ifdef ARROW_MIMALLOC
-    {"mimalloc", MemoryPoolBackend::Mimalloc},
-#endif
-#if defined(ARROW_JEMALLOC) && defined(__APPLE__)
-    {"jemalloc", MemoryPoolBackend::Jemalloc},
-#endif
-    {"system", MemoryPoolBackend::System}
-  };
-  return backends;
-}
-
-// Return the MemoryPoolBackend selected by the user through the
-// ARROW_DEFAULT_MEMORY_POOL environment variable, if any.
-util::optional<MemoryPoolBackend> UserSelectedBackend() {
-  static auto user_selected_backend = []() -> util::optional<MemoryPoolBackend> {
-    auto unsupported_backend = [](const std::string& name) {
-      std::vector<std::string> supported;
-      for (const auto backend : SupportedBackends()) {
-        supported.push_back(std::string("'") + backend.name + "'");
-      }
-      ARROW_LOG(WARNING) << "Unsupported backend '" << name << "' specified in "
-                         << kDefaultBackendEnvVar << " (supported backends are "
-                         << internal::JoinStrings(supported, ", ") << ")";
-    };
-
-    auto maybe_name = internal::GetEnvVar(kDefaultBackendEnvVar);
-    if (!maybe_name.ok()) {
-      return {};
-    }
-    const auto name = *std::move(maybe_name);
-    if (name.empty()) {
-      // An empty environment variable is considered missing
-      return {};
-    }
-    const auto found = std::find_if(
-        SupportedBackends().begin(), SupportedBackends().end(),
-        [&](const SupportedBackend& backend) { return name == backend.name; });
-    if (found != SupportedBackends().end()) {
-      return found->backend;
-    }
-    unsupported_backend(name);
-    return {};
-  }();
-
-  return user_selected_backend;
-}
-
-MemoryPoolBackend DefaultBackend() {
-  auto backend = UserSelectedBackend();
-  if (backend.has_value()) {
-    return backend.value();
-  }
-  struct SupportedBackend default_backend = SupportedBackends().front();
-  return default_backend.backend;
-}
-
+enum class MemoryPoolBackend : uint8_t { System, Jemalloc, Mimalloc }; 
+ 
+struct SupportedBackend { 
+  const char* name; 
+  MemoryPoolBackend backend; 
+}; 
+ 
+// See ARROW-12248 for why we use static in-function singletons rather than 
+// global constants below (in SupportedBackends() and UserSelectedBackend()). 
+// In some contexts (especially R bindings) `default_memory_pool()` may be 
+// called before all globals are initialized, and then the ARROW_DEFAULT_MEMORY_POOL 
+// environment variable would be ignored. 
+ 
+const std::vector<SupportedBackend>& SupportedBackends() { 
+  static std::vector<SupportedBackend> backends = { 
+  // ARROW-12316: Apple => mimalloc first, then jemalloc 
+  //              non-Apple => jemalloc first, then mimalloc 
+#if defined(ARROW_JEMALLOC) && !defined(__APPLE__) 
+    {"jemalloc", MemoryPoolBackend::Jemalloc}, 
+#endif 
+#ifdef ARROW_MIMALLOC 
+    {"mimalloc", MemoryPoolBackend::Mimalloc}, 
+#endif 
+#if defined(ARROW_JEMALLOC) && defined(__APPLE__) 
+    {"jemalloc", MemoryPoolBackend::Jemalloc}, 
+#endif 
+    {"system", MemoryPoolBackend::System} 
+  }; 
+  return backends; 
+} 
+ 
+// Return the MemoryPoolBackend selected by the user through the 
+// ARROW_DEFAULT_MEMORY_POOL environment variable, if any. 
+util::optional<MemoryPoolBackend> UserSelectedBackend() { 
+  static auto user_selected_backend = []() -> util::optional<MemoryPoolBackend> { 
+    auto unsupported_backend = [](const std::string& name) { 
+      std::vector<std::string> supported; 
+      for (const auto backend : SupportedBackends()) { 
+        supported.push_back(std::string("'") + backend.name + "'"); 
+      } 
+      ARROW_LOG(WARNING) << "Unsupported backend '" << name << "' specified in " 
+                         << kDefaultBackendEnvVar << " (supported backends are " 
+                         << internal::JoinStrings(supported, ", ") << ")"; 
+    }; 
+ 
+    auto maybe_name = internal::GetEnvVar(kDefaultBackendEnvVar); 
+    if (!maybe_name.ok()) { 
+      return {}; 
+    } 
+    const auto name = *std::move(maybe_name); 
+    if (name.empty()) { 
+      // An empty environment variable is considered missing 
+      return {}; 
+    } 
+    const auto found = std::find_if( 
+        SupportedBackends().begin(), SupportedBackends().end(), 
+        [&](const SupportedBackend& backend) { return name == backend.name; }); 
+    if (found != SupportedBackends().end()) { 
+      return found->backend; 
+    } 
+    unsupported_backend(name); 
+    return {}; 
+  }(); 
+ 
+  return user_selected_backend; 
+} 
+ 
+MemoryPoolBackend DefaultBackend() { 
+  auto backend = UserSelectedBackend(); 
+  if (backend.has_value()) { 
+    return backend.value(); 
+  } 
+  struct SupportedBackend default_backend = SupportedBackends().front(); 
+  return default_backend.backend; 
+} 
+ 
 // A static piece of memory for 0-size allocations, so as to return
 // an aligned non-null pointer.
 alignas(kAlignment) static uint8_t zero_size_area[1];
@@ -204,11 +204,11 @@ class SystemAllocator {
     if (!*out) {
       return Status::OutOfMemory("malloc of size ", size, " failed");
     }
-#elif defined(sun) || defined(__sun)
-    *out = reinterpret_cast<uint8_t*>(memalign(kAlignment, static_cast<size_t>(size)));
-    if (!*out) {
-      return Status::OutOfMemory("malloc of size ", size, " failed");
-    }
+#elif defined(sun) || defined(__sun) 
+    *out = reinterpret_cast<uint8_t*>(memalign(kAlignment, static_cast<size_t>(size))); 
+    if (!*out) { 
+      return Status::OutOfMemory("malloc of size ", size, " failed"); 
+    } 
 #else
     const int result = posix_memalign(reinterpret_cast<void**>(out), kAlignment,
                                       static_cast<size_t>(size));
@@ -262,14 +262,14 @@ class SystemAllocator {
 #endif
     }
   }
-
-  static void ReleaseUnused() {
-#ifdef __GLIBC__
-    // The return value of malloc_trim is not an error but to inform
-    // you if memory was actually released or not, which we do not care about here
-    ARROW_UNUSED(malloc_trim(0));
-#endif
-  }
+ 
+  static void ReleaseUnused() { 
+#ifdef __GLIBC__ 
+    // The return value of malloc_trim is not an error but to inform 
+    // you if memory was actually released or not, which we do not care about here 
+    ARROW_UNUSED(malloc_trim(0)); 
+#endif 
+  } 
 };
 
 #ifdef ARROW_JEMALLOC
@@ -317,10 +317,10 @@ class JemallocAllocator {
       dallocx(ptr, MALLOCX_ALIGN(kAlignment));
     }
   }
-
-  static void ReleaseUnused() {
-    mallctl("arena." ARROW_STRINGIFY(MALLCTL_ARENAS_ALL) ".purge", NULL, NULL, NULL, 0);
-  }
+ 
+  static void ReleaseUnused() { 
+    mallctl("arena." ARROW_STRINGIFY(MALLCTL_ARENAS_ALL) ".purge", NULL, NULL, NULL, 0); 
+  } 
 };
 
 #endif  // defined(ARROW_JEMALLOC)
@@ -343,8 +343,8 @@ class MimallocAllocator {
     return Status::OK();
   }
 
-  static void ReleaseUnused() { mi_collect(true); }
-
+  static void ReleaseUnused() { mi_collect(true); } 
+ 
   static Status ReallocateAligned(int64_t old_size, int64_t new_size, uint8_t** ptr) {
     uint8_t* previous_ptr = *ptr;
     if (previous_ptr == zero_size_area) {
@@ -451,8 +451,8 @@ class BaseMemoryPoolImpl : public MemoryPool {
     stats_.UpdateAllocatedBytes(-size);
   }
 
-  void ReleaseUnused() override { Allocator::ReleaseUnused(); }
-
+  void ReleaseUnused() override { Allocator::ReleaseUnused(); } 
+ 
   int64_t bytes_allocated() const override { return stats_.bytes_allocated(); }
 
   int64_t max_memory() const override { return stats_.max_memory(); }
@@ -480,46 +480,46 @@ class MimallocMemoryPool : public BaseMemoryPoolImpl<MimallocAllocator> {
 };
 #endif
 
-std::unique_ptr<MemoryPool> MemoryPool::CreateDefault() {
-  auto backend = DefaultBackend();
-  switch (backend) {
-    case MemoryPoolBackend::System:
-      return std::unique_ptr<MemoryPool>(new SystemMemoryPool);
+std::unique_ptr<MemoryPool> MemoryPool::CreateDefault() { 
+  auto backend = DefaultBackend(); 
+  switch (backend) { 
+    case MemoryPoolBackend::System: 
+      return std::unique_ptr<MemoryPool>(new SystemMemoryPool); 
 #ifdef ARROW_JEMALLOC
-    case MemoryPoolBackend::Jemalloc:
-      return std::unique_ptr<MemoryPool>(new JemallocMemoryPool);
+    case MemoryPoolBackend::Jemalloc: 
+      return std::unique_ptr<MemoryPool>(new JemallocMemoryPool); 
 #endif
-#ifdef ARROW_MIMALLOC
-    case MemoryPoolBackend::Mimalloc:
-      return std::unique_ptr<MemoryPool>(new MimallocMemoryPool);
-#endif
-    default:
-      ARROW_LOG(FATAL) << "Internal error: cannot create default memory pool";
-      return nullptr;
-  }
+#ifdef ARROW_MIMALLOC 
+    case MemoryPoolBackend::Mimalloc: 
+      return std::unique_ptr<MemoryPool>(new MimallocMemoryPool); 
+#endif 
+    default: 
+      ARROW_LOG(FATAL) << "Internal error: cannot create default memory pool"; 
+      return nullptr; 
+  } 
 }
 
-static struct GlobalState {
-  ~GlobalState() { finalizing.store(true, std::memory_order_relaxed); }
-
-  bool is_finalizing() const { return finalizing.load(std::memory_order_relaxed); }
-
-  std::atomic<bool> finalizing{false};  // constructed first, destroyed last
-
-  SystemMemoryPool system_pool;
+static struct GlobalState { 
+  ~GlobalState() { finalizing.store(true, std::memory_order_relaxed); } 
+ 
+  bool is_finalizing() const { return finalizing.load(std::memory_order_relaxed); } 
+ 
+  std::atomic<bool> finalizing{false};  // constructed first, destroyed last 
+ 
+  SystemMemoryPool system_pool; 
 #ifdef ARROW_JEMALLOC
-  JemallocMemoryPool jemalloc_pool;
+  JemallocMemoryPool jemalloc_pool; 
 #endif
 #ifdef ARROW_MIMALLOC
-  MimallocMemoryPool mimalloc_pool;
+  MimallocMemoryPool mimalloc_pool; 
 #endif
-} global_state;
+} global_state; 
 
-MemoryPool* system_memory_pool() { return &global_state.system_pool; }
+MemoryPool* system_memory_pool() { return &global_state.system_pool; } 
 
 Status jemalloc_memory_pool(MemoryPool** out) {
 #ifdef ARROW_JEMALLOC
-  *out = &global_state.jemalloc_pool;
+  *out = &global_state.jemalloc_pool; 
   return Status::OK();
 #else
   return Status::NotImplemented("This Arrow build does not enable jemalloc");
@@ -528,7 +528,7 @@ Status jemalloc_memory_pool(MemoryPool** out) {
 
 Status mimalloc_memory_pool(MemoryPool** out) {
 #ifdef ARROW_MIMALLOC
-  *out = &global_state.mimalloc_pool;
+  *out = &global_state.mimalloc_pool; 
   return Status::OK();
 #else
   return Status::NotImplemented("This Arrow build does not enable mimalloc");
@@ -536,22 +536,22 @@ Status mimalloc_memory_pool(MemoryPool** out) {
 }
 
 MemoryPool* default_memory_pool() {
-  auto backend = DefaultBackend();
-  switch (backend) {
-    case MemoryPoolBackend::System:
-      return &global_state.system_pool;
+  auto backend = DefaultBackend(); 
+  switch (backend) { 
+    case MemoryPoolBackend::System: 
+      return &global_state.system_pool; 
 #ifdef ARROW_JEMALLOC
-    case MemoryPoolBackend::Jemalloc:
-      return &global_state.jemalloc_pool;
+    case MemoryPoolBackend::Jemalloc: 
+      return &global_state.jemalloc_pool; 
 #endif
-#ifdef ARROW_MIMALLOC
-    case MemoryPoolBackend::Mimalloc:
-      return &global_state.mimalloc_pool;
-#endif
-    default:
-      ARROW_LOG(FATAL) << "Internal error: cannot create default memory pool";
-      return nullptr;
-  }
+#ifdef ARROW_MIMALLOC 
+    case MemoryPoolBackend::Mimalloc: 
+      return &global_state.mimalloc_pool; 
+#endif 
+    default: 
+      ARROW_LOG(FATAL) << "Internal error: cannot create default memory pool"; 
+      return nullptr; 
+  } 
 }
 
 #define RETURN_IF_JEMALLOC_ERROR(ERR)                  \
@@ -674,124 +674,124 @@ int64_t ProxyMemoryPool::max_memory() const { return impl_->max_memory(); }
 
 std::string ProxyMemoryPool::backend_name() const { return impl_->backend_name(); }
 
-std::vector<std::string> SupportedMemoryBackendNames() {
-  std::vector<std::string> supported;
-  for (const auto backend : SupportedBackends()) {
-    supported.push_back(backend.name);
-  }
-  return supported;
-}
-
-// -----------------------------------------------------------------------
-// Pool buffer and allocation
-
-/// A Buffer whose lifetime is tied to a particular MemoryPool
-class PoolBuffer final : public ResizableBuffer {
- public:
-  explicit PoolBuffer(std::shared_ptr<MemoryManager> mm, MemoryPool* pool)
-      : ResizableBuffer(nullptr, 0, std::move(mm)), pool_(pool) {}
-
-  ~PoolBuffer() override {
-    // Avoid calling pool_->Free if the global pools are destroyed
-    // (XXX this will not work with user-defined pools)
-
-    // This can happen if a Future is destructing on one thread while or
-    // after memory pools are destructed on the main thread (as there is
-    // no guarantee of destructor order between thread/memory pools)
-    uint8_t* ptr = mutable_data();
-    if (ptr && !global_state.is_finalizing()) {
-      pool_->Free(ptr, capacity_);
-    }
-  }
-
-  Status Reserve(const int64_t capacity) override {
-    if (capacity < 0) {
-      return Status::Invalid("Negative buffer capacity: ", capacity);
-    }
-    uint8_t* ptr = mutable_data();
-    if (!ptr || capacity > capacity_) {
-      int64_t new_capacity = BitUtil::RoundUpToMultipleOf64(capacity);
-      if (ptr) {
-        RETURN_NOT_OK(pool_->Reallocate(capacity_, new_capacity, &ptr));
-      } else {
-        RETURN_NOT_OK(pool_->Allocate(new_capacity, &ptr));
-      }
-      data_ = ptr;
-      capacity_ = new_capacity;
-    }
-    return Status::OK();
-  }
-
-  Status Resize(const int64_t new_size, bool shrink_to_fit = true) override {
-    if (ARROW_PREDICT_FALSE(new_size < 0)) {
-      return Status::Invalid("Negative buffer resize: ", new_size);
-    }
-    uint8_t* ptr = mutable_data();
-    if (ptr && shrink_to_fit && new_size <= size_) {
-      // Buffer is non-null and is not growing, so shrink to the requested size without
-      // excess space.
-      int64_t new_capacity = BitUtil::RoundUpToMultipleOf64(new_size);
-      if (capacity_ != new_capacity) {
-        // Buffer hasn't got yet the requested size.
-        RETURN_NOT_OK(pool_->Reallocate(capacity_, new_capacity, &ptr));
-        data_ = ptr;
-        capacity_ = new_capacity;
-      }
-    } else {
-      RETURN_NOT_OK(Reserve(new_size));
-    }
-    size_ = new_size;
-
-    return Status::OK();
-  }
-
-  static std::shared_ptr<PoolBuffer> MakeShared(MemoryPool* pool) {
-    std::shared_ptr<MemoryManager> mm;
-    if (pool == nullptr) {
-      pool = default_memory_pool();
-      mm = default_cpu_memory_manager();
-    } else {
-      mm = CPUDevice::memory_manager(pool);
-    }
-    return std::make_shared<PoolBuffer>(std::move(mm), pool);
-  }
-
-  static std::unique_ptr<PoolBuffer> MakeUnique(MemoryPool* pool) {
-    std::shared_ptr<MemoryManager> mm;
-    if (pool == nullptr) {
-      pool = default_memory_pool();
-      mm = default_cpu_memory_manager();
-    } else {
-      mm = CPUDevice::memory_manager(pool);
-    }
-    return std::unique_ptr<PoolBuffer>(new PoolBuffer(std::move(mm), pool));
-  }
-
- private:
-  MemoryPool* pool_;
-};
-
-namespace {
-// A utility that does most of the work of the `AllocateBuffer` and
-// `AllocateResizableBuffer` methods. The argument `buffer` should be a smart pointer to
-// a PoolBuffer.
-template <typename BufferPtr, typename PoolBufferPtr>
-inline Result<BufferPtr> ResizePoolBuffer(PoolBufferPtr&& buffer, const int64_t size) {
-  RETURN_NOT_OK(buffer->Resize(size));
-  buffer->ZeroPadding();
-  return std::move(buffer);
-}
-
-}  // namespace
-
-Result<std::unique_ptr<Buffer>> AllocateBuffer(const int64_t size, MemoryPool* pool) {
-  return ResizePoolBuffer<std::unique_ptr<Buffer>>(PoolBuffer::MakeUnique(pool), size);
-}
-
-Result<std::unique_ptr<ResizableBuffer>> AllocateResizableBuffer(const int64_t size,
-                                                                 MemoryPool* pool) {
-  return ResizePoolBuffer<std::unique_ptr<ResizableBuffer>>(PoolBuffer::MakeUnique(pool),
-                                                            size);
-}
-
+std::vector<std::string> SupportedMemoryBackendNames() { 
+  std::vector<std::string> supported; 
+  for (const auto backend : SupportedBackends()) { 
+    supported.push_back(backend.name); 
+  } 
+  return supported; 
+} 
+ 
+// ----------------------------------------------------------------------- 
+// Pool buffer and allocation 
+ 
+/// A Buffer whose lifetime is tied to a particular MemoryPool 
+class PoolBuffer final : public ResizableBuffer { 
+ public: 
+  explicit PoolBuffer(std::shared_ptr<MemoryManager> mm, MemoryPool* pool) 
+      : ResizableBuffer(nullptr, 0, std::move(mm)), pool_(pool) {} 
+ 
+  ~PoolBuffer() override { 
+    // Avoid calling pool_->Free if the global pools are destroyed 
+    // (XXX this will not work with user-defined pools) 
+ 
+    // This can happen if a Future is destructing on one thread while or 
+    // after memory pools are destructed on the main thread (as there is 
+    // no guarantee of destructor order between thread/memory pools) 
+    uint8_t* ptr = mutable_data(); 
+    if (ptr && !global_state.is_finalizing()) { 
+      pool_->Free(ptr, capacity_); 
+    } 
+  } 
+ 
+  Status Reserve(const int64_t capacity) override { 
+    if (capacity < 0) { 
+      return Status::Invalid("Negative buffer capacity: ", capacity); 
+    } 
+    uint8_t* ptr = mutable_data(); 
+    if (!ptr || capacity > capacity_) { 
+      int64_t new_capacity = BitUtil::RoundUpToMultipleOf64(capacity); 
+      if (ptr) { 
+        RETURN_NOT_OK(pool_->Reallocate(capacity_, new_capacity, &ptr)); 
+      } else { 
+        RETURN_NOT_OK(pool_->Allocate(new_capacity, &ptr)); 
+      } 
+      data_ = ptr; 
+      capacity_ = new_capacity; 
+    } 
+    return Status::OK(); 
+  } 
+ 
+  Status Resize(const int64_t new_size, bool shrink_to_fit = true) override { 
+    if (ARROW_PREDICT_FALSE(new_size < 0)) { 
+      return Status::Invalid("Negative buffer resize: ", new_size); 
+    } 
+    uint8_t* ptr = mutable_data(); 
+    if (ptr && shrink_to_fit && new_size <= size_) { 
+      // Buffer is non-null and is not growing, so shrink to the requested size without 
+      // excess space. 
+      int64_t new_capacity = BitUtil::RoundUpToMultipleOf64(new_size); 
+      if (capacity_ != new_capacity) { 
+        // Buffer hasn't got yet the requested size. 
+        RETURN_NOT_OK(pool_->Reallocate(capacity_, new_capacity, &ptr)); 
+        data_ = ptr; 
+        capacity_ = new_capacity; 
+      } 
+    } else { 
+      RETURN_NOT_OK(Reserve(new_size)); 
+    } 
+    size_ = new_size; 
+ 
+    return Status::OK(); 
+  } 
+ 
+  static std::shared_ptr<PoolBuffer> MakeShared(MemoryPool* pool) { 
+    std::shared_ptr<MemoryManager> mm; 
+    if (pool == nullptr) { 
+      pool = default_memory_pool(); 
+      mm = default_cpu_memory_manager(); 
+    } else { 
+      mm = CPUDevice::memory_manager(pool); 
+    } 
+    return std::make_shared<PoolBuffer>(std::move(mm), pool); 
+  } 
+ 
+  static std::unique_ptr<PoolBuffer> MakeUnique(MemoryPool* pool) { 
+    std::shared_ptr<MemoryManager> mm; 
+    if (pool == nullptr) { 
+      pool = default_memory_pool(); 
+      mm = default_cpu_memory_manager(); 
+    } else { 
+      mm = CPUDevice::memory_manager(pool); 
+    } 
+    return std::unique_ptr<PoolBuffer>(new PoolBuffer(std::move(mm), pool)); 
+  } 
+ 
+ private: 
+  MemoryPool* pool_; 
+}; 
+ 
+namespace { 
+// A utility that does most of the work of the `AllocateBuffer` and 
+// `AllocateResizableBuffer` methods. The argument `buffer` should be a smart pointer to 
+// a PoolBuffer. 
+template <typename BufferPtr, typename PoolBufferPtr> 
+inline Result<BufferPtr> ResizePoolBuffer(PoolBufferPtr&& buffer, const int64_t size) { 
+  RETURN_NOT_OK(buffer->Resize(size)); 
+  buffer->ZeroPadding(); 
+  return std::move(buffer); 
+} 
+ 
+}  // namespace 
+ 
+Result<std::unique_ptr<Buffer>> AllocateBuffer(const int64_t size, MemoryPool* pool) { 
+  return ResizePoolBuffer<std::unique_ptr<Buffer>>(PoolBuffer::MakeUnique(pool), size); 
+} 
+ 
+Result<std::unique_ptr<ResizableBuffer>> AllocateResizableBuffer(const int64_t size, 
+                                                                 MemoryPool* pool) { 
+  return ResizePoolBuffer<std::unique_ptr<ResizableBuffer>>(PoolBuffer::MakeUnique(pool), 
+                                                            size); 
+} 
+ 
 }  // namespace arrow

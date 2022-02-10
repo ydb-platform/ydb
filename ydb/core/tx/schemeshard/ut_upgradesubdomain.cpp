@@ -734,9 +734,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                         )", key.c_str());
                 NKikimrMiniKQL::TResult result;
                 TString err;
-                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+                NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
                 UNIT_ASSERT_VALUES_EQUAL(err, "");
-                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+                UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);; 
             };
 
             fnWriteRow(TTestTxConfig::FakeHiveTablets + 2, "AAA");

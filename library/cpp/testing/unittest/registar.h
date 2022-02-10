@@ -270,7 +270,7 @@ private:                                             \
                                                            \
 public:                                                    \
     static TString StaticName() noexcept {                 \
-        return TypeName<N>(); \
+        return TypeName<N>(); \ 
     }                                                      \
                                                            \
 private:                                                   \
@@ -403,13 +403,13 @@ public:                       \
         const auto _ed = (E);                                                                                                          \
         const auto _ad = (A);                                                                                                          \
         const auto _dd = (D);                                                                                                          \
-        if (std::isnan((long double)_ed) && !std::isnan((long double)_ad)) {                                                           \
-            const auto _as = ToString((long double)_ad);                                                                               \
+        if (std::isnan((long double)_ed) && !std::isnan((long double)_ad)) {                                                           \ 
+            const auto _as = ToString((long double)_ad);                                                                               \ 
             auto&& failMsg = Sprintf("expected NaN, got %s %s", _as.data(), (::TStringBuilder() << C).data());                           \
             UNIT_FAIL_IMPL("assertion failure", failMsg);                                                                              \
         }                                                                                                                              \
-        if (!std::isnan((long double)_ed) && std::isnan((long double)_ad)) {                                                           \
-            const auto _es = ToString((long double)_ed);                                                                               \
+        if (!std::isnan((long double)_ed) && std::isnan((long double)_ad)) {                                                           \ 
+            const auto _es = ToString((long double)_ed);                                                                               \ 
             auto&& failMsg = Sprintf("expected %s, got NaN %s", _es.data(), (::TStringBuilder() << C).data());                           \
             UNIT_FAIL_IMPL("assertion failure", failMsg);                                                                              \
         }                                                                                                                              \

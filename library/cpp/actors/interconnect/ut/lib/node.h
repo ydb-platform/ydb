@@ -74,9 +74,9 @@ public:
 
         loggerSettings->Append(
             NActorsServices::EServiceCommon_MIN,
-            NActorsServices::EServiceCommon_MAX,
-            NActorsServices::EServiceCommon_Name
-        );
+            NActorsServices::EServiceCommon_MAX, 
+            NActorsServices::EServiceCommon_Name 
+        ); 
 
         constexpr ui32 WilsonComponentId = 430; // NKikimrServices::WILSON
         static const TString WilsonComponentName = "WILSON";

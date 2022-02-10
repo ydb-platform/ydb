@@ -73,10 +73,10 @@ namespace NBus {
         }
         TJobHandler(const TJobHandler&) = default;
         TJobHandler& operator =(const TJobHandler&) = default;
-        bool operator==(TJobHandler h) const {
+        bool operator==(TJobHandler h) const { 
             return MyPtr == h.MyPtr;
         }
-        bool operator!=(TJobHandler h) const {
+        bool operator!=(TJobHandler h) const { 
             return MyPtr != h.MyPtr;
         }
         bool operator!() const {

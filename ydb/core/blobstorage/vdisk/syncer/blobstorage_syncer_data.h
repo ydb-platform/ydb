@@ -51,7 +51,7 @@ namespace NKikimr {
 
             TPeerSyncState();
             void Serialize(IOutputStream &s) const;
-            void ParseFromArcadiaStream(IInputStream &str);
+            void ParseFromArcadiaStream(IInputStream &str); 
             void Serialize(NKikimrVDiskData::TSyncerVDiskEntry &pb) const;
             void Parse(const NKikimrVDiskData::TSyncerVDiskEntry &pb);
             TString ToString() const;
@@ -88,7 +88,7 @@ namespace NKikimr {
             TPeerGuidInfo PeerGuidInfo;
 
             void Serialize(IOutputStream &s) const;
-            void ParseFromArcadiaStream(IInputStream &str);
+            void ParseFromArcadiaStream(IInputStream &str); 
             void Serialize(NKikimrVDiskData::TSyncerVDiskEntry &pb) const;
             void Parse(const NKikimrVDiskData::TSyncerVDiskEntry &pb);
             TString ToString() const;

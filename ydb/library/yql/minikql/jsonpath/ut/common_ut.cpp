@@ -89,7 +89,7 @@ public:
             // Check string literals
             {"1", "\"string\"", {"\"string\""}},
             {"1", "\"  space  another space  \"", {"\"  space  another space  \""}},
-            {"1", "\"привет\"", {"\"привет\""}},
+            {"1", "\"привет\"", {"\"привет\""}}, 
             // NOTE: escaping is added by library/cpp/json
             {"1", "\"\r\n\t\"", {"\"\\r\\n\\t\""}},
         };
@@ -419,18 +419,18 @@ public:
             "strict $.$key",
             "strict $.28key",
             "strict $.ke^y",
-            "strict $.привет",
-            "strict $._пока_28_ключ_$_",
-            "     strict       $.пока    ",
+            "strict $.привет", 
+            "strict $._пока_28_ключ_$_", 
+            "     strict       $.пока    ", 
             "lax",
             "lax smth.key",
             "lax $.",
             "lax $.$key",
             "lax $.28key",
             "lax $.ke^y",
-            "lax $.привет",
-            "lax $._пока_28_ключ_$_",
-            "     lax       $.пока    ",
+            "lax $.привет", 
+            "lax $._пока_28_ключ_$_", 
+            "     lax       $.пока    ", 
             "12.",
             "12..3",
             "12.3e",
@@ -608,9 +608,9 @@ public:
             // Check comparison of UTF8 strings
             // First string is U+00e9 (LATIN SMALL LETTER E WITH ACUTE), "é"
             // Second string is U+0065 (LATIN SMALL LETTER E) U+0301 (COMBINING ACUTE ACCENT), "é"
-            {"1", R"("é" < "é")", {"false"}},
-            {"1", R"("é" > "é")", {"true"}},
-            {"1", R"("привет" == "привет")", {"true"}},
+            {"1", R"("é" < "é")", {"false"}}, 
+            {"1", R"("é" > "é")", {"true"}}, 
+            {"1", R"("привет" == "привет")", {"true"}}, 
 
             // Check cross-product comparison
             {R"({

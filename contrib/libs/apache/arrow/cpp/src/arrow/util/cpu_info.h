@@ -70,18 +70,18 @@ class ARROW_EXPORT CpuInfo {
   /// Returns all the flags for this cpu
   int64_t hardware_flags();
 
-  /// \brief Returns whether or not the given feature is enabled.
-  ///
-  /// IsSupported() is true iff IsDetected() is also true and the feature
-  /// wasn't disabled by the user (for example by setting the ARROW_USER_SIMD_LEVEL
-  /// environment variable).
+  /// \brief Returns whether or not the given feature is enabled. 
+  /// 
+  /// IsSupported() is true iff IsDetected() is also true and the feature 
+  /// wasn't disabled by the user (for example by setting the ARROW_USER_SIMD_LEVEL 
+  /// environment variable). 
   bool IsSupported(int64_t flags) const { return (hardware_flags_ & flags) == flags; }
 
-  /// Returns whether or not the given feature is available on the CPU.
-  bool IsDetected(int64_t flags) const {
-    return (original_hardware_flags_ & flags) == flags;
-  }
-
+  /// Returns whether or not the given feature is available on the CPU. 
+  bool IsDetected(int64_t flags) const { 
+    return (original_hardware_flags_ & flags) == flags; 
+  } 
+ 
   /// \brief The processor supports SSE4.2 and the Arrow libraries are built
   /// with support for it
   bool CanUseSSE4_2() const;
@@ -113,15 +113,15 @@ class ARROW_EXPORT CpuInfo {
  private:
   CpuInfo();
 
-  enum UserSimdLevel {
-    USER_SIMD_NONE = 0,
-    USER_SIMD_SSE4_2,
-    USER_SIMD_AVX,
-    USER_SIMD_AVX2,
-    USER_SIMD_AVX512,
-    USER_SIMD_MAX,
-  };
-
+  enum UserSimdLevel { 
+    USER_SIMD_NONE = 0, 
+    USER_SIMD_SSE4_2, 
+    USER_SIMD_AVX, 
+    USER_SIMD_AVX2, 
+    USER_SIMD_AVX512, 
+    USER_SIMD_MAX, 
+  }; 
+ 
   void Init();
 
   /// Inits CPU cache size variables with default values

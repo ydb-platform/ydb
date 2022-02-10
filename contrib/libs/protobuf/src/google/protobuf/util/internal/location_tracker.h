@@ -31,12 +31,12 @@
 #ifndef GOOGLE_PROTOBUF_UTIL_CONVERTER_LOCATION_TRACKER_H__
 #define GOOGLE_PROTOBUF_UTIL_CONVERTER_LOCATION_TRACKER_H__
 
-#include <string>
+#include <string> 
 
-#include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/common.h> 
 
-#include <google/protobuf/port_def.inc>
-
+#include <google/protobuf/port_def.inc> 
+ 
 namespace google {
 namespace protobuf {
 namespace util {
@@ -44,12 +44,12 @@ namespace converter {
 
 // LocationTrackerInterface is an interface for classes that track
 // the location information for the purpose of error reporting.
-class PROTOBUF_EXPORT LocationTrackerInterface {
+class PROTOBUF_EXPORT LocationTrackerInterface { 
  public:
   virtual ~LocationTrackerInterface() {}
 
   // Returns the object location as human readable string.
-  virtual TProtoStringType ToString() const = 0;
+  virtual TProtoStringType ToString() const = 0; 
 
  protected:
   LocationTrackerInterface() {}
@@ -62,8 +62,8 @@ class PROTOBUF_EXPORT LocationTrackerInterface {
 }  // namespace converter
 }  // namespace util
 }  // namespace protobuf
-}  // namespace google
+}  // namespace google 
 
-#include <google/protobuf/port_undef.inc>
-
+#include <google/protobuf/port_undef.inc> 
+ 
 #endif  // GOOGLE_PROTOBUF_UTIL_CONVERTER_LOCATION_TRACKER_H__

@@ -7,11 +7,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html. 
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -248,7 +248,7 @@ CURLWARNING(_curl_easy_getinfo_err_curl_off_t,
   (0 < (option) && (option) < CURLOPTTYPE_OBJECTPOINT)
 
 #define curlcheck_off_t_option(option)          \
-  (((option) > CURLOPTTYPE_OFF_T) && ((option) < CURLOPTTYPE_BLOB))
+  (((option) > CURLOPTTYPE_OFF_T) && ((option) < CURLOPTTYPE_BLOB)) 
 
 /* evaluates to true if option takes a char* argument */
 #define curlcheck_string_option(option)                                       \
@@ -273,7 +273,7 @@ CURLWARNING(_curl_easy_getinfo_err_curl_off_t,
    (option) == CURLOPT_FTPPORT ||                                             \
    (option) == CURLOPT_FTP_ACCOUNT ||                                         \
    (option) == CURLOPT_FTP_ALTERNATIVE_TO_USER ||                             \
-   (option) == CURLOPT_HSTS ||                                                \
+   (option) == CURLOPT_HSTS ||                                                \ 
    (option) == CURLOPT_INTERFACE ||                                           \
    (option) == CURLOPT_ISSUERCERT ||                                          \
    (option) == CURLOPT_KEYPASSWD ||                                           \
@@ -293,7 +293,7 @@ CURLWARNING(_curl_easy_getinfo_err_curl_off_t,
    (option) == CURLOPT_PROXY_CAINFO ||                                        \
    (option) == CURLOPT_PROXY_CAPATH ||                                        \
    (option) == CURLOPT_PROXY_CRLFILE ||                                       \
-   (option) == CURLOPT_PROXY_ISSUERCERT ||                                    \
+   (option) == CURLOPT_PROXY_ISSUERCERT ||                                    \ 
    (option) == CURLOPT_PROXY_KEYPASSWD ||                                     \
    (option) == CURLOPT_PROXY_PINNEDPUBLICKEY ||                               \
    (option) == CURLOPT_PROXY_SERVICE_NAME ||                                  \
@@ -336,7 +336,7 @@ CURLWARNING(_curl_easy_getinfo_err_curl_off_t,
    (option) == CURLOPT_USERNAME ||                                            \
    (option) == CURLOPT_USERPWD ||                                             \
    (option) == CURLOPT_XOAUTH2_BEARER ||                                      \
-   (option) == CURLOPT_SSL_EC_CURVES ||                                       \
+   (option) == CURLOPT_SSL_EC_CURVES ||                                       \ 
    0)
 
 /* evaluates to true if option takes a curl_write_callback argument */
@@ -357,8 +357,8 @@ CURLWARNING(_curl_easy_getinfo_err_curl_off_t,
    (option) == CURLOPT_DEBUGDATA ||                                           \
    (option) == CURLOPT_FNMATCH_DATA ||                                        \
    (option) == CURLOPT_HEADERDATA ||                                          \
-   (option) == CURLOPT_HSTSREADDATA ||                                        \
-   (option) == CURLOPT_HSTSWRITEDATA ||                                       \
+   (option) == CURLOPT_HSTSREADDATA ||                                        \ 
+   (option) == CURLOPT_HSTSWRITEDATA ||                                       \ 
    (option) == CURLOPT_INTERLEAVEDATA ||                                      \
    (option) == CURLOPT_IOCTLDATA ||                                           \
    (option) == CURLOPT_OPENSOCKETDATA ||                                      \
@@ -396,9 +396,9 @@ CURLWARNING(_curl_easy_getinfo_err_curl_off_t,
 /* groups of curl_easy_getinfo infos that take the same type of argument */
 
 /* evaluates to true if info expects a pointer to char * argument */
-#define curlcheck_string_info(info)                             \
-  (CURLINFO_STRING < (info) && (info) < CURLINFO_LONG &&        \
-   (info) != CURLINFO_PRIVATE)
+#define curlcheck_string_info(info)                             \ 
+  (CURLINFO_STRING < (info) && (info) < CURLINFO_LONG &&        \ 
+   (info) != CURLINFO_PRIVATE) 
 
 /* evaluates to true if info expects a pointer to long argument */
 #define curlcheck_long_info(info)                       \

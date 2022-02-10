@@ -19,20 +19,20 @@
 //
 // Arghh!  I wish C++ literals were "string".
 
-// Doing this simplifies the logic below.
-#ifndef __has_include
-#define __has_include(x) 0
-#endif
-
+// Doing this simplifies the logic below. 
+#ifndef __has_include 
+#define __has_include(x) 0 
+#endif 
+ 
 #include <stddef.h>
 #include <string.h>
 #include <algorithm>
 #include <iosfwd>
 #include <iterator>
 #include <string>
-#if __has_include(<string_view>) && __cplusplus >= 201703L
-#include <string_view>
-#endif
+#if __has_include(<string_view>) && __cplusplus >= 201703L 
+#include <string_view> 
+#endif 
 #if defined(ARCADIA_ROOT)
 #include <util/generic/string.h>
 #endif
@@ -41,7 +41,7 @@ namespace re2 {
 
 class StringPiece {
  public:
-  typedef std::char_traits<char> traits_type;
+  typedef std::char_traits<char> traits_type; 
   typedef char value_type;
   typedef char* pointer;
   typedef const char* const_pointer;
@@ -60,10 +60,10 @@ class StringPiece {
   // expected.
   StringPiece()
       : data_(NULL), size_(0) {}
-#if __has_include(<string_view>) && __cplusplus >= 201703L
-  StringPiece(const std::string_view& str)
-      : data_(str.data()), size_(str.size()) {}
-#endif
+#if __has_include(<string_view>) && __cplusplus >= 201703L 
+  StringPiece(const std::string_view& str) 
+      : data_(str.data()), size_(str.size()) {} 
+#endif 
   StringPiece(const std::string& str)
       : data_(str.data()), size_(str.size()) {}
   StringPiece(const char* str)
@@ -71,8 +71,8 @@ class StringPiece {
   StringPiece(const char* str, size_type len)
       : data_(str), size_(len) {}
 #if defined(ARCADIA_ROOT)
-  StringPiece(const TString& str)
-      : StringPiece(str.data(), str.size()) {}
+  StringPiece(const TString& str) 
+      : StringPiece(str.data(), str.size()) {} 
 #endif
 
   const_iterator begin() const { return data_; }
@@ -110,13 +110,13 @@ class StringPiece {
     size_ = len;
   }
 
-  // Converts to `std::basic_string`.
-  template <typename A>
-  explicit operator std::basic_string<char, traits_type, A>() const {
-    if (!data_) return {};
-    return std::basic_string<char, traits_type, A>(data_, size_);
-  }
-
+  // Converts to `std::basic_string`. 
+  template <typename A> 
+  explicit operator std::basic_string<char, traits_type, A>() const { 
+    if (!data_) return {}; 
+    return std::basic_string<char, traits_type, A>(data_, size_); 
+  } 
+ 
   std::string as_string() const {
     return std::string(data_, size_);
   }

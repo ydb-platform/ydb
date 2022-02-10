@@ -119,9 +119,9 @@ static system_clock::time_point __libcpp_system_clock_now() {
 #elif defined(CLOCK_REALTIME) && defined(_LIBCPP_USE_CLOCK_GETTIME)
 
 static system_clock::time_point __libcpp_system_clock_now() {
-  struct timespec tp;
-  if (0 != clock_gettime(CLOCK_REALTIME, &tp))
-    __throw_system_error(errno, "clock_gettime(CLOCK_REALTIME) failed");
+  struct timespec tp; 
+  if (0 != clock_gettime(CLOCK_REALTIME, &tp)) 
+    __throw_system_error(errno, "clock_gettime(CLOCK_REALTIME) failed"); 
   return system_clock::time_point(seconds(tp.tv_sec) + microseconds(tp.tv_nsec / 1000));
 }
 

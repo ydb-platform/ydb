@@ -12,7 +12,7 @@ namespace NKikimr {
         TStringStream str;
         str.Write(&CurSignature, sizeof(ui32));
         // pb payload
-        bool success = pb.SerializeToArcadiaStream(&str);
+        bool success = pb.SerializeToArcadiaStream(&str); 
         Y_VERIFY(success);
         return str.Str();
     }

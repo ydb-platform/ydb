@@ -13,24 +13,24 @@ LICENSE(Apache-2.0)
 
 PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/base
-    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/low_level_alloc
+    contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/low_level_alloc 
     contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/raw_logging
     contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/spinlock_wait
     contrib/restricted/abseil-cpp-tstring/y_absl/base/internal/throw_delegate
     contrib/restricted/abseil-cpp-tstring/y_absl/base/log_severity
-    contrib/restricted/abseil-cpp-tstring/y_absl/debugging
-    contrib/restricted/abseil-cpp-tstring/y_absl/debugging/stacktrace
-    contrib/restricted/abseil-cpp-tstring/y_absl/debugging/symbolize
-    contrib/restricted/abseil-cpp-tstring/y_absl/demangle
+    contrib/restricted/abseil-cpp-tstring/y_absl/debugging 
+    contrib/restricted/abseil-cpp-tstring/y_absl/debugging/stacktrace 
+    contrib/restricted/abseil-cpp-tstring/y_absl/debugging/symbolize 
+    contrib/restricted/abseil-cpp-tstring/y_absl/demangle 
     contrib/restricted/abseil-cpp-tstring/y_absl/numeric
-    contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/exponential_biased
+    contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/exponential_biased 
     contrib/restricted/abseil-cpp-tstring/y_absl/strings
-    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_strings_internal
-    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization
-    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/internal
-    contrib/restricted/abseil-cpp-tstring/y_absl/time
-    contrib/restricted/abseil-cpp-tstring/y_absl/time/civil_time
-    contrib/restricted/abseil-cpp-tstring/y_absl/time/time_zone
+    contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/absl_strings_internal 
+    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization 
+    contrib/restricted/abseil-cpp-tstring/y_absl/synchronization/internal 
+    contrib/restricted/abseil-cpp-tstring/y_absl/time 
+    contrib/restricted/abseil-cpp-tstring/y_absl/time/civil_time 
+    contrib/restricted/abseil-cpp-tstring/y_absl/time/time_zone 
 )
 
 ADDINCL(
@@ -39,11 +39,11 @@ ADDINCL(
 
 NO_COMPILER_WARNINGS()
 
-SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/container/internal)
+SRCDIR(contrib/restricted/abseil-cpp-tstring/y_absl/container/internal) 
 
 SRCS(
-    hashtablez_sampler.cc
-    hashtablez_sampler_force_weak_definition.cc
+    hashtablez_sampler.cc 
+    hashtablez_sampler_force_weak_definition.cc 
 )
 
 END()

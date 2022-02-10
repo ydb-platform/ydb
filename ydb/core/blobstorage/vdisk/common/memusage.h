@@ -74,7 +74,7 @@ namespace NKikimr {
         ssize_t MemConsumed = 0;
     };
 
-    template<typename TDerived>
+    template<typename TDerived> 
     class TTrackableBase
     {
         TMemoryConsumer Consumer;
@@ -83,7 +83,7 @@ namespace NKikimr {
 #endif
 
         size_t GetCapacity() const {
-            return static_cast<const TDerived&>(*this).GetCapacityImpl();
+            return static_cast<const TDerived&>(*this).GetCapacityImpl(); 
         }
 
         void CountInitialCapacity() {
@@ -175,7 +175,7 @@ namespace NKikimr {
 #define TRACKABLE_WRAP_METHOD(METHOD)                                                              \
         template<typename... TArgs>                                                                \
         decltype(std::declval<TBase>().METHOD(std::declval<TArgs>()...)) METHOD(TArgs&&... args) { \
-            auto tracker = static_cast<TDerived&>(*this).TTrackableBase<TDerived>::SpawnTracker(); \
+            auto tracker = static_cast<TDerived&>(*this).TTrackableBase<TDerived>::SpawnTracker(); \ 
             return TBase::METHOD(std::forward<TArgs>(args)...);                                    \
         }
 
@@ -199,17 +199,17 @@ namespace NKikimr {
         WRAP_METHOD_BOTH(rend) \
         WRAP_METHOD(crend, const)
 
-    template<typename TContainer, typename TDerived>
+    template<typename TContainer, typename TDerived> 
     struct TTrackerWrapperBase
         : protected TContainer
     {
         using TContainer::TContainer;
     };
 
-    template<typename TBase, typename TDerived>
+    template<typename TBase, typename TDerived> 
     struct TTrackerWrapper;
 
-    template<typename T, typename A, typename TDerived>
+    template<typename T, typename A, typename TDerived> 
     struct TTrackerWrapper<TDeque<T, A>, TDerived>
         : protected TTrackerWrapperBase<TDeque<T, A>, TDerived>
     {
@@ -246,11 +246,11 @@ namespace NKikimr {
     };
 
     template<typename T, typename A, typename TDerived>
-    struct TTrackerWrapper<TVector<T, A>, TDerived>
-        : protected TTrackerWrapperBase<TVector<T, A>, TDerived>
+    struct TTrackerWrapper<TVector<T, A>, TDerived> 
+        : protected TTrackerWrapperBase<TVector<T, A>, TDerived> 
     {
         using TBase = TVector<T, A>;
-        using TWrapperBase = TTrackerWrapperBase<TVector<T, A>, TDerived>;
+        using TWrapperBase = TTrackerWrapperBase<TVector<T, A>, TDerived>; 
         using TWrapperBase::TWrapperBase;
 
         size_t GetCapacityImpl() const {
@@ -287,12 +287,12 @@ namespace NKikimr {
         WRAP_METHOD(capacity, const)
     };
 
-    template<typename T, typename A, typename TDerived>
-    struct TTrackerWrapper<TList<T, A>, TDerived>
-        : protected TTrackerWrapperBase<TList<T, A>, TDerived>
+    template<typename T, typename A, typename TDerived> 
+    struct TTrackerWrapper<TList<T, A>, TDerived> 
+        : protected TTrackerWrapperBase<TList<T, A>, TDerived> 
     {
         using TBase = TList<T, A>;
-        using TWrapperBase = TTrackerWrapperBase<TList<T, A>, TDerived>;
+        using TWrapperBase = TTrackerWrapperBase<TList<T, A>, TDerived>; 
         using TWrapperBase::TWrapperBase;
 
         size_t GetCapacityImpl() const {
@@ -318,26 +318,26 @@ namespace NKikimr {
         TRACKABLE_WRAP_METHOD(unique)
 
         template<typename... TArgs>
-        void splice(typename TBase::const_iterator pos, TDerived& other, TArgs&&... args) {
-            auto tracker = static_cast<TDerived&>(*this).TTrackableBase<TDerived>::SpawnTracker();
-            auto otherTracker = other.TTrackableBase<TDerived>::SpawnTracker();
+        void splice(typename TBase::const_iterator pos, TDerived& other, TArgs&&... args) { 
+            auto tracker = static_cast<TDerived&>(*this).TTrackableBase<TDerived>::SpawnTracker(); 
+            auto otherTracker = other.TTrackableBase<TDerived>::SpawnTracker(); 
             TBase::splice(pos, other, std::forward<TArgs>(args)...);
         }
 
         template<typename... TArgs>
-        void splice(typename TBase::const_iterator pos, TDerived&& other, TArgs&&... args) {
+        void splice(typename TBase::const_iterator pos, TDerived&& other, TArgs&&... args) { 
             splice(pos, other, std::forward<TArgs>(args)...);
         }
 
         template<typename... TArgs>
-        void merge(TDerived& other, TArgs&&... args) {
-            auto tracker = static_cast<TDerived&>(*this).TTrackableBase<TDerived>::SpawnTracker();
-            auto otherTracker = other.TTrackableBase<TDerived>::SpawnTracker();
+        void merge(TDerived& other, TArgs&&... args) { 
+            auto tracker = static_cast<TDerived&>(*this).TTrackableBase<TDerived>::SpawnTracker(); 
+            auto otherTracker = other.TTrackableBase<TDerived>::SpawnTracker(); 
             TBase::merge(other, std::forward<TArgs>(args)...);
         }
 
         template<typename... TArgs>
-        void merge(TDerived&& other, TArgs&&... args) {
+        void merge(TDerived&& other, TArgs&&... args) { 
             merge(other, std::forward<TArgs>(args)...);
         }
 
@@ -358,12 +358,12 @@ namespace NKikimr {
         using typename TBase::const_reverse_iterator;
     };
 
-    template<typename TDerived>
-    struct TTrackerWrapper<TBuffer, TDerived>
-        : protected TTrackerWrapperBase<TBuffer, TDerived>
+    template<typename TDerived> 
+    struct TTrackerWrapper<TBuffer, TDerived> 
+        : protected TTrackerWrapperBase<TBuffer, TDerived> 
     {
         using TBase = TBuffer;
-        using TWrapperBase = TTrackerWrapperBase<TBuffer, TDerived>;
+        using TWrapperBase = TTrackerWrapperBase<TBuffer, TDerived>; 
         using TWrapperBase::TWrapperBase;
 
         size_t GetCapacityImpl() const {
@@ -393,12 +393,12 @@ namespace NKikimr {
         WRAP_METHOD_BOTH(End)
     };
 
-    template<typename TDerived>
-    struct TTrackerWrapper<TString, TDerived>
-        : protected TTrackerWrapperBase<TString, TDerived>
+    template<typename TDerived> 
+    struct TTrackerWrapper<TString, TDerived> 
+        : protected TTrackerWrapperBase<TString, TDerived> 
     {
         using TBase = TString;
-        using TWrapperBase = TTrackerWrapperBase<TString, TDerived>;
+        using TWrapperBase = TTrackerWrapperBase<TString, TDerived>; 
         using TWrapperBase::TWrapperBase;
 
         size_t GetCapacityImpl() const {

@@ -98,7 +98,7 @@ namespace NTest {
             ui32 keyBytes = 0, opsBytes = 0;
 
             for (auto &one: key) keyBytes += one.Size();
-            for (auto &one: ops) opsBytes += one.AsRef().size();
+            for (auto &one: ops) opsBytes += one.AsRef().size(); 
 
             Updates++, KeyBytes += keyBytes, OpsBytes += opsBytes;
             KeyItems += key.size(), OpsItems += ops.size();

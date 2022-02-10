@@ -770,7 +770,7 @@ int yydebug;
 # define YYMAXDEPTH ]b4_stack_depth_max[
 #endif]b4_lac_if([[
 
-
+ 
 /* Given a state stack such that *YYBOTTOM is its bottom, such that
    *YYTOP is either its top or is YYTOP_EMPTY to indicate an empty
    stack, and such that *YYCAPACITY is the maximum number of elements it
@@ -1054,11 +1054,11 @@ yy_lac (yytype_int16 *yyesa, yytype_int16 **yyes,
    backslash-backslash).  YYSTR is taken from yytname.  If YYRES is
    null, do not copy; instead, return the length of what the result
    would have been.  */
-#ifdef __cplusplus
-# define BISON_FALLTHROUGH [[fallthrough]]
-#else
-# define BISON_FALLTHROUGH
-#endif
+#ifdef __cplusplus 
+# define BISON_FALLTHROUGH [[fallthrough]] 
+#else 
+# define BISON_FALLTHROUGH 
+#endif 
 static YYSIZE_T
 yytnamerr (char *yyres, const char *yystr)
 {
@@ -1077,7 +1077,7 @@ yytnamerr (char *yyres, const char *yystr)
           case '\\':
             if (*++yyp != '\\')
               goto do_not_strip_quotes;
-            BISON_FALLTHROUGH;
+            BISON_FALLTHROUGH; 
           default:
             if (yyres)
               yyres[yyn] = *yyp;

@@ -2,8 +2,8 @@
 
 LIBRARY()
 
-WITHOUT_LICENSE_TEXTS()
-
+WITHOUT_LICENSE_TEXTS() 
+ 
 OWNER(g:cpp-contrib)
 
 LICENSE(Apache-2.0)
@@ -15,9 +15,9 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/base/internal/throw_delegate
     contrib/restricted/abseil-cpp/absl/base/log_severity
     contrib/restricted/abseil-cpp/absl/numeric
-    contrib/restricted/abseil-cpp/absl/strings
-    contrib/restricted/abseil-cpp/absl/strings/internal/absl_strings_internal
-    contrib/restricted/abseil-cpp/absl/types/bad_optional_access
+    contrib/restricted/abseil-cpp/absl/strings 
+    contrib/restricted/abseil-cpp/absl/strings/internal/absl_strings_internal 
+    contrib/restricted/abseil-cpp/absl/types/bad_optional_access 
 )
 
 ADDINCL(
@@ -32,10 +32,10 @@ CFLAGS(
     -DNOMINMAX
 )
 
-SRCDIR(contrib/restricted/abseil-cpp/absl/random/internal)
-
+SRCDIR(contrib/restricted/abseil-cpp/absl/random/internal) 
+ 
 SRCS(
-    seed_material.cc
+    seed_material.cc 
 )
 
 END()

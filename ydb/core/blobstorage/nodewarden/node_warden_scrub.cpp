@@ -42,7 +42,7 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerScrubStartQuantum::TPtr ev
 
             case TVDiskRecord::EScrubState::QUANTUM_FINISHED_AND_WAITING_FOR_NEXT_ONE:
                 vdisk.QuantumFinished.Clear();
-                [[fallthrough]];
+                [[fallthrough]]; 
             case TVDiskRecord::EScrubState::QUERY_START_QUANTUM:
                 vdisk.ScrubState = TVDiskRecord::EScrubState::IN_PROGRESS;
                 TActivationContext::Send(ev->Forward(MakeBlobStorageVDiskID(vslotId.NodeId, vslotId.PDiskId, vslotId.VDiskSlotId)));

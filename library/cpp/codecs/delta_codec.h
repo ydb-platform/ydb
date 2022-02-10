@@ -2,7 +2,7 @@
 
 #include "codecs.h"
 
-#include <util/generic/array_ref.h>
+#include <util/generic/array_ref.h> 
 #include <util/generic/typetraits.h>
 #include <util/generic/bitops.h>
 #include <util/string/cast.h>
@@ -70,7 +70,7 @@ namespace NCodecs {
         }
 
         TString GetName() const override {
-            return ToString(MyName());
+            return ToString(MyName()); 
         }
 
         template <class TItem>
@@ -85,16 +85,16 @@ namespace NCodecs {
             }
 
             b.Reserve(s.size());
-            TArrayRef<const T> tin{(const T*)s.data(), s.size() / sizeof(T)};
+            TArrayRef<const T> tin{(const T*)s.data(), s.size() / sizeof(T)}; 
 
-            const T* it = tin.begin();
+            const T* it = tin.begin(); 
             TDelta last = *(it++);
             AppendTo(b, last);
 
             TDelta maxt = SubSafe(MaxDelta, last);
             TDelta mint = AddSafe(MinDelta, last);
 
-            for (; it != tin.end(); ++it) {
+            for (; it != tin.end(); ++it) { 
                 TDelta t = *it;
 
                 if (Y_LIKELY((t >= mint) & (t <= maxt))) {
@@ -122,11 +122,11 @@ namespace NCodecs {
             }
 
             b.Reserve(s.size());
-            TArrayRef<const T> tin{(const T*)s.data(), s.size() / sizeof(T)};
+            TArrayRef<const T> tin{(const T*)s.data(), s.size() / sizeof(T)}; 
 
             TDecoder dec;
 
-            for (const T* it = tin.begin(); it != tin.end(); ++it) {
+            for (const T* it = tin.begin(); it != tin.end(); ++it) { 
                 T tmp;
                 memcpy(&tmp, it, sizeof(tmp));
                 if (dec.Decode(tmp)) {

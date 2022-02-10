@@ -434,7 +434,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         auto writeRow = [&](ui64 tabletId, ui64 key, TInstant ts, const char* table, const char* ct = "Timestamp") {
             NKikimrMiniKQL::TResult result;
             TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"( 
                 (
                     (let key   '( '('key (Uint64 '%lu ) ) ) )
                     (let row   '( '('ts (%s '%lu) ) ) )
@@ -442,14 +442,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 )
             )", key, ct, ts.GetValue(), table), result, error);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error); 
             UNIT_ASSERT_VALUES_EQUAL(error, "");
         };
 
         auto readTable = [&](ui64 tabletId, const char* table) {
             NKikimrMiniKQL::TResult result;
             TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"( 
                 (
                     (let range '( '('key (Uint64 '0) (Void) )))
                     (let columns '('key) )
@@ -458,7 +458,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
                 )
             )", table), result, error);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error); 
             UNIT_ASSERT_VALUES_EQUAL(error, "");
 
             return result;

@@ -3,8 +3,8 @@ option java_package = "ru.yandex.kikimr.proto";
 
 // 0-255 range
 enum EServiceCommon {
-    // WARN: This must be the smallest value in the enumeration
-
+    // WARN: This must be the smallest value in the enumeration 
+ 
     GLOBAL = 0;
     INTERCONNECT = 1;
     TEST = 2;
@@ -14,8 +14,8 @@ enum EServiceCommon {
     INTERCONNECT_NETWORK = 6;
     INTERCONNECT_SESSION = 7;
     HTTP = 8;
-
-    // This value is reserved boundary. Is must not be aliased with any values
-    // TODO: use reseved values upon protobuf update
-    // COMMON_END = 256;
+ 
+    // This value is reserved boundary. Is must not be aliased with any values 
+    // TODO: use reseved values upon protobuf update 
+    // COMMON_END = 256; 
 };

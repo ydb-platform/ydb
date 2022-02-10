@@ -4,7 +4,7 @@ OWNER(g:kikimr)
 
 FORK_SUBTESTS()
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND) 
     TIMEOUT(2400)
     SIZE(LARGE)
     TAG(ya:fat)

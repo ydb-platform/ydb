@@ -1,15 +1,15 @@
 #include <iostream>
 #include <sstream>
-#include <memory>
-
-#include <google/protobuf/compiler/perlxs/perlxs_generator.h>
-#include <google/protobuf/compiler/perlxs/perlxs_helpers.h>
-#include <google/protobuf/descriptor.h>
+#include <memory> 
+ 
+#include <google/protobuf/compiler/perlxs/perlxs_generator.h> 
+#include <google/protobuf/compiler/perlxs/perlxs_helpers.h> 
+#include <google/protobuf/descriptor.h> 
 #include "google/protobuf/descriptor.pb.h"
-#include <google/protobuf/stubs/common.h>
-#include <google/protobuf/io/printer.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/io/zero_copy_stream.h>
+#include <google/protobuf/stubs/common.h> 
+#include <google/protobuf/io/printer.h> 
+#include <google/protobuf/descriptor.h> 
+#include <google/protobuf/io/zero_copy_stream.h> 
 
 namespace google {
 namespace protobuf {
@@ -34,12 +34,12 @@ bool HasHasMethod(const FieldDescriptor* field) {
 PerlXSGenerator::PerlXSGenerator() {}
 PerlXSGenerator::~PerlXSGenerator() {}
 
-
+ 
 bool
 PerlXSGenerator::Generate(const FileDescriptor* file,
-			  const TProtoStringType& parameter,
+			  const TProtoStringType& parameter, 
 			  OutputDirectory* outdir,
-			  TProtoStringType* error) const
+			  TProtoStringType* error) const 
 {
   // Each top-level message get its own XS source file, Perl module,
   // and typemap.  Each top-level enum gets its own Perl module.  The
@@ -63,13 +63,13 @@ PerlXSGenerator::Generate(const FileDescriptor* file,
 }
 
 bool
-PerlXSGenerator::ProcessOption(const TProtoStringType& option)
+PerlXSGenerator::ProcessOption(const TProtoStringType& option) 
 {
   size_t equals;
   bool   recognized = false;
 
   equals = option.find_first_of('=');
-  if (equals != TProtoStringType::npos) {
+  if (equals != TProtoStringType::npos) { 
     TProtoStringType name = option.substr(0, equals);
     TProtoStringType value;
 
@@ -91,19 +91,19 @@ void
 PerlXSGenerator::GenerateMessageXS(const Descriptor* descriptor,
 				   OutputDirectory* outdir) const
 {
-  TProtoStringType filename = descriptor->name() + ".xs";
-  std::unique_ptr<io::ZeroCopyOutputStream> output(outdir->Open(filename));
+  TProtoStringType filename = descriptor->name() + ".xs"; 
+  std::unique_ptr<io::ZeroCopyOutputStream> output(outdir->Open(filename)); 
   io::Printer printer(output.get(), '$'); // '$' works well in the .xs file
 
-  TProtoStringType base = cpp::StripProto(descriptor->file()->name());
+  TProtoStringType base = cpp::StripProto(descriptor->file()->name()); 
 
   // Boilerplate at the top of the file.
 
   printer.Print(
 		"#include <stdint.h>\n"
 		"#include <sstream>\n"
-		"#include <google/protobuf/stubs/common.h>\n"
-		"#include <google/protobuf/io/zero_copy_stream.h>\n"
+		"#include <google/protobuf/stubs/common.h>\n" 
+		"#include <google/protobuf/io/zero_copy_stream.h>\n" 
 		"#include \"$base$.pb.h\"\n"
         "#ifdef __cplusplus\n"
 		"extern \"C\" {\n"
@@ -199,11 +199,11 @@ void
 PerlXSGenerator::GenerateMessageModule(const Descriptor* descriptor,
 				       OutputDirectory* outdir) const
 {
-  TProtoStringType filename = descriptor->name() + ".pm";
-  std::unique_ptr<io::ZeroCopyOutputStream> output(outdir->Open(filename));
+  TProtoStringType filename = descriptor->name() + ".pm"; 
+  std::unique_ptr<io::ZeroCopyOutputStream> output(outdir->Open(filename)); 
   io::Printer printer(output.get(), '*'); // '*' works well in the .pm file
 
-  std::map<TProtoStringType, TProtoStringType> vars;
+  std::map<TProtoStringType, TProtoStringType> vars; 
 
   vars["package"] = MessageModuleName(descriptor);
   vars["message"] = descriptor->full_name();
@@ -238,11 +238,11 @@ void
 PerlXSGenerator::GenerateMessagePOD(const Descriptor* descriptor,
 				    OutputDirectory* outdir) const
 {
-  TProtoStringType filename = descriptor->name() + ".pod";
-  std::unique_ptr<io::ZeroCopyOutputStream> output(outdir->Open(filename));
+  TProtoStringType filename = descriptor->name() + ".pod"; 
+  std::unique_ptr<io::ZeroCopyOutputStream> output(outdir->Open(filename)); 
   io::Printer printer(output.get(), '*'); // '*' works well in the .pod file
 
-  std::map<TProtoStringType, TProtoStringType> vars;
+  std::map<TProtoStringType, TProtoStringType> vars; 
 
   vars["package"] = MessageModuleName(descriptor);
   vars["message"] = descriptor->full_name();
@@ -297,7 +297,7 @@ PerlXSGenerator::GenerateMessagePOD(const Descriptor* descriptor,
   // List of classes
 
   GenerateDescriptorClassNamePOD(descriptor, printer);
-
+ 
   printer.Print("\n"
 		"=back\n"
 		"\n");
@@ -331,7 +331,7 @@ PerlXSGenerator::GenerateDescriptorClassNamePOD(const Descriptor* descriptor,
 		  "A wrapper around the *enum* enum\n"
 		  "\n",
 		  "name", EnumClassName(descriptor->enum_type(i)),
-		  "enum", descriptor->enum_type(i)->full_name());
+		  "enum", descriptor->enum_type(i)->full_name()); 
   }
 
   for ( int i = 0; i < descriptor->nested_type_count(); i++ ) {
@@ -374,7 +374,7 @@ PerlXSGenerator::GenerateDescriptorMethodPOD(const Descriptor* descriptor,
 
   // Constructor
 
-  std::map<TProtoStringType, TProtoStringType> vars;
+  std::map<TProtoStringType, TProtoStringType> vars; 
 
   vars["name"]  = MessageClassName(descriptor);
   vars["value"] = descriptor->name();
@@ -405,12 +405,12 @@ PerlXSGenerator::GenerateDescriptorMethodPOD(const Descriptor* descriptor,
   // Common message methods
 
   printer.Print(vars,
-		"=item B<$*value*2-E<gt>copy_from($*value*1)>\n"
+		"=item B<$*value*2-E<gt>copy_from($*value*1)>\n" 
 		"\n"
 		"Copies the contents of C<*value*1> into C<*value*2>.\n"
 		"C<*value*2> is another instance of the same message type.\n"
 		"\n"
-		"=item B<$*value*2-E<gt>copy_from($hashref)>\n"
+		"=item B<$*value*2-E<gt>copy_from($hashref)>\n" 
 		"\n"
 		"Copies the contents of C<hashref> into C<*value*2>.\n"
 		"C<hashref> is a Data::Dumper-style representation of an\n"
@@ -421,7 +421,7 @@ PerlXSGenerator::GenerateDescriptorMethodPOD(const Descriptor* descriptor,
 		"Merges the contents of C<*value*1> into C<*value*2>.\n"
 		"C<*value*2> is another instance of the same message type.\n"
 		"\n"
-		"=item B<$*value*2-E<gt>merge_from($hashref)>\n"
+		"=item B<$*value*2-E<gt>merge_from($hashref)>\n" 
 		"\n"
 		"Merges the contents of C<hashref> into C<*value*2>.\n"
 		"C<hashref> is a Data::Dumper-style representation of an\n"
@@ -437,7 +437,7 @@ PerlXSGenerator::GenerateDescriptorMethodPOD(const Descriptor* descriptor,
 		"\n"
 		"=item B<$errstr = $*value*-E<gt>error_string()>\n"
 		"\n"
-		"Returns a comma-delimited TProtoStringType of initialization errors.\n"
+		"Returns a comma-delimited TProtoStringType of initialization errors.\n" 
 		"\n"
 		"=item B<$*value*-E<gt>discard_unknown_fields()>\n"
 		"\n"
@@ -445,20 +445,20 @@ PerlXSGenerator::GenerateDescriptorMethodPOD(const Descriptor* descriptor,
 		"\n"
 		"=item B<$dstr = $*value*-E<gt>debug_string()>\n"
 		"\n"
-		"Returns a TProtoStringType representation of C<*value*>.\n"
+		"Returns a TProtoStringType representation of C<*value*>.\n" 
 		"\n"
 		"=item B<$dstr = $*value*-E<gt>short_debug_string()>\n"
 		"\n"
-		"Returns a short TProtoStringType representation of C<*value*>.\n"
+		"Returns a short TProtoStringType representation of C<*value*>.\n" 
 		"\n"
-		"=item B<$ok = $*value*-E<gt>unpack($TProtoStringType)>\n"
+		"=item B<$ok = $*value*-E<gt>unpack($TProtoStringType)>\n" 
 		"\n"
-		"Attempts to parse C<TProtoStringType> into C<*value*>, returning 1 "
+		"Attempts to parse C<TProtoStringType> into C<*value*>, returning 1 " 
 		"on success and 0 on failure.\n"
 		"\n"
-		"=item B<$TProtoStringType = $*value*-E<gt>pack()>\n"
+		"=item B<$TProtoStringType = $*value*-E<gt>pack()>\n" 
 		"\n"
-		"Serializes C<*value*> into C<TProtoStringType>.\n"
+		"Serializes C<*value*> into C<TProtoStringType>.\n" 
 		"\n"
 		"=item B<$length = $*value*-E<gt>length()>\n"
 		"\n"
@@ -561,11 +561,11 @@ void
 PerlXSGenerator::GenerateEnumModule(const EnumDescriptor* enum_descriptor,
 				    OutputDirectory* outdir) const
 {
-  TProtoStringType filename = enum_descriptor->name() + ".pm";
-  std::unique_ptr<io::ZeroCopyOutputStream> output(outdir->Open(filename));
+  TProtoStringType filename = enum_descriptor->name() + ".pm"; 
+  std::unique_ptr<io::ZeroCopyOutputStream> output(outdir->Open(filename)); 
   io::Printer printer(output.get(), '*'); // '*' works well in the .pm file
 
-  std::map<TProtoStringType, TProtoStringType> vars;
+  std::map<TProtoStringType, TProtoStringType> vars; 
 
   vars["package"] = EnumClassName(enum_descriptor);
   vars["enum"]    = enum_descriptor->full_name();
@@ -625,7 +625,7 @@ PerlXSGenerator::GenerateEnumModule(const EnumDescriptor* enum_descriptor,
   for ( int i = 0; i < enum_descriptor->value_count(); i++ ) {
     PODPrintEnumValue(enum_descriptor->value(i), printer);
   }
-
+ 
   printer.Print(vars,
 		"\n"
 		"=back\n"
@@ -668,8 +668,8 @@ PerlXSGenerator::GenerateMessageXSTypedefs(const Descriptor* descriptor,
   }
 
   if ( seen.find(descriptor) == seen.end() ) {
-    TProtoStringType cn = cpp::ClassName(descriptor, true);
-    TProtoStringType un = StringReplace(cn, "::", "__", true);
+    TProtoStringType cn = cpp::ClassName(descriptor, true); 
+    TProtoStringType un = StringReplace(cn, "::", "__", true); 
 
     seen.insert(descriptor);
     printer.Print("typedef $classname$ $underscores$;\n",
@@ -687,10 +687,10 @@ PerlXSGenerator::GenerateMessageStatics(const Descriptor* descriptor,
     GenerateMessageStatics(descriptor->nested_type(i), printer);
   }
 
-  std::map<TProtoStringType, TProtoStringType> vars;
+  std::map<TProtoStringType, TProtoStringType> vars; 
 
-  TProtoStringType cn = cpp::ClassName(descriptor, true);
-  TProtoStringType un = StringReplace(cn, "::", "__", true);
+  TProtoStringType cn = cpp::ClassName(descriptor, true); 
+  TProtoStringType un = StringReplace(cn, "::", "__", true); 
 
   vars["depth"]       = "0";
   vars["fieldtype"]   = cn;
@@ -698,7 +698,7 @@ PerlXSGenerator::GenerateMessageStatics(const Descriptor* descriptor,
   vars["underscores"] = un;
 
   // from_hashref static helper
-
+ 
   printer.Print(vars,
 		"static $classname$ *\n"
 		"$underscores$_from_hashref ( SV * sv0 )\n"
@@ -720,14 +720,14 @@ PerlXSGenerator::GenerateMessageStatics(const Descriptor* descriptor,
 void
 PerlXSGenerator::GenerateMessageXSFieldAccessors(const FieldDescriptor* field,
 						 io::Printer& printer,
-						 const TProtoStringType& classname) const
+						 const TProtoStringType& classname) const 
 {
   const Descriptor* descriptor = field->containing_type();
-  TProtoStringType            cppname    = cpp::FieldName(field);
-  TProtoStringType            perlclass  = MessageClassName(descriptor);
+  TProtoStringType            cppname    = cpp::FieldName(field); 
+  TProtoStringType            perlclass  = MessageClassName(descriptor); 
   bool              repeated   = field->is_repeated();
 
-  std::map<TProtoStringType, TProtoStringType> vars;
+  std::map<TProtoStringType, TProtoStringType> vars; 
 
   vars["classname"] = classname;
   vars["cppname"]   = cppname;
@@ -1045,14 +1045,14 @@ PerlXSGenerator::GenerateMessageXSFieldAccessors(const FieldDescriptor* field,
 void
 PerlXSGenerator::GenerateMessageXSCommonMethods(const Descriptor* descriptor,
 						io::Printer& printer,
-						const TProtoStringType& classname) const
+						const TProtoStringType& classname) const 
 {
-  std::map<TProtoStringType, TProtoStringType> vars;
+  std::map<TProtoStringType, TProtoStringType> vars; 
 #if (GOOGLE_PROTOBUF_VERSION >= 2002000)
   FileOptions::OptimizeMode mode;
 #endif // GOOGLE_PROTOBUF_VERSION
-  TProtoStringType cn = cpp::ClassName(descriptor, true);
-  TProtoStringType un = StringReplace(cn, "::", "__", true);
+  TProtoStringType cn = cpp::ClassName(descriptor, true); 
+  TProtoStringType un = StringReplace(cn, "::", "__", true); 
 
 #if (GOOGLE_PROTOBUF_VERSION >= 2002000)
   mode = descriptor->file()->options().optimize_for();
@@ -1117,7 +1117,7 @@ PerlXSGenerator::GenerateMessageXSCommonMethods(const Descriptor* descriptor,
 		"    }\n"
 		"\n"
 		"\n");
-
+ 
   // clear
 
   printer.Print(vars,
@@ -1284,7 +1284,7 @@ PerlXSGenerator::GenerateMessageXSCommonMethods(const Descriptor* descriptor,
 #if NO_ZERO_COPY
   printer.Print(vars,
 		"  PREINIT:\n"
-		"    TProtoStringType output;\n"
+		"    TProtoStringType output;\n" 
 		"\n");
 #endif
 
@@ -1411,12 +1411,12 @@ PerlXSGenerator::GenerateMessageXSPackage(const Descriptor* descriptor,
     GenerateMessageXSPackage(descriptor->nested_type(i), printer);
   }
 
-  std::map<TProtoStringType, TProtoStringType> vars;
+  std::map<TProtoStringType, TProtoStringType> vars; 
 
-  TProtoStringType cn = cpp::ClassName(descriptor, true);
-  TProtoStringType mn = MessageModuleName(descriptor);
-  TProtoStringType pn = MessageClassName(descriptor);
-  TProtoStringType un = StringReplace(cn, "::", "__", true);
+  TProtoStringType cn = cpp::ClassName(descriptor, true); 
+  TProtoStringType mn = MessageModuleName(descriptor); 
+  TProtoStringType pn = MessageClassName(descriptor); 
+  TProtoStringType un = StringReplace(cn, "::", "__", true); 
 
   vars["module"]      = mn;
   vars["classname"]   = cn;
@@ -1527,11 +1527,11 @@ PerlXSGenerator::GenerateMessageXSPackage(const Descriptor* descriptor,
 void
 PerlXSGenerator::GenerateTypemapInput(const Descriptor* descriptor,
 				      io::Printer& printer,
-				      const TProtoStringType& svname) const
+				      const TProtoStringType& svname) const 
 {
-  std::map<TProtoStringType, TProtoStringType> vars;
+  std::map<TProtoStringType, TProtoStringType> vars; 
 
-  TProtoStringType cn = cpp::ClassName(descriptor, true);
+  TProtoStringType cn = cpp::ClassName(descriptor, true); 
 
   vars["classname"]   = cn;
   vars["perlclass"]   = MessageClassName(descriptor);
@@ -1550,7 +1550,7 @@ PerlXSGenerator::GenerateTypemapInput(const Descriptor* descriptor,
 
 // Returns the containing Perl module name for a message descriptor.
 
-TProtoStringType
+TProtoStringType 
 PerlXSGenerator::MessageModuleName(const Descriptor* descriptor) const
 {
   const Descriptor *container = descriptor;
@@ -1564,7 +1564,7 @@ PerlXSGenerator::MessageModuleName(const Descriptor* descriptor) const
 
 // Returns the Perl class name for a message descriptor.
 
-TProtoStringType
+TProtoStringType 
 PerlXSGenerator::MessageClassName(const Descriptor* descriptor) const
 {
   return PackageName(descriptor->full_name(), descriptor->file()->package());
@@ -1572,7 +1572,7 @@ PerlXSGenerator::MessageClassName(const Descriptor* descriptor) const
 
 // Returns the Perl class name for a message descriptor.
 
-TProtoStringType
+TProtoStringType 
 PerlXSGenerator::EnumClassName(const EnumDescriptor* descriptor) const
 {
   return PackageName(descriptor->full_name(), descriptor->file()->package());
@@ -1580,10 +1580,10 @@ PerlXSGenerator::EnumClassName(const EnumDescriptor* descriptor) const
 
 // Possibly replace the package prefix with the --perlxs-package value
 
-TProtoStringType
-PerlXSGenerator::PackageName(const TProtoStringType& name, const TProtoStringType& package) const
+TProtoStringType 
+PerlXSGenerator::PackageName(const TProtoStringType& name, const TProtoStringType& package) const 
 {
-  TProtoStringType output;
+  TProtoStringType output; 
 
   if (!perlxs_package_.empty()) {
     output = StringReplace(name, package.c_str(), perlxs_package_.c_str(), false);
@@ -1597,7 +1597,7 @@ PerlXSGenerator::PackageName(const TProtoStringType& name, const TProtoStringTyp
 
 void
 PerlXSGenerator::PerlSVGetHelper(io::Printer& printer,
-				 const std::map<TProtoStringType, TProtoStringType>& vars,
+				 const std::map<TProtoStringType, TProtoStringType>& vars, 
 				 FieldDescriptor::CppType fieldtype,
 				 int depth) const
 {
@@ -1666,10 +1666,10 @@ PerlXSGenerator::PODPrintEnumValue(const EnumValueDescriptor *value,
 		"number", ost.str().c_str());
 }
 
-TProtoStringType
+TProtoStringType 
 PerlXSGenerator::PODFieldTypeString(const FieldDescriptor* field) const
 {
-  TProtoStringType type;
+  TProtoStringType type; 
 
   switch ( field->cpp_type() ) {
   case FieldDescriptor::CPPTYPE_INT32:
@@ -1695,7 +1695,7 @@ PerlXSGenerator::PODFieldTypeString(const FieldDescriptor* field) const
     type = "a 64-bit unsigned integer";
     break;
   case FieldDescriptor::CPPTYPE_STRING:
-    type = "a TProtoStringType";
+    type = "a TProtoStringType"; 
     break;
   case FieldDescriptor::CPPTYPE_MESSAGE:
     type = "an instance of " + MessageClassName(field->message_type());
@@ -1711,7 +1711,7 @@ PerlXSGenerator::PODFieldTypeString(const FieldDescriptor* field) const
 void
 PerlXSGenerator::StartFieldToHashref(const FieldDescriptor * field,
 				     io::Printer& printer,
-				     std::map<TProtoStringType, TProtoStringType>& vars,
+				     std::map<TProtoStringType, TProtoStringType>& vars, 
 				     int depth) const
 {
   SetupDepthVars(vars, depth);
@@ -1743,7 +1743,7 @@ PerlXSGenerator::StartFieldToHashref(const FieldDescriptor * field,
 
 void
 PerlXSGenerator::FieldToHashrefHelper(io::Printer& printer,
-				      std::map<TProtoStringType, TProtoStringType>& vars,
+				      std::map<TProtoStringType, TProtoStringType>& vars, 
 				      const FieldDescriptor* field) const
 {
   vars["msg"] = "msg" + vars["pdepth"];
@@ -1792,7 +1792,7 @@ PerlXSGenerator::FieldToHashrefHelper(io::Printer& printer,
 void
 PerlXSGenerator::EndFieldToHashref(const FieldDescriptor * field,
 				   io::Printer& printer,
-				   std::map<TProtoStringType, TProtoStringType>& vars,
+				   std::map<TProtoStringType, TProtoStringType>& vars, 
 				   int depth) const
 {
   vars["field"] = field->name();
@@ -1820,12 +1820,12 @@ PerlXSGenerator::EndFieldToHashref(const FieldDescriptor * field,
   }
   printer.Outdent();
   printer.Print("}\n");
-}
+} 
 
 void
 PerlXSGenerator::MessageToHashref(const Descriptor * descriptor,
 				  io::Printer& printer,
-				  std::map<TProtoStringType, TProtoStringType>& vars,
+				  std::map<TProtoStringType, TProtoStringType>& vars, 
 				  int depth) const
 {
   int i;
@@ -1838,7 +1838,7 @@ PerlXSGenerator::MessageToHashref(const Descriptor * descriptor,
 
     vars["field"] = field->name();
     vars["cppname"] = cpp::FieldName(field);
-
+ 
     StartFieldToHashref(field, printer, vars, depth);
 
     if ( fieldtype == FieldDescriptor::CPPTYPE_MESSAGE ) {
@@ -1861,7 +1861,7 @@ PerlXSGenerator::MessageToHashref(const Descriptor * descriptor,
 
 void
 PerlXSGenerator::FieldFromHashrefHelper(io::Printer& printer,
-					std::map<TProtoStringType, TProtoStringType>& vars,
+					std::map<TProtoStringType, TProtoStringType>& vars, 
 					const FieldDescriptor * field) const
 {
   vars["msg"] = "msg" + vars["pdepth"];
@@ -1941,7 +1941,7 @@ PerlXSGenerator::FieldFromHashrefHelper(io::Printer& printer,
 void
 PerlXSGenerator::MessageFromHashref(const Descriptor * descriptor,
 				    io::Printer& printer,
-				    std::map<TProtoStringType, TProtoStringType>& vars,
+				    std::map<TProtoStringType, TProtoStringType>& vars, 
 				    int depth) const
 {
   int i;

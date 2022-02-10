@@ -37,13 +37,13 @@ namespace arrow {
 
 using internal::CountSetBits;
 
-static inline void AdjustNonNullable(Type::type type_id, int64_t length,
+static inline void AdjustNonNullable(Type::type type_id, int64_t length, 
                                      std::vector<std::shared_ptr<Buffer>>* buffers,
                                      int64_t* null_count) {
-  if (type_id == Type::NA) {
-    *null_count = length;
-    (*buffers)[0] = nullptr;
-  } else if (internal::HasValidityBitmap(type_id)) {
+  if (type_id == Type::NA) { 
+    *null_count = length; 
+    (*buffers)[0] = nullptr; 
+  } else if (internal::HasValidityBitmap(type_id)) { 
     if (*null_count == 0) {
       // In case there are no nulls, don't keep an allocated null bitmap around
       (*buffers)[0] = nullptr;
@@ -56,39 +56,39 @@ static inline void AdjustNonNullable(Type::type type_id, int64_t length,
   }
 }
 
-std::shared_ptr<ArrayData> ArrayData::Make(std::shared_ptr<DataType> type, int64_t length,
+std::shared_ptr<ArrayData> ArrayData::Make(std::shared_ptr<DataType> type, int64_t length, 
                                            std::vector<std::shared_ptr<Buffer>> buffers,
                                            int64_t null_count, int64_t offset) {
-  AdjustNonNullable(type->id(), length, &buffers, &null_count);
-  return std::make_shared<ArrayData>(std::move(type), length, std::move(buffers),
-                                     null_count, offset);
+  AdjustNonNullable(type->id(), length, &buffers, &null_count); 
+  return std::make_shared<ArrayData>(std::move(type), length, std::move(buffers), 
+                                     null_count, offset); 
 }
 
 std::shared_ptr<ArrayData> ArrayData::Make(
-    std::shared_ptr<DataType> type, int64_t length,
+    std::shared_ptr<DataType> type, int64_t length, 
     std::vector<std::shared_ptr<Buffer>> buffers,
     std::vector<std::shared_ptr<ArrayData>> child_data, int64_t null_count,
     int64_t offset) {
-  AdjustNonNullable(type->id(), length, &buffers, &null_count);
-  return std::make_shared<ArrayData>(std::move(type), length, std::move(buffers),
+  AdjustNonNullable(type->id(), length, &buffers, &null_count); 
+  return std::make_shared<ArrayData>(std::move(type), length, std::move(buffers), 
                                      std::move(child_data), null_count, offset);
 }
 
 std::shared_ptr<ArrayData> ArrayData::Make(
-    std::shared_ptr<DataType> type, int64_t length,
+    std::shared_ptr<DataType> type, int64_t length, 
     std::vector<std::shared_ptr<Buffer>> buffers,
     std::vector<std::shared_ptr<ArrayData>> child_data,
     std::shared_ptr<ArrayData> dictionary, int64_t null_count, int64_t offset) {
-  AdjustNonNullable(type->id(), length, &buffers, &null_count);
-  auto data = std::make_shared<ArrayData>(std::move(type), length, std::move(buffers),
+  AdjustNonNullable(type->id(), length, &buffers, &null_count); 
+  auto data = std::make_shared<ArrayData>(std::move(type), length, std::move(buffers), 
                                           std::move(child_data), null_count, offset);
   data->dictionary = std::move(dictionary);
   return data;
 }
 
-std::shared_ptr<ArrayData> ArrayData::Make(std::shared_ptr<DataType> type, int64_t length,
-                                           int64_t null_count, int64_t offset) {
-  return std::make_shared<ArrayData>(std::move(type), length, null_count, offset);
+std::shared_ptr<ArrayData> ArrayData::Make(std::shared_ptr<DataType> type, int64_t length, 
+                                           int64_t null_count, int64_t offset) { 
+  return std::make_shared<ArrayData>(std::move(type), length, null_count, offset); 
 }
 
 std::shared_ptr<ArrayData> ArrayData::Slice(int64_t off, int64_t len) const {
@@ -213,7 +213,7 @@ struct ViewDataImpl {
 
   Status MakeDataView(const std::shared_ptr<Field>& out_field,
                       std::shared_ptr<ArrayData>* out) {
-    const auto& out_type = out_field->type();
+    const auto& out_type = out_field->type(); 
     const auto out_layout = out_type->layout();
 
     AdjustInputPointer();
@@ -249,11 +249,11 @@ struct ViewDataImpl {
     } else {
       // No null bitmap in input, append no-nulls bitmap
       out_buffers.push_back(nullptr);
-      if (out_type->id() == Type::NA) {
-        out_null_count = out_length;
-      } else {
-        out_null_count = 0;
-      }
+      if (out_type->id() == Type::NA) { 
+        out_null_count = out_length; 
+      } else { 
+        out_null_count = 0; 
+      } 
     }
 
     // Process other buffers in output layout

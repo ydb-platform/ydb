@@ -63,7 +63,7 @@
 // outlives the StringPiece.
 //
 // A StringPiece may represent just part of a string; thus the name "Piece".
-// For example, when splitting a string, vector<StringPiece> is a natural data
+// For example, when splitting a string, vector<StringPiece> is a natural data 
 // type for the output.  For another example, a Cord is a non-contiguous,
 // potentially very long string-like object.  The Cord class has an interface
 // that iteratively provides StringPiece objects that point to the
@@ -76,30 +76,30 @@
 //
 // There are several ways to create a null StringPiece:
 //   StringPiece()
-//   StringPiece(nullptr)
-//   StringPiece(nullptr, 0)
-// For all of the above, sp.data() == nullptr, sp.length() == 0,
+//   StringPiece(nullptr) 
+//   StringPiece(nullptr, 0) 
+// For all of the above, sp.data() == nullptr, sp.length() == 0, 
 // and sp.empty() == true.  Also, if you create a StringPiece with
-// a non-null pointer then sp.data() != nullptr.  Once created,
-// sp.data() will stay either nullptr or not-nullptr, except if you call
+// a non-null pointer then sp.data() != nullptr.  Once created, 
+// sp.data() will stay either nullptr or not-nullptr, except if you call 
 // sp.clear() or sp.set().
 //
-// Thus, you can use StringPiece(nullptr) to signal an out-of-band value
+// Thus, you can use StringPiece(nullptr) to signal an out-of-band value 
 // that is different from other StringPiece values.  This is similar
-// to the way that const char* p1 = nullptr; is different from
+// to the way that const char* p1 = nullptr; is different from 
 // const char* p2 = "";.
 //
 // There are many ways to create an empty StringPiece:
 //   StringPiece()
-//   StringPiece(nullptr)
-//   StringPiece(nullptr, 0)
+//   StringPiece(nullptr) 
+//   StringPiece(nullptr, 0) 
 //   StringPiece("")
 //   StringPiece("", 0)
 //   StringPiece("abcdef", 0)
 //   StringPiece("abcdef"+6, 0)
 // For all of the above, sp.length() will be 0 and sp.empty() will be true.
-// For some empty StringPiece values, sp.data() will be nullptr.
-// For some empty StringPiece values, sp.data() will not be nullptr.
+// For some empty StringPiece values, sp.data() will be nullptr. 
+// For some empty StringPiece values, sp.data() will not be nullptr. 
 //
 // Be careful not to confuse: null StringPiece and empty StringPiece.
 // The set of empty StringPieces properly includes the set of null StringPieces.
@@ -109,20 +109,20 @@
 // All empty StringPiece values compare equal to each other.
 // Even a null StringPieces compares equal to a non-null empty StringPiece:
 //  StringPiece() == StringPiece("", 0)
-//  StringPiece(nullptr) == StringPiece("abc", 0)
-//  StringPiece(nullptr, 0) == StringPiece("abcdef"+6, 0)
+//  StringPiece(nullptr) == StringPiece("abc", 0) 
+//  StringPiece(nullptr, 0) == StringPiece("abcdef"+6, 0) 
 //
 // Look carefully at this example:
-//   StringPiece("") == nullptr
+//   StringPiece("") == nullptr 
 // True or false?  TRUE, because StringPiece::operator== converts
-// the right-hand side from nullptr to StringPiece(nullptr),
+// the right-hand side from nullptr to StringPiece(nullptr), 
 // and then compares two zero-length spans of characters.
 // However, we are working to make this example produce a compile error.
 //
 // Suppose you want to write:
-//   bool TestWhat?(StringPiece sp) { return sp == nullptr; }  // BAD
+//   bool TestWhat?(StringPiece sp) { return sp == nullptr; }  // BAD 
 // Do not do that.  Write one of these instead:
-//   bool TestNull(StringPiece sp) { return sp.data() == nullptr; }
+//   bool TestNull(StringPiece sp) { return sp.data() == nullptr; } 
 //   bool TestEmpty(StringPiece sp) { return sp.empty(); }
 // The intent of TestWhat? is unclear.  Did you mean TestNull or TestEmpty?
 // Right now, TestWhat? behaves likes TestEmpty.
@@ -146,55 +146,55 @@
 #include <string.h>
 #include <iosfwd>
 #include <limits>
-#include <string>
+#include <string> 
 
-#if defined(__cpp_lib_string_view)
-#include <string_view>
-#endif
+#if defined(__cpp_lib_string_view) 
+#include <string_view> 
+#endif 
+ 
+#include <google/protobuf/stubs/hash.h> 
 
-#include <google/protobuf/stubs/hash.h>
-
-#include <google/protobuf/port_def.inc>
-
+#include <google/protobuf/port_def.inc> 
+ 
 namespace google {
 namespace protobuf {
-namespace stringpiece_internal {
+namespace stringpiece_internal { 
 
-class PROTOBUF_EXPORT StringPiece {
- public:
-  using traits_type = std::char_traits<char>;
-  using value_type = char;
-  using pointer = char*;
-  using const_pointer = const char*;
-  using reference = char&;
-  using const_reference = const char&;
-  using const_iterator = const char*;
-  using iterator = const_iterator;
-  using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-  using reverse_iterator = const_reverse_iterator;
-  using size_type = size_t;
-  using difference_type = std::ptrdiff_t;
+class PROTOBUF_EXPORT StringPiece { 
+ public: 
+  using traits_type = std::char_traits<char>; 
+  using value_type = char; 
+  using pointer = char*; 
+  using const_pointer = const char*; 
+  using reference = char&; 
+  using const_reference = const char&; 
+  using const_iterator = const char*; 
+  using iterator = const_iterator; 
+  using const_reverse_iterator = std::reverse_iterator<const_iterator>; 
+  using reverse_iterator = const_reverse_iterator; 
+  using size_type = size_t; 
+  using difference_type = std::ptrdiff_t; 
 
  private:
   const char* ptr_;
-  size_type length_;
+  size_type length_; 
 
-  static constexpr size_type kMaxSize =
-      (std::numeric_limits<difference_type>::max)();
-
-  static size_type CheckSize(size_type size) {
-#if !defined(NDEBUG) || defined(_FORTIFY_SOURCE) && _FORTIFY_SOURCE > 0
-    if (PROTOBUF_PREDICT_FALSE(size > kMaxSize)) {
+  static constexpr size_type kMaxSize = 
+      (std::numeric_limits<difference_type>::max)(); 
+ 
+  static size_type CheckSize(size_type size) { 
+#if !defined(NDEBUG) || defined(_FORTIFY_SOURCE) && _FORTIFY_SOURCE > 0 
+    if (PROTOBUF_PREDICT_FALSE(size > kMaxSize)) { 
       // Some people grep for this message in logs
       // so take care if you ever change it.
-      LogFatalSizeTooBig(size, "string length exceeds max size");
+      LogFatalSizeTooBig(size, "string length exceeds max size"); 
     }
 #endif
-    return size;
+    return size; 
   }
 
   // Out-of-line error path.
-  static void LogFatalSizeTooBig(size_type size, const char* details);
+  static void LogFatalSizeTooBig(size_type size, const char* details); 
 
  public:
   // We provide non-explicit singleton constructors so users can pass
@@ -203,60 +203,60 @@ class PROTOBUF_EXPORT StringPiece {
   //
   // Style guide exception granted:
   // http://goto/style-guide-exception-20978288
-  StringPiece() : ptr_(nullptr), length_(0) {}
+  StringPiece() : ptr_(nullptr), length_(0) {} 
 
   StringPiece(const char* str)  // NOLINT(runtime/explicit)
       : ptr_(str), length_(0) {
-    if (str != nullptr) {
-      length_ = CheckSize(strlen(str));
+    if (str != nullptr) { 
+      length_ = CheckSize(strlen(str)); 
     }
   }
 
-  StringPiece(const TProtoStringType& str)
-  	  : ptr_(str.data()), length_(str.size())
-  {
+  StringPiece(const TProtoStringType& str) 
+  	  : ptr_(str.data()), length_(str.size()) 
+  { 
   }
+  
+#if defined(__cpp_lib_string_view) 
+  StringPiece(  // NOLINT(runtime/explicit) 
+      std::string_view str) 
+      : ptr_(str.data()), length_(0) { 
+    length_ = CheckSize(str.size()); 
+  } 
+#endif 
+    
  
-#if defined(__cpp_lib_string_view)
-  StringPiece(  // NOLINT(runtime/explicit)
-      std::string_view str)
-      : ptr_(str.data()), length_(0) {
-    length_ = CheckSize(str.size());
-  }
-#endif
-   
-
-  StringPiece(const char* offset, size_type len)
-      : ptr_(offset), length_(CheckSize(len)) {}
+  StringPiece(const char* offset, size_type len) 
+      : ptr_(offset), length_(CheckSize(len)) {} 
 
   // data() may return a pointer to a buffer with embedded NULs, and the
   // returned buffer may or may not be null terminated.  Therefore it is
   // typically a mistake to pass data() to a routine that expects a NUL
   // terminated string.
-  const_pointer data() const { return ptr_; }
-  size_type size() const { return length_; }
-  size_type length() const { return length_; }
+  const_pointer data() const { return ptr_; } 
+  size_type size() const { return length_; } 
+  size_type length() const { return length_; } 
   bool empty() const { return length_ == 0; }
 
-  char operator[](size_type i) const {
+  char operator[](size_type i) const { 
     assert(i < length_);
     return ptr_[i];
   }
 
-  void remove_prefix(size_type n) {
+  void remove_prefix(size_type n) { 
     assert(length_ >= n);
     ptr_ += n;
     length_ -= n;
   }
 
-  void remove_suffix(size_type n) {
+  void remove_suffix(size_type n) { 
     assert(length_ >= n);
     length_ -= n;
   }
 
   // returns {-1, 0, 1}
   int compare(StringPiece x) const {
-    size_type min_size = length_ < x.length_ ? length_ : x.length_;
+    size_type min_size = length_ < x.length_ ? length_ : x.length_; 
     int r = memcmp(ptr_, x.ptr_, static_cast<size_t>(min_size));
     if (r < 0) return -1;
     if (r > 0) return 1;
@@ -265,21 +265,21 @@ class PROTOBUF_EXPORT StringPiece {
     return 0;
   }
 
-  TProtoStringType as_string() const { return ToString(); }
+  TProtoStringType as_string() const { return ToString(); } 
   // We also define ToString() here, since many other string-like
   // interfaces name the routine that converts to a C++ string
   // "ToString", and it's confusing to have the method that does that
   // for a StringPiece be called "as_string()".  We also leave the
   // "as_string()" method defined here for existing code.
-  TProtoStringType ToString() const {
-    if (ptr_ == nullptr) return "";
-    return TProtoStringType(data(), static_cast<size_type>(size()));
+  TProtoStringType ToString() const { 
+    if (ptr_ == nullptr) return ""; 
+    return TProtoStringType(data(), static_cast<size_type>(size())); 
   }
 
-  explicit operator TProtoStringType() const { return ToString(); }
+  explicit operator TProtoStringType() const { return ToString(); } 
 
-  void CopyToString(TProtoStringType* target) const;
-  void AppendToString(TProtoStringType* target) const;
+  void CopyToString(TProtoStringType* target) const; 
+  void AppendToString(TProtoStringType* target) const; 
 
   bool starts_with(StringPiece x) const {
     return (length_ >= x.length_) &&
@@ -301,39 +301,39 @@ class PROTOBUF_EXPORT StringPiece {
 
   // standard STL container boilerplate
   static const size_type npos;
-  const_iterator begin() const { return ptr_; }
-  const_iterator end() const { return ptr_ + length_; }
+  const_iterator begin() const { return ptr_; } 
+  const_iterator end() const { return ptr_ + length_; } 
   const_reverse_iterator rbegin() const {
     return const_reverse_iterator(ptr_ + length_);
   }
   const_reverse_iterator rend() const {
     return const_reverse_iterator(ptr_);
   }
-  size_type max_size() const { return length_; }
-  size_type capacity() const { return length_; }
+  size_type max_size() const { return length_; } 
+  size_type capacity() const { return length_; } 
 
   // cpplint.py emits a false positive [build/include_what_you_use]
-  size_type copy(char* buf, size_type n, size_type pos = 0) const;  // NOLINT
+  size_type copy(char* buf, size_type n, size_type pos = 0) const;  // NOLINT 
 
   bool contains(StringPiece s) const;
 
-  size_type find(StringPiece s, size_type pos = 0) const;
-  size_type find(char c, size_type pos = 0) const;
-  size_type rfind(StringPiece s, size_type pos = npos) const;
-  size_type rfind(char c, size_type pos = npos) const;
+  size_type find(StringPiece s, size_type pos = 0) const; 
+  size_type find(char c, size_type pos = 0) const; 
+  size_type rfind(StringPiece s, size_type pos = npos) const; 
+  size_type rfind(char c, size_type pos = npos) const; 
 
-  size_type find_first_of(StringPiece s, size_type pos = 0) const;
-  size_type find_first_of(char c, size_type pos = 0) const {
+  size_type find_first_of(StringPiece s, size_type pos = 0) const; 
+  size_type find_first_of(char c, size_type pos = 0) const { 
     return find(c, pos);
   }
-  size_type find_first_not_of(StringPiece s, size_type pos = 0) const;
-  size_type find_first_not_of(char c, size_type pos = 0) const;
-  size_type find_last_of(StringPiece s, size_type pos = npos) const;
-  size_type find_last_of(char c, size_type pos = npos) const {
+  size_type find_first_not_of(StringPiece s, size_type pos = 0) const; 
+  size_type find_first_not_of(char c, size_type pos = 0) const; 
+  size_type find_last_of(StringPiece s, size_type pos = npos) const; 
+  size_type find_last_of(char c, size_type pos = npos) const { 
     return rfind(c, pos);
   }
-  size_type find_last_not_of(StringPiece s, size_type pos = npos) const;
-  size_type find_last_not_of(char c, size_type pos = npos) const;
+  size_type find_last_not_of(StringPiece s, size_type pos = npos) const; 
+  size_type find_last_not_of(char c, size_type pos = npos) const; 
 
   StringPiece substr(size_type pos, size_type n = npos) const;
 };
@@ -342,7 +342,7 @@ class PROTOBUF_EXPORT StringPiece {
 // one of the arguments is a literal, the compiler can elide a lot of the
 // following comparisons.
 inline bool operator==(StringPiece x, StringPiece y) {
-  StringPiece::size_type len = x.size();
+  StringPiece::size_type len = x.size(); 
   if (len != y.size()) {
     return false;
   }
@@ -356,7 +356,7 @@ inline bool operator!=(StringPiece x, StringPiece y) {
 }
 
 inline bool operator<(StringPiece x, StringPiece y) {
-  const StringPiece::size_type min_size =
+  const StringPiece::size_type min_size = 
       x.size() < y.size() ? x.size() : y.size();
   const int r = memcmp(x.data(), y.data(), static_cast<size_t>(min_size));
   return (r < 0) || (r == 0 && x.size() < y.size());
@@ -377,9 +377,9 @@ inline bool operator>=(StringPiece x, StringPiece y) {
 // allow StringPiece to be logged
 extern std::ostream& operator<<(std::ostream& o, StringPiece piece);
 
-}  // namespace stringpiece_internal
+}  // namespace stringpiece_internal 
 
-using ::google::protobuf::stringpiece_internal::StringPiece;
+using ::google::protobuf::stringpiece_internal::StringPiece; 
 
 }  // namespace protobuf
 }  // namespace google
@@ -388,7 +388,7 @@ GOOGLE_PROTOBUF_HASH_NAMESPACE_DECLARATION_START
 template<> struct hash<StringPiece> {
   size_t operator()(const StringPiece& s) const {
     size_t result = 0;
-    for (const char *str = s.data(), *end = str + s.size(); str < end; str++) {
+    for (const char *str = s.data(), *end = str + s.size(); str < end; str++) { 
       result = 5 * result + static_cast<size_t>(*str);
     }
     return result;
@@ -396,6 +396,6 @@ template<> struct hash<StringPiece> {
 };
 GOOGLE_PROTOBUF_HASH_NAMESPACE_DECLARATION_END
 
-#include <google/protobuf/port_undef.inc>
-
+#include <google/protobuf/port_undef.inc> 
+ 
 #endif  // STRINGS_STRINGPIECE_H_

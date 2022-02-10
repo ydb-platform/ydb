@@ -176,7 +176,7 @@ depth findMaxWidth(const NGHolder &h, const SpecialEdgeFilter &filter,
     }
 
     if (d.is_unreachable()) {
-        assert(findMinWidth(h, filter, src).is_unreachable());
+        assert(findMinWidth(h, filter, src).is_unreachable()); 
         return d;
     }
 

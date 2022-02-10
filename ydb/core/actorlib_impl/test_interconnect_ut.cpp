@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
 
     TAutoPtr<IEventHandle> GetSerialized(const TAutoPtr<IEventHandle>& ev) {
         NActors::TAllocChunkSerializer chunker;
-        ev->GetBase()->SerializeToArcadiaStream(&chunker);
+        ev->GetBase()->SerializeToArcadiaStream(&chunker); 
         auto Data = chunker.Release(ev->GetBase()->IsExtendedFormat());
         TAutoPtr<IEventHandle> serev =
             new IEventHandle(ev->GetBase()->Type(), ev->Flags,

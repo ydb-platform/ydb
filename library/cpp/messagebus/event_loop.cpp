@@ -350,7 +350,7 @@ TChannelPtr TEventLoop::TImpl::Register(TSocket socket, TEventHandlerPtr eventHa
 }
 
 void TEventLoop::TImpl::Wakeup() {
-    if (NBus::NPrivate::SocketSend(WakeupWriteSocket, TArrayRef<const char>("", 1)) < 0) {
+    if (NBus::NPrivate::SocketSend(WakeupWriteSocket, TArrayRef<const char>("", 1)) < 0) { 
         if (LastSystemError() != EAGAIN) {
             Y_FAIL("failed to send to wakeup socket: %s", LastSystemErrorText());
         }

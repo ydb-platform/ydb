@@ -3,8 +3,8 @@
 #include "event.h"
 #include "event_load.h"
 
-#include <google/protobuf/io/zero_copy_stream.h>
-#include <google/protobuf/arena.h>
+#include <google/protobuf/io/zero_copy_stream.h> 
+#include <google/protobuf/arena.h> 
 #include <library/cpp/actors/protos/actors.pb.h>
 #include <util/generic/deque.h>
 #include <util/system/context.h>
@@ -26,12 +26,12 @@ namespace NActors {
         bool Next(const void** data, int* size) override;
         void BackUp(int count) override;
         bool Skip(int count) override;
-        int64_t ByteCount() const override {
-            return TotalByteCount;
-        }
+        int64_t ByteCount() const override { 
+            return TotalByteCount; 
+        } 
 
     private:
-        int64_t TotalByteCount = 0;
+        int64_t TotalByteCount = 0; 
     };
 
     class TChunkSerializer : public NProtoBuf::io::ZeroCopyOutputStream {
@@ -47,9 +47,9 @@ namespace NActors {
     public:
         bool Next(void** data, int* size) override;
         void BackUp(int count) override;
-        int64_t ByteCount() const override {
-            return Buffers->GetSize();
-        }
+        int64_t ByteCount() const override { 
+            return Buffers->GetSize(); 
+        } 
         bool WriteAliasedRaw(const void* data, int size) override;
 
         // WARNING: these methods require owner to retain ownership and immutability of passed objects
@@ -90,9 +90,9 @@ namespace NActors {
 
         bool Next(void** data, int* size) override;
         void BackUp(int count) override;
-        int64_t ByteCount() const override {
-            return TotalSerializedDataSize;
-        }
+        int64_t ByteCount() const override { 
+            return TotalSerializedDataSize; 
+        } 
         bool WriteAliasedRaw(const void* data, int size) override;
         bool AllowsAliasing() const override;
 
@@ -166,7 +166,7 @@ namespace NActors {
             return static_cast<bool>(Payload);
         }
 
-        bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
+        bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override { 
             // serialize payload first
             if (Payload) {
                 void *data;
@@ -471,8 +471,8 @@ namespace NActors {
             return GetRecord().ShortDebugString();
         }
 
-        bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override {
-            return chunker->WriteString(&PreSerializedData) && TBase::SerializeToArcadiaStream(chunker);
+        bool SerializeToArcadiaStream(TChunkSerializer* chunker) const override { 
+            return chunker->WriteString(&PreSerializedData) && TBase::SerializeToArcadiaStream(chunker); 
         }
 
         ui32 CalculateSerializedSize() const override {

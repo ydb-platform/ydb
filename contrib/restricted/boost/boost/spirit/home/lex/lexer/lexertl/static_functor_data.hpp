@@ -209,7 +209,7 @@ namespace boost { namespace spirit { namespace lex { namespace lexertl
             bool bol_;      // helper storing whether last character was \n
 
             // silence MSVC warning C4512: assignment operator could not be generated
-            BOOST_DELETED_FUNCTION(static_data& operator= (static_data const&));
+            BOOST_DELETED_FUNCTION(static_data& operator= (static_data const&)); 
         };
 
         ///////////////////////////////////////////////////////////////////////
@@ -283,7 +283,7 @@ namespace boost { namespace spirit { namespace lex { namespace lexertl
             std::size_t num_states_;
 
             // silence MSVC warning C4512: assignment operator could not be generated
-            BOOST_DELETED_FUNCTION(static_data& operator= (static_data const&));
+            BOOST_DELETED_FUNCTION(static_data& operator= (static_data const&)); 
         };
 
         ///////////////////////////////////////////////////////////////////////
@@ -421,7 +421,7 @@ namespace boost { namespace spirit { namespace lex { namespace lexertl
             bool has_hold_;     // 'true' if hold_ is valid
 
             // silence MSVC warning C4512: assignment operator could not be generated
-            BOOST_DELETED_FUNCTION(static_data& operator= (static_data const&));
+            BOOST_DELETED_FUNCTION(static_data& operator= (static_data const&)); 
         };
 
         ///////////////////////////////////////////////////////////////////////
@@ -560,7 +560,7 @@ namespace boost { namespace spirit { namespace lex { namespace lexertl
             bool has_hold_;     // 'true' if hold_ is valid
 
             // silence MSVC warning C4512: assignment operator could not be generated
-            BOOST_DELETED_FUNCTION(static_data& operator= (static_data const&));
+            BOOST_DELETED_FUNCTION(static_data& operator= (static_data const&)); 
         };
     }
 }}}}

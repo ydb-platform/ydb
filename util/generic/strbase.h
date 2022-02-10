@@ -45,11 +45,11 @@ public:
     using TSelf = TStringBase<TDerived, TChar, TTraits>;
 
     using size_type = size_t;
-    using difference_type = ptrdiff_t;
+    using difference_type = ptrdiff_t; 
     static constexpr size_t npos = size_t(-1);
 
     using const_iterator = const TCharType*;
-    using const_reference = const TCharType&;
+    using const_reference = const TCharType&; 
 
     template <typename TBase>
     struct TReverseIteratorBase {
@@ -106,21 +106,21 @@ public:
     };
     using const_reverse_iterator = TReverseIteratorBase<const_iterator>;
 
-    static constexpr size_t StrLen(const TCharType* s) noexcept {
+    static constexpr size_t StrLen(const TCharType* s) noexcept { 
         if (Y_LIKELY(s)) {
-            return TTraits::length(s);
+            return TTraits::length(s); 
         }
         return 0;
     }
 
-    template <class TCharTraits>
-    inline constexpr operator std::basic_string_view<TCharType, TCharTraits>() const {
+    template <class TCharTraits> 
+    inline constexpr operator std::basic_string_view<TCharType, TCharTraits>() const { 
         return std::basic_string_view<TCharType, TCharTraits>(data(), size());
-    }
-
-    template <class TCharTraits, class Allocator>
+    } 
+ 
+    template <class TCharTraits, class Allocator> 
     inline explicit operator std::basic_string<TCharType, TCharTraits, Allocator>() const {
-        return std::basic_string<TCharType, TCharTraits, Allocator>(Ptr(), Len());
+        return std::basic_string<TCharType, TCharTraits, Allocator>(Ptr(), Len()); 
     }
 
     /**
@@ -327,16 +327,16 @@ public:
     }
 
     template <typename TDerived2, typename TTraits2>
-    bool operator==(const TStringBase<TDerived2, TChar, TTraits2>& s2) const noexcept {
-        return equal(*this, s2);
+    bool operator==(const TStringBase<TDerived2, TChar, TTraits2>& s2) const noexcept { 
+        return equal(*this, s2); 
     }
 
-    bool operator==(TStringView s2) const noexcept {
-        return equal(*this, s2);
-    }
-
-    bool operator==(const TCharType* pc) const noexcept {
-        return equal(*this, pc);
+    bool operator==(TStringView s2) const noexcept { 
+        return equal(*this, s2); 
+    } 
+ 
+    bool operator==(const TCharType* pc) const noexcept { 
+        return equal(*this, pc); 
     }
 
 #ifndef __cpp_impl_three_way_comparison
@@ -349,10 +349,10 @@ public:
         return !(s1 == s2);
     }
 
-    friend bool operator!=(const TSelf& s1, TStringView s2) noexcept {
-        return !(s1 == s2);
-    }
-
+    friend bool operator!=(const TSelf& s1, TStringView s2) noexcept { 
+        return !(s1 == s2); 
+    } 
+ 
     friend bool operator!=(const TSelf& s, const TCharType* pc) noexcept {
         return !(s == pc);
     }
@@ -367,10 +367,10 @@ public:
         return compare(s1, s2) < 0;
     }
 
-    friend bool operator<(const TSelf& s1, TStringView s2) noexcept {
-        return compare(s1, s2) < 0;
-    }
-
+    friend bool operator<(const TSelf& s1, TStringView s2) noexcept { 
+        return compare(s1, s2) < 0; 
+    } 
+ 
     friend bool operator<(const TSelf& s, const TCharType* pc) noexcept {
         return compare(s, pc) < 0;
     }
@@ -384,10 +384,10 @@ public:
         return compare(s1, s2) <= 0;
     }
 
-    friend bool operator<=(const TSelf& s1, TStringView s2) noexcept {
-        return compare(s1, s2) <= 0;
-    }
-
+    friend bool operator<=(const TSelf& s1, TStringView s2) noexcept { 
+        return compare(s1, s2) <= 0; 
+    } 
+ 
     friend bool operator<=(const TSelf& s, const TCharType* pc) noexcept {
         return compare(s, pc) <= 0;
     }
@@ -401,10 +401,10 @@ public:
         return compare(s1, s2) > 0;
     }
 
-    friend bool operator>(const TSelf& s1, TStringView s2) noexcept {
-        return compare(s1, s2) > 0;
-    }
-
+    friend bool operator>(const TSelf& s1, TStringView s2) noexcept { 
+        return compare(s1, s2) > 0; 
+    } 
+ 
     friend bool operator>(const TSelf& s, const TCharType* pc) noexcept {
         return compare(s, pc) > 0;
     }
@@ -418,10 +418,10 @@ public:
         return compare(s1, s2) >= 0;
     }
 
-    friend bool operator>=(const TSelf& s1, TStringView s2) noexcept {
-        return compare(s1, s2) >= 0;
-    }
-
+    friend bool operator>=(const TSelf& s1, TStringView s2) noexcept { 
+        return compare(s1, s2) >= 0; 
+    } 
+ 
     friend bool operator>=(const TSelf& s, const TCharType* pc) noexcept {
         return compare(s, pc) >= 0;
     }
@@ -452,10 +452,10 @@ public:
         return find(s.data(), pos, s.size());
     }
 
-    inline size_t find(const TCharType* s, size_t pos, size_t count) const noexcept {
+    inline size_t find(const TCharType* s, size_t pos, size_t count) const noexcept { 
         return AsStringView().find(s, pos, count);
-    }
-
+    } 
+ 
     inline size_t find(TCharType c, size_t pos = 0) const noexcept {
         return AsStringView().find(c, pos);
     }
@@ -550,7 +550,7 @@ public:
 
     inline size_t copy(TCharType* pc, size_t n, size_t pos) const {
         if (pos > Len()) {
-            throw std::out_of_range("TStringBase::copy");
+            throw std::out_of_range("TStringBase::copy"); 
         }
 
         return CopyImpl(pc, n, pos);
@@ -600,7 +600,7 @@ private:
     inline size_t CopyImpl(TCharType* pc, size_t n, size_t pos) const noexcept {
         const size_t toCopy = Min(Len() - pos, n);
 
-        TTraits::copy(pc, Ptr() + pos, toCopy);
+        TTraits::copy(pc, Ptr() + pos, toCopy); 
 
         return toCopy;
     }

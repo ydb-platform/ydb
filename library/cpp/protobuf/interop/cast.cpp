@@ -1,8 +1,8 @@
 #include <library/cpp/protobuf/interop/cast.h>
 
-#include <google/protobuf/duration.pb.h>
-#include <google/protobuf/timestamp.pb.h>
-#include <google/protobuf/util/time_util.h>
+#include <google/protobuf/duration.pb.h> 
+#include <google/protobuf/timestamp.pb.h> 
+#include <google/protobuf/util/time_util.h> 
 
 namespace NProtoInterop {
     google::protobuf::Duration CastToProto(TDuration duration) {

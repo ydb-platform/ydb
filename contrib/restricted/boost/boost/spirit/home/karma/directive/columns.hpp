@@ -110,7 +110,7 @@ namespace boost { namespace spirit { namespace karma
             mutable unsigned int count;
 
             // silence MSVC warning C4512: assignment operator could not be generated
-            BOOST_DELETED_FUNCTION(columns_delimiter& operator= (columns_delimiter const&));
+            BOOST_DELETED_FUNCTION(columns_delimiter& operator= (columns_delimiter const&)); 
         };
     }
 

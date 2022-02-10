@@ -55,7 +55,7 @@ namespace orc {
 
     virtual bool Next(void** data, int*size) override;
     virtual void BackUp(int count) override;
-    virtual int64_t ByteCount() const override;
+    virtual int64_t ByteCount() const override; 
     virtual bool WriteAliasedRaw(const void * data, int size) override;
     virtual bool AllowsAliasing() const override;
 

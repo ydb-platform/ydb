@@ -2,10 +2,10 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <string_view>
-
+#include <string_view> 
+ 
 Y_UNIT_TEST_SUITE(TStrBufTest) {
-    Y_UNIT_TEST(TestConstructorsAndOperators) {
+    Y_UNIT_TEST(TestConstructorsAndOperators) { 
         TStringBuf str("qwerty");
 
         UNIT_ASSERT_EQUAL(*str.data(), 'q');
@@ -16,14 +16,14 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT_VALUES_UNEQUAL(str1, str2);
         UNIT_ASSERT_VALUES_EQUAL(str1.size(), 7);
         UNIT_ASSERT_VALUES_EQUAL(str2.size(), 3);
-
-        std::string_view helloWorld("Hello, World!");
-        TStringBuf fromStringView(helloWorld);
-        UNIT_ASSERT_EQUAL(fromStringView.data(), helloWorld.data());
+ 
+        std::string_view helloWorld("Hello, World!"); 
+        TStringBuf fromStringView(helloWorld); 
+        UNIT_ASSERT_EQUAL(fromStringView.data(), helloWorld.data()); 
         UNIT_ASSERT_EQUAL(fromStringView.size(), helloWorld.size());
-
-        std::string_view fromStringBuf = fromStringView;
-        UNIT_ASSERT_EQUAL(helloWorld.data(), fromStringBuf.data());
+ 
+        std::string_view fromStringBuf = fromStringView; 
+        UNIT_ASSERT_EQUAL(helloWorld.data(), fromStringBuf.data()); 
         UNIT_ASSERT_EQUAL(helloWorld.size(), fromStringBuf.size());
     }
 
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(str.After('w'), TStringBuf("erty"));
         UNIT_ASSERT_VALUES_EQUAL(str.After('x'), TStringBuf("qwerty"));
-        UNIT_ASSERT_VALUES_EQUAL(str.After('y'), TStringBuf());
+        UNIT_ASSERT_VALUES_EQUAL(str.After('y'), TStringBuf()); 
         UNIT_ASSERT_STRINGS_EQUAL(str.After('='), str);
 
         // Also works properly on empty strings
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         UNIT_ASSERT_VALUES_EQUAL(str.Before('w'), TStringBuf("q"));
         UNIT_ASSERT_VALUES_EQUAL(str.Before('x'), TStringBuf("qwerty"));
         UNIT_ASSERT_VALUES_EQUAL(str.Before('y'), TStringBuf("qwert"));
-        UNIT_ASSERT_VALUES_EQUAL(str.Before('q'), TStringBuf());
+        UNIT_ASSERT_VALUES_EQUAL(str.Before('q'), TStringBuf()); 
     }
 
     Y_UNIT_TEST(TestRAfterBefore) {
@@ -207,18 +207,18 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         TStringBuf buf("12\n45\r\n\r\n23");
         TStringBuf tok;
 
-        buf.ReadLine(tok);
-        UNIT_ASSERT_VALUES_EQUAL(tok, "12");
-
-        buf.ReadLine(tok);
-        UNIT_ASSERT_VALUES_EQUAL(tok, "45");
-
-        buf.ReadLine(tok);
-        UNIT_ASSERT_VALUES_EQUAL(tok, "");
-
-        buf.ReadLine(tok);
-        UNIT_ASSERT_VALUES_EQUAL(tok, "23");
-
+        buf.ReadLine(tok); 
+        UNIT_ASSERT_VALUES_EQUAL(tok, "12"); 
+ 
+        buf.ReadLine(tok); 
+        UNIT_ASSERT_VALUES_EQUAL(tok, "45"); 
+ 
+        buf.ReadLine(tok); 
+        UNIT_ASSERT_VALUES_EQUAL(tok, ""); 
+ 
+        buf.ReadLine(tok); 
+        UNIT_ASSERT_VALUES_EQUAL(tok, "23"); 
+ 
         UNIT_ASSERT(!buf.ReadLine(tok));
     }
 
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
     template <class T>
     void PassByConstReference(const T& val) {
         // In https://st.yandex-team.ru/IGNIETFERRO-294 was assumed that `const char[]` types are compile time strings
-        // and that CharTraits::Length may not be called for them. Unfortunately that is not true, `char[]` types
+        // and that CharTraits::Length may not be called for them. Unfortunately that is not true, `char[]` types 
         // are easily converted to `const char[]` if they are passed to a function accepting `const T&`.
         UNIT_ASSERT(TStringBuf(val).size() == 5);
     }

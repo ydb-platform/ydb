@@ -12,8 +12,8 @@
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/system/spinlock.h>
-
-#include <atomic>
+ 
+#include <atomic> 
 #include <exception>
 
 namespace NThreading {

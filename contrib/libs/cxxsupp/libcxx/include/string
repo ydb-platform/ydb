@@ -683,7 +683,7 @@ class
     basic_string
     : private __basic_string_common<true> // This base class is historical, but it needs to remain for ABI compatibility
 {
-	static_assert(sizeof(_CharT) <= 4, "libc++ implementation of std::basic_string does not support extra-wide character types");
+	static_assert(sizeof(_CharT) <= 4, "libc++ implementation of std::basic_string does not support extra-wide character types"); 
 public:
     typedef basic_string                                 __self;
     typedef basic_string_view<_CharT, _Traits>           __self_view;
@@ -706,13 +706,13 @@ public:
     static_assert(( is_same<typename allocator_type::value_type, value_type>::value),
                   "Allocator::value_type must be same type as value_type");
 
-#if _YNDX_LIBCPP_MAKE_STRING_ITERATOR_POINTERS == 1
+#if _YNDX_LIBCPP_MAKE_STRING_ITERATOR_POINTERS == 1 
     typedef pointer                                      iterator;
     typedef const_pointer                                const_iterator;
-#else
+#else 
     typedef __wrap_iter<pointer>                         iterator;
     typedef __wrap_iter<const_pointer>                   const_iterator;
-#endif
+#endif 
     typedef _VSTD::reverse_iterator<iterator>             reverse_iterator;
     typedef _VSTD::reverse_iterator<const_iterator>       const_reverse_iterator;
 
@@ -835,9 +835,9 @@ public:
     basic_string(basic_string&& __str, const allocator_type& __a);
 #endif // _LIBCPP_CXX03_LANG
 
-    _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY
-    basic_string(nullptr_t) = delete;
-
+    _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY 
+    basic_string(nullptr_t) = delete; 
+ 
     template <class = __enable_if_t<__is_allocator<_Allocator>::value, nullptr_t> >
     _LIBCPP_INLINE_VISIBILITY
     basic_string(const _CharT* __s) : __r_(__default_init_tag(), __default_init_tag()) {
@@ -852,18 +852,18 @@ public:
         _LIBCPP_INLINE_VISIBILITY
         basic_string(const _CharT* __s, const _Allocator& __a);
 
-    _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY
-    basic_string(nullptr_t, size_t) = delete;
-
+    _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY 
+    basic_string(nullptr_t, size_t) = delete; 
+ 
     _LIBCPP_INLINE_VISIBILITY
     basic_string(const _CharT* __s, size_type __n);
-
-    _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY
-    basic_string(nullptr_t, size_t, const _Allocator&) = delete;
-
+ 
+    _LIBCPP_CONSTEXPR _LIBCPP_INLINE_VISIBILITY 
+    basic_string(nullptr_t, size_t, const _Allocator&) = delete; 
+ 
     _LIBCPP_INLINE_VISIBILITY
     basic_string(const _CharT* __s, size_type __n, const _Allocator& __a);
-
+ 
     _LIBCPP_INLINE_VISIBILITY
     basic_string(size_type __n, _CharT __c);
 
@@ -911,8 +911,8 @@ public:
 
     basic_string& operator=(const basic_string& __str);
 
-    basic_string& operator=(nullptr_t) = delete;
-
+    basic_string& operator=(nullptr_t) = delete; 
+ 
     template <class _Tp, class = __enable_if_t<__can_be_converted_to_string_view<_CharT, _Traits, _Tp>::value && !__is_same_uncvref<_Tp, basic_string>::value> >
     basic_string& operator=(const _Tp& __t)
         {__self_view __sv = __t; return assign(__sv);}
@@ -991,14 +991,14 @@ public:
         {return (__is_long() ? __get_long_cap()
                              : static_cast<size_type>(__min_cap)) - 1;}
 
-
-#if _YNDX_LIBCXX_ENABLE_STRING_RESIZE_UNINITIALIZED == 1
-    inline void resize_uninitialized(size_type __n)
-    {
-        __resize_default_init(__n);
-    }
-#endif
-
+ 
+#if _YNDX_LIBCXX_ENABLE_STRING_RESIZE_UNINITIALIZED == 1 
+    inline void resize_uninitialized(size_type __n) 
+    { 
+        __resize_default_init(__n); 
+    } 
+#endif 
+ 
     void resize(size_type __n, value_type __c);
     _LIBCPP_INLINE_VISIBILITY void resize(size_type __n) {resize(__n, value_type());}
 
@@ -1425,8 +1425,8 @@ public:
     int compare(size_type __pos1, size_type __n1, const value_type* __s) const;
     int compare(size_type __pos1, size_type __n1, const value_type* __s, size_type __n2) const;
 
-//WARN: disabled std guards in order to allow using these options without switching to new std
-//#if _LIBCPP_STD_VER > 17
+//WARN: disabled std guards in order to allow using these options without switching to new std 
+//#if _LIBCPP_STD_VER > 17 
     constexpr _LIBCPP_INLINE_VISIBILITY
     bool starts_with(__self_view __sv) const noexcept
     { return __self_view(data(), size()).starts_with(__sv); }
@@ -1450,7 +1450,7 @@ public:
     constexpr _LIBCPP_INLINE_VISIBILITY
     bool ends_with(const value_type* __s) const noexcept
     { return ends_with(__self_view(__s)); }
-//#endif
+//#endif 
 
 #if _LIBCPP_STD_VER > 20
     constexpr _LIBCPP_INLINE_VISIBILITY

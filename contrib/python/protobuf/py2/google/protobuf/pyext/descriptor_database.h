@@ -33,7 +33,7 @@
 
 #include <Python.h>
 
-#include <google/protobuf/descriptor_database.h>
+#include <google/protobuf/descriptor_database.h> 
 
 namespace google {
 namespace protobuf {
@@ -48,27 +48,27 @@ class PyDescriptorDatabase : public DescriptorDatabase {
   // with a copy of FileDescriptorProto.
 
   // Find a file by file name.
-  bool FindFileByName(const TProtoStringType& filename, FileDescriptorProto* output);
+  bool FindFileByName(const TProtoStringType& filename, FileDescriptorProto* output); 
 
   // Find the file that declares the given fully-qualified symbol name.
-  bool FindFileContainingSymbol(const TProtoStringType& symbol_name,
+  bool FindFileContainingSymbol(const TProtoStringType& symbol_name, 
                                 FileDescriptorProto* output);
 
   // Find the file which defines an extension extending the given message type
   // with the given field number.
   // Containing_type must be a fully-qualified type name.
   // Python objects are not required to implement this method.
-  bool FindFileContainingExtension(const TProtoStringType& containing_type,
+  bool FindFileContainingExtension(const TProtoStringType& containing_type, 
                                    int field_number,
                                    FileDescriptorProto* output);
 
-  // Finds the tag numbers used by all known extensions of
-  // containing_type, and appends them to output in an undefined
-  // order.
-  // Python objects are not required to implement this method.
-  bool FindAllExtensionNumbers(const TProtoStringType& containing_type,
-                               std::vector<int>* output);
-
+  // Finds the tag numbers used by all known extensions of 
+  // containing_type, and appends them to output in an undefined 
+  // order. 
+  // Python objects are not required to implement this method. 
+  bool FindAllExtensionNumbers(const TProtoStringType& containing_type, 
+                               std::vector<int>* output); 
+ 
  private:
   // The python object that implements the database. The reference is owned.
   PyObject* py_database_;
@@ -76,6 +76,6 @@ class PyDescriptorDatabase : public DescriptorDatabase {
 
 }  // namespace python
 }  // namespace protobuf
-}  // namespace google
+}  // namespace google 
 
 #endif  // GOOGLE_PROTOBUF_PYTHON_CPP_DESCRIPTOR_DATABASE_H__

@@ -14,10 +14,10 @@ PEERDIR(
     contrib/restricted/abseil-cpp/absl/base/internal/spinlock_wait
     contrib/restricted/abseil-cpp/absl/base/internal/throw_delegate
     contrib/restricted/abseil-cpp/absl/base/log_severity
-    contrib/restricted/abseil-cpp/absl/flags/internal/commandlineflag
+    contrib/restricted/abseil-cpp/absl/flags/internal/commandlineflag 
     contrib/restricted/abseil-cpp/absl/numeric
     contrib/restricted/abseil-cpp/absl/strings
-    contrib/restricted/abseil-cpp/absl/strings/internal/absl_strings_internal
+    contrib/restricted/abseil-cpp/absl/strings/internal/absl_strings_internal 
     contrib/restricted/abseil-cpp/absl/types/bad_optional_access
 )
 
@@ -33,10 +33,10 @@ CFLAGS(
     -DNOMINMAX
 )
 
-SRCDIR(contrib/restricted/abseil-cpp/absl/flags)
+SRCDIR(contrib/restricted/abseil-cpp/absl/flags) 
 
 SRCS(
-    commandlineflag.cc
+    commandlineflag.cc 
 )
 
 END()

@@ -81,17 +81,17 @@ struct ARROW_EXPORT ValueDescr {
   }
 
   bool operator==(const ValueDescr& other) const {
-    if (shape != other.shape) return false;
-    if (type == other.type) return true;
-    return type && type->Equals(other.type);
+    if (shape != other.shape) return false; 
+    if (type == other.type) return true; 
+    return type && type->Equals(other.type); 
   }
 
   bool operator!=(const ValueDescr& other) const { return !(*this == other); }
 
   std::string ToString() const;
-  static std::string ToString(const std::vector<ValueDescr>&);
-
-  ARROW_EXPORT friend void PrintTo(const ValueDescr&, std::ostream*);
+  static std::string ToString(const std::vector<ValueDescr>&); 
+ 
+  ARROW_EXPORT friend void PrintTo(const ValueDescr&, std::ostream*); 
 };
 
 /// \brief For use with scalar functions, returns the broadcasted Value::Shape
@@ -105,25 +105,25 @@ ValueDescr::Shape GetBroadcastShape(const std::vector<ValueDescr>& args);
 struct ARROW_EXPORT Datum {
   enum Kind { NONE, SCALAR, ARRAY, CHUNKED_ARRAY, RECORD_BATCH, TABLE, COLLECTION };
 
-  struct Empty {};
-
+  struct Empty {}; 
+ 
   // Datums variants may have a length. This special value indicate that the
   // current variant does not have a length.
   static constexpr int64_t kUnknownLength = -1;
 
-  util::Variant<Empty, std::shared_ptr<Scalar>, std::shared_ptr<ArrayData>,
+  util::Variant<Empty, std::shared_ptr<Scalar>, std::shared_ptr<ArrayData>, 
                 std::shared_ptr<ChunkedArray>, std::shared_ptr<RecordBatch>,
                 std::shared_ptr<Table>, std::vector<Datum>>
       value;
 
   /// \brief Empty datum, to be populated elsewhere
-  Datum() = default;
+  Datum() = default; 
 
-  Datum(const Datum& other) = default;
-  Datum& operator=(const Datum& other) = default;
-  Datum(Datum&& other) = default;
-  Datum& operator=(Datum&& other) = default;
-
+  Datum(const Datum& other) = default; 
+  Datum& operator=(const Datum& other) = default; 
+  Datum(Datum&& other) = default; 
+  Datum& operator=(Datum&& other) = default; 
+ 
   Datum(std::shared_ptr<Scalar> value)  // NOLINT implicit conversion
       : value(std::move(value)) {}
 
@@ -163,8 +163,8 @@ struct ARROW_EXPORT Datum {
   explicit Datum(uint64_t value);
   explicit Datum(float value);
   explicit Datum(double value);
-  explicit Datum(std::string value);
-  explicit Datum(const char* value);
+  explicit Datum(std::string value); 
+  explicit Datum(const char* value); 
 
   Datum::Kind kind() const {
     switch (this->value.index()) {
@@ -216,11 +216,11 @@ struct ARROW_EXPORT Datum {
   }
 
   template <typename ExactType>
-  std::shared_ptr<ExactType> array_as() const {
-    return internal::checked_pointer_cast<ExactType>(this->make_array());
-  }
-
-  template <typename ExactType>
+  std::shared_ptr<ExactType> array_as() const { 
+    return internal::checked_pointer_cast<ExactType>(this->make_array()); 
+  } 
+ 
+  template <typename ExactType> 
   const ExactType& scalar_as() const {
     return internal::checked_cast<const ExactType&>(*this->scalar());
   }
@@ -253,11 +253,11 @@ struct ARROW_EXPORT Datum {
   /// \return nullptr if no type
   std::shared_ptr<DataType> type() const;
 
-  /// \brief The schema of the variant, if any
-  ///
-  /// \return nullptr if no schema
-  std::shared_ptr<Schema> schema() const;
-
+  /// \brief The schema of the variant, if any 
+  /// 
+  /// \return nullptr if no schema 
+  std::shared_ptr<Schema> schema() const; 
+ 
   /// \brief The value length of the variant, if any
   ///
   /// \return kUnknownLength if no type
@@ -274,8 +274,8 @@ struct ARROW_EXPORT Datum {
   bool operator!=(const Datum& other) const { return !Equals(other); }
 
   std::string ToString() const;
-
-  ARROW_EXPORT friend void PrintTo(const Datum&, std::ostream*);
+ 
+  ARROW_EXPORT friend void PrintTo(const Datum&, std::ostream*); 
 };
 
 }  // namespace arrow

@@ -2815,7 +2815,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         auto writeRow = [&](ui64 tabletId, ui32 key, const TString& value, const char* table) {
             NKikimrMiniKQL::TResult result;
             TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"( 
                 (
                     (let key   '( '('key (Uint32 '%u ) ) ) )
                     (let row   '( '('value (Utf8 '%s) ) ) )
@@ -2823,7 +2823,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                 )
             )", key, value.c_str(), table), result, error);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error); 
             UNIT_ASSERT_VALUES_EQUAL(error, "");
         };
 
@@ -2904,7 +2904,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
         auto writeRow = [&](ui64 tabletId, ui32 key, const TString& value, const char* table) {
             NKikimrMiniKQL::TResult result;
             TString error;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"(
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, Sprintf(R"( 
                 (
                     (let key   '( '('key (Uint32 '%u ) ) ) )
                     (let row   '( '('value (Utf8 '%s) ) ) )
@@ -2912,7 +2912,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
                 )
             )", key, value.c_str(), table), result, error);
 
-            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, error); 
             UNIT_ASSERT_VALUES_EQUAL(error, "");
         };
 

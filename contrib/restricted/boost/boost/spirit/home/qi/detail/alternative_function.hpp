@@ -177,7 +177,7 @@ namespace boost { namespace spirit { namespace qi { namespace detail
         Attribute& attr;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(alternative_function& operator= (alternative_function const&));
+        BOOST_DELETED_FUNCTION(alternative_function& operator= (alternative_function const&)); 
     };
 
     template <typename Iterator, typename Context, typename Skipper>
@@ -204,7 +204,7 @@ namespace boost { namespace spirit { namespace qi { namespace detail
         Skipper const& skipper;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(alternative_function& operator= (alternative_function const&));
+        BOOST_DELETED_FUNCTION(alternative_function& operator= (alternative_function const&)); 
     };
 
 }}}}

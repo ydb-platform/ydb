@@ -14,22 +14,22 @@ namespace std
 
 // exception
 
-exception::~exception() noexcept
+exception::~exception() noexcept 
 {
 }
 
-const char* exception::what() const noexcept
+const char* exception::what() const noexcept 
 {
   return "std::exception";
 }
 
 // bad_exception
 
-bad_exception::~bad_exception() noexcept
+bad_exception::~bad_exception() noexcept 
 {
 }
 
-const char* bad_exception::what() const noexcept
+const char* bad_exception::what() const noexcept 
 {
   return "std::bad_exception";
 }
@@ -37,32 +37,32 @@ const char* bad_exception::what() const noexcept
 
 //  bad_alloc
 
-bad_alloc::bad_alloc() noexcept
+bad_alloc::bad_alloc() noexcept 
 {
 }
 
-bad_alloc::~bad_alloc() noexcept
+bad_alloc::~bad_alloc() noexcept 
 {
 }
 
 const char*
-bad_alloc::what() const noexcept
+bad_alloc::what() const noexcept 
 {
     return "std::bad_alloc";
 }
 
 // bad_array_new_length
 
-bad_array_new_length::bad_array_new_length() noexcept
+bad_array_new_length::bad_array_new_length() noexcept 
 {
 }
 
-bad_array_new_length::~bad_array_new_length() noexcept
+bad_array_new_length::~bad_array_new_length() noexcept 
 {
 }
 
 const char*
-bad_array_new_length::what() const noexcept
+bad_array_new_length::what() const noexcept 
 {
     return "bad_array_new_length";
 }

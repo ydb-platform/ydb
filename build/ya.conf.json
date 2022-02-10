@@ -958,73 +958,73 @@
                 "wine": "yes"
             }
         },
-        "clang-format": {
-            "tools": {
-                "clang-format": {
-                    "bottle": "clang-format",
-                    "executable": "clang-format"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN",
-                        "arch": "arm64"
-                    },
-                    "default": true
-                }
-            ]
-        },
-        "clang-tidy": {
-            "tools": {
-                "clang-tidy": {
-                    "bottle": "clang-tidy",
-                    "executable": "clang-tidy"
-                },
-                "clang-apply-replacements": {
-                    "bottle": "clang-tidy",
-                    "executable": "clang-apply-replacements"
-                }
-            },
-            "platforms": [
-                {
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "default": true
-                },
-                {
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "default": true
-                }
-            ]
-        },
+        "clang-format": { 
+            "tools": { 
+                "clang-format": { 
+                    "bottle": "clang-format", 
+                    "executable": "clang-format" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN", 
+                        "arch": "arm64" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
+        "clang-tidy": { 
+            "tools": { 
+                "clang-tidy": { 
+                    "bottle": "clang-tidy", 
+                    "executable": "clang-tidy" 
+                }, 
+                "clang-apply-replacements": { 
+                    "bottle": "clang-tidy", 
+                    "executable": "clang-apply-replacements" 
+                } 
+            }, 
+            "platforms": [ 
+                { 
+                    "host": { 
+                        "os": "LINUX" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "DARWIN" 
+                    }, 
+                    "default": true 
+                }, 
+                { 
+                    "host": { 
+                        "os": "WIN" 
+                    }, 
+                    "default": true 
+                } 
+            ] 
+        }, 
         "ymake": {
             "tools": {
                 "ymake": {
@@ -1423,7 +1423,7 @@
                 "werror_mode": "compiler_specific",
                 "c_compiler": "$(GCC)/gcc/bin/gcc",
                 "cxx_compiler": "$(GCC)/gcc/bin/g++",
-                "cxx_std": "c++17",
+                "cxx_std": "c++17", 
                 "gcc_version": "8.2.0",
                 "arch_opt": [
                     "-w"
@@ -2233,7 +2233,7 @@
                 "werror_mode": "all",
                 "c_compiler": "$(CLANG)/usr/bin/clang",
                 "cxx_compiler": "$(CLANG)/usr/bin/clang++",
-                "cxx_std": "c++17",
+                "cxx_std": "c++17", 
                 "ar": "$(CLANG)/usr/bin/libtool",
                 "inplace_tools": true,
                 "gcc_version": "8.0",
@@ -5751,39 +5751,39 @@
                 ]
             }
         },
-        "clang-format": {
-            "formula": {
+        "clang-format": { 
+            "formula": { 
                 "sandbox_id": [
                     1042773541
                 ],
-                "match": "clang-format"
-            },
-            "executable": {
-                "clang-format": [
-                    "clang-format"
-                ]
-            }
-        },
-        "clang-tidy": {
-            "formula": {
-                "sandbox_id": [
+                "match": "clang-format" 
+            }, 
+            "executable": { 
+                "clang-format": [ 
+                    "clang-format" 
+                ] 
+            } 
+        }, 
+        "clang-tidy": { 
+            "formula": { 
+                "sandbox_id": [ 
                     1073581733,
                     1073610805,
                     1073627148
-                ],
-                "match": "CLANG_TIDY"
-            },
-            "executable": {
-                "clang-tidy": [
-                    "bin",
-                    "clang-tidy"
-                ],
-                "clang-apply-replacements": [
-                    "bin",
-                    "clang-apply-replacements"
-                ]
-            }
-        },
+                ], 
+                "match": "CLANG_TIDY" 
+            }, 
+            "executable": { 
+                "clang-tidy": [ 
+                    "bin", 
+                    "clang-tidy" 
+                ], 
+                "clang-apply-replacements": [ 
+                    "bin", 
+                    "clang-apply-replacements" 
+                ] 
+            } 
+        }, 
         "maven_import_sandbox_uploader": {
             "formula": {
                 "sandbox_id": 1031028343,
@@ -8094,6 +8094,6 @@
     "toolchain_aliases": {
         "clang-win-x86_64": "clang12-win-x86_64",
         "clang-win-i686": "clang12-win-i686",
-        "gcc-linux-x86_64": "gcc82-linux-x86_64"
+        "gcc-linux-x86_64": "gcc82-linux-x86_64" 
     }
 }

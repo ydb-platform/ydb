@@ -21,8 +21,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
-#include <google/protobuf/text_format.h>
-#include <google/protobuf/util/message_differencer.h>
+#include <google/protobuf/text_format.h> 
+#include <google/protobuf/util/message_differencer.h> 
 
 #include <util/string/join.h>
 #include <util/system/sanitizers.h>

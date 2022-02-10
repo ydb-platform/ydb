@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "y_absl/profiling/internal/periodic_sampler.h"
+#include "y_absl/profiling/internal/periodic_sampler.h" 
 
 #include <atomic>
 
-#include "y_absl/profiling/internal/exponential_biased.h"
+#include "y_absl/profiling/internal/exponential_biased.h" 
 
 namespace y_absl {
 ABSL_NAMESPACE_BEGIN
-namespace profiling_internal {
+namespace profiling_internal { 
 
 int64_t PeriodicSamplerBase::GetExponentialBiased(int period) noexcept {
   return rng_.GetStride(period);
@@ -48,6 +48,6 @@ bool PeriodicSamplerBase::SubtleConfirmSample() noexcept {
   return true;
 }
 
-}  // namespace profiling_internal
+}  // namespace profiling_internal 
 ABSL_NAMESPACE_END
 }  // namespace y_absl

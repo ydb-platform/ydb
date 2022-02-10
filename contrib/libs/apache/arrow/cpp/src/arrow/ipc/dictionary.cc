@@ -20,14 +20,14 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
-#include <set>
+#include <set> 
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "arrow/array.h"
 #include "arrow/array/concatenate.h"
-#include "arrow/array/validate.h"
+#include "arrow/array/validate.h" 
 #include "arrow/extension_type.h"
 #include "arrow/record_batch.h"
 #include "arrow/status.h"
@@ -88,16 +88,16 @@ struct DictionaryFieldMapper::Impl {
 
   int num_fields() const { return static_cast<int>(field_path_to_id.size()); }
 
-  int num_dicts() const {
-    std::set<int64_t> uniqueIds;
-
-    for (auto& kv : field_path_to_id) {
-      uniqueIds.insert(kv.second);
-    }
-
-    return static_cast<int>(uniqueIds.size());
-  }
-
+  int num_dicts() const { 
+    std::set<int64_t> uniqueIds; 
+ 
+    for (auto& kv : field_path_to_id) { 
+      uniqueIds.insert(kv.second); 
+    } 
+ 
+    return static_cast<int>(uniqueIds.size()); 
+  } 
+ 
  private:
   void ImportFields(const FieldPosition& pos,
                     const std::vector<std::shared_ptr<Field>>& fields) {
@@ -151,32 +151,32 @@ Result<int64_t> DictionaryFieldMapper::GetFieldId(std::vector<int> field_path) c
 
 int DictionaryFieldMapper::num_fields() const { return impl_->num_fields(); }
 
-int DictionaryFieldMapper::num_dicts() const { return impl_->num_dicts(); }
-
+int DictionaryFieldMapper::num_dicts() const { return impl_->num_dicts(); } 
+ 
 // ----------------------------------------------------------------------
 // DictionaryMemo implementation
 
-namespace {
-
-bool HasUnresolvedNestedDict(const ArrayData& data) {
-  if (data.type->id() == Type::DICTIONARY) {
-    if (data.dictionary == nullptr) {
-      return true;
-    }
-    if (HasUnresolvedNestedDict(*data.dictionary)) {
-      return true;
-    }
-  }
-  for (const auto& child : data.child_data) {
-    if (HasUnresolvedNestedDict(*child)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-}  // namespace
-
+namespace { 
+ 
+bool HasUnresolvedNestedDict(const ArrayData& data) { 
+  if (data.type->id() == Type::DICTIONARY) { 
+    if (data.dictionary == nullptr) { 
+      return true; 
+    } 
+    if (HasUnresolvedNestedDict(*data.dictionary)) { 
+      return true; 
+    } 
+  } 
+  for (const auto& child : data.child_data) { 
+    if (HasUnresolvedNestedDict(*child)) { 
+      return true; 
+    } 
+  } 
+  return false; 
+} 
+ 
+}  // namespace 
+ 
 struct DictionaryMemo::Impl {
   // Map of dictionary id to dictionary array(s) (several in case of deltas)
   std::unordered_map<int64_t, ArrayDataVector> id_to_dictionary_;
@@ -205,12 +205,12 @@ struct DictionaryMemo::Impl {
       // corrupted data.  Full validation is necessary for certain types
       // (for example nested dictionaries).
       for (const auto& data : *data_vector) {
-        if (HasUnresolvedNestedDict(*data)) {
-          return Status::NotImplemented(
-              "Encountered delta dictionary with an unresolved nested dictionary");
-        }
-        RETURN_NOT_OK(::arrow::internal::ValidateArray(*data));
-        RETURN_NOT_OK(::arrow::internal::ValidateArrayFull(*data));
+        if (HasUnresolvedNestedDict(*data)) { 
+          return Status::NotImplemented( 
+              "Encountered delta dictionary with an unresolved nested dictionary"); 
+        } 
+        RETURN_NOT_OK(::arrow::internal::ValidateArray(*data)); 
+        RETURN_NOT_OK(::arrow::internal::ValidateArrayFull(*data)); 
         to_combine.push_back(MakeArray(data));
       }
       ARROW_ASSIGN_OR_RAISE(auto combined_dict, Concatenate(to_combine, pool));

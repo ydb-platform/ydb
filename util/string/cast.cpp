@@ -325,7 +325,7 @@ namespace {
     [[noreturn]] static Y_NO_INLINE void ThrowParseError(EParseStatus status, const TChar* data, size_t len, const TChar* pos) {
         Y_ASSERT(status != PS_OK);
 
-        typedef TBasicString<TChar> TStringType;
+        typedef TBasicString<TChar> TStringType; 
 
         switch (status) {
             case PS_EMPTY_STRING:
@@ -443,13 +443,13 @@ DEF_INT_SPEC(int)
 DEF_INT_SPEC(long)
 DEF_INT_SPEC(long long)
 
-#ifdef __cpp_char8_t
-template <>
-size_t ToStringImpl<char8_t>(char8_t value, char* buf, size_t len) {
-    return FormatInt<ui64, 10, char>(value, buf, len);
-}
-#endif
-
+#ifdef __cpp_char8_t 
+template <> 
+size_t ToStringImpl<char8_t>(char8_t value, char* buf, size_t len) { 
+    return FormatInt<ui64, 10, char>(value, buf, len); 
+} 
+#endif 
+ 
 using TCharIType = std::conditional_t<std::is_signed<char>::value, i64, ui64>;
 using TWCharIType = std::conditional_t<std::is_signed<wchar_t>::value, i64, ui64>;
 

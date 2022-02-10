@@ -251,9 +251,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             )", key, index, value.c_str(), table);
             NKikimrMiniKQL::TResult result;
             TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
             UNIT_ASSERT_VALUES_EQUAL(err, "");
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);; 
         };
         for (ui32 delta = 0; delta < 101; ++delta) {
             fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, 1 + delta, 1000 + delta, "aaaa", "Table");
@@ -425,9 +425,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             )", key, value.c_str(), index, table);
             NKikimrMiniKQL::TResult result;
             TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
             UNIT_ASSERT_VALUES_EQUAL(err, "");
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);; 
         };
         TVector<char> longStrData(100000, 'a');
         TString longString(longStrData.begin(), longStrData.end());
@@ -890,9 +890,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             )", key, index, value.c_str(), table);
             NKikimrMiniKQL::TResult result;
             TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
             UNIT_ASSERT_VALUES_EQUAL(err, "");
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);; 
         };
         for (ui32 delta = 0; delta < 101; ++delta) {
             fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 1000 + delta, "aaaa", "Table");
@@ -953,9 +953,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTest) {
             )", key, index, value.c_str(), table);
             NKikimrMiniKQL::TResult result;
             TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
             UNIT_ASSERT_VALUES_EQUAL(err, "");
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK); 
         };
         for (ui32 delta = 0; delta < 101; ++delta) {
             fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 1000 + delta, "aaaa", "Table");

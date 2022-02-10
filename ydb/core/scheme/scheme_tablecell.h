@@ -453,7 +453,7 @@ public:
     }
 
     static TString Serialize(const TConstArrayRef<TCell>& cells) {
-        if (cells.empty())
+        if (cells.empty()) 
             return TString();
 
         size_t sz = sizeof(ui16);
@@ -463,7 +463,7 @@ public:
 
         TString res;
         res.reserve(sz);
-        ui16 cnt = cells.size();
+        ui16 cnt = cells.size(); 
         res.append((const char*)&cnt, sizeof(ui16));
         for (auto& c : cells) {
             TValue header;

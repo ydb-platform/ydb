@@ -1053,7 +1053,7 @@
 /* #undef HAVE_STRLCPY */
 
 /* Define to 1 if you have the <stropts.h> header file. */
-/* #undef HAVE_STROPTS_H */
+/* #undef HAVE_STROPTS_H */ 
 
 /* Define to 1 if you have the `strsignal' function. */
 #define HAVE_STRSIGNAL 1

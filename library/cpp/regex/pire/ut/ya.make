@@ -39,6 +39,6 @@ SIZE(MEDIUM)
 
 TIMEOUT(600)
 
-PIRE_INLINE(inline_ut.cpp)
+PIRE_INLINE(inline_ut.cpp) 
 
 END()

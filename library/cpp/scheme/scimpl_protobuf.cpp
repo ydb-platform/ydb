@@ -3,9 +3,9 @@
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/message.h>
-#include <google/protobuf/reflection.h>
+#include <google/protobuf/descriptor.h> 
+#include <google/protobuf/message.h> 
+#include <google/protobuf/reflection.h> 
 
 using namespace google::protobuf;
 

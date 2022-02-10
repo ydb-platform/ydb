@@ -390,11 +390,11 @@ class MemoryMappedFile::MemoryMap
   // An object representing the entire memory-mapped region.
   // It can be sliced in order to return individual subregions, which
   // will then keep the original region alive as long as necessary.
-  class Region : public Buffer {
+  class Region : public Buffer { 
    public:
     Region(std::shared_ptr<MemoryMappedFile::MemoryMap> memory_map, uint8_t* data,
            int64_t size)
-        : Buffer(data, size) {
+        : Buffer(data, size) { 
       is_mutable_ = memory_map->writable();
     }
 
@@ -539,8 +539,8 @@ class MemoryMappedFile::MemoryMap
 
   void advance(int64_t nbytes) { position_ = position_ + nbytes; }
 
-  uint8_t* data() { return region_ ? region_->data() : nullptr; }
-
+  uint8_t* data() { return region_ ? region_->data() : nullptr; } 
+ 
   uint8_t* head() { return data() + position_; }
 
   bool writable() { return file_->mode() != FileMode::READ; }
@@ -696,7 +696,7 @@ Result<std::shared_ptr<Buffer>> MemoryMappedFile::Read(int64_t nbytes) {
   return buffer;
 }
 
-Future<std::shared_ptr<Buffer>> MemoryMappedFile::ReadAsync(const IOContext&,
+Future<std::shared_ptr<Buffer>> MemoryMappedFile::ReadAsync(const IOContext&, 
                                                             int64_t position,
                                                             int64_t nbytes) {
   return Future<std::shared_ptr<Buffer>>::MakeFinished(ReadAt(position, nbytes));

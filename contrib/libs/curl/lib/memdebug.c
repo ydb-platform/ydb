@@ -5,11 +5,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html. 
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -277,7 +277,7 @@ void curl_dbg_free(void *ptr, int line, const char *source)
     (Curl_cfree)(mem);
   }
 
-  if(source && ptr)
+  if(source && ptr) 
     curl_dbg_log("MEM %s:%d free(%p)\n", source, line, (void *)ptr);
 }
 
@@ -405,16 +405,16 @@ FILE *curl_dbg_fopen(const char *file, const char *mode,
   return res;
 }
 
-FILE *curl_dbg_fdopen(int filedes, const char *mode,
-                      int line, const char *source)
-{
-  FILE *res = fdopen(filedes, mode);
-  if(source)
-    curl_dbg_log("FILE %s:%d fdopen(\"%d\",\"%s\") = %p\n",
-                 source, line, filedes, mode, (void *)res);
-  return res;
-}
-
+FILE *curl_dbg_fdopen(int filedes, const char *mode, 
+                      int line, const char *source) 
+{ 
+  FILE *res = fdopen(filedes, mode); 
+  if(source) 
+    curl_dbg_log("FILE %s:%d fdopen(\"%d\",\"%s\") = %p\n", 
+                 source, line, filedes, mode, (void *)res); 
+  return res; 
+} 
+ 
 int curl_dbg_fclose(FILE *file, int line, const char *source)
 {
   int res;

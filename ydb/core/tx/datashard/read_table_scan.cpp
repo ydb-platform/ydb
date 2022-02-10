@@ -192,7 +192,7 @@ private:
             AddCell(protoRow, ColTypes[col], cells[col]);
         }
 
-        OldResultSet.SerializeToArcadiaStream(&ResultStream);
+        OldResultSet.SerializeToArcadiaStream(&ResultStream); 
         OldResultSet.Clear();
     }
 
@@ -234,7 +234,7 @@ private:
             AddCell(protoRow, ColTypes[col], cells[col]);
         }
 
-        YdbResultSet.SerializeToArcadiaStream(&ResultStream);
+        YdbResultSet.SerializeToArcadiaStream(&ResultStream); 
         YdbResultSet.Clear();
     }
 

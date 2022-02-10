@@ -71,7 +71,7 @@ class EqualOptions {
     return res;
   }
 
-  static EqualOptions Defaults() { return {}; }
+  static EqualOptions Defaults() { return {}; } 
 
  protected:
   double atol_ = kDefaultAbsoluteTolerance;
@@ -88,25 +88,25 @@ bool ARROW_EXPORT ArrayEquals(const Array& left, const Array& right,
 bool ARROW_EXPORT ArrayApproxEquals(const Array& left, const Array& right,
                                     const EqualOptions& = EqualOptions::Defaults());
 
-/// Returns true if indicated equal-length segment of arrays are exactly equal
+/// Returns true if indicated equal-length segment of arrays are exactly equal 
 bool ARROW_EXPORT ArrayRangeEquals(const Array& left, const Array& right,
                                    int64_t start_idx, int64_t end_idx,
-                                   int64_t other_start_idx,
-                                   const EqualOptions& = EqualOptions::Defaults());
+                                   int64_t other_start_idx, 
+                                   const EqualOptions& = EqualOptions::Defaults()); 
 
-/// Returns true if indicated equal-length segment of arrays are approximately equal
-bool ARROW_EXPORT ArrayRangeApproxEquals(const Array& left, const Array& right,
-                                         int64_t start_idx, int64_t end_idx,
-                                         int64_t other_start_idx,
-                                         const EqualOptions& = EqualOptions::Defaults());
-
-bool ARROW_EXPORT TensorEquals(const Tensor& left, const Tensor& right,
-                               const EqualOptions& = EqualOptions::Defaults());
-
-/// EXPERIMENTAL: Returns true if the given sparse tensors are exactly equal
-bool ARROW_EXPORT SparseTensorEquals(const SparseTensor& left, const SparseTensor& right,
-                                     const EqualOptions& = EqualOptions::Defaults());
-
+/// Returns true if indicated equal-length segment of arrays are approximately equal 
+bool ARROW_EXPORT ArrayRangeApproxEquals(const Array& left, const Array& right, 
+                                         int64_t start_idx, int64_t end_idx, 
+                                         int64_t other_start_idx, 
+                                         const EqualOptions& = EqualOptions::Defaults()); 
+ 
+bool ARROW_EXPORT TensorEquals(const Tensor& left, const Tensor& right, 
+                               const EqualOptions& = EqualOptions::Defaults()); 
+ 
+/// EXPERIMENTAL: Returns true if the given sparse tensors are exactly equal 
+bool ARROW_EXPORT SparseTensorEquals(const SparseTensor& left, const SparseTensor& right, 
+                                     const EqualOptions& = EqualOptions::Defaults()); 
+ 
 /// Returns true if the type metadata are exactly equal
 /// \param[in] left a DataType
 /// \param[in] right a DataType
@@ -122,12 +122,12 @@ bool ARROW_EXPORT TypeEquals(const DataType& left, const DataType& right,
 bool ARROW_EXPORT ScalarEquals(const Scalar& left, const Scalar& right,
                                const EqualOptions& options = EqualOptions::Defaults());
 
-/// Returns true if scalars are approximately equal
-/// \param[in] left a Scalar
-/// \param[in] right a Scalar
-/// \param[in] options comparison options
-bool ARROW_EXPORT
-ScalarApproxEquals(const Scalar& left, const Scalar& right,
-                   const EqualOptions& options = EqualOptions::Defaults());
-
+/// Returns true if scalars are approximately equal 
+/// \param[in] left a Scalar 
+/// \param[in] right a Scalar 
+/// \param[in] options comparison options 
+bool ARROW_EXPORT 
+ScalarApproxEquals(const Scalar& left, const Scalar& right, 
+                   const EqualOptions& options = EqualOptions::Defaults()); 
+ 
 }  // namespace arrow

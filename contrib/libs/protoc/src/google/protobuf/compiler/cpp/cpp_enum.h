@@ -37,19 +37,19 @@
 
 #include <map>
 #include <set>
-#include <string>
-#include <google/protobuf/compiler/cpp/cpp_options.h>
-#include <google/protobuf/descriptor.h>
+#include <string> 
+#include <google/protobuf/compiler/cpp/cpp_options.h> 
+#include <google/protobuf/descriptor.h> 
 
 namespace google {
 namespace protobuf {
-namespace io {
-class Printer;  // printer.h
+namespace io { 
+class Printer;  // printer.h 
 }
-}  // namespace protobuf
-}  // namespace google
+}  // namespace protobuf 
+}  // namespace google 
 
-namespace google {
+namespace google { 
 namespace protobuf {
 namespace compiler {
 namespace cpp {
@@ -57,9 +57,9 @@ namespace cpp {
 class EnumGenerator {
  public:
   // See generator.cc for the meaning of dllexport_decl.
-  EnumGenerator(const EnumDescriptor* descriptor,
-                const std::map<TProtoStringType, TProtoStringType>& vars,
-                const Options& options);
+  EnumGenerator(const EnumDescriptor* descriptor, 
+                const std::map<TProtoStringType, TProtoStringType>& vars, 
+                const Options& options); 
   ~EnumGenerator();
 
   // Generate header code defining the enum.  This code should be placed
@@ -75,23 +75,23 @@ class EnumGenerator {
   // symbols (e.g. the enum type name, all its values, etc.) into the class's
   // namespace.  This should be placed inside the class definition in the
   // header.
-  void GenerateSymbolImports(io::Printer* printer) const;
+  void GenerateSymbolImports(io::Printer* printer) const; 
 
   // Source file stuff.
 
   // Generate non-inline methods related to the enum, such as IsValidValue().
-  // Goes in the .cc file. EnumDescriptors are stored in an array, idx is
-  // the index in this array that corresponds with this enum.
-  void GenerateMethods(int idx, io::Printer* printer);
+  // Goes in the .cc file. EnumDescriptors are stored in an array, idx is 
+  // the index in this array that corresponds with this enum. 
+  void GenerateMethods(int idx, io::Printer* printer); 
 
  private:
   const EnumDescriptor* descriptor_;
-  const TProtoStringType classname_;
+  const TProtoStringType classname_; 
   const Options& options_;
   // whether to generate the *_ARRAYSIZE constant.
   const bool generate_array_size_;
 
-  std::map<TProtoStringType, TProtoStringType> variables_;
+  std::map<TProtoStringType, TProtoStringType> variables_; 
 
   friend class FileGenerator;
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(EnumGenerator);
@@ -100,6 +100,6 @@ class EnumGenerator {
 }  // namespace cpp
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google
+}  // namespace google 
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_CPP_ENUM_H__

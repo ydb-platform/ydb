@@ -33,7 +33,7 @@
 #ifndef GOOGLE_PROTOBUF_PYTHON_CPP_SCOPED_PYOBJECT_PTR_H__
 #define GOOGLE_PROTOBUF_PYTHON_CPP_SCOPED_PYOBJECT_PTR_H__
 
-#include <google/protobuf/stubs/common.h>
+#include <google/protobuf/stubs/common.h> 
 
 #include <Python.h>
 namespace google {
@@ -77,7 +77,7 @@ class ScopedPythonPtr {
 
   PyObject* as_pyobject() const { return reinterpret_cast<PyObject*>(ptr_); }
 
-  // Increments the reference count of the current object.
+  // Increments the reference count of the current object. 
   // Should not be called when no object is held.
   void inc() const { Py_INCREF(ptr_); }
 

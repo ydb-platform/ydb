@@ -34,7 +34,7 @@ SymbolDatabase is the MessageFactory for messages generated at compile time,
 and makes it easy to create new instances of a registered type, given only the
 type's protocol buffer symbol name.
 
-Example usage::
+Example usage:: 
 
   db = symbol_database.SymbolDatabase()
 
@@ -58,7 +58,7 @@ Example usage::
 """
 
 
-from google.protobuf.internal import api_implementation
+from google.protobuf.internal import api_implementation 
 from google.protobuf import descriptor_pool
 from google.protobuf import message_factory
 
@@ -72,8 +72,8 @@ class SymbolDatabase(message_factory.MessageFactory):
     Calls to GetSymbol() and GetMessages() will return messages registered here.
 
     Args:
-      message: A :class:`google.protobuf.message.Message` subclass (or
-        instance); its descriptor will be registered.
+      message: A :class:`google.protobuf.message.Message` subclass (or 
+        instance); its descriptor will be registered. 
 
     Returns:
       The provided message.
@@ -88,46 +88,46 @@ class SymbolDatabase(message_factory.MessageFactory):
     """Registers the given message descriptor in the local database.
 
     Args:
-      message_descriptor (Descriptor): the message descriptor to add.
+      message_descriptor (Descriptor): the message descriptor to add. 
     """
-    if api_implementation.Type() == 'python':
-      # pylint: disable=protected-access
-      self.pool._AddDescriptor(message_descriptor)
+    if api_implementation.Type() == 'python': 
+      # pylint: disable=protected-access 
+      self.pool._AddDescriptor(message_descriptor) 
 
   def RegisterEnumDescriptor(self, enum_descriptor):
     """Registers the given enum descriptor in the local database.
 
     Args:
-      enum_descriptor (EnumDescriptor): The enum descriptor to register.
+      enum_descriptor (EnumDescriptor): The enum descriptor to register. 
 
     Returns:
-      EnumDescriptor: The provided descriptor.
+      EnumDescriptor: The provided descriptor. 
     """
-    if api_implementation.Type() == 'python':
-      # pylint: disable=protected-access
-      self.pool._AddEnumDescriptor(enum_descriptor)
+    if api_implementation.Type() == 'python': 
+      # pylint: disable=protected-access 
+      self.pool._AddEnumDescriptor(enum_descriptor) 
     return enum_descriptor
 
   def RegisterServiceDescriptor(self, service_descriptor):
     """Registers the given service descriptor in the local database.
 
     Args:
-      service_descriptor (ServiceDescriptor): the service descriptor to
-        register.
+      service_descriptor (ServiceDescriptor): the service descriptor to 
+        register. 
     """
-    if api_implementation.Type() == 'python':
-      # pylint: disable=protected-access
-      self.pool._AddServiceDescriptor(service_descriptor)
+    if api_implementation.Type() == 'python': 
+      # pylint: disable=protected-access 
+      self.pool._AddServiceDescriptor(service_descriptor) 
 
   def RegisterFileDescriptor(self, file_descriptor):
     """Registers the given file descriptor in the local database.
 
     Args:
-      file_descriptor (FileDescriptor): The file descriptor to register.
+      file_descriptor (FileDescriptor): The file descriptor to register. 
     """
-    if api_implementation.Type() == 'python':
-      # pylint: disable=protected-access
-      self.pool._InternalAddFileDescriptor(file_descriptor)
+    if api_implementation.Type() == 'python': 
+      # pylint: disable=protected-access 
+      self.pool._InternalAddFileDescriptor(file_descriptor) 
 
   def GetSymbol(self, symbol):
     """Tries to find a symbol in the local database.
@@ -136,7 +136,7 @@ class SymbolDatabase(message_factory.MessageFactory):
     may be extended in future to support other symbol types.
 
     Args:
-      symbol (str): a protocol buffer symbol.
+      symbol (str): a protocol buffer symbol. 
 
     Returns:
       A Python class corresponding to the symbol.
@@ -157,7 +157,7 @@ class SymbolDatabase(message_factory.MessageFactory):
     messages, but does not register any message extensions.
 
     Args:
-      files (list[str]): The file names to extract messages from.
+      files (list[str]): The file names to extract messages from. 
 
     Returns:
       A dictionary mapping proto names to the message classes.

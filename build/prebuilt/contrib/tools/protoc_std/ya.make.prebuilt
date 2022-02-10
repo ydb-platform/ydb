@@ -1,6 +1,6 @@
 INCLUDE(ya.make.resource)
 
-IF (SANDBOX_RESOURCE_ID != "")
+IF (SANDBOX_RESOURCE_ID != "") 
     ENABLE(PREBUILT)
 
     PREBUILT_PROGRAM(protoc)

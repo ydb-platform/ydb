@@ -6,7 +6,7 @@ OWNER(
 RECURSE(
     afl
     antlr4_cpp_runtime
-    apache
+    apache 
     apr
     apr-util
     asio
@@ -14,7 +14,7 @@ RECURSE(
     authparser
     avs-device-sdk
     aws-sdk-cpp
-    backtrace
+    backtrace 
     base64
     bdb
     bdb/ut
@@ -47,7 +47,7 @@ RECURSE(
     ctemplate
     curl
     cxxsupp/libcxx
-    cxxsupp/libcxxabi-parts
+    cxxsupp/libcxxabi-parts 
     djvulibre
     dlib
     dpdk
@@ -99,7 +99,7 @@ RECURSE(
     gtfs_realtime
     h3
     harfbuzz
-    hdf5
+    hdf5 
     hdr_histogram
     highwayhash
     hiredis
@@ -126,7 +126,7 @@ RECURSE(
     jwt-cpp
     kaldi
     kenlm
-    kissfft
+    kissfft 
     kyotocabinet
     lang_detect
     lbfgs
@@ -214,7 +214,7 @@ RECURSE(
     lmdbxx/example
     lua
     lua-cjson
-    luajit_21
+    luajit_21 
     lz4
     lz4/generated
     lzmasdk
@@ -267,7 +267,7 @@ RECURSE(
     pcre2
     pdqsort
     pffft
-    pfr
+    pfr 
     picohttpparser
     #pire/ut
     pixman
@@ -276,10 +276,10 @@ RECURSE(
     porto_api
     proj
     protobuf
-    protobuf/python
+    protobuf/python 
     protobuf-mutator
     protobuf_std
-    protoc_std
+    protoc_std 
     psimd
     pthreadpool
     pugixml
@@ -333,9 +333,9 @@ RECURSE(
     tf/tensorflow
     tf/tensorflow/compiler
     tf/tests
-    tf-2.4
-    tf-2.4/sample_python
-    tf-2.4/tensorflow/python
+    tf-2.4 
+    tf-2.4/sample_python 
+    tf-2.4/tensorflow/python 
     thrax
     tinyalsa
     tlsh
@@ -357,7 +357,7 @@ RECURSE(
     xmlsec
     xpdf-3.04
     xxhash
-    xz
+    xz 
     yajl
     yaml
     yaml-cpp
@@ -383,7 +383,7 @@ IF (OS_DARWIN)
     RECURSE(
         gperftools
         osxfuse
-        macfuse-headers
+        macfuse-headers 
         uuid
     )
 ENDIF()

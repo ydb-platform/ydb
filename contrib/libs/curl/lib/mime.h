@@ -7,11 +7,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html. 
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -31,7 +31,7 @@
 /* Part flags. */
 #define MIME_USERHEADERS_OWNER  (1 << 0)
 #define MIME_BODY_ONLY          (1 << 1)
-#define MIME_FAST_READ          (1 << 2)
+#define MIME_FAST_READ          (1 << 2) 
 
 #define FILE_CONTENTTYPE_DEFAULT        "application/octet-stream"
 #define MULTIPART_CONTENTTYPE_DEFAULT   "multipart/mixed"
@@ -69,43 +69,43 @@ enum mimestrategy {
 };
 
 /* Content transfer encoder. */
-struct mime_encoder {
+struct mime_encoder { 
   const char *   name;          /* Encoding name. */
   size_t         (*encodefunc)(char *buffer, size_t size, bool ateof,
                                curl_mimepart *part);  /* Encoded read. */
   curl_off_t     (*sizefunc)(curl_mimepart *part);  /* Encoded size. */
-};
+}; 
 
 /* Content transfer encoder state. */
-struct mime_encoder_state {
+struct mime_encoder_state { 
   size_t         pos;           /* Position on output line. */
   size_t         bufbeg;        /* Next data index in input buffer. */
   size_t         bufend;        /* First unused byte index in input buffer. */
   char           buf[ENCODING_BUFFER_SIZE]; /* Input buffer. */
-};
+}; 
 
 /* Mime readback state. */
-struct mime_state {
+struct mime_state { 
   enum mimestate state;       /* Current state token. */
   void *ptr;                  /* State-dependent pointer. */
-  curl_off_t offset;          /* State-dependent offset. */
-};
+  curl_off_t offset;          /* State-dependent offset. */ 
+}; 
 
 /* minimum buffer size for the boundary string */
 #define MIME_BOUNDARY_LEN (24 + MIME_RAND_BOUNDARY_CHARS + 1)
 
 /* A mime multipart. */
-struct curl_mime {
+struct curl_mime { 
   struct Curl_easy *easy;          /* The associated easy handle. */
   curl_mimepart *parent;           /* Parent part. */
   curl_mimepart *firstpart;        /* First part. */
   curl_mimepart *lastpart;         /* Last part. */
   char boundary[MIME_BOUNDARY_LEN]; /* The part boundary. */
-  struct mime_state state;         /* Current readback state. */
+  struct mime_state state;         /* Current readback state. */ 
 };
 
 /* A mime part. */
-struct curl_mimepart {
+struct curl_mimepart { 
   struct Curl_easy *easy;          /* The associated easy handle. */
   curl_mime *parent;               /* Parent mime structure. */
   curl_mimepart *nextpart;         /* Forward linked list. */
@@ -123,35 +123,35 @@ struct curl_mimepart {
   char *name;                      /* Data name. */
   curl_off_t datasize;             /* Expected data size. */
   unsigned int flags;              /* Flags. */
-  struct mime_state state;         /* Current readback state. */
-  const struct mime_encoder *encoder; /* Content data encoder. */
-  struct mime_encoder_state encstate; /* Data encoder state. */
-  size_t lastreadstatus;           /* Last read callback returned status. */
+  struct mime_state state;         /* Current readback state. */ 
+  const struct mime_encoder *encoder; /* Content data encoder. */ 
+  struct mime_encoder_state encstate; /* Data encoder state. */ 
+  size_t lastreadstatus;           /* Last read callback returned status. */ 
 };
 
-CURLcode Curl_mime_add_header(struct curl_slist **slp, const char *fmt, ...);
-
-#if (!defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_MIME)) ||     \
+CURLcode Curl_mime_add_header(struct curl_slist **slp, const char *fmt, ...); 
+ 
+#if (!defined(CURL_DISABLE_HTTP) && !defined(CURL_DISABLE_MIME)) ||     \ 
   !defined(CURL_DISABLE_SMTP) || !defined(CURL_DISABLE_IMAP)
 
 /* Prototypes. */
-void Curl_mime_initpart(struct curl_mimepart *part, struct Curl_easy *easy);
-void Curl_mime_cleanpart(struct curl_mimepart *part);
-CURLcode Curl_mime_duppart(struct curl_mimepart *dst,
-                           const curl_mimepart *src);
-CURLcode Curl_mime_set_subparts(struct curl_mimepart *part,
-                                struct curl_mime *subparts,
-                                int take_ownership);
-CURLcode Curl_mime_prepare_headers(struct curl_mimepart *part,
+void Curl_mime_initpart(struct curl_mimepart *part, struct Curl_easy *easy); 
+void Curl_mime_cleanpart(struct curl_mimepart *part); 
+CURLcode Curl_mime_duppart(struct curl_mimepart *dst, 
+                           const curl_mimepart *src); 
+CURLcode Curl_mime_set_subparts(struct curl_mimepart *part, 
+                                struct curl_mime *subparts, 
+                                int take_ownership); 
+CURLcode Curl_mime_prepare_headers(struct curl_mimepart *part, 
                                    const char *contenttype,
                                    const char *disposition,
                                    enum mimestrategy strategy);
-curl_off_t Curl_mime_size(struct curl_mimepart *part);
+curl_off_t Curl_mime_size(struct curl_mimepart *part); 
 size_t Curl_mime_read(char *buffer, size_t size, size_t nitems,
                       void *instream);
-CURLcode Curl_mime_rewind(struct curl_mimepart *part);
+CURLcode Curl_mime_rewind(struct curl_mimepart *part); 
 const char *Curl_mime_contenttype(const char *filename);
-void Curl_mime_unpause(struct curl_mimepart *part);
+void Curl_mime_unpause(struct curl_mimepart *part); 
 
 #else
 /* if disabled */
@@ -163,7 +163,7 @@ void Curl_mime_unpause(struct curl_mimepart *part);
 #define Curl_mime_size(x) (curl_off_t) -1
 #define Curl_mime_read NULL
 #define Curl_mime_rewind(x) ((void)x, CURLE_NOT_BUILT_IN)
-#define Curl_mime_unpause(x)
+#define Curl_mime_unpause(x) 
 #endif
 
 

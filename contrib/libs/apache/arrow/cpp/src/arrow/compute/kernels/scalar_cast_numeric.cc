@@ -17,10 +17,10 @@
 
 // Implementation of casting to integer, floating point, or decimal types
 
-#include "arrow/array/builder_primitive.h"
+#include "arrow/array/builder_primitive.h" 
 #include "arrow/compute/kernels/common.h"
 #include "arrow/compute/kernels/scalar_cast_internal.h"
-#include "arrow/compute/kernels/util_internal.h"
+#include "arrow/compute/kernels/util_internal.h" 
 #include "arrow/util/bit_block_counter.h"
 #include "arrow/util/int_util.h"
 #include "arrow/util/value_parsing.h"
@@ -36,18 +36,18 @@ using internal::ParseValue;
 namespace compute {
 namespace internal {
 
-Status CastIntegerToInteger(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+Status CastIntegerToInteger(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
   const auto& options = checked_cast<const CastState*>(ctx->state())->options;
   if (!options.allow_int_overflow) {
-    RETURN_NOT_OK(IntegersCanFit(batch[0], *out->type()));
+    RETURN_NOT_OK(IntegersCanFit(batch[0], *out->type())); 
   }
   CastNumberToNumberUnsafe(batch[0].type()->id(), out->type()->id(), batch[0], out);
-  return Status::OK();
+  return Status::OK(); 
 }
 
-Status CastFloatingToFloating(KernelContext*, const ExecBatch& batch, Datum* out) {
+Status CastFloatingToFloating(KernelContext*, const ExecBatch& batch, Datum* out) { 
   CastNumberToNumberUnsafe(batch[0].type()->id(), out->type()->id(), batch[0], out);
-  return Status::OK();
+  return Status::OK(); 
 }
 
 // ----------------------------------------------------------------------
@@ -65,7 +65,7 @@ Status CheckFloatTruncation(const Datum& input, const Datum& output) {
     return is_valid && static_cast<InT>(out_val) != in_val;
   };
   auto GetErrorMessage = [&](InT val) {
-    return Status::Invalid("Float value ", val, " was truncated converting to ",
+    return Status::Invalid("Float value ", val, " was truncated converting to ", 
                            *output.type());
   };
 
@@ -170,13 +170,13 @@ Status CheckFloatToIntTruncation(const Datum& input, const Datum& output) {
   return Status::OK();
 }
 
-Status CastFloatingToInteger(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+Status CastFloatingToInteger(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
   const auto& options = checked_cast<const CastState*>(ctx->state())->options;
   CastNumberToNumberUnsafe(batch[0].type()->id(), out->type()->id(), batch[0], out);
   if (!options.allow_float_truncate) {
-    RETURN_NOT_OK(CheckFloatToIntTruncation(batch[0], *out));
+    RETURN_NOT_OK(CheckFloatToIntTruncation(batch[0], *out)); 
   }
-  return Status::OK();
+  return Status::OK(); 
 }
 
 // ----------------------------------------------------------------------
@@ -249,14 +249,14 @@ Status CheckForIntegerToFloatingTruncation(const Datum& input, Type::type out_ty
   return Status::OK();
 }
 
-Status CastIntegerToFloating(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+Status CastIntegerToFloating(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
   const auto& options = checked_cast<const CastState*>(ctx->state())->options;
   Type::type out_type = out->type()->id();
   if (!options.allow_float_truncate) {
-    RETURN_NOT_OK(CheckForIntegerToFloatingTruncation(batch[0], out_type));
+    RETURN_NOT_OK(CheckForIntegerToFloatingTruncation(batch[0], out_type)); 
   }
   CastNumberToNumberUnsafe(batch[0].type()->id(), out_type, batch[0], out);
-  return Status::OK();
+  return Status::OK(); 
 }
 
 // ----------------------------------------------------------------------
@@ -264,7 +264,7 @@ Status CastIntegerToFloating(KernelContext* ctx, const ExecBatch& batch, Datum* 
 
 struct BooleanToNumber {
   template <typename OutValue, typename Arg0Value>
-  static OutValue Call(KernelContext*, Arg0Value val, Status*) {
+  static OutValue Call(KernelContext*, Arg0Value val, Status*) { 
     constexpr auto kOne = static_cast<OutValue>(1);
     constexpr auto kZero = static_cast<OutValue>(0);
     return val ? kOne : kZero;
@@ -273,9 +273,9 @@ struct BooleanToNumber {
 
 template <typename O>
 struct CastFunctor<O, BooleanType, enable_if_number<O>> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
-    return applicator::ScalarUnary<O, BooleanType, BooleanToNumber>::Exec(ctx, batch,
-                                                                          out);
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
+    return applicator::ScalarUnary<O, BooleanType, BooleanToNumber>::Exec(ctx, batch, 
+                                                                          out); 
   }
 };
 
@@ -285,11 +285,11 @@ struct CastFunctor<O, BooleanType, enable_if_number<O>> {
 template <typename OutType>
 struct ParseString {
   template <typename OutValue, typename Arg0Value>
-  OutValue Call(KernelContext* ctx, Arg0Value val, Status* st) const {
+  OutValue Call(KernelContext* ctx, Arg0Value val, Status* st) const { 
     OutValue result = OutValue(0);
     if (ARROW_PREDICT_FALSE(!ParseValue<OutType>(val.data(), val.size(), &result))) {
-      *st = Status::Invalid("Failed to parse string: '", val, "' as a scalar of type ",
-                            TypeTraits<OutType>::type_singleton()->ToString());
+      *st = Status::Invalid("Failed to parse string: '", val, "' as a scalar of type ", 
+                            TypeTraits<OutType>::type_singleton()->ToString()); 
     }
     return result;
   }
@@ -297,8 +297,8 @@ struct ParseString {
 
 template <typename O, typename I>
 struct CastFunctor<O, I, enable_if_base_binary<I>> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
-    return applicator::ScalarUnaryNotNull<O, I, ParseString<O>>::Exec(ctx, batch, out);
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
+    return applicator::ScalarUnaryNotNull<O, I, ParseString<O>>::Exec(ctx, batch, out); 
   }
 };
 
@@ -306,13 +306,13 @@ struct CastFunctor<O, I, enable_if_base_binary<I>> {
 // Decimal to integer
 
 struct DecimalToIntegerMixin {
-  template <typename OutValue, typename Arg0Value>
-  OutValue ToInteger(KernelContext* ctx, const Arg0Value& val, Status* st) const {
+  template <typename OutValue, typename Arg0Value> 
+  OutValue ToInteger(KernelContext* ctx, const Arg0Value& val, Status* st) const { 
     constexpr auto min_value = std::numeric_limits<OutValue>::min();
     constexpr auto max_value = std::numeric_limits<OutValue>::max();
 
     if (!allow_int_overflow_ && ARROW_PREDICT_FALSE(val < min_value || val > max_value)) {
-      *st = Status::Invalid("Integer value out of bounds");
+      *st = Status::Invalid("Integer value out of bounds"); 
       return OutValue{};  // Zero
     } else {
       return static_cast<OutValue>(val.low_bits());
@@ -330,8 +330,8 @@ struct UnsafeUpscaleDecimalToInteger : public DecimalToIntegerMixin {
   using DecimalToIntegerMixin::DecimalToIntegerMixin;
 
   template <typename OutValue, typename Arg0Value>
-  OutValue Call(KernelContext* ctx, Arg0Value val, Status* st) const {
-    return ToInteger<OutValue>(ctx, val.IncreaseScaleBy(-in_scale_), st);
+  OutValue Call(KernelContext* ctx, Arg0Value val, Status* st) const { 
+    return ToInteger<OutValue>(ctx, val.IncreaseScaleBy(-in_scale_), st); 
   }
 };
 
@@ -339,8 +339,8 @@ struct UnsafeDownscaleDecimalToInteger : public DecimalToIntegerMixin {
   using DecimalToIntegerMixin::DecimalToIntegerMixin;
 
   template <typename OutValue, typename Arg0Value>
-  OutValue Call(KernelContext* ctx, Arg0Value val, Status* st) const {
-    return ToInteger<OutValue>(ctx, val.ReduceScaleBy(in_scale_, false), st);
+  OutValue Call(KernelContext* ctx, Arg0Value val, Status* st) const { 
+    return ToInteger<OutValue>(ctx, val.ReduceScaleBy(in_scale_, false), st); 
   }
 };
 
@@ -348,44 +348,44 @@ struct SafeRescaleDecimalToInteger : public DecimalToIntegerMixin {
   using DecimalToIntegerMixin::DecimalToIntegerMixin;
 
   template <typename OutValue, typename Arg0Value>
-  OutValue Call(KernelContext* ctx, Arg0Value val, Status* st) const {
+  OutValue Call(KernelContext* ctx, Arg0Value val, Status* st) const { 
     auto result = val.Rescale(in_scale_, 0);
     if (ARROW_PREDICT_FALSE(!result.ok())) {
-      *st = result.status();
+      *st = result.status(); 
       return OutValue{};  // Zero
     } else {
-      return ToInteger<OutValue>(ctx, *result, st);
+      return ToInteger<OutValue>(ctx, *result, st); 
     }
   }
 };
 
-template <typename O, typename I>
-struct CastFunctor<O, I,
-                   enable_if_t<is_integer_type<O>::value && is_decimal_type<I>::value>> {
+template <typename O, typename I> 
+struct CastFunctor<O, I, 
+                   enable_if_t<is_integer_type<O>::value && is_decimal_type<I>::value>> { 
   using out_type = typename O::c_type;
 
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     const auto& options = checked_cast<const CastState*>(ctx->state())->options;
 
-    const auto& in_type_inst = checked_cast<const I&>(*batch[0].type());
+    const auto& in_type_inst = checked_cast<const I&>(*batch[0].type()); 
     const auto in_scale = in_type_inst.scale();
 
     if (options.allow_decimal_truncate) {
       if (in_scale < 0) {
         // Unsafe upscale
-        applicator::ScalarUnaryNotNullStateful<O, I, UnsafeUpscaleDecimalToInteger>
+        applicator::ScalarUnaryNotNullStateful<O, I, UnsafeUpscaleDecimalToInteger> 
             kernel(UnsafeUpscaleDecimalToInteger{in_scale, options.allow_int_overflow});
         return kernel.Exec(ctx, batch, out);
       } else {
         // Unsafe downscale
-        applicator::ScalarUnaryNotNullStateful<O, I, UnsafeDownscaleDecimalToInteger>
+        applicator::ScalarUnaryNotNullStateful<O, I, UnsafeDownscaleDecimalToInteger> 
             kernel(UnsafeDownscaleDecimalToInteger{in_scale, options.allow_int_overflow});
         return kernel.Exec(ctx, batch, out);
       }
     } else {
       // Safe rescale
-      applicator::ScalarUnaryNotNullStateful<O, I, SafeRescaleDecimalToInteger> kernel(
-          SafeRescaleDecimalToInteger{in_scale, options.allow_int_overflow});
+      applicator::ScalarUnaryNotNullStateful<O, I, SafeRescaleDecimalToInteger> kernel( 
+          SafeRescaleDecimalToInteger{in_scale, options.allow_int_overflow}); 
       return kernel.Exec(ctx, batch, out);
     }
   }
@@ -394,104 +394,104 @@ struct CastFunctor<O, I,
 // ----------------------------------------------------------------------
 // Decimal to decimal
 
-// Helper that converts the input and output decimals
-// For instance, Decimal128 -> Decimal256 requires converting, then scaling
-// Decimal256 -> Decimal128 requires scaling, then truncating
-template <typename OutDecimal, typename InDecimal>
-struct DecimalConversions {};
-
-template <typename InDecimal>
-struct DecimalConversions<Decimal256, InDecimal> {
-  // Convert then scale
-  static Decimal256 ConvertInput(InDecimal&& val) { return Decimal256(val); }
-  static Decimal256 ConvertOutput(Decimal256&& val) { return val; }
-};
-
-template <>
-struct DecimalConversions<Decimal128, Decimal256> {
-  // Scale then truncate
-  static Decimal256 ConvertInput(Decimal256&& val) { return val; }
-  static Decimal128 ConvertOutput(Decimal256&& val) {
-    return Decimal128(val.little_endian_array()[1], val.little_endian_array()[0]);
+// Helper that converts the input and output decimals 
+// For instance, Decimal128 -> Decimal256 requires converting, then scaling 
+// Decimal256 -> Decimal128 requires scaling, then truncating 
+template <typename OutDecimal, typename InDecimal> 
+struct DecimalConversions {}; 
+ 
+template <typename InDecimal> 
+struct DecimalConversions<Decimal256, InDecimal> { 
+  // Convert then scale 
+  static Decimal256 ConvertInput(InDecimal&& val) { return Decimal256(val); } 
+  static Decimal256 ConvertOutput(Decimal256&& val) { return val; } 
+}; 
+ 
+template <> 
+struct DecimalConversions<Decimal128, Decimal256> { 
+  // Scale then truncate 
+  static Decimal256 ConvertInput(Decimal256&& val) { return val; } 
+  static Decimal128 ConvertOutput(Decimal256&& val) { 
+    return Decimal128(val.little_endian_array()[1], val.little_endian_array()[0]); 
   }
+}; 
+
+template <> 
+struct DecimalConversions<Decimal128, Decimal128> { 
+  static Decimal128 ConvertInput(Decimal128&& val) { return val; } 
+  static Decimal128 ConvertOutput(Decimal128&& val) { return val; } 
 };
 
-template <>
-struct DecimalConversions<Decimal128, Decimal128> {
-  static Decimal128 ConvertInput(Decimal128&& val) { return val; }
-  static Decimal128 ConvertOutput(Decimal128&& val) { return val; }
-};
-
-struct UnsafeUpscaleDecimal {
-  template <typename OutValue, typename Arg0Value>
-  OutValue Call(KernelContext*, Arg0Value val, Status*) const {
-    using Conv = DecimalConversions<OutValue, Arg0Value>;
-    return Conv::ConvertOutput(Conv::ConvertInput(std::move(val)).IncreaseScaleBy(by_));
-  }
-  int32_t by_;
-};
-
+struct UnsafeUpscaleDecimal { 
+  template <typename OutValue, typename Arg0Value> 
+  OutValue Call(KernelContext*, Arg0Value val, Status*) const { 
+    using Conv = DecimalConversions<OutValue, Arg0Value>; 
+    return Conv::ConvertOutput(Conv::ConvertInput(std::move(val)).IncreaseScaleBy(by_)); 
+  } 
+  int32_t by_; 
+}; 
+ 
 struct UnsafeDownscaleDecimal {
-  template <typename OutValue, typename Arg0Value>
-  OutValue Call(KernelContext*, Arg0Value val, Status*) const {
-    using Conv = DecimalConversions<OutValue, Arg0Value>;
-    return Conv::ConvertOutput(
-        Conv::ConvertInput(std::move(val)).ReduceScaleBy(by_, false));
+  template <typename OutValue, typename Arg0Value> 
+  OutValue Call(KernelContext*, Arg0Value val, Status*) const { 
+    using Conv = DecimalConversions<OutValue, Arg0Value>; 
+    return Conv::ConvertOutput( 
+        Conv::ConvertInput(std::move(val)).ReduceScaleBy(by_, false)); 
   }
-  int32_t by_;
+  int32_t by_; 
 };
 
 struct SafeRescaleDecimal {
-  template <typename OutValue, typename Arg0Value>
-  OutValue Call(KernelContext*, Arg0Value val, Status* st) const {
-    using Conv = DecimalConversions<OutValue, Arg0Value>;
-    auto maybe_rescaled =
-        Conv::ConvertInput(std::move(val)).Rescale(in_scale_, out_scale_);
-    if (ARROW_PREDICT_FALSE(!maybe_rescaled.ok())) {
-      *st = maybe_rescaled.status();
-      return {};  // Zero
+  template <typename OutValue, typename Arg0Value> 
+  OutValue Call(KernelContext*, Arg0Value val, Status* st) const { 
+    using Conv = DecimalConversions<OutValue, Arg0Value>; 
+    auto maybe_rescaled = 
+        Conv::ConvertInput(std::move(val)).Rescale(in_scale_, out_scale_); 
+    if (ARROW_PREDICT_FALSE(!maybe_rescaled.ok())) { 
+      *st = maybe_rescaled.status(); 
+      return {};  // Zero 
     }
-
-    if (ARROW_PREDICT_TRUE(maybe_rescaled->FitsInPrecision(out_precision_))) {
-      return Conv::ConvertOutput(maybe_rescaled.MoveValueUnsafe());
-    }
-
-    *st = Status::Invalid("Decimal value does not fit in precision ", out_precision_);
-    return {};  // Zero
+ 
+    if (ARROW_PREDICT_TRUE(maybe_rescaled->FitsInPrecision(out_precision_))) { 
+      return Conv::ConvertOutput(maybe_rescaled.MoveValueUnsafe()); 
+    } 
+ 
+    *st = Status::Invalid("Decimal value does not fit in precision ", out_precision_); 
+    return {};  // Zero 
   }
 
   int32_t out_scale_, out_precision_, in_scale_;
 };
 
-template <typename O, typename I>
-struct CastFunctor<O, I,
-                   enable_if_t<is_decimal_type<O>::value && is_decimal_type<I>::value>> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+template <typename O, typename I> 
+struct CastFunctor<O, I, 
+                   enable_if_t<is_decimal_type<O>::value && is_decimal_type<I>::value>> { 
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     const auto& options = checked_cast<const CastState*>(ctx->state())->options;
 
-    const auto& in_type = checked_cast<const I&>(*batch[0].type());
-    const auto& out_type = checked_cast<const O&>(*out->type());
-    const auto in_scale = in_type.scale();
-    const auto out_scale = out_type.scale();
+    const auto& in_type = checked_cast<const I&>(*batch[0].type()); 
+    const auto& out_type = checked_cast<const O&>(*out->type()); 
+    const auto in_scale = in_type.scale(); 
+    const auto out_scale = out_type.scale(); 
 
     if (options.allow_decimal_truncate) {
       if (in_scale < out_scale) {
         // Unsafe upscale
-        applicator::ScalarUnaryNotNullStateful<O, I, UnsafeUpscaleDecimal> kernel(
-            UnsafeUpscaleDecimal{out_scale - in_scale});
+        applicator::ScalarUnaryNotNullStateful<O, I, UnsafeUpscaleDecimal> kernel( 
+            UnsafeUpscaleDecimal{out_scale - in_scale}); 
         return kernel.Exec(ctx, batch, out);
       } else {
         // Unsafe downscale
-        applicator::ScalarUnaryNotNullStateful<O, I, UnsafeDownscaleDecimal> kernel(
-            UnsafeDownscaleDecimal{in_scale - out_scale});
+        applicator::ScalarUnaryNotNullStateful<O, I, UnsafeDownscaleDecimal> kernel( 
+            UnsafeDownscaleDecimal{in_scale - out_scale}); 
         return kernel.Exec(ctx, batch, out);
       }
     }
-
-    // Safe rescale
-    applicator::ScalarUnaryNotNullStateful<O, I, SafeRescaleDecimal> kernel(
-        SafeRescaleDecimal{out_scale, out_type.precision(), in_scale});
-    return kernel.Exec(ctx, batch, out);
+ 
+    // Safe rescale 
+    applicator::ScalarUnaryNotNullStateful<O, I, SafeRescaleDecimal> kernel( 
+        SafeRescaleDecimal{out_scale, out_type.precision(), in_scale}); 
+    return kernel.Exec(ctx, batch, out); 
   }
 };
 
@@ -500,33 +500,33 @@ struct CastFunctor<O, I,
 
 struct RealToDecimal {
   template <typename OutValue, typename RealType>
-  OutValue Call(KernelContext*, RealType val, Status* st) const {
-    auto maybe_decimal = OutValue::FromReal(val, out_precision_, out_scale_);
-
-    if (ARROW_PREDICT_TRUE(maybe_decimal.ok())) {
-      return maybe_decimal.MoveValueUnsafe();
+  OutValue Call(KernelContext*, RealType val, Status* st) const { 
+    auto maybe_decimal = OutValue::FromReal(val, out_precision_, out_scale_); 
+ 
+    if (ARROW_PREDICT_TRUE(maybe_decimal.ok())) { 
+      return maybe_decimal.MoveValueUnsafe(); 
     }
-
-    if (!allow_truncate_) {
-      *st = maybe_decimal.status();
-    }
-    return {};  // Zero
+ 
+    if (!allow_truncate_) { 
+      *st = maybe_decimal.status(); 
+    } 
+    return {};  // Zero 
   }
 
   int32_t out_scale_, out_precision_;
   bool allow_truncate_;
 };
 
-template <typename O, typename I>
-struct CastFunctor<O, I,
-                   enable_if_t<is_decimal_type<O>::value && is_floating_type<I>::value>> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+template <typename O, typename I> 
+struct CastFunctor<O, I, 
+                   enable_if_t<is_decimal_type<O>::value && is_floating_type<I>::value>> { 
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     const auto& options = checked_cast<const CastState*>(ctx->state())->options;
-    const auto& out_type = checked_cast<const O&>(*out->type());
-    const auto out_scale = out_type.scale();
-    const auto out_precision = out_type.precision();
+    const auto& out_type = checked_cast<const O&>(*out->type()); 
+    const auto out_scale = out_type.scale(); 
+    const auto out_precision = out_type.precision(); 
 
-    applicator::ScalarUnaryNotNullStateful<O, I, RealToDecimal> kernel(
+    applicator::ScalarUnaryNotNullStateful<O, I, RealToDecimal> kernel( 
         RealToDecimal{out_scale, out_precision, options.allow_decimal_truncate});
     return kernel.Exec(ctx, batch, out);
   }
@@ -537,21 +537,21 @@ struct CastFunctor<O, I,
 
 struct DecimalToReal {
   template <typename RealType, typename Arg0Value>
-  RealType Call(KernelContext*, const Arg0Value& val, Status*) const {
-    return val.template ToReal<RealType>(in_scale_);
+  RealType Call(KernelContext*, const Arg0Value& val, Status*) const { 
+    return val.template ToReal<RealType>(in_scale_); 
   }
 
   int32_t in_scale_;
 };
 
-template <typename O, typename I>
-struct CastFunctor<O, I,
-                   enable_if_t<is_floating_type<O>::value && is_decimal_type<I>::value>> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
-    const auto& in_type = checked_cast<const I&>(*batch[0].type());
-    const auto in_scale = in_type.scale();
+template <typename O, typename I> 
+struct CastFunctor<O, I, 
+                   enable_if_t<is_floating_type<O>::value && is_decimal_type<I>::value>> { 
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
+    const auto& in_type = checked_cast<const I&>(*batch[0].type()); 
+    const auto in_scale = in_type.scale(); 
 
-    applicator::ScalarUnaryNotNullStateful<O, I, DecimalToReal> kernel(
+    applicator::ScalarUnaryNotNullStateful<O, I, DecimalToReal> kernel( 
         DecimalToReal{in_scale});
     return kernel.Exec(ctx, batch, out);
   }
@@ -595,10 +595,10 @@ std::shared_ptr<CastFunction> GetCastToInteger(std::string name) {
   AddCommonNumberCasts<OutType>(out_ty, func.get());
 
   // From decimal to integer
-  DCHECK_OK(func->AddKernel(Type::DECIMAL, {InputType(Type::DECIMAL)}, out_ty,
+  DCHECK_OK(func->AddKernel(Type::DECIMAL, {InputType(Type::DECIMAL)}, out_ty, 
                             CastFunctor<OutType, Decimal128Type>::Exec));
-  DCHECK_OK(func->AddKernel(Type::DECIMAL256, {InputType(Type::DECIMAL256)}, out_ty,
-                            CastFunctor<OutType, Decimal256Type>::Exec));
+  DCHECK_OK(func->AddKernel(Type::DECIMAL256, {InputType(Type::DECIMAL256)}, out_ty, 
+                            CastFunctor<OutType, Decimal256Type>::Exec)); 
   return func;
 }
 
@@ -621,18 +621,18 @@ std::shared_ptr<CastFunction> GetCastToFloating(std::string name) {
   AddCommonNumberCasts<OutType>(out_ty, func.get());
 
   // From decimal to floating point
-  DCHECK_OK(func->AddKernel(Type::DECIMAL, {InputType(Type::DECIMAL)}, out_ty,
+  DCHECK_OK(func->AddKernel(Type::DECIMAL, {InputType(Type::DECIMAL)}, out_ty, 
                             CastFunctor<OutType, Decimal128Type>::Exec));
-  DCHECK_OK(func->AddKernel(Type::DECIMAL256, {InputType(Type::DECIMAL256)}, out_ty,
-                            CastFunctor<OutType, Decimal256Type>::Exec));
+  DCHECK_OK(func->AddKernel(Type::DECIMAL256, {InputType(Type::DECIMAL256)}, out_ty, 
+                            CastFunctor<OutType, Decimal256Type>::Exec)); 
   return func;
 }
 
-std::shared_ptr<CastFunction> GetCastToDecimal128() {
+std::shared_ptr<CastFunction> GetCastToDecimal128() { 
   OutputType sig_out_ty(ResolveOutputFromOptions);
 
-  auto func = std::make_shared<CastFunction>("cast_decimal", Type::DECIMAL128);
-  AddCommonCasts(Type::DECIMAL128, sig_out_ty, func.get());
+  auto func = std::make_shared<CastFunction>("cast_decimal", Type::DECIMAL128); 
+  AddCommonCasts(Type::DECIMAL128, sig_out_ty, func.get()); 
 
   // Cast from floating point
   DCHECK_OK(func->AddKernel(Type::FLOAT, {float32()}, sig_out_ty,
@@ -643,36 +643,36 @@ std::shared_ptr<CastFunction> GetCastToDecimal128() {
   // Cast from other decimal
   auto exec = CastFunctor<Decimal128Type, Decimal128Type>::Exec;
   // We resolve the output type of this kernel from the CastOptions
-  DCHECK_OK(
-      func->AddKernel(Type::DECIMAL128, {InputType(Type::DECIMAL128)}, sig_out_ty, exec));
-  exec = CastFunctor<Decimal128Type, Decimal256Type>::Exec;
-  DCHECK_OK(
-      func->AddKernel(Type::DECIMAL256, {InputType(Type::DECIMAL256)}, sig_out_ty, exec));
+  DCHECK_OK( 
+      func->AddKernel(Type::DECIMAL128, {InputType(Type::DECIMAL128)}, sig_out_ty, exec)); 
+  exec = CastFunctor<Decimal128Type, Decimal256Type>::Exec; 
+  DCHECK_OK( 
+      func->AddKernel(Type::DECIMAL256, {InputType(Type::DECIMAL256)}, sig_out_ty, exec)); 
   return func;
 }
 
-std::shared_ptr<CastFunction> GetCastToDecimal256() {
-  OutputType sig_out_ty(ResolveOutputFromOptions);
-
-  auto func = std::make_shared<CastFunction>("cast_decimal256", Type::DECIMAL256);
-  AddCommonCasts(Type::DECIMAL256, sig_out_ty, func.get());
-
-  // Cast from floating point
-  DCHECK_OK(func->AddKernel(Type::FLOAT, {float32()}, sig_out_ty,
-                            CastFunctor<Decimal256Type, FloatType>::Exec));
-  DCHECK_OK(func->AddKernel(Type::DOUBLE, {float64()}, sig_out_ty,
-                            CastFunctor<Decimal256Type, DoubleType>::Exec));
-
-  // Cast from other decimal
-  auto exec = CastFunctor<Decimal256Type, Decimal128Type>::Exec;
-  DCHECK_OK(
-      func->AddKernel(Type::DECIMAL128, {InputType(Type::DECIMAL128)}, sig_out_ty, exec));
-  exec = CastFunctor<Decimal256Type, Decimal256Type>::Exec;
-  DCHECK_OK(
-      func->AddKernel(Type::DECIMAL256, {InputType(Type::DECIMAL256)}, sig_out_ty, exec));
-  return func;
-}
-
+std::shared_ptr<CastFunction> GetCastToDecimal256() { 
+  OutputType sig_out_ty(ResolveOutputFromOptions); 
+ 
+  auto func = std::make_shared<CastFunction>("cast_decimal256", Type::DECIMAL256); 
+  AddCommonCasts(Type::DECIMAL256, sig_out_ty, func.get()); 
+ 
+  // Cast from floating point 
+  DCHECK_OK(func->AddKernel(Type::FLOAT, {float32()}, sig_out_ty, 
+                            CastFunctor<Decimal256Type, FloatType>::Exec)); 
+  DCHECK_OK(func->AddKernel(Type::DOUBLE, {float64()}, sig_out_ty, 
+                            CastFunctor<Decimal256Type, DoubleType>::Exec)); 
+ 
+  // Cast from other decimal 
+  auto exec = CastFunctor<Decimal256Type, Decimal128Type>::Exec; 
+  DCHECK_OK( 
+      func->AddKernel(Type::DECIMAL128, {InputType(Type::DECIMAL128)}, sig_out_ty, exec)); 
+  exec = CastFunctor<Decimal256Type, Decimal256Type>::Exec; 
+  DCHECK_OK( 
+      func->AddKernel(Type::DECIMAL256, {InputType(Type::DECIMAL256)}, sig_out_ty, exec)); 
+  return func; 
+} 
+ 
 }  // namespace
 
 std::vector<std::shared_ptr<CastFunction>> GetNumericCasts() {
@@ -681,8 +681,8 @@ std::vector<std::shared_ptr<CastFunction>> GetNumericCasts() {
   // Make a cast to null that does not do much. Not sure why we need to be able
   // to cast from dict<null> -> null but there are unit tests for it
   auto cast_null = std::make_shared<CastFunction>("cast_null", Type::NA);
-  DCHECK_OK(cast_null->AddKernel(Type::DICTIONARY, {InputType(Type::DICTIONARY)}, null(),
-                                 OutputAllNull));
+  DCHECK_OK(cast_null->AddKernel(Type::DICTIONARY, {InputType(Type::DICTIONARY)}, null(), 
+                                 OutputAllNull)); 
   functions.push_back(cast_null);
 
   functions.push_back(GetCastToInteger<Int8Type>("cast_int8"));
@@ -716,8 +716,8 @@ std::vector<std::shared_ptr<CastFunction>> GetNumericCasts() {
   functions.push_back(GetCastToFloating<FloatType>("cast_float"));
   functions.push_back(GetCastToFloating<DoubleType>("cast_double"));
 
-  functions.push_back(GetCastToDecimal128());
-  functions.push_back(GetCastToDecimal256());
+  functions.push_back(GetCastToDecimal128()); 
+  functions.push_back(GetCastToDecimal256()); 
 
   return functions;
 }

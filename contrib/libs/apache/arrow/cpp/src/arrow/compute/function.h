@@ -29,7 +29,7 @@
 #include "arrow/datum.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
-#include "arrow/util/compare.h"
+#include "arrow/util/compare.h" 
 #include "arrow/util/macros.h"
 #include "arrow/util/visibility.h"
 
@@ -40,50 +40,50 @@ namespace compute {
 ///
 /// @{
 
-/// \brief Extension point for defining options outside libarrow (but
-/// still within this project).
-class ARROW_EXPORT FunctionOptionsType {
- public:
-  virtual ~FunctionOptionsType() = default;
-
-  virtual const char* type_name() const = 0;
-  virtual std::string Stringify(const FunctionOptions&) const = 0;
-  virtual bool Compare(const FunctionOptions&, const FunctionOptions&) const = 0;
-  virtual Result<std::shared_ptr<Buffer>> Serialize(const FunctionOptions&) const;
-  virtual Result<std::unique_ptr<FunctionOptions>> Deserialize(
-      const Buffer& buffer) const;
-};
-
+/// \brief Extension point for defining options outside libarrow (but 
+/// still within this project). 
+class ARROW_EXPORT FunctionOptionsType { 
+ public: 
+  virtual ~FunctionOptionsType() = default; 
+ 
+  virtual const char* type_name() const = 0; 
+  virtual std::string Stringify(const FunctionOptions&) const = 0; 
+  virtual bool Compare(const FunctionOptions&, const FunctionOptions&) const = 0; 
+  virtual Result<std::shared_ptr<Buffer>> Serialize(const FunctionOptions&) const; 
+  virtual Result<std::unique_ptr<FunctionOptions>> Deserialize( 
+      const Buffer& buffer) const; 
+}; 
+ 
 /// \brief Base class for specifying options configuring a function's behavior,
 /// such as error handling.
-class ARROW_EXPORT FunctionOptions : public util::EqualityComparable<FunctionOptions> {
- public:
-  virtual ~FunctionOptions() = default;
+class ARROW_EXPORT FunctionOptions : public util::EqualityComparable<FunctionOptions> { 
+ public: 
+  virtual ~FunctionOptions() = default; 
 
-  const FunctionOptionsType* options_type() const { return options_type_; }
-  const char* type_name() const { return options_type()->type_name(); }
-
-  bool Equals(const FunctionOptions& other) const;
-  using util::EqualityComparable<FunctionOptions>::Equals;
-  using util::EqualityComparable<FunctionOptions>::operator==;
-  using util::EqualityComparable<FunctionOptions>::operator!=;
-  std::string ToString() const;
-  /// \brief Serialize an options struct to a buffer.
-  Result<std::shared_ptr<Buffer>> Serialize() const;
-  /// \brief Deserialize an options struct from a buffer.
-  /// Note: this will only look for `type_name` in the default FunctionRegistry;
-  /// to use a custom FunctionRegistry, look up the FunctionOptionsType, then
-  /// call FunctionOptionsType::Deserialize().
-  static Result<std::unique_ptr<FunctionOptions>> Deserialize(
-      const std::string& type_name, const Buffer& buffer);
-
- protected:
-  explicit FunctionOptions(const FunctionOptionsType* type) : options_type_(type) {}
-  const FunctionOptionsType* options_type_;
-};
-
-ARROW_EXPORT void PrintTo(const FunctionOptions&, std::ostream*);
-
+  const FunctionOptionsType* options_type() const { return options_type_; } 
+  const char* type_name() const { return options_type()->type_name(); } 
+ 
+  bool Equals(const FunctionOptions& other) const; 
+  using util::EqualityComparable<FunctionOptions>::Equals; 
+  using util::EqualityComparable<FunctionOptions>::operator==; 
+  using util::EqualityComparable<FunctionOptions>::operator!=; 
+  std::string ToString() const; 
+  /// \brief Serialize an options struct to a buffer. 
+  Result<std::shared_ptr<Buffer>> Serialize() const; 
+  /// \brief Deserialize an options struct from a buffer. 
+  /// Note: this will only look for `type_name` in the default FunctionRegistry; 
+  /// to use a custom FunctionRegistry, look up the FunctionOptionsType, then 
+  /// call FunctionOptionsType::Deserialize(). 
+  static Result<std::unique_ptr<FunctionOptions>> Deserialize( 
+      const std::string& type_name, const Buffer& buffer); 
+ 
+ protected: 
+  explicit FunctionOptions(const FunctionOptionsType* type) : options_type_(type) {} 
+  const FunctionOptionsType* options_type_; 
+}; 
+ 
+ARROW_EXPORT void PrintTo(const FunctionOptions&, std::ostream*); 
+ 
 /// \brief Contains the number of required arguments for the function.
 ///
 /// Naming conventions taken from https://en.wikipedia.org/wiki/Arity.
@@ -118,37 +118,37 @@ struct ARROW_EXPORT Arity {
   bool is_varargs = false;
 };
 
-struct ARROW_EXPORT FunctionDoc {
-  /// \brief A one-line summary of the function, using a verb.
-  ///
-  /// For example, "Add two numeric arrays or scalars".
-  std::string summary;
-
-  /// \brief A detailed description of the function, meant to follow the summary.
-  std::string description;
-
-  /// \brief Symbolic names (identifiers) for the function arguments.
-  ///
-  /// Some bindings may use this to generate nicer function signatures.
-  std::vector<std::string> arg_names;
-
-  // TODO add argument descriptions?
-
-  /// \brief Name of the options class, if any.
-  std::string options_class;
-
-  FunctionDoc() = default;
-
-  FunctionDoc(std::string summary, std::string description,
-              std::vector<std::string> arg_names, std::string options_class = "")
-      : summary(std::move(summary)),
-        description(std::move(description)),
-        arg_names(std::move(arg_names)),
-        options_class(std::move(options_class)) {}
-
-  static const FunctionDoc& Empty();
-};
-
+struct ARROW_EXPORT FunctionDoc { 
+  /// \brief A one-line summary of the function, using a verb. 
+  /// 
+  /// For example, "Add two numeric arrays or scalars". 
+  std::string summary; 
+ 
+  /// \brief A detailed description of the function, meant to follow the summary. 
+  std::string description; 
+ 
+  /// \brief Symbolic names (identifiers) for the function arguments. 
+  /// 
+  /// Some bindings may use this to generate nicer function signatures. 
+  std::vector<std::string> arg_names; 
+ 
+  // TODO add argument descriptions? 
+ 
+  /// \brief Name of the options class, if any. 
+  std::string options_class; 
+ 
+  FunctionDoc() = default; 
+ 
+  FunctionDoc(std::string summary, std::string description, 
+              std::vector<std::string> arg_names, std::string options_class = "") 
+      : summary(std::move(summary)), 
+        description(std::move(description)), 
+        arg_names(std::move(arg_names)), 
+        options_class(std::move(options_class)) {} 
+ 
+  static const FunctionDoc& Empty(); 
+}; 
+ 
 /// \brief Base class for compute functions. Function implementations contain a
 /// collection of "kernels" which are implementations of the function for
 /// specific argument types. Selecting a viable kernel for executing a function
@@ -172,10 +172,10 @@ class ARROW_EXPORT Function {
     /// A function that computes scalar summary statistics from array input.
     SCALAR_AGGREGATE,
 
-    /// A function that computes grouped summary statistics from array input
-    /// and an array of group identifiers.
-    HASH_AGGREGATE,
-
+    /// A function that computes grouped summary statistics from array input 
+    /// and an array of group identifiers. 
+    HASH_AGGREGATE, 
+ 
     /// A function that dispatches to other functions and does not contain its
     /// own kernels.
     META
@@ -194,27 +194,27 @@ class ARROW_EXPORT Function {
   /// function accepts variable numbers of arguments.
   const Arity& arity() const { return arity_; }
 
-  /// \brief Return the function documentation
-  const FunctionDoc& doc() const { return *doc_; }
-
+  /// \brief Return the function documentation 
+  const FunctionDoc& doc() const { return *doc_; } 
+ 
   /// \brief Returns the number of registered kernels for this function.
   virtual int num_kernels() const = 0;
 
-  /// \brief Return a kernel that can execute the function given the exact
-  /// argument types (without implicit type casts or scalar->array promotions).
-  ///
-  /// NB: This function is overridden in CastFunction.
-  virtual Result<const Kernel*> DispatchExact(
-      const std::vector<ValueDescr>& values) const;
-
-  /// \brief Return a best-match kernel that can execute the function given the argument
-  /// types, after implicit casts are applied.
-  ///
-  /// \param[in,out] values Argument types. An element may be modified to indicate that
-  /// the returned kernel only approximately matches the input value descriptors; callers
-  /// are responsible for casting inputs to the type and shape required by the kernel.
-  virtual Result<const Kernel*> DispatchBest(std::vector<ValueDescr>* values) const;
-
+  /// \brief Return a kernel that can execute the function given the exact 
+  /// argument types (without implicit type casts or scalar->array promotions). 
+  /// 
+  /// NB: This function is overridden in CastFunction. 
+  virtual Result<const Kernel*> DispatchExact( 
+      const std::vector<ValueDescr>& values) const; 
+ 
+  /// \brief Return a best-match kernel that can execute the function given the argument 
+  /// types, after implicit casts are applied. 
+  /// 
+  /// \param[in,out] values Argument types. An element may be modified to indicate that 
+  /// the returned kernel only approximately matches the input value descriptors; callers 
+  /// are responsible for casting inputs to the type and shape required by the kernel. 
+  virtual Result<const Kernel*> DispatchBest(std::vector<ValueDescr>* values) const; 
+ 
   /// \brief Execute the function eagerly with the passed input arguments with
   /// kernel dispatch, batch iteration, and memory allocation details taken
   /// care of.
@@ -231,24 +231,24 @@ class ARROW_EXPORT Function {
   /// that default_options() is valid to pass to Execute as options.
   const FunctionOptions* default_options() const { return default_options_; }
 
-  virtual Status Validate() const;
-
+  virtual Status Validate() const; 
+ 
  protected:
   Function(std::string name, Function::Kind kind, const Arity& arity,
-           const FunctionDoc* doc, const FunctionOptions* default_options)
+           const FunctionDoc* doc, const FunctionOptions* default_options) 
       : name_(std::move(name)),
         kind_(kind),
         arity_(arity),
-        doc_(doc ? doc : &FunctionDoc::Empty()),
+        doc_(doc ? doc : &FunctionDoc::Empty()), 
         default_options_(default_options) {}
 
-  Status CheckArity(const std::vector<InputType>&) const;
-  Status CheckArity(const std::vector<ValueDescr>&) const;
+  Status CheckArity(const std::vector<InputType>&) const; 
+  Status CheckArity(const std::vector<ValueDescr>&) const; 
 
   std::string name_;
   Function::Kind kind_;
   Arity arity_;
-  const FunctionDoc* doc_;
+  const FunctionDoc* doc_; 
   const FunctionOptions* default_options_ = NULLPTR;
 };
 
@@ -270,20 +270,20 @@ class FunctionImpl : public Function {
 
  protected:
   FunctionImpl(std::string name, Function::Kind kind, const Arity& arity,
-               const FunctionDoc* doc, const FunctionOptions* default_options)
-      : Function(std::move(name), kind, arity, doc, default_options) {}
+               const FunctionDoc* doc, const FunctionOptions* default_options) 
+      : Function(std::move(name), kind, arity, doc, default_options) {} 
 
   std::vector<KernelType> kernels_;
 };
 
-/// \brief Look up a kernel in a function. If no Kernel is found, nullptr is returned.
-ARROW_EXPORT
-const Kernel* DispatchExactImpl(const Function* func, const std::vector<ValueDescr>&);
-
-/// \brief Return an error message if no Kernel is found.
-ARROW_EXPORT
-Status NoMatchingKernel(const Function* func, const std::vector<ValueDescr>&);
-
+/// \brief Look up a kernel in a function. If no Kernel is found, nullptr is returned. 
+ARROW_EXPORT 
+const Kernel* DispatchExactImpl(const Function* func, const std::vector<ValueDescr>&); 
+ 
+/// \brief Return an error message if no Kernel is found. 
+ARROW_EXPORT 
+Status NoMatchingKernel(const Function* func, const std::vector<ValueDescr>&); 
+ 
 }  // namespace detail
 
 /// \brief A function that executes elementwise operations on arrays or
@@ -295,9 +295,9 @@ class ARROW_EXPORT ScalarFunction : public detail::FunctionImpl<ScalarKernel> {
  public:
   using KernelType = ScalarKernel;
 
-  ScalarFunction(std::string name, const Arity& arity, const FunctionDoc* doc,
+  ScalarFunction(std::string name, const Arity& arity, const FunctionDoc* doc, 
                  const FunctionOptions* default_options = NULLPTR)
-      : detail::FunctionImpl<ScalarKernel>(std::move(name), Function::SCALAR, arity, doc,
+      : detail::FunctionImpl<ScalarKernel>(std::move(name), Function::SCALAR, arity, doc, 
                                            default_options) {}
 
   /// \brief Add a kernel with given input/output types, no required state
@@ -319,9 +319,9 @@ class ARROW_EXPORT VectorFunction : public detail::FunctionImpl<VectorKernel> {
  public:
   using KernelType = VectorKernel;
 
-  VectorFunction(std::string name, const Arity& arity, const FunctionDoc* doc,
+  VectorFunction(std::string name, const Arity& arity, const FunctionDoc* doc, 
                  const FunctionOptions* default_options = NULLPTR)
-      : detail::FunctionImpl<VectorKernel>(std::move(name), Function::VECTOR, arity, doc,
+      : detail::FunctionImpl<VectorKernel>(std::move(name), Function::VECTOR, arity, doc, 
                                            default_options) {}
 
   /// \brief Add a simple kernel with given input/output types, no required
@@ -340,29 +340,29 @@ class ARROW_EXPORT ScalarAggregateFunction
  public:
   using KernelType = ScalarAggregateKernel;
 
-  ScalarAggregateFunction(std::string name, const Arity& arity, const FunctionDoc* doc,
+  ScalarAggregateFunction(std::string name, const Arity& arity, const FunctionDoc* doc, 
                           const FunctionOptions* default_options = NULLPTR)
       : detail::FunctionImpl<ScalarAggregateKernel>(
-            std::move(name), Function::SCALAR_AGGREGATE, arity, doc, default_options) {}
+            std::move(name), Function::SCALAR_AGGREGATE, arity, doc, default_options) {} 
 
   /// \brief Add a kernel (function implementation). Returns error if the
   /// kernel's signature does not match the function's arity.
   Status AddKernel(ScalarAggregateKernel kernel);
-};
+}; 
 
-class ARROW_EXPORT HashAggregateFunction
-    : public detail::FunctionImpl<HashAggregateKernel> {
- public:
-  using KernelType = HashAggregateKernel;
-
-  HashAggregateFunction(std::string name, const Arity& arity, const FunctionDoc* doc,
-                        const FunctionOptions* default_options = NULLPTR)
-      : detail::FunctionImpl<HashAggregateKernel>(
-            std::move(name), Function::HASH_AGGREGATE, arity, doc, default_options) {}
-
-  /// \brief Add a kernel (function implementation). Returns error if the
-  /// kernel's signature does not match the function's arity.
-  Status AddKernel(HashAggregateKernel kernel);
+class ARROW_EXPORT HashAggregateFunction 
+    : public detail::FunctionImpl<HashAggregateKernel> { 
+ public: 
+  using KernelType = HashAggregateKernel; 
+ 
+  HashAggregateFunction(std::string name, const Arity& arity, const FunctionDoc* doc, 
+                        const FunctionOptions* default_options = NULLPTR) 
+      : detail::FunctionImpl<HashAggregateKernel>( 
+            std::move(name), Function::HASH_AGGREGATE, arity, doc, default_options) {} 
+ 
+  /// \brief Add a kernel (function implementation). Returns error if the 
+  /// kernel's signature does not match the function's arity. 
+  Status AddKernel(HashAggregateKernel kernel); 
 };
 
 /// \brief A function that dispatches to other functions. Must implement
@@ -382,9 +382,9 @@ class ARROW_EXPORT MetaFunction : public Function {
                                     const FunctionOptions* options,
                                     ExecContext* ctx) const = 0;
 
-  MetaFunction(std::string name, const Arity& arity, const FunctionDoc* doc,
+  MetaFunction(std::string name, const Arity& arity, const FunctionDoc* doc, 
                const FunctionOptions* default_options = NULLPTR)
-      : Function(std::move(name), Function::META, arity, doc, default_options) {}
+      : Function(std::move(name), Function::META, arity, doc, default_options) {} 
 };
 
 /// @}

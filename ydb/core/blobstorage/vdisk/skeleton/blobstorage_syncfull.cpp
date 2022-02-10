@@ -98,17 +98,17 @@ namespace NKikimr {
                 case NKikimrBlobStorage::LogoBlobs:
                     Stage = NKikimrBlobStorage::LogoBlobs;
                     pres = Process(ctx, FullSnap.LogoBlobsSnap, KeyLogoBlob, LogoBlobFilter);
-                    if ((pres & MsgFullFlag) == 0) {
-                        Y_VERIFY(pres & EmptyFlag);
-                    }
-                    break;
+                    if ((pres & MsgFullFlag) == 0) { 
+                        Y_VERIFY(pres & EmptyFlag); 
+                    } 
+                    break; 
                 case NKikimrBlobStorage::Blocks:
                     Stage = NKikimrBlobStorage::Blocks;
                     pres = Process(ctx, FullSnap.BlocksSnap, KeyBlock, FakeFilter);
-                    if ((pres & MsgFullFlag) == 0) {
-                        Y_VERIFY(pres & EmptyFlag);
-                    }
-                    break;
+                    if ((pres & MsgFullFlag) == 0) { 
+                        Y_VERIFY(pres & EmptyFlag); 
+                    } 
+                    break; 
                 case NKikimrBlobStorage::Barriers:
                     Stage = NKikimrBlobStorage::Barriers;
                     pres = Process(ctx, FullSnap.BarriersSnap, KeyBarrier, FakeFilter);

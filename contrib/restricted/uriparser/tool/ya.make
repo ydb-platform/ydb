@@ -14,7 +14,7 @@ LICENSE(BSD-3-Clause)
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
-    contrib/restricted/uriparser
+    contrib/restricted/uriparser 
 )
 
 ADDINCL(

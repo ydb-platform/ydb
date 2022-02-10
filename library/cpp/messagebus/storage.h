@@ -85,7 +85,7 @@ namespace NBus {
                 }
             };
 
-            typedef google::dense_hash_map<TBusKey, TValue, TIdHash> TKeyToMessage;
+            typedef google::dense_hash_map<TBusKey, TValue, TIdHash> TKeyToMessage; 
 
             TKeyToMessage KeyToMessage;
         };

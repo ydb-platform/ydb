@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/deque.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 
 Y_UNIT_TEST_SUITE(TestContext) {
     template <class F>
@@ -26,17 +26,17 @@ Y_UNIT_TEST_SUITE(TestContext) {
 
         auto& tw = w.emplace_back(&f);
 
-        return {&tw, TArrayRef(tw.Buf, sizeof(tw.Buf))};
+        return {&tw, TArrayRef(tw.Buf, sizeof(tw.Buf))}; 
     }
 
     Y_UNIT_TEST(TestExceptionSafety) {
         TExceptionSafeContext main;
         TExceptionSafeContext* volatile nextPtr = nullptr;
 
-        bool hasUncaught = true;
+        bool hasUncaught = true; 
 
-        auto func = [&]() {
-            hasUncaught = UncaughtException();
+        auto func = [&]() { 
+            hasUncaught = UncaughtException(); 
             nextPtr->SwitchTo(&main);
         };
 
@@ -66,6 +66,6 @@ Y_UNIT_TEST_SUITE(TestContext) {
         }
 
         UNIT_ASSERT(throwed);
-        UNIT_ASSERT(!hasUncaught);
+        UNIT_ASSERT(!hasUncaught); 
     }
 }

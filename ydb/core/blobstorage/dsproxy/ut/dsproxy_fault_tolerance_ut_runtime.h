@@ -41,16 +41,16 @@ public:
         TIntrusivePtr<NLog::TSettings> logSettings = new NLog::TSettings(loggerActorId, NKikimrServices::LOGGER,
                 (IsVerbose ? NLog::PRI_NOTICE : NLog::PRI_CRIT),
                 NLog::PRI_DEBUG, 0);
-        logSettings->Append(
-            NActorsServices::EServiceCommon_MIN,
-            NActorsServices::EServiceCommon_MAX,
-            NActorsServices::EServiceCommon_Name
-        );
-        logSettings->Append(
-            NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            NKikimrServices::EServiceKikimr_Name
-        );
+        logSettings->Append( 
+            NActorsServices::EServiceCommon_MIN, 
+            NActorsServices::EServiceCommon_MAX, 
+            NActorsServices::EServiceCommon_Name 
+        ); 
+        logSettings->Append( 
+            NKikimrServices::EServiceKikimr_MIN, 
+            NKikimrServices::EServiceKikimr_MAX, 
+            NKikimrServices::EServiceKikimr_Name 
+        ); 
 //        TString explanation;
 //        logSettings->SetLevel(NLog::PRI_DEBUG, NKikimrServices::BS_PROXY_GET, explanation);
 //        logSettings->SetLevel(NLog::PRI_DEBUG, NActorsServices::TEST, explanation);

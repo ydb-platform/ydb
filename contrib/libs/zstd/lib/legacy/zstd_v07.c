@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Yann Collet, Facebook, Inc.
+ * Copyright (c) Yann Collet, Facebook, Inc. 
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -242,11 +242,11 @@ extern "C" {
 *  Basic Types
 *****************************************************************/
 #if  !defined (__VMS) && (defined (__cplusplus) || (defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L) /* C99 */) )
-# if defined(_AIX)
-#  include <inttypes.h>
-# else
-#  include <stdint.h> /* intptr_t */
-# endif
+# if defined(_AIX) 
+#  include <inttypes.h> 
+# else 
+#  include <stdint.h> /* intptr_t */ 
+# endif 
   typedef  uint8_t BYTE;
   typedef uint16_t U16;
   typedef  int16_t S16;
@@ -3254,7 +3254,7 @@ typedef struct
 *   Provides the size of compressed block from block header `src` */
 static size_t ZSTDv07_getcBlockSize(const void* src, size_t srcSize, blockProperties_t* bpPtr)
 {
-    const BYTE* const in = (const BYTE*)src;
+    const BYTE* const in = (const BYTE*)src; 
     U32 cSize;
 
     if (srcSize < ZSTDv07_blockHeaderSize) return ERROR(srcSize_wrong);
@@ -3449,7 +3449,7 @@ static size_t ZSTDv07_decodeSeqHeaders(int* nbSeqPtr,
                              FSEv07_DTable* DTableLL, FSEv07_DTable* DTableML, FSEv07_DTable* DTableOffb, U32 flagRepeatTable,
                              const void* src, size_t srcSize)
 {
-    const BYTE* const istart = (const BYTE*)src;
+    const BYTE* const istart = (const BYTE*)src; 
     const BYTE* const iend = istart + srcSize;
     const BYTE* ip = istart;
 
@@ -3668,7 +3668,7 @@ static size_t ZSTDv07_decompressSequences(
 {
     const BYTE* ip = (const BYTE*)seqStart;
     const BYTE* const iend = ip + seqSize;
-    BYTE* const ostart = (BYTE*)dst;
+    BYTE* const ostart = (BYTE*)dst; 
     BYTE* const oend = ostart + maxDstSize;
     BYTE* op = ostart;
     const BYTE* litPtr = dctx->litPtr;
@@ -3795,7 +3795,7 @@ static size_t ZSTDv07_decompressFrame(ZSTDv07_DCtx* dctx,
 {
     const BYTE* ip = (const BYTE*)src;
     const BYTE* const iend = ip + srcSize;
-    BYTE* const ostart = (BYTE*)dst;
+    BYTE* const ostart = (BYTE*)dst; 
     BYTE* const oend = ostart + dstCapacity;
     BYTE* op = ostart;
     size_t remainingSize = srcSize;

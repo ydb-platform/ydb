@@ -58,9 +58,9 @@ static void WriteRows(TTestActorRuntime& runtime, ui64 tabletId, ui32 key, ui32 
 
     NKikimrMiniKQL::TResult result;
     TString err;
-    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
     UNIT_ASSERT_VALUES_EQUAL(err, "");
-    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);; 
 }
 
 Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
@@ -378,9 +378,9 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
                     NKikimrMiniKQL::TResult result;
                     TString err;
-                    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+                    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
                     UNIT_ASSERT_VALUES_EQUAL(err, "");
-                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);; 
                 };
                 for (ui32 delta = 0; delta < 1; ++delta) {
                     fnWriteRow(TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);

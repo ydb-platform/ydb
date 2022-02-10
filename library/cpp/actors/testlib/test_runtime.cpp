@@ -497,11 +497,11 @@ namespace NActors {
     }
 
     void TTestActorRuntimeBase::InitNodeImpl(TNodeDataBase* node, size_t nodeIndex) {
-        node->LogSettings->Append(
-            NActorsServices::EServiceCommon_MIN,
-            NActorsServices::EServiceCommon_MAX,
-            NActorsServices::EServiceCommon_Name
-        );
+        node->LogSettings->Append( 
+            NActorsServices::EServiceCommon_MIN, 
+            NActorsServices::EServiceCommon_MAX, 
+            NActorsServices::EServiceCommon_Name 
+        ); 
 
         if (!UseRealThreads) {
             node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));

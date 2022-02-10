@@ -80,7 +80,7 @@ public:
         unvisited_nodes(compare_by_heap_value(NULL, ValueCompare()))
     {}
 
-    ordered_adaptor_iterator(const ContainerType * container, ValueCompare const & /* cmp */):
+    ordered_adaptor_iterator(const ContainerType * container, ValueCompare const & /* cmp */): 
         container(container), current_index(container->size()),
         unvisited_nodes(compare_by_heap_value(container, ValueCompare()))
     {}

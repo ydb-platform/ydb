@@ -21,14 +21,14 @@ NO_PLATFORM()
 
 NO_COMPILER_WARNINGS()
 
-IF (SANITIZER_TYPE == thread)
+IF (SANITIZER_TYPE == thread) 
     NO_SANITIZE()
     CFLAGS(
         -fPIC
     )
 ENDIF()
 
-IF (SANITIZER_TYPE == memory)
+IF (SANITIZER_TYPE == memory) 
     NO_SANITIZE()
     CFLAGS(
         -fPIC

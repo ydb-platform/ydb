@@ -3,8 +3,8 @@
 #include <util/generic/hash.h>
 #include <util/digest/fnv.h>
 
-#include <iterator>
-
+#include <iterator> 
+ 
 template <typename T>
 struct TCollectionImpl {
     TVector<TConstArrayRef<T>> Words;
@@ -18,21 +18,21 @@ struct TCollectionImpl {
         return true;
     }
 
-    TConstArrayRef<T> Remap(const TConstArrayRef<ui64>& keys) const {
+    TConstArrayRef<T> Remap(const TConstArrayRef<ui64>& keys) const { 
         if (keys.empty()) {
             return TConstArrayRef<T>();
         }
-        auto firstWordPos = std::distance(Keys.data(), keys.begin());
-        auto lastWordPos = std::distance(Keys.data(), keys.end()) - 1;
-        Y_ASSERT(firstWordPos >= 0);
-        Y_ASSERT(lastWordPos >= firstWordPos);
-        Y_ASSERT(static_cast<size_t>(lastWordPos) < Words.size());
-
-        return TConstArrayRef<T>(Words[firstWordPos].begin(), Words[lastWordPos].end());
+        auto firstWordPos = std::distance(Keys.data(), keys.begin()); 
+        auto lastWordPos = std::distance(Keys.data(), keys.end()) - 1; 
+        Y_ASSERT(firstWordPos >= 0); 
+        Y_ASSERT(lastWordPos >= firstWordPos); 
+        Y_ASSERT(static_cast<size_t>(lastWordPos) < Words.size()); 
+ 
+        return TConstArrayRef<T>(Words[firstWordPos].begin(), Words[lastWordPos].end()); 
     }
 
     TConstArrayRef<ui64> GetKeys() const {
-        return TConstArrayRef<ui64>(Keys);
+        return TConstArrayRef<ui64>(Keys); 
     }
 };
 
@@ -50,10 +50,10 @@ struct TCollection<char>: public TCollectionImpl<char> {
 };
 
 template <>
-struct TCollection<wchar16>: public TCollectionImpl<wchar16> {
+struct TCollection<wchar16>: public TCollectionImpl<wchar16> { 
     TCollection(const TWtringBuf& str, const TUtf16String& delims) {
-        TSetDelimiter<const wchar16> set(delims.data());
-        TKeepDelimiters<TCollection<wchar16>> c(this);
+        TSetDelimiter<const wchar16> set(delims.data()); 
+        TKeepDelimiters<TCollection<wchar16>> c(this); 
         SplitString(str.begin(), str.end(), set, c);
     }
 };
@@ -72,16 +72,16 @@ size_t NDiff::InlineDiff(TVector<TChunk<char>>& chunks, const TStringBuf& left, 
     return dist;
 }
 
-size_t NDiff::InlineDiff(TVector<TChunk<wchar16>>& chunks, const TWtringBuf& left, const TWtringBuf& right, const TUtf16String& delims) {
+size_t NDiff::InlineDiff(TVector<TChunk<wchar16>>& chunks, const TWtringBuf& left, const TWtringBuf& right, const TUtf16String& delims) { 
     if (delims.empty()) {
-        return InlineDiff<wchar16>(chunks, TConstArrayRef<wchar16>(left.data(), left.size()), TConstArrayRef<wchar16>(right.data(), right.size()));
+        return InlineDiff<wchar16>(chunks, TConstArrayRef<wchar16>(left.data(), left.size()), TConstArrayRef<wchar16>(right.data(), right.size())); 
     }
-    TCollection<wchar16> c1(left, delims);
-    TCollection<wchar16> c2(right, delims);
+    TCollection<wchar16> c1(left, delims); 
+    TCollection<wchar16> c2(right, delims); 
     TVector<TChunk<ui64>> diff;
     const size_t dist = InlineDiff<ui64>(diff, c1.GetKeys(), c2.GetKeys());
     for (const auto& it : diff) {
-        chunks.push_back(TChunk<wchar16>(c1.Remap(it.Left), c2.Remap(it.Right), c1.Remap(it.Common)));
+        chunks.push_back(TChunk<wchar16>(c1.Remap(it.Left), c2.Remap(it.Right), c1.Remap(it.Common))); 
     }
     return dist;
 }

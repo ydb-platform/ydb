@@ -38,15 +38,15 @@ namespace  NKikimr {
         : Settings({}, NKikimrServices::LOGGER, NActors::NLog::PRI_ERROR, NActors::NLog::PRI_DEBUG, 0)
     {
         Settings.Append(
-            NActorsServices::EServiceCommon_MIN,
-            NActorsServices::EServiceCommon_MAX,
-            NActorsServices::EServiceCommon_Name
-        );
+            NActorsServices::EServiceCommon_MIN, 
+            NActorsServices::EServiceCommon_MAX, 
+            NActorsServices::EServiceCommon_Name 
+        ); 
         Settings.Append(
-            NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            NKikimrServices::EServiceKikimr_Name
-        );
+            NKikimrServices::EServiceKikimr_MIN, 
+            NKikimrServices::EServiceKikimr_MAX, 
+            NKikimrServices::EServiceKikimr_Name 
+        ); 
     }
 
 

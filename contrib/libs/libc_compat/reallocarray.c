@@ -1,4 +1,4 @@
-/*	$OpenBSD: reallocarray.c,v 1.3 2015/09/13 08:31:47 guenther Exp $	*/
+/*	$OpenBSD: reallocarray.c,v 1.3 2015/09/13 08:31:47 guenther Exp $	*/ 
 /*
  * Copyright (c) 2008 Otto Moerbeek <otto@drijf.net>
  *
@@ -32,8 +32,8 @@ reallocarray(void *optr, size_t nmemb, size_t size)
 	if ((nmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
 	    nmemb > 0 && SIZE_MAX / nmemb < size) {
 		errno = ENOMEM;
-		return NULL;
+		return NULL; 
 	}
-	return realloc(optr, size * nmemb);
+	return realloc(optr, size * nmemb); 
 }
-
+ 

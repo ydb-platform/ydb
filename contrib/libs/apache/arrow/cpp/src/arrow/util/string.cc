@@ -92,23 +92,23 @@ Status ParseHexValue(const char* data, uint8_t* out) {
 
 namespace internal {
 
-std::vector<util::string_view> SplitString(util::string_view v, char delimiter) {
-  std::vector<util::string_view> parts;
-  size_t start = 0, end;
-  while (true) {
-    end = v.find(delimiter, start);
-    parts.push_back(v.substr(start, end - start));
-    if (end == std::string::npos) {
-      break;
-    }
-    start = end + 1;
-  }
-  return parts;
-}
-
-template <typename StringLike>
-static std::string JoinStringLikes(const std::vector<StringLike>& strings,
-                                   util::string_view delimiter) {
+std::vector<util::string_view> SplitString(util::string_view v, char delimiter) { 
+  std::vector<util::string_view> parts; 
+  size_t start = 0, end; 
+  while (true) { 
+    end = v.find(delimiter, start); 
+    parts.push_back(v.substr(start, end - start)); 
+    if (end == std::string::npos) { 
+      break; 
+    } 
+    start = end + 1; 
+  } 
+  return parts; 
+} 
+ 
+template <typename StringLike> 
+static std::string JoinStringLikes(const std::vector<StringLike>& strings, 
+                                   util::string_view delimiter) { 
   if (strings.size() == 0) {
     return "";
   }
@@ -120,18 +120,18 @@ static std::string JoinStringLikes(const std::vector<StringLike>& strings,
   return out;
 }
 
-std::string JoinStrings(const std::vector<util::string_view>& strings,
-                        util::string_view delimiter) {
-  return JoinStringLikes(strings, delimiter);
-}
+std::string JoinStrings(const std::vector<util::string_view>& strings, 
+                        util::string_view delimiter) { 
+  return JoinStringLikes(strings, delimiter); 
+} 
 
-std::string JoinStrings(const std::vector<std::string>& strings,
-                        util::string_view delimiter) {
-  return JoinStringLikes(strings, delimiter);
-}
-
-static constexpr bool IsWhitespace(char c) { return c == ' ' || c == '\t'; }
-
+std::string JoinStrings(const std::vector<std::string>& strings, 
+                        util::string_view delimiter) { 
+  return JoinStringLikes(strings, delimiter); 
+} 
+ 
+static constexpr bool IsWhitespace(char c) { return c == ' ' || c == '\t'; } 
+ 
 std::string TrimString(std::string value) {
   size_t ltrim_chars = 0;
   while (ltrim_chars < value.size() && IsWhitespace(value[ltrim_chars])) {

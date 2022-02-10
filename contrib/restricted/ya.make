@@ -13,12 +13,12 @@ RECURSE(
     boost
     cityhash-1.0.2
     cmph
-    cpuinfo
-    exiv2
-    expected-lite
+    cpuinfo 
+    exiv2 
+    expected-lite 
     fast_float
     dragonbox
-    gemmlowp
+    gemmlowp 
     glib
     glib-networking
     glibmm
@@ -28,7 +28,7 @@ RECURSE(
     gst-plugins-base
     gst-plugins-good
     gstreamer
-    http-parser
+    http-parser 
     keyutils
     libelf
     libffi
@@ -37,12 +37,12 @@ RECURSE(
     librseq
     libsigcxx
     libsoup
-    libtorrent
+    libtorrent 
     liburcu
-    libxsmm
+    libxsmm 
     llhttp
     mpg123
-    murmurhash
+    murmurhash 
     nfs_ganesha
     noc
     openal-soft
@@ -53,11 +53,11 @@ RECURSE(
     range-v3
     rnnoise
     rubberband
-    spdlog
+    spdlog 
     thrift
     thrift/compiler
-    turbo_base64
-    uriparser
+    turbo_base64 
+    uriparser 
 )
 
 IF(OS_LINUX OR OS_DARWIN)

@@ -1103,7 +1103,7 @@ BELONGS ya.make
     Files with this license:
         readme.html [8:8]
 
-KEEP     Custom-Punycode      bd57aec5790d5e2d75543b49589d1e8e
+KEEP     Custom-Punycode      bd57aec5790d5e2d75543b49589d1e8e 
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:

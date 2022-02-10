@@ -2,7 +2,7 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-LICENSE(YandexOpen)
+LICENSE(YandexOpen) 
 
 NO_PLATFORM()
 

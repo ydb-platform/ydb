@@ -7,11 +7,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html. 
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -24,10 +24,10 @@
 
 #include "conncache.h"
 #include "psl.h"
-#include "socketpair.h"
+#include "socketpair.h" 
 
 struct Curl_message {
-  struct Curl_llist_element list;
+  struct Curl_llist_element list; 
   /* the 'CURLMsg' is the part that is visible to the external user */
   struct CURLMsg extmsg;
 };
@@ -67,21 +67,21 @@ typedef enum {
 
 #define CURLPIPE_ANY (CURLPIPE_MULTIPLEX)
 
-#if defined(USE_SOCKETPAIR) && !defined(USE_BLOCKING_SOCKETS) &&        \
-  !defined(CURL_DISABLE_SOCKETPAIR)
-#define ENABLE_WAKEUP
-#endif
-
-/* value for MAXIMUM CONCURRENT STREAMS upper limit */
-#define INITIAL_MAX_CONCURRENT_STREAMS ((1U << 31) - 1)
-
+#if defined(USE_SOCKETPAIR) && !defined(USE_BLOCKING_SOCKETS) &&        \ 
+  !defined(CURL_DISABLE_SOCKETPAIR) 
+#define ENABLE_WAKEUP 
+#endif 
+ 
+/* value for MAXIMUM CONCURRENT STREAMS upper limit */ 
+#define INITIAL_MAX_CONCURRENT_STREAMS ((1U << 31) - 1) 
+ 
 /* This is the struct known as CURLM on the outside */
 struct Curl_multi {
   /* First a simple identifier to easier detect if a user mix up
      this multi handle with an easy handle. Set this to CURL_MULTI_HANDLE. */
   long type;
 
-  /* We have a doubly-linked list with easy handles */
+  /* We have a doubly-linked list with easy handles */ 
   struct Curl_easy *easyp;
   struct Curl_easy *easylp; /* last node */
 
@@ -89,9 +89,9 @@ struct Curl_multi {
   int num_alive; /* amount of easy handles that are added but have not yet
                     reached COMPLETE state */
 
-  struct Curl_llist msglist; /* a list of messages from completed transfers */
+  struct Curl_llist msglist; /* a list of messages from completed transfers */ 
 
-  struct Curl_llist pending; /* Curl_easys that are in the
+  struct Curl_llist pending; /* Curl_easys that are in the 
                                 CURLM_STATE_CONNECT_PEND state */
 
   /* callback function and user data pointer for the *socket() API */
@@ -103,7 +103,7 @@ struct Curl_multi {
   void *push_userp;
 
   /* Hostname cache */
-  struct Curl_hash hostcache;
+  struct Curl_hash hostcache; 
 
 #ifdef USE_LIBPSL
   /* PSL cache. */
@@ -117,7 +117,7 @@ struct Curl_multi {
   /* 'sockhash' is the lookup hash for socket descriptor => easy handles (note
      the pluralis form, there can be more than one easy handle waiting on the
      same actual socket) */
-  struct Curl_hash sockhash;
+  struct Curl_hash sockhash; 
 
   /* Shared connection cache (bundles)*/
   struct conncache conn_cache;
@@ -136,17 +136,17 @@ struct Curl_multi {
   void *timer_userp;
   struct curltime timer_lastcall; /* the fixed time for the timeout for the
                                     previous callback */
-  unsigned int max_concurrent_streams;
-
-#ifdef ENABLE_WAKEUP
-  curl_socket_t wakeup_pair[2]; /* socketpair() used for wakeup
-                                   0 is used for read, 1 is used for write */
-#endif
-  /* multiplexing wanted */
-  bool multiplexing;
-  bool recheckstate; /* see Curl_multi_connchanged */
+  unsigned int max_concurrent_streams; 
+ 
+#ifdef ENABLE_WAKEUP 
+  curl_socket_t wakeup_pair[2]; /* socketpair() used for wakeup 
+                                   0 is used for read, 1 is used for write */ 
+#endif 
+  /* multiplexing wanted */ 
+  bool multiplexing; 
+  bool recheckstate; /* see Curl_multi_connchanged */ 
   bool in_callback;            /* true while executing a callback */
-  bool ipv6_works;
+  bool ipv6_works; 
 };
 
 #endif /* HEADER_CURL_MULTIHANDLE_H */

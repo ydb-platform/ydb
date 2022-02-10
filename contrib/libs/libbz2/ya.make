@@ -22,7 +22,7 @@ NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
-IF (SANITIZER_TYPE == undefined)
+IF (SANITIZER_TYPE == undefined) 
     NO_SANITIZE()
 ENDIF()
 

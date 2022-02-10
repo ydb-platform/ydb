@@ -6,7 +6,7 @@
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <google/protobuf/text_format.h>
+#include <google/protobuf/text_format.h> 
 
 namespace NKikimr {
 namespace NFlatTests {

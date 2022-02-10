@@ -7,11 +7,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al. 
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html. 
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -118,7 +118,7 @@ struct ftp_conn {
   char *entrypath; /* the PWD reply when we logged on */
   char **dirs;   /* realloc()ed array for path components */
   int dirdepth;  /* number of entries used in the 'dirs' array */
-  char *file;    /* url-decoded file name (or path) */
+  char *file;    /* url-decoded file name (or path) */ 
   bool dont_check;  /* Set to TRUE to prevent the final (post-transfer)
                        file size and 226/250 status check. It should still
                        read the line, just ignore the result. */
@@ -131,7 +131,7 @@ struct ftp_conn {
   bool cwdfail;     /* set TRUE if a CWD command fails, as then we must prevent
                        caching the current directory */
   bool wait_data_conn; /* this is set TRUE if data connection is waited */
-  char *prevpath;   /* url-decoded conn->path from the previous transfer */
+  char *prevpath;   /* url-decoded conn->path from the previous transfer */ 
   char transfertype; /* set by ftp_transfertype for use by Curl_client_write()a
                         and others (A/I or zero) */
   int count1; /* general purpose counter for the state machine */

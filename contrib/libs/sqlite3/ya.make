@@ -2,15 +2,15 @@
 
 LIBRARY()
 
-OWNER(
-    g:cpp-contrib
-    g:maps-mrc
-)
-
+OWNER( 
+    g:cpp-contrib 
+    g:maps-mrc 
+) 
+ 
 VERSION(3.37.2)
-
+ 
 ORIGINAL_SOURCE(https://github.com/sqlite/sqlite/archive/version-3.37.2.tar.gz)
-
+ 
 LICENSE(
     Public-Domain AND
     blessing
@@ -18,8 +18,8 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-ADDINCL(
-    contrib/libs/sqlite3
+ADDINCL( 
+    contrib/libs/sqlite3 
 )
 
 NO_COMPILER_WARNINGS()
@@ -52,13 +52,13 @@ CFLAGS(
 )
 
 IF (OS_WINDOWS)
-    CFLAGS(
-        -DSQLITE_OS_WIN
-    )
+    CFLAGS( 
+        -DSQLITE_OS_WIN 
+    ) 
 ELSE()
-    CFLAGS(
-        -DSQLITE_OS_UNIX
-    )
+    CFLAGS( 
+        -DSQLITE_OS_UNIX 
+    ) 
 ENDIF()
 
 SRCS(

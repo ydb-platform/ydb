@@ -1,4 +1,4 @@
-ALLOW contrib/clickhouse -> library/cpp/consistent_hashing
+ALLOW contrib/clickhouse -> library/cpp/consistent_hashing 
 ALLOW contrib -> contrib
 ALLOW contrib -> build
 ALLOW contrib -> library/python/resource
@@ -54,23 +54,23 @@ ALLOW contrib/python/psycopg2/tests -> mail/devpack
 ALLOW contrib/python/asn1crypto -> library/python/symbols/crypto
 ALLOW contrib/python/win_unicode_console -> library/python/symbols/win_unicode_console
 ALLOW contrib/python/pycryptodome -> library/python/symbols/registry
-
-ALLOW contrib/tests/python -> library/python/fs
-
-ALLOW contrib/tests/subversion -> vcs/svn/run
-ALLOW contrib/tests/subversion -> vcs/svn/test
-
-ALLOW contrib/tests/subvertpy -> devtools/ya/exts
-ALLOW contrib/tests/subvertpy -> devtools/ya/yalibrary/svn/testing
-ALLOW contrib/tests/subvertpy -> library/python/windows
-ALLOW contrib/tests/subvertpy -> vcs/svn/wc/client
-
+ 
+ALLOW contrib/tests/python -> library/python/fs 
+ 
+ALLOW contrib/tests/subversion -> vcs/svn/run 
+ALLOW contrib/tests/subversion -> vcs/svn/test 
+ 
+ALLOW contrib/tests/subvertpy -> devtools/ya/exts 
+ALLOW contrib/tests/subvertpy -> devtools/ya/yalibrary/svn/testing 
+ALLOW contrib/tests/subvertpy -> library/python/windows 
+ALLOW contrib/tests/subvertpy -> vcs/svn/wc/client 
+ 
 ALLOW contrib/tools/unbound -> infra/libs
 ALLOW contrib/tools/unbound -> library/cpp/proto_config
 
 ALLOW contrib/python/marshmallow-mongoengine/py[23]/tests -> library/python/pytest-mongodb
 
-# contrib tests is written by us, hence everything is allowed
-ALLOW contrib/tests -> .*
-
+# contrib tests is written by us, hence everything is allowed 
+ALLOW contrib/tests -> .* 
+ 
 DENY contrib -> .*

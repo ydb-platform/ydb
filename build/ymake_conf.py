@@ -105,9 +105,9 @@ class Platform(object):
         self.is_android = self.os == 'android'
         if self.is_android:
             # This is default Android API level unless `ANDROID_API` is specified
-            # 18 is the smallest level with OpenGL support
+            # 18 is the smallest level with OpenGL support 
             # 21 is the smallest level for 64-bit platforms
-            default_android_api = 21 if self.is_64_bit else 18
+            default_android_api = 21 if self.is_64_bit else 18 
             self.android_api = int(preset('ANDROID_API', default_android_api))
 
         self.is_cygwin = self.os == 'cygwin'
@@ -788,7 +788,7 @@ when (($USEMPROF == "yes") || ($USE_MPROF == "yes")) {
             emit('ARM7_FLOAT_ABI', self.platform.armv7_float_abi)
 
         if self.platform.is_android:
-            emit('ANDROID_API', str(self.platform.android_api))
+            emit('ANDROID_API', str(self.platform.android_api)) 
 
         if self.platform.is_posix:
             self.print_nix_target_const()
@@ -960,8 +960,8 @@ class ToolchainOptions(object):
         # TODO(somov): Убрать чтение настройки из os.environ.
         self.werror_mode = preset('WERROR_MODE') or os.environ.get('WERROR_MODE') or self.params.get('werror_mode') or 'compiler_specific'
 
-        # default C++ standard is set here, some older toolchains might need to redefine it in ya.conf.json
-        self.cxx_std = self.params.get('cxx_std', 'c++20')
+        # default C++ standard is set here, some older toolchains might need to redefine it in ya.conf.json 
+        self.cxx_std = self.params.get('cxx_std', 'c++20') 
 
         self._env = tc_json.get('env', {})
 
@@ -1325,48 +1325,48 @@ class GnuCompiler(Compiler):
         self.target = self.build.target
         self.tc = tc
 
-        self.c_foptions = [
-            # Enable C++ exceptions (and allow them to be throw through pure C code)
-            '-fexceptions',
-            # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants.
-            # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0
-            '-fno-common',
-        ]
-
-        if self.tc.is_clang and self.target.is_linux:
-            # Use .init_array instead of .ctors (default for old clang versions)
-            # See: https://maskray.me/blog/2021-11-07-init-ctors-init-array
-            self.c_foptions.append('-fuse-init-array')
-
-        if self.tc.is_clang:
-            self.c_foptions += [
-                # Set up output colorization
-                '-fcolor-diagnostics',
-                # Enable aligned allocation
-                '-faligned-allocation',
-            ]
-        elif self.tc.is_gcc:
-            self.c_foptions += [
-                # Set up output colorization
-                '-fdiagnostics-color=always',
-                # It looks like there is no way to enable aligned allocation in gcc
-            ]
-
-        self.c_warnings = [
-            # Enable default warnings subset
-            '-Wall',
-            '-Wextra',
-        ]
+        self.c_foptions = [ 
+            # Enable C++ exceptions (and allow them to be throw through pure C code) 
+            '-fexceptions', 
+            # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants. 
+            # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0 
+            '-fno-common', 
+        ] 
+ 
+        if self.tc.is_clang and self.target.is_linux: 
+            # Use .init_array instead of .ctors (default for old clang versions) 
+            # See: https://maskray.me/blog/2021-11-07-init-ctors-init-array 
+            self.c_foptions.append('-fuse-init-array') 
+ 
+        if self.tc.is_clang: 
+            self.c_foptions += [ 
+                # Set up output colorization 
+                '-fcolor-diagnostics', 
+                # Enable aligned allocation 
+                '-faligned-allocation', 
+            ] 
+        elif self.tc.is_gcc: 
+            self.c_foptions += [ 
+                # Set up output colorization 
+                '-fdiagnostics-color=always', 
+                # It looks like there is no way to enable aligned allocation in gcc 
+            ] 
+ 
+        self.c_warnings = [ 
+            # Enable default warnings subset 
+            '-Wall', 
+            '-Wextra', 
+        ] 
         self.cxx_warnings = [
-            # Issue a warning if certain overload is hidden due to inheritance
-            '-Woverloaded-virtual',
+            # Issue a warning if certain overload is hidden due to inheritance 
+            '-Woverloaded-virtual', 
         ]
 
-        # Disable some warnings which will fail compilation at the time
-        self.c_warnings += [
-            '-Wno-parentheses'
-        ]
-
+        # Disable some warnings which will fail compilation at the time 
+        self.c_warnings += [ 
+            '-Wno-parentheses' 
+        ] 
+ 
         self.c_defines = ['-DFAKEID=$CPP_FAKEID']
         if self.target.is_android:
             self.c_defines.append('-DANDROID_FAKEID=$ANDROID_FAKEID')
@@ -1426,25 +1426,25 @@ class GnuCompiler(Compiler):
             self.cxx_warnings += [
                 '-Wimport-preprocessor-directive-pedantic',
                 '-Wno-undefined-var-template',
-                '-Wno-return-std-move',
-                '-Wno-address-of-packed-member',
-                '-Wno-defaulted-function-deleted',
-                '-Wno-pessimizing-move',
-                '-Wno-range-loop-construct',
-                '-Wno-deprecated-anon-enum-enum-conversion',
-                '-Wno-deprecated-enum-enum-conversion',
-                '-Wno-deprecated-enum-float-conversion',
-                '-Wno-ambiguous-reversed-operator',
-                '-Wno-deprecated-volatile',
+                '-Wno-return-std-move', 
+                '-Wno-address-of-packed-member', 
+                '-Wno-defaulted-function-deleted', 
+                '-Wno-pessimizing-move', 
+                '-Wno-range-loop-construct', 
+                '-Wno-deprecated-anon-enum-enum-conversion', 
+                '-Wno-deprecated-enum-enum-conversion', 
+                '-Wno-deprecated-enum-float-conversion', 
+                '-Wno-ambiguous-reversed-operator', 
+                '-Wno-deprecated-volatile', 
             ]
 
-            self.c_warnings += [
-                '-Wno-implicit-const-int-float-conversion',
-                # For nvcc to accept the above.
-                '-Wno-unknown-warning-option',
-            ]
+            self.c_warnings += [ 
+                '-Wno-implicit-const-int-float-conversion', 
+                # For nvcc to accept the above. 
+                '-Wno-unknown-warning-option', 
+            ] 
 
-        elif self.tc.is_gcc:
+        elif self.tc.is_gcc: 
             self.c_foptions.append('-fno-delete-null-pointer-checks')
             self.c_foptions.append('-fabi-version=8')
 
@@ -1535,7 +1535,7 @@ class GnuCompiler(Compiler):
             }
             when ($NO_COMPILER_WARNINGS == "yes") {
                 C_WARNING_OPTS = -w
-                CXX_WARNING_OPTS = -Wno-everything
+                CXX_WARNING_OPTS = -Wno-everything 
             }
             when ($NO_OPTIMIZE == "yes") {
                 OPTIMIZE = -O0
@@ -1724,9 +1724,9 @@ class GnuCompiler(Compiler):
         emit('_SRC_MASM_CMD', '$_EMPTY_CMD')
 
         # fuzzing configuration
-        if self.tc.is_clang:
-            if self.tc.version_at_least(12):
-                emit('LIBFUZZER_PATH', 'contrib/libs/libfuzzer12')
+        if self.tc.is_clang: 
+            if self.tc.version_at_least(12): 
+                emit('LIBFUZZER_PATH', 'contrib/libs/libfuzzer12') 
 
 
 class SwiftCompiler(object):
@@ -2386,17 +2386,17 @@ class MSVCCompiler(MSVC, Compiler):
             '/D__STDC_FORMAT_MACROS',
             '/D_USING_V110_SDK71_',
             '/D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES',
-            '/DNOMINMAX',
-            '/DWIN32_LEAN_AND_MEAN',
+            '/DNOMINMAX', 
+            '/DWIN32_LEAN_AND_MEAN', 
         ]
 
-        cxx_defines = [
-            # Use builtin offsetof implementation
-            # instead of a crutcy macro defined in ucrt/stddef.h.
-            # The latter can not be used in constexpr statements.
-            '/D_CRT_USE_BUILTIN_OFFSETOF',
-        ]
-
+        cxx_defines = [ 
+            # Use builtin offsetof implementation 
+            # instead of a crutcy macro defined in ucrt/stddef.h. 
+            # The latter can not be used in constexpr statements. 
+            '/D_CRT_USE_BUILTIN_OFFSETOF', 
+        ] 
+ 
         if target.is_x86_64:
             defines.extend(('/D_WIN64', '/DWIN64'))
 
@@ -2414,11 +2414,11 @@ class MSVCCompiler(MSVC, Compiler):
                 MSVC_INLINE_FLAG=/Zc:inline-
             }''')
 
-        flags = [
-            '/nologo', '/Zm500', '/GR', '/bigobj', '/FC', '/EHs', '/errorReport:prompt', '$MSVC_INLINE_FLAG', '/utf-8',
-            # enable standard conforming mode
-            '/permissive-'
-        ]
+        flags = [ 
+            '/nologo', '/Zm500', '/GR', '/bigobj', '/FC', '/EHs', '/errorReport:prompt', '$MSVC_INLINE_FLAG', '/utf-8', 
+            # enable standard conforming mode 
+            '/permissive-' 
+        ] 
         flags += self.tc.arch_opt
 
         c_warnings = ['/we{}'.format(code) for code in warns_as_error]
@@ -2430,20 +2430,20 @@ class MSVCCompiler(MSVC, Compiler):
         flags_release = ['/Ox', '/Ob2', '/Oi', '/DNDEBUG']
 
         flags_c_only = []
-        cxx_flags = [
-            # Provide proper __cplusplus value
-            # https://devblogs.microsoft.com/cppblog/msvc-now-correctly-reports-__cplusplus/
-            "/Zc:__cplusplus"
-        ]
+        cxx_flags = [ 
+            # Provide proper __cplusplus value 
+            # https://devblogs.microsoft.com/cppblog/msvc-now-correctly-reports-__cplusplus/ 
+            "/Zc:__cplusplus" 
+        ] 
 
         if self.tc.use_clang:
-            flags += [
-                # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
-                '-fcase-insensitive-paths',
-                # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants.
-                # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0
-                '-fno-common',
-            ]
+            flags += [ 
+                # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems. 
+                '-fcase-insensitive-paths', 
+                # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants. 
+                # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0 
+                '-fno-common', 
+            ] 
             if target.is_x86:
                 flags.append('-m32')
             if target.is_x86_64:
@@ -2476,7 +2476,7 @@ class MSVCCompiler(MSVC, Compiler):
             ))
 
             cxx_warnings += [
-                '-Woverloaded-virtual',
+                '-Woverloaded-virtual', 
                 '-Wno-register',  # IGNIETFERRO-722 needed for contrib
                 '-Wimport-preprocessor-directive-pedantic',
                 '-Wno-undefined-var-template',
@@ -2696,28 +2696,28 @@ class MSVCLinker(MSVC, Linker):
         link_flags_lib = flags_ignore + [flag_machine]
 
         stdlibs = [
-            'advapi32.lib',
-            'comdlg32.lib',
-            'crypt32.lib',
-            'dnsapi.lib',
-            'gdi32.lib',
-            'iphlpapi.lib',
+            'advapi32.lib', 
+            'comdlg32.lib', 
+            'crypt32.lib', 
+            'dnsapi.lib', 
+            'gdi32.lib', 
+            'iphlpapi.lib', 
             'kernel32.lib',
-            'mswsock.lib',
+            'mswsock.lib', 
             'ole32.lib',
             'oleaut32.lib',
-            'psapi.lib',
-            'rpcrt4.lib',
-            'secur32.lib',
-            'shell32.lib',
-            'shlwapi.lib',
-            'user32.lib',
-            'userenv.lib',
+            'psapi.lib', 
+            'rpcrt4.lib', 
+            'secur32.lib', 
+            'shell32.lib', 
+            'shlwapi.lib', 
+            'user32.lib', 
+            'userenv.lib', 
             'uuid.lib',
-            'version.lib',
-            'winmm.lib',
-            'winspool.lib',
-            'ws2_32.lib',
+            'version.lib', 
+            'winmm.lib', 
+            'winspool.lib', 
+            'ws2_32.lib', 
         ]
 
         emit('LINK_LIB_CMD', linker_lib)

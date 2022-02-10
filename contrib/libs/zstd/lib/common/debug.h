@@ -1,7 +1,7 @@
 /* ******************************************************************
  * debug
  * Part of FSE library
- * Copyright (c) Yann Collet, Facebook, Inc.
+ * Copyright (c) Yann Collet, Facebook, Inc. 
  *
  * You can contact the author at :
  * - Source repository : https://github.com/Cyan4973/FiniteStateEntropy
@@ -67,8 +67,8 @@ extern "C" {
  */
 
 #if (DEBUGLEVEL>=1)
-#  define ZSTD_DEPS_NEED_ASSERT
-#  include "zstd_deps.h"
+#  define ZSTD_DEPS_NEED_ASSERT 
+#  include "zstd_deps.h" 
 #else
 #  ifndef assert   /* assert may be already defined, due to prior #include <assert.h> */
 #    define assert(condition) ((void)0)   /* disable assert (default) */
@@ -76,8 +76,8 @@ extern "C" {
 #endif
 
 #if (DEBUGLEVEL>=2)
-#  define ZSTD_DEPS_NEED_IO
-#  include "zstd_deps.h"
+#  define ZSTD_DEPS_NEED_IO 
+#  include "zstd_deps.h" 
 extern int g_debuglevel; /* the variable is only declared,
                             it actually lives in debug.c,
                             and is shared by the whole process.
@@ -85,14 +85,14 @@ extern int g_debuglevel; /* the variable is only declared,
                             It's useful when enabling very verbose levels
                             on selective conditions (such as position in src) */
 
-#  define RAWLOG(l, ...) {                                       \
-                if (l<=g_debuglevel) {                           \
-                    ZSTD_DEBUG_PRINT(__VA_ARGS__);               \
+#  define RAWLOG(l, ...) {                                       \ 
+                if (l<=g_debuglevel) {                           \ 
+                    ZSTD_DEBUG_PRINT(__VA_ARGS__);               \ 
             }   }
-#  define DEBUGLOG(l, ...) {                                     \
-                if (l<=g_debuglevel) {                           \
-                    ZSTD_DEBUG_PRINT(__FILE__ ": " __VA_ARGS__); \
-                    ZSTD_DEBUG_PRINT(" \n");                     \
+#  define DEBUGLOG(l, ...) {                                     \ 
+                if (l<=g_debuglevel) {                           \ 
+                    ZSTD_DEBUG_PRINT(__FILE__ ": " __VA_ARGS__); \ 
+                    ZSTD_DEBUG_PRINT(" \n");                     \ 
             }   }
 #else
 #  define RAWLOG(l, ...)      {}    /* disabled */

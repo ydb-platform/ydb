@@ -2,8 +2,8 @@
 
 #include <library/cpp/messagebus/ybus.h>
 
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/message.h>
+#include <google/protobuf/descriptor.h> 
+#include <google/protobuf/message.h> 
 
 #include <util/generic/cast.h>
 #include <util/generic/vector.h>

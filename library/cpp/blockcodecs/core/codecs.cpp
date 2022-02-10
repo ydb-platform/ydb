@@ -13,7 +13,7 @@
 #include <util/generic/cast.h>
 #include <util/generic/deque.h>
 #include <util/generic/buffer.h>
-#include <util/generic/array_ref.h>
+#include <util/generic/array_ref.h> 
 #include <util/generic/singleton.h>
 #include <util/generic/algorithm.h>
 #include <util/generic/mem_copy.h>
@@ -129,20 +129,20 @@ void ICodec::Decode(const TData& in, TBuffer& out) const {
 
 void ICodec::Encode(const TData& in, TString& out) const {
     const size_t maxLen = MaxCompressedLength(in);
-    out.ReserveAndResize(maxLen);
+    out.ReserveAndResize(maxLen); 
 
-    size_t actualLen = Compress(in, out.begin());
-    Y_ASSERT(actualLen <= maxLen);
-    out.resize(actualLen);
+    size_t actualLen = Compress(in, out.begin()); 
+    Y_ASSERT(actualLen <= maxLen); 
+    out.resize(actualLen); 
 }
 
 void ICodec::Decode(const TData& in, TString& out) const {
-    const size_t maxLen = GetDecompressedLength(in);
-    out.ReserveAndResize(maxLen);
+    const size_t maxLen = GetDecompressedLength(in); 
+    out.ReserveAndResize(maxLen); 
 
-    size_t actualLen = Decompress(in, out.begin());
-    Y_ASSERT(actualLen <= maxLen);
-    out.resize(actualLen);
+    size_t actualLen = Decompress(in, out.begin()); 
+    Y_ASSERT(actualLen <= maxLen); 
+    out.resize(actualLen); 
 }
 
 ICodec::~ICodec() = default;

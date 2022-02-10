@@ -30,7 +30,7 @@ CFLAGS(
     -Daws_checksums_EXPORTS
 )
 
-IF (BUILD_TYPE == "DEBUG")
+IF (BUILD_TYPE == "DEBUG") 
     CFLAGS(
         -DDEBUG_BUILD
     )

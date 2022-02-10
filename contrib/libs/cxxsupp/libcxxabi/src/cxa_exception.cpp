@@ -20,7 +20,7 @@
 #include "include/atomic_support.h" // from libc++
 
 #if __has_feature(address_sanitizer)
-#include <sanitizer/asan_interface.h>
+#include <sanitizer/asan_interface.h> 
 #endif
 
 // +---------------------------+-----------------------------+---------------+
@@ -392,7 +392,7 @@ asm("	.pushsection	.text.__cxa_end_cleanup,\"ax\",%progbits\n"
     "   b _Unwind_Resume\n"
 #endif
     "	.popsection");
-#endif // defined(_LIBCXXABI_ARM_EHABI)
+#endif // defined(_LIBCXXABI_ARM_EHABI) 
 
 /*
 This routine can catch foreign or native exceptions.  If native, the exception

@@ -7,7 +7,7 @@
 
 using namespace NRainCheck;
 
-TContClosure TCoroTaskRunner::ContClosure(TCoroTaskRunner* runner, TArrayRef<char> memRegion) {
+TContClosure TCoroTaskRunner::ContClosure(TCoroTaskRunner* runner, TArrayRef<char> memRegion) { 
     TContClosure contClosure;
     contClosure.TrampoLine = runner;
     contClosure.Stack = memRegion;

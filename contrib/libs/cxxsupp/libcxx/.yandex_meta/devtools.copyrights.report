@@ -30,7 +30,7 @@
 # =======================
 
 KEEP     COPYRIGHT_SERVICE_LABEL 7e6a182a2f65f965d96f2755976c1829
-BELONGS ya.make
+BELONGS ya.make 
     License text:
          * FreeBSD libc.  These are covered by the following copyright:
          *
@@ -40,12 +40,12 @@ BELONGS ya.make
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        src/support/solaris/mbsnrtowcs.inc [5:7]
-        src/support/solaris/wcsnrtombs.inc [2:2]
+        src/support/solaris/mbsnrtowcs.inc [5:7] 
+        src/support/solaris/wcsnrtombs.inc [2:2] 
 
 KEEP     COPYRIGHT_SERVICE_LABEL ebc015cad7377d32e7b2fc0ae5293aa1
-BELONGS ya.make
-FILE_INCLUDE CREDITS.TXT found in files: LICENSE.TXT at line 252
+BELONGS ya.make 
+FILE_INCLUDE CREDITS.TXT found in files: LICENSE.TXT at line 252 
     # libcxxabi/CREDITS.TXT included in libcxxabi
     License text:
         Copyright (c) 2009-2019 by the contributors listed in CREDITS.TXT
@@ -54,11 +54,11 @@ FILE_INCLUDE CREDITS.TXT found in files: LICENSE.TXT at line 252
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        LICENSE.TXT [252:252]
+        LICENSE.TXT [252:252] 
 
 KEEP     COPYRIGHT_SERVICE_LABEL f52c727d32a7eaf5a8de6bc96b82797c
-BELONGS ya.make
-FILE_INCLUDE CREDITS.TXT found in files: LICENSE.TXT at line 293
+BELONGS ya.make 
+FILE_INCLUDE CREDITS.TXT found in files: LICENSE.TXT at line 293 
     # libcxxabi/CREDITS.TXT included in libcxxabi
     License text:
         Copyright (c) 2009-2014 by the contributors listed in CREDITS.TXT
@@ -67,4 +67,4 @@ FILE_INCLUDE CREDITS.TXT found in files: LICENSE.TXT at line 293
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        LICENSE.TXT [293:293]
+        LICENSE.TXT [293:293] 

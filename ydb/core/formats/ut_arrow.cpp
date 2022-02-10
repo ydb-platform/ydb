@@ -4,8 +4,8 @@
 #include <ydb/core/formats/merging_sorted_input_stream.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h> 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h> 
 #include <util/random/shuffle.h>
 
 namespace NKikimr {

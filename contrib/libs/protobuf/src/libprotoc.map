@@ -1,9 +1,9 @@
-{
-  global:
-    extern "C++" {
-      *google*;
-    };
-
-  local:
-    *;
-};
+{ 
+  global: 
+    extern "C++" { 
+      *google*; 
+    }; 
+ 
+  local: 
+    *; 
+}; 

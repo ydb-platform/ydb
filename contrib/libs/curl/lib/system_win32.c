@@ -5,11 +5,11 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 2016 - 2020, Steve Holme, <steve_holme@hotmail.com>.
+ * Copyright (C) 2016 - 2020, Steve Holme, <steve_holme@hotmail.com>. 
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
- * are also available at https://curl.se/docs/copyright.html.
+ * are also available at https://curl.se/docs/copyright.html. 
  *
  * You may opt to use, copy, modify, merge, publish, distribute and/or sell
  * copies of the Software, and permit persons to whom the Software is
@@ -26,7 +26,7 @@
 
 #include <curl/curl.h>
 #include "system_win32.h"
-#include "version_win32.h"
+#include "version_win32.h" 
 #include "curl_sspi.h"
 #include "warnless.h"
 
@@ -55,7 +55,7 @@ CURLcode Curl_win32_init(long flags)
     WSADATA wsaData;
     int res;
 
-    wVersionRequested = MAKEWORD(2, 2);
+    wVersionRequested = MAKEWORD(2, 2); 
     res = WSAStartup(wVersionRequested, &wsaData);
 
     if(res != 0)
@@ -78,9 +78,9 @@ CURLcode Curl_win32_init(long flags)
       return CURLE_FAILED_INIT;
     }
     /* The Windows Sockets DLL is acceptable. Proceed. */
-#elif defined(USE_LWIPSOCK)
+#elif defined(USE_LWIPSOCK) 
     lwip_init();
-#endif
+#endif 
   } /* CURL_GLOBAL_WIN32 */
 
 #ifdef USE_WINDOWS_SSPI
@@ -102,14 +102,14 @@ CURLcode Curl_win32_init(long flags)
       Curl_if_nametoindex = pIfNameToIndex;
   }
 
-  if(curlx_verify_windows_version(6, 0, PLATFORM_WINNT,
-                                  VERSION_GREATER_THAN_EQUAL)) {
+  if(curlx_verify_windows_version(6, 0, PLATFORM_WINNT, 
+                                  VERSION_GREATER_THAN_EQUAL)) { 
     Curl_isVistaOrGreater = TRUE;
   }
   else
     Curl_isVistaOrGreater = FALSE;
 
-  QueryPerformanceFrequency(&Curl_freq);
+  QueryPerformanceFrequency(&Curl_freq); 
   return CURLE_OK;
 }
 

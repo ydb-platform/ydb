@@ -47,7 +47,7 @@ size_t std::type_info::hash_code() const noexcept {
 
 // FIXME: Remove the _LIBCPP_BUILDING_HAS_NO_ABI_LIBRARY configuration.
 #if (!defined(LIBCXX_BUILDING_LIBCXXABI) &&               \
-     !defined(LIBCXX_BUILDING_LIBCXXRT) &&                \
+     !defined(LIBCXX_BUILDING_LIBCXXRT) &&                \ 
      !defined(__GLIBCXX__) &&                             \
      !defined(_LIBCPP_ABI_VCRUNTIME)) ||                  \
     defined(_LIBCPP_BUILDING_HAS_NO_ABI_LIBRARY)

@@ -19,7 +19,7 @@ IF (USE_ARCADIA_CUDA)
                 DECLARE_EXTERNAL_RESOURCE(CUDA sbr:2073566375) # CUDA Toolkit 11.2.2 for Linux x86-64
             ELSEIF (CUDA_VERSION == "11.1")
                 DECLARE_EXTERNAL_RESOURCE(CUDA sbr:1882836946) # CUDA Toolkit 11.1.1 for Linux x86-64
-            ELSEIF (CUDA_VERSION == "11.0")
+            ELSEIF (CUDA_VERSION == "11.0") 
                 DECLARE_EXTERNAL_RESOURCE(CUDA sbr:1647896014) # CUDA Toolkit 11.0.2 for Linux x86-64
             ELSEIF (CUDA_VERSION == "10.1")
                 DECLARE_EXTERNAL_RESOURCE(CUDA sbr:2077988857) # CUDA Toolkit 10.1.168 for Linux x86-64
@@ -152,15 +152,15 @@ IF (CUDA_HOST_COMPILER_NOT_FOUND)
     MESSAGE(FATAL_ERROR "No CUDA host compiler for the selected platform and CUDA Toolkit version ${CUDA_VERSION}")
 ENDIF()
 
-# Use thrust and cub from Arcadia, not from HPC SDK
-# NB:
-#   it would be better to use PEERDIR instead,
-#   but ymake does not allow PEERDIRs from RESOURCES_LIBRARY.
-ADDINCL(
-    GLOBAL contrib/libs/nvidia/thrust
-    GLOBAL contrib/libs/nvidia/cub
-)
-
+# Use thrust and cub from Arcadia, not from HPC SDK 
+# NB: 
+#   it would be better to use PEERDIR instead, 
+#   but ymake does not allow PEERDIRs from RESOURCES_LIBRARY. 
+ADDINCL( 
+    GLOBAL contrib/libs/nvidia/thrust 
+    GLOBAL contrib/libs/nvidia/cub 
+) 
+ 
 IF (HOST_OS_WINDOWS)
     SET_APPEND_WITH_GLOBAL(USER_CFLAGS GLOBAL "\"-I${CUDA_ROOT}/include\"")
 ELSE()

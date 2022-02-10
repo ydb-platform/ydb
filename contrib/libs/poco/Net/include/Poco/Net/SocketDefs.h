@@ -239,7 +239,7 @@
 	#define POCO_HAVE_ADDRINFO_A 1
 #endif
 
-
+ 
 /// Without this option, Poco library will restart recv after EINTR,
 /// but it doesn't update socket receive timeout that leads to infinite wait
 /// when query profiler is activated. The issue persisted in delayed_replica_failover

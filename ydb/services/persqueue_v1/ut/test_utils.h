@@ -4,7 +4,7 @@
 #include <ydb/core/testlib/test_pq_client.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <google/protobuf/message.h>
+#include <google/protobuf/message.h> 
 #include <contrib/libs/grpc/include/grpcpp/support/sync_stream.h>
 #include <util/string/builder.h>
 #include <util/system/type_name.h>

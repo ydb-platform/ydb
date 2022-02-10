@@ -96,18 +96,18 @@ struct size_holder<false, SizeType>
     {}
 
 #ifndef BOOST_NO_CXX11_RVALUE_REFERENCES
-    size_holder(size_holder && /* rhs */) BOOST_NOEXCEPT
+    size_holder(size_holder && /* rhs */) BOOST_NOEXCEPT 
     {}
 
-    size_holder(size_holder const & /* rhs */) BOOST_NOEXCEPT
+    size_holder(size_holder const & /* rhs */) BOOST_NOEXCEPT 
     {}
 
-    size_holder & operator=(size_holder && /* rhs */) BOOST_NOEXCEPT
+    size_holder & operator=(size_holder && /* rhs */) BOOST_NOEXCEPT 
     {
         return *this;
     }
 
-    size_holder & operator=(size_holder const & /* rhs */) BOOST_NOEXCEPT
+    size_holder & operator=(size_holder const & /* rhs */) BOOST_NOEXCEPT 
     {
         return *this;
     }
@@ -566,12 +566,12 @@ struct make_heap_base
 template <typename Alloc>
 struct extract_allocator_types
 {
-    typedef size_t size_type;
-    typedef ptrdiff_t difference_type;
-    typedef typename std::allocator_traits<Alloc>::value_type& reference;
-    typedef const typename std::allocator_traits<Alloc>::value_type& const_reference;
-    typedef typename std::allocator_traits<Alloc>::pointer pointer;
-    typedef typename std::allocator_traits<Alloc>::const_pointer const_pointer;
+    typedef size_t size_type; 
+    typedef ptrdiff_t difference_type; 
+    typedef typename std::allocator_traits<Alloc>::value_type& reference; 
+    typedef const typename std::allocator_traits<Alloc>::value_type& const_reference; 
+    typedef typename std::allocator_traits<Alloc>::pointer pointer; 
+    typedef typename std::allocator_traits<Alloc>::const_pointer const_pointer; 
 };
 
 

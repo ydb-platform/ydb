@@ -33,11 +33,11 @@ public:
     ~TFakeMutex() = default;
 };
 
-class TMutex {
+class TMutex { 
 public:
-    TMutex();
-    TMutex(TMutex&&);
-    ~TMutex();
+    TMutex(); 
+    TMutex(TMutex&&); 
+    ~TMutex(); 
 
     void Acquire() noexcept;
     bool TryAcquire() noexcept;

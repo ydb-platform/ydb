@@ -190,17 +190,17 @@ struct TPDiskFailureInjectionTest {
         TIntrusivePtr<NLog::TSettings> loggerSettings = new NLog::TSettings(loggerId, NKikimrServices::LOGGER,
                 NActors::NLog::PRI_NOTICE, NActors::NLog::PRI_DEBUG, 0);
 
-        loggerSettings->Append(
-            NActorsServices::EServiceCommon_MIN,
-            NActorsServices::EServiceCommon_MAX,
-            NActorsServices::EServiceCommon_Name
-        );
+        loggerSettings->Append( 
+            NActorsServices::EServiceCommon_MIN, 
+            NActorsServices::EServiceCommon_MAX, 
+            NActorsServices::EServiceCommon_Name 
+        ); 
 
-        loggerSettings->Append(
-            NKikimrServices::EServiceKikimr_MIN,
-            NKikimrServices::EServiceKikimr_MAX,
-            NKikimrServices::EServiceKikimr_Name
-        );
+        loggerSettings->Append( 
+            NKikimrServices::EServiceKikimr_MIN, 
+            NKikimrServices::EServiceKikimr_MAX, 
+            NKikimrServices::EServiceKikimr_Name 
+        ); 
 
         TString explanation;
         loggerSettings->SetLevel(NActors::NLog::PRI_INFO, NKikimrServices::BS_PDISK, explanation);

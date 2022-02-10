@@ -101,22 +101,22 @@ Y_UNIT_TEST_SUITE(NameValidationTest) {
 Y_UNIT_TEST_SUITE(MessageBodyValidationTest) {
     Y_UNIT_TEST(MessageBodyValidationTest) {
         TString desc;
-        UNIT_ASSERT(ValidateMessageBody("english text.", desc));
-        UNIT_ASSERT(ValidateMessageBody("русский текст.", desc));
-        UNIT_ASSERT(ValidateMessageBody("\n", desc));
-        UNIT_ASSERT(ValidateMessageBody("\t", desc));
-        UNIT_ASSERT(ValidateMessageBody("Δx", desc));
-        UNIT_ASSERT(ValidateMessageBody(":)", desc));
-        UNIT_ASSERT(ValidateMessageBody("\U00010000", desc));
-        UNIT_ASSERT(ValidateMessageBody("\uE000", desc));
-        UNIT_ASSERT(ValidateMessageBody("\uFFFD", desc));
-        UNIT_ASSERT(ValidateMessageBody("\uD7FF", desc));
-        UNIT_ASSERT(ValidateMessageBody("\u00FF", desc));
+        UNIT_ASSERT(ValidateMessageBody("english text.", desc)); 
+        UNIT_ASSERT(ValidateMessageBody("русский текст.", desc)); 
+        UNIT_ASSERT(ValidateMessageBody("\n", desc)); 
+        UNIT_ASSERT(ValidateMessageBody("\t", desc)); 
+        UNIT_ASSERT(ValidateMessageBody("Δx", desc)); 
+        UNIT_ASSERT(ValidateMessageBody(":)", desc)); 
+        UNIT_ASSERT(ValidateMessageBody("\U00010000", desc)); 
+        UNIT_ASSERT(ValidateMessageBody("\uE000", desc)); 
+        UNIT_ASSERT(ValidateMessageBody("\uFFFD", desc)); 
+        UNIT_ASSERT(ValidateMessageBody("\uD7FF", desc)); 
+        UNIT_ASSERT(ValidateMessageBody("\u00FF", desc)); 
 
         UNIT_ASSERT(!ValidateMessageBody(TStringBuf("\0", 1), desc));
-        UNIT_ASSERT(!ValidateMessageBody("\u0002", desc));
-        UNIT_ASSERT(!ValidateMessageBody("\u0019", desc));
-        UNIT_ASSERT(!ValidateMessageBody("\uFFFF", desc));
+        UNIT_ASSERT(!ValidateMessageBody("\u0002", desc)); 
+        UNIT_ASSERT(!ValidateMessageBody("\u0019", desc)); 
+        UNIT_ASSERT(!ValidateMessageBody("\uFFFF", desc)); 
     }
 }
 

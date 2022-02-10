@@ -38,14 +38,14 @@
 
 #include <memory>
 
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/pyext/message.h>
+#include <google/protobuf/descriptor.h> 
+#include <google/protobuf/pyext/message.h> 
 
 namespace google {
 namespace protobuf {
 namespace python {
 
-typedef struct RepeatedScalarContainer : public ContainerBase {
+typedef struct RepeatedScalarContainer : public ContainerBase { 
 } RepeatedScalarContainer;
 
 extern PyTypeObject RepeatedScalarContainer_Type;
@@ -54,7 +54,7 @@ namespace repeated_scalar_container {
 
 // Builds a RepeatedScalarContainer object, from a parent message and a
 // field descriptor.
-extern RepeatedScalarContainer* NewContainer(
+extern RepeatedScalarContainer* NewContainer( 
     CMessage* parent, const FieldDescriptor* parent_field_descriptor);
 
 // Appends the scalar 'item' to the end of the container 'self'.
@@ -72,6 +72,6 @@ PyObject* Extend(RepeatedScalarContainer* self, PyObject* value);
 }  // namespace repeated_scalar_container
 }  // namespace python
 }  // namespace protobuf
-}  // namespace google
+}  // namespace google 
 
 #endif  // GOOGLE_PROTOBUF_PYTHON_CPP_REPEATED_SCALAR_CONTAINER_H__

@@ -21,14 +21,14 @@ namespace NCodecs {
         }
 
         TString GetName() const override {
-            return ToString(MyName());
+            return ToString(MyName()); 
         }
 
         ui8 Encode(TStringBuf in, TBuffer& bbb) const override;
 
         void Decode(TStringBuf in, TBuffer& bbb) const override;
 
-        void LearnByFreqs(const TArrayRef<std::pair<char, ui64>>& freqs);
+        void LearnByFreqs(const TArrayRef<std::pair<char, ui64>>& freqs); 
 
     protected:
         void DoLearn(ISequenceReader& in) override;

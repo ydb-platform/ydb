@@ -1,7 +1,7 @@
 #pragma once
 
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/message.h>
+#include <google/protobuf/descriptor.h> 
+#include <google/protobuf/message.h> 
 
 #include <util/generic/vector.h>
 

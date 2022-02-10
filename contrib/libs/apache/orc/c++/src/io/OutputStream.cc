@@ -67,7 +67,7 @@ namespace orc {
     }
   }
 
-  int64_t BufferedOutputStream::ByteCount() const {
+  int64_t BufferedOutputStream::ByteCount() const { 
     return static_cast<google::protobuf::int64>(dataBuffer->size());
   }
 

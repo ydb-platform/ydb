@@ -37,13 +37,13 @@ namespace {
 template <typename Type, typename Enable = void>
 struct FillNullFunctor {};
 
-// Numeric inputs
-
+// Numeric inputs 
+ 
 template <typename Type>
 struct FillNullFunctor<Type, enable_if_t<is_number_type<Type>::value>> {
   using T = typename TypeTraits<Type>::CType;
 
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     const ArrayData& data = *batch[0].array();
     const Scalar& fill_value = *batch[1].scalar();
     ArrayData* output = out->mutable_array();
@@ -54,8 +54,8 @@ struct FillNullFunctor<Type, enable_if_t<is_number_type<Type>::value>> {
 
     T value = UnboxScalar<Type>::Unbox(fill_value);
     if (data.MayHaveNulls() != 0 && fill_value.is_valid) {
-      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<Buffer> out_buf,
-                            ctx->Allocate(data.length * sizeof(T)));
+      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<Buffer> out_buf, 
+                            ctx->Allocate(data.length * sizeof(T))); 
 
       const uint8_t* is_valid = data.buffers[0]->data();
       const T* in_values = data.GetValues<T>(1);
@@ -80,28 +80,28 @@ struct FillNullFunctor<Type, enable_if_t<is_number_type<Type>::value>> {
         in_values += block.length;
       }
       output->buffers[1] = out_buf;
-      output->null_count = 0;
+      output->null_count = 0; 
     } else {
       *output = data;
     }
-
-    return Status::OK();
+ 
+    return Status::OK(); 
   }
 };
 
-// Boolean input
-
+// Boolean input 
+ 
 template <typename Type>
 struct FillNullFunctor<Type, enable_if_t<is_boolean_type<Type>::value>> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     const ArrayData& data = *batch[0].array();
     const Scalar& fill_value = *batch[1].scalar();
     ArrayData* output = out->mutable_array();
 
     bool value = UnboxScalar<BooleanType>::Unbox(fill_value);
     if (data.MayHaveNulls() != 0 && fill_value.is_valid) {
-      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<Buffer> out_buf,
-                            ctx->AllocateBitmap(data.length));
+      ARROW_ASSIGN_OR_RAISE(std::shared_ptr<Buffer> out_buf, 
+                            ctx->AllocateBitmap(data.length)); 
 
       const uint8_t* is_valid = data.buffers[0]->data();
       const uint8_t* data_bitmap = data.buffers[1]->data();
@@ -132,68 +132,68 @@ struct FillNullFunctor<Type, enable_if_t<is_boolean_type<Type>::value>> {
         out_offset += block.length;
       }
       output->buffers[1] = out_buf;
-      output->null_count = 0;
+      output->null_count = 0; 
     } else {
       *output = data;
     }
-
-    return Status::OK();
+ 
+    return Status::OK(); 
   }
 };
 
-// Null input
-
+// Null input 
+ 
 template <typename Type>
 struct FillNullFunctor<Type, enable_if_t<is_null_type<Type>::value>> {
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
     // Nothing preallocated, so we assign into the output
     *out->mutable_array() = *batch[0].array();
-    return Status::OK();
+    return Status::OK(); 
   }
 };
 
-// Binary-like input
-
-template <typename Type>
-struct FillNullFunctor<Type, enable_if_t<is_base_binary_type<Type>::value>> {
-  using BuilderType = typename TypeTraits<Type>::BuilderType;
-
-  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) {
-    const ArrayData& input = *batch[0].array();
-    const auto& fill_value_scalar =
-        checked_cast<const BaseBinaryScalar&>(*batch[1].scalar());
-    ArrayData* output = out->mutable_array();
-
-    // Ensure the kernel is configured properly to have no validity bitmap /
-    // null count 0 unless we explicitly propagate it below.
-    DCHECK(output->buffers[0] == nullptr);
-
-    const int64_t null_count = input.GetNullCount();
-
-    if (null_count > 0 && fill_value_scalar.is_valid) {
-      util::string_view fill_value(*fill_value_scalar.value);
-      BuilderType builder(input.type, ctx->memory_pool());
-      RETURN_NOT_OK(builder.ReserveData(input.buffers[2]->size() +
-                                        fill_value.length() * null_count));
-      RETURN_NOT_OK(builder.Resize(input.length));
-
-      VisitArrayDataInline<Type>(
-          input, [&](util::string_view s) { builder.UnsafeAppend(s); },
-          [&]() { builder.UnsafeAppend(fill_value); });
-      std::shared_ptr<Array> string_array;
-      RETURN_NOT_OK(builder.Finish(&string_array));
-      *output = *string_array->data();
-      // The builder does not match the logical type, due to
-      // GenerateTypeAgnosticVarBinaryBase
-      output->type = input.type;
-    } else {
-      *output = input;
-    }
-
-    return Status::OK();
-  }
-};
-
+// Binary-like input 
+ 
+template <typename Type> 
+struct FillNullFunctor<Type, enable_if_t<is_base_binary_type<Type>::value>> { 
+  using BuilderType = typename TypeTraits<Type>::BuilderType; 
+ 
+  static Status Exec(KernelContext* ctx, const ExecBatch& batch, Datum* out) { 
+    const ArrayData& input = *batch[0].array(); 
+    const auto& fill_value_scalar = 
+        checked_cast<const BaseBinaryScalar&>(*batch[1].scalar()); 
+    ArrayData* output = out->mutable_array(); 
+ 
+    // Ensure the kernel is configured properly to have no validity bitmap / 
+    // null count 0 unless we explicitly propagate it below. 
+    DCHECK(output->buffers[0] == nullptr); 
+ 
+    const int64_t null_count = input.GetNullCount(); 
+ 
+    if (null_count > 0 && fill_value_scalar.is_valid) { 
+      util::string_view fill_value(*fill_value_scalar.value); 
+      BuilderType builder(input.type, ctx->memory_pool()); 
+      RETURN_NOT_OK(builder.ReserveData(input.buffers[2]->size() + 
+                                        fill_value.length() * null_count)); 
+      RETURN_NOT_OK(builder.Resize(input.length)); 
+ 
+      VisitArrayDataInline<Type>( 
+          input, [&](util::string_view s) { builder.UnsafeAppend(s); }, 
+          [&]() { builder.UnsafeAppend(fill_value); }); 
+      std::shared_ptr<Array> string_array; 
+      RETURN_NOT_OK(builder.Finish(&string_array)); 
+      *output = *string_array->data(); 
+      // The builder does not match the logical type, due to 
+      // GenerateTypeAgnosticVarBinaryBase 
+      output->type = input.type; 
+    } else { 
+      *output = input; 
+    } 
+ 
+    return Status::OK(); 
+  } 
+}; 
+ 
 void AddBasicFillNullKernels(ScalarKernel kernel, ScalarFunction* func) {
   auto AddKernels = [&](const std::vector<std::shared_ptr<DataType>>& types) {
     for (const std::shared_ptr<DataType>& ty : types) {
@@ -208,22 +208,22 @@ void AddBasicFillNullKernels(ScalarKernel kernel, ScalarFunction* func) {
   AddKernels({boolean(), null()});
 }
 
-void AddBinaryFillNullKernels(ScalarKernel kernel, ScalarFunction* func) {
-  for (const std::shared_ptr<DataType>& ty : BaseBinaryTypes()) {
-    kernel.signature =
-        KernelSignature::Make({InputType::Array(ty), InputType::Scalar(ty)}, ty);
-    kernel.exec = GenerateTypeAgnosticVarBinaryBase<FillNullFunctor>(*ty);
-    DCHECK_OK(func->AddKernel(kernel));
-  }
-}
-
-const FunctionDoc fill_null_doc{
-    "Replace null elements",
-    ("`fill_value` must be a scalar of the same type as `values`.\n"
-     "Each non-null value in `values` is emitted as-is.\n"
-     "Each null value in `values` is replaced with `fill_value`."),
-    {"values", "fill_value"}};
-
+void AddBinaryFillNullKernels(ScalarKernel kernel, ScalarFunction* func) { 
+  for (const std::shared_ptr<DataType>& ty : BaseBinaryTypes()) { 
+    kernel.signature = 
+        KernelSignature::Make({InputType::Array(ty), InputType::Scalar(ty)}, ty); 
+    kernel.exec = GenerateTypeAgnosticVarBinaryBase<FillNullFunctor>(*ty); 
+    DCHECK_OK(func->AddKernel(kernel)); 
+  } 
+} 
+ 
+const FunctionDoc fill_null_doc{ 
+    "Replace null elements", 
+    ("`fill_value` must be a scalar of the same type as `values`.\n" 
+     "Each non-null value in `values` is emitted as-is.\n" 
+     "Each null value in `values` is replaced with `fill_value`."), 
+    {"values", "fill_value"}}; 
+ 
 }  // namespace
 
 void RegisterScalarFillNull(FunctionRegistry* registry) {
@@ -231,10 +231,10 @@ void RegisterScalarFillNull(FunctionRegistry* registry) {
     ScalarKernel fill_null_base;
     fill_null_base.null_handling = NullHandling::COMPUTED_NO_PREALLOCATE;
     fill_null_base.mem_allocation = MemAllocation::NO_PREALLOCATE;
-    auto fill_null =
-        std::make_shared<ScalarFunction>("fill_null", Arity::Binary(), &fill_null_doc);
+    auto fill_null = 
+        std::make_shared<ScalarFunction>("fill_null", Arity::Binary(), &fill_null_doc); 
     AddBasicFillNullKernels(fill_null_base, fill_null.get());
-    AddBinaryFillNullKernels(fill_null_base, fill_null.get());
+    AddBinaryFillNullKernels(fill_null_base, fill_null.get()); 
     DCHECK_OK(registry->AddFunction(fill_null));
   }
 }

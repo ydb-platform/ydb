@@ -4,8 +4,8 @@
 #include "path.h"
 #include "traits.h"
 
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/message.h>
+#include <google/protobuf/descriptor.h> 
+#include <google/protobuf/message.h> 
 
 #include <util/generic/maybe.h>
 #include <util/generic/typetraits.h>

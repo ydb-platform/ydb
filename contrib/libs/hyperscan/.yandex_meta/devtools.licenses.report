@@ -30,7 +30,7 @@
 # =======================
 
 KEEP     BSD-3-Clause         0a4ed1ba60401e7adddd4627f0742271
-BELONGS ya.make
+BELONGS ya.make 
     License text:
          *** What follows is derived from Intel's Slicing-by-8 CRC32 impl, which is BSD
          *** licensed and available from http://sourceforge.net/projects/slicing-by-8/
@@ -54,7 +54,7 @@ BELONGS ya.make
         LICENSE [92:116]
 
 KEEP     BSD-3-Clause         1cf0b95cc97a0b670f31f920d6a0cc89
-BELONGS ya.make
+BELONGS ya.make 
     License text:
          * This software program is licensed subject to the BSD License, 
          * available at http://www.opensource.org/licenses/bsd-license.html.
@@ -78,7 +78,7 @@ BELONGS ya.make
         LICENSE [64:86]
 
 KEEP     BSL-1.0              2cc71fe4bd12718a9884bf7ff37269f3
-BELONGS ya.make
+BELONGS ya.make 
     License text:
         // Distributed under the Boost Software License, Version 1.0.
         // (See accompanying file LICENSE_1_0.txt or copy at
@@ -103,7 +103,7 @@ BELONGS ya.make
         LICENSE [5:26]
 
 KEEP     BSD-3-Clause         4bd413230c8a7f23e3bb7671e2416c1c
-BELONGS ya.make
+BELONGS ya.make 
     License text:
         // BSD-licensed code, with additions to handled aligned case automatically.
     Scancode info:
@@ -141,7 +141,7 @@ BELONGS ya.make
         LICENSE [1:1]
 
 KEEP     BSD-3-Clause         6e500f366f90c01e0d7da6e88327038a
-BELONGS runtime_avx2/ya.make runtime_avx512/ya.make runtime_core2/ya.make runtime_corei7/ya.make ya.make
+BELONGS runtime_avx2/ya.make runtime_avx512/ya.make runtime_core2/ya.make runtime_corei7/ya.make ya.make 
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: BSD-3-Clause
@@ -149,15 +149,15 @@ BELONGS runtime_avx2/ya.make runtime_avx512/ya.make runtime_core2/ya.make runtim
         Match type      : TEXT
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        hs_version.h [4:26]
-        runtime_avx2/hs_common.h [4:26]
-        runtime_avx2/hs_runtime.h [4:26]
-        runtime_avx512/hs_common.h [4:26]
-        runtime_avx512/hs_runtime.h [4:26]
-        runtime_core2/hs_common.h [4:26]
-        runtime_core2/hs_runtime.h [4:26]
-        runtime_corei7/hs_common.h [4:26]
-        runtime_corei7/hs_runtime.h [4:26]
+        hs_version.h [4:26] 
+        runtime_avx2/hs_common.h [4:26] 
+        runtime_avx2/hs_runtime.h [4:26] 
+        runtime_avx512/hs_common.h [4:26] 
+        runtime_avx512/hs_runtime.h [4:26] 
+        runtime_core2/hs_common.h [4:26] 
+        runtime_core2/hs_runtime.h [4:26] 
+        runtime_corei7/hs_common.h [4:26] 
+        runtime_corei7/hs_runtime.h [4:26] 
         src/alloc.c [4:26]
         src/allocator.h [4:26]
         src/compiler/asserts.cpp [4:26]
@@ -280,7 +280,7 @@ BELONGS runtime_avx2/ya.make runtime_avx512/ya.make runtime_core2/ya.make runtim
         src/nfa/mcclellancompile.h [4:26]
         src/nfa/mcclellancompile_util.cpp [4:26]
         src/nfa/mcclellancompile_util.h [4:26]
-        src/nfa/mcclellandump.h [4:26]
+        src/nfa/mcclellandump.h [4:26] 
         src/nfa/mcsheng.c [4:26]
         src/nfa/mcsheng.h [4:26]
         src/nfa/mcsheng_compile.cpp [4:26]
@@ -477,7 +477,7 @@ BELONGS runtime_avx2/ya.make runtime_avx512/ya.make runtime_core2/ya.make runtim
         src/parser/ConstComponentVisitor.cpp [4:26]
         src/parser/ConstComponentVisitor.h [4:26]
         src/parser/Parser.h [4:26]
-        src/parser/Parser.rl6 [4:26]
+        src/parser/Parser.rl6 [4:26] 
         src/parser/Utf8ComponentClass.cpp [4:26]
         src/parser/Utf8ComponentClass.h [4:26]
         src/parser/buildstate.cpp [4:26]
@@ -485,10 +485,10 @@ BELONGS runtime_avx2/ya.make runtime_avx512/ya.make runtime_core2/ya.make runtim
         src/parser/check_refs.cpp [4:26]
         src/parser/check_refs.h [4:26]
         src/parser/control_verbs.h [4:26]
-        src/parser/control_verbs.rl6 [4:26]
+        src/parser/control_verbs.rl6 [4:26] 
         src/parser/dump.h [4:26]
-        src/parser/logical_combination.cpp [4:26]
-        src/parser/logical_combination.h [4:26]
+        src/parser/logical_combination.cpp [4:26] 
+        src/parser/logical_combination.h [4:26] 
         src/parser/parse_error.cpp [4:26]
         src/parser/parse_error.h [4:26]
         src/parser/parser_util.cpp [4:26]
@@ -631,7 +631,7 @@ BELONGS runtime_avx2/ya.make runtime_avx512/ya.make runtime_core2/ya.make runtim
         src/util/dump_charclass.h [4:26]
         src/util/dump_mask.cpp [4:26]
         src/util/dump_mask.h [4:26]
-        src/util/dump_util.h [4:26]
+        src/util/dump_util.h [4:26] 
         src/util/exhaust.h [4:26]
         src/util/fatbit.h [4:26]
         src/util/fatbit_build.cpp [4:26]
@@ -640,13 +640,13 @@ BELONGS runtime_avx2/ya.make runtime_avx512/ya.make runtime_core2/ya.make runtim
         src/util/graph.h [4:26]
         src/util/graph_range.h [4:26]
         src/util/graph_small_color_map.h [4:26]
-        src/util/graph_undirected.h [4:26]
+        src/util/graph_undirected.h [4:26] 
         src/util/hash.h [4:26]
         src/util/hash_dynamic_bitset.h [4:26]
         src/util/insertion_ordered.h [4:26]
         src/util/intrinsics.h [4:26]
         src/util/join.h [4:26]
-        src/util/logical.h [4:26]
+        src/util/logical.h [4:26] 
         src/util/make_unique.h [4:26]
         src/util/masked_move.c [4:26]
         src/util/masked_move.h [4:26]

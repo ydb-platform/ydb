@@ -73,11 +73,11 @@ namespace boost { namespace numeric { namespace ublas {
             //                    r_.start () + r_.size () <= data_.size (), bad_index ());
         }
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
-        BOOST_UBLAS_INLINE
-        vector_range (const vector_range&) = default;
-#endif
-
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
+        BOOST_UBLAS_INLINE 
+        vector_range (const vector_range&) = default; 
+#endif 
+ 
         // Accessors
         BOOST_UBLAS_INLINE
         size_type start () const {
@@ -286,11 +286,11 @@ namespace boost { namespace numeric { namespace ublas {
             const_iterator (const typename self_type::iterator &it):  // ISSUE self_type:: stops VC8 using std::iterator here
                 container_const_reference<self_type> (it ()), it_ (it.it_) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
-            BOOST_UBLAS_INLINE
-            const_iterator (const const_iterator&) = default;
-#endif
-
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
+            BOOST_UBLAS_INLINE 
+            const_iterator (const const_iterator&) = default; 
+#endif 
+ 
             // Arithmetic
             BOOST_UBLAS_INLINE
             const_iterator &operator ++ () {
@@ -655,11 +655,11 @@ namespace boost { namespace numeric { namespace ublas {
             //                    s_.start () + s_.stride () * (s_.size () - (s_.size () > 0)) <= data_.size (), bad_index ());
         }
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
-        BOOST_UBLAS_INLINE
-        vector_slice (const vector_slice&) = default;
-#endif
-
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
+        BOOST_UBLAS_INLINE 
+        vector_slice (const vector_slice&) = default; 
+#endif 
+ 
         // Accessors
         BOOST_UBLAS_INLINE
         size_type start () const {
@@ -873,11 +873,11 @@ namespace boost { namespace numeric { namespace ublas {
             const_iterator (const typename self_type::iterator &it):  // ISSUE self_type:: stops VC8 using std::iterator here
                 container_const_reference<self_type> (it ()), it_ (it.it_) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
-            BOOST_UBLAS_INLINE
-            const_iterator (const const_iterator&) = default;
-#endif
-
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
+            BOOST_UBLAS_INLINE 
+            const_iterator (const const_iterator&) = default; 
+#endif 
+ 
             // Arithmetic
             BOOST_UBLAS_INLINE
             const_iterator &operator ++ () {
@@ -984,11 +984,11 @@ namespace boost { namespace numeric { namespace ublas {
             iterator (self_type &vs, const subiterator_type &it):
                 container_reference<self_type> (vs), it_ (it) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
-            BOOST_UBLAS_INLINE
-            iterator (const iterator&) = default;
-#endif
-
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
+            BOOST_UBLAS_INLINE 
+            iterator (const iterator&) = default; 
+#endif 
+ 
             // Arithmetic
             BOOST_UBLAS_INLINE
             iterator &operator ++ () {
@@ -1444,11 +1444,11 @@ namespace boost { namespace numeric { namespace ublas {
             const_iterator (const typename self_type::iterator &it):  // ISSUE self_type:: stops VC8 using std::iterator here
                 container_const_reference<self_type> (it ()), it_ (it.it_) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
-            BOOST_UBLAS_INLINE
-            const_iterator (const const_iterator&) = default;
-#endif
-
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
+            BOOST_UBLAS_INLINE 
+            const_iterator (const const_iterator&) = default; 
+#endif 
+ 
             // Arithmetic
             BOOST_UBLAS_INLINE
             const_iterator &operator ++ () {
@@ -1555,11 +1555,11 @@ namespace boost { namespace numeric { namespace ublas {
             iterator (self_type &vi, const subiterator_type &it):
                 container_reference<self_type> (vi), it_ (it) {}
 
-#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
-            BOOST_UBLAS_INLINE
-            iterator (const iterator&) = default;
-#endif
-
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS 
+            BOOST_UBLAS_INLINE 
+            iterator (const iterator&) = default; 
+#endif 
+ 
             // Arithmetic
             BOOST_UBLAS_INLINE
             iterator &operator ++ () {

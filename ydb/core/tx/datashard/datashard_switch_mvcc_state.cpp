@@ -29,11 +29,11 @@ void TDataShard::CheckMvccStateChangeCanStart(const TActorContext& ctx) {
                     // We cannot start checking before shard initialization
 
                     Y_VERIFY_DEBUG(false, "Unexpected shard state State:%d", State);
-                    [[fallthrough]];
+                    [[fallthrough]]; 
 
                 case TShardState::Readonly:
                     // Don't switch the state on follower
-                    [[fallthrough]];
+                    [[fallthrough]]; 
 
                 case TShardState::Offline:
                 case TShardState::PreOffline:
@@ -42,7 +42,7 @@ void TDataShard::CheckMvccStateChangeCanStart(const TActorContext& ctx) {
                 case TShardState::SplitSrcSendingSnapshot:
                 case TShardState::SplitSrcWaitForPartitioningChanged:
                     // Don't switch the state while splitting or stopping
-                    [[fallthrough]];
+                    [[fallthrough]]; 
 
                 default:
                     // How we ran into it??

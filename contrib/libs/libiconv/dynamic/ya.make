@@ -1,7 +1,7 @@
 DYNAMIC_LIBRARY(iconv)
 
 OWNER(
-    g:contrib g:cpp-contrib
+    g:contrib g:cpp-contrib 
 )
 
 VERSION(1.13)

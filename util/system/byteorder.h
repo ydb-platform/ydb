@@ -30,28 +30,28 @@
         #define SwapBytes32 OSSwapInt32
         #define SwapBytes64 OSSwapInt64
     #endif
-#endif
+#endif 
 
-#ifndef SwapBytes16
+#ifndef SwapBytes16 
 inline ui16 SwapBytes16(ui16 val) noexcept {
-    #define byte_n(__val, __n) ((((unsigned char*)(&__val))[__n]))
+    #define byte_n(__val, __n) ((((unsigned char*)(&__val))[__n])) 
     DoSwap(byte_n(val, 0), byte_n(val, 1));
     return val;
-    #undef byte_n
+    #undef byte_n 
 }
-#endif
+#endif 
 
-#ifndef SwapBytes32
+#ifndef SwapBytes32 
 inline ui32 SwapBytes32(ui32 val) noexcept {
-    #define byte_n(__val, __n) ((((unsigned char*)(&__val))[__n]))
+    #define byte_n(__val, __n) ((((unsigned char*)(&__val))[__n])) 
     DoSwap(byte_n(val, 0), byte_n(val, 3));
     DoSwap(byte_n(val, 1), byte_n(val, 2));
     return val;
-    #undef byte_n
+    #undef byte_n 
 }
-#endif
+#endif 
 
-#ifndef SwapBytes64
+#ifndef SwapBytes64 
 inline ui64 SwapBytes64(ui64 val) noexcept {
     union {
         ui64 val;

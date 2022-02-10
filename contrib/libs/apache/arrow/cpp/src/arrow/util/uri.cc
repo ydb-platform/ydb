@@ -23,7 +23,7 @@
 
 #include "arrow/util/string_view.h"
 #include "arrow/util/value_parsing.h"
-#include "contrib/restricted/uriparser/include/uriparser/Uri.h"
+#include "contrib/restricted/uriparser/include/uriparser/Uri.h" 
 
 namespace arrow {
 namespace internal {
@@ -71,28 +71,28 @@ std::string UriEscape(const std::string& s) {
   return escaped;
 }
 
-std::string UriUnescape(const util::string_view s) {
-  std::string result(s);
-  if (!result.empty()) {
-    auto end = uriUnescapeInPlaceA(&result[0]);
-    result.resize(end - &result[0]);
-  }
-  return result;
-}
-
-std::string UriEncodeHost(const std::string& host) {
-  // Fairly naive check: if it contains a ':', it's IPv6 and needs
-  // brackets, else it's OK
-  if (host.find(":") != std::string::npos) {
-    std::string result = "[";
-    result += host;
-    result += ']';
-    return result;
-  } else {
-    return host;
-  }
-}
-
+std::string UriUnescape(const util::string_view s) { 
+  std::string result(s); 
+  if (!result.empty()) { 
+    auto end = uriUnescapeInPlaceA(&result[0]); 
+    result.resize(end - &result[0]); 
+  } 
+  return result; 
+} 
+ 
+std::string UriEncodeHost(const std::string& host) { 
+  // Fairly naive check: if it contains a ':', it's IPv6 and needs 
+  // brackets, else it's OK 
+  if (host.find(":") != std::string::npos) { 
+    std::string result = "["; 
+    result += host; 
+    result += ']'; 
+    return result; 
+  } else { 
+    return host; 
+  } 
+} 
+ 
 struct Uri::Impl {
   Impl() : string_rep_(""), port_(-1) { memset(&uri_, 0, sizeof(uri_)); }
 

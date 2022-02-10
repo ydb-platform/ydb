@@ -136,7 +136,7 @@ namespace NTable {
 
     private:
         ui8 Value = 0;
-    } Y_PACKED;
+    } Y_PACKED; 
 
 #pragma pack(pop)
 

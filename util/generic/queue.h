@@ -14,7 +14,7 @@ class TQueue: public std::queue<T, S> {
     using TBase = std::queue<T, S>;
 
 public:
-    using TBase::TBase;
+    using TBase::TBase; 
 
     inline explicit operator bool() const noexcept {
         return !this->empty();
@@ -35,10 +35,10 @@ public:
 
 template <class T, class S, class C>
 class TPriorityQueue: public std::priority_queue<T, S, C> {
-    using TBase = std::priority_queue<T, S, C>;
+    using TBase = std::priority_queue<T, S, C>; 
 
 public:
-    using TBase::TBase;
+    using TBase::TBase; 
 
     inline explicit operator bool() const noexcept {
         return !this->empty();

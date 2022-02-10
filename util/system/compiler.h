@@ -158,9 +158,9 @@
 #endif
 
 #ifdef __GNUC__
-    #define Y_PACKED __attribute__((packed))
+    #define Y_PACKED __attribute__((packed)) 
 #else
-    #define Y_PACKED
+    #define Y_PACKED 
 #endif
 
 #if defined(__GNUC__)
@@ -262,7 +262,7 @@ _YandexAbort();
  * }
  * @endcode
  */
-#if defined(__GNUC__)
+#if defined(__GNUC__) 
     #define Y_UNREACHABLE() __builtin_unreachable()
 #elif defined(_MSC_VER)
     #define Y_UNREACHABLE() __assume(false)
@@ -626,21 +626,21 @@ _YandexAbort();
 
 #ifdef __cplusplus
 
-void UseCharPointerImpl(volatile const char*);
+void UseCharPointerImpl(volatile const char*); 
 
-template <typename T>
-Y_FORCE_INLINE void DoNotOptimizeAway(T&& datum) {
+template <typename T> 
+Y_FORCE_INLINE void DoNotOptimizeAway(T&& datum) { 
     #if defined(_MSC_VER)
-    UseCharPointerImpl(&reinterpret_cast<volatile const char&>(datum));
-    _ReadWriteBarrier();
+    UseCharPointerImpl(&reinterpret_cast<volatile const char&>(datum)); 
+    _ReadWriteBarrier(); 
     #elif defined(__GNUC__) && defined(_x86_)
-    asm volatile(""
-                 :
-                 : "X"(datum));
+    asm volatile("" 
+                 : 
+                 : "X"(datum)); 
     #else
-    Y_FAKE_READ(datum);
+    Y_FAKE_READ(datum); 
     #endif
-}
+} 
 
     /**
  * Use this macro to prevent unused variables elimination.

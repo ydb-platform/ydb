@@ -20,19 +20,19 @@
 #include <string>
 #include <utility>
 
-#include "contrib/restricted/fast_float/include/fast_float/fast_float.h"
+#include "contrib/restricted/fast_float/include/fast_float/fast_float.h" 
 
 namespace arrow {
 namespace internal {
 
 bool StringToFloat(const char* s, size_t length, float* out) {
-  const auto res = fast_float::from_chars(s, s + length, *out);
-  return res.ec == std::errc() && res.ptr == s + length;
+  const auto res = fast_float::from_chars(s, s + length, *out); 
+  return res.ec == std::errc() && res.ptr == s + length; 
 }
 
 bool StringToFloat(const char* s, size_t length, double* out) {
-  const auto res = fast_float::from_chars(s, s + length, *out);
-  return res.ec == std::errc() && res.ptr == s + length;
+  const auto res = fast_float::from_chars(s, s + length, *out); 
+  return res.ec == std::errc() && res.ptr == s + length; 
 }
 
 // ----------------------------------------------------------------------

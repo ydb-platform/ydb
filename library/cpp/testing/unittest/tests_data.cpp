@@ -98,7 +98,7 @@ ui16 TPortManager::GetPortsRange(const ui16 startPort, const ui16 range) {
     return Impl_->GetPortsRange(startPort, range);
 }
 
-ui16 GetRandomPort() {
+ui16 GetRandomPort() { 
     TPortManager* pm = Singleton<TPortManager>(false);
-    return pm->GetPort();
-}
+    return pm->GetPort(); 
+} 

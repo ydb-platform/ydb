@@ -35,24 +35,24 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_PRIMITIVE_FIELD_LITE_H__
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_PRIMITIVE_FIELD_LITE_H__
 
-#include <cstdint>
+#include <cstdint> 
 #include <map>
-#include <string>
-
-#include <google/protobuf/compiler/java/java_field.h>
+#include <string> 
+ 
+#include <google/protobuf/compiler/java/java_field.h> 
 
 namespace google {
 namespace protobuf {
-namespace compiler {
-namespace java {
-class Context;            // context.h
-class ClassNameResolver;  // name_resolver.h
-}  // namespace java
-}  // namespace compiler
-}  // namespace protobuf
-}  // namespace google
+namespace compiler { 
+namespace java { 
+class Context;            // context.h 
+class ClassNameResolver;  // name_resolver.h 
+}  // namespace java 
+}  // namespace compiler 
+}  // namespace protobuf 
+}  // namespace google 
 
-namespace google {
+namespace google { 
 namespace protobuf {
 namespace compiler {
 namespace java {
@@ -61,25 +61,25 @@ class ImmutablePrimitiveFieldLiteGenerator
     : public ImmutableFieldLiteGenerator {
  public:
   explicit ImmutablePrimitiveFieldLiteGenerator(
-      const FieldDescriptor* descriptor, int messageBitIndex, Context* context);
-  ~ImmutablePrimitiveFieldLiteGenerator() override;
+      const FieldDescriptor* descriptor, int messageBitIndex, Context* context); 
+  ~ImmutablePrimitiveFieldLiteGenerator() override; 
 
-  // implements ImmutableFieldLiteGenerator
-  // ------------------------------------
-  int GetNumBitsForMessage() const override;
-  void GenerateInterfaceMembers(io::Printer* printer) const override;
-  void GenerateMembers(io::Printer* printer) const override;
-  void GenerateBuilderMembers(io::Printer* printer) const override;
-  void GenerateInitializationCode(io::Printer* printer) const override;
-  void GenerateFieldInfo(io::Printer* printer,
-                         std::vector<uint16_t>* output) const override;
-  void GenerateKotlinDslMembers(io::Printer* printer) const override;
+  // implements ImmutableFieldLiteGenerator 
+  // ------------------------------------ 
+  int GetNumBitsForMessage() const override; 
+  void GenerateInterfaceMembers(io::Printer* printer) const override; 
+  void GenerateMembers(io::Printer* printer) const override; 
+  void GenerateBuilderMembers(io::Printer* printer) const override; 
+  void GenerateInitializationCode(io::Printer* printer) const override; 
+  void GenerateFieldInfo(io::Printer* printer, 
+                         std::vector<uint16_t>* output) const override; 
+  void GenerateKotlinDslMembers(io::Printer* printer) const override; 
 
-  TProtoStringType GetBoxedType() const override;
+  TProtoStringType GetBoxedType() const override; 
 
  protected:
   const FieldDescriptor* descriptor_;
-  std::map<TProtoStringType, TProtoStringType> variables_;
+  std::map<TProtoStringType, TProtoStringType> variables_; 
   const int messageBitIndex_;
   ClassNameResolver* name_resolver_;
 
@@ -90,16 +90,16 @@ class ImmutablePrimitiveFieldLiteGenerator
 class ImmutablePrimitiveOneofFieldLiteGenerator
     : public ImmutablePrimitiveFieldLiteGenerator {
  public:
-  ImmutablePrimitiveOneofFieldLiteGenerator(const FieldDescriptor* descriptor,
-                                            int messageBitIndex,
-                                            Context* context);
+  ImmutablePrimitiveOneofFieldLiteGenerator(const FieldDescriptor* descriptor, 
+                                            int messageBitIndex, 
+                                            Context* context); 
   ~ImmutablePrimitiveOneofFieldLiteGenerator();
 
   void GenerateMembers(io::Printer* printer) const;
   void GenerateBuilderMembers(io::Printer* printer) const;
 
-  void GenerateFieldInfo(io::Printer* printer,
-                         std::vector<uint16_t>* output) const;
+  void GenerateFieldInfo(io::Printer* printer, 
+                         std::vector<uint16_t>* output) const; 
 
  private:
   GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(ImmutablePrimitiveOneofFieldLiteGenerator);
@@ -109,24 +109,24 @@ class RepeatedImmutablePrimitiveFieldLiteGenerator
     : public ImmutableFieldLiteGenerator {
  public:
   explicit RepeatedImmutablePrimitiveFieldLiteGenerator(
-      const FieldDescriptor* descriptor, int messageBitIndex, Context* context);
-  ~RepeatedImmutablePrimitiveFieldLiteGenerator() override;
+      const FieldDescriptor* descriptor, int messageBitIndex, Context* context); 
+  ~RepeatedImmutablePrimitiveFieldLiteGenerator() override; 
 
   // implements ImmutableFieldLiteGenerator ------------------------------------
-  int GetNumBitsForMessage() const override;
-  void GenerateInterfaceMembers(io::Printer* printer) const override;
-  void GenerateMembers(io::Printer* printer) const override;
-  void GenerateBuilderMembers(io::Printer* printer) const override;
-  void GenerateInitializationCode(io::Printer* printer) const override;
-  void GenerateFieldInfo(io::Printer* printer,
-                         std::vector<uint16_t>* output) const override;
-  void GenerateKotlinDslMembers(io::Printer* printer) const override;
+  int GetNumBitsForMessage() const override; 
+  void GenerateInterfaceMembers(io::Printer* printer) const override; 
+  void GenerateMembers(io::Printer* printer) const override; 
+  void GenerateBuilderMembers(io::Printer* printer) const override; 
+  void GenerateInitializationCode(io::Printer* printer) const override; 
+  void GenerateFieldInfo(io::Printer* printer, 
+                         std::vector<uint16_t>* output) const override; 
+  void GenerateKotlinDslMembers(io::Printer* printer) const override; 
 
-  TProtoStringType GetBoxedType() const override;
+  TProtoStringType GetBoxedType() const override; 
 
  private:
   const FieldDescriptor* descriptor_;
-  std::map<TProtoStringType, TProtoStringType> variables_;
+  std::map<TProtoStringType, TProtoStringType> variables_; 
   Context* context_;
   ClassNameResolver* name_resolver_;
 
@@ -136,6 +136,6 @@ class RepeatedImmutablePrimitiveFieldLiteGenerator
 }  // namespace java
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google
+}  // namespace google 
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_JAVA_PRIMITIVE_FIELD_LITE_H__

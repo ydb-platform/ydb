@@ -35,15 +35,15 @@ namespace google {
 namespace protobuf {
 
 #undef GOOGLE_DISALLOW_EVIL_CONSTRUCTORS
-#define GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(TypeName) \
-  TypeName(const TypeName&) = delete;               \
-  void operator=(const TypeName&) = delete
+#define GOOGLE_DISALLOW_EVIL_CONSTRUCTORS(TypeName) \ 
+  TypeName(const TypeName&) = delete;               \ 
+  void operator=(const TypeName&) = delete 
 
 #undef GOOGLE_DISALLOW_IMPLICIT_CONSTRUCTORS
 #define GOOGLE_DISALLOW_IMPLICIT_CONSTRUCTORS(TypeName) \
-  TypeName() = delete;                                  \
-  TypeName(const TypeName&) = delete;                   \
-  void operator=(const TypeName&) = delete
+  TypeName() = delete;                                  \ 
+  TypeName(const TypeName&) = delete;                   \ 
+  void operator=(const TypeName&) = delete 
 
 // ===================================================================
 // from google3/base/basictypes.h

@@ -152,7 +152,7 @@ namespace NTable {
         void ParseMeta(TArrayRef<const char> plain) noexcept
         {
             TMemoryInput stream(plain.data(), plain.size());
-            bool parsed = Root.ParseFromArcadiaStream(&stream);
+            bool parsed = Root.ParseFromArcadiaStream(&stream); 
             Y_VERIFY(parsed && stream.Skip(1) == 0, "Cannot parse TPart meta");
             Y_VERIFY(Root.HasEpoch(), "TPart meta has no epoch info");
         }

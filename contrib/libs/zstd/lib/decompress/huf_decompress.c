@@ -1,7 +1,7 @@
 /* ******************************************************************
  * huff0 huffman decoder,
  * part of Finite State Entropy library
- * Copyright (c) Yann Collet, Facebook, Inc.
+ * Copyright (c) Yann Collet, Facebook, Inc. 
  *
  *  You can contact the author at :
  *  - FSE+HUF source repository : https://github.com/Cyan4973/FiniteStateEntropy
@@ -15,7 +15,7 @@
 /* **************************************************************
 *  Dependencies
 ****************************************************************/
-#include "../common/zstd_deps.h"  /* ZSTD_memcpy, ZSTD_memset */
+#include "../common/zstd_deps.h"  /* ZSTD_memcpy, ZSTD_memset */ 
 #include "../common/compiler.h"
 #include "../common/bitstream.h"  /* BIT_* */
 #include "../common/fse.h"        /* to compress headers */
@@ -134,7 +134,7 @@ typedef struct { BYTE maxTableLog; BYTE tableType; BYTE tableLog; BYTE reserved;
 static DTableDesc HUF_getDTableDesc(const HUF_DTable* table)
 {
     DTableDesc dtd;
-    ZSTD_memcpy(&dtd, table, sizeof(dtd));
+    ZSTD_memcpy(&dtd, table, sizeof(dtd)); 
     return dtd;
 }
 
@@ -280,21 +280,21 @@ static size_t HUF_initRemainingDStream(BIT_DStream_t* bit, HUF_DecompressAsmArgs
 /*-***************************/
 typedef struct { BYTE nbBits; BYTE byte; } HUF_DEltX1;   /* single-symbol decoding */
 
-/**
- * Packs 4 HUF_DEltX1 structs into a U64. This is used to lay down 4 entries at
- * a time.
- */
-static U64 HUF_DEltX1_set4(BYTE symbol, BYTE nbBits) {
-    U64 D4;
-    if (MEM_isLittleEndian()) {
+/** 
+ * Packs 4 HUF_DEltX1 structs into a U64. This is used to lay down 4 entries at 
+ * a time. 
+ */ 
+static U64 HUF_DEltX1_set4(BYTE symbol, BYTE nbBits) { 
+    U64 D4; 
+    if (MEM_isLittleEndian()) { 
         D4 = (symbol << 8) + nbBits;
     } else {
-        D4 = symbol + (nbBits << 8);
-    }
-    D4 *= 0x0001000100010001ULL;
-    return D4;
-}
-
+        D4 = symbol + (nbBits << 8); 
+    } 
+    D4 *= 0x0001000100010001ULL; 
+    return D4; 
+} 
+ 
 /**
  * Increase the tableLog to targetTableLog and rescales the stats.
  * If tableLog > targetTableLog this is a no-op.
@@ -325,36 +325,36 @@ static U32 HUF_rescaleStats(BYTE* huffWeight, U32* rankVal, U32 nbSymbols, U32 t
     return targetTableLog;
 }
 
-typedef struct {
-        U32 rankVal[HUF_TABLELOG_ABSOLUTEMAX + 1];
-        U32 rankStart[HUF_TABLELOG_ABSOLUTEMAX + 1];
-        U32 statsWksp[HUF_READ_STATS_WORKSPACE_SIZE_U32];
-        BYTE symbols[HUF_SYMBOLVALUE_MAX + 1];
-        BYTE huffWeight[HUF_SYMBOLVALUE_MAX + 1];
-} HUF_ReadDTableX1_Workspace;
-
-
+typedef struct { 
+        U32 rankVal[HUF_TABLELOG_ABSOLUTEMAX + 1]; 
+        U32 rankStart[HUF_TABLELOG_ABSOLUTEMAX + 1]; 
+        U32 statsWksp[HUF_READ_STATS_WORKSPACE_SIZE_U32]; 
+        BYTE symbols[HUF_SYMBOLVALUE_MAX + 1]; 
+        BYTE huffWeight[HUF_SYMBOLVALUE_MAX + 1]; 
+} HUF_ReadDTableX1_Workspace; 
+ 
+ 
 size_t HUF_readDTableX1_wksp(HUF_DTable* DTable, const void* src, size_t srcSize, void* workSpace, size_t wkspSize)
 {
-    return HUF_readDTableX1_wksp_bmi2(DTable, src, srcSize, workSpace, wkspSize, /* bmi2 */ 0);
-}
-
-size_t HUF_readDTableX1_wksp_bmi2(HUF_DTable* DTable, const void* src, size_t srcSize, void* workSpace, size_t wkspSize, int bmi2)
-{
+    return HUF_readDTableX1_wksp_bmi2(DTable, src, srcSize, workSpace, wkspSize, /* bmi2 */ 0); 
+} 
+ 
+size_t HUF_readDTableX1_wksp_bmi2(HUF_DTable* DTable, const void* src, size_t srcSize, void* workSpace, size_t wkspSize, int bmi2) 
+{ 
     U32 tableLog = 0;
     U32 nbSymbols = 0;
     size_t iSize;
     void* const dtPtr = DTable + 1;
     HUF_DEltX1* const dt = (HUF_DEltX1*)dtPtr;
-    HUF_ReadDTableX1_Workspace* wksp = (HUF_ReadDTableX1_Workspace*)workSpace;
+    HUF_ReadDTableX1_Workspace* wksp = (HUF_ReadDTableX1_Workspace*)workSpace; 
 
-    DEBUG_STATIC_ASSERT(HUF_DECOMPRESS_WORKSPACE_SIZE >= sizeof(*wksp));
-    if (sizeof(*wksp) > wkspSize) return ERROR(tableLog_tooLarge);
+    DEBUG_STATIC_ASSERT(HUF_DECOMPRESS_WORKSPACE_SIZE >= sizeof(*wksp)); 
+    if (sizeof(*wksp) > wkspSize) return ERROR(tableLog_tooLarge); 
 
     DEBUG_STATIC_ASSERT(sizeof(DTableDesc) == sizeof(HUF_DTable));
-    /* ZSTD_memset(huffWeight, 0, sizeof(huffWeight)); */   /* is not necessary, even though some analyzer complain ... */
+    /* ZSTD_memset(huffWeight, 0, sizeof(huffWeight)); */   /* is not necessary, even though some analyzer complain ... */ 
 
-    iSize = HUF_readStats_wksp(wksp->huffWeight, HUF_SYMBOLVALUE_MAX + 1, wksp->rankVal, &nbSymbols, &tableLog, src, srcSize, wksp->statsWksp, sizeof(wksp->statsWksp), bmi2);
+    iSize = HUF_readStats_wksp(wksp->huffWeight, HUF_SYMBOLVALUE_MAX + 1, wksp->rankVal, &nbSymbols, &tableLog, src, srcSize, wksp->statsWksp, sizeof(wksp->statsWksp), bmi2); 
     if (HUF_isError(iSize)) return iSize;
 
 
@@ -366,114 +366,114 @@ size_t HUF_readDTableX1_wksp_bmi2(HUF_DTable* DTable, const void* src, size_t sr
         if (tableLog > (U32)(dtd.maxTableLog+1)) return ERROR(tableLog_tooLarge);   /* DTable too small, Huffman tree cannot fit in */
         dtd.tableType = 0;
         dtd.tableLog = (BYTE)tableLog;
-        ZSTD_memcpy(DTable, &dtd, sizeof(dtd));
+        ZSTD_memcpy(DTable, &dtd, sizeof(dtd)); 
     }
 
-    /* Compute symbols and rankStart given rankVal:
-     *
-     * rankVal already contains the number of values of each weight.
-     *
-     * symbols contains the symbols ordered by weight. First are the rankVal[0]
-     * weight 0 symbols, followed by the rankVal[1] weight 1 symbols, and so on.
-     * symbols[0] is filled (but unused) to avoid a branch.
-     *
-     * rankStart contains the offset where each rank belongs in the DTable.
-     * rankStart[0] is not filled because there are no entries in the table for
-     * weight 0.
-     */
-    {
-        int n;
-        int nextRankStart = 0;
-        int const unroll = 4;
-        int const nLimit = (int)nbSymbols - unroll + 1;
-        for (n=0; n<(int)tableLog+1; n++) {
-            U32 const curr = nextRankStart;
-            nextRankStart += wksp->rankVal[n];
-            wksp->rankStart[n] = curr;
-        }
-        for (n=0; n < nLimit; n += unroll) {
-            int u;
-            for (u=0; u < unroll; ++u) {
-                size_t const w = wksp->huffWeight[n+u];
-                wksp->symbols[wksp->rankStart[w]++] = (BYTE)(n+u);
-            }
-        }
-        for (; n < (int)nbSymbols; ++n) {
-            size_t const w = wksp->huffWeight[n];
-            wksp->symbols[wksp->rankStart[w]++] = (BYTE)n;
-        }
-    }
+    /* Compute symbols and rankStart given rankVal: 
+     * 
+     * rankVal already contains the number of values of each weight. 
+     * 
+     * symbols contains the symbols ordered by weight. First are the rankVal[0] 
+     * weight 0 symbols, followed by the rankVal[1] weight 1 symbols, and so on. 
+     * symbols[0] is filled (but unused) to avoid a branch. 
+     * 
+     * rankStart contains the offset where each rank belongs in the DTable. 
+     * rankStart[0] is not filled because there are no entries in the table for 
+     * weight 0. 
+     */ 
+    { 
+        int n; 
+        int nextRankStart = 0; 
+        int const unroll = 4; 
+        int const nLimit = (int)nbSymbols - unroll + 1; 
+        for (n=0; n<(int)tableLog+1; n++) { 
+            U32 const curr = nextRankStart; 
+            nextRankStart += wksp->rankVal[n]; 
+            wksp->rankStart[n] = curr; 
+        } 
+        for (n=0; n < nLimit; n += unroll) { 
+            int u; 
+            for (u=0; u < unroll; ++u) { 
+                size_t const w = wksp->huffWeight[n+u]; 
+                wksp->symbols[wksp->rankStart[w]++] = (BYTE)(n+u); 
+            } 
+        } 
+        for (; n < (int)nbSymbols; ++n) { 
+            size_t const w = wksp->huffWeight[n]; 
+            wksp->symbols[wksp->rankStart[w]++] = (BYTE)n; 
+        } 
+    } 
 
-    /* fill DTable
-     * We fill all entries of each weight in order.
+    /* fill DTable 
+     * We fill all entries of each weight in order. 
      * That way length is a constant for each iteration of the outer loop.
-     * We can switch based on the length to a different inner loop which is
-     * optimized for that particular case.
-     */
-    {
-        U32 w;
-        int symbol=wksp->rankVal[0];
-        int rankStart=0;
-        for (w=1; w<tableLog+1; ++w) {
-            int const symbolCount = wksp->rankVal[w];
-            int const length = (1 << w) >> 1;
-            int uStart = rankStart;
-            BYTE const nbBits = (BYTE)(tableLog + 1 - w);
-            int s;
-            int u;
-            switch (length) {
-            case 1:
-                for (s=0; s<symbolCount; ++s) {
-                    HUF_DEltX1 D;
-                    D.byte = wksp->symbols[symbol + s];
-                    D.nbBits = nbBits;
-                    dt[uStart] = D;
-                    uStart += 1;
-                }
-                break;
-            case 2:
-                for (s=0; s<symbolCount; ++s) {
-                    HUF_DEltX1 D;
-                    D.byte = wksp->symbols[symbol + s];
-                    D.nbBits = nbBits;
-                    dt[uStart+0] = D;
-                    dt[uStart+1] = D;
-                    uStart += 2;
-                }
-                break;
-            case 4:
-                for (s=0; s<symbolCount; ++s) {
-                    U64 const D4 = HUF_DEltX1_set4(wksp->symbols[symbol + s], nbBits);
-                    MEM_write64(dt + uStart, D4);
-                    uStart += 4;
-                }
-                break;
-            case 8:
-                for (s=0; s<symbolCount; ++s) {
-                    U64 const D4 = HUF_DEltX1_set4(wksp->symbols[symbol + s], nbBits);
-                    MEM_write64(dt + uStart, D4);
-                    MEM_write64(dt + uStart + 4, D4);
-                    uStart += 8;
-                }
-                break;
-            default:
-                for (s=0; s<symbolCount; ++s) {
-                    U64 const D4 = HUF_DEltX1_set4(wksp->symbols[symbol + s], nbBits);
-                    for (u=0; u < length; u += 16) {
-                        MEM_write64(dt + uStart + u + 0, D4);
-                        MEM_write64(dt + uStart + u + 4, D4);
-                        MEM_write64(dt + uStart + u + 8, D4);
-                        MEM_write64(dt + uStart + u + 12, D4);
-                    }
-                    assert(u == length);
-                    uStart += length;
-                }
-                break;
-            }
-            symbol += symbolCount;
-            rankStart += symbolCount * length;
-        }
-    }
+     * We can switch based on the length to a different inner loop which is 
+     * optimized for that particular case. 
+     */ 
+    { 
+        U32 w; 
+        int symbol=wksp->rankVal[0]; 
+        int rankStart=0; 
+        for (w=1; w<tableLog+1; ++w) { 
+            int const symbolCount = wksp->rankVal[w]; 
+            int const length = (1 << w) >> 1; 
+            int uStart = rankStart; 
+            BYTE const nbBits = (BYTE)(tableLog + 1 - w); 
+            int s; 
+            int u; 
+            switch (length) { 
+            case 1: 
+                for (s=0; s<symbolCount; ++s) { 
+                    HUF_DEltX1 D; 
+                    D.byte = wksp->symbols[symbol + s]; 
+                    D.nbBits = nbBits; 
+                    dt[uStart] = D; 
+                    uStart += 1; 
+                } 
+                break; 
+            case 2: 
+                for (s=0; s<symbolCount; ++s) { 
+                    HUF_DEltX1 D; 
+                    D.byte = wksp->symbols[symbol + s]; 
+                    D.nbBits = nbBits; 
+                    dt[uStart+0] = D; 
+                    dt[uStart+1] = D; 
+                    uStart += 2; 
+                } 
+                break; 
+            case 4: 
+                for (s=0; s<symbolCount; ++s) { 
+                    U64 const D4 = HUF_DEltX1_set4(wksp->symbols[symbol + s], nbBits); 
+                    MEM_write64(dt + uStart, D4); 
+                    uStart += 4; 
+                } 
+                break; 
+            case 8: 
+                for (s=0; s<symbolCount; ++s) { 
+                    U64 const D4 = HUF_DEltX1_set4(wksp->symbols[symbol + s], nbBits); 
+                    MEM_write64(dt + uStart, D4); 
+                    MEM_write64(dt + uStart + 4, D4); 
+                    uStart += 8; 
+                } 
+                break; 
+            default: 
+                for (s=0; s<symbolCount; ++s) { 
+                    U64 const D4 = HUF_DEltX1_set4(wksp->symbols[symbol + s], nbBits); 
+                    for (u=0; u < length; u += 16) { 
+                        MEM_write64(dt + uStart + u + 0, D4); 
+                        MEM_write64(dt + uStart + u + 4, D4); 
+                        MEM_write64(dt + uStart + u + 8, D4); 
+                        MEM_write64(dt + uStart + u + 12, D4); 
+                    } 
+                    assert(u == length); 
+                    uStart += length; 
+                } 
+                break; 
+            } 
+            symbol += symbolCount; 
+            rankStart += symbolCount * length; 
+        } 
+    } 
     return iSize;
 }
 
@@ -791,7 +791,7 @@ static size_t HUF_decompress4X1_DCtx_wksp_bmi2(HUF_DTable* dctx, void* dst, size
 {
     const BYTE* ip = (const BYTE*) cSrc;
 
-    size_t const hSize = HUF_readDTableX1_wksp_bmi2(dctx, cSrc, cSrcSize, workSpace, wkspSize, bmi2);
+    size_t const hSize = HUF_readDTableX1_wksp_bmi2(dctx, cSrc, cSrcSize, workSpace, wkspSize, bmi2); 
     if (HUF_isError(hSize)) return hSize;
     if (hSize >= cSrcSize) return ERROR(srcSize_wrong);
     ip += hSize; cSrcSize -= hSize;
@@ -1033,15 +1033,15 @@ static void HUF_fillDTableX2(HUF_DEltX2* DTable, const U32 targetLog,
     }
 }
 
-typedef struct {
-    rankValCol_t rankVal[HUF_TABLELOG_MAX];
-    U32 rankStats[HUF_TABLELOG_MAX + 1];
+typedef struct { 
+    rankValCol_t rankVal[HUF_TABLELOG_MAX]; 
+    U32 rankStats[HUF_TABLELOG_MAX + 1]; 
     U32 rankStart0[HUF_TABLELOG_MAX + 3];
-    sortedSymbol_t sortedSymbol[HUF_SYMBOLVALUE_MAX + 1];
-    BYTE weightList[HUF_SYMBOLVALUE_MAX + 1];
-    U32 calleeWksp[HUF_READ_STATS_WORKSPACE_SIZE_U32];
-} HUF_ReadDTableX2_Workspace;
-
+    sortedSymbol_t sortedSymbol[HUF_SYMBOLVALUE_MAX + 1]; 
+    BYTE weightList[HUF_SYMBOLVALUE_MAX + 1]; 
+    U32 calleeWksp[HUF_READ_STATS_WORKSPACE_SIZE_U32]; 
+} HUF_ReadDTableX2_Workspace; 
+ 
 size_t HUF_readDTableX2_wksp(HUF_DTable* DTable,
                        const void* src, size_t srcSize,
                              void* workSpace, size_t wkspSize)
@@ -1061,17 +1061,17 @@ size_t HUF_readDTableX2_wksp_bmi2(HUF_DTable* DTable,
     HUF_DEltX2* const dt = (HUF_DEltX2*)dtPtr;
     U32 *rankStart;
 
-    HUF_ReadDTableX2_Workspace* const wksp = (HUF_ReadDTableX2_Workspace*)workSpace;
+    HUF_ReadDTableX2_Workspace* const wksp = (HUF_ReadDTableX2_Workspace*)workSpace; 
 
-    if (sizeof(*wksp) > wkspSize) return ERROR(GENERIC);
+    if (sizeof(*wksp) > wkspSize) return ERROR(GENERIC); 
 
-    rankStart = wksp->rankStart0 + 1;
-    ZSTD_memset(wksp->rankStats, 0, sizeof(wksp->rankStats));
-    ZSTD_memset(wksp->rankStart0, 0, sizeof(wksp->rankStart0));
+    rankStart = wksp->rankStart0 + 1; 
+    ZSTD_memset(wksp->rankStats, 0, sizeof(wksp->rankStats)); 
+    ZSTD_memset(wksp->rankStart0, 0, sizeof(wksp->rankStart0)); 
 
     DEBUG_STATIC_ASSERT(sizeof(HUF_DEltX2) == sizeof(HUF_DTable));   /* if compiler fails here, assertion is wrong */
     if (maxTableLog > HUF_TABLELOG_MAX) return ERROR(tableLog_tooLarge);
-    /* ZSTD_memset(weightList, 0, sizeof(weightList)); */  /* is not necessary, even though some analyzer complain ... */
+    /* ZSTD_memset(weightList, 0, sizeof(weightList)); */  /* is not necessary, even though some analyzer complain ... */ 
 
     iSize = HUF_readStats_wksp(wksp->weightList, HUF_SYMBOLVALUE_MAX + 1, wksp->rankStats, &nbSymbols, &tableLog, src, srcSize, wksp->calleeWksp, sizeof(wksp->calleeWksp), bmi2);
     if (HUF_isError(iSize)) return iSize;
@@ -1081,14 +1081,14 @@ size_t HUF_readDTableX2_wksp_bmi2(HUF_DTable* DTable,
     if (tableLog <= HUF_DECODER_FAST_TABLELOG && maxTableLog > HUF_DECODER_FAST_TABLELOG) maxTableLog = HUF_DECODER_FAST_TABLELOG;
 
     /* find maxWeight */
-    for (maxW = tableLog; wksp->rankStats[maxW]==0; maxW--) {}  /* necessarily finds a solution before 0 */
+    for (maxW = tableLog; wksp->rankStats[maxW]==0; maxW--) {}  /* necessarily finds a solution before 0 */ 
 
     /* Get start index of each weight */
     {   U32 w, nextRankStart = 0;
         for (w=1; w<maxW+1; w++) {
-            U32 curr = nextRankStart;
-            nextRankStart += wksp->rankStats[w];
-            rankStart[w] = curr;
+            U32 curr = nextRankStart; 
+            nextRankStart += wksp->rankStats[w]; 
+            rankStart[w] = curr; 
         }
         rankStart[0] = nextRankStart;   /* put all 0w symbols at the end of sorted list*/
         rankStart[maxW+1] = nextRankStart;
@@ -1097,27 +1097,27 @@ size_t HUF_readDTableX2_wksp_bmi2(HUF_DTable* DTable,
     /* sort symbols by weight */
     {   U32 s;
         for (s=0; s<nbSymbols; s++) {
-            U32 const w = wksp->weightList[s];
+            U32 const w = wksp->weightList[s]; 
             U32 const r = rankStart[w]++;
-            wksp->sortedSymbol[r].symbol = (BYTE)s;
+            wksp->sortedSymbol[r].symbol = (BYTE)s; 
         }
         rankStart[0] = 0;   /* forget 0w symbols; this is beginning of weight(1) */
     }
 
     /* Build rankVal */
-    {   U32* const rankVal0 = wksp->rankVal[0];
+    {   U32* const rankVal0 = wksp->rankVal[0]; 
         {   int const rescale = (maxTableLog-tableLog) - 1;   /* tableLog <= maxTableLog */
             U32 nextRankVal = 0;
             U32 w;
             for (w=1; w<maxW+1; w++) {
-                U32 curr = nextRankVal;
-                nextRankVal += wksp->rankStats[w] << (w+rescale);
-                rankVal0[w] = curr;
+                U32 curr = nextRankVal; 
+                nextRankVal += wksp->rankStats[w] << (w+rescale); 
+                rankVal0[w] = curr; 
         }   }
         {   U32 const minBits = tableLog+1 - maxW;
             U32 consumed;
             for (consumed = minBits; consumed < maxTableLog - minBits + 1; consumed++) {
-                U32* const rankValPtr = wksp->rankVal[consumed];
+                U32* const rankValPtr = wksp->rankVal[consumed]; 
                 U32 w;
                 for (w = 1; w < maxW+1; w++) {
                     rankValPtr[w] = rankVal0[w] >> consumed;
@@ -1125,12 +1125,12 @@ size_t HUF_readDTableX2_wksp_bmi2(HUF_DTable* DTable,
 
     HUF_fillDTableX2(dt, maxTableLog,
                    wksp->sortedSymbol,
-                   wksp->rankStart0, wksp->rankVal, maxW,
+                   wksp->rankStart0, wksp->rankVal, maxW, 
                    tableLog+1);
 
     dtd.tableLog = (BYTE)maxTableLog;
     dtd.tableType = 1;
-    ZSTD_memcpy(DTable, &dtd, sizeof(dtd));
+    ZSTD_memcpy(DTable, &dtd, sizeof(dtd)); 
     return iSize;
 }
 
@@ -1648,8 +1648,8 @@ size_t HUF_decompress1X_DCtx_wksp(HUF_DTable* dctx, void* dst, size_t dstSize,
     /* validation checks */
     if (dstSize == 0) return ERROR(dstSize_tooSmall);
     if (cSrcSize > dstSize) return ERROR(corruption_detected);   /* invalid */
-    if (cSrcSize == dstSize) { ZSTD_memcpy(dst, cSrc, dstSize); return dstSize; }   /* not compressed */
-    if (cSrcSize == 1) { ZSTD_memset(dst, *(const BYTE*)cSrc, dstSize); return dstSize; }   /* RLE */
+    if (cSrcSize == dstSize) { ZSTD_memcpy(dst, cSrc, dstSize); return dstSize; }   /* not compressed */ 
+    if (cSrcSize == 1) { ZSTD_memset(dst, *(const BYTE*)cSrc, dstSize); return dstSize; }   /* RLE */ 
 
     {   U32 const algoNb = HUF_selectDecoder(dstSize, cSrcSize);
 #if defined(HUF_FORCE_DECOMPRESS_X1)
@@ -1694,7 +1694,7 @@ size_t HUF_decompress1X1_DCtx_wksp_bmi2(HUF_DTable* dctx, void* dst, size_t dstS
 {
     const BYTE* ip = (const BYTE*) cSrc;
 
-    size_t const hSize = HUF_readDTableX1_wksp_bmi2(dctx, cSrc, cSrcSize, workSpace, wkspSize, bmi2);
+    size_t const hSize = HUF_readDTableX1_wksp_bmi2(dctx, cSrc, cSrcSize, workSpace, wkspSize, bmi2); 
     if (HUF_isError(hSize)) return hSize;
     if (hSize >= cSrcSize) return ERROR(srcSize_wrong);
     ip += hSize; cSrcSize -= hSize;
@@ -1741,149 +1741,149 @@ size_t HUF_decompress4X_hufOnly_wksp_bmi2(HUF_DTable* dctx, void* dst, size_t ds
 #endif
     }
 }
-
-#ifndef ZSTD_NO_UNUSED_FUNCTIONS
-#ifndef HUF_FORCE_DECOMPRESS_X2
-size_t HUF_readDTableX1(HUF_DTable* DTable, const void* src, size_t srcSize)
-{
-    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32];
-    return HUF_readDTableX1_wksp(DTable, src, srcSize,
-                                 workSpace, sizeof(workSpace));
-}
-
-size_t HUF_decompress1X1_DCtx(HUF_DTable* DCtx, void* dst, size_t dstSize,
-                              const void* cSrc, size_t cSrcSize)
-{
-    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32];
-    return HUF_decompress1X1_DCtx_wksp(DCtx, dst, dstSize, cSrc, cSrcSize,
-                                       workSpace, sizeof(workSpace));
-}
-
-size_t HUF_decompress1X1 (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize)
-{
-    HUF_CREATE_STATIC_DTABLEX1(DTable, HUF_TABLELOG_MAX);
-    return HUF_decompress1X1_DCtx (DTable, dst, dstSize, cSrc, cSrcSize);
-}
-#endif
-
-#ifndef HUF_FORCE_DECOMPRESS_X1
-size_t HUF_readDTableX2(HUF_DTable* DTable, const void* src, size_t srcSize)
-{
-  U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32];
-  return HUF_readDTableX2_wksp(DTable, src, srcSize,
-                               workSpace, sizeof(workSpace));
-}
-
-size_t HUF_decompress1X2_DCtx(HUF_DTable* DCtx, void* dst, size_t dstSize,
-                              const void* cSrc, size_t cSrcSize)
-{
-    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32];
-    return HUF_decompress1X2_DCtx_wksp(DCtx, dst, dstSize, cSrc, cSrcSize,
-                                       workSpace, sizeof(workSpace));
-}
-
-size_t HUF_decompress1X2 (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize)
-{
-    HUF_CREATE_STATIC_DTABLEX2(DTable, HUF_TABLELOG_MAX);
-    return HUF_decompress1X2_DCtx(DTable, dst, dstSize, cSrc, cSrcSize);
-}
-#endif
-
-#ifndef HUF_FORCE_DECOMPRESS_X2
-size_t HUF_decompress4X1_DCtx (HUF_DTable* dctx, void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize)
-{
-    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32];
-    return HUF_decompress4X1_DCtx_wksp(dctx, dst, dstSize, cSrc, cSrcSize,
-                                       workSpace, sizeof(workSpace));
-}
-size_t HUF_decompress4X1 (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize)
-{
-    HUF_CREATE_STATIC_DTABLEX1(DTable, HUF_TABLELOG_MAX);
-    return HUF_decompress4X1_DCtx(DTable, dst, dstSize, cSrc, cSrcSize);
-}
-#endif
-
-#ifndef HUF_FORCE_DECOMPRESS_X1
-size_t HUF_decompress4X2_DCtx(HUF_DTable* dctx, void* dst, size_t dstSize,
-                              const void* cSrc, size_t cSrcSize)
-{
-    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32];
-    return HUF_decompress4X2_DCtx_wksp(dctx, dst, dstSize, cSrc, cSrcSize,
-                                       workSpace, sizeof(workSpace));
-}
-
-size_t HUF_decompress4X2 (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize)
-{
-    HUF_CREATE_STATIC_DTABLEX2(DTable, HUF_TABLELOG_MAX);
-    return HUF_decompress4X2_DCtx(DTable, dst, dstSize, cSrc, cSrcSize);
-}
-#endif
-
-typedef size_t (*decompressionAlgo)(void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize);
-
-size_t HUF_decompress (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize)
-{
-#if !defined(HUF_FORCE_DECOMPRESS_X1) && !defined(HUF_FORCE_DECOMPRESS_X2)
-    static const decompressionAlgo decompress[2] = { HUF_decompress4X1, HUF_decompress4X2 };
-#endif
-
-    /* validation checks */
-    if (dstSize == 0) return ERROR(dstSize_tooSmall);
-    if (cSrcSize > dstSize) return ERROR(corruption_detected);   /* invalid */
-    if (cSrcSize == dstSize) { ZSTD_memcpy(dst, cSrc, dstSize); return dstSize; }   /* not compressed */
-    if (cSrcSize == 1) { ZSTD_memset(dst, *(const BYTE*)cSrc, dstSize); return dstSize; }   /* RLE */
-
-    {   U32 const algoNb = HUF_selectDecoder(dstSize, cSrcSize);
-#if defined(HUF_FORCE_DECOMPRESS_X1)
-        (void)algoNb;
-        assert(algoNb == 0);
-        return HUF_decompress4X1(dst, dstSize, cSrc, cSrcSize);
-#elif defined(HUF_FORCE_DECOMPRESS_X2)
-        (void)algoNb;
-        assert(algoNb == 1);
-        return HUF_decompress4X2(dst, dstSize, cSrc, cSrcSize);
-#else
-        return decompress[algoNb](dst, dstSize, cSrc, cSrcSize);
-#endif
-    }
-}
-
-size_t HUF_decompress4X_DCtx (HUF_DTable* dctx, void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize)
-{
-    /* validation checks */
-    if (dstSize == 0) return ERROR(dstSize_tooSmall);
-    if (cSrcSize > dstSize) return ERROR(corruption_detected);   /* invalid */
-    if (cSrcSize == dstSize) { ZSTD_memcpy(dst, cSrc, dstSize); return dstSize; }   /* not compressed */
-    if (cSrcSize == 1) { ZSTD_memset(dst, *(const BYTE*)cSrc, dstSize); return dstSize; }   /* RLE */
-
-    {   U32 const algoNb = HUF_selectDecoder(dstSize, cSrcSize);
-#if defined(HUF_FORCE_DECOMPRESS_X1)
-        (void)algoNb;
-        assert(algoNb == 0);
-        return HUF_decompress4X1_DCtx(dctx, dst, dstSize, cSrc, cSrcSize);
-#elif defined(HUF_FORCE_DECOMPRESS_X2)
-        (void)algoNb;
-        assert(algoNb == 1);
-        return HUF_decompress4X2_DCtx(dctx, dst, dstSize, cSrc, cSrcSize);
-#else
-        return algoNb ? HUF_decompress4X2_DCtx(dctx, dst, dstSize, cSrc, cSrcSize) :
-                        HUF_decompress4X1_DCtx(dctx, dst, dstSize, cSrc, cSrcSize) ;
-#endif
-    }
-}
-
-size_t HUF_decompress4X_hufOnly(HUF_DTable* dctx, void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize)
-{
-    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32];
-    return HUF_decompress4X_hufOnly_wksp(dctx, dst, dstSize, cSrc, cSrcSize,
-                                         workSpace, sizeof(workSpace));
-}
-
-size_t HUF_decompress1X_DCtx(HUF_DTable* dctx, void* dst, size_t dstSize,
-                             const void* cSrc, size_t cSrcSize)
-{
-    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32];
-    return HUF_decompress1X_DCtx_wksp(dctx, dst, dstSize, cSrc, cSrcSize,
-                                      workSpace, sizeof(workSpace));
-}
-#endif
+ 
+#ifndef ZSTD_NO_UNUSED_FUNCTIONS 
+#ifndef HUF_FORCE_DECOMPRESS_X2 
+size_t HUF_readDTableX1(HUF_DTable* DTable, const void* src, size_t srcSize) 
+{ 
+    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32]; 
+    return HUF_readDTableX1_wksp(DTable, src, srcSize, 
+                                 workSpace, sizeof(workSpace)); 
+} 
+ 
+size_t HUF_decompress1X1_DCtx(HUF_DTable* DCtx, void* dst, size_t dstSize, 
+                              const void* cSrc, size_t cSrcSize) 
+{ 
+    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32]; 
+    return HUF_decompress1X1_DCtx_wksp(DCtx, dst, dstSize, cSrc, cSrcSize, 
+                                       workSpace, sizeof(workSpace)); 
+} 
+ 
+size_t HUF_decompress1X1 (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize) 
+{ 
+    HUF_CREATE_STATIC_DTABLEX1(DTable, HUF_TABLELOG_MAX); 
+    return HUF_decompress1X1_DCtx (DTable, dst, dstSize, cSrc, cSrcSize); 
+} 
+#endif 
+ 
+#ifndef HUF_FORCE_DECOMPRESS_X1 
+size_t HUF_readDTableX2(HUF_DTable* DTable, const void* src, size_t srcSize) 
+{ 
+  U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32]; 
+  return HUF_readDTableX2_wksp(DTable, src, srcSize, 
+                               workSpace, sizeof(workSpace)); 
+} 
+ 
+size_t HUF_decompress1X2_DCtx(HUF_DTable* DCtx, void* dst, size_t dstSize, 
+                              const void* cSrc, size_t cSrcSize) 
+{ 
+    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32]; 
+    return HUF_decompress1X2_DCtx_wksp(DCtx, dst, dstSize, cSrc, cSrcSize, 
+                                       workSpace, sizeof(workSpace)); 
+} 
+ 
+size_t HUF_decompress1X2 (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize) 
+{ 
+    HUF_CREATE_STATIC_DTABLEX2(DTable, HUF_TABLELOG_MAX); 
+    return HUF_decompress1X2_DCtx(DTable, dst, dstSize, cSrc, cSrcSize); 
+} 
+#endif 
+ 
+#ifndef HUF_FORCE_DECOMPRESS_X2 
+size_t HUF_decompress4X1_DCtx (HUF_DTable* dctx, void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize) 
+{ 
+    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32]; 
+    return HUF_decompress4X1_DCtx_wksp(dctx, dst, dstSize, cSrc, cSrcSize, 
+                                       workSpace, sizeof(workSpace)); 
+} 
+size_t HUF_decompress4X1 (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize) 
+{ 
+    HUF_CREATE_STATIC_DTABLEX1(DTable, HUF_TABLELOG_MAX); 
+    return HUF_decompress4X1_DCtx(DTable, dst, dstSize, cSrc, cSrcSize); 
+} 
+#endif 
+ 
+#ifndef HUF_FORCE_DECOMPRESS_X1 
+size_t HUF_decompress4X2_DCtx(HUF_DTable* dctx, void* dst, size_t dstSize, 
+                              const void* cSrc, size_t cSrcSize) 
+{ 
+    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32]; 
+    return HUF_decompress4X2_DCtx_wksp(dctx, dst, dstSize, cSrc, cSrcSize, 
+                                       workSpace, sizeof(workSpace)); 
+} 
+ 
+size_t HUF_decompress4X2 (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize) 
+{ 
+    HUF_CREATE_STATIC_DTABLEX2(DTable, HUF_TABLELOG_MAX); 
+    return HUF_decompress4X2_DCtx(DTable, dst, dstSize, cSrc, cSrcSize); 
+} 
+#endif 
+ 
+typedef size_t (*decompressionAlgo)(void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize); 
+ 
+size_t HUF_decompress (void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize) 
+{ 
+#if !defined(HUF_FORCE_DECOMPRESS_X1) && !defined(HUF_FORCE_DECOMPRESS_X2) 
+    static const decompressionAlgo decompress[2] = { HUF_decompress4X1, HUF_decompress4X2 }; 
+#endif 
+ 
+    /* validation checks */ 
+    if (dstSize == 0) return ERROR(dstSize_tooSmall); 
+    if (cSrcSize > dstSize) return ERROR(corruption_detected);   /* invalid */ 
+    if (cSrcSize == dstSize) { ZSTD_memcpy(dst, cSrc, dstSize); return dstSize; }   /* not compressed */ 
+    if (cSrcSize == 1) { ZSTD_memset(dst, *(const BYTE*)cSrc, dstSize); return dstSize; }   /* RLE */ 
+ 
+    {   U32 const algoNb = HUF_selectDecoder(dstSize, cSrcSize); 
+#if defined(HUF_FORCE_DECOMPRESS_X1) 
+        (void)algoNb; 
+        assert(algoNb == 0); 
+        return HUF_decompress4X1(dst, dstSize, cSrc, cSrcSize); 
+#elif defined(HUF_FORCE_DECOMPRESS_X2) 
+        (void)algoNb; 
+        assert(algoNb == 1); 
+        return HUF_decompress4X2(dst, dstSize, cSrc, cSrcSize); 
+#else 
+        return decompress[algoNb](dst, dstSize, cSrc, cSrcSize); 
+#endif 
+    } 
+} 
+ 
+size_t HUF_decompress4X_DCtx (HUF_DTable* dctx, void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize) 
+{ 
+    /* validation checks */ 
+    if (dstSize == 0) return ERROR(dstSize_tooSmall); 
+    if (cSrcSize > dstSize) return ERROR(corruption_detected);   /* invalid */ 
+    if (cSrcSize == dstSize) { ZSTD_memcpy(dst, cSrc, dstSize); return dstSize; }   /* not compressed */ 
+    if (cSrcSize == 1) { ZSTD_memset(dst, *(const BYTE*)cSrc, dstSize); return dstSize; }   /* RLE */ 
+ 
+    {   U32 const algoNb = HUF_selectDecoder(dstSize, cSrcSize); 
+#if defined(HUF_FORCE_DECOMPRESS_X1) 
+        (void)algoNb; 
+        assert(algoNb == 0); 
+        return HUF_decompress4X1_DCtx(dctx, dst, dstSize, cSrc, cSrcSize); 
+#elif defined(HUF_FORCE_DECOMPRESS_X2) 
+        (void)algoNb; 
+        assert(algoNb == 1); 
+        return HUF_decompress4X2_DCtx(dctx, dst, dstSize, cSrc, cSrcSize); 
+#else 
+        return algoNb ? HUF_decompress4X2_DCtx(dctx, dst, dstSize, cSrc, cSrcSize) : 
+                        HUF_decompress4X1_DCtx(dctx, dst, dstSize, cSrc, cSrcSize) ; 
+#endif 
+    } 
+} 
+ 
+size_t HUF_decompress4X_hufOnly(HUF_DTable* dctx, void* dst, size_t dstSize, const void* cSrc, size_t cSrcSize) 
+{ 
+    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32]; 
+    return HUF_decompress4X_hufOnly_wksp(dctx, dst, dstSize, cSrc, cSrcSize, 
+                                         workSpace, sizeof(workSpace)); 
+} 
+ 
+size_t HUF_decompress1X_DCtx(HUF_DTable* dctx, void* dst, size_t dstSize, 
+                             const void* cSrc, size_t cSrcSize) 
+{ 
+    U32 workSpace[HUF_DECOMPRESS_WORKSPACE_SIZE_U32]; 
+    return HUF_decompress1X_DCtx_wksp(dctx, dst, dstSize, cSrc, cSrcSize, 
+                                      workSpace, sizeof(workSpace)); 
+} 
+#endif 

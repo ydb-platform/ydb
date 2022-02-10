@@ -2,7 +2,7 @@
 
 #include <library/cpp/histogram/adaptive/protos/histo.pb.h>
 
-#include <util/generic/algorithm.h>
+#include <util/generic/algorithm.h> 
 #include <util/generic/yexception.h>
 #include <util/generic/intrlist.h>
 #include <util/generic/ptr.h>

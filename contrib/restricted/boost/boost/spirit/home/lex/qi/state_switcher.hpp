@@ -155,7 +155,7 @@ namespace boost { namespace spirit { namespace qi
             std::size_t state;
 
             // silence MSVC warning C4512: assignment operator could not be generated
-            BOOST_DELETED_FUNCTION(reset_state_on_exit& operator= (reset_state_on_exit const&));
+            BOOST_DELETED_FUNCTION(reset_state_on_exit& operator= (reset_state_on_exit const&)); 
         };
     }
 
@@ -214,7 +214,7 @@ namespace boost { namespace spirit { namespace qi
         State state;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(state_switcher_context& operator= (state_switcher_context const&));
+        BOOST_DELETED_FUNCTION(state_switcher_context& operator= (state_switcher_context const&)); 
     };
 
     ///////////////////////////////////////////////////////////////////////////

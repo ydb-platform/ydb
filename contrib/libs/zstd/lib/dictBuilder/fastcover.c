@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc.
+ * Copyright (c) Facebook, Inc. 
  * All rights reserved.
  *
  * This source code is licensed under both the BSD-style license (found in the
@@ -16,17 +16,17 @@
 #include <string.h> /* memset */
 #include <time.h>   /* clock */
 
-#ifndef ZDICT_STATIC_LINKING_ONLY
-#  define ZDICT_STATIC_LINKING_ONLY
-#endif
-
+#ifndef ZDICT_STATIC_LINKING_ONLY 
+#  define ZDICT_STATIC_LINKING_ONLY 
+#endif 
+ 
 #include "../common/mem.h" /* read */
 #include "../common/pool.h"
 #include "../common/threading.h"
 #include "../common/zstd_internal.h" /* includes zstd.h */
-#include "../compress/zstd_compress_internal.h" /* ZSTD_hash*() */
-#include "../zdict.h"
-#include "cover.h"
+#include "../compress/zstd_compress_internal.h" /* ZSTD_hash*() */ 
+#include "../zdict.h" 
+#include "cover.h" 
 
 
 /*-*************************************
@@ -42,7 +42,7 @@
 #define FASTCOVER_MAX_SAMPLES_SIZE (sizeof(size_t) == 8 ? ((unsigned)-1) : ((unsigned)1 GB))
 #define FASTCOVER_MAX_F 31
 #define FASTCOVER_MAX_ACCEL 10
-#define FASTCOVER_DEFAULT_SPLITPOINT 0.75
+#define FASTCOVER_DEFAULT_SPLITPOINT 0.75 
 #define DEFAULT_F 20
 #define DEFAULT_ACCEL 1
 
@@ -50,36 +50,36 @@
 /*-*************************************
 *  Console display
 ***************************************/
-#ifndef LOCALDISPLAYLEVEL
+#ifndef LOCALDISPLAYLEVEL 
 static int g_displayLevel = 0;
-#endif
-#undef  DISPLAY
+#endif 
+#undef  DISPLAY 
 #define DISPLAY(...)                                                           \
   {                                                                            \
     fprintf(stderr, __VA_ARGS__);                                              \
     fflush(stderr);                                                            \
   }
-#undef  LOCALDISPLAYLEVEL
+#undef  LOCALDISPLAYLEVEL 
 #define LOCALDISPLAYLEVEL(displayLevel, l, ...)                                \
   if (displayLevel >= l) {                                                     \
     DISPLAY(__VA_ARGS__);                                                      \
   } /* 0 : no display;   1: errors;   2: default;  3: details;  4: debug */
-#undef  DISPLAYLEVEL
+#undef  DISPLAYLEVEL 
 #define DISPLAYLEVEL(l, ...) LOCALDISPLAYLEVEL(g_displayLevel, l, __VA_ARGS__)
 
-#ifndef LOCALDISPLAYUPDATE
-static const clock_t g_refreshRate = CLOCKS_PER_SEC * 15 / 100;
-static clock_t g_time = 0;
-#endif
-#undef  LOCALDISPLAYUPDATE
+#ifndef LOCALDISPLAYUPDATE 
+static const clock_t g_refreshRate = CLOCKS_PER_SEC * 15 / 100; 
+static clock_t g_time = 0; 
+#endif 
+#undef  LOCALDISPLAYUPDATE 
 #define LOCALDISPLAYUPDATE(displayLevel, l, ...)                               \
   if (displayLevel >= l) {                                                     \
-    if ((clock() - g_time > g_refreshRate) || (displayLevel >= 4)) {             \
+    if ((clock() - g_time > g_refreshRate) || (displayLevel >= 4)) {             \ 
       g_time = clock();                                                        \
       DISPLAY(__VA_ARGS__);                                                    \
     }                                                                          \
   }
-#undef  DISPLAYUPDATE
+#undef  DISPLAYUPDATE 
 #define DISPLAYUPDATE(l, ...) LOCALDISPLAYUPDATE(g_displayLevel, l, __VA_ARGS__)
 
 
@@ -87,13 +87,13 @@ static clock_t g_time = 0;
 * Hash Functions
 ***************************************/
 /**
- * Hash the d-byte value pointed to by p and mod 2^f into the frequency vector
+ * Hash the d-byte value pointed to by p and mod 2^f into the frequency vector 
  */
-static size_t FASTCOVER_hashPtrToIndex(const void* p, U32 f, unsigned d) {
+static size_t FASTCOVER_hashPtrToIndex(const void* p, U32 f, unsigned d) { 
   if (d == 6) {
-    return ZSTD_hash6Ptr(p, f);
+    return ZSTD_hash6Ptr(p, f); 
   }
-  return ZSTD_hash8Ptr(p, f);
+  return ZSTD_hash8Ptr(p, f); 
 }
 
 
@@ -470,20 +470,20 @@ typedef struct FASTCOVER_tryParameters_data_s {
  * This function is thread safe if zstd is compiled with multithreaded support.
  * It takes its parameters as an *OWNING* opaque pointer to support threading.
  */
-static void FASTCOVER_tryParameters(void* opaque)
+static void FASTCOVER_tryParameters(void* opaque) 
 {
   /* Save parameters as local variables */
-  FASTCOVER_tryParameters_data_t *const data = (FASTCOVER_tryParameters_data_t*)opaque;
+  FASTCOVER_tryParameters_data_t *const data = (FASTCOVER_tryParameters_data_t*)opaque; 
   const FASTCOVER_ctx_t *const ctx = data->ctx;
   const ZDICT_cover_params_t parameters = data->parameters;
   size_t dictBufferCapacity = data->dictBufferCapacity;
   size_t totalCompressedSize = ERROR(GENERIC);
   /* Initialize array to keep track of frequency of dmer within activeSegment */
-  U16* segmentFreqs = (U16*)calloc(((U64)1 << ctx->f), sizeof(U16));
+  U16* segmentFreqs = (U16*)calloc(((U64)1 << ctx->f), sizeof(U16)); 
   /* Allocate space for hash table, dict, and freqs */
-  BYTE *const dict = (BYTE*)malloc(dictBufferCapacity);
+  BYTE *const dict = (BYTE*)malloc(dictBufferCapacity); 
   COVER_dictSelection_t selection = COVER_dictSelectionError(ERROR(GENERIC));
-  U32* freqs = (U32*) malloc(((U64)1 << ctx->f) * sizeof(U32));
+  U32* freqs = (U32*) malloc(((U64)1 << ctx->f) * sizeof(U32)); 
   if (!segmentFreqs || !dict || !freqs) {
     DISPLAYLEVEL(1, "Failed to allocate buffers: out of memory\n");
     goto _cleanup;
@@ -495,7 +495,7 @@ static void FASTCOVER_tryParameters(void* opaque)
                                                     parameters, segmentFreqs);
 
     const unsigned nbFinalizeSamples = (unsigned)(ctx->nbTrainSamples * ctx->accelParams.finalize / 100);
-    selection = COVER_selectDict(dict + tail, dictBufferCapacity, dictBufferCapacity - tail,
+    selection = COVER_selectDict(dict + tail, dictBufferCapacity, dictBufferCapacity - tail, 
          ctx->samples, ctx->samplesSizes, nbFinalizeSamples, ctx->nbTrainSamples, ctx->nbSamples, parameters, ctx->offsets,
          totalCompressedSize);
 
@@ -626,7 +626,7 @@ ZDICT_optimizeTrainFromBuffer_fastCover(
     /* constants */
     const unsigned nbThreads = parameters->nbThreads;
     const double splitPoint =
-        parameters->splitPoint <= 0.0 ? FASTCOVER_DEFAULT_SPLITPOINT : parameters->splitPoint;
+        parameters->splitPoint <= 0.0 ? FASTCOVER_DEFAULT_SPLITPOINT : parameters->splitPoint; 
     const unsigned kMinD = parameters->d == 0 ? 6 : parameters->d;
     const unsigned kMaxD = parameters->d == 0 ? 8 : parameters->d;
     const unsigned kMinK = parameters->k == 0 ? 50 : parameters->k;

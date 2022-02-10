@@ -16,7 +16,7 @@
 #include <cstdlib>
 #include <utility>
 
-#include "y_absl/base/call_once.h"
+#include "y_absl/base/call_once.h" 
 #include "y_absl/base/internal/raw_logging.h"
 #include "y_absl/status/status.h"
 #include "y_absl/strings/str_cat.h"
@@ -27,44 +27,44 @@ ABSL_NAMESPACE_BEGIN
 BadStatusOrAccess::BadStatusOrAccess(y_absl::Status status)
     : status_(std::move(status)) {}
 
-BadStatusOrAccess::BadStatusOrAccess(const BadStatusOrAccess& other)
-    : status_(other.status_) {}
-
-BadStatusOrAccess& BadStatusOrAccess::operator=(
-    const BadStatusOrAccess& other) {
-  // Ensure assignment is correct regardless of whether this->InitWhat() has
-  // already been called.
-  other.InitWhat();
-  status_ = other.status_;
-  what_ = other.what_;
-  return *this;
-}
-
-BadStatusOrAccess& BadStatusOrAccess::operator=(BadStatusOrAccess&& other) {
-  // Ensure assignment is correct regardless of whether this->InitWhat() has
-  // already been called.
-  other.InitWhat();
-  status_ = std::move(other.status_);
-  what_ = std::move(other.what_);
-  return *this;
-}
-
-BadStatusOrAccess::BadStatusOrAccess(BadStatusOrAccess&& other)
-    : status_(std::move(other.status_)) {}
-
+BadStatusOrAccess::BadStatusOrAccess(const BadStatusOrAccess& other) 
+    : status_(other.status_) {} 
+ 
+BadStatusOrAccess& BadStatusOrAccess::operator=( 
+    const BadStatusOrAccess& other) { 
+  // Ensure assignment is correct regardless of whether this->InitWhat() has 
+  // already been called. 
+  other.InitWhat(); 
+  status_ = other.status_; 
+  what_ = other.what_; 
+  return *this; 
+} 
+ 
+BadStatusOrAccess& BadStatusOrAccess::operator=(BadStatusOrAccess&& other) { 
+  // Ensure assignment is correct regardless of whether this->InitWhat() has 
+  // already been called. 
+  other.InitWhat(); 
+  status_ = std::move(other.status_); 
+  what_ = std::move(other.what_); 
+  return *this; 
+} 
+ 
+BadStatusOrAccess::BadStatusOrAccess(BadStatusOrAccess&& other) 
+    : status_(std::move(other.status_)) {} 
+ 
 const char* BadStatusOrAccess::what() const noexcept {
-  InitWhat();
-  return what_.c_str();
+  InitWhat(); 
+  return what_.c_str(); 
 }
 
 const y_absl::Status& BadStatusOrAccess::status() const { return status_; }
 
-void BadStatusOrAccess::InitWhat() const {
-  y_absl::call_once(init_what_, [this] {
-    what_ = y_absl::StrCat("Bad StatusOr access: ", status_.ToString());
-  });
-}
-
+void BadStatusOrAccess::InitWhat() const { 
+  y_absl::call_once(init_what_, [this] { 
+    what_ = y_absl::StrCat("Bad StatusOr access: ", status_.ToString()); 
+  }); 
+} 
+ 
 namespace internal_statusor {
 
 void Helper::HandleInvalidStatusCtorArg(y_absl::Status* status) {

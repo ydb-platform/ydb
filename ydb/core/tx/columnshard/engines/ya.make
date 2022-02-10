@@ -20,7 +20,7 @@ SRCS(
 )
 
 PEERDIR(
-    contrib/libs/apache/arrow
+    contrib/libs/apache/arrow 
     ydb/core/base
     ydb/core/formats
     ydb/core/protos

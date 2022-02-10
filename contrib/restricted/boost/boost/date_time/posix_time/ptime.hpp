@@ -54,8 +54,8 @@ namespace posix_time {
     ptime() : date_time::base_time<time_type,time_system_type>(gregorian::date(not_a_date_time), time_duration_type(not_a_date_time))
     {}
 #endif // DATE_TIME_NO_DEFAULT_CONSTRUCTOR
-    using base = date_time::base_time<ptime, posix_time_system>;
-    using base::operator==;
+    using base = date_time::base_time<ptime, posix_time_system>; 
+    using base::operator==; 
   };
 
 

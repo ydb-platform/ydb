@@ -4,9 +4,9 @@
  */
 
 /* Namespace for Google classes */
-#define GOOGLE_NAMESPACE ::google
+#define GOOGLE_NAMESPACE ::google 
 
-/* the location of the header defining hash functions */
+/* the location of the header defining hash functions */ 
 #ifndef HASH_FUN_H
 #define HASH_FUN_H <util/generic/hash.h>
 #endif
@@ -39,10 +39,10 @@
 /* #undef HAVE___UINT16 */
 
 /* The system-provided hash function including the namespace. */
-#define SPARSEHASH_HASH HASH_NAMESPACE::THash
+#define SPARSEHASH_HASH HASH_NAMESPACE::THash 
 
 /* Stops putting the code inside the Google namespace */
-#define _END_GOOGLE_NAMESPACE_ }
+#define _END_GOOGLE_NAMESPACE_ } 
 
 /* Puts following code inside the Google namespace */
-#define _START_GOOGLE_NAMESPACE_ namespace google {
+#define _START_GOOGLE_NAMESPACE_ namespace google { 

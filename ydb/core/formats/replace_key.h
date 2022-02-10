@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/base/defs.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h> 
 
 namespace NKikimr::NArrow {
 
@@ -95,7 +95,7 @@ private:
         switch (typeId) {
             case arrow::Type::TIMESTAMP:
                 return THash<size_t>()((size_t)static_cast<const arrow::TimestampArray&>(ar).Value(pos));
-            default:
+            default: 
                 break;
         }
         return 0;
@@ -141,26 +141,26 @@ private:
                 return EqualView<arrow::Date64Array>(lhs, lpos, rhs, rpos);
             case arrow::Type::TIMESTAMP:
                 return EqualValue<arrow::TimestampArray>(lhs, lpos, rhs, rpos);
-            case arrow::Type::DURATION:
-                return EqualValue<arrow::DurationArray>(lhs, lpos, rhs, rpos);
-            case arrow::Type::DECIMAL256:
+            case arrow::Type::DURATION: 
+                return EqualValue<arrow::DurationArray>(lhs, lpos, rhs, rpos); 
+            case arrow::Type::DECIMAL256: 
             case arrow::Type::DECIMAL:
             case arrow::Type::DENSE_UNION:
             case arrow::Type::DICTIONARY:
             case arrow::Type::EXTENSION:
             case arrow::Type::FIXED_SIZE_LIST:
-            case arrow::Type::INTERVAL_DAY_TIME:
-            case arrow::Type::INTERVAL_MONTHS:
+            case arrow::Type::INTERVAL_DAY_TIME: 
+            case arrow::Type::INTERVAL_MONTHS: 
             case arrow::Type::LARGE_BINARY:
             case arrow::Type::LARGE_LIST:
-            case arrow::Type::LARGE_STRING:
-            case arrow::Type::LIST:
-            case arrow::Type::MAP:
+            case arrow::Type::LARGE_STRING: 
+            case arrow::Type::LIST: 
+            case arrow::Type::MAP: 
             case arrow::Type::MAX_ID:
-            case arrow::Type::SPARSE_UNION:
-            case arrow::Type::STRUCT:
-            case arrow::Type::TIME32:
-            case arrow::Type::TIME64:
+            case arrow::Type::SPARSE_UNION: 
+            case arrow::Type::STRUCT: 
+            case arrow::Type::TIME32: 
+            case arrow::Type::TIME64: 
                 break;
         }
         return false;
@@ -209,24 +209,24 @@ private:
                 return CompareValue<arrow::Time32Array, notNull>(lhs, lpos, rhs, rpos);
             case arrow::Type::TIME64:
                 return CompareValue<arrow::Time64Array, notNull>(lhs, lpos, rhs, rpos);
-            case arrow::Type::DURATION:
-                return CompareValue<arrow::DurationArray, notNull>(lhs, lpos, rhs, rpos);
-            case arrow::Type::DECIMAL256:
+            case arrow::Type::DURATION: 
+                return CompareValue<arrow::DurationArray, notNull>(lhs, lpos, rhs, rpos); 
+            case arrow::Type::DECIMAL256: 
             case arrow::Type::DECIMAL:
             case arrow::Type::DENSE_UNION:
             case arrow::Type::DICTIONARY:
             case arrow::Type::EXTENSION:
             case arrow::Type::FIXED_SIZE_LIST:
-            case arrow::Type::INTERVAL_DAY_TIME:
-            case arrow::Type::INTERVAL_MONTHS:
+            case arrow::Type::INTERVAL_DAY_TIME: 
+            case arrow::Type::INTERVAL_MONTHS: 
             case arrow::Type::LARGE_BINARY:
             case arrow::Type::LARGE_LIST:
-            case arrow::Type::LARGE_STRING:
-            case arrow::Type::LIST:
-            case arrow::Type::MAP:
+            case arrow::Type::LARGE_STRING: 
+            case arrow::Type::LIST: 
+            case arrow::Type::MAP: 
             case arrow::Type::MAX_ID:
-            case arrow::Type::SPARSE_UNION:
-            case arrow::Type::STRUCT:
+            case arrow::Type::SPARSE_UNION: 
+            case arrow::Type::STRUCT: 
                 break;
         }
         return false;

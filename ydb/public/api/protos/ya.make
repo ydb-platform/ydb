@@ -50,7 +50,7 @@ SRCS(
 CPP_PROTO_PLUGIN0(validation ydb/core/grpc_services/validation)
 
 # .pb.h are only available in C++ variant of PROTO_LIBRARY
-IF (MODULE_TAG == "CPP_PROTO")
+IF (MODULE_TAG == "CPP_PROTO") 
     GENERATE_ENUM_SERIALIZATION(draft/persqueue_common.pb.h)
     GENERATE_ENUM_SERIALIZATION(ydb_persqueue_cluster_discovery.pb.h)
     GENERATE_ENUM_SERIALIZATION(draft/datastreams.pb.h)

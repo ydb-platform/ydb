@@ -25,7 +25,7 @@ __unexpected(unexpected_handler func);
 
 _LIBCXXABI_HIDDEN _LIBCXXABI_NORETURN
 void
-__terminate(terminate_handler func) noexcept;
+__terminate(terminate_handler func) noexcept; 
 
 }  // std
 
@@ -52,4 +52,4 @@ _LIBCXXABI_DATA_VIS extern void (*__cxa_new_handler)();
 
 } // extern "C"
 
-#endif // _CXA_HANDLERS_H
+#endif // _CXA_HANDLERS_H 

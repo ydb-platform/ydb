@@ -28,14 +28,14 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/util/internal/default_value_objectwriter.h>
+#include <google/protobuf/util/internal/default_value_objectwriter.h> 
 
-#include <cstdint>
-#include <unordered_map>
+#include <cstdint> 
+#include <unordered_map> 
 
-#include <google/protobuf/util/internal/constants.h>
-#include <google/protobuf/util/internal/utility.h>
-#include <google/protobuf/stubs/map_util.h>
+#include <google/protobuf/util/internal/constants.h> 
+#include <google/protobuf/util/internal/utility.h> 
+#include <google/protobuf/stubs/map_util.h> 
 
 namespace google {
 namespace protobuf {
@@ -47,12 +47,12 @@ namespace {
 // passed converter function on the DataPiece created from "value" argument.
 // If value is empty or if conversion fails, the default_value is returned.
 template <typename T>
-T ConvertTo(StringPiece value,
-            util::StatusOr<T> (DataPiece::*converter_fn)() const,
+T ConvertTo(StringPiece value, 
+            util::StatusOr<T> (DataPiece::*converter_fn)() const, 
             T default_value) {
   if (value.empty()) return default_value;
-  util::StatusOr<T> result = (DataPiece(value, true).*converter_fn)();
-  return result.ok() ? result.value() : default_value;
+  util::StatusOr<T> result = (DataPiece(value, true).*converter_fn)(); 
+  return result.ok() ? result.value() : default_value; 
 }
 }  // namespace
 
@@ -62,11 +62,11 @@ DefaultValueObjectWriter::DefaultValueObjectWriter(
     : typeinfo_(TypeInfo::NewTypeInfo(type_resolver)),
       own_typeinfo_(true),
       type_(type),
-      current_(nullptr),
-      root_(nullptr),
+      current_(nullptr), 
+      root_(nullptr), 
       suppress_empty_list_(false),
       preserve_proto_field_names_(false),
-      use_ints_for_enums_(false),
+      use_ints_for_enums_(false), 
       ow_(ow) {}
 
 DefaultValueObjectWriter::~DefaultValueObjectWriter() {
@@ -75,9 +75,9 @@ DefaultValueObjectWriter::~DefaultValueObjectWriter() {
   }
 }
 
-DefaultValueObjectWriter* DefaultValueObjectWriter::RenderBool(
-    StringPiece name, bool value) {
-  if (current_ == nullptr) {
+DefaultValueObjectWriter* DefaultValueObjectWriter::RenderBool( 
+    StringPiece name, bool value) { 
+  if (current_ == nullptr) { 
     ow_->RenderBool(name, value);
   } else {
     RenderDataPiece(name, DataPiece(value));
@@ -86,8 +86,8 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderBool(
 }
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderInt32(
-    StringPiece name, int32_t value) {
-  if (current_ == nullptr) {
+    StringPiece name, int32_t value) { 
+  if (current_ == nullptr) { 
     ow_->RenderInt32(name, value);
   } else {
     RenderDataPiece(name, DataPiece(value));
@@ -96,8 +96,8 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderInt32(
 }
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderUint32(
-    StringPiece name, uint32_t value) {
-  if (current_ == nullptr) {
+    StringPiece name, uint32_t value) { 
+  if (current_ == nullptr) { 
     ow_->RenderUint32(name, value);
   } else {
     RenderDataPiece(name, DataPiece(value));
@@ -106,8 +106,8 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderUint32(
 }
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderInt64(
-    StringPiece name, int64_t value) {
-  if (current_ == nullptr) {
+    StringPiece name, int64_t value) { 
+  if (current_ == nullptr) { 
     ow_->RenderInt64(name, value);
   } else {
     RenderDataPiece(name, DataPiece(value));
@@ -116,8 +116,8 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderInt64(
 }
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderUint64(
-    StringPiece name, uint64_t value) {
-  if (current_ == nullptr) {
+    StringPiece name, uint64_t value) { 
+  if (current_ == nullptr) { 
     ow_->RenderUint64(name, value);
   } else {
     RenderDataPiece(name, DataPiece(value));
@@ -127,7 +127,7 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderUint64(
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderDouble(
     StringPiece name, double value) {
-  if (current_ == nullptr) {
+  if (current_ == nullptr) { 
     ow_->RenderDouble(name, value);
   } else {
     RenderDataPiece(name, DataPiece(value));
@@ -137,7 +137,7 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderDouble(
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderFloat(
     StringPiece name, float value) {
-  if (current_ == nullptr) {
+  if (current_ == nullptr) { 
     ow_->RenderBool(name, value);
   } else {
     RenderDataPiece(name, DataPiece(value));
@@ -147,12 +147,12 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderFloat(
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderString(
     StringPiece name, StringPiece value) {
-  if (current_ == nullptr) {
+  if (current_ == nullptr) { 
     ow_->RenderString(name, value);
   } else {
     // Since StringPiece is essentially a pointer, takes a copy of "value" to
     // avoid ownership issues.
-    string_values_.emplace_back(new TProtoStringType(value));
+    string_values_.emplace_back(new TProtoStringType(value)); 
     RenderDataPiece(name, DataPiece(*string_values_.back(), true));
   }
   return this;
@@ -160,12 +160,12 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderString(
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderBytes(
     StringPiece name, StringPiece value) {
-  if (current_ == nullptr) {
+  if (current_ == nullptr) { 
     ow_->RenderBytes(name, value);
   } else {
     // Since StringPiece is essentially a pointer, takes a copy of "value" to
     // avoid ownership issues.
-    string_values_.emplace_back(new TProtoStringType(value));
+    string_values_.emplace_back(new TProtoStringType(value)); 
     RenderDataPiece(name, DataPiece(*string_values_.back(), false, true));
   }
   return this;
@@ -173,7 +173,7 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderBytes(
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::RenderNull(
     StringPiece name) {
-  if (current_ == nullptr) {
+  if (current_ == nullptr) { 
     ow_->RenderNull(name);
   } else {
     RenderDataPiece(name, DataPiece::NullData());
@@ -182,27 +182,27 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::RenderNull(
 }
 
 void DefaultValueObjectWriter::RegisterFieldScrubCallBack(
-    FieldScrubCallBack field_scrub_callback) {
-  field_scrub_callback_ = std::move(field_scrub_callback);
+    FieldScrubCallBack field_scrub_callback) { 
+  field_scrub_callback_ = std::move(field_scrub_callback); 
 }
 
 DefaultValueObjectWriter::Node* DefaultValueObjectWriter::CreateNewNode(
-    const TProtoStringType& name, const google::protobuf::Type* type, NodeKind kind,
-    const DataPiece& data, bool is_placeholder,
-    const std::vector<TProtoStringType>& path, bool suppress_empty_list,
-    bool preserve_proto_field_names, bool use_ints_for_enums,
-    FieldScrubCallBack field_scrub_callback) {
+    const TProtoStringType& name, const google::protobuf::Type* type, NodeKind kind, 
+    const DataPiece& data, bool is_placeholder, 
+    const std::vector<TProtoStringType>& path, bool suppress_empty_list, 
+    bool preserve_proto_field_names, bool use_ints_for_enums, 
+    FieldScrubCallBack field_scrub_callback) { 
   return new Node(name, type, kind, data, is_placeholder, path,
                   suppress_empty_list, preserve_proto_field_names,
-                  use_ints_for_enums, std::move(field_scrub_callback));
+                  use_ints_for_enums, std::move(field_scrub_callback)); 
 }
 
 DefaultValueObjectWriter::Node::Node(
-    const TProtoStringType& name, const google::protobuf::Type* type, NodeKind kind,
-    const DataPiece& data, bool is_placeholder,
-    const std::vector<TProtoStringType>& path, bool suppress_empty_list,
-    bool preserve_proto_field_names, bool use_ints_for_enums,
-    FieldScrubCallBack field_scrub_callback)
+    const TProtoStringType& name, const google::protobuf::Type* type, NodeKind kind, 
+    const DataPiece& data, bool is_placeholder, 
+    const std::vector<TProtoStringType>& path, bool suppress_empty_list, 
+    bool preserve_proto_field_names, bool use_ints_for_enums, 
+    FieldScrubCallBack field_scrub_callback) 
     : name_(name),
       type_(type),
       kind_(kind),
@@ -212,13 +212,13 @@ DefaultValueObjectWriter::Node::Node(
       path_(path),
       suppress_empty_list_(suppress_empty_list),
       preserve_proto_field_names_(preserve_proto_field_names),
-      use_ints_for_enums_(use_ints_for_enums),
-      field_scrub_callback_(std::move(field_scrub_callback)) {}
+      use_ints_for_enums_(use_ints_for_enums), 
+      field_scrub_callback_(std::move(field_scrub_callback)) {} 
 
 DefaultValueObjectWriter::Node* DefaultValueObjectWriter::Node::FindChild(
     StringPiece name) {
   if (name.empty() || kind_ != OBJECT) {
-    return nullptr;
+    return nullptr; 
   }
   for (int i = 0; i < children_.size(); ++i) {
     Node* child = children_[i];
@@ -226,7 +226,7 @@ DefaultValueObjectWriter::Node* DefaultValueObjectWriter::Node::FindChild(
       return child;
     }
   }
-  return nullptr;
+  return nullptr; 
 }
 
 void DefaultValueObjectWriter::Node::WriteTo(ObjectWriter* ow) {
@@ -280,7 +280,7 @@ const google::protobuf::Type* DefaultValueObjectWriter::Node::GetMapValueType(
     if (sub_field.number() != 2) {
       continue;
     }
-    if (sub_field.kind() != google::protobuf::Field::TYPE_MESSAGE) {
+    if (sub_field.kind() != google::protobuf::Field::TYPE_MESSAGE) { 
       // This map's value type is not a message type. We don't need to
       // get the field_type in this case.
       break;
@@ -290,11 +290,11 @@ const google::protobuf::Type* DefaultValueObjectWriter::Node::GetMapValueType(
     if (!sub_type.ok()) {
       GOOGLE_LOG(WARNING) << "Cannot resolve type '" << sub_field.type_url() << "'.";
     } else {
-      return sub_type.value();
+      return sub_type.value(); 
     }
     break;
   }
-  return nullptr;
+  return nullptr; 
 }
 
 void DefaultValueObjectWriter::Node::PopulateChildren(
@@ -305,13 +305,13 @@ void DefaultValueObjectWriter::Node::PopulateChildren(
   // TODO(tsun): remove "kStructValueType" from the list. It's being checked
   //     now because of a bug in the tool-chain that causes the "oneof_index"
   //     of kStructValueType to not be set correctly.
-  if (type_ == nullptr || type_->name() == kAnyType ||
+  if (type_ == nullptr || type_->name() == kAnyType || 
       type_->name() == kStructType || type_->name() == kTimestampType ||
       type_->name() == kDurationType || type_->name() == kStructValueType) {
     return;
   }
   std::vector<Node*> new_children;
-  std::unordered_map<TProtoStringType, int> orig_children_map;
+  std::unordered_map<TProtoStringType, int> orig_children_map; 
 
   // Creates a map of child nodes to speed up lookup.
   for (int i = 0; i < children_.size(); ++i) {
@@ -323,30 +323,30 @@ void DefaultValueObjectWriter::Node::PopulateChildren(
 
     // This code is checking if the field to be added to the tree should be
     // scrubbed or not by calling the field_scrub_callback_ callback function.
-    std::vector<TProtoStringType> path;
+    std::vector<TProtoStringType> path; 
     if (!path_.empty()) {
       path.insert(path.begin(), path_.begin(), path_.end());
     }
     path.push_back(field.name());
-    if (field_scrub_callback_ && field_scrub_callback_(path, &field)) {
+    if (field_scrub_callback_ && field_scrub_callback_(path, &field)) { 
       continue;
     }
 
-    std::unordered_map<TProtoStringType, int>::iterator found =
+    std::unordered_map<TProtoStringType, int>::iterator found = 
         orig_children_map.find(field.name());
     // If the child field has already been set, we just add it to the new list
     // of children.
     if (found != orig_children_map.end()) {
       new_children.push_back(children_[found->second]);
-      children_[found->second] = nullptr;
+      children_[found->second] = nullptr; 
       continue;
     }
 
-    const google::protobuf::Type* field_type = nullptr;
+    const google::protobuf::Type* field_type = nullptr; 
     bool is_map = false;
     NodeKind kind = PRIMITIVE;
 
-    if (field.kind() == google::protobuf::Field::TYPE_MESSAGE) {
+    if (field.kind() == google::protobuf::Field::TYPE_MESSAGE) { 
       kind = OBJECT;
       util::StatusOr<const google::protobuf::Type*> found_result =
           typeinfo->ResolveTypeUrl(field.type_url());
@@ -354,7 +354,7 @@ void DefaultValueObjectWriter::Node::PopulateChildren(
         // "field" is of an unknown type.
         GOOGLE_LOG(WARNING) << "Cannot resolve type '" << field.type_url() << "'.";
       } else {
-        const google::protobuf::Type* found_type = found_result.value();
+        const google::protobuf::Type* found_type = found_result.value(); 
         is_map = IsMap(field, *found_type);
 
         if (!is_map) {
@@ -369,7 +369,7 @@ void DefaultValueObjectWriter::Node::PopulateChildren(
     }
 
     if (!is_map &&
-        field.cardinality() == google::protobuf::Field::CARDINALITY_REPEATED) {
+        field.cardinality() == google::protobuf::Field::CARDINALITY_REPEATED) { 
       kind = LIST;
     }
 
@@ -380,23 +380,23 @@ void DefaultValueObjectWriter::Node::PopulateChildren(
 
     // If the child field is of primitive type, sets its data to the default
     // value of its type.
-    std::unique_ptr<Node> child(
-        new Node(preserve_proto_field_names_ ? field.name() : field.json_name(),
-                 field_type, kind,
-                 kind == PRIMITIVE ? CreateDefaultDataPieceForField(
-                                         field, typeinfo, use_ints_for_enums_)
-                                   : DataPiece::NullData(),
-                 true, path, suppress_empty_list_, preserve_proto_field_names_,
-                 use_ints_for_enums_, field_scrub_callback_));
+    std::unique_ptr<Node> child( 
+        new Node(preserve_proto_field_names_ ? field.name() : field.json_name(), 
+                 field_type, kind, 
+                 kind == PRIMITIVE ? CreateDefaultDataPieceForField( 
+                                         field, typeinfo, use_ints_for_enums_) 
+                                   : DataPiece::NullData(), 
+                 true, path, suppress_empty_list_, preserve_proto_field_names_, 
+                 use_ints_for_enums_, field_scrub_callback_)); 
     new_children.push_back(child.release());
   }
   // Adds all leftover nodes in children_ to the beginning of new_child.
   for (int i = 0; i < children_.size(); ++i) {
-    if (children_[i] == nullptr) {
+    if (children_[i] == nullptr) { 
       continue;
     }
     new_children.insert(new_children.begin(), children_[i]);
-    children_[i] = nullptr;
+    children_[i] = nullptr; 
   }
   children_.swap(new_children);
 }
@@ -404,15 +404,15 @@ void DefaultValueObjectWriter::Node::PopulateChildren(
 void DefaultValueObjectWriter::MaybePopulateChildrenOfAny(Node* node) {
   // If this is an "Any" node with "@type" already given and no other children
   // have been added, populates its children.
-  if (node != nullptr && node->is_any() && node->type() != nullptr &&
+  if (node != nullptr && node->is_any() && node->type() != nullptr && 
       node->type()->name() != kAnyType && node->number_of_children() == 1) {
     node->PopulateChildren(typeinfo_);
   }
 }
 
 DataPiece DefaultValueObjectWriter::FindEnumDefault(
-    const google::protobuf::Field& field, const TypeInfo* typeinfo,
-    bool use_ints_for_enums) {
+    const google::protobuf::Field& field, const TypeInfo* typeinfo, 
+    bool use_ints_for_enums) { 
   if (!field.default_value().empty())
     return DataPiece(field.default_value(), true);
 
@@ -425,93 +425,93 @@ DataPiece DefaultValueObjectWriter::FindEnumDefault(
   }
   // We treat the first value as the default if none is specified.
   return enum_type->enumvalue_size() > 0
-             ? (use_ints_for_enums
-                    ? DataPiece(enum_type->enumvalue(0).number())
-                    : DataPiece(enum_type->enumvalue(0).name(), true))
+             ? (use_ints_for_enums 
+                    ? DataPiece(enum_type->enumvalue(0).number()) 
+                    : DataPiece(enum_type->enumvalue(0).name(), true)) 
              : DataPiece::NullData();
 }
 
 DataPiece DefaultValueObjectWriter::CreateDefaultDataPieceForField(
-    const google::protobuf::Field& field, const TypeInfo* typeinfo,
-    bool use_ints_for_enums) {
+    const google::protobuf::Field& field, const TypeInfo* typeinfo, 
+    bool use_ints_for_enums) { 
   switch (field.kind()) {
-    case google::protobuf::Field::TYPE_DOUBLE: {
+    case google::protobuf::Field::TYPE_DOUBLE: { 
       return DataPiece(ConvertTo<double>(
           field.default_value(), &DataPiece::ToDouble, static_cast<double>(0)));
     }
-    case google::protobuf::Field::TYPE_FLOAT: {
+    case google::protobuf::Field::TYPE_FLOAT: { 
       return DataPiece(ConvertTo<float>(
           field.default_value(), &DataPiece::ToFloat, static_cast<float>(0)));
     }
-    case google::protobuf::Field::TYPE_INT64:
-    case google::protobuf::Field::TYPE_SINT64:
-    case google::protobuf::Field::TYPE_SFIXED64: {
-      return DataPiece(ConvertTo<int64_t>(
-          field.default_value(), &DataPiece::ToInt64, static_cast<int64_t>(0)));
+    case google::protobuf::Field::TYPE_INT64: 
+    case google::protobuf::Field::TYPE_SINT64: 
+    case google::protobuf::Field::TYPE_SFIXED64: { 
+      return DataPiece(ConvertTo<int64_t>( 
+          field.default_value(), &DataPiece::ToInt64, static_cast<int64_t>(0))); 
     }
-    case google::protobuf::Field::TYPE_UINT64:
-    case google::protobuf::Field::TYPE_FIXED64: {
-      return DataPiece(ConvertTo<uint64_t>(field.default_value(),
-                                           &DataPiece::ToUint64,
-                                           static_cast<uint64_t>(0)));
+    case google::protobuf::Field::TYPE_UINT64: 
+    case google::protobuf::Field::TYPE_FIXED64: { 
+      return DataPiece(ConvertTo<uint64_t>(field.default_value(), 
+                                           &DataPiece::ToUint64, 
+                                           static_cast<uint64_t>(0))); 
     }
-    case google::protobuf::Field::TYPE_INT32:
-    case google::protobuf::Field::TYPE_SINT32:
-    case google::protobuf::Field::TYPE_SFIXED32: {
-      return DataPiece(ConvertTo<int32_t>(
-          field.default_value(), &DataPiece::ToInt32, static_cast<int32_t>(0)));
+    case google::protobuf::Field::TYPE_INT32: 
+    case google::protobuf::Field::TYPE_SINT32: 
+    case google::protobuf::Field::TYPE_SFIXED32: { 
+      return DataPiece(ConvertTo<int32_t>( 
+          field.default_value(), &DataPiece::ToInt32, static_cast<int32_t>(0))); 
     }
-    case google::protobuf::Field::TYPE_BOOL: {
+    case google::protobuf::Field::TYPE_BOOL: { 
       return DataPiece(
           ConvertTo<bool>(field.default_value(), &DataPiece::ToBool, false));
     }
-    case google::protobuf::Field::TYPE_STRING: {
+    case google::protobuf::Field::TYPE_STRING: { 
       return DataPiece(field.default_value(), true);
     }
-    case google::protobuf::Field::TYPE_BYTES: {
+    case google::protobuf::Field::TYPE_BYTES: { 
       return DataPiece(field.default_value(), false, true);
     }
-    case google::protobuf::Field::TYPE_UINT32:
-    case google::protobuf::Field::TYPE_FIXED32: {
-      return DataPiece(ConvertTo<uint32_t>(field.default_value(),
-                                           &DataPiece::ToUint32,
-                                           static_cast<uint32_t>(0)));
+    case google::protobuf::Field::TYPE_UINT32: 
+    case google::protobuf::Field::TYPE_FIXED32: { 
+      return DataPiece(ConvertTo<uint32_t>(field.default_value(), 
+                                           &DataPiece::ToUint32, 
+                                           static_cast<uint32_t>(0))); 
     }
-    case google::protobuf::Field::TYPE_ENUM: {
-      return FindEnumDefault(field, typeinfo, use_ints_for_enums);
+    case google::protobuf::Field::TYPE_ENUM: { 
+      return FindEnumDefault(field, typeinfo, use_ints_for_enums); 
     }
-    default: {
-      return DataPiece::NullData();
-    }
+    default: { 
+      return DataPiece::NullData(); 
+    } 
   }
 }
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::StartObject(
     StringPiece name) {
-  if (current_ == nullptr) {
-    std::vector<TProtoStringType> path;
-    root_.reset(CreateNewNode(TProtoStringType(name), &type_, OBJECT,
+  if (current_ == nullptr) { 
+    std::vector<TProtoStringType> path; 
+    root_.reset(CreateNewNode(TProtoStringType(name), &type_, OBJECT, 
                               DataPiece::NullData(), false, path,
                               suppress_empty_list_, preserve_proto_field_names_,
-                              use_ints_for_enums_, field_scrub_callback_));
+                              use_ints_for_enums_, field_scrub_callback_)); 
     root_->PopulateChildren(typeinfo_);
     current_ = root_.get();
     return this;
   }
   MaybePopulateChildrenOfAny(current_);
   Node* child = current_->FindChild(name);
-  if (current_->kind() == LIST || current_->kind() == MAP || child == nullptr) {
+  if (current_->kind() == LIST || current_->kind() == MAP || child == nullptr) { 
     // If current_ is a list or a map node, we should create a new child and use
     // the type of current_ as the type of the new child.
-    std::unique_ptr<Node> node(
-        CreateNewNode(TProtoStringType(name),
+    std::unique_ptr<Node> node( 
+        CreateNewNode(TProtoStringType(name), 
                       ((current_->kind() == LIST || current_->kind() == MAP)
                            ? current_->type()
-                           : nullptr),
+                           : nullptr), 
                       OBJECT, DataPiece::NullData(), false,
-                      child == nullptr ? current_->path() : child->path(),
+                      child == nullptr ? current_->path() : child->path(), 
                       suppress_empty_list_, preserve_proto_field_names_,
-                      use_ints_for_enums_, field_scrub_callback_));
+                      use_ints_for_enums_, field_scrub_callback_)); 
     child = node.get();
     current_->AddChild(node.release());
   }
@@ -539,23 +539,23 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::EndObject() {
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::StartList(
     StringPiece name) {
-  if (current_ == nullptr) {
-    std::vector<TProtoStringType> path;
-    root_.reset(CreateNewNode(TProtoStringType(name), &type_, LIST,
-                              DataPiece::NullData(), false, path,
-                              suppress_empty_list_, preserve_proto_field_names_,
-                              use_ints_for_enums_, field_scrub_callback_));
+  if (current_ == nullptr) { 
+    std::vector<TProtoStringType> path; 
+    root_.reset(CreateNewNode(TProtoStringType(name), &type_, LIST, 
+                              DataPiece::NullData(), false, path, 
+                              suppress_empty_list_, preserve_proto_field_names_, 
+                              use_ints_for_enums_, field_scrub_callback_)); 
     current_ = root_.get();
     return this;
   }
   MaybePopulateChildrenOfAny(current_);
   Node* child = current_->FindChild(name);
-  if (child == nullptr || child->kind() != LIST) {
-    std::unique_ptr<Node> node(CreateNewNode(
-        TProtoStringType(name), nullptr, LIST, DataPiece::NullData(), false,
-        child == nullptr ? current_->path() : child->path(),
-        suppress_empty_list_, preserve_proto_field_names_, use_ints_for_enums_,
-        field_scrub_callback_));
+  if (child == nullptr || child->kind() != LIST) { 
+    std::unique_ptr<Node> node(CreateNewNode( 
+        TProtoStringType(name), nullptr, LIST, DataPiece::NullData(), false, 
+        child == nullptr ? current_->path() : child->path(), 
+        suppress_empty_list_, preserve_proto_field_names_, use_ints_for_enums_, 
+        field_scrub_callback_)); 
     child = node.get();
     current_->AddChild(node.release());
   }
@@ -568,8 +568,8 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::StartList(
 
 void DefaultValueObjectWriter::WriteRoot() {
   root_->WriteTo(ow_);
-  root_.reset(nullptr);
-  current_ = nullptr;
+  root_.reset(nullptr); 
+  current_ = nullptr; 
 }
 
 DefaultValueObjectWriter* DefaultValueObjectWriter::EndList() {
@@ -585,11 +585,11 @@ DefaultValueObjectWriter* DefaultValueObjectWriter::EndList() {
 void DefaultValueObjectWriter::RenderDataPiece(StringPiece name,
                                                const DataPiece& data) {
   MaybePopulateChildrenOfAny(current_);
-  if (current_->type() != nullptr && current_->type()->name() == kAnyType &&
+  if (current_->type() != nullptr && current_->type()->name() == kAnyType && 
       name == "@type") {
-    util::StatusOr<TProtoStringType> data_string = data.ToString();
+    util::StatusOr<TProtoStringType> data_string = data.ToString(); 
     if (data_string.ok()) {
-      const TProtoStringType& string_value = data_string.value();
+      const TProtoStringType& string_value = data_string.value(); 
       // If the type of current_ is "Any" and its "@type" field is being set
       // here, sets the type of current_ to be the type specified by the
       // "@type".
@@ -598,26 +598,26 @@ void DefaultValueObjectWriter::RenderDataPiece(StringPiece name,
       if (!found_type.ok()) {
         GOOGLE_LOG(WARNING) << "Failed to resolve type '" << string_value << "'.";
       } else {
-        current_->set_type(found_type.value());
+        current_->set_type(found_type.value()); 
       }
       current_->set_is_any(true);
       // If the "@type" field is placed after other fields, we should populate
       // other children of primitive type now. Otherwise, we should wait until
       // the first value field is rendered before we populate the children,
       // because the "value" field of a Any message could be omitted.
-      if (current_->number_of_children() > 1 && current_->type() != nullptr) {
+      if (current_->number_of_children() > 1 && current_->type() != nullptr) { 
         current_->PopulateChildren(typeinfo_);
       }
     }
   }
   Node* child = current_->FindChild(name);
-  if (child == nullptr || child->kind() != PRIMITIVE) {
+  if (child == nullptr || child->kind() != PRIMITIVE) { 
     // No children are found, creates a new child.
-    std::unique_ptr<Node> node(
-        CreateNewNode(TProtoStringType(name), nullptr, PRIMITIVE, data, false,
-                      child == nullptr ? current_->path() : child->path(),
+    std::unique_ptr<Node> node( 
+        CreateNewNode(TProtoStringType(name), nullptr, PRIMITIVE, data, false, 
+                      child == nullptr ? current_->path() : child->path(), 
                       suppress_empty_list_, preserve_proto_field_names_,
-                      use_ints_for_enums_, field_scrub_callback_));
+                      use_ints_for_enums_, field_scrub_callback_)); 
     current_->AddChild(node.release());
   } else {
     child->set_data(data);

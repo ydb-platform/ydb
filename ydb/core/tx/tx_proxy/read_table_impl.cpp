@@ -974,7 +974,7 @@ private:
                 TxProxyMon->TxResultCancelled->Inc();
                 status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecCancelled;
                 code = NKikimrIssues::TStatusIds::ERROR;
-                break;
+                break; 
             case NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST:
                 TxProxyMon->TxResultCancelled->Inc();
                 status = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::WrongRequest;
@@ -1256,7 +1256,7 @@ private:
                 CancelProposal(0);
 
                 // fall through to generic error handling
-                [[fallthrough]];
+                [[fallthrough]]; 
 
             default:
                 // something went wrong
@@ -1569,7 +1569,7 @@ private:
                 if (state.ReadTxId == msg->GetTxId()) {
                     break;
                 }
-                [[fallthrough]];
+                [[fallthrough]]; 
 
             default:
                 // Ignore unexpected results

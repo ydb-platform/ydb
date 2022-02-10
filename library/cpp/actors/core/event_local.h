@@ -13,7 +13,7 @@ namespace NActors {
             return TypeName<TEv>();
         }
 
-        bool SerializeToArcadiaStream(TChunkSerializer* /*serializer*/) const override {
+        bool SerializeToArcadiaStream(TChunkSerializer* /*serializer*/) const override { 
             Y_FAIL("Serialization of local event %s type %" PRIu32, TypeName<TEv>().data(), TEventType);
         }
 
@@ -54,7 +54,7 @@ namespace NActors {
             return header;
         }
 
-        bool SerializeToArcadiaStream(TChunkSerializer* /*serializer*/) const override {
+        bool SerializeToArcadiaStream(TChunkSerializer* /*serializer*/) const override { 
             static_assert(sizeof(TEv) == sizeof(TEventSimple<TEv, TEventType>), "Descendant should be an empty class");
             return true;
         }

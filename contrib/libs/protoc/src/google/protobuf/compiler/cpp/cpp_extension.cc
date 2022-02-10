@@ -32,12 +32,12 @@
 //  Based on original Protocol Buffers design by
 //  Sanjay Ghemawat, Jeff Dean, and others.
 
-#include <google/protobuf/compiler/cpp/cpp_extension.h>
+#include <google/protobuf/compiler/cpp/cpp_extension.h> 
 #include <map>
-#include <google/protobuf/compiler/cpp/cpp_helpers.h>
-#include <google/protobuf/descriptor.pb.h>
-#include <google/protobuf/io/printer.h>
-#include <google/protobuf/stubs/strutil.h>
+#include <google/protobuf/compiler/cpp/cpp_helpers.h> 
+#include <google/protobuf/descriptor.pb.h> 
+#include <google/protobuf/io/printer.h> 
+#include <google/protobuf/stubs/strutil.h> 
 
 namespace google {
 namespace protobuf {
@@ -49,7 +49,7 @@ namespace {
 // Returns the fully-qualified class name of the message that this field
 // extends. This function is used in the Google-internal code to handle some
 // legacy cases.
-TProtoStringType ExtendeeClassName(const FieldDescriptor* descriptor) {
+TProtoStringType ExtendeeClassName(const FieldDescriptor* descriptor) { 
   const Descriptor* extendee = descriptor->containing_type();
   return ClassName(extendee, true);
 }
@@ -58,7 +58,7 @@ TProtoStringType ExtendeeClassName(const FieldDescriptor* descriptor) {
 
 ExtensionGenerator::ExtensionGenerator(const FieldDescriptor* descriptor,
                                        const Options& options)
-    : descriptor_(descriptor), options_(options) {
+    : descriptor_(descriptor), options_(options) { 
   // Construct type_traits_.
   if (descriptor_->is_repeated()) {
     type_traits_ = "Repeated";
@@ -82,103 +82,103 @@ ExtensionGenerator::ExtensionGenerator(const FieldDescriptor* descriptor,
       break;
     default:
       type_traits_.append("PrimitiveTypeTraits< ");
-      type_traits_.append(PrimitiveTypeName(options_, descriptor_->cpp_type()));
+      type_traits_.append(PrimitiveTypeName(options_, descriptor_->cpp_type())); 
       type_traits_.append(" >");
       break;
   }
-  SetCommonVars(options, &variables_);
-  variables_["extendee"] = ExtendeeClassName(descriptor_);
-  variables_["type_traits"] = type_traits_;
-  TProtoStringType name = descriptor_->name();
-  variables_["name"] = ResolveKeyword(name);
-  variables_["constant_name"] = FieldConstantName(descriptor_);
-  variables_["field_type"] =
-      StrCat(static_cast<int>(descriptor_->type()));
-  variables_["packed"] = descriptor_->is_packed() ? "true" : "false";
-
-  TProtoStringType scope =
-      IsScoped() ? ClassName(descriptor_->extension_scope(), false) + "::" : "";
-  variables_["scope"] = scope;
-  variables_["scoped_name"] = ExtensionName(descriptor_);
-  variables_["number"] = StrCat(descriptor_->number());
+  SetCommonVars(options, &variables_); 
+  variables_["extendee"] = ExtendeeClassName(descriptor_); 
+  variables_["type_traits"] = type_traits_; 
+  TProtoStringType name = descriptor_->name(); 
+  variables_["name"] = ResolveKeyword(name); 
+  variables_["constant_name"] = FieldConstantName(descriptor_); 
+  variables_["field_type"] = 
+      StrCat(static_cast<int>(descriptor_->type())); 
+  variables_["packed"] = descriptor_->is_packed() ? "true" : "false"; 
+ 
+  TProtoStringType scope = 
+      IsScoped() ? ClassName(descriptor_->extension_scope(), false) + "::" : ""; 
+  variables_["scope"] = scope; 
+  variables_["scoped_name"] = ExtensionName(descriptor_); 
+  variables_["number"] = StrCat(descriptor_->number()); 
 }
 
 ExtensionGenerator::~ExtensionGenerator() {}
 
-bool ExtensionGenerator::IsScoped() const {
-  return descriptor_->extension_scope() != nullptr;
-}
+bool ExtensionGenerator::IsScoped() const { 
+  return descriptor_->extension_scope() != nullptr; 
+} 
 
-void ExtensionGenerator::GenerateDeclaration(io::Printer* printer) const {
-  Formatter format(printer, variables_);
-
+void ExtensionGenerator::GenerateDeclaration(io::Printer* printer) const { 
+  Formatter format(printer, variables_); 
+ 
   // If this is a class member, it needs to be declared "static".  Otherwise,
   // it needs to be "extern".  In the latter case, it also needs the DLL
   // export/import specifier.
-  TProtoStringType qualifier;
-  if (!IsScoped()) {
-    qualifier = "extern";
+  TProtoStringType qualifier; 
+  if (!IsScoped()) { 
+    qualifier = "extern"; 
     if (!options_.dllexport_decl.empty()) {
-      qualifier = options_.dllexport_decl + " " + qualifier;
+      qualifier = options_.dllexport_decl + " " + qualifier; 
     }
   } else {
-    qualifier = "static";
+    qualifier = "static"; 
   }
 
-  format(
-      "static const int $constant_name$ = $number$;\n"
-      "$1$ ::$proto_ns$::internal::ExtensionIdentifier< $extendee$,\n"
-      "    ::$proto_ns$::internal::$type_traits$, $field_type$, $packed$ >\n"
-      "  ${2$$name$$}$;\n",
-      qualifier, descriptor_);
+  format( 
+      "static const int $constant_name$ = $number$;\n" 
+      "$1$ ::$proto_ns$::internal::ExtensionIdentifier< $extendee$,\n" 
+      "    ::$proto_ns$::internal::$type_traits$, $field_type$, $packed$ >\n" 
+      "  ${2$$name$$}$;\n", 
+      qualifier, descriptor_); 
 }
 
 void ExtensionGenerator::GenerateDefinition(io::Printer* printer) {
-  // If we are building for lite with implicit weak fields, we want to skip over
-  // any custom options (i.e. extensions of messages from descriptor.proto).
-  // This prevents the creation of any unnecessary linker references to the
-  // descriptor messages.
-  if (options_.lite_implicit_weak_fields &&
-      descriptor_->containing_type()->file()->name() ==
-          "net/proto2/proto/descriptor.proto") {
-    return;
-  }
-
-  Formatter format(printer, variables_);
-  TProtoStringType default_str;
+  // If we are building for lite with implicit weak fields, we want to skip over 
+  // any custom options (i.e. extensions of messages from descriptor.proto). 
+  // This prevents the creation of any unnecessary linker references to the 
+  // descriptor messages. 
+  if (options_.lite_implicit_weak_fields && 
+      descriptor_->containing_type()->file()->name() == 
+          "net/proto2/proto/descriptor.proto") { 
+    return; 
+  } 
+ 
+  Formatter format(printer, variables_); 
+  TProtoStringType default_str; 
   // If this is a class member, it needs to be declared in its class scope.
   if (descriptor_->cpp_type() == FieldDescriptor::CPPTYPE_STRING) {
     // We need to declare a global string which will contain the default value.
     // We cannot declare it at class scope because that would require exposing
     // it in the header which would be annoying for other reasons.  So we
     // replace :: with _ in the name and declare it as a global.
-    default_str =
-        StringReplace(variables_["scoped_name"], "::", "_", true) + "_default";
-    format("const TProtoStringType $1$($2$);\n", default_str,
-           DefaultValue(options_, descriptor_));
-  } else if (descriptor_->message_type()) {
-    // We have to initialize the default instance for extensions at registration
-    // time.
-    default_str =
-        FieldMessageTypeName(descriptor_, options_) + "::default_instance()";
-  } else {
-    default_str = DefaultValue(options_, descriptor_);
+    default_str = 
+        StringReplace(variables_["scoped_name"], "::", "_", true) + "_default"; 
+    format("const TProtoStringType $1$($2$);\n", default_str, 
+           DefaultValue(options_, descriptor_)); 
+  } else if (descriptor_->message_type()) { 
+    // We have to initialize the default instance for extensions at registration 
+    // time. 
+    default_str = 
+        FieldMessageTypeName(descriptor_, options_) + "::default_instance()"; 
+  } else { 
+    default_str = DefaultValue(options_, descriptor_); 
   }
 
   // Likewise, class members need to declare the field constant variable.
-  if (IsScoped()) {
-    format(
-        "#if !defined(_MSC_VER) || _MSC_VER >= 1900\n"
-        "const int $scope$$constant_name$;\n"
-        "#endif\n");
+  if (IsScoped()) { 
+    format( 
+        "#if !defined(_MSC_VER) || _MSC_VER >= 1900\n" 
+        "const int $scope$$constant_name$;\n" 
+        "#endif\n"); 
   }
 
-  format(
-      "PROTOBUF_ATTRIBUTE_INIT_PRIORITY "
-      "::$proto_ns$::internal::ExtensionIdentifier< $extendee$,\n"
-      "    ::$proto_ns$::internal::$type_traits$, $field_type$, $packed$ >\n"
-      "  $scoped_name$($constant_name$, $1$);\n",
-      default_str);
+  format( 
+      "PROTOBUF_ATTRIBUTE_INIT_PRIORITY " 
+      "::$proto_ns$::internal::ExtensionIdentifier< $extendee$,\n" 
+      "    ::$proto_ns$::internal::$type_traits$, $field_type$, $packed$ >\n" 
+      "  $scoped_name$($constant_name$, $1$);\n", 
+      default_str); 
 }
 
 }  // namespace cpp

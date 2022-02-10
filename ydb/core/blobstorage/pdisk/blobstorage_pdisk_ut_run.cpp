@@ -107,16 +107,16 @@ void Run(TVector<IActor*> tests, TTestRunConfig runCfg) {
         TIntrusivePtr<NActors::NLog::TSettings> logSettings(
             new NActors::NLog::TSettings(loggerActorId, NKikimrServices::LOGGER,
                 NActors::NLog::PRI_ERROR, NActors::NLog::PRI_ERROR, 0));
-        logSettings->Append(
-            NActorsServices::EServiceCommon_MIN,
-            NActorsServices::EServiceCommon_MAX,
-            NActorsServices::EServiceCommon_Name
-        );
-        logSettings->Append(
-            NKikimrServices::EServiceKikimr_MIN,
+        logSettings->Append( 
+            NActorsServices::EServiceCommon_MIN, 
+            NActorsServices::EServiceCommon_MAX, 
+            NActorsServices::EServiceCommon_Name 
+        ); 
+        logSettings->Append( 
+            NKikimrServices::EServiceKikimr_MIN, 
             NKikimrServices::EServiceKikimr_MAX,
-            NKikimrServices::EServiceKikimr_Name
-        );
+            NKikimrServices::EServiceKikimr_Name 
+        ); 
 
         TString explanation;
         if (!IsLowVerbose) {

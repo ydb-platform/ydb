@@ -48,7 +48,7 @@ namespace boost { namespace fusion
         pos_type pos;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(repetitive_view_iterator& operator= (repetitive_view_iterator const&))
+        BOOST_DELETED_FUNCTION(repetitive_view_iterator& operator= (repetitive_view_iterator const&)) 
     };
 }}
 

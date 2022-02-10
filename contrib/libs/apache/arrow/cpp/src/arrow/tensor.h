@@ -56,16 +56,16 @@ static inline bool is_tensor_supported(Type::type type_id) {
 namespace internal {
 
 ARROW_EXPORT
-Status ComputeRowMajorStrides(const FixedWidthType& type,
-                              const std::vector<int64_t>& shape,
-                              std::vector<int64_t>* strides);
+Status ComputeRowMajorStrides(const FixedWidthType& type, 
+                              const std::vector<int64_t>& shape, 
+                              std::vector<int64_t>* strides); 
 
 ARROW_EXPORT
-Status ComputeColumnMajorStrides(const FixedWidthType& type,
-                                 const std::vector<int64_t>& shape,
-                                 std::vector<int64_t>* strides);
-
-ARROW_EXPORT
+Status ComputeColumnMajorStrides(const FixedWidthType& type, 
+                                 const std::vector<int64_t>& shape, 
+                                 std::vector<int64_t>* strides); 
+ 
+ARROW_EXPORT 
 bool IsTensorStridesContiguous(const std::shared_ptr<DataType>& type,
                                const std::vector<int64_t>& shape,
                                const std::vector<int64_t>& strides);
@@ -180,10 +180,10 @@ class ARROW_EXPORT Tensor {
     return *ptr;
   }
 
-  Status Validate() const {
-    return internal::ValidateTensorParameters(type_, data_, shape_, strides_, dim_names_);
-  }
-
+  Status Validate() const { 
+    return internal::ValidateTensorParameters(type_, data_, shape_, strides_, dim_names_); 
+  } 
+ 
  protected:
   Tensor() {}
 

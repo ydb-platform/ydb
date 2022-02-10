@@ -692,20 +692,20 @@ bool PrivateGenerator::PrintPreamble(grpc_generator::Printer* out) {
 
         TString input_type_file_name = method->get_input_type_name();
         TString input_module_name =
-            ModuleName(input_type_file_name, config.import_prefix,
+            ModuleName(input_type_file_name, config.import_prefix, 
                        config.prefixes_to_filter);
         TString input_module_alias =
-            ModuleAlias(input_type_file_name, config.import_prefix,
+            ModuleAlias(input_type_file_name, config.import_prefix, 
                         config.prefixes_to_filter);
         imports_set.insert(
             std::make_tuple(input_module_name, input_module_alias));
 
         TString output_type_file_name = method->get_output_type_name();
         TString output_module_name =
-            ModuleName(output_type_file_name, config.import_prefix,
+            ModuleName(output_type_file_name, config.import_prefix, 
                        config.prefixes_to_filter);
         TString output_module_alias =
-            ModuleAlias(output_type_file_name, config.import_prefix,
+            ModuleAlias(output_type_file_name, config.import_prefix, 
                         config.prefixes_to_filter);
         imports_set.insert(
             std::make_tuple(output_module_name, output_module_alias));

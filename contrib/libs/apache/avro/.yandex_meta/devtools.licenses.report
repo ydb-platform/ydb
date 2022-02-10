@@ -44,7 +44,7 @@ BELONGS ya.make
 
 KEEP     Apache-2.0           807648c73ed5fa476be45e9005a86248
 BELONGS ya.make
-FILE_INCLUDE NOTICE found in files: api/AvroParse.hh at line 3, api/AvroSerialize.hh at line 3, api/AvroTraits.hh at line 3, api/Compiler.hh at line 3, api/Config.hh at line 3, api/DataFile.hh at line 3, api/Decoder.hh at line 3, api/Encoder.hh at line 3, api/Exception.hh at line 3, api/Generic.hh at line 3, api/GenericDatum.hh at line 3, api/Layout.hh at line 3, api/LogicalType.hh at line 3, api/Node.hh at line 3, api/NodeConcepts.hh at line 3, api/NodeImpl.hh at line 3, api/Parser.hh at line 3, api/Reader.hh at line 3, api/Resolver.hh at line 3, api/ResolverSchema.hh at line 3, api/ResolvingReader.hh at line 3, api/Schema.hh at line 3, api/SchemaResolution.hh at line 3, api/Serializer.hh at line 3, api/Specific.hh at line 3, api/Stream.hh at line 3, api/Types.hh at line 3, api/ValidSchema.hh at line 3, api/Validator.hh at line 3, api/Writer.hh at line 3, api/Zigzag.hh at line 3, api/buffer/Buffer.hh at line 3, api/buffer/BufferReader.hh at line 3, api/buffer/detail/BufferDetail.hh at line 3, api/buffer/detail/BufferDetailIterator.hh at line 3, impl/BinaryDecoder.cc at line 3, impl/BinaryEncoder.cc at line 3, impl/Compiler.cc at line 3, impl/DataFile.cc at line 3, impl/FileStream.cc at line 3, impl/Generic.cc at line 3, impl/GenericDatum.cc at line 3, impl/LogicalType.cc at line 3, impl/Node.cc at line 3, impl/NodeImpl.cc at line 3, impl/Resolver.cc at line 4, impl/ResolverSchema.cc at line 4, impl/Schema.cc at line 3, impl/Stream.cc at line 3, impl/Types.cc at line 3, impl/ValidSchema.cc at line 3, impl/Validator.cc at line 3, impl/Zigzag.cc at line 3, impl/json/JsonDom.cc at line 3, impl/json/JsonDom.hh at line 3, impl/json/JsonIO.cc at line 3, impl/json/JsonIO.hh at line 3, impl/parsing/JsonCodec.cc at line 3, impl/parsing/ResolvingDecoder.cc at line 3, impl/parsing/Symbol.cc at line 3, impl/parsing/Symbol.hh at line 3, impl/parsing/ValidatingCodec.cc at line 3, impl/parsing/ValidatingCodec.hh at line 3
+FILE_INCLUDE NOTICE found in files: api/AvroParse.hh at line 3, api/AvroSerialize.hh at line 3, api/AvroTraits.hh at line 3, api/Compiler.hh at line 3, api/Config.hh at line 3, api/DataFile.hh at line 3, api/Decoder.hh at line 3, api/Encoder.hh at line 3, api/Exception.hh at line 3, api/Generic.hh at line 3, api/GenericDatum.hh at line 3, api/Layout.hh at line 3, api/LogicalType.hh at line 3, api/Node.hh at line 3, api/NodeConcepts.hh at line 3, api/NodeImpl.hh at line 3, api/Parser.hh at line 3, api/Reader.hh at line 3, api/Resolver.hh at line 3, api/ResolverSchema.hh at line 3, api/ResolvingReader.hh at line 3, api/Schema.hh at line 3, api/SchemaResolution.hh at line 3, api/Serializer.hh at line 3, api/Specific.hh at line 3, api/Stream.hh at line 3, api/Types.hh at line 3, api/ValidSchema.hh at line 3, api/Validator.hh at line 3, api/Writer.hh at line 3, api/Zigzag.hh at line 3, api/buffer/Buffer.hh at line 3, api/buffer/BufferReader.hh at line 3, api/buffer/detail/BufferDetail.hh at line 3, api/buffer/detail/BufferDetailIterator.hh at line 3, impl/BinaryDecoder.cc at line 3, impl/BinaryEncoder.cc at line 3, impl/Compiler.cc at line 3, impl/DataFile.cc at line 3, impl/FileStream.cc at line 3, impl/Generic.cc at line 3, impl/GenericDatum.cc at line 3, impl/LogicalType.cc at line 3, impl/Node.cc at line 3, impl/NodeImpl.cc at line 3, impl/Resolver.cc at line 4, impl/ResolverSchema.cc at line 4, impl/Schema.cc at line 3, impl/Stream.cc at line 3, impl/Types.cc at line 3, impl/ValidSchema.cc at line 3, impl/Validator.cc at line 3, impl/Zigzag.cc at line 3, impl/json/JsonDom.cc at line 3, impl/json/JsonDom.hh at line 3, impl/json/JsonIO.cc at line 3, impl/json/JsonIO.hh at line 3, impl/parsing/JsonCodec.cc at line 3, impl/parsing/ResolvingDecoder.cc at line 3, impl/parsing/Symbol.cc at line 3, impl/parsing/Symbol.hh at line 3, impl/parsing/ValidatingCodec.cc at line 3, impl/parsing/ValidatingCodec.hh at line 3 
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -52,8 +52,8 @@ FILE_INCLUDE NOTICE found in files: api/AvroParse.hh at line 3, api/AvroSerializ
         Match type      : NOTICE
         Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
     Files with this license:
-        api/AvroParse.hh [2:16]
-        api/AvroSerialize.hh [2:16]
+        api/AvroParse.hh [2:16] 
+        api/AvroSerialize.hh [2:16] 
         api/AvroTraits.hh [2:16]
         api/Compiler.hh [2:16]
         api/Config.hh [2:16]
@@ -68,20 +68,20 @@ FILE_INCLUDE NOTICE found in files: api/AvroParse.hh at line 3, api/AvroSerializ
         api/Node.hh [2:16]
         api/NodeConcepts.hh [2:16]
         api/NodeImpl.hh [2:16]
-        api/Parser.hh [2:16]
+        api/Parser.hh [2:16] 
         api/Reader.hh [2:16]
         api/Resolver.hh [2:16]
         api/ResolverSchema.hh [2:16]
-        api/ResolvingReader.hh [2:16]
+        api/ResolvingReader.hh [2:16] 
         api/Schema.hh [2:16]
         api/SchemaResolution.hh [2:16]
-        api/Serializer.hh [2:16]
+        api/Serializer.hh [2:16] 
         api/Specific.hh [2:16]
         api/Stream.hh [2:16]
         api/Types.hh [2:16]
         api/ValidSchema.hh [2:16]
         api/Validator.hh [2:16]
-        api/Writer.hh [2:16]
+        api/Writer.hh [2:16] 
         api/Zigzag.hh [2:16]
         api/buffer/Buffer.hh [2:16]
         api/buffer/BufferReader.hh [2:16]

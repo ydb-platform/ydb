@@ -2,7 +2,7 @@
 
 #include <ostream>
 
-namespace testing {
+namespace testing { 
     void PrintTo(const TProbeState& state, ::std::ostream* os) {
         int copies = state.CopyConstructors + state.CopyAssignments;
         int moves = state.MoveConstructors + state.MoveAssignments;
@@ -10,4 +10,4 @@ namespace testing {
             << "copies: " << copies << " = " << state.CopyConstructors << " + " << state.CopyAssignments << "; "
             << "moves: " << moves << " = " << state.MoveConstructors << " + " << state.MoveAssignments;
     }
-} // namespace testing
+} // namespace testing 

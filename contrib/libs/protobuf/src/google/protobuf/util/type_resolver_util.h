@@ -33,8 +33,8 @@
 #ifndef GOOGLE_PROTOBUF_UTIL_TYPE_RESOLVER_UTIL_H__
 #define GOOGLE_PROTOBUF_UTIL_TYPE_RESOLVER_UTIL_H__
 
-#include <string>
-#include <google/protobuf/stubs/port.h>
+#include <string> 
+#include <google/protobuf/stubs/port.h> 
 
 namespace google {
 namespace protobuf {
@@ -42,17 +42,17 @@ class DescriptorPool;
 namespace util {
 class TypeResolver;
 
-#include <google/protobuf/port_def.inc>
-
+#include <google/protobuf/port_def.inc> 
+ 
 // Creates a TypeResolver that serves type information in the given descriptor
 // pool. Caller takes ownership of the returned TypeResolver.
-PROTOBUF_EXPORT TypeResolver* NewTypeResolverForDescriptorPool(
-    const TProtoStringType& url_prefix, const DescriptorPool* pool);
+PROTOBUF_EXPORT TypeResolver* NewTypeResolverForDescriptorPool( 
+    const TProtoStringType& url_prefix, const DescriptorPool* pool); 
 
 }  // namespace util
 }  // namespace protobuf
-}  // namespace google
+}  // namespace google 
 
-#include <google/protobuf/port_undef.inc>
-
+#include <google/protobuf/port_undef.inc> 
+ 
 #endif  // GOOGLE_PROTOBUF_UTIL_TYPE_RESOLVER_UTIL_H__

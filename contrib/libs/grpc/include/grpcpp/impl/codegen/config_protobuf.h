@@ -23,18 +23,18 @@
 
 #ifndef GRPC_CUSTOM_MESSAGE
 #ifdef GRPC_USE_PROTO_LITE
-#include <google/protobuf/message_lite.h>
+#include <google/protobuf/message_lite.h> 
 #define GRPC_CUSTOM_MESSAGE ::google::protobuf::MessageLite
 #define GRPC_CUSTOM_MESSAGELITE ::google::protobuf::MessageLite
 #else
-#include <google/protobuf/message.h>
+#include <google/protobuf/message.h> 
 #define GRPC_CUSTOM_MESSAGE ::google::protobuf::Message
 #define GRPC_CUSTOM_MESSAGELITE ::google::protobuf::MessageLite
 #endif
 #endif
 
 #ifndef GRPC_CUSTOM_DESCRIPTOR
-#include <google/protobuf/descriptor.h>
+#include <google/protobuf/descriptor.h> 
 #include <google/protobuf/descriptor.pb.h>
 #define GRPC_CUSTOM_DESCRIPTOR ::google::protobuf::Descriptor
 #define GRPC_CUSTOM_DESCRIPTORPOOL ::google::protobuf::DescriptorPool
@@ -47,15 +47,15 @@
 #endif
 
 #ifndef GRPC_CUSTOM_DESCRIPTORDATABASE
-#include <google/protobuf/descriptor_database.h>
+#include <google/protobuf/descriptor_database.h> 
 #define GRPC_CUSTOM_DESCRIPTORDATABASE ::google::protobuf::DescriptorDatabase
 #define GRPC_CUSTOM_SIMPLEDESCRIPTORDATABASE \
   ::google::protobuf::SimpleDescriptorDatabase
 #endif
 
 #ifndef GRPC_CUSTOM_ZEROCOPYOUTPUTSTREAM
-#include <google/protobuf/io/coded_stream.h>
-#include <google/protobuf/io/zero_copy_stream.h>
+#include <google/protobuf/io/coded_stream.h> 
+#include <google/protobuf/io/zero_copy_stream.h> 
 #define GRPC_CUSTOM_ZEROCOPYOUTPUTSTREAM \
   ::google::protobuf::io::ZeroCopyOutputStream
 #define GRPC_CUSTOM_ZEROCOPYINPUTSTREAM \
@@ -64,7 +64,7 @@
 #endif
 
 #ifndef GRPC_CUSTOM_JSONUTIL
-#include <google/protobuf/util/json_util.h>
+#include <google/protobuf/util/json_util.h> 
 #define GRPC_CUSTOM_JSONUTIL ::google::protobuf::util
 #define GRPC_CUSTOM_UTIL_STATUS ::google::protobuf::util::Status
 #endif

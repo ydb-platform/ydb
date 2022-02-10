@@ -14,6 +14,6 @@ RECURSE(
     util/proto
     yql
     yql/ut
-    yandex_patches_ut
+    yandex_patches_ut 
     yt
 )

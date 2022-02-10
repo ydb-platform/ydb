@@ -1,7 +1,7 @@
 #pragma once
 
 #include <array>
-#include <google/protobuf/message.h>
+#include <google/protobuf/message.h> 
 #include <ydb/library/yql/parser/proto_ast/proto_ast.h>
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>

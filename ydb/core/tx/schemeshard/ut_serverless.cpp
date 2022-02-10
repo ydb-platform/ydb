@@ -181,9 +181,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardServerLess) {
             )", key, index, value.c_str(), table);
             NKikimrMiniKQL::TResult result;
             TString err;
-            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err); 
             UNIT_ASSERT_VALUES_EQUAL(err, "");
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);; 
         };
         for (ui32 delta = 0; delta < 101; ++delta) {
             fnWriteRow(TTestTxConfig::FakeHiveTablets + 6, 1 + delta, 1000 + delta, "aaaa", "Table");

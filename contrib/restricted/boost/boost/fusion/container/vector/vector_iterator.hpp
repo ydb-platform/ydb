@@ -46,7 +46,7 @@ namespace boost { namespace fusion
         Vector& vec;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(vector_iterator& operator= (vector_iterator const&))
+        BOOST_DELETED_FUNCTION(vector_iterator& operator= (vector_iterator const&)) 
     };
 }}
 

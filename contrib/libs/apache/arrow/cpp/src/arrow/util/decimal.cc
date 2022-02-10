@@ -30,7 +30,7 @@
 
 #include "arrow/status.h"
 #include "arrow/util/decimal.h"
-#include "arrow/util/endian.h"
+#include "arrow/util/endian.h" 
 #include "arrow/util/formatting.h"
 #include "arrow/util/int128_internal.h"
 #include "arrow/util/int_util_internal.h"
@@ -94,47 +94,47 @@ static constexpr double kDoublePowersOfTen[2 * 38 + 1] = {
     1e17,  1e18,  1e19,  1e20,  1e21,  1e22,  1e23,  1e24,  1e25,  1e26,  1e27,
     1e28,  1e29,  1e30,  1e31,  1e32,  1e33,  1e34,  1e35,  1e36,  1e37,  1e38};
 
-// On the Windows R toolchain, INFINITY is double type instead of float
-static constexpr float kFloatInf = std::numeric_limits<float>::infinity();
-static constexpr float kFloatPowersOfTen76[2 * 76 + 1] = {
-    0,         0,         0,         0,         0,         0,         0,
-    0,         0,         0,         0,         0,         0,         0,
-    0,         0,         0,         0,         0,         0,         0,
-    0,         0,         0,         0,         0,         0,         0,
-    0,         0,         0,         1e-45f,    1e-44f,    1e-43f,    1e-42f,
-    1e-41f,    1e-40f,    1e-39f,    1e-38f,    1e-37f,    1e-36f,    1e-35f,
-    1e-34f,    1e-33f,    1e-32f,    1e-31f,    1e-30f,    1e-29f,    1e-28f,
-    1e-27f,    1e-26f,    1e-25f,    1e-24f,    1e-23f,    1e-22f,    1e-21f,
-    1e-20f,    1e-19f,    1e-18f,    1e-17f,    1e-16f,    1e-15f,    1e-14f,
-    1e-13f,    1e-12f,    1e-11f,    1e-10f,    1e-9f,     1e-8f,     1e-7f,
-    1e-6f,     1e-5f,     1e-4f,     1e-3f,     1e-2f,     1e-1f,     1e0f,
-    1e1f,      1e2f,      1e3f,      1e4f,      1e5f,      1e6f,      1e7f,
-    1e8f,      1e9f,      1e10f,     1e11f,     1e12f,     1e13f,     1e14f,
-    1e15f,     1e16f,     1e17f,     1e18f,     1e19f,     1e20f,     1e21f,
-    1e22f,     1e23f,     1e24f,     1e25f,     1e26f,     1e27f,     1e28f,
-    1e29f,     1e30f,     1e31f,     1e32f,     1e33f,     1e34f,     1e35f,
-    1e36f,     1e37f,     1e38f,     kFloatInf, kFloatInf, kFloatInf, kFloatInf,
-    kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf,
-    kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf,
-    kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf,
-    kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf,
-    kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf};
-
-static constexpr double kDoublePowersOfTen76[2 * 76 + 1] = {
-    1e-76, 1e-75, 1e-74, 1e-73, 1e-72, 1e-71, 1e-70, 1e-69, 1e-68, 1e-67, 1e-66, 1e-65,
-    1e-64, 1e-63, 1e-62, 1e-61, 1e-60, 1e-59, 1e-58, 1e-57, 1e-56, 1e-55, 1e-54, 1e-53,
-    1e-52, 1e-51, 1e-50, 1e-49, 1e-48, 1e-47, 1e-46, 1e-45, 1e-44, 1e-43, 1e-42, 1e-41,
-    1e-40, 1e-39, 1e-38, 1e-37, 1e-36, 1e-35, 1e-34, 1e-33, 1e-32, 1e-31, 1e-30, 1e-29,
-    1e-28, 1e-27, 1e-26, 1e-25, 1e-24, 1e-23, 1e-22, 1e-21, 1e-20, 1e-19, 1e-18, 1e-17,
-    1e-16, 1e-15, 1e-14, 1e-13, 1e-12, 1e-11, 1e-10, 1e-9,  1e-8,  1e-7,  1e-6,  1e-5,
-    1e-4,  1e-3,  1e-2,  1e-1,  1e0,   1e1,   1e2,   1e3,   1e4,   1e5,   1e6,   1e7,
-    1e8,   1e9,   1e10,  1e11,  1e12,  1e13,  1e14,  1e15,  1e16,  1e17,  1e18,  1e19,
-    1e20,  1e21,  1e22,  1e23,  1e24,  1e25,  1e26,  1e27,  1e28,  1e29,  1e30,  1e31,
-    1e32,  1e33,  1e34,  1e35,  1e36,  1e37,  1e38,  1e39,  1e40,  1e41,  1e42,  1e43,
-    1e44,  1e45,  1e46,  1e47,  1e48,  1e49,  1e50,  1e51,  1e52,  1e53,  1e54,  1e55,
-    1e56,  1e57,  1e58,  1e59,  1e60,  1e61,  1e62,  1e63,  1e64,  1e65,  1e66,  1e67,
-    1e68,  1e69,  1e70,  1e71,  1e72,  1e73,  1e74,  1e75,  1e76};
-
+// On the Windows R toolchain, INFINITY is double type instead of float 
+static constexpr float kFloatInf = std::numeric_limits<float>::infinity(); 
+static constexpr float kFloatPowersOfTen76[2 * 76 + 1] = { 
+    0,         0,         0,         0,         0,         0,         0, 
+    0,         0,         0,         0,         0,         0,         0, 
+    0,         0,         0,         0,         0,         0,         0, 
+    0,         0,         0,         0,         0,         0,         0, 
+    0,         0,         0,         1e-45f,    1e-44f,    1e-43f,    1e-42f, 
+    1e-41f,    1e-40f,    1e-39f,    1e-38f,    1e-37f,    1e-36f,    1e-35f, 
+    1e-34f,    1e-33f,    1e-32f,    1e-31f,    1e-30f,    1e-29f,    1e-28f, 
+    1e-27f,    1e-26f,    1e-25f,    1e-24f,    1e-23f,    1e-22f,    1e-21f, 
+    1e-20f,    1e-19f,    1e-18f,    1e-17f,    1e-16f,    1e-15f,    1e-14f, 
+    1e-13f,    1e-12f,    1e-11f,    1e-10f,    1e-9f,     1e-8f,     1e-7f, 
+    1e-6f,     1e-5f,     1e-4f,     1e-3f,     1e-2f,     1e-1f,     1e0f, 
+    1e1f,      1e2f,      1e3f,      1e4f,      1e5f,      1e6f,      1e7f, 
+    1e8f,      1e9f,      1e10f,     1e11f,     1e12f,     1e13f,     1e14f, 
+    1e15f,     1e16f,     1e17f,     1e18f,     1e19f,     1e20f,     1e21f, 
+    1e22f,     1e23f,     1e24f,     1e25f,     1e26f,     1e27f,     1e28f, 
+    1e29f,     1e30f,     1e31f,     1e32f,     1e33f,     1e34f,     1e35f, 
+    1e36f,     1e37f,     1e38f,     kFloatInf, kFloatInf, kFloatInf, kFloatInf, 
+    kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, 
+    kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, 
+    kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, 
+    kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, 
+    kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf, kFloatInf}; 
+ 
+static constexpr double kDoublePowersOfTen76[2 * 76 + 1] = { 
+    1e-76, 1e-75, 1e-74, 1e-73, 1e-72, 1e-71, 1e-70, 1e-69, 1e-68, 1e-67, 1e-66, 1e-65, 
+    1e-64, 1e-63, 1e-62, 1e-61, 1e-60, 1e-59, 1e-58, 1e-57, 1e-56, 1e-55, 1e-54, 1e-53, 
+    1e-52, 1e-51, 1e-50, 1e-49, 1e-48, 1e-47, 1e-46, 1e-45, 1e-44, 1e-43, 1e-42, 1e-41, 
+    1e-40, 1e-39, 1e-38, 1e-37, 1e-36, 1e-35, 1e-34, 1e-33, 1e-32, 1e-31, 1e-30, 1e-29, 
+    1e-28, 1e-27, 1e-26, 1e-25, 1e-24, 1e-23, 1e-22, 1e-21, 1e-20, 1e-19, 1e-18, 1e-17, 
+    1e-16, 1e-15, 1e-14, 1e-13, 1e-12, 1e-11, 1e-10, 1e-9,  1e-8,  1e-7,  1e-6,  1e-5, 
+    1e-4,  1e-3,  1e-2,  1e-1,  1e0,   1e1,   1e2,   1e3,   1e4,   1e5,   1e6,   1e7, 
+    1e8,   1e9,   1e10,  1e11,  1e12,  1e13,  1e14,  1e15,  1e16,  1e17,  1e18,  1e19, 
+    1e20,  1e21,  1e22,  1e23,  1e24,  1e25,  1e26,  1e27,  1e28,  1e29,  1e30,  1e31, 
+    1e32,  1e33,  1e34,  1e35,  1e36,  1e37,  1e38,  1e39,  1e40,  1e41,  1e42,  1e43, 
+    1e44,  1e45,  1e46,  1e47,  1e48,  1e49,  1e50,  1e51,  1e52,  1e53,  1e54,  1e55, 
+    1e56,  1e57,  1e58,  1e59,  1e60,  1e61,  1e62,  1e63,  1e64,  1e65,  1e66,  1e67, 
+    1e68,  1e69,  1e70,  1e71,  1e72,  1e73,  1e74,  1e75,  1e76}; 
+ 
 namespace {
 
 template <typename Real, typename Derived>
@@ -267,7 +267,7 @@ static void AppendLittleEndianArrayToString(const std::array<uint64_t, n>& array
       // *elem = dividend / 1e9;
       // remainder = dividend % 1e9.
       uint32_t hi = static_cast<uint32_t>(*elem >> 32);
-      uint32_t lo = static_cast<uint32_t>(*elem & BitUtil::LeastSignificantBitMask(32));
+      uint32_t lo = static_cast<uint32_t>(*elem & BitUtil::LeastSignificantBitMask(32)); 
       uint64_t dividend_hi = (static_cast<uint64_t>(remainder) << 32) | hi;
       uint64_t quotient_hi = dividend_hi / k1e9;
       remainder = static_cast<uint32_t>(dividend_hi % k1e9);
@@ -486,24 +486,24 @@ bool ParseDecimalComponents(const char* s, size_t size, DecimalComponents* out) 
   return pos == size;
 }
 
-inline Status ToArrowStatus(DecimalStatus dstatus, int num_bits) {
-  switch (dstatus) {
-    case DecimalStatus::kSuccess:
-      return Status::OK();
-
-    case DecimalStatus::kDivideByZero:
-      return Status::Invalid("Division by 0 in Decimal", num_bits);
-
-    case DecimalStatus::kOverflow:
-      return Status::Invalid("Overflow occurred during Decimal", num_bits, " operation.");
-
-    case DecimalStatus::kRescaleDataLoss:
-      return Status::Invalid("Rescaling Decimal", num_bits,
-                             " value would cause data loss");
-  }
-  return Status::OK();
-}
-
+inline Status ToArrowStatus(DecimalStatus dstatus, int num_bits) { 
+  switch (dstatus) { 
+    case DecimalStatus::kSuccess: 
+      return Status::OK(); 
+ 
+    case DecimalStatus::kDivideByZero: 
+      return Status::Invalid("Division by 0 in Decimal", num_bits); 
+ 
+    case DecimalStatus::kOverflow: 
+      return Status::Invalid("Overflow occurred during Decimal", num_bits, " operation."); 
+ 
+    case DecimalStatus::kRescaleDataLoss: 
+      return Status::Invalid("Rescaling Decimal", num_bits, 
+                             " value would cause data loss"); 
+  } 
+  return Status::OK(); 
+} 
+ 
 }  // namespace
 
 Status Decimal128::FromString(const util::string_view& s, Decimal128* out,
@@ -609,7 +609,7 @@ Result<Decimal128> Decimal128::FromBigEndian(const uint8_t* bytes, int32_t lengt
 
   int64_t high, low;
 
-  if (ARROW_PREDICT_FALSE(length < kMinDecimalBytes || length > kMaxDecimalBytes)) {
+  if (ARROW_PREDICT_FALSE(length < kMinDecimalBytes || length > kMaxDecimalBytes)) { 
     return Status::Invalid("Length of byte array passed to Decimal128::FromBigEndian ",
                            "was ", length, ", but must be between ", kMinDecimalBytes,
                            " and ", kMaxDecimalBytes);
@@ -657,275 +657,275 @@ Result<Decimal128> Decimal128::FromBigEndian(const uint8_t* bytes, int32_t lengt
 }
 
 Status Decimal128::ToArrowStatus(DecimalStatus dstatus) const {
-  return arrow::ToArrowStatus(dstatus, 128);
-}
+  return arrow::ToArrowStatus(dstatus, 128); 
+} 
 
-std::ostream& operator<<(std::ostream& os, const Decimal128& decimal) {
-  os << decimal.ToIntegerString();
-  return os;
-}
+std::ostream& operator<<(std::ostream& os, const Decimal128& decimal) { 
+  os << decimal.ToIntegerString(); 
+  return os; 
+} 
 
-Decimal256::Decimal256(const std::string& str) : Decimal256() {
-  *this = Decimal256::FromString(str).ValueOrDie();
-}
+Decimal256::Decimal256(const std::string& str) : Decimal256() { 
+  *this = Decimal256::FromString(str).ValueOrDie(); 
+} 
 
-std::string Decimal256::ToIntegerString() const {
-  std::string result;
-  if (static_cast<int64_t>(little_endian_array()[3]) < 0) {
-    result.push_back('-');
-    Decimal256 abs = *this;
-    abs.Negate();
-    AppendLittleEndianArrayToString(abs.little_endian_array(), &result);
-  } else {
-    AppendLittleEndianArrayToString(little_endian_array(), &result);
+std::string Decimal256::ToIntegerString() const { 
+  std::string result; 
+  if (static_cast<int64_t>(little_endian_array()[3]) < 0) { 
+    result.push_back('-'); 
+    Decimal256 abs = *this; 
+    abs.Negate(); 
+    AppendLittleEndianArrayToString(abs.little_endian_array(), &result); 
+  } else { 
+    AppendLittleEndianArrayToString(little_endian_array(), &result); 
+  } 
+  return result; 
+} 
+
+std::string Decimal256::ToString(int32_t scale) const { 
+  std::string str(ToIntegerString()); 
+  AdjustIntegerStringWithScale(scale, &str); 
+  return str; 
+} 
+ 
+Status Decimal256::FromString(const util::string_view& s, Decimal256* out, 
+                              int32_t* precision, int32_t* scale) { 
+  if (s.empty()) { 
+    return Status::Invalid("Empty string cannot be converted to decimal"); 
   }
-  return result;
+ 
+  DecimalComponents dec; 
+  if (!ParseDecimalComponents(s.data(), s.size(), &dec)) { 
+    return Status::Invalid("The string '", s, "' is not a valid decimal number"); 
+  } 
+ 
+  // Count number of significant digits (without leading zeros) 
+  size_t first_non_zero = dec.whole_digits.find_first_not_of('0'); 
+  size_t significant_digits = dec.fractional_digits.size(); 
+  if (first_non_zero != std::string::npos) { 
+    significant_digits += dec.whole_digits.size() - first_non_zero; 
+  } 
+ 
+  if (precision != nullptr) { 
+    *precision = static_cast<int32_t>(significant_digits); 
+  } 
+ 
+  if (scale != nullptr) { 
+    if (dec.has_exponent) { 
+      auto adjusted_exponent = dec.exponent; 
+      auto len = static_cast<int32_t>(significant_digits); 
+      *scale = -adjusted_exponent + len - 1; 
+    } else { 
+      *scale = static_cast<int32_t>(dec.fractional_digits.size()); 
+    } 
+  } 
+ 
+  if (out != nullptr) { 
+    std::array<uint64_t, 4> little_endian_array = {0, 0, 0, 0}; 
+    ShiftAndAdd(dec.whole_digits, little_endian_array.data(), little_endian_array.size()); 
+    ShiftAndAdd(dec.fractional_digits, little_endian_array.data(), 
+                little_endian_array.size()); 
+    *out = Decimal256(little_endian_array); 
+ 
+    if (dec.sign == '-') { 
+      out->Negate(); 
+    } 
+  } 
+ 
+  return Status::OK(); 
 }
 
-std::string Decimal256::ToString(int32_t scale) const {
-  std::string str(ToIntegerString());
-  AdjustIntegerStringWithScale(scale, &str);
-  return str;
-}
-
-Status Decimal256::FromString(const util::string_view& s, Decimal256* out,
-                              int32_t* precision, int32_t* scale) {
-  if (s.empty()) {
-    return Status::Invalid("Empty string cannot be converted to decimal");
-  }
-
-  DecimalComponents dec;
-  if (!ParseDecimalComponents(s.data(), s.size(), &dec)) {
-    return Status::Invalid("The string '", s, "' is not a valid decimal number");
-  }
-
-  // Count number of significant digits (without leading zeros)
-  size_t first_non_zero = dec.whole_digits.find_first_not_of('0');
-  size_t significant_digits = dec.fractional_digits.size();
-  if (first_non_zero != std::string::npos) {
-    significant_digits += dec.whole_digits.size() - first_non_zero;
-  }
-
-  if (precision != nullptr) {
-    *precision = static_cast<int32_t>(significant_digits);
-  }
-
-  if (scale != nullptr) {
-    if (dec.has_exponent) {
-      auto adjusted_exponent = dec.exponent;
-      auto len = static_cast<int32_t>(significant_digits);
-      *scale = -adjusted_exponent + len - 1;
-    } else {
-      *scale = static_cast<int32_t>(dec.fractional_digits.size());
-    }
-  }
-
-  if (out != nullptr) {
-    std::array<uint64_t, 4> little_endian_array = {0, 0, 0, 0};
-    ShiftAndAdd(dec.whole_digits, little_endian_array.data(), little_endian_array.size());
-    ShiftAndAdd(dec.fractional_digits, little_endian_array.data(),
-                little_endian_array.size());
-    *out = Decimal256(little_endian_array);
-
-    if (dec.sign == '-') {
-      out->Negate();
-    }
-  }
-
-  return Status::OK();
-}
-
-Status Decimal256::FromString(const std::string& s, Decimal256* out, int32_t* precision,
-                              int32_t* scale) {
-  return FromString(util::string_view(s), out, precision, scale);
-}
-
-Status Decimal256::FromString(const char* s, Decimal256* out, int32_t* precision,
-                              int32_t* scale) {
-  return FromString(util::string_view(s), out, precision, scale);
-}
-
-Result<Decimal256> Decimal256::FromString(const util::string_view& s) {
-  Decimal256 out;
-  RETURN_NOT_OK(FromString(s, &out, nullptr, nullptr));
-  return std::move(out);
-}
-
-Result<Decimal256> Decimal256::FromString(const std::string& s) {
-  return FromString(util::string_view(s));
-}
-
-Result<Decimal256> Decimal256::FromString(const char* s) {
-  return FromString(util::string_view(s));
-}
-
-Result<Decimal256> Decimal256::FromBigEndian(const uint8_t* bytes, int32_t length) {
-  static constexpr int32_t kMinDecimalBytes = 1;
-  static constexpr int32_t kMaxDecimalBytes = 32;
-
-  std::array<uint64_t, 4> little_endian_array;
-
-  if (ARROW_PREDICT_FALSE(length < kMinDecimalBytes || length > kMaxDecimalBytes)) {
-    return Status::Invalid("Length of byte array passed to Decimal128::FromBigEndian ",
-                           "was ", length, ", but must be between ", kMinDecimalBytes,
-                           " and ", kMaxDecimalBytes);
-  }
-
-  // Bytes are coming in big-endian, so the first byte is the MSB and therefore holds the
-  // sign bit.
-  const bool is_negative = static_cast<int8_t>(bytes[0]) < 0;
-
-  for (int word_idx = 0; word_idx < 4; word_idx++) {
-    const int32_t word_length = std::min(length, static_cast<int32_t>(sizeof(uint64_t)));
-
-    if (word_length == 8) {
-      // Full words can be assigned as is (and are UB with the shift below).
-      little_endian_array[word_idx] =
-          UInt64FromBigEndian(bytes + length - word_length, word_length);
-    } else {
-      // Sign extend the word its if necessary
-      uint64_t word = -1 * is_negative;
-      if (length > 0) {
-        // Incorporate the actual values if present.
-        // Shift left enough bits to make room for the incoming int64_t
-        word = SafeLeftShift(word, word_length * CHAR_BIT);
-        // Preserve the upper bits by inplace OR-ing the int64_t
-        word |= UInt64FromBigEndian(bytes + length - word_length, word_length);
-      }
-      little_endian_array[word_idx] = word;
-    }
-    // Move on to the next word.
-    length -= word_length;
-  }
-
-  return Decimal256(little_endian_array);
-}
-
-Status Decimal256::ToArrowStatus(DecimalStatus dstatus) const {
-  return arrow::ToArrowStatus(dstatus, 256);
-}
-
-namespace {
-
-template <typename Real, typename Derived>
-struct Decimal256RealConversion {
-  static Result<Decimal256> FromPositiveReal(Real real, int32_t precision,
-                                             int32_t scale) {
-    auto x = real;
-    if (scale >= -76 && scale <= 76) {
-      x *= Derived::powers_of_ten()[scale + 76];
-    } else {
-      x *= std::pow(static_cast<Real>(10), static_cast<Real>(scale));
-    }
-    x = std::nearbyint(x);
-    const auto max_abs = Derived::powers_of_ten()[precision + 76];
-    if (x >= max_abs) {
-      return Status::Invalid("Cannot convert ", real,
-                             " to Decimal256(precision = ", precision,
-                             ", scale = ", scale, "): overflow");
-    }
-    // Extract parts
-    const auto part3 = std::floor(std::ldexp(x, -192));
-    x -= std::ldexp(part3, 192);
-    const auto part2 = std::floor(std::ldexp(x, -128));
-    x -= std::ldexp(part2, 128);
-    const auto part1 = std::floor(std::ldexp(x, -64));
-    x -= std::ldexp(part1, 64);
-    const auto part0 = x;
-
-    DCHECK_GE(part3, 0);
-    DCHECK_LT(part3, 1.8446744073709552e+19);  // 2**64
-    DCHECK_GE(part2, 0);
-    DCHECK_LT(part2, 1.8446744073709552e+19);  // 2**64
-    DCHECK_GE(part1, 0);
-    DCHECK_LT(part1, 1.8446744073709552e+19);  // 2**64
-    DCHECK_GE(part0, 0);
-    DCHECK_LT(part0, 1.8446744073709552e+19);  // 2**64
-    return Decimal256(std::array<uint64_t, 4>{
-        static_cast<uint64_t>(part0), static_cast<uint64_t>(part1),
-        static_cast<uint64_t>(part2), static_cast<uint64_t>(part3)});
-  }
-
-  static Result<Decimal256> FromReal(Real x, int32_t precision, int32_t scale) {
-    DCHECK_GT(precision, 0);
-    DCHECK_LE(precision, 76);
-
-    if (!std::isfinite(x)) {
-      return Status::Invalid("Cannot convert ", x, " to Decimal256");
-    }
-    if (x < 0) {
-      ARROW_ASSIGN_OR_RAISE(auto dec, FromPositiveReal(-x, precision, scale));
-      return dec.Negate();
-    } else {
-      // Includes negative zero
-      return FromPositiveReal(x, precision, scale);
-    }
-  }
-
-  static Real ToRealPositive(const Decimal256& decimal, int32_t scale) {
-    DCHECK_GE(decimal, 0);
-    Real x = 0;
-    const auto& parts = decimal.little_endian_array();
-    x += Derived::two_to_192(static_cast<Real>(parts[3]));
-    x += Derived::two_to_128(static_cast<Real>(parts[2]));
-    x += Derived::two_to_64(static_cast<Real>(parts[1]));
-    x += static_cast<Real>(parts[0]);
-    if (scale >= -76 && scale <= 76) {
-      x *= Derived::powers_of_ten()[-scale + 76];
-    } else {
-      x *= std::pow(static_cast<Real>(10), static_cast<Real>(-scale));
-    }
-    return x;
-  }
-
-  static Real ToReal(Decimal256 decimal, int32_t scale) {
-    if (decimal.little_endian_array()[3] & (1ULL << 63)) {
-      // Convert the absolute value to avoid precision loss
-      decimal.Negate();
-      return -ToRealPositive(decimal, scale);
-    } else {
-      return ToRealPositive(decimal, scale);
-    }
-  }
-};
-
-struct Decimal256FloatConversion
-    : public Decimal256RealConversion<float, Decimal256FloatConversion> {
-  static constexpr const float* powers_of_ten() { return kFloatPowersOfTen76; }
-
-  static float two_to_64(float x) { return x * 1.8446744e+19f; }
-  static float two_to_128(float x) { return x == 0 ? 0 : INFINITY; }
-  static float two_to_192(float x) { return x == 0 ? 0 : INFINITY; }
-};
-
-struct Decimal256DoubleConversion
-    : public Decimal256RealConversion<double, Decimal256DoubleConversion> {
-  static constexpr const double* powers_of_ten() { return kDoublePowersOfTen76; }
-
-  static double two_to_64(double x) { return x * 1.8446744073709552e+19; }
-  static double two_to_128(double x) { return x * 3.402823669209385e+38; }
-  static double two_to_192(double x) { return x * 6.277101735386681e+57; }
-};
-
-}  // namespace
-
-Result<Decimal256> Decimal256::FromReal(float x, int32_t precision, int32_t scale) {
-  return Decimal256FloatConversion::FromReal(x, precision, scale);
-}
-
-Result<Decimal256> Decimal256::FromReal(double x, int32_t precision, int32_t scale) {
-  return Decimal256DoubleConversion::FromReal(x, precision, scale);
-}
-
-float Decimal256::ToFloat(int32_t scale) const {
-  return Decimal256FloatConversion::ToReal(*this, scale);
-}
-
-double Decimal256::ToDouble(int32_t scale) const {
-  return Decimal256DoubleConversion::ToReal(*this, scale);
-}
-
-std::ostream& operator<<(std::ostream& os, const Decimal256& decimal) {
+Status Decimal256::FromString(const std::string& s, Decimal256* out, int32_t* precision, 
+                              int32_t* scale) { 
+  return FromString(util::string_view(s), out, precision, scale); 
+} 
+ 
+Status Decimal256::FromString(const char* s, Decimal256* out, int32_t* precision, 
+                              int32_t* scale) { 
+  return FromString(util::string_view(s), out, precision, scale); 
+} 
+ 
+Result<Decimal256> Decimal256::FromString(const util::string_view& s) { 
+  Decimal256 out; 
+  RETURN_NOT_OK(FromString(s, &out, nullptr, nullptr)); 
+  return std::move(out); 
+} 
+ 
+Result<Decimal256> Decimal256::FromString(const std::string& s) { 
+  return FromString(util::string_view(s)); 
+} 
+ 
+Result<Decimal256> Decimal256::FromString(const char* s) { 
+  return FromString(util::string_view(s)); 
+} 
+ 
+Result<Decimal256> Decimal256::FromBigEndian(const uint8_t* bytes, int32_t length) { 
+  static constexpr int32_t kMinDecimalBytes = 1; 
+  static constexpr int32_t kMaxDecimalBytes = 32; 
+ 
+  std::array<uint64_t, 4> little_endian_array; 
+ 
+  if (ARROW_PREDICT_FALSE(length < kMinDecimalBytes || length > kMaxDecimalBytes)) { 
+    return Status::Invalid("Length of byte array passed to Decimal128::FromBigEndian ", 
+                           "was ", length, ", but must be between ", kMinDecimalBytes, 
+                           " and ", kMaxDecimalBytes); 
+  } 
+ 
+  // Bytes are coming in big-endian, so the first byte is the MSB and therefore holds the 
+  // sign bit. 
+  const bool is_negative = static_cast<int8_t>(bytes[0]) < 0; 
+ 
+  for (int word_idx = 0; word_idx < 4; word_idx++) { 
+    const int32_t word_length = std::min(length, static_cast<int32_t>(sizeof(uint64_t))); 
+ 
+    if (word_length == 8) { 
+      // Full words can be assigned as is (and are UB with the shift below). 
+      little_endian_array[word_idx] = 
+          UInt64FromBigEndian(bytes + length - word_length, word_length); 
+    } else { 
+      // Sign extend the word its if necessary 
+      uint64_t word = -1 * is_negative; 
+      if (length > 0) { 
+        // Incorporate the actual values if present. 
+        // Shift left enough bits to make room for the incoming int64_t 
+        word = SafeLeftShift(word, word_length * CHAR_BIT); 
+        // Preserve the upper bits by inplace OR-ing the int64_t 
+        word |= UInt64FromBigEndian(bytes + length - word_length, word_length); 
+      } 
+      little_endian_array[word_idx] = word; 
+    } 
+    // Move on to the next word. 
+    length -= word_length; 
+  } 
+ 
+  return Decimal256(little_endian_array); 
+} 
+ 
+Status Decimal256::ToArrowStatus(DecimalStatus dstatus) const { 
+  return arrow::ToArrowStatus(dstatus, 256); 
+} 
+ 
+namespace { 
+ 
+template <typename Real, typename Derived> 
+struct Decimal256RealConversion { 
+  static Result<Decimal256> FromPositiveReal(Real real, int32_t precision, 
+                                             int32_t scale) { 
+    auto x = real; 
+    if (scale >= -76 && scale <= 76) { 
+      x *= Derived::powers_of_ten()[scale + 76]; 
+    } else { 
+      x *= std::pow(static_cast<Real>(10), static_cast<Real>(scale)); 
+    } 
+    x = std::nearbyint(x); 
+    const auto max_abs = Derived::powers_of_ten()[precision + 76]; 
+    if (x >= max_abs) { 
+      return Status::Invalid("Cannot convert ", real, 
+                             " to Decimal256(precision = ", precision, 
+                             ", scale = ", scale, "): overflow"); 
+    } 
+    // Extract parts 
+    const auto part3 = std::floor(std::ldexp(x, -192)); 
+    x -= std::ldexp(part3, 192); 
+    const auto part2 = std::floor(std::ldexp(x, -128)); 
+    x -= std::ldexp(part2, 128); 
+    const auto part1 = std::floor(std::ldexp(x, -64)); 
+    x -= std::ldexp(part1, 64); 
+    const auto part0 = x; 
+ 
+    DCHECK_GE(part3, 0); 
+    DCHECK_LT(part3, 1.8446744073709552e+19);  // 2**64 
+    DCHECK_GE(part2, 0); 
+    DCHECK_LT(part2, 1.8446744073709552e+19);  // 2**64 
+    DCHECK_GE(part1, 0); 
+    DCHECK_LT(part1, 1.8446744073709552e+19);  // 2**64 
+    DCHECK_GE(part0, 0); 
+    DCHECK_LT(part0, 1.8446744073709552e+19);  // 2**64 
+    return Decimal256(std::array<uint64_t, 4>{ 
+        static_cast<uint64_t>(part0), static_cast<uint64_t>(part1), 
+        static_cast<uint64_t>(part2), static_cast<uint64_t>(part3)}); 
+  } 
+ 
+  static Result<Decimal256> FromReal(Real x, int32_t precision, int32_t scale) { 
+    DCHECK_GT(precision, 0); 
+    DCHECK_LE(precision, 76); 
+ 
+    if (!std::isfinite(x)) { 
+      return Status::Invalid("Cannot convert ", x, " to Decimal256"); 
+    } 
+    if (x < 0) { 
+      ARROW_ASSIGN_OR_RAISE(auto dec, FromPositiveReal(-x, precision, scale)); 
+      return dec.Negate(); 
+    } else { 
+      // Includes negative zero 
+      return FromPositiveReal(x, precision, scale); 
+    } 
+  } 
+ 
+  static Real ToRealPositive(const Decimal256& decimal, int32_t scale) { 
+    DCHECK_GE(decimal, 0); 
+    Real x = 0; 
+    const auto& parts = decimal.little_endian_array(); 
+    x += Derived::two_to_192(static_cast<Real>(parts[3])); 
+    x += Derived::two_to_128(static_cast<Real>(parts[2])); 
+    x += Derived::two_to_64(static_cast<Real>(parts[1])); 
+    x += static_cast<Real>(parts[0]); 
+    if (scale >= -76 && scale <= 76) { 
+      x *= Derived::powers_of_ten()[-scale + 76]; 
+    } else { 
+      x *= std::pow(static_cast<Real>(10), static_cast<Real>(-scale)); 
+    } 
+    return x; 
+  } 
+ 
+  static Real ToReal(Decimal256 decimal, int32_t scale) { 
+    if (decimal.little_endian_array()[3] & (1ULL << 63)) { 
+      // Convert the absolute value to avoid precision loss 
+      decimal.Negate(); 
+      return -ToRealPositive(decimal, scale); 
+    } else { 
+      return ToRealPositive(decimal, scale); 
+    } 
+  } 
+}; 
+ 
+struct Decimal256FloatConversion 
+    : public Decimal256RealConversion<float, Decimal256FloatConversion> { 
+  static constexpr const float* powers_of_ten() { return kFloatPowersOfTen76; } 
+ 
+  static float two_to_64(float x) { return x * 1.8446744e+19f; } 
+  static float two_to_128(float x) { return x == 0 ? 0 : INFINITY; } 
+  static float two_to_192(float x) { return x == 0 ? 0 : INFINITY; } 
+}; 
+ 
+struct Decimal256DoubleConversion 
+    : public Decimal256RealConversion<double, Decimal256DoubleConversion> { 
+  static constexpr const double* powers_of_ten() { return kDoublePowersOfTen76; } 
+ 
+  static double two_to_64(double x) { return x * 1.8446744073709552e+19; } 
+  static double two_to_128(double x) { return x * 3.402823669209385e+38; } 
+  static double two_to_192(double x) { return x * 6.277101735386681e+57; } 
+}; 
+ 
+}  // namespace 
+ 
+Result<Decimal256> Decimal256::FromReal(float x, int32_t precision, int32_t scale) { 
+  return Decimal256FloatConversion::FromReal(x, precision, scale); 
+} 
+ 
+Result<Decimal256> Decimal256::FromReal(double x, int32_t precision, int32_t scale) { 
+  return Decimal256DoubleConversion::FromReal(x, precision, scale); 
+} 
+ 
+float Decimal256::ToFloat(int32_t scale) const { 
+  return Decimal256FloatConversion::ToReal(*this, scale); 
+} 
+ 
+double Decimal256::ToDouble(int32_t scale) const { 
+  return Decimal256DoubleConversion::ToReal(*this, scale); 
+} 
+ 
+std::ostream& operator<<(std::ostream& os, const Decimal256& decimal) { 
   os << decimal.ToIntegerString();
   return os;
 }

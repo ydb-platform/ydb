@@ -72,13 +72,13 @@ class new_allocator<void>
    new_allocator(const new_allocator &) BOOST_NOEXCEPT_OR_NOTHROW
    {}
 
-   //!Copy assignment operator from other new_allocator.
-   //!Never throws
-   new_allocator& operator=(const new_allocator &) BOOST_NOEXCEPT_OR_NOTHROW
-   {
-       return *this;
-   }
-
+   //!Copy assignment operator from other new_allocator. 
+   //!Never throws 
+   new_allocator& operator=(const new_allocator &) BOOST_NOEXCEPT_OR_NOTHROW 
+   { 
+       return *this; 
+   } 
+ 
    //!Constructor from related new_allocator.
    //!Never throws
    template<class T2>
@@ -137,13 +137,13 @@ class new_allocator
    new_allocator(const new_allocator &) BOOST_NOEXCEPT_OR_NOTHROW
    {}
 
-   //!Copy assignment operator from other new_allocator.
-   //!Never throws
-   new_allocator& operator=(const new_allocator &) BOOST_NOEXCEPT_OR_NOTHROW
-   {
-       return *this;
-   }
-
+   //!Copy assignment operator from other new_allocator. 
+   //!Never throws 
+   new_allocator& operator=(const new_allocator &) BOOST_NOEXCEPT_OR_NOTHROW 
+   { 
+       return *this; 
+   } 
+ 
    //!Constructor from related new_allocator.
    //!Never throws
    template<class T2>

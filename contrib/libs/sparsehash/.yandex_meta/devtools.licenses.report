@@ -61,13 +61,13 @@ BELONGS ya.make
         src/sparsehash/template_util.h [4:28]
         src/sparsehash/type_traits.h [4:28]
 
-SKIP     FSFAP                d02cc4799cbd521d2aa8c3ff19e655f6
+SKIP     FSFAP                d02cc4799cbd521d2aa8c3ff19e655f6 
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
-        Original SPDX id: FSFAP
+        Original SPDX id: FSFAP 
         Score           : 100.00
         Match type      : TEXT
-        Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP
+        Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP 
     Files with this license:
-        INSTALL [7:10]
+        INSTALL [7:10] 

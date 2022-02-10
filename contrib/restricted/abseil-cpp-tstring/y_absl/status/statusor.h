@@ -44,7 +44,7 @@
 #include <utility>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/call_once.h"
+#include "y_absl/base/call_once.h" 
 #include "y_absl/meta/type_traits.h"
 #include "y_absl/status/internal/statusor_internal.h"
 #include "y_absl/status/status.h"
@@ -73,18 +73,18 @@ ABSL_NAMESPACE_BEGIN
 class BadStatusOrAccess : public std::exception {
  public:
   explicit BadStatusOrAccess(y_absl::Status status);
-  ~BadStatusOrAccess() override = default;
+  ~BadStatusOrAccess() override = default; 
 
-  BadStatusOrAccess(const BadStatusOrAccess& other);
-  BadStatusOrAccess& operator=(const BadStatusOrAccess& other);
-  BadStatusOrAccess(BadStatusOrAccess&& other);
-  BadStatusOrAccess& operator=(BadStatusOrAccess&& other);
-
+  BadStatusOrAccess(const BadStatusOrAccess& other); 
+  BadStatusOrAccess& operator=(const BadStatusOrAccess& other); 
+  BadStatusOrAccess(BadStatusOrAccess&& other); 
+  BadStatusOrAccess& operator=(BadStatusOrAccess&& other); 
+ 
   // BadStatusOrAccess::what()
   //
   // Returns the associated explanatory string of the `y_absl::StatusOr<T>`
-  // object's error code. This function contains information about the failing
-  // status, but its exact formatting may change and should not be depended on.
+  // object's error code. This function contains information about the failing 
+  // status, but its exact formatting may change and should not be depended on. 
   //
   // The pointer of this string is guaranteed to be valid until any non-const
   // function is invoked on the exception object.
@@ -97,11 +97,11 @@ class BadStatusOrAccess : public std::exception {
   const y_absl::Status& status() const;
 
  private:
-  void InitWhat() const;
-
+  void InitWhat() const; 
+ 
   y_absl::Status status_;
-  mutable y_absl::once_flag init_what_;
-  mutable TString what_;
+  mutable y_absl::once_flag init_what_; 
+  mutable TString what_; 
 };
 
 // Returned StatusOr objects may not be ignored.
@@ -429,8 +429,8 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
   // if `T` can be constructed from a `U`. Can accept move or copy constructors.
   //
   // This constructor is explicit if `U` is not convertible to `T`. To avoid
-  // ambiguity, this constructor is disabled if `U` is a `StatusOr<J>`, where
-  // `J` is convertible to `T`.
+  // ambiguity, this constructor is disabled if `U` is a `StatusOr<J>`, where 
+  // `J` is convertible to `T`. 
   template <
       typename U = T,
       y_absl::enable_if_t<
@@ -447,7 +447,7 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
                               T, U&&>>>>>::value,
           int> = 0>
   StatusOr(U&& u)  // NOLINT
-      : StatusOr(y_absl::in_place, std::forward<U>(u)) {}
+      : StatusOr(y_absl::in_place, std::forward<U>(u)) {} 
 
   template <
       typename U = T,
@@ -466,7 +466,7 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
               y_absl::negation<std::is_convertible<U&&, T>>>::value,
           int> = 0>
   explicit StatusOr(U&& u)  // NOLINT
-      : StatusOr(y_absl::in_place, std::forward<U>(u)) {}
+      : StatusOr(y_absl::in_place, std::forward<U>(u)) {} 
 
   // StatusOr<T>::ok()
   //
@@ -489,7 +489,7 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
   // Returns a reference to the current `y_absl::Status` contained within the
   // `y_absl::StatusOr<T>`. If `y_absl::StatusOr<T>` contains a `T`, then this
   // function returns `y_absl::OkStatus()`.
-  const Status& status() const&;
+  const Status& status() const&; 
   Status status() &&;
 
   // StatusOr<T>::value()
@@ -518,10 +518,10 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
   //
   // The `std::move` on statusor instead of on the whole expression enables
   // warnings about possible uses of the statusor object after the move.
-  const T& value() const& ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  T& value() & ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  const T&& value() const&& ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  T&& value() && ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  const T& value() const& ABSL_ATTRIBUTE_LIFETIME_BOUND; 
+  T& value() & ABSL_ATTRIBUTE_LIFETIME_BOUND; 
+  const T&& value() const&& ABSL_ATTRIBUTE_LIFETIME_BOUND; 
+  T&& value() && ABSL_ATTRIBUTE_LIFETIME_BOUND; 
 
   // StatusOr<T>:: operator*()
   //
@@ -533,10 +533,10 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
   // `y_absl::StatusOr<T>`. Alternatively, see the `value()` member function for a
   // similar API that guarantees crashing or throwing an exception if there is
   // no current value.
-  const T& operator*() const& ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  T& operator*() & ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  const T&& operator*() const&& ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  T&& operator*() && ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  const T& operator*() const& ABSL_ATTRIBUTE_LIFETIME_BOUND; 
+  T& operator*() & ABSL_ATTRIBUTE_LIFETIME_BOUND; 
+  const T&& operator*() const&& ABSL_ATTRIBUTE_LIFETIME_BOUND; 
+  T&& operator*() && ABSL_ATTRIBUTE_LIFETIME_BOUND; 
 
   // StatusOr<T>::operator->()
   //
@@ -545,8 +545,8 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
   // REQUIRES: `this->ok() == true`, otherwise the behavior is undefined.
   //
   // Use `this->ok()` to verify that there is a current value.
-  const T* operator->() const ABSL_ATTRIBUTE_LIFETIME_BOUND;
-  T* operator->() ABSL_ATTRIBUTE_LIFETIME_BOUND;
+  const T* operator->() const ABSL_ATTRIBUTE_LIFETIME_BOUND; 
+  T* operator->() ABSL_ATTRIBUTE_LIFETIME_BOUND; 
 
   // StatusOr<T>::value_or()
   //
@@ -669,9 +669,9 @@ StatusOr<T>::StatusOr(y_absl::in_place_t, std::initializer_list<U> ilist,
     : Base(y_absl::in_place, ilist, std::forward<Args>(args)...) {}
 
 template <typename T>
-const Status& StatusOr<T>::status() const& {
-  return this->status_;
-}
+const Status& StatusOr<T>::status() const& { 
+  return this->status_; 
+} 
 template <typename T>
 Status StatusOr<T>::status() && {
   return ok() ? OkStatus() : std::move(this->status_);

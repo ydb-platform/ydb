@@ -20,8 +20,8 @@ TType* ValidateColumns(
 {
     TStructTypeBuilder rowTypeBuilder(builder->GetTypeEnvironment());
     TStructLiteralBuilder tagsBuilder(builder->GetTypeEnvironment());
-    rowTypeBuilder.Reserve(columns.size());
-    tagsBuilder.Reserve(columns.size());
+    rowTypeBuilder.Reserve(columns.size()); 
+    tagsBuilder.Reserve(columns.size()); 
     for (auto& col : columns) {
         MKQL_ENSURE(col.SchemeType != 0, "Null type is not allowed");
         TDataType *dataType;

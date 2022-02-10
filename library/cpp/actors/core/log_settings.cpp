@@ -52,15 +52,15 @@ namespace NActors {
             Y_VERIFY(minVal >= 0, "NLog::TSettings: minVal must be non-negative");
             Y_VERIFY(maxVal > minVal, "NLog::TSettings: maxVal must be greater than minVal");
 
-            // update bounds
+            // update bounds 
             if (!MaxVal || minVal < MinVal) {
                 MinVal = minVal;
             }
 
-            if (!MaxVal || maxVal > MaxVal) {
+            if (!MaxVal || maxVal > MaxVal) { 
                 MaxVal = maxVal;
 
-                // expand ComponentNames to the new bounds
+                // expand ComponentNames to the new bounds 
                 auto oldMask = Mask;
                 Mask = PowerOf2Mask(MaxVal);
 
@@ -79,10 +79,10 @@ namespace NActors {
                 ComponentNames.resize(Mask + 1);
             }
 
-            // assign new names but validate if newly added members were not used before
+            // assign new names but validate if newly added members were not used before 
             for (int i = minVal; i <= maxVal; i++) {
-                Y_VERIFY(!ComponentNames[i], "component name at %d already set: %s",
-                    i, ComponentNames[i].data());
+                Y_VERIFY(!ComponentNames[i], "component name at %d already set: %s", 
+                    i, ComponentNames[i].data()); 
                 ComponentNames[i] = func(i);
             }
         }

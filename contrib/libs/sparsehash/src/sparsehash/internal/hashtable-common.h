@@ -51,7 +51,7 @@ _START_GOOGLE_NAMESPACE_
 
 template <bool> struct SparsehashCompileAssert { };
 #define SPARSEHASH_COMPILE_ASSERT(expr, msg) \
-  [[maybe_unused]] typedef SparsehashCompileAssert<(bool(expr))> msg[bool(expr) ? 1 : -1]
+  [[maybe_unused]] typedef SparsehashCompileAssert<(bool(expr))> msg[bool(expr) ? 1 : -1] 
 
 namespace sparsehash_internal {
 

@@ -111,7 +111,7 @@ namespace NActors {
                 return "TEvRemoteHttpInfo";
             }
 
-            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
+            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override { 
                 return serializer->WriteString(&Query);
             }
 
@@ -148,7 +148,7 @@ namespace NActors {
                 return "TEvRemoteHttpInfoRes";
             }
 
-            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
+            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override { 
                 return serializer->WriteString(&Html);
             }
 
@@ -180,7 +180,7 @@ namespace NActors {
                 return "TEvRemoteJsonInfoRes";
             }
 
-            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
+            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override { 
                 return serializer->WriteString(&Json);
             }
 
@@ -212,7 +212,7 @@ namespace NActors {
                 return "TEvRemoteBinaryInfoRes";
             }
 
-            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override {
+            bool SerializeToArcadiaStream(TChunkSerializer *serializer) const override { 
                 return serializer->WriteString(&Blob);
             }
 

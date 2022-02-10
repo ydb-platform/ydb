@@ -31,7 +31,7 @@
 #ifndef GOOGLE_PROTOBUF_COMPILER_JAVA_OPTIONS_H__
 #define GOOGLE_PROTOBUF_COMPILER_JAVA_OPTIONS_H__
 
-#include <string>
+#include <string> 
 
 namespace google {
 namespace protobuf {
@@ -68,6 +68,6 @@ struct Options {
 }  // namespace java
 }  // namespace compiler
 }  // namespace protobuf
-}  // namespace google
+}  // namespace google 
 
 #endif  // GOOGLE_PROTOBUF_COMPILER_JAVA_OPTIONS_H__

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2020, Intel Corporation
+ * Copyright (c) 2017-2020, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -519,43 +519,43 @@ public:
     }
 };
 
-class RoseInstrCheckMask64
-    : public RoseInstrBaseOneTarget<ROSE_INSTR_CHECK_MASK_64,
-                                    ROSE_STRUCT_CHECK_MASK_64,
-                                    RoseInstrCheckMask64> {
-public:
-    std::array<u8, 64> and_mask;
-    std::array<u8, 64> cmp_mask;
-    u64a neg_mask;
-    s32 offset;
-    const RoseInstruction *target;
-
-    RoseInstrCheckMask64(std::array<u8, 64> and_mask_in,
-                         std::array<u8, 64> cmp_mask_in, u64a neg_mask_in,
-                         s32 offset_in, const RoseInstruction *target_in)
-        : and_mask(std::move(and_mask_in)), cmp_mask(std::move(cmp_mask_in)),
-          neg_mask(neg_mask_in), offset(offset_in), target(target_in) {}
-    bool operator==(const RoseInstrCheckMask64 &ri) const {
-        return and_mask == ri.and_mask && cmp_mask == ri.cmp_mask &&
-               neg_mask == ri.neg_mask && offset == ri.offset &&
-               target == ri.target;
-    }
-
-    size_t hash() const override {
-        return hash_all(opcode, and_mask, cmp_mask, neg_mask, offset);
-    }
-
-    void write(void *dest, RoseEngineBlob &blob,
-               const OffsetMap &offset_map) const override;
-
-    bool equiv_to(const RoseInstrCheckMask64 &ri, const OffsetMap &offsets,
-                  const OffsetMap &other_offsets) const {
-        return and_mask == ri.and_mask && cmp_mask == ri.cmp_mask &&
-               neg_mask == ri.neg_mask && offset == ri.offset &&
-               offsets.at(target) == other_offsets.at(ri.target);
-    }
-};
-
+class RoseInstrCheckMask64 
+    : public RoseInstrBaseOneTarget<ROSE_INSTR_CHECK_MASK_64, 
+                                    ROSE_STRUCT_CHECK_MASK_64, 
+                                    RoseInstrCheckMask64> { 
+public: 
+    std::array<u8, 64> and_mask; 
+    std::array<u8, 64> cmp_mask; 
+    u64a neg_mask; 
+    s32 offset; 
+    const RoseInstruction *target; 
+ 
+    RoseInstrCheckMask64(std::array<u8, 64> and_mask_in, 
+                         std::array<u8, 64> cmp_mask_in, u64a neg_mask_in, 
+                         s32 offset_in, const RoseInstruction *target_in) 
+        : and_mask(std::move(and_mask_in)), cmp_mask(std::move(cmp_mask_in)), 
+          neg_mask(neg_mask_in), offset(offset_in), target(target_in) {} 
+    bool operator==(const RoseInstrCheckMask64 &ri) const { 
+        return and_mask == ri.and_mask && cmp_mask == ri.cmp_mask && 
+               neg_mask == ri.neg_mask && offset == ri.offset && 
+               target == ri.target; 
+    } 
+ 
+    size_t hash() const override { 
+        return hash_all(opcode, and_mask, cmp_mask, neg_mask, offset); 
+    } 
+ 
+    void write(void *dest, RoseEngineBlob &blob, 
+               const OffsetMap &offset_map) const override; 
+ 
+    bool equiv_to(const RoseInstrCheckMask64 &ri, const OffsetMap &offsets, 
+                  const OffsetMap &other_offsets) const { 
+        return and_mask == ri.and_mask && cmp_mask == ri.cmp_mask && 
+               neg_mask == ri.neg_mask && offset == ri.offset && 
+               offsets.at(target) == other_offsets.at(ri.target); 
+    } 
+}; 
+ 
 class RoseInstrCheckByte
     : public RoseInstrBaseOneTarget<ROSE_INSTR_CHECK_BYTE,
                                     ROSE_STRUCT_CHECK_BYTE,
@@ -775,109 +775,109 @@ public:
     }
 };
 
-class RoseInstrCheckShufti64x8
-    : public RoseInstrBaseOneTarget<ROSE_INSTR_CHECK_SHUFTI_64x8,
-                                    ROSE_STRUCT_CHECK_SHUFTI_64x8,
-                                    RoseInstrCheckShufti64x8> {
-public:
-    std::array<u8, 64> hi_mask;
-    std::array<u8, 64> lo_mask;
-    std::array<u8, 64> bucket_select_mask;
-    u64a neg_mask;
-    s32 offset;
-    const RoseInstruction *target;
-
-    RoseInstrCheckShufti64x8(std::array<u8, 64> hi_mask_in,
-                             std::array<u8, 64> lo_mask_in,
-                             std::array<u8, 64> bucket_select_mask_in,
-                             u64a neg_mask_in, s32 offset_in,
-                             const RoseInstruction *target_in)
-        : hi_mask(std::move(hi_mask_in)), lo_mask(std::move(lo_mask_in)),
-          bucket_select_mask(std::move(bucket_select_mask_in)),
-          neg_mask(neg_mask_in), offset(offset_in), target(target_in) {}
-
-    bool operator==(const RoseInstrCheckShufti64x8 &ri) const {
-        return hi_mask == ri.hi_mask && lo_mask == ri.lo_mask &&
-               bucket_select_mask == ri.bucket_select_mask &&
-               neg_mask == ri.neg_mask && offset == ri.offset &&
-               target == ri.target;
-    }
-
-    size_t hash() const override {
-        return hash_all(opcode, hi_mask, lo_mask, bucket_select_mask, neg_mask,
-                        offset);
-    }
-
-    void write(void *dest, RoseEngineBlob &blob,
-               const OffsetMap &offset_map) const override;
-
-    bool equiv_to(const RoseInstrCheckShufti64x8 &ri, const OffsetMap &offsets,
-                  const OffsetMap &other_offsets) const {
-        return hi_mask == ri.hi_mask && lo_mask == ri.lo_mask &&
-               bucket_select_mask == ri.bucket_select_mask &&
-               neg_mask == ri.neg_mask && offset == ri.offset &&
-               offsets.at(target) == other_offsets.at(ri.target);
-    }
-};
-
-class RoseInstrCheckShufti64x16
-    : public RoseInstrBaseOneTarget<ROSE_INSTR_CHECK_SHUFTI_64x16,
-                                    ROSE_STRUCT_CHECK_SHUFTI_64x16,
-                                    RoseInstrCheckShufti64x16> {
-public:
-    std::array<u8, 64> hi_mask_1;
-    std::array<u8, 64> hi_mask_2;
-    std::array<u8, 64> lo_mask_1;
-    std::array<u8, 64> lo_mask_2;
-    std::array<u8, 64> bucket_select_mask_hi;
-    std::array<u8, 64> bucket_select_mask_lo;
-    u64a neg_mask;
-    s32 offset;
-    const RoseInstruction *target;
-
-    RoseInstrCheckShufti64x16(std::array<u8, 64> hi_mask_1_in,
-                              std::array<u8, 64> hi_mask_2_in,
-                              std::array<u8, 64> lo_mask_1_in,
-                              std::array<u8, 64> lo_mask_2_in,
-                              std::array<u8, 64> bucket_select_mask_hi_in,
-                              std::array<u8, 64> bucket_select_mask_lo_in,
-                              u64a neg_mask_in, s32 offset_in,
-                              const RoseInstruction *target_in)
-        : hi_mask_1(std::move(hi_mask_1_in)), hi_mask_2(std::move(hi_mask_2_in)),
-          lo_mask_1(std::move(lo_mask_1_in)), lo_mask_2(std::move(lo_mask_2_in)),
-          bucket_select_mask_hi(std::move(bucket_select_mask_hi_in)),
-          bucket_select_mask_lo(std::move(bucket_select_mask_lo_in)),
-          neg_mask(neg_mask_in), offset(offset_in), target(target_in) {}
-
-    bool operator==(const RoseInstrCheckShufti64x16 &ri) const {
-        return hi_mask_1 == ri.hi_mask_1 && hi_mask_2 == ri.hi_mask_2 &&
-               lo_mask_1 == ri.lo_mask_1 && lo_mask_2 == ri.lo_mask_2 &&
-               bucket_select_mask_hi == ri.bucket_select_mask_hi &&
-               bucket_select_mask_lo == ri.bucket_select_mask_lo &&
-               neg_mask == ri.neg_mask && offset == ri.offset &&
-               target == ri.target;
-    }
-
-    size_t hash() const override {
-        return hash_all(opcode, hi_mask_1, hi_mask_2, lo_mask_1, lo_mask_2,
-                        bucket_select_mask_hi, bucket_select_mask_lo, neg_mask,
-                        offset);
-    }
-
-    void write(void *dest, RoseEngineBlob &blob,
-               const OffsetMap &offset_map) const override;
-
-    bool equiv_to(const RoseInstrCheckShufti64x16 &ri, const OffsetMap &offsets,
-                  const OffsetMap &other_offsets) const {
-        return hi_mask_1 == ri.hi_mask_1 && hi_mask_2 == ri.hi_mask_2 &&
-               lo_mask_1 == ri.lo_mask_1 && lo_mask_2 == ri.lo_mask_2 &&
-               bucket_select_mask_hi == ri.bucket_select_mask_hi &&
-               bucket_select_mask_lo == ri.bucket_select_mask_lo &&
-               neg_mask == ri.neg_mask && offset == ri.offset &&
-               offsets.at(target) == other_offsets.at(ri.target);
-    }
-};
-
+class RoseInstrCheckShufti64x8 
+    : public RoseInstrBaseOneTarget<ROSE_INSTR_CHECK_SHUFTI_64x8, 
+                                    ROSE_STRUCT_CHECK_SHUFTI_64x8, 
+                                    RoseInstrCheckShufti64x8> { 
+public: 
+    std::array<u8, 64> hi_mask; 
+    std::array<u8, 64> lo_mask; 
+    std::array<u8, 64> bucket_select_mask; 
+    u64a neg_mask; 
+    s32 offset; 
+    const RoseInstruction *target; 
+ 
+    RoseInstrCheckShufti64x8(std::array<u8, 64> hi_mask_in, 
+                             std::array<u8, 64> lo_mask_in, 
+                             std::array<u8, 64> bucket_select_mask_in, 
+                             u64a neg_mask_in, s32 offset_in, 
+                             const RoseInstruction *target_in) 
+        : hi_mask(std::move(hi_mask_in)), lo_mask(std::move(lo_mask_in)), 
+          bucket_select_mask(std::move(bucket_select_mask_in)), 
+          neg_mask(neg_mask_in), offset(offset_in), target(target_in) {} 
+ 
+    bool operator==(const RoseInstrCheckShufti64x8 &ri) const { 
+        return hi_mask == ri.hi_mask && lo_mask == ri.lo_mask && 
+               bucket_select_mask == ri.bucket_select_mask && 
+               neg_mask == ri.neg_mask && offset == ri.offset && 
+               target == ri.target; 
+    } 
+ 
+    size_t hash() const override { 
+        return hash_all(opcode, hi_mask, lo_mask, bucket_select_mask, neg_mask, 
+                        offset); 
+    } 
+ 
+    void write(void *dest, RoseEngineBlob &blob, 
+               const OffsetMap &offset_map) const override; 
+ 
+    bool equiv_to(const RoseInstrCheckShufti64x8 &ri, const OffsetMap &offsets, 
+                  const OffsetMap &other_offsets) const { 
+        return hi_mask == ri.hi_mask && lo_mask == ri.lo_mask && 
+               bucket_select_mask == ri.bucket_select_mask && 
+               neg_mask == ri.neg_mask && offset == ri.offset && 
+               offsets.at(target) == other_offsets.at(ri.target); 
+    } 
+}; 
+ 
+class RoseInstrCheckShufti64x16 
+    : public RoseInstrBaseOneTarget<ROSE_INSTR_CHECK_SHUFTI_64x16, 
+                                    ROSE_STRUCT_CHECK_SHUFTI_64x16, 
+                                    RoseInstrCheckShufti64x16> { 
+public: 
+    std::array<u8, 64> hi_mask_1; 
+    std::array<u8, 64> hi_mask_2; 
+    std::array<u8, 64> lo_mask_1; 
+    std::array<u8, 64> lo_mask_2; 
+    std::array<u8, 64> bucket_select_mask_hi; 
+    std::array<u8, 64> bucket_select_mask_lo; 
+    u64a neg_mask; 
+    s32 offset; 
+    const RoseInstruction *target; 
+ 
+    RoseInstrCheckShufti64x16(std::array<u8, 64> hi_mask_1_in, 
+                              std::array<u8, 64> hi_mask_2_in, 
+                              std::array<u8, 64> lo_mask_1_in, 
+                              std::array<u8, 64> lo_mask_2_in, 
+                              std::array<u8, 64> bucket_select_mask_hi_in, 
+                              std::array<u8, 64> bucket_select_mask_lo_in, 
+                              u64a neg_mask_in, s32 offset_in, 
+                              const RoseInstruction *target_in) 
+        : hi_mask_1(std::move(hi_mask_1_in)), hi_mask_2(std::move(hi_mask_2_in)), 
+          lo_mask_1(std::move(lo_mask_1_in)), lo_mask_2(std::move(lo_mask_2_in)), 
+          bucket_select_mask_hi(std::move(bucket_select_mask_hi_in)), 
+          bucket_select_mask_lo(std::move(bucket_select_mask_lo_in)), 
+          neg_mask(neg_mask_in), offset(offset_in), target(target_in) {} 
+ 
+    bool operator==(const RoseInstrCheckShufti64x16 &ri) const { 
+        return hi_mask_1 == ri.hi_mask_1 && hi_mask_2 == ri.hi_mask_2 && 
+               lo_mask_1 == ri.lo_mask_1 && lo_mask_2 == ri.lo_mask_2 && 
+               bucket_select_mask_hi == ri.bucket_select_mask_hi && 
+               bucket_select_mask_lo == ri.bucket_select_mask_lo && 
+               neg_mask == ri.neg_mask && offset == ri.offset && 
+               target == ri.target; 
+    } 
+ 
+    size_t hash() const override { 
+        return hash_all(opcode, hi_mask_1, hi_mask_2, lo_mask_1, lo_mask_2, 
+                        bucket_select_mask_hi, bucket_select_mask_lo, neg_mask, 
+                        offset); 
+    } 
+ 
+    void write(void *dest, RoseEngineBlob &blob, 
+               const OffsetMap &offset_map) const override; 
+ 
+    bool equiv_to(const RoseInstrCheckShufti64x16 &ri, const OffsetMap &offsets, 
+                  const OffsetMap &other_offsets) const { 
+        return hi_mask_1 == ri.hi_mask_1 && hi_mask_2 == ri.hi_mask_2 && 
+               lo_mask_1 == ri.lo_mask_1 && lo_mask_2 == ri.lo_mask_2 && 
+               bucket_select_mask_hi == ri.bucket_select_mask_hi && 
+               bucket_select_mask_lo == ri.bucket_select_mask_lo && 
+               neg_mask == ri.neg_mask && offset == ri.offset && 
+               offsets.at(target) == other_offsets.at(ri.target); 
+    } 
+}; 
+ 
 class RoseInstrCheckInfix
     : public RoseInstrBaseOneTarget<ROSE_INSTR_CHECK_INFIX,
                                     ROSE_STRUCT_CHECK_INFIX,
@@ -2284,102 +2284,102 @@ public:
     }
 };
 
-class RoseInstrSetLogical
-    : public RoseInstrBaseNoTargets<ROSE_INSTR_SET_LOGICAL,
-                                    ROSE_STRUCT_SET_LOGICAL,
-                                    RoseInstrSetLogical> {
-public:
-    u32 lkey;
-    s32 offset_adjust;
-
-    RoseInstrSetLogical(u32 lkey_in, s32 offset_adjust_in)
-        : lkey(lkey_in), offset_adjust(offset_adjust_in) {}
-
-    bool operator==(const RoseInstrSetLogical &ri) const {
-        return lkey == ri.lkey && offset_adjust == ri.offset_adjust;
-    }
-
-    size_t hash() const override {
-        return hash_all(opcode, lkey, offset_adjust);
-    }
-
-    void write(void *dest, RoseEngineBlob &blob,
-               const OffsetMap &offset_map) const override;
-
-    bool equiv_to(const RoseInstrSetLogical &ri, const OffsetMap &,
-                  const OffsetMap &) const {
-        return lkey == ri.lkey && offset_adjust == ri.offset_adjust;
-    }
-};
-
-class RoseInstrSetCombination
-    : public RoseInstrBaseNoTargets<ROSE_INSTR_SET_COMBINATION,
-                                    ROSE_STRUCT_SET_COMBINATION,
-                                    RoseInstrSetCombination> {
-public:
-    u32 ckey;
-
-    RoseInstrSetCombination(u32 ckey_in) : ckey(ckey_in) {}
-
-    bool operator==(const RoseInstrSetCombination &ri) const {
-        return ckey == ri.ckey;
-    }
-
-    size_t hash() const override {
-        return hash_all(opcode, ckey);
-    }
-
-    void write(void *dest, RoseEngineBlob &blob,
-               const OffsetMap &offset_map) const override;
-
-    bool equiv_to(const RoseInstrSetCombination &ri, const OffsetMap &,
-                  const OffsetMap &) const {
-        return ckey == ri.ckey;
-    }
-};
-
-class RoseInstrFlushCombination
-    : public RoseInstrBaseTrivial<ROSE_INSTR_FLUSH_COMBINATION,
-                                  ROSE_STRUCT_FLUSH_COMBINATION,
-                                  RoseInstrFlushCombination> {
-public:
-    ~RoseInstrFlushCombination() override;
-};
-
-class RoseInstrLastFlushCombination
-    : public RoseInstrBaseTrivial<ROSE_INSTR_LAST_FLUSH_COMBINATION,
-                                  ROSE_STRUCT_LAST_FLUSH_COMBINATION,
-                                  RoseInstrLastFlushCombination> {
-public:
-    ~RoseInstrLastFlushCombination() override;
-};
-
-class RoseInstrSetExhaust
-    : public RoseInstrBaseNoTargets<ROSE_INSTR_SET_EXHAUST,
-                                    ROSE_STRUCT_SET_EXHAUST,
-                                    RoseInstrSetExhaust> {
-public:
-    u32 ekey;
-
-    RoseInstrSetExhaust(u32 ekey_in) : ekey(ekey_in) {}
-
-    bool operator==(const RoseInstrSetExhaust &ri) const {
-        return ekey == ri.ekey;
-    }
-
-    size_t hash() const override {
-        return hash_all(opcode, ekey);
-    }
-
-    void write(void *dest, RoseEngineBlob &blob,
-               const OffsetMap &offset_map) const override;
-
-    bool equiv_to(const RoseInstrSetExhaust &ri, const OffsetMap &,
-                  const OffsetMap &) const {
-        return ekey == ri.ekey;
-    }
-};
-
+class RoseInstrSetLogical 
+    : public RoseInstrBaseNoTargets<ROSE_INSTR_SET_LOGICAL, 
+                                    ROSE_STRUCT_SET_LOGICAL, 
+                                    RoseInstrSetLogical> { 
+public: 
+    u32 lkey; 
+    s32 offset_adjust; 
+ 
+    RoseInstrSetLogical(u32 lkey_in, s32 offset_adjust_in) 
+        : lkey(lkey_in), offset_adjust(offset_adjust_in) {} 
+ 
+    bool operator==(const RoseInstrSetLogical &ri) const { 
+        return lkey == ri.lkey && offset_adjust == ri.offset_adjust; 
+    } 
+ 
+    size_t hash() const override { 
+        return hash_all(opcode, lkey, offset_adjust); 
+    } 
+ 
+    void write(void *dest, RoseEngineBlob &blob, 
+               const OffsetMap &offset_map) const override; 
+ 
+    bool equiv_to(const RoseInstrSetLogical &ri, const OffsetMap &, 
+                  const OffsetMap &) const { 
+        return lkey == ri.lkey && offset_adjust == ri.offset_adjust; 
+    } 
+}; 
+ 
+class RoseInstrSetCombination 
+    : public RoseInstrBaseNoTargets<ROSE_INSTR_SET_COMBINATION, 
+                                    ROSE_STRUCT_SET_COMBINATION, 
+                                    RoseInstrSetCombination> { 
+public: 
+    u32 ckey; 
+ 
+    RoseInstrSetCombination(u32 ckey_in) : ckey(ckey_in) {} 
+ 
+    bool operator==(const RoseInstrSetCombination &ri) const { 
+        return ckey == ri.ckey; 
+    } 
+ 
+    size_t hash() const override { 
+        return hash_all(opcode, ckey); 
+    } 
+ 
+    void write(void *dest, RoseEngineBlob &blob, 
+               const OffsetMap &offset_map) const override; 
+ 
+    bool equiv_to(const RoseInstrSetCombination &ri, const OffsetMap &, 
+                  const OffsetMap &) const { 
+        return ckey == ri.ckey; 
+    } 
+}; 
+ 
+class RoseInstrFlushCombination 
+    : public RoseInstrBaseTrivial<ROSE_INSTR_FLUSH_COMBINATION, 
+                                  ROSE_STRUCT_FLUSH_COMBINATION, 
+                                  RoseInstrFlushCombination> { 
+public: 
+    ~RoseInstrFlushCombination() override; 
+}; 
+ 
+class RoseInstrLastFlushCombination 
+    : public RoseInstrBaseTrivial<ROSE_INSTR_LAST_FLUSH_COMBINATION, 
+                                  ROSE_STRUCT_LAST_FLUSH_COMBINATION, 
+                                  RoseInstrLastFlushCombination> { 
+public: 
+    ~RoseInstrLastFlushCombination() override; 
+}; 
+ 
+class RoseInstrSetExhaust 
+    : public RoseInstrBaseNoTargets<ROSE_INSTR_SET_EXHAUST, 
+                                    ROSE_STRUCT_SET_EXHAUST, 
+                                    RoseInstrSetExhaust> { 
+public: 
+    u32 ekey; 
+ 
+    RoseInstrSetExhaust(u32 ekey_in) : ekey(ekey_in) {} 
+ 
+    bool operator==(const RoseInstrSetExhaust &ri) const { 
+        return ekey == ri.ekey; 
+    } 
+ 
+    size_t hash() const override { 
+        return hash_all(opcode, ekey); 
+    } 
+ 
+    void write(void *dest, RoseEngineBlob &blob, 
+               const OffsetMap &offset_map) const override; 
+ 
+    bool equiv_to(const RoseInstrSetExhaust &ri, const OffsetMap &, 
+                  const OffsetMap &) const { 
+        return ekey == ri.ekey; 
+    } 
+}; 
+ 
 class RoseInstrEnd
     : public RoseInstrBaseTrivial<ROSE_INSTR_END, ROSE_STRUCT_END,
                                   RoseInstrEnd> {

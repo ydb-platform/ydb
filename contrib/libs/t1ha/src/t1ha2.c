@@ -1,8 +1,8 @@
 /*
- *  Copyright (c) 2016-2020 Positive Technologies, https://www.ptsecurity.com,
+ *  Copyright (c) 2016-2020 Positive Technologies, https://www.ptsecurity.com, 
  *  Fast Positive Hash.
  *
- *  Portions Copyright (c) 2010-2020 Leonid Yuriev <leo@yuriev.ru>,
+ *  Portions Copyright (c) 2010-2020 Leonid Yuriev <leo@yuriev.ru>, 
  *  The 1Hippeus project (t1h).
  *
  *  This software is provided 'as-is', without any express or implied
@@ -34,7 +34,7 @@
  *     hardware tricks).
  *  3. Not suitable for cryptography.
  *
- * The Future will (be) Positive. Всё будет хорошо.
+ * The Future will (be) Positive. Всё будет хорошо. 
  *
  * ACKNOWLEDGEMENT:
  * The t1ha was originally developed by Leonid Yuriev (Леонид Юрьев)
@@ -206,12 +206,12 @@ uint64_t t1ha2_atonce(const void *data, size_t length, uint64_t seed) {
 #if T1HA_SYS_UNALIGNED_ACCESS == T1HA_UNALIGNED_ACCESS__EFFICIENT
   if (unlikely(length > 32)) {
     init_cd(&state, seed, length);
-#if defined(__LCC__) && __LCC__ > 123
-/* Форсирует комбинирование пар арифметических операций в двухэтажные операции
- * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации
- * говорят, что это нецелесообразно */
-#pragma comb_oper
-#endif /* E2K LCC > 1.23 */
+#if defined(__LCC__) && __LCC__ > 123 
+/* Форсирует комбинирование пар арифметических операций в двухэтажные операции 
+ * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации 
+ * говорят, что это нецелесообразно */ 
+#pragma comb_oper 
+#endif /* E2K LCC > 1.23 */ 
     T1HA2_LOOP(le, unaligned, &state, data, length);
     squash(&state);
     length &= 31;
@@ -222,12 +222,12 @@ uint64_t t1ha2_atonce(const void *data, size_t length, uint64_t seed) {
   if (misaligned) {
     if (unlikely(length > 32)) {
       init_cd(&state, seed, length);
-#if defined(__LCC__) && __LCC__ > 123
-/* Форсирует комбинирование пар арифметических операций в двухэтажные операции
- * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации
- * говорят, что это нецелесообразно */
-#pragma comb_oper
-#endif /* E2K LCC > 1.23 */
+#if defined(__LCC__) && __LCC__ > 123 
+/* Форсирует комбинирование пар арифметических операций в двухэтажные операции 
+ * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации 
+ * говорят, что это нецелесообразно */ 
+#pragma comb_oper 
+#endif /* E2K LCC > 1.23 */ 
       T1HA2_LOOP(le, unaligned, &state, data, length);
       squash(&state);
       length &= 31;
@@ -236,12 +236,12 @@ uint64_t t1ha2_atonce(const void *data, size_t length, uint64_t seed) {
   } else {
     if (unlikely(length > 32)) {
       init_cd(&state, seed, length);
-#if defined(__LCC__) && __LCC__ > 123
-/* Форсирует комбинирование пар арифметических операций в двухэтажные операции
- * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации
- * говорят, что это нецелесообразно */
-#pragma comb_oper
-#endif /* E2K LCC > 1.23 */
+#if defined(__LCC__) && __LCC__ > 123 
+/* Форсирует комбинирование пар арифметических операций в двухэтажные операции 
+ * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации 
+ * говорят, что это нецелесообразно */ 
+#pragma comb_oper 
+#endif /* E2K LCC > 1.23 */ 
       T1HA2_LOOP(le, aligned, &state, data, length);
       squash(&state);
       length &= 31;
@@ -260,12 +260,12 @@ uint64_t t1ha2_atonce128(uint64_t *__restrict extra_result,
 
 #if T1HA_SYS_UNALIGNED_ACCESS == T1HA_UNALIGNED_ACCESS__EFFICIENT
   if (unlikely(length > 32)) {
-#if defined(__LCC__) && __LCC__ > 123
-/* Форсирует комбинирование пар арифметических операций в двухэтажные операции
- * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации
- * говорят, что это нецелесообразно */
-#pragma comb_oper
-#endif /* E2K LCC > 1.23 */
+#if defined(__LCC__) && __LCC__ > 123 
+/* Форсирует комбинирование пар арифметических операций в двухэтажные операции 
+ * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации 
+ * говорят, что это нецелесообразно */ 
+#pragma comb_oper 
+#endif /* E2K LCC > 1.23 */ 
     T1HA2_LOOP(le, unaligned, &state, data, length);
     length &= 31;
   }
@@ -274,24 +274,24 @@ uint64_t t1ha2_atonce128(uint64_t *__restrict extra_result,
   const bool misaligned = (((uintptr_t)data) & (ALIGNMENT_64 - 1)) != 0;
   if (misaligned) {
     if (unlikely(length > 32)) {
-#if defined(__LCC__) && __LCC__ > 123
-/* Форсирует комбинирование пар арифметических операций в двухэтажные операции
- * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации
- * говорят, что это нецелесообразно */
-#pragma comb_oper
-#endif /* E2K LCC > 1.23 */
+#if defined(__LCC__) && __LCC__ > 123 
+/* Форсирует комбинирование пар арифметических операций в двухэтажные операции 
+ * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации 
+ * говорят, что это нецелесообразно */ 
+#pragma comb_oper 
+#endif /* E2K LCC > 1.23 */ 
       T1HA2_LOOP(le, unaligned, &state, data, length);
       length &= 31;
     }
     T1HA2_TAIL_ABCD(le, unaligned, &state, data, length);
   } else {
     if (unlikely(length > 32)) {
-#if defined(__LCC__) && __LCC__ > 123
-/* Форсирует комбинирование пар арифметических операций в двухэтажные операции
- * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации
- * говорят, что это нецелесообразно */
-#pragma comb_oper
-#endif /* E2K LCC > 1.23 */
+#if defined(__LCC__) && __LCC__ > 123 
+/* Форсирует комбинирование пар арифметических операций в двухэтажные операции 
+ * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации 
+ * говорят, что это нецелесообразно */ 
+#pragma comb_oper 
+#endif /* E2K LCC > 1.23 */ 
       T1HA2_LOOP(le, aligned, &state, data, length);
       length &= 31;
     }
@@ -330,30 +330,30 @@ void t1ha2_update(t1ha_context_t *__restrict ctx, const void *__restrict data,
 
   if (length >= 32) {
 #if T1HA_SYS_UNALIGNED_ACCESS == T1HA_UNALIGNED_ACCESS__EFFICIENT
-#if defined(__LCC__) && __LCC__ > 123
-/* Форсирует комбинирование пар арифметических операций в двухэтажные операции
- * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации
- * говорят, что это нецелесообразно */
-#pragma comb_oper
-#endif /* E2K LCC > 1.23 */
+#if defined(__LCC__) && __LCC__ > 123 
+/* Форсирует комбинирование пар арифметических операций в двухэтажные операции 
+ * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации 
+ * говорят, что это нецелесообразно */ 
+#pragma comb_oper 
+#endif /* E2K LCC > 1.23 */ 
     T1HA2_LOOP(le, unaligned, &ctx->state, data, length);
 #else
     const bool misaligned = (((uintptr_t)data) & (ALIGNMENT_64 - 1)) != 0;
     if (misaligned) {
-#if defined(__LCC__) && __LCC__ > 123
-/* Форсирует комбинирование пар арифметических операций в двухэтажные операции
- * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации
- * говорят, что это нецелесообразно */
-#pragma comb_oper
-#endif /* E2K LCC > 1.23 */
+#if defined(__LCC__) && __LCC__ > 123 
+/* Форсирует комбинирование пар арифметических операций в двухэтажные операции 
+ * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации 
+ * говорят, что это нецелесообразно */ 
+#pragma comb_oper 
+#endif /* E2K LCC > 1.23 */ 
       T1HA2_LOOP(le, unaligned, &ctx->state, data, length);
     } else {
-#if defined(__LCC__) && __LCC__ > 123
-/* Форсирует комбинирование пар арифметических операций в двухэтажные операции
- * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации
- * говорят, что это нецелесообразно */
-#pragma comb_oper
-#endif /* E2K LCC > 1.23 */
+#if defined(__LCC__) && __LCC__ > 123 
+/* Форсирует комбинирование пар арифметических операций в двухэтажные операции 
+ * в ближайшем после объявления директивы цикле, даже если эвристики оптимизации 
+ * говорят, что это нецелесообразно */ 
+#pragma comb_oper 
+#endif /* E2K LCC > 1.23 */ 
       T1HA2_LOOP(le, aligned, &ctx->state, data, length);
     }
 #endif

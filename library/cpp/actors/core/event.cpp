@@ -16,7 +16,7 @@ namespace NActors {
         }
         if (Event) {
             TAllocChunkSerializer serializer;
-            Event->SerializeToArcadiaStream(&serializer);
+            Event->SerializeToArcadiaStream(&serializer); 
             auto chainBuf = serializer.Release(Event->IsExtendedFormat());
             Event.Reset();
             return chainBuf;
@@ -29,7 +29,7 @@ namespace NActors {
             return Buffer;
         if (Event) {
             TAllocChunkSerializer serializer;
-            Event->SerializeToArcadiaStream(&serializer);
+            Event->SerializeToArcadiaStream(&serializer); 
             Buffer = serializer.Release(Event->IsExtendedFormat());
             return Buffer;
         }

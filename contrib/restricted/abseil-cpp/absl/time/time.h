@@ -182,30 +182,30 @@ class Duration {
 
   // Overloads that forward to either the int64_t or double overloads above.
   // Integer operands must be representable as int64_t.
-  template <typename T, time_internal::EnableIfIntegral<T> = 0>
+  template <typename T, time_internal::EnableIfIntegral<T> = 0> 
   Duration& operator*=(T r) {
     int64_t x = r;
     return *this *= x;
   }
-
-  template <typename T, time_internal::EnableIfIntegral<T> = 0>
+ 
+  template <typename T, time_internal::EnableIfIntegral<T> = 0> 
   Duration& operator/=(T r) {
     int64_t x = r;
     return *this /= x;
   }
 
-  template <typename T, time_internal::EnableIfFloat<T> = 0>
-  Duration& operator*=(T r) {
-    double x = r;
-    return *this *= x;
-  }
-
-  template <typename T, time_internal::EnableIfFloat<T> = 0>
-  Duration& operator/=(T r) {
-    double x = r;
-    return *this /= x;
-  }
-
+  template <typename T, time_internal::EnableIfFloat<T> = 0> 
+  Duration& operator*=(T r) { 
+    double x = r; 
+    return *this *= x; 
+  } 
+ 
+  template <typename T, time_internal::EnableIfFloat<T> = 0> 
+  Duration& operator/=(T r) { 
+    double x = r; 
+    return *this /= x; 
+  } 
+ 
   template <typename H>
   friend H AbslHashValue(H h, Duration d) {
     return H::combine(std::move(h), d.rep_hi_, d.rep_lo_);
@@ -403,30 +403,30 @@ constexpr Duration InfiniteDuration();
 //
 //   absl::Duration a = absl::Seconds(60);
 //   absl::Duration b = absl::Minutes(1);  // b == a
-template <typename T, time_internal::EnableIfIntegral<T> = 0>
-constexpr Duration Nanoseconds(T n) {
-  return time_internal::FromInt64(n, std::nano{});
-}
-template <typename T, time_internal::EnableIfIntegral<T> = 0>
-constexpr Duration Microseconds(T n) {
-  return time_internal::FromInt64(n, std::micro{});
-}
-template <typename T, time_internal::EnableIfIntegral<T> = 0>
-constexpr Duration Milliseconds(T n) {
-  return time_internal::FromInt64(n, std::milli{});
-}
-template <typename T, time_internal::EnableIfIntegral<T> = 0>
-constexpr Duration Seconds(T n) {
-  return time_internal::FromInt64(n, std::ratio<1>{});
-}
-template <typename T, time_internal::EnableIfIntegral<T> = 0>
-constexpr Duration Minutes(T n) {
-  return time_internal::FromInt64(n, std::ratio<60>{});
-}
-template <typename T, time_internal::EnableIfIntegral<T> = 0>
-constexpr Duration Hours(T n) {
-  return time_internal::FromInt64(n, std::ratio<3600>{});
-}
+template <typename T, time_internal::EnableIfIntegral<T> = 0> 
+constexpr Duration Nanoseconds(T n) { 
+  return time_internal::FromInt64(n, std::nano{}); 
+} 
+template <typename T, time_internal::EnableIfIntegral<T> = 0> 
+constexpr Duration Microseconds(T n) { 
+  return time_internal::FromInt64(n, std::micro{}); 
+} 
+template <typename T, time_internal::EnableIfIntegral<T> = 0> 
+constexpr Duration Milliseconds(T n) { 
+  return time_internal::FromInt64(n, std::milli{}); 
+} 
+template <typename T, time_internal::EnableIfIntegral<T> = 0> 
+constexpr Duration Seconds(T n) { 
+  return time_internal::FromInt64(n, std::ratio<1>{}); 
+} 
+template <typename T, time_internal::EnableIfIntegral<T> = 0> 
+constexpr Duration Minutes(T n) { 
+  return time_internal::FromInt64(n, std::ratio<60>{}); 
+} 
+template <typename T, time_internal::EnableIfIntegral<T> = 0> 
+constexpr Duration Hours(T n) { 
+  return time_internal::FromInt64(n, std::ratio<3600>{}); 
+} 
 
 // Factory overloads for constructing `Duration` values from a floating-point
 // number of the unit indicated by the factory function's name. These functions
@@ -480,9 +480,9 @@ Duration Hours(T n) {
 // ToInt64Hours()
 //
 // Helper functions that convert a Duration to an integral count of the
-// indicated unit. These return the same results as the `IDivDuration()`
-// function, though they usually do so more efficiently; see the
-// documentation of `IDivDuration()` for details about overflow, etc.
+// indicated unit. These return the same results as the `IDivDuration()` 
+// function, though they usually do so more efficiently; see the 
+// documentation of `IDivDuration()` for details about overflow, etc. 
 //
 // Example:
 //
@@ -577,20 +577,20 @@ inline std::ostream& operator<<(std::ostream& os, Duration d) {
 // `ZeroDuration()`. Parses "inf" and "-inf" as +/- `InfiniteDuration()`.
 bool ParseDuration(absl::string_view dur_string, Duration* d);
 
-// AbslParseFlag()
-//
-// Parses a command-line flag string representation `text` into a a Duration
-// value. Duration flags must be specified in a format that is valid input for
-// `absl::ParseDuration()`.
+// AbslParseFlag() 
+// 
+// Parses a command-line flag string representation `text` into a a Duration 
+// value. Duration flags must be specified in a format that is valid input for 
+// `absl::ParseDuration()`. 
 bool AbslParseFlag(absl::string_view text, Duration* dst, std::string* error);
-
-
-// AbslUnparseFlag()
-//
-// Unparses a Duration value into a command-line string representation using
-// the format specified by `absl::ParseDuration()`.
+ 
+ 
+// AbslUnparseFlag() 
+// 
+// Unparses a Duration value into a command-line string representation using 
+// the format specified by `absl::ParseDuration()`. 
 std::string AbslUnparseFlag(Duration d);
-
+ 
 ABSL_DEPRECATED("Use AbslParseFlag() instead.")
 bool ParseFlag(const std::string& text, Duration* dst, std::string* error);
 ABSL_DEPRECATED("Use AbslUnparseFlag() instead.")
@@ -853,13 +853,13 @@ Time FromChrono(const std::chrono::system_clock::time_point& tp);
 //   // tp == std::chrono::system_clock::from_time_t(123);
 std::chrono::system_clock::time_point ToChronoTime(Time);
 
-// AbslParseFlag()
+// AbslParseFlag() 
 //
-// Parses the command-line flag string representation `text` into a Time value.
-// Time flags must be specified in a format that matches absl::RFC3339_full.
-//
-// For example:
-//
+// Parses the command-line flag string representation `text` into a Time value. 
+// Time flags must be specified in a format that matches absl::RFC3339_full. 
+// 
+// For example: 
+// 
 //   --start_time=2016-01-02T03:04:05.678+08:00
 //
 // Note: A UTC offset (or 'Z' indicating a zero-offset from UTC) is required.
@@ -868,13 +868,13 @@ std::chrono::system_clock::time_point ToChronoTime(Time);
 // seconds/milliseconds/etc from the Unix epoch, use an absl::Duration flag
 // and add that duration to absl::UnixEpoch() to get an absl::Time.
 bool AbslParseFlag(absl::string_view text, Time* t, std::string* error);
-
-// AbslUnparseFlag()
-//
-// Unparses a Time value into a command-line string representation using
-// the format specified by `absl::ParseTime()`.
+ 
+// AbslUnparseFlag() 
+// 
+// Unparses a Time value into a command-line string representation using 
+// the format specified by `absl::ParseTime()`. 
 std::string AbslUnparseFlag(Time t);
-
+ 
 ABSL_DEPRECATED("Use AbslParseFlag() instead.")
 bool ParseFlag(const std::string& text, Time* t, std::string* error);
 ABSL_DEPRECATED("Use AbslUnparseFlag() instead.")
@@ -1402,7 +1402,7 @@ constexpr Duration MakeDuration(int64_t hi, int64_t lo) {
 inline Duration MakePosDoubleDuration(double n) {
   const int64_t int_secs = static_cast<int64_t>(n);
   const uint32_t ticks = static_cast<uint32_t>(
-      std::round((n - static_cast<double>(int_secs)) * kTicksPerSecond));
+      std::round((n - static_cast<double>(int_secs)) * kTicksPerSecond)); 
   return ticks < kTicksPerSecond
              ? MakeDuration(int_secs, ticks)
              : MakeDuration(int_secs + 1, ticks - kTicksPerSecond);

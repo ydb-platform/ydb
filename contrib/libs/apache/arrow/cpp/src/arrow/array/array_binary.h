@@ -28,7 +28,7 @@
 #include "arrow/array/array_base.h"
 #include "arrow/array/data.h"
 #include "arrow/buffer.h"
-#include "arrow/stl_iterator.h"
+#include "arrow/stl_iterator.h" 
 #include "arrow/type.h"
 #include "arrow/util/checked_cast.h"
 #include "arrow/util/macros.h"
@@ -47,7 +47,7 @@ class BaseBinaryArray : public FlatArray {
  public:
   using TypeClass = TYPE;
   using offset_type = typename TypeClass::offset_type;
-  using IteratorType = stl::ArrayIterator<BaseBinaryArray<TYPE>>;
+  using IteratorType = stl::ArrayIterator<BaseBinaryArray<TYPE>>; 
 
   /// Return the pointer to the given elements bytes
   // XXX should GetValue(int64_t i) return a string_view?
@@ -71,13 +71,13 @@ class BaseBinaryArray : public FlatArray {
                              raw_value_offsets_[i + 1] - pos);
   }
 
-  /// \brief Get binary value as a string_view
-  /// Provided for consistency with other arrays.
-  ///
-  /// \param i the value index
-  /// \return the view over the selected value
-  util::string_view Value(int64_t i) const { return GetView(i); }
-
+  /// \brief Get binary value as a string_view 
+  /// Provided for consistency with other arrays. 
+  /// 
+  /// \param i the value index 
+  /// \return the view over the selected value 
+  util::string_view Value(int64_t i) const { return GetView(i); } 
+ 
   /// \brief Get binary value as a std::string
   ///
   /// \param i the value index
@@ -124,13 +124,13 @@ class BaseBinaryArray : public FlatArray {
     }
   }
 
-  IteratorType begin() const { return IteratorType(*this); }
-
-  IteratorType end() const { return IteratorType(*this, length()); }
-
+  IteratorType begin() const { return IteratorType(*this); } 
+ 
+  IteratorType end() const { return IteratorType(*this, length()); } 
+ 
  protected:
   // For subclasses
-  BaseBinaryArray() = default;
+  BaseBinaryArray() = default; 
 
   // Protected method for constructors
   void SetData(const std::shared_ptr<ArrayData>& data) {
@@ -139,8 +139,8 @@ class BaseBinaryArray : public FlatArray {
     raw_data_ = data->GetValuesSafe<uint8_t>(2, /*offset=*/0);
   }
 
-  const offset_type* raw_value_offsets_ = NULLPTR;
-  const uint8_t* raw_data_ = NULLPTR;
+  const offset_type* raw_value_offsets_ = NULLPTR; 
+  const uint8_t* raw_data_ = NULLPTR; 
 };
 
 /// Concrete Array class for variable-size binary data
@@ -216,7 +216,7 @@ class ARROW_EXPORT LargeStringArray : public LargeBinaryArray {
 class ARROW_EXPORT FixedSizeBinaryArray : public PrimitiveArray {
  public:
   using TypeClass = FixedSizeBinaryType;
-  using IteratorType = stl::ArrayIterator<FixedSizeBinaryArray>;
+  using IteratorType = stl::ArrayIterator<FixedSizeBinaryArray>; 
 
   explicit FixedSizeBinaryArray(const std::shared_ptr<ArrayData>& data);
 
@@ -238,10 +238,10 @@ class ARROW_EXPORT FixedSizeBinaryArray : public PrimitiveArray {
 
   const uint8_t* raw_values() const { return raw_values_ + data_->offset * byte_width_; }
 
-  IteratorType begin() const { return IteratorType(*this); }
-
-  IteratorType end() const { return IteratorType(*this, length()); }
-
+  IteratorType begin() const { return IteratorType(*this); } 
+ 
+  IteratorType end() const { return IteratorType(*this, length()); } 
+ 
  protected:
   void SetData(const std::shared_ptr<ArrayData>& data) {
     this->PrimitiveArray::SetData(data);

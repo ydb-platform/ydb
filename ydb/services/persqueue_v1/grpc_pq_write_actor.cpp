@@ -326,7 +326,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     EscapedSourceId = HexEncode(encodedSourceId);
 
     TString s = TopicConverter->GetClientsideName() + encodedSourceId;
-    Hash = MurmurHash<ui32>(s.c_str(), s.size(), MURMUR_ARRAY_SEED);
+    Hash = MurmurHash<ui32>(s.c_str(), s.size(), MURMUR_ARRAY_SEED); 
 
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session request cookie: " << Cookie << " " << init << " from " << PeerName);
     //TODO: get user agent from headers

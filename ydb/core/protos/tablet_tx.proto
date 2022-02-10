@@ -11,7 +11,7 @@ message TEvLocalMKQL {
 
 message TEvLocalMKQLResponse {
     optional uint64 Origin = 1;
-    optional int32 Status = 2;
+    optional int32 Status = 2; 
 
     optional uint32 EngineStatus = 10;
     optional uint32 EngineResponseStatus = 11;
@@ -27,7 +27,7 @@ message TEvLocalSchemeTx {
 
 message TEvLocalSchemeTxResponse {
     optional uint64 Origin = 1;
-    optional int32 Status = 2;
+    optional int32 Status = 2; 
     optional string ErrorReason = 3;
 
     optional NTabletFlatScheme.TSchemeChanges FullScheme = 4;

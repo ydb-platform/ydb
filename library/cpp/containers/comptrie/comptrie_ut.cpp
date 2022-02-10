@@ -1296,7 +1296,7 @@ void TCompactTrieTest::TestFindLongestPrefixWithEmptyValue() {
 template <typename TChar>
 struct TConvertKey {
     static inline TString Convert(const TStringBuf& key) {
-        return ToString(key);
+        return ToString(key); 
     }
 };
 

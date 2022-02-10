@@ -92,7 +92,7 @@ namespace boost { namespace spirit { namespace karma
         T const exact;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(exact_iterator& operator= (exact_iterator const&));
+        BOOST_DELETED_FUNCTION(exact_iterator& operator= (exact_iterator const&)); 
     };
 
     // handles repeat(min, max)[p]
@@ -112,7 +112,7 @@ namespace boost { namespace spirit { namespace karma
         T const max;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(finite_iterator& operator= (finite_iterator const&));
+        BOOST_DELETED_FUNCTION(finite_iterator& operator= (finite_iterator const&)); 
     };
 
     // handles repeat(min, inf)[p]
@@ -130,7 +130,7 @@ namespace boost { namespace spirit { namespace karma
         T const min;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(infinite_iterator& operator= (infinite_iterator const&));
+        BOOST_DELETED_FUNCTION(infinite_iterator& operator= (infinite_iterator const&)); 
     };
 
     ///////////////////////////////////////////////////////////////////////////

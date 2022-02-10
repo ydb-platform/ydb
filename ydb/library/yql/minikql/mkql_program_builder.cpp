@@ -1827,7 +1827,7 @@ TRuntimeNode TProgramBuilder::Extend(const TArrayRef<const TRuntimeNode>& lists)
 
     auto listType = lists.front().GetStaticType();
     MKQL_ENSURE(listType->IsFlow() || listType->IsList() || listType->IsStream(), "Expected either flow, list or stream");
-    for (ui32 i = 1; i < lists.size(); ++i) {
+    for (ui32 i = 1; i < lists.size(); ++i) { 
         auto listType2 = lists[i].GetStaticType();
         MKQL_ENSURE(listType->IsSameType(*listType2), "Types of flows are different, left: " <<
             PrintNode(listType, true) << ", right: " <<

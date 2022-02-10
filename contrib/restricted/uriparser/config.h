@@ -44,7 +44,7 @@
 #define PACKAGE_VERSION "0.9.6"
 
 #define HAVE_WPRINTF
-#define HAVE_REALLOCARRAY
+#define HAVE_REALLOCARRAY 
 
 
 

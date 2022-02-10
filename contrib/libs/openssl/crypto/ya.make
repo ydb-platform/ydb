@@ -156,8 +156,8 @@ IF (OS_DARWIN AND ARCH_ARM64)
     )
 ENDIF()
 
-IF (OS_WINDOWS)
-    IF (ARCH_X86_64)
+IF (OS_WINDOWS) 
+    IF (ARCH_X86_64) 
         CFLAGS(
             -DENGINESDIR="\"C:\\\\Program\ Files\\\\OpenSSL\\\\lib\\\\engines-1_1\""
             -DOPENSSLDIR="\"C:\\\\Program\ Files\\\\Common\ Files\\\\SSL\""
@@ -179,7 +179,7 @@ IF (OS_WINDOWS)
     )
 ENDIF()
 
-IF (SANITIZER_TYPE == memory)
+IF (SANITIZER_TYPE == memory) 
     CFLAGS(
         -DPURIFY
     )
@@ -938,7 +938,7 @@ ENDIF()
 
 IF (OS_LINUX AND ARCH_ARM7)
     IF (CLANG)
-        # XXX: This is a workarond for 'out of range immediate fixup value'
+        # XXX: This is a workarond for 'out of range immediate fixup value' 
         # error with clang integrated assembler:
         # https://github.com/openssl/openssl/issues/7878
         CFLAGS(

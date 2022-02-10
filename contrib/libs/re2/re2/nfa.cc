@@ -27,18 +27,18 @@
 #include <stdio.h>
 #include <string.h>
 #include <algorithm>
-#include <deque>
+#include <deque> 
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "util/logging.h"
-#include "util/strutil.h"
-#include "re2/pod_array.h"
+#include "util/logging.h" 
+#include "util/strutil.h" 
+#include "re2/pod_array.h" 
 #include "re2/prog.h"
 #include "re2/regexp.h"
-#include "re2/sparse_array.h"
-#include "re2/sparse_set.h"
+#include "re2/sparse_array.h" 
+#include "re2/sparse_set.h" 
 
 namespace re2 {
 
@@ -90,41 +90,41 @@ class NFA {
 
   // Follows all empty arrows from id0 and enqueues all the states reached.
   // Enqueues only the ByteRange instructions that match byte c.
-  // context is used (with p) for evaluating empty-width specials.
+  // context is used (with p) for evaluating empty-width specials. 
   // p is the current input position, and t0 is the current thread.
-  void AddToThreadq(Threadq* q, int id0, int c, const StringPiece& context,
+  void AddToThreadq(Threadq* q, int id0, int c, const StringPiece& context, 
                     const char* p, Thread* t0);
 
   // Run runq on byte c, appending new states to nextq.
   // Updates matched_ and match_ as new, better matches are found.
-  // context is used (with p) for evaluating empty-width specials.
-  // p is the position of byte c in the input string for AddToThreadq;
-  // p-1 will be used when processing Match instructions.
+  // context is used (with p) for evaluating empty-width specials. 
+  // p is the position of byte c in the input string for AddToThreadq; 
+  // p-1 will be used when processing Match instructions. 
   // Frees all the threads on runq.
   // If there is a shortcut to the end, returns that shortcut.
-  int Step(Threadq* runq, Threadq* nextq, int c, const StringPiece& context,
-           const char* p);
+  int Step(Threadq* runq, Threadq* nextq, int c, const StringPiece& context, 
+           const char* p); 
 
   // Returns text version of capture information, for debugging.
-  std::string FormatCapture(const char** capture);
+  std::string FormatCapture(const char** capture); 
 
-  void CopyCapture(const char** dst, const char** src) {
-    memmove(dst, src, ncapture_*sizeof src[0]);
-  }
+  void CopyCapture(const char** dst, const char** src) { 
+    memmove(dst, src, ncapture_*sizeof src[0]); 
+  } 
 
-  Prog* prog_;                // underlying program
-  int start_;                 // start instruction in program
-  int ncapture_;              // number of submatches to track
-  bool longest_;              // whether searching for longest match
-  bool endmatch_;             // whether match must end at text.end()
-  const char* btext_;         // beginning of text (for FormatSubmatch)
-  const char* etext_;         // end of text (for endmatch_)
-  Threadq q0_, q1_;           // pre-allocated for Search.
-  PODArray<AddState> stack_;  // pre-allocated for AddToThreadq
-  std::deque<Thread> arena_;  // thread arena
-  Thread* freelist_;          // thread freelist
-  const char** match_;        // best match so far
-  bool matched_;              // any match so far?
+  Prog* prog_;                // underlying program 
+  int start_;                 // start instruction in program 
+  int ncapture_;              // number of submatches to track 
+  bool longest_;              // whether searching for longest match 
+  bool endmatch_;             // whether match must end at text.end() 
+  const char* btext_;         // beginning of text (for FormatSubmatch) 
+  const char* etext_;         // end of text (for endmatch_) 
+  Threadq q0_, q1_;           // pre-allocated for Search. 
+  PODArray<AddState> stack_;  // pre-allocated for AddToThreadq 
+  std::deque<Thread> arena_;  // thread arena 
+  Thread* freelist_;          // thread freelist 
+  const char** match_;        // best match so far 
+  bool matched_;              // any match so far? 
 
   NFA(const NFA&) = delete;
   NFA& operator=(const NFA&) = delete;
@@ -141,34 +141,34 @@ NFA::NFA(Prog* prog) {
   q0_.resize(prog_->size());
   q1_.resize(prog_->size());
   // See NFA::AddToThreadq() for why this is so.
-  int nstack = 2*prog_->inst_count(kInstCapture) +
-               prog_->inst_count(kInstEmptyWidth) +
-               prog_->inst_count(kInstNop) + 1;  // + 1 for start inst
-  stack_ = PODArray<AddState>(nstack);
-  freelist_ = NULL;
+  int nstack = 2*prog_->inst_count(kInstCapture) + 
+               prog_->inst_count(kInstEmptyWidth) + 
+               prog_->inst_count(kInstNop) + 1;  // + 1 for start inst 
+  stack_ = PODArray<AddState>(nstack); 
+  freelist_ = NULL; 
   match_ = NULL;
   matched_ = false;
 }
 
 NFA::~NFA() {
   delete[] match_;
-  for (const Thread& t : arena_)
-    delete[] t.capture;
+  for (const Thread& t : arena_) 
+    delete[] t.capture; 
 }
 
 NFA::Thread* NFA::AllocThread() {
-  Thread* t = freelist_;
-  if (t != NULL) {
-    freelist_ = t->next;
+  Thread* t = freelist_; 
+  if (t != NULL) { 
+    freelist_ = t->next; 
     t->ref = 1;
-    // We don't need to touch t->capture because
-    // the caller will immediately overwrite it.
+    // We don't need to touch t->capture because 
+    // the caller will immediately overwrite it. 
     return t;
   }
-  arena_.emplace_back();
-  t = &arena_.back();
+  arena_.emplace_back(); 
+  t = &arena_.back(); 
   t->ref = 1;
-  t->capture = new const char*[ncapture_];
+  t->capture = new const char*[ncapture_]; 
   return t;
 }
 
@@ -179,37 +179,37 @@ NFA::Thread* NFA::Incref(Thread* t) {
 }
 
 void NFA::Decref(Thread* t) {
-  DCHECK(t != NULL);
+  DCHECK(t != NULL); 
   t->ref--;
   if (t->ref > 0)
     return;
   DCHECK_EQ(t->ref, 0);
-  t->next = freelist_;
-  freelist_ = t;
+  t->next = freelist_; 
+  freelist_ = t; 
 }
 
 // Follows all empty arrows from id0 and enqueues all the states reached.
 // Enqueues only the ByteRange instructions that match byte c.
-// context is used (with p) for evaluating empty-width specials.
+// context is used (with p) for evaluating empty-width specials. 
 // p is the current input position, and t0 is the current thread.
-void NFA::AddToThreadq(Threadq* q, int id0, int c, const StringPiece& context,
+void NFA::AddToThreadq(Threadq* q, int id0, int c, const StringPiece& context, 
                        const char* p, Thread* t0) {
   if (id0 == 0)
     return;
 
-  // Use stack_ to hold our stack of instructions yet to process.
+  // Use stack_ to hold our stack of instructions yet to process. 
   // It was preallocated as follows:
   //   two entries per Capture;
   //   one entry per EmptyWidth; and
   //   one entry per Nop.
   // This reflects the maximum number of stack pushes that each can
   // perform. (Each instruction can be processed at most once.)
-  AddState* stk = stack_.data();
+  AddState* stk = stack_.data(); 
   int nstk = 0;
 
-  stk[nstk++] = {id0, NULL};
+  stk[nstk++] = {id0, NULL}; 
   while (nstk > 0) {
-    DCHECK_LE(nstk, stack_.size());
+    DCHECK_LE(nstk, stack_.size()); 
     AddState a = stk[--nstk];
 
   Loop:
@@ -233,7 +233,7 @@ void NFA::AddToThreadq(Threadq* q, int id0, int c, const StringPiece& context,
     // or we might not.  Even if not, it is necessary to have it,
     // so that we don't revisit id0 during the recursion.
     q->set_new(id, NULL);
-    Thread** tp = &q->get_existing(id);
+    Thread** tp = &q->get_existing(id); 
     int j;
     Thread* t;
     Prog::Inst* ip = prog_->inst(id);
@@ -251,25 +251,25 @@ void NFA::AddToThreadq(Threadq* q, int id0, int c, const StringPiece& context,
       *tp = t;
 
       DCHECK(!ip->last());
-      a = {id+1, NULL};
+      a = {id+1, NULL}; 
       goto Loop;
 
     case kInstNop:
       if (!ip->last())
-        stk[nstk++] = {id+1, NULL};
+        stk[nstk++] = {id+1, NULL}; 
 
       // Continue on.
-      a = {ip->out(), NULL};
+      a = {ip->out(), NULL}; 
       goto Loop;
 
     case kInstCapture:
       if (!ip->last())
-        stk[nstk++] = {id+1, NULL};
+        stk[nstk++] = {id+1, NULL}; 
 
       if ((j=ip->cap()) < ncapture_) {
         // Push a dummy whose only job is to restore t0
         // once we finish exploring this possibility.
-        stk[nstk++] = {0, t0};
+        stk[nstk++] = {0, t0}; 
 
         // Record capture.
         t = AllocThread();
@@ -277,7 +277,7 @@ void NFA::AddToThreadq(Threadq* q, int id0, int c, const StringPiece& context,
         t->capture[j] = p;
         t0 = t;
       }
-      a = {ip->out(), NULL};
+      a = {ip->out(), NULL}; 
       goto Loop;
 
     case kInstByteRange:
@@ -290,32 +290,32 @@ void NFA::AddToThreadq(Threadq* q, int id0, int c, const StringPiece& context,
       if (ExtraDebug)
         fprintf(stderr, " + %d%s\n", id, FormatCapture(t0->capture).c_str());
 
-      if (ip->hint() == 0)
-        break;
-      a = {id+ip->hint(), NULL};
-      goto Loop;
-
-    case kInstMatch:
-      // Save state; will pick up at next byte.
-      t = Incref(t0);
-      *tp = t;
-      if (ExtraDebug)
-        fprintf(stderr, " ! %d%s\n", id, FormatCapture(t0->capture).c_str());
-
+      if (ip->hint() == 0) 
+        break; 
+      a = {id+ip->hint(), NULL}; 
+      goto Loop; 
+ 
+    case kInstMatch: 
+      // Save state; will pick up at next byte. 
+      t = Incref(t0); 
+      *tp = t; 
+      if (ExtraDebug) 
+        fprintf(stderr, " ! %d%s\n", id, FormatCapture(t0->capture).c_str()); 
+ 
     Next:
       if (ip->last())
         break;
-      a = {id+1, NULL};
+      a = {id+1, NULL}; 
       goto Loop;
 
     case kInstEmptyWidth:
       if (!ip->last())
-        stk[nstk++] = {id+1, NULL};
+        stk[nstk++] = {id+1, NULL}; 
 
       // Continue on if we have all the right flag bits.
-      if (ip->empty() & ~Prog::EmptyFlags(context, p))
+      if (ip->empty() & ~Prog::EmptyFlags(context, p)) 
         break;
-      a = {ip->out(), NULL};
+      a = {ip->out(), NULL}; 
       goto Loop;
     }
   }
@@ -323,17 +323,17 @@ void NFA::AddToThreadq(Threadq* q, int id0, int c, const StringPiece& context,
 
 // Run runq on byte c, appending new states to nextq.
 // Updates matched_ and match_ as new, better matches are found.
-// context is used (with p) for evaluating empty-width specials.
-// p is the position of byte c in the input string for AddToThreadq;
-// p-1 will be used when processing Match instructions.
+// context is used (with p) for evaluating empty-width specials. 
+// p is the position of byte c in the input string for AddToThreadq; 
+// p-1 will be used when processing Match instructions. 
 // Frees all the threads on runq.
 // If there is a shortcut to the end, returns that shortcut.
-int NFA::Step(Threadq* runq, Threadq* nextq, int c, const StringPiece& context,
-              const char* p) {
+int NFA::Step(Threadq* runq, Threadq* nextq, int c, const StringPiece& context, 
+              const char* p) { 
   nextq->clear();
 
   for (Threadq::iterator i = runq->begin(); i != runq->end(); ++i) {
-    Thread* t = i->value();
+    Thread* t = i->value(); 
     if (t == NULL)
       continue;
 
@@ -355,7 +355,7 @@ int NFA::Step(Threadq* runq, Threadq* nextq, int c, const StringPiece& context,
         break;
 
       case kInstByteRange:
-        AddToThreadq(nextq, ip->out(), c, context, p, t);
+        AddToThreadq(nextq, ip->out(), c, context, p, t); 
         break;
 
       case kInstAltMatch:
@@ -367,10 +367,10 @@ int NFA::Step(Threadq* runq, Threadq* nextq, int c, const StringPiece& context,
           matched_ = true;
 
           Decref(t);
-          for (++i; i != runq->end(); ++i) {
-            if (i->value() != NULL)
-              Decref(i->value());
-          }
+          for (++i; i != runq->end(); ++i) { 
+            if (i->value() != NULL) 
+              Decref(i->value()); 
+          } 
           runq->clear();
           if (ip->greedy(prog_))
             return ip->out1();
@@ -378,50 +378,50 @@ int NFA::Step(Threadq* runq, Threadq* nextq, int c, const StringPiece& context,
         }
         break;
 
-      case kInstMatch: {
-        // Avoid invoking undefined behavior (arithmetic on a null pointer)
-        // by storing p instead of p-1. (What would the latter even mean?!)
-        // This complements the special case in NFA::Search().
-        if (p == NULL) {
-          CopyCapture(match_, t->capture);
-          match_[1] = p;
-          matched_ = true;
+      case kInstMatch: { 
+        // Avoid invoking undefined behavior (arithmetic on a null pointer) 
+        // by storing p instead of p-1. (What would the latter even mean?!) 
+        // This complements the special case in NFA::Search(). 
+        if (p == NULL) { 
+          CopyCapture(match_, t->capture); 
+          match_[1] = p; 
+          matched_ = true; 
           break;
-        }
+        } 
 
-        if (endmatch_ && p-1 != etext_)
-          break;
-
+        if (endmatch_ && p-1 != etext_) 
+          break; 
+ 
         if (longest_) {
           // Leftmost-longest mode: save this match only if
           // it is either farther to the left or at the same
           // point but longer than an existing match.
           if (!matched_ || t->capture[0] < match_[0] ||
-              (t->capture[0] == match_[0] && p-1 > match_[1])) {
+              (t->capture[0] == match_[0] && p-1 > match_[1])) { 
             CopyCapture(match_, t->capture);
-            match_[1] = p-1;
+            match_[1] = p-1; 
             matched_ = true;
           }
         } else {
           // Leftmost-biased mode: this match is by definition
           // better than what we've already found (see next line).
           CopyCapture(match_, t->capture);
-          match_[1] = p-1;
+          match_[1] = p-1; 
           matched_ = true;
 
           // Cut off the threads that can only find matches
           // worse than the one we just found: don't run the
           // rest of the current Threadq.
           Decref(t);
-          for (++i; i != runq->end(); ++i) {
-            if (i->value() != NULL)
-              Decref(i->value());
-          }
+          for (++i; i != runq->end(); ++i) { 
+            if (i->value() != NULL) 
+              Decref(i->value()); 
+          } 
           runq->clear();
           return 0;
         }
         break;
-      }
+      } 
     }
     Decref(t);
   }
@@ -429,18 +429,18 @@ int NFA::Step(Threadq* runq, Threadq* nextq, int c, const StringPiece& context,
   return 0;
 }
 
-std::string NFA::FormatCapture(const char** capture) {
-  std::string s;
+std::string NFA::FormatCapture(const char** capture) { 
+  std::string s; 
   for (int i = 0; i < ncapture_; i+=2) {
     if (capture[i] == NULL)
-      s += "(?,?)";
+      s += "(?,?)"; 
     else if (capture[i+1] == NULL)
-      s += StringPrintf("(%td,?)",
-                        capture[i] - btext_);
+      s += StringPrintf("(%td,?)", 
+                        capture[i] - btext_); 
     else
-      s += StringPrintf("(%td,%td)",
-                        capture[i] - btext_,
-                        capture[i+1] - btext_);
+      s += StringPrintf("(%td,%td)", 
+                        capture[i] - btext_, 
+                        capture[i+1] - btext_); 
   }
   return s;
 }
@@ -452,7 +452,7 @@ bool NFA::Search(const StringPiece& text, const StringPiece& const_context,
     return false;
 
   StringPiece context = const_context;
-  if (context.data() == NULL)
+  if (context.data() == NULL) 
     context = text;
 
   // Sanity check: make sure that text lies within context.
@@ -488,17 +488,17 @@ bool NFA::Search(const StringPiece& text, const StringPiece& const_context,
   }
 
   match_ = new const char*[ncapture_];
-  memset(match_, 0, ncapture_*sizeof match_[0]);
+  memset(match_, 0, ncapture_*sizeof match_[0]); 
   matched_ = false;
 
   // For debugging prints.
-  btext_ = context.data();
-  // For convenience.
-  etext_ = text.data() + text.size();
+  btext_ = context.data(); 
+  // For convenience. 
+  etext_ = text.data() + text.size(); 
 
   if (ExtraDebug)
     fprintf(stderr, "NFA::Search %s (context: %s) anchored=%d longest=%d\n",
-            std::string(text).c_str(), std::string(context).c_str(), anchored, longest);
+            std::string(text).c_str(), std::string(context).c_str(), anchored, longest); 
 
   // Set up search.
   Threadq* runq = &q0_;
@@ -507,19 +507,19 @@ bool NFA::Search(const StringPiece& text, const StringPiece& const_context,
   nextq->clear();
 
   // Loop over the text, stepping the machine.
-  for (const char* p = text.data();; p++) {
+  for (const char* p = text.data();; p++) { 
     if (ExtraDebug) {
       int c = 0;
-      if (p == btext_)
+      if (p == btext_) 
         c = '^';
-      else if (p > etext_)
+      else if (p > etext_) 
         c = '$';
-      else if (p < etext_)
+      else if (p < etext_) 
         c = p[0] & 0xFF;
 
-      fprintf(stderr, "%c:", c);
+      fprintf(stderr, "%c:", c); 
       for (Threadq::iterator i = runq->begin(); i != runq->end(); ++i) {
-        Thread* t = i->value();
+        Thread* t = i->value(); 
         if (t == NULL)
           continue;
         fprintf(stderr, " %d%s", i->index(), FormatCapture(t->capture).c_str());
@@ -528,14 +528,14 @@ bool NFA::Search(const StringPiece& text, const StringPiece& const_context,
     }
 
     // This is a no-op the first time around the loop because runq is empty.
-    int id = Step(runq, nextq, p < etext_ ? p[0] & 0xFF : -1, context, p);
+    int id = Step(runq, nextq, p < etext_ ? p[0] & 0xFF : -1, context, p); 
     DCHECK_EQ(runq->size(), 0);
     using std::swap;
     swap(nextq, runq);
     nextq->clear();
     if (id != 0) {
       // We're done: full match ahead.
-      p = etext_;
+      p = etext_; 
       for (;;) {
         Prog::Inst* ip = prog_->inst(id);
         switch (ip->opcode()) {
@@ -563,29 +563,29 @@ bool NFA::Search(const StringPiece& text, const StringPiece& const_context,
       break;
     }
 
-    if (p > etext_)
+    if (p > etext_) 
       break;
 
     // Start a new thread if there have not been any matches.
     // (No point in starting a new thread if there have been
     // matches, since it would be to the right of the match
     // we already found.)
-    if (!matched_ && (!anchored || p == text.data())) {
-      // Try to use prefix accel (e.g. memchr) to skip ahead.
-      // The search must be unanchored and there must be zero
-      // possible matches already.
+    if (!matched_ && (!anchored || p == text.data())) { 
+      // Try to use prefix accel (e.g. memchr) to skip ahead. 
+      // The search must be unanchored and there must be zero 
+      // possible matches already. 
       if (!anchored && runq->size() == 0 &&
-          p < etext_ && prog_->can_prefix_accel()) {
-        p = reinterpret_cast<const char*>(prog_->PrefixAccel(p, etext_ - p));
-        if (p == NULL)
-          p = etext_;
+          p < etext_ && prog_->can_prefix_accel()) { 
+        p = reinterpret_cast<const char*>(prog_->PrefixAccel(p, etext_ - p)); 
+        if (p == NULL) 
+          p = etext_; 
       }
 
       Thread* t = AllocThread();
       CopyCapture(t->capture, match_);
       t->capture[0] = p;
-      AddToThreadq(runq, start_, p < etext_ ? p[0] & 0xFF : -1, context, p,
-                   t);
+      AddToThreadq(runq, start_, p < etext_ ? p[0] & 0xFF : -1, context, p, 
+                   t); 
       Decref(t);
     }
 
@@ -596,23 +596,23 @@ bool NFA::Search(const StringPiece& text, const StringPiece& const_context,
       break;
     }
 
-    // Avoid invoking undefined behavior (arithmetic on a null pointer)
-    // by simply not continuing the loop.
-    // This complements the special case in NFA::Step().
-    if (p == NULL) {
-      (void) Step(runq, nextq, -1, context, p);
-      DCHECK_EQ(runq->size(), 0);
-      using std::swap;
-      swap(nextq, runq);
-      nextq->clear();
-      break;
-    }
+    // Avoid invoking undefined behavior (arithmetic on a null pointer) 
+    // by simply not continuing the loop. 
+    // This complements the special case in NFA::Step(). 
+    if (p == NULL) { 
+      (void) Step(runq, nextq, -1, context, p); 
+      DCHECK_EQ(runq->size(), 0); 
+      using std::swap; 
+      swap(nextq, runq); 
+      nextq->clear(); 
+      break; 
+    } 
   }
 
-  for (Threadq::iterator i = runq->begin(); i != runq->end(); ++i) {
-    if (i->value() != NULL)
-      Decref(i->value());
-  }
+  for (Threadq::iterator i = runq->begin(); i != runq->end(); ++i) { 
+    if (i->value() != NULL) 
+      Decref(i->value()); 
+  } 
 
   if (matched_) {
     for (int i = 0; i < nsubmatch; i++)
@@ -621,8 +621,8 @@ bool NFA::Search(const StringPiece& text, const StringPiece& const_context,
                       static_cast<size_t>(match_[2 * i + 1] - match_[2 * i]));
     if (ExtraDebug)
       fprintf(stderr, "match (%td,%td)\n",
-              match_[0] - btext_,
-              match_[1] - btext_);
+              match_[0] - btext_, 
+              match_[1] - btext_); 
     return true;
   }
   return false;
@@ -663,7 +663,7 @@ void Prog::Fanout(SparseArray<int>* fanout) {
   fanout->clear();
   fanout->set_new(start(), 0);
   for (SparseArray<int>::iterator i = fanout->begin(); i != fanout->end(); ++i) {
-    int* count = &i->value();
+    int* count = &i->value(); 
     reachable.clear();
     reachable.insert(i->index());
     for (SparseSet::iterator j = reachable.begin(); j != reachable.end(); ++j) {

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2020, Intel Corporation
+ * Copyright (c) 2015-2020, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -430,65 +430,65 @@ const nfa_dispatch_fn NFATraits<MCSHENG_NFA_16>::has_repeats_other_than_firsts =
 const char *NFATraits<MCSHENG_NFA_16>::name = "Shengy McShengFace 16";
 #endif
 
-template<> struct NFATraits<SHENG_NFA_32> {
-    UNUSED static const char *name;
-    static const NFACategory category = NFA_OTHER;
-    static const u32 stateAlign = 1;
-    static const nfa_dispatch_fn has_accel;
-    static const nfa_dispatch_fn has_repeats;
-    static const nfa_dispatch_fn has_repeats_other_than_firsts;
-};
-const nfa_dispatch_fn NFATraits<SHENG_NFA_32>::has_accel = has_accel_sheng;
-const nfa_dispatch_fn NFATraits<SHENG_NFA_32>::has_repeats = dispatch_false;
-const nfa_dispatch_fn NFATraits<SHENG_NFA_32>::has_repeats_other_than_firsts = dispatch_false;
-#if defined(DUMP_SUPPORT)
-const char *NFATraits<SHENG_NFA_32>::name = "Sheng 32";
-#endif
-
-template<> struct NFATraits<SHENG_NFA_64> {
-    UNUSED static const char *name;
-    static const NFACategory category = NFA_OTHER;
-    static const u32 stateAlign = 1;
-    static const nfa_dispatch_fn has_accel;
-    static const nfa_dispatch_fn has_repeats;
-    static const nfa_dispatch_fn has_repeats_other_than_firsts;
-};
-const nfa_dispatch_fn NFATraits<SHENG_NFA_64>::has_accel = has_accel_sheng;
-const nfa_dispatch_fn NFATraits<SHENG_NFA_64>::has_repeats = dispatch_false;
-const nfa_dispatch_fn NFATraits<SHENG_NFA_64>::has_repeats_other_than_firsts = dispatch_false;
-#if defined(DUMP_SUPPORT)
-const char *NFATraits<SHENG_NFA_64>::name = "Sheng 64";
-#endif
-
-template<> struct NFATraits<MCSHENG_64_NFA_8> {
-    UNUSED static const char *name;
-    static const NFACategory category = NFA_OTHER;
-    static const u32 stateAlign = 1;
-    static const nfa_dispatch_fn has_accel;
-    static const nfa_dispatch_fn has_repeats;
-    static const nfa_dispatch_fn has_repeats_other_than_firsts;
-};
-const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_8>::has_accel = has_accel_mcsheng;
-const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_8>::has_repeats = dispatch_false;
-const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_8>::has_repeats_other_than_firsts = dispatch_false;
-#if defined(DUMP_SUPPORT)
-const char *NFATraits<MCSHENG_64_NFA_8>::name = "Shengy64 McShengFace 8";
-#endif
-
-template<> struct NFATraits<MCSHENG_64_NFA_16> {
-    UNUSED static const char *name;
-    static const NFACategory category = NFA_OTHER;
-    static const u32 stateAlign = 2;
-    static const nfa_dispatch_fn has_accel;
-    static const nfa_dispatch_fn has_repeats;
-    static const nfa_dispatch_fn has_repeats_other_than_firsts;
-};
-const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_16>::has_accel = has_accel_mcsheng;
-const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_16>::has_repeats = dispatch_false;
-const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_16>::has_repeats_other_than_firsts = dispatch_false;
-#if defined(DUMP_SUPPORT)
-const char *NFATraits<MCSHENG_64_NFA_16>::name = "Shengy64 McShengFace 16";
-#endif
+template<> struct NFATraits<SHENG_NFA_32> { 
+    UNUSED static const char *name; 
+    static const NFACategory category = NFA_OTHER; 
+    static const u32 stateAlign = 1; 
+    static const nfa_dispatch_fn has_accel; 
+    static const nfa_dispatch_fn has_repeats; 
+    static const nfa_dispatch_fn has_repeats_other_than_firsts; 
+}; 
+const nfa_dispatch_fn NFATraits<SHENG_NFA_32>::has_accel = has_accel_sheng; 
+const nfa_dispatch_fn NFATraits<SHENG_NFA_32>::has_repeats = dispatch_false; 
+const nfa_dispatch_fn NFATraits<SHENG_NFA_32>::has_repeats_other_than_firsts = dispatch_false; 
+#if defined(DUMP_SUPPORT) 
+const char *NFATraits<SHENG_NFA_32>::name = "Sheng 32"; 
+#endif 
+ 
+template<> struct NFATraits<SHENG_NFA_64> { 
+    UNUSED static const char *name; 
+    static const NFACategory category = NFA_OTHER; 
+    static const u32 stateAlign = 1; 
+    static const nfa_dispatch_fn has_accel; 
+    static const nfa_dispatch_fn has_repeats; 
+    static const nfa_dispatch_fn has_repeats_other_than_firsts; 
+}; 
+const nfa_dispatch_fn NFATraits<SHENG_NFA_64>::has_accel = has_accel_sheng; 
+const nfa_dispatch_fn NFATraits<SHENG_NFA_64>::has_repeats = dispatch_false; 
+const nfa_dispatch_fn NFATraits<SHENG_NFA_64>::has_repeats_other_than_firsts = dispatch_false; 
+#if defined(DUMP_SUPPORT) 
+const char *NFATraits<SHENG_NFA_64>::name = "Sheng 64"; 
+#endif 
+ 
+template<> struct NFATraits<MCSHENG_64_NFA_8> { 
+    UNUSED static const char *name; 
+    static const NFACategory category = NFA_OTHER; 
+    static const u32 stateAlign = 1; 
+    static const nfa_dispatch_fn has_accel; 
+    static const nfa_dispatch_fn has_repeats; 
+    static const nfa_dispatch_fn has_repeats_other_than_firsts; 
+}; 
+const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_8>::has_accel = has_accel_mcsheng; 
+const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_8>::has_repeats = dispatch_false; 
+const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_8>::has_repeats_other_than_firsts = dispatch_false; 
+#if defined(DUMP_SUPPORT) 
+const char *NFATraits<MCSHENG_64_NFA_8>::name = "Shengy64 McShengFace 8"; 
+#endif 
+ 
+template<> struct NFATraits<MCSHENG_64_NFA_16> { 
+    UNUSED static const char *name; 
+    static const NFACategory category = NFA_OTHER; 
+    static const u32 stateAlign = 2; 
+    static const nfa_dispatch_fn has_accel; 
+    static const nfa_dispatch_fn has_repeats; 
+    static const nfa_dispatch_fn has_repeats_other_than_firsts; 
+}; 
+const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_16>::has_accel = has_accel_mcsheng; 
+const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_16>::has_repeats = dispatch_false; 
+const nfa_dispatch_fn NFATraits<MCSHENG_64_NFA_16>::has_repeats_other_than_firsts = dispatch_false; 
+#if defined(DUMP_SUPPORT) 
+const char *NFATraits<MCSHENG_64_NFA_16>::name = "Shengy64 McShengFace 16"; 
+#endif 
 } // namespace
 
 #if defined(DUMP_SUPPORT)

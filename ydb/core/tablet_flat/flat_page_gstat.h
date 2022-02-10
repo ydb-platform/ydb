@@ -19,7 +19,7 @@ namespace NPage {
             ui16 Pad0_ = 0;
             ui32 Pad1_ = 0;
             ui64 Items = 0;
-        } Y_PACKED;
+        } Y_PACKED; 
 
         struct TItem {
             ui64 Step_;
@@ -33,7 +33,7 @@ namespace NPage {
             ui64 GetBytes() const {
                 return Bytes_;
             }
-        } Y_PACKED;
+        } Y_PACKED; 
 
         static_assert(sizeof(THeader) == 16, "Invalid THeader size");
         static_assert(sizeof(TItem) == 24, "Invalid TItem size");

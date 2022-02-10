@@ -3,7 +3,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <google/protobuf/descriptor.h>
+#include <google/protobuf/descriptor.h> 
 
 Y_UNIT_TEST_SUITE(ProtobufIsEqual) {
     const ::google::protobuf::Descriptor* Descr = TSampleForIsEqual::descriptor();

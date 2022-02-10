@@ -581,7 +581,7 @@ namespace NTabletPipe {
                 if (!Buffer) {
                     Y_VERIFY(Event, "Sending an empty event without a buffer");
                     TAllocChunkSerializer serializer;
-                    Event->SerializeToArcadiaStream(&serializer);
+                    Event->SerializeToArcadiaStream(&serializer); 
                     Buffer = serializer.Release(Event->IsExtendedFormat());
                 }
 

@@ -11,9 +11,9 @@
 
 template <class K, class L, class A>
 class TSet: public std::set<K, L, TReboundAllocator<A, K>> {
-public:
+public: 
     using TBase = std::set<K, L, TReboundAllocator<A, K>>;
-    using TBase::TBase;
+    using TBase::TBase; 
 
     inline explicit operator bool() const noexcept {
         return !this->empty();
@@ -27,9 +27,9 @@ public:
 
 template <class K, class L, class A>
 class TMultiSet: public std::multiset<K, L, TReboundAllocator<A, K>> {
-public:
+public: 
     using TBase = std::multiset<K, L, TReboundAllocator<A, K>>;
-    using TBase::TBase;
+    using TBase::TBase; 
 
     inline explicit operator bool() const noexcept {
         return !this->empty();

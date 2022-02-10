@@ -536,22 +536,22 @@ class ThrowingValue : private exceptions_internal::TrackedObject {
   }
 
   // Memory management operators
-  static void* operator new(size_t s) noexcept(
-      IsSpecified(TypeSpec::kNoThrowNew)) {
-    if (!IsSpecified(TypeSpec::kNoThrowNew)) {
-      exceptions_internal::MaybeThrow(ABSL_PRETTY_FUNCTION, true);
-    }
-    return ::operator new(s);
-  }
-
-  static void* operator new[](size_t s) noexcept(
-      IsSpecified(TypeSpec::kNoThrowNew)) {
-    if (!IsSpecified(TypeSpec::kNoThrowNew)) {
-      exceptions_internal::MaybeThrow(ABSL_PRETTY_FUNCTION, true);
-    }
-    return ::operator new[](s);
-  }
-
+  static void* operator new(size_t s) noexcept( 
+      IsSpecified(TypeSpec::kNoThrowNew)) { 
+    if (!IsSpecified(TypeSpec::kNoThrowNew)) { 
+      exceptions_internal::MaybeThrow(ABSL_PRETTY_FUNCTION, true); 
+    } 
+    return ::operator new(s); 
+  } 
+ 
+  static void* operator new[](size_t s) noexcept( 
+      IsSpecified(TypeSpec::kNoThrowNew)) { 
+    if (!IsSpecified(TypeSpec::kNoThrowNew)) { 
+      exceptions_internal::MaybeThrow(ABSL_PRETTY_FUNCTION, true); 
+    } 
+    return ::operator new[](s); 
+  } 
+ 
   template <typename... Args>
   static void* operator new(size_t s, Args&&... args) noexcept(
       IsSpecified(TypeSpec::kNoThrowNew)) {
@@ -736,7 +736,7 @@ class ThrowingAllocator : private exceptions_internal::TrackedObject {
   ThrowingAllocator select_on_container_copy_construction() noexcept(
       IsSpecified(AllocSpec::kNoThrowAllocate)) {
     ReadStateAndMaybeThrow(ABSL_PRETTY_FUNCTION);
-    return *this;
+    return *this; 
   }
 
   template <typename U>

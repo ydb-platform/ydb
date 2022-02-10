@@ -10,7 +10,7 @@
 #include <util/stream/output.h>
 #include <util/stream/str.h>
 #include <util/digest/numeric.h>
-#include <google/protobuf/message.h>
+#include <google/protobuf/message.h> 
 
 #include "yql_issue_id.h"
 

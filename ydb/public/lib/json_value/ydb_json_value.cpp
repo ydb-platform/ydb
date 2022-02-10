@@ -606,7 +606,7 @@ namespace {
                 BuildTypeInner(typeBuilder);
                 TypeParser.CloseDict();
                 typeBuilder.EndDict();
-                break;
+                break; 
             default:
                 ThrowFatalError(TStringBuilder() << "Unsupported type kind: " << TypeParser.GetKind());
             }

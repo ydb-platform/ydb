@@ -43,7 +43,7 @@ namespace boost { namespace fusion
         transform_type f;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(transform_view_iterator& operator= (transform_view_iterator const&))
+        BOOST_DELETED_FUNCTION(transform_view_iterator& operator= (transform_view_iterator const&)) 
     };
 
     // Binary Version
@@ -70,7 +70,7 @@ namespace boost { namespace fusion
         transform_type f;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(transform_view_iterator2& operator= (transform_view_iterator2 const&))
+        BOOST_DELETED_FUNCTION(transform_view_iterator2& operator= (transform_view_iterator2 const&)) 
     };
 }}
 

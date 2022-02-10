@@ -68,7 +68,7 @@ BELONGS ya.make
         CHANGES.txt [2776:2776]
 
 KEEP     BSD-3-Clause         6aa235708ac9f5dd8e5c6ac415fc5837
-BELONGS ya.make
+BELONGS ya.make 
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: BSD-3-Clause

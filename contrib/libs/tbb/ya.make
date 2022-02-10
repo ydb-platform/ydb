@@ -65,31 +65,31 @@ IF (CLANG OR CLANG_CL)
     ENDIF()
 ENDIF()
 
-IF (OS_WINDOWS)
+IF (OS_WINDOWS) 
     CFLAGS(
         -DUSE_WINTHREAD
     )
-ELSE()
+ELSE() 
     CFLAGS(
         -DUSE_PTHREAD
     )
-ENDIF()
-
-IF (GCC)
-    CFLAGS(
-        -flifetime-dse=1
-        -mrtm
-    )
-ENDIF()
-
-IF (NOT ARCH_ARM64)
-    CFLAGS(
+ENDIF() 
+ 
+IF (GCC) 
+    CFLAGS( 
+        -flifetime-dse=1 
+        -mrtm 
+    ) 
+ENDIF() 
+ 
+IF (NOT ARCH_ARM64) 
+    CFLAGS( 
         -D__TBB_USE_ITT_NOTIFY
-        -DDO_ITT_NOTIFY
-    )
-    SRCS(
-        src/tbb/itt_notify.cpp
-    )
-ENDIF()
-
+        -DDO_ITT_NOTIFY 
+    ) 
+    SRCS( 
+        src/tbb/itt_notify.cpp 
+    ) 
+ENDIF() 
+ 
 END()

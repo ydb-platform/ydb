@@ -138,21 +138,21 @@ uint128::uint128(float v) : uint128(MakeUint128FromFloat(v)) {}
 uint128::uint128(double v) : uint128(MakeUint128FromFloat(v)) {}
 uint128::uint128(long double v) : uint128(MakeUint128FromFloat(v)) {}
 
-#if !defined(ABSL_HAVE_INTRINSIC_INT128)
+#if !defined(ABSL_HAVE_INTRINSIC_INT128) 
 uint128 operator/(uint128 lhs, uint128 rhs) {
   uint128 quotient = 0;
   uint128 remainder = 0;
   DivModImpl(lhs, rhs, &quotient, &remainder);
   return quotient;
 }
-
+ 
 uint128 operator%(uint128 lhs, uint128 rhs) {
   uint128 quotient = 0;
   uint128 remainder = 0;
   DivModImpl(lhs, rhs, &quotient, &remainder);
   return remainder;
 }
-#endif  // !defined(ABSL_HAVE_INTRINSIC_INT128)
+#endif  // !defined(ABSL_HAVE_INTRINSIC_INT128) 
 
 namespace {
 

@@ -145,7 +145,7 @@ namespace boost { namespace phoenix
 
         BOOST_PROTO_BASIC_EXTENDS(expr_type, actor<Expr>, phoenix_domain)
         BOOST_PROTO_EXTENDS_SUBSCRIPT()
-        BOOST_PROTO_EXTENDS_ASSIGN_()
+        BOOST_PROTO_EXTENDS_ASSIGN_() 
 
         template <typename Sig>
         struct result;
@@ -224,8 +224,8 @@ namespace boost { namespace phoenix
             return phoenix::eval(*this, phoenix::context(env, default_actions()));
         }
 #endif
-
-        BOOST_DELETED_FUNCTION(actor& operator=(actor const&))
+ 
+        BOOST_DELETED_FUNCTION(actor& operator=(actor const&)) 
     };
 }}
 

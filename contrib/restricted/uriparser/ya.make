@@ -17,13 +17,13 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-PEERDIR(
-    contrib/libs/libc_compat
-)
-
+PEERDIR( 
+    contrib/libs/libc_compat 
+) 
+ 
 ADDINCL(
-    GLOBAL contrib/restricted/uriparser/include
-    contrib/restricted/uriparser
+    GLOBAL contrib/restricted/uriparser/include 
+    contrib/restricted/uriparser 
 )
 
 NO_COMPILER_WARNINGS()

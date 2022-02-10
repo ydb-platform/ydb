@@ -2,7 +2,7 @@
 
 #include <util/system/yassert.h>
 
-namespace NTesting {
+namespace NTesting { 
     ////////////////////////////////////////////////////////////////////////////////
 
     // Below there is a serie of probe classes for testing construction/destruction copying/moving of class.
@@ -137,4 +137,4 @@ namespace NTesting {
             : State(nullptr)
         {}
     };
-} // namespace NTesting
+} // namespace NTesting 

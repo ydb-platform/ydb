@@ -28,7 +28,7 @@ protected:
             , freepos(0)
         {
         }
-        seg_inf(T* d, size_t sz)
+        seg_inf(T* d, size_t sz) 
             : data(d)
             , _size(sz)
             , freepos(0)

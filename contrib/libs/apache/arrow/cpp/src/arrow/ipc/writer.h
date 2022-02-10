@@ -60,23 +60,23 @@ struct IpcPayload {
   int64_t body_length = 0;
 };
 
-struct WriteStats {
-  /// Number of IPC messages written.
-  int64_t num_messages = 0;
-  /// Number of record batches written.
-  int64_t num_record_batches = 0;
-  /// Number of dictionary batches written.
-  ///
-  /// Note: num_dictionary_batches >= num_dictionary_deltas + num_replaced_dictionaries
-  int64_t num_dictionary_batches = 0;
-
-  /// Number of dictionary deltas written.
-  int64_t num_dictionary_deltas = 0;
-  /// Number of replaced dictionaries (i.e. where a dictionary batch replaces
-  /// an existing dictionary with an unrelated new dictionary).
-  int64_t num_replaced_dictionaries = 0;
-};
-
+struct WriteStats { 
+  /// Number of IPC messages written. 
+  int64_t num_messages = 0; 
+  /// Number of record batches written. 
+  int64_t num_record_batches = 0; 
+  /// Number of dictionary batches written. 
+  /// 
+  /// Note: num_dictionary_batches >= num_dictionary_deltas + num_replaced_dictionaries 
+  int64_t num_dictionary_batches = 0; 
+ 
+  /// Number of dictionary deltas written. 
+  int64_t num_dictionary_deltas = 0; 
+  /// Number of replaced dictionaries (i.e. where a dictionary batch replaces 
+  /// an existing dictionary with an unrelated new dictionary). 
+  int64_t num_replaced_dictionaries = 0; 
+}; 
+ 
 /// \class RecordBatchWriter
 /// \brief Abstract interface for writing a stream of record batches
 class ARROW_EXPORT RecordBatchWriter {
@@ -96,25 +96,25 @@ class ARROW_EXPORT RecordBatchWriter {
 
   /// \brief Write Table with a particular chunksize
   /// \param[in] table table to write
-  /// \param[in] max_chunksize maximum length of table chunks. To indicate
-  /// that no maximum should be enforced, pass -1.
+  /// \param[in] max_chunksize maximum length of table chunks. To indicate 
+  /// that no maximum should be enforced, pass -1. 
   /// \return Status
-  virtual Status WriteTable(const Table& table, int64_t max_chunksize);
+  virtual Status WriteTable(const Table& table, int64_t max_chunksize); 
 
   /// \brief Perform any logic necessary to finish the stream
   ///
   /// \return Status
   virtual Status Close() = 0;
-
-  /// \brief Return current write statistics
-  virtual WriteStats stats() const = 0;
+ 
+  /// \brief Return current write statistics 
+  virtual WriteStats stats() const = 0; 
 };
 
-/// \defgroup record-batch-writer-factories Functions for creating RecordBatchWriter
-/// instances
-///
-/// @{
-
+/// \defgroup record-batch-writer-factories Functions for creating RecordBatchWriter 
+/// instances 
+/// 
+/// @{ 
+ 
 /// Create a new IPC stream writer from stream sink and schema. User is
 /// responsible for closing the actual OutputStream.
 ///
@@ -165,14 +165,14 @@ Result<std::shared_ptr<RecordBatchWriter>> MakeFileWriter(
     const IpcWriteOptions& options = IpcWriteOptions::Defaults(),
     const std::shared_ptr<const KeyValueMetadata>& metadata = NULLPTR);
 
-/// @}
-
-ARROW_DEPRECATED("Use MakeStreamWriter")
-ARROW_EXPORT
-Result<std::shared_ptr<RecordBatchWriter>> NewStreamWriter(
-    io::OutputStream* sink, const std::shared_ptr<Schema>& schema,
-    const IpcWriteOptions& options = IpcWriteOptions::Defaults());
-
+/// @} 
+ 
+ARROW_DEPRECATED("Use MakeStreamWriter") 
+ARROW_EXPORT 
+Result<std::shared_ptr<RecordBatchWriter>> NewStreamWriter( 
+    io::OutputStream* sink, const std::shared_ptr<Schema>& schema, 
+    const IpcWriteOptions& options = IpcWriteOptions::Defaults()); 
+ 
 ARROW_DEPRECATED("Use MakeFileWriter")
 ARROW_EXPORT
 Result<std::shared_ptr<RecordBatchWriter>> NewFileWriter(

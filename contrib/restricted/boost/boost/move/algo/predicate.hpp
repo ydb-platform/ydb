@@ -28,10 +28,10 @@ struct antistable
       : m_comp(comp)
    {}
 
-   antistable(const antistable & other)
-      : m_comp(other.m_comp)
-   {}
-
+   antistable(const antistable & other) 
+      : m_comp(other.m_comp) 
+   {} 
+ 
    template<class U, class V>
    bool operator()(const U &u, const V & v)
    {  return !m_comp(v, u);  }

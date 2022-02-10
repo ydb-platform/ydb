@@ -15,7 +15,7 @@ namespace NActors {
 
     class ISerializerToStream {
     public:
-        virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
+        virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0; 
     };
 
     class IEventBase
@@ -35,7 +35,7 @@ namespace NActors {
             return 0;
         }
         virtual ui32 Type() const = 0;
-        virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0;
+        virtual bool SerializeToArcadiaStream(TChunkSerializer*) const = 0; 
         virtual bool IsSerializable() const = 0;
         virtual bool IsExtendedFormat() const {
             return false;
@@ -318,7 +318,7 @@ namespace NActors {
     TString ToStringHeader() const override {                           \
         return TString(header);                                         \
     }                                                                   \
-    bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
+    bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \ 
         Y_FAIL("Local event " #eventType " is not serializable");       \
     }                                                                   \
     static IEventBase* Load(NActors::TEventSerializedData*) {           \
@@ -332,7 +332,7 @@ namespace NActors {
     TString ToStringHeader() const override {                           \
         return TString(header);                                         \
     }                                                                   \
-    bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \
+    bool SerializeToArcadiaStream(NActors::TChunkSerializer*) const override { \ 
         return true;                                                    \
     }                                                                   \
     static IEventBase* Load(NActors::TEventSerializedData*) {           \

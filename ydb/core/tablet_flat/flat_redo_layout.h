@@ -27,18 +27,18 @@ namespace NRedo {
         ui32 RootId;
         ui32 Size;
         ERedo Op;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     struct TEvUpdate_Legacy {
         TChunk_Legacy OpHeader;
         ui32 Keys;
         ui32 Ops;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     struct TEvErase_Legacy {
         TChunk_Legacy OpHeader;
         ui32 Keys;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     struct TEvFlush_Legacy {
         TChunk_Legacy Hdr;
@@ -46,7 +46,7 @@ namespace NRedo {
         ui64 TxStamp;
         i64 Epoch;
         ui64 Unused1_;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     /*_ New generic, TLV based, log */
 
@@ -55,14 +55,14 @@ namespace NRedo {
         ui8 Pad0_;
         ui16 Pad1_;
         ui32 Size;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     struct TEvBegin_v0 {
         TChunk Label;
 
         ui32 Tail;
         ui32 Head;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     struct TEvBegin_v1 {
         TChunk Label;
@@ -71,12 +71,12 @@ namespace NRedo {
         ui32 Head;
         ui64 Serial;
         ui64 Stamp;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     struct TEvAnnex {
         TChunk Label;
         ui32 Items; /* Followed by array of NPageCollection::TGlobId */
-    } Y_PACKED;
+    } Y_PACKED; 
 
     struct TEvUpdate {
         TChunk Label;
@@ -86,12 +86,12 @@ namespace NRedo {
         ui8 Pad0_;
         ui16 Keys;
         ui16 Ops;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     struct TEvUpdateV {
         ui64 RowVersionStep;
         ui64 RowVersionTxId;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     struct TEvUpdateTx {
         ui64 TxId;
@@ -104,7 +104,7 @@ namespace NRedo {
         ui32 Pad0_;
         ui64 Stamp;
         i64 Epoch;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     struct TEvRemoveTx {
         TChunk Label;
@@ -132,13 +132,13 @@ namespace NRedo {
 
         ui16 TypeId;
         ui32 Size;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     struct TUpdate {
         NTable::TCellOp CellOp;
         NTable::TTag Tag;
         TValue Val;
-    } Y_PACKED;
+    } Y_PACKED; 
 
     #pragma pack(pop)
 

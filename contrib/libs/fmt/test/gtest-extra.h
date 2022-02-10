@@ -9,8 +9,8 @@
 #define FMT_GTEST_EXTRA_H_
 
 #include <string>
-
-#include "fmt/os.h"
+ 
+#include "fmt/os.h" 
 #include <gmock/gmock.h>
 
 #define FMT_TEST_THROW_(statement, expected_exception, expected_message, fail) \
@@ -139,20 +139,20 @@ class SuppressAssert {
     EXPECT_SYSTEM_ERROR(SUPPRESS_ASSERT(statement), error_code, message)
 
 // Attempts to read count characters from a file.
-std::string read(fmt::file& f, size_t count);
+std::string read(fmt::file& f, size_t count); 
 
 #  define EXPECT_READ(file, expected_content) \
-    EXPECT_EQ(expected_content, \
-              read(file, fmt::string_view(expected_content).size()))
+    EXPECT_EQ(expected_content, \ 
+              read(file, fmt::string_view(expected_content).size())) 
 
 #else
-#  define EXPECT_WRITE(file, statement, expected_output) \
-    do {                                                 \
-      (void)(file);                                      \
-      (void)(statement);                                 \
-      (void)(expected_output);                           \
-      SUCCEED();                                         \
-    } while (false)
+#  define EXPECT_WRITE(file, statement, expected_output) \ 
+    do {                                                 \ 
+      (void)(file);                                      \ 
+      (void)(statement);                                 \ 
+      (void)(expected_output);                           \ 
+      SUCCEED();                                         \ 
+    } while (false) 
 #endif  // FMT_USE_FCNTL
 
 template <typename Mock> struct ScopedMock : testing::StrictMock<Mock> {

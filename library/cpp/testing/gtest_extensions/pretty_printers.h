@@ -39,8 +39,8 @@
  * }
  * ```
  */
-#define Y_GTEST_ARCADIA_PRINTER(T) \
-    void PrintTo(const T& value, std::ostream* stream) {   \
+#define Y_GTEST_ARCADIA_PRINTER(T) \ 
+    void PrintTo(const T& value, std::ostream* stream) {   \ 
         ::TString ss;                \
         ::TStringOutput s{ss};       \
         s << value;                  \
@@ -48,18 +48,18 @@
     }
 
 
-template <typename TCharType, typename TCharTraits>
-void PrintTo(const TBasicString<TCharType, TCharTraits>& value, std::ostream* stream) {
+template <typename TCharType, typename TCharTraits> 
+void PrintTo(const TBasicString<TCharType, TCharTraits>& value, std::ostream* stream) { 
     *stream << value.Quote().c_str();
 }
 
-template <typename TCharType, typename TCharTraits>
-void PrintTo(TBasicStringBuf<TCharType, TCharTraits> value, std::ostream* stream) {
-    *stream << TBasicString<TCharType, TCharTraits>{value}.Quote().c_str();
+template <typename TCharType, typename TCharTraits> 
+void PrintTo(TBasicStringBuf<TCharType, TCharTraits> value, std::ostream* stream) { 
+    *stream << TBasicString<TCharType, TCharTraits>{value}.Quote().c_str(); 
 }
 
 template <typename T, typename P>
-void PrintTo(const TMaybe<T, P>& value, std::ostream* stream) {
+void PrintTo(const TMaybe<T, P>& value, std::ostream* stream) { 
     if (value.Defined()) {
         ::testing::internal::UniversalPrint(value.GetRef(), stream);
     } else {
@@ -67,7 +67,7 @@ void PrintTo(const TMaybe<T, P>& value, std::ostream* stream) {
     }
 }
 
-inline void PrintTo(TNothing /* value */, std::ostream* stream) {
+inline void PrintTo(TNothing /* value */, std::ostream* stream) { 
     *stream << "nothing";
 }
 

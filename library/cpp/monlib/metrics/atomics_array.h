@@ -3,8 +3,8 @@
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 
-#include <atomic>
-
+#include <atomic> 
+ 
 namespace NMonitoring {
     class TAtomicsArray {
     public:

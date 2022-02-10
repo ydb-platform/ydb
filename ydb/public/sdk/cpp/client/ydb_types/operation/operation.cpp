@@ -79,8 +79,8 @@ TString TOperation::ToJsonString() const {
     using namespace google::protobuf::util;
 
     TString json;
-    auto status = MessageToJsonString(GetProto(), &json, JsonPrintOptions());
-    Y_VERIFY(status.ok());
+    auto status = MessageToJsonString(GetProto(), &json, JsonPrintOptions()); 
+    Y_VERIFY(status.ok()); 
     return json;
 }
 

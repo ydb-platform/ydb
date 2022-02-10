@@ -26,7 +26,7 @@
 #include <grpc/support/log.h>
 #include "src/core/lib/iomgr/pollset_custom.h"
 
-#error #include <uv.h>
+#error #include <uv.h> 
 
 /* Indicates that grpc_pollset_work should run an iteration of the UV loop
    before running callbacks. This defaults to 1, and should be disabled if

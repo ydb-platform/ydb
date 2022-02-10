@@ -1,14 +1,14 @@
 RECURSE(
-    clickhouse
-    deprecated
-    go
-    java
+    clickhouse 
+    deprecated 
+    go 
+    java 
     libs
-    nginx
+    nginx 
     node_modules
     phantom/pd/ssl
-    python
+    python 
     restricted
-    tests
-    tools
+    tests 
+    tools 
 )

@@ -26,7 +26,7 @@ CFLAGS(
 
 END()
 
-IF (NOT DLL_FOR)
+IF (NOT DLL_FOR) 
     RECURSE(
         default
         dynamic

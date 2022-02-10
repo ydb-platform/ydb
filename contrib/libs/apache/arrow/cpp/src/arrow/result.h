@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include <cstddef>
+#include <cstddef> 
 #include <new>
 #include <string>
 #include <type_traits>
@@ -29,9 +29,9 @@
 
 namespace arrow {
 
-template <typename>
-struct EnsureResult;
-
+template <typename> 
+struct EnsureResult; 
+ 
 namespace internal {
 
 #if __cplusplus >= 201703L
@@ -317,7 +317,7 @@ class ARROW_MUST_USE_TYPE Result : public util::EqualityComparable<Result<T>> {
     return ValueUnsafe();
   }
   const T& operator*() const& { return ValueOrDie(); }
-  const T* operator->() const { return &ValueOrDie(); }
+  const T* operator->() const { return &ValueOrDie(); } 
 
   /// Gets a mutable reference to the stored `T` value.
   ///
@@ -332,7 +332,7 @@ class ARROW_MUST_USE_TYPE Result : public util::EqualityComparable<Result<T>> {
     return ValueUnsafe();
   }
   T& operator*() & { return ValueOrDie(); }
-  T* operator->() { return &ValueOrDie(); }
+  T* operator->() { return &ValueOrDie(); } 
 
   /// Moves and returns the internally-stored `T` value.
   ///
@@ -385,7 +385,7 @@ class ARROW_MUST_USE_TYPE Result : public util::EqualityComparable<Result<T>> {
   /// Apply a function to the internally stored value to produce a new result or propagate
   /// the stored error.
   template <typename M>
-  typename EnsureResult<typename std::result_of<M && (T)>::type>::type Map(M&& m) && {
+  typename EnsureResult<typename std::result_of<M && (T)>::type>::type Map(M&& m) && { 
     if (!ok()) {
       return status();
     }
@@ -395,36 +395,36 @@ class ARROW_MUST_USE_TYPE Result : public util::EqualityComparable<Result<T>> {
   /// Apply a function to the internally stored value to produce a new result or propagate
   /// the stored error.
   template <typename M>
-  typename EnsureResult<typename std::result_of<M && (const T&)>::type>::type Map(
-      M&& m) const& {
+  typename EnsureResult<typename std::result_of<M && (const T&)>::type>::type Map( 
+      M&& m) const& { 
     if (!ok()) {
       return status();
     }
     return std::forward<M>(m)(ValueUnsafe());
   }
 
-  /// Cast the internally stored value to produce a new result or propagate the stored
-  /// error.
-  template <typename U, typename E = typename std::enable_if<
-                            std::is_constructible<U, T>::value>::type>
-  Result<U> As() && {
-    if (!ok()) {
-      return status();
-    }
-    return U(MoveValueUnsafe());
-  }
-
-  /// Cast the internally stored value to produce a new result or propagate the stored
-  /// error.
-  template <typename U, typename E = typename std::enable_if<
-                            std::is_constructible<U, const T&>::value>::type>
-  Result<U> As() const& {
-    if (!ok()) {
-      return status();
-    }
-    return U(ValueUnsafe());
-  }
-
+  /// Cast the internally stored value to produce a new result or propagate the stored 
+  /// error. 
+  template <typename U, typename E = typename std::enable_if< 
+                            std::is_constructible<U, T>::value>::type> 
+  Result<U> As() && { 
+    if (!ok()) { 
+      return status(); 
+    } 
+    return U(MoveValueUnsafe()); 
+  } 
+ 
+  /// Cast the internally stored value to produce a new result or propagate the stored 
+  /// error. 
+  template <typename U, typename E = typename std::enable_if< 
+                            std::is_constructible<U, const T&>::value>::type> 
+  Result<U> As() const& { 
+    if (!ok()) { 
+      return status(); 
+    } 
+    return U(ValueUnsafe()); 
+  } 
+ 
   const T& ValueUnsafe() const& {
     return *internal::launder(reinterpret_cast<const T*>(&data_));
   }
@@ -448,16 +448,16 @@ class ARROW_MUST_USE_TYPE Result : public util::EqualityComparable<Result<T>> {
 
   void Destroy() {
     if (ARROW_PREDICT_TRUE(status_.ok())) {
-      static_assert(offsetof(Result<T>, status_) == 0,
-                    "Status is guaranteed to be at the start of Result<>");
+      static_assert(offsetof(Result<T>, status_) == 0, 
+                    "Status is guaranteed to be at the start of Result<>"); 
       internal::launder(reinterpret_cast<const T*>(&data_))->~T();
     }
   }
 };
 
-#define ARROW_ASSIGN_OR_RAISE_IMPL(result_name, lhs, rexpr)                              \
-  auto&& result_name = (rexpr);                                                          \
-  ARROW_RETURN_IF_(!(result_name).ok(), (result_name).status(), ARROW_STRINGIFY(rexpr)); \
+#define ARROW_ASSIGN_OR_RAISE_IMPL(result_name, lhs, rexpr)                              \ 
+  auto&& result_name = (rexpr);                                                          \ 
+  ARROW_RETURN_IF_(!(result_name).ok(), (result_name).status(), ARROW_STRINGIFY(rexpr)); \ 
   lhs = std::move(result_name).ValueUnsafe();
 
 #define ARROW_ASSIGN_OR_RAISE_NAME(x, y) ARROW_CONCAT(x, y)
@@ -475,14 +475,14 @@ class ARROW_MUST_USE_TYPE Result : public util::EqualityComparable<Result<T>> {
 /// WARNING: ARROW_ASSIGN_OR_RAISE expands into multiple statements;
 /// it cannot be used in a single statement (e.g. as the body of an if
 /// statement without {})!
-///
-/// WARNING: ARROW_ASSIGN_OR_RAISE `std::move`s its right operand. If you have
-/// an lvalue Result which you *don't* want to move out of cast appropriately.
-///
-/// WARNING: ARROW_ASSIGN_OR_RAISE is not a single expression; it will not
-/// maintain lifetimes of all temporaries in `rexpr` (e.g.
-/// `ARROW_ASSIGN_OR_RAISE(auto x, MakeTemp().GetResultRef());`
-/// will most likely segfault)!
+/// 
+/// WARNING: ARROW_ASSIGN_OR_RAISE `std::move`s its right operand. If you have 
+/// an lvalue Result which you *don't* want to move out of cast appropriately. 
+/// 
+/// WARNING: ARROW_ASSIGN_OR_RAISE is not a single expression; it will not 
+/// maintain lifetimes of all temporaries in `rexpr` (e.g. 
+/// `ARROW_ASSIGN_OR_RAISE(auto x, MakeTemp().GetResultRef());` 
+/// will most likely segfault)! 
 #define ARROW_ASSIGN_OR_RAISE(lhs, rexpr)                                              \
   ARROW_ASSIGN_OR_RAISE_IMPL(ARROW_ASSIGN_OR_RAISE_NAME(_error_or_value, __COUNTER__), \
                              lhs, rexpr);
@@ -490,7 +490,7 @@ class ARROW_MUST_USE_TYPE Result : public util::EqualityComparable<Result<T>> {
 namespace internal {
 
 template <typename T>
-inline const Status& GenericToStatus(const Result<T>& res) {
+inline const Status& GenericToStatus(const Result<T>& res) { 
   return res.status();
 }
 
@@ -501,19 +501,19 @@ inline Status GenericToStatus(Result<T>&& res) {
 
 }  // namespace internal
 
-template <typename T, typename R = typename EnsureResult<T>::type>
-R ToResult(T t) {
-  return R(std::move(t));
+template <typename T, typename R = typename EnsureResult<T>::type> 
+R ToResult(T t) { 
+  return R(std::move(t)); 
 }
 
-template <typename T>
-struct EnsureResult {
-  using type = Result<T>;
-};
-
-template <typename T>
-struct EnsureResult<Result<T>> {
-  using type = Result<T>;
-};
-
+template <typename T> 
+struct EnsureResult { 
+  using type = Result<T>; 
+}; 
+ 
+template <typename T> 
+struct EnsureResult<Result<T>> { 
+  using type = Result<T>; 
+}; 
+ 
 }  // namespace arrow

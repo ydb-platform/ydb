@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/array_ref.h>
+#include <util/generic/array_ref.h> 
 #include <util/generic/strbuf.h>
 
 class IInputStream;
@@ -40,18 +40,18 @@ public:
 
     MD5& Update(IInputStream* in);
 
-    /*
-     * Return hex-encoded md5 checksum for given file.
-     *
-     * Return nullptr / empty string if the file does not exist.
-     */
+    /* 
+     * Return hex-encoded md5 checksum for given file. 
+     * 
+     * Return nullptr / empty string if the file does not exist. 
+     */ 
     static char* File(const char* filename, char* buf);
     static TString File(const TString& filename);
-
+ 
     static char* Data(const void* data, size_t len, char* buf);
     static char* Data(const TArrayRef<const ui8>& data, char* buf);
     static TString Data(const TArrayRef<const ui8>& data);
-    static TString Data(TStringBuf data);
+    static TString Data(TStringBuf data); 
     static char* Stream(IInputStream* in, char* buf);
 
     static TString Calc(TStringBuf data);                     // 32-byte hex-encoded

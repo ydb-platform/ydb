@@ -31,8 +31,8 @@
 #error ABSL_HAVE_ELF_MEM_IMAGE cannot be directly set
 #endif
 
-#if defined(__ELF__) && !defined(__native_client__) && !defined(__asmjs__) && \
-    !defined(__wasm__)
+#if defined(__ELF__) && !defined(__native_client__) && !defined(__asmjs__) && \ 
+    !defined(__wasm__) 
 #define ABSL_HAVE_ELF_MEM_IMAGE 1
 #endif
 
@@ -40,10 +40,10 @@
 
 #include <link.h>  // for ElfW
 
-#if defined(__FreeBSD__) && !defined(ElfW)
-#define ElfW(x) __ElfN(x)
-#endif
-
+#if defined(__FreeBSD__) && !defined(ElfW) 
+#define ElfW(x) __ElfN(x) 
+#endif 
+ 
 namespace y_absl {
 ABSL_NAMESPACE_BEGIN
 namespace debugging_internal {

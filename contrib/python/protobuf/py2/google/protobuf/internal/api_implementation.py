@@ -32,7 +32,7 @@
 """
 
 import os
-import sys
+import sys 
 import warnings
 
 try:
@@ -60,25 +60,25 @@ if _api_version < 0:  # Still unspecified?
       raise ImportError('_use_fast_cpp_protos import succeeded but was None')
     del _use_fast_cpp_protos
     _api_version = 2
-    from google.protobuf import use_pure_python
-    raise RuntimeError(
-        'Conflicting deps on both :use_fast_cpp_protos and :use_pure_python.\n'
-        ' go/build_deps_on_BOTH_use_fast_cpp_protos_AND_use_pure_python\n'
-        'This should be impossible via a link error at build time...')
+    from google.protobuf import use_pure_python 
+    raise RuntimeError( 
+        'Conflicting deps on both :use_fast_cpp_protos and :use_pure_python.\n' 
+        ' go/build_deps_on_BOTH_use_fast_cpp_protos_AND_use_pure_python\n' 
+        'This should be impossible via a link error at build time...') 
   except ImportError:
-    try:
-      # pylint: disable=g-import-not-at-top
-      from google.protobuf import use_pure_python
-      del use_pure_python  # Avoids a pylint error and namespace pollution.
-      _api_version = 0
-    except ImportError:
-      # TODO(b/74017912): It's unsafe to enable :use_fast_cpp_protos by default;
-      # it can cause data loss if you have any Python-only extensions to any
-      # message passed back and forth with C++ code.
-      #
-      # TODO(b/17427486): Once that bug is fixed, we want to make both Python 2
-      # and Python 3 default to `_api_version = 2` (C++ implementation V2).
-      pass
+    try: 
+      # pylint: disable=g-import-not-at-top 
+      from google.protobuf import use_pure_python 
+      del use_pure_python  # Avoids a pylint error and namespace pollution. 
+      _api_version = 0 
+    except ImportError: 
+      # TODO(b/74017912): It's unsafe to enable :use_fast_cpp_protos by default; 
+      # it can cause data loss if you have any Python-only extensions to any 
+      # message passed back and forth with C++ code. 
+      # 
+      # TODO(b/17427486): Once that bug is fixed, we want to make both Python 2 
+      # and Python 3 default to `_api_version = 2` (C++ implementation V2). 
+      pass 
 
 _default_implementation_type = (
     'python' if _api_version <= 0 else 'cpp')
@@ -143,12 +143,12 @@ def Type():
   return _implementation_type
 
 
-def _SetType(implementation_type):
-  """Never use! Only for protobuf benchmark."""
-  global _implementation_type
-  _implementation_type = implementation_type
-
-
+def _SetType(implementation_type): 
+  """Never use! Only for protobuf benchmark.""" 
+  global _implementation_type 
+  _implementation_type = implementation_type 
+ 
+ 
 # See comment on 'Type' above.
 def Version():
   return _implementation_version

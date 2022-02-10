@@ -5,37 +5,37 @@ ALLOW taxi/tools/dorblu -> maps/libs/deprecated/bson
 ALLOW maps/masstransit/info -> maps/libs/deprecated/mongo
 ALLOW taxi/tools/dorblu -> maps/libs/deprecated/mongo
 
-# Use maps/libs/locale instead
-ALLOW maps/automotive/remote_access/libs/i18n -> maps/libs/deprecated/localeutils
-ALLOW maps/carparks/renderer/datasource -> maps/libs/deprecated/localeutils
-ALLOW maps/fastcgi/tilerenderer-serv -> maps/libs/deprecated/localeutils
-ALLOW maps/garden/modules/renderer_denormalization -> maps/libs/deprecated/localeutils
-ALLOW maps/infopoint -> maps/libs/deprecated/localeutils
-ALLOW maps/jams/renderer2 -> maps/libs/deprecated/localeutils
-ALLOW maps/libs/i18n -> maps/libs/deprecated/localeutils
-ALLOW maps/libs/i18n-geobase -> maps/libs/deprecated/localeutils
-ALLOW maps/libs/jams/static-graph -> maps/libs/deprecated/localeutils
-ALLOW maps/libs/locale/compatibility -> maps/libs/deprecated/localeutils
-ALLOW maps/libs/road_graph -> maps/libs/deprecated/localeutils
-ALLOW maps/poi/personalized_poi -> maps/libs/deprecated/localeutils
-ALLOW maps/renderer -> maps/libs/deprecated/localeutils
-ALLOW maps/routing/router -> maps/libs/deprecated/localeutils
-ALLOW maps/routing/graph-tile-builder -> maps/libs/deprecated/localeutils
-ALLOW maps/snippets/tools/masstransit -> maps/libs/deprecated/localeutils
-ALLOW maps/tools/indoor -> maps/libs/deprecated/localeutils
-ALLOW maps/wikimap/mapspro/services/mrc -> maps/libs/deprecated/localeutils
-ALLOW netsys/tiles-vcdiff/gen-tiles -> maps/libs/deprecated/localeutils
+# Use maps/libs/locale instead 
+ALLOW maps/automotive/remote_access/libs/i18n -> maps/libs/deprecated/localeutils 
+ALLOW maps/carparks/renderer/datasource -> maps/libs/deprecated/localeutils 
+ALLOW maps/fastcgi/tilerenderer-serv -> maps/libs/deprecated/localeutils 
+ALLOW maps/garden/modules/renderer_denormalization -> maps/libs/deprecated/localeutils 
+ALLOW maps/infopoint -> maps/libs/deprecated/localeutils 
+ALLOW maps/jams/renderer2 -> maps/libs/deprecated/localeutils 
+ALLOW maps/libs/i18n -> maps/libs/deprecated/localeutils 
+ALLOW maps/libs/i18n-geobase -> maps/libs/deprecated/localeutils 
+ALLOW maps/libs/jams/static-graph -> maps/libs/deprecated/localeutils 
+ALLOW maps/libs/locale/compatibility -> maps/libs/deprecated/localeutils 
+ALLOW maps/libs/road_graph -> maps/libs/deprecated/localeutils 
+ALLOW maps/poi/personalized_poi -> maps/libs/deprecated/localeutils 
+ALLOW maps/renderer -> maps/libs/deprecated/localeutils 
+ALLOW maps/routing/router -> maps/libs/deprecated/localeutils 
+ALLOW maps/routing/graph-tile-builder -> maps/libs/deprecated/localeutils 
+ALLOW maps/snippets/tools/masstransit -> maps/libs/deprecated/localeutils 
+ALLOW maps/tools/indoor -> maps/libs/deprecated/localeutils 
+ALLOW maps/wikimap/mapspro/services/mrc -> maps/libs/deprecated/localeutils 
+ALLOW netsys/tiles-vcdiff/gen-tiles -> maps/libs/deprecated/localeutils 
 
-# Use maps/libs/geolib instead
-ALLOW maps/streetview/backoffice/lib -> maps/libs/deprecated/coordtrans_pymod
-
+# Use maps/libs/geolib instead 
+ALLOW maps/streetview/backoffice/lib -> maps/libs/deprecated/coordtrans_pymod 
+ 
 # Use std::chrono or util/datetime instead
 ALLOW maps/analyzer -> maps/libs/deprecated/boost_time
 ALLOW maps/routing -> maps/libs/deprecated/boost_time
 ALLOW maps/tools/naviguide/lib -> maps/libs/deprecated/boost_time
 
 # Stop spreading deprecated stuff
-ALLOW maps/libs/deprecated -> maps/libs/deprecated
+ALLOW maps/libs/deprecated -> maps/libs/deprecated 
 DENY .* -> maps/libs/deprecated
 
 # maps/doc/proto holds proto interface for maps backends. Anyone can use them.
@@ -44,7 +44,7 @@ ALLOW .* -> maps/doc/proto
 # These libraries are allowed for general use
 ALLOW .* -> maps/libs/common
 ALLOW .* -> maps/libs/csv
-ALLOW .* -> maps/libs/enum_io
+ALLOW .* -> maps/libs/enum_io 
 ALLOW .* -> maps/libs/geolib
 ALLOW .* -> maps/libs/http
 ALLOW .* -> maps/libs/json
@@ -57,7 +57,7 @@ ALLOW .* -> maps/libs/sql_chemistry
 ALLOW .* -> maps/libs/st
 ALLOW .* -> maps/libs/tile
 ALLOW .* -> maps/libs/ttl_cache
-ALLOW .* -> maps/pylibs/local_postgres
+ALLOW .* -> maps/pylibs/local_postgres 
 
 # Fix current PEERDIRs and prevent any further growth
 ALLOW media/road-graph-tool -> maps/libs/road_graph
@@ -156,12 +156,12 @@ ALLOW sandbox/projects/masstransit -> maps/
 ALLOW sprav/altay/panorama -> maps/streetview/libs
 ALLOW yql/udfs/maps -> maps/
 
-# maps_adv will be split into maps and smb
-ALLOW maps_adv/ -> maps/
-ALLOW maps_adv/ -> maps_adv/
-ALLOW smb/ -> maps_adv/
-DENY .* -> maps_adv/
-
+# maps_adv will be split into maps and smb 
+ALLOW maps_adv/ -> maps/ 
+ALLOW maps_adv/ -> maps_adv/ 
+ALLOW smb/ -> maps_adv/ 
+DENY .* -> maps_adv/ 
+ 
 ALLOW sdg/library/python/revision_manager -> maps/wikimap/mapspro/libs/common
 ALLOW sdg/library/python/revision_manager -> maps/wikimap/mapspro/libs/revision
 
@@ -172,8 +172,8 @@ ALLOW ydo/libs/dispatch -> maps/libs/kdtree
 # use of privacy_detector
 ALLOW toloka -> maps/wikimap/mapspro/services/mrc/libs/
 
-# allow using yacare to implement piglet sync service
-ALLOW devtools/contrib -> maps/infra/yacare
-
+# allow using yacare to implement piglet sync service 
+ALLOW devtools/contrib -> maps/infra/yacare 
+ 
 # Do not allow PEERDIRs into maps unless such PEERDIRs have be explicitly allowed above
 DENY .* -> maps/

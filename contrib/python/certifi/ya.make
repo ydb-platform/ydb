@@ -1,6 +1,6 @@
 PY23_LIBRARY()
 
-LICENSE(Service-Py23-Proxy)
+LICENSE(Service-Py23-Proxy) 
 
 OWNER(orivej g:python-contrib)
 

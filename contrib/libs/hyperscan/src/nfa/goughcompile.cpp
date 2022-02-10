@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2018, Intel Corporation
+ * Copyright (c) 2015-2018, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -91,7 +91,7 @@ public:
     void buildAccel(dstate_id_t this_idx, const AccelScheme &info,
                     void *accel_out) override;
     u32 max_allowed_offset_accel() const override { return 0; }
-    DfaType getType() const override { return Gough; }
+    DfaType getType() const override { return Gough; } 
 
     raw_som_dfa &rdfa;
     const GoughGraph &gg;
@@ -375,7 +375,7 @@ unique_ptr<GoughGraph> makeCFG(const raw_som_dfa &raw) {
     }
 
     u16 top_sym = raw.alpha_remap[TOP];
-    DEBUG_PRINTF("top: %hu, kind %s\n", top_sym, to_string(raw.kind).c_str());
+    DEBUG_PRINTF("top: %hu, kind %s\n", top_sym, to_string(raw.kind).c_str()); 
 
     /* create edges, JOIN variables (on edge targets) */
     map<dstate_id_t, GoughEdge> seen;

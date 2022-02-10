@@ -92,10 +92,10 @@ class SimpleTable : public Table {
 
   std::shared_ptr<ChunkedArray> column(int i) const override { return columns_[i]; }
 
-  const std::vector<std::shared_ptr<ChunkedArray>>& columns() const override {
-    return columns_;
-  }
-
+  const std::vector<std::shared_ptr<ChunkedArray>>& columns() const override { 
+    return columns_; 
+  } 
+ 
   std::shared_ptr<Table> Slice(int64_t offset, int64_t length) const override {
     auto sliced = columns_;
     int64_t num_rows = length;
@@ -103,13 +103,13 @@ class SimpleTable : public Table {
       column = column->Slice(offset, length);
       num_rows = column->length();
     }
-    return Table::Make(schema_, std::move(sliced), num_rows);
+    return Table::Make(schema_, std::move(sliced), num_rows); 
   }
 
   Result<std::shared_ptr<Table>> RemoveColumn(int i) const override {
     ARROW_ASSIGN_OR_RAISE(auto new_schema, schema_->RemoveField(i));
 
-    return Table::Make(std::move(new_schema), internal::DeleteVectorElement(columns_, i),
+    return Table::Make(std::move(new_schema), internal::DeleteVectorElement(columns_, i), 
                        this->num_rows());
   }
 
@@ -129,7 +129,7 @@ class SimpleTable : public Table {
     }
 
     ARROW_ASSIGN_OR_RAISE(auto new_schema, schema_->AddField(i, field_arg));
-    return Table::Make(std::move(new_schema),
+    return Table::Make(std::move(new_schema), 
                        internal::AddVectorElement(columns_, i, std::move(col)));
   }
 
@@ -149,14 +149,14 @@ class SimpleTable : public Table {
     }
 
     ARROW_ASSIGN_OR_RAISE(auto new_schema, schema_->SetField(i, field_arg));
-    return Table::Make(std::move(new_schema),
+    return Table::Make(std::move(new_schema), 
                        internal::ReplaceVectorElement(columns_, i, std::move(col)));
   }
 
   std::shared_ptr<Table> ReplaceSchemaMetadata(
       const std::shared_ptr<const KeyValueMetadata>& metadata) const override {
     auto new_schema = schema_->WithMetadata(metadata);
-    return Table::Make(std::move(new_schema), columns_);
+    return Table::Make(std::move(new_schema), columns_); 
   }
 
   Result<std::shared_ptr<Table>> Flatten(MemoryPool* pool) const override {
@@ -374,7 +374,7 @@ Result<std::shared_ptr<Table>> Table::SelectColumns(
 
   auto new_schema =
       std::make_shared<arrow::Schema>(std::move(fields), schema()->metadata());
-  return Table::Make(std::move(new_schema), std::move(columns), num_rows());
+  return Table::Make(std::move(new_schema), std::move(columns), num_rows()); 
 }
 
 std::string Table::ToString() const {
@@ -435,7 +435,7 @@ Result<std::shared_ptr<Table>> ConcatenateTables(
     }
     columns[i] = std::make_shared<ChunkedArray>(column_arrays, schema->field(i)->type());
   }
-  return Table::Make(std::move(schema), std::move(columns));
+  return Table::Make(std::move(schema), std::move(columns)); 
 }
 
 Result<std::shared_ptr<Table>> PromoteTableToSchema(const std::shared_ptr<Table>& table,
@@ -564,7 +564,7 @@ Result<std::shared_ptr<Table>> Table::CombineChunks(MemoryPool* pool) const {
       compacted_columns[i] = std::make_shared<ChunkedArray>(compacted);
     }
   }
-  return Table::Make(schema(), std::move(compacted_columns), num_rows_);
+  return Table::Make(schema(), std::move(compacted_columns), num_rows_); 
 }
 
 // ----------------------------------------------------------------------

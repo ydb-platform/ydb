@@ -11,7 +11,7 @@
 #include <util/system/file.h>
 #include <util/system/fs.h>
 #include <util/system/hostname.h>
-#include <google/protobuf/text_format.h>
+#include <google/protobuf/text_format.h> 
 
 extern TAutoPtr<NKikimrConfig::TActorSystemConfig> DummyActorSystemConfig();
 extern TAutoPtr<NKikimrConfig::TAllocatorConfig> DummyAllocatorConfig();

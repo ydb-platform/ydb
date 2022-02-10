@@ -60,11 +60,11 @@ namespace NPrivate {
                 return *this;
             }
 
-            TIterator& operator--() noexcept {
-                --Value;
-                return *this;
-            }
-
+            TIterator& operator--() noexcept { 
+                --Value; 
+                return *this; 
+            } 
+ 
             constexpr TDiff operator-(const TIterator& b) const noexcept {
                 return Value - b.Value;
             }
@@ -169,11 +169,11 @@ namespace NPrivate {
                 return *this;
             }
 
-            TIterator& operator--() noexcept {
-                Value_ -= Parent_->Step_;
-                return *this;
-            }
-
+            TIterator& operator--() noexcept { 
+                Value_ -= Parent_->Step_; 
+                return *this; 
+            } 
+ 
             constexpr TDiff operator-(const TIterator& b) const noexcept {
                 return (Value_ - b.Value_) / Parent_->Step_;
             }

@@ -93,18 +93,18 @@ of all derivatives of our free software and of promoting the sharing
 and reuse of software generally.
 
 
-====================Custom-Punycode====================
- * Disclaimer and license: Regarding this entire document or any
- * portion of it (including the pseudocode and C code), the author
- * makes no guarantees and is not responsible for any damage resulting
- * from its use.  The author grants irrevocable permission to anyone
- * to use, modify, and distribute it in any way that does not diminish
- * the rights of anyone else to use, modify, and distribute it,
- * provided that redistributed derivative works do not contain
- * misleading author or version information.  Derivative works need
- * not be licensed under similar terms.
-
-
+====================Custom-Punycode==================== 
+ * Disclaimer and license: Regarding this entire document or any 
+ * portion of it (including the pseudocode and C code), the author 
+ * makes no guarantees and is not responsible for any damage resulting 
+ * from its use.  The author grants irrevocable permission to anyone 
+ * to use, modify, and distribute it in any way that does not diminish 
+ * the rights of anyone else to use, modify, and distribute it, 
+ * provided that redistributed derivative works do not contain 
+ * misleading author or version information.  Derivative works need 
+ * not be licensed under similar terms. 
+ 
+ 
 ====================Ietf====================
  * This document and translations of it may be copied and furnished to
  * others, and derivative works that comment on or otherwise explain it

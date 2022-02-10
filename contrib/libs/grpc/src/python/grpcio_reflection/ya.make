@@ -30,7 +30,7 @@ ADDINCL(
     contrib/libs/grpc/include
 )
 
-IF (SANITIZER_TYPE == undefined)
+IF (SANITIZER_TYPE == undefined) 
     # https://github.com/grpc/grpc/blob/v1.15.1/tools/bazel.rc#L43
     CXXFLAGS(-fno-sanitize=function)
 ENDIF()

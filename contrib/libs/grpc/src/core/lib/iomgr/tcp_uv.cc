@@ -39,7 +39,7 @@
 #include "src/core/lib/slice/slice_internal.h"
 #include "src/core/lib/slice/slice_string_helpers.h"
 
-#error #include <uv.h>
+#error #include <uv.h> 
 
 #define IGNORE_CONST(addr) ((grpc_sockaddr*)(uintptr_t)(addr))
 

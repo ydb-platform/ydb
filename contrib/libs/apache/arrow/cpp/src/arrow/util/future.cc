@@ -26,7 +26,7 @@
 
 #include "arrow/util/checked_cast.h"
 #include "arrow/util/logging.h"
-#include "arrow/util/thread_pool.h"
+#include "arrow/util/thread_pool.h" 
 
 namespace arrow {
 
@@ -40,8 +40,8 @@ using internal::checked_cast;
 // should ideally not limit scalability.
 static std::mutex global_waiter_mutex;
 
-const double FutureWaiter::kInfinity = HUGE_VAL;
-
+const double FutureWaiter::kInfinity = HUGE_VAL; 
+ 
 class FutureWaiterImpl : public FutureWaiter {
  public:
   FutureWaiterImpl(Kind kind, std::vector<FutureImpl*> futures)
@@ -76,7 +76,7 @@ class FutureWaiterImpl : public FutureWaiter {
     }
   }
 
-  ~FutureWaiterImpl() override {
+  ~FutureWaiterImpl() override { 
     for (auto future : futures_) {
       future->RemoveWaiter(this);
     }
@@ -177,9 +177,9 @@ FutureWaiterImpl* GetConcreteWaiter(FutureWaiter* waiter) {
 
 }  // namespace
 
-FutureWaiter::FutureWaiter() = default;
+FutureWaiter::FutureWaiter() = default; 
 
-FutureWaiter::~FutureWaiter() = default;
+FutureWaiter::~FutureWaiter() = default; 
 
 std::unique_ptr<FutureWaiter> FutureWaiter::Make(Kind kind,
                                                  std::vector<FutureImpl*> futures) {
@@ -232,70 +232,70 @@ class ConcreteFutureImpl : public FutureImpl {
 
   void DoMarkFailed() { DoMarkFinishedOrFailed(FutureState::FAILURE); }
 
-  void CheckOptions(const CallbackOptions& opts) {
-    if (opts.should_schedule != ShouldSchedule::Never) {
-      DCHECK_NE(opts.executor, nullptr)
-          << "An executor must be specified when adding a callback that might schedule";
-    }
-  }
-
-  void AddCallback(Callback callback, CallbackOptions opts) {
-    CheckOptions(opts);
-    std::unique_lock<std::mutex> lock(mutex_);
-    CallbackRecord callback_record{std::move(callback), opts};
-    if (IsFutureFinished(state_)) {
-      lock.unlock();
-      RunOrScheduleCallback(std::move(callback_record), /*in_add_callback=*/true);
-    } else {
-      callbacks_.push_back(std::move(callback_record));
-    }
-  }
-
-  bool TryAddCallback(const std::function<Callback()>& callback_factory,
-                      CallbackOptions opts) {
-    CheckOptions(opts);
-    std::unique_lock<std::mutex> lock(mutex_);
-    if (IsFutureFinished(state_)) {
-      return false;
-    } else {
-      callbacks_.push_back({callback_factory(), opts});
-      return true;
-    }
-  }
-
-  bool ShouldScheduleCallback(const CallbackRecord& callback_record,
-                              bool in_add_callback) {
-    switch (callback_record.options.should_schedule) {
-      case ShouldSchedule::Never:
-        return false;
-      case ShouldSchedule::Always:
-        return true;
-      case ShouldSchedule::IfUnfinished:
-        return !in_add_callback;
-      case ShouldSchedule::IfDifferentExecutor:
-        return !callback_record.options.executor->OwnsThisThread();
-      default:
-        DCHECK(false) << "Unrecognized ShouldSchedule option";
-        return false;
-    }
-  }
-
-  void RunOrScheduleCallback(CallbackRecord&& callback_record, bool in_add_callback) {
-    if (ShouldScheduleCallback(callback_record, in_add_callback)) {
-      struct CallbackTask {
-        void operator()() { std::move(callback)(*self); }
-
-        Callback callback;
-        std::shared_ptr<FutureImpl> self;
-      };
-      // Need to keep `this` alive until the callback has a chance to be scheduled.
-      CallbackTask task{std::move(callback_record.callback), shared_from_this()};
-      DCHECK_OK(callback_record.options.executor->Spawn(std::move(task)));
-    } else {
-      std::move(callback_record.callback)(*this);
-    }
-  }
-
+  void CheckOptions(const CallbackOptions& opts) { 
+    if (opts.should_schedule != ShouldSchedule::Never) { 
+      DCHECK_NE(opts.executor, nullptr) 
+          << "An executor must be specified when adding a callback that might schedule"; 
+    } 
+  } 
+ 
+  void AddCallback(Callback callback, CallbackOptions opts) { 
+    CheckOptions(opts); 
+    std::unique_lock<std::mutex> lock(mutex_); 
+    CallbackRecord callback_record{std::move(callback), opts}; 
+    if (IsFutureFinished(state_)) { 
+      lock.unlock(); 
+      RunOrScheduleCallback(std::move(callback_record), /*in_add_callback=*/true); 
+    } else { 
+      callbacks_.push_back(std::move(callback_record)); 
+    } 
+  } 
+ 
+  bool TryAddCallback(const std::function<Callback()>& callback_factory, 
+                      CallbackOptions opts) { 
+    CheckOptions(opts); 
+    std::unique_lock<std::mutex> lock(mutex_); 
+    if (IsFutureFinished(state_)) { 
+      return false; 
+    } else { 
+      callbacks_.push_back({callback_factory(), opts}); 
+      return true; 
+    } 
+  } 
+ 
+  bool ShouldScheduleCallback(const CallbackRecord& callback_record, 
+                              bool in_add_callback) { 
+    switch (callback_record.options.should_schedule) { 
+      case ShouldSchedule::Never: 
+        return false; 
+      case ShouldSchedule::Always: 
+        return true; 
+      case ShouldSchedule::IfUnfinished: 
+        return !in_add_callback; 
+      case ShouldSchedule::IfDifferentExecutor: 
+        return !callback_record.options.executor->OwnsThisThread(); 
+      default: 
+        DCHECK(false) << "Unrecognized ShouldSchedule option"; 
+        return false; 
+    } 
+  } 
+ 
+  void RunOrScheduleCallback(CallbackRecord&& callback_record, bool in_add_callback) { 
+    if (ShouldScheduleCallback(callback_record, in_add_callback)) { 
+      struct CallbackTask { 
+        void operator()() { std::move(callback)(*self); } 
+ 
+        Callback callback; 
+        std::shared_ptr<FutureImpl> self; 
+      }; 
+      // Need to keep `this` alive until the callback has a chance to be scheduled. 
+      CallbackTask task{std::move(callback_record.callback), shared_from_this()}; 
+      DCHECK_OK(callback_record.options.executor->Spawn(std::move(task))); 
+    } else { 
+      std::move(callback_record.callback)(*this); 
+    } 
+  } 
+ 
   void DoMarkFinishedOrFailed(FutureState state) {
     {
       // Lock the hypothetical waiter first, and the future after.
@@ -310,17 +310,17 @@ class ConcreteFutureImpl : public FutureImpl {
       }
     }
     cv_.notify_all();
-
-    // run callbacks, lock not needed since the future is finished by this
-    // point so nothing else can modify the callbacks list and it is safe
-    // to iterate.
-    //
-    // In fact, it is important not to hold the locks because the callback
-    // may be slow or do its own locking on other resources
-    for (auto& callback_record : callbacks_) {
-      RunOrScheduleCallback(std::move(callback_record), /*in_add_callback=*/false);
-    }
-    callbacks_.clear();
+ 
+    // run callbacks, lock not needed since the future is finished by this 
+    // point so nothing else can modify the callbacks list and it is safe 
+    // to iterate. 
+    // 
+    // In fact, it is important not to hold the locks because the callback 
+    // may be slow or do its own locking on other resources 
+    for (auto& callback_record : callbacks_) { 
+      RunOrScheduleCallback(std::move(callback_record), /*in_add_callback=*/false); 
+    } 
+    callbacks_.clear(); 
   }
 
   void DoWait() {
@@ -355,12 +355,12 @@ std::unique_ptr<FutureImpl> FutureImpl::Make() {
   return std::unique_ptr<FutureImpl>(new ConcreteFutureImpl());
 }
 
-std::unique_ptr<FutureImpl> FutureImpl::MakeFinished(FutureState state) {
-  std::unique_ptr<ConcreteFutureImpl> ptr(new ConcreteFutureImpl());
-  ptr->state_ = state;
-  return std::move(ptr);
-}
-
+std::unique_ptr<FutureImpl> FutureImpl::MakeFinished(FutureState state) { 
+  std::unique_ptr<ConcreteFutureImpl> ptr(new ConcreteFutureImpl()); 
+  ptr->state_ = state; 
+  return std::move(ptr); 
+} 
+ 
 FutureImpl::FutureImpl() : state_(FutureState::PENDING) {}
 
 FutureState FutureImpl::SetWaiter(FutureWaiter* w, int future_num) {
@@ -379,43 +379,43 @@ void FutureImpl::MarkFinished() { GetConcreteFuture(this)->DoMarkFinished(); }
 
 void FutureImpl::MarkFailed() { GetConcreteFuture(this)->DoMarkFailed(); }
 
-void FutureImpl::AddCallback(Callback callback, CallbackOptions opts) {
-  GetConcreteFuture(this)->AddCallback(std::move(callback), opts);
-}
-
-bool FutureImpl::TryAddCallback(const std::function<Callback()>& callback_factory,
-                                CallbackOptions opts) {
-  return GetConcreteFuture(this)->TryAddCallback(callback_factory, opts);
-}
-
-Future<> AllComplete(const std::vector<Future<>>& futures) {
-  struct State {
-    explicit State(int64_t n_futures) : mutex(), n_remaining(n_futures) {}
-
-    std::mutex mutex;
-    std::atomic<size_t> n_remaining;
-  };
-
-  if (futures.empty()) {
-    return Future<>::MakeFinished();
-  }
-
-  auto state = std::make_shared<State>(futures.size());
-  auto out = Future<>::Make();
-  for (const auto& future : futures) {
-    future.AddCallback([state, out](const Status& status) mutable {
-      if (!status.ok()) {
-        std::unique_lock<std::mutex> lock(state->mutex);
-        if (!out.is_finished()) {
-          out.MarkFinished(status);
-        }
-        return;
-      }
-      if (state->n_remaining.fetch_sub(1) != 1) return;
-      out.MarkFinished();
-    });
-  }
-  return out;
-}
-
+void FutureImpl::AddCallback(Callback callback, CallbackOptions opts) { 
+  GetConcreteFuture(this)->AddCallback(std::move(callback), opts); 
+} 
+ 
+bool FutureImpl::TryAddCallback(const std::function<Callback()>& callback_factory, 
+                                CallbackOptions opts) { 
+  return GetConcreteFuture(this)->TryAddCallback(callback_factory, opts); 
+} 
+ 
+Future<> AllComplete(const std::vector<Future<>>& futures) { 
+  struct State { 
+    explicit State(int64_t n_futures) : mutex(), n_remaining(n_futures) {} 
+ 
+    std::mutex mutex; 
+    std::atomic<size_t> n_remaining; 
+  }; 
+ 
+  if (futures.empty()) { 
+    return Future<>::MakeFinished(); 
+  } 
+ 
+  auto state = std::make_shared<State>(futures.size()); 
+  auto out = Future<>::Make(); 
+  for (const auto& future : futures) { 
+    future.AddCallback([state, out](const Status& status) mutable { 
+      if (!status.ok()) { 
+        std::unique_lock<std::mutex> lock(state->mutex); 
+        if (!out.is_finished()) { 
+          out.MarkFinished(status); 
+        } 
+        return; 
+      } 
+      if (state->n_remaining.fetch_sub(1) != 1) return; 
+      out.MarkFinished(); 
+    }); 
+  } 
+  return out; 
+} 
+ 
 }  // namespace arrow

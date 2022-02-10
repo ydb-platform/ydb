@@ -28,9 +28,9 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <google/protobuf/util/internal/object_writer.h>
+#include <google/protobuf/util/internal/object_writer.h> 
 
-#include <google/protobuf/util/internal/datapiece.h>
+#include <google/protobuf/util/internal/datapiece.h> 
 
 namespace google {
 namespace protobuf {
@@ -38,43 +38,43 @@ namespace util {
 namespace converter {
 
 // static
-void ObjectWriter::RenderDataPieceTo(const DataPiece& data,
-                                     StringPiece name, ObjectWriter* ow) {
+void ObjectWriter::RenderDataPieceTo(const DataPiece& data, 
+                                     StringPiece name, ObjectWriter* ow) { 
   switch (data.type()) {
     case DataPiece::TYPE_INT32: {
-      ow->RenderInt32(name, data.ToInt32().value());
+      ow->RenderInt32(name, data.ToInt32().value()); 
       break;
     }
     case DataPiece::TYPE_INT64: {
-      ow->RenderInt64(name, data.ToInt64().value());
+      ow->RenderInt64(name, data.ToInt64().value()); 
       break;
     }
     case DataPiece::TYPE_UINT32: {
-      ow->RenderUint32(name, data.ToUint32().value());
+      ow->RenderUint32(name, data.ToUint32().value()); 
       break;
     }
     case DataPiece::TYPE_UINT64: {
-      ow->RenderUint64(name, data.ToUint64().value());
+      ow->RenderUint64(name, data.ToUint64().value()); 
       break;
     }
     case DataPiece::TYPE_DOUBLE: {
-      ow->RenderDouble(name, data.ToDouble().value());
+      ow->RenderDouble(name, data.ToDouble().value()); 
       break;
     }
     case DataPiece::TYPE_FLOAT: {
-      ow->RenderFloat(name, data.ToFloat().value());
+      ow->RenderFloat(name, data.ToFloat().value()); 
       break;
     }
     case DataPiece::TYPE_BOOL: {
-      ow->RenderBool(name, data.ToBool().value());
+      ow->RenderBool(name, data.ToBool().value()); 
       break;
     }
     case DataPiece::TYPE_STRING: {
-      ow->RenderString(name, data.ToString().value());
+      ow->RenderString(name, data.ToString().value()); 
       break;
     }
     case DataPiece::TYPE_BYTES: {
-      ow->RenderBytes(name, data.ToBytes().value());
+      ow->RenderBytes(name, data.ToBytes().value()); 
       break;
     }
     case DataPiece::TYPE_NULL: {
@@ -86,7 +86,7 @@ void ObjectWriter::RenderDataPieceTo(const DataPiece& data,
   }
 }
 
-
+ 
 }  // namespace converter
 }  // namespace util
 }  // namespace protobuf

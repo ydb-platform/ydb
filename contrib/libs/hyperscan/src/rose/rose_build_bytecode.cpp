@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2020, Intel Corporation
+ * Copyright (c) 2015-2020, Intel Corporation 
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions are met:
@@ -426,17 +426,17 @@ void fillStateOffsets(const RoseBuildImpl &build, u32 rolesWithStateCount,
     curr_offset += mmbit_size(build.rm.numEkeys());
     so->exhausted_size = mmbit_size(build.rm.numEkeys());
 
-    // Logical multibit.
-    so->logicalVec = curr_offset;
-    so->logicalVec_size = mmbit_size(build.rm.numLogicalKeys() +
-                                     build.rm.numLogicalOps());
-    curr_offset += so->logicalVec_size;
-
-    // Combination multibit.
-    so->combVec = curr_offset;
-    so->combVec_size = mmbit_size(build.rm.numCkeys());
-    curr_offset += so->combVec_size;
-
+    // Logical multibit. 
+    so->logicalVec = curr_offset; 
+    so->logicalVec_size = mmbit_size(build.rm.numLogicalKeys() + 
+                                     build.rm.numLogicalOps()); 
+    curr_offset += so->logicalVec_size; 
+ 
+    // Combination multibit. 
+    so->combVec = curr_offset; 
+    so->combVec_size = mmbit_size(build.rm.numCkeys()); 
+    curr_offset += so->combVec_size; 
+ 
     // SOM locations and valid/writeable multibit structures.
     if (build.ssm.numSomSlots()) {
         const u32 somWidth = build.ssm.somPrecision();
@@ -554,8 +554,8 @@ void findFixedDepthTops(const RoseGraph &g, const set<PredTopPair> &triggers,
  */
 static
 bytecode_ptr<NFA> pickImpl(bytecode_ptr<NFA> dfa_impl,
-                           bytecode_ptr<NFA> nfa_impl,
-                           bool fast_nfa) {
+                           bytecode_ptr<NFA> nfa_impl, 
+                           bool fast_nfa) { 
     assert(nfa_impl);
     assert(dfa_impl);
     assert(isDfaType(dfa_impl->type));
@@ -585,7 +585,7 @@ bytecode_ptr<NFA> pickImpl(bytecode_ptr<NFA> dfa_impl,
                 return nfa_impl;
             }
         } else {
-            if (n_accel && fast_nfa) {
+            if (n_accel && fast_nfa) { 
                 return nfa_impl;
             } else {
                 return dfa_impl;
@@ -634,15 +634,15 @@ bytecode_ptr<NFA> getDfa(raw_dfa &rdfa, bool is_transient,
         dfa = mcshengCompile(rdfa, cc, rm);
     }
     if (!dfa) {
-        dfa = sheng32Compile(rdfa, cc, rm, false);
-    }
-    if (!dfa) {
-        dfa = sheng64Compile(rdfa, cc, rm, false);
-    }
-    if (!dfa && !is_transient) {
-        dfa = mcshengCompile64(rdfa, cc, rm);
-    }
-    if (!dfa) {
+        dfa = sheng32Compile(rdfa, cc, rm, false); 
+    } 
+    if (!dfa) { 
+        dfa = sheng64Compile(rdfa, cc, rm, false); 
+    } 
+    if (!dfa && !is_transient) { 
+        dfa = mcshengCompile64(rdfa, cc, rm); 
+    } 
+    if (!dfa) { 
         // Sheng wasn't successful, so unleash McClellan!
         dfa = mcclellanCompile(rdfa, cc, rm, false);
     }
@@ -688,21 +688,21 @@ buildSuffix(const ReportManager &rm, const SomSlotManager &ssm,
         }
     }
 
-    bool fast_nfa = false;
+    bool fast_nfa = false; 
     auto n = constructNFA(holder, &rm, fixed_depth_tops, triggers,
-                          compress_state, fast_nfa, cc);
+                          compress_state, fast_nfa, cc); 
     assert(n);
 
     if (oneTop && cc.grey.roseMcClellanSuffix) {
         if (cc.grey.roseMcClellanSuffix == 2 || n->nPositions > 128 ||
-            !has_bounded_repeats_other_than_firsts(*n) || !fast_nfa) {
+            !has_bounded_repeats_other_than_firsts(*n) || !fast_nfa) { 
             auto rdfa = buildMcClellan(holder, &rm, false, triggers.at(0),
                                        cc.grey);
             if (rdfa) {
                 auto d = getDfa(*rdfa, false, cc, rm);
                 assert(d);
                 if (cc.grey.roseMcClellanSuffix != 2) {
-                    n = pickImpl(move(d), move(n), fast_nfa);
+                    n = pickImpl(move(d), move(n), fast_nfa); 
                 } else {
                     n = move(d);
                 }
@@ -837,24 +837,24 @@ bytecode_ptr<NFA> makeLeftNfa(const RoseBuildImpl &tbi, left_id &left,
         n = constructLBR(*left.graph(), triggers.begin()->second, cc, rm);
     }
 
-    bool fast_nfa = false;
+    bool fast_nfa = false; 
     if (!n && left.graph()) {
         map<u32, vector<vector<CharReach>>> triggers;
         if (left.graph()->kind == NFA_INFIX) {
             findTriggerSequences(tbi, infixTriggers.at(left), &triggers);
         }
         n = constructNFA(*left.graph(), nullptr, fixed_depth_tops, triggers,
-                         compress_state, fast_nfa, cc);
+                         compress_state, fast_nfa, cc); 
     }
 
     if (cc.grey.roseMcClellanPrefix == 1 && is_prefix && !left.dfa()
         && left.graph()
-        && (!n || !has_bounded_repeats_other_than_firsts(*n) || !fast_nfa)) {
+        && (!n || !has_bounded_repeats_other_than_firsts(*n) || !fast_nfa)) { 
         auto rdfa = buildMcClellan(*left.graph(), nullptr, cc.grey);
         if (rdfa) {
             auto d = getDfa(*rdfa, is_transient, cc, rm);
             assert(d);
-            n = pickImpl(move(d), move(n), fast_nfa);
+            n = pickImpl(move(d), move(n), fast_nfa); 
         }
     }
 
@@ -1639,18 +1639,18 @@ public:
         const map<u32, u32> fixed_depth_tops; /* no tops */
         const map<u32, vector<vector<CharReach>>> triggers; /* no tops */
         bool compress_state = cc.streaming;
-        bool fast_nfa = false;
+        bool fast_nfa = false; 
         auto n = constructNFA(h, &rm, fixed_depth_tops, triggers,
-                              compress_state, fast_nfa, cc);
+                              compress_state, fast_nfa, cc); 
 
         // Try for a DFA upgrade.
         if (n && cc.grey.roseMcClellanOutfix &&
-            (!has_bounded_repeats_other_than_firsts(*n) || !fast_nfa)) {
+            (!has_bounded_repeats_other_than_firsts(*n) || !fast_nfa)) { 
             auto rdfa = buildMcClellan(h, &rm, cc.grey);
             if (rdfa) {
                 auto d = getDfa(*rdfa, false, cc, rm);
                 if (d) {
-                    n = pickImpl(move(d), move(n), fast_nfa);
+                    n = pickImpl(move(d), move(n), fast_nfa); 
                 }
             }
         }
@@ -2494,18 +2494,18 @@ void writeLeftInfo(RoseEngineBlob &engine_blob, RoseEngine &proto,
 }
 
 static
-void writeLogicalInfo(const ReportManager &rm, RoseEngineBlob &engine_blob,
-                      RoseEngine &proto) {
-    const auto &tree = rm.getLogicalTree();
-    proto.logicalTreeOffset = engine_blob.add_range(tree);
-    const auto &combMap = rm.getCombInfoMap();
-    proto.combInfoMapOffset = engine_blob.add_range(combMap);
-    proto.lkeyCount = rm.numLogicalKeys();
-    proto.lopCount = rm.numLogicalOps();
-    proto.ckeyCount = rm.numCkeys();
-}
-
-static
+void writeLogicalInfo(const ReportManager &rm, RoseEngineBlob &engine_blob, 
+                      RoseEngine &proto) { 
+    const auto &tree = rm.getLogicalTree(); 
+    proto.logicalTreeOffset = engine_blob.add_range(tree); 
+    const auto &combMap = rm.getCombInfoMap(); 
+    proto.combInfoMapOffset = engine_blob.add_range(combMap); 
+    proto.lkeyCount = rm.numLogicalKeys(); 
+    proto.lopCount = rm.numLogicalOps(); 
+    proto.ckeyCount = rm.numCkeys(); 
+} 
+ 
+static 
 void writeNfaInfo(const RoseBuildImpl &build, build_context &bc,
                   RoseEngine &proto, const set<u32> &no_retrigger_queues) {
     const u32 queue_count = build.qif.allocated_count();
@@ -3350,24 +3350,24 @@ RoseProgram makeEodProgram(const RoseBuildImpl &build, build_context &bc,
 }
 
 static
-RoseProgram makeFlushCombProgram(const RoseEngine &t) {
-    RoseProgram program;
-    if (t.ckeyCount) {
-        addFlushCombinationProgram(program);
-    }
-    return program;
-}
-
-static
-RoseProgram makeLastFlushCombProgram(const RoseEngine &t) {
-    RoseProgram program;
-    if (t.ckeyCount) {
-        addLastFlushCombinationProgram(program);
-    }
-    return program;
-}
-
-static
+RoseProgram makeFlushCombProgram(const RoseEngine &t) { 
+    RoseProgram program; 
+    if (t.ckeyCount) { 
+        addFlushCombinationProgram(program); 
+    } 
+    return program; 
+} 
+ 
+static 
+RoseProgram makeLastFlushCombProgram(const RoseEngine &t) { 
+    RoseProgram program; 
+    if (t.ckeyCount) { 
+        addLastFlushCombinationProgram(program); 
+    } 
+    return program; 
+} 
+ 
+static 
 u32 history_required(const rose_literal_id &key) {
     if (key.msk.size() < key.s.length()) {
         return key.elength() - 1;
@@ -3732,15 +3732,15 @@ bytecode_ptr<RoseEngine> RoseBuildImpl::buildFinalEngine(u32 minWidth) {
 
     writeDkeyInfo(rm, bc.engine_blob, proto);
     writeLeftInfo(bc.engine_blob, proto, leftInfoTable);
-    writeLogicalInfo(rm, bc.engine_blob, proto);
+    writeLogicalInfo(rm, bc.engine_blob, proto); 
 
-    auto flushComb_prog = makeFlushCombProgram(proto);
-    proto.flushCombProgramOffset = writeProgram(bc, move(flushComb_prog));
-
-    auto lastFlushComb_prog = makeLastFlushCombProgram(proto);
-    proto.lastFlushCombProgramOffset =
-        writeProgram(bc, move(lastFlushComb_prog));
-
+    auto flushComb_prog = makeFlushCombProgram(proto); 
+    proto.flushCombProgramOffset = writeProgram(bc, move(flushComb_prog)); 
+ 
+    auto lastFlushComb_prog = makeLastFlushCombProgram(proto); 
+    proto.lastFlushCombProgramOffset = 
+        writeProgram(bc, move(lastFlushComb_prog)); 
+ 
     // Build anchored matcher.
     auto atable = buildAnchoredMatcher(*this, fragments, anchored_dfas);
     if (atable) {

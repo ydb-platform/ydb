@@ -1810,7 +1810,7 @@ private:
                 auto userSID = NACLib::TUserToken(QueryState->UserToken).GetUserSID();
                 NSysView::CollectQueryStats(ctx, stats, queryDuration, ExtractQueryText(),
                     userSID, QueryState->ParametersSize, database, type, requestUnits);
-                break;
+                break; 
             }
             default:
                 break;

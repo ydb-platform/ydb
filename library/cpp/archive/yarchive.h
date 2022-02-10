@@ -22,7 +22,7 @@ public:
     void Flush();
     void Finish();
     void Add(const TString& key, IInputStream* src);
-    void AddSynonym(const TString& existingKey, const TString& newKey);
+    void AddSynonym(const TString& existingKey, const TString& newKey); 
 
 private:
     class TImpl;

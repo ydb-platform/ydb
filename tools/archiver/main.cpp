@@ -16,8 +16,8 @@
 #include <util/string/subst.h>
 #include <util/system/filemap.h>
 
-#include <cstring>
-
+#include <cstring> 
+ 
 namespace {
     class TStringArrayOutput: public IOutputStream {
     public:
@@ -203,91 +203,91 @@ namespace {
         IOutputStream* O = nullptr;
         const TString B;
     };
-
-    struct TMyFileComparator {
-        bool operator()(const TString& fname1, const TString& fname2) const {
-            if (fname1 == fname2) {
-                return false;
-            }
-            if (const auto* savedResultPtr = SavedResults.FindPtr(std::make_pair(fname1, fname2))) {
-                return *savedResultPtr < 0;
-            }
-            TMemoryMap mmap1(fname1, TMemoryMap::oRdOnly);
-            TMemoryMap mmap2(fname2, TMemoryMap::oRdOnly);
-            mmap1.SetSequential();
-            mmap2.SetSequential();
-            Y_ASSERT(mmap1.Length() == mmap2.Length());
-            TMemoryMap::TMapResult mapResult1 = mmap1.Map(0, mmap1.Length());
-            TMemoryMap::TMapResult mapResult2 = mmap2.Map(0, mmap2.Length());
-            Y_ASSERT(mapResult1.MappedSize() == mapResult2.MappedSize());
-            int res = memcmp(mapResult1.MappedData(), mapResult2.MappedData(), mapResult1.MappedSize());
-            mmap1.Unmap(mapResult1);
-            mmap2.Unmap(mapResult2);
-            SavedResults[std::make_pair(fname1, fname2)] = res;
-            SavedResults[std::make_pair(fname2, fname1)] = -res;
-            return res < 0;
-        }
-
+ 
+    struct TMyFileComparator { 
+        bool operator()(const TString& fname1, const TString& fname2) const { 
+            if (fname1 == fname2) { 
+                return false; 
+            } 
+            if (const auto* savedResultPtr = SavedResults.FindPtr(std::make_pair(fname1, fname2))) { 
+                return *savedResultPtr < 0; 
+            } 
+            TMemoryMap mmap1(fname1, TMemoryMap::oRdOnly); 
+            TMemoryMap mmap2(fname2, TMemoryMap::oRdOnly); 
+            mmap1.SetSequential(); 
+            mmap2.SetSequential(); 
+            Y_ASSERT(mmap1.Length() == mmap2.Length()); 
+            TMemoryMap::TMapResult mapResult1 = mmap1.Map(0, mmap1.Length()); 
+            TMemoryMap::TMapResult mapResult2 = mmap2.Map(0, mmap2.Length()); 
+            Y_ASSERT(mapResult1.MappedSize() == mapResult2.MappedSize()); 
+            int res = memcmp(mapResult1.MappedData(), mapResult2.MappedData(), mapResult1.MappedSize()); 
+            mmap1.Unmap(mapResult1); 
+            mmap2.Unmap(mapResult2); 
+            SavedResults[std::make_pair(fname1, fname2)] = res; 
+            SavedResults[std::make_pair(fname2, fname1)] = -res; 
+            return res < 0; 
+        } 
+ 
         mutable THashMap<std::pair<TString, TString>, int> SavedResults;
-    };
-
-    struct TDuplicatesMap {
-        void Add(const TString& fname, const TString& rname) {
-            Y_ENSURE(!InitialFillingDone);
-            FileNames.push_back(fname);
-            FileNameToRecordName[fname] = rname;
-        }
-
-        void Finish() {
-            Y_ENSURE(!InitialFillingDone);
-            InitialFillingDone = true;
+    }; 
+ 
+    struct TDuplicatesMap { 
+        void Add(const TString& fname, const TString& rname) { 
+            Y_ENSURE(!InitialFillingDone); 
+            FileNames.push_back(fname); 
+            FileNameToRecordName[fname] = rname; 
+        } 
+ 
+        void Finish() { 
+            Y_ENSURE(!InitialFillingDone); 
+            InitialFillingDone = true; 
             TMap<i64, TVector<TString>> bySize;
-            for (const TString& fname: FileNames) {
-                TFile file(fname, OpenExisting | RdOnly);
-                bySize[file.GetLength()].push_back(fname);
-            }
-            for (const auto& bySizeElement: bySize) {
-                if (bySizeElement.second.size() > 1) {
+            for (const TString& fname: FileNames) { 
+                TFile file(fname, OpenExisting | RdOnly); 
+                bySize[file.GetLength()].push_back(fname); 
+            } 
+            for (const auto& bySizeElement: bySize) { 
+                if (bySizeElement.second.size() > 1) { 
                     TMap<TString, TVector<TString>, TMyFileComparator> byContents;
-                    for (const TString& fname: bySizeElement.second) {
-                        byContents[fname].push_back(fname);
-                    }
-                    for (const auto& byContentsElement: byContents) {
-                        if (byContentsElement.second.size() > 1) {
-                            const TString& rootName = byContentsElement.second.front();
-                            const TString& rootRecordName = FileNameToRecordName[rootName];
-                            for (const TString& fname: byContentsElement.second) {
-                                if (fname != rootName) {
-                                    Synonyms[FileNameToRecordName[fname]] = rootRecordName;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            FileNames.clear();
-            FileNameToRecordName.clear();
-        }
-
-        bool InitialFillingDone = false;
+                    for (const TString& fname: bySizeElement.second) { 
+                        byContents[fname].push_back(fname); 
+                    } 
+                    for (const auto& byContentsElement: byContents) { 
+                        if (byContentsElement.second.size() > 1) { 
+                            const TString& rootName = byContentsElement.second.front(); 
+                            const TString& rootRecordName = FileNameToRecordName[rootName]; 
+                            for (const TString& fname: byContentsElement.second) { 
+                                if (fname != rootName) { 
+                                    Synonyms[FileNameToRecordName[fname]] = rootRecordName; 
+                                } 
+                            } 
+                        } 
+                    } 
+                } 
+            } 
+            FileNames.clear(); 
+            FileNameToRecordName.clear(); 
+        } 
+ 
+        bool InitialFillingDone = false; 
         TVector<TString> FileNames;
         THashMap<TString, TString> FileNameToRecordName;
         THashMap<TString, TString> Synonyms;
-    };
-
-    struct TDeduplicationArchiveWriter {
+    }; 
+ 
+    struct TDeduplicationArchiveWriter { 
         TDeduplicationArchiveWriter(const TDuplicatesMap& duplicatesMap, IOutputStream* out, bool compress)
-            : DuplicatesMap(duplicatesMap)
-            , Writer(out, compress)
-        {}
-
-        void Finish() {
-            Writer.Finish();
-        }
-
-        const TDuplicatesMap& DuplicatesMap;
-        TArchiveWriter Writer;
-    };
+            : DuplicatesMap(duplicatesMap) 
+            , Writer(out, compress) 
+        {} 
+ 
+        void Finish() { 
+            Writer.Finish(); 
+        } 
+ 
+        const TDuplicatesMap& DuplicatesMap; 
+        TArchiveWriter Writer; 
+    }; 
 }
 
 static inline TAutoPtr<IOutputStream> OpenOutput(const TString& url) {
@@ -338,21 +338,21 @@ static inline void Append(IOutputStream& w, const TString& fname, const TString&
     TransferData((IInputStream*)&in, &w);
 }
 
-static inline void Append(TDuplicatesMap& w, const TString& fname, const TString& rname) {
-    w.Add(fname, rname);
-}
+static inline void Append(TDuplicatesMap& w, const TString& fname, const TString& rname) { 
+    w.Add(fname, rname); 
+} 
 
-static inline void Append(TDeduplicationArchiveWriter& w, const TString& fname, const TString& rname) {
+static inline void Append(TDeduplicationArchiveWriter& w, const TString& fname, const TString& rname) { 
     if (!Quiet) {
         Cerr << "--> " << rname << Endl;
     }
 
-    if (const TString* rootRecordName = w.DuplicatesMap.Synonyms.FindPtr(rname)) {
-        w.Writer.AddSynonym(*rootRecordName, rname);
-    } else {
-        TMappedFileInput in(fname);
-        w.Writer.Add(rname, &in);
-    }
+    if (const TString* rootRecordName = w.DuplicatesMap.Synonyms.FindPtr(rname)) { 
+        w.Writer.AddSynonym(*rootRecordName, rname); 
+    } else { 
+        TMappedFileInput in(fname); 
+        w.Writer.Add(rname, &in); 
+    } 
 }
 
 namespace {
@@ -386,7 +386,7 @@ namespace {
                 const char* name;
                 const TString p = Path + off;
 
-                fl.Fill(p, true);
+                fl.Fill(p, true); 
 
                 while ((name = fl.Next())) {
                     const TString fname = p + name;
@@ -402,7 +402,7 @@ namespace {
                 const char* name;
                 const TString p = Path + off;
 
-                dl.Fill(p, true);
+                dl.Fill(p, true); 
 
                 while ((name = dl.Next())) {
                     if (strcmp(name, ".") && strcmp(name, "..")) {
@@ -516,12 +516,12 @@ int main(int argc, char** argv) {
         .Optional()
         .StoreValue(&doNotZip, true);
 
-    bool deduplicate = false;
-    opts.AddLongOption("deduplicate", "Turn on file-wise deduplication")
-        .NoArgument()
-        .Optional()
-        .StoreValue(&deduplicate, true);
-
+    bool deduplicate = false; 
+    opts.AddLongOption("deduplicate", "Turn on file-wise deduplication") 
+        .NoArgument() 
+        .Optional() 
+        .StoreValue(&deduplicate, true); 
+ 
     bool unpack = false;
     opts.AddLongOption('u', "unpack", "Unpack archive into current directory")
         .NoArgument()
@@ -634,17 +634,17 @@ int main(int argc, char** argv) {
 
     try {
         if (listMd5) {
-            for (const auto& rec: recs) {
+            for (const auto& rec: recs) { 
                 ListArchiveMd5(rec.Path, cutSlash);
             }
         } else if (list) {
-            for (const auto& rec: recs) {
+            for (const auto& rec: recs) { 
                 ListArchive(rec.Path, cutSlash);
             }
         } else if (unpack) {
             const TFsPath dir(unpackDir);
-            for (const auto& rec: recs) {
-                UnpackArchive(rec.Path, dir);
+            for (const auto& rec: recs) { 
+                UnpackArchive(rec.Path, dir); 
             }
         } else {
             TAutoPtr<IOutputStream> outf(OpenOutput(outputf));
@@ -668,21 +668,21 @@ int main(int argc, char** argv) {
             outf->Write(prepend.data(), prepend.size());
 
             if (cat) {
-                for (const auto& rec: recs) {
-                    rec.Recurse(*out);
+                for (const auto& rec: recs) { 
+                    rec.Recurse(*out); 
                 }
             } else {
-                TDuplicatesMap duplicatesMap;
-                if (deduplicate) {
-                    for (const auto& rec: recs) {
-                        rec.Recurse(duplicatesMap);
-                    }
+                TDuplicatesMap duplicatesMap; 
+                if (deduplicate) { 
+                    for (const auto& rec: recs) { 
+                        rec.Recurse(duplicatesMap); 
+                    } 
                 }
-                duplicatesMap.Finish();
-                TDeduplicationArchiveWriter w(duplicatesMap, out, !doNotZip);
-                for (const auto& rec: recs) {
-                    rec.Recurse(w);
-                }
+                duplicatesMap.Finish(); 
+                TDeduplicationArchiveWriter w(duplicatesMap, out, !doNotZip); 
+                for (const auto& rec: recs) { 
+                    rec.Recurse(w); 
+                } 
                 w.Finish();
             }
 

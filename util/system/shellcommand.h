@@ -3,7 +3,7 @@
 #include <util/generic/noncopyable.h>
 #include <util/generic/string.h>
 #include <util/generic/list.h>
-#include <util/generic/hash.h>
+#include <util/generic/hash.h> 
 #include <util/generic/strbuf.h>
 #include <util/generic/maybe.h>
 #include <util/stream/input.h>
@@ -16,11 +16,11 @@
 
 class TShellCommandOptions {
 public:
-    struct TUserOptions {
+    struct TUserOptions { 
         TString Name;
-#if defined(_win_)
+#if defined(_win_) 
         TString Password;
-#endif
+#endif 
 #if defined(_unix_)
         /**
          * Run child process with the user supplementary groups.
@@ -29,15 +29,15 @@ public:
          */
         bool UseUserGroups = false;
 #endif
-    };
-
+    }; 
+ 
     enum EHandleMode {
         HANDLE_INHERIT,
         HANDLE_PIPE,
         HANDLE_STREAM
     };
 
-public:
+public: 
     inline TShellCommandOptions() noexcept
         : ClearSignalMask(false)
         , CloseAllFdsOnExec(false)
@@ -317,7 +317,7 @@ public:
     IInputStream* InputStream;
     IOutputStream* OutputStream;
     IOutputStream* ErrorStream;
-    TUserOptions User;
+    TUserOptions User; 
     THashMap<TString, TString> Environment;
     int Nice = 0;
 

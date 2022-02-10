@@ -1,5 +1,5 @@
 #pragma once
-
+ 
 #include <util/charset/recode_result.h>
 #include <util/charset/utf8.h>
 #include <util/generic/ptr.h>
@@ -7,10 +7,10 @@
 #include <util/system/defaults.h>
 
 #include "codepage.h"
-#include "doccodes.h"
+#include "doccodes.h" 
 #include "iconv.h"
 #include "wide.h"
-
+ 
 namespace NCodepagePrivate {
     inline RECODE_RESULT _recodeCopy(const char* in, char* out, size_t in_size, size_t out_size, size_t& in_readed, size_t& out_writed) {
         in_readed = in_size;
@@ -23,18 +23,18 @@ namespace NCodepagePrivate {
             memcpy(out, in, in_readed);
         out_writed = in_readed;
         return res;
-    }
-
+    } 
+ 
     inline RECODE_RESULT _recodeToUTF8(ECharset From, const char* in, char* out, size_t in_size, size_t out_size, size_t& in_readed, size_t& out_writed) {
         if (From == CODES_UTF8)
             return _recodeCopy(in, out, in_size, out_size, in_readed, out_writed);
         const CodePage* cp = CodePageByCharset(From);
-
+ 
         const unsigned char* in_start = (const unsigned char*)in;
         const unsigned char* in_end = in_start + in_size;
         const unsigned char* out_start = (unsigned char*)out;
         const unsigned char* out_end = out_start + out_size;
-
+ 
         size_t rune_len;
         RECODE_RESULT res = RECODE_OK;
         while ((unsigned char*)in < in_end && res == RECODE_OK) {
@@ -44,7 +44,7 @@ namespace NCodepagePrivate {
         in_readed = (unsigned char*)in - in_start;
         out_writed = (unsigned char*)out - out_start;
         return res;
-    }
+    } 
 
     inline RECODE_RESULT _recodeFromUTF8(ECharset to, const char* in, char* out, size_t in_size, size_t out_size, size_t& in_readed, size_t& out_writed) {
         if (to == CODES_UTF8)
@@ -56,7 +56,7 @@ namespace NCodepagePrivate {
         const unsigned char* in_end = in_start + in_size;
         const unsigned char* out_start = (unsigned char*)out;
         const unsigned char* out_end = out_start + out_size;
-
+ 
         wchar32 rune;
         size_t rune_len;
         RECODE_RESULT res = RECODE_OK;
@@ -73,8 +73,8 @@ namespace NCodepagePrivate {
         in_readed = (unsigned char*)in - in_start;
         out_writed = (unsigned char*)out - out_start;
         return res;
-    }
-
+    } 
+ 
     inline RECODE_RESULT _recodeToYandex(ECharset From, const char* in, char* out, size_t in_size, size_t out_size, size_t& in_readed, size_t& out_writed) {
         if (From == CODES_YANDEX)
             return _recodeCopy(in, out, in_size, out_size, in_readed, out_writed);
@@ -101,7 +101,7 @@ namespace NCodepagePrivate {
             return RECODE_EOOUTPUT;
         return RECODE_OK;
     }
-
+ 
     template <class TCharType>
     inline RECODE_RESULT _recodeUTF8ToUnicode(const char* in, TCharType* out, size_t in_size, size_t out_size, size_t& in_readed, size_t& out_writed) {
         const unsigned char* inp = (const unsigned char*)in;
@@ -121,7 +121,7 @@ namespace NCodepagePrivate {
                 }
                 inp += rune_len;
             }
-        }
+        } 
         in_readed = inp - (const unsigned char*)in;
         out_writed = outp - out;
 
@@ -130,7 +130,7 @@ namespace NCodepagePrivate {
 
         return res;
     }
-
+ 
     template <class TCharType>
     inline RECODE_RESULT _recodeSBToUnicode(ECharset From, const char* in, TCharType* out, size_t in_size, size_t out_size, size_t& in_readed, size_t& out_writed) {
         const CodePage* cp = CodePageByCharset(From);
@@ -146,7 +146,7 @@ namespace NCodepagePrivate {
             return RECODE_EOOUTPUT;
         return RECODE_OK;
     }
-
+ 
     template <class TCharType>
     inline RECODE_RESULT _recodeUnicodeToUTF8Impl(const TCharType* in, char* out, size_t in_size, size_t out_size, size_t& in_readed, size_t& out_writed) {
         const TCharType* inp = in;
@@ -167,8 +167,8 @@ namespace NCodepagePrivate {
         in_readed = inp - in;
         out_writed = outp - (const unsigned char*)out;
         return res;
-    }
-
+    } 
+ 
     inline RECODE_RESULT _recodeUnicodeToUTF8(wchar32 rune, char* out, size_t out_size, size_t& nwritten) {
         return SafeWriteUTF8Char(rune, nwritten, (unsigned char*)out, out_size);
     }
@@ -215,7 +215,7 @@ namespace NCodepagePrivate {
 
         return RECODE_OK;
     }
-
+ 
     inline RECODE_RESULT _recodeUnicodeToSB(ECharset To, wchar32 rune, char* out, size_t out_size, size_t& nwritten) {
         if (0 == out_size)
             return RECODE_EOOUTPUT;
@@ -236,17 +236,17 @@ namespace NCodepagePrivate {
                     break;
                 }
                 out[out_writed++] = hex_digs[h];
-            }
-        }
+            } 
+        } 
         return res;
-    }
-
+    } 
+ 
     inline RECODE_RESULT _recodeUnicodeToHTMLEntities(const wchar32* in, char* out, size_t in_size, size_t out_size, size_t& in_readed, size_t& out_writed) {
         const wchar32* in_end = in + in_size;
         const char* out_beg = out;
         const wchar32* in_beg = in;
         RECODE_RESULT res = RECODE_OK;
-
+ 
         const char* out_end = out + out_size - 1;
         while (in < in_end && out < out_end) {
             if (*in < 0x80 && *in != '<' && *in != '&' && *in != '>') { //ascii
@@ -266,15 +266,15 @@ namespace NCodepagePrivate {
                 ent += ent_writed;
                 *ent++ = ';';
                 out = ent;
-            }
+            } 
             in++;
-        }
+        } 
         *out++ = '\x00';
         out_writed = out - out_beg;
         in_readed = in - in_beg;
         return res;
-    }
-
+    } 
+ 
     template <class TCharType>
     inline RECODE_RESULT _recodeToUnicode(ECharset From, const char* in, TCharType* out, size_t in_size, size_t out_size, size_t& in_readed, size_t& out_writed) {
         if (!ValidCodepage(From))

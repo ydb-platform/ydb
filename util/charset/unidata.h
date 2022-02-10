@@ -54,7 +54,7 @@ enum WC_TYPE {        // TODO move no NUnicode
     Pe_QUOTE = 38,     // '"'
     Pi_QUOTE = 39,     // '"'
     Pf_QUOTE = 40,     // '"'
-    Pc_CONNECTOR = 41, // '_' [_]       LOW LINE
+    Pc_CONNECTOR = 41, // '_' [_]       LOW LINE 
     Po_OTHER = 42,     // '*' [#%&*/@\] NUMBER SIGN ... REVERSE SOLIDUS
     Po_QUOTE = 43,     // '"' ["]       QUOTATION MARK
     Po_TERMINAL = 44,  // '.' [!,.:;?]  EXCLAMATION MARK ... QUESTION MARK

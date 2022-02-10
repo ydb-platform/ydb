@@ -186,10 +186,10 @@ Y_UNIT_TEST_SUITE(TCgiParametersTest) {
     }
 
     Y_UNIT_TEST(TestUnscape) {
-        TCgiParameters c("f=1&t=%84R%84%7C%84%80%84%7E&reqenc=SHIFT_JIS&p=0");
-        UNIT_ASSERT_VALUES_EQUAL(c.Get("t"), "\x84R\x84\x7C\x84\x80\x84\x7E");
-    }
-
+        TCgiParameters c("f=1&t=%84R%84%7C%84%80%84%7E&reqenc=SHIFT_JIS&p=0"); 
+        UNIT_ASSERT_VALUES_EQUAL(c.Get("t"), "\x84R\x84\x7C\x84\x80\x84\x7E"); 
+    } 
+ 
     Y_UNIT_TEST(TestEmpty) {
         UNIT_ASSERT(TCgiParameters().Print().empty());
     }

@@ -24,13 +24,13 @@ using namespace NCodepagePrivate;
 
 void Recoder::Create(const CodePage& source, const CodePage& target) {
     const Encoder* wideTarget = &EncoderByCharset(target.CPEnum);
-    Create(source, wideTarget);
-}
+    Create(source, wideTarget); 
+} 
 void Recoder::Create(const CodePage& page, wchar32 (*mapfunc)(wchar32)) {
     const Encoder* widePage = &EncoderByCharset(page.CPEnum);
-    Create(page, widePage, mapfunc);
-}
-
+    Create(page, widePage, mapfunc); 
+} 
+ 
 template <class T, class T1>
 static inline T1 Apply(T b, T e, T1 to, const Recoder& mapper) {
     while (b != e) {

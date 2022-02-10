@@ -9,25 +9,25 @@
 #include "codepage.h"
 #include "doccodes.h"
 #include "iconv.h"
-#include "recyr_int.hh"
+#include "recyr_int.hh" 
 
-///////////////////////////////////////////////////////////////////////////////////////
-//     input buf -> output buf                                                       //
-///////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////// 
+//     input buf -> output buf                                                       // 
+/////////////////////////////////////////////////////////////////////////////////////// 
 template <class TCharType>
 inline RECODE_RESULT RecodeToUnicode(ECharset from, const char* in, TCharType* out, size_t inSize, size_t outSize, size_t& inRead, size_t& outWritten) {
     static_assert(sizeof(TCharType) > 1, "expect wide character type");
 
     return NCodepagePrivate::_recodeToUnicode(from, in, out, inSize, outSize, inRead, outWritten);
-}
-
+} 
+ 
 template <class TCharType>
 inline RECODE_RESULT RecodeFromUnicode(ECharset to, const TCharType* in, char* out, size_t inSize, size_t outSize, size_t& inRead, size_t& outWritten) {
     static_assert(sizeof(TCharType) > 1, "expect wide character type");
 
     return NCodepagePrivate::_recodeFromUnicode(to, in, out, inSize, outSize, inRead, outWritten);
-}
-
+} 
+ 
 inline RECODE_RESULT RecodeFromUnicode(ECharset to, wchar32 rune, char* out, size_t outSize, size_t& outWritten) {
     return NCodepagePrivate::_recodeFromUnicode(to, rune, out, outSize, outWritten);
 }
@@ -66,7 +66,7 @@ inline RECODE_RESULT Recode(ECharset from, ECharset to, const char* in, char* ou
 
     if (to == from)
         return NCodepagePrivate::_recodeCopy(in, out, inSize, outSize, inRead, outWritten);
-
+ 
     if (NCodepagePrivate::NativeCodepage(from) && NCodepagePrivate::NativeCodepage(to)) {
         if (from == CODES_UTF8)
             return NCodepagePrivate::_recodeFromUTF8(to, in, out, inSize, outSize, inRead, outWritten);
@@ -79,7 +79,7 @@ inline RECODE_RESULT Recode(ECharset from, ECharset to, const char* in, char* ou
     } else if (NICONVPrivate::CanConvert(from, to)) {
         return NICONVPrivate::RecodeNoThrow(from, to, in, out, inSize, outSize, inRead, outWritten);
     }
-
+ 
     size_t wideSize = inSize * 3;
     TArrayHolder<wchar16> wide(new wchar16[wideSize]);
 
@@ -131,22 +131,22 @@ inline bool Recode(ECharset from, ECharset to, const TStringBuf& in, TString& ou
     return true;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////// 
 //     TString -> TString                                                              //
-///////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////// 
 inline TString Recode(ECharset from, ECharset to, const TString& in) {
     TString out;
     return to != from && Recode(from, to, in, out) ? out : in;
-}
+} 
 inline TString RecodeToYandex(ECharset from, const TString& in) {
     return Recode(from, CODES_YANDEX, in);
-}
+} 
 inline TString RecodeFromYandex(ECharset to, const TString& in) {
     return Recode(CODES_YANDEX, to, in);
-}
-
+} 
+ 
 inline TString RecodeToHTMLEntities(ECharset from, const TString& in) {
-    RECODE_RESULT res;
+    RECODE_RESULT res; 
     size_t outWritten, inRead;
     TString out;
     out.resize(in.length() * (4 + 4));
@@ -154,11 +154,11 @@ inline TString RecodeToHTMLEntities(ECharset from, const TString& in) {
     if (res == RECODE_EOOUTPUT) { //input contains many 8-byte characters?
         out.resize(in.length() * (4 + 8));
         res = NCodepagePrivate::_recodeToHTMLEntities(from, in.c_str(), out.begin(), in.length(), out.length(), inRead, outWritten);
-    }
+    } 
     if (res != RECODE_OK) {
         ythrow yexception() << "Recode to HTML entities failed";
     }
 
     out.resize(outWritten - 1);
-    return out;
-}
+    return out; 
+} 

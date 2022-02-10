@@ -35,7 +35,7 @@ namespace NStringPrivate {
 }
 
 template <typename TDerived, typename TCharType, typename TTraitsType = std::char_traits<TCharType>>
-class TStringBase {
+class TStringBase { 
     using TStringView = std::basic_string_view<TCharType>;
     using TStringViewWithTraits = std::basic_string_view<TCharType, TTraitsType>;
 
@@ -43,7 +43,7 @@ public:
     using TChar = TCharType;
     using TTraits = TTraitsType;
     using TSelf = TStringBase<TDerived, TChar, TTraits>;
-
+ 
     using size_type = size_t;
     using difference_type = ptrdiff_t;
     static constexpr size_t npos = size_t(-1);

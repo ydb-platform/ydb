@@ -19,18 +19,18 @@ public:
 class TSimpleTimer {
     TInstant T;
 
-public:
+public: 
     TSimpleTimer() {
-        Reset();
-    }
+        Reset(); 
+    } 
     TDuration Get() const {
         return TInstant::Now() - T;
-    }
+    } 
     void Reset() {
         T = TInstant::Now();
-    }
-};
-
+    } 
+}; 
+ 
 class TProfileTimer {
     TDuration T;
 

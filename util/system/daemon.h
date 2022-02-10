@@ -1,11 +1,11 @@
 #pragma once
-
+ 
 namespace NDaemonMaker {
     enum ECloseDescriptors {
         closeAll = 0,
         closeStdIoOnly
     };
-
+ 
     enum EStdIoDescriptors {
         openNone = 0,
         openDevNull,

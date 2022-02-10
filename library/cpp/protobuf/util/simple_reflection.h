@@ -104,7 +104,7 @@ namespace NProtoBuf {
             return *Msg.GetReflection();
         }
 
-        [[noreturn]] void RaiseUnknown() const { 
+        [[noreturn]] void RaiseUnknown() const {
             ythrow yexception() << "Unknown field cpp-type: " << (size_t)CppType();
         }
 

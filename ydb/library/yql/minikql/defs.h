@@ -34,7 +34,7 @@
 namespace NKikimr {
 
 template <typename T>
-[[noreturn]] void ThrowException(T&& e) 
+[[noreturn]] void ThrowException(T&& e)
 {
     throw e;
 }
@@ -42,7 +42,7 @@ template <typename T>
 struct TThrowable
 {
     template <typename T>
-    [[noreturn]] void operator,(T&& e) { 
+    [[noreturn]] void operator,(T&& e) {
         ThrowException(e);
     }
 };

@@ -91,7 +91,7 @@ inline void YaDebugBreak() {
 
 namespace NPrivate {
     /// method should not be used directly
-    [[noreturn]] void Panic(const TStaticBuf& file, int line, const char* function, const char* expr, const char* format, ...) noexcept Y_PRINTF_FORMAT(5, 6); 
+    [[noreturn]] void Panic(const TStaticBuf& file, int line, const char* function, const char* expr, const char* format, ...) noexcept Y_PRINTF_FORMAT(5, 6);
 }
 
 /// Assert that does not depend on NDEBUG macro and outputs message like printf

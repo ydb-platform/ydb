@@ -5,31 +5,31 @@
 #include "vector.h"
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/builder.h>
- 
+
 Y_UNIT_TEST_SUITE(XRange) {
-    void TestXRangeImpl(size_t begin, size_t end) { 
-        size_t count = 0; 
-        size_t sum = 0; 
-        size_t first = 42; 
-        bool firstInited = false; 
-        size_t last = 0; 
- 
+    void TestXRangeImpl(size_t begin, size_t end) {
+        size_t count = 0;
+        size_t sum = 0;
+        size_t first = 42;
+        bool firstInited = false;
+        size_t last = 0;
+
         for (auto i : xrange(begin, end)) {
             ++count;
-            sum += i; 
-            last = i; 
-            if (!firstInited) { 
-                first = i; 
-                firstInited = true; 
-            } 
-        } 
- 
-        UNIT_ASSERT_VALUES_EQUAL(count, end - begin); 
-        UNIT_ASSERT_VALUES_EQUAL(first, begin); 
-        UNIT_ASSERT_VALUES_EQUAL(last, end - 1); 
-        UNIT_ASSERT_VALUES_EQUAL(sum, count * (first + last) / 2); 
-    } 
- 
+            sum += i;
+            last = i;
+            if (!firstInited) {
+                first = i;
+                firstInited = true;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(count, end - begin);
+        UNIT_ASSERT_VALUES_EQUAL(first, begin);
+        UNIT_ASSERT_VALUES_EQUAL(last, end - 1);
+        UNIT_ASSERT_VALUES_EQUAL(sum, count * (first + last) / 2);
+    }
+
     void TestSteppedXRangeImpl(int begin, int end, int step, const TVector<int>& expected) {
         size_t expInd = 0;
         for (auto i : xrange(begin, end, step)) {
@@ -41,9 +41,9 @@ Y_UNIT_TEST_SUITE(XRange) {
     }
 
     Y_UNIT_TEST(IncrementWorks) {
-        TestXRangeImpl(0, 10); 
-        TestXRangeImpl(10, 20); 
-    } 
+        TestXRangeImpl(0, 10);
+        TestXRangeImpl(10, 20);
+    }
 
     Y_UNIT_TEST(DecrementWorks) {
         TestSteppedXRangeImpl(10, 0, -1, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1});
@@ -214,4 +214,4 @@ Y_UNIT_TEST_SUITE(XRange) {
             UNIT_ASSERT_VALUES_EQUAL(5, *it);
         }
     }
-} 
+}

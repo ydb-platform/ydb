@@ -18,7 +18,7 @@ namespace NLastGetopt {
     template <class TpFunc>
     struct TOptKVHandler;
 
-    [[noreturn]] void PrintUsageAndExit(const TOptsParser* parser); 
-    [[noreturn]] void PrintVersionAndExit(const TOptsParser* parser); 
+    [[noreturn]] void PrintUsageAndExit(const TOptsParser* parser);
+    [[noreturn]] void PrintVersionAndExit(const TOptsParser* parser);
     [[noreturn]] void PrintShortVersionAndExit(const TString& appName);
 }

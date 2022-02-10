@@ -1044,11 +1044,11 @@ namespace {
         }
 
     private:
-        [[noreturn]] static void ThrowNoData() { 
+        [[noreturn]] static void ThrowNoData() {
             THROW yexception() << "No more data in buffer";
         }
 
-        [[noreturn]] static void ThrowCorrupted() { 
+        [[noreturn]] static void ThrowCorrupted() {
             THROW yexception() << "Serialized data is corrupted";
         }
 

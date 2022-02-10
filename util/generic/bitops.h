@@ -4,7 +4,7 @@
 #include "typelist.h"
 
 #include <util/system/compiler.h>
-#include <util/system/yassert.h> 
+#include <util/system/yassert.h>
 
 #ifdef _MSC_VER
     #include <intrin.h>
@@ -98,7 +98,7 @@ namespace NBitOps {
             Y_ASSERT(value); // because __builtin_ctz* have undefined result for zero.
             return __builtin_ctzl(value);
         }
- 
+
         inline unsigned CountTrailingZeroBitsImpl(unsigned long long value) noexcept {
             Y_ASSERT(value); // because __builtin_ctz* have undefined result for zero.
             return __builtin_ctzll(value);
@@ -113,7 +113,7 @@ namespace NBitOps {
                 value >>= 1;
                 ++result;
             }
- 
+
             return result;
         }
 #endif
@@ -210,7 +210,7 @@ static inline T FastClp2(T t) noexcept {
     Y_ASSERT(t > 0);
     using TCvt = typename ::TUnsignedInts::template TSelectBy<TSizeOfPredicate<sizeof(T)>::template TResult>::type;
     return 1 + ::NBitOps::NPrivate::TClp2Helper<sizeof(TCvt) * 4, T>::Calc(static_cast<TCvt>(t));
-} 
+}
 
 /**
  * Check if integer is a power of 2.

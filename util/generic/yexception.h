@@ -148,7 +148,7 @@ namespace NPrivate {
         TStringBuf Message;
     };
 
-    [[noreturn]] void ThrowYException(const TSimpleExceptionMessage& sm); 
+    [[noreturn]] void ThrowYException(const TSimpleExceptionMessage& sm);
     [[noreturn]] void ThrowYExceptionWithBacktrace(const TSimpleExceptionMessage& sm);
 }
 

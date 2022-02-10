@@ -1,9 +1,9 @@
 #include "ipv6_address.h"
 #include "ipv6_address_p.h"
 
-#ifdef _unix_ 
+#ifdef _unix_
 #include <netinet/in.h>
-#endif 
+#endif
 
 #include <util/network/address.h>
 #include <util/network/init.h>

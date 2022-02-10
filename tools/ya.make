@@ -18,7 +18,7 @@ RECURSE(
     clustermaster
     coldiff
     compress
-    convert2html 
+    convert2html
     cproxy
     crc32
     crx_creator

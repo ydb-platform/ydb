@@ -156,8 +156,8 @@
 
 #if defined(__POPCNT__) || defined(POPCNT_ENABLED)
     #define _popcnt_
-#endif 
- 
+#endif
+
 #if defined(__PCLMUL__) || defined(PCLMUL_ENABLED)
     #define _pclmul_
 #endif

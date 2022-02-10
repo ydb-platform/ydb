@@ -10,8 +10,8 @@
 #include <util/generic/string.h>
 #include <util/generic/strbuf.h>
 
-/// @addtogroup Strings_Miscellaneous
-/// @{
+/// @addtogroup Strings_Miscellaneous 
+/// @{ 
 int a2i(const TString& s);
 
 /// Removes the last character if it is equal to c.
@@ -43,8 +43,8 @@ inline void addIfAbsent(TString& s, char lastCh1, char lastCh2) {
     }
 }
 
-/// @}
-
+/// @} 
+ 
 /*
  * ------------------------------------------------------------------
  *

@@ -164,12 +164,12 @@ private:
             TStoredSize nSize;
             Add(3, &nSize);
             TVector<typename AMM::key_type, typename std::allocator_traits<typename AMM::allocator_type>::template rebind_alloc<typename AMM::key_type>> indices;
-            indices.resize(nSize); 
+            indices.resize(nSize);
             for (TStoredSize i = 0; i < nSize; ++i)
-                Add(1, &indices[i]); 
+                Add(1, &indices[i]);
             for (TStoredSize i = 0; i < nSize; ++i) {
                 std::pair<typename AMM::key_type, typename AMM::mapped_type> valToInsert;
-                valToInsert.first = indices[i]; 
+                valToInsert.first = indices[i];
                 Add(2, &valToInsert.second);
                 data.insert(valToInsert);
             }
@@ -391,7 +391,7 @@ public:
         }
         int i = 1;
         for (typename TList<T1>::iterator k = data.begin(); k != data.end(); ++k, ++i)
-            Add(i + 2, &(*k)); 
+            Add(i + 2, &(*k));
         return 0;
     }
     template <class T1, class T2>
@@ -400,7 +400,7 @@ public:
         Add(2, &(pData->second));
         return 0;
     }
- 
+
     template <class T1, size_t N>
     int Add(const chunk_id, std::array<T1, N>* pData) {
         if (HasNonTrivialSerializer<T1>(0u)) {

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "bin_saver.h"
- 
+
 namespace NMemIoInternals {
     class TMemoryStream: public IBinaryStream {
         TVector<char>& Data;

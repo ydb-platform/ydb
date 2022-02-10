@@ -2,7 +2,7 @@
 
 #include <util/network/ip.h>
 #include <util/network/init.h>
-#include <util/network/address.h> 
+#include <util/network/address.h>
 #include <util/generic/size_literals.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -19,15 +19,15 @@ public:
     void BindAddresses(TBindAddresses& ret) const;
 
     inline THttpServerOptions& AddBindAddress(const TString& address, ui16 port) {
-        const TAddr addr = { 
+        const TAddr addr = {
             address,
             port,
         };
 
-        BindSockaddr.push_back(addr); 
+        BindSockaddr.push_back(addr);
         return *this;
-    } 
- 
+    }
+
     inline THttpServerOptions& AddBindAddress(const TString& address) {
         return AddBindAddress(address, 0);
     }
@@ -139,13 +139,13 @@ public:
         return *this;
     }
 
-    struct TAddr { 
+    struct TAddr {
         TString Addr;
-        ui16 Port; 
-    }; 
- 
+        ui16 Port;
+    };
+
     typedef TVector<TAddr> TAddrs;
- 
+
     bool KeepAliveEnabled = true;
     bool CompressionEnabled = false;
     bool RejectExcessConnections = false;

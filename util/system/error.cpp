@@ -88,8 +88,8 @@ void LastSystemErrorText(char* str, size_t size, int code) {
 #elif defined(_freebsd_) || defined(_darwin_) || defined(_musl_) || defined(_bionic_)
     strerror_r(code, str, size);
 #elif defined(_linux_) | defined(_cygwin_)
-    char* msg = strerror_r(code, str, size); 
-    strncpy(str, msg, size); 
+    char* msg = strerror_r(code, str, size);
+    strncpy(str, msg, size);
 #else
     #error port me gently!
 #endif

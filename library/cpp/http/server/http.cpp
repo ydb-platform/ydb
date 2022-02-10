@@ -26,8 +26,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-using namespace NAddr; 
- 
+using namespace NAddr;
+
 namespace {
     class IPollAble {
     public:

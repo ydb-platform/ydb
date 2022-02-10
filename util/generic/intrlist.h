@@ -521,7 +521,7 @@ public:
 
         gapFront->SetNext(gapBack);
         gapBack->SetPrev(gapFront);
- 
+
         TListItem* const pasteBack = pasteBefore.Item();
         TListItem* const pasteFront = pasteBack->Prev();
 
@@ -541,11 +541,11 @@ public:
             functor(&*(i++));
         }
     }
- 
+
     template <class TFunctor>
     inline void ForEach(TFunctor&& functor) const {
         TConstIterator i = Begin();
- 
+
         while (i != End()) {
             functor(&*(i++));
         }
@@ -589,13 +589,13 @@ class TIntrusiveListWithAutoDelete: public TIntrusiveList<T, Tag> {
 public:
     using TIterator = typename TIntrusiveList<T, Tag>::TIterator;
     using TConstIterator = typename TIntrusiveList<T, Tag>::TConstIterator;
- 
+
     using TReverseIterator = typename TIntrusiveList<T, Tag>::TReverseIterator;
     using TConstReverseIterator = typename TIntrusiveList<T, Tag>::TConstReverseIterator;
 
     using iterator = TIterator;
     using const_iterator = TConstIterator;
- 
+
     using reverse_iterator = TReverseIterator;
     using const_reverse_iterator = TConstReverseIterator;
 
@@ -622,7 +622,7 @@ public:
             D::Destroy(item);
         });
     }
- 
+
     inline static void Cut(TIterator begin, TIterator end) noexcept {
         TIntrusiveListWithAutoDelete<T, D, Tag> temp;
         Cut(begin, end, temp.End());

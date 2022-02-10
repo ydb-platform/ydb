@@ -10,7 +10,7 @@ enum class EMetricValueType {
     UINT64,
     HISTOGRAM,
     SUMMARY,
-    LOGHISTOGRAM,
+    LOGHISTOGRAM, 
 };
 
 } // namespace NMonitoring

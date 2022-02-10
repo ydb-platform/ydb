@@ -167,49 +167,49 @@ namespace NMonitoring {
                     break;
 
                 case EMetricType::DSUMMARY:
-                    c->OnSummaryDouble(time, ReadSummaryDouble());
-                    break;
-
+                    c->OnSummaryDouble(time, ReadSummaryDouble()); 
+                    break; 
+ 
                 case EMetricType::HIST:
                 case EMetricType::HIST_RATE:
                     c->OnHistogram(time, ReadHistogram());
                     break;
 
-                case EMetricType::LOGHIST:
-                    c->OnLogHistogram(time, ReadLogHistogram());
-                    break;
-
+                case EMetricType::LOGHIST: 
+                    c->OnLogHistogram(time, ReadLogHistogram()); 
+                    break; 
+ 
                 default:
                     throw TSpackDecodeError() << "Unsupported metric type: " << metricType;
                 }
             }
 
-            ISummaryDoubleSnapshotPtr ReadSummaryDouble() {
-                ui64 count = ReadFixed<ui64>();
-                double sum = ReadFixed<double>();
-                double min = ReadFixed<double>();
-                double max = ReadFixed<double>();
-                double last = ReadFixed<double>();
-                return MakeIntrusive<TSummaryDoubleSnapshot>(sum, min, max, last, count);
-            }
-
-            TLogHistogramSnapshotPtr ReadLogHistogram() {
-                double base = ReadFixed<double>();
-                ui64 zerosCount = ReadFixed<ui64>();
-                int startPower = static_cast<int>(ReadVarint());
-                ui32 count = ReadVarint();
+            ISummaryDoubleSnapshotPtr ReadSummaryDouble() { 
+                ui64 count = ReadFixed<ui64>(); 
+                double sum = ReadFixed<double>(); 
+                double min = ReadFixed<double>(); 
+                double max = ReadFixed<double>(); 
+                double last = ReadFixed<double>(); 
+                return MakeIntrusive<TSummaryDoubleSnapshot>(sum, min, max, last, count); 
+            } 
+ 
+            TLogHistogramSnapshotPtr ReadLogHistogram() { 
+                double base = ReadFixed<double>(); 
+                ui64 zerosCount = ReadFixed<ui64>(); 
+                int startPower = static_cast<int>(ReadVarint()); 
+                ui32 count = ReadVarint(); 
                 // see https://a.yandex-team.ru/arc/trunk/arcadia/infra/yasm/stockpile_client/points.cpp?rev=r8593154#L31
                 // and https://a.yandex-team.ru/arc/trunk/arcadia/infra/yasm/common/points/hgram/normal/normal.h?rev=r8268697#L9
                 // TODO: share this constant value
                 Y_ENSURE(count <= 100u, "more than 100 buckets in log histogram: " << count);
-                TVector<double> buckets;
-                buckets.reserve(count);
-                for (ui32 i = 0; i < count; ++i) {
-                    buckets.emplace_back(ReadFixed<double>());
-                }
-                return MakeIntrusive<TLogHistogramSnapshot>(base, zerosCount, startPower, std::move(buckets));
-            }
-
+                TVector<double> buckets; 
+                buckets.reserve(count); 
+                for (ui32 i = 0; i < count; ++i) { 
+                    buckets.emplace_back(ReadFixed<double>()); 
+                } 
+                return MakeIntrusive<TLogHistogramSnapshot>(base, zerosCount, startPower, std::move(buckets)); 
+            } 
+ 
             IHistogramSnapshotPtr ReadHistogram() {
                 ui32 bucketsCount = ReadVarint();
                 auto s = TExplicitHistogramSnapshot::New(bucketsCount);
@@ -245,9 +245,9 @@ namespace NMonitoring {
                 IMetricConsumer* c)
             {
                 for (ui32 i = 0; i < count; i++) {
-                    auto nameIdx = ReadVarint();
-                    auto valueIdx = ReadVarint();
-                    c->OnLabel(labelNames.Get(nameIdx), labelValues.Get(valueIdx));
+                    auto nameIdx = ReadVarint(); 
+                    auto valueIdx = ReadVarint(); 
+                    c->OnLabel(labelNames.Get(nameIdx), labelValues.Get(valueIdx)); 
                 }
             }
 
@@ -385,7 +385,7 @@ namespace NMonitoring {
                 *result = EMetricType::DSUMMARY;
             }
             return true;
-        } else if (byte == EncodeMetricType(EMetricType::LOGHIST)) {
+        } else if (byte == EncodeMetricType(EMetricType::LOGHIST)) { 
             if (result) {
                 *result = EMetricType::LOGHIST;
             }

@@ -25,12 +25,12 @@ void Out<NMonitoring::NProto::TSingleSample::ValueCase>(IOutputStream& os, NMoni
     case NMonitoring::NProto::TSingleSample::ValueCase::kFloat64:
         os << "Float64";
         break;
-    case NMonitoring::NProto::TSingleSample::ValueCase::kSummaryDouble:
-        os << "DSummary";
-        break;
-    case NMonitoring::NProto::TSingleSample::ValueCase::kLogHistogram:
-        os << "LogHistogram";
-        break;
+    case NMonitoring::NProto::TSingleSample::ValueCase::kSummaryDouble: 
+        os << "DSummary"; 
+        break; 
+    case NMonitoring::NProto::TSingleSample::ValueCase::kLogHistogram: 
+        os << "LogHistogram"; 
+        break; 
     case NMonitoring::NProto::TSingleSample::ValueCase::VALUE_NOT_SET:
         os << "NOT SET";
         break;

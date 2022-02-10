@@ -101,34 +101,34 @@ namespace {
         }
     }
 
-    void AssertPointEqual(const NProto::TPoint& p, TInstant time, const TLogHistogramSnapshot& expected) {
-        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds());
-        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kLogHistogram);
-
-        const double eps = 1e-10;
-        const NProto::TLogHistogram& h = p.GetLogHistogram();
-
-        UNIT_ASSERT_DOUBLES_EQUAL(h.GetBase(), expected.Base(), eps);
-        UNIT_ASSERT_VALUES_EQUAL(h.GetZerosCount(), expected.ZerosCount());
-        UNIT_ASSERT_VALUES_EQUAL(h.GetStartPower(), expected.StartPower());
-        UNIT_ASSERT_VALUES_EQUAL(h.BucketsSize(), expected.Count());
-        for (size_t i = 0; i < expected.Count(); ++i) {
-            UNIT_ASSERT_DOUBLES_EQUAL(h.GetBuckets(i), expected.Bucket(i), eps);
-        }
-    }
-
-    void AssertPointEqual(const NProto::TPoint& p, TInstant time, const ISummaryDoubleSnapshot& expected) {
-        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds());
-        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kSummaryDouble);
-        auto actual = p.GetSummaryDouble();
-        const double eps = 1e-10;
-        UNIT_ASSERT_DOUBLES_EQUAL(actual.GetSum(), expected.GetSum(), eps);
-        UNIT_ASSERT_DOUBLES_EQUAL(actual.GetMin(), expected.GetMin(), eps);
-        UNIT_ASSERT_DOUBLES_EQUAL(actual.GetMax(), expected.GetMax(), eps);
-        UNIT_ASSERT_DOUBLES_EQUAL(actual.GetLast(), expected.GetLast(), eps);
-        UNIT_ASSERT_VALUES_EQUAL(actual.GetCount(), expected.GetCount());
-    }
-
+    void AssertPointEqual(const NProto::TPoint& p, TInstant time, const TLogHistogramSnapshot& expected) { 
+        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds()); 
+        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kLogHistogram); 
+ 
+        const double eps = 1e-10; 
+        const NProto::TLogHistogram& h = p.GetLogHistogram(); 
+ 
+        UNIT_ASSERT_DOUBLES_EQUAL(h.GetBase(), expected.Base(), eps); 
+        UNIT_ASSERT_VALUES_EQUAL(h.GetZerosCount(), expected.ZerosCount()); 
+        UNIT_ASSERT_VALUES_EQUAL(h.GetStartPower(), expected.StartPower()); 
+        UNIT_ASSERT_VALUES_EQUAL(h.BucketsSize(), expected.Count()); 
+        for (size_t i = 0; i < expected.Count(); ++i) { 
+            UNIT_ASSERT_DOUBLES_EQUAL(h.GetBuckets(i), expected.Bucket(i), eps); 
+        } 
+    } 
+ 
+    void AssertPointEqual(const NProto::TPoint& p, TInstant time, const ISummaryDoubleSnapshot& expected) { 
+        UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), time.MilliSeconds()); 
+        UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kSummaryDouble); 
+        auto actual = p.GetSummaryDouble(); 
+        const double eps = 1e-10; 
+        UNIT_ASSERT_DOUBLES_EQUAL(actual.GetSum(), expected.GetSum(), eps); 
+        UNIT_ASSERT_DOUBLES_EQUAL(actual.GetMin(), expected.GetMin(), eps); 
+        UNIT_ASSERT_DOUBLES_EQUAL(actual.GetMax(), expected.GetMax(), eps); 
+        UNIT_ASSERT_DOUBLES_EQUAL(actual.GetLast(), expected.GetLast(), eps); 
+        UNIT_ASSERT_VALUES_EQUAL(actual.GetCount(), expected.GetCount()); 
+    } 
+ 
 } // namespace
 
 
@@ -734,223 +734,223 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         return out.Str();
     }
 
-    Y_UNIT_TEST(SummaryValueEncode) {
+    Y_UNIT_TEST(SummaryValueEncode) { 
         auto writeDocument = [](IMetricEncoder* e) {
-            e->OnStreamBegin();
-            {
+            e->OnStreamBegin(); 
+            { 
                 e->OnMetricBegin(EMetricType::DSUMMARY);
-                {
-                    e->OnLabelsBegin();
+                { 
+                    e->OnLabelsBegin(); 
                     e->OnLabel("metric", "temperature");
-                    e->OnLabelsEnd();
-                }
-
-                e->OnSummaryDouble(now, MakeIntrusive<TSummaryDoubleSnapshot>(10., -0.5, 0.5, 0.3, 30u));
+                    e->OnLabelsEnd(); 
+                } 
+ 
+                e->OnSummaryDouble(now, MakeIntrusive<TSummaryDoubleSnapshot>(10., -0.5, 0.5, 0.3, 30u)); 
                 e->OnMetricEnd();
-            }
-            e->OnStreamEnd();
-        };
-
-        TString result1 = EncodeToString(EncoderJson, writeDocument);
-        UNIT_ASSERT_NO_DIFF(result1, NResource::Find("/summary_value.json"));
-
-        TString result2 = EncodeToString(BufferedEncoderJson, writeDocument);
-        UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/summary_value.json"));
-    }
-
-    ISummaryDoubleSnapshotPtr TestInfSummary() {
-        return MakeIntrusive<TSummaryDoubleSnapshot>(
-                   std::numeric_limits<double>::quiet_NaN(),
-                   -std::numeric_limits<double>::infinity(),
-                   std::numeric_limits<double>::infinity(),
-                   0.3,
-                   30u);
-    }
-
-    Y_UNIT_TEST(SummaryInfEncode) {
+            } 
+            e->OnStreamEnd(); 
+        }; 
+ 
+        TString result1 = EncodeToString(EncoderJson, writeDocument); 
+        UNIT_ASSERT_NO_DIFF(result1, NResource::Find("/summary_value.json")); 
+ 
+        TString result2 = EncodeToString(BufferedEncoderJson, writeDocument); 
+        UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/summary_value.json")); 
+    } 
+ 
+    ISummaryDoubleSnapshotPtr TestInfSummary() { 
+        return MakeIntrusive<TSummaryDoubleSnapshot>( 
+                   std::numeric_limits<double>::quiet_NaN(), 
+                   -std::numeric_limits<double>::infinity(), 
+                   std::numeric_limits<double>::infinity(), 
+                   0.3, 
+                   30u); 
+    } 
+ 
+    Y_UNIT_TEST(SummaryInfEncode) { 
         auto writeDocument = [](IMetricEncoder* e) {
-            e->OnStreamBegin();
-            {
+            e->OnStreamBegin(); 
+            { 
                 e->OnMetricBegin(EMetricType::DSUMMARY);
-                {
-                    e->OnLabelsBegin();
+                { 
+                    e->OnLabelsBegin(); 
                     e->OnLabel("metric", "temperature");
-                    e->OnLabelsEnd();
-                }
-
-                e->OnSummaryDouble(now, TestInfSummary());
+                    e->OnLabelsEnd(); 
+                } 
+ 
+                e->OnSummaryDouble(now, TestInfSummary()); 
                 e->OnMetricEnd();
-            }
-            e->OnStreamEnd();
-        };
-
-        TString result1 = EncodeToString(EncoderJson, writeDocument);
-        UNIT_ASSERT_NO_DIFF(result1, NResource::Find("/summary_inf.json"));
-
-        TString result2 = EncodeToString(BufferedEncoderJson, writeDocument);
-        UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/summary_inf.json"));
-    }
-
-    Y_UNIT_TEST(SummaryInfDecode) {
-        NProto::TMultiSamplesList samples;
-        {
+            } 
+            e->OnStreamEnd(); 
+        }; 
+ 
+        TString result1 = EncodeToString(EncoderJson, writeDocument); 
+        UNIT_ASSERT_NO_DIFF(result1, NResource::Find("/summary_inf.json")); 
+ 
+        TString result2 = EncodeToString(BufferedEncoderJson, writeDocument); 
+        UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/summary_inf.json")); 
+    } 
+ 
+    Y_UNIT_TEST(SummaryInfDecode) { 
+        NProto::TMultiSamplesList samples; 
+        { 
             IMetricEncoderPtr e = EncoderProtobuf(&samples);
-
-            TString testJson = NResource::Find("/summary_inf.json");
-            DecodeJson(testJson, e.Get());
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(1, samples.SamplesSize());
-        const NProto::TMultiSample& s = samples.GetSamples(0);
-
+ 
+            TString testJson = NResource::Find("/summary_inf.json"); 
+            DecodeJson(testJson, e.Get()); 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(1, samples.SamplesSize()); 
+        const NProto::TMultiSample& s = samples.GetSamples(0); 
+ 
         UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::DSUMMARY);
-        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1); 
         AssertLabelEqual(s.GetLabels(0), "metric", "temperature");
-
-        UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
-
-        auto actual = s.GetPoints(0).GetSummaryDouble();
-        UNIT_ASSERT(std::isnan(actual.GetSum()));
-        UNIT_ASSERT(actual.GetMin() < 0);
-        UNIT_ASSERT(std::isinf(actual.GetMin()));
-        UNIT_ASSERT(actual.GetMax() > 0);
-        UNIT_ASSERT(std::isinf(actual.GetMax()));
-    }
-
-    Y_UNIT_TEST(SummaryValueDecode) {
-        NProto::TMultiSamplesList samples;
-        {
+ 
+        UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1); 
+ 
+        auto actual = s.GetPoints(0).GetSummaryDouble(); 
+        UNIT_ASSERT(std::isnan(actual.GetSum())); 
+        UNIT_ASSERT(actual.GetMin() < 0); 
+        UNIT_ASSERT(std::isinf(actual.GetMin())); 
+        UNIT_ASSERT(actual.GetMax() > 0); 
+        UNIT_ASSERT(std::isinf(actual.GetMax())); 
+    } 
+ 
+    Y_UNIT_TEST(SummaryValueDecode) { 
+        NProto::TMultiSamplesList samples; 
+        { 
             IMetricEncoderPtr e = EncoderProtobuf(&samples);
-
-            TString testJson = NResource::Find("/summary_value.json");
-            DecodeJson(testJson, e.Get());
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(1, samples.SamplesSize());
-        const NProto::TMultiSample& s = samples.GetSamples(0);
-
+ 
+            TString testJson = NResource::Find("/summary_value.json"); 
+            DecodeJson(testJson, e.Get()); 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(1, samples.SamplesSize()); 
+        const NProto::TMultiSample& s = samples.GetSamples(0); 
+ 
         UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::DSUMMARY);
-        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1); 
         AssertLabelEqual(s.GetLabels(0), "metric", "temperature");
-
-        UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
-
-        auto snapshot = TSummaryDoubleSnapshot(10., -0.5, 0.5, 0.3, 30u);
-        AssertPointEqual(s.GetPoints(0), now, snapshot);
-    }
-
-    Y_UNIT_TEST(SummaryTimeSeriesEncode) {
+ 
+        UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1); 
+ 
+        auto snapshot = TSummaryDoubleSnapshot(10., -0.5, 0.5, 0.3, 30u); 
+        AssertPointEqual(s.GetPoints(0), now, snapshot); 
+    } 
+ 
+    Y_UNIT_TEST(SummaryTimeSeriesEncode) { 
         auto writeDocument = [](IMetricEncoder* e) {
-            e->OnStreamBegin();
-            {
+            e->OnStreamBegin(); 
+            { 
                 e->OnMetricBegin(EMetricType::DSUMMARY);
-                {
-                    e->OnLabelsBegin();
+                { 
+                    e->OnLabelsBegin(); 
                     e->OnLabel("metric", "temperature");
-                    e->OnLabelsEnd();
-                }
-
-                TSummaryDoubleCollector summary;
-                summary.Collect(0.3);
-                summary.Collect(-0.5);
-                summary.Collect(1.);
-
-                e->OnSummaryDouble(now, summary.Snapshot());
-
-                summary.Collect(-1.5);
-                summary.Collect(0.01);
-
-                e->OnSummaryDouble(now + TDuration::Seconds(15), summary.Snapshot());
-
+                    e->OnLabelsEnd(); 
+                } 
+ 
+                TSummaryDoubleCollector summary; 
+                summary.Collect(0.3); 
+                summary.Collect(-0.5); 
+                summary.Collect(1.); 
+ 
+                e->OnSummaryDouble(now, summary.Snapshot()); 
+ 
+                summary.Collect(-1.5); 
+                summary.Collect(0.01); 
+ 
+                e->OnSummaryDouble(now + TDuration::Seconds(15), summary.Snapshot()); 
+ 
                 e->OnMetricEnd();
-            }
-            e->OnStreamEnd();
-        };
-
-        TString result1 = EncodeToString(EncoderJson, writeDocument);
-        UNIT_ASSERT_NO_DIFF(result1, NResource::Find("/summary_timeseries.json"));
-
-        TString result2 = EncodeToString(BufferedEncoderJson, writeDocument);
-        UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/summary_timeseries.json"));
-    }
-
-    Y_UNIT_TEST(SummaryTimeSeriesDecode) {
-        NProto::TMultiSamplesList samples;
-        {
+            } 
+            e->OnStreamEnd(); 
+        }; 
+ 
+        TString result1 = EncodeToString(EncoderJson, writeDocument); 
+        UNIT_ASSERT_NO_DIFF(result1, NResource::Find("/summary_timeseries.json")); 
+ 
+        TString result2 = EncodeToString(BufferedEncoderJson, writeDocument); 
+        UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/summary_timeseries.json")); 
+    } 
+ 
+    Y_UNIT_TEST(SummaryTimeSeriesDecode) { 
+        NProto::TMultiSamplesList samples; 
+        { 
             IMetricEncoderPtr e = EncoderProtobuf(&samples);
-
-            TString testJson = NResource::Find("/summary_timeseries.json");
-            DecodeJson(testJson, e.Get());
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(1, samples.SamplesSize());
-        const NProto::TMultiSample& s = samples.GetSamples(0);
-
+ 
+            TString testJson = NResource::Find("/summary_timeseries.json"); 
+            DecodeJson(testJson, e.Get()); 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(1, samples.SamplesSize()); 
+        const NProto::TMultiSample& s = samples.GetSamples(0); 
+ 
         UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::DSUMMARY);
-        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1); 
         AssertLabelEqual(s.GetLabels(0), "metric", "temperature");
-
-        UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 2);
-
-        TSummaryDoubleCollector summary;
-        summary.Collect(0.3);
-        summary.Collect(-0.5);
-        summary.Collect(1.);
-
-        AssertPointEqual(s.GetPoints(0), now, *summary.Snapshot());
-
-        summary.Collect(-1.5);
-        summary.Collect(0.01);
-
-        AssertPointEqual(s.GetPoints(1), now + TDuration::Seconds(15), *summary.Snapshot());
-    }
-
-    Y_UNIT_TEST(LogHistogramValueEncode) {
-        auto writeDocument = [](IMetricEncoder* e) {
-            e->OnStreamBegin();
-            {
-                e->OnMetricBegin(EMetricType::LOGHIST);
-                {
-                    e->OnLabelsBegin();
+ 
+        UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 2); 
+ 
+        TSummaryDoubleCollector summary; 
+        summary.Collect(0.3); 
+        summary.Collect(-0.5); 
+        summary.Collect(1.); 
+ 
+        AssertPointEqual(s.GetPoints(0), now, *summary.Snapshot()); 
+ 
+        summary.Collect(-1.5); 
+        summary.Collect(0.01); 
+ 
+        AssertPointEqual(s.GetPoints(1), now + TDuration::Seconds(15), *summary.Snapshot()); 
+    } 
+ 
+    Y_UNIT_TEST(LogHistogramValueEncode) { 
+        auto writeDocument = [](IMetricEncoder* e) { 
+            e->OnStreamBegin(); 
+            { 
+                e->OnMetricBegin(EMetricType::LOGHIST); 
+                { 
+                    e->OnLabelsBegin(); 
                     e->OnLabel("metric", "ms");
-                    e->OnLabelsEnd();
-                }
-
-                e->OnLogHistogram(now, TestLogHistogram());
-                e->OnMetricEnd();
-            }
-            e->OnStreamEnd();
-        };
-
-        TString result1 = EncodeToString(EncoderJson, writeDocument);
-        UNIT_ASSERT_NO_DIFF(result1, NResource::Find("/log_histogram_value.json"));
-
-        TString result2 = EncodeToString(BufferedEncoderJson, writeDocument);
-        UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/log_histogram_value.json"));
-    }
-
-    Y_UNIT_TEST(LogHistogramValueDecode) {
-        NProto::TMultiSamplesList samples;
-        {
-            IMetricEncoderPtr e = EncoderProtobuf(&samples);
-
-            TString testJson = NResource::Find("/log_histogram_value.json");
-            DecodeJson(testJson, e.Get());
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(1, samples.SamplesSize());
-        const NProto::TMultiSample& s = samples.GetSamples(0);
-
-        UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::LOGHISTOGRAM);
-        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+                    e->OnLabelsEnd(); 
+                } 
+ 
+                e->OnLogHistogram(now, TestLogHistogram()); 
+                e->OnMetricEnd(); 
+            } 
+            e->OnStreamEnd(); 
+        }; 
+ 
+        TString result1 = EncodeToString(EncoderJson, writeDocument); 
+        UNIT_ASSERT_NO_DIFF(result1, NResource::Find("/log_histogram_value.json")); 
+ 
+        TString result2 = EncodeToString(BufferedEncoderJson, writeDocument); 
+        UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/log_histogram_value.json")); 
+    } 
+ 
+    Y_UNIT_TEST(LogHistogramValueDecode) { 
+        NProto::TMultiSamplesList samples; 
+        { 
+            IMetricEncoderPtr e = EncoderProtobuf(&samples); 
+ 
+            TString testJson = NResource::Find("/log_histogram_value.json"); 
+            DecodeJson(testJson, e.Get()); 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(1, samples.SamplesSize()); 
+        const NProto::TMultiSample& s = samples.GetSamples(0); 
+ 
+        UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::LOGHISTOGRAM); 
+        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1); 
         AssertLabelEqual(s.GetLabels(0), "metric", "ms");
-
-        UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
-
-        auto snapshot = TestLogHistogram();
-        AssertPointEqual(s.GetPoints(0), now, *snapshot);
-    }
-
+ 
+        UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1); 
+ 
+        auto snapshot = TestLogHistogram(); 
+        AssertPointEqual(s.GetPoints(0), now, *snapshot); 
+    } 
+ 
     Y_UNIT_TEST(HistogramValueEncode) {
         auto writeDocument = [](IMetricEncoder* e) {
             e->OnStreamBegin();
@@ -981,58 +981,58 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
         UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/histogram_value.json"));
     }
 
-    Y_UNIT_TEST(LogHistogramTimeSeriesEncode) {
-        auto writeDocument = [](IMetricEncoder* e) {
-            e->OnStreamBegin();
-            {
-                e->OnMetricBegin(EMetricType::LOGHIST);
-                {
-                    e->OnLabelsBegin();
+    Y_UNIT_TEST(LogHistogramTimeSeriesEncode) { 
+        auto writeDocument = [](IMetricEncoder* e) { 
+            e->OnStreamBegin(); 
+            { 
+                e->OnMetricBegin(EMetricType::LOGHIST); 
+                { 
+                    e->OnLabelsBegin(); 
                     e->OnLabel("metric", "ms");
-                    e->OnLabelsEnd();
-                }
-
-                e->OnLogHistogram(now, TestLogHistogram(1));;
-
-                e->OnLogHistogram(now + TDuration::Seconds(15), TestLogHistogram(2));
-
-                e->OnMetricEnd();
-            }
-            e->OnStreamEnd();
-        };
-
-        TString result1 = EncodeToString(EncoderJson, writeDocument);
-        UNIT_ASSERT_NO_DIFF(result1, NResource::Find("/log_histogram_timeseries.json"));
-
-        TString result2 = EncodeToString(BufferedEncoderJson, writeDocument);
-        UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/log_histogram_timeseries.json"));
-    }
-
-    Y_UNIT_TEST(LogHistogramTimeSeriesDecode) {
-        NProto::TMultiSamplesList samples;
-        {
-            IMetricEncoderPtr e = EncoderProtobuf(&samples);
-
-            TString testJson = NResource::Find("/log_histogram_timeseries.json");
-            DecodeJson(testJson, e.Get());
-        }
-
-        UNIT_ASSERT_VALUES_EQUAL(1, samples.SamplesSize());
-        const NProto::TMultiSample& s = samples.GetSamples(0);
-
-        UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::LOGHISTOGRAM);
-        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+                    e->OnLabelsEnd(); 
+                } 
+ 
+                e->OnLogHistogram(now, TestLogHistogram(1));; 
+ 
+                e->OnLogHistogram(now + TDuration::Seconds(15), TestLogHistogram(2)); 
+ 
+                e->OnMetricEnd(); 
+            } 
+            e->OnStreamEnd(); 
+        }; 
+ 
+        TString result1 = EncodeToString(EncoderJson, writeDocument); 
+        UNIT_ASSERT_NO_DIFF(result1, NResource::Find("/log_histogram_timeseries.json")); 
+ 
+        TString result2 = EncodeToString(BufferedEncoderJson, writeDocument); 
+        UNIT_ASSERT_NO_DIFF(result2, NResource::Find("/log_histogram_timeseries.json")); 
+    } 
+ 
+    Y_UNIT_TEST(LogHistogramTimeSeriesDecode) { 
+        NProto::TMultiSamplesList samples; 
+        { 
+            IMetricEncoderPtr e = EncoderProtobuf(&samples); 
+ 
+            TString testJson = NResource::Find("/log_histogram_timeseries.json"); 
+            DecodeJson(testJson, e.Get()); 
+        } 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(1, samples.SamplesSize()); 
+        const NProto::TMultiSample& s = samples.GetSamples(0); 
+ 
+        UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::LOGHISTOGRAM); 
+        UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1); 
         AssertLabelEqual(s.GetLabels(0), "metric", "ms");
-
-        UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 2);
-
-        auto logHist = TestLogHistogram(1);
-        AssertPointEqual(s.GetPoints(0), now, *logHist);
-
-        logHist = TestLogHistogram(2);
-        AssertPointEqual(s.GetPoints(1), now + TDuration::Seconds(15), *logHist);
-    }
-
+ 
+        UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 2); 
+ 
+        auto logHist = TestLogHistogram(1); 
+        AssertPointEqual(s.GetPoints(0), now, *logHist); 
+ 
+        logHist = TestLogHistogram(2); 
+        AssertPointEqual(s.GetPoints(1), now + TDuration::Seconds(15), *logHist); 
+    } 
+ 
     void HistogramValueDecode(const TString& filePath) {
         NProto::TMultiSamplesList samples;
         {

@@ -260,24 +260,24 @@ Y_UNIT_TEST_SUITE(TTextText) {
                                   "     HIST readTimeMillis{} [{1: 0, 2: 0, 3: 1, 4: 0, 5: 7, inf: 1}]\n"
                                   "HIST_RATE writeTimeMillis{} [{1: 0, 2: 0, 3: 1, 4: 0, 5: 7, inf: 1}]\n");
     }
-
-    Y_UNIT_TEST(Summary) {
-        auto s = MakeIntrusive<TSummaryDoubleSnapshot>(10.1, -0.45, 0.478, 0.3, 30u);
+ 
+    Y_UNIT_TEST(Summary) { 
+        auto s = MakeIntrusive<TSummaryDoubleSnapshot>(10.1, -0.45, 0.478, 0.3, 30u); 
         TString result = EncodeToString(true, [s](IMetricEncoder* e) {
-            e->OnStreamBegin();
-            {
+            e->OnStreamBegin(); 
+            { 
                 e->OnMetricBegin(EMetricType::DSUMMARY);
-                {
-                    e->OnLabelsBegin();
-                    e->OnLabel("sensor", "temperature");
-                    e->OnLabelsEnd();
-                }
-                e->OnSummaryDouble(TInstant::Zero(), s);
+                { 
+                    e->OnLabelsBegin(); 
+                    e->OnLabel("sensor", "temperature"); 
+                    e->OnLabelsEnd(); 
+                } 
+                e->OnSummaryDouble(TInstant::Zero(), s); 
                 e->OnMetricEnd();
-            }
-            e->OnStreamEnd();
-        });
-        UNIT_ASSERT_STRINGS_EQUAL(result,
-                " DSUMMARY temperature{} [{sum: 10.1, min: -0.45, max: 0.478, last: 0.3, count: 30}]\n");
-    }
+            } 
+            e->OnStreamEnd(); 
+        }); 
+        UNIT_ASSERT_STRINGS_EQUAL(result, 
+                " DSUMMARY temperature{} [{sum: 10.1, min: -0.45, max: 0.478, last: 0.3, count: 30}]\n"); 
+    } 
 }

@@ -73,38 +73,38 @@ private:
     bool InfPresented_ = false;
     TBucketValue InfValue_;
 };
-
+ 
 class TSummaryDoubleBuilder {
 public:
     ISummaryDoubleSnapshotPtr Build() const {
         return MakeIntrusive<TSummaryDoubleSnapshot>(Sum_, Min_, Max_, Last_, Count_);
     }
-
+ 
     void SetSum(double sum) {
         Empty_ = false;
         Sum_ = sum;
     }
-
+ 
     void SetMin(double min) {
         Empty_ = false;
         Min_ = min;
     }
-
+ 
     void SetMax(double max) {
         Empty_ = false;
         Max_ = max;
     }
-
+ 
     void SetLast(double last) {
         Empty_ = false;
         Last_ = last;
     }
-
+ 
     void SetCount(ui64 count) {
         Empty_ = false;
         Count_ = count;
     }
-
+ 
     void Clear() {
         Empty_ = true;
         Sum_ = 0;
@@ -113,11 +113,11 @@ public:
         Last_ = 0;
         Count_ = 0;
     }
-
+ 
     bool Empty() const {
         return Empty_;
     }
-
+ 
 private:
     double Sum_ = 0;
     double Min_ = 0;
@@ -126,51 +126,51 @@ private:
     ui64 Count_ = 0;
     bool Empty_ = true;
 };
-
+ 
 class TLogHistogramBuilder {
 public:
     void SetBase(double base) {
         DECODE_ENSURE(base > 0, "base must be positive");
         Base_ = base;
     }
-
+ 
     void SetZerosCount(ui64 zerosCount) {
         DECODE_ENSURE(zerosCount >= 0, "zeros count must be positive");
         ZerosCount_ = zerosCount;
     }
-
+ 
     void SetStartPower(int startPower) {
         StartPower_ = startPower;
     }
-
+ 
     void AddBucketValue(double value) {
         DECODE_ENSURE(value > 0.0, "bucket values must be positive");
         DECODE_ENSURE(value < std::numeric_limits<double>::max(), "bucket values must be finite");
         Buckets_.push_back(value);
     }
-
+ 
     void Clear() {
         Buckets_.clear();
         Base_ = 1.5;
         ZerosCount_ = 0;
         StartPower_ = 0;
     }
-
+ 
     bool Empty() const {
         return Buckets_.empty() && ZerosCount_ == 0;
     }
-
+ 
     TLogHistogramSnapshotPtr Build() {
         return MakeIntrusive<TLogHistogramSnapshot>(Base_, ZerosCount_, StartPower_, std::move(Buckets_));
     }
-
+ 
 private:
     double Base_ = 1.5;
     ui64 ZerosCount_ = 0;
     int StartPower_ = 0;
     TVector<double> Buckets_;
 };
-
+ 
 std::pair<double, bool> ParseSpecDouble(TStringBuf string) {
     if (string == TStringBuf("nan") || string == TStringBuf("NaN")) {
         return {std::numeric_limits<double>::quiet_NaN(), true};
@@ -542,7 +542,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 LastMetric_.SummaryBuilder.SetCount(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_DSUMMARY_SUM:
                 LastMetric_.SummaryBuilder.SetSum(value);
                 State_.ToPrev();
@@ -559,26 +559,26 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 LastMetric_.SummaryBuilder.SetLast(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_LOG_HIST_BASE:
                 LastMetric_.LogHistBuilder.SetBase(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_LOG_HIST_ZEROS:
                 LastMetric_.LogHistBuilder.SetZerosCount(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_LOG_HIST_START_POWER:
                 LastMetric_.LogHistBuilder.SetStartPower(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_LOG_HIST_BUCKETS:
                 LastMetric_.LogHistBuilder.AddBucketValue(value);
                 break;
-
+ 
             default:
                 return false;
         }
@@ -627,7 +627,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 LastMetric_.SummaryBuilder.SetCount(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_DSUMMARY_SUM:
                 LastMetric_.SummaryBuilder.SetSum(value);
                 State_.ToPrev();
@@ -644,26 +644,26 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 LastMetric_.SummaryBuilder.SetLast(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_LOG_HIST_BASE:
                 LastMetric_.LogHistBuilder.SetBase(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_LOG_HIST_ZEROS:
                 LastMetric_.LogHistBuilder.SetZerosCount(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_LOG_HIST_START_POWER:
                 LastMetric_.LogHistBuilder.SetStartPower(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_LOG_HIST_BUCKETS:
                 LastMetric_.LogHistBuilder.AddBucketValue(value);
                 break;
-
+ 
             default:
                 return false;
         }
@@ -697,16 +697,16 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                 LastMetric_.SummaryBuilder.SetLast(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_LOG_HIST_BASE:
                 LastMetric_.LogHistBuilder.SetBase(value);
                 State_.ToPrev();
                 break;
-
+ 
             case TState::METRIC_LOG_HIST_BUCKETS:
                 LastMetric_.LogHistBuilder.AddBucketValue(value);
                 break;
-
+ 
             default:
                 return false;
         }
@@ -810,7 +810,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
 
         return true;
     }
-
+ 
     bool OnMapKey(const TStringBuf& key) override {
         switch (State_.Current()) {
             case TState::ROOT_OBJECT:
@@ -822,12 +822,12 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                     State_.ToNext(TState::METRICS_ARRAY);
                 }
                 break;
-
+ 
             case TState::COMMON_LABELS:
             case TState::METRIC_LABELS:
                 LastLabelName_ = key;
                 break;
-
+ 
             case TState::METRIC_OBJECT:
                 if (key == TStringBuf("labels")) {
                     State_.ToNext(TState::METRIC_LABELS);
@@ -865,7 +865,7 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
                     return false;
                 }
                 break;
-
+ 
             case TState::METRIC_TIMESERIES:
                 if (key == TStringBuf("ts")) {
                     State_.ToNext(TState::METRIC_TS);
@@ -924,22 +924,22 @@ if (Y_UNLIKELY(!(CONDITION))) {                  \
 
         return true;
     }
-
+ 
     bool OnOpenMap() override {
         switch (State_.Current()) {
             case TState::ROOT_OBJECT:
                 MetricConsumer_->OnStreamBegin();
                 break;
-
+ 
             case TState::COMMON_LABELS:
                 MetricConsumer_->OnLabelsBegin();
                 break;
-
+ 
             case TState::METRICS_ARRAY:
                 State_.ToNext(TState::METRIC_OBJECT);
                 LastMetric_.Clear();
                 break;
-
+ 
             default:
                 break;
         }
@@ -1147,7 +1147,7 @@ void DecodeJson(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel)
         // no need to check a return value. If there is an error, a TJsonDecodeError is thrown
         NJson::ReadJson(&memIn, &decoder);
     }
-
+ 
     TCommonPartsProxy commonPartsProxy(std::move(commonPartsCollector.CommonParts()), c);
     {
         TMemoryInput memIn(data);
@@ -1156,7 +1156,7 @@ void DecodeJson(TStringBuf data, IMetricConsumer* c, TStringBuf metricNameLabel)
         NJson::ReadJson(&memIn, &decoder);
     }
 }
-
+ 
 #undef DECODE_ENSURE
 
 }

@@ -57,9 +57,9 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         0x00,                   // time precision                 (fixed ui8)
         0x00,                   // compression algorithm          (fixed ui8)
         0x0d, 0x00, 0x00, 0x00, // label names size   (fixed ui32)
-        0x40, 0x00, 0x00, 0x00, // labels values size (fixed ui32)
+        0x40, 0x00, 0x00, 0x00, // labels values size (fixed ui32) 
         0x08, 0x00, 0x00, 0x00, // metric count       (fixed ui32)
-        0x08, 0x00, 0x00, 0x00, // points count       (fixed ui32)
+        0x08, 0x00, 0x00, 0x00, // points count       (fixed ui32) 
     };
 
     ui8 expectedHeader[] = {
@@ -70,9 +70,9 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         0x00,                   // time precision                 (fixed ui8)
         0x00,                   // compression algorithm          (fixed ui8)
         0x0d, 0x00, 0x00, 0x00, // label names size   (fixed ui32)
-        0x40, 0x00, 0x00, 0x00, // labels values size (fixed ui32)
+        0x40, 0x00, 0x00, 0x00, // labels values size (fixed ui32) 
         0x08, 0x00, 0x00, 0x00, // metric count       (fixed ui32)
-        0x08, 0x00, 0x00, 0x00, // points count       (fixed ui32)
+        0x08, 0x00, 0x00, 0x00, // points count       (fixed ui32) 
     };
 
     ui8 expectedStringPools[] = {
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, // "responseTimeMillis\0"
         0x54, 0x69, 0x6d, 0x65, 0x4d, 0x69, 0x6c, 0x6c,
         0x69, 0x73, 0x00,
-        0x62, 0x79, 0x74, 0x65, 0x73, 0x00,             // "bytes\0"
+        0x62, 0x79, 0x74, 0x65, 0x73, 0x00,             // "bytes\0" 
         0x74, 0x65, 0x6D, 0x70, 0x65, 0x72, 0x61, 0x74, // "temperature\0"
         0x75, 0x72, 0x65, 0x00,
         0x6d, 0x73, 0x00,                               // "ms\0"
@@ -191,42 +191,42 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         0x00,                                           // flags                                   (fixed ui8)
         0x01,                                           // metric labels count                     (varint)
         0x00,                                           // label name index                        (varint)
-        0x06,                                           // label value index                       (varint)
+        0x06,                                           // label value index                       (varint) 
         0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32)
         0x39, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // value                                   (fixed i64)
     };
 
     ui8 expectedMetric7[] = {
-        0x1e,                                           // types (DSUMMARY | ONE_WITH_TS)          (fixed ui8)
-        0x00,                                           // flags                                   (fixed ui8)
+        0x1e,                                           // types (DSUMMARY | ONE_WITH_TS)          (fixed ui8) 
+        0x00,                                           // flags                                   (fixed ui8) 
         0x01,                                           // metric labels count                     (varint)
-        0x00,                                           // label name index                        (varint)
+        0x00,                                           // label name index                        (varint) 
         0x07,                                           // label value index                       (varint)
-        0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32)
-        0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // count                                   (fixed ui64)
-        0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x24, 0x40, // sum                                     (fixed double)
-        0xcd, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xdc, 0xbf, // min                                     (fixed double)
-        0x64, 0x3b, 0xdf, 0x4f, 0x8d, 0x97, 0xde, 0x3f, // max                                     (fixed double)
-        0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0xd3, 0x3f, // last                                    (fixed double)
-    };
-
+        0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32) 
+        0x1e, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // count                                   (fixed ui64) 
+        0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x24, 0x40, // sum                                     (fixed double) 
+        0xcd, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xdc, 0xbf, // min                                     (fixed double) 
+        0x64, 0x3b, 0xdf, 0x4f, 0x8d, 0x97, 0xde, 0x3f, // max                                     (fixed double) 
+        0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0xd3, 0x3f, // last                                    (fixed double) 
+    }; 
+ 
     ui8 expectedMetric8[] = {
         0x26,                                           // types (LOGHIST | ONE_WITH_TS)           (fixed ui8)
-        0x00,                                           // flags                                   (fixed ui8)
+        0x00,                                           // flags                                   (fixed ui8) 
         0x01,                                           // metric labels count                     (variant)
-        0x00,                                           // label name index                        (variant)
-        0x08,                                           // label value index                       (variant)
-        0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32)
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x3F, // base                                    (fixed double)
-        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // zerosCount                              (fixed ui64)
-        0x00,                                           // startPower                              (variant)
-        0x04,                                           // buckets count                           (variant)
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x3F,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD0, 0x3F, // bucket values
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD0, 0x3F,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x3F,
-    };
-
+        0x00,                                           // label name index                        (variant) 
+        0x08,                                           // label value index                       (variant) 
+        0x0b, 0x63, 0xfe, 0x59,                         // time in seconds                         (fixed ui32) 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x3F, // base                                    (fixed double) 
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // zerosCount                              (fixed ui64) 
+        0x00,                                           // startPower                              (variant) 
+        0x04,                                           // buckets count                           (variant) 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x3F, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD0, 0x3F, // bucket values 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xD0, 0x3F, 
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE0, 0x3F, 
+    }; 
+ 
     const size_t expectedSize =
         Y_ARRAY_SIZE(expectedHeader) +
         Y_ARRAY_SIZE(expectedStringPools) +
@@ -252,15 +252,15 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         return h->Snapshot();
     }
 
-    TLogHistogramSnapshotPtr TestLogHistogram() {
-        TVector buckets{0.5, 0.25, 0.25, 0.5};
-        return MakeIntrusive<TLogHistogramSnapshot>(1.5, 1u, 0, std::move(buckets));
-    }
-
-    ISummaryDoubleSnapshotPtr TestSummaryDouble() {
-        return MakeIntrusive<TSummaryDoubleSnapshot>(10.1, -0.45, 0.478, 0.3, 30u);
-    }
-
+    TLogHistogramSnapshotPtr TestLogHistogram() { 
+        TVector buckets{0.5, 0.25, 0.25, 0.5}; 
+        return MakeIntrusive<TLogHistogramSnapshot>(1.5, 1u, 0, std::move(buckets)); 
+    } 
+ 
+    ISummaryDoubleSnapshotPtr TestSummaryDouble() { 
+        return MakeIntrusive<TSummaryDoubleSnapshot>(10.1, -0.45, 0.478, 0.3, 30u); 
+    } 
+ 
     Y_UNIT_TEST(Encode) {
         TBuffer buffer;
         TBufferOutput out(buffer);
@@ -345,29 +345,29 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         }
         { // metric 7
             e->OnMetricBegin(EMetricType::DSUMMARY);
-            {
-                e->OnLabelsBegin();
+            { 
+                e->OnLabelsBegin(); 
                 e->OnLabel("name", "temperature");
-                e->OnLabelsEnd();
-            }
-            e->OnSummaryDouble(now, TestSummaryDouble());
+                e->OnLabelsEnd(); 
+            } 
+            e->OnSummaryDouble(now, TestSummaryDouble()); 
             e->OnMetricEnd();
-        }
+        } 
         { // metric 8
-            e->OnMetricBegin(EMetricType::LOGHIST);
-            {
-                e->OnLabelsBegin();
+            e->OnMetricBegin(EMetricType::LOGHIST); 
+            { 
+                e->OnLabelsBegin(); 
                 e->OnLabel("name", "ms");
-                e->OnLabelsEnd();
-            }
-            e->OnLogHistogram(now, TestLogHistogram());
-            e->OnMetricEnd();
-        }
+                e->OnLabelsEnd(); 
+            } 
+            e->OnLogHistogram(now, TestLogHistogram()); 
+            e->OnMetricEnd(); 
+        } 
         e->OnStreamEnd();
         e->Close();
 
-        // Cout << "encoded: " << HexEncode(buffer.Data(), buffer.Size()) << Endl;
-        // Cout << "size: " << buffer.Size() << Endl;
+        // Cout << "encoded: " << HexEncode(buffer.Data(), buffer.Size()) << Endl; 
+        // Cout << "size: " << buffer.Size() << Endl; 
 
         UNIT_ASSERT_VALUES_EQUAL(buffer.Size(), expectedSize);
 
@@ -401,10 +401,10 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
 
         UNIT_ASSERT_BINARY_EQUALS(p, expectedMetric6);
         p += Y_ARRAY_SIZE(expectedMetric6);
-
+ 
         UNIT_ASSERT_BINARY_EQUALS(p, expectedMetric7);
         p += Y_ARRAY_SIZE(expectedMetric7);
-
+ 
         UNIT_ASSERT_BINARY_EQUALS(p, expectedMetric8);
         p += Y_ARRAY_SIZE(expectedMetric8);
     }
@@ -509,7 +509,7 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
         UNIT_ASSERT_VALUES_EQUAL(samples.CommonLabelsSize(), 1);
         AssertLabelEqual(samples.GetCommonLabels(0), "project", "solomon");
 
-        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 8);
+        UNIT_ASSERT_VALUES_EQUAL(samples.SamplesSize(), 8); 
         {
             const NProto::TMultiSample& s = samples.GetSamples(0);
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::RATE);
@@ -576,51 +576,51 @@ Y_UNIT_TEST_SUITE(TSpackTest) {
             UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
             AssertPointEqual(s.GetPoints(0), now, i64(1337));
         }
-        {
-            const NProto::TMultiSample& s = samples.GetSamples(6);
+        { 
+            const NProto::TMultiSample& s = samples.GetSamples(6); 
             UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::DSUMMARY);
-            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1); 
             AssertLabelEqual(s.GetLabels(0), "name", "temperature");
-
-            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
-
-            const NProto::TPoint& p = s.GetPoints(0);
-            UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), now.MilliSeconds());
-            UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kSummaryDouble);
-
-            auto expected = TestSummaryDouble();
-
-            auto actual = p.GetSummaryDouble();
-
-            UNIT_ASSERT_VALUES_EQUAL(expected->GetSum(), actual.GetSum());
-            UNIT_ASSERT_VALUES_EQUAL(expected->GetMin(), actual.GetMin());
-            UNIT_ASSERT_VALUES_EQUAL(expected->GetMax(), actual.GetMax());
-            UNIT_ASSERT_VALUES_EQUAL(expected->GetLast(), actual.GetLast());
-            UNIT_ASSERT_VALUES_EQUAL(expected->GetCount(), actual.GetCount());
-        }
-        {
-            const NProto::TMultiSample& s = samples.GetSamples(7);
-            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::LOGHISTOGRAM);
-            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1);
+ 
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1); 
+ 
+            const NProto::TPoint& p = s.GetPoints(0); 
+            UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), now.MilliSeconds()); 
+            UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kSummaryDouble); 
+ 
+            auto expected = TestSummaryDouble(); 
+ 
+            auto actual = p.GetSummaryDouble(); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(expected->GetSum(), actual.GetSum()); 
+            UNIT_ASSERT_VALUES_EQUAL(expected->GetMin(), actual.GetMin()); 
+            UNIT_ASSERT_VALUES_EQUAL(expected->GetMax(), actual.GetMax()); 
+            UNIT_ASSERT_VALUES_EQUAL(expected->GetLast(), actual.GetLast()); 
+            UNIT_ASSERT_VALUES_EQUAL(expected->GetCount(), actual.GetCount()); 
+        } 
+        { 
+            const NProto::TMultiSample& s = samples.GetSamples(7); 
+            UNIT_ASSERT_EQUAL(s.GetMetricType(), NProto::LOGHISTOGRAM); 
+            UNIT_ASSERT_VALUES_EQUAL(s.LabelsSize(), 1); 
             AssertLabelEqual(s.GetLabels(0), "name", "ms");
-
-            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
-
-            const NProto::TPoint& p = s.GetPoints(0);
-            UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), now.MilliSeconds());
-            UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kLogHistogram);
-
-            auto expected = TestLogHistogram();
-            auto actual = p.GetLogHistogram();
-
-            UNIT_ASSERT_VALUES_EQUAL(expected->ZerosCount(), actual.GetZerosCount());
-            UNIT_ASSERT_VALUES_EQUAL(expected->Base(), actual.GetBase());
-            UNIT_ASSERT_VALUES_EQUAL(expected->StartPower(), actual.GetStartPower());
-            UNIT_ASSERT_VALUES_EQUAL(expected->Count(), actual.BucketsSize());
-            for (size_t i = 0; i < expected->Count(); ++i) {
-                UNIT_ASSERT_VALUES_EQUAL(expected->Bucket(i), actual.GetBuckets(i));
-            }
-        }
+ 
+            UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1); 
+ 
+            const NProto::TPoint& p = s.GetPoints(0); 
+            UNIT_ASSERT_VALUES_EQUAL(p.GetTime(), now.MilliSeconds()); 
+            UNIT_ASSERT_EQUAL(p.GetValueCase(), NProto::TPoint::kLogHistogram); 
+ 
+            auto expected = TestLogHistogram(); 
+            auto actual = p.GetLogHistogram(); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(expected->ZerosCount(), actual.GetZerosCount()); 
+            UNIT_ASSERT_VALUES_EQUAL(expected->Base(), actual.GetBase()); 
+            UNIT_ASSERT_VALUES_EQUAL(expected->StartPower(), actual.GetStartPower()); 
+            UNIT_ASSERT_VALUES_EQUAL(expected->Count(), actual.BucketsSize()); 
+            for (size_t i = 0; i < expected->Count(); ++i) { 
+                UNIT_ASSERT_VALUES_EQUAL(expected->Bucket(i), actual.GetBuckets(i)); 
+            } 
+        } 
     }
 
     void TestCompression(ECompression alg) {

@@ -19,8 +19,8 @@ enum EMetricType {
     RATE = 4;
     HISTOGRAM = 5;
     HIST_RATE = 6;
-    DSUMMARY = 7;
-    LOGHISTOGRAM = 8;
+    DSUMMARY = 7; 
+    LOGHISTOGRAM = 8; 
 }
 
 message THistogram {
@@ -28,21 +28,21 @@ message THistogram {
     repeated uint64 Values = 2; // values stored in each bucket
 }
 
-message TLogHistogram {
-    double Base = 1;
-    uint64 ZerosCount = 2;
-    int32 StartPower = 3;
-    repeated double Buckets = 4;
-}
-
-message TSummaryDouble {
-    double Sum = 1;
-    double Min = 2;
-    double Max = 3;
-    double Last = 4;
-    uint64 Count = 5;
-}
-
+message TLogHistogram { 
+    double Base = 1; 
+    uint64 ZerosCount = 2; 
+    int32 StartPower = 3; 
+    repeated double Buckets = 4; 
+} 
+ 
+message TSummaryDouble { 
+    double Sum = 1; 
+    double Min = 2; 
+    double Max = 3; 
+    double Last = 4; 
+    uint64 Count = 5; 
+} 
+ 
 // see TSingleSample
 message TPoint {
     uint64 Time = 1;
@@ -51,8 +51,8 @@ message TPoint {
         fixed64 Uint64 = 3;
         double Float64 = 4;
         THistogram Histogram = 5;
-        TSummaryDouble SummaryDouble = 6;
-        TLogHistogram LogHistogram = 7;
+        TSummaryDouble SummaryDouble = 6; 
+        TLogHistogram LogHistogram = 7; 
     }
 }
 
@@ -67,8 +67,8 @@ message TSingleSample {
         fixed64 Uint64 = 5;
         double Float64 = 6;
         THistogram Histogram = 7;
-        TSummaryDouble SummaryDouble = 8;
-        TLogHistogram LogHistogram = 9;
+        TSummaryDouble SummaryDouble = 8; 
+        TLogHistogram LogHistogram = 9; 
     }
 }
 

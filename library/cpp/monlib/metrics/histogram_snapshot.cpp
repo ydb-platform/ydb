@@ -1,7 +1,7 @@
 #include "histogram_snapshot.h"
 
-#include <util/stream/output.h>
-
+#include <util/stream/output.h> 
+ 
 #include <iostream>
 
 
@@ -23,16 +23,16 @@ namespace NMonitoring {
     }
 
 } // namespace NMonitoring
-
+ 
 namespace {
-
+ 
 template <typename TStream>
 auto& Output(TStream& os, const NMonitoring::IHistogramSnapshot& hist) {
     os << TStringBuf("{");
-
+ 
     ui32 i = 0;
     ui32 count = hist.Count();
-
+ 
     if (count > 0) {
         for (; i < count - 1; ++i) {
             os << hist.UpperBound(i) << TStringBuf(": ") << hist.Value(i);
@@ -44,12 +44,12 @@ auto& Output(TStream& os, const NMonitoring::IHistogramSnapshot& hist) {
         } else {
             os << hist.UpperBound(i) << TStringBuf(": ") << hist.Value(i);
         }
-    }
-
+    } 
+ 
     os << TStringBuf("}");
 
     return os;
-}
+} 
 
 } // namespace
 

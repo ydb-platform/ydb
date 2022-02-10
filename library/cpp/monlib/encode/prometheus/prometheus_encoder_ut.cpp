@@ -20,10 +20,10 @@ Y_UNIT_TEST_SUITE(TPrometheusEncoderTest) {
         return ss.Str();
     }
 
-    ISummaryDoubleSnapshotPtr TestSummaryDouble() {
-        return MakeIntrusive<TSummaryDoubleSnapshot>(10.1, -0.45, 0.478, 0.3, 30u);
-    }
-
+    ISummaryDoubleSnapshotPtr TestSummaryDouble() { 
+        return MakeIntrusive<TSummaryDoubleSnapshot>(10.1, -0.45, 0.478, 0.3, 30u); 
+    } 
+ 
     Y_UNIT_TEST(Empty) {
         auto result = EncodeToString([](IMetricEncoder* e) {
             e->OnStreamBegin();
@@ -112,17 +112,17 @@ Y_UNIT_TEST_SUITE(TPrometheusEncoderTest) {
                 e->OnDouble(TInstant::Zero(), INFINITY);
                 e->OnMetricEnd();
             }
-            {
+            { 
                 e->OnMetricBegin(EMetricType::DSUMMARY);
-                {
-                    e->OnLabelsBegin();
-                    e->OnLabel("sensor", "seconds");
-                    e->OnLabel("disk", "sdb1");
-                    e->OnLabelsEnd();
-                }
-                e->OnSummaryDouble(TInstant::Zero(), TestSummaryDouble());
+                { 
+                    e->OnLabelsBegin(); 
+                    e->OnLabel("sensor", "seconds"); 
+                    e->OnLabel("disk", "sdb1"); 
+                    e->OnLabelsEnd(); 
+                } 
+                e->OnSummaryDouble(TInstant::Zero(), TestSummaryDouble()); 
                 e->OnMetricEnd();
-            }
+            } 
             e->OnStreamEnd();
         });
 
@@ -138,11 +138,11 @@ Y_UNIT_TEST_SUITE(TPrometheusEncoderTest) {
             "nanValue nan\n"
             "# TYPE infValue gauge\n"
             "infValue inf\n"
-            "seconds_sum{disk=\"sdb1\", } 10.1\n"
-            "seconds_min{disk=\"sdb1\", } -0.45\n"
-            "seconds_max{disk=\"sdb1\", } 0.478\n"
-            "seconds_last{disk=\"sdb1\", } 0.3\n"
-            "seconds_count{disk=\"sdb1\", } 30\n"
+            "seconds_sum{disk=\"sdb1\", } 10.1\n" 
+            "seconds_min{disk=\"sdb1\", } -0.45\n" 
+            "seconds_max{disk=\"sdb1\", } 0.478\n" 
+            "seconds_last{disk=\"sdb1\", } 0.3\n" 
+            "seconds_count{disk=\"sdb1\", } 30\n" 
             "\n");
     }
 

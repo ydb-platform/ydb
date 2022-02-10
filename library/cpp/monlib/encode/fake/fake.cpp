@@ -35,12 +35,12 @@ namespace NMonitoring {
         void OnHistogram(TInstant, IHistogramSnapshotPtr) override {
         }
 
-        void OnSummaryDouble(TInstant, ISummaryDoubleSnapshotPtr) override {
-        }
-
-        void OnLogHistogram(TInstant, TLogHistogramSnapshotPtr) override {
-        }
-
+        void OnSummaryDouble(TInstant, ISummaryDoubleSnapshotPtr) override { 
+        } 
+ 
+        void OnLogHistogram(TInstant, TLogHistogramSnapshotPtr) override { 
+        } 
+ 
         void Close() override {
         }
     };

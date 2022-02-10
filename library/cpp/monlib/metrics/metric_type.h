@@ -14,7 +14,7 @@ namespace NMonitoring {
         IGAUGE = 4,
         HIST = 5,
         HIST_RATE = 6,
-        DSUMMARY = 7,
+        DSUMMARY = 7, 
         // ISUMMARY = 8, reserved
         LOGHIST = 9,
     };

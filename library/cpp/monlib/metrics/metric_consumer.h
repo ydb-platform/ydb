@@ -2,8 +2,8 @@
 
 #include "metric_type.h"
 #include "histogram_collector.h"
-#include "summary_collector.h"
-#include "log_histogram_snapshot.h"
+#include "summary_collector.h" 
+#include "log_histogram_snapshot.h" 
 
 class TInstant;
 
@@ -31,7 +31,7 @@ namespace NMonitoring {
         virtual void OnUint64(TInstant time, ui64 value) = 0;
 
         virtual void OnHistogram(TInstant time, IHistogramSnapshotPtr snapshot) = 0;
-        virtual void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) = 0;
+        virtual void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) = 0; 
         virtual void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) = 0;
     };
 

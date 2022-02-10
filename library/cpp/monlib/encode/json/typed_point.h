@@ -98,20 +98,20 @@ namespace NMonitoring {
             if (ValueType_ == EMetricValueType::HISTOGRAM) {
                 Value_.AsHistogram()->Ref();
             } else if (ValueType_ == EMetricValueType::SUMMARY) {
-                Value_.AsSummaryDouble()->Ref();
-            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) {
-                Value_.AsLogHistogram()->Ref();
-            }
+                Value_.AsSummaryDouble()->Ref(); 
+            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) { 
+                Value_.AsLogHistogram()->Ref(); 
+            } 
         }
 
         void UnRef() {
             if (ValueType_ == EMetricValueType::HISTOGRAM) {
                 Value_.AsHistogram()->UnRef();
             } else if (ValueType_ == EMetricValueType::SUMMARY) {
-                Value_.AsSummaryDouble()->UnRef();
-            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) {
-                Value_.AsLogHistogram()->UnRef();
-            }
+                Value_.AsSummaryDouble()->UnRef(); 
+            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) { 
+                Value_.AsLogHistogram()->UnRef(); 
+            } 
         }
 
     private:

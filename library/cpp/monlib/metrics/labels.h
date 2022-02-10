@@ -292,12 +292,12 @@ namespace NMonitoring {
             return tmp;
         }
 
-        void SortByName() {
+        void SortByName() { 
             std::sort(Labels_.begin(), Labels_.end(), [](const auto& lhs, const auto& rhs) {
-                return lhs.Name() < rhs.Name();
-            });
-        }
-
+                return lhs.Name() < rhs.Name(); 
+            }); 
+        } 
+ 
         inline size_t Hash() const noexcept override {
             return TSimpleRangeHash()(Labels_);
         }

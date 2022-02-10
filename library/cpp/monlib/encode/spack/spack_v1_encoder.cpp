@@ -60,14 +60,14 @@ namespace NMonitoring {
                 TBufferedEncoderBase::OnHistogram(time, snapshot);
             }
 
-            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override {
-                TBufferedEncoderBase::OnSummaryDouble(time, snapshot);
-            }
-
-            void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) override {
-                TBufferedEncoderBase::OnLogHistogram(time, snapshot);
-            }
-
+            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override { 
+                TBufferedEncoderBase::OnSummaryDouble(time, snapshot); 
+            } 
+ 
+            void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) override { 
+                TBufferedEncoderBase::OnLogHistogram(time, snapshot); 
+            } 
+ 
             void Close() override {
                 if (Closed_) {
                     return;
@@ -222,13 +222,13 @@ namespace NMonitoring {
                         break;
 
                     case EMetricType::DSUMMARY:
-                        WriteSummaryDouble(*value.AsSummaryDouble());
-                        break;
-
-                    case EMetricType::LOGHIST:
-                        WriteLogHistogram(*value.AsLogHistogram());
-                        break;
-
+                        WriteSummaryDouble(*value.AsSummaryDouble()); 
+                        break; 
+ 
+                    case EMetricType::LOGHIST: 
+                        WriteLogHistogram(*value.AsLogHistogram()); 
+                        break; 
+ 
                     default:
                         ythrow yexception() << "unsupported metric type: " << metricType;
                 }
@@ -267,24 +267,24 @@ namespace NMonitoring {
                 }
             }
 
-            void WriteLogHistogram(const TLogHistogramSnapshot& logHist) {
-                WriteFixed(logHist.Base());
-                WriteFixed(logHist.ZerosCount());
-                WriteVarUInt32(Out_, static_cast<ui32>(logHist.StartPower()));
-                WriteVarUInt32(Out_, logHist.Count());
-                for (ui32 i = 0; i < logHist.Count(); ++i) {
-                    WriteFixed(logHist.Bucket(i));
-                }
-            }
-
-            void WriteSummaryDouble(const ISummaryDoubleSnapshot& summary) {
-                WriteFixed(summary.GetCount());
-                WriteFixed(summary.GetSum());
-                WriteFixed(summary.GetMin());
-                WriteFixed(summary.GetMax());
-                WriteFixed(summary.GetLast());
-            }
-
+            void WriteLogHistogram(const TLogHistogramSnapshot& logHist) { 
+                WriteFixed(logHist.Base()); 
+                WriteFixed(logHist.ZerosCount()); 
+                WriteVarUInt32(Out_, static_cast<ui32>(logHist.StartPower())); 
+                WriteVarUInt32(Out_, logHist.Count()); 
+                for (ui32 i = 0; i < logHist.Count(); ++i) { 
+                    WriteFixed(logHist.Bucket(i)); 
+                } 
+            } 
+ 
+            void WriteSummaryDouble(const ISummaryDoubleSnapshot& summary) { 
+                WriteFixed(summary.GetCount()); 
+                WriteFixed(summary.GetSum()); 
+                WriteFixed(summary.GetMin()); 
+                WriteFixed(summary.GetMax()); 
+                WriteFixed(summary.GetLast()); 
+            } 
+ 
         private:
             IOutputStream* Out_;
             ETimePrecision TimePrecision_;

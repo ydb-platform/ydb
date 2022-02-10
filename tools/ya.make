@@ -42,7 +42,7 @@ RECURSE(
     filter_nonucs2
     fix_elf
     fml_sweeper_api
-    frq_index_print 
+    frq_index_print
     geo
     geodb_ops
     geodb_ops/tests
@@ -105,7 +105,7 @@ RECURSE(
     printwzrd/tests
     printxmap
     printxref
-    prngrp_index_print 
+    prngrp_index_print
     prog_rule
     protobin2mr
     prwordsfr
@@ -121,9 +121,9 @@ RECURSE(
     rcgtest
     re_check
     recode
-    refaww_index_print 
-    refdmap_index_print 
-    reflerf_index_print 
+    refaww_index_print
+    refdmap_index_print
+    reflerf_index_print
     releaser
     relev_fml_codegen
     relev_fml_unused
@@ -136,7 +136,7 @@ RECURSE(
     sanitizer
     segutils
     seinfo
-    sent_index_print 
+    sent_index_print
     showmime
     shutter_jing_plugin
     snipmake
@@ -151,7 +151,7 @@ RECURSE(
     test_relev
     testlangmodel
     thresher
-    titleseq_index_print 
+    titleseq_index_print
     tokenize
     tokenize/tests
     tomaparsertest

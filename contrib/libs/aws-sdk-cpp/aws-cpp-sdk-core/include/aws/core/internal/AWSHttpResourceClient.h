@@ -2,61 +2,61 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
- 
-#pragma once 
- 
-#include <aws/core/Core_EXPORTS.h> 
-#include <aws/core/utils/memory/AWSMemory.h> 
-#include <aws/core/utils/memory/stl/AWSString.h> 
-#include <aws/core/client/ClientConfiguration.h> 
+
+#pragma once
+
+#include <aws/core/Core_EXPORTS.h>
+#include <aws/core/utils/memory/AWSMemory.h>
+#include <aws/core/utils/memory/stl/AWSString.h>
+#include <aws/core/client/ClientConfiguration.h>
 #include <aws/core/client/AWSErrorMarshaller.h>
 #include <aws/core/auth/AWSCredentials.h>
 #include <aws/core/AmazonWebServiceResult.h>
 #include <aws/core/utils/DateTime.h>
-#include <memory> 
+#include <memory>
 #include <mutex>
-namespace Aws 
-{ 
-    namespace Http 
-    { 
-        class HttpClient; 
+namespace Aws
+{
+    namespace Http
+    {
+        class HttpClient;
         class HttpRequest;
         enum class HttpResponseCode;
-    } // namespace Http 
- 
-    namespace Internal 
-    { 
-        /** 
-         * Simple client for accessing the AWS remote data by Http. 
-         * Currently we use it to access EC2 Metadata and ECS Credential. 
-         */ 
-        class AWS_CORE_API AWSHttpResourceClient 
-        { 
-        public: 
-            /** 
-             * Builds an AWSHttpResourceClient instance by using default http stack. 
-             */ 
-            AWSHttpResourceClient(const char* logtag = "AWSHttpResourceClient"); 
-            AWSHttpResourceClient(const Client::ClientConfiguration& clientConfiguration, const char* logtag = "AWSHttpResourceClient"); 
- 
-            AWSHttpResourceClient& operator =(const AWSHttpResourceClient& rhs) = delete; 
-            AWSHttpResourceClient(const AWSHttpResourceClient& rhs) = delete; 
-            AWSHttpResourceClient& operator =(const AWSHttpResourceClient&& rhs) = delete; 
-            AWSHttpResourceClient(const AWSHttpResourceClient&& rhs) = delete; 
- 
-            virtual ~AWSHttpResourceClient(); 
- 
-            /** 
-             * Connects to an HTTP endpoint to read the specified resource and returns the text contents. 
-             * The resource URI = endpoint + resourcePath (e.g:http://domain/path/to/res) 
-             * @param endpoint The HTTP resource to connect to. 
-             * @param resourcePath A path appended to the endpoint to form the final URI. 
-             * @param authToken An optional authorization token that will be passed as the value of the HTTP 
-             * header 'Authorization'. 
-             * @return The response from the HTTP endpoint as a string. 
-             */ 
-            virtual Aws::String GetResource(const char* endpoint, const char* resourcePath, const char* authToken) const; 
- 
+    } // namespace Http
+
+    namespace Internal
+    {
+        /**
+         * Simple client for accessing the AWS remote data by Http.
+         * Currently we use it to access EC2 Metadata and ECS Credential.
+         */
+        class AWS_CORE_API AWSHttpResourceClient
+        {
+        public:
+            /**
+             * Builds an AWSHttpResourceClient instance by using default http stack.
+             */
+            AWSHttpResourceClient(const char* logtag = "AWSHttpResourceClient");
+            AWSHttpResourceClient(const Client::ClientConfiguration& clientConfiguration, const char* logtag = "AWSHttpResourceClient");
+
+            AWSHttpResourceClient& operator =(const AWSHttpResourceClient& rhs) = delete;
+            AWSHttpResourceClient(const AWSHttpResourceClient& rhs) = delete;
+            AWSHttpResourceClient& operator =(const AWSHttpResourceClient&& rhs) = delete;
+            AWSHttpResourceClient(const AWSHttpResourceClient&& rhs) = delete;
+
+            virtual ~AWSHttpResourceClient();
+
+            /**
+             * Connects to an HTTP endpoint to read the specified resource and returns the text contents.
+             * The resource URI = endpoint + resourcePath (e.g:http://domain/path/to/res)
+             * @param endpoint The HTTP resource to connect to.
+             * @param resourcePath A path appended to the endpoint to form the final URI.
+             * @param authToken An optional authorization token that will be passed as the value of the HTTP
+             * header 'Authorization'.
+             * @return The response from the HTTP endpoint as a string.
+             */
+            virtual Aws::String GetResource(const char* endpoint, const char* resourcePath, const char* authToken) const;
+
             /**
              * Connects to an HTTP endpoint to read the specified resource and returns the text contents.
              * The resource URI = endpoint + resourcePath (e.g:http://domain/path/to/res)
@@ -82,107 +82,107 @@ namespace Aws
             void SetErrorMarshaller(Aws::UniquePtr<Client::AWSErrorMarshaller> errorMarshaller) { m_errorMarshaller = std::move(errorMarshaller); }
             const Client::AWSErrorMarshaller* GetErrorMarshaller() const { return m_errorMarshaller.get(); }
 
-        protected: 
-            Aws::String m_logtag; 
- 
-        private: 
-            std::shared_ptr<Client::RetryStrategy> m_retryStrategy; 
-            std::shared_ptr<Http::HttpClient> m_httpClient; 
+        protected:
+            Aws::String m_logtag;
+
+        private:
+            std::shared_ptr<Client::RetryStrategy> m_retryStrategy;
+            std::shared_ptr<Http::HttpClient> m_httpClient;
             Aws::UniquePtr<Client::AWSErrorMarshaller> m_errorMarshaller;
-        }; 
- 
-        /** 
-         * Derived class to support retrieving of EC2 Metadata 
-         */ 
-        class AWS_CORE_API EC2MetadataClient : public AWSHttpResourceClient 
-        { 
-        public: 
-            /** 
-             * Build an instance with default EC2 Metadata service endpoint 
-             */ 
-            EC2MetadataClient(const char* endpoint = "http://169.254.169.254"); 
-            EC2MetadataClient(const Client::ClientConfiguration& clientConfiguration, const char* endpoint = "http://169.254.169.254"); 
- 
-            EC2MetadataClient& operator =(const EC2MetadataClient& rhs) = delete; 
-            EC2MetadataClient(const EC2MetadataClient& rhs) = delete; 
-            EC2MetadataClient& operator =(const EC2MetadataClient&& rhs) = delete; 
-            EC2MetadataClient(const EC2MetadataClient&& rhs) = delete; 
- 
-            virtual ~EC2MetadataClient(); 
- 
-            using AWSHttpResourceClient::GetResource; 
- 
-            /** 
-            * Connects to the metadata service to read the specified resource and 
-            * returns the text contents. The resource URI = m_endpoint + resourcePath. 
-            */ 
-            virtual Aws::String GetResource(const char* resourcePath) const; 
- 
-            /** 
-             * Connects to the Amazon EC2 Instance Metadata Service to retrieve the 
-             * default credential information (if any). 
-             */ 
-            virtual Aws::String GetDefaultCredentials() const; 
- 
-            /** 
+        };
+
+        /**
+         * Derived class to support retrieving of EC2 Metadata
+         */
+        class AWS_CORE_API EC2MetadataClient : public AWSHttpResourceClient
+        {
+        public:
+            /**
+             * Build an instance with default EC2 Metadata service endpoint
+             */
+            EC2MetadataClient(const char* endpoint = "http://169.254.169.254");
+            EC2MetadataClient(const Client::ClientConfiguration& clientConfiguration, const char* endpoint = "http://169.254.169.254");
+
+            EC2MetadataClient& operator =(const EC2MetadataClient& rhs) = delete;
+            EC2MetadataClient(const EC2MetadataClient& rhs) = delete;
+            EC2MetadataClient& operator =(const EC2MetadataClient&& rhs) = delete;
+            EC2MetadataClient(const EC2MetadataClient&& rhs) = delete;
+
+            virtual ~EC2MetadataClient();
+
+            using AWSHttpResourceClient::GetResource;
+
+            /**
+            * Connects to the metadata service to read the specified resource and
+            * returns the text contents. The resource URI = m_endpoint + resourcePath.
+            */
+            virtual Aws::String GetResource(const char* resourcePath) const;
+
+            /**
+             * Connects to the Amazon EC2 Instance Metadata Service to retrieve the
+             * default credential information (if any).
+             */
+            virtual Aws::String GetDefaultCredentials() const;
+
+            /**
              * Connects to the Amazon EC2 Instance Metadata Service to retrieve the
              * credential information (if any) in a more secure way.
              */
             virtual Aws::String GetDefaultCredentialsSecurely() const;
 
             /**
-             * connects to the Amazon EC2 Instance metadata Service to retrieve the region 
-             * the current EC2 instance is running in. 
-             */ 
-            virtual Aws::String GetCurrentRegion() const; 
- 
-        private: 
-            Aws::String m_endpoint; 
+             * connects to the Amazon EC2 Instance metadata Service to retrieve the region
+             * the current EC2 instance is running in.
+             */
+            virtual Aws::String GetCurrentRegion() const;
+
+        private:
+            Aws::String m_endpoint;
             mutable std::recursive_mutex m_tokenMutex;
             mutable Aws::String m_token;
             mutable bool m_tokenRequired;
             mutable Aws::String m_region;
-        }; 
- 
+        };
+
         void AWS_CORE_API InitEC2MetadataClient();
         void AWS_CORE_API CleanupEC2MetadataClient();
         std::shared_ptr<EC2MetadataClient> AWS_CORE_API GetEC2MetadataClient();
 
-        /** 
+        /**
          * Derived class to support retrieving of ECS Credentials
-         */ 
-        class AWS_CORE_API ECSCredentialsClient : public AWSHttpResourceClient 
-        { 
-        public: 
-            /** 
-             * Build an instance with default ECS service endpoint 
-             * @param resourcePath The path part of the metadata URL 
-             * @param endpoint The URL authority to hit. Default is the IP address of the Task metadata service endpoint. 
-             */ 
-            ECSCredentialsClient(const char* resourcePath, const char* endpoint = "http://169.254.170.2", 
-                    const char* authToken = ""); 
-            ECSCredentialsClient(const Client::ClientConfiguration& clientConfiguration, 
-                                 const char* resourcePath, const char* endpoint = "http://169.254.170.2", 
-                                 const char* authToken = ""); 
- 
-            ECSCredentialsClient& operator =(ECSCredentialsClient& rhs) = delete; 
-            ECSCredentialsClient(const ECSCredentialsClient& rhs) = delete; 
-            ECSCredentialsClient& operator =(ECSCredentialsClient&& rhs) = delete; 
-            ECSCredentialsClient(const ECSCredentialsClient&& rhs) = delete; 
- 
-            /** 
-             * Connects to the Amazon ECS service to retrieve the credential 
-             */ 
-            virtual Aws::String GetECSCredentials() const 
-            { 
-                return GetResource(m_endpoint.c_str(), m_resourcePath.c_str(), m_token.c_str()); 
-            } 
- 
-        private: 
-            Aws::String m_resourcePath; 
-            Aws::String m_endpoint; 
-            Aws::String m_token; 
-        }; 
+         */
+        class AWS_CORE_API ECSCredentialsClient : public AWSHttpResourceClient
+        {
+        public:
+            /**
+             * Build an instance with default ECS service endpoint
+             * @param resourcePath The path part of the metadata URL
+             * @param endpoint The URL authority to hit. Default is the IP address of the Task metadata service endpoint.
+             */
+            ECSCredentialsClient(const char* resourcePath, const char* endpoint = "http://169.254.170.2",
+                    const char* authToken = "");
+            ECSCredentialsClient(const Client::ClientConfiguration& clientConfiguration,
+                                 const char* resourcePath, const char* endpoint = "http://169.254.170.2",
+                                 const char* authToken = "");
+
+            ECSCredentialsClient& operator =(ECSCredentialsClient& rhs) = delete;
+            ECSCredentialsClient(const ECSCredentialsClient& rhs) = delete;
+            ECSCredentialsClient& operator =(ECSCredentialsClient&& rhs) = delete;
+            ECSCredentialsClient(const ECSCredentialsClient&& rhs) = delete;
+
+            /**
+             * Connects to the Amazon ECS service to retrieve the credential
+             */
+            virtual Aws::String GetECSCredentials() const
+            {
+                return GetResource(m_endpoint.c_str(), m_resourcePath.c_str(), m_token.c_str());
+            }
+
+        private:
+            Aws::String m_resourcePath;
+            Aws::String m_endpoint;
+            Aws::String m_token;
+        };
 
         /**
          * To support retrieving credentials from STS.
@@ -221,5 +221,5 @@ namespace Aws
         private:
             Aws::String m_endpoint;
         };
-    } // namespace Internal 
-} // namespace Aws 
+    } // namespace Internal
+} // namespace Aws

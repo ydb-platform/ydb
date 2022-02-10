@@ -2,37 +2,37 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
- 
- 
-#pragma once 
- 
-#include <aws/core/Core_EXPORTS.h> 
-#include <aws/core/utils/memory/stl/AWSString.h> 
-#include <aws/core/utils/memory/stl/AWSVector.h> 
-#include <memory> 
- 
- 
-namespace Aws 
-{ 
-    namespace Client 
-    { 
-        class AWSAuthSigner; 
-    } 
-    namespace Auth 
-    { 
+
+
+#pragma once
+
+#include <aws/core/Core_EXPORTS.h>
+#include <aws/core/utils/memory/stl/AWSString.h>
+#include <aws/core/utils/memory/stl/AWSVector.h>
+#include <memory>
+
+
+namespace Aws
+{
+    namespace Client
+    {
+        class AWSAuthSigner;
+    }
+    namespace Auth
+    {
         class AWSCredentialsProvider;
 
-        class AWS_CORE_API AWSAuthSignerProvider 
-        { 
-        public: 
-            virtual std::shared_ptr<Aws::Client::AWSAuthSigner> GetSigner(const Aws::String& signerName) const = 0; 
+        class AWS_CORE_API AWSAuthSignerProvider
+        {
+        public:
+            virtual std::shared_ptr<Aws::Client::AWSAuthSigner> GetSigner(const Aws::String& signerName) const = 0;
             virtual void AddSigner(std::shared_ptr<Aws::Client::AWSAuthSigner>& signer) = 0;
-            virtual ~AWSAuthSignerProvider() = default; 
-        }; 
- 
-        class AWS_CORE_API DefaultAuthSignerProvider : public AWSAuthSignerProvider 
-        { 
-        public: 
+            virtual ~AWSAuthSignerProvider() = default;
+        };
+
+        class AWS_CORE_API DefaultAuthSignerProvider : public AWSAuthSignerProvider
+        {
+        public:
             /**
              * Creates a Signature-V4 signer provider that supports the different implementations of Signature-V4
              * used for standard and event-stream requests.
@@ -43,11 +43,11 @@ namespace Aws
              */
             DefaultAuthSignerProvider(const std::shared_ptr<AWSCredentialsProvider>& credentialsProvider,
                     const Aws::String& serviceName, const Aws::String& region);
-            explicit DefaultAuthSignerProvider(const std::shared_ptr<Aws::Client::AWSAuthSigner>& signer); 
+            explicit DefaultAuthSignerProvider(const std::shared_ptr<Aws::Client::AWSAuthSigner>& signer);
             void AddSigner(std::shared_ptr<Aws::Client::AWSAuthSigner>& signer) override;
-            std::shared_ptr<Aws::Client::AWSAuthSigner> GetSigner(const Aws::String& signerName) const override; 
-        private: 
-            Aws::Vector<std::shared_ptr<Aws::Client::AWSAuthSigner>> m_signers; 
-        }; 
-    } 
-} 
+            std::shared_ptr<Aws::Client::AWSAuthSigner> GetSigner(const Aws::String& signerName) const override;
+        private:
+            Aws::Vector<std::shared_ptr<Aws::Client::AWSAuthSigner>> m_signers;
+        };
+    }
+}

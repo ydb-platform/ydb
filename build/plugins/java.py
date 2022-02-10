@@ -39,10 +39,10 @@ def on_run_jbuild_program(unit, *args):
     """
 
     flat, kv = common.sort_by_keywords({'IN': -1, 'IN_DIR': -1, 'OUT': -1, 'OUT_DIR': -1, 'CWD': 1, 'CLASSPATH': -1, 'CP_USE_COMMAND_FILE': 1, 'ADD_SRCS_TO_CLASSPATH': 0}, args)
-    depends = kv.get('CLASSPATH', []) + kv.get('JAR', []) 
+    depends = kv.get('CLASSPATH', []) + kv.get('JAR', [])
     fake_out = None
-    if depends: 
-        # XXX: hack to force ymake to build dependencies 
+    if depends:
+        # XXX: hack to force ymake to build dependencies
         fake_out = "fake.out.{}".format(hash(tuple(args)))
         unit.on_run_java(['TOOL'] + depends + ["OUT", fake_out])
 

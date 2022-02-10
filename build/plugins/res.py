@@ -1,4 +1,4 @@
-from _common import iterpair, listid, pathid, rootrel_arc_src, tobuilddir, filter_out_by_keyword 
+from _common import iterpair, listid, pathid, rootrel_arc_src, tobuilddir, filter_out_by_keyword
 
 
 def split(lst, limit):

@@ -2,13 +2,13 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
- 
-#pragma once 
- 
-#include <aws/core/Core_EXPORTS.h> 
- 
-namespace Aws 
-{ 
+
+#pragma once
+
+#include <aws/core/Core_EXPORTS.h>
+
+namespace Aws
+{
 namespace Utils
 {
 namespace Xml
@@ -20,7 +20,7 @@ namespace Json
     class JsonValue;
 }
 } // namespace Utils
- 
+
 class AWS_CORE_API NoResult
 {
 public:
@@ -28,5 +28,5 @@ public:
     NoResult(const Aws::AmazonWebServiceResult<Aws::Utils::Xml::XmlDocument>&) {};
     NoResult(const Aws::AmazonWebServiceResult<Aws::Utils::Json::JsonValue>&) {};
 };
- 
-} // namespace Aws 
+
+} // namespace Aws

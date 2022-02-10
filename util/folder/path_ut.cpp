@@ -1,7 +1,7 @@
 #include "path.h"
 #include "pathsplit.h"
-#include "dirut.h" 
-#include "tempdir.h" 
+#include "dirut.h"
+#include "tempdir.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -9,8 +9,8 @@
 #include <util/system/platform.h>
 #include <util/system/yassert.h>
 #include <util/stream/output.h>
-#include <util/stream/file.h> 
-#include <util/system/fs.h> 
+#include <util/stream/file.h>
+#include <util/system/fs.h>
 
 #include <algorithm>
 
@@ -424,108 +424,108 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
         TFsPath pathThree{"/a/b"};
         UNIT_ASSERT_VALUES_EQUAL(ToString(pathThree), "/a/b");
     }
- 
-#ifdef _unix_ 
+
+#ifdef _unix_
     Y_UNIT_TEST(TestRemoveSymlinkToDir) {
-        TTempDir tempDir; 
-        TFsPath tempDirPath(tempDir()); 
- 
+        TTempDir tempDir;
+        TFsPath tempDirPath(tempDir());
+
         const TString originDir = tempDirPath.Child("origin");
-        MakePathIfNotExist(originDir.c_str()); 
- 
+        MakePathIfNotExist(originDir.c_str());
+
         const TString originFile = TFsPath(originDir).Child("data");
-        { 
+        {
             TFixedBufferFileOutput out(originFile);
-            out << "data111!!!"; 
-        } 
- 
+            out << "data111!!!";
+        }
+
         const TString link = tempDirPath.Child("origin_symlink");
-        NFs::SymLink(originDir, link); 
- 
-        TFsPath(link).ForceDelete(); 
- 
+        NFs::SymLink(originDir, link);
+
+        TFsPath(link).ForceDelete();
+
         UNIT_ASSERT(!NFs::Exists(link));
         UNIT_ASSERT(NFs::Exists(originFile));
         UNIT_ASSERT(NFs::Exists(originDir));
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestRemoveSymlinkToFile) {
-        TTempDir tempDir; 
-        TFsPath tempDirPath(tempDir()); 
- 
+        TTempDir tempDir;
+        TFsPath tempDirPath(tempDir());
+
         const TString originDir = tempDirPath.Child("origin");
-        MakePathIfNotExist(originDir.c_str()); 
- 
+        MakePathIfNotExist(originDir.c_str());
+
         const TString originFile = TFsPath(originDir).Child("data");
-        { 
+        {
             TFixedBufferFileOutput out(originFile);
-            out << "data111!!!"; 
-        } 
- 
+            out << "data111!!!";
+        }
+
         const TString link = tempDirPath.Child("origin_symlink");
-        NFs::SymLink(originFile, link); 
- 
-        TFsPath(link).ForceDelete(); 
- 
+        NFs::SymLink(originFile, link);
+
+        TFsPath(link).ForceDelete();
+
         UNIT_ASSERT(!NFs::Exists(link));
         UNIT_ASSERT(NFs::Exists(originFile));
         UNIT_ASSERT(NFs::Exists(originDir));
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestRemoveDirWithSymlinkToDir) {
-        TTempDir tempDir; 
-        TFsPath tempDirPath(tempDir()); 
- 
+        TTempDir tempDir;
+        TFsPath tempDirPath(tempDir());
+
         const TString symlinkedDir = tempDirPath.Child("to_remove");
-        MakePathIfNotExist(symlinkedDir.c_str()); 
- 
+        MakePathIfNotExist(symlinkedDir.c_str());
+
         const TString originDir = tempDirPath.Child("origin");
-        MakePathIfNotExist(originDir.c_str()); 
- 
+        MakePathIfNotExist(originDir.c_str());
+
         const TString originFile = TFsPath(originDir).Child("data");
-        { 
+        {
             TFixedBufferFileOutput out(originFile);
-            out << "data111!!!"; 
-        } 
- 
+            out << "data111!!!";
+        }
+
         const TString symlinkedFile = TFsPath(symlinkedDir).Child("origin_symlink");
-        NFs::SymLink(originDir, symlinkedFile); 
- 
-        TFsPath(symlinkedDir).ForceDelete(); 
- 
+        NFs::SymLink(originDir, symlinkedFile);
+
+        TFsPath(symlinkedDir).ForceDelete();
+
         UNIT_ASSERT(!NFs::Exists(symlinkedFile));
         UNIT_ASSERT(!NFs::Exists(symlinkedDir));
         UNIT_ASSERT(NFs::Exists(originFile));
         UNIT_ASSERT(NFs::Exists(originDir));
-    } 
- 
+    }
+
     Y_UNIT_TEST(TestRemoveDirWithSymlinkToFile) {
-        TTempDir tempDir; 
-        TFsPath tempDirPath(tempDir()); 
- 
+        TTempDir tempDir;
+        TFsPath tempDirPath(tempDir());
+
         const TString symlinkedDir = tempDirPath.Child("to_remove");
-        MakePathIfNotExist(symlinkedDir.c_str()); 
- 
+        MakePathIfNotExist(symlinkedDir.c_str());
+
         const TString originDir = tempDirPath.Child("origin");
-        MakePathIfNotExist(originDir.c_str()); 
- 
+        MakePathIfNotExist(originDir.c_str());
+
         const TString originFile = TFsPath(originDir).Child("data");
-        { 
+        {
             TFixedBufferFileOutput out(originFile);
-            out << "data111!!!"; 
-        } 
- 
+            out << "data111!!!";
+        }
+
         const TString symlinkedFile = TFsPath(symlinkedDir).Child("origin_symlink");
-        NFs::SymLink(originFile, symlinkedFile); 
- 
-        TFsPath(symlinkedDir).ForceDelete(); 
- 
+        NFs::SymLink(originFile, symlinkedFile);
+
+        TFsPath(symlinkedDir).ForceDelete();
+
         UNIT_ASSERT(!NFs::Exists(symlinkedFile));
         UNIT_ASSERT(!NFs::Exists(symlinkedDir));
         UNIT_ASSERT(NFs::Exists(originFile));
         UNIT_ASSERT(NFs::Exists(originDir));
-    } 
-#endif 
+    }
+#endif
 
     Y_UNIT_TEST(TestForceDeleteNonexisting) {
         TTempDir tempDir;

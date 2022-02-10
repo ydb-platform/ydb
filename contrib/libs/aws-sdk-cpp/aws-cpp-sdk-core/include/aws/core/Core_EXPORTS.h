@@ -2,29 +2,29 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
- 
-#pragma once 
- 
-#include <aws/core/SDKConfig.h> 
- 
+
+#pragma once
+
+#include <aws/core/SDKConfig.h>
+
 #if defined (USE_WINDOWS_DLL_SEMANTICS) || defined (_WIN32)
-    #ifdef _MSC_VER 
-        #pragma warning(disable : 4251) 
-    #endif // _MSC_VER 
- 
-    #ifdef USE_IMPORT_EXPORT 
-        #ifdef AWS_CORE_EXPORTS 
-            #define  AWS_CORE_API __declspec(dllexport) 
-        #else // AWS_CORE_EXPORTS 
-            #define  AWS_CORE_API __declspec(dllimport) 
-        #endif // AWS_CORE_EXPORTS 
-    #else // USE_IMPORT_EXPORT 
-        #define AWS_CORE_API 
-    #endif // USE_IMPORT_EXPORT 
+    #ifdef _MSC_VER
+        #pragma warning(disable : 4251)
+    #endif // _MSC_VER
+
+    #ifdef USE_IMPORT_EXPORT
+        #ifdef AWS_CORE_EXPORTS
+            #define  AWS_CORE_API __declspec(dllexport)
+        #else // AWS_CORE_EXPORTS
+            #define  AWS_CORE_API __declspec(dllimport)
+        #endif // AWS_CORE_EXPORTS
+    #else // USE_IMPORT_EXPORT
+        #define AWS_CORE_API
+    #endif // USE_IMPORT_EXPORT
 #else // defined (USE_WINDOWS_DLL_SEMANTICS) || defined (_WIN32)
-    #define AWS_CORE_API 
+    #define AWS_CORE_API
 #endif // defined (USE_WINDOWS_DLL_SEMANTICS) || defined (_WIN32)
- 
+
 #ifdef _MSC_VER
     #define AWS_SUPPRESS_WARNING_PUSH(W) \
             __pragma(warning(push)) \
@@ -89,15 +89,15 @@
 // Update: When deprecating a function/components, we won't remove the existing tests
 // immediately, so we need AWS_DISABLE_DEPRECATION as well.
 #if defined(AWS_DISABLE_DEPRECATION)
-    #define AWS_DEPRECATED(msg) 
-#elif defined (__cplusplus) && __cplusplus > 201103L // standard attributes are available since C++14 
-    #define AWS_DEPRECATED(msg) [[deprecated(msg)]] 
-#else 
-    #ifdef _MSC_VER 
-        #define AWS_DEPRECATED(msg) __declspec(deprecated(msg)) 
+    #define AWS_DEPRECATED(msg)
+#elif defined (__cplusplus) && __cplusplus > 201103L // standard attributes are available since C++14
+    #define AWS_DEPRECATED(msg) [[deprecated(msg)]]
+#else
+    #ifdef _MSC_VER
+        #define AWS_DEPRECATED(msg) __declspec(deprecated(msg))
     #elif defined (__clang__) || defined (__GNUC__)
-        #define AWS_DEPRECATED(msg) __attribute__((deprecated(msg))) 
-    #else 
-        #define AWS_DEPRECATED(msg) 
-    #endif 
-#endif 
+        #define AWS_DEPRECATED(msg) __attribute__((deprecated(msg)))
+    #else
+        #define AWS_DEPRECATED(msg)
+    #endif
+#endif

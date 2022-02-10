@@ -5,7 +5,7 @@
 #include <util/generic/list.h>
 #include <util/generic/hash.h>
 #include <util/generic/strbuf.h>
-#include <util/generic/maybe.h> 
+#include <util/generic/maybe.h>
 #include <util/stream/input.h>
 #include <util/stream/output.h>
 #include "file.h"
@@ -399,13 +399,13 @@ public:
     ECommandStatus GetStatus() const;
 
     /**
-     * @brief return exit code of finished process 
-     * The value is unspecified in case of internal errors or if the process is running 
-     * 
-     * @return exit code 
-     */ 
-    TMaybe<int> GetExitCode() const; 
- 
+     * @brief return exit code of finished process
+     * The value is unspecified in case of internal errors or if the process is running
+     *
+     * @return exit code
+     */
+    TMaybe<int> GetExitCode() const;
+
     /**
      * @brief get id of underlying process
      * @note depends on os: pid_t on UNIX, HANDLE on win

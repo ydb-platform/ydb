@@ -163,8 +163,8 @@ class Platform(object):
         ))
 
     @property
-    def library_path_variables(self): 
-        return ['LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'] 
+    def library_path_variables(self):
+        return ['LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH']
 
     def find_in_dict(self, dict_, default=None):
         if dict_ is None:
@@ -266,7 +266,7 @@ def to_strings(o):
 
 def emit(key, *value):
     print('{0}={1}'.format(key, ' '.join(to_strings(value))))
- 
+
 
 def emit_with_comment(comment, key, *value):
     print('# {}'.format(comment))
@@ -520,13 +520,13 @@ class Build(object):
 
         if self.build_system == 'distbuild':
             emit('DISTBUILD', 'yes')
-        elif self.build_system != 'ymake': 
+        elif self.build_system != 'ymake':
             raise ConfigureError()
 
-        python_bin = preset('BUILD_PYTHON_BIN', '$(PYTHON)/python') 
- 
-        emit('YMAKE_PYTHON', python_bin) 
-        emit('YMAKE_UNPICKLER', python_bin, '$ARCADIA_ROOT/build/plugins/_unpickler.py') 
+        python_bin = preset('BUILD_PYTHON_BIN', '$(PYTHON)/python')
+
+        emit('YMAKE_PYTHON', python_bin)
+        emit('YMAKE_UNPICKLER', python_bin, '$ARCADIA_ROOT/build/plugins/_unpickler.py')
 
     @property
     def is_release(self):
@@ -1291,7 +1291,7 @@ class GnuToolchain(Toolchain):
         self.platform_projects.append(project)
         self.c_flags_platform.append('-B{}/{}'.format(var, bin))
         if ldlibs:
-            for lib_path in self.build.host.library_path_variables: 
+            for lib_path in self.build.host.library_path_variables:
                 self.env.setdefault(lib_path, []).append('{}/{}'.format(var, ldlibs))
 
     def print_toolchain(self):
@@ -2566,7 +2566,7 @@ class MSVCCompiler(MSVC, Compiler):
         emit('DEBUG_INFO_FLAGS', debug_info_flags)
         append('C_WARNING_OPTS', c_warnings)
         append('CXX_WARNING_OPTS', cxx_warnings)
- 
+
         if self.build.is_release:
             emit('CFLAGS_PER_TYPE', '$CFLAGS_RELEASE')
         if self.build.is_debug:

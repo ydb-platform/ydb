@@ -195,7 +195,7 @@ private:
     TList<TString> Arguments;
     TString WorkDir;
     TAtomic ExecutionStatus; // TShellCommand::ECommandStatus
-    TMaybe<int> ExitCode; 
+    TMaybe<int> ExitCode;
     IInputStream* InputStream;
     IOutputStream* OutputStream;
     IOutputStream* ErrorStream;
@@ -362,10 +362,10 @@ public:
         return static_cast<ECommandStatus>(AtomicGet(ExecutionStatus));
     }
 
-    inline TMaybe<int> GetExitCode() const { 
-        return ExitCode; 
-    } 
- 
+    inline TMaybe<int> GetExitCode() const {
+        return ExitCode;
+    }
+
     inline TProcessId GetPid() const {
 #if defined(_win_)
         return GetProcessId(Pid);
@@ -1062,9 +1062,9 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
         // Otherwise there is no way for input stream provider to discover
         // that process has exited and stream shouldn't wait for new data.
         bool cleanExit = false;
-        TMaybe<int> processExitCode; 
+        TMaybe<int> processExitCode;
 #if defined(_unix_)
-        processExitCode = WEXITSTATUS(status); 
+        processExitCode = WEXITSTATUS(status);
         if (WIFEXITED(status) && processExitCode == 0) {
             cleanExit = true;
         } else if (WIFSIGNALED(status)) {
@@ -1078,11 +1078,11 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
             }
             if (exitCode == 0)
                 cleanExit = true;
-            processExitCode = static_cast<int>(exitCode); 
+            processExitCode = static_cast<int>(exitCode);
             DBG(Cerr << "exit code: " << exitCode << Endl);
         }
 #endif
-        pi->Parent->ExitCode = processExitCode; 
+        pi->Parent->ExitCode = processExitCode;
         if (cleanExit) {
             AtomicSet(pi->Parent->ExecutionStatus, SHELL_FINISHED);
         } else {
@@ -1155,10 +1155,10 @@ TShellCommand::ECommandStatus TShellCommand::GetStatus() const {
     return Impl->GetStatus();
 }
 
-TMaybe<int> TShellCommand::GetExitCode() const { 
-    return Impl->GetExitCode(); 
-} 
- 
+TMaybe<int> TShellCommand::GetExitCode() const {
+    return Impl->GetExitCode();
+}
+
 TProcessId TShellCommand::GetPid() const {
     return Impl->GetPid();
 }

@@ -2,20 +2,20 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
- 
-#pragma once 
- 
-#include <aws/core/Core_EXPORTS.h> 
- 
-#include <aws/core/utils/memory/stl/AWSString.h> 
- 
-namespace Aws 
-{ 
-    /** 
-     * AWS Regions 
-     */ 
-    namespace Region 
-    { 
+
+#pragma once
+
+#include <aws/core/Core_EXPORTS.h>
+
+#include <aws/core/utils/memory/stl/AWSString.h>
+
+namespace Aws
+{
+    /**
+     * AWS Regions
+     */
+    namespace Region
+    {
         // AWS_GLOBAL is a pseudo region that can be used to tell SDK to use the service global endpoint if there is any.
         // You can specify this region to corresponding environment variable, config file item and in your code.
         // For services without global region, the request will be directed to us-east-1
@@ -47,7 +47,7 @@ namespace Aws
 
         // If a pseudo region, for example, aws-global or us-east-1-fips is provided, it should be converted to the region name used for signing.
         Aws::String AWS_CORE_API ComputeSignerRegion(const Aws::String& region);
-    } 
- 
-} // namespace Aws 
- 
+    }
+
+} // namespace Aws
+

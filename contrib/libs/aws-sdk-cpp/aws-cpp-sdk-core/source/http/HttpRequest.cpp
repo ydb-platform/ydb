@@ -2,14 +2,14 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
- 
-#include <aws/core/http/HttpRequest.h> 
- 
-namespace Aws 
-{ 
-namespace Http 
-{ 
- 
+
+#include <aws/core/http/HttpRequest.h>
+
+namespace Aws
+{
+namespace Http
+{
+
 const char DATE_HEADER[] = "date";
 const char AWS_DATE_HEADER[] = "X-Amz-Date";
 const char AWS_SECURITY_TOKEN[] = "X-Amz-Security-Token";
@@ -32,9 +32,9 @@ const char API_VERSION_HEADER[] = "x-amz-api-version";
 const char SDK_INVOCATION_ID_HEADER[] = "amz-sdk-invocation-id";
 const char SDK_REQUEST_HEADER[] = "amz-sdk-request";
 const char CHUNKED_VALUE[] = "chunked";
- 
-} // Http 
-} // Aws 
- 
- 
- 
+
+} // Http
+} // Aws
+
+
+

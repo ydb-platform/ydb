@@ -9,9 +9,9 @@ try:
 except Exception:
     import pickle
 
-import _common as common 
+import _common as common
 
- 
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', help='pickled object of TCustomCommand class', required=True)

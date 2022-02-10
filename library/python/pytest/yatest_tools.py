@@ -10,24 +10,24 @@ import sys
 import yatest_lib.tools
 
 
-class Subtest(object): 
+class Subtest(object):
     def __init__(self, name, test_name, status, comment, elapsed, result=None, test_type=None, logs=None, cwd=None, metrics=None):
         self._name = name
         self._test_name = test_name
-        self.status = status 
-        self.elapsed = elapsed 
-        self.comment = comment 
+        self.status = status
+        self.elapsed = elapsed
+        self.comment = comment
         self.result = result
         self.test_type = test_type
         self.logs = logs or {}
         self.cwd = cwd
         self.metrics = metrics
- 
+
     def __eq__(self, other):
         if not isinstance(other, Subtest):
             return False
         return self.name == other.name and self.test_name == other.test_name
- 
+
     def __str__(self):
         return yatest_lib.tools.to_utf8(unicode(self))
 
@@ -83,7 +83,7 @@ class SubtestInfo(object):
         return str(self)
 
 
-class Status(object): 
+class Status(object):
     GOOD, XFAIL, FAIL, XPASS, MISSING, CRASHED, TIMEOUT = range(7)
     SKIPPED = -100
     NOT_LAUNCHED = -200
@@ -93,16 +93,16 @@ class Status(object):
                'skipped': SKIPPED, 'flaky': FLAKY, 'not_launched': NOT_LAUNCHED, 'timeout': TIMEOUT, 'diff': CANON_DIFF}
     TO_STR = {GOOD: 'good', FAIL: 'fail', XFAIL: 'xfail', XPASS: 'xpass', MISSING: 'missing', CRASHED: 'crashed',
               SKIPPED: 'skipped', FLAKY: 'flaky', NOT_LAUNCHED: 'not_launched', TIMEOUT: 'timeout', CANON_DIFF: 'diff'}
- 
- 
-class Test(object): 
+
+
+class Test(object):
     def __init__(self, name, path, status=None, comment=None, subtests=None):
-        self.name = name 
-        self.path = path 
+        self.name = name
+        self.path = path
         self.status = status
         self.comment = comment
         self.subtests = subtests or []
- 
+
     def __eq__(self, other):
         if not isinstance(other, Test):
             return False
@@ -114,19 +114,19 @@ class Test(object):
     def __repr__(self):
         return str(self)
 
-    def add_subtest(self, subtest): 
-        self.subtests.append(subtest) 
- 
-    def setup_status(self, status, comment): 
-        self.status = Status.BY_NAME[status or 'good'] 
-        if len(self.subtests) != 0: 
-            self.status = max(self.status, max(s.status for s in self.subtests)) 
-        self.comment = comment 
- 
-    def subtests_by_status(self, status): 
-        return [x.status for x in self.subtests].count(status) 
- 
- 
+    def add_subtest(self, subtest):
+        self.subtests.append(subtest)
+
+    def setup_status(self, status, comment):
+        self.status = Status.BY_NAME[status or 'good']
+        if len(self.subtests) != 0:
+            self.status = max(self.status, max(s.status for s in self.subtests))
+        self.comment = comment
+
+    def subtests_by_status(self, status):
+        return [x.status for x in self.subtests].count(status)
+
+
 class NoMd5FileException(Exception):
     pass
 

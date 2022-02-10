@@ -17,10 +17,10 @@ def onacceleo(unit, *args):
     classpath = ['$SCARAB', ]  # XXX special word for ya make to replace following paths with real classpath
     classpath.append('tools/acceleo')
 
-    depends = [] 
+    depends = []
     if not unit.get('IDE_MSVS_CALL'):
         for jar in classpath[1:]:
-            depends.append(jar) 
+            depends.append(jar)
 
     classpath = ':'.join(classpath)
 
@@ -60,7 +60,7 @@ def onacceleo(unit, *args):
         if kv.get(k):
             run_java += [k] + kv[k]
 
-    if depends: 
-        run_java += ['TOOL'] + depends 
- 
+    if depends:
+        run_java += ['TOOL'] + depends
+
     unit.on_run_java(run_java)

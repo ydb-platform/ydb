@@ -2,63 +2,63 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
- 
-#include <aws/core/client/ClientConfiguration.h> 
+
+#include <aws/core/client/ClientConfiguration.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
-#include <aws/core/client/DefaultRetryStrategy.h> 
+#include <aws/core/client/DefaultRetryStrategy.h>
 #include <aws/core/platform/Environment.h>
-#include <aws/core/platform/OSVersionInfo.h> 
-#include <aws/core/utils/memory/AWSMemory.h> 
+#include <aws/core/platform/OSVersionInfo.h>
+#include <aws/core/utils/memory/AWSMemory.h>
 #include <aws/core/utils/StringUtils.h>
-#include <aws/core/utils/threading/Executor.h> 
-#include <aws/core/utils/memory/stl/AWSStringStream.h> 
-#include <aws/core/Version.h> 
+#include <aws/core/utils/threading/Executor.h>
+#include <aws/core/utils/memory/stl/AWSStringStream.h>
+#include <aws/core/Version.h>
 #include <aws/core/config/AWSProfileConfigLoader.h>
 #include <aws/core/utils/logging/LogMacros.h>
- 
-namespace Aws 
-{ 
+
+namespace Aws
+{
 namespace Auth
 {
     AWS_CORE_API Aws::String GetConfigProfileFilename();
 }
-namespace Client 
-{ 
- 
+namespace Client
+{
+
 static const char* CLIENT_CONFIG_TAG = "ClientConfiguration";
- 
+
 AWS_CORE_API Aws::String ComputeUserAgentString()
-{ 
-  Aws::StringStream ss; 
-  ss << "aws-sdk-cpp/" << Version::GetVersionString() << " " <<  Aws::OSVersionInfo::ComputeOSVersionString() 
-      << " " << Version::GetCompilerVersionString(); 
-  return ss.str(); 
-} 
- 
+{
+  Aws::StringStream ss;
+  ss << "aws-sdk-cpp/" << Version::GetVersionString() << " " <<  Aws::OSVersionInfo::ComputeOSVersionString()
+      << " " << Version::GetCompilerVersionString();
+  return ss.str();
+}
+
 ClientConfiguration::ClientConfiguration() :
     scheme(Aws::Http::Scheme::HTTPS),
-    useDualStack(false), 
+    useDualStack(false),
     maxConnections(25),
     httpRequestTimeoutMs(0),
     requestTimeoutMs(3000),
-    connectTimeoutMs(1000), 
+    connectTimeoutMs(1000),
     enableTcpKeepAlive(true),
     tcpKeepAliveIntervalMs(30000),
     lowSpeedLimit(1),
-    proxyScheme(Aws::Http::Scheme::HTTP), 
-    proxyPort(0), 
+    proxyScheme(Aws::Http::Scheme::HTTP),
+    proxyPort(0),
     executor(Aws::MakeShared<Aws::Utils::Threading::DefaultExecutor>(CLIENT_CONFIG_TAG)),
-    verifySSL(true), 
-    writeRateLimiter(nullptr), 
-    readRateLimiter(nullptr), 
-    httpLibOverride(Aws::Http::TransferLibType::DEFAULT_CLIENT), 
+    verifySSL(true),
+    writeRateLimiter(nullptr),
+    readRateLimiter(nullptr),
+    httpLibOverride(Aws::Http::TransferLibType::DEFAULT_CLIENT),
     followRedirects(FollowRedirectsPolicy::DEFAULT),
-    disableExpectHeader(false), 
+    disableExpectHeader(false),
     enableClockSkewAdjustment(true),
     enableHostPrefixInjection(true),
     enableEndpointDiscovery(false),
     profileName(Aws::Auth::GetConfigProfileName())
-{ 
+{
     AWS_LOGSTREAM_DEBUG(CLIENT_CONFIG_TAG, "ClientConfiguration will use SDK Auto Resolved profile: [" << profileName << "] if not specified by users.");
 
     // Initialize Retry Strategy
@@ -138,8 +138,8 @@ ClientConfiguration::ClientConfiguration() :
     }
 
     region = Aws::String(Aws::Region::US_EAST_1);
-} 
- 
+}
+
 ClientConfiguration::ClientConfiguration(const char* profile) : ClientConfiguration()
 {
     if (profile && Aws::Config::HasCachedConfigProfile(profile))
@@ -156,5 +156,5 @@ ClientConfiguration::ClientConfiguration(const char* profile) : ClientConfigurat
     AWS_LOGSTREAM_WARN(CLIENT_CONFIG_TAG, "User specified profile: [" << profile << "] is not found, will use the SDK resolved one.");
 }
 
-} // namespace Client 
-} // namespace Aws 
+} // namespace Client
+} // namespace Aws

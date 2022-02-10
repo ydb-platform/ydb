@@ -215,7 +215,7 @@ namespace NFsPrivate {
     /*
 bool GetObjectId(const char* path, GUID* id) {
     TFileHandle h = CreateFileWithUtf8Name(path, 0, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
-                                OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT|FILE_FLAG_BACKUP_SEMANTICS, true); 
+                                OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT|FILE_FLAG_BACKUP_SEMANTICS, true);
     if (h.IsOpen()) {
         FILE_OBJECTID_BUFFER fob;
         DWORD resSize = 0;

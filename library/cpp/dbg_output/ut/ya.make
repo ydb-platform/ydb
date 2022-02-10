@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/dbg_output)
 
-OWNER(pg) 
+OWNER(pg)
 
 SRCS(
     dbg_output_ut.cpp

@@ -64,7 +64,7 @@ namespace NFs {
     ///
     /// @param[in] path          Path to be created
     /// @param[in] mode          Access permissions field; NOTE: ignored on win
-    /// @returns                 true if target path created or exists (and directory) 
+    /// @returns                 true if target path created or exists (and directory)
     inline bool MakeDirectoryRecursive(const TString& path, EFilePermissions mode) {
         return MakeDirectoryRecursive(path, mode, false);
     }

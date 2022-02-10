@@ -21,9 +21,9 @@ import io
 
 import mock
 
-from __tests__ import unittest 
-from __tests__ import RecordingSubscriber 
-from __tests__ import NonSeekableWriter 
+from __tests__ import unittest
+from __tests__ import RecordingSubscriber
+from __tests__ import NonSeekableWriter
 from s3transfer.compat import six
 from s3transfer.futures import TransferFuture
 from s3transfer.futures import TransferMeta

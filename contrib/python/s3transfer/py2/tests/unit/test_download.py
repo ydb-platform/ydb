@@ -17,13 +17,13 @@ import tempfile
 import socket
 import mock
 
-from __tests__ import BaseTaskTest 
-from __tests__ import BaseSubmissionTaskTest 
-from __tests__ import StreamWithError 
-from __tests__ import FileCreator 
-from __tests__ import unittest 
-from __tests__ import RecordingExecutor 
-from __tests__ import NonSeekableWriter 
+from __tests__ import BaseTaskTest
+from __tests__ import BaseSubmissionTaskTest
+from __tests__ import StreamWithError
+from __tests__ import FileCreator
+from __tests__ import unittest
+from __tests__ import RecordingExecutor
+from __tests__ import NonSeekableWriter
 from s3transfer.compat import six
 from s3transfer.compat import SOCKET_ERROR
 from s3transfer.exceptions import RetriesExceededError

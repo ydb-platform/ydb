@@ -717,7 +717,7 @@ def onadd_pytest_script(unit, *args):
     requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
     test_data = get_norm_paths(unit, 'TEST_DATA_VALUE')
     data, data_files = get_canonical_test_resources(unit)
-    test_data += data 
+    test_data += data
     python_paths = get_values_list(unit, 'TEST_PYTHON_PATH_VALUE')
     binary_path = None
     test_cwd = unit.get('TEST_CWD_VALUE') or ''
@@ -762,7 +762,7 @@ def add_test_to_dart(unit, test_type, binary_path=None, runner_bin=None):
     requirements = get_values_list(unit, 'TEST_REQUIREMENTS_VALUE')
     test_data = get_norm_paths(unit, 'TEST_DATA_VALUE')
     data, data_files = get_canonical_test_resources(unit)
-    test_data += data 
+    test_data += data
     python_paths = get_values_list(unit, 'TEST_PYTHON_PATH_VALUE')
     yt_spec = get_values_list(unit, 'TEST_YT_SPEC_VALUE')
     if not binary_path:
@@ -845,7 +845,7 @@ def onjava_test(unit, *args):
         'TESTED-PROJECT-NAME': path,
         'TEST-ENV': prepare_env(unit.get("TEST_ENV_VALUE")),
         #  'TEST-PRESERVE-ENV': 'da',
-        'TEST-DATA': serialize_list(sorted(_common.filter_out_by_keyword(test_data, 'AUTOUPDATED'))), 
+        'TEST-DATA': serialize_list(sorted(_common.filter_out_by_keyword(test_data, 'AUTOUPDATED'))),
         'FORK-MODE': unit.get('TEST_FORK_MODE') or '',
         'SPLIT-FACTOR': unit.get('TEST_SPLIT_FACTOR') or '',
         'CUSTOM-DEPENDENCIES': ' '.join(get_values_list(unit, 'TEST_DEPENDS_VALUE')),
@@ -957,7 +957,7 @@ def _dump_test(
         test_cwd=None,
         runner_bin=None,
         yt_spec=None,
-        data_files=None 
+        data_files=None
 ):
 
     if test_type == "PY_TEST":
@@ -1110,4 +1110,4 @@ def _get_external_resources_from_canon_data(data):
 
 
 def _get_canonical_data_resources_v2(filename, unit_path):
-    return (_get_external_resources_from_canon_data(_load_canonical_file(filename, unit_path)), [filename]) 
+    return (_get_external_resources_from_canon_data(_load_canonical_file(filename, unit_path)), [filename])

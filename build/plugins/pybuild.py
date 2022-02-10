@@ -403,7 +403,7 @@ def onpy_srcs(unit, *args):
                     '--source-root', '${ARCADIA_ROOT}',
                     # set arcadia root relative __file__ for generated modules
                     '-X', 'set_initial_path={}'.format(filename),
-                ] + cython_directives 
+                ] + cython_directives
 
                 cython(cython_args)
                 py_register(unit, mod, py3)

@@ -14,10 +14,10 @@ from concurrent import futures
 from functools import partial
 from threading import Event
 
-from __tests__ import unittest 
-from __tests__ import RecordingSubscriber 
-from __tests__ import BaseTaskTest 
-from __tests__ import BaseSubmissionTaskTest 
+from __tests__ import unittest
+from __tests__ import RecordingSubscriber
+from __tests__ import BaseTaskTest
+from __tests__ import BaseSubmissionTaskTest
 from s3transfer.futures import TransferCoordinator
 from s3transfer.futures import BoundedExecutor
 from s3transfer.subscribers import BaseSubscriber

@@ -17,9 +17,9 @@ import traceback
 import mock
 from concurrent.futures import ThreadPoolExecutor
 
-from __tests__ import unittest 
-from __tests__ import RecordingExecutor 
-from __tests__ import TransferCoordinatorWithInterrupt 
+from __tests__ import unittest
+from __tests__ import RecordingExecutor
+from __tests__ import TransferCoordinatorWithInterrupt
 from s3transfer.exceptions import CancelledError
 from s3transfer.exceptions import FatalError
 from s3transfer.exceptions import TransferNotDoneError

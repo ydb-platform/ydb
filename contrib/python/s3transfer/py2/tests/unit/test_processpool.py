@@ -22,11 +22,11 @@ from botocore.exceptions import ReadTimeoutError
 from botocore.client import BaseClient
 from botocore.config import Config
 
-from __tests__ import unittest 
-from __tests__ import skip_if_windows 
-from __tests__ import FileCreator 
-from __tests__ import StreamWithError 
-from __tests__ import StubbedClientTest 
+from __tests__ import unittest
+from __tests__ import skip_if_windows
+from __tests__ import FileCreator
+from __tests__ import StreamWithError
+from __tests__ import StubbedClientTest
 from s3transfer.compat import six
 from s3transfer.constants import PROCESS_USER_AGENT
 from s3transfer.exceptions import RetriesExceededError

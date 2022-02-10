@@ -286,7 +286,7 @@ RECURSE(
     django-redis
     django-redis-cache
     django-replicated
-    django-rest-framework-docs 
+    django-rest-framework-docs
     django-rest-multiple-models
     django-reversion
     django-select2-forms

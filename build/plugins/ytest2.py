@@ -27,7 +27,7 @@ def ytest_base(unit, related_prj_dir, related_prj_name, args):
     custom_deps = ' '.join(spec_args["DEPENDS"]) if "DEPENDS" in spec_args else ''
     unit.set(['CUSTOM-DEPENDENCIES', custom_deps])
     data_lst = spec_args.get('DATA', []) + (unit.get(['__test_data']) or '').split(' ')
-    data_lst.sort() 
+    data_lst.sort()
     data = '\"' + ';'.join(data_lst) + '\"' if data_lst else ''
     unit.set(['TEST-DATA', data])
 

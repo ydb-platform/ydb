@@ -104,7 +104,7 @@ class Swig(iw.CustomCommand):
     def output_includes(self):
         return [(self._out_header, [])] if self._swig_lang in ['java', 'jni_cpp'] else []
 
-    def run(self, extra_args, binary): 
+    def run(self, extra_args, binary):
         if self._local_swig:
             binary = self._tool
         return self.do_run_java(binary, self._path) if self._swig_lang in ['java', 'jni_cpp', 'jni_java'] else self.do_run(binary, self._path)

@@ -1,6 +1,6 @@
-{ 
-    "static_codec_tools.test_static_codec_tools": { 
-        "checksum": "960e3c8c57fb846ab53ccbd07e287233", 
-        "uri": "sbr://144512644/static_codec_tools.test_static_codec_tools/solar-8k-a.huffman.1467494385.codec_info" 
-    } 
-} 
+{
+    "static_codec_tools.test_static_codec_tools": {
+        "checksum": "960e3c8c57fb846ab53ccbd07e287233",
+        "uri": "sbr://144512644/static_codec_tools.test_static_codec_tools/solar-8k-a.huffman.1467494385.codec_info"
+    }
+}

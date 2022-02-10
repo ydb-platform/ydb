@@ -16,7 +16,7 @@ import tempfile
 
 import mock
 
-from __tests__ import unittest 
+from __tests__ import unittest
 from s3transfer.bandwidth import RequestExceededException
 from s3transfer.bandwidth import RequestToken
 from s3transfer.bandwidth import TimeUtils

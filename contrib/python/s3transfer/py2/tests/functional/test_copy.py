@@ -13,8 +13,8 @@
 from botocore.exceptions import ClientError
 from botocore.stub import Stubber
 
-from __tests__ import BaseGeneralInterfaceTest 
-from __tests__ import FileSizeProvider 
+from __tests__ import BaseGeneralInterfaceTest
+from __tests__ import FileSizeProvider
 from s3transfer.manager import TransferManager
 from s3transfer.manager import TransferConfig
 from s3transfer.utils import MIN_UPLOAD_CHUNKSIZE

@@ -14,7 +14,7 @@ import os
 import tempfile
 import shutil
 import socket
-from __tests__ import unittest 
+from __tests__ import unittest
 from contextlib import closing
 
 import mock

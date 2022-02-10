@@ -21,10 +21,10 @@ from botocore.exceptions import ClientError
 from botocore.awsrequest import AWSRequest
 from botocore.stub import ANY
 
-from __tests__ import BaseGeneralInterfaceTest 
-from __tests__ import RecordingSubscriber 
-from __tests__ import RecordingOSUtils 
-from __tests__ import NonSeekableReader 
+from __tests__ import BaseGeneralInterfaceTest
+from __tests__ import RecordingSubscriber
+from __tests__ import RecordingOSUtils
+from __tests__ import NonSeekableReader
 from s3transfer.compat import six
 from s3transfer.manager import TransferManager
 from s3transfer.manager import TransferConfig

@@ -14,8 +14,8 @@ from io import BytesIO
 from botocore.awsrequest import create_request_object
 import mock
 
-from __tests__ import skip_if_using_serial_implementation 
-from __tests__ import StubbedClientTest 
+from __tests__ import skip_if_using_serial_implementation
+from __tests__ import StubbedClientTest
 from s3transfer.exceptions import CancelledError
 from s3transfer.exceptions import FatalError
 from s3transfer.futures import BaseExecutor

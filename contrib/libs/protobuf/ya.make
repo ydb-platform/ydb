@@ -128,7 +128,7 @@ SRCS(
     src/google/protobuf/wrappers.pb.cc
 )
 
-FILES( 
+FILES(
     src/google/protobuf/any.proto
     src/google/protobuf/api.proto
     src/google/protobuf/descriptor.proto
@@ -140,8 +140,8 @@ FILES(
     src/google/protobuf/timestamp.proto
     src/google/protobuf/type.proto
     src/google/protobuf/wrappers.proto
-) 
- 
+)
+
 END()
 
 RECURSE(

@@ -5,11 +5,11 @@
 namespace NKikimr {
 namespace NPQ {
 
-NMonitoring::TDynamicCounterPtr GetCounters(NMonitoring::TDynamicCounterPtr counters, 
-                                            const TString& subsystem, 
-                                            const TString& topic); 
-NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounterPtr counters, 
-                                                     const TString& subsystem); 
+NMonitoring::TDynamicCounterPtr GetCounters(NMonitoring::TDynamicCounterPtr counters,
+                                            const TString& subsystem,
+                                            const TString& topic);
+NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounterPtr counters,
+                                                     const TString& subsystem);
 
 struct TLabelsInfo {
     TVector<std::pair<TString,TString>> Labels;
@@ -18,26 +18,26 @@ struct TLabelsInfo {
 
 TVector<TLabelsInfo> GetLabels(const TString& topic);
 TVector<TLabelsInfo> GetLabels(const TString& cluster, const TString& oldTopic);
-TVector<TLabelsInfo> GetLabelsForStream(const TString& topic, const TString& cloudId, 
-                                        const TString& dbId, const TString& folderId); 
+TVector<TLabelsInfo> GetLabelsForStream(const TString& topic, const TString& cloudId,
+                                        const TString& dbId, const TString& folderId);
 
 class TMultiCounter {
 public:
-    TMultiCounter() = default; 
+    TMultiCounter() = default;
 
-    TMultiCounter(NMonitoring::TDynamicCounterPtr counters, 
-                  const TVector<TLabelsInfo>& labels, 
-                  const TVector<std::pair<TString, TString>>& subgroups, 
-                  const TVector<TString>& counter_names, 
-                  bool deriv, 
-                  const TString& name = "sensor", 
-                  bool expiring = true); 
+    TMultiCounter(NMonitoring::TDynamicCounterPtr counters,
+                  const TVector<TLabelsInfo>& labels,
+                  const TVector<std::pair<TString, TString>>& subgroups,
+                  const TVector<TString>& counter_names,
+                  bool deriv,
+                  const TString& name = "sensor",
+                  bool expiring = true);
 
-    void Inc(ui64 val = 1); 
-    void Dec(ui64 val = 1); 
-    void Set(ui64 value); 
+    void Inc(ui64 val = 1);
+    void Dec(ui64 val = 1);
+    void Set(ui64 value);
 
-    operator bool(); 
+    operator bool();
 
 private:
     ui64 Value = 0;
@@ -46,18 +46,18 @@ private:
 
 class TPercentileCounter {
 public:
-    TPercentileCounter() = default; 
-    TPercentileCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, 
-                       const TVector<TLabelsInfo>& labels, 
-                       const TVector<std::pair<TString, TString>>& subgroups, 
-                       const TString& sensor, 
-                       const TVector<std::pair<ui64, TString>>& intervals, 
-                       const bool deriv, 
-                       bool expiring = true); 
+    TPercentileCounter() = default;
+    TPercentileCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+                       const TVector<TLabelsInfo>& labels,
+                       const TVector<std::pair<TString, TString>>& subgroups,
+                       const TString& sensor,
+                       const TVector<std::pair<ui64, TString>>& intervals,
+                       const bool deriv,
+                       bool expiring = true);
 
     void IncFor(ui64 key, ui64 value = 1);
     void DecFor(ui64 key, ui64 value = 1);
- 
+
 private:
     TVector<TMultiCounter> Counters;
     TVector<ui64> Ranges;

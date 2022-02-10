@@ -131,7 +131,7 @@ struct TEvPQ {
             ui32 UncompressedSize;
             TString PartitionKey;
             TString ExplicitHashKey;
-            bool External; 
+            bool External;
         };
 
         TEvWrite(const ui64 cookie, const ui64 messageNo, const TString& ownerCookie, const TMaybe<ui64> offset, TVector<TMsg> &&msgs, bool isDirectWrite)
@@ -149,7 +149,7 @@ struct TEvPQ {
         TMaybe<ui64> Offset;
         TVector<TMsg> Msgs;
         bool IsDirectWrite;
- 
+
     };
 
     struct TEvReadTimeout : public TEventLocal<TEvReadTimeout, EvReadTimeout> {
@@ -161,10 +161,10 @@ struct TEvPQ {
     };
 
     struct TEvRead : public TEventLocal<TEvRead, EvRead> {
-        TEvRead(const ui64 cookie, const ui64 offset, const ui16 partNo, const ui32 count, 
-                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size, 
-                const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString& clientDC, 
-                bool externalOperation) 
+        TEvRead(const ui64 cookie, const ui64 offset, const ui16 partNo, const ui32 count,
+                const TString& sessionId, const TString& clientId, const ui32 timeout, const ui32 size,
+                const ui32 maxTimeLagMs, const ui64 readTimestampMs, const TString& clientDC,
+                bool externalOperation)
         : Cookie(cookie)
         , Offset(offset)
         , PartNo(partNo)
@@ -176,7 +176,7 @@ struct TEvPQ {
         , MaxTimeLagMs(maxTimeLagMs)
         , ReadTimestampMs(readTimestampMs)
         , ClientDC(clientDC)
-        , ExternalOperation(externalOperation) 
+        , ExternalOperation(externalOperation)
         {}
 
         ui64 Cookie;
@@ -190,7 +190,7 @@ struct TEvPQ {
         ui32 MaxTimeLagMs;
         ui64 ReadTimestampMs;
         TString ClientDC;
-        bool ExternalOperation; 
+        bool ExternalOperation;
     };
 
     struct TEvMonRequest : public TEventLocal<TEvMonRequest, EvMonRequest> {

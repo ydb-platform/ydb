@@ -12,8 +12,8 @@ option java_package = "com.yandex.ydb.datastreams.v1";
 enum EFieldTransformationType {
     TRANSFORM_NONE = 0;
     TRANSFORM_BASE64 = 1;
-    TRANSFORM_DOUBLE_S_TO_INT_MS = 2; 
-    TRANSFORM_EMPTY_TO_NOTHING = 3; 
+    TRANSFORM_DOUBLE_S_TO_INT_MS = 2;
+    TRANSFORM_EMPTY_TO_NOTHING = 3;
 }
 
 extend google.protobuf.FieldOptions {
@@ -45,7 +45,7 @@ message ChildShard {
 // Represents details of consumer
 message Consumer {
     string consumer_arn = 1;
-    int64 consumer_creation_timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS]; 
+    int64 consumer_creation_timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     string consumer_name = 3;
     ConsumerDescription.ConsumerStatus consumer_status = 4;
 }
@@ -58,9 +58,9 @@ message HashKeyRange {
 
 message Record {
     // Timestamp that the record was inserted into the stream
-    int64 timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS]; 
+    int64 timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Data blob
-    bytes data = 2 [(FieldTransformer) = TRANSFORM_BASE64]; 
+    bytes data = 2 [(FieldTransformer) = TRANSFORM_BASE64];
     // Encryption type used on record
     EncryptionType encryption = 3;
     // Identifies shard in the stream the record is assigned to
@@ -98,7 +98,7 @@ message StreamDescription {
     repeated Shard shards = 6;
     string stream_arn = 7;
     // Timestamp that the stream was created
-    int64 stream_creation_timestamp = 8 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS]; 
+    int64 stream_creation_timestamp = 8 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Current status of the stream
     StreamStatus stream_status = 9;
     // Name of the stream
@@ -116,11 +116,11 @@ message SequenceNumberRange {
 // Represents shard details
 message Shard {
     // Id of the shard adjacent to the shard's parent
-    string adjacent_parent_shard_id = 1 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING]; 
+    string adjacent_parent_shard_id = 1 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     // The range of possible hash key values for the shard
     HashKeyRange hash_key_range = 2;
     // Id of the shard's parent
-    string parent_shard_id = 3 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING]; 
+    string parent_shard_id = 3 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     // The range of possible sequence numbers for the shard
     SequenceNumberRange sequence_number_range = 4;
     // Unique id of the shard within stream
@@ -138,7 +138,7 @@ message ConsumerDescription {
 
     string consumer_arn = 1;
     // Timestamp that the consumer was created
-    int64 consumer_creation_timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS]; 
+    int64 consumer_creation_timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Name of the consumer
     string consumer_name = 3;
     ConsumerStatus consumer_status = 4;
@@ -181,14 +181,14 @@ message ShardFilter {
     // Exclusive id. Can only be used if AFTER_SHARD_ID is specified
     string shard_id = 1;
     // Can only be used if AT_TIMESTAMP or FROM_TIMESTAMP are specified.
-    int64 timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS]; 
+    int64 timestamp = 2 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     ShardFilterType type = 3;
 }
 
 // Represents starting position in the stream from which to start reading
 message StartingPosition {
     // Timestamp of the record from which to start reading
-    int64 timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS]; 
+    int64 timestamp = 1 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Sequence number of the record from which to start reading
     string sequence_number = 2;
     ShardIteratorType type = 3;
@@ -209,7 +209,7 @@ message StreamDescriptionSummary {
     int32 retention_period_hours = 6;
     string stream_arn = 7;
     // Timestamp that the stream was created
-    int64 stream_creation_timestamp = 8 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS]; 
+    int64 stream_creation_timestamp = 8 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Name of the stream
     string stream_name = 9;
     // Current status of the stream
@@ -322,7 +322,7 @@ message ListShardsRequest {
     // Filter out response
     ShardFilter shard_filter = 5;
     // Used to distinguish streams that have the same name
-    int64 stream_creation_timestamp = 6 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS]; 
+    int64 stream_creation_timestamp = 6 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
     // Name of the stream
     string stream_name = 7;
 }
@@ -381,7 +381,7 @@ message ListStreamConsumersRequest {
     string next_token = 3;
     string stream_arn = 4;
     // Used to distinguish streams that have the same name
-    int64 stream_creation_timestamp = 5 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS]; 
+    int64 stream_creation_timestamp = 5 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
 }
 
 message ListStreamConsumersResponse {
@@ -475,8 +475,8 @@ message PutRecordsRequestEntry {
 
 // Represents result of an individual record
 message PutRecordsResultEntry {
-    string error_message = 2 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING]; 
-    string error_code = 3 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING]; 
+    string error_message = 2 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
+    string error_code = 3 [(FieldTransformer) = TRANSFORM_EMPTY_TO_NOTHING];
     string sequence_number = 4;
     string shard_id = 5;
 }
@@ -484,7 +484,7 @@ message PutRecordsResultEntry {
 message GetRecordsRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // Max number of records to return
-    int32 limit = 2; 
+    int32 limit = 2;
     // Iterator to shard
     string shard_iterator = 3;
 }
@@ -513,7 +513,7 @@ message PutRecordRequest {
     string explicit_hash_key = 3;
     // Used as input to hash function that maps partition key to a specific shard
     string partition_key = 4;
-    string sequence_number_for_ordering = 5; 
+    string sequence_number_for_ordering = 5;
     // Name of the stream to put record to
     string stream_name = 6;
 }
@@ -564,7 +564,7 @@ message GetShardIteratorRequest {
     // Name of the stream
     string stream_name = 5;
     // Used with shard iterator type AT_TIMESTAMP
-    int64 timestamp = 6 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS]; 
+    int64 timestamp = 6 [(FieldTransformer) = TRANSFORM_DOUBLE_S_TO_INT_MS];
 }
 
 message GetShardIteratorResponse {
@@ -573,7 +573,7 @@ message GetShardIteratorResponse {
 }
 
 message GetShardIteratorResult {
-    string shard_iterator = 1; 
+    string shard_iterator = 1;
 }
 
 message SubscribeToShardRequest {
@@ -653,8 +653,8 @@ message DescribeStreamSummaryResponse {
 }
 
 message DescribeStreamSummaryResult {
-    // Stream description sumary 
-    StreamDescriptionSummary stream_description_summary = 1; 
+    // Stream description sumary
+    StreamDescriptionSummary stream_description_summary = 1;
 }
 
 message DisableEnhancedMonitoringRequest {

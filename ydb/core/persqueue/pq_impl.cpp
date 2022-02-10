@@ -1449,7 +1449,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                         labels.pop_back();
                     }
                     it = BytesWrittenFromDC.emplace(clientDC, NKikimr::NPQ::TMultiCounter(GetServiceCounters(counters, "pqproxy|writeSession"),
-                                labels, {{"ClientDC", clientDC}}, {"BytesWrittenFromDC"}, true)).first; 
+                                labels, {{"ClientDC", clientDC}}, {"BytesWrittenFromDC"}, true)).first;
                 }
             }
             if (it != BytesWrittenFromDC.end())
@@ -1527,7 +1527,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 msgs.push_back({cmd.GetSourceId(), static_cast<ui64>(cmd.GetSeqNo()), partNo,
                     totalParts, totalSize, createTimestampMs, receiveTimestampMs,
                     disableDeduplication, writeTimestampMs, data, uncompressedSize,
-                    cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation() 
+                    cmd.GetPartitionKey(), cmd.GetExplicitHash(), cmd.GetExternalOperation()
                 });
                 partNo++;
                 uncompressedSize = 0;
@@ -1542,23 +1542,23 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 static_cast<ui16>(cmd.HasPartNo() ? cmd.GetTotalParts() : 1),
                 static_cast<ui32>(cmd.HasTotalSize() ? cmd.GetTotalSize() : cmd.GetData().Size()),
                 createTimestampMs, receiveTimestampMs, disableDeduplication, writeTimestampMs, cmd.GetData(),
-                cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u, cmd.GetPartitionKey(), cmd.GetExplicitHash(), 
-                cmd.GetExternalOperation() 
+                cmd.HasUncompressedSize() ? cmd.GetUncompressedSize() : 0u, cmd.GetPartitionKey(), cmd.GetExplicitHash(),
+                cmd.GetExternalOperation()
             });
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got client message topic: " << TopicName << 
-                    " partition: " << req.GetPartition() << 
-                    " SourceId: \'" << EscapeC(msgs.back().SourceId) << 
-                    "\' SeqNo: " << msgs.back().SeqNo << " partNo : " << msgs.back().PartNo << 
-                    " messageNo: " << req.GetMessageNo() << " size " << msgs.back().Data.size() << 
-                    " offset: " << (req.HasCmdWriteOffset() ? (req.GetCmdWriteOffset() + i) : -1)); 
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got client message topic: " << TopicName <<
+                    " partition: " << req.GetPartition() <<
+                    " SourceId: \'" << EscapeC(msgs.back().SourceId) <<
+                    "\' SeqNo: " << msgs.back().SeqNo << " partNo : " << msgs.back().PartNo <<
+                    " messageNo: " << req.GetMessageNo() << " size " << msgs.back().Data.size() <<
+                    " offset: " << (req.HasCmdWriteOffset() ? (req.GetCmdWriteOffset() + i) : -1));
     }
     InitResponseBuilder(responseCookie, msgs.size(), COUNTER_LATENCY_PQ_WRITE);
-    THolder<TEvPQ::TEvWrite> event = 
-        MakeHolder<TEvPQ::TEvWrite>(responseCookie, req.GetMessageNo(), 
-                                    req.HasOwnerCookie() ? req.GetOwnerCookie() : "", 
-                                    req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(), 
-                                    std::move(msgs), req.GetIsDirectWrite()); 
+    THolder<TEvPQ::TEvWrite> event =
+        MakeHolder<TEvPQ::TEvWrite>(responseCookie, req.GetMessageNo(),
+                                    req.HasOwnerCookie() ? req.GetOwnerCookie() : "",
+                                    req.HasCmdWriteOffset() ? req.GetCmdWriteOffset() : TMaybe<ui64>(),
+                                    std::move(msgs), req.GetIsDirectWrite());
     ctx.Send(partActor, event.Release());
 }
 
@@ -1659,16 +1659,16 @@ void TPersQueue::HandleReadRequest(const ui64 responseCookie, const TActorId& pa
         ui32 bytes = Min<ui32>(MAX_BYTES, cmd.HasBytes() ? cmd.GetBytes() : MAX_BYTES);
         auto clientDC = cmd.HasClientDC() ? to_lower(cmd.GetClientDC()) : "unknown";
         clientDC.to_title();
-        THolder<TEvPQ::TEvRead> event = 
-            MakeHolder<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(), 
-                                       cmd.HasPartNo() ? cmd.GetPartNo() : 0, 
-                                       count, 
-                                       cmd.HasSessionId() ? cmd.GetSessionId() : "", 
-                                       cmd.GetClientId(), 
-                                       cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0, bytes, 
-                                       cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0, 
-                                       cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0, clientDC, 
-                                       cmd.GetExternalOperation()); 
+        THolder<TEvPQ::TEvRead> event =
+            MakeHolder<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(),
+                                       cmd.HasPartNo() ? cmd.GetPartNo() : 0,
+                                       count,
+                                       cmd.HasSessionId() ? cmd.GetSessionId() : "",
+                                       cmd.GetClientId(),
+                                       cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0, bytes,
+                                       cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0,
+                                       cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0, clientDC,
+                                       cmd.GetExternalOperation());
         ctx.Send(partActor, event.Release());
     }
 }

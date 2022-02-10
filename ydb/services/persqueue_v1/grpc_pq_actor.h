@@ -550,8 +550,8 @@ private:
 
     void GenerateNextWriteRequest(const NActors::TActorContext& ctx);
 
-    void SetupCounters(); 
-    void SetupCounters(const TString& cloudId, const TString& dbId, const TString& folderId); 
+    void SetupCounters();
+    void SetupCounters(const TString& cloudId, const TString& dbId, const TString& folderId);
 
 private:
     std::unique_ptr<NKikimr::NGRpcService::TEvStreamPQWriteRequest> Request;
@@ -854,13 +854,13 @@ private:
     void HandleWakeup(const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const NActors::TActorContext& ctx);
 
-    void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, 
-                      const NActors::TActorContext& ctx); 
+    void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode,
+                      const NActors::TActorContext& ctx);
 
     void SetupCounters();
     void SetupTopicCounters(const TString& topic);
-    void SetupTopicCounters(const TString& topic, const TString& cloudId, const TString& dbId, 
-                            const TString& folderId); 
+    void SetupTopicCounters(const TString& topic, const TString& cloudId, const TString& dbId,
+                            const TString& folderId);
 
     void ProcessReads(const NActors::TActorContext& ctx); // returns false if actor died
     struct TFormedReadResponse;
@@ -1137,8 +1137,8 @@ public:
                              const TString& workingDir, const TString& name);
 
     void Bootstrap(const NActors::TActorContext& ctx);
- 
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx){ Y_UNUSED(ev); Y_UNUSED(ctx); } 
+
+    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx){ Y_UNUSED(ev); Y_UNUSED(ctx); }
 };
 
 class TDescribeTopicActor : public TPQGrpcSchemaBase<TDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest> {
@@ -1152,7 +1152,7 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx); 
+    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 };
 
 
@@ -1195,8 +1195,8 @@ public:
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx){ Y_UNUSED(ev); Y_UNUSED(ctx); } 
- 
+    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx){ Y_UNUSED(ev); Y_UNUSED(ctx); }
+
 private:
     TString LocalCluster;
     TVector<TString> Clusters;
@@ -1213,8 +1213,8 @@ public:
                              const TString& workingDir, const TString& name);
 
     void Bootstrap(const NActors::TActorContext& ctx);
- 
-    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx){ Y_UNUSED(ev); Y_UNUSED(ctx); } 
+
+    void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx){ Y_UNUSED(ev); Y_UNUSED(ctx); }
 };
 
 

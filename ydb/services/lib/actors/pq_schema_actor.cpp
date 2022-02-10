@@ -125,39 +125,39 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TString& consumerName,
         const TActorContext& ctx
     ) {
-        THashSet<TString> rulesToRemove; 
-        rulesToRemove.insert(consumerName); 
- 
-        config->ClearReadRuleVersions(); 
-        config->ClearReadRules(); 
-        config->ClearReadFromTimestampsMs(); 
-        config->ClearConsumerFormatVersions(); 
-        config->ClearConsumerCodecs(); 
-        config->MutablePartitionConfig()->ClearImportantClientId(); 
+        THashSet<TString> rulesToRemove;
+        rulesToRemove.insert(consumerName);
+
+        config->ClearReadRuleVersions();
+        config->ClearReadRules();
+        config->ClearReadFromTimestampsMs();
+        config->ClearConsumerFormatVersions();
+        config->ClearConsumerCodecs();
+        config->MutablePartitionConfig()->ClearImportantClientId();
         config->ClearReadRuleServiceTypes();
- 
-        for (const auto& importantConsumer : originalConfig.GetPartitionConfig().GetImportantClientId()) { 
-            if (rulesToRemove.find(importantConsumer) == rulesToRemove.end()) { 
-                config->MutablePartitionConfig()->AddImportantClientId(importantConsumer); 
-            } 
-        } 
- 
+
+        for (const auto& importantConsumer : originalConfig.GetPartitionConfig().GetImportantClientId()) {
+            if (rulesToRemove.find(importantConsumer) == rulesToRemove.end()) {
+                config->MutablePartitionConfig()->AddImportantClientId(importantConsumer);
+            }
+        }
+
         const auto& pqConfig = AppData(ctx)->PQConfig;
-        for (size_t i = 0; i < originalConfig.ReadRulesSize(); i++) { 
-            if (auto it = rulesToRemove.find(originalConfig.GetReadRules(i)); it != rulesToRemove.end()) { 
-                rulesToRemove.erase(it); 
-                continue; 
-            } 
- 
-            config->AddReadRuleVersions(originalConfig.GetReadRuleVersions(i)); 
-            config->AddReadRules(originalConfig.GetReadRules(i)); 
-            config->AddReadFromTimestampsMs(originalConfig.GetReadFromTimestampsMs(i)); 
-            config->AddConsumerFormatVersions(originalConfig.GetConsumerFormatVersions(i)); 
-            auto ct = config->AddConsumerCodecs(); 
-            for (size_t j = 0; j < originalConfig.GetConsumerCodecs(i).CodecsSize(); j++) { 
-                ct->AddCodecs(originalConfig.GetConsumerCodecs(i).GetCodecs(j)); 
-                ct->AddIds(originalConfig.GetConsumerCodecs(i).GetIds(j)); 
-            } 
+        for (size_t i = 0; i < originalConfig.ReadRulesSize(); i++) {
+            if (auto it = rulesToRemove.find(originalConfig.GetReadRules(i)); it != rulesToRemove.end()) {
+                rulesToRemove.erase(it);
+                continue;
+            }
+
+            config->AddReadRuleVersions(originalConfig.GetReadRuleVersions(i));
+            config->AddReadRules(originalConfig.GetReadRules(i));
+            config->AddReadFromTimestampsMs(originalConfig.GetReadFromTimestampsMs(i));
+            config->AddConsumerFormatVersions(originalConfig.GetConsumerFormatVersions(i));
+            auto ct = config->AddConsumerCodecs();
+            for (size_t j = 0; j < originalConfig.GetConsumerCodecs(i).CodecsSize(); j++) {
+                ct->AddCodecs(originalConfig.GetConsumerCodecs(i).GetCodecs(j));
+                ct->AddIds(originalConfig.GetConsumerCodecs(i).GetIds(j));
+            }
             if (i < originalConfig.ReadRuleServiceTypesSize()) {
                 config->AddReadRuleServiceTypes(originalConfig.GetReadRuleServiceTypes(i));
             } else {
@@ -167,15 +167,15 @@ namespace NKikimr::NGRpcProxy::V1 {
                 }
                 config->AddReadRuleServiceTypes(pqConfig.GetDefaultClientServiceType().GetName());
             }
-        } 
- 
-        if (rulesToRemove.size() > 0) { 
-            return TStringBuilder() << "Rule for consumer " << *rulesToRemove.begin() << " doesn't exist"; 
-        } 
- 
-        return ""; 
-    } 
- 
+        }
+
+        if (rulesToRemove.size() > 0) {
+            return TStringBuilder() << "Rule for consumer " << *rulesToRemove.begin() << " doesn't exist";
+        }
+
+        return "";
+    }
+
     bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedClientServiceTypes,
                                 TString& error) {
 

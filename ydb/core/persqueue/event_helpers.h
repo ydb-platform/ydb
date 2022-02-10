@@ -19,8 +19,8 @@ void ReplyPersQueueError(
     NKikimrServices::EServiceKikimr service,
     const ui64 responseCookie,
     NPersQueue::NErrorCode::EErrorCode errorCode,
-    const TString& error, 
-    bool logDebug = false 
+    const TString& error,
+    bool logDebug = false
 );
 
 }// NPQ

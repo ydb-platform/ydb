@@ -568,10 +568,10 @@ RESOURCE_FILES(
     #botocore/data/kinesis-video-media/2017-09-30/service-2.json
     #botocore/data/kinesis-video-signaling/2019-12-04/paginators-1.json
     #botocore/data/kinesis-video-signaling/2019-12-04/service-2.json
-    botocore/data/kinesis/2013-12-02/examples-1.json 
-    botocore/data/kinesis/2013-12-02/paginators-1.json 
-    botocore/data/kinesis/2013-12-02/service-2.json 
-    botocore/data/kinesis/2013-12-02/waiters-2.json 
+    botocore/data/kinesis/2013-12-02/examples-1.json
+    botocore/data/kinesis/2013-12-02/paginators-1.json
+    botocore/data/kinesis/2013-12-02/service-2.json
+    botocore/data/kinesis/2013-12-02/waiters-2.json
     #botocore/data/kinesisanalytics/2015-08-14/examples-1.json
     #botocore/data/kinesisanalytics/2015-08-14/paginators-1.json
     #botocore/data/kinesisanalytics/2015-08-14/service-2.json

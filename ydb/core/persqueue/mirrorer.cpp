@@ -61,7 +61,7 @@ void TMirrorer::Bootstrap(const TActorContext& ctx) {
             TString suffix = LocalDC ? "Remote" : "Internal";
             MirrorerErrors = NKikimr::NPQ::TMultiCounter(
                 GetServiceCounters(counters, "pqproxy|writeSession"),
-                GetLabels(TopicName), {}, {"MirrorerErrors" + suffix}, true 
+                GetLabels(TopicName), {}, {"MirrorerErrors" + suffix}, true
             );
             MirrorerTimeLags = THolder<TPercentileCounter>(new TPercentileCounter(
                 GetServiceCounters(counters, "pqproxy|mirrorWriteTimeLag"),
@@ -71,11 +71,11 @@ void TMirrorer::Bootstrap(const TActorContext& ctx) {
             ));
             InitTimeoutCounter = NKikimr::NPQ::TMultiCounter(
                 GetServiceCounters(counters, "pqproxy|writeSession"),
-                GetLabels(TopicName), {}, {"MirrorerInitTimeout" + suffix}, true 
+                GetLabels(TopicName), {}, {"MirrorerInitTimeout" + suffix}, true
             );
             WriteTimeoutCounter = NKikimr::NPQ::TMultiCounter(
                 GetServiceCounters(counters, "pqproxy|writeSession"),
-                {}, {}, {"MirrorerWriteTimeout"}, true, "sensor", false 
+                {}, {}, {"MirrorerWriteTimeout"}, true, "sensor", false
             );
         }
     }

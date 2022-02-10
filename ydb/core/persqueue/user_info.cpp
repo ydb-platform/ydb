@@ -35,18 +35,18 @@ TUsersInfoStorage::TUsersInfoStorage(
     ui32 partition,
     const TTabletCountersBase& counters,
     const NKikimrPQ::TPQTabletConfig& config,
-    const TString& cloudId, 
-    const TString& dbId, 
-    const TString& folderId 
+    const TString& cloudId,
+    const TString& dbId,
+    const TString& folderId
 )
     : DCId(std::move(dcId))
     , TabletId(tabletId)
     , TopicName(topicName)
     , Partition(partition)
     , Config(config)
-    , CloudId(cloudId) 
-    , DbId(dbId) 
-    , FolderId(folderId) 
+    , CloudId(cloudId)
+    , DbId(dbId)
+    , FolderId(folderId)
 {
     Counters.Populate(counters);
 }
@@ -154,7 +154,7 @@ TUserInfo& TUsersInfoStorage::Create(
     ui32 gen, ui32 step, i64 offset, ui64 readOffsetRewindSum, TInstant readFromTimestamp
 ) {
 
-    ui64 burst = 1'000'000'000, speed = 1'000'000'000; 
+    ui64 burst = 1'000'000'000, speed = 1'000'000'000;
     if (AppData(ctx)->PQConfig.GetQuotingConfig().GetPartitionReadQuotaIsTwiceWriteQuota()) {
         burst = Config.GetPartitionConfig().GetBurstSize() * 2;
         speed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() * 2;

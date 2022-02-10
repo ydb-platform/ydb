@@ -20,8 +20,8 @@ void ReplyPersQueueError(
     NKikimrServices::EServiceKikimr service,
     const ui64 responseCookie,
     NPersQueue::NErrorCode::EErrorCode errorCode,
-    const TString& error, 
-    bool logDebug 
+    const TString& error,
+    bool logDebug
 ) {
     if (errorCode == NPersQueue::NErrorCode::BAD_REQUEST) {
         counters.Cumulative()[COUNTER_PQ_BAD_REQUEST].Increment(1);
@@ -36,11 +36,11 @@ void ReplyPersQueueError(
     }
     logStr << " error: " << error;
 
-    if (logDebug) { 
-        LOG_DEBUG_S(ctx, service, logStr); 
-    } else { 
-        LOG_WARN_S(ctx, service, logStr); 
-    } 
+    if (logDebug) {
+        LOG_DEBUG_S(ctx, service, logStr);
+    } else {
+        LOG_WARN_S(ctx, service, logStr);
+    }
     ctx.Send(dstActor, new TEvPQ::TEvError(errorCode, error, responseCookie));
 }
 

@@ -350,8 +350,8 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     auto subGroup = GetServiceCounters(Counters, "pqproxy|SLI");
     Aggr = {{{{"Account", TopicConverter->GetAccount()}}, {"total"}}};
 
-    SLITotal = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsTotal"}, true, "sensor", false); 
-    SLIErrors = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsError"}, true, "sensor", false); 
+    SLITotal = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsTotal"}, true, "sensor", false);
+    SLIErrors = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsError"}, true, "sensor", false);
     SLITotal.Inc();
 
     const auto& preferredCluster = init.preferred_cluster();
@@ -360,39 +360,39 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     }
 }
 
-void TWriteSessionActor::SetupCounters() 
+void TWriteSessionActor::SetupCounters()
 {
     //now topic is checked, can create group for real topic, not garbage
     auto subGroup = GetServiceCounters(Counters, "pqproxy|writeSession");
     TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabels(LocalDC, TopicConverter->GetClientsideName());
 
-    BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflight"}, false); 
-    BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflightTotal"}, false); 
-    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"SessionsCreated"}, true); 
-    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"SessionsActive"}, false); 
-    Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"Errors"}, true); 
+    BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflight"}, false);
+    BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"BytesInflightTotal"}, false);
+    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"SessionsCreated"}, true);
+    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"SessionsActive"}, false);
+    Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"Errors"}, true);
 
     SessionsCreated.Inc();
     SessionsActive.Inc();
 }
 
-void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& dbId, 
-                                       const TString& folderId) 
-{ 
-    //now topic is checked, can create group for real topic, not garbage 
-    auto subGroup = NKikimr::NPQ::GetCountersForStream(Counters, "writeSession"); 
+void TWriteSessionActor::SetupCounters(const TString& cloudId, const TString& dbId,
+                                       const TString& folderId)
+{
+    //now topic is checked, can create group for real topic, not garbage
+    auto subGroup = NKikimr::NPQ::GetCountersForStream(Counters, "writeSession");
     TVector<NPQ::TLabelsInfo> aggr = NKikimr::NPQ::GetLabelsForStream(TopicConverter->GetClientsideName(), cloudId, dbId, folderId);
- 
-    BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding"}, false); 
-    BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding_total"}, false); 
-    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_created_per_second"}, true); 
-    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_active"}, false); 
-    Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.errors_per_second"}, true); 
- 
-    SessionsCreated.Inc(); 
-    SessionsActive.Inc(); 
-} 
- 
+
+    BytesInflight = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding"}, false);
+    BytesInflightTotal = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.bytes_proceeding_total"}, false);
+    SessionsCreated = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_created_per_second"}, true);
+    SessionsActive = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.sessions_active"}, false);
+    Errors = NKikimr::NPQ::TMultiCounter(subGroup, aggr, {}, {"stream.internal_write.errors_per_second"}, true);
+
+    SessionsCreated.Inc();
+    SessionsActive.Inc();
+}
+
 void TWriteSessionActor::InitCheckSchema(const TActorContext& ctx, bool needWaitSchema) {
     LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "init check schema");
 
@@ -428,13 +428,13 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
         PartitionToTablet[pi.GetPartitionId()] = pi.GetTabletId();
     }
 
-    if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { 
-        const auto& tabletConfig = description.GetPQTabletConfig(); 
-        SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(), 
-                      tabletConfig.GetYcFolderId()); 
-    } else { 
-        SetupCounters(); 
-    } 
+    if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        const auto& tabletConfig = description.GetPQTabletConfig();
+        SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
+                      tabletConfig.GetYcFolderId());
+    } else {
+        SetupCounters();
+    }
 
     Y_VERIFY (entry.SecurityObject);
     ACL.Reset(new TAclWrapper(entry.SecurityObject));
@@ -471,32 +471,32 @@ void TWriteSessionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::
         );
     }
 
-    const auto& pqDescription = navigate->ResultSet.front().PQGroupInfo->Description; 
+    const auto& pqDescription = navigate->ResultSet.front().PQGroupInfo->Description;
 
-    Y_VERIFY(pqDescription.PartitionsSize() > 0); 
-    Y_VERIFY(pqDescription.HasPQTabletConfig()); 
-    InitialPQTabletConfig = pqDescription.GetPQTabletConfig(); 
+    Y_VERIFY(pqDescription.PartitionsSize() > 0);
+    Y_VERIFY(pqDescription.HasPQTabletConfig());
+    InitialPQTabletConfig = pqDescription.GetPQTabletConfig();
 
-    if (!pqDescription.HasBalancerTabletID()) { 
+    if (!pqDescription.HasBalancerTabletID()) {
         TString errorReason = Sprintf("topic '%s' has no balancer, Marker# PQ93", TopicConverter->GetClientsideName().c_str());
         CloseSession(errorReason, PersQueue::ErrorCode::UNKNOWN_TOPIC, ctx);
         return;
     }
 
-    BalancerTabletId = pqDescription.GetBalancerTabletID(); 
+    BalancerTabletId = pqDescription.GetBalancerTabletID();
 
-    for (ui32 i = 0; i < pqDescription.PartitionsSize(); ++i) { 
-        const auto& pi = pqDescription.GetPartitions(i); 
+    for (ui32 i = 0; i < pqDescription.PartitionsSize(); ++i) {
+        const auto& pi = pqDescription.GetPartitions(i);
         PartitionToTablet[pi.GetPartitionId()] = pi.GetTabletId();
     }
 
-    if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) { 
-        const auto& tabletConfig = pqDescription.GetPQTabletConfig(); 
-        SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(), 
-                      tabletConfig.GetYcFolderId()); 
-    } else { 
-        SetupCounters(); 
-    } 
+    if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        const auto& tabletConfig = pqDescription.GetPQTabletConfig();
+        SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
+                      tabletConfig.GetYcFolderId());
+    } else {
+        SetupCounters();
+    }
 
     Y_VERIFY(!navigate->ResultSet.empty());
     ACL.Reset(new TAclWrapper(navigate->ResultSet.front().SecurityObject));
@@ -705,7 +705,7 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
     auto subGroup = GetServiceCounters(Counters, "pqproxy|SLI");
 
     InitLatency = NKikimr::NPQ::CreateSLIDurationCounter(subGroup, Aggr, "WriteInit", border, {100, 200, 500, 1000, 1500, 2000, 5000, 10000, 30000, 99999999});
-    SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsBigLatency"}, true, "sesnor", false); 
+    SLIBigLatency = NKikimr::NPQ::TMultiCounter(subGroup, Aggr, {}, {"RequestsBigLatency"}, true, "sesnor", false);
 
     ui32 initDurationMs = (ctx.Now() - StartTime).MilliSeconds();
     InitLatency.IncFor(initDurationMs, 1);

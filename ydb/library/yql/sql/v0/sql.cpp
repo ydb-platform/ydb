@@ -26,10 +26,10 @@
 #include <util/string/hex.h>
 #include <util/string/join.h>
 
-#if defined(_tsan_enabled_) 
-#include <util/system/mutex.h> 
-#endif 
- 
+#if defined(_tsan_enabled_)
+#include <util/system/mutex.h>
+#endif
+
 using namespace NYql;
 
 namespace NSQLTranslationV0 {

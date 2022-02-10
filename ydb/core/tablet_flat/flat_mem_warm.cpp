@@ -1,27 +1,27 @@
-#include "flat_mem_warm.h" 
+#include "flat_mem_warm.h"
 #include "flat_mem_snapshot.h"
-#include "flat_page_other.h" 
+#include "flat_page_other.h"
 
 namespace NKikimr {
-namespace NTable { 
+namespace NTable {
 
 TString PrintRow(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry) {
     return DbgPrintTuple(row, typeRegistry);
 }
 
 TIntrusiveConstPtr<NPage::TExtBlobs> TMemTable::MakeBlobsPage(TArrayRef<const TMemTableSnapshot> list)
-{ 
+{
     NPage::TExtBlobsWriter writer;
- 
+
     for (auto &one: list) {
         for (auto it = one->GetBlobs()->Iterator(); it.IsValid(); it.Next()) {
             writer.Put(it->GId);
         }
     }
- 
+
     return new NPage::TExtBlobs(writer.Make(true), { });
-} 
- 
+}
+
 NMem::TTreeSnapshot TMemTable::Snapshot() {
     return NMem::TTreeSnapshot(Tree.Snapshot());
 }
@@ -45,25 +45,25 @@ void TMemTable::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& type
 
         TString keyStr = PrintRow(key, typeRegistry) + " -> ";
         const auto *row = it.GetValue();
-        while (row) { 
+        while (row) {
             str << keyStr
                 << "ERowOp " << int(row->Rop)
                 << " {";
-            for (ui32 i = 0; i < row->Items; ++i) { 
-                TTag colId = row->Ops()[i].Tag; 
-                if (Scheme->ColInfo(colId)) { 
-                    NScheme::TTypeId typeId = Scheme->ColInfo(colId)->TypeId; 
-                    auto &op = row->Ops()[i]; 
- 
+            for (ui32 i = 0; i < row->Items; ++i) {
+                TTag colId = row->Ops()[i].Tag;
+                if (Scheme->ColInfo(colId)) {
+                    NScheme::TTypeId typeId = Scheme->ColInfo(colId)->TypeId;
+                    auto &op = row->Ops()[i];
+
                     str << EOpToStr(ECellOp(op.Op)) << " " << op.Tag << " " << DbgPrintCell(op.Value, typeId, typeRegistry);
                 } else {
                     str << "unknown column " << colId;
                 }
-                if (i+1 < row->Items) 
+                if (i+1 < row->Items)
                     str << ", ";
             }
             str << "}" << Endl;
-            row = row->Next; 
+            row = row->Next;
         }
     }
 }

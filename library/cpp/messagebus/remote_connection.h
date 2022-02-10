@@ -13,8 +13,8 @@
 #include "storage.h"
 #include "vector_swaps.h"
 #include "ybus.h"
-#include "misc/granup.h" 
-#include "misc/tokenquota.h" 
+#include "misc/granup.h"
+#include "misc/tokenquota.h"
 
 #include <library/cpp/messagebus/actor/actor.h>
 #include <library/cpp/messagebus/actor/executor.h>
@@ -49,7 +49,7 @@ namespace NBus {
         struct TWriterToReaderSocketMessage {
             TSocket Socket;
             ui32 SocketVersion;
- 
+
             TWriterToReaderSocketMessage(TSocket socket, ui32 socketVersion)
                 : Socket(socket)
                 , SocketVersion(socketVersion)
@@ -154,13 +154,13 @@ namespace NBus {
             virtual void ReaderProcessMessageUnknownVersion(TArrayRef<const char> dataRef) = 0;
             bool MessageRead(TArrayRef<const char> dataRef, TInstant now);
             virtual void MessageSent(TArrayRef<TBusMessagePtrAndHeader> messages) = 0;
- 
+
             void CallSerialize(TBusMessage* msg, TBuffer& buffer) const;
             void SerializeMessage(TBusMessage* msg, TBuffer* data, TMessageCounter* counter) const;
             TBusMessage* DeserializeMessage(TArrayRef<const char> dataRef, const TBusHeader* header, TMessageCounter* messageCounter, EMessageStatus* status) const;
- 
+
             void ResetOneWayFlag(TArrayRef<TBusMessage*>);
- 
+
             inline ::NActor::TActor<TRemoteConnection, TWriterTag>* GetWriterActor() {
                 return this;
             }
@@ -269,7 +269,7 @@ namespace NBus {
                 TGranUp<TRemoteConnectionWriterStatus> Writer;
                 TGranUp<TRemoteConnectionReaderStatus> Reader;
             };
- 
+
             TWriterData WriterData;
             TReaderData ReaderData;
             TGranStatus GranStatus;
@@ -280,15 +280,15 @@ namespace NBus {
 
             // client connection only
             TLockFreeQueueBatch<TBusMessagePtrAndHeader, TVectorSwaps> ReplyQueue;
- 
+
             EMessageStatus ShutdownReason;
         };
 
         inline const TNetAddr& TRemoteConnection::GetAddr() const noexcept {
             return PeerAddr;
         }
- 
+
         typedef TIntrusivePtr<TRemoteConnection> TRemoteConnectionPtr;
- 
+
     }
 }

@@ -78,7 +78,7 @@ public:
             PartMetaVec.push_back(partMeta);
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " got returned parts " << PartMetaVec <<  " from " << FromTabletId);
 
-            txc.Env.CleanupLoan(partMeta, FromTabletId); 
+            txc.Env.CleanupLoan(partMeta, FromTabletId);
         }
 
         return true;
@@ -117,7 +117,7 @@ public:
             PartMetaVec.push_back(partMeta);
 
             TLogoBlobID borrowId;
-            txc.Env.ConfirmLoan(partMeta, borrowId); 
+            txc.Env.ConfirmLoan(partMeta, borrowId);
         }
 
         return true;

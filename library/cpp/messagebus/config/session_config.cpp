@@ -120,7 +120,7 @@ void TBusSessionConfig::ConfigureLastGetopt(NLastGetopt::TOpts& opts,
     opts.AddLongOption(prefix + "max-message-size")
         .RequiredArgument("BYTES")
         .DefaultValue(ToString(MaxMessageSize))
-        .StoreMappedResultT<const char*>(&MaxMessageSize, &ParseWithKmgSuffix); 
+        .StoreMappedResultT<const char*>(&MaxMessageSize, &ParseWithKmgSuffix);
     opts.AddLongOption(prefix + "socket-recv-buffer-size")
         .RequiredArgument("BYTES")
         .DefaultValue(ToString(SocketRecvBufferSize))

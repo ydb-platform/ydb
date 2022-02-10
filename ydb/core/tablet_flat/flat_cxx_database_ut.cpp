@@ -3,15 +3,15 @@
 #include <ydb/core/tablet_flat/test/libs/table/test_dummy.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include "flat_cxx_database.h"
-#include "flat_dbase_scheme.h" 
-#include "flat_dbase_apply.h" 
+#include "flat_dbase_scheme.h"
+#include "flat_dbase_apply.h"
 
 namespace NKikimr {
 
-namespace NTable { 
+namespace NTable {
 
 Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
-    using TDummyEnv = NTable::TDummyEnv; 
+    using TDummyEnv = NTable::TDummyEnv;
 
     enum ESomeEnum : ui8 {
         SomeValue0,
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
     };
 
     Y_UNIT_TEST(BasicSchemaTest) {
-        TDatabase DB; 
+        TDatabase DB;
         NIceDb::TNiceDb db(DB);
         ui64 stamp = 0;
 
@@ -587,16 +587,16 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
 
     Y_UNIT_TEST(RenameColumnSchemaTest) {
         TScheme scheme;
-        TSchemeModifier applier(scheme); 
-        TAlter delta; 
+        TSchemeModifier applier(scheme);
+        TAlter delta;
 
         delta.AddTable("test", 1);
-        delta.AddColumn(1, "test", 1, 1, { }); 
-        applier.Apply(*delta.Flush()); 
+        delta.AddColumn(1, "test", 1, 1, { });
+        applier.Apply(*delta.Flush());
 
         delta.AddTable("testtest", 1);
-        delta.AddColumn(1, "testtest", 1, 1, { }); 
-        applier.Apply(*delta.Flush()); 
+        delta.AddColumn(1, "testtest", 1, 1, { });
+        applier.Apply(*delta.Flush());
 
         UNIT_ASSERT(scheme.Tables.find(1)->second.Name == "testtest");
         UNIT_ASSERT(scheme.TableNames.find("testtest")->second == 1);

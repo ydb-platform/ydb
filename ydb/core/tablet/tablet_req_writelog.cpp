@@ -26,10 +26,10 @@ class TTabletReqWriteLog : public TActorBootstrapped<TTabletReqWriteLog> {
     TVector<ui32> YellowMoveChannels;
     TVector<ui32> YellowStopChannels;
 
-    void Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext &ctx) { 
+    void Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext &ctx) {
         return ReplyAndDie(NKikimrProto::ERROR, "BlobStorage proxy unavailable", ctx);
-    } 
- 
+    }
+
     void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev, const TActorContext &ctx) {
         TEvBlobStorage::TEvPutResult *msg = ev->Get();
 
@@ -143,7 +143,7 @@ public:
     STFUNC(StateWait) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvPutResult, Handle);
-            HFunc(TEvents::TEvUndelivered, Handle); 
+            HFunc(TEvents::TEvUndelivered, Handle);
         }
     }
 };

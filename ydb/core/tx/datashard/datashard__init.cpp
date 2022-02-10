@@ -368,7 +368,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         return false;
 
     // TODO: properly check shard state
-    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::TxMain::TableId)) { 
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::TxMain::TableId)) {
         if (!Self->TransQueue.Load(db))
             return false;
 
@@ -497,7 +497,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        bool isCreate = txc.DB.GetScheme().IsEmpty(); 
+        bool isCreate = txc.DB.GetScheme().IsEmpty();
 
         if (isCreate) {
             Self->State = TShardState::WaitScheme;
@@ -516,8 +516,8 @@ public:
         }
 
         if (isCreate) {
-            txc.DB.Alter().SetExecutorAllowLogBatching(gAllowLogBatchingDefaultValue); 
-            txc.DB.Alter().SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500)); 
+            txc.DB.Alter().SetExecutorAllowLogBatching(gAllowLogBatchingDefaultValue);
+            txc.DB.Alter().SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
 
             Self->PersistSys(db, Schema::Sys_State, Self->State);
 

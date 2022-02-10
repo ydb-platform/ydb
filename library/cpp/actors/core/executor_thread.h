@@ -43,7 +43,7 @@ namespace NActors {
                                const TActorId& parentId = TActorId());
         TActorId RegisterActor(IActor* actor, TMailboxHeader* mailbox, ui32 hint, const TActorId& parentId = TActorId());
         void UnregisterActor(TMailboxHeader* mailbox, ui64 localActorId);
-        void DropUnregistered(); 
+        void DropUnregistered();
         const std::vector<THolder<IActor>>& GetUnregistered() const { return DyingActors; }
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);

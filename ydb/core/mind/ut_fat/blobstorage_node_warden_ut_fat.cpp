@@ -110,7 +110,7 @@ void SetupServices(TTestActorRuntime &runtime) {
 
     const ui32 domainId = DOMAIN_ID;
     const ui32 stateStorageGroup = domainId;
- 
+
     TString keyfile;
     { // prepare keyfile
         TString baseDir = runtime.GetTempDir();
@@ -119,12 +119,12 @@ void SetupServices(TTestActorRuntime &runtime) {
         file << "some key data";
     }
 
-    TAppPrepare app; 
- 
+    TAppPrepare app;
+
     { // setup domain info
-        app.ClearDomainsAndHive(); 
-        app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1", domainId).Release()); 
-        app.AddHive(domainId, MakeDefaultHiveID(stateStorageGroup)); 
+        app.ClearDomainsAndHive();
+        app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1", domainId).Release());
+        app.AddHive(domainId, MakeDefaultHiveID(stateStorageGroup));
     }
     { // setup channel profiles
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
@@ -134,7 +134,7 @@ void SetupServices(TTestActorRuntime &runtime) {
             profile.Channels.push_back(
                 TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureMirror3, 0, NKikimrBlobStorage::TVDiskKind::Default));
         }
-        app.SetChannels(std::move(channelProfiles)); 
+        app.SetChannels(std::move(channelProfiles));
     }
 
     ui32 groupId = TGroupID(GroupConfigurationTypeStatic, DOMAIN_ID, 0).GetRaw();
@@ -213,7 +213,7 @@ void SetupServices(TTestActorRuntime &runtime) {
         SetupTabletResolver(runtime, nodeIndex);
     }
 
-    runtime.Initialize(app.Unwrap()); 
+    runtime.Initialize(app.Unwrap());
 
     for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
         TActorId localActor = runtime.GetLocalServiceId(
@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     CUSTOM_UNIT_TEST(TestCreatePDiskAndGroup) {
         TTempDir tempDir;
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime);
         TActorId sender0 = runtime.AllocateEdgeActor(0);
         TActorId sender1 = runtime.AllocateEdgeActor(1);

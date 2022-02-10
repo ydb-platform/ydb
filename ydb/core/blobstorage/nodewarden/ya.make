@@ -1,12 +1,12 @@
-LIBRARY() 
- 
-OWNER( 
+LIBRARY()
+
+OWNER(
     alexvru
-    cthulhu 
-    g:kikimr 
-) 
- 
-SRCS( 
+    cthulhu
+    g:kikimr
+)
+
+SRCS(
     group_stat_aggregator.cpp
     node_warden_cache.cpp
     node_warden_group.cpp
@@ -20,18 +20,18 @@ SRCS(
     node_warden_scrub.cpp
     node_warden_stat_aggr.cpp
     node_warden_vdisk.cpp
-) 
- 
-PEERDIR( 
+)
+
+PEERDIR(
     library/cpp/json
     ydb/core/base
     ydb/core/blobstorage/groupinfo
     ydb/core/blobstorage/pdisk
     ydb/core/control
     ydb/library/pdisk_io
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

@@ -1,34 +1,34 @@
-#pragma once 
- 
-#include "flat_mem_warm.h" 
+#pragma once
+
+#include "flat_mem_warm.h"
 #include "flat_mem_snapshot.h"
-#include "flat_table_part.h" 
-#include "flat_part_laid.h" 
+#include "flat_table_part.h"
+#include "flat_part_laid.h"
 #include "flat_table_committed.h"
- 
-#include <util/generic/vector.h> 
- 
-namespace NKikimr { 
-namespace NTable { 
- 
-    struct TSubset { 
-        explicit operator bool() const 
-        { 
+
+#include <util/generic/vector.h>
+
+namespace NKikimr {
+namespace NTable {
+
+    struct TSubset {
+        explicit operator bool() const
+        {
             return bool(Frozen) || bool(Flatten) || bool(ColdParts);
-        } 
- 
-        TEpoch Epoch() const noexcept 
-        { 
+        }
+
+        TEpoch Epoch() const noexcept
+        {
             TEpoch epoch = TEpoch::Min();
- 
-            for (auto &mem: Frozen) { 
-                epoch = Max(epoch, mem->Epoch); 
-            } 
- 
-            for (auto &hunk: Flatten) { 
-                epoch = Max(epoch, hunk.Part->Epoch); 
-            } 
- 
+
+            for (auto &mem: Frozen) {
+                epoch = Max(epoch, mem->Epoch);
+            }
+
+            for (auto &hunk: Flatten) {
+                epoch = Max(epoch, hunk.Part->Epoch);
+            }
+
             for (auto &part: ColdParts) {
                 epoch = Max(epoch, part->Epoch);
             }
@@ -37,40 +37,40 @@ namespace NTable {
                 epoch = Max(epoch, part->Epoch);
             }
 
-            return epoch; 
-        } 
- 
-        bool IsStickedToHead() const 
-        { 
-            return Head == TEpoch::Zero() || Head == Epoch() + 1;
-        } 
- 
-        void Describe(IOutputStream &out) const noexcept
-        { 
-            out 
-                << "TSubset{" << "head " << Head 
-                << ", " << Frozen.size() << "m" 
-                << " " << Flatten.size() << "p" 
-                << " " << ColdParts.size() << "c"
-                << "}"; 
-        } 
- 
-        ui64 MaxRows() const noexcept 
+            return epoch;
+        }
+
+        bool IsStickedToHead() const
         {
-            ui64 rows = 0; 
- 
+            return Head == TEpoch::Zero() || Head == Epoch() + 1;
+        }
+
+        void Describe(IOutputStream &out) const noexcept
+        {
+            out
+                << "TSubset{" << "head " << Head
+                << ", " << Frozen.size() << "m"
+                << " " << Flatten.size() << "p"
+                << " " << ColdParts.size() << "c"
+                << "}";
+        }
+
+        ui64 MaxRows() const noexcept
+        {
+            ui64 rows = 0;
+
             for (const auto &memTable : Frozen)
                 rows += memTable->GetRowCount();
- 
-            for (const auto &part : Flatten) 
-                rows += part->Stat.Rows; 
- 
+
+            for (const auto &part : Flatten)
+                rows += part->Stat.Rows;
+
             if (ColdParts) {
                 // We don't know, signal it to bloom filter
                 rows = 0;
             }
 
-            return rows; 
+            return rows;
         }
 
         TRowVersion MinRowVersion() const noexcept
@@ -110,8 +110,8 @@ namespace NTable {
             , Flatten(std::move(flatten))
         { }
 
-        const TEpoch Head; 
- 
+        const TEpoch Head;
+
         TIntrusiveConstPtr<TRowScheme> Scheme;
         TVector<TMemTableSnapshot> Frozen;
         TVector<TPartView> Flatten;
@@ -119,8 +119,8 @@ namespace NTable {
         TTransactionMap<TRowVersion> CommittedTransactions;
         TTransactionSet RemovedTransactions;
         TVector<TIntrusiveConstPtr<TTxStatusPart>> TxStatus;
-    }; 
- 
+    };
+
     using TGarbage = TVector<TAutoPtr<TSubset>>; /* data of deleted tables */
-} 
-} 
+}
+}

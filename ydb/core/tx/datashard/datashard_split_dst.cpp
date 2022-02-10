@@ -174,7 +174,7 @@ public:
             ui32 localTableId = Ev->Get()->Record.GetTableSnapshot(i).GetTableId();
             TString compressedBody = Ev->Get()->Record.GetTableSnapshot(i).GetSnapshotData();
             TString snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody);
-            txc.Env.LoanTable(localTableId, snapBody); 
+            txc.Env.LoanTable(localTableId, snapBody);
         }
 
         NIceDb::TNiceDb db(txc.DB);

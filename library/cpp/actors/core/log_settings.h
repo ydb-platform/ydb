@@ -1,32 +1,32 @@
 #pragma once
 
 #include "actor.h"
-#include "log_iface.h" 
+#include "log_iface.h"
 #include <util/generic/vector.h>
 #include <util/digest/murmur.h>
 #include <util/random/easy.h>
 
 namespace NActors {
     namespace NLog {
-        inline const char* PriorityToString(EPrio priority) { 
+        inline const char* PriorityToString(EPrio priority) {
             switch (priority) {
-                case EPrio::Emerg: 
+                case EPrio::Emerg:
                     return "EMERG";
-                case EPrio::Alert: 
+                case EPrio::Alert:
                     return "ALERT";
-                case EPrio::Crit: 
+                case EPrio::Crit:
                     return "CRIT";
-                case EPrio::Error: 
+                case EPrio::Error:
                     return "ERROR";
-                case EPrio::Warn: 
+                case EPrio::Warn:
                     return "WARN";
-                case EPrio::Notice: 
+                case EPrio::Notice:
                     return "NOTICE";
-                case EPrio::Info: 
+                case EPrio::Info:
                     return "INFO";
-                case EPrio::Debug: 
+                case EPrio::Debug:
                     return "DEBUG";
-                case EPrio::Trace: 
+                case EPrio::Trace:
                     return "TRACE";
                 default:
                     return "UNKNOWN";

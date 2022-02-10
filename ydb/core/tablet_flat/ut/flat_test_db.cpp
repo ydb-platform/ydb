@@ -9,7 +9,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
-namespace NTable { 
+namespace NTable {
 
 struct TFakeKey {
     TVector<TFakeTableCell> Columns;
@@ -38,26 +38,26 @@ struct TFakeVal {
     bool IsDeleted;
     TMap<TTag, TFakeTableCell> Columns;
 
-    void ApplyUpdate(const TFakeVal& other) 
-    { 
-        if (IsDeleted = other.IsDeleted) { 
+    void ApplyUpdate(const TFakeVal& other)
+    {
+        if (IsDeleted = other.IsDeleted) {
             Columns.clear();
-        } else { 
-            for (auto &val: other.Columns) 
-                Columns[val.first] = val.second; 
+        } else {
+            for (auto &val: other.Columns)
+                Columns[val.first] = val.second;
         }
-    } 
+    }
 
-    TCell Read( 
-            TArrayRef<const TFakeTableCell> key, const TColumn &col) 
-                const noexcept 
-    { 
-        if (col.KeyOrder != Max<ui32>()) { 
-            return *key[col.KeyOrder]; /* has no default values */ 
-        } else { 
-            auto *val = Columns.FindPtr(col.Id); 
- 
-            return val ? **val : col.Null; 
+    TCell Read(
+            TArrayRef<const TFakeTableCell> key, const TColumn &col)
+                const noexcept
+    {
+        if (col.KeyOrder != Max<ui32>()) {
+            return *key[col.KeyOrder]; /* has no default values */
+        } else {
+            auto *val = Columns.FindPtr(col.Id);
+
+            return val ? **val : col.Null;
         }
     }
 
@@ -72,7 +72,7 @@ typedef TMap<TFakeKey, TFakeVal, TFakeKeyComparator> TFakeTable;
 
 class TFakeDbIterator : public ITestIterator {
     TVector<ui32> ValueTags;
-    TVector<const TColumn*> Cols; 
+    TVector<const TColumn*> Cols;
     TFakeTable::const_iterator RowIt;
     TFakeTable::const_iterator RowEnd;
 
@@ -81,23 +81,23 @@ class TFakeDbIterator : public ITestIterator {
 
     TVector<NScheme::TTypeId> ValueTypes;
     TVector<TCell> ValueCells;
-    bool First = true; 
+    bool First = true;
 
 public:
-    explicit TFakeDbIterator(const TScheme& scheme, ui32 root, TTagsRef tags, TFakeTable::const_iterator rowIt, TFakeTable::const_iterator rowEnd) 
-        : ValueTags(tags.begin(), tags.end()) 
+    explicit TFakeDbIterator(const TScheme& scheme, ui32 root, TTagsRef tags, TFakeTable::const_iterator rowIt, TFakeTable::const_iterator rowEnd)
+        : ValueTags(tags.begin(), tags.end())
         , RowIt(rowIt)
         , RowEnd(rowEnd)
     {
-        Cols.reserve(tags.size()); 
-        ValueTypes.reserve(tags.size()); 
-        ValueCells.reserve(tags.size()); 
- 
+        Cols.reserve(tags.size());
+        ValueTypes.reserve(tags.size());
+        ValueCells.reserve(tags.size());
+
         for (auto tag : ValueTags) {
-            auto *column = scheme.GetColumnInfo(root, tag); 
- 
-            Cols.push_back(column); 
-            ValueTypes.push_back(column->PType); 
+            auto *column = scheme.GetColumnInfo(root, tag);
+
+            Cols.push_back(column);
+            ValueTypes.push_back(column->PType);
         }
 
         for (auto tag : scheme.GetTableInfo(root)->KeyColumns) {
@@ -112,23 +112,23 @@ public:
     }
 
     EReady Next(ENext mode) override
-    { 
-        /* Should position to the first row on first Next() to conform db 
-            iterator API, but iterator is already positioned to first row 
-            just after ctor invocation. 
-         */ 
- 
-        while (IsValid()) { 
-            if (!std::exchange(First, false)) 
-                ++RowIt; 
- 
+    {
+        /* Should position to the first row on first Next() to conform db
+            iterator API, but iterator is already positioned to first row
+            just after ctor invocation.
+         */
+
+        while (IsValid()) {
+            if (!std::exchange(First, false))
+                ++RowIt;
+
             if (!(mode == ENext::Data && IsValid() && RowIt->second.IsDeleted))
-                break; 
-        } 
- 
+                break;
+        }
+
         FillCells();
- 
-        return IsValid () ? EReady::Data : EReady::Gone; 
+
+        return IsValid () ? EReady::Data : EReady::Gone;
     }
 
     bool IsValid() override {
@@ -171,11 +171,11 @@ private:
         if (!IsValid())
             return;
 
-        for (const TFakeTableCell& kc : RowIt->first.Columns) 
-            KeyCells.push_back(*kc); 
+        for (const TFakeTableCell& kc : RowIt->first.Columns)
+            KeyCells.push_back(*kc);
 
-        for (auto *col: Cols) 
-            ValueCells.emplace_back(RowIt->second.Read(RowIt->first.Columns, *col)); 
+        for (auto *col: Cols)
+            ValueCells.emplace_back(RowIt->second.Read(RowIt->first.Columns, *col));
     }
 };
 
@@ -195,19 +195,19 @@ public:
 
     TString FinishTransaction(bool commit) override {
         if (commit) {
-            TAutoPtr<TSchemeChanges> schemeDeltaRecs = SchemeChanges.Flush(); 
-            TSchemeModifier(*Scheme).Apply(*schemeDeltaRecs); 
+            TAutoPtr<TSchemeChanges> schemeDeltaRecs = SchemeChanges.Flush();
+            TSchemeModifier(*Scheme).Apply(*schemeDeltaRecs);
             // Apply scheme operations that affect existing data
             for (ui32 i = 0;  i < schemeDeltaRecs->DeltaSize(); ++i) {
-                const TAlterRecord& rec = schemeDeltaRecs->GetDelta(i); 
+                const TAlterRecord& rec = schemeDeltaRecs->GetDelta(i);
                 switch (rec.GetDeltaType()) {
-                case TAlterRecord::AddTable: 
+                case TAlterRecord::AddTable:
                     Tables[rec.GetTableId()] = TFakeTable();
                     break;
-                case TAlterRecord::DropTable: 
+                case TAlterRecord::DropTable:
                     Tables.erase(rec.GetTableId());
                     break;
-                case TAlterRecord::DropColumn: 
+                case TAlterRecord::DropColumn:
                     EraseColumnValues(rec.GetTableId(), rec.GetColumnId());
                     break;
                 default:
@@ -226,23 +226,23 @@ public:
             }
         }
         TxChanges.clear();
-        SchemeChanges.Flush(); 
+        SchemeChanges.Flush();
         return TString();
     }
 
     void Update(ui32 root, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops) override
-    { 
+    {
         if (rop == ERowOp::Upsert) {
-            UpdateRow(root, key, ops); 
+            UpdateRow(root, key, ops);
         } else if (rop == ERowOp::Erase){
-            EraseRow(root, key); 
-        } 
-    } 
- 
-    void UpdateRow(ui32 root, TRawVals key, TArrayRef<const TUpdateOp> ops) 
-    { 
+            EraseRow(root, key);
+        }
+    }
+
+    void UpdateRow(ui32 root, TRawVals key, TArrayRef<const TUpdateOp> ops)
+    {
         TFakeKey fk;
-        FillKey(root, fk, key, true); 
+        FillKey(root, fk, key, true);
 
         // Copy previous value from the commited data
         if (!TxChanges[root].contains(fk) && Tables[root].contains(fk)) {
@@ -252,24 +252,24 @@ public:
         // Apply changes
         TFakeVal& fv = TxChanges[root][fk];
         fv.IsDeleted = false;
-        for (auto &one: ops) { 
+        for (auto &one: ops) {
             if (one.Op == ECellOp::Null || !one.Value)
-                fv.Columns[one.Tag].Set({ }); 
+                fv.Columns[one.Tag].Set({ });
             else
-                fv.Columns[one.Tag].Set(one.Value); 
+                fv.Columns[one.Tag].Set(one.Value);
         }
     }
 
-    void EraseRow(ui32 root, TRawVals key) { 
+    void EraseRow(ui32 root, TRawVals key) {
         TFakeKey fk;
-        FillKey(root, fk, key, true); 
+        FillKey(root, fk, key, true);
         TFakeVal fv;
         fv.IsDeleted = true;
         TxChanges[root][fk] = fv;
     }
 
     void Precharge(ui32 root,
-                           TRawVals keyFrom, TRawVals keyTo, 
+                           TRawVals keyFrom, TRawVals keyTo,
                            TTagsRef tags, ui32 flags) override {
         Y_UNUSED(root);
         Y_UNUSED(keyFrom);
@@ -279,42 +279,42 @@ public:
     }
 
     ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup mode) noexcept override {
-        if (!key) { 
-            return new TFakeDbIterator(GetScheme(), root, tags, Tables[root].begin(), Tables[root].end()); 
+        if (!key) {
+            return new TFakeDbIterator(GetScheme(), root, tags, Tables[root].begin(), Tables[root].end());
         }
 
         TFakeKey fk;
-        FillKey(root, fk, key, false); 
-        if (mode == ELookup::ExactMatch) { 
-            auto begin = Tables[root].find(fk); 
-            decltype(begin) end = begin; 
- 
-            return new TFakeDbIterator(GetScheme(), root, tags, begin, end == Tables[root].end() ? end : ++end); 
+        FillKey(root, fk, key, false);
+        if (mode == ELookup::ExactMatch) {
+            auto begin = Tables[root].find(fk);
+            decltype(begin) end = begin;
+
+            return new TFakeDbIterator(GetScheme(), root, tags, begin, end == Tables[root].end() ? end : ++end);
         } else {
-            auto begin = Tables[root].lower_bound(fk); 
- 
-            if (mode == ELookup::GreaterThan && begin != Tables[root].end()) { 
+            auto begin = Tables[root].lower_bound(fk);
+
+            if (mode == ELookup::GreaterThan && begin != Tables[root].end()) {
                 TFakeKeyComparator keyLess;
                 // proceed to the next row if keys are equal
-                if (!keyLess(fk, begin->first) && !keyLess(begin->first, fk)) 
-                    ++begin; 
+                if (!keyLess(fk, begin->first) && !keyLess(begin->first, fk))
+                    ++begin;
             }
- 
-            return new TFakeDbIterator(GetScheme(), root, tags, begin, Tables[root].end()); 
+
+            return new TFakeDbIterator(GetScheme(), root, tags, begin, Tables[root].end());
         }
     }
 
-    void Apply(const TSchemeChanges &delta) override 
-    { 
-        SchemeChanges.Merge(delta); 
-    } 
- 
+    void Apply(const TSchemeChanges &delta) override
+    {
+        SchemeChanges.Merge(delta);
+    }
+
 private:
-    void FillKey(ui32, TFakeKey& fk, TRawVals key, bool) const 
-    { 
-        fk.Columns.resize(key.size()); 
-        for (ui32 on = 0; on < fk.Columns.size(); on++) { 
-            fk.Columns[on].Set(key[on]); 
+    void FillKey(ui32, TFakeKey& fk, TRawVals key, bool) const
+    {
+        fk.Columns.resize(key.size());
+        for (ui32 on = 0; on < fk.Columns.size(); on++) {
+            fk.Columns[on].Set(key[on]);
         }
     }
 
@@ -327,7 +327,7 @@ private:
 private:
     THashMap<ui32, TFakeTable> Tables;
     THashMap<ui32, TFakeTable> TxChanges;
-    TAlter SchemeChanges; 
+    TAlter SchemeChanges;
 };
 
 
@@ -335,5 +335,5 @@ TAutoPtr<ITestDb> CreateFakeDb() {
     return new TFakeDb();
 }
 
-} // namspace NTable 
+} // namspace NTable
 } // namespace NKikimr

@@ -7,12 +7,12 @@
 namespace NActors {
 
 struct IReadDataCatch {
-    virtual void CatchReadDataError(TString error) noexcept = 0; 
+    virtual void CatchReadDataError(TString error) noexcept = 0;
     /* returns false if the protocol should continue to read data */
     virtual bool CatchReadDataComplete(
         const TActorContext& ctx, size_t amount) noexcept = 0;
 
-    virtual void CatchReadDataClosed() noexcept = 0; 
+    virtual void CatchReadDataClosed() noexcept = 0;
 };
 
 class TReadDataProtocolImpl {
@@ -101,9 +101,9 @@ private:
     struct TCatch: public IReadDataCatch {
         TDerived* Catcher;
 
-        virtual void CatchReadDataError(TString error) noexcept override 
+        virtual void CatchReadDataError(TString error) noexcept override
         {
-            Catcher->CatchReadDataError(error); 
+            Catcher->CatchReadDataError(error);
         }
 
         /* returns false if the protocol should continue to read data */
@@ -113,9 +113,9 @@ private:
             return Catcher->CatchReadDataComplete(ctx, amount);
         }
 
-        virtual void CatchReadDataClosed() noexcept override 
+        virtual void CatchReadDataClosed() noexcept override
         {
-            Catcher->CatchReadDataClosed(); 
+            Catcher->CatchReadDataClosed();
         }
     };
 

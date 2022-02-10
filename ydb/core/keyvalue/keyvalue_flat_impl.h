@@ -53,17 +53,17 @@ protected:
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat Execute");
             TSimpleDbFlat db(txc.DB);
-            if (txc.DB.GetScheme().GetTableInfo(TABLE_ID) == nullptr) { 
+            if (txc.DB.GetScheme().GetTableInfo(TABLE_ID) == nullptr) {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat BuildScheme");
                 // Init the scheme
-                auto &alter = txc.DB.Alter(); 
-                alter.AddTable("kvtable", TABLE_ID); 
+                auto &alter = txc.DB.Alter();
+                alter.AddTable("kvtable", TABLE_ID);
                 alter.AddColumn(TABLE_ID, "key", KEY_TAG, NScheme::TSmallBoundedString::TypeId, false);
-                alter.AddColumnToKey(TABLE_ID, KEY_TAG); 
+                alter.AddColumnToKey(TABLE_ID, KEY_TAG);
                 alter.AddColumn(TABLE_ID, "value", VALUE_TAG, NScheme::TString::TypeId, false);
                 // Init log batching settings
-                alter.SetExecutorAllowLogBatching(true); 
-                alter.SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500)); 
+                alter.SetExecutorAllowLogBatching(true);
+                alter.SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
                 Self.State.Clear();
             } else {
                 LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxInit flat ReadDb Tree");
@@ -83,29 +83,29 @@ protected:
             return true;
         }
 
-        static bool LoadStateFromDB(TKeyValueState& state, NTable::TDatabase& db) { 
+        static bool LoadStateFromDB(TKeyValueState& state, NTable::TDatabase& db) {
             state.Clear();
             // Just walk through the DB and read all the keys and values
-            const std::array<ui32, 2> tags {{ KEY_TAG, VALUE_TAG }}; 
-            auto mode = NTable::ELookup::GreaterOrEqualThan; 
-            auto iter = db.Iterate(TABLE_ID, {}, tags, mode); 
- 
-            if (!db.Precharge(TABLE_ID, {}, {}, tags, 0, -1, -1)) 
+            const std::array<ui32, 2> tags {{ KEY_TAG, VALUE_TAG }};
+            auto mode = NTable::ELookup::GreaterOrEqualThan;
+            auto iter = db.Iterate(TABLE_ID, {}, tags, mode);
+
+            if (!db.Precharge(TABLE_ID, {}, {}, tags, 0, -1, -1))
                 return false;
 
             while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
-                const auto &row = iter->Row(); 
+                const auto &row = iter->Row();
 
-                TString key(row.Get(0).AsBuf()); 
-                TString value(row.Get(1).AsBuf()); 
+                TString key(row.Get(0).AsBuf());
+                TString value(row.Get(1).AsBuf());
 
-                state.Load(key, value); 
-                if (state.GetIsDamaged()) { 
-                    return true; 
+                state.Load(key, value);
+                if (state.GetIsDamaged()) {
+                    return true;
                 }
             }
- 
-            return iter->Last() != NTable::EReady::Page; 
+
+            return iter->Last() != NTable::EReady::Page;
         }
 
         void Complete(const TActorContext &ctx) override {
@@ -422,7 +422,7 @@ public:
 
     TKeyValueFlat(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory) 
+        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
     {
         TAutoPtr<TTabletCountersBase> counters(
         new TProtobufTabletCounters<

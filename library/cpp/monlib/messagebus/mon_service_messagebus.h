@@ -42,5 +42,5 @@ namespace NMonitoring {
             RegisterBusNgMonPage()->RegisterModule(module);
         }
     };
- 
+
 }

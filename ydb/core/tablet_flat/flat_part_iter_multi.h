@@ -1,6 +1,6 @@
 #pragma once
 
-#include "flat_part_iface.h" 
+#include "flat_part_iface.h"
 #include "flat_table_part.h"
 #include "flat_row_eggs.h"
 #include "flat_row_state.h"
@@ -1139,10 +1139,10 @@ namespace NTable {
                 if (ref >> (sizeof(ui32) * 8))
                     Y_FAIL("Upper bits of ELargeObj ref now isn't used");
                 if (auto blob = Env->Locate(Part, ref, op)) {
-                    const auto got = NPage::THello().Read(**blob); 
+                    const auto got = NPage::THello().Read(**blob);
 
-                    Y_VERIFY(got == NPage::ECodec::Plain && got.Version == 0); 
- 
+                    Y_VERIFY(got == NPage::ECodec::Plain && got.Version == 0);
+
                     row.Set(pin.To, { ECellOp(op), ELargeObj::Inline }, TCell(*got));
                 } else if (op == ELargeObj::Outer) {
                     op = TCellOp(blob.Need ? ECellOp::Null : ECellOp(op), ELargeObj::Outer);

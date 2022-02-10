@@ -1,7 +1,7 @@
-#pragma once 
- 
-#include "defs.h" 
-#include "flat_bio_events.h" 
+#pragma once
+
+#include "defs.h"
+#include "flat_bio_events.h"
 #include "shared_handle.h"
 
 #include <util/generic/map.h>
@@ -9,50 +9,50 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
-#include <memory> 
- 
-namespace NKikimr { 
+#include <memory>
+
+namespace NKikimr {
 namespace NSharedCache {
- 
+
     using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
- 
-    enum EEv { 
+
+    enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR),
- 
+
         EvTouch = EvBegin + 512,
-        EvUnregister, 
-        EvInvalidate, 
+        EvUnregister,
+        EvInvalidate,
         EvAttach,
-        EvRequest, 
+        EvRequest,
         EvResult,
         EvUpdated,
- 
-        EvEnd 
- 
-        /* +1024 range is reserved for scan events */ 
-    }; 
- 
-    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), ""); 
- 
-    struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> { 
-    }; 
- 
-    struct TEvInvalidate : public TEventLocal<TEvInvalidate, EvInvalidate> { 
+
+        EvEnd
+
+        /* +1024 range is reserved for scan events */
+    };
+
+    static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
+
+    struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> {
+    };
+
+    struct TEvInvalidate : public TEventLocal<TEvInvalidate, EvInvalidate> {
         const TLogoBlobID PageCollectionId;
- 
+
         TEvInvalidate(const TLogoBlobID &pageCollectionId)
             : PageCollectionId(pageCollectionId)
-        {} 
-    }; 
- 
-    struct TEvTouch : public TEventLocal<TEvTouch, EvTouch> { 
+        {}
+    };
+
+    struct TEvTouch : public TEventLocal<TEvTouch, EvTouch> {
         THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> Touched;
- 
+
         TEvTouch(THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> &&touched)
-            : Touched(std::move(touched)) 
-        {} 
-    }; 
- 
+            : Touched(std::move(touched))
+        {}
+    };
+
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TActorId Owner;
@@ -65,23 +65,23 @@ namespace NSharedCache {
         }
     };
 
-    struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> { 
+    struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> {
         const EPriority Priority;
         TAutoPtr<NPageCollection::TFetch> Fetch;
         TActorId Owner;
- 
+
         TEvRequest(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch, TActorId owner)
             : Priority(priority)
             , Fetch(fetch)
-            , Owner(owner) 
-        { 
-            Y_VERIFY(Owner, "Cannot sent request with empty owner"); 
-        } 
-    }; 
- 
+            , Owner(owner)
+        {
+            Y_VERIFY(Owner, "Cannot sent request with empty owner");
+        }
+    };
+
     struct TEvResult : public TEventLocal<TEvResult, EvResult> {
         using EStatus = NKikimrProto::EReplyStatus;
- 
+
         TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> origin, ui64 cookie, EStatus status)
             : Status(status)
             , Cookie(cookie)
@@ -119,8 +119,8 @@ namespace NSharedCache {
         const ui64 Cookie;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin;
         TVector<TLoaded> Loaded;
-    }; 
- 
+    };
+
     struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {
         struct TActions {
             THashMap<ui32, TSharedPageRef> Accepted;
@@ -130,26 +130,26 @@ namespace NSharedCache {
         THashMap<TLogoBlobID, TActions> Actions;
     };
 
-} 
-} 
- 
-template<> inline 
+}
+}
+
+template<> inline
 void Out<NKikimr::NTabletFlatExecutor::NBlockIO::EPriority>(
         IOutputStream& o,
         NKikimr::NTabletFlatExecutor::NBlockIO::EPriority value)
-{ 
-    switch (value) { 
+{
+    switch (value) {
     case NKikimr::NTabletFlatExecutor::NBlockIO::EPriority::Fast:
-        o << "Online"; 
-        break; 
+        o << "Online";
+        break;
     case NKikimr::NTabletFlatExecutor::NBlockIO::EPriority::Bkgr:
-        o << "AsyncLoad"; 
-        break; 
+        o << "AsyncLoad";
+        break;
     case NKikimr::NTabletFlatExecutor::NBlockIO::EPriority::Bulk:
-        o << "Scan"; 
-        break; 
-    default: 
-        o << static_cast<ui32>(value); 
-        break; 
-    } 
-} 
+        o << "Scan";
+        break;
+    default:
+        o << static_cast<ui32>(value);
+        break;
+    }
+}

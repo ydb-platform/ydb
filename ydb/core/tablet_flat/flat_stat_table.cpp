@@ -11,7 +11,7 @@ void BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
 
     stats.Clear();
 
-    TStatsIterator stIter(subset.Scheme->Keys); 
+    TStatsIterator stIter(subset.Scheme->Keys);
 
     // Make index iterators for all parts
     for (auto& pi : subset.Flatten) {

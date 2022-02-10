@@ -86,7 +86,7 @@ namespace {
     THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs;
 
     void SetupDomainInfo(TTestActorRuntime &runtime, TAppPrepare &app)  {
-        app.ClearDomainsAndHive(); 
+        app.ClearDomainsAndHive();
 
         ui32 domainUid = TTestTxConfig::DomainUid;
         ui32 ssId = 0;
@@ -113,7 +113,7 @@ namespace {
 
     static TString STORAGE_POOL = "def";
 
-    void SetupChannels(TAppPrepare &app) { 
+    void SetupChannels(TAppPrepare &app) {
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
         channelProfiles->Profiles.emplace_back();
         TChannelProfiles::TProfile &profile = channelProfiles->Profiles.back();
@@ -121,7 +121,7 @@ namespace {
             profile.Channels.push_back(
                 TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureNone, 0, NKikimrBlobStorage::TVDiskKind::Default));
         }
-        app.SetChannels(std::move(channelProfiles)); 
+        app.SetChannels(std::move(channelProfiles));
     }
 
     static TChannelBind GetChannelBind(const TString& storagePool) {
@@ -245,10 +245,10 @@ namespace {
     }
 
     void SetupServices(TTestActorRuntime &runtime, bool isLocalEnabled) {
-        TAppPrepare app; 
- 
+        TAppPrepare app;
+
         SetupDomainInfo(runtime, app);
-        SetupChannels(app); 
+        SetupChannels(app);
 
         app.SetMinRequestSequenceSize(10); // for smaller sequences and high interaction between root and domain hives
         app.SetRequestSequenceSize(10);
@@ -265,7 +265,7 @@ namespace {
             SetupNodeWhiteboard(runtime, nodeIndex);
         }
 
-        runtime.Initialize(app.Unwrap()); 
+        runtime.Initialize(app.Unwrap());
 
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             auto it = NodeWardenConfigs.find(nodeIndex);
@@ -795,7 +795,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestCreateTablet) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -1656,7 +1656,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             if (ENABLE_DETAILED_HIVE_LOG) {
                 Ctest << "At dispatch " << dispatchName << Endl;
             }
-            TTestBasicRuntime runtime(1, false); 
+            TTestBasicRuntime runtime(1, false);
             Setup(runtime, true);
             setup(runtime);
 
@@ -1682,7 +1682,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestCreateAndDeleteTabletWithStoragePools) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime);
 
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -1883,7 +1883,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestDeleteTablet) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2000,7 +2000,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(PipeAlivenessOfDeadTablet) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2025,7 +2025,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestCreateTabletBeforeLocal) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, false);
         TActorId sender = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2067,7 +2067,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestReCreateTablet) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         Setup(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2106,7 +2106,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestReCreateTabletError) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         Setup(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2147,7 +2147,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             if (ENABLE_DETAILED_HIVE_LOG) {
                 Ctest << "At dispatch " << dispatchName << Endl;
             }
-            TTestBasicRuntime runtime; 
+            TTestBasicRuntime runtime;
             Setup(runtime, true);
             setup(runtime);
             TActorId sender = runtime.AllocateEdgeActor();
@@ -2186,7 +2186,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLocalDisconnect) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         TVector<ui64> tabletIds;
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2205,7 +2205,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestNodeDisconnect) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         TVector<ui64> tabletIds;
         TActorId sender = runtime.AllocateEdgeActor();
@@ -2240,7 +2240,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLocalReplacement) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, true);
         TVector<ui64> tabletIds;
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2318,7 +2318,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLimitedNodeList) {
-        TTestBasicRuntime runtime(3, false); 
+        TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);
         TVector<ui64> tabletIds;
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2341,7 +2341,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestCreateTabletAndReassignGroups) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -2386,7 +2386,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestCreateTabletAndReassignGroups3) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true, 3);
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -2442,7 +2442,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestReassignGroupsWithRecreateTablet) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true, 3);
         TActorId sender = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2511,7 +2511,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             if (ENABLE_DETAILED_HIVE_LOG) {
                 Ctest << "At dispatch " << dispatchName << Endl;
             }
-            TTestBasicRuntime runtime; 
+            TTestBasicRuntime runtime;
             Setup(runtime, true);
             setup(runtime);
             TActorId sender = runtime.AllocateEdgeActor();
@@ -2558,7 +2558,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
 //    Y_UNIT_TEST(TestCreateTabletAndChangeProfiles) {
-//        TTestBasicRuntime runtime(1, false); 
+//        TTestBasicRuntime runtime(1, false);
 //        Setup(runtime, true);
 //        TActorId sender = runtime.AllocateEdgeActor();
 //        CreatePDiskAndGroup(runtime, sender);
@@ -2590,7 +2590,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     // Commented to remove noise from the unit-test logs
     /*
     Y_UNIT_TEST(topTablet) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2610,7 +2610,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     // Commented to remove noise from the unit-test logs
     /*
     Y_UNIT_TEST(TestStopAndRestartTablet) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         TActorId sender = runtime.AllocateEdgeActor();
         TVector<ui64> tabletIds;
@@ -2634,7 +2634,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     /*
     Y_UNIT_TEST(TestFailureNotification) {
-        TTestBasicRuntime runtime(3, false); 
+        TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);
         TVector<ui64> tabletIds;
         TActorId senderA = runtime.AllocateEdgeActor();
@@ -2662,7 +2662,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     */
 
     Y_UNIT_TEST(TestFollowers) {
-        TTestBasicRuntime runtime(3, false); 
+        TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);
         TVector<ui64> tabletIds;
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -2687,7 +2687,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestFollowersReconfiguration) {
-        TTestBasicRuntime runtime(3, false); 
+        TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);
         TVector<ui64> tabletIds;
         TActorId senderA = runtime.AllocateEdgeActor();
@@ -2735,7 +2735,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     Y_UNIT_TEST(TestFollowerPromotion) {
         constexpr int NODES = 3;
-        TTestBasicRuntime runtime(NODES, false); 
+        TTestBasicRuntime runtime(NODES, false);
         Setup(runtime, true);
 
         TVector<ui64> tabletIds;
@@ -2805,7 +2805,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestManyFollowersOnOneNode) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, true);
         const int nodeBase = runtime.GetNodeId(0);
         TVector<ui64> tabletIds;
@@ -2848,7 +2848,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestStartTabletTwiceInARow) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -2876,7 +2876,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     Y_UNIT_TEST(TestHiveBalancer) {
         static const int NUM_NODES = 3;
         static const int NUM_TABLETS = NUM_NODES * 3;
-        TTestBasicRuntime runtime(NUM_NODES, false); 
+        TTestBasicRuntime runtime(NUM_NODES, false);
         Setup(runtime, true);
         const int nodeBase = runtime.GetNodeId(0);
         TActorId senderA = runtime.AllocateEdgeActor();
@@ -3374,7 +3374,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestRestartTablets) {
-        TTestBasicRuntime runtime(3, false); 
+        TTestBasicRuntime runtime(3, false);
         Setup(runtime, true);
         TVector<ui64> tabletIds;
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -3437,7 +3437,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestFollowersCrossDC_Easy) {
-        TTestBasicRuntime runtime((ui32)9, (ui32)3); 
+        TTestBasicRuntime runtime((ui32)9, (ui32)3);
         Setup(runtime, true);
         TVector<ui64> tabletIds;
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -3489,7 +3489,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestFollowers_LocalNodeOnly) {
-        TTestBasicRuntime runtime((ui32)9, (ui32)3); 
+        TTestBasicRuntime runtime((ui32)9, (ui32)3);
         Setup(runtime, true);
         TVector<ui64> tabletIds;
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -3845,7 +3845,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestCreateExternalTablet) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -3859,7 +3859,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestCreateTabletChangeToExternal) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -3882,7 +3882,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestGetStorageInfo) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -3902,7 +3902,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestGetStorageInfoDeleteTabletBeforeAssigned) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         const ui64 hiveTablet = MakeDefaultHiveID(0);
         const ui64 testerTablet = MakeDefaultHiveID(1);
@@ -3979,7 +3979,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockTabletExecution) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, false);
         CreateLocal(runtime, 0); // only the 1st node has local running
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -4003,7 +4003,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionBadOwner) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, false);
         CreateLocal(runtime, 0); // only the 1st node has local running
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -4022,7 +4022,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionTimeout) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, false);
         CreateLocal(runtime, 0); // only the 1st node has local running
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -4051,7 +4051,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionRebootTimeout) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, false);
         CreateLocal(runtime, 0); // only the 1st node has local running
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -4080,7 +4080,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionDelete) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, false);
         CreateLocal(runtime, 0); // only the 1st node has local running
         TActorId sender = runtime.AllocateEdgeActor();
@@ -4184,7 +4184,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionReconnect) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, false);
         CreateLocal(runtime, 0); // only the 1st node has local running
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -4213,7 +4213,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionRebootReconnect) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, false);
         CreateLocal(runtime, 0); // only the 1st node has local running
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -4239,7 +4239,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionReconnectExpire) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, false);
         CreateLocal(runtime, 0); // only the 1st node has local running
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -4288,7 +4288,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionBadUnlock) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, false);
         CreateLocal(runtime, 0); // only the 1st node has local running
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -4309,7 +4309,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionGoodUnlock) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, false);
         CreateLocal(runtime, 0); // only the 1st node has local running
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -4334,7 +4334,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionStealLock) {
-        TTestBasicRuntime runtime(2, false); 
+        TTestBasicRuntime runtime(2, false);
         Setup(runtime, false);
         CreateLocal(runtime, 0); // only the 1st node has local running
         const ui64 hiveTablet = MakeDefaultHiveID(0);
@@ -4359,7 +4359,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
     }
 
     Y_UNIT_TEST(TestExternalBoot) {
-        TTestBasicRuntime runtime(1, false); 
+        TTestBasicRuntime runtime(1, false);
         Setup(runtime, true);
         CreateLocal(runtime, 0); // only the 1st node has local running
         const ui64 hiveTablet = MakeDefaultHiveID(0);

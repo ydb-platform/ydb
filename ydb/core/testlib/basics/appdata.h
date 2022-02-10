@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include "feature_flags.h"
 
 #include <ydb/core/base/appdata.h>
@@ -10,9 +10,9 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/tx/datashard/export_iface.h>
 #include <ydb/core/tx/datashard/export_s3.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
     // FIXME
     // Split this factory
     class TDataShardExportFactory : public NKikimr::NDataShard::IExportFactory {
@@ -36,21 +36,21 @@ namespace NKikimr {
 
     struct TAppPrepare : public TTestFeatureFlagsHolder<TAppPrepare> {
         struct TMine : public NActors::IDestructable {
-            TIntrusivePtr<NScheme::TTypeRegistry> Types; 
-            TIntrusivePtr<NMiniKQL::IFunctionRegistry> Funcs; 
+            TIntrusivePtr<NScheme::TTypeRegistry> Types;
+            TIntrusivePtr<NMiniKQL::IFunctionRegistry> Funcs;
             TIntrusivePtr<TFormatFactory> Formats;
             std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
             std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
 
             ~TMine();
-        }; 
- 
-        using TFnReg = std::function<NMiniKQL::IFunctionRegistry*(const NScheme::TTypeRegistry&)>; 
- 
+        };
+
+        using TFnReg = std::function<NMiniKQL::IFunctionRegistry*(const NScheme::TTypeRegistry&)>;
+
         TAppPrepare(std::shared_ptr<NKikimr::NDataShard::IExportFactory> ef = {});
- 
+
         NActors::TTestActorRuntime::TEgg Unwrap() noexcept;
- 
+
         void AddDomain(TDomainsInfo::TDomain* domain);
         void AddHive(ui32 hiveUid, ui64 hive);
         void ClearDomainsAndHive();
@@ -68,10 +68,10 @@ namespace NKikimr {
         void SetRequestSequenceSize(ui64 value);
         void AddSystemBackupSID(const TString& sid);
         void SetEnableProtoSourceIdInfo(std::optional<bool> value);
- 
-        TIntrusivePtr<TChannelProfiles> Channels; 
-        NKikimrBlobStorage::TNodeWardenServiceSet BSConf; 
-        TIntrusivePtr<TDomainsInfo> Domains; 
+
+        TIntrusivePtr<TChannelProfiles> Channels;
+        NKikimrBlobStorage::TNodeWardenServiceSet BSConf;
+        TIntrusivePtr<TDomainsInfo> Domains;
         TMap<ui32, NKikimrProto::TKeyConfig> Keys;
         bool EnableKqpSpilling = false;
         NKikimrConfig::TCompactionConfig CompactionConfig;
@@ -80,9 +80,9 @@ namespace NKikimr {
         NKikimrConfig::TDataShardConfig DataShardConfig;
         NKikimrConfig::TMeteringConfig MeteringConfig;
         NKikimrPQ::TPQConfig PQConfig;
- 
-    private: 
-        TAutoPtr<TMine> Mine; 
-    }; 
- 
-} 
+
+    private:
+        TAutoPtr<TMine> Mine;
+    };
+
+}

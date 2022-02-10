@@ -79,7 +79,7 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(bool value = true) {
 
 Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     Y_UNIT_TEST(Create) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(LS) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(ConcurrentCreateSubDomainAndDescribe) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
 
     Y_UNIT_TEST(CreataWithoutPlanResolution) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -217,7 +217,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(CreataWithoutTimeCastBuckets) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -235,7 +235,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(CreateWithNoEqualName) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(CreateItemsInsideSubdomain) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -359,7 +359,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(CreateItemsInsideSubdomainWithStoragePools) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -410,7 +410,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(CreateSubDomainWithoutTablets) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -428,7 +428,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(CreateSubDomainWithoutSomeTablets) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -455,7 +455,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenMkDir) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(CreateSubDomainWithoutTabletsThenDrop) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(CreateSubDomainsInSeparateDir) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -568,7 +568,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(SimultaneousCreateDelete) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -936,7 +936,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(SimultaneousCreateTenantTable) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -1030,7 +1030,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(SimultaneousCreateTenantDirTable) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -1329,7 +1329,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(Restart) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -1367,7 +1367,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(RestartAtInFly) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -1395,7 +1395,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(Delete) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -1430,7 +1430,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(DeleteAdd) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -1468,7 +1468,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
     }
 
     Y_UNIT_TEST(DeleteAndRestart) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 

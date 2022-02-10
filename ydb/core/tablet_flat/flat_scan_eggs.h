@@ -1,15 +1,15 @@
-#pragma once 
- 
+#pragma once
+
 #include "flat_table_subset.h"
-#include "flat_scan_iface.h" 
-#include "flat_executor_misc.h" 
+#include "flat_scan_iface.h"
+#include "flat_executor_misc.h"
 #include "util_basics.h"
- 
-namespace NKikimr { 
-namespace NTabletFlatExecutor { 
- 
+
+namespace NKikimr {
+namespace NTabletFlatExecutor {
+
     namespace NOps {
- 
+
         struct TConf {
             ui64 AheadHi = 0;
             ui64 AheadLo = 0;
@@ -27,5 +27,5 @@ namespace NTabletFlatExecutor {
         TRowVersion Snapshot;
     };
 
-} 
-} 
+}
+}

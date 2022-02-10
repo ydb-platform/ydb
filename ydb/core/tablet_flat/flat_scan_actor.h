@@ -1,47 +1,47 @@
-#pragma once 
- 
-#include "flat_scan_feed.h" 
-#include "flat_scan_events.h" 
-#include "flat_scan_eggs.h" 
-#include "flat_scan_spent.h" 
-#include "flat_bio_events.h" 
-#include "flat_fwd_env.h" 
-#include "util_fmt_logger.h" 
-#include "util_fmt_desc.h" 
+#pragma once
+
+#include "flat_scan_feed.h"
+#include "flat_scan_events.h"
+#include "flat_scan_eggs.h"
+#include "flat_scan_spent.h"
+#include "flat_bio_events.h"
+#include "flat_fwd_env.h"
+#include "util_fmt_logger.h"
+#include "util_fmt_desc.h"
 #include "shared_sausagecache.h"
 #include "flat_part_store.h"
 #include "flat_load_blob_queue.h"
- 
+
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
-#include <util/generic/cast.h> 
- 
-namespace NKikimr { 
-namespace NTabletFlatExecutor { 
-namespace NOps { 
- 
-    class TDriver final 
+#include <util/generic/cast.h>
+
+namespace NKikimr {
+namespace NTabletFlatExecutor {
+namespace NOps {
+
+    class TDriver final
             : public ::NActors::TActor<TDriver>
-            , private NTable::TFeed 
-            , private NTable::IDriver 
+            , private NTable::TFeed
+            , private NTable::IDriver
             , private ILoadBlob
-    { 
-    public: 
-        using TSubset = NTable::TSubset; 
+    {
+    public:
+        using TSubset = NTable::TSubset;
         using TPartView = NTable::TPartView;
         using TPartStore = NTable::TPartStore;
         using TColdPart = NTable::TColdPart;
         using TColdPartStore = NTable::TColdPartStore;
-        using TEnv = NTable::NFwd::TEnv; 
-        using TSpent = NTable::TSpent; 
+        using TEnv = NTable::NFwd::TEnv;
+        using TSpent = NTable::TSpent;
         using IScan = NTable::IScan;
-        using EScan = NTable::EScan; 
-        using EAbort = NTable::EAbort; 
-        using ELnLev = NUtil::ELnLev; 
- 
+        using EScan = NTable::EScan;
+        using EAbort = NTable::EAbort;
+        using ELnLev = NUtil::ELnLev;
+
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::TABLET_OPS_HOST_A;
         }
@@ -49,35 +49,35 @@ namespace NOps {
         TDriver(ui64 serial, TAutoPtr<IScan> scan, TConf args, THolder<TScanSnapshot> snapshot)
             : TActor(&TDriver::StateBoot)
             , NTable::TFeed(scan.Release(), *snapshot->Subset, snapshot->Snapshot)
-            , Serial(serial) 
+            , Serial(serial)
             , Args(args)
             , Snapshot(std::move(snapshot))
             , MaxCyclesPerIteration(/* 10ms */ (NHPTimer::GetCyclesPerSecond() + 99) / 100)
-        { 
-        } 
- 
-        ~TDriver() 
-        { 
+        {
+        }
+
+        ~TDriver()
+        {
             /* Correct actors shutdown hasn't been implemented in
-                kikimr, thus actors may be destructed in incompleted state 
-                and dtor cannot be used for completeness checkups. 
- 
-                Moreover, special workaround is required in case of sudden 
-                actor system shutdown happens before Bootstrap(...). 
-            */ 
- 
+                kikimr, thus actors may be destructed in incompleted state
+                and dtor cannot be used for completeness checkups.
+
+                Moreover, special workaround is required in case of sudden
+                actor system shutdown happens before Bootstrap(...).
+            */
+
             if (Scan && Spent == nullptr)
                 delete DetachScan();
-        } 
- 
+        }
+
         void Describe(IOutputStream &out) const noexcept override
-        { 
+        {
             out
                 << "Scan{" << Serial << " on " << Snapshot->Table
                 << ", " << NFmt::Do(*Scan) << "}";
-        } 
- 
-    private: 
+        }
+
+    private:
         struct TEvPrivate {
             enum EEv {
                 EvLoadBlob = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
@@ -240,10 +240,10 @@ namespace NOps {
         };
 
     private:
-        void MakeCache() noexcept 
-        { 
-            NTable::NFwd::TConf conf; 
- 
+        void MakeCache() noexcept
+        {
+            NTable::NFwd::TConf conf;
+
             conf.AheadLo = Args.AheadLo;
             conf.AheadHi = Args.AheadHi;
 
@@ -258,9 +258,9 @@ namespace NOps {
             conf.AheadLo = Min(conf.AheadLo, conf.AheadHi);
 
             conf.Trace = Args.Trace;
-            conf.Edge = Conf.LargeEdge; 
-            conf.Tablet = Args.Tablet; 
- 
+            conf.Edge = Conf.LargeEdge;
+            conf.Tablet = Args.Tablet;
+
             Cache = new TEnv(conf, Subset);
 
             BlobQueue.Config.TabletID = Args.Tablet;
@@ -278,10 +278,10 @@ namespace NOps {
                     BlobQueue.Config.ReadPrio = NKikimrBlobStorage::LowRead;
                     break;
             }
-        } 
- 
-        NTable::IPages* MakeEnv() noexcept override 
-        { 
+        }
+
+        NTable::IPages* MakeEnv() noexcept override
+        {
             if (Resets++ != 0) {
                 Cache->Reset();
                 for (const auto& pr : ColdPartLoaded) {
@@ -290,8 +290,8 @@ namespace NOps {
             }
 
             return Cache.Get();
-        } 
- 
+        }
+
         TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>& part) noexcept override
         {
             const auto label = part->Label;
@@ -317,15 +317,15 @@ namespace NOps {
             return Cache->MayProgress() && ColdPartLoaders.empty();
         }
 
-        void Touch(EScan scan) noexcept override 
-        { 
-            Y_VERIFY(Depth == 0, "Touch(..) is used from invalid context"); 
- 
+        void Touch(EScan scan) noexcept override
+        {
+            Y_VERIFY(Depth == 0, "Touch(..) is used from invalid context");
+
             switch (scan) {
                 case EScan::Feed:
                 case EScan::Reset:
                     Resume(scan);
- 
+
                     if (MayProgress()) {
                         return React();
                     }
@@ -337,22 +337,22 @@ namespace NOps {
 
                 case EScan::Sleep:
                     Y_FAIL("Scan actor got an unexpected EScan::Sleep");
-            } 
+            }
 
             Y_FAIL("Scan actor got an unexpected EScan value");
-        } 
- 
+        }
+
         void Registered(TActorSystem *sys, const TActorId &owner) override
-        { 
-            Owner = owner; 
-            Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_OPS_HOST); 
-            sys->Send(SelfId(), new TEvents::TEvBootstrap); 
-        } 
- 
+        {
+            Owner = owner;
+            Logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_OPS_HOST);
+            sys->Send(SelfId(), new TEvents::TEvBootstrap);
+        }
+
         STRICT_STFUNC(StateBoot, {
             cFunc(TEvents::TEvBootstrap::EventType, Bootstrap);
         });
- 
+
         STRICT_STFUNC(StateWork, {
             hFunc(TEvContinue, Handle);
             hFunc(TEvPrivate::TEvLoadBlob, Handle);
@@ -367,35 +367,35 @@ namespace NOps {
             cFunc(TEvents::TEvPoison::EventType, HandlePoison);
         });
 
-        void Bootstrap() noexcept 
-        { 
-            Y_VERIFY(!Spent, "Talble scan actor bootstrapped twice"); 
- 
-            Spent = new TSpent(TAppData::TimeProvider.Get()); 
- 
-            if (auto logl = Logger->Log(ELnLev::Info)) { 
-                logl 
+        void Bootstrap() noexcept
+        {
+            Y_VERIFY(!Spent, "Talble scan actor bootstrapped twice");
+
+            Spent = new TSpent(TAppData::TimeProvider.Get());
+
+            if (auto logl = Logger->Log(ELnLev::Info)) {
+                logl
                     << NFmt::Do(*this) << " begin on " << NFmt::Do(Subset);
-            } 
- 
+            }
+
             Become(&TDriver::StateWork);
 
-            { 
-                TGuard<ui64, NUtil::TIncDecOps<ui64>> guard(Depth); 
- 
+            {
+                TGuard<ui64, NUtil::TIncDecOps<ui64>> guard(Depth);
+
                 auto hello = Scan->Prepare(this, Subset.Scheme);
- 
-                Conf = hello.Conf; 
- 
-                guard.Release(); 
- 
-                MakeCache(); 
- 
-                if (hello.Scan != EScan::Sleep) 
-                    Touch(hello.Scan); 
-            } 
-        } 
- 
+
+                Conf = hello.Conf;
+
+                guard.Release();
+
+                MakeCache();
+
+                if (hello.Scan != EScan::Sleep)
+                    Touch(hello.Scan);
+            }
+        }
+
         /**
          * Helper for calculating TEvScanStat
          */
@@ -440,13 +440,13 @@ namespace NOps {
             SendToOwner(new TEvScanStat(elapsedUs, stat.Seen, stat.Skipped));
         }
 
-        void React() noexcept 
-        { 
-            TGuard<ui64, NUtil::TIncDecOps<ui64>> guard(Depth); 
- 
+        void React() noexcept
+        {
+            TGuard<ui64, NUtil::TIncDecOps<ui64>> guard(Depth);
+
             Y_VERIFY_DEBUG(MayProgress(), "React called with non-ready cache");
             Y_VERIFY(Scan, "Table scan op has been finalized");
- 
+
             TStatState stat(Seen, Skipped);
             ui64 processed = 0;
             bool yield = false;
@@ -467,10 +467,10 @@ namespace NOps {
                     processed = 0;
                 }
 
-                const auto ready = Process(); 
- 
+                const auto ready = Process();
+
                 processed += stat.UpdateRows(Seen, Skipped);
- 
+
                 if (ready == NTable::EReady::Gone) {
                     Terminate(EAbort::None);
                     stat.UpdateCycles();
@@ -478,10 +478,10 @@ namespace NOps {
                     return;
                 }
 
-                while (auto req = Cache->GrabFetches()) { 
-                    if (auto logl = Logger->Log(ELnLev::Debug)) 
-                        logl << NFmt::Do(*this) << " " << NFmt::Do(*req); 
- 
+                while (auto req = Cache->GrabFetches()) {
+                    if (auto logl = Logger->Log(ELnLev::Debug))
+                        logl << NFmt::Do(*this) << " " << NFmt::Do(*req);
+
                     const auto label = req->PageCollection->Label();
                     if (PrivateCollections.contains(label)) {
                         Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req, SelfId()));
@@ -489,10 +489,10 @@ namespace NOps {
                     } else {
                         SendToOwner(new NSharedCache::TEvRequest(Args.ReadPrio, req, Owner), true);
                     }
-                } 
- 
-                if (ready == NTable::EReady::Page) 
-                    break; /* pages required or just suspended */ 
+                }
+
+                if (ready == NTable::EReady::Page)
+                    break; /* pages required or just suspended */
 
                 if (!MayProgress()) {
                     // We must honor EReady::Gone from an implicit callback
@@ -505,18 +505,18 @@ namespace NOps {
 
                     break;
                 }
-            } 
- 
+            }
+
             Spent->Alter(MayProgress());
 
             if (!yield) {
                 stat.UpdateCycles();
             }
             SendStat(stat);
-        } 
- 
+        }
+
         void Handle(TEvContinue::TPtr&) noexcept
-        { 
+        {
             Y_VERIFY(ContinueInFly);
 
             ContinueInFly = false;
@@ -623,33 +623,33 @@ namespace NOps {
         {
             auto& msg = *ev->Get();
 
-            auto lvl = msg.Status ? ELnLev::Error : ELnLev::Debug; 
- 
-            if (auto logl = Logger->Log(lvl)) 
-                logl << NFmt::Do(*this) << " " << NFmt::Do(msg); 
- 
+            auto lvl = msg.Status ? ELnLev::Error : ELnLev::Debug;
+
+            if (auto logl = Logger->Log(lvl))
+                logl << NFmt::Do(*this) << " " << NFmt::Do(msg);
+
             if (msg.Status != NKikimrProto::OK) {
                 if (msg.Status == NKikimrProto::NODATA) {
                     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_nodata", true)->Inc();
                 }
 
-                return Terminate(EAbort::Host); 
+                return Terminate(EAbort::Host);
             }
- 
+
             // TODO: would want to postpone pinning until usage
             TVector<NPageCollection::TLoadedPage> pinned(Reserve(msg.Loaded.size()));
             for (auto& loaded : msg.Loaded) {
                 pinned.emplace_back(loaded.PageId, TPinnedPageRef(loaded.Page).GetData());
             }
- 
+
             Cache->DoSave(std::move(msg.Origin), msg.Cookie, pinned);
 
             if (MayProgress()) {
-                Spent->Alter(true /* resource available again */); 
-                React(); 
-            } 
-        } 
- 
+                Spent->Alter(true /* resource available again */);
+                React();
+            }
+        }
+
         void HandleUndelivered() noexcept
         {
             Terminate(EAbort::Lost);
@@ -660,39 +660,39 @@ namespace NOps {
             Terminate(EAbort::Term);
         }
 
-        void Terminate(EAbort abort) noexcept 
-        { 
+        void Terminate(EAbort abort) noexcept
+        {
             auto trace = Args.Trace ? Cache->GrabTraces() : nullptr;
- 
-            if (auto logl = Logger->Log(ELnLev::Info)) { 
-                logl 
-                    << NFmt::Do(*this) << " end=" << ui32(abort) 
-                    << ", " << Seen << "r seen, " << NFmt::Do(Cache->Stats()) 
-                    << ", bio " << NFmt::If(Spent.Get()); 
- 
-                if (trace) 
-                    logl 
-                        << ", trace " << trace->Seen << " of " << trace->Total 
-                        << " ~" << trace->Sieve.size() << "p"; 
-            } 
- 
-            /* Each Flatten should have its trace on the same position */ 
- 
+
+            if (auto logl = Logger->Log(ELnLev::Info)) {
+                logl
+                    << NFmt::Do(*this) << " end=" << ui32(abort)
+                    << ", " << Seen << "r seen, " << NFmt::Do(Cache->Stats())
+                    << ", bio " << NFmt::If(Spent.Get());
+
+                if (trace)
+                    logl
+                        << ", trace " << trace->Seen << " of " << trace->Total
+                        << " ~" << trace->Sieve.size() << "p";
+            }
+
+            /* Each Flatten should have its trace on the same position */
+
             Y_VERIFY(!trace || trace->Sieve.size() == Subset.Flatten.size() + 1);
- 
+
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */
- 
+
             auto prod = DetachScan()->Finish(abort);
- 
-            if (abort != EAbort::Lost) { 
+
+            if (abort != EAbort::Lost) {
                 auto ev = new TEvResult(Serial, abort, std::move(Snapshot), prod);
- 
-                ev->Trace = std::move(trace); 
- 
+
+                ev->Trace = std::move(trace);
+
                 SendToOwner(ev);
-            } 
- 
+            }
+
             for (const auto& pr : ColdPartLoaders) {
                 Send(pr.second, new TEvents::TEvPoison);
             }
@@ -701,38 +701,38 @@ namespace NOps {
                 Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
             }
 
-            PassAway(); 
-        } 
- 
+            PassAway();
+        }
+
         void SendToSelf(THolder<IEventBase> event) noexcept
-        { 
+        {
             Send(SelfId(), event.Release());
         }
 
         void SendToOwner(TAutoPtr<IEventBase> event, bool nack = false) noexcept
         {
-            ui32 flags = nack ? NActors::IEventHandle::FlagTrackDelivery : 0; 
- 
+            ui32 flags = nack ? NActors::IEventHandle::FlagTrackDelivery : 0;
+
             Send(Owner, event.Release(), flags);
-        } 
- 
-    private: 
+        }
+
+    private:
         struct TBlobQueueRequest {
             TActorId Sender;
             ui64 Cookie;
         };
 
     private:
-        const ui64 Serial = 0; 
+        const ui64 Serial = 0;
         const NOps::TConf Args;
         TAutoPtr<NUtil::ILogger> Logger;
         TActorId Owner;
- 
+
         THolder<TScanSnapshot> Snapshot;
         TAutoPtr<TEnv> Cache;       /* NFwd scan read ahead cache   */
         TAutoPtr<TSpent> Spent;     /* NBlockIO read blockage stats */
-        ui64 Depth = 0; 
-        ui64 Resets = 0; 
+        ui64 Depth = 0;
+        ui64 Resets = 0;
 
         THashMap<TLogoBlobID, TActorId> ColdPartLoaders;
         THashMap<TLogoBlobID, TPartView> ColdPartLoaded;
@@ -747,8 +747,8 @@ namespace NOps {
 
         const NHPTimer::STime MaxCyclesPerIteration;
         static constexpr ui64 MinRowsPerCheck = 1000;
-    }; 
- 
-} 
-} 
-} 
+    };
+
+}
+}
+}

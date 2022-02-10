@@ -182,8 +182,8 @@ namespace NKikimr {
     // TSyncerScheduler
     ////////////////////////////////////////////////////////////////////////////
     class TSyncerScheduler : public TActorBootstrapped<TSyncerScheduler> {
-        using IActor::Schedule; // name is used by IActor API 
- 
+        using IActor::Schedule; // name is used by IActor API
+
         // from protobuf
         using ESyncStatus = NKikimrVDiskData::TSyncerVDiskEntry::ESyncStatus;
         using TSyncStatusVal = NKikimrVDiskData::TSyncerVDiskEntry;

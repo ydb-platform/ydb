@@ -1,55 +1,55 @@
-#pragma once 
- 
-#include "flat_sausage_record.h" 
-#include "flat_sausage_grind.h" 
+#pragma once
+
+#include "flat_sausage_record.h"
+#include "flat_sausage_grind.h"
 #include "util_basics.h"
- 
-namespace NKikimr { 
+
+namespace NKikimr {
 namespace NPageCollection {
- 
-    class TWriter { 
-    public: 
+
+    class TWriter {
+    public:
         TWriter(TCookieAllocator &cookieAllocator, ui8 channel, ui32 block)
-            : Block(block) 
-            , Channel(channel) 
+            : Block(block)
+            , Channel(channel)
             , CookieAllocator(cookieAllocator)
             , Record(cookieAllocator.GroupBy(channel))
-        { 
- 
-        } 
- 
+        {
+
+        }
+
         explicit operator bool() const
         {
             return Record.Pages() || Blobs || Buffer;
         }
 
         ui32 AddPage(const TArrayRef<const char> body, ui32 type)
-        { 
-            for (size_t offset = 0; offset < body.size(); ) { 
-                if (Buffer.capacity() == 0 && Block != Max<ui32>()) 
-                    Buffer.reserve(Min(Block, ui32(16 * 1024 * 1024))); 
- 
-                auto piece = Min(body.size() - offset, Block - Buffer.size()); 
+        {
+            for (size_t offset = 0; offset < body.size(); ) {
+                if (Buffer.capacity() == 0 && Block != Max<ui32>())
+                    Buffer.reserve(Min(Block, ui32(16 * 1024 * 1024)));
+
+                auto piece = Min(body.size() - offset, Block - Buffer.size());
                 auto chunk = body.Slice(offset, piece);
- 
+
                 Buffer.append(chunk.data(), chunk.size());
-                offset += piece; 
- 
-                if (Buffer.size() >= Block) Flush(); 
-            } 
- 
+                offset += piece;
+
+                if (Buffer.size() >= Block) Flush();
+            }
+
             return Record.Push(type, body);
-        } 
- 
+        }
+
         void AddInplace(ui32 page, TArrayRef<const char> body)
         {
             Record.PushInplace(page, body);
         }
 
         TSharedData Finish(bool empty)
-        { 
-            Flush(); 
- 
+        {
+            Flush();
+
             TSharedData meta;
 
             if (Record.Pages() || empty) {
@@ -57,26 +57,26 @@ namespace NPageCollection {
             }
 
             return meta;
-        } 
- 
-        TVector<TGlob> Grab() noexcept 
-        { 
-            return std::exchange(Blobs, TVector<TGlob>()); 
-        } 
- 
-    private: 
-        void Flush() noexcept 
-        { 
-            if (Buffer) { 
+        }
+
+        TVector<TGlob> Grab() noexcept
+        {
+            return std::exchange(Blobs, TVector<TGlob>());
+        }
+
+    private:
+        void Flush() noexcept
+        {
+            if (Buffer) {
                 auto glob = CookieAllocator.Do(Channel, Buffer.size());
- 
-                Y_VERIFY(glob.Group == Record.Group, "Unexpected BS group"); 
- 
+
+                Y_VERIFY(glob.Group == Record.Group, "Unexpected BS group");
+
                 Blobs.emplace_back(glob, TakeBuffer());
-                Record.Push(glob.Logo); 
-            } 
-        } 
- 
+                Record.Push(glob.Logo);
+            }
+        }
+
         TString TakeBuffer() noexcept
         {
             TString data;
@@ -94,15 +94,15 @@ namespace NPageCollection {
             return data;
         }
 
-    public: 
-        const ui32 Block = Max<ui32>(); 
-        const ui8 Channel = Max<ui8>(); 
-    private: 
+    public:
+        const ui32 Block = Max<ui32>();
+        const ui8 Channel = Max<ui8>();
+    private:
         TString Buffer;
         TCookieAllocator &CookieAllocator;
-        TVector<TGlob> Blobs; 
+        TVector<TGlob> Blobs;
         NPageCollection::TRecord Record;
-    }; 
- 
-} 
-} 
+    };
+
+}
+}

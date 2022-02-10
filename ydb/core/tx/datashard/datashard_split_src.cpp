@@ -183,7 +183,7 @@ public:
             snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot));
         }
 
-        txc.Env.MakeSnapshot(snapContext); 
+        txc.Env.MakeSnapshot(snapContext);
 
         Self->SplitSnapshotStarted = true;
         Self->State = TShardState::SplitSrcMakeSnapshot;
@@ -226,8 +226,8 @@ public:
 
         Y_VERIFY(Self->State == TShardState::SplitSrcMakeSnapshot, "Datashard in unexpected state %s", DatashardStateName(Self->State).data());
 
-        txc.Env.ClearSnapshot(*SnapContext); 
- 
+        txc.Env.ClearSnapshot(*SnapContext);
+
         NIceDb::TNiceDb db(txc.DB);
 
         ui64 sourceOffsetsBytes = 0;
@@ -259,7 +259,7 @@ public:
                     // Extract dst range from split/merge description to pass it to BorrowSnapshot
                     TSerializedCellVec fromCells(dstRangeDescr.GetKeyRangeBegin());
                     TSerializedCellVec toCells(dstRangeDescr.GetKeyRangeEnd());
- 
+
                     auto cellsToRawValues = [&tableInfo] (const TSerializedCellVec& cells) {
                         TVector<TRawTypeValue> rawVals;
                         ui32 ki = 0;
@@ -372,7 +372,7 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " BorrowSnapshot is restarting for split OpId " << opId);
             return false;
         } else {
-            txc.Env.DropSnapshot(SnapContext); 
+            txc.Env.DropSnapshot(SnapContext);
 
             Self->State = TShardState::SplitSrcSendingSnapshot;
             Self->PersistSys(db, Schema::Sys_State, Self->State);

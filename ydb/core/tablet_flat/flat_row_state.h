@@ -1,57 +1,57 @@
-#pragma once 
- 
-#include "flat_row_eggs.h" 
+#pragma once
+
+#include "flat_row_eggs.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
- 
-namespace NKikimr { 
-namespace NTable { 
- 
-    class TRowState { 
-    public: 
-        TRowState(size_t slots = 0) 
-        { 
-            Init(slots); 
-        } 
- 
-        void Init(size_t slots) 
-        { 
+
+namespace NKikimr {
+namespace NTable {
+
+    class TRowState {
+    public:
+        TRowState(size_t slots = 0)
+        {
+            Init(slots);
+        }
+
+        void Init(size_t slots)
+        {
             Rop = ERowOp::Absent;
-            Need_ = 0; 
-            Left_ = slots; 
-            Cells.assign(slots, { }); 
-            State.assign(slots, { }); 
-        } 
- 
-        void Reset(TArrayRef<const TCell> nulls) 
-        { 
+            Need_ = 0;
+            Left_ = slots;
+            Cells.assign(slots, { });
+            State.assign(slots, { });
+        }
+
+        void Reset(TArrayRef<const TCell> nulls)
+        {
             Rop = ERowOp::Absent;
-            Need_ = 0; 
-            Left_ = nulls.size(); 
-            State.assign(Left_, { }); 
-            Cells.assign(nulls.begin(), nulls.end()); 
-        } 
- 
-        ui32 Need() const noexcept { return Need_; } 
-        ui32 Left() const noexcept { return Left_; } 
-        TPos Size() const noexcept { return Cells.size(); } 
- 
+            Need_ = 0;
+            Left_ = nulls.size();
+            State.assign(Left_, { });
+            Cells.assign(nulls.begin(), nulls.end());
+        }
+
+        ui32 Need() const noexcept { return Need_; }
+        ui32 Left() const noexcept { return Left_; }
+        TPos Size() const noexcept { return Cells.size(); }
+
         bool operator==(ERowOp rop) const noexcept
-        { 
-            return Rop == rop; 
-        } 
- 
+        {
+            return Rop == rop;
+        }
+
         bool operator!=(ERowOp rop) const noexcept
         {
             return Rop != rop;
         }
 
         ERowOp GetRowState() const {
-            return Rop; 
-        } 
- 
+            return Rop;
+        }
+
         bool Touch(ERowOp op) noexcept
-        { 
+        {
             Y_VERIFY(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
                 "Sequence for row state is already finalized");
 
@@ -65,11 +65,11 @@ namespace NTable {
                     return false; /* current row shouldn't be processed */
                 default:
                     Y_FAIL("Unexpected row rolling operation code: %" PRIu8, ui8(op));
-            } 
-        } 
- 
+            }
+        }
+
         void Set(TPos on, TCellOp code, const TCell &cell) noexcept
-        { 
+        {
             Y_VERIFY(State[on] == ECellOp::Empty, "Updating cell that already has a value assigned");
 
             if (Y_UNLIKELY(code == ECellOp::Empty)) {
@@ -84,23 +84,23 @@ namespace NTable {
             if (Y_UNLIKELY(code == ECellOp::Reset)) {
                 // Setting cell to a schema default value
                 // N.B. doesn't really happen in practice
-                State[on] = code; 
+                State[on] = code;
             } else if (code != ECellOp::Null || code != ELargeObj::Inline) {
                 State[on] = code;
-                Cells[on] = cell; 
- 
-                /* Required but not materialized external blobs are stored as 
+                Cells[on] = cell;
+
+                /* Required but not materialized external blobs are stored as
                     ECellOp::Null with non-inline ELargeObj storage. Upper layers may
-                    check completeness of loaded row later. 
-                 */ 
- 
+                    check completeness of loaded row later.
+                 */
+
                 Need_ += bool(code == ECellOp::Null && code != ELargeObj::Inline);
-            } else { 
+            } else {
                 State[on] = ECellOp::Set;
-                Cells[on] = { }; 
-            } 
-        } 
- 
+                Cells[on] = { };
+            }
+        }
+
         void Merge(const TRowState& other) noexcept {
             Y_VERIFY(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
                 "Sequence for row state is already finalized");
@@ -120,40 +120,40 @@ namespace NTable {
             }
         }
 
-        TArrayRef<const TCell> operator*() const noexcept 
-        { 
-            return Cells; 
-        } 
- 
-        const TCell& Get(TPos pos) const noexcept 
-        { 
-            return Cells[pos]; 
-        } 
- 
+        TArrayRef<const TCell> operator*() const noexcept
+        {
+            return Cells;
+        }
+
+        const TCell& Get(TPos pos) const noexcept
+        {
+            return Cells[pos];
+        }
+
         TCellOp GetOp(TPos pos) const noexcept
-        { 
-            return State[pos]; 
-        } 
- 
-        bool IsFinalized() const noexcept 
-        { 
+        {
+            return State[pos];
+        }
+
+        bool IsFinalized() const noexcept
+        {
             return (Rop == ERowOp::Upsert && Left_ == 0)
                     || Rop == ERowOp::Erase
                     || Rop == ERowOp::Reset;
-        } 
- 
-        bool IsFinalized(TPos pos) const noexcept 
-        { 
+        }
+
+        bool IsFinalized(TPos pos) const noexcept
+        {
             return GetOp(pos) != ECellOp::Empty;
-        } 
- 
-    private: 
+        }
+
+    private:
         ERowOp Rop = ERowOp::Absent;
-        ui32 Need_ = 0;     /* Dangled cells state      */ 
-        ui32 Left_ = 0;     /* Cells with unknown state */ 
+        ui32 Need_ = 0;     /* Dangled cells state      */
+        ui32 Left_ = 0;     /* Cells with unknown state */
         TStackVec<TCellOp, 64> State;
-        TSmallVec<TCell> Cells; 
-    }; 
- 
-} 
-} 
+        TSmallVec<TCell> Cells;
+    };
+
+}
+}

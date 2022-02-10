@@ -1,12 +1,12 @@
-#pragma once 
- 
-#include <util/system/yassert.h> 
-#include <util/generic/ylimits.h> 
- 
-namespace NKikimr { 
-namespace NTabletFlatExecutor { 
-namespace NBoot { 
- 
+#pragma once
+
+#include <util/system/yassert.h>
+#include <util/generic/ylimits.h>
+
+namespace NKikimr {
+namespace NTabletFlatExecutor {
+namespace NBoot {
+
     class TSpawned {
     public:
         explicit TSpawned(bool spawned)
@@ -22,20 +22,20 @@ namespace NBoot {
         const bool Spawned;
     };
 
-    class TLeft { 
-    public: 
-        TLeft() = default; 
- 
-        explicit operator bool() const noexcept 
-        { 
-            return Value > 0; 
-        } 
- 
-        ui64 Get() const noexcept 
-        { 
-            return Value; 
-        } 
- 
+    class TLeft {
+    public:
+        TLeft() = default;
+
+        explicit operator bool() const noexcept
+        {
+            return Value > 0;
+        }
+
+        ui64 Get() const noexcept
+        {
+            return Value;
+        }
+
         TLeft& operator +=(const TSpawned& spawned) noexcept
         {
             if (spawned) {
@@ -45,30 +45,30 @@ namespace NBoot {
             return *this;
         }
 
-        TLeft& operator +=(size_t inc) noexcept 
-        { 
-            if (Value > Max<decltype(Value)>() - inc) { 
- 
-                Y_FAIL("TLeft counter is overflowed"); 
-            } 
- 
-            Value += inc; 
- 
-            return *this; 
-        } 
- 
-        TLeft& operator -=(size_t dec) noexcept 
-        { 
-            Y_VERIFY(Value >= dec, "TLeft counter is underflowed"); 
- 
-            Value -= dec; 
- 
-            return *this; 
-        } 
- 
-    private: 
-        ui64 Value = 0; 
-    }; 
-} 
-} 
-} 
+        TLeft& operator +=(size_t inc) noexcept
+        {
+            if (Value > Max<decltype(Value)>() - inc) {
+
+                Y_FAIL("TLeft counter is overflowed");
+            }
+
+            Value += inc;
+
+            return *this;
+        }
+
+        TLeft& operator -=(size_t dec) noexcept
+        {
+            Y_VERIFY(Value >= dec, "TLeft counter is underflowed");
+
+            Value -= dec;
+
+            return *this;
+        }
+
+    private:
+        ui64 Value = 0;
+    };
+}
+}
+}

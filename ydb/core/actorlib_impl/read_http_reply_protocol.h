@@ -32,7 +32,7 @@ public:
                              Buf.data(), Buf.size() - Filled);
     }
 
-    virtual void CatchReadDataError(TString error) noexcept = 0; 
+    virtual void CatchReadDataError(TString error) noexcept = 0;
 
     virtual void CatchHTTPReply(
         const TActorContext& ctx,
@@ -49,7 +49,7 @@ private:
     bool CatchReadDataComplete(
         const TActorContext& ctx, size_t amount) noexcept;
 
-    void CatchReadDataClosed() noexcept; 
+    void CatchReadDataClosed() noexcept;
 
 
     TIntrusivePtr<NInterconnect::TStreamSocket> Socket;

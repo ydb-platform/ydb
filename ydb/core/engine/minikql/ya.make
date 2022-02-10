@@ -7,7 +7,7 @@ OWNER(
 
 SRCS(
     flat_local_minikql_host.h
-    flat_local_tx_factory.cpp 
+    flat_local_tx_factory.cpp
     minikql_engine_host.cpp
     minikql_engine_host.h
 )

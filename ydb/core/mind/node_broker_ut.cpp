@@ -54,11 +54,11 @@ void SetupServices(TTestActorRuntime &runtime,
     const ui32 disksInDomain = 1;
 
     // setup domain info
-    TAppPrepare app; 
+    TAppPrepare app;
 
-    app.ClearDomainsAndHive(); 
-    app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release()); 
- 
+    app.ClearDomainsAndHive();
+    app.AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dc-1").Release());
+
     { // setup channel profiles
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
         channelProfiles->Profiles.emplace_back();
@@ -67,7 +67,7 @@ void SetupServices(TTestActorRuntime &runtime,
             profile.Channels.push_back(
                                        TChannelProfiles::TProfile::TChannel(TBlobStorageGroupType::ErasureNone, 0, NKikimrBlobStorage::TVDiskKind::Default));
         }
-        app.SetChannels(std::move(channelProfiles)); 
+        app.SetChannels(std::move(channelProfiles));
     }
 
     for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
@@ -141,7 +141,7 @@ void SetupServices(TTestActorRuntime &runtime,
         SetupTabletResolver(runtime, nodeIndex);
     }
 
-    runtime.Initialize(app.Unwrap()); 
+    runtime.Initialize(app.Unwrap());
 
     runtime.GetAppData().DynamicNameserviceConfig = new TDynamicNameserviceConfig;
     auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
@@ -645,7 +645,7 @@ void RestartNodeBroker(TTestActorRuntime &runtime)
 Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
     Y_UNIT_TEST(BasicFunctionality)
     {
-        TTestBasicRuntime runtime(8, false); 
+        TTestBasicRuntime runtime(8, false);
         Setup(runtime, 4);
         TActorId sender = runtime.AllocateEdgeActor();
 
@@ -1079,7 +1079,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
 Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
     Y_UNIT_TEST(BasicFunctionality)
     {
-        TTestBasicRuntime runtime(8, false); 
+        TTestBasicRuntime runtime(8, false);
         Setup(runtime);
         TActorId sender = runtime.AllocateEdgeActor();
 

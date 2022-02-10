@@ -747,7 +747,7 @@ Y_UNIT_TEST(TestGivenMirror3DCGetWithFirstSlowDisk) {
 }
 
 Y_UNIT_TEST(TestGivenBlock42GetThenVGetResponseParts2523Nodata4ThenGetOk) {
-    TTestBasicRuntime runtime(1, false); 
+    TTestBasicRuntime runtime(1, false);
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 
@@ -975,7 +975,7 @@ Y_UNIT_TEST(TestProtobufSizeWithMultiGet) {
 }
 
 Y_UNIT_TEST(TestGivenStripe42GetThenVGetResponsePartsNodata263451ThenGetOk) {
-    TTestBasicRuntime runtime(1, false); 
+    TTestBasicRuntime runtime(1, false);
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Stripe};
     Setup(runtime, type);
 
@@ -1021,7 +1021,7 @@ Y_UNIT_TEST(TestGivenStripe42GetThenVGetResponsePartsNodata263451ThenGetOk) {
 
 Y_UNIT_TEST(TestGivenStripe42WhenGet2PartsOfBlobThenGetOk) {
     // Arrange
-    TTestBasicRuntime runtime(1, false); 
+    TTestBasicRuntime runtime(1, false);
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Stripe};
     Setup(runtime, type);
 
@@ -1086,7 +1086,7 @@ Y_UNIT_TEST(TestGivenStripe42WhenGet2PartsOfBlobThenGetOk) {
 }
 
 Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
-    TTestBasicRuntime runtime(1, false); 
+    TTestBasicRuntime runtime(1, false);
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 
@@ -1146,7 +1146,7 @@ Y_UNIT_TEST(TestGivenBlock42IntersectingPutWhenNodataOkThenOk) {
 }
 
 Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
-    TTestBasicRuntime runtime(1, false); 
+    TTestBasicRuntime runtime(1, false);
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 
@@ -1255,7 +1255,7 @@ Y_UNIT_TEST(TestGivenBlock42PutWhenPartialGetThenSingleDiskRequestOk) {
 }
 
 Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
-    TTestBasicRuntime runtime(1, false); 
+    TTestBasicRuntime runtime(1, false);
     TBlobStorageGroupType type = {TErasureType::Erasure4Plus2Block};
     Setup(runtime, type);
 

@@ -1,70 +1,70 @@
-#pragma once 
- 
-#include "defs.h" 
-#include "flat_row_nulls.h" 
-#include "flat_row_celled.h" 
+#pragma once
+
+#include "defs.h"
+#include "flat_row_nulls.h"
+#include "flat_row_celled.h"
 #include "flat_part_iter_multi.h"
-#include "flat_part_screen.h" 
-#include "flat_part_laid.h" 
+#include "flat_part_screen.h"
+#include "flat_part_laid.h"
 #include "flat_stat_part.h"
- 
-namespace NKikimr { 
-namespace NTable { 
- 
-    class TShrink { 
-    public: 
-        using TCells = TArrayRef<const TCell>; 
- 
+
+namespace NKikimr {
+namespace NTable {
+
+    class TShrink {
+    public:
+        using TCells = TArrayRef<const TCell>;
+
         TShrink(IPages *env, TIntrusiveConstPtr<TKeyNulls> nulls)
-            : Env(env) 
-            , Nulls(nulls) 
-        { 
- 
-        } 
- 
+            : Env(env)
+            , Nulls(nulls)
+        {
+
+        }
+
         TShrink& Put(const TPartView &partView, TRawVals from, TRawVals to)
-        { 
+        {
             return Put({ &partView, 1 }, from, to);
-        } 
- 
+        }
+
         TShrink& Put(TArrayRef<const TPartView> all, TRawVals from_, TRawVals to_)
-        { 
-            const TCelled from(from_, *Nulls, false); 
-            const TCelled to(to_, *Nulls, false); 
- 
-            return Put(all, from, to); 
-        } 
- 
+        {
+            const TCelled from(from_, *Nulls, false);
+            const TCelled to(to_, *Nulls, false);
+
+            return Put(all, from, to);
+        }
+
         TShrink& Put(TArrayRef<const TPartView> all, TCells from, TCells to)
-        { 
+        {
             for (auto &partView: all) {
                 Y_VERIFY(partView.Slices, "Shrink attempt on a part without slices");
 
-                if (!from && !to) /* [-inf, +inf) */ { 
+                if (!from && !to) /* [-inf, +inf) */ {
                     PartView.emplace_back(partView);
-                } else { 
+                } else {
                     TPartSimpleIt first(partView.Part.Get(), { }, Nulls, Env);
                     Skipped += EReady::Page == first.Seek(from, ESeek::Lower);
- 
+
                     TPartSimpleIt last(partView.Part.Get(), { }, Nulls, Env);
                     Skipped += EReady::Page == last.Seek(to, to ? ESeek::Lower : ESeek::Upper);
- 
+
                     auto firstRowId = first.GetRowId();
                     auto lastRowId = last.GetRowId();
- 
+
                     if (Skipped == 0 && firstRowId < lastRowId) {
                         auto with = TScreen::THole{ firstRowId, lastRowId };
                         auto screen = TScreen::Cut(partView.Screen, with);
- 
+
                         if (!screen || screen->Size() > 0) {
                             auto keys = partView.Part->Scheme->Groups[0].KeyTypes.size();
- 
+
                             TArrayRef<const TCell> firstKey, lastKey;
                             firstKey = first.GetKey().Cells().Slice(0, keys);
                             if (last.IsValid()) {
                                 lastKey = last.GetKey().Cells().Slice(0, keys);
                             }
- 
+
                             auto run = TSlices::Cut(
                                 partView.Slices,
                                 firstRowId,
@@ -72,25 +72,25 @@ namespace NTable {
                                 firstKey,
                                 lastKey);
                             Y_VERIFY_DEBUG(run, "Unexpected null result");
- 
+
                             if (run->size() > 0) {
                                 run->Validate();
                                 PartView.emplace_back(TPartView{ partView.Part, screen, std::move(run) });
                             }
                         }
-                    } 
-                } 
-            } 
- 
-            return *this; 
-        } 
- 
-    public: 
-        IPages * const Env = nullptr; 
+                    }
+                }
+            }
+
+            return *this;
+        }
+
+    public:
+        IPages * const Env = nullptr;
         TIntrusiveConstPtr<TKeyNulls> Nulls;
-        size_t Skipped = 0; 
+        size_t Skipped = 0;
         TVector<TPartView> PartView;
-    }; 
- 
-} 
-} 
+    };
+
+}
+}

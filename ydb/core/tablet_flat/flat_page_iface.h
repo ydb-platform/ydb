@@ -1,14 +1,14 @@
-#pragma once 
- 
-#include <util/system/types.h> 
- 
-namespace NKikimr { 
-namespace NTable { 
-namespace NPage { 
- 
-    using TSize = ui32; 
-    using TPageId = ui32; 
- 
+#pragma once
+
+#include <util/system/types.h>
+
+namespace NKikimr {
+namespace NTable {
+namespace NPage {
+
+    using TSize = ui32;
+    using TPageId = ui32;
+
     /**
      * A type-safe column group identifier
      */
@@ -53,32 +53,32 @@ namespace NPage {
         }
     };
 
-    enum class EPage : ui16 { 
-        Undef = 0, 
-        Scheme = 2, 
-        Index = 3, 
+    enum class EPage : ui16 {
+        Undef = 0,
+        Scheme = 2,
+        Index = 3,
         DataPage = 4,
-        Frames = 5, /* Tagged entities to TRowId relation index     */ 
+        Frames = 5, /* Tagged entities to TRowId relation index     */
         Globs = 6,  /* Just enumartion of NPageCollection::TGlobId refs    */
-        Schem2 = 7, /* New version of EPage::Scheme with TLabel     */ 
-        Opaque = 8, /* User defined content, cell value as blob     */ 
-        Bloom = 9,  /* Bloom filter for some app. defined cells set */ 
+        Schem2 = 7, /* New version of EPage::Scheme with TLabel     */
+        Opaque = 8, /* User defined content, cell value as blob     */
+        Bloom = 9,  /* Bloom filter for some app. defined cells set */
         GarbageStats = 10, /* Stats on garbage in historic data */
         TxIdStats = 11, /* Stats for uncommitted TxIds at compaction time */
         TxStatus = 12, /* Status of committed/removed transactions */
-    }; 
- 
-    enum class ECodec : ui8 { 
-        Plain   = 0,    /* Keep data in page as-is  */ 
-        LZ4     = 1,    /* Use lz4fast compressor   */ 
-    }; 
- 
-    enum class ECache { 
-        None    = 0, 
-        Once    = 1,    /* Put to cache once at load   */ 
-        Ever    = 2,    /* Keep in cache util the end  */ 
-    }; 
- 
-} 
-} 
-} 
+    };
+
+    enum class ECodec : ui8 {
+        Plain   = 0,    /* Keep data in page as-is  */
+        LZ4     = 1,    /* Use lz4fast compressor   */
+    };
+
+    enum class ECache {
+        None    = 0,
+        Once    = 1,    /* Put to cache once at load   */
+        Ever    = 2,    /* Keep in cache util the end  */
+    };
+
+}
+}
+}

@@ -1661,7 +1661,7 @@ public:
 
     TBlobStorageController(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory) 
+        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , ResponsivenessPinger(nullptr)
         , ScrubState(this)
     {

@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
-#include "flat_sausage_slicer.h" 
-#include "flat_exec_commit.h" 
+#include "flat_sausage_slicer.h"
+#include "flat_exec_commit.h"
 #include <util/generic/vector.h>
 #include <util/generic/set.h>
 #include <ydb/core/base/blobstorage.h>
@@ -38,15 +38,15 @@ struct TGCLogEntry {
 class TExecutorGCLogic {
 public:
     TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo>, TAutoPtr<NPageCollection::TSteppedCookieAllocator>);
-    void WriteToLog(TLogCommit &logEntry); 
+    void WriteToLog(TLogCommit &logEntry);
     TGCLogEntry SnapshotLog(ui32 step);
-    void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step); 
+    void SnapToLog(NKikimrExecutorFlat::TLogSnapshot &logSnapshot, ui32 step);
     void OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext &ctx);                 // notification about log commit - could send GC to blob storage
     void OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev);             // notification on any garbage collection results
     void ApplyLogEntry(TGCLogEntry &entry);                                                      // apply one log entry, used during recovery and also from WriteToLog
     void ApplyLogSnapshot(TGCLogEntry &snapshot, const  TVector<std::pair<ui32, ui64>> &barriers);
     void HoldBarrier(ui32 step);                                // holds GC on no more than this step for channels specified
-    void ReleaseBarrier(ui32 step); 
+    void ReleaseBarrier(ui32 step);
     ui32 GetActiveGcBarrier();
     void FollowersSyncComplete(bool isBoot);
 

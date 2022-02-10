@@ -1,16 +1,16 @@
 #include "flat_executor_bootlogic.h"
-#include "flat_boot_env.h" 
-#include "flat_boot_blobs.h" 
-#include "flat_boot_back.h" 
-#include "flat_boot_stages.h" 
+#include "flat_boot_env.h"
+#include "flat_boot_blobs.h"
+#include "flat_boot_back.h"
+#include "flat_boot_stages.h"
 #include "flat_exec_commit_mgr.h"
-#include "flat_bio_actor.h" 
-#include "flat_bio_events.h" 
-#include "flat_sausage_chop.h" 
-#include "logic_snap_waste.h" 
-#include "logic_snap_main.h" 
-#include "util_fmt_logger.h" 
-#include "util_fmt_basic.h" 
+#include "flat_bio_actor.h"
+#include "flat_bio_events.h"
+#include "flat_sausage_chop.h"
+#include "logic_snap_waste.h"
+#include "logic_snap_main.h"
+#include "util_fmt_logger.h"
+#include "util_fmt_basic.h"
 #include "shared_sausagecache.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -20,42 +20,42 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
 NBoot::TLoadBlobs::TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeGlobId, ui64 cookie)
-    : IStep(owner, NBoot::EStep::Blobs) 
-    , Cookie(cookie) 
+    : IStep(owner, NBoot::EStep::Blobs)
+    , Cookie(cookie)
     , LargeGlobId(largeGlobId)
     , State(LargeGlobId)
-{ 
-    Logic->LoadEntry(this); 
-} 
- 
+{
+    Logic->LoadEntry(this);
+}
+
 TExecutorBootLogic::TExecutorBootLogic(IOps *ops, const TActorId &self, TTabletStorageInfo *info, ui64 maxBytesInFly)
-    : Ops(ops) 
-    , SelfId(self) 
-    , Info(info) 
+    : Ops(ops)
+    , SelfId(self)
+    , Info(info)
     , GroupResolveCachedChannel(Max<ui32>())
     , GroupResolveCachedGeneration(Max<ui32>())
     , GroupResolveCachedGroup(Max<ui32>())
-{ 
+{
     LoadBlobQueue.Config.MaxBytesInFly = maxBytesInFly;
-} 
- 
+}
+
 TExecutorBootLogic::~TExecutorBootLogic()
-{ 
+{
     LoadBlobQueue.Clear();
 
-    Loads.clear(); 
-    EntriesToLoad.clear(); 
+    Loads.clear();
+    EntriesToLoad.clear();
 
-    Steps->Execute(); /* should flush all jobs in internal queue */ 
- 
-    Y_VERIFY(Steps->Alone(), "Bootlogic is still has pending IStep()s"); 
-} 
- 
-void TExecutorBootLogic::Describe(IOutputStream &out) const noexcept 
-{ 
-    return Steps->Describe(out); 
-} 
- 
+    Steps->Execute(); /* should flush all jobs in internal queue */
+
+    Y_VERIFY(Steps->Alone(), "Bootlogic is still has pending IStep()s");
+}
+
+void TExecutorBootLogic::Describe(IOutputStream &out) const noexcept
+{
+    return Steps->Describe(out);
+}
+
 TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveFollowerBoot(
         TEvTablet::TEvFBoot::TPtr &ev,
         TExecutorCaches &&caches)
@@ -73,7 +73,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveFollowerBoot(
         if (auto logl = Steps->Logger()->Log(ELnLev::Debug))
             logl
             << NFmt::Do(State()) << " start follower from log"
-            << " snapshot " << State().Generation << ":" << update->Step; 
+            << " snapshot " << State().Generation << ":" << update->Step;
 
         TString body;
         TVector<TLogoBlobID> logo;
@@ -86,14 +86,14 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveFollowerBoot(
 
         const auto span = NPageCollection::TGroupBlobsByCookie(logo).Do();
         const auto largeGlobId = NPageCollection::TGroupBlobsByCookie::ToLargeGlobId(span, GetBSGroupFor(logo[0]));
- 
+
         Y_VERIFY(span.size() == update->References.size());
         Y_VERIFY(TCookie(logo[0].Cookie()).Type() == TCookie::EType::Log);
         Y_VERIFY(largeGlobId, "Cannot make TLargeGlobId for snapshot");
- 
+
         Steps->Spawn<NBoot::TStages>(nullptr, new NBoot::TBody{ largeGlobId, std::move(body) });
     }
- 
+
     Steps->Execute();
 
     return CheckCompletion();
@@ -104,64 +104,64 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveBoot(
         TExecutorCaches &&caches)
 {
     PrepareEnv(false, ev->Get()->Generation, std::move(caches));
- 
-    Steps->Spawn<NBoot::TStages>(std::move(ev->Get()->DependencyGraph), nullptr); 
+
+    Steps->Spawn<NBoot::TStages>(std::move(ev->Get()->DependencyGraph), nullptr);
     Steps->Execute();
 
     return CheckCompletion();
 }
 
 void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches caches) noexcept
-{ 
-    BootStartTime = TAppData::TimeProvider->Now(); 
- 
-    auto *sys = TlsActivationContext->ExecutorThread.ActorSystem; 
-    auto *logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_FLATBOOT); 
- 
+{
+    BootStartTime = TAppData::TimeProvider->Now();
+
+    auto *sys = TlsActivationContext->ExecutorThread.ActorSystem;
+    auto *logger = new NUtil::TLogger(sys, NKikimrServices::TABLET_FLATBOOT);
+
     LoadBlobQueue.Config.TabletID = Info->TabletID;
     LoadBlobQueue.Config.Generation = gen;
     LoadBlobQueue.Config.Follower = follower;
     LoadBlobQueue.Config.NoDataCounter = GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_boot_nodata", true);
 
     State_ = new NBoot::TBack(follower, Info->TabletID, gen);
-    State().Scheme = new NTable::TScheme; 
+    State().Scheme = new NTable::TScheme;
     State().PageCaches = std::move(caches.PageCaches);
     State().TxStatusCaches = std::move(caches.TxStatusCaches);
- 
-    Steps = new NBoot::TRoot(this, State_.Get(), logger); 
- 
-    Result_ = new NBoot::TResult; 
- 
+
+    Steps = new NBoot::TRoot(this, State_.Get(), logger);
+
+    Result_ = new NBoot::TResult;
+
     if (follower) {
         /* Required for TLargeGlobId-less TPart data (Evolution < 12) */
- 
-        Result().Loans = new TExecutorBorrowLogic(nullptr); 
-    } else { 
+
+        Result().Loans = new TExecutorBorrowLogic(nullptr);
+    } else {
         auto &steppedCookieAllocatorFactory = *(State().SteppedCookieAllocatorFactory = new NBoot::TSteppedCookieAllocatorFactory(*Info, gen));
- 
-        State().Waste = new NSnap::TWaste(gen); 
+
+        State().Waste = new NSnap::TWaste(gen);
         Result().GcLogic = new TExecutorGCLogic(Info, steppedCookieAllocatorFactory.Sys(TCookie::EIdx::GCExt));
         Result().Alter = new TLogicAlter(steppedCookieAllocatorFactory.Sys(TCookie::EIdx::Alter));
         Result().Loans = new TExecutorBorrowLogic(steppedCookieAllocatorFactory.Sys(TCookie::EIdx::Loan));
-        Result().Comp = new TCompactionLogicState(); 
- 
-        /* The rest of ... are produced on TStages::FinalizeLogicObjects() */ 
-    } 
-} 
- 
+        Result().Comp = new TCompactionLogicState();
+
+        /* The rest of ... are produced on TStages::FinalizeLogicObjects() */
+    }
+}
+
 void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
-    if (auto logl = Steps->Logger()->Log(ELnLev::Debug)) { 
-        logl 
+    if (auto logl = Steps->Logger()->Log(ELnLev::Debug)) {
+        logl
             << NFmt::Do(State()) << " Loading " << NFmt::Do(entry->LargeGlobId);
-    } 
- 
+    }
+
     Y_VERIFY(entry->LargeGlobId, "Support loads only of valid TLargeGlobId units");
     Y_VERIFY(entry->Blobs(), "Valid TLargeGlobId unit hasn't been expanded to blobs");
- 
+
     const ui32 group = entry->LargeGlobId.Group;
- 
+
     Y_VERIFY(group != NPageCollection::TLargeGlobId::InvalidGroup, "Got TLargeGlobId without BS group");
- 
+
     for (const auto &blobId : entry->Blobs()) {
         EntriesToLoad[blobId] = entry;
         LoadBlobQueue.Enqueue(blobId, group, this);
@@ -170,9 +170,9 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
 
 NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPageCollection::TFetch> req) {
     auto success = Loads.insert(std::make_pair(req->PageCollection.Get(), step)).second;
- 
+
     Y_VERIFY(success, "IPageCollection queued twice for loading");
- 
+
     Ops->Send(
         MakeSharedPageCacheId(),
         new NSharedCache::TEvRequest(
@@ -180,91 +180,91 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPage
             req,
             SelfId),
         0, (ui64)EPageCollectionRequest::BootLogic);
- 
+
     return NBoot::TSpawned(true);
-} 
- 
-ui32 TExecutorBootLogic::GetBSGroupFor(const TLogoBlobID &logo) const { 
-    auto *info = (logo.TabletID() == Info->TabletID) ? Info.Get() : Result().Loans->StorageInfoFor(logo); 
-    return info->GroupFor(logo.Channel(), logo.Generation()); 
-} 
- 
+}
+
+ui32 TExecutorBootLogic::GetBSGroupFor(const TLogoBlobID &logo) const {
+    auto *info = (logo.TabletID() == Info->TabletID) ? Info.Get() : Result().Loans->StorageInfoFor(logo);
+    return info->GroupFor(logo.Channel(), logo.Generation());
+}
+
 ui32 TExecutorBootLogic::GetBSGroupID(ui32 channel, ui32 generation) {
     if (generation != GroupResolveCachedGeneration || channel != GroupResolveCachedChannel) {
         GroupResolveCachedChannel = channel;
         GroupResolveCachedGeneration = generation;
-        GroupResolveCachedGroup = Info->GroupFor(channel, generation); 
+        GroupResolveCachedGroup = Info->GroupFor(channel, generation);
     }
 
     return GroupResolveCachedGroup;
 }
 
-TExecutorBootLogic::EOpResult TExecutorBootLogic::CheckCompletion() 
-{ 
+TExecutorBootLogic::EOpResult TExecutorBootLogic::CheckCompletion()
+{
     if (LoadBlobQueue.SendRequests(SelfId))
         return OpResultContinue;
 
     Y_VERIFY(EntriesToLoad.empty());
 
-    if (Steps && !Steps->Alone()) 
-        return OpResultContinue; 
- 
-    if (Loads) 
+    if (Steps && !Steps->Alone())
+        return OpResultContinue;
+
+    if (Loads)
         return OpResultContinue;
 
     if (State().Follower || Restored) {
-        if (auto logl = Steps->Logger()->Log(ELnLev::Info)) { 
-            auto spent = TAppData::TimeProvider->Now() - BootStartTime; 
+        if (auto logl = Steps->Logger()->Log(ELnLev::Info)) {
+            auto spent = TAppData::TimeProvider->Now() - BootStartTime;
 
-            logl 
-                << NFmt::Do(State()) << " booting completed" 
-                << ", took " << NFmt::TDelay(spent); 
-        } 
- 
+            logl
+                << NFmt::Do(State()) << " booting completed"
+                << ", took " << NFmt::TDelay(spent);
+        }
+
         return OpResultComplete;
     }
 
     return OpResultContinue;
 }
 
-TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveRestored(TEvTablet::TEvRestored::TPtr &ev) { 
+TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveRestored(TEvTablet::TEvRestored::TPtr &ev) {
     Y_UNUSED(ev);
     Restored = true;
-    return CheckCompletion(); 
+    return CheckCompletion();
 }
 
 void TExecutorBootLogic::OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) {
     Y_UNUSED(cookie);
- 
+
     auto it = EntriesToLoad.find(id);
 
     Y_VERIFY(it != EntriesToLoad.end(),
         "OnBlobLoaded with unexpected blob id %s", id.ToString().c_str());
 
     auto entry = std::move(it->second);
- 
+
     EntriesToLoad.erase(it);
 
     entry->Feed(id, std::move(body));
     entry.Reset();
- 
+
     Steps->Execute();
 }
- 
+
 TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandle &ev)
 {
     if (auto *msg = ev.CastAsLocal<TEvBlobStorage::TEvGetResult>()) {
         if (!LoadBlobQueue.ProcessResult(msg))
             return OpResultBroken;
- 
+
     } else if (auto *msg = ev.CastAsLocal<NSharedCache::TEvResult>()) {
         if (EPageCollectionRequest(ev.Cookie) != EPageCollectionRequest::BootLogic)
             return OpResultUnhandled;
 
-        auto it = Loads.find(msg->Origin.Get()); 
-        if (it == Loads.end()) // could receive outdated results 
+        auto it = Loads.find(msg->Origin.Get());
+        if (it == Loads.end()) // could receive outdated results
             return OpResultUnhandled;
- 
+
         // Remove step from loads first (so HandleBio may request more pages)
         auto step = std::move(it->second);
         Loads.erase(it);
@@ -277,30 +277,30 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
             return OpResultBroken;
 
         step.Drop();
-        Steps->Execute(); 
-    } else { 
+        Steps->Execute();
+    } else {
         return OpResultUnhandled;
     }
- 
-    return CheckCompletion(); 
+
+    return CheckCompletion();
 }
 
-TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() noexcept { 
-    Y_VERIFY(Result_->Database, "Looks like booting hasn't been done"); 
-    return Result_; 
+TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() noexcept {
+    Y_VERIFY(Result_->Database, "Looks like booting hasn't been done");
+    return Result_;
 }
 
-void TExecutorBootLogic::Cancel() { 
+void TExecutorBootLogic::Cancel() {
 }
 
 void TExecutorBootLogic::FollowersSyncComplete() {
-    Y_VERIFY(Result_); 
-    Y_VERIFY(Result().GcLogic); 
+    Y_VERIFY(Result_);
+    Y_VERIFY(Result().GcLogic);
     Result().GcLogic->FollowersSyncComplete(true);
 }
 
 TExecutorCaches TExecutorBootLogic::DetachCaches() {
-    if (Result_) { 
+    if (Result_) {
         for (auto &x : Result().PageCaches)
             State().PageCaches[x->Id] = x;
     }

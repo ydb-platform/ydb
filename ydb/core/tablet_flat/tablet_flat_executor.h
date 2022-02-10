@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 
-#include "flat_scan_iface.h" 
+#include "flat_scan_iface.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
@@ -14,11 +14,11 @@
 namespace NKikimr {
 class TTabletCountersBase;
 
-namespace NTable { 
-    class TDatabase; 
+namespace NTable {
+    class TDatabase;
     class TScheme;
-} 
- 
+}
+
 namespace NTabletFlatExecutor {
 
 class TTransactionContext;
@@ -55,19 +55,19 @@ public:
         AtomicStore(&Dropped, true);
     }
 
-    void Describe(IOutputStream &out) const noexcept 
-    { 
-        out << "Res{"; 
- 
-        if (TaskId) { 
-            out << TaskId; 
-        } else { 
-            out << "static"; 
-        } 
- 
-        out << " " << Size << "b}"; 
-    } 
- 
+    void Describe(IOutputStream &out) const noexcept
+    {
+        out << "Res{";
+
+        if (TaskId) {
+            out << TaskId;
+        } else {
+            out << "static";
+        }
+
+        out << " " << Size << "b}";
+    }
+
     const ui64 Size;
     const ui64 TaskId;
 
@@ -88,20 +88,20 @@ public:
     const TIntrusivePtr<TMemoryGCToken> GCToken;
 };
 
-struct IExecuting { 
-    /* Functionality available only in tx execution contextt */ 
- 
-    virtual ~IExecuting() = default; 
- 
+struct IExecuting {
+    /* Functionality available only in tx execution contextt */
+
+    virtual ~IExecuting() = default;
+
     virtual void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext>) = 0;
     virtual void DropSnapshot(TIntrusivePtr<TTableSnapshotContext>) = 0;
     virtual void MoveSnapshot(const TTableSnapshotContext&, ui32 src, ui32 dst) = 0;
-    virtual void ClearSnapshot(const TTableSnapshotContext&) = 0; 
-    virtual void LoanTable(ui32 tableId, const TString &partsInfo) = 0; // attach table parts to table (called on part destination) 
-    virtual void CleanupLoan(const TLogoBlobID &bundleId, ui64 from) = 0; // mark loan completion (called on part source) 
-    virtual void ConfirmLoan(const TLogoBlobID &bundleId, const TLogoBlobID &borrowId) = 0; // confirm loan update delivery (called on part destination) 
-}; 
- 
+    virtual void ClearSnapshot(const TTableSnapshotContext&) = 0;
+    virtual void LoanTable(ui32 tableId, const TString &partsInfo) = 0; // attach table parts to table (called on part destination)
+    virtual void CleanupLoan(const TLogoBlobID &bundleId, ui64 from) = 0; // mark loan completion (called on part source)
+    virtual void ConfirmLoan(const TLogoBlobID &bundleId, const TLogoBlobID &borrowId) = 0; // confirm loan update delivery (called on part destination)
+};
+
 class TTxMemoryProviderBase : TNonCopyable {
 public:
     TTxMemoryProviderBase(ui64 memoryLimit, ui64 taskId)
@@ -254,18 +254,18 @@ enum class ETerminationReason {
     MemoryLimitExceeded = 1,
 };
 
- 
-class ITransaction : TNonCopyable { 
+
+class ITransaction : TNonCopyable {
 public:
-    using TTransactionContext = NTabletFlatExecutor::TTransactionContext; 
- 
+    using TTransactionContext = NTabletFlatExecutor::TTransactionContext;
+
     ITransaction() = default;
 
     ITransaction(NLWTrace::TOrbit &&orbit)
         : Orbit(std::move(orbit))
     { }
 
-    virtual ~ITransaction() = default; 
+    virtual ~ITransaction() = default;
     /// @return true if execution complete and transaction is ready for commit
     virtual bool Execute(TTransactionContext &txc, const TActorContext &ctx) = 0;
     virtual void Complete(const TActorContext &ctx) = 0;
@@ -274,18 +274,18 @@ public:
     }
     virtual void ReleaseTxData(TTxMemoryProvider &/*provider*/, const TActorContext &/*ctx*/) {}
     virtual TTxType GetTxType() const { return UnknownTxType; }
- 
-    virtual void Describe(IOutputStream &out) const noexcept 
-    { 
+
+    virtual void Describe(IOutputStream &out) const noexcept
+    {
         out << TypeName(*this);
-    } 
+    }
 
 public:
     NLWTrace::TOrbit Orbit;
 };
 
 template<typename T>
-class TTransactionBase : public ITransaction { 
+class TTransactionBase : public ITransaction {
 protected:
     typedef T TSelf;
     typedef TTransactionBase<TSelf> TBase;
@@ -470,7 +470,7 @@ namespace NFlatExecutorSetup {
         TIntrusivePtr<TTabletStorageInfo> TabletInfo;
     };
 
- 
+
     ////////////////////////////////////////////
     // tablet -> executor
     struct IExecutor : TNonCopyable {
@@ -496,20 +496,20 @@ namespace NFlatExecutorSetup {
 
         virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
 
-        /* Make blob with data required for table bootstapping. Note: 
-            1. Once non-trivial blob obtained and commited in tx all of its 
-                borrowed bundles have to be eventually released (see db). 
-            2. Call accepts subset range in form [from, to). 
-            3. [-inf, +inf), the complete set, is encoded as ({ }, { }). 
-            4. May return empty blob on lack of some vital pages in cache. 
-         */ 
+        /* Make blob with data required for table bootstapping. Note:
+            1. Once non-trivial blob obtained and commited in tx all of its
+                borrowed bundles have to be eventually released (see db).
+            2. Call accepts subset range in form [from, to).
+            3. [-inf, +inf), the complete set, is encoded as ({ }, { }).
+            4. May return empty blob on lack of some vital pages in cache.
+         */
         virtual TString BorrowSnapshot(ui32 tableId, const TTableSnapshotContext&, TRawVals from, TRawVals to, ui64 loaner) const = 0;
         // Prepare snapshot which can later be used for scan task.
-        virtual ui64 MakeScanSnapshot(ui32 table) = 0; 
-        virtual void DropScanSnapshot(ui64 snapId) = 0; 
+        virtual ui64 MakeScanSnapshot(ui32 table) = 0;
+        virtual void DropScanSnapshot(ui64 snapId) = 0;
         virtual ui64 QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options = TScanOptions()) = 0;
         virtual bool CancelScan(ui32 tableId, ui64 taskId) = 0;
- 
+
         // edge and ts of last full compaction
         virtual TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 tableId) const = 0;
 
@@ -520,13 +520,13 @@ namespace NFlatExecutorSetup {
         virtual ui64 CompactTable(ui32 tableId) = 0;
         virtual bool CompactTables() = 0;
 
-        virtual void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr&) const = 0; 
-        virtual void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr&) const = 0; 
+        virtual void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr&) const = 0;
+        virtual void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr&) const = 0;
         virtual void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const = 0;
         virtual void RegisterExternalTabletCounters(TAutoPtr<TTabletCountersBase> appCounters) = 0;
-        virtual void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr&) = 0; 
+        virtual void GetTabletCounters(TEvTablet::TEvGetCounters::TPtr&) = 0;
 
-        virtual void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) = 0; 
+        virtual void UpdateConfig(TEvTablet::TEvUpdateConfig::TPtr&) = 0;
 
         virtual void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) = 0;
 
@@ -537,12 +537,12 @@ namespace NFlatExecutorSetup {
         virtual void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) = 0;
 
         virtual const TExecutorStats& GetStats() const = 0;
-        virtual NMetrics::TResourceMetrics* GetResourceMetrics() const = 0; 
+        virtual NMetrics::TResourceMetrics* GetResourceMetrics() const = 0;
 
-        /* This stange looking functionallity probably should be dropped */ 
- 
-        virtual float GetRejectProbability() const = 0; 
- 
+        /* This stange looking functionallity probably should be dropped */
+
+        virtual float GetRejectProbability() const = 0;
+
         // Returns current database scheme (executor must be active)
         virtual const NTable::TScheme& Scheme() const noexcept = 0;
 

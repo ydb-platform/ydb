@@ -60,25 +60,25 @@ TOwnedCellVec::TInit TOwnedCellVec::Allocate(TOwnedCellVec::TCellVec cells) {
     };
 }
 
-TString DbgPrintCell(const TCell& r, NScheme::TTypeId typeId, const NScheme::TTypeRegistry &reg) { 
-    NScheme::ITypeSP t = reg.GetType(typeId); 
+TString DbgPrintCell(const TCell& r, NScheme::TTypeId typeId, const NScheme::TTypeRegistry &reg) {
+    NScheme::ITypeSP t = reg.GetType(typeId);
 
     if (!t.IsKnownType())
         return Sprintf("Unknow typeId 0x%x", (ui32)typeId);
 
     TString res = t->GetName();
     res += " : ";
- 
-    DbgPrintValue(res, r, typeId); 
- 
-    return res; 
-} 
- 
-void DbgPrintValue(TString &res, const TCell &r, ui32 type) { 
-    if (r.IsNull()) { 
+
+    DbgPrintValue(res, r, typeId);
+
+    return res;
+}
+
+void DbgPrintValue(TString &res, const TCell &r, ui32 type) {
+    if (r.IsNull()) {
         res += "NULL";
-    } else { 
-        switch (type) { 
+    } else {
+        switch (type) {
         case NScheme::NTypeIds::Bool:
             res += r.AsValue<bool>() ? "true" : "false";
             break;

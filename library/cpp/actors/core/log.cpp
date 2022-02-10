@@ -251,11 +251,11 @@ namespace NActors {
 
         const auto prio = ev.Level.ToPrio();
 
-        switch (prio) { 
-            case ::NActors::NLog::EPrio::Alert: 
+        switch (prio) {
+            case ::NActors::NLog::EPrio::Alert:
                 Metrics->IncAlertMsgs();
                 break;
-            case ::NActors::NLog::EPrio::Emerg: 
+            case ::NActors::NLog::EPrio::Emerg:
                 Metrics->IncEmergMsgs();
                 break;
             default:
@@ -344,10 +344,10 @@ namespace NActors {
                                 str << "<a href='logger?c=" << i << "'>" << name << "</a>";
                             }
                             TABLED() {
-                                str << PriorityToString(EPrio(componentSettings.Raw.X.Level)); 
+                                str << PriorityToString(EPrio(componentSettings.Raw.X.Level));
                             }
                             TABLED() {
-                                str << PriorityToString(EPrio(componentSettings.Raw.X.SamplingLevel)); 
+                                str << PriorityToString(EPrio(componentSettings.Raw.X.SamplingLevel));
                             }
                             TABLED() {
                                 str << componentSettings.Raw.X.SamplingRate;
@@ -421,11 +421,11 @@ namespace NActors {
                         UL() {
                             LI() {
                                 str << "Priority: "
-                                    << NLog::PriorityToString(NLog::EPrio(componentSettings.Raw.X.Level)); 
+                                    << NLog::PriorityToString(NLog::EPrio(componentSettings.Raw.X.Level));
                             }
                             LI() {
                                 str << "Sampling priority: "
-                                    << NLog::PriorityToString(NLog::EPrio(componentSettings.Raw.X.SamplingLevel)); 
+                                    << NLog::PriorityToString(NLog::EPrio(componentSettings.Raw.X.SamplingLevel));
                             }
                             LI() {
                                 str << "Sampling rate: "
@@ -444,7 +444,7 @@ namespace NActors {
                             for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
                                 LI() {
                                     str << "<a href='logger?c=" << component << "&p=" << p << "'>"
-                                        << NLog::PriorityToString(NLog::EPrio(p)) << "</a>"; 
+                                        << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
                                 }
                             }
                         }
@@ -455,7 +455,7 @@ namespace NActors {
                             for (int p = NLog::PRI_EMERG; p <= NLog::PRI_TRACE; ++p) {
                                 LI() {
                                     str << "<a href='logger?c=" << component << "&sp=" << p << "'>"
-                                        << NLog::PriorityToString(NLog::EPrio(p)) << "</a>"; 
+                                        << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
                                 }
                             }
                         }
@@ -519,7 +519,7 @@ namespace NActors {
                                     TABLER() {
                                         TABLED() {
                                             str << "<a href = 'logger?c=-1&p=" << p << "'>"
-                                                << NLog::PriorityToString(NLog::EPrio(p)) << "</a>"; 
+                                                << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
                                         }
                                     }
                                 }
@@ -541,7 +541,7 @@ namespace NActors {
                                     TABLER() {
                                         TABLED() {
                                             str << "<a href = 'logger?c=-1&sp=" << p << "'>"
-                                                << NLog::PriorityToString(NLog::EPrio(p)) << "</a>"; 
+                                                << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
                                         }
                                     }
                                 }
@@ -576,8 +576,8 @@ namespace NActors {
 
     bool TLoggerActor::OutputRecord(TInstant time, NLog::EPrio priority, NLog::EComponent component,
                                     const TString& formatted) noexcept try {
-        const auto logPrio = ::ELogPriority(ui16(priority)); 
- 
+        const auto logPrio = ::ELogPriority(ui16(priority));
+
         char buf[TimeBufSize];
         switch (Settings->Format) {
             case NActors::NLog::TSettings::PLAIN_FULL_FORMAT: {

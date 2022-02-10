@@ -1,6 +1,6 @@
 #include "flat_executor_compaction_logic.h"
-#include "flat_exec_broker.h" 
-#include "flat_dbase_scheme.h" 
+#include "flat_exec_broker.h"
+#include "flat_dbase_scheme.h"
 #include "flat_comp_create.h"
 
 #include <ydb/core/base/appdata.h>
@@ -21,12 +21,12 @@ TCompactionLogic::TCompactionLogic(NUtil::ILogger *logger,
                                    NTable::IResourceBroker *broker,
                                    NTable::ICompactionBackend *backend,
                                    TAutoPtr<TCompactionLogicState> state,
-                                   TString taskNameSuffix) 
+                                   TString taskNameSuffix)
     : Logger(logger)
     , Broker(broker)
     , Backend(backend)
-    , Time(TAppData::TimeProvider.Get()) 
-    , State(state) 
+    , Time(TAppData::TimeProvider.Get())
+    , State(state)
     , TaskNameSuffix(taskNameSuffix)
 {}
 
@@ -55,7 +55,7 @@ TCompactionLogicState::TSnapshotState TCompactionLogic::SnapToLog(ui32 tableId) 
     return ret;
 }
 
-void TCompactionLogic::UpdateCompactions() 
+void TCompactionLogic::UpdateCompactions()
 {
     for (auto &tpr : State->Tables) {
         auto &tableInfo = tpr.second;
@@ -63,14 +63,14 @@ void TCompactionLogic::UpdateCompactions()
         auto &inMem = tableInfo.InMem;
 
         if (inMem.State == ECompactionState::PendingBackground) {
-            auto priority = tableInfo.ComputeBackgroundPriority(inMem, policy, Time->Now()); 
+            auto priority = tableInfo.ComputeBackgroundPriority(inMem, policy, Time->Now());
             auto oldPriority = inMem.CompactionTask.Priority;
 
             // Avoid task updates in case of small priority changes.
             if (priority < oldPriority
                 && (oldPriority - priority) >= oldPriority / PRIORITY_UPDATE_FACTOR) {
                 UpdateCompactionTask(policy.BackgroundSnapshotPolicy.ResourceBrokerTask,
-                                     priority, inMem.CompactionTask); 
+                                     priority, inMem.CompactionTask);
             }
         }
 
@@ -104,21 +104,21 @@ TVector<TTableCompactionChanges> TCompactionLogic::ApplyChanges()
     return results;
 }
 
-void TCompactionLogic::PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, TTableSnapshotContext *snapContext) { 
+void TCompactionLogic::PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, TTableSnapshotContext *snapContext) {
     TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(table);
     Y_VERIFY_DEBUG(tableInfo);
     TCompactionLogicState::TInMem &inMem = tableInfo->InMem;
 
-    Y_VERIFY(edge.TxStamp != Max<ui64>(), "TxStamp of snapshot is undefined"); 
+    Y_VERIFY(edge.TxStamp != Max<ui64>(), "TxStamp of snapshot is undefined");
 
-    tableInfo->SnapRequests.emplace_back(TCompactionLogicState::TSnapRequest(edge, snapContext)); 
- 
+    tableInfo->SnapRequests.emplace_back(TCompactionLogicState::TSnapRequest(edge, snapContext));
+
     switch (inMem.State) {
     case ECompactionState::Free:
         SubmitCompactionTask(table, 0,
                              tableInfo->Policy->SnapshotResourceBrokerTask,
                              tableInfo->Policy->DefaultTaskPriority,
-                             inMem.CompactionTask); 
+                             inMem.CompactionTask);
         inMem.State = ECompactionState::SnapshotPending;
         break;
     case ECompactionState::Pending:
@@ -128,7 +128,7 @@ void TCompactionLogic::PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, 
         // Replace background compaction with regular snapshot task.
         UpdateCompactionTask(tableInfo->Policy->SnapshotResourceBrokerTask,
                              tableInfo->Policy->DefaultTaskPriority,
-                             inMem.CompactionTask); 
+                             inMem.CompactionTask);
         inMem.State = ECompactionState::SnapshotPending;
         break;
     default:
@@ -165,13 +165,13 @@ ui64 TCompactionLogic::PrepareForceCompaction(ui32 table, EForceCompaction mode)
                 SubmitCompactionTask(table, 0,
                                     tableInfo->Policy->InMemResourceBrokerTask,
                                     tableInfo->Policy->DefaultTaskPriority,
-                                    inMem.CompactionTask); 
+                                    inMem.CompactionTask);
                 inMem.State = ECompactionState::Pending;
                 break;
             case ECompactionState::PendingBackground:
                 UpdateCompactionTask(tableInfo->Policy->InMemResourceBrokerTask,
                                     tableInfo->Policy->DefaultTaskPriority,
-                                    inMem.CompactionTask); 
+                                    inMem.CompactionTask);
                 inMem.State = ECompactionState::Pending;
                 break;
             default:
@@ -363,12 +363,12 @@ void TCompactionLogic::StrategyChanging(TCompactionLogicState::TTableInfo &table
     }
 }
 
-void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size) { 
-    auto *info = State->Tables.FindPtr(table); 
-    Y_VERIFY(info); 
-    auto &mem = info->InMem; 
-    mem.EstimatedSize = size; 
-    mem.Steps += steps; 
+void TCompactionLogic::UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size) {
+    auto *info = State->Tables.FindPtr(table);
+    Y_VERIFY(info);
+    auto &mem = info->InMem;
+    mem.EstimatedSize = size;
+    mem.Steps += steps;
 
     CheckInMemStats(table);
 }
@@ -385,53 +385,53 @@ void TCompactionLogic::CheckInMemStats(ui32 table) {
 
     if (mem.State != ECompactionState::Free
         && mem.State != ECompactionState::PendingBackground) {
-        return; 
+        return;
     }
- 
-    if (policy.InMemForceSizeToSnapshot <= mem.EstimatedSize 
-        || policy.InMemForceStepsToSnapshot <= mem.Steps 
+
+    if (policy.InMemForceSizeToSnapshot <= mem.EstimatedSize
+        || policy.InMemForceStepsToSnapshot <= mem.Steps
         || (policy.InMemSizeToSnapshot <= mem.EstimatedSize && policy.InMemStepsToSnapshot <= mem.Steps))
     {
         // Replace background task or submit a new one.
         if (mem.State == ECompactionState::PendingBackground) {
             UpdateCompactionTask(policy.InMemResourceBrokerTask,
                                  policy.DefaultTaskPriority,
-                                 mem.CompactionTask); 
+                                 mem.CompactionTask);
         } else {
             SubmitCompactionTask(table, 0,
                                  policy.InMemResourceBrokerTask,
                                  policy.DefaultTaskPriority,
-                                 mem.CompactionTask); 
+                                 mem.CompactionTask);
         }
-        mem.State = ECompactionState::Pending; 
+        mem.State = ECompactionState::Pending;
     } else if (mem.State == ECompactionState::Free && (mem.EstimatedSize > 0 || mem.Steps > 0)) {
-        auto priority = info->ComputeBackgroundPriority(mem, policy, Time->Now()); 
+        auto priority = info->ComputeBackgroundPriority(mem, policy, Time->Now());
         if (priority != BAD_PRIORITY) {
             SubmitCompactionTask(table, 0, policy.BackgroundSnapshotPolicy.ResourceBrokerTask,
-                                 priority, mem.CompactionTask); 
+                                 priority, mem.CompactionTask);
             mem.State = ECompactionState::PendingBackground;
         }
-    } 
+    }
 }
 
-void TCompactionLogic::UpdateLogUsage(TArrayRef<const NRedo::TUsage> usage) 
-{ 
+void TCompactionLogic::UpdateLogUsage(TArrayRef<const NRedo::TUsage> usage)
+{
     for (auto &one : usage) {
         UpdateLogUsage(one);
     }
-} 
- 
-void TCompactionLogic::UpdateLogUsage(const NRedo::TUsage &usage) 
-{ 
-    auto* tableInfo = State->Tables.FindPtr(usage.Table); 
+}
+
+void TCompactionLogic::UpdateLogUsage(const NRedo::TUsage &usage)
+{
+    auto* tableInfo = State->Tables.FindPtr(usage.Table);
     if (!tableInfo) {
         // Ignore deleted tables
         return;
     }
 
     auto& inMem = tableInfo->InMem;
-    inMem.LogOverheadCount = usage.Items; 
-    inMem.LogOverheadSize = usage.Bytes; 
+    inMem.LogOverheadCount = usage.Items;
+    inMem.LogOverheadSize = usage.Bytes;
 
     if (inMem.State != ECompactionState::Free &&
         inMem.State != ECompactionState::PendingBackground)
@@ -447,19 +447,19 @@ void TCompactionLogic::UpdateLogUsage(const NRedo::TUsage &usage)
         if (inMem.State == ECompactionState::PendingBackground) {
             UpdateCompactionTask(policy.InMemResourceBrokerTask,
                                  policy.DefaultTaskPriority,
-                                 inMem.CompactionTask); 
+                                 inMem.CompactionTask);
         } else {
-            SubmitCompactionTask(usage.Table, 0, 
+            SubmitCompactionTask(usage.Table, 0,
                                  policy.InMemResourceBrokerTask,
                                  policy.DefaultTaskPriority,
-                                 inMem.CompactionTask); 
+                                 inMem.CompactionTask);
         }
         inMem.State = ECompactionState::Pending;
     }
 }
 
 bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
-{ 
+{
     TCompactionLogicState::TTableInfo *tableInfo = State->Tables.FindPtr(tableId);
     Y_VERIFY(tableInfo,
         "Unexpected BeginMemTableCompaction(%" PRIu64 ", %" PRIu32 ") for a dropped table",
@@ -560,14 +560,14 @@ TCompactionLogic::HandleCompaction(
             SubmitCompactionTask(tableId, 0,
                                  tableInfo->Policy->SnapshotResourceBrokerTask,
                                  tableInfo->Policy->DefaultTaskPriority,
-                                 inMem.CompactionTask); 
+                                 inMem.CompactionTask);
             inMem.State = ECompactionState::SnapshotPending;
         } else if (tableInfo->ForcedCompactionState == EForcedCompactionState::PendingMem) {
             // There is another memory compaction request
             SubmitCompactionTask(tableId, 0,
                                  tableInfo->Policy->InMemResourceBrokerTask,
                                  tableInfo->Policy->DefaultTaskPriority,
-                                 inMem.CompactionTask); 
+                                 inMem.CompactionTask);
             inMem.State = ECompactionState::Pending;
         }
 
@@ -616,11 +616,11 @@ TCompactionLogic::CancelledCompaction(
 }
 
 void TCompactionLogic::BorrowedPart(ui32 tableId, NTable::TPartView partView) {
-    auto *tableInfo = State->Tables.FindPtr(tableId); 
+    auto *tableInfo = State->Tables.FindPtr(tableId);
     Y_VERIFY(tableInfo);
     tableInfo->Strategy->PartMerged(std::move(partView), 255);
 }
- 
+
 void TCompactionLogic::BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TColdPart> part) {
     auto *tableInfo = State->Tables.FindPtr(tableId);
     Y_VERIFY(tableInfo);
@@ -628,7 +628,7 @@ void TCompactionLogic::BorrowedPart(ui32 tableId, TIntrusiveConstPtr<NTable::TCo
 }
 
 ui32 TCompactionLogic::BorrowedPartLevel() {
-    return 255; 
+    return 255;
 }
 
 TTableCompactionChanges TCompactionLogic::RemovedParts(ui32 tableId, TArrayRef<const TLogoBlobID> parts) {
@@ -645,12 +645,12 @@ void TCompactionLogic::SubmitCompactionTask(ui32 table,
                                             ui32 generation,
                                             const TString &type,
                                             ui32 priority,
-                                            TCompactionLogicState::TCompactionTask &task) 
+                                            TCompactionLogicState::TCompactionTask &task)
 {
     Y_VERIFY(generation == 0, "Unexpected gen %" PRIu32 " in compaction logic", generation);
 
     task.Priority = priority;
-    task.SubmissionTimestamp = Time->Now(); 
+    task.SubmissionTimestamp = Time->Now();
 
     TString name = Sprintf("gen%" PRIu32 "-table-%" PRIu32 "-%s",
                            generation, table, TaskNameSuffix.data());
@@ -668,7 +668,7 @@ void TCompactionLogic::SubmitCompactionTask(ui32 table,
 
 void TCompactionLogic::UpdateCompactionTask(const TString &type,
                                             ui32 priority,
-                                            TCompactionLogicState::TCompactionTask &task) 
+                                            TCompactionLogicState::TCompactionTask &task)
 {
     task.Priority = priority;
 

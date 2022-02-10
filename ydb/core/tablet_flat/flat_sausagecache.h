@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
-#include "flat_sausage_gut.h" 
-#include "flat_sausage_fetch.h" 
+#include "flat_sausage_gut.h"
+#include "flat_sausage_fetch.h"
 #include "shared_handle.h"
 #include "shared_cache_events.h"
 #include <ydb/core/util/cache_cache.h>
@@ -12,7 +12,7 @@ namespace NTabletFlatExecutor {
 
 struct TPrivatePageCachePinPad : public TAtomicRefCount<TPrivatePageCachePinPad> {
     // no internal state
-}; 
+};
 
 struct TPrivatePageCacheWaitPad : public TExplicitSimpleCounter {
     // no internal state
@@ -76,10 +76,10 @@ public:
         void Fill(TSharedData data, bool sticky = false) {
             Y_VERIFY_DEBUG(!SharedBody && !SharedPending, "Populating cache with shared data already present");
             Sticky = sticky;
-            LoadState = LoadStateLoaded; 
+            LoadState = LoadStateLoaded;
             PinnedBody = std::move(data);
-        } 
- 
+        }
+
         void Fill(TSharedPageRef shared, bool sticky = false) {
             Sticky = sticky;
             SharedPending = false;
@@ -90,8 +90,8 @@ public:
 
         const TSharedData* GetBody() const noexcept {
             return LoadState == LoadStateLoaded ? &PinnedBody : nullptr;
-        } 
- 
+        }
+
         TSharedPageRef GetShared() const noexcept {
             if (LoadState == LoadStateLoaded) {
                 if (SharedBody) {
@@ -137,8 +137,8 @@ public:
         const TSharedData* Lookup(ui32 pageId) const noexcept {
             auto* page = GetPage(pageId);
             return page ? page->GetBody() : nullptr;
-        } 
- 
+        }
+
         TPage* GetPage(ui32 pageId) const noexcept {
             return PageMap[pageId].Get();
         }
@@ -153,8 +153,8 @@ public:
 
         void Fill(const NPageCollection::TLoadedPage &paged, bool sticky = false) noexcept {
             EnsurePage(paged.PageId)->Fill(paged.Data, sticky);
-        } 
- 
+        }
+
         void Fill(NSharedCache::TEvResult::TLoaded&& loaded, bool sticky = false) noexcept {
             EnsurePage(loaded.PageId)->Fill(std::move(loaded.Page), sticky);
         }
@@ -231,7 +231,7 @@ public:
         ui64 Users;
 
         explicit TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pack);
-        TInfo(const TInfo &info); 
+        TInfo(const TInfo &info);
     };
 
 public:

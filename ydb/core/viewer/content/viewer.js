@@ -2614,9 +2614,9 @@ function onTreeNodeChildrenDataSizeComplete(dataSizeCell, result) {
         return;
     }
     var dataSize = 0;
-    dataSize += getCounter(result.TabletCounters.ExecutorCounters.SimpleCounters, "LogRedoMemory"); 
-    dataSize += getCounter(result.TabletCounters.ExecutorCounters.SimpleCounters, "DbIndexBytes"); 
-    dataSize += getCounter(result.TabletCounters.ExecutorCounters.SimpleCounters, "DbDataBytes"); 
+    dataSize += getCounter(result.TabletCounters.ExecutorCounters.SimpleCounters, "LogRedoMemory");
+    dataSize += getCounter(result.TabletCounters.ExecutorCounters.SimpleCounters, "DbIndexBytes");
+    dataSize += getCounter(result.TabletCounters.ExecutorCounters.SimpleCounters, "DbDataBytes");
     dataSize += getCounter(result.TabletCounters.AppCounters.SimpleCounters, "KV/RecordBytes");
     dataSize += getCounter(result.TabletCounters.AppCounters.SimpleCounters, "KV/TrashBytes");
     dataSizeCell.innerHTML = bytesToSize(dataSize);

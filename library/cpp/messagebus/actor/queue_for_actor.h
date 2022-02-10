@@ -60,15 +60,15 @@ namespace NActor {
                 temp.Shrink();
             }
         }
- 
+
         template <typename TFunc>
         void DequeueAllLikelyEmpty(const TFunc& func) {
             if (Y_LIKELY(IsEmpty())) {
                 return;
             }
- 
+
             DequeueAll(func);
-        } 
+        }
     };
 
 }

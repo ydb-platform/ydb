@@ -1,20 +1,20 @@
 #pragma once
 #include "defs.h"
 #include "tablet_flat_executor.h"
-#include "flat_executor_misc.h" 
-#include "flat_store_bundle.h" 
-#include "flat_exec_broker.h" 
-#include "logic_redo_eggs.h" 
+#include "flat_executor_misc.h"
+#include "flat_store_bundle.h"
+#include "flat_exec_broker.h"
+#include "logic_redo_eggs.h"
 #include "util_fmt_line.h"
 #include <ydb/core/base/localdb.h>
 #include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr {
- 
-namespace NTable{ 
-    class TScheme; 
-} 
- 
+
+namespace NTable{
+    class TScheme;
+}
+
 namespace NTabletFlatExecutor {
 
 class TTableSnapshotContext;
@@ -63,11 +63,11 @@ struct TCompactionLogicState {
     };
 
     struct TSnapRequest {
-        const NTable::TSnapEdge Edge; 
+        const NTable::TSnapEdge Edge;
         TIntrusivePtr<TTableSnapshotContext> Context;
 
-        TSnapRequest(NTable::TSnapEdge edge, TTableSnapshotContext *context) 
-            : Edge(edge) 
+        TSnapRequest(NTable::TSnapEdge edge, TTableSnapshotContext *context)
+            : Edge(edge)
             , Context(context)
         {}
 
@@ -123,14 +123,14 @@ struct TCompactionLogicState {
         // not have any strategy markers in their history are assumed to have
         // used the generational compaction.
         NKikimrSchemeOp::ECompactionStrategy Strategy = NKikimrSchemeOp::CompactionStrategyGenerational;
-    }; 
- 
+    };
+
     TMap<ui32, TTableInfo> Tables;
     THashMap<ui32, TSnapshotState> Snapshots;
 };
 
 class TFlatTableScan;
- 
+
 struct TTableCompactionResult {
     NTable::TCompactionChanges Changes;
     NKikimrSchemeOp::ECompactionStrategy Strategy;
@@ -157,7 +157,7 @@ class TCompactionLogic {
     NUtil::ILogger * const Logger;
     NTable::IResourceBroker * const Broker;
     NTable::ICompactionBackend * const Backend;
-    ITimeProvider * const Time = nullptr; 
+    ITimeProvider * const Time = nullptr;
     TAutoPtr<TCompactionLogicState> State;
     TString TaskNameSuffix;
 
@@ -167,9 +167,9 @@ class TCompactionLogic {
 
     void SubmitCompactionTask(ui32 table, ui32 generation,
                               const TString &type, ui32 priority,
-                              TCompactionLogicState::TCompactionTask &task); 
+                              TCompactionLogicState::TCompactionTask &task);
     void UpdateCompactionTask(const TString &type, ui32 priority,
-                              TCompactionLogicState::TCompactionTask &task); 
+                              TCompactionLogicState::TCompactionTask &task);
 
     bool BeginMemTableCompaction(ui64 taskId, ui32 tableId);
 
@@ -200,14 +200,14 @@ public:
     TCompactionLogicState::TSnapshotState SnapToLog(ui32 tableId);
 
     // Update priorities for background compaction tasks.
-    void UpdateCompactions(); 
+    void UpdateCompactions();
 
     // Strategy of this table wants to apply some changes
     void RequestChanges(ui32 tableId);
     TVector<TTableCompactionChanges> ApplyChanges();
 
     //
-    void PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, TTableSnapshotContext *snapContext); 
+    void PrepareTableSnapshot(ui32 table, NTable::TSnapEdge edge, TTableSnapshotContext *snapContext);
 
     // Force compaction support
     // See slightly simlified state diagram: jing.yandex-team.ru/files/eivanov89/ForcedCompactionPath.png
@@ -218,10 +218,10 @@ public:
     TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 table);
 
     TReflectSchemeChangesResult ReflectSchemeChanges();
-    void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size); 
+    void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size);
     void CheckInMemStats(ui32 table);
-    void UpdateLogUsage(TArrayRef<const NRedo::TUsage>); 
-    void UpdateLogUsage(const NRedo::TUsage&); 
+    void UpdateLogUsage(TArrayRef<const NRedo::TUsage>);
+    void UpdateLogUsage(const NRedo::TUsage&);
     float GetOverloadFactor() const;
     ui64 GetBackingSize() const;
     ui64 GetBackingSize(ui64 ownerTabletId) const;

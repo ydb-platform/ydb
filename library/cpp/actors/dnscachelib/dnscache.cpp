@@ -7,7 +7,7 @@
 #include <util/datetime/systime.h>
 
 const TDnsCache::THost TDnsCache::NullHost;
- 
+
 LWTRACE_USING(DNSCACHELIB_PROVIDER);
 
 static_assert(sizeof(ares_channel) == sizeof(void*), "expect sizeof(ares_channel) == sizeof(void *)");
@@ -22,7 +22,7 @@ TDnsCache::TDnsCache(bool allowIpv4, bool allowIpv6, time_t lifetime, time_t neg
     , ACacheMisses(0)
     , PtrCacheHits(0)
     , PtrCacheMisses(0)
-{ 
+{
 #ifdef _win_
     if (ares_library_init(ARES_LIB_INIT_WIN32) != ARES_SUCCESS) {
         LWPROBE(AresInitFailed);
@@ -53,97 +53,97 @@ TDnsCache::~TDnsCache(void) {
 }
 
 TString TDnsCache::GetHostByAddr(const NAddr::IRemoteAddr& addr) {
-    in6_addr key; 
- 
-    if (addr.Addr()->sa_family == AF_INET6) { 
+    in6_addr key;
+
+    if (addr.Addr()->sa_family == AF_INET6) {
         const struct sockaddr_in6* s6 = (const struct sockaddr_in6*)(addr.Addr());
-        memcpy(&key, &s6->sin6_addr, sizeof(s6->sin6_addr)); 
-    } else if (addr.Addr()->sa_family == AF_INET) { 
+        memcpy(&key, &s6->sin6_addr, sizeof(s6->sin6_addr));
+    } else if (addr.Addr()->sa_family == AF_INET) {
         const struct sockaddr_in* s4 = (const struct sockaddr_in*)(addr.Addr());
-        memset(&key, 0, sizeof(key)); 
-        memcpy(&key, &s4->sin_addr, sizeof(s4->sin_addr)); 
-    } else { 
-        return ""; 
-    } 
+        memset(&key, 0, sizeof(key));
+        memcpy(&key, &s4->sin_addr, sizeof(s4->sin_addr));
+    } else {
+        return "";
+    }
     const TAddr& host = ResolveAddr(key, addr.Addr()->sa_family);
- 
-    return host.Hostname; 
-} 
- 
+
+    return host.Hostname;
+}
+
 TIpHost TDnsCache::Get(const TString& hostname) {
-    if (!AllowIpV4) 
-        return TIpHost(-1); 
- 
+    if (!AllowIpV4)
+        return TIpHost(-1);
+
     const THost& addr = Resolve(hostname, AF_INET);
- 
+
     TGuard<TMutex> lock(CacheMtx);
-    if (addr.AddrsV4.empty()) { 
-        return TIpHost(-1); 
-    } 
-    return addr.AddrsV4.front(); 
-} 
- 
-NAddr::IRemoteAddrPtr TDnsCache::GetAddr( 
+    if (addr.AddrsV4.empty()) {
+        return TIpHost(-1);
+    }
+    return addr.AddrsV4.front();
+}
+
+NAddr::IRemoteAddrPtr TDnsCache::GetAddr(
     const TString& hostname,
     int family,
     TIpPort port,
     bool cacheOnly) {
-    if (family != AF_INET && AllowIpV6) { 
+    if (family != AF_INET && AllowIpV6) {
         const THost& addr = Resolve(hostname, AF_INET6, cacheOnly);
- 
+
         TGuard<TMutex> lock(CacheMtx);
-        if (!addr.AddrsV6.empty()) { 
-            struct sockaddr_in6 sin6; 
-            Zero(sin6); 
-            sin6.sin6_family = AF_INET6; 
-            sin6.sin6_addr = addr.AddrsV6.front(); 
-            sin6.sin6_port = HostToInet(port); 
- 
+        if (!addr.AddrsV6.empty()) {
+            struct sockaddr_in6 sin6;
+            Zero(sin6);
+            sin6.sin6_family = AF_INET6;
+            sin6.sin6_addr = addr.AddrsV6.front();
+            sin6.sin6_port = HostToInet(port);
+
             return MakeHolder<NAddr::TIPv6Addr>(sin6);
-        } 
-    } 
- 
-    if (family != AF_INET6 && AllowIpV4) { 
+        }
+    }
+
+    if (family != AF_INET6 && AllowIpV4) {
         const THost& addr = Resolve(hostname, AF_INET, cacheOnly);
- 
+
         TGuard<TMutex> lock(CacheMtx);
-        if (!addr.AddrsV4.empty()) { 
+        if (!addr.AddrsV4.empty()) {
             return MakeHolder<NAddr::TIPv4Addr>(TIpAddress(addr.AddrsV4.front(), port));
-        } 
-    } 
- 
+        }
+    }
+
     LWPROBE(FamilyMismatch, family, AllowIpV4, AllowIpV6);
     return nullptr;
-} 
- 
-void TDnsCache::GetAllAddresses( 
+}
+
+void TDnsCache::GetAllAddresses(
     const TString& hostname,
     TVector<NAddr::IRemoteAddrPtr>& addrs) {
-    if (AllowIpV4) { 
+    if (AllowIpV4) {
         const THost& addr4 = Resolve(hostname, AF_INET);
 
         TGuard<TMutex> lock(CacheMtx);
-        for (size_t i = 0; i < addr4.AddrsV4.size(); i++) { 
+        for (size_t i = 0; i < addr4.AddrsV4.size(); i++) {
             addrs.push_back(MakeHolder<NAddr::TIPv4Addr>(TIpAddress(addr4.AddrsV4[i], 0)));
-        } 
-    } 
- 
-    if (AllowIpV6) { 
+        }
+    }
+
+    if (AllowIpV6) {
         const THost& addr6 = Resolve(hostname, AF_INET6);
 
-        struct sockaddr_in6 sin6; 
-        Zero(sin6); 
-        sin6.sin6_family = AF_INET6; 
+        struct sockaddr_in6 sin6;
+        Zero(sin6);
+        sin6.sin6_family = AF_INET6;
 
         TGuard<TMutex> lock(CacheMtx);
-        for (size_t i = 0; i < addr6.AddrsV6.size(); i++) { 
-            sin6.sin6_addr = addr6.AddrsV6[i]; 
- 
+        for (size_t i = 0; i < addr6.AddrsV6.size(); i++) {
+            sin6.sin6_addr = addr6.AddrsV6[i];
+
             addrs.push_back(MakeHolder<NAddr::TIPv6Addr>(sin6));
-        } 
-    } 
-} 
- 
+        }
+    }
+}
+
 void TDnsCache::GetStats(ui64& a_cache_hits, ui64& a_cache_misses,
                          ui64& ptr_cache_hits, ui64& ptr_cache_misses) {
     TGuard<TMutex> lock(CacheMtx);
@@ -169,11 +169,11 @@ bool TDnsCache::THost::IsStale(int family, const TDnsCache* ctx) const noexcept 
 
 const TDnsCache::THost&
 TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
-    if (!ValidateHName(hostname)) { 
+    if (!ValidateHName(hostname)) {
         LWPROBE(ResolveNullHost, hostname, family);
-        return NullHost; 
-    } 
- 
+        return NullHost;
+    }
+
     THostCache::iterator p;
 
     Y_ASSERT(family == AF_INET || family == AF_INET6);
@@ -232,9 +232,9 @@ TDnsCache::Resolve(const TString& hostname, int family, bool cacheOnly) {
 }
 
 bool TDnsCache::ValidateHName(const TString& name) const noexcept {
-    return name.size() > 0; 
-} 
- 
+    return name.size() > 0;
+}
+
 const TDnsCache::TAddr& TDnsCache::ResolveAddr(const in6_addr& addr, int family) {
     TAddrCache::iterator p;
 
@@ -282,7 +282,7 @@ const TDnsCache::TAddr& TDnsCache::ResolveAddr(const in6_addr& addr, int family)
 }
 
 void TDnsCache::WaitTask(TAtomic& flag) {
-    const TInstant start = TInstant(TTimeKeeper::GetTimeval()); 
+    const TInstant start = TInstant(TTimeKeeper::GetTimeval());
 
     while (AtomicGet(flag)) {
         ares_channel chan = static_cast<ares_channel>(Channel);
@@ -319,11 +319,11 @@ void TDnsCache::WaitTask(TAtomic& flag) {
 
         Y_ASSERT(nfds != 0);
 
-        const TDuration left = TInstant(TTimeKeeper::GetTimeval()) - start; 
-        const TDuration wait = Max(Timeout - left, TDuration::Zero()); 
- 
-        int rv = poll(pfd, nfds, wait.MilliSeconds()); 
- 
+        const TDuration left = TInstant(TTimeKeeper::GetTimeval()) - start;
+        const TDuration wait = Max(Timeout - left, TDuration::Zero());
+
+        int rv = poll(pfd, nfds, wait.MilliSeconds());
+
         if (rv == -1) {
             if (errno == EINTR) {
                 continue;
@@ -351,10 +351,10 @@ void TDnsCache::WaitTask(TAtomic& flag) {
                                     : ARES_SOCKET_BAD);
             }
         }
- 
-        if (start + Timeout <= TInstant(TTimeKeeper::GetTimeval())) { 
-            break; 
-        } 
+
+        if (start + Timeout <= TInstant(TTimeKeeper::GetTimeval())) {
+            break;
+        }
     }
 }
 

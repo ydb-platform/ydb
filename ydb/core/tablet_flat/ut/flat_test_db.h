@@ -8,7 +8,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
-namespace NTable { 
+namespace NTable {
 
 // Unified interface for iterator
 class ITestIterator {
@@ -26,9 +26,9 @@ public:
 // Unified interface for real DB implementation and simple reference implementation
 class ITestDb {
 public:
-    using ECodec = NPage::ECodec; 
-    using ECache = NPage::ECache; 
- 
+    using ECodec = NPage::ECodec;
+    using ECache = NPage::ECache;
+
     virtual ~ITestDb() {}
 
     virtual void Init(const TScheme& scheme) = 0;
@@ -37,10 +37,10 @@ public:
     virtual void Update(ui32 root, ERowOp, TRawVals key, TArrayRef<const TUpdateOp> ops) = 0;
 
     virtual void Precharge(ui32 root,
-                           TRawVals keyFrom, TRawVals keyTo, 
-                           TTagsRef tags, ui32 flags) = 0; 
-    virtual ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup) = 0; 
-    virtual void Apply(const TSchemeChanges&) = 0; 
+                           TRawVals keyFrom, TRawVals keyTo,
+                           TTagsRef tags, ui32 flags) = 0;
+    virtual ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup) = 0;
+    virtual void Apply(const TSchemeChanges&) = 0;
 };
 
 // Means that iterator needs pages to be loaded
@@ -58,17 +58,17 @@ public:
     {}
 
     EReady Next(ENext mode) override
-    { 
+    {
         const auto ready = Iter->Next(mode);
- 
-        if (ready == EReady::Page) 
+
+        if (ready == EReady::Page)
             throw TIteratorNotReady();
- 
-        return ready; 
+
+        return ready;
     }
 
     bool IsValid() override {
-        return Iter->Last() == EReady::Data; 
+        return Iter->Last() == EReady::Data;
     }
 
     bool IsRowDeleted() override {
@@ -84,7 +84,7 @@ public:
     }
 
     TCell GetValue(ui32 idx) override {
-        return Iter->Row().Get(idx); 
+        return Iter->Row().Get(idx);
     }
 };
 
@@ -112,7 +112,7 @@ public:
     }
 
     const TScheme& GetScheme() const override {
-        return Db->GetScheme(); 
+        return Db->GetScheme();
     }
 
     TString FinishTransaction(bool commit) override {
@@ -122,28 +122,28 @@ public:
     }
 
     void Update(ui32 root, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops) override
-    { 
-        Db->Update(root, rop, key, ops); 
+    {
+        Db->Update(root, rop, key, ops);
     }
 
     void Precharge(ui32 root,
-                           TRawVals keyFrom, TRawVals keyTo, 
+                           TRawVals keyFrom, TRawVals keyTo,
                            TTagsRef tags, ui32 flags) override {
-        bool res = Db->Precharge(root, keyFrom, keyTo, tags, flags, -1, -1); 
+        bool res = Db->Precharge(root, keyFrom, keyTo, tags, flags, -1, -1);
         if (!res)
             throw TIteratorNotReady();
     }
 
     ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup mode) override {
-        if (auto res = Db->Iterate(root, key, tags, mode)) 
-            return new TFlatDbIterator(res); 
-        throw TIteratorNotReady(); 
+        if (auto res = Db->Iterate(root, key, tags, mode))
+            return new TFlatDbIterator(res);
+        throw TIteratorNotReady();
     }
 
-    void Apply(const TSchemeChanges &delta) override 
-    { 
-        Db->Alter().Merge(delta); 
-    } 
+    void Apply(const TSchemeChanges &delta) override
+    {
+        Db->Alter().Merge(delta);
+    }
 };
 
 
@@ -163,11 +163,11 @@ public:
     {}
 
     EReady Next(ENext mode) override
-    { 
+    {
         const auto one = It1->Next(mode);
         const auto two = It2->Next(mode);
-        UNIT_ASSERT(one == two); 
-        return one; 
+        UNIT_ASSERT(one == two);
+        return one;
     }
 
     bool IsValid() override {
@@ -205,8 +205,8 @@ public:
 
 private:
     static void VerifyEqualTuples(const TDbTupleRef& a, const TDbTupleRef& b) {
-        TString aStr = PrintRow(a); 
-        TString bStr = PrintRow(b); 
+        TString aStr = PrintRow(a);
+        TString bStr = PrintRow(b);
         UNIT_ASSERT_NO_DIFF(aStr, bStr);
     }
 };
@@ -248,29 +248,29 @@ public:
     }
 
     void Update(ui32 root, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops) override {
-        Db1->Update(root, rop, key, ops); 
-        Db2->Update(root, rop, key, ops); 
+        Db1->Update(root, rop, key, ops);
+        Db2->Update(root, rop, key, ops);
     }
 
     void Precharge(ui32 root,
-                           TRawVals keyFrom, TRawVals keyTo, 
+                           TRawVals keyFrom, TRawVals keyTo,
                            TTagsRef tags, ui32 flags) override {
-        Db1->Precharge(root, keyFrom, keyTo, tags, flags); 
-        Db2->Precharge(root, keyFrom, keyTo, tags, flags); 
+        Db1->Precharge(root, keyFrom, keyTo, tags, flags);
+        Db2->Precharge(root, keyFrom, keyTo, tags, flags);
     }
 
     ITestIterator* Iterate(ui32 root, TRawVals key, TTagsRef tags, ELookup mode) override {
         return new TIteratorPair(
-                    Db1->Iterate(root, key, tags, mode), 
-                    Db2->Iterate(root, key, tags, mode)); 
+                    Db1->Iterate(root, key, tags, mode),
+                    Db2->Iterate(root, key, tags, mode));
     }
 
-    void Apply(const TSchemeChanges &delta) override 
-    { 
-        Db1->Apply(delta); 
-        Db2->Apply(delta); 
-    } 
- 
+    void Apply(const TSchemeChanges &delta) override
+    {
+        Db1->Apply(delta);
+        Db2->Apply(delta);
+    }
+
     bool CompareDBs() {
         bool res = true;
         for (auto& ti : Db1->GetScheme().Tables) {
@@ -290,16 +290,16 @@ private:
             valTags.push_back(ci.first);
         }
 
-        TAutoPtr<ITestIterator> it1 = Db1->Iterate(root, {}, valTags, ELookup::GreaterOrEqualThan); 
-        TAutoPtr<ITestIterator> it2 = Db2->Iterate(root, {}, valTags, ELookup::GreaterOrEqualThan); 
+        TAutoPtr<ITestIterator> it1 = Db1->Iterate(root, {}, valTags, ELookup::GreaterOrEqualThan);
+        TAutoPtr<ITestIterator> it2 = Db2->Iterate(root, {}, valTags, ELookup::GreaterOrEqualThan);
 
-        ui64 errors = 0; 
-        int cmp = 0; 
-        EReady rdy1 = EReady::Gone; 
-        EReady rdy2 = EReady::Gone; 
- 
+        ui64 errors = 0;
+        int cmp = 0;
+        EReady rdy1 = EReady::Gone;
+        EReady rdy2 = EReady::Gone;
+
         while (true) {
-            TDbTupleRef key1, key2, val1, val2; 
+            TDbTupleRef key1, key2, val1, val2;
 
             if ((rdy1 = cmp <= 0 ? it1->Next(ENext::Data) : rdy1) == EReady::Data) {
                 key1 = it1->GetKey();
@@ -311,46 +311,46 @@ private:
                 val2 = it2->GetValues();
             }
 
-            if (rdy1 == rdy2 && rdy2 == EReady::Gone) { 
-                break; 
-            } else if (rdy1 == EReady::Data && rdy2 != EReady::Data) { 
-                cmp = -1; 
-            } else if (rdy1 != EReady::Data && rdy2 == EReady::Data) { 
-                cmp = 1; 
-            } else { 
-                cmp = CmpTupleRefs(key1, key2); 
-            } 
+            if (rdy1 == rdy2 && rdy2 == EReady::Gone) {
+                break;
+            } else if (rdy1 == EReady::Data && rdy2 != EReady::Data) {
+                cmp = -1;
+            } else if (rdy1 != EReady::Data && rdy2 == EReady::Data) {
+                cmp = 1;
+            } else {
+                cmp = CmpTupleRefs(key1, key2);
+            }
 
-            errors += (cmp != 0) ? 1 : 0; 
+            errors += (cmp != 0) ? 1 : 0;
 
-            if (cmp > 0) { 
-                Cerr << "Missing row in DB #1:" << Endl 
-                     << PrintRow(key2) << " : "<< PrintRow(val2) << Endl << Endl; 
-            } else if (cmp < 0) { 
-                Cerr << "Missing row in DB #2:" << Endl 
-                     << PrintRow(key1) << " : "<< PrintRow(val1) << Endl << Endl; 
-            } else if (CmpTupleRefs(val1, val2) != 0) { 
-                errors++; 
-                Cerr << "Different values for key " << PrintRow(key1) << Endl; 
-                Cerr << PrintRow(val1) << Endl 
-                        << PrintRow(val2) << Endl << Endl; 
+            if (cmp > 0) {
+                Cerr << "Missing row in DB #1:" << Endl
+                     << PrintRow(key2) << " : "<< PrintRow(val2) << Endl << Endl;
+            } else if (cmp < 0) {
+                Cerr << "Missing row in DB #2:" << Endl
+                     << PrintRow(key1) << " : "<< PrintRow(val1) << Endl << Endl;
+            } else if (CmpTupleRefs(val1, val2) != 0) {
+                errors++;
+                Cerr << "Different values for key " << PrintRow(key1) << Endl;
+                Cerr << PrintRow(val1) << Endl
+                        << PrintRow(val2) << Endl << Endl;
             }
         }
- 
-        return errors == 0; 
+
+        return errors == 0;
     }
- 
-    static int CmpTupleRefs(const TDbTupleRef &one, const TDbTupleRef &two) { 
-        const auto num = one.ColumnCount; 
- 
-        if (num != two.ColumnCount) { 
-            Y_FAIL("Got different key columns count"); 
-        } else if (!std::equal(one.Types, one.Types + num, two.Types)) { 
-            Y_FAIL("TDbTupleRef rows types vec are not the same"); 
-        } else { 
-            return CompareTypedCellVectors(one.Columns, two.Columns, one.Types, num); 
-        } 
-    } 
+
+    static int CmpTupleRefs(const TDbTupleRef &one, const TDbTupleRef &two) {
+        const auto num = one.ColumnCount;
+
+        if (num != two.ColumnCount) {
+            Y_FAIL("Got different key columns count");
+        } else if (!std::equal(one.Types, one.Types + num, two.Types)) {
+            Y_FAIL("TDbTupleRef rows types vec are not the same");
+        } else {
+            return CompareTypedCellVectors(one.Columns, two.Columns, one.Types, num);
+        }
+    }
 };
 
 } // namspace NTabletFlatExecutor

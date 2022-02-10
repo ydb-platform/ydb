@@ -488,5 +488,5 @@ bool NKikimr::ObtainStaticKey(TEncryptionKey *key) {
 }
 
 IActor* NKikimr::CreateBSNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg) {
-    return new NStorage::TNodeWarden(cfg); 
+    return new NStorage::TNodeWarden(cfg);
 }

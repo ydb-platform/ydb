@@ -15,7 +15,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
 #include <util/generic/stack.h>
-#include <util/generic/queue.h> 
+#include <util/generic/queue.h>
 
 namespace NKikimr {
 namespace NCms {
@@ -429,7 +429,7 @@ private:
 public:
     TCms(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
-        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory) 
+        , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
         , State(new TCmsState)
         , Logger(State)
         , ConfigSubscriptionId(0)

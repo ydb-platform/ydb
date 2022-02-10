@@ -22,10 +22,10 @@ struct TUserTable : public TThrRefBase {
     using TPtr = TIntrusivePtr<TUserTable>;
     using TCPtr = TIntrusiveConstPtr<TUserTable>;
 
-    struct TUserFamily { 
-        using ECodec = NTable::NPage::ECodec; 
-        using ECache = NTable::NPage::ECache; 
- 
+    struct TUserFamily {
+        using ECodec = NTable::NPage::ECodec;
+        using ECache = NTable::NPage::ECache;
+
         TUserFamily(const NKikimrSchemeOp::TFamilyDescription& family)
             : ColumnCodec(family.GetColumnCodec())
             , ColumnCache(family.GetColumnCache())
@@ -38,7 +38,7 @@ struct TUserTable : public TThrRefBase {
             , Name(family.GetName())
         {
         }
- 
+
         void Update(const NKikimrSchemeOp::TFamilyDescription& family) {
             if (family.HasColumnCodec()) {
                 ColumnCodec = family.GetColumnCodec();
@@ -59,7 +59,7 @@ struct TUserTable : public TThrRefBase {
             }
             Room.Reset(new TStorageRoom(family.GetRoom()));
         }
- 
+
         static ui32 SaveGetThreshold(ui32 value) {
             return 0 == value ? Max<ui32>() : value;
         }
@@ -181,8 +181,8 @@ struct TUserTable : public TThrRefBase {
             if (Name)
                 return Name;
             return "default";
-        } 
- 
+        }
+
         ui32 GetRoomId() const {
             return Room->GetId();
         }
@@ -194,7 +194,7 @@ struct TUserTable : public TThrRefBase {
             if (family.HasColumnCodec())
                 return ToDbCodec(family.GetColumnCodec());
             if (family.GetCodec() == 1) // legacy
-                return ECodec::LZ4; 
+                return ECodec::LZ4;
             return ECodec::Plain;
         }
 
@@ -204,7 +204,7 @@ struct TUserTable : public TThrRefBase {
                     return ECodec::Plain;
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecLZ4:
                 case NKikimrSchemeOp::EColumnCodec::ColumnCodecZSTD: // FIXME: not supported
-                    return ECodec::LZ4; 
+                    return ECodec::LZ4;
                 // keep no default
             }
             Y_FAIL("unexpected");
@@ -228,13 +228,13 @@ struct TUserTable : public TThrRefBase {
             }
             Y_FAIL("unexpected");
         }
-    }; 
- 
+    };
+
     struct TUserColumn {
         NScheme::TTypeId Type;
         TString Name;
         bool IsKey;
-        ui32 Family = 0; 
+        ui32 Family = 0;
         bool NotNull = false;
 
         TUserColumn(NScheme::TTypeId type, TString name, bool isKey = false)

@@ -72,7 +72,7 @@ private:
     TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     TIntrusivePtr<ITimeProvider> TimeProvider;
-    NTable::TDatabase DB; 
+    NTable::TDatabase DB;
 };
 
 

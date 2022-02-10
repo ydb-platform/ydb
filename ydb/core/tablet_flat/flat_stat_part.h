@@ -1,8 +1,8 @@
 #pragma once
 
-#include "flat_part_iface.h" 
+#include "flat_part_iface.h"
 #include "flat_part_laid.h"
-#include "flat_page_frames.h" 
+#include "flat_page_frames.h"
 #include "util_basics.h"
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -98,8 +98,8 @@ private:
 class TPartIndexIterator {
 public:
     TPartIndexIterator(TIntrusiveConstPtr<TPart> part, TIntrusiveConstPtr<TKeyNulls> keys)
-        : Part(std::move(part)) 
-        , KeyColumns(std::move(keys)) 
+        : Part(std::move(part))
+        , KeyColumns(std::move(keys))
     {
         Pos = Part->Index->Begin();
         End = Part->Index->End();
@@ -138,10 +138,10 @@ public:
         return TDbTupleRef(KeyColumns->BasicTypes().data(), CurrentKey.data(), CurrentKey.size());
     }
 
-    ui64 GetLastRowId() const { 
-        return LastRowId; 
-    } 
- 
+    ui64 GetLastRowId() const {
+        return LastRowId;
+    }
+
     ui64 GetCurrentRowId() const {
         if (IsValid()) {
             return Pos->GetRowId();
@@ -198,8 +198,8 @@ private:
 private:
     TIntrusiveConstPtr<TPart> Part;
     TIntrusiveConstPtr<TKeyNulls> KeyColumns;
-    NPage::TIndex::TIter Pos; 
-    NPage::TIndex::TIter End; 
+    NPage::TIndex::TIter Pos;
+    NPage::TIndex::TIter End;
     TSmallVec<TCell> CurrentKey;
     ui64 CurrentSize = 0;
     ui64 LastRowId = 0;
@@ -216,7 +216,7 @@ public:
                             TIntrusiveConstPtr<NPage::TFrames> small)
         : PartIter(partView.Part, keyColumns)
         , Screen(std::move(partView.Screen))
-        , Small(std::move(small)) 
+        , Small(std::move(small))
         , CurrentHole(TScreen::Iter(Screen, CurrentHoleIdx, 0, 1))
     {
     }
@@ -284,27 +284,27 @@ private:
         return rowCount;
     }
 
-    ui64 CalcSmallBytes() noexcept { 
-        ui64 bytes = 0; 
- 
-        const auto row = PartIter.GetLastRowId(); 
-        const auto end = PartIter.GetCurrentRowId(); 
- 
-        PrevSmallPage = Small->Lower(row, PrevSmallPage, Max<ui32>()); 
- 
-        while (auto &rel = Small->Relation(PrevSmallPage)) { 
-            if (rel.Row < end) { 
-                bytes += rel.Size, ++PrevSmallPage; 
-            } else if (!rel.IsHead()) { 
-                Y_FAIL("Got unaligned NPage::TFrames head record"); 
-            } else { 
-                break; 
-            } 
-        } 
- 
-        return bytes; 
-    } 
- 
+    ui64 CalcSmallBytes() noexcept {
+        ui64 bytes = 0;
+
+        const auto row = PartIter.GetLastRowId();
+        const auto end = PartIter.GetCurrentRowId();
+
+        PrevSmallPage = Small->Lower(row, PrevSmallPage, Max<ui32>());
+
+        while (auto &rel = Small->Relation(PrevSmallPage)) {
+            if (rel.Row < end) {
+                bytes += rel.Size, ++PrevSmallPage;
+            } else if (!rel.IsHead()) {
+                Y_FAIL("Got unaligned NPage::TFrames head record");
+            } else {
+                break;
+            }
+        }
+
+        return bytes;
+    }
+
 private:
     TPartIndexIterator PartIter;
     TIntrusiveConstPtr<TScreen> Screen;
@@ -315,7 +315,7 @@ private:
     ui64 PrevRowCount = 0;
     ui64 CurrentSize = 0;
     ui64 PrevSize = 0;
-    ui32 PrevSmallPage = 0; 
+    ui32 PrevSmallPage = 0;
 };
 
 }}

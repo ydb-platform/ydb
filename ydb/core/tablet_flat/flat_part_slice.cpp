@@ -1,5 +1,5 @@
 #include "flat_part_slice.h"
-#include "util_fmt_desc.h" 
+#include "util_fmt_desc.h"
 
 #include <ydb/core/util/yverify_stream.h>
 

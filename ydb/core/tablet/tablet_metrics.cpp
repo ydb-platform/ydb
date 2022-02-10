@@ -15,7 +15,7 @@ ui64 TDecayingAverageWithSum::GetRawValue() const
     return RawValue;
 }
 
-void TResourceMetricsValues::Fill(NKikimrTabletBase::TMetrics& metrics) const { 
+void TResourceMetricsValues::Fill(NKikimrTabletBase::TMetrics& metrics) const {
     if (CPU.IsValueReady()) {
         metrics.SetCPU(CPU.GetValue());
     }

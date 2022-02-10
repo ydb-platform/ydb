@@ -26,10 +26,10 @@ class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBloc
         SendToBSProxy(TlsActivationContext->AsActorContext(), proxy, event.Release());
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr&) { 
+    void Handle(TEvents::TEvUndelivered::TPtr&) {
         return ReplyAndDie(NKikimrProto::ERROR, "BlobStorage proxy unavailable");
-    } 
- 
+    }
+
     void Handle(TEvBlobStorage::TEvBlockResult::TPtr &ev) {
         const TEvBlobStorage::TEvBlockResult *msg = ev->Get();
 
@@ -55,7 +55,7 @@ class TTabletReqBlockBlobStorageGroup : public TActorBootstrapped<TTabletReqBloc
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvBlockResult, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
-            hFunc(TEvents::TEvUndelivered, Handle); 
+            hFunc(TEvents::TEvUndelivered, Handle);
         }
     }
 

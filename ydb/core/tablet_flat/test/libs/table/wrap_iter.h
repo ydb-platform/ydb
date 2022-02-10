@@ -1,26 +1,26 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/core/tablet_flat/flat_table_subset.h>
 #include <ydb/core/tablet_flat/flat_iterator.h>
 #include <ydb/core/tablet_flat/flat_row_scheme.h>
- 
-namespace NKikimr { 
-namespace NTable { 
-namespace NTest { 
- 
+
+namespace NKikimr {
+namespace NTable {
+namespace NTest {
+
     template<class TIter>
     struct TWrapIterImpl {
-        using TFrozen = decltype(TSubset::Frozen); 
-        using TFlatten = decltype(TSubset::Flatten); 
- 
+        using TFrozen = decltype(TSubset::Frozen);
+        using TFlatten = decltype(TSubset::Flatten);
+
         TWrapIterImpl(const TSubset &subset, TRowVersion snapshot = TRowVersion::Max())
-            : Scheme(subset.Scheme) 
-            , Nulls(Scheme->Keys) 
-            , Frozen(subset.Frozen) 
-            , Flatten(subset.Flatten) 
+            : Scheme(subset.Scheme)
+            , Nulls(Scheme->Keys)
+            , Frozen(subset.Frozen)
+            , Flatten(subset.Flatten)
             , Snapshot(snapshot)
             , Levels(Scheme->Keys)
-        { 
+        {
             TVector<const TPartView*> parts;
             parts.reserve(Flatten.size());
             for (auto &partView: Flatten) {
@@ -36,44 +36,44 @@ namespace NTest {
             for (auto *p: parts) {
                 Levels.Add(p->Part, p->Slices);
             }
-        } 
- 
-        explicit operator bool() const noexcept 
-        { 
-            return Iter && Iter->Last() == EReady::Data; 
-        } 
- 
+        }
+
+        explicit operator bool() const noexcept
+        {
+            return Iter && Iter->Last() == EReady::Data;
+        }
+
         TIter* Get() const noexcept
-        { 
-            return Iter.Get(); 
-        } 
- 
-        const TRemap& Remap() const noexcept 
-        { 
-            return Iter->Remap; 
-        } 
- 
-        void Make(IPages *env) noexcept 
-        { 
-            Iter = nullptr, Env = env; /* Have to make on each Seek(...) */ 
-        } 
- 
-        EReady Seek(TRawVals key_, ESeek seek) noexcept 
-        { 
-            const TCelled key(key_, *Scheme->Keys, false); 
- 
-            ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>(); 
- 
+        {
+            return Iter.Get();
+        }
+
+        const TRemap& Remap() const noexcept
+        {
+            return Iter->Remap;
+        }
+
+        void Make(IPages *env) noexcept
+        {
+            Iter = nullptr, Env = env; /* Have to make on each Seek(...) */
+        }
+
+        EReady Seek(TRawVals key_, ESeek seek) noexcept
+        {
+            const TCelled key(key_, *Scheme->Keys, false);
+
+            ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
+
             Iter = new TIter(&*Scheme, Scheme->Tags(), limit, Snapshot);
- 
-            for (auto &mem: Frozen) 
-                Iter->Push( 
+
+            for (auto &mem: Frozen)
+                Iter->Push(
                     TMemIt::Make(*mem, mem.Snapshot, key, seek, Nulls, &Iter->Remap, Env,
                         TIter::Direction));
- 
+
             for (auto &run: Levels) {
                 auto one = MakeHolder<TRunIt>(run, Remap().Tags, Nulls, Env);
- 
+
                 EReady status;
                 if constexpr (TIter::Direction == EDirection::Reverse) {
                     status = one->SeekReverse(key, seek);
@@ -83,37 +83,37 @@ namespace NTest {
 
                 if (status != EReady::Gone)
                     Iter->Push(std::move(one));
-            } 
- 
+            }
+
             return Iter->Next(ENext::All);
-        } 
- 
-        EReady Next() noexcept 
-        { 
+        }
+
+        EReady Next() noexcept
+        {
             return Iter->Next(ENext::All);
-        } 
- 
-        const TRowState& Apply() noexcept 
-        { 
-            return Iter->Row(); 
-        } 
- 
-    public: 
+        }
+
+        const TRowState& Apply() noexcept
+        {
+            return Iter->Row();
+        }
+
+    public:
         const TIntrusiveConstPtr<TRowScheme> Scheme;
         const TIntrusiveConstPtr<TKeyNulls> Nulls;
-        const TFrozen Frozen; 
-        const TFlatten Flatten; 
+        const TFrozen Frozen;
+        const TFlatten Flatten;
         const TRowVersion Snapshot;
- 
-    private: 
-        IPages *Env = nullptr; 
+
+    private:
+        IPages *Env = nullptr;
         TLevels Levels;
         TAutoPtr<TIter> Iter;
-    }; 
- 
+    };
+
     using TWrapIter = TWrapIterImpl<TTableIt>;
     using TWrapReverseIter = TWrapIterImpl<TTableReverseIt>;
 
-} 
-} 
-} 
+}
+}
+}

@@ -1,9 +1,9 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(g:kikimr)
- 
-PEERDIR( 
+
+PEERDIR(
     ydb/core/tablet_flat/test/libs/rows
-) 
- 
-END() 
+)
+
+END()

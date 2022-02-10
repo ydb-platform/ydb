@@ -26,7 +26,7 @@ namespace NKikimr {
 
         TFakeCoordinator(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state)
             : TActor<TFakeCoordinator>(&TFakeCoordinator::StateInit)
-            , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory) 
+            , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
             , State(state)
             , Pipes(NTabletPipe::CreateUnboundedClientCache(GetPipeClientConfig()))
         {

@@ -1,27 +1,27 @@
-#pragma once 
- 
-#include "flat_scan_iface.h" 
-#include "flat_scan_spent.h" 
-#include "flat_bio_events.h" 
-#include "flat_writer_bundle.h" 
-#include "flat_sausage_chop.h" 
-#include "flat_row_misc.h" 
-#include "flat_part_writer.h" 
-#include "flat_part_loader.h" 
+#pragma once
+
+#include "flat_scan_iface.h"
+#include "flat_scan_spent.h"
+#include "flat_bio_events.h"
+#include "flat_writer_bundle.h"
+#include "flat_sausage_chop.h"
+#include "flat_row_misc.h"
+#include "flat_part_writer.h"
+#include "flat_part_loader.h"
 #include "flat_part_slice.h"
-#include "util_fmt_logger.h" 
-#include "util_fmt_desc.h" 
+#include "util_fmt_logger.h"
+#include "util_fmt_desc.h"
 #include "util_basics.h"
- 
+
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/appdata.h>
 #include <library/cpp/actors/core/actor.h>
- 
+
 #include <bitset>
 
-namespace NKikimr { 
-namespace NTabletFlatExecutor { 
- 
+namespace NKikimr {
+namespace NTabletFlatExecutor {
+
     struct TProdCompact: public IDestructable {
         struct TResult {
             NTable::TPartView Part;
@@ -34,124 +34,124 @@ namespace NTabletFlatExecutor {
                 TVector<ui32>&& yellowMoveChannels,
                 TVector<ui32>&& yellowStopChannels)
             : Success(ok)
-            , Step(step) 
+            , Step(step)
             , Params(std::move(params))
             , YellowMoveChannels(std::move(yellowMoveChannels))
             , YellowStopChannels(std::move(yellowStopChannels))
-        { 
- 
-        } 
- 
-        bool Success = false; 
-        ui32 Step = Max<ui32>(); 
+        {
+
+        }
+
+        bool Success = false;
+        ui32 Step = Max<ui32>();
         TResults Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
         THolder<NTable::TCompactionParams> Params;
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
-    }; 
- 
+    };
+
     class TOpsCompact: private ::NActors::IActor, public NTable::IVersionScan {
-        using TEvPut = TEvBlobStorage::TEvPut; 
+        using TEvPut = TEvBlobStorage::TEvPut;
         using TEvPutResult = TEvBlobStorage::TEvPutResult;
-        using TScheme = NTable::TRowScheme; 
-        using TWriter = NTable::TPartWriter; 
-        using TBundle = NWriter::TBundle; 
-        using TStorage = TIntrusivePtr<TTabletStorageInfo>; 
+        using TScheme = NTable::TRowScheme;
+        using TWriter = NTable::TPartWriter;
+        using TBundle = NWriter::TBundle;
+        using TStorage = TIntrusivePtr<TTabletStorageInfo>;
         using TEventHandlePtr = TAutoPtr<::NActors::IEventHandle>;
-        using ELnLev = NUtil::ELnLev; 
- 
-    public: 
-        constexpr static ui64 MaxFlight = 20ll * (1ll << 20); 
- 
+        using ELnLev = NUtil::ELnLev;
+
+    public:
+        constexpr static ui64 MaxFlight = 20ll * (1ll << 20);
+
         TOpsCompact(TActorId owner, TLogoBlobID mask, TAutoPtr<TCompactCfg> conf)
             : ::NActors::IActor(static_cast<TReceiveFunc>(&TOpsCompact::Inbox), NKikimrServices::TActivity::OPS_COMPACT_A)
-            , Mask(mask) 
-            , Owner(owner) 
+            , Mask(mask)
+            , Owner(owner)
             , Conf(std::move(conf))
-            , Bundle(new TBundle(Mask, Conf->Writer)) 
-        { 
-        } 
- 
-        ~TOpsCompact() 
-        { 
-            // Y_VERIFY(!Driver, "TOpsCompact is still running under scan"); 
-        } 
- 
-        void Describe(IOutputStream &out) const noexcept override 
-        { 
-            out 
+            , Bundle(new TBundle(Mask, Conf->Writer))
+        {
+        }
+
+        ~TOpsCompact()
+        {
+            // Y_VERIFY(!Driver, "TOpsCompact is still running under scan");
+        }
+
+        void Describe(IOutputStream &out) const noexcept override
+        {
+            out
                 << "Compact{" << Mask.TabletID()
-                << "." << Mask.Generation() 
-                << "." << Mask.Step() 
-                << ", eph " << Conf->Epoch 
-                << "}"; 
-        } 
- 
-    private: 
+                << "." << Mask.Generation()
+                << "." << Mask.Step()
+                << ", eph " << Conf->Epoch
+                << "}";
+        }
+
+    private:
         void Registered(TActorSystem *sys, const TActorId&) override
-        { 
-            Logger = new NUtil::TLogger(sys, NKikimrServices::OPS_COMPACT); 
-        } 
- 
+        {
+            Logger = new NUtil::TLogger(sys, NKikimrServices::OPS_COMPACT);
+        }
+
         THello Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
-        { 
+        {
             TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
- 
-            Spent = new TSpent(TAppData::TimeProvider.Get()); 
-            Registry = AppData()->TypeRegistry; 
-            Scheme = std::move(scheme); 
-            Driver = driver; 
- 
+
+            Spent = new TSpent(TAppData::TimeProvider.Get());
+            Registry = AppData()->TypeRegistry;
+            Scheme = std::move(scheme);
+            Driver = driver;
+
             NTable::IScan::TConf conf;
- 
-            conf.NoErased = false; /* emit erase markers */ 
-            conf.LargeEdge = Conf->Layout.LargeEdge; 
- 
-            return { EScan::Feed, conf }; 
-        } 
- 
-        EScan Seek(TLead &lead, ui64 seq) noexcept override 
-        { 
-            if (seq == 0) /* on first Seek() init compaction */ { 
+
+            conf.NoErased = false; /* emit erase markers */
+            conf.LargeEdge = Conf->Layout.LargeEdge;
+
+            return { EScan::Feed, conf };
+        }
+
+        EScan Seek(TLead &lead, ui64 seq) noexcept override
+        {
+            if (seq == 0) /* on first Seek() init compaction */ {
                 Y_VERIFY(!Writer, "Initial IScan::Seek(...) called twice");
- 
-                const auto tags = Scheme->Tags(); 
- 
-                lead.To(tags, { }, NTable::ESeek::Lower); 
- 
-                auto *scheme = new NTable::TPartScheme(Scheme->Cols); 
- 
+
+                const auto tags = Scheme->Tags();
+
+                lead.To(tags, { }, NTable::ESeek::Lower);
+
+                auto *scheme = new NTable::TPartScheme(Scheme->Cols);
+
                 Writer = new TWriter(scheme, tags, *Bundle, Conf->Layout, Conf->Epoch);
- 
-                return EScan::Feed; 
- 
-            } else if (seq == 1) /* after the end(), stop compaction */ { 
+
+                return EScan::Feed;
+
+            } else if (seq == 1) /* after the end(), stop compaction */ {
                 if (!Finished) {
                     Stat = Writer->Finish();
                     Results = Bundle->Results();
                     Y_VERIFY(Stat.Parts == Results.size());
                     WriteTxStatus();
                     Finished = true;
-                } 
- 
-                return Flush(true /* final flush, sleep or finish */); 
-            } else { 
-                Y_FAIL("Compaction scan op should get only two Seeks()"); 
-            } 
-        } 
- 
+                }
+
+                return Flush(true /* final flush, sleep or finish */);
+            } else {
+                Y_FAIL("Compaction scan op should get only two Seeks()");
+            }
+        }
+
         EScan BeginKey(TArrayRef<const TCell> key) noexcept override
-        { 
+        {
             Writer->BeginKey(key);
- 
-            if (auto logl = Logger->Log(ELnLev::Dbg03)) { 
-                logl 
+
+            if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+                logl
                     << NFmt::Do(*this) << " begin key { "
                     << NFmt::TCells(key, *Scheme->Keys, Registry)
                     << "}";
             }
- 
+
             return Flush(false /* intermediate, sleep or feed */);
         }
 
@@ -224,19 +224,19 @@ namespace NTabletFlatExecutor {
                 logl << NFmt::Do(*this) << " feed row { ";
 
                 if (row.GetRowState() == NTable::ERowOp::Erase) {
-                    logl << "erased"; 
-                } else { 
-                    logl << NFmt::TCells(*row, *Scheme->Nulls, Registry); 
-                } 
- 
+                    logl << "erased";
+                } else {
+                    logl << NFmt::TCells(*row, *Scheme->Nulls, Registry);
+                }
+
                 logl << " at " << rowVersion << " }";
             }
- 
+
             Writer->AddKeyVersion(row, rowVersion);
 
-            return Flush(false /* intermediate, sleep or feed */); 
-        } 
- 
+            return Flush(false /* intermediate, sleep or feed */);
+        }
+
         EScan EndKey() noexcept override
         {
             ui32 written = Writer->EndKey();
@@ -300,12 +300,12 @@ namespace NTabletFlatExecutor {
         }
 
         TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
-        { 
+        {
             const auto fail = Failed || !Finished || abort != EAbort::None;
- 
+
             auto *prod = new TProdCompact(!fail, Mask.Step(), std::move(Conf->Params),
                     std::move(YellowMoveChannels), std::move(YellowStopChannels));
- 
+
             for (auto &result : Results) {
                 Y_VERIFY(result.PageCollections, "Compaction produced a part without page collections");
 
@@ -313,43 +313,43 @@ namespace NTabletFlatExecutor {
                     std::move(result.PageCollections),
                     { },
                     std::move(result.Overlay));
- 
+
                 auto fetch = loader.Run();
- 
+
                 Y_VERIFY(!fetch, "Just compacted part needs to load some pages");
- 
+
                 auto& res = prod->Results.emplace_back();
                 res.Part = loader.Result();
                 res.Growth = std::move(result.Growth);
                 Y_VERIFY(res.Part, "Unexpected result without a part after compaction");
-            } 
- 
+            }
+
             prod->TxStatus = std::move(TxStatus);
 
-            if (auto logl = Logger->Log(fail ? ELnLev::Error : ELnLev::Info)) { 
-                auto raito = Stat.Bytes ? (Stat.Coded + 0.) / Stat.Bytes : 0.; 
- 
-                logl 
-                    << NFmt::Do(*this) << " end=" << ui32(abort) 
-                    << ", " << Blobs << "blobs " << Stat.Rows << "r" 
-                    << " (max " << Conf->Layout.MaxRows << ")" 
-                    << ", put " << NFmt::If(Spent.Get()); 
- 
+            if (auto logl = Logger->Log(fail ? ELnLev::Error : ELnLev::Info)) {
+                auto raito = Stat.Bytes ? (Stat.Coded + 0.) / Stat.Bytes : 0.;
+
+                logl
+                    << NFmt::Do(*this) << " end=" << ui32(abort)
+                    << ", " << Blobs << "blobs " << Stat.Rows << "r"
+                    << " (max " << Conf->Layout.MaxRows << ")"
+                    << ", put " << NFmt::If(Spent.Get());
+
                 for (const auto &result : prod->Results) {
                     if (auto *part = result.Part.As<NTable::TPartStore>()) {
                         auto lobs = part->Blobs ? part->Blobs->Total() : 0;
                         auto small = part->Small ? part->Small->Stats().Size : 0;
                         auto large = part->Large ? part->Large->Stats().Size : 0;
                         auto grow = NTable::TScreen::Sum(result.Growth);
- 
+
                         logl
                             << " Part{ " << part->PageCollections.size() << " pk"
                             << ", lobs " << (lobs - grow) << " +" << grow
-                            << ", (" << part->DataSize() 
+                            << ", (" << part->DataSize()
                                 << " " << small << " " << large <<")b"
                             << " }";
                     }
-                } 
+                }
 
                 if (prod->Results) {
                     logl << ", ecr=" << Sprintf("%.3f", raito);
@@ -358,72 +358,72 @@ namespace NTabletFlatExecutor {
                 for (const auto &txStatus : prod->TxStatus) {
                     logl << " TxStatus{ " << txStatus->Label << " }";
                 }
-            } 
- 
-            if (fail) { 
+            }
+
+            if (fail) {
                 prod->Results.clear(); /* shouldn't sent w/o fixation in bs */
             } else if (bool(prod->Results) != bool(Stat.Rows > 0)) {
-                Y_FAIL("Unexpexced rows production result after compaction"); 
+                Y_FAIL("Unexpexced rows production result after compaction");
             } else if ((bool(prod->Results) || bool(prod->TxStatus)) != bool(Blobs > 0)) {
-                Y_FAIL("Unexpexced blobs production result after compaction"); 
-            } 
- 
-            Driver = nullptr; 
- 
-            PassAway(); 
- 
-            return prod; 
-        } 
- 
-        EScan Flush(bool last) noexcept 
-        { 
+                Y_FAIL("Unexpexced blobs production result after compaction");
+            }
+
+            Driver = nullptr;
+
+            PassAway();
+
+            return prod;
+        }
+
+        EScan Flush(bool last) noexcept
+        {
             for (NPageCollection::TGlob& one : Bundle->GetBlobsToSave())
                 FlushToBs(std::move(one));
- 
-            EScan scan = EScan::Sleep; 
- 
-            if (last) { 
-                scan = (Flushing > 0 ? EScan::Sleep : EScan::Final); 
-            } else { 
-                scan = (Flushing >= MaxFlight ? EScan::Sleep : EScan::Feed); 
-            } 
- 
-            Spent->Alter(scan != EScan::Sleep); 
- 
-            return scan; 
-        } 
- 
+
+            EScan scan = EScan::Sleep;
+
+            if (last) {
+                scan = (Flushing > 0 ? EScan::Sleep : EScan::Final);
+            } else {
+                scan = (Flushing >= MaxFlight ? EScan::Sleep : EScan::Feed);
+            }
+
+            Spent->Alter(scan != EScan::Sleep);
+
+            return scan;
+        }
+
         void Inbox(TEventHandlePtr &eh, const ::NActors::TActorContext&)
-        { 
+        {
             if (auto *ev = eh->CastAsLocal<TEvPutResult>()) {
-                Handle(*ev); 
-            } else if (eh->CastAsLocal<TEvents::TEvUndelivered>()) { 
-                if (auto logl = Logger->Log(ELnLev::Error)) { 
-                    logl 
-                        << NFmt::Do(*this) << " cannot send put event to BS"; 
-                } 
- 
-                if (!std::exchange(Failed, true)) 
-                    Driver->Touch(EScan::Final); 
-            } else { 
-                Y_FAIL("Compaction actor got an unexpected event"); 
-            } 
-        } 
- 
+                Handle(*ev);
+            } else if (eh->CastAsLocal<TEvents::TEvUndelivered>()) {
+                if (auto logl = Logger->Log(ELnLev::Error)) {
+                    logl
+                        << NFmt::Do(*this) << " cannot send put event to BS";
+                }
+
+                if (!std::exchange(Failed, true))
+                    Driver->Touch(EScan::Final);
+            } else {
+                Y_FAIL("Compaction actor got an unexpected event");
+            }
+        }
+
         void Handle(TEvPutResult &msg) noexcept
-        { 
+        {
             if (!NPageCollection::TGroupBlobsByCookie::IsInPlane(msg.Id, Mask)) {
-                Y_FAIL("TEvPutResult Id mask is differ from used"); 
+                Y_FAIL("TEvPutResult Id mask is differ from used");
             } else if (Writing < msg.Id.BlobSize()) {
                 Y_FAIL("Compaction writing bytes counter is out of sync");
-            } else if (Flushing < msg.Id.BlobSize()) { 
-                Y_FAIL("Compaction flushing bytes counter is out of sync"); 
-            } 
- 
+            } else if (Flushing < msg.Id.BlobSize()) {
+                Y_FAIL("Compaction flushing bytes counter is out of sync");
+            }
+
             Writing -= msg.Id.BlobSize();
-            Flushing -= msg.Id.BlobSize(); 
- 
- 
+            Flushing -= msg.Id.BlobSize();
+
+
             if (msg.StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove)) {
                 const ui32 channel = msg.Id.Channel();
                 Y_VERIFY_DEBUG(channel < 256);
@@ -440,7 +440,7 @@ namespace NTabletFlatExecutor {
                     YellowStopChannels.push_back(channel);
                 }
             }
- 
+
             const auto ok = (msg.Status == NKikimrProto::OK);
 
             if (auto logl = Logger->Log(ok ? ELnLev::Debug: ELnLev::Error)) {
@@ -452,9 +452,9 @@ namespace NTabletFlatExecutor {
                     << " left " << Flushing << "b";
             }
 
-            if (ok) { 
+            if (ok) {
                 Send(Owner, new NBlockIO::TEvStat(NBlockIO::EDir::Write, NBlockIO::EPriority::Bulk, msg.GroupId, msg.Id));
- 
+
                 while (!WriteQueue.empty() && Writing < MaxFlight) {
                     SendToBs(std::move(WriteQueue.front()));
                     WriteQueue.pop_front();
@@ -462,23 +462,23 @@ namespace NTabletFlatExecutor {
 
                 Y_VERIFY_DEBUG(Flushing == 0 || Writing > 0, "Unexpected: Flushing > 0 and Writing == 0");
 
-                if (Flushing == 0) { 
-                    Spent->Alter(true /* resource available again */); 
+                if (Flushing == 0) {
+                    Spent->Alter(true /* resource available again */);
                     Driver->Touch(Finished ? EScan::Final : EScan::Feed);
-                } 
-            } else if (!std::exchange(Failed, true)) { 
-                Driver->Touch(EScan::Final); 
-            } 
-        } 
- 
+                }
+            } else if (!std::exchange(Failed, true)) {
+                Driver->Touch(EScan::Final);
+            }
+        }
+
         void FlushToBs(NPageCollection::TGlob&& glob) noexcept
-        { 
+        {
             Y_VERIFY(glob.GId.Logo.BlobSize() == glob.Data.size(),
                 "Written LogoBlob size doesn't match id");
- 
+
             Flushing += glob.GId.Logo.BlobSize();
-            Blobs++; 
- 
+            Blobs++;
+
             if (Writing < MaxFlight && WriteQueue.empty()) {
                 SendToBs(std::move(glob));
             } else {
@@ -494,26 +494,26 @@ namespace NTabletFlatExecutor {
             Writing += id.Logo.BlobSize();
             Y_VERIFY_DEBUG(Writing <= Flushing, "Unexpected: Writing > Flushing");
 
-            if (auto logl = Logger->Log(ELnLev::Debug)) { 
-                logl 
-                    << NFmt::Do(*this) 
+            if (auto logl = Logger->Log(ELnLev::Debug)) {
+                logl
+                    << NFmt::Do(*this)
                     << " saving " << id.Logo.ToString()
-                    << " left " << Flushing << "b"; 
-            } 
- 
-            auto flag = NKikimrBlobStorage::AsyncBlob; 
+                    << " left " << Flushing << "b";
+            }
+
+            auto flag = NKikimrBlobStorage::AsyncBlob;
             auto *ev = new TEvPut(id.Logo, std::exchange(glob.Data, TString{ }), TInstant::Max(), flag,
                 TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput);
-            auto ctx = TActivationContext::ActorContextFor(SelfId()); 
- 
+            auto ctx = TActivationContext::ActorContextFor(SelfId());
+
             SendToBSProxy(ctx, id.Group, ev);
-        } 
- 
-    private: 
-        const TLogoBlobID Mask; 
+        }
+
+    private:
+        const TLogoBlobID Mask;
         const TActorId Owner;
         TAutoPtr<NUtil::ILogger> Logger;
-        IDriver * Driver = nullptr; 
+        IDriver * Driver = nullptr;
         THolder<TCompactCfg> Conf;
         TIntrusiveConstPtr<TScheme> Scheme;
         TAutoPtr<TBundle> Bundle;
@@ -521,12 +521,12 @@ namespace NTabletFlatExecutor {
         NTable::TWritten Stat;
         TVector<TBundle::TResult> Results;
         TVector<TIntrusiveConstPtr<NTable::TTxStatusPart>> TxStatus;
-        const NScheme::TTypeRegistry * Registry = nullptr; 
- 
+        const NScheme::TTypeRegistry * Registry = nullptr;
+
         bool Finished = false;
-        bool Failed = false;/* Failed to write blobs    */ 
+        bool Failed = false;/* Failed to write blobs    */
         TAutoPtr<TSpent> Spent; /* Blockage on write stats  */
-        ui64 Blobs = 0;     /* Blobs produced by writer */ 
+        ui64 Blobs = 0;     /* Blobs produced by writer */
         ui64 Writing = 0;   /* Bytes flying to storage  */
         ui64 Flushing = 0;  /* Bytes flushing to storage */
 
@@ -538,6 +538,6 @@ namespace NTabletFlatExecutor {
 
         THashMap<ui64, TRow> Deltas;
         TSmallVec<ui64> DeltasOrder;
-    }; 
-} 
-} 
+    };
+}
+}

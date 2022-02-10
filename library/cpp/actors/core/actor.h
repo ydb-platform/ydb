@@ -6,7 +6,7 @@
 #include <library/cpp/actors/util/local_process_key.h>
 
 namespace NActors {
-    class TActorSystem; 
+    class TActorSystem;
     class TMailboxTable;
     struct TMailboxHeader;
 
@@ -169,11 +169,11 @@ namespace NActors {
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
     };
 
-    class IActor; 
- 
-    class IActorOps : TNonCopyable { 
+    class IActor;
+
+    class IActorOps : TNonCopyable {
     public:
-        virtual void Describe(IOutputStream&) const noexcept = 0; 
+        virtual void Describe(IOutputStream&) const noexcept = 0;
         virtual bool Send(const TActorId& recipient, IEventBase*, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept = 0;
 
         /**
@@ -205,12 +205,12 @@ namespace NActors {
 
         virtual TActorId Register(IActor*, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const noexcept = 0;
         virtual TActorId RegisterWithSameMailbox(IActor*) const noexcept = 0;
-    }; 
- 
+    };
+
     class TDecorator;
 
-    class IActor : protected IActorOps { 
-    public: 
+    class IActor : protected IActorOps {
+    public:
         typedef void (IActor::*TReceiveFunc)(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx);
 
     private:
@@ -324,7 +324,7 @@ namespace NActors {
         }
 
         virtual void Registered(TActorSystem* sys, const TActorId& owner);
- 
+
         virtual TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parentId) {
             Y_UNUSED(self);
             Y_UNUSED(parentId);
@@ -349,7 +349,7 @@ namespace NActors {
         }
 
     protected:
-        void Describe(IOutputStream&) const noexcept override; 
+        void Describe(IOutputStream&) const noexcept override;
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
         template <typename TEvent>
         bool Send(const TActorId& recipient, THolder<TEvent> ev, ui32 flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{
@@ -363,7 +363,7 @@ namespace NActors {
 
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
         void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
-        void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final; 
+        void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
 
         // register new actor in ActorSystem on new fresh mailbox.
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 poolId = Max<ui32>()) const noexcept final;

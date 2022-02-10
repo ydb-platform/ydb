@@ -39,8 +39,8 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
 
     void Handle(TEvents::TEvUndelivered::TPtr&) {
         return ReplyAndDie(NKikimrProto::ERROR, "BlobStorage proxy unavailable");
-    } 
- 
+    }
+
     void Handle(TEvBlobStorage::TEvDiscoverResult::TPtr &ev) {
         TEvBlobStorage::TEvDiscoverResult *msg = ev->Get();
 

@@ -1,20 +1,20 @@
 #pragma once
- 
+
 #include "defs.h"
-#include "flat_part_scheme.h" 
-#include "flat_page_index.h" 
-#include "flat_page_data.h" 
-#include "flat_page_blobs.h" 
-#include "flat_page_frames.h" 
-#include "flat_page_bloom.h" 
+#include "flat_part_scheme.h"
+#include "flat_page_index.h"
+#include "flat_page_data.h"
+#include "flat_page_blobs.h"
+#include "flat_page_frames.h"
+#include "flat_page_bloom.h"
 #include "flat_page_gstat.h"
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
 #include "util_basics.h"
 
 namespace NKikimr {
-namespace NTable { 
-    struct IPages; 
+namespace NTable {
+    struct IPages;
 
     /**
      * Cold parts are parts that don't have any metadata loaded into memory,
@@ -40,14 +40,14 @@ namespace NTable {
         const TEpoch Epoch;
     };
 
-    class TPart : public virtual TThrRefBase { 
-    public: 
-        enum ELimits : ui32 { 
-            Trace = 2, /* how many last data pages to keep while seq scans */ 
-        }; 
- 
-        struct TEgg { 
-            TEpoch Epoch; 
+    class TPart : public virtual TThrRefBase {
+    public:
+        enum ELimits : ui32 {
+            Trace = 2, /* how many last data pages to keep while seq scans */
+        };
+
+        struct TEgg {
+            TEpoch Epoch;
             TIntrusiveConstPtr<TPartScheme> Scheme;
             TSharedData Index;
             TIntrusiveConstPtr<NPage::TExtBlobs> Blobs;
@@ -60,68 +60,68 @@ namespace NTable {
             TRowVersion MaxRowVersion;
             TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
             TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats;
-        }; 
- 
-        struct TStat { 
-            ui64 Bytes;     /* Part raw data (unencoded) bytes  */ 
-            ui64 Coded;     /* Encoded data pages in part bytes */ 
+        };
+
+        struct TStat {
+            ui64 Bytes;     /* Part raw data (unencoded) bytes  */
+            ui64 Coded;     /* Encoded data pages in part bytes */
             ui64 Drops;     /* Total rows with ERowOp::Erase code */
-            ui64 Rows;      /* Total rows count in the TPart    */ 
+            ui64 Rows;      /* Total rows count in the TPart    */
             ui64 HiddenRows; /* Hidden (non-main) total rows */
             ui64 HiddenDrops; /* Hidden (non-main) rows with ERowOp::Erase */
-        }; 
- 
-        TPart(const TLogoBlobID &label, TEgg egg, TStat stat) 
-            : Label(label) 
-            , Epoch(egg.Epoch) 
-            , Scheme(std::move(egg.Scheme)) 
-            , Blobs(std::move(egg.Blobs)) 
-            , Large(std::move(egg.Large)) 
-            , Small(std::move(egg.Small)) 
-            , Index(std::move(egg.Index)) 
+        };
+
+        TPart(const TLogoBlobID &label, TEgg egg, TStat stat)
+            : Label(label)
+            , Epoch(egg.Epoch)
+            , Scheme(std::move(egg.Scheme))
+            , Blobs(std::move(egg.Blobs))
+            , Large(std::move(egg.Large))
+            , Small(std::move(egg.Small))
+            , Index(std::move(egg.Index))
             , GroupIndexes(
                 std::make_move_iterator(egg.GroupIndexes.begin()),
                 std::make_move_iterator(egg.GroupIndexes.end()))
             , HistoricIndexes(
                 std::make_move_iterator(egg.HistoricIndexes.begin()),
                 std::make_move_iterator(egg.HistoricIndexes.end()))
-            , ByKey(std::move(egg.ByKey)) 
+            , ByKey(std::move(egg.ByKey))
             , GarbageStats(std::move(egg.GarbageStats))
             , TxIdStats(std::move(egg.TxIdStats))
-            , Stat(stat) 
+            , Stat(stat)
             , Groups(1 + GroupIndexes.size())
             , IndexesRawSize(Index.RawSize() + SumRawSize(GroupIndexes))
             , MinRowVersion(egg.MinRowVersion)
             , MaxRowVersion(egg.MaxRowVersion)
-        { 
+        {
             Y_VERIFY(Scheme->Groups.size() == Groups,
                 "Part has scheme with %" PRISZT " groups, but %" PRISZT " indexes",
                 Scheme->Groups.size(), Groups);
             Y_VERIFY(HistoricIndexes.empty() || HistoricIndexes.size() == Groups,
                 "Part has %" PRISZT " indexes, but %" PRISZT " historic indexes",
                 Groups, HistoricIndexes.size());
-        } 
+        }
 
-        virtual ~TPart() = default; 
+        virtual ~TPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept 
-        { 
-            out 
-                << "Part{" << Label << " eph " << Epoch << ", " 
-                << Stat.Coded << "b " << Stat.Rows << "r}"; 
-        } 
- 
-        bool MightHaveKey(TStringBuf serializedKey) const 
-        { 
-            return ByKey ? ByKey->MightHave(serializedKey) : true; 
-        } 
- 
+        void Describe(IOutputStream &out) const noexcept
+        {
+            out
+                << "Part{" << Label << " eph " << Epoch << ", "
+                << Stat.Coded << "b " << Stat.Rows << "r}";
+        }
+
+        bool MightHaveKey(TStringBuf serializedKey) const
+        {
+            return ByKey ? ByKey->MightHave(serializedKey) : true;
+        }
+
         /**
          * Returns a cloned part with Epoch changed to the specified epoch
          */
         virtual TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const = 0;
 
-        virtual ui64 DataSize() const = 0; 
+        virtual ui64 DataSize() const = 0;
         virtual ui64 BackingSize() const = 0;
         virtual ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId = { }) const = 0;
 
@@ -173,25 +173,25 @@ namespace NTable {
             return ret;
         }
 
-    public: 
-        const TLogoBlobID Label; 
+    public:
+        const TLogoBlobID Label;
         const TEpoch Epoch;
         const TIntrusiveConstPtr<TPartScheme> Scheme;
         const TIntrusiveConstPtr<NPage::TExtBlobs> Blobs;
         const TIntrusiveConstPtr<NPage::TFrames> Large;
         const TIntrusiveConstPtr<NPage::TFrames> Small;
-        const NPage::TIndex Index; 
+        const NPage::TIndex Index;
         const TVector<NPage::TIndex> GroupIndexes;
         const TVector<NPage::TIndex> HistoricIndexes;
         const TIntrusiveConstPtr<NPage::TBloom> ByKey;
         const TIntrusiveConstPtr<NPage::TGarbageStats> GarbageStats;
         const TIntrusiveConstPtr<NPage::TTxIdStatsPage> TxIdStats;
-        const TStat Stat; 
+        const TStat Stat;
         const size_t Groups;
         const size_t IndexesRawSize;
         const TRowVersion MinRowVersion;
         const TRowVersion MaxRowVersion;
-    }; 
+    };
 
     /**
      * This class represents a loaded part of tx status table, identified by its label
@@ -220,5 +220,5 @@ namespace NTable {
         const TIntrusiveConstPtr<NPage::TTxStatusPage> TxStatusPage;
     };
 
-} 
-} 
+}
+}

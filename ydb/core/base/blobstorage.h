@@ -431,7 +431,7 @@ inline bool SendToBSProxy(const TActorContext &ctx, TActorId recipient, IEventBa
         NWilson::TTraceId traceId = {}) {
     return ctx.Send(CreateEventForBSProxy(ctx.SelfID, recipient, ev, cookie, std::move(traceId)));
 }
- 
+
 inline bool SendToBSProxy(TActorId sender, ui32 groupId, IEventBase *ev, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
     return TActivationContext::Send(CreateEventForBSProxy(sender, groupId, ev, cookie, std::move(traceId)));
 }
@@ -983,7 +983,7 @@ struct TEvBlobStorage {
                 , Size(0)
             {}
 
-            void Set(const TLogoBlobID &id, ui32 sh = 0, ui32 sz = 0) { 
+            void Set(const TLogoBlobID &id, ui32 sh = 0, ui32 sz = 0) {
                 Id = id;
                 Shift = sh;
                 Size = sz;

@@ -12,7 +12,7 @@ using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(Boot) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
     }
 
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(MkRmDir) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -663,7 +663,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CreateTable) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -2395,7 +2395,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(IgnoreUserColumnIds) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -2427,7 +2427,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
 #if 0 // KIKIMR-1452
     Y_UNIT_TEST(CreateSameTable) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -2482,7 +2482,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 #endif
 
     Y_UNIT_TEST(CreateTableWithUniformPartitioning) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -2518,7 +2518,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CreateTableWithSplitBounadaries) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
         ++txId;
@@ -2553,7 +2553,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CreateTableWithConfig) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -2592,7 +2592,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CreateTableWithNamedConfig) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -2618,7 +2618,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CreateTableWithUnknownNamedConfig) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -2712,7 +2712,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(DependentOps) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -2755,7 +2755,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(ParallelCreateTable) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -2794,7 +2794,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(ParallelCreateSameTable) { //+
         using ESts = NKikimrScheme::EStatus;
 
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -2838,7 +2838,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CopyTable) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -2879,7 +2879,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CopyTableTwiceSimultaneously) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -2930,7 +2930,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CopyTableAndConcurrentChanges) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -3020,7 +3020,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CopyTableAndConcurrentSplit) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -3071,7 +3071,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CopyTableAndConcurrentMerge) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -3121,7 +3121,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CopyTableAndConcurrentSplitMerge) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -3559,7 +3559,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AlterTableAndConcurrentSplit) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -3724,7 +3724,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(DropTableAndConcurrentSplit) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -3761,7 +3761,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AlterTable) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -3970,7 +3970,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AlterTableKeyColumns) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -4059,7 +4059,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AlterTableById) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -4094,7 +4094,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AlterTableConfig) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -4221,7 +4221,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         using NKikimrSchemeOp::EColumnCache;
         using NKikimrSchemeOp::EColumnStorage;
 
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
         TVector<ui64> tabletIds = {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1};
@@ -4321,7 +4321,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(MultipleColumnFamilies) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -5134,7 +5134,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AlterTableComapctionPolicy) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -5206,7 +5206,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AlterTableFollowers) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -5719,7 +5719,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
 
     Y_UNIT_TEST(AlterTableSizeToSplit) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -5812,7 +5812,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AlterTableSettings) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -5922,7 +5922,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CreatePersQueueGroup) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 1000;
 
@@ -5980,7 +5980,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AlterPersQueueGroup) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 1000;
 
@@ -6237,7 +6237,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(DropTable) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 1000;
 
@@ -6299,7 +6299,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(DropTableById) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 1000;
 
@@ -6329,7 +6329,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(DropPQ) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 1000;
 
@@ -6451,7 +6451,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(ParallelModifying) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 1000;
 
@@ -6555,7 +6555,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(DropPQFail) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -6599,7 +6599,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(DropPQAbort) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -6809,7 +6809,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(Restart) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -6850,7 +6850,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(ReadOnlyMode) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -6894,7 +6894,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(PathErrors) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -6936,7 +6936,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(SchemeErrors) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 123;
 
@@ -6965,7 +6965,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(ManyDirs) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
         ui64 num = 500;
@@ -6995,7 +6995,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(NestedDirs) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
         ui64 txId = 123;
@@ -7064,7 +7064,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CreateFinishedInDescription) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -7147,7 +7147,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     };
 
     Y_UNIT_TEST(CreateBlockStoreVolume) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -7253,7 +7253,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AlterBlockStoreVolume) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime, /* nchannels */ 6);
         ui64 txId = 100;
 
@@ -7677,7 +7677,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(DropBlockStoreVolume) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -7788,7 +7788,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AssignBlockStoreVolume) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -7847,7 +7847,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(AssignBlockStoreVolumeDuringAlter) {
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
@@ -8464,7 +8464,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     }
 
     Y_UNIT_TEST(CreateDropKesus) { //+
-        TTestBasicRuntime runtime; 
+        TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 

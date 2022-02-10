@@ -116,7 +116,7 @@ namespace NActors {
 
                 str << titleName
                     << " for all components has been changed to "
-                    << PriorityToString(EPrio(priority)); 
+                    << PriorityToString(EPrio(priority));
                 explanation = str.Str();
                 return 0;
             } else {
@@ -136,8 +136,8 @@ namespace NActors {
                 AtomicSet(ComponentInfo[component], settings.Raw.Data);
                 TStringStream str;
                 str << titleName << " for the component " << ComponentNames[component]
-                    << " has been changed from " << PriorityToString(EPrio(oldPriority)) 
-                    << " to " << PriorityToString(EPrio(priority)); 
+                    << " has been changed from " << PriorityToString(EPrio(oldPriority))
+                    << " to " << PriorityToString(EPrio(priority));
                 explanation = str.Str();
                 return 0;
             }

@@ -1,45 +1,45 @@
-#pragma once 
- 
-#include "flat_page_base.h" 
-#include "flat_page_label.h" 
-#include "flat_row_nulls.h" 
-#include "util_deref.h"
- 
-namespace NKikimr { 
-namespace NTable { 
-namespace NPage { 
- 
-    struct TIndex { 
-        /* 
-                TRecord binary layout v2 
-            .---------.---------------. 
-            | TRowId  | page id       | header 
-            .---------.---------------.      -. 
-            | is_null | value OR offs | key_1 | 
-            .---------.---------------.       | 
-            |       .    .    .       |       | fixed-size 
-            .---------.---------------.       | 
-            | is_null | value OR offs | key_K | 
-            .-.------.--.-------.-----.      -' 
-            | |      |  |       |     | var-size values 
-            '-'------'--'-------'-----' 
-        */ 
- 
-#pragma pack(push,1) 
+#pragma once
 
-        struct TItem { 
+#include "flat_page_base.h"
+#include "flat_page_label.h"
+#include "flat_row_nulls.h"
+#include "util_deref.h"
+
+namespace NKikimr {
+namespace NTable {
+namespace NPage {
+
+    struct TIndex {
+        /*
+                TRecord binary layout v2
+            .---------.---------------.
+            | TRowId  | page id       | header
+            .---------.---------------.      -.
+            | is_null | value OR offs | key_1 |
+            .---------.---------------.       |
+            |       .    .    .       |       | fixed-size
+            .---------.---------------.       |
+            | is_null | value OR offs | key_K |
+            .-.------.--.-------.-----.      -'
+            | |      |  |       |     | var-size values
+            '-'------'--'-------'-----'
+        */
+
+#pragma pack(push,1)
+
+        struct TItem {
             TCellOp GetOp(bool) const noexcept
-            { 
+            {
                 return { Null ? ECellOp::Null : ECellOp::Set, ELargeObj::Inline };
-            } 
- 
-            bool Null; 
+            }
+
+            bool Null;
         } Y_PACKED;
- 
+
         struct TRecord : public TDataPageRecord<TRecord, TItem> {
             TRowId RowId_;
             TPageId PageId_;
- 
+
             inline TRowId GetRowId() const { return RowId_; }
             inline TPageId GetPageId() const { return PageId_; }
 
@@ -47,73 +47,73 @@ namespace NPage {
             inline void SetPageId(TPageId value) { PageId_ = value; }
         } Y_PACKED;
 
-#pragma pack(pop) 
- 
+#pragma pack(pop)
+
         static_assert(sizeof(TItem) == 1, "Invalid TIndex TItem size");
         static_assert(sizeof(TRecord) == 12, "Invalid TIndex TRecord size");
 
-        using TBlock = TBlockWithRecords<TRecord>; 
- 
-    public: 
-        using TIter = typename TBlock::TIterator; 
- 
+        using TBlock = TBlockWithRecords<TRecord>;
+
+    public:
+        using TIter = typename TBlock::TIterator;
+
         static constexpr ui16 Version = 3;
- 
+
         TIndex(TSharedData raw)
-            : Raw(std::move(raw)) 
-        { 
-            const auto got = NPage::THello().Read(Raw, EPage::Index); 
- 
-            Y_VERIFY(got == ECodec::Plain && (got.Version == 2 || got.Version == 3)); 
- 
+            : Raw(std::move(raw))
+        {
+            const auto got = NPage::THello().Read(Raw, EPage::Index);
+
+            Y_VERIFY(got == ECodec::Plain && (got.Version == 2 || got.Version == 3));
+
             auto *hdr = TDeref<const TRecordsHeader>::At(got.Page.data(), 0);
             auto skip = got.Page.size() - hdr->Records * sizeof(TPgSize);
- 
-            Y_VERIFY(hdr->Records >= 1u + (got.Version < 3 ? 0u : 1u)); 
- 
+
+            Y_VERIFY(hdr->Records >= 1u + (got.Version < 3 ? 0u : 1u));
+
             Page.Base = Raw.data();
             Page.Array = TDeref<const TRecordsEntry>::At(hdr, skip);
-            Page.Records = hdr->Records - (got.Version == 3 ? 1 : 0); 
+            Page.Records = hdr->Records - (got.Version == 3 ? 1 : 0);
             LastKey = (got.Version == 3) ? Page.Record(Page.Records) : nullptr;
             EndRowId = LastKey ? LastKey->GetRowId() + 1 : Max<TRowId>();
-        } 
- 
-        const TBlock* operator->() const noexcept 
-        { 
-            return &Page; 
-        } 
- 
-        const auto* Label() const noexcept 
-        { 
+        }
+
+        const TBlock* operator->() const noexcept
+        {
+            return &Page;
+        }
+
+        const auto* Label() const noexcept
+        {
             return TDeref<const NPage::TLabel>::At(Raw.data(), 0);
-        } 
- 
-        TIter Rewind(TRowId to, TIter on, int dir) const 
-        { 
-            Y_VERIFY(dir == +1, "Only forward lookups supported"); 
- 
+        }
+
+        TIter Rewind(TRowId to, TIter on, int dir) const
+        {
+            Y_VERIFY(dir == +1, "Only forward lookups supported");
+
             if (to >= EndRowId || !on) {
-                return Page.End(); 
-            } else { 
-                /* This branch have to never return End() since the real 
-                    upper RowId value isn't known. Only Max<TRowId>() and 
-                    invalid on iterator may be safetly mapped to End(). 
-                 */ 
- 
-                for (size_t it = 0; ++it < 4 && ++on;) { 
+                return Page.End();
+            } else {
+                /* This branch have to never return End() since the real
+                    upper RowId value isn't known. Only Max<TRowId>() and
+                    invalid on iterator may be safetly mapped to End().
+                 */
+
+                for (size_t it = 0; ++it < 4 && ++on;) {
                     if (on->GetRowId() > to) return --on;
-                } 
- 
-                auto less = [](TRowId rowId, const TRecord &rec) { 
+                }
+
+                auto less = [](TRowId rowId, const TRecord &rec) {
                     return rowId < rec.GetRowId();
-                }; 
- 
-                auto it = std::upper_bound(on, Page.End(), to, less); 
- 
-                return (it && it == on) ? on : --it; 
-            } 
-        } 
- 
+                };
+
+                auto it = std::upper_bound(on, Page.End(), to, less);
+
+                return (it && it == on) ? on : --it;
+            }
+        }
+
         /**
          * Lookup a page that contains rowId
          */
@@ -176,7 +176,7 @@ namespace NPage {
         TIter LookupKey(
                 TCells key, const TPartScheme::TGroupInfo &group,
                 const ESeek seek, const TKeyNulls *nulls) const noexcept
-        { 
+        {
             if (!key) {
                 // Special treatment for an empty key
                 switch (seek) {
@@ -185,7 +185,7 @@ namespace NPage {
                     case ESeek::Exact:
                     case ESeek::Upper:
                         return Page.End();
-                } 
+                }
             }
 
             const auto cmp = TCompare<TRecord>(group.ColsKeyIdx, *nulls);
@@ -196,8 +196,8 @@ namespace NPage {
             // If LastKey < key then the needed page doesn't exist
             if (!it && LastKey && cmp(*LastKey, key)) {
                 return it;
-            } 
- 
+            }
+
             if (it.Off() == 0) {
                 // If key < FirstKey then exact key doesn't exist
                 if (seek == ESeek::Exact) {
@@ -209,8 +209,8 @@ namespace NPage {
             }
 
             return it;
-        } 
- 
+        }
+
         /**
          * Lookup a page that may contain key with specified seek mode
          *
@@ -268,23 +268,23 @@ namespace NPage {
             return LastKey ? LastKey->GetRowId() : Max<TRowId>();
         }
 
-        ui64 Rows() const noexcept 
-        { 
-            if (LastKey) { 
-                return LastKey->GetRowId() + 1; /* exact number of rows */ 
+        ui64 Rows() const noexcept
+        {
+            if (LastKey) {
+                return LastKey->GetRowId() + 1; /* exact number of rows */
             } else if (auto iter = --Page.End()) {
-                auto pages = (iter - Page.Begin()) + 1; 
- 
+                auto pages = (iter - Page.Begin()) + 1;
+
                 return iter->GetRowId() * (pages + 1) / pages;
-            } else 
-                return 0; /* cannot estimate rows for one page part */ 
-        } 
- 
-        TPageId UpperPage() const noexcept 
-        { 
+            } else
+                return 0; /* cannot estimate rows for one page part */
+        }
+
+        TPageId UpperPage() const noexcept
+        {
             return Page.Begin() ? (Page.End() - 1)->GetPageId() + 1 : 0;
-        } 
- 
+        }
+
         const TRecord* GetFirstKeyRecord() const noexcept
         {
             return Page.Record(0);
@@ -292,7 +292,7 @@ namespace NPage {
 
         const TRecord* GetLastKeyRecord() const noexcept
         {
-            return LastKey; 
+            return LastKey;
         }
 
         TRowId GetEndRowId() const noexcept
@@ -305,13 +305,13 @@ namespace NPage {
             return Raw.size();
         }
 
-    private: 
+    private:
         TSharedData Raw;
-        TBlock Page; 
-        const TRecord* LastKey; 
+        TBlock Page;
+        const TRecord* LastKey;
         TRowId EndRowId;
-    }; 
- 
-} 
-} 
-} 
+    };
+
+}
+}
+}

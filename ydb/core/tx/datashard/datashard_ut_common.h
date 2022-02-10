@@ -92,7 +92,7 @@ public:
         ~TActiveZone() { if (Tester.ActiveZone) *Tester.ActiveZone = false; }
     };
 
-    TTestBasicRuntime Runtime; 
+    TTestBasicRuntime Runtime;
 
     TTester(ESchema schema, const TOptions& opts = TOptions());
     TTester(ESchema schema, const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup,

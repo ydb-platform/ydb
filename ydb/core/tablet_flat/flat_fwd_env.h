@@ -1,98 +1,98 @@
-#pragma once 
- 
-#include "flat_fwd_iface.h" 
-#include "flat_fwd_misc.h" 
-#include "flat_fwd_cache.h" 
-#include "flat_fwd_blobs.h" 
-#include "flat_fwd_conf.h" 
-#include "flat_fwd_sieve.h" 
-#include "flat_fwd_warmed.h" 
-#include "flat_table_subset.h" 
-#include "flat_part_iface.h" 
-#include "flat_part_store.h" 
-#include "flat_sausage_packet.h" 
-#include "flat_sausage_fetch.h" 
-#include "util_fmt_abort.h" 
+#pragma once
+
+#include "flat_fwd_iface.h"
+#include "flat_fwd_misc.h"
+#include "flat_fwd_cache.h"
+#include "flat_fwd_blobs.h"
+#include "flat_fwd_conf.h"
+#include "flat_fwd_sieve.h"
+#include "flat_fwd_warmed.h"
+#include "flat_table_subset.h"
+#include "flat_part_iface.h"
+#include "flat_part_store.h"
+#include "flat_sausage_packet.h"
+#include "flat_sausage_fetch.h"
+#include "util_fmt_abort.h"
 #include "util_basics.h"
-#include <util/generic/deque.h> 
-#include <util/random/random.h> 
-#include <util/generic/intrlist.h> 
- 
-namespace NKikimr { 
-namespace NTable { 
-namespace NFwd { 
+#include <util/generic/deque.h>
+#include <util/random/random.h>
+#include <util/generic/intrlist.h>
+
+namespace NKikimr {
+namespace NTable {
+namespace NFwd {
     using IPageCollection = NPageCollection::IPageCollection;
     using TFetch = NPageCollection::TFetch;
- 
+
     class TPageLoadingQueue : public IPageLoadingQueue, public TIntrusiveListItem<TPageLoadingQueue> {
-    public: 
+    public:
         TPageLoadingQueue(ui32 slot, ui64 cookie, TIntrusiveConstPtr<IPageCollection> pageCollection, TAutoPtr<IPageLoadingLogic> line)
-            : Cookie(cookie) 
+            : Cookie(cookie)
             , PageCollection(std::move(pageCollection))
             , PageLoadingLogic(line)
-            , Slot(slot) 
-        { 
- 
-        } 
- 
+            , Slot(slot)
+        {
+
+        }
+
         IPageLoadingLogic* operator->() const
-        { 
+        {
             return PageLoadingLogic.Get();
-        } 
- 
+        }
+
         ui64 AddToQueue(TPageId pageId, ui16 type) noexcept override
-        { 
-            if (!Fetch) { 
+        {
+            if (!Fetch) {
                 Fetch.Reset(new TFetch(Cookie, PageCollection, { }));
-                Fetch->Pages.reserve(16); 
-            } 
- 
+                Fetch->Pages.reserve(16);
+            }
+
             const auto meta = PageCollection->Page(pageId);
- 
-            if (meta.Type != type || meta.Size == 0) 
-                Y_FAIL("Got a non-data page while part index traverse"); 
- 
-            Fetch->Pages.emplace_back(pageId); 
- 
-            return meta.Size; 
-        } 
- 
-    public: 
-        const ui64 Cookie = Max<ui64>(); 
+
+            if (meta.Type != type || meta.Size == 0)
+                Y_FAIL("Got a non-data page while part index traverse");
+
+            Fetch->Pages.emplace_back(pageId);
+
+            return meta.Size;
+        }
+
+    public:
+        const ui64 Cookie = Max<ui64>();
         const TIntrusiveConstPtr<IPageCollection> PageCollection;
         const TAutoPtr<IPageLoadingLogic> PageLoadingLogic;
-        const ui32 Slot = Max<ui32>(); 
-        bool Grow = false;  /* Should call Forward(...) for preloading */ 
+        const ui32 Slot = Max<ui32>();
+        bool Grow = false;  /* Should call Forward(...) for preloading */
         TAutoPtr<TFetch> Fetch;
-    }; 
- 
-    struct TEnv: public IPages { 
-        using TSlot = ui32; 
+    };
+
+    struct TEnv: public IPages {
+        using TSlot = ui32;
         using TSlotVec = TSmallVec<TSlot>;
- 
-        struct TEgg { 
+
+        struct TEgg {
             TAutoPtr<IPageLoadingLogic> PageLoadingLogic;
             TIntrusiveConstPtr<IPageCollection> PageCollection;
-        }; 
- 
-    public: 
+        };
+
+    public:
         using TData = const TSharedData*;
- 
-        TEnv(const TConf &conf, const TSubset &subset) 
+
+        TEnv(const TConf &conf, const TSubset &subset)
             : Salt(RandomNumber<ui32>())
-            , Conf(conf) 
+            , Conf(conf)
             , Subset(subset)
             , Keys(Subset.Scheme->Tags(true))
             , MemTable(new TMemTableHandler(Keys, Conf.Edge,
-                                        Conf.Trace ? &subset.Frozen : nullptr)) 
-        { 
-            Y_VERIFY(Conf.AheadHi >= Conf.AheadLo); 
-            Y_VERIFY(std::is_sorted(Keys.begin(), Keys.end())); 
- 
+                                        Conf.Trace ? &subset.Frozen : nullptr))
+        {
+            Y_VERIFY(Conf.AheadHi >= Conf.AheadLo);
+            Y_VERIFY(std::is_sorted(Keys.begin(), Keys.end()));
+
             for (auto &one: Subset.Flatten)
                 AddPartView(one);
-        } 
- 
+        }
+
         void AddCold(const TPartView& partView) noexcept
         {
             auto r = ColdParts.insert(partView.Part.Get());
@@ -101,40 +101,40 @@ namespace NFwd {
             AddPartView(partView);
         }
 
-        bool MayProgress() const noexcept 
-        { 
-            return Pending == 0; 
-        } 
- 
+        bool MayProgress() const noexcept
+        {
+            return Pending == 0;
+        }
+
         TData TryGetPage(const TPart* part, TPageId ref, TGroupId groupId) override
-        { 
+        {
             ui16 room = (groupId.Historic ? part->Groups + 2 : 0) + groupId.Index;
             return Handle(GetQueue(part, room), ref).Page;
-        } 
- 
+        }
+
         TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
-        { 
+        {
             return MemTable->Locate(memTable, ref, tag);
-        } 
- 
+        }
+
         TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
-        { 
+        {
             if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
                 Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
-            } 
- 
+            }
+
             ui32 room = part->Groups + (lob == ELargeObj::Extern ? 1 : 0);
 
             return Handle(GetQueue(part, room), ref);
-        } 
- 
+        }
+
         void DoSave(TIntrusiveConstPtr<IPageCollection> pageCollection, ui64 cookie, TArrayRef<NPageCollection::TLoadedPage> pages)
-        { 
+        {
             const ui32 epoch = ui32(cookie) - Salt;
             if (epoch < Epoch) {
                 return; // ignore pages requested before Reset
-            } 
- 
+            }
+
             Y_VERIFY(epoch == Epoch,
                     "Got an invalid part cookie on pages absorption");
 
@@ -149,71 +149,71 @@ namespace NFwd {
             Y_VERIFY(pages.size() <= Pending,
                     "Page fwd cache got more pages than was requested");
 
-            Pending -= pages.size(); 
+            Pending -= pages.size();
             Queues.at(part)->Apply(pages);
-        } 
- 
-        IPages* Reset() noexcept 
-        { 
-            /* Current version of cache works only on forward iterations over 
-                parts and cannot handle backward jumps. This call is temporary 
-                workaround for clients that wants to go back. */ 
- 
-            Y_VERIFY(!Conf.Trace, "Cannot reset NFwd in blobs tracing state"); 
- 
+        }
+
+        IPages* Reset() noexcept
+        {
+            /* Current version of cache works only on forward iterations over
+                parts and cannot handle backward jumps. This call is temporary
+                workaround for clients that wants to go back. */
+
+            Y_VERIFY(!Conf.Trace, "Cannot reset NFwd in blobs tracing state");
+
             // Ignore all pages fetched before Reset
             Pending = 0;
             ++Epoch;
 
-            Total = Stats(); 
-            Parts.clear(); 
+            Total = Stats();
+            Parts.clear();
             Queues.clear();
             ColdParts.clear();
- 
+
             for (auto &one : Subset.Flatten)
                 AddPartView(one);
 
-            return this; 
-        } 
- 
-        TStat Stats() const noexcept 
-        { 
+            return this;
+        }
+
+        TStat Stats() const noexcept
+        {
             auto aggr = [](auto &&stat, const TPageLoadingQueue &q) {
                 return stat += q->Stat;
-            }; 
- 
-            return 
+            };
+
+            return
                 std::accumulate(Queues.begin(), Queues.end(), Total, aggr);
-        } 
- 
+        }
+
         TAutoPtr<TFetch> GrabFetches() noexcept
-        { 
+        {
             while (auto *q = Queue ? Queue.PopFront() : nullptr) {
                 if (std::exchange(q->Grow, false))
                     (*q)->Forward(q, Max(ui64(1), Conf.AheadHi));
- 
+
                 if (auto req = std::move(q->Fetch)) {
-                    Y_VERIFY(req->Pages, "Shouldn't sent an empty requests"); 
- 
-                    Pending += req->Pages.size(); 
- 
-                    return req; 
-                } 
-            } 
- 
-            return nullptr; 
-        } 
- 
+                    Y_VERIFY(req->Pages, "Shouldn't sent an empty requests");
+
+                    Pending += req->Pages.size();
+
+                    return req;
+                }
+            }
+
+            return nullptr;
+        }
+
         TAutoPtr<TSeen> GrabTraces() noexcept
-        { 
+        {
             TDeque<TSieve> sieves(Parts.size() - ColdParts.size() + 1);
- 
+
             sieves.back() = MemTable->Traced(); /* blobs of memtable */
- 
+
             ui64 total = sieves.back().Total();
             ui64 seen = sieves.back().Removed();
- 
-            for (auto &it: Parts) { 
+
+            for (auto &it: Parts) {
                 const auto *part = it.first;
                 if (ColdParts.contains(part)) {
                     continue; // we don't trace cold parts
@@ -221,7 +221,7 @@ namespace NFwd {
                 if (auto &blobs = part->Blobs) {
                     auto &q = GetQueue(part, part->Groups + 1);
                     auto &line = dynamic_cast<TBlobs&>(*q.PageLoadingLogic);
- 
+
                     Y_VERIFY(q.Slot < (sieves.size() - 1));
                     sieves.at(q.Slot) = {
                         blobs,
@@ -232,26 +232,26 @@ namespace NFwd {
 
                     total += sieves[q.Slot].Total();
                     seen += sieves[q.Slot].Removed();
-                } 
-            } 
- 
-            return new TSeen{ total, seen, std::move(sieves) }; 
-        } 
- 
-    private: 
+                }
+            }
+
+            return new TSeen{ total, seen, std::move(sieves) };
+        }
+
+    private:
         TResult Handle(TPageLoadingQueue &q, TPageId ref) noexcept
-        { 
+        {
             auto got = q->Handle(&q, ref, Conf.AheadLo);
- 
+
             if ((q.Grow = got.Grow) || bool(q.Fetch)) {
                 Queue.PushBack(&q);
-            } else if (got.Need && got.Page == nullptr) { 
-                Y_FAIL("Cache line head don't want to do fetch but should"); 
-            } 
- 
-            return { got.Need, got.Page }; 
-        } 
- 
+            } else if (got.Need && got.Page == nullptr) {
+                Y_FAIL("Cache line head don't want to do fetch but should");
+            }
+
+            return { got.Need, got.Page };
+        }
+
         void AddPartView(const TPartView& partView) noexcept
         {
             const auto *part = partView.Part.Get();
@@ -278,8 +278,8 @@ namespace NFwd {
         }
 
         TPageLoadingQueue& GetQueue(const TPart *part, ui16 room) noexcept
-        { 
-            auto it = Parts.find(part); 
+        {
+            auto it = Parts.find(part);
             Y_VERIFY(it != Parts.end(),
                 "NFwd cache tyring to access part outside of subset");
             Y_VERIFY(room < it->second.size(),
@@ -288,90 +288,90 @@ namespace NFwd {
                 "NFwd cache trying to access room that is not assigned");
             Y_VERIFY(Queues.at(it->second[0]).PageCollection->Label() == part->Label,
                 "Cannot handle multiple parts on the same page collection");
- 
+
             return Queues.at(it->second[room]);
-        } 
- 
-        TSlot Settle(TEgg egg, ui32 slot) noexcept 
-        { 
+        }
+
+        TSlot Settle(TEgg egg, ui32 slot) noexcept
+        {
             if (egg.PageLoadingLogic || egg.PageCollection) {
                 const ui64 cookie = (ui64(Queues.size()) << 32) | ui32(Salt + Epoch);
- 
+
                 Queues.emplace_back(slot, cookie, std::move(egg.PageCollection), egg.PageLoadingLogic);
- 
+
                 return Queues.size() - 1;
-            } else { 
+            } else {
                 return Max<TSlot>(); /* Will fail on access in GetQueue(...) */
-            } 
-        } 
- 
+            }
+        }
+
         TEgg MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> bounds) const noexcept
-        { 
+        {
             auto *partStore = dynamic_cast<const TPartStore*>(part);
- 
+
             Y_VERIFY(groupId.Index < partStore->PageCollections.size(), "Got part without enough page collections");
- 
+
             auto& cache = partStore->PageCollections[groupId.Index];
             auto& index = part->GetGroupIndex(groupId);
             if (cache->PageCollection->Total() < index.UpperPage())
-                Y_FAIL("Part index last page is out of storage capacity"); 
- 
+                Y_FAIL("Part index last page is out of storage capacity");
+
             return { new NFwd::TCache(index, bounds), cache->PageCollection };
-        } 
- 
+        }
+
         TEgg MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
-        { 
-            if (auto blobs = part->Blobs) { 
-                /* Should always materialize key columns to values since 
-                    current impl cannot handle outlined blobs in keys cells. 
-                    And have to materialize blobs of alien tablets in some 
-                    cases, this behaviour is ruled by Conf.Tablet value. 
-                 */ 
- 
-                const auto tablet = part->Label.TabletID(); 
- 
+        {
+            if (auto blobs = part->Blobs) {
+                /* Should always materialize key columns to values since
+                    current impl cannot handle outlined blobs in keys cells.
+                    And have to materialize blobs of alien tablets in some
+                    cases, this behaviour is ruled by Conf.Tablet value.
+                 */
+
+                const auto tablet = part->Label.TabletID();
+
                 TVector<ui32> edge(part->Large->Stats().Tags.size(), Conf.Edge);
- 
+
                 for (auto& col : part->Scheme->AllColumns) {
-                    if (TRowScheme::HasTag(Keys, col.Tag)) { 
-                        edge.at(col.Pos) = Max<ui32>(); 
-                    } else if (Conf.Tablet && Conf.Tablet != tablet) { 
-                        edge.at(col.Pos) = Max<ui32>(); 
-                    } 
-                } 
- 
+                    if (TRowScheme::HasTag(Keys, col.Tag)) {
+                        edge.at(col.Pos) = Max<ui32>();
+                    } else if (Conf.Tablet && Conf.Tablet != tablet) {
+                        edge.at(col.Pos) = Max<ui32>();
+                    }
+                }
+
                 bool trace = Conf.Trace && !ColdParts.contains(part);
 
-                return 
+                return
                     { new NFwd::TBlobs(part->Large, std::move(bounds), edge, trace), blobs};
-            } else { 
-                return { nullptr, nullptr }; 
-            } 
-        } 
- 
+            } else {
+                return { nullptr, nullptr };
+            }
+        }
+
         TEgg MakeOuter(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
-        { 
-            if (auto small = part->Small) { 
+        {
+            if (auto small = part->Small) {
                 auto *partStore = CheckedCast<const TPartStore*>(part);
- 
+
                 TVector<ui32> edge(small->Stats().Tags.size(), Max<ui32>());
- 
+
                 auto pageCollection = partStore->PageCollections.at(partStore->Groups)->PageCollection;
- 
-                return 
+
+                return
                     { new NFwd::TBlobs(small, std::move(bounds), edge, false), pageCollection };
-            } else { 
-                return { nullptr, nullptr }; 
-            } 
-        } 
- 
-    private: 
+            } else {
+                return { nullptr, nullptr };
+            }
+        }
+
+    private:
         const ui32 Salt;
         ui32 Epoch = 0;
-        const TConf Conf; 
+        const TConf Conf;
         const TSubset &Subset;
         const TVector<ui32> Keys; /* Tags to expand ELargeObj references */
- 
+
         TDeque<TPageLoadingQueue> Queues;
         THashMap<const TPart*, TSlotVec> Parts;
         THashSet<const TPart*> ColdParts;
@@ -383,7 +383,7 @@ namespace NFwd {
         ui64 Pending = 0;
         // Accumulated stats on resets
         TStat Total;
-    }; 
-} 
-} 
-} 
+    };
+}
+}
+}

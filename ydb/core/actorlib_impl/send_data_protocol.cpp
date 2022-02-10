@@ -67,23 +67,23 @@ void TSendDataProtocol::TryAgain(const TActorContext& ctx) noexcept {
 
     switch (-sendResult) {
     case ECONNRESET:
-        CatchSendDataError("Connection reset by peer"); 
+        CatchSendDataError("Connection reset by peer");
         return;
 
     case EPIPE:
-        CatchSendDataError("Connection is closed"); 
+        CatchSendDataError("Connection is closed");
         return;
 
     case 0:
         /* Not realy sure what to do with 0 result, assume socket is closed */
-        CatchSendDataError("Connection is closed"); 
+        CatchSendDataError("Connection is closed");
         return;
 
     default:
         {
             char buf[1024];
             LastSystemErrorText(buf, 1024, -sendResult);
-            CatchSendDataError(TString("Socker error: ") + buf); 
+            CatchSendDataError(TString("Socker error: ") + buf);
             return;
         }
 

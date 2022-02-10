@@ -783,8 +783,8 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
     void Handle(TEvents::TEvUndelivered::TPtr&) {
         return ReplyAndDie(NKikimrProto::ERROR, "BlobStorage proxy unavailable");
-    } 
- 
+    }
+
     void Handle(TEvTabletBase::TEvFindLatestLogEntryResult::TPtr &ev) {
         TEvTabletBase::TEvFindLatestLogEntryResult *msg = ev->Get();
 

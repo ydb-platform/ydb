@@ -1,9 +1,9 @@
 #pragma once
 #include "defs.h"
-#include "flat_fwd_sieve.h" 
-#include "flat_exec_commit.h" 
-#include "flat_executor_tx_env.h" 
-#include "flat_sausage_slicer.h" 
+#include "flat_fwd_sieve.h"
+#include "flat_exec_commit.h"
+#include "flat_executor_tx_env.h"
+#include "flat_sausage_slicer.h"
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 
 namespace NKikimr {
@@ -54,7 +54,7 @@ class TExecutorBorrowLogic {
     };
 
     THashMap<TLogoBlobID, TBorrowedPartInfo> BorrowedInfo;
-    TDeque<TLogoBlobID> Garbage; 
+    TDeque<TLogoBlobID> Garbage;
 
     THashMap<TLogoBlobID, TCompactedPartLoans> CompactedPartLoans;
     TDeque<TCompactedPart> PendingCompactedPartLoans;
@@ -70,10 +70,10 @@ class TExecutorBorrowLogic {
             NKikimrExecutorFlat::TBorrowedPart &proto,
             const TBorrowedPartInfo &storedInfo);
 
-    void StoreBorrowProto( 
+    void StoreBorrowProto(
             const TLogoBlobID &metaId,
             TBorrowedPartInfo &storedInfo,
-            TLogCommit *commit); 
+            TLogCommit *commit);
 
     bool CheckLoanCompletion(const TLogoBlobID &metaId, TBorrowedPartInfo &storedInfo, ui32 step);
 
@@ -93,16 +93,16 @@ public:
     }
 
     // called on lender at moment of sharing part
-    void BorrowBundle( 
-        const TLogoBlobID &bundleId, 
+    void BorrowBundle(
+        const TLogoBlobID &bundleId,
         const TSet<ui64> &loaners,
-        TLogCommit *commit); 
+        TLogCommit *commit);
 
     // called on loaner at moment of attaching part
-    void LoanBundle( 
-        const TLogoBlobID &bundleId, 
+    void LoanBundle(
+        const TLogoBlobID &bundleId,
         TPageCollectionTxEnv::TLoanBundle &loaned,
-        TLogCommit *commit); 
+        TLogCommit *commit);
 
     // called on loaner at moment of attaching part
     void LoanTxStatus(
@@ -111,32 +111,32 @@ public:
         TLogCommit *commit);
 
     // called on lender
-    void UpdateBorrow( 
-        const TLogoBlobID &bundleId, 
+    void UpdateBorrow(
+        const TLogoBlobID &bundleId,
         TPageCollectionTxEnv::TBorrowUpdate &borrowUpdate,
-        TLogCommit *commit); 
+        TLogCommit *commit);
 
     // confirmation for loaner
-    void ConfirmUpdateLoan( 
-        const TLogoBlobID &bundleId, 
+    void ConfirmUpdateLoan(
+        const TLogoBlobID &bundleId,
         const TLogoBlobID &borrowId,
-        TLogCommit *commit); 
+        TLogCommit *commit);
 
-    void SnapToLog(NKikimrExecutorFlat::TLogSnapshot&, TLogCommit&); 
+    void SnapToLog(NKikimrExecutorFlat::TLogSnapshot&, TLogCommit&);
 
     // returns true if sieve blobs could be collected
     // returning false means those blobs are still in use
     bool BundlePartiallyCompacted(
         const NTable::IBundle &bundle,
         const NTable::NFwd::TSieve &sieve,
-        TLogCommit *commit); 
+        TLogCommit *commit);
 
     // returns true if part blobs could be collected
     // returning false means part is still in use
-    bool BundleCompacted( 
-        const NTable::IBundle &bundle, 
-        const NTable::NFwd::TSieve &sieve, 
-        TLogCommit *commit); 
+    bool BundleCompacted(
+        const NTable::IBundle &bundle,
+        const NTable::NFwd::TSieve &sieve,
+        TLogCommit *commit);
 
     // returns true if bundle blobs could be collected
     // returns false when part is still in use

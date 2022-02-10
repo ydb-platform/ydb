@@ -1,18 +1,18 @@
 #pragma once
- 
-#include "flat_table_column.h" 
-#include "flat_page_iface.h" 
+
+#include "flat_table_column.h"
+#include "flat_page_iface.h"
 #include "util_basics.h"
- 
+
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/protos/scheme_log.pb.h>
- 
+
 #include <util/generic/map.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/list.h>
 
 namespace NKikimr {
-namespace NTable { 
+namespace NTable {
 
 using namespace NTabletFlatScheme;
 
@@ -23,56 +23,56 @@ using TCompactionPolicy = NLocalDb::TCompactionPolicy;
 class TScheme {
 public:
     using TTypeId = ui32;
-    using ECache = NPage::ECache; 
+    using ECache = NPage::ECache;
 
-    enum EDefault { 
-        DefaultRoom = 0, 
-        DefaultChannel = 1, 
+    enum EDefault {
+        DefaultRoom = 0,
+        DefaultChannel = 1,
     };
 
     struct TRoom /* Storage unit settings (page collection) */ {
-        TRoom() = default; 
- 
-        TRoom(ui32 channel) 
-            : Main(channel) 
-        { 
- 
-        } 
- 
-        bool IsTheSame(const TRoom &room) const noexcept 
-        { 
-            return 
-                Main == room.Main 
-                && Blobs == room.Blobs 
-                && Outer == room.Outer; 
-        } 
- 
+        TRoom() = default;
+
+        TRoom(ui32 channel)
+            : Main(channel)
+        {
+
+        }
+
+        bool IsTheSame(const TRoom &room) const noexcept
+        {
+            return
+                Main == room.Main
+                && Blobs == room.Blobs
+                && Outer == room.Outer;
+        }
+
         ui8 Main = DefaultChannel;      /* Primary channel for page collection  */
-        ui8 Blobs = DefaultChannel;     /* Channel for external blobs   */ 
-        ui8 Outer = DefaultChannel;     /* Channel for outer values pack*/ 
+        ui8 Blobs = DefaultChannel;     /* Channel for external blobs   */
+        ui8 Outer = DefaultChannel;     /* Channel for outer values pack*/
     };
 
-    struct TFamily /* group of columns configuration */ { 
-        using ECodec = NPage::ECodec; 
- 
-        bool IsTheSame(const TFamily &other) const noexcept 
-        { 
-            return 
-                Room == other.Room 
-                && Cache == other.Cache 
-                && Codec == other.Codec 
-                && Small == other.Small 
-                && Large == other.Large; 
-        } 
- 
-        ui32 Room = DefaultRoom; 
-        ECache Cache = ECache::None;    /* How to cache data pages      */ 
-        ECodec Codec = ECodec::Plain;   /* How to encode data pages     */ 
-        ui32 Small = Max<ui32>();       /* When pack values to outer blobs  */ 
-        ui32 Large = Max<ui32>();       /* When keep values in single blobs */ 
-    }; 
- 
-    using TColumn = NTable::TColumn; 
+    struct TFamily /* group of columns configuration */ {
+        using ECodec = NPage::ECodec;
+
+        bool IsTheSame(const TFamily &other) const noexcept
+        {
+            return
+                Room == other.Room
+                && Cache == other.Cache
+                && Codec == other.Codec
+                && Small == other.Small
+                && Large == other.Large;
+        }
+
+        ui32 Room = DefaultRoom;
+        ECache Cache = ECache::None;    /* How to cache data pages      */
+        ECodec Codec = ECodec::Plain;   /* How to encode data pages     */
+        ui32 Small = Max<ui32>();       /* When pack values to outer blobs  */
+        ui32 Large = Max<ui32>();       /* When keep values in single blobs */
+    };
+
+    using TColumn = NTable::TColumn;
 
     struct TTableSchema {
         using TColumns = THashMap<ui32, TColumn>;
@@ -84,15 +84,15 @@ public:
     };
 
     struct TTableInfo : public TTableSchema {
-        TTableInfo(TString name, ui32 id) 
-            : Id(id) 
-            , Name(std::move(name)) 
+        TTableInfo(TString name, ui32 id)
+            : Id(id)
+            , Name(std::move(name))
             , CompactionPolicy(NLocalDb::CreateDefaultTablePolicy())
-        { 
-            Families[TColumn::LeaderFamily]; 
-            Rooms[DefaultRoom]; 
-        } 
- 
+        {
+            Families[TColumn::LeaderFamily];
+            Rooms[DefaultRoom];
+        }
+
         ui32 Id;
         TString Name;
         THashMap<ui32, TRoom> Rooms;
@@ -100,40 +100,40 @@ public:
 
         TIntrusiveConstPtr<TCompactionPolicy> CompactionPolicy;
         bool ColdBorrow = false;
-        bool ByKeyFilter = false; 
+        bool ByKeyFilter = false;
         bool EraseCacheEnabled = false;
         ui32 EraseCacheMinRows = 0; // 0 means use default
         ui32 EraseCacheMaxBytes = 0; // 0 means use default
-    }; 
+    };
 
-    struct TRedo { 
-        /* Do not put cell values below this byte limit to external blobs 
-            on writing redo log update entries (annex to log). By default 
-            this limit is taken from Large field of family settings. Thus 
- 
-                effective = Max(Annex, TFamily::Large) 
- 
-            However cell value may be converted to external blob eventually 
-            on compaction if Annex field overrides actual Large setting for 
-            cell. This feature is required for testing and for ability to 
-            turn off annex at all putting Max<ui32>() to Annex setting. 
-         */ 
- 
-        ui32 Annex = 512;   /* some reasonably low default value */ 
+    struct TRedo {
+        /* Do not put cell values below this byte limit to external blobs
+            on writing redo log update entries (annex to log). By default
+            this limit is taken from Large field of family settings. Thus
+
+                effective = Max(Annex, TFamily::Large)
+
+            However cell value may be converted to external blob eventually
+            on compaction if Annex field overrides actual Large setting for
+            cell. This feature is required for testing and for ability to
+            turn off annex at all putting Max<ui32>() to Annex setting.
+         */
+
+        ui32 Annex = 512;   /* some reasonably low default value */
     };
 
     struct TExecutorInfo {
         ui64 CacheSize = 384 * 1024;
-        bool AllowLogBatching = false; 
+        bool AllowLogBatching = false;
         bool LogFastTactic = true;
-        TDuration LogFlushPeriod = TDuration::MicroSeconds(500); 
-        ui32 LimitInFlyTx = 0; 
+        TDuration LogFlushPeriod = TDuration::MicroSeconds(500);
+        ui32 LimitInFlyTx = 0;
         TString ResourceProfile = "default";
         ECompactionStrategy DefaultCompactionStrategy = NKikimrSchemeOp::CompactionStrategyGenerational;
     };
 
     const TTableInfo* GetTableInfo(ui32 id) const { return const_cast<TScheme*>(this)->GetTableInfo(id); }
-    const TColumn* GetColumnInfo(ui32 table, ui32 id) const { return const_cast<TScheme*>(this)->GetColumnInfo(const_cast<TScheme*>(this)->GetTableInfo(table), id); } 
+    const TColumn* GetColumnInfo(ui32 table, ui32 id) const { return const_cast<TScheme*>(this)->GetColumnInfo(const_cast<TScheme*>(this)->GetTableInfo(table), id); }
 
     TAutoPtr<TSchemeChanges> GetSnapshot() const;
 
@@ -141,41 +141,41 @@ public:
         return Tables.FindPtr(id);
     }
 
-    inline TColumn* GetColumnInfo(TTableInfo* ptable, ui32 id) { 
-        return ptable ? ptable->Columns.FindPtr(id) : nullptr; 
+    inline TColumn* GetColumnInfo(TTableInfo* ptable, ui32 id) {
+        return ptable ? ptable->Columns.FindPtr(id) : nullptr;
     }
 
-    inline const TColumn* GetColumnInfo(const TTableInfo* ptable, ui32 id) const { 
-        return ptable ? ptable->Columns.FindPtr(id) : nullptr; 
+    inline const TColumn* GetColumnInfo(const TTableInfo* ptable, ui32 id) const {
+        return ptable ? ptable->Columns.FindPtr(id) : nullptr;
     }
 
     bool IsEmpty() const {
         return Tables.empty();
     }
 
-    const TRoom* DefaultRoomFor(ui32 id) const noexcept 
-    { 
-        if (auto *table = GetTableInfo(id)) 
-            return table->Rooms.FindPtr(DefaultRoom); 
- 
-        return nullptr; 
-    } 
- 
-    const TFamily* DefaultFamilyFor(ui32 id) const noexcept 
-    { 
-        if (auto *table = GetTableInfo(id)) 
-            return table->Families.FindPtr(TColumn::LeaderFamily); 
- 
-        return nullptr; 
-    } 
- 
-    ECache CachePolicy(ui32 id) const noexcept 
-    { 
-        auto *family = DefaultFamilyFor(id); 
- 
-        return family ? family->Cache : ECache::None; 
-    } 
- 
+    const TRoom* DefaultRoomFor(ui32 id) const noexcept
+    {
+        if (auto *table = GetTableInfo(id))
+            return table->Rooms.FindPtr(DefaultRoom);
+
+        return nullptr;
+    }
+
+    const TFamily* DefaultFamilyFor(ui32 id) const noexcept
+    {
+        if (auto *table = GetTableInfo(id))
+            return table->Families.FindPtr(TColumn::LeaderFamily);
+
+        return nullptr;
+    }
+
+    ECache CachePolicy(ui32 id) const noexcept
+    {
+        auto *family = DefaultFamilyFor(id);
+
+        return family ? family->Cache : ECache::None;
+    }
+
     ECompactionStrategy CompactionStrategyFor(ui32 id) const noexcept
     {
         if (auto *table = GetTableInfo(id)) {
@@ -189,54 +189,54 @@ public:
                 return strategy;
             }
         }
- 
+
         return Executor.DefaultCompactionStrategy;
     }
 
 
     THashMap<ui32, TTableInfo> Tables;
     THashMap<TString, ui32> TableNames;
-    TExecutorInfo Executor; 
-    TRedo Redo; 
+    TExecutorInfo Executor;
+    TRedo Redo;
 };
 
 // scheme delta
-class TAlter { 
+class TAlter {
 public:
-    using ECodec = NPage::ECodec; 
-    using ECache = NPage::ECache; 
- 
-    const TSchemeChanges& operator*() const noexcept 
-    { 
-        return Log; 
-    } 
+    using ECodec = NPage::ECodec;
+    using ECache = NPage::ECache;
 
-    TAlter& Merge(const TSchemeChanges &delta); 
-    TAlter& AddTable(const TString& name, ui32 id); 
-    TAlter& DropTable(ui32 id); 
+    const TSchemeChanges& operator*() const noexcept
+    {
+        return Log;
+    }
+
+    TAlter& Merge(const TSchemeChanges &delta);
+    TAlter& AddTable(const TString& name, ui32 id);
+    TAlter& DropTable(ui32 id);
     TAlter& AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null = { });
-    TAlter& DropColumn(ui32 table, ui32 id); 
-    TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family); 
-    TAlter& AddFamily(ui32 table, ui32 family, ui32 room); 
-    TAlter& AddColumnToKey(ui32 table, ui32 column); 
-    TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec); 
+    TAlter& DropColumn(ui32 table, ui32 id);
+    TAlter& AddColumnToFamily(ui32 table, ui32 column, ui32 family);
+    TAlter& AddFamily(ui32 table, ui32 family, ui32 room);
+    TAlter& AddColumnToKey(ui32 table, ui32 column);
+    TAlter& SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec);
     TAlter& SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large);
-    TAlter& SetRoom(ui32 table, ui32 room, ui32 main, ui32 blobs, ui32 outer); 
-    TAlter& SetRedo(ui32 annex); 
-    TAlter& SetExecutorCacheSize(ui64 cacheSize); 
+    TAlter& SetRoom(ui32 table, ui32 room, ui32 main, ui32 blobs, ui32 outer);
+    TAlter& SetRedo(ui32 annex);
+    TAlter& SetExecutorCacheSize(ui64 cacheSize);
     TAlter& SetExecutorFastLogPolicy(bool allow);
-    TAlter& SetExecutorAllowLogBatching(bool allow); 
-    TAlter& SetExecutorLogFlushPeriod(TDuration flushPeriod); 
-    TAlter& SetExecutorLimitInFlyTx(ui32 limitTxInFly); 
-    TAlter& SetExecutorResourceProfile(const TString &name); 
-    TAlter& SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPolicy); 
-    TAlter& SetByKeyFilter(ui32 tableId, bool enabled); 
+    TAlter& SetExecutorAllowLogBatching(bool allow);
+    TAlter& SetExecutorLogFlushPeriod(TDuration flushPeriod);
+    TAlter& SetExecutorLimitInFlyTx(ui32 limitTxInFly);
+    TAlter& SetExecutorResourceProfile(const TString &name);
+    TAlter& SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPolicy);
+    TAlter& SetByKeyFilter(ui32 tableId, bool enabled);
     TAlter& SetColdBorrow(ui32 tableId, bool enabled);
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
- 
-    TAutoPtr<TSchemeChanges> Flush(); 
+
+    TAutoPtr<TSchemeChanges> Flush();
 protected:
-    TSchemeChanges Log; 
+    TSchemeChanges Log;
 };
 
 }}

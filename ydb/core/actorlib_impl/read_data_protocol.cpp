@@ -91,18 +91,18 @@ void TReadDataProtocolImpl::TryAgain(const TActorContext& ctx) noexcept {
 
     switch (-recvResult) {
     case ECONNRESET:
-        Catcher->CatchReadDataError("Connection reset by peer"); 
+        Catcher->CatchReadDataError("Connection reset by peer");
         return;
 
     case EPIPE:
-        Catcher->CatchReadDataError("Connection is closed"); 
+        Catcher->CatchReadDataError("Connection is closed");
         return;
 
     default:
         {
             char buf[1024];
             LastSystemErrorText(buf, 1024, -recvResult);
-            Catcher->CatchReadDataError(TString("Socker error: ") + buf); 
+            Catcher->CatchReadDataError(TString("Socker error: ") + buf);
             return;
         }
 

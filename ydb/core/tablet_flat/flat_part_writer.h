@@ -1,45 +1,45 @@
-#pragma once 
- 
-#include "flat_abi_evol.h" 
-#include "flat_page_conf.h" 
+#pragma once
+
+#include "flat_abi_evol.h"
+#include "flat_page_conf.h"
 #include "flat_page_gstat.h"
 #include "flat_page_txidstat.h"
 #include "flat_page_txstatus.h"
-#include "flat_page_writer.h" 
-#include "flat_page_other.h" 
-#include "flat_part_iface.h" 
+#include "flat_page_writer.h"
+#include "flat_page_other.h"
+#include "flat_part_iface.h"
 #include "flat_part_overlay.h"
-#include "flat_part_screen.h" 
+#include "flat_part_screen.h"
 #include "flat_part_slice.h"
-#include "flat_part_laid.h" 
-#include "flat_row_state.h" 
-#include "flat_bloom_writer.h" 
-#include "util_fmt_abort.h" 
+#include "flat_part_laid.h"
+#include "flat_row_state.h"
+#include "flat_bloom_writer.h"
+#include "util_fmt_abort.h"
 #include "util_deref.h"
- 
+
 #include <ydb/core/tablet_flat/protos/flat_table_part.pb.h>
 #include <ydb/core/util/intrusive_heap.h>
-#include <util/system/sanitizers.h> 
- 
-namespace NKikimr { 
-namespace NTable { 
- 
-    class TPartWriter final : protected ISaver { 
-        using ECodec = NPage::ECodec; 
-        using ICodec = NBlockCodecs::ICodec; 
- 
+#include <util/system/sanitizers.h>
+
+namespace NKikimr {
+namespace NTable {
+
+    class TPartWriter final : protected ISaver {
+        using ECodec = NPage::ECodec;
+        using ICodec = NBlockCodecs::ICodec;
+
         enum : size_t {
             GarbageStatsMaxSize = 100,
             GarbageStatsMaxBuildSize = 10000,
         };
 
-    public: 
-        TPartWriter() = delete; 
-        TPartWriter(const TPartWriter&) = delete; 
- 
+    public:
+        TPartWriter() = delete;
+        TPartWriter(const TPartWriter&) = delete;
+
         TPartWriter(TIntrusiveConstPtr<TPartScheme> scheme, TTagsRef tags, IPageWriter& pager,
                         const NPage::TConf &conf, TEpoch epoch)
-            : Final(conf.Final) 
+            : Final(conf.Final)
             , SmallEdge(conf.SmallEdge)
             , LargeEdge(conf.LargeEdge)
             , MaxLargeBlob(conf.MaxLargeBlob)
@@ -51,12 +51,12 @@ namespace NTable {
             , SplitKeys(conf.SplitKeys)
             , MinRowVersion(conf.MinRowVersion)
             , Scheme(scheme)
-            , Pager(pager) 
+            , Pager(pager)
             , FrameL(tags.size())
             , FrameS(tags.size())
             , EraseRowState(tags.size())
             , SchemeData(scheme->Serialize())
-        { 
+        {
             for (ui32 group : xrange(conf.Groups.size())) {
                 Groups.emplace_back(scheme, conf, tags, NPage::TGroupId(group));
                 Histories.emplace_back(scheme, conf, tags, NPage::TGroupId(group, true));
@@ -64,9 +64,9 @@ namespace NTable {
 
             if (conf.ByKeyFilter) {
                 if (MainPageCollectionEdge || SmallPageCollectionEdge || !conf.MaxRows) {
-                    ByKey.Reset(new NBloom::TQueue(0.0001)); 
+                    ByKey.Reset(new NBloom::TQueue(0.0001));
                 } else {
-                    ByKey.Reset(new NBloom::TWriter(conf.MaxRows, 0.0001)); 
+                    ByKey.Reset(new NBloom::TWriter(conf.MaxRows, 0.0001));
                 }
             }
 
@@ -80,8 +80,8 @@ namespace NTable {
 
             // This is used to write delayed erase markers
             EraseRowState.Touch(ERowOp::Erase);
-        } 
- 
+        }
+
         void BeginKey(TCellsRef key) noexcept {
             Y_VERIFY(Phase == 0, "BeginKey called after Finish");
 
@@ -117,7 +117,7 @@ namespace NTable {
         }
 
         void AddKeyVersion(const TRowState& row, TRowVersion version) noexcept
-        { 
+        {
             Y_VERIFY_DEBUG(version < KeyState.LastVersion, "Key versions must be in descending order");
 
             if (row != ERowOp::Erase) {
@@ -152,8 +152,8 @@ namespace NTable {
 
             if (KeyState.Written == 0) {
                 return ERowOp::Absent;
-            } 
- 
+            }
+
             return row.GetRowState();
         }
 
@@ -172,7 +172,7 @@ namespace NTable {
             } else {
                 WriteHistoryRow(row, minVersion, maxVersion);
             }
- 
+
             ++KeyState.Written;
         }
 
@@ -262,14 +262,14 @@ namespace NTable {
 
             if (KeyState.WrittenDeltas == 0 && NeedFlush()) {
                 Flush(false);
- 
+
                 // Next part would not have overflow
                 for (auto& g : Groups) {
                     g.NextDataSize.Overflow = false;
                 }
             }
 
-            Current.Rows += 1; 
+            Current.Rows += 1;
             Current.Drops += (row == ERowOp::Erase || maxVersion < TRowVersion::Max() ? 1 : 0);
             Current.HiddenRows += (maxVersion < TRowVersion::Max() ? 1 : 0);
 
@@ -330,10 +330,10 @@ namespace NTable {
                 NextSliceFirstRowId = Groups[0].Data.GetLastRowId();
                 NextSliceFirstKey = TSerializedCellVec(TSerializedCellVec::Serialize(KeyState.Key));
             }
-        } 
- 
+        }
+
         void WriteHistoryRow(const TRowState& row, TRowVersion minVersion, TRowVersion maxVersion) noexcept
-        { 
+        {
             Y_VERIFY(Phase == 0, "WriteHistoryRow called after Finish");
 
             Y_VERIFY_DEBUG(minVersion < maxVersion);
@@ -465,26 +465,26 @@ namespace NTable {
         void Flush(bool last) noexcept
         {
             // The first group must write the last key
-            Y_VERIFY(std::exchange(Phase, 1) == 0, "Called twice"); 
- 
+            Y_VERIFY(std::exchange(Phase, 1) == 0, "Called twice");
+
             for (auto& g : Groups) {
                 g.Data.Flush(*this);
             }
- 
+
             for (auto& g : Histories) {
                 g.Data.Flush(*this);
             }
 
             if (Current.Rows > 0) {
-                Y_VERIFY(Phase == 2, "Missed the last Save call"); 
- 
+                Y_VERIFY(Phase == 2, "Missed the last Save call");
+
                 Result.Rows += Current.Rows;
                 Result.Drops += Current.Drops;
                 Result.Bytes += Current.Bytes;
                 Result.Coded += Current.Coded;
                 Result.HiddenRows += Current.HiddenRows;
                 Result.HiddenDrops += Current.HiddenDrops;
- 
+
                 if (Current.HistoryWritten > 0) {
                     Current.HistoricIndexes.clear();
                     Current.HistoricIndexes.reserve(Histories.size());
@@ -508,7 +508,7 @@ namespace NTable {
                 if (ByKey) {
                     Current.ByKey = WriteIf(ByKey->Make(), EPage::Bloom);
                 }
- 
+
                 if (Current.GarbageStatsBuilder) {
                     Current.GarbageStatsBuilder.ShrinkTo(GarbageStatsMaxSize);
                     Current.GarbageStats = WriteIf(Current.GarbageStatsBuilder.Finish(), EPage::GarbageStats);
@@ -520,7 +520,7 @@ namespace NTable {
 
                 Current.Scheme = WritePage(SchemeData, EPage::Schem2);
                 WriteInplace(Current.Scheme, MakeMetaBlob(last));
- 
+
                 Y_VERIFY(Slices && *Slices, "Flushing bundle without a run");
 
                 Pager.Finish(TOverlay{ nullptr, std::move(Slices) }.Encode());
@@ -541,7 +541,7 @@ namespace NTable {
                 Globs.Reset();
                 if (ByKey) {
                     ByKey->Reset();
-                } 
+                }
                 Slices.Reset();
 
                 RegisteredGlobs.clear();
@@ -555,23 +555,23 @@ namespace NTable {
                 NextSliceFirstKey = { };
                 LastSliceBytes = 0;
 
-                Phase = 0; 
+                Phase = 0;
                 Current = { };
-            } 
-        } 
- 
+            }
+        }
+
         TString MakeMetaBlob(bool last) const noexcept
-        { 
-            NProto::TRoot proto; 
- 
+        {
+            NProto::TRoot proto;
+
             proto.SetEpoch(Epoch.ToProto());
- 
-            if (auto *abi = proto.MutableEvol()) { 
+
+            if (auto *abi = proto.MutableEvol()) {
                 ui32 head = ui32(NTable::ECompatibility::Head);
- 
+
                 if (Current.Small != Max<TPageId>())
                     head = Max(head, ui32(15) /* ELargeObj:Outer packed blobs */);
- 
+
                 if (!last || Result.Parts > 0)
                     head = Max(head, ui32(20) /* Multiple part outputs */);
 
@@ -584,11 +584,11 @@ namespace NTable {
                 if (Current.TxIdStatsBuilder)
                     head = Max(head, ui32(28) /* Uncommitted deltas present */);
 
-                abi->SetTail(head); 
+                abi->SetTail(head);
                 abi->SetHead(ui32(NTable::ECompatibility::Edge));
-            } 
- 
-            if (auto *stat = proto.MutableStat()) { 
+            }
+
+            if (auto *stat = proto.MutableStat()) {
                 stat->SetBytes(Current.Bytes);
                 stat->SetCoded(Current.Coded);
                 stat->SetDrops(Current.Drops);
@@ -597,12 +597,12 @@ namespace NTable {
                     stat->SetHiddenRows(Current.HiddenRows);
                     stat->SetHiddenDrops(Current.HiddenDrops);
                 }
-            } 
- 
-            if (auto *lay = proto.MutableLayout()) { 
+            }
+
+            if (auto *lay = proto.MutableLayout()) {
                 lay->SetScheme(Current.Scheme);
                 lay->SetIndex(Current.Index);
- 
+
                 if (Current.Globs != Max<TPageId>())
                     lay->SetGlobs(Current.Globs);
                 if (Current.Large != Max<TPageId>())
@@ -627,8 +627,8 @@ namespace NTable {
                 if (Current.TxIdStats != Max<TPageId>()) {
                     lay->SetTxIdStats(Current.TxIdStats);
                 }
-            } 
- 
+            }
+
             // There must have been at least one row
             Y_VERIFY_DEBUG(Current.MinRowVersion <= Current.MaxRowVersion);
 
@@ -649,23 +649,23 @@ namespace NTable {
                 Y_VERIFY_DEBUG(!Current.MaxRowVersion);
             }
 
-            TString blob; 
+            TString blob;
             Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&blob);
- 
-            return blob; 
-        } 
- 
+
+            return blob;
+        }
+
         TPageId WritePage(TSharedData page, EPage type, ui32 group = 0) noexcept
-        { 
-            NSan::CheckMemIsInitialized(page.data(), page.size()); 
- 
+        {
+            NSan::CheckMemIsInitialized(page.data(), page.size());
+
             if (group == 0) {
                 Current.MainWritten += page.size();
             }
 
             return Pager.Write(std::move(page), type, group);
-        } 
- 
+        }
+
         void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept
         {
             NSan::CheckMemIsInitialized(body.data(), body.size());
@@ -679,25 +679,25 @@ namespace NTable {
         }
 
         void Save(TSharedData raw, NPage::TGroupId groupId) noexcept override
-        { 
+        {
             auto& g = groupId.Historic ? Histories[groupId.Index] : Groups[groupId.Index];
 
             if (groupId.IsMain()) {
                 Y_VERIFY(Phase < 2, "Called twice on Finish(...)");
             }
-            Y_VERIFY(raw, "Save(...) accepts only non-trivial blobs"); 
- 
+            Y_VERIFY(raw, "Save(...) accepts only non-trivial blobs");
+
             if (auto dataPage = NPage::TDataPage(&raw)) {
                 TSharedData keep; /* should preserve original data for Key */
- 
-                /* Need to extract first key from page. Just written key 
-                    columns may not hold EOp::Reset cells (and now this 
-                    isn't possible technically), thus there isn't required 
-                    TNulls object for expanding defaults. 
-                 */ 
- 
+
+                /* Need to extract first key from page. Just written key
+                    columns may not hold EOp::Reset cells (and now this
+                    isn't possible technically), thus there isn't required
+                    TNulls object for expanding defaults.
+                 */
+
                 Y_VERIFY(dataPage->Records, "Invalid EPage::DataPage blob");
- 
+
                 if (groupId.IsMain()) {
                     Y_VERIFY_DEBUG(NextSliceFirstRowId != Max<TRowId>());
 
@@ -709,21 +709,21 @@ namespace NTable {
                 }
 
                 Current.Bytes += raw.size(); /* before encoding */
- 
+
                 if (g.Codec == NPage::ECodec::Plain) {
-                    /* Ecoding was not enabled, keep as is */ 
+                    /* Ecoding was not enabled, keep as is */
                 } else if (keep = Encode(raw, g.Codec, g.ForceCompression)) {
-                    std::swap(raw, keep); 
-                } 
- 
+                    std::swap(raw, keep);
+                }
+
                 Current.Coded += raw.size(); /* after encoding */
- 
+
                 auto page = WritePage(raw, EPage::DataPage, groupId.Index);
- 
+
                 // N.B. non-main groups have no key
                 Y_VERIFY_DEBUG(g.Index.CalcSize(Key) == g.FirstKeyIndexSize);
                 g.Index.Add(g.FirstKeyIndexSize, Key, dataPage.BaseRow(), page);
- 
+
                 // N.B. hack to save the last row/key for the main group
                 // SliceSize is wrong, but it's a hack for tests right now
                 if (groupId.IsMain() && (NextSliceForce || Phase == 1 || Current.Bytes - LastSliceBytes >= SliceSize)) {
@@ -734,52 +734,52 @@ namespace NTable {
 
                     SaveSlice(lastRowId, TSerializedCellVec(TSerializedCellVec::Serialize(Key)));
 
-                    if (Phase == 1) { 
+                    if (Phase == 1) {
                         Y_VERIFY_DEBUG(g.Index.CalcSize(Key) == g.LastKeyIndexSize);
                         g.Index.Add(g.LastKeyIndexSize, Key, lastRowId, page);
-                        ++Phase; 
+                        ++Phase;
                     }
                 }
 
                 g.FirstKeyIndexSize = 0;
                 g.LastKeyIndexSize = 0;
-            } 
-        } 
- 
+            }
+        }
+
         TLargeObj Save(TRowId row, ui32 tag, const TGlobId &glob) noexcept override
-        { 
-            return Register(row, tag, glob); 
-        } 
- 
+        {
+            return Register(row, tag, glob);
+        }
+
         TLargeObj Save(TRowId row, ui32 tag, TArrayRef<const char> plain) noexcept override
-        { 
+        {
             if (plain.size() >= LargeEdge && plain.size() <= MaxLargeBlob) {
                 auto blob = NPage::THello::WrapString(plain, EPage::Opaque, 0);
                 ui64 ref = Globs.Size(); /* is the current blob index */
- 
+
                 return Register(row, tag, Pager.WriteLarge(std::move(blob), ref));
- 
+
             } else if (plain.size() >= SmallEdge) {
                 auto blob = NPage::THello::Wrap(plain, EPage::Opaque, 0);
                 Current.Bytes += blob.size();
                 Current.Coded += blob.size();
- 
-                FrameS.Put(row, tag, blob.size()); 
- 
+
+                FrameS.Put(row, tag, blob.size());
+
                 Current.SmallWritten += blob.size();
 
                 return { ELargeObj::Outer, Pager.WriteOuter(std::move(blob)) };
- 
-            } else { 
+
+            } else {
                 Y_Fail("Got ELargeObj blob " << plain.size() << "b out of limits"
                         << " { " << SmallEdge << "b, " << LargeEdge << "b }");
-            } 
-        } 
- 
+            }
+        }
+
         TLargeObj Register(TRowId row, ui32 tag, const TGlobId &glob) noexcept
-        { 
+        {
             ui32 ref;
- 
+
             auto it = RegisteredGlobs.find(glob.Logo);
             if (it != RegisteredGlobs.end()) {
                 // It's ok to reuse, as long as the glob is on the same row and column
@@ -800,50 +800,50 @@ namespace NTable {
             }
 
             return { ELargeObj::Extern, ref };
-        } 
- 
+        }
+
         TSharedData Encode(TArrayRef<const char> page, ECodec codec, bool force) noexcept
-        { 
+        {
             Y_VERIFY(codec == ECodec::LZ4, "Only LZ4 encoding allowed");
- 
+
             auto got = NPage::THello().Read(page, EPage::DataPage);
- 
-            Y_VERIFY(got == ECodec::Plain, "Page is already encoded"); 
+
+            Y_VERIFY(got == ECodec::Plain, "Page is already encoded");
             Y_VERIFY(got.Page.data() - page.data() == 16, "Page compression would change page header size");
- 
+
             if (!CodecImpl) {
                 CodecImpl = NBlockCodecs::Codec("lz4fast");
             }
             auto size = CodecImpl->MaxCompressedLength(got.Page);
- 
+
             TSharedData out = TSharedData::Uninitialized(size + 16 /* label */);
- 
+
             size = CodecImpl->Compress(got.Page, out.mutable_begin() + 16);
- 
+
             auto trimmed = out.Trim(size + 16 /* label */);
             if (trimmed >= out.size()) {
                 // Make a hard copy and avoid wasting space in caches
                 out = TSharedData::Copy(out);
             }
- 
+
             if (!force && out.size() + (page.size() >> 3) > page.size()) {
-                return { }; /* Compressed page is almost the same in size */ 
-            } else { 
+                return { }; /* Compressed page is almost the same in size */
+            } else {
                 std::copy(page.begin(), page.begin() + 16, out.mutable_begin());
- 
+
                 auto *label = TDeref<NPage::TLabel>::At(out.mutable_begin(), 0);
                 label->SetSize(out.size());
- 
+
                 *TDeref<ui8>::At(label + 1, 0) = ui8(ECodec::LZ4);
- 
-                Y_VERIFY(label->Format & 0x8000, "Unexpected label version"); 
- 
+
+                Y_VERIFY(label->Format & 0x8000, "Unexpected label version");
+
                 NSan::CheckMemIsInitialized(out.data(), out.size());
 
                 return out;
-            } 
-        } 
- 
+            }
+        }
+
         void InitKey(const NPage::TDataPage::TRecord* record, NPage::TGroupId groupId) noexcept
         {
             const auto& layout = Scheme->GetLayout(groupId);
@@ -871,8 +871,8 @@ namespace NTable {
             LastSliceBytes = Current.Bytes;
         }
 
-    private: 
-        const bool Final = false; 
+    private:
+        const bool Final = false;
         const ui32 SmallEdge;
         const ui32 LargeEdge;
         const ui32 MaxLargeBlob;
@@ -884,16 +884,16 @@ namespace NTable {
         NPage::ISplitKeys* const SplitKeys;
         const TRowVersion MinRowVersion;
         const TIntrusiveConstPtr<TPartScheme> Scheme;
- 
+
         const ICodec *CodecImpl = nullptr;
-        IPageWriter& Pager; 
-        NPage::TFrameWriter FrameL; /* Large blobs inverted index   */ 
-        NPage::TFrameWriter FrameS; /* Packed blobs invertedi index */ 
+        IPageWriter& Pager;
+        NPage::TFrameWriter FrameL; /* Large blobs inverted index   */
+        NPage::TFrameWriter FrameS; /* Packed blobs invertedi index */
         NPage::TExtBlobsWriter Globs;
         THolder<NBloom::IWriter> ByKey;
         TWritten Result;
-        TStackVec<TCell, 16> Key; 
-        ui32 Phase = 0; 
+        TStackVec<TCell, 16> Key;
+        ui32 Phase = 0;
 
         struct TRegisteredGlob {
             TRowId Row;
@@ -984,6 +984,6 @@ namespace NTable {
         TSerializedCellVec NextSliceFirstKey;
         ui64 LastSliceBytes = 0;
         bool NextSliceForce = false;
-    }; 
- 
-}} 
+    };
+
+}}

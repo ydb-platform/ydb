@@ -5,7 +5,7 @@
 
 namespace NKikimr {
 
-namespace NTable { 
+namespace NTable {
     class TDatabase;
 }
 
@@ -13,9 +13,9 @@ namespace NKeyValue {
 
 class TSimpleDbFlat : public ISimpleDb {
 protected:
-    NTable::TDatabase &Db; 
+    NTable::TDatabase &Db;
 public:
-    TSimpleDbFlat(NTable::TDatabase &db); 
+    TSimpleDbFlat(NTable::TDatabase &db);
     void Erase(const TString &key, const TActorContext &ctx) override;
     void Update(const TString &key, const TString &value, const TActorContext &ctx) override;
 };

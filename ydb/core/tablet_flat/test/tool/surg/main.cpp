@@ -6,34 +6,34 @@
 #include <ydb/core/protos/scheme_log.pb.h>
 #include <ydb/core/protos/tablet.pb.h>
 #include <ydb/core/util/pb.h>
- 
+
 #include <library/cpp/getopt/last_getopt.h>
 #include <library/cpp/blockcodecs/codecs.h>
-#include <util/generic/yexception.h> 
-#include <util/stream/file.h> 
-#include <array> 
- 
-namespace NKikimr { 
-namespace NTable { 
-namespace NTest { 
- 
-    struct TNames { 
- 
+#include <util/generic/yexception.h>
+#include <util/stream/file.h>
+#include <array>
+
+namespace NKikimr {
+namespace NTable {
+namespace NTest {
+
+    struct TNames {
+
         static const char* Do(ERowOp rop)
-        { 
-            static const std::array<const char*, 6> names { { 
-                "Absent", 
-                "Upsert", 
-                "Erase", 
-                "Reset", 
-                "Update", 
-                "Insert" 
-            }}; 
- 
-            return ui8(rop) < names.size() ? names[ui8(rop)] : "?error"; 
-        } 
-    }; 
- 
+        {
+            static const std::array<const char*, 6> names { {
+                "Absent",
+                "Upsert",
+                "Erase",
+                "Reset",
+                "Update",
+                "Insert"
+            }};
+
+            return ui8(rop) < names.size() ? names[ui8(rop)] : "?error";
+        }
+    };
+
     class TDumpValue {
     public:
         TDumpValue(const TRawTypeValue& value)
@@ -66,50 +66,50 @@ namespace NTest {
         const TRawTypeValue& Value;
     };
 
-    struct TDump { 
-        using TKeys = TArrayRef<const TRawTypeValue>; 
-        using TOps = TArrayRef<const TUpdateOp>; 
- 
-        TDump(IOutputStream &out) : Out(out) { } 
- 
-        bool NeedIn(ui32) noexcept 
-        { 
-            return true; 
-        } 
- 
-        void DoBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp) noexcept 
-        { 
-            Out 
-                << " +Begin ABI[" << tail << ", " << head << "]" 
-                << " {" << serial << " " << NFmt::TStamp(stamp) << "}" 
-                << Endl; 
-        } 
- 
+    struct TDump {
+        using TKeys = TArrayRef<const TRawTypeValue>;
+        using TOps = TArrayRef<const TUpdateOp>;
+
+        TDump(IOutputStream &out) : Out(out) { }
+
+        bool NeedIn(ui32) noexcept
+        {
+            return true;
+        }
+
+        void DoBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp) noexcept
+        {
+            Out
+                << " +Begin ABI[" << tail << ", " << head << "]"
+                << " {" << serial << " " << NFmt::TStamp(stamp) << "}"
+                << Endl;
+        }
+
         void DoAnnex(TArrayRef<const TStdPad<NPageCollection::TGlobId>> annex) noexcept
-        { 
-            Out << " | Annex " << annex.size() << " items" << Endl; 
- 
-            for (auto &one: annex) 
-                Out << " | " << (*one).Group << " : " << (*one).Logo << Endl; 
-        } 
- 
+        {
+            Out << " | Annex " << annex.size() << " items" << Endl;
+
+            for (auto &one: annex)
+                Out << " | " << (*one).Group << " : " << (*one).Logo << Endl;
+        }
+
         void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion rowVersion) noexcept
-        { 
-            ui32 keyBytes = 0, opsBytes = 0; 
- 
-            for (auto &one: key) keyBytes += one.Size(); 
+        {
+            ui32 keyBytes = 0, opsBytes = 0;
+
+            for (auto &one: key) keyBytes += one.Size();
             for (auto &one: ops) opsBytes += one.AsRef().size();
- 
-            Updates++, KeyBytes += keyBytes, OpsBytes += opsBytes; 
-            KeyItems += key.size(), OpsItems += ops.size(); 
- 
-            Out 
-                << " | Update " << tid 
-                << ": " << TNames::Do(rop) << "." << unsigned(rop) 
+
+            Updates++, KeyBytes += keyBytes, OpsBytes += opsBytes;
+            KeyItems += key.size(), OpsItems += ops.size();
+
+            Out
+                << " | Update " << tid
+                << ": " << TNames::Do(rop) << "." << unsigned(rop)
                 << ", " << key.size() << " keys (" << keyBytes << "b)"
                 << " " << ops.size() << " ops (" << opsBytes << "b)"
                 << " " << rowVersion
-                << Endl; 
+                << Endl;
 
             for (const auto& keyValue : key) {
                 Out << "   > key: " << TDumpValue(keyValue) << " <" << Endl;
@@ -117,8 +117,8 @@ namespace NTest {
             for (const auto& op : ops) {
                 Out << "   > col " << op.Tag << ": " << TDumpValue(op.Value) << " <" << Endl;
             }
-        } 
- 
+        }
+
         void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId) noexcept
         {
             ui32 keyBytes = 0, opsBytes = 0;
@@ -156,49 +156,49 @@ namespace NTest {
         }
 
         void DoFlush(ui32 tid, ui64 stamp, TEpoch epoch) noexcept
-        { 
-            Out 
-                << " | Flush " << tid << ", " << epoch << " eph" 
-                << ", stamp " << NFmt::TStamp(stamp) << Endl; 
-        } 
- 
-        void Finalize() const noexcept 
-        { 
-            Out 
-                << " ' Stats: " << Updates << " ups" 
-                << ", keys " << KeyItems << " " << KeyBytes << "b" 
-                << ", ops " << OpsItems << " " << OpsBytes << "b" 
-                << Endl; 
-        } 
- 
-    private: 
-        IOutputStream &Out; 
- 
-        ui64 Updates = 0; 
-        ui64 KeyItems = 0; 
-        ui64 KeyBytes = 0; 
-        ui64 OpsItems = 0; 
-        ui64 OpsBytes = 0; 
-    }; 
- 
-    template<typename TProto> 
-    struct TProtoDump { 
-        TProtoDump(IOutputStream &out) : Out(out) { } 
- 
-        void Do(TArrayRef<const char> plain) 
-        { 
-            TProto proto; 
- 
-            if (!ParseFromStringNoSizeLimit(proto, plain)) { 
-                throw yexception() << "Failed to parse proto blob"; 
-            } else { 
-                Out << proto.DebugString(); 
-            } 
-        } 
- 
-    private: 
-        IOutputStream &Out; 
-    }; 
+        {
+            Out
+                << " | Flush " << tid << ", " << epoch << " eph"
+                << ", stamp " << NFmt::TStamp(stamp) << Endl;
+        }
+
+        void Finalize() const noexcept
+        {
+            Out
+                << " ' Stats: " << Updates << " ups"
+                << ", keys " << KeyItems << " " << KeyBytes << "b"
+                << ", ops " << OpsItems << " " << OpsBytes << "b"
+                << Endl;
+        }
+
+    private:
+        IOutputStream &Out;
+
+        ui64 Updates = 0;
+        ui64 KeyItems = 0;
+        ui64 KeyBytes = 0;
+        ui64 OpsItems = 0;
+        ui64 OpsBytes = 0;
+    };
+
+    template<typename TProto>
+    struct TProtoDump {
+        TProtoDump(IOutputStream &out) : Out(out) { }
+
+        void Do(TArrayRef<const char> plain)
+        {
+            TProto proto;
+
+            if (!ParseFromStringNoSizeLimit(proto, plain)) {
+                throw yexception() << "Failed to parse proto blob";
+            } else {
+                Out << proto.DebugString();
+            }
+        }
+
+    private:
+        IOutputStream &Out;
+    };
 
     void DumpPart(const NKikimrExecutorFlat::TLogTableSnap& part) {
         Cerr << " | Table " << part.GetTable() << " level " << part.GetCompactionLevel() << Endl;
@@ -243,50 +243,50 @@ namespace NTest {
         }
     }
 
-} 
-} 
-} 
- 
-int main(int argc, char *argv[]) 
-{ 
-    using namespace NLastGetopt; 
-    using namespace NKikimr; 
-    using namespace NKikimr::NTable; 
- 
-    TOpts opts; 
- 
-    opts.AddLongOption("path", "path to blob") 
-        .RequiredArgument("FILE").Required(); 
-    opts.AddLongOption("blob", "type of blob to read") 
-        .RequiredArgument("STR").Required(); 
-    opts.AddLongOption("codec", "blob encoding: lz4, plain") 
-        .RequiredArgument("STR").DefaultValue("plain"); 
- 
-    THolder<TOptsParseResult> res(new TOptsParseResult(&opts, argc, argv)); 
- 
-    auto raw = TFileInput(res->Get("path")).ReadAll(); 
- 
-    if (!res->Has("codec") || !strcmp(res->Get("codec"), "plain")) { 
-        /* Blob is already decoded, nothing to do */ 
-    } else if (!strcmp(res->Get("codec"), "lz4")) { 
-        raw = NBlockCodecs::Codec("lz4fast")->Decode(raw); 
-    } else { 
-        throw yexception() << "Unknown blob encoding " << res->Get("codec"); 
-    } 
- 
-    Cerr << " decoded blob has " << raw.size() << " bytes" << Endl; 
- 
-    if (!strcmp(res->Get("blob"), "redo")) { 
-        NTest::TDump dump(Cerr); 
- 
-        NRedo::TPlayer<NTest::TDump>(dump).Replay(raw); 
- 
-        dump.Finalize(); 
- 
-    } else if (!strcmp(res->Get("blob"), "alter")) { 
-        NTest::TProtoDump<NTabletFlatScheme::TSchemeChanges>(Cerr).Do(raw); 
-    } else if (!strcmp(res->Get("blob"), "snap")) { 
-        NTest::TProtoDump<NKikimrExecutorFlat::TLogSnapshot>(Cerr).Do(raw); 
+}
+}
+}
+
+int main(int argc, char *argv[])
+{
+    using namespace NLastGetopt;
+    using namespace NKikimr;
+    using namespace NKikimr::NTable;
+
+    TOpts opts;
+
+    opts.AddLongOption("path", "path to blob")
+        .RequiredArgument("FILE").Required();
+    opts.AddLongOption("blob", "type of blob to read")
+        .RequiredArgument("STR").Required();
+    opts.AddLongOption("codec", "blob encoding: lz4, plain")
+        .RequiredArgument("STR").DefaultValue("plain");
+
+    THolder<TOptsParseResult> res(new TOptsParseResult(&opts, argc, argv));
+
+    auto raw = TFileInput(res->Get("path")).ReadAll();
+
+    if (!res->Has("codec") || !strcmp(res->Get("codec"), "plain")) {
+        /* Blob is already decoded, nothing to do */
+    } else if (!strcmp(res->Get("codec"), "lz4")) {
+        raw = NBlockCodecs::Codec("lz4fast")->Decode(raw);
+    } else {
+        throw yexception() << "Unknown blob encoding " << res->Get("codec");
+    }
+
+    Cerr << " decoded blob has " << raw.size() << " bytes" << Endl;
+
+    if (!strcmp(res->Get("blob"), "redo")) {
+        NTest::TDump dump(Cerr);
+
+        NRedo::TPlayer<NTest::TDump>(dump).Replay(raw);
+
+        dump.Finalize();
+
+    } else if (!strcmp(res->Get("blob"), "alter")) {
+        NTest::TProtoDump<NTabletFlatScheme::TSchemeChanges>(Cerr).Do(raw);
+    } else if (!strcmp(res->Get("blob"), "snap")) {
+        NTest::TProtoDump<NKikimrExecutorFlat::TLogSnapshot>(Cerr).Do(raw);
 
         TProtoBox<NKikimrExecutorFlat::TLogSnapshot> proto(raw);
 
@@ -338,33 +338,33 @@ int main(int argc, char *argv[])
             Cerr << " --------------------" << Endl;
         }
 
-    } else if (!strcmp(res->Get("blob"), "switch")) { 
-        NTest::TProtoDump<NKikimrExecutorFlat::TTablePartSwitch>(Cerr).Do(raw); 
+    } else if (!strcmp(res->Get("blob"), "switch")) {
+        NTest::TProtoDump<NKikimrExecutorFlat::TTablePartSwitch>(Cerr).Do(raw);
 
         TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(raw);
         if (proto.HasIntroducedParts()) {
             NTest::DumpPart(proto.GetIntroducedParts());
         }
 
-    } else if (!strcmp(res->Get("blob"), "borrow")) { 
-        NTest::TProtoDump<NKikimrExecutorFlat::TBorrowedPart>(Cerr).Do(raw); 
-    } else if (!strcmp(res->Get("blob"), "tablet")) { 
-        NTest::TProtoDump<NKikimrTabletBase::TTabletLogEntry>(Cerr).Do(raw); 
- 
-        TProtoBox<NKikimrTabletBase::TTabletLogEntry> proto(raw); 
- 
-        for (const auto &ref : proto.GetReferences()) { 
-            auto logo = LogoBlobIDFromLogoBlobID(ref); 
- 
-            Cerr << " | Ref " << logo << Endl; 
-        } 
- 
-        for (const auto &ref : proto.GetGcDiscovered()) { 
-            auto logo = LogoBlobIDFromLogoBlobID(ref); 
- 
-            Cerr << " | GC+ " << logo << Endl; 
-        } 
- 
+    } else if (!strcmp(res->Get("blob"), "borrow")) {
+        NTest::TProtoDump<NKikimrExecutorFlat::TBorrowedPart>(Cerr).Do(raw);
+    } else if (!strcmp(res->Get("blob"), "tablet")) {
+        NTest::TProtoDump<NKikimrTabletBase::TTabletLogEntry>(Cerr).Do(raw);
+
+        TProtoBox<NKikimrTabletBase::TTabletLogEntry> proto(raw);
+
+        for (const auto &ref : proto.GetReferences()) {
+            auto logo = LogoBlobIDFromLogoBlobID(ref);
+
+            Cerr << " | Ref " << logo << Endl;
+        }
+
+        for (const auto &ref : proto.GetGcDiscovered()) {
+            auto logo = LogoBlobIDFromLogoBlobID(ref);
+
+            Cerr << " | GC+ " << logo << Endl;
+        }
+
         for (const auto &ref : proto.GetGcLeft()) {
             auto logo = LogoBlobIDFromLogoBlobID(ref);
 
@@ -379,11 +379,11 @@ int main(int argc, char *argv[])
             dump.Finalize();
         }
 
-    } else if (!strcmp(res->Get("blob"), "unlog")) { 
-        TProtoBox<NKikimrTabletBase::TTabletLogEntry> proto(raw); 
- 
-        if (proto.HasEmbeddedLogBody()) Cout << proto.GetEmbeddedLogBody(); 
-    } else { 
-        throw yexception() << "Unknown blob type " <<  res->Get("blob"); 
-    } 
-} 
+    } else if (!strcmp(res->Get("blob"), "unlog")) {
+        TProtoBox<NKikimrTabletBase::TTabletLogEntry> proto(raw);
+
+        if (proto.HasEmbeddedLogBody()) Cout << proto.GetEmbeddedLogBody();
+    } else {
+        throw yexception() << "Unknown blob type " <<  res->Get("blob");
+    }
+}

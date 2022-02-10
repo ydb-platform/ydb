@@ -31,16 +31,16 @@ Y_UNIT_TEST_SUITE(TPartMulti) {
         const auto baz = *TNatural(*lay).Col(888_u32, "baz", 5.42, false);
         const auto zzz = *TNatural(*lay).Col(999_u32, "zzz", 4.11, false);
 
-        NTest::TPartEggs eggs = { 
-            nullptr, 
+        NTest::TPartEggs eggs = {
+            nullptr,
             lay.RowScheme(),
             {
-                TPartCook(lay, { }).Add(foo).Add(bar).Finish().Lone(), 
-                TPartCook(lay, { }).Add(baz).Finish().Lone(), 
-                TPartCook(lay, { }).Add(zzz).Finish().Lone(), 
+                TPartCook(lay, { }).Add(foo).Add(bar).Finish().Lone(),
+                TPartCook(lay, { }).Add(baz).Finish().Lone(),
+                TPartCook(lay, { }).Add(zzz).Finish().Lone(),
             }};
 
-        TCheckIt wrap(eggs, { }); 
+        TCheckIt wrap(eggs, { });
 
         wrap.To(10).Has(foo).Has(bar);
         wrap.To(11).NoVal(*TNatural(*lay).Col(555_u32, "foo", 10.));

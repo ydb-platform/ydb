@@ -190,7 +190,7 @@ extern const TTenantTestConfig DefaultTenantTestConfig;
 
 bool IsTabletActiveEvent(IEventHandle& ev);
 
-class TTenantTestRuntime : public TTestBasicRuntime { 
+class TTenantTestRuntime : public TTestBasicRuntime {
 private:
     void Setup(bool createTenantPools = true);
 

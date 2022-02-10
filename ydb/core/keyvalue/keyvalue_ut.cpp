@@ -76,7 +76,7 @@ struct TTestContext {
     void Prepare(const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &outActiveZone) {
         Y_UNUSED(dispatchName);
         outActiveZone = false;
-        Runtime.Reset(new TTestBasicRuntime); 
+        Runtime.Reset(new TTestBasicRuntime);
         Runtime->SetScheduledLimit(100);
         Runtime->SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
         SetupLogging(*Runtime);

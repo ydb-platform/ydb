@@ -36,14 +36,14 @@ namespace NBus {
     public:
         class TError: public yexception {
         };
- 
+
         TNetAddr();
         TNetAddr(TAutoPtr<IRemoteAddr> addr);
         TNetAddr(const char* hostPort, EIpVersion requireVersion = EIP_VERSION_ANY, EIpVersion preferVersion = EIP_VERSION_ANY);
         TNetAddr(TStringBuf host, int port, EIpVersion requireVersion = EIP_VERSION_ANY, EIpVersion preferVersion = EIP_VERSION_ANY);
         TNetAddr(const TNetworkAddress& na, EIpVersion requireVersion = EIP_VERSION_ANY, EIpVersion preferVersion = EIP_VERSION_ANY);
         TNetAddr(const TNetworkAddress& na, const TAddrInfo& ai);
- 
+
         bool operator==(const TNetAddr&) const;
         bool operator!=(const TNetAddr& other) const {
             return !(*this == other);

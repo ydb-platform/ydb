@@ -49,7 +49,7 @@ public:
     TTabletIopsValue ReadIops;
     TTabletIopsValue WriteIops;
 
-    void Fill(NKikimrTabletBase::TMetrics& metrics) const; 
+    void Fill(NKikimrTabletBase::TMetrics& metrics) const;
 };
 
 class TResourceMetricsSendState {

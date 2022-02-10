@@ -93,14 +93,14 @@ public:
         ReadHTTPReply<TOrigActor>(orig, ctx, Socket, buf);
     }
 
-    virtual void CatchHTTPRequestError(TString error) noexcept = 0; 
+    virtual void CatchHTTPRequestError(TString error) noexcept = 0;
 
     virtual void CatchHTTPContent(
         const TActorContext& ctx, TVector<char> buf) noexcept = 0;
 
     virtual void CatchHTTPWriteComplete(const TActorContext&) noexcept {}
 
-    virtual void CatchHTTPConnectionClosed() noexcept = 0; 
+    virtual void CatchHTTPConnectionClosed() noexcept = 0;
 
 public:
     void CatchHostAddress(
@@ -156,7 +156,7 @@ public:
                      ctx.SelfID.ToString().data(),
                      error.data());
 
-        CatchHTTPRequestError(std::move(error)); 
+        CatchHTTPRequestError(std::move(error));
     }
 
 
@@ -170,7 +170,7 @@ public:
             RetryCall = std::function<void(const TActorContext& ctx)>();
         }
 
-        CatchHTTPRequestError(std::move(error)); 
+        CatchHTTPRequestError(std::move(error));
     }
 
 
@@ -185,14 +185,14 @@ public:
         ReadHTTPReply<TOrigActor>(OriginalActor, ctx, Socket);
     }
 
-    void CatchSendDataError(TString error) noexcept override 
+    void CatchSendDataError(TString error) noexcept override
     {
-        CatchHTTPRequestError(std::move(error)); 
+        CatchHTTPRequestError(std::move(error));
     }
 
     void CatchReadDataError(TString error) noexcept override
     {
-        CatchHTTPRequestError(std::move(error)); 
+        CatchHTTPRequestError(std::move(error));
     }
 
     void CatchSendDataComplete(const TActorContext& ctx) noexcept override {
@@ -224,8 +224,8 @@ public:
         return true;
     }
 
-    void CatchReadDataClosed() noexcept { 
-        CatchHTTPConnectionClosed(); 
+    void CatchReadDataClosed() noexcept {
+        CatchHTTPConnectionClosed();
     }
 
 private:

@@ -1,15 +1,15 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(g:kikimr)
- 
-SRCS( 
-    misc.cpp 
-) 
- 
-PEERDIR( 
+
+SRCS(
+    misc.cpp
+)
+
+PEERDIR(
     ydb/core/tablet_flat/test/libs/rows
     ydb/core/tablet_flat/test/libs/table/model
     ydb/core/tablet_flat
-) 
- 
-END() 
+)
+
+END()

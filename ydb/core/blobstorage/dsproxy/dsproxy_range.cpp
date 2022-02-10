@@ -240,7 +240,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         TArrayHolder<TEvBlobStorage::TEvGet::TQuery> queries(new TEvBlobStorage::TEvGet::TQuery[queryCount]);
         TEvBlobStorage::TEvGet::TQuery *query = queries.Get();
         for (const TBlobQueryItem& item : BlobsToGet) {
-            query->Set(item.BlobId, 0, 0); 
+            query->Set(item.BlobId, 0, 0);
             ++query;
         }
         Y_VERIFY(query == queries.Get() + queryCount);

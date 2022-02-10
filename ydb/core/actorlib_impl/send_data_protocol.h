@@ -30,7 +30,7 @@ public:
         TryAgain(ctx);
     }
 
-    virtual void CatchSendDataError(TString error) noexcept = 0; 
+    virtual void CatchSendDataError(TString error) noexcept = 0;
 
     virtual void CatchSendDataComplete(
         const TActorContext& ctx) noexcept = 0;

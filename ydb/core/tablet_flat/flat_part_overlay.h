@@ -7,10 +7,10 @@
 namespace NKikimr {
 namespace NTable {
 
-    struct TOverlay { 
+    struct TOverlay {
         static TOverlay Decode(TArrayRef<const char> opaque, TArrayRef<const char> ext) noexcept;
-        TString Encode() const noexcept; 
-        void Validate() const noexcept; 
+        TString Encode() const noexcept;
+        void Validate() const noexcept;
 
         void ApplyDelta(TArrayRef<const char> delta) noexcept;
 
@@ -26,7 +26,7 @@ namespace NTable {
 
         TIntrusiveConstPtr<TScreen> Screen;
         TIntrusiveConstPtr<TSlices> Slices;
-    }; 
+    };
 
 }
 }

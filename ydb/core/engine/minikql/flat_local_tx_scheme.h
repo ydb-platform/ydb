@@ -1,5 +1,5 @@
-#pragma once 
- 
+#pragma once
+
 #include "flat_local_minikql_host.h"
 #include <ydb/core/tablet_flat/flat_dbase_apply.h>
 #include <ydb/core/tablet_flat/flat_database.h>
@@ -12,33 +12,33 @@
 #include <ydb/core/base/appdata.h>
 
 namespace NKikimr {
-namespace NMiniKQL { 
+namespace NMiniKQL {
 
 class TFlatLocalSchemeTx : public NTabletFlatExecutor::ITransaction {
-public: 
+public:
     TFlatLocalSchemeTx(TActorId sender, TEvTablet::TEvLocalSchemeTx::TPtr &ev)
-        : Sender(sender) 
-        , Ev(ev) 
-    {} 
+        : Sender(sender)
+        , Ev(ev)
+    {}
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
         Y_UNUSED(ctx);
 
         Response.Reset(new TEvTablet::TEvLocalSchemeTxResponse);
 
-        auto &delta =  Ev->Get()->Record.GetSchemeChanges(); 
- 
-        auto currentScheme = txc.DB.GetScheme(); 
-        NTable::TSchemeModifier(currentScheme).Apply(delta); 
+        auto &delta =  Ev->Get()->Record.GetSchemeChanges();
+
+        auto currentScheme = txc.DB.GetScheme();
+        NTable::TSchemeModifier(currentScheme).Apply(delta);
         // TODO: Validate scheme change
 
-        if (!Ev->Get()->Record.GetDryRun()) 
-            txc.DB.Alter().Merge(delta); 
+        if (!Ev->Get()->Record.GetDryRun())
+            txc.DB.Alter().Merge(delta);
 
-        auto schemeSnapshot = currentScheme.GetSnapshot(); 
+        auto schemeSnapshot = currentScheme.GetSnapshot();
         Response->Record.MutableFullScheme()->Swap(schemeSnapshot.Get());
         Response->Record.SetStatus(NKikimrProto::OK);
-        Response->Record.SetOrigin(txc.Tablet); 
+        Response->Record.SetOrigin(txc.Tablet);
 
         return true;
     }
@@ -51,10 +51,10 @@ public:
         ctx.Send(Sender, Response.Release());
     }
 
-private: 
+private:
     const TActorId Sender;
-    TEvTablet::TEvLocalSchemeTx::TPtr Ev; 
-    TAutoPtr<TEvTablet::TEvLocalSchemeTxResponse> Response; 
+    TEvTablet::TEvLocalSchemeTx::TPtr Ev;
+    TAutoPtr<TEvTablet::TEvLocalSchemeTxResponse> Response;
 };
 
 }}

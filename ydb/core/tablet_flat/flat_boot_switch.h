@@ -1,20 +1,20 @@
-#pragma once 
- 
-#include "flat_boot_blobs.h" 
-#include "flat_store_hotdog.h" 
-#include "flat_store_solid.h" 
- 
+#pragma once
+
+#include "flat_boot_blobs.h"
+#include "flat_store_hotdog.h"
+#include "flat_store_solid.h"
+
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
- 
-namespace NKikimr { 
-namespace NTabletFlatExecutor { 
-namespace NBoot { 
- 
+
+namespace NKikimr {
+namespace NTabletFlatExecutor {
+namespace NBoot {
+
     struct TSwitch {
- 
+
         struct TBundle {
             TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
-            TString Legacy; 
+            TString Legacy;
             TString Opaque;
             TVector<TString> Deltas;
             NTable::TEpoch Epoch = NTable::TEpoch::Max();
@@ -33,9 +33,9 @@ namespace NBoot {
             }
         };
 
-        struct TChange { 
+        struct TChange {
             TLogoBlobID Label;
-            TString Legacy; 
+            TString Legacy;
             TString Opaque;
         };
 
@@ -66,14 +66,14 @@ namespace NBoot {
             bool Load = true;
         };
 
-        TSwitch() { } 
+        TSwitch() { }
         TSwitch(NPageCollection::TLargeGlobId largeGlobId) : LargeGlobId(largeGlobId) { }
- 
-        bool Loaded() const noexcept 
-        { 
-            return Table != Max<ui32>(); 
-        } 
- 
+
+        bool Loaded() const noexcept
+        {
+            return Table != Max<ui32>();
+        }
+
         void Init(const NKikimrExecutorFlat::TTablePartSwitch &proto)
         {
             InitTable(proto.GetTableId());
@@ -120,52 +120,52 @@ namespace NBoot {
             }
         }
 
-        void Init(const NKikimrExecutorFlat::TLogTableSnap &snap) 
-        { 
+        void Init(const NKikimrExecutorFlat::TLogTableSnap &snap)
+        {
             InitTable(snap.GetTable());
- 
+
             if (snap.HasCompactionLevel()) {
                 Level = snap.GetCompactionLevel();
             }
- 
+
             if (snap.DbPartMetaInfoBodySize() > 0) {
                 /* Legacy mode, may hold only one page collection per entity */
- 
+
                 AddLegacyLargeGlobId(Bundles.emplace_back(), snap.GetDbPartMetaInfoBody());
             }
- 
+
             if (snap.BundlesSize() > 0) {
                 Bundles.reserve(Bundles.size() + snap.BundlesSize());
 
                 for (auto &bundle: snap.GetBundles()) {
-                    auto &one = Bundles.emplace_back(); 
+                    auto &one = Bundles.emplace_back();
 
                     one.LargeGlobIds.reserve(bundle.PageCollectionsSize());
 
                     for (auto &pageCollection: bundle.GetPageCollections()) {
                         if (pageCollection.HasLargeGlobId()) {
                             auto largeGlobId = TLargeGlobIdProto::Get(pageCollection.GetLargeGlobId());
- 
+
                             one.LargeGlobIds.emplace_back(largeGlobId);
-                        } else { 
+                        } else {
                             AddLegacyLargeGlobId(one, pageCollection.GetMetaId());
-                        } 
-                    } 
- 
+                        }
+                    }
+
                     Y_VERIFY(one.LargeGlobIds.size(), "Part bundle has no page collections");
 
-                    if (bundle.HasLegacy()) 
-                        one.Legacy = bundle.GetLegacy(); 
- 
-                    if (bundle.HasOpaque()) 
-                        one.Opaque = bundle.GetOpaque(); 
+                    if (bundle.HasLegacy())
+                        one.Legacy = bundle.GetLegacy();
+
+                    if (bundle.HasOpaque())
+                        one.Opaque = bundle.GetOpaque();
 
                     if (bundle.HasEpoch())
                         one.Epoch = NTable::TEpoch(bundle.GetEpoch());
                 }
             }
         }
- 
+
         void Init(const NKikimrExecutorFlat::TLogTxStatusSnap &snap)
         {
             InitTable(snap.GetTable());
@@ -181,13 +181,13 @@ namespace NBoot {
         void Init(const NKikimrExecutorFlat::TCompactionState &proto)
         {
             InitTable(proto.GetTable());
- 
+
             CompactionChanges.Strategy = proto.GetStrategy();
             for (const auto& kv : proto.GetKeyValues()) {
                 CompactionChanges.KeyValues[kv.GetKey()] = kv.GetValue();
-            } 
-        } 
- 
+            }
+        }
+
         void Init(const NKikimrExecutorFlat::TRowVersionState &proto)
         {
             InitTable(proto.GetTable());
@@ -207,11 +207,11 @@ namespace NBoot {
 
             c.Label = LogoBlobIDFromLogoBlobID(change.GetLabel());
 
-            if (change.HasLegacy()) 
-                c.Legacy = change.GetLegacy(); 
- 
+            if (change.HasLegacy())
+                c.Legacy = change.GetLegacy();
+
             if (change.HasOpaque())
-                c.Opaque = change.GetOpaque(); 
+                c.Opaque = change.GetOpaque();
         }
 
         void AddDelta(const NKikimrExecutorFlat::TBundleDelta &delta)
@@ -225,9 +225,9 @@ namespace NBoot {
         }
 
         void AddMove(const NKikimrExecutorFlat::TBundleMove &proto)
-        { 
+        {
             auto &m = Moves.emplace_back();
- 
+
             m.Label = LogoBlobIDFromLogoBlobID(proto.GetLabel());
 
             if (proto.HasRebasedEpoch())
@@ -235,18 +235,18 @@ namespace NBoot {
 
             if (proto.HasSourceTable())
                 m.SourceTable = proto.GetSourceTable();
-        } 
- 
-    private: 
+        }
+
+    private:
         void AddLegacyLargeGlobId(TBundle &bundle, const TLargeGlobIdProto::TRep &rep)
-        { 
-            auto lookup = [](const TLogoBlobID&) { 
+        {
+            auto lookup = [](const TLogoBlobID&) {
                 return NPageCollection::TLargeGlobId::InvalidGroup; /* Don't know now group id */
-            }; 
- 
+            };
+
             bundle.LargeGlobIds.emplace_back(TLargeGlobIdProto::Get(rep, lookup));
-        } 
- 
+        }
+
         void InitTable(ui32 table) {
             Y_VERIFY(table != Max<ui32>(), "Invalid table id in switch");
             if (Table == Max<ui32>()) {
@@ -258,15 +258,15 @@ namespace NBoot {
             }
         }
 
-    public: 
+    public:
         const NPageCollection::TLargeGlobId LargeGlobId;  /* Switch blob LargeGlobId */
- 
-        ui32 Table = Max<ui32>(); 
+
+        ui32 Table = Max<ui32>();
         ui32 Level = 255;
- 
+
         TVector<TBundle> Bundles;
         TVector<TBundle> MovedBundles;
-        TVector<TChange> Changes; 
+        TVector<TChange> Changes;
         TVector<TDelta> Deltas;
         TVector<TMove> Moves;
         TVector<TLogoBlobID> Leaving;
@@ -276,7 +276,7 @@ namespace NBoot {
         TCompactionChanges CompactionChanges;
 
         TVector<TRemovedRowVersions> RemovedRowVersions;
-    }; 
-} 
-} 
-} 
+    };
+}
+}
+}

@@ -19,7 +19,7 @@ TAcceptor::TAcceptor(TBusSessionImpl* session, ui64 acceptorId, SOCKET socket, c
     : TActor<TAcceptor>(session->Queue->WorkQueue.Get())
     , AcceptorId(acceptorId)
     , Session(session)
-    , GranStatus(session->Config.Secret.StatusFlushPeriod) 
+    , GranStatus(session->Config.Secret.StatusFlushPeriod)
 {
     SetNonBlock(socket, true);
 
@@ -30,7 +30,7 @@ TAcceptor::TAcceptor(TBusSessionImpl* session, ui64 acceptorId, SOCKET socket, c
     Stats.Fd = socket;
     Stats.ListenAddr = addr;
 
-    SendStatus(TInstant::Now()); 
+    SendStatus(TInstant::Now());
 }
 
 void TAcceptor::Act(TDefaultTag) {
@@ -40,8 +40,8 @@ void TAcceptor::Act(TDefaultTag) {
         return;
     }
 
-    TInstant now = TInstant::Now(); 
- 
+    TInstant now = TInstant::Now();
+
     if (state == SS_SHUTDOWN_COMMAND) {
         if (!!Channel) {
             Channel->Unregister();
@@ -49,7 +49,7 @@ void TAcceptor::Act(TDefaultTag) {
             Stats.Fd = INVALID_SOCKET;
         }
 
-        SendStatus(now); 
+        SendStatus(now);
 
         Session->GetDeadAcceptorStatusQueue()->EnqueueAndSchedule(Stats);
         Stats.ResetIncremental();
@@ -96,7 +96,7 @@ void TAcceptor::Act(TDefaultTag) {
 
             Session->GetOnAcceptQueue()->EnqueueAndSchedule(onAccept);
 
-            Stats.LastAcceptSuccessInstant = now; 
+            Stats.LastAcceptSuccessInstant = now;
             ++Stats.AcceptSuccessCount;
         }
 
@@ -105,11 +105,11 @@ void TAcceptor::Act(TDefaultTag) {
 
     Channel->EnableRead();
 
-    SendStatus(now); 
+    SendStatus(now);
 }
 
-void TAcceptor::SendStatus(TInstant now) { 
-    GranStatus.Listen.Update(Stats, now); 
+void TAcceptor::SendStatus(TInstant now) {
+    GranStatus.Listen.Update(Stats, now);
 }
 
 void TAcceptor::HandleEvent(SOCKET socket, void* cookie) {

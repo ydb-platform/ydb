@@ -129,7 +129,7 @@ namespace NBus {
             ythrow TNetAddr::TError() << "cannot resolve " << host << ":" << port << " into " << Describe(requireVersion);
         }
     }
- 
+
     TNetAddr::TNetAddr(const TNetworkAddress& na, EIpVersion requireVersion /*= EIP_VERSION_ANY*/, EIpVersion preferVersion /*= EIP_VERSION_ANY*/)
         : Ptr(MakeAddress(na, requireVersion, preferVersion))
     {

@@ -49,8 +49,8 @@ public:
         , CloseStreams(false)
         , ShouldCloseInput(true)
         , InputMode(HANDLE_INHERIT)
-        , OutputMode(HANDLE_STREAM)
-        , ErrorMode(HANDLE_STREAM)
+        , OutputMode(HANDLE_STREAM) 
+        , ErrorMode(HANDLE_STREAM) 
         , InputStream(nullptr)
         , OutputStream(nullptr)
         , ErrorStream(nullptr)
@@ -259,18 +259,18 @@ public:
         return *this;
     }
 
-    inline TShellCommandOptions& PipeOutput() {
-        OutputMode = HANDLE_PIPE;
-        OutputStream = nullptr;
-        return *this;
-    }
-
-    inline TShellCommandOptions& PipeError() {
-        ErrorMode = HANDLE_PIPE;
-        ErrorStream = nullptr;
-        return *this;
-    }
-
+    inline TShellCommandOptions& PipeOutput() { 
+        OutputMode = HANDLE_PIPE; 
+        OutputStream = nullptr; 
+        return *this; 
+    } 
+ 
+    inline TShellCommandOptions& PipeError() { 
+        ErrorMode = HANDLE_PIPE; 
+        ErrorStream = nullptr; 
+        return *this; 
+    } 
+ 
     /**
      * @brief set if child should inherit output handle
      *
@@ -279,7 +279,7 @@ public:
      * @return self
      */
     inline TShellCommandOptions& SetInheritOutput(bool inherit) {
-        OutputMode = inherit ? HANDLE_INHERIT : HANDLE_STREAM;
+        OutputMode = inherit ? HANDLE_INHERIT : HANDLE_STREAM; 
         return *this;
     }
 
@@ -291,24 +291,24 @@ public:
      * @return self
      */
     inline TShellCommandOptions& SetInheritError(bool inherit) {
-        ErrorMode = inherit ? HANDLE_INHERIT : HANDLE_STREAM;
+        ErrorMode = inherit ? HANDLE_INHERIT : HANDLE_STREAM; 
         return *this;
     }
 
 public:
-    bool ClearSignalMask = false;
-    bool CloseAllFdsOnExec = false;
-    bool AsyncMode = false;
-    size_t PollDelayMs = 0;
-    bool UseShell = false;
-    bool QuoteArguments = false;
-    bool DetachSession = false;
-    bool CloseStreams = false;
-    bool ShouldCloseInput = false;
-    EHandleMode InputMode = HANDLE_STREAM;
-    EHandleMode OutputMode = HANDLE_STREAM;
-    EHandleMode ErrorMode = HANDLE_STREAM;
-
+    bool ClearSignalMask = false; 
+    bool CloseAllFdsOnExec = false; 
+    bool AsyncMode = false; 
+    size_t PollDelayMs = 0; 
+    bool UseShell = false; 
+    bool QuoteArguments = false; 
+    bool DetachSession = false; 
+    bool CloseStreams = false; 
+    bool ShouldCloseInput = false; 
+    EHandleMode InputMode = HANDLE_STREAM; 
+    EHandleMode OutputMode = HANDLE_STREAM; 
+    EHandleMode ErrorMode = HANDLE_STREAM; 
+ 
     /// @todo more options
     // bool SearchPath // search exe name in $PATH
     // bool UnicodeConsole
@@ -319,7 +319,7 @@ public:
     IOutputStream* ErrorStream;
     TUserOptions User;
     THashMap<TString, TString> Environment;
-    int Nice = 0;
+    int Nice = 0; 
 
     static const size_t DefaultSyncPollDelay = 1000; // ms
     std::function<void()> FuncAfterFork = {};

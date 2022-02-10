@@ -1,9 +1,9 @@
 #include "minikql_program_printer.h"
 
-#include <ydb/library/yql/minikql/mkql_node.h> 
-#include <ydb/library/yql/minikql/mkql_node_printer.h> 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
-#include <ydb/library/yql/minikql/mkql_node_visitor.h> 
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/mkql_node_printer.h>
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/minikql/mkql_node_visitor.h>
 
 namespace NYq {
 

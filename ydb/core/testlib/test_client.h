@@ -11,10 +11,10 @@
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/mind/local.h>
-#include <ydb/library/yql/minikql/mkql_node.h> 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <library/cpp/grpc/server/grpc_server.h>
@@ -54,24 +54,24 @@ namespace Tests {
     const ui64 SchemeRoot = 0x850100;
     const ui64 Hive = 0xA001;
 
-    struct TServerSetup { 
+    struct TServerSetup {
         TString IpAddress;
-        ui16 Port = 0; 
- 
-        TServerSetup() 
-        {} 
- 
+        ui16 Port = 0;
+
+        TServerSetup()
+        {}
+
         TServerSetup(const TString& ipAddress, ui16 port)
-            : IpAddress(ipAddress) 
-            , Port(port) 
-        {} 
-    }; 
- 
-    // whether external server is used 
-    bool IsServerRedirected(); 
-    TServerSetup GetServerSetup(); 
- 
-    ui64 ChangeDomain(ui64 tabletId, ui32 domainUid); 
+            : IpAddress(ipAddress)
+            , Port(port)
+        {}
+    };
+
+    // whether external server is used
+    bool IsServerRedirected();
+    TServerSetup GetServerSetup();
+
+    ui64 ChangeDomain(ui64 tabletId, ui32 domainUid);
     ui64 ChangeStateStorage(ui64 tabletId, ui32 ssUid);
     NMiniKQL::IFunctionRegistry* DefaultFrFactory(const NScheme::TTypeRegistry& typeRegistry);
 
@@ -88,7 +88,7 @@ namespace Tests {
         using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
 
         ui16 Port;
-        ui16 GrpcPort = 0; 
+        ui16 GrpcPort = 0;
         NKikimrProto::TAuthConfig AuthConfig;
         NKikimrPQ::TPQConfig PQConfig;
         NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
@@ -128,7 +128,7 @@ namespace Tests {
         std::function<IActor*(const NKikimrProto::TAuthConfig&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
 
-        TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; } 
+        TServerSettings& SetGrpcPort(ui16 value) { GrpcPort = value; return *this; }
         TServerSettings& SetSupportsRedirect(bool value) { SupportsRedirect = value; return *this; }
         TServerSettings& SetTracePath(const TString& value) { TracePath = value; return *this; }
         TServerSettings& SetDomain(ui32 value) { Domain = value; return *this; }
@@ -280,9 +280,9 @@ namespace Tests {
 
         const NMsgBusProxy::TMsgBusClientConfig& GetClientConfig() const;
         std::shared_ptr<NMsgBusProxy::TMsgBusClient> GetClient() const;
-        bool LoadTypes(); 
+        bool LoadTypes();
         const NScheme::TTypeRegistry& GetTypeRegistry() const;
-        const NScheme::TTypeMetadataRegistry& GetTypeMetadataRegistry() const; 
+        const NScheme::TTypeMetadataRegistry& GetTypeMetadataRegistry() const;
         const NMiniKQL::IFunctionRegistry& GetFunctionRegistry() const;
 
         template <typename T>
@@ -315,7 +315,7 @@ namespace Tests {
 
         template <typename T>
         NBus::EMessageStatus SyncCall(TAutoPtr<T> msgHolder, TAutoPtr<NBus::TBusMessage> &reply) {
-            NBus::EMessageStatus msgbusStatus = NBus::EMessageStatus::MESSAGE_TIMEOUT; 
+            NBus::EMessageStatus msgbusStatus = NBus::EMessageStatus::MESSAGE_TIMEOUT;
             const ui64 finishTimeMs = TInstant::Now().MilliSeconds() +  TIME_LIMIT_MS;
             PrepareRequest(msgHolder);
             while (TInstant::Now().MilliSeconds() < finishTimeMs) {
@@ -507,16 +507,16 @@ namespace Tests {
     protected:
         using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
 
-        const ui32 Domain; 
+        const ui32 Domain;
         const TString DomainName;
-        const bool SupportsRedirect; 
+        const bool SupportsRedirect;
         const TStoragePoolKinds StoragePoolTypes;
         NScheme::TKikimrTypeRegistry TypeRegistry;
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
         NMsgBusProxy::TMsgBusClientConfig ClientConfig;
         std::shared_ptr<NMsgBusProxy::TMsgBusClient> Client;
-        TMaybe<ui64> TypesEtag; 
-        NScheme::TTypeMetadataRegistry LoadedTypeMetadataRegistry; 
+        TMaybe<ui64> TypesEtag;
+        NScheme::TTypeMetadataRegistry LoadedTypeMetadataRegistry;
         TIntrusivePtr<NMiniKQL::IFunctionRegistry> LoadedFunctionRegistry;
         TString SecurityToken;
     };

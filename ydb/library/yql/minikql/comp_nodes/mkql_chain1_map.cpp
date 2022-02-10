@@ -1,8 +1,8 @@
 #include "mkql_chain1_map.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -112,7 +112,7 @@ private:
     const TComputationNodes ComputationNodes;
 };
 
-template <bool IsStream> 
+template <bool IsStream>
 class TBaseChain1MapWrapper {
 public:
     class TListValue : public TCustomListValue {
@@ -150,7 +150,7 @@ public:
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, const TComputationNodes& computationNodes)
             : TCustomListValue(memInfo)
             , CompCtx(compCtx)
-            , List(std::move(list)) 
+            , List(std::move(list))
             , ComputationNodes(computationNodes)
         {}
 
@@ -180,39 +180,39 @@ public:
         const TComputationNodes& ComputationNodes;
     };
 
-    class TStreamValue : public TComputationValue<TStreamValue> { 
-    public: 
-        using TBase = TComputationValue<TStreamValue>; 
- 
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    public:
+        using TBase = TComputationValue<TStreamValue>;
+
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& list, const TComputationNodes& computationNodes)
-            : TBase(memInfo) 
+            : TBase(memInfo)
             , CompCtx(compCtx)
-            , List(std::move(list)) 
-            , ComputationNodes(computationNodes) 
-        {} 
- 
+            , List(std::move(list))
+            , ComputationNodes(computationNodes)
+        {}
+
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& value) final {
             const auto status = List.Fetch(ComputationNodes.ItemArg->RefValue(CompCtx));
-            if (status != NUdf::EFetchStatus::Ok) { 
-                return status; 
-            } 
- 
-            ++Length; 
- 
-            auto itemNode = Length == 1 ? ComputationNodes.InitItem : ComputationNodes.UpdateItem; 
-            auto stateNode = Length == 1 ? ComputationNodes.InitState : ComputationNodes.UpdateState; 
+            if (status != NUdf::EFetchStatus::Ok) {
+                return status;
+            }
+
+            ++Length;
+
+            auto itemNode = Length == 1 ? ComputationNodes.InitItem : ComputationNodes.UpdateItem;
+            auto stateNode = Length == 1 ? ComputationNodes.InitState : ComputationNodes.UpdateState;
             value = itemNode->GetValue(CompCtx);
             ComputationNodes.StateArg->SetValue(CompCtx, stateNode->GetValue(CompCtx));
-            return NUdf::EFetchStatus::Ok; 
-        } 
- 
+            return NUdf::EFetchStatus::Ok;
+        }
+
         TComputationContext& CompCtx;
         const NUdf::TUnboxedValue List;
         const TComputationNodes& ComputationNodes;
-        ui64 Length = 0; 
-    }; 
- 
+        ui64 Length = 0;
+    };
+
     TBaseChain1MapWrapper(IComputationNode* list, IComputationExternalNode* itemArg, IComputationExternalNode* stateArg,
         IComputationNode* initItem, IComputationNode* initState,
         IComputationNode* updateItem, IComputationNode* updateState)
@@ -244,7 +244,7 @@ public:
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         auto args = ctx.Func->arg_begin();
 

@@ -1,14 +1,14 @@
 #include "yql_solomon_provider_impl.h"
 
-#include <ydb/library/yql/core/yql_opt_utils.h> 
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h> 
-#include <ydb/library/yql/dq/opt/dq_opt.h> 
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h> 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h> 
-#include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h> 
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h> 
+#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
+#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 #include <util/string/split.h>
 

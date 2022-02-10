@@ -517,12 +517,12 @@ void TGRpcRequestProxyImpl::DoStartUpdate(const TString& database) {
 
 template<typename TEvent>
 void LogRequest(const TEvent& event) {
-    auto getDebugString = [&event]()->TString { 
+    auto getDebugString = [&event]()->TString {
         TStringStream ss;
         ss << "Got grpc request# " << event->Get()->GetRequestName();
         ss << ", traceId# " << event->Get()->GetTraceId().GetOrElse("undef");
         ss << ", sdkBuildInfo# " << event->Get()->GetSdkBuildInfo().GetOrElse("undef");
-        ss << ", state# " << event->Get()->GetAuthState().State; 
+        ss << ", state# " << event->Get()->GetAuthState().State;
         ss << ", database# " << event->Get()->GetDatabaseName().GetOrElse("undef");
         ss << ", grpcInfo# " << event->Get()->GetGrpcUserAgent().GetOrElse("undef");
         if (event->Get()->GetDeadline() == TInstant::Max()) {
@@ -535,8 +535,8 @@ void LogRequest(const TEvent& event) {
 
     if constexpr (std::is_same_v<TEvListEndpointsRequest::TPtr, TEvent>) {
         LOG_NOTICE(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
-    } 
-    else { 
+    }
+    else {
         LOG_DEBUG(*TlsActivationContext, NKikimrServices::GRPC_SERVER, "%s", getDebugString().c_str());
     }
 }

@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
         struct TestTable : Table<1> {
             struct ID : Column<1, NScheme::NTypeIds::Uint64> {};
             struct Value : Column<2, NScheme::NTypeIds::Uint64> {};
-            struct Name : Column<3, NScheme::NTypeIds::Utf8> {}; 
+            struct Name : Column<3, NScheme::NTypeIds::Utf8> {};
             struct BoolValue : Column<4, NScheme::NTypeIds::Bool> {};
             struct EmptyValue : Column<5, NScheme::NTypeIds::Uint64> { static constexpr ui64 Default = 13; };
             struct ProtoValue : Column<6, NScheme::NTypeIds::String> { using Type = NKikimrMiniKQL::TValue; };
@@ -46,7 +46,7 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
         };
 
         struct TestTable3 : Table<3> {
-            struct ID1 : Column<1, NScheme::NTypeIds::Utf8> {}; 
+            struct ID1 : Column<1, NScheme::NTypeIds::Utf8> {};
             struct ID2 : Column<2, NScheme::NTypeIds::String> {};
             struct Value : Column<3, NScheme::NTypeIds::Uint64> {};
 

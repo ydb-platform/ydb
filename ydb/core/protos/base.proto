@@ -1,19 +1,19 @@
-package NKikimrProto; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-enum EReplyStatus { 
-    OK = 0; 
-    ERROR = 1; 
-    ALREADY = 2; 
-    TIMEOUT = 3; 
-    RACE = 4; 
-    NODATA = 5; 
-    BLOCKED = 6; 
-    NOTREADY = 7; 
-    OVERRUN = 8; 
-    TRYLATER = 9; 
-    TRYLATER_TIME = 10; 
-    TRYLATER_SIZE = 11; 
+package NKikimrProto;
+option java_package = "ru.yandex.kikimr.proto";
+
+enum EReplyStatus {
+    OK = 0;
+    ERROR = 1;
+    ALREADY = 2;
+    TIMEOUT = 3;
+    RACE = 4;
+    NODATA = 5;
+    BLOCKED = 6;
+    NOTREADY = 7;
+    OVERRUN = 8;
+    TRYLATER = 9;
+    TRYLATER_TIME = 10;
+    TRYLATER_SIZE = 11;
     DEADLINE = 12;
     CORRUPTED = 13;
     SCHEDULED = 14;
@@ -24,14 +24,14 @@ enum EReplyStatus {
     RESTART = 19;
     NOT_YET = 20;
     NO_GROUP = 21;
-    UNKNOWN = 255; 
-}; 
- 
-message TLogoBlobID { 
-    optional fixed64 RawX1 = 1; 
-    optional fixed64 RawX2 = 2; 
-    optional fixed64 RawX3 = 3; 
-}; 
+    UNKNOWN = 255;
+};
+
+message TLogoBlobID {
+    optional fixed64 RawX1 = 1;
+    optional fixed64 RawX2 = 2;
+    optional fixed64 RawX3 = 3;
+};
 
 message TRowVersion {
     optional uint64 Step = 1;

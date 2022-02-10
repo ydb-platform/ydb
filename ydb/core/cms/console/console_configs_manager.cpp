@@ -5,7 +5,7 @@
 
 #include <ydb/core/cms/console/validators/registry.h>
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h> 
+#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
 #include <util/generic/bitmap.h>
 #include <util/random/random.h>

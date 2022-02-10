@@ -10,7 +10,7 @@
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/utils/utf8.h> 
+#include <ydb/library/yql/utils/utf8.h>
 
 namespace NKikimr {
 

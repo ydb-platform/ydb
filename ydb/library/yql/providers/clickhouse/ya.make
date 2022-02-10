@@ -1,6 +1,6 @@
-RECURSE( 
+RECURSE(
     actors
-    expr_nodes 
-    provider 
+    expr_nodes
+    provider
     proto
-) 
+)

@@ -1,8 +1,8 @@
 OWNER(g:yq)
- 
-LIBRARY() 
- 
-SRCS( 
+
+LIBRARY()
+
+SRCS(
     clusters_from_connections.cpp
     database_resolver.cpp
     error.cpp
@@ -10,7 +10,7 @@ SRCS(
     nodes_manager.cpp
     pending_fetcher.cpp
     pinger.cpp
-    proxy.cpp 
+    proxy.cpp
     proxy_private.cpp
     result_writer.cpp
     run_actor.cpp
@@ -20,10 +20,10 @@ SRCS(
     task_get.cpp
     task_ping.cpp
     task_result_write.cpp
-) 
- 
-PEERDIR( 
-    library/cpp/actors/core 
+)
+
+PEERDIR(
+    library/cpp/actors/core
     library/cpp/actors/interconnect
     library/cpp/json/yson
     library/cpp/monlib/dynamic_counters
@@ -61,29 +61,29 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/yq
     ydb/public/sdk/cpp/client/ydb_table
-    ydb/library/yql/providers/clickhouse/provider 
-    ydb/library/yql/providers/common/codec 
-    ydb/library/yql/providers/common/comp_nodes 
-    ydb/library/yql/providers/common/provider 
-    ydb/library/yql/providers/common/schema/mkql 
-    ydb/library/yql/providers/common/udf_resolve 
-    ydb/library/yql/providers/dq/actors 
-    ydb/library/yql/providers/dq/common 
-    ydb/library/yql/providers/dq/counters 
-    ydb/library/yql/providers/dq/interface 
-    ydb/library/yql/providers/dq/provider 
-    ydb/library/yql/providers/dq/provider/exec 
-    ydb/library/yql/providers/dq/worker_manager/interface 
-    ydb/library/yql/providers/pq/cm_client/interface 
-    ydb/library/yql/providers/pq/provider 
-    ydb/library/yql/providers/pq/task_meta 
-    ydb/library/yql/providers/s3/provider 
-    ydb/library/yql/providers/ydb/provider 
-) 
- 
-YQL_LAST_ABI_VERSION() 
- 
-END() 
+    ydb/library/yql/providers/clickhouse/provider
+    ydb/library/yql/providers/common/codec
+    ydb/library/yql/providers/common/comp_nodes
+    ydb/library/yql/providers/common/provider
+    ydb/library/yql/providers/common/schema/mkql
+    ydb/library/yql/providers/common/udf_resolve
+    ydb/library/yql/providers/dq/actors
+    ydb/library/yql/providers/dq/common
+    ydb/library/yql/providers/dq/counters
+    ydb/library/yql/providers/dq/interface
+    ydb/library/yql/providers/dq/provider
+    ydb/library/yql/providers/dq/provider/exec
+    ydb/library/yql/providers/dq/worker_manager/interface
+    ydb/library/yql/providers/pq/cm_client/interface
+    ydb/library/yql/providers/pq/provider
+    ydb/library/yql/providers/pq/task_meta
+    ydb/library/yql/providers/s3/provider
+    ydb/library/yql/providers/ydb/provider
+)
+
+YQL_LAST_ABI_VERSION()
+
+END()
 
 RECURSE(
     logging

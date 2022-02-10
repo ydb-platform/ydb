@@ -1,6 +1,6 @@
 #include "client.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <logbroker/public/api/grpc/config_manager.grpc.pb.h>
 

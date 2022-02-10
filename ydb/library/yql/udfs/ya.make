@@ -1,4 +1,4 @@
-RECURSE( 
-    common 
-    logs 
-) 
+RECURSE(
+    common
+    logs
+)

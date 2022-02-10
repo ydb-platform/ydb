@@ -3,8 +3,8 @@
 #include <ydb/library/yql/minikql/mkql_node.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/library/yql/dq/actors/task_runner/events.h> 
-#include <ydb/library/yql/dq/proto/dq_tasks.pb.h> 
+#include <ydb/library/yql/dq/actors/task_runner/events.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
 namespace NYql::NDq {
 

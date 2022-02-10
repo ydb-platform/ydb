@@ -1,14 +1,14 @@
-UNITTEST_FOR(yql/library/codegen) 
- 
+UNITTEST_FOR(yql/library/codegen)
+
 OWNER(g:yql)
- 
-NO_COMPILER_WARNINGS() 
- 
-SRCS( 
-    codegen_ut.cpp 
-) 
- 
-IF (OS_WINDOWS) 
+
+NO_COMPILER_WARNINGS()
+
+SRCS(
+    codegen_ut.cpp
+)
+
+IF (OS_WINDOWS)
     LLVM_BC(
         fib.cpp
         sum_sqr.cpp
@@ -25,7 +25,7 @@ IF (OS_WINDOWS)
         sum_sqr_128_ir
         str_size
     )
-ELSE() 
+ELSE()
     LLVM_BC(
         fib.cpp
         sum_sqr.cpp
@@ -42,6 +42,6 @@ ELSE()
         sum_sqr_128_ir
         str_size
     )
-ENDIF() 
- 
-END() 
+ENDIF()
+
+END()

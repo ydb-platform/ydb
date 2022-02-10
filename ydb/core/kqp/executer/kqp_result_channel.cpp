@@ -8,7 +8,7 @@
 #include <ydb/core/kqp/kqp.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 namespace NKikimr {
 namespace NKqp {

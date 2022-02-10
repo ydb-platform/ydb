@@ -13,7 +13,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h> 
+#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 

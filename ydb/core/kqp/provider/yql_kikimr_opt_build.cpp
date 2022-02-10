@@ -1,8 +1,8 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <ydb/library/yql/core/yql_opt_utils.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h> 
+#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.h>
 
 namespace NYql {
 namespace {
@@ -542,8 +542,8 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, const TMaybe<bool>& useNewEngine, T
                 .Ptr();
 
             auto newResult = ctx.ChangeChild(
-                *ctx.ChangeChild( 
-                    result.Ref(), 
+                *ctx.ChangeChild(
+                    result.Ref(),
                     TResWriteBase::idx_World,
                     execWorld.Ptr()
                 ),
@@ -622,7 +622,7 @@ TExprNode::TPtr KiBuildResult(TExprBase node,  const TString& cluster, TExprCont
         .Input(exec)
         .Done();
 
-    return ctx.ChangeChild(*ctx.ChangeChild(resFill.Ref(), 0, world.Ptr()), 3, data.Ptr()); 
+    return ctx.ChangeChild(*ctx.ChangeChild(resFill.Ref(), 0, world.Ptr()), 3, data.Ptr());
 }
 
 TYdbOperation GetTableOp(const TKiWriteTable& write) {

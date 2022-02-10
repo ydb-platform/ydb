@@ -1,19 +1,19 @@
-LIBRARY() 
- 
-OWNER( 
-    g:yql 
-) 
- 
-PEERDIR( 
-    ydb/library/yql/dq/runtime 
-) 
- 
-SRCS( 
-    counters.cpp 
-) 
- 
- 
-   YQL_LAST_ABI_VERSION() 
- 
- 
-END() 
+LIBRARY()
+
+OWNER(
+    g:yql
+)
+
+PEERDIR(
+    ydb/library/yql/dq/runtime
+)
+
+SRCS(
+    counters.cpp
+)
+
+
+   YQL_LAST_ABI_VERSION()
+
+
+END()

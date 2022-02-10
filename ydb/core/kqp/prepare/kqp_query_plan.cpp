@@ -4,11 +4,11 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/public/lib/value/value.h>
 
-#include <ydb/library/yql/ast/yql_ast_escaping.h> 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
-#include <ydb/library/yql/core/yql_opt_utils.h> 
-#include <ydb/library/yql/dq/opt/dq_opt.h> 
-#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h> 
+#include <ydb/library/yql/ast/yql_ast_escaping.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 
 #include <library/cpp/json/writer/json.h>
 #include <library/cpp/json/json_reader.h>

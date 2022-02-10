@@ -1,17 +1,17 @@
 #include "dq_solomon_write_actor.h"
 #include "metrics_encoder.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sinks.h> 
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h> 
-#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sinks.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h> 
-#include <ydb/library/yql/minikql/mkql_alloc.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
-#include <ydb/library/yql/utils/yql_panic.h> 
-#include <ydb/library/yql/utils/actors/http_sender_actor.h> 
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/actors/http_sender_actor.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event_local.h>

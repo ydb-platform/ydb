@@ -10,7 +10,7 @@
 #include <ydb/core/testlib/tenant_runtime.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #ifndef NDEBUG
 const bool DETAILED_LOG = true;

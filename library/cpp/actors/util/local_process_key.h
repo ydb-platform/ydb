@@ -1,30 +1,30 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/string/builder.h>
-#include <util/generic/strbuf.h> 
-#include <util/generic/vector.h> 
-#include <util/generic/hash.h> 
-#include <util/generic/singleton.h> 
+#include <util/generic/strbuf.h>
+#include <util/generic/vector.h>
+#include <util/generic/hash.h>
+#include <util/generic/singleton.h>
 #include <util/generic/serialized_enum.h>
- 
-template <typename T> 
-class TLocalProcessKeyState { 
- 
-template <typename U, const char* Name> 
-friend class TLocalProcessKey; 
+
+template <typename T>
+class TLocalProcessKeyState {
+
+template <typename U, const char* Name>
+friend class TLocalProcessKey;
 template <typename U, typename EnumT>
 friend class TEnumProcessKey;
- 
-public: 
-    static TLocalProcessKeyState& GetInstance() { 
-        return *Singleton<TLocalProcessKeyState<T>>(); 
-    } 
- 
-    size_t GetCount() const { 
+
+public:
+    static TLocalProcessKeyState& GetInstance() {
+        return *Singleton<TLocalProcessKeyState<T>>();
+    }
+
+    size_t GetCount() const {
         return StartIndex + Names.size();
-    } 
- 
-    TStringBuf GetNameByIndex(size_t index) const { 
+    }
+
+    TStringBuf GetNameByIndex(size_t index) const {
         if (index < StartIndex) {
             return StaticNames[index];
         } else {
@@ -32,24 +32,24 @@ public:
             Y_ENSURE(index < Names.size());
             return Names[index];
         }
-    } 
- 
-    size_t GetIndexByName(TStringBuf name) const { 
-        auto it = Map.find(name); 
-        Y_ENSURE(it != Map.end()); 
-        return it->second; 
-    } 
- 
-private: 
-    size_t Register(TStringBuf name) { 
+    }
+
+    size_t GetIndexByName(TStringBuf name) const {
+        auto it = Map.find(name);
+        Y_ENSURE(it != Map.end());
+        return it->second;
+    }
+
+private:
+    size_t Register(TStringBuf name) {
         auto x = Map.emplace(name, Names.size()+StartIndex);
-        if (x.second) { 
-            Names.emplace_back(name); 
-        } 
- 
-        return x.first->second; 
-    } 
- 
+        if (x.second) {
+            Names.emplace_back(name);
+        }
+
+        return x.first->second;
+    }
+
     size_t Register(TStringBuf name, ui32 index) {
         Y_VERIFY(index < StartIndex);
         auto x = Map.emplace(name, index);
@@ -58,7 +58,7 @@ private:
         return x.first->second;
     }
 
-private: 
+private:
     static constexpr ui32 StartIndex = 2000;
 
     TVector<TString> FillStaticNames() {
@@ -73,22 +73,22 @@ private:
     TVector<TString> StaticNames = FillStaticNames();
     TVector<TString> Names;
     THashMap<TString, size_t> Map;
-}; 
- 
-template <typename T, const char* Name> 
-class TLocalProcessKey { 
-public: 
-    static TStringBuf GetName() { 
-        return Name; 
-    } 
- 
-    static size_t GetIndex() { 
-        return Index; 
-    } 
- 
-private: 
-    inline static size_t Index = TLocalProcessKeyState<T>::GetInstance().Register(Name); 
-}; 
+};
+
+template <typename T, const char* Name>
+class TLocalProcessKey {
+public:
+    static TStringBuf GetName() {
+        return Name;
+    }
+
+    static size_t GetIndex() {
+        return Index;
+    }
+
+private:
+    inline static size_t Index = TLocalProcessKeyState<T>::GetInstance().Register(Name);
+};
 
 template <typename T, typename EnumT>
 class TEnumProcessKey {

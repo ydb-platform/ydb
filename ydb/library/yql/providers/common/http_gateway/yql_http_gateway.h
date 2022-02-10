@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h> 
+#include <ydb/library/yql/public/issue/yql_issue.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 

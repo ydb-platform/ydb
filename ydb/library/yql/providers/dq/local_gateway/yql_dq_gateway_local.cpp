@@ -1,21 +1,21 @@
 #include "yql_dq_gateway_local.h"
 
-#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h> 
-#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h> 
+#include <ydb/library/yql/providers/dq/provider/yql_dq_gateway.h>
+#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 
 #include <ydb/library/yql/providers/dq/service/interconnect_helpers.h>
 #include <ydb/library/yql/providers/dq/service/service_node.h>
 
-#include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h> 
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h> 
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h> 
-#include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h> 
-#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h> 
-#include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h> 
+#include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
+#include <ydb/library/yql/providers/clickhouse/actors/yql_ch_source_factory.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_source_factory.h>
+#include <ydb/library/yql/providers/ydb/actors/yql_ydb_source_factory.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_io_actors_factory.h> 
-#include <ydb/library/yql/utils/range_walker.h> 
-#include <ydb/library/yql/utils/bind_in_range.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_io_actors_factory.h>
+#include <ydb/library/yql/utils/range_walker.h>
+#include <ydb/library/yql/utils/bind_in_range.h>
 
 #include <library/cpp/messagebus/network.h>
 

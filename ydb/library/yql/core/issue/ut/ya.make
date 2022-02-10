@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/core/issue) 
+UNITTEST_FOR(ydb/library/yql/core/issue)
 
 OWNER(g:yql)
 
@@ -11,7 +11,7 @@ SRCS(
 PEERDIR(
 )
 
-TIMEOUT(300) 
-SIZE(MEDIUM) 
- 
+TIMEOUT(300)
+SIZE(MEDIUM)
+
 END()

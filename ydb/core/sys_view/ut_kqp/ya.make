@@ -25,7 +25,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 SRCS(
     ut_kqp.cpp
     ut_common.cpp

@@ -15,8 +15,8 @@ PEERDIR(
     ydb/library/yql/utils/log
     ydb/public/lib/experimental
     ydb/public/sdk/cpp/client/ydb_driver
-    ydb/library/yql/dq/actors/compute 
-    ydb/library/yql/providers/ydb/proto 
+    ydb/library/yql/dq/actors/compute
+    ydb/library/yql/providers/ydb/proto
 )
 
 YQL_LAST_ABI_VERSION()

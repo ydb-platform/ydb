@@ -24,7 +24,7 @@ PEERDIR(
     ydb/library/security
     ydb/public/sdk/cpp/client/ydb_scheme
     ydb/public/sdk/cpp/client/ydb_value
-    ydb/library/yql/public/issue 
+    ydb/library/yql/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

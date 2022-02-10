@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
     void TestListPoolPagesImpl(size_t listSize, ui16 countOfLists, size_t expectedListCapacity, ui32 expectedMark) {
         using TPool = TListPool<TItem>;
         TAlignedPagePool pagePool;
-        TPool pool(pagePool); 
+        TPool pool(pagePool);
         UNIT_ASSERT(countOfLists > 1);
 
         THashSet<TItem*> lists;
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
     void TestListPoolLargeImpl() {
         using TPool = TListPool<TItem>;
         TAlignedPagePool pagePool;
-        TPool pool(pagePool); 
+        TPool pool(pagePool);
         const size_t listSize = TListPoolBase::GetMaxListSize<TItem>();
         TItem* l = pool.template GetList<TItem>(listSize);
         pool.template IncrementList<TItem>(l);
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         const ui64 sumValuesTarget = sumKeysTarget + addition * elementsCount;
 
         TAlignedPagePool pagePool;
-        TCompactHash<TItem, TItem, TItemHash> hash(pagePool); 
+        TCompactHash<TItem, TItem, TItemHash> hash(pagePool);
 
         TVector<TItem> elements(elementsCount);
         std::iota(elements.begin(), elements.end(), 0);
@@ -168,7 +168,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
 
         {
             decltype(hash) hash2(std::move(hash));
-            decltype(hash) hash3(pagePool); 
+            decltype(hash) hash3(pagePool);
             hash3.Swap(hash2);
             hash = hash3;
         }
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         const ui64 elementsCount = keysCount * (keysCount + 1) / 2;
 
         TAlignedPagePool pagePool;
-        TCompactMultiHash<TItem, TItem, TItemHash> hash(pagePool); 
+        TCompactMultiHash<TItem, TItem, TItemHash> hash(pagePool);
 
         TVector<TItem> keys(keysCount);
         std::iota(keys.begin(), keys.end(), 0);
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
 
         {
             decltype(hash) hash2(std::move(hash));
-            decltype(hash) hash3(pagePool); 
+            decltype(hash) hash3(pagePool);
             hash3.Swap(hash2);
             hash = hash3;
         }
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
 
         {
             decltype(hash) hash2(std::move(hash));
-            decltype(hash) hash3(pagePool); 
+            decltype(hash) hash3(pagePool);
             hash3.Swap(hash2);
             hash = hash3;
         }
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
         const ui64 sumKeysTarget = elementsCount * (elementsCount - 1) / 2;
 
         TAlignedPagePool pagePool;
-        TCompactHashSet<TItem, TItemHash> hash(pagePool); 
+        TCompactHashSet<TItem, TItemHash> hash(pagePool);
 
         TVector<TItem> elements(elementsCount);
         std::iota(elements.begin(), elements.end(), 0);
@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(TCompactHashTest) {
 
         {
             decltype(hash) hash2(std::move(hash));
-            decltype(hash) hash3(pagePool); 
+            decltype(hash) hash3(pagePool);
             hash3.Swap(hash2);
             hash = hash3;
         }

@@ -1,10 +1,10 @@
-#pragma once 
- 
-#include <ydb/library/yql/core/yql_data_provider.h> 
-#include <ydb/library/yql/core/yql_type_annotation.h> 
+#pragma once
 
-namespace NYql { 
- 
+#include <ydb/library/yql/core/yql_data_provider.h>
+#include <ydb/library/yql/core/yql_type_annotation.h>
+
+namespace NYql {
+
 struct IPipelineConfigurator;
 
 struct TPeepholeSettings {
@@ -21,4 +21,4 @@ IGraphTransformer::TStatus PeepHoleOptimizeNode(const TExprNode::TPtr& input, TE
 
 THolder<IGraphTransformer> MakePeepholeOptimization(TTypeAnnotationContextPtr typeAnnotationContext, const IPipelineConfigurator* config = nullptr);
 
-} 
+}

@@ -1,11 +1,11 @@
 #include "mkql_while.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 template <bool SkipOrTake, bool Inclusive>
@@ -117,24 +117,24 @@ private:
 template <bool SkipOrTake, bool Inclusive, bool IsStream>
 class TBaseWhileWrapper {
 protected:
-    class TListValue : public TCustomListValue { 
-    public: 
+    class TListValue : public TCustomListValue {
+    public:
         class TIterator : public TComputationValue<TIterator> {
-        public: 
+        public:
             TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, IComputationNode* predicate)
                 : TComputationValue<TIterator>(memInfo)
                 , CompCtx(compCtx)
                 , Iter(std::move(iter))
-                , Item(item) 
-                , Predicate(predicate) 
-            {} 
- 
+                , Item(item)
+                , Predicate(predicate)
+            {}
+
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
                 if (FilterWorkFinished) {
                     return SkipOrTake ? Iter.Next(value) : false;
-                } 
- 
+                }
+
                 if constexpr (SkipOrTake) {
                     while (Iter.Next(Item->RefValue(CompCtx))) {
                         if (!Predicate->GetValue(CompCtx).template Get<bool>()) {
@@ -145,41 +145,41 @@ protected:
                                 value = Item->GetValue(CompCtx);
                                 return true;
                             }
-                        } 
+                        }
                     }
-                } else { 
+                } else {
                     if (Iter.Next(Item->RefValue(CompCtx))) {
                         if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                             value = Item->GetValue(CompCtx);
-                            return true; 
+                            return true;
                         } else {
                             FilterWorkFinished = true;
                             if constexpr (Inclusive) {
                                 value = Item->GetValue(CompCtx);
                                 return true;
                             }
-                        } 
-                    } 
+                        }
+                    }
                 }
- 
+
                 return false;
             }
 
             TComputationContext& CompCtx;
             const NUdf::TUnboxedValue Iter;
             IComputationExternalNode* const Item;
-            IComputationNode* const Predicate; 
+            IComputationNode* const Predicate;
             bool FilterWorkFinished = false;
-        }; 
- 
+        };
+
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const NUdf::TUnboxedValue& list, IComputationExternalNode* item, IComputationNode* predicate)
-            : TCustomListValue(memInfo) 
+            : TCustomListValue(memInfo)
             , CompCtx(compCtx)
-            , List(list) 
-            , Item(item) 
-            , Predicate(predicate) 
+            , List(list)
+            , Item(item)
+            , Predicate(predicate)
         {}
- 
+
     private:
         NUdf::TUnboxedValue GetListIterator() const override {
             return CompCtx.HolderFactory.Create<TIterator>(CompCtx, List.GetListIterator(), Item, Predicate);
@@ -188,22 +188,22 @@ protected:
         TComputationContext& CompCtx;
         const NUdf::TUnboxedValue List;
         IComputationExternalNode* const Item;
-        IComputationNode* const Predicate; 
-    }; 
- 
-    class TStreamValue : public TComputationValue<TStreamValue> { 
-    public: 
-        using TBase = TComputationValue<TStreamValue>; 
- 
+        IComputationNode* const Predicate;
+    };
+
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    public:
+        using TBase = TComputationValue<TStreamValue>;
+
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, const NUdf::TUnboxedValue& stream, IComputationExternalNode* item, IComputationNode* predicate)
-            : TBase(memInfo) 
+            : TBase(memInfo)
             , CompCtx(compCtx)
-            , Stream(stream) 
-            , Item(item) 
-            , Predicate(predicate) 
-        { 
-        } 
- 
+            , Stream(stream)
+            , Item(item)
+            , Predicate(predicate)
+        {
+        }
+
     private:
         ui32 GetTraverseCount() const override {
             return 1;
@@ -214,17 +214,17 @@ protected:
             return Stream;
         }
 
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override { 
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
             if (FilterWorkFinished) {
                 return SkipOrTake ? Stream.Fetch(result) : NUdf::EFetchStatus::Finish;
-            } 
- 
+            }
+
             if constexpr (SkipOrTake) {
                 for (;;) {
                     if (const auto status = Stream.Fetch(Item->RefValue(CompCtx)); status != NUdf::EFetchStatus::Ok) {
-                        return status; 
-                    } 
- 
+                        return status;
+                    }
+
                     if (!Predicate->GetValue(CompCtx).template Get<bool>()) {
                         FilterWorkFinished = true;
                         if constexpr (Inclusive) {
@@ -233,22 +233,22 @@ protected:
                             result = Item->GetValue(CompCtx);
                             return NUdf::EFetchStatus::Ok;
                         }
-                    } 
-                } 
-            } else { 
+                    }
+                }
+            } else {
                 switch (const auto status = Stream.Fetch(Item->RefValue(CompCtx))) {
                     case NUdf::EFetchStatus::Yield:
-                        return status; 
- 
+                        return status;
+
                     case NUdf::EFetchStatus::Ok:
                         if (Predicate->GetValue(CompCtx).template Get<bool>()) {
                             result = Item->GetValue(CompCtx);
                             return NUdf::EFetchStatus::Ok;
                         }
                     case NUdf::EFetchStatus::Finish:
-                        break; 
+                        break;
                 }
- 
+
                 FilterWorkFinished = true;
                 if constexpr (Inclusive) {
                     result = Item->GetValue(CompCtx);
@@ -256,17 +256,17 @@ protected:
                 } else {
                     return NUdf::EFetchStatus::Finish;
                 }
-            } 
-        } 
- 
+            }
+        }
+
         TComputationContext& CompCtx;
         const NUdf::TUnboxedValue Stream;
         IComputationExternalNode* const Item;
-        IComputationNode* const Predicate; 
+        IComputationNode* const Predicate;
         bool FilterWorkFinished = false;
-    }; 
- 
-#ifndef MKQL_DISABLE_CODEGEN 
+    };
+
+#ifndef MKQL_DISABLE_CODEGEN
     class TStreamCodegenWhileValue : public TStreamCodegenStatefulValueT<> {
     public:
         TStreamCodegenWhileValue(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream)
@@ -296,12 +296,12 @@ protected:
     };
 
     using TCustomListCodegenWhileValue = TCustomListCodegenStatefulValueT<TCodegenIteratorWhile>;
-#endif 
+#endif
 
     TBaseWhileWrapper(IComputationNode* list, IComputationExternalNode* item, IComputationNode* predicate)
         : List(list), Item(item), Predicate(predicate)
     {}
- 
+
 #ifndef MKQL_DISABLE_CODEGEN
     Function* GenerateFilter(const NYql::NCodegen::ICodegen::TPtr& codegen, const TString& name) const {
         auto& module = codegen->GetModule();
@@ -321,7 +321,7 @@ protected:
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType), PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         auto args = ctx.Func->arg_begin();
 
@@ -404,11 +404,11 @@ protected:
     TFilterPtr Filter = nullptr;
 #endif
 
-    IComputationNode* const List; 
+    IComputationNode* const List;
     IComputationExternalNode* const Item;
-    IComputationNode* const Predicate; 
-}; 
- 
+    IComputationNode* const Predicate;
+};
+
 template <bool SkipOrTake, bool Inclusive>
 class TStreamWhileWrapper : public TCustomValueCodegeneratorNode<TStreamWhileWrapper<SkipOrTake, Inclusive>>,
     private TBaseWhileWrapper<SkipOrTake, Inclusive, true> {
@@ -652,12 +652,12 @@ private:
 
 template <bool SkipOrTake, bool Inclusive>
 IComputationNode* WrapFilterWhile(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args"); 
+    MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
     const auto type = callable.GetType()->GetReturnType();
- 
+
     const auto predicateType = AS_TYPE(TDataType, callable.GetInput(2));
     MKQL_ENSURE(predicateType->GetSchemeType() == NUdf::TDataType<bool>::Id, "Expected bool");
- 
+
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     const auto predicate = LocateNode(ctx.NodeLocator, callable, 2);
     const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1);
@@ -667,28 +667,28 @@ IComputationNode* WrapFilterWhile(TCallable& callable, const TComputationNodeFac
         return new TStreamWhileWrapper<SkipOrTake, Inclusive>(ctx.Mutables, flow, itemArg, predicate);
     } else if (type->IsList()) {
         return new TListWhileWrapper<SkipOrTake, Inclusive>(ctx.Mutables, flow, itemArg, predicate);
-    } 
+    }
 
     THROW yexception() << "Expected flow, list or stream.";
-} 
- 
 }
 
-IComputationNode* WrapTakeWhile(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+}
+
+IComputationNode* WrapTakeWhile(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapFilterWhile<false, false>(callable, ctx);
-} 
- 
-IComputationNode* WrapSkipWhile(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+}
+
+IComputationNode* WrapSkipWhile(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapFilterWhile<true, false>(callable, ctx);
-} 
- 
+}
+
 IComputationNode* WrapTakeWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapFilterWhile<false, true>(callable, ctx);
-} 
+}
 
 IComputationNode* WrapSkipWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapFilterWhile<true, true>(callable, ctx);
-} 
+}
 
 }
 }

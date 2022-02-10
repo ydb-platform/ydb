@@ -2,7 +2,7 @@
 #include "dq_checkpoints.h"
 #include "dq_compute_actor_impl.h"
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h> 
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 
 #include <algorithm>
 

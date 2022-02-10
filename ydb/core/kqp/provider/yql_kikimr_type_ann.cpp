@@ -1,11 +1,11 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <ydb/library/yql/core/type_ann/type_ann_impl.h> 
-#include <ydb/library/yql/core/type_ann/type_ann_list.h> 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
-#include <ydb/library/yql/core/yql_opt_utils.h> 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
+#include <ydb/library/yql/core/type_ann/type_ann_impl.h>
+#include <ydb/library/yql/core/type_ann/type_ann_list.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
 namespace NYql {
 namespace {
@@ -155,12 +155,12 @@ private:
                     selectType = newStructType;
                 }
 
-                auto listSelectType = ctx.MakeType<TListExprType>(selectType); 
+                auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
                 TTypeAnnotationNode::TListType children;
                 children.push_back(node.World().Ref().GetTypeAnn());
                 children.push_back(listSelectType);
-                auto tupleAnn = ctx.MakeType<TTupleExprType>(children); 
+                auto tupleAnn = ctx.MakeType<TTupleExprType>(children);
                 node.Ptr()->SetTypeAnn(tupleAnn);
 
                 YQL_ENSURE(tableDesc->Metadata->ColumnOrder.size() == tableDesc->Metadata->Columns.size());
@@ -186,7 +186,7 @@ private:
 
                 TTypeAnnotationNode::TListType children;
                 children.push_back(node.World().Ref().GetTypeAnn());
-                children.push_back(ctx.MakeType<TDataExprType>(EDataSlot::Yson)); 
+                children.push_back(ctx.MakeType<TDataExprType>(EDataSlot::Yson));
                 node.Ptr()->SetTypeAnn(ctx.MakeType<TTupleExprType>(children));
                 return TStatus::Ok;
             }
@@ -458,7 +458,7 @@ private:
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!EnsureSpecificDataType(*filterLambda, EDataSlot::Bool, ctx)) { 
+        if (!EnsureSpecificDataType(*filterLambda, EDataSlot::Bool, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -477,7 +477,7 @@ private:
 
         auto updateResultType = updateLambda->GetTypeAnn()->Cast<TStructExprType>();
         for (auto& item : updateResultType->GetItems()) {
-            const auto& name = item->GetName(); 
+            const auto& name = item->GetName();
 
             if (table->GetKeyColumnIndex(TString(name))) {
                 ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
@@ -538,7 +538,7 @@ private:
             return IGraphTransformer::TStatus::Repeat;
         }
 
-        if (!EnsureSpecificDataType(*filterLambda, EDataSlot::Bool, ctx)) { 
+        if (!EnsureSpecificDataType(*filterLambda, EDataSlot::Bool, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -593,7 +593,7 @@ private:
 
             TKikimrColumnMetadata columnMeta;
             columnMeta.Name = columnName;
-            columnMeta.Type = dataType->GetName(); 
+            columnMeta.Type = dataType->GetName();
             columnMeta.NotNull = notNull;
 
             if (columnTuple.Size() > 2) {
@@ -1254,7 +1254,7 @@ private:
                 return TStatus::Error;
             }
 
-            auto optSelectType = ctx.MakeType<TOptionalExprType>(selectType); 
+            auto optSelectType = ctx.MakeType<TOptionalExprType>(selectType);
 
             node.Ptr()->SetTypeAnn(optSelectType);
 
@@ -1270,7 +1270,7 @@ private:
                 return TStatus::Error;
             }
 
-            auto listSelectType = ctx.MakeType<TListExprType>(selectType); 
+            auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
             node.Ptr()->SetTypeAnn(listSelectType);
 
@@ -1375,7 +1375,7 @@ private:
             auto predicateType = condEffect.Predicate().Ref().GetTypeAnn()->Cast<TDataExprType>();
             YQL_ENSURE(predicateType);
 
-            if (predicateType->GetSlot() != EDataSlot::Bool) { 
+            if (predicateType->GetSlot() != EDataSlot::Bool) {
                 ctx.AddError(TIssue(ctx.GetPosition(condEffect.Pos()), "Expected bool as predicate type"));
                 return IGraphTransformer::TStatus::Error;
             }

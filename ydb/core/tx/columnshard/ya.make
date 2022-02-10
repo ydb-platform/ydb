@@ -46,7 +46,7 @@ PEERDIR(
     ydb/core/util
     ydb/core/wrappers
     ydb/public/api/protos
-    ydb/library/yql/dq/actors/compute 
+    ydb/library/yql/dq/actors/compute
 )
 
 YQL_LAST_ABI_VERSION()

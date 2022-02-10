@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/utils/rand_guid.h> 
+#include <ydb/library/yql/utils/rand_guid.h>
 
 #include <util/generic/hash.h>
 #include <util/folder/path.h>

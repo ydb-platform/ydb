@@ -1,14 +1,14 @@
-#include "mkql_extend.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
- 
+#include "mkql_extend.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+
 #include <util/string/cast.h>
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 class TExtendFlowWrapper : public TStatefulFlowCodegeneratorNode<TExtendFlowWrapper> {
@@ -90,24 +90,24 @@ public:
     TExtendWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& lists)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , Lists(std::move(lists))
-    { 
-    } 
- 
+    {
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         TUnboxedValueVector values;
         values.reserve(Lists.size());
         std::transform(Lists.cbegin(), Lists.cend(), std::back_inserter(values),
             std::bind(&IComputationNode::GetValue, std::placeholders::_1, std::ref(ctx))
         );
- 
+
         return IsStream ?
             ctx.HolderFactory.ExtendStream(values.data(), values.size()):
             ctx.HolderFactory.ExtendList<false>(values.data(), values.size());
-    } 
+    }
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
- 
+
         const auto valueType = Type::getInt128Ty(context);
         const auto sizeType = Type::getInt64Ty(context);
         const auto size = ConstantInt::get(sizeType, Lists.size());
@@ -143,33 +143,33 @@ public:
 private:
     void RegisterDependencies() const final {
         std::for_each(Lists.cbegin(), Lists.cend(), std::bind(&TExtendWrapper::DependsOn, this, std::placeholders::_1));
-    } 
- 
+    }
+
     const TComputationNodePtrVector Lists;
-}; 
- 
+};
+
 }
 
-IComputationNode* WrapExtend(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() >= 1, "Expected at least 1 list"); 
+IComputationNode* WrapExtend(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() >= 1, "Expected at least 1 list");
     const auto type = callable.GetType()->GetReturnType();
 
     TComputationNodePtrVector flows;
     flows.reserve(callable.GetInputsCount());
-    for (ui32 i = 0; i < callable.GetInputsCount(); ++i) { 
+    for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {
         flows.emplace_back(LocateNode(ctx.NodeLocator, callable, i));
-    } 
- 
+    }
+
     if (type->IsFlow()) {
         return new TExtendFlowWrapper(ctx.Mutables, GetValueRepresentation(AS_TYPE(TFlowType, type)->GetItemType()), std::move(flows));
     } else if (type->IsStream()) {
         return new TExtendWrapper<true>(ctx.Mutables, std::move(flows));
     } else if (type->IsList()) {
         return new TExtendWrapper<false>(ctx.Mutables, std::move(flows));
-    } 
+    }
 
     THROW yexception() << "Expected either flow, list or stream.";
-} 
- 
-} 
-} 
+}
+
+}
+}

@@ -20,7 +20,7 @@
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>

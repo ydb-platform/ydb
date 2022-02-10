@@ -1,9 +1,9 @@
 #include "presort.h"
 
-#include <ydb/library/yql/minikql/mkql_alloc.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -432,61 +432,61 @@ Y_UNIT_TEST(Decimal) {
     TPresortTest().ValidateEncoding(values);
 }
 
-Y_UNIT_TEST(GenericVoid) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    auto type = env.GetVoid()->GetType(); 
-    NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod::Void(); 
-    TGenericPresortEncoder encoder(type); 
-    auto buf = encoder.Encode(value, false); 
+Y_UNIT_TEST(GenericVoid) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    auto type = env.GetVoid()->GetType();
+    NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod::Void();
+    TGenericPresortEncoder encoder(type);
+    auto buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf(""));
 }
 
-Y_UNIT_TEST(GenericBool) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    auto type = TDataType::Create(NUdf::TDataType<bool>::Id, env); 
-    NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(true); 
-    TGenericPresortEncoder encoder(type); 
-    auto buf = encoder.Encode(value, false); 
+Y_UNIT_TEST(GenericBool) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    auto type = TDataType::Create(NUdf::TDataType<bool>::Id, env);
+    NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(true);
+    TGenericPresortEncoder encoder(type);
+    auto buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01"));
-    buf = encoder.Encode(value, true); 
+    buf = encoder.Encode(value, true);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\xFE"));
-} 
- 
-Y_UNIT_TEST(GenericNumber) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    auto type = TDataType::Create(NUdf::TDataType<ui32>::Id, env); 
-    NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(ui32(1234)); 
-    TGenericPresortEncoder encoder(type); 
-    auto buf = encoder.Encode(value, false); 
+}
+
+Y_UNIT_TEST(GenericNumber) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    auto type = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
+    NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(ui32(1234));
+    TGenericPresortEncoder encoder(type);
+    auto buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00\x00\x04\xD2"sv));
-} 
- 
-Y_UNIT_TEST(GenericString) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    auto type = TDataType::Create(NUdf::TDataType<char*>::Id, env); 
-    NUdf::TUnboxedValue value = MakeString("ALongStringExample"); 
-    TGenericPresortEncoder encoder(type); 
-    auto buf = encoder.Encode(value, false); 
+}
+
+Y_UNIT_TEST(GenericString) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    auto type = TDataType::Create(NUdf::TDataType<char*>::Id, env);
+    NUdf::TUnboxedValue value = MakeString("ALongStringExample");
+    TGenericPresortEncoder encoder(type);
+    auto buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x1F" "ALongStringExam\x1Fple\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03"sv));
-} 
- 
-Y_UNIT_TEST(GenericOptional) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    auto type = TOptionalType::Create(TDataType::Create(NUdf::TDataType<bool>::Id, env), env); 
-    NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(true); 
-    TGenericPresortEncoder encoder(type); 
-    auto buf = encoder.Encode(value, false); 
+}
+
+Y_UNIT_TEST(GenericOptional) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    auto type = TOptionalType::Create(TDataType::Create(NUdf::TDataType<bool>::Id, env), env);
+    NUdf::TUnboxedValue value = NUdf::TUnboxedValuePod(true);
+    TGenericPresortEncoder encoder(type);
+    auto buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01"));
-    value = {}; 
-    buf = encoder.Encode(value, false); 
+    value = {};
+    buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv));
-} 
- 
+}
+
 Y_UNIT_TEST(NestedOptional) {
     TScopedAlloc alloc;
     TTypeEnvironment env(alloc);
@@ -514,133 +514,133 @@ Y_UNIT_TEST(NestedOptional) {
 }
 
 
-Y_UNIT_TEST(GenericList) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    auto type = TListType::Create(TDataType::Create(NUdf::TDataType<bool>::Id, env), env); 
-    TMemoryUsageInfo memInfo("test"); 
-    THolderFactory holderFactory(alloc.Ref(), memInfo); 
-    auto value = holderFactory.GetEmptyContainer(); 
-    TGenericPresortEncoder encoder(type); 
-    auto buf = encoder.Encode(value, false); 
+Y_UNIT_TEST(GenericList) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    auto type = TListType::Create(TDataType::Create(NUdf::TDataType<bool>::Id, env), env);
+    TMemoryUsageInfo memInfo("test");
+    THolderFactory holderFactory(alloc.Ref(), memInfo);
+    auto value = holderFactory.GetEmptyContainer();
+    TGenericPresortEncoder encoder(type);
+    auto buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv));
-    NUdf::TUnboxedValue* items; 
-    value = holderFactory.CreateDirectArrayHolder(1, items); 
-    items[0] = NUdf::TUnboxedValuePod(true); 
-    buf = encoder.Encode(value, false); 
+    NUdf::TUnboxedValue* items;
+    value = holderFactory.CreateDirectArrayHolder(1, items);
+    items[0] = NUdf::TUnboxedValuePod(true);
+    buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x00"sv));
-    value = holderFactory.CreateDirectArrayHolder(2, items); 
-    items[0] = NUdf::TUnboxedValuePod(true); 
-    items[1] = NUdf::TUnboxedValuePod(false); 
-    buf = encoder.Encode(value, false); 
+    value = holderFactory.CreateDirectArrayHolder(2, items);
+    items[0] = NUdf::TUnboxedValuePod(true);
+    items[1] = NUdf::TUnboxedValuePod(false);
+    buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x01\x00\x00"sv));
-} 
- 
-Y_UNIT_TEST(GenericTuple) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    TType* tupleTypes[2]; 
-    tupleTypes[0] = TDataType::Create(NUdf::TDataType<bool>::Id, env); 
-    tupleTypes[1] = TDataType::Create(NUdf::TDataType<ui32>::Id, env); 
-    auto type = TTupleType::Create(2, tupleTypes, env); 
-    TMemoryUsageInfo memInfo("test"); 
-    THolderFactory holderFactory(alloc.Ref(), memInfo); 
-    NUdf::TUnboxedValue* items; 
-    auto value = holderFactory.CreateDirectArrayHolder(2, items); 
-    items[0] = NUdf::TUnboxedValuePod(true); 
-    items[1] = NUdf::TUnboxedValuePod(ui32(1234)); 
-    TGenericPresortEncoder encoder(type); 
-    auto buf = encoder.Encode(value, false); 
+}
+
+Y_UNIT_TEST(GenericTuple) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    TType* tupleTypes[2];
+    tupleTypes[0] = TDataType::Create(NUdf::TDataType<bool>::Id, env);
+    tupleTypes[1] = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
+    auto type = TTupleType::Create(2, tupleTypes, env);
+    TMemoryUsageInfo memInfo("test");
+    THolderFactory holderFactory(alloc.Ref(), memInfo);
+    NUdf::TUnboxedValue* items;
+    auto value = holderFactory.CreateDirectArrayHolder(2, items);
+    items[0] = NUdf::TUnboxedValuePod(true);
+    items[1] = NUdf::TUnboxedValuePod(ui32(1234));
+    TGenericPresortEncoder encoder(type);
+    auto buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv));
-} 
- 
-Y_UNIT_TEST(GenericStruct) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    TStructMember structTypes[2]; 
-    structTypes[0] = TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, env)); 
-    structTypes[1] = TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, env)); 
-    auto type = TStructType::Create(2, structTypes, env); 
-    TMemoryUsageInfo memInfo("test"); 
-    THolderFactory holderFactory(alloc.Ref(), memInfo); 
-    NUdf::TUnboxedValue* items; 
-    auto value = holderFactory.CreateDirectArrayHolder(2, items); 
-    items[0] = NUdf::TUnboxedValuePod(true); 
-    items[1] = NUdf::TUnboxedValuePod(ui32(1234)); 
-    TGenericPresortEncoder encoder(type); 
-    auto buf = encoder.Encode(value, false); 
+}
+
+Y_UNIT_TEST(GenericStruct) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    TStructMember structTypes[2];
+    structTypes[0] = TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, env));
+    structTypes[1] = TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, env));
+    auto type = TStructType::Create(2, structTypes, env);
+    TMemoryUsageInfo memInfo("test");
+    THolderFactory holderFactory(alloc.Ref(), memInfo);
+    NUdf::TUnboxedValue* items;
+    auto value = holderFactory.CreateDirectArrayHolder(2, items);
+    items[0] = NUdf::TUnboxedValuePod(true);
+    items[1] = NUdf::TUnboxedValuePod(ui32(1234));
+    TGenericPresortEncoder encoder(type);
+    auto buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv));
-} 
- 
-Y_UNIT_TEST(GenericTupleVariant) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    TType* tupleTypes[2]; 
-    tupleTypes[0] = TDataType::Create(NUdf::TDataType<bool>::Id, env); 
-    tupleTypes[1] = TDataType::Create(NUdf::TDataType<ui32>::Id, env); 
-    auto underlying = TTupleType::Create(2, tupleTypes, env); 
-    auto type = TVariantType::Create(underlying, env); 
-    TMemoryUsageInfo memInfo("test"); 
-    THolderFactory holderFactory(alloc.Ref(), memInfo); 
-    TGenericPresortEncoder encoder(type); 
-    auto value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(true), 0); 
-    auto buf = encoder.Encode(value, false); 
+}
+
+Y_UNIT_TEST(GenericTupleVariant) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    TType* tupleTypes[2];
+    tupleTypes[0] = TDataType::Create(NUdf::TDataType<bool>::Id, env);
+    tupleTypes[1] = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
+    auto underlying = TTupleType::Create(2, tupleTypes, env);
+    auto type = TVariantType::Create(underlying, env);
+    TMemoryUsageInfo memInfo("test");
+    THolderFactory holderFactory(alloc.Ref(), memInfo);
+    TGenericPresortEncoder encoder(type);
+    auto value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(true), 0);
+    auto buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00\x01"sv));
-    value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(ui32(1234)), 1); 
-    buf = encoder.Encode(value, false); 
+    value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(ui32(1234)), 1);
+    buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv));
-} 
- 
-Y_UNIT_TEST(GenericStructVariant) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    TStructMember structTypes[2]; 
-    structTypes[0] = TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, env)); 
-    structTypes[1] = TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, env)); 
-    auto underlying = TStructType::Create(2, structTypes, env); 
-    auto type = TVariantType::Create(underlying, env); 
-    TMemoryUsageInfo memInfo("test"); 
-    THolderFactory holderFactory(alloc.Ref(), memInfo); 
-    TGenericPresortEncoder encoder(type); 
-    auto value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(true), 0); 
-    auto buf = encoder.Encode(value, false); 
+}
+
+Y_UNIT_TEST(GenericStructVariant) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    TStructMember structTypes[2];
+    structTypes[0] = TStructMember("A", TDataType::Create(NUdf::TDataType<bool>::Id, env));
+    structTypes[1] = TStructMember("B", TDataType::Create(NUdf::TDataType<ui32>::Id, env));
+    auto underlying = TStructType::Create(2, structTypes, env);
+    auto type = TVariantType::Create(underlying, env);
+    TMemoryUsageInfo memInfo("test");
+    THolderFactory holderFactory(alloc.Ref(), memInfo);
+    TGenericPresortEncoder encoder(type);
+    auto value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(true), 0);
+    auto buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00\x01"sv));
-    value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(ui32(1234)), 1); 
-    buf = encoder.Encode(value, false); 
+    value = holderFactory.CreateVariantHolder(NUdf::TUnboxedValuePod(ui32(1234)), 1);
+    buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2"sv));
-} 
- 
-Y_UNIT_TEST(GenericDict) { 
-    TScopedAlloc alloc; 
-    TTypeEnvironment env(alloc); 
-    auto type = TDictType::Create(TDataType::Create(NUdf::TDataType<ui32>::Id, env), 
-        TDataType::Create(NUdf::TDataType<bool>::Id, env), env); 
-    TKeyTypes keyTypes; 
-    bool isTuple; 
-    bool encoded; 
-    GetDictionaryKeyTypes(type->GetKeyType(), keyTypes, isTuple, encoded); 
-    UNIT_ASSERT(!isTuple); 
-    UNIT_ASSERT(!encoded); 
-    TMemoryUsageInfo memInfo("test"); 
-    THolderFactory holderFactory(alloc.Ref(), memInfo); 
-    auto value = holderFactory.GetEmptyContainer(); 
-    TGenericPresortEncoder encoder(type); 
-    auto buf = encoder.Encode(value, false); 
+}
+
+Y_UNIT_TEST(GenericDict) {
+    TScopedAlloc alloc;
+    TTypeEnvironment env(alloc);
+    auto type = TDictType::Create(TDataType::Create(NUdf::TDataType<ui32>::Id, env),
+        TDataType::Create(NUdf::TDataType<bool>::Id, env), env);
+    TKeyTypes keyTypes;
+    bool isTuple;
+    bool encoded;
+    GetDictionaryKeyTypes(type->GetKeyType(), keyTypes, isTuple, encoded);
+    UNIT_ASSERT(!isTuple);
+    UNIT_ASSERT(!encoded);
+    TMemoryUsageInfo memInfo("test");
+    THolderFactory holderFactory(alloc.Ref(), memInfo);
+    auto value = holderFactory.GetEmptyContainer();
+    TGenericPresortEncoder encoder(type);
+    auto buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x00"sv));
-    value = holderFactory.CreateDirectHashedDictHolder([](TValuesDictHashMap& map) { 
-        map.emplace(NUdf::TUnboxedValuePod(ui32(1234)), NUdf::TUnboxedValuePod(true)); 
-    }, keyTypes, false, true, nullptr); 
-    buf = encoder.Encode(value, false); 
+    value = holderFactory.CreateDirectHashedDictHolder([](TValuesDictHashMap& map) {
+        map.emplace(NUdf::TUnboxedValuePod(ui32(1234)), NUdf::TUnboxedValuePod(true));
+    }, keyTypes, false, true, nullptr);
+    buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2\x01\x00"sv));
-    value = holderFactory.CreateDirectHashedDictHolder([](TValuesDictHashMap& map) { 
-        map.emplace(NUdf::TUnboxedValuePod(ui32(5678)), NUdf::TUnboxedValuePod(false)); 
-        map.emplace(NUdf::TUnboxedValuePod(ui32(1234)), NUdf::TUnboxedValuePod(true)); 
-    }, keyTypes, false, true, nullptr); 
-    buf = encoder.Encode(value, false); 
+    value = holderFactory.CreateDirectHashedDictHolder([](TValuesDictHashMap& map) {
+        map.emplace(NUdf::TUnboxedValuePod(ui32(5678)), NUdf::TUnboxedValuePod(false));
+        map.emplace(NUdf::TUnboxedValuePod(ui32(1234)), NUdf::TUnboxedValuePod(true));
+    }, keyTypes, false, true, nullptr);
+    buf = encoder.Encode(value, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2\x01\x01\x00\x00\x16\x2E\x00\x00"sv));
-} 
- 
-} 
- 
+}
+
+}
+
 } // NMiniKQL
 } // NKikimr

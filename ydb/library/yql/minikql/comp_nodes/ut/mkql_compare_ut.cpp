@@ -1,12 +1,12 @@
 #include "mkql_computation_node_ut.h"
 
-#include <ydb/library/yql/minikql/mkql_node_printer.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/mkql_node_printer.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_list_adapter.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_list_adapter.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
 #include <cfloat>
 #include <utility>
@@ -700,72 +700,72 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
         auto opt2 = pb.NewOptional(pb.NewDataLiteral<ui32>(2));
         auto optEmpty = pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         auto pgmReturn = pb.NewEmptyList(pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<bool>::Id)));
- 
+
         pgmReturn = pb.Append(pgmReturn, pb.Equals(opt1, opt1));
         pgmReturn = pb.Append(pgmReturn, pb.Equals(opt1, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.Equals(opt1, optEmpty));
         pgmReturn = pb.Append(pgmReturn, pb.Equals(optEmpty, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.Equals(optEmpty, optEmpty));
- 
+
         pgmReturn = pb.Append(pgmReturn, pb.NotEquals(opt1, opt1));
         pgmReturn = pb.Append(pgmReturn, pb.NotEquals(opt1, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.NotEquals(opt1, optEmpty));
         pgmReturn = pb.Append(pgmReturn, pb.NotEquals(optEmpty, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.NotEquals(optEmpty, optEmpty));
- 
+
         pgmReturn = pb.Append(pgmReturn, pb.Less(opt1, opt1));
         pgmReturn = pb.Append(pgmReturn, pb.Less(opt1, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.Less(opt2, opt1));
         pgmReturn = pb.Append(pgmReturn, pb.Less(opt1, optEmpty));
         pgmReturn = pb.Append(pgmReturn, pb.Less(optEmpty, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.Less(optEmpty, optEmpty));
- 
+
         pgmReturn = pb.Append(pgmReturn, pb.LessOrEqual(opt1, opt1));
         pgmReturn = pb.Append(pgmReturn, pb.LessOrEqual(opt1, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.LessOrEqual(opt2, opt1));
         pgmReturn = pb.Append(pgmReturn, pb.LessOrEqual(opt1, optEmpty));
         pgmReturn = pb.Append(pgmReturn, pb.LessOrEqual(optEmpty, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.LessOrEqual(optEmpty, optEmpty));
- 
+
         pgmReturn = pb.Append(pgmReturn, pb.Greater(opt1, opt1));
         pgmReturn = pb.Append(pgmReturn, pb.Greater(opt1, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.Greater(opt2, opt1));
         pgmReturn = pb.Append(pgmReturn, pb.Greater(opt1, optEmpty));
         pgmReturn = pb.Append(pgmReturn, pb.Greater(optEmpty, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.Greater(optEmpty, optEmpty));
- 
+
         pgmReturn = pb.Append(pgmReturn, pb.GreaterOrEqual(opt1, opt1));
         pgmReturn = pb.Append(pgmReturn, pb.GreaterOrEqual(opt1, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.GreaterOrEqual(opt2, opt1));
         pgmReturn = pb.Append(pgmReturn, pb.GreaterOrEqual(opt1, optEmpty));
         pgmReturn = pb.Append(pgmReturn, pb.GreaterOrEqual(optEmpty, opt2));
         pgmReturn = pb.Append(pgmReturn, pb.GreaterOrEqual(optEmpty, optEmpty));
- 
+
         auto opt1s = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("A"));
         auto opt2s = pb.NewOptional(pb.NewDataLiteral<NUdf::EDataSlot::String>("B"));
         auto optEmptys = pb.NewEmptyOptionalDataLiteral(NUdf::TDataType<char*>::Id);
- 
+
         pgmReturn = pb.Append(pgmReturn, pb.Equals(opt1s, opt1s));
         pgmReturn = pb.Append(pgmReturn, pb.Equals(opt1s, opt2s));
         pgmReturn = pb.Append(pgmReturn, pb.Equals(opt1s, optEmptys));
         pgmReturn = pb.Append(pgmReturn, pb.Equals(optEmptys, opt2s));
         pgmReturn = pb.Append(pgmReturn, pb.Equals(optEmptys, optEmptys));
- 
+
         pgmReturn = pb.Append(pgmReturn, pb.NotEquals(opt1s, opt1s));
         pgmReturn = pb.Append(pgmReturn, pb.NotEquals(opt1s, opt2s));
         pgmReturn = pb.Append(pgmReturn, pb.NotEquals(opt1s, optEmptys));
         pgmReturn = pb.Append(pgmReturn, pb.NotEquals(optEmptys, opt2s));
         pgmReturn = pb.Append(pgmReturn, pb.NotEquals(optEmptys, optEmptys));
- 
-        auto graph = setup.BuildGraph(pgmReturn); 
-        auto iterator = graph->GetValue().GetListIterator(); 
+
+        auto graph = setup.BuildGraph(pgmReturn);
+        auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
- 
-        // equals 
+
+        // equals
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
@@ -775,9 +775,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
 
         // not equals
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
@@ -787,11 +787,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
 
         // less
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
@@ -801,11 +801,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
 
         // less or equal
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
@@ -815,11 +815,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
 
         // greater
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
@@ -829,11 +829,11 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
 
         // greater or equal
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
@@ -843,9 +843,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
 
         // equals - string
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
@@ -855,9 +855,9 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
 
         // not equals - string
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), false);
         UNIT_ASSERT(iterator.Next(item));
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<bool>(), true);
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item);
         UNIT_ASSERT(iterator.Next(item));
@@ -986,7 +986,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCompareTest) {
         const auto result = graph->GetValue();
         UNBOXED_VALUE_STR_EQUAL(result, "1970-01-01T03:00:06,Africa/Asmara");
    }
-} 
- 
-} 
-} 
+}
+
+}
+}

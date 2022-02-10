@@ -18,8 +18,8 @@ SRCS(
 PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/opt/physical/effects
-    ydb/library/yql/dq/common 
-    ydb/library/yql/dq/opt 
+    ydb/library/yql/dq/common
+    ydb/library/yql/dq/opt
 )
 
 YQL_LAST_ABI_VERSION()

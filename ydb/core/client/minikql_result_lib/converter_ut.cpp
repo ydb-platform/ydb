@@ -23,19 +23,19 @@ Y_UNIT_TEST(TTestWithSimpleProgram) {
     const TString pgmText = R"___(
 (
 (let list (AsList (Uint32 '20) (Uint32 '10) (Uint32 '0)))
-(let opt (Just (String 'i_am_opt))) 
+(let opt (Just (String 'i_am_opt)))
 (let tuple '((Double '12) (Float '22)))
 (return (AsList
     (SetResult 'list list)
     (SetResult 'opt opt)
-    (SetResult 'emptyOpt (Nothing (OptionalType (DataType 'Int32)))) 
+    (SetResult 'emptyOpt (Nothing (OptionalType (DataType 'Int32))))
     (SetResult 'tuple tuple)
 ))
 )
 )___";
 
     NKikimrMiniKQL::TResult result;
-    UNIT_ASSERT(client.FlatQuery(pgmText, result)); 
+    UNIT_ASSERT(client.FlatQuery(pgmText, result));
 
     TStruct s = ConvertResult(result.GetValue(), result.GetType());
     {

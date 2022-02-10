@@ -2,39 +2,39 @@
 
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <util/generic/ylimits.h>
-#include <util/generic/ymath.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
- 
+#include <util/generic/ymath.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/binary_json/read.h>
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
-namespace { 
- 
-template <typename TIn, typename TOut> 
+namespace NKikimr {
+namespace NMiniKQL {
+
+namespace {
+
+template <typename TIn, typename TOut>
 struct TFloatToIntegralImpl {
     static constexpr TIn MinValue = static_cast<TIn>(std::numeric_limits<TOut>::min());
     static constexpr TIn MaxValue = std::is_same<TIn, double>::value ? MaxFloor<TOut>() : static_cast<TIn>(std::numeric_limits<TOut>::max());
 
-    static NUdf::TUnboxedValuePod Do(TIn val) { 
-        switch (std::fpclassify(val)) { 
-        case FP_NORMAL: 
-            break; 
-        case FP_ZERO: 
-        case FP_SUBNORMAL: 
+    static NUdf::TUnboxedValuePod Do(TIn val) {
+        switch (std::fpclassify(val)) {
+        case FP_NORMAL:
+            break;
+        case FP_ZERO:
+        case FP_SUBNORMAL:
             return NUdf::TUnboxedValuePod::Zero();
-        default: 
-            return NUdf::TUnboxedValuePod(); 
-        } 
- 
+        default:
+            return NUdf::TUnboxedValuePod();
+        }
+
         if (val < MinValue || val > MaxValue) {
-            return NUdf::TUnboxedValuePod(); 
-        } 
+            return NUdf::TUnboxedValuePod();
+        }
 
         return NUdf::TUnboxedValuePod(static_cast<TOut>(val));
-    } 
+    }
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
@@ -45,7 +45,7 @@ struct TFloatToIntegralImpl {
         const auto fnType = FunctionType::get(type, {val->getType()}, false);
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int(*)(TIn)>(&std::fpclassify)));
-        const auto func = module.getOrInsertFunction(name, fnType).getCallee(); 
+        const auto func = module.getOrInsertFunction(name, fnType).getCallee();
         const auto classify = CallInst::Create(func, {val}, "fpclassify", block);
 
         const auto none = BasicBlock::Create(context, "none", ctx.Func);
@@ -85,23 +85,23 @@ struct TFloatToIntegralImpl {
         return result;
     }
 #endif
-}; 
- 
-template <typename TIn> 
+};
+
+template <typename TIn>
 struct TFloatToIntegralImpl<TIn, bool> {
-    static NUdf::TUnboxedValuePod Do(TIn val) { 
-        switch (std::fpclassify(val)) { 
-        case FP_NORMAL: 
-        case FP_INFINITE: 
-            return NUdf::TUnboxedValuePod(true); 
-            break; 
-        case FP_ZERO: 
-        case FP_SUBNORMAL: 
-            return NUdf::TUnboxedValuePod(false); 
-        default: 
-            return NUdf::TUnboxedValuePod(); 
-        } 
-    } 
+    static NUdf::TUnboxedValuePod Do(TIn val) {
+        switch (std::fpclassify(val)) {
+        case FP_NORMAL:
+        case FP_INFINITE:
+            return NUdf::TUnboxedValuePod(true);
+            break;
+        case FP_ZERO:
+        case FP_SUBNORMAL:
+            return NUdf::TUnboxedValuePod(false);
+        default:
+            return NUdf::TUnboxedValuePod();
+        }
+    }
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
@@ -112,7 +112,7 @@ struct TFloatToIntegralImpl<TIn, bool> {
         const auto fnType = FunctionType::get(type, {val->getType()}, false);
         const auto name = std::is_same<TIn, float>() ? "MyFloatClassify" : "MyDoubleClassify";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<int(*)(TIn)>(&std::fpclassify)));
-        const auto func = module.getOrInsertFunction(name, fnType).getCallee(); 
+        const auto func = module.getOrInsertFunction(name, fnType).getCallee();
         const auto classify = CallInst::Create(func, {val}, "fpclassify", block);
 
         const auto none = BasicBlock::Create(context, "none", ctx.Func);
@@ -140,8 +140,8 @@ struct TFloatToIntegralImpl<TIn, bool> {
         return result;
     }
 #endif
-}; 
- 
+};
+
 template <typename TInput, typename TOutput>
 struct TFloatToIntegral : public TArithmeticConstraintsUnary<TInput, TOutput> {
     static_assert(std::is_floating_point<TInput>::value, "Input type must be floating point!");
@@ -151,14 +151,14 @@ struct TFloatToIntegral : public TArithmeticConstraintsUnary<TInput, TOutput> {
     {
         return TFloatToIntegralImpl<TInput, TOutput>::Do(arg.template Get<TInput>());
     }
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
         return TFloatToIntegralImpl<TInput, TOutput>::Gen(arg, ctx, block);
     }
 #endif
 };
- 
+
 #ifndef MKQL_DISABLE_CODEGEN
 Value* GenInBounds(Value* val, Constant* low, Constant* high, BasicBlock* block) {
     const auto lt = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_SLE, val, high, "lt", block);
@@ -215,9 +215,9 @@ template <typename TInput, typename TOutput>
 struct TConvert : public TArithmeticConstraintsUnary<TInput, TOutput> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) {
         return NUdf::TUnboxedValuePod(static_cast<TOutput>(arg.template Get<TInput>()));
-    } 
+    }
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen->GetContext();
@@ -228,7 +228,7 @@ struct TConvert : public TArithmeticConstraintsUnary<TInput, TOutput> {
     }
 #endif
 };
- 
+
 template <typename TInput, typename TOutput, TOutput Multiplier>
 struct TScaleUp : public TArithmeticConstraintsUnary<TInput, TOutput> {
     static_assert(sizeof(TInput) < sizeof(TOutput), "Output should be wider than input.");
@@ -369,16 +369,16 @@ struct TStringConvert {
     {
         Y_VERIFY_DEBUG(!arg.IsBoxed(), "Expected unboxed arg in String::Convert()");
         return arg; // handle optional args as well
-    } 
+    }
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* arg, const TCodegenContext&, BasicBlock*&)
     {
         return arg;
     }
 #endif
 };
- 
+
 NUdf::TUnboxedValuePod JsonToJsonDocument(const NUdf::TUnboxedValuePod value) {
     auto binaryJson = NKikimr::NBinaryJson::SerializeToBinaryJson(value.AsStringRef());
     if (!binaryJson.Defined()) {
@@ -720,35 +720,35 @@ constexpr auto convert = "Convert";
 constexpr auto integral = "ToIntegral";
 constexpr auto decimal = "ToDecimal";
 
-template <typename TInput, typename TOutput> 
+template <typename TInput, typename TOutput>
 void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionUnOpt<TInput, TOutput, TConvert, TUnaryArgsOpt>(registry, convert);
-} 
- 
-template <typename TInput, typename TOutput> 
+}
+
+template <typename TInput, typename TOutput>
 void RegisterStringConvert(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionOpt<TInput, TOutput, TStringConvert, TUnaryArgsOpt>(registry, convert);
-} 
- 
-template <typename TOutput> 
+}
+
+template <typename TOutput>
 void RegisterIntegralCasts(IBuiltinFunctionRegistry& registry) {
-    RegisterConvert<NUdf::TDataType<i8>, TOutput>(registry); 
-    RegisterConvert<NUdf::TDataType<ui8>, TOutput>(registry); 
-    RegisterConvert<NUdf::TDataType<i16>, TOutput>(registry); 
-    RegisterConvert<NUdf::TDataType<ui16>, TOutput>(registry); 
+    RegisterConvert<NUdf::TDataType<i8>, TOutput>(registry);
+    RegisterConvert<NUdf::TDataType<ui8>, TOutput>(registry);
+    RegisterConvert<NUdf::TDataType<i16>, TOutput>(registry);
+    RegisterConvert<NUdf::TDataType<ui16>, TOutput>(registry);
     RegisterConvert<NUdf::TDataType<i32>, TOutput>(registry);
     RegisterConvert<NUdf::TDataType<ui32>, TOutput>(registry);
     RegisterConvert<NUdf::TDataType<i64>, TOutput>(registry);
     RegisterConvert<NUdf::TDataType<ui64>, TOutput>(registry);
     RegisterConvert<NUdf::TDataType<bool>, TOutput>(registry);
-} 
- 
+}
+
 template <typename TInput>
 void RegisterDecimalConvertFromIntegral(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionOpt<NUdf::TDataType<TInput>, NUdf::TDataType<NUdf::TDecimal>, NDecimal::TConvertFromIntegral<TInput>, TUnaryArgsOpt>(registry, decimal);
 }
 
-template <typename TOutput> 
+template <typename TOutput>
 void RegisterDecimalConvertToIntegral(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionImpl<NDecimal::TConvertToIntegral<TOutput>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<TOutput>, false>, TUnaryStub>(registry, integral);
     RegisterFunctionImpl<NDecimal::TConvertToIntegral<TOutput>, TUnaryArgsWithNullableResultOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<TOutput>, true>, TUnaryWrap>(registry, integral);
@@ -785,27 +785,27 @@ template <typename TOutput>
 void RegisterRealCasts(IBuiltinFunctionRegistry& registry) {
     RegisterConvert<NUdf::TDataType<float>, TOutput>(registry);
     RegisterConvert<NUdf::TDataType<double>, TOutput>(registry);
-} 
- 
-template <typename TInput, typename TOutput> 
+}
+
+template <typename TInput, typename TOutput>
 void RegisterRealToIntegralCastsImpl(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionImpl<TFloatToIntegral<typename TInput::TLayout, typename TOutput::TLayout>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, false>, TUnaryStub>(registry, integral);
     RegisterFunctionImpl<TFloatToIntegral<typename TInput::TLayout, typename TOutput::TLayout>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, true>, TUnaryWrap>(registry, integral);
-} 
- 
-template <typename TInput> 
+}
+
+template <typename TInput>
 void RegisterRealToIntegralCasts(IBuiltinFunctionRegistry& registry) {
-    RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<i8>>(registry); 
-    RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<ui8>>(registry); 
-    RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<i16>>(registry); 
-    RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<ui16>>(registry); 
+    RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<i8>>(registry);
+    RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<ui8>>(registry);
+    RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<i16>>(registry);
+    RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<ui16>>(registry);
     RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<i32>>(registry);
     RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<ui32>>(registry);
     RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<i64>>(registry);
     RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<ui64>>(registry);
     RegisterRealToIntegralCastsImpl<TInput, NUdf::TDataType<bool>>(registry);
-} 
- 
+}
+
 template <typename TInput, typename TOutput>
 void RegisterWideToShortCastsImpl(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionImpl<TWideToShort<typename TInput::TLayout, typename TOutput::TLayout>, TUnaryArgsWithNullableResultOpt<TInput, TOutput, false>, TUnaryStub>(registry, integral);
@@ -965,19 +965,19 @@ void RegisterWideToShortIntegralCasts(IBuiltinFunctionRegistry& registry) {
 
 template <typename TDate>
 void RegisterFromDateConvert(IBuiltinFunctionRegistry& registry) {
-    RegisterConvert<TDate, NUdf::TDataType<i8>>(registry); 
-    RegisterConvert<TDate, NUdf::TDataType<ui8>>(registry); 
-    RegisterConvert<TDate, NUdf::TDataType<i16>>(registry); 
-    RegisterConvert<TDate, NUdf::TDataType<ui16>>(registry); 
-    RegisterConvert<TDate, NUdf::TDataType<i32>>(registry); 
-    RegisterConvert<TDate, NUdf::TDataType<ui32>>(registry); 
-    RegisterConvert<TDate, NUdf::TDataType<i64>>(registry); 
-    RegisterConvert<TDate, NUdf::TDataType<ui64>>(registry); 
- 
+    RegisterConvert<TDate, NUdf::TDataType<i8>>(registry);
+    RegisterConvert<TDate, NUdf::TDataType<ui8>>(registry);
+    RegisterConvert<TDate, NUdf::TDataType<i16>>(registry);
+    RegisterConvert<TDate, NUdf::TDataType<ui16>>(registry);
+    RegisterConvert<TDate, NUdf::TDataType<i32>>(registry);
+    RegisterConvert<TDate, NUdf::TDataType<ui32>>(registry);
+    RegisterConvert<TDate, NUdf::TDataType<i64>>(registry);
+    RegisterConvert<TDate, NUdf::TDataType<ui64>>(registry);
+
     RegisterConvert<TDate, NUdf::TDataType<float>>(registry);
     RegisterConvert<TDate, NUdf::TDataType<double>>(registry);
-} 
- 
+}
+
 void RegisterToDateConvert(IBuiltinFunctionRegistry& registry) {
     RegisterConvert<NUdf::TDataType<ui8>, NUdf::TDataType<NUdf::TDate>>(registry);
     RegisterConvert<NUdf::TDataType<ui8>, NUdf::TDataType<NUdf::TTzDate>>(registry);
@@ -1006,8 +1006,8 @@ void RegisterToDateConvert(IBuiltinFunctionRegistry& registry) {
     RegisterConvert<NUdf::TDataType<ui32>, NUdf::TDataType<NUdf::TDatetime>>(registry);
     RegisterConvert<NUdf::TDataType<ui64>, NUdf::TDataType<NUdf::TTimestamp>>(registry);
     RegisterConvert<NUdf::TDataType<i64>, NUdf::TDataType<NUdf::TInterval>>(registry);
-} 
- 
+}
+
 template <typename TInput, typename TOutput, bool Tz = false>
 void RegisterRescaleOpt(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionImpl<TDatetimeRescale<typename TInput::TLayout, typename TOutput::TLayout, Tz>, TUnaryArgsOpt<TInput, TOutput, false>, TUnaryStub>(registry, convert);
@@ -1078,19 +1078,19 @@ void RegisterJsonDocumentConvert(IBuiltinFunctionRegistry& registry) {
 }
 
 void RegisterConvert(IBuiltinFunctionRegistry& registry) {
-    RegisterIntegralCasts<NUdf::TDataType<i32>>(registry); 
-    RegisterIntegralCasts<NUdf::TDataType<ui32>>(registry); 
-    RegisterIntegralCasts<NUdf::TDataType<i64>>(registry); 
-    RegisterIntegralCasts<NUdf::TDataType<ui64>>(registry); 
-    RegisterIntegralCasts<NUdf::TDataType<ui8>>(registry); 
-    RegisterIntegralCasts<NUdf::TDataType<i8>>(registry); 
-    RegisterIntegralCasts<NUdf::TDataType<ui16>>(registry); 
-    RegisterIntegralCasts<NUdf::TDataType<i16>>(registry); 
-    RegisterIntegralCasts<NUdf::TDataType<bool>>(registry); 
- 
-    RegisterIntegralCasts<NUdf::TDataType<float>>(registry); 
-    RegisterIntegralCasts<NUdf::TDataType<double>>(registry); 
- 
+    RegisterIntegralCasts<NUdf::TDataType<i32>>(registry);
+    RegisterIntegralCasts<NUdf::TDataType<ui32>>(registry);
+    RegisterIntegralCasts<NUdf::TDataType<i64>>(registry);
+    RegisterIntegralCasts<NUdf::TDataType<ui64>>(registry);
+    RegisterIntegralCasts<NUdf::TDataType<ui8>>(registry);
+    RegisterIntegralCasts<NUdf::TDataType<i8>>(registry);
+    RegisterIntegralCasts<NUdf::TDataType<ui16>>(registry);
+    RegisterIntegralCasts<NUdf::TDataType<i16>>(registry);
+    RegisterIntegralCasts<NUdf::TDataType<bool>>(registry);
+
+    RegisterIntegralCasts<NUdf::TDataType<float>>(registry);
+    RegisterIntegralCasts<NUdf::TDataType<double>>(registry);
+
     RegisterWideToShortIntegralCasts(registry);
 
     RegisterRealCasts<NUdf::TDataType<i8>>(registry);
@@ -1102,17 +1102,17 @@ void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterRealCasts<NUdf::TDataType<i64>>(registry);
     RegisterRealCasts<NUdf::TDataType<ui64>>(registry);
 
-    RegisterRealCasts<NUdf::TDataType<float>>(registry); 
-    RegisterRealCasts<NUdf::TDataType<double>>(registry); 
- 
-    RegisterRealToIntegralCasts<NUdf::TDataType<float>>(registry); 
-    RegisterRealToIntegralCasts<NUdf::TDataType<double>>(registry); 
- 
-    RegisterStringConvert<NUdf::TDataType<char*>, NUdf::TDataType<char*>>(registry); 
-    RegisterStringConvert<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<char*>>(registry); 
-    RegisterStringConvert<NUdf::TDataType<NUdf::TYson>, NUdf::TDataType<char*>>(registry); 
-    RegisterStringConvert<NUdf::TDataType<NUdf::TJson>, NUdf::TDataType<char*>>(registry); 
-    RegisterStringConvert<NUdf::TDataType<NUdf::TJson>, NUdf::TDataType<NUdf::TUtf8>>(registry); 
+    RegisterRealCasts<NUdf::TDataType<float>>(registry);
+    RegisterRealCasts<NUdf::TDataType<double>>(registry);
+
+    RegisterRealToIntegralCasts<NUdf::TDataType<float>>(registry);
+    RegisterRealToIntegralCasts<NUdf::TDataType<double>>(registry);
+
+    RegisterStringConvert<NUdf::TDataType<char*>, NUdf::TDataType<char*>>(registry);
+    RegisterStringConvert<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<char*>>(registry);
+    RegisterStringConvert<NUdf::TDataType<NUdf::TYson>, NUdf::TDataType<char*>>(registry);
+    RegisterStringConvert<NUdf::TDataType<NUdf::TJson>, NUdf::TDataType<char*>>(registry);
+    RegisterStringConvert<NUdf::TDataType<NUdf::TJson>, NUdf::TDataType<NUdf::TUtf8>>(registry);
 
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TDate>>(registry);
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TDatetime>>(registry);
@@ -1121,7 +1121,7 @@ void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TTzDate>>(registry);
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TTzDatetime>>(registry);
     RegisterFromDateConvert<NUdf::TDataType<NUdf::TTzTimestamp>>(registry);
- 
+
     RegisterTzDateimeConvert(registry);
     RegisterDatetimeRescale(registry);
     RegisterToDateConvert(registry);
@@ -1129,7 +1129,7 @@ void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterDecimalConvert(registry);
 
     RegisterJsonDocumentConvert(registry);
-} 
- 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+}
+
+} // namespace NMiniKQL
+} // namespace NKikimr

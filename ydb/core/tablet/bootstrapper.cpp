@@ -192,7 +192,7 @@ class TBootstrapper : public TActor<TBootstrapper> {
         if (BootstrapperInfo->OtherNodes.empty())
             return Boot(ctx);
 
-        SelfSeed = AppData(ctx)->RandomProvider->GenRand64(); 
+        SelfSeed = AppData(ctx)->RandomProvider->GenRand64();
         LOG_INFO(ctx, NKikimrServices::BOOTSTRAPPER, "tablet: %" PRIu64 ", type: %s, begin new round, seed: %" PRIu64,
                  TabletInfo->TabletID, GetTabletTypeName(), SelfSeed);
 

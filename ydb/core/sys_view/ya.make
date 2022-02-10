@@ -23,9 +23,9 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 END()
- 
+
 RECURSE(
     common
     nodes
@@ -36,7 +36,7 @@ RECURSE(
     storage
     tablets
 )
- 
+
 RECURSE_FOR_TESTS(
     ut_kqp
 )

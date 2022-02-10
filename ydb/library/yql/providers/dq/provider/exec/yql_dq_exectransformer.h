@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_data_provider.h> 
+#include <ydb/library/yql/core/yql_data_provider.h>
 
 #include <util/generic/ptr.h>
 

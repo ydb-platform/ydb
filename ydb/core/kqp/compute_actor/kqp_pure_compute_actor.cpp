@@ -8,7 +8,7 @@
 #include <ydb/core/sys_view/scan.h>
 #include <ydb/core/util/yverify_stream.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
 
 namespace NKikimr {

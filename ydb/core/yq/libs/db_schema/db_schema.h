@@ -1,13 +1,13 @@
-#pragma once 
- 
+#pragma once
+
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
- 
+
 #include <util/string/builder.h>
 #include <util/generic/hash_set.h>
 
 namespace NYq {
- 
+
 class TSqlQueryBuilder {
 public:
     TSqlQueryBuilder(const TString& tablePrefix, const TString& queryName = "Unknown query name");

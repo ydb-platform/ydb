@@ -6,14 +6,14 @@
 
 #ifndef _win32_
 typedef int dird;
-typedef struct stat stat_struct; 
+typedef struct stat stat_struct;
     #define STAT_FUNC stat
 #else
     #include <util/folder/dirent_win.h>
 typedef WCHAR* dird;
 typedef unsigned short u_short;
 typedef unsigned int nlink_t;
-typedef struct _stat64 stat_struct; 
+typedef struct _stat64 stat_struct;
     #define STAT_FUNC stat64UTF
     //TODO: remove from global scope stat64UTF stat64UTF
     #ifdef __cplusplus
@@ -97,7 +97,7 @@ typedef struct _ftsent {
 #define FTS_SKIP 4     /* discard node */
     u_short fts_instr; /* yfts_set() instructions */
 
-    stat_struct* fts_statp; /* stat(2) information */ 
+    stat_struct* fts_statp; /* stat(2) information */
     char fts_name[1];       /* file name */
 } FTSENT;
 

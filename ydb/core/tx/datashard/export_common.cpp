@@ -6,7 +6,7 @@
 #include <ydb/library/dynumber/dynumber.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/library/yql/public/decimal/yql_decimal.h> 
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <util/generic/algorithm.h>
 

@@ -1,17 +1,17 @@
 RECURSE(
     actors
     api
-    backtrace 
+    backtrace
     common
-    config 
-    counters 
+    config
+    counters
     expr_nodes
     interface
     mkql
     opt
     planner
     provider
-    provider/exec 
+    provider/exec
     runtime
     task_runner
     task_runner_actor

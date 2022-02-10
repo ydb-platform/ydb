@@ -1,6 +1,6 @@
 #include "yql_out_transformers.h"
 
-#include <ydb/library/yql/ast/yql_expr.h> 
+#include <ydb/library/yql/ast/yql_expr.h>
 
 #include <library/cpp/yson/writer.h>
 

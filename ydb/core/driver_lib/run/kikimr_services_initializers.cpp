@@ -135,12 +135,12 @@
 
 #include <ydb/core/yq/libs/init/init.h>
 #include <ydb/core/yq/libs/logs/log.h>
- 
+
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/folder_service/proto/config.pb.h>
 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h> 
- 
+#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+
 #include <library/cpp/actors/protos/services_common.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "udf_string_ref.h" 
+#include "udf_string_ref.h"
 #include "udf_types.h"
 
 #include <library/cpp/containers/stack_vector/stack_vec.h> // TSmallVec
-#include <util/generic/algorithm.h> 
+#include <util/generic/algorithm.h>
 
 #include <util/system/yassert.h> // FAIL, VERIFY_DEBUG
 #include <util/generic/ylimits.h> // Max
@@ -16,10 +16,10 @@ namespace NUdf {
 //////////////////////////////////////////////////////////////////////////////
 // TStubTypeVisitor
 //////////////////////////////////////////////////////////////////////////////
-class TStubTypeVisitor1: public ITypeVisitor 
+class TStubTypeVisitor1: public ITypeVisitor
 {
 private:
-    void OnDataType(TDataTypeId typeId) override; 
+    void OnDataType(TDataTypeId typeId) override;
     void OnStruct(
             ui32 membersCount,
             TStringRef* membersNames,
@@ -31,44 +31,44 @@ private:
     void OnCallable(
             const TType* returnType,
             ui32 argsCount, const TType** argsTypes,
-            ui32 optionalArgsCount, 
-            const ICallablePayload* payload) override; 
-    void OnVariant(const TType* underlyingType) override; 
-    void OnStream(const TType* itemType) override; 
-}; 
- 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
-class TStubTypeVisitor2: public TStubTypeVisitor1 
-{ 
-public: 
-    void OnDecimal(ui8 precision, ui8 scale) override;
-}; 
-#endif
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15) 
-class TStubTypeVisitor3: public TStubTypeVisitor2 
-{ 
-public: 
-    void OnResource(TStringRef tag) override; 
-}; 
-#endif 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21) 
-class TStubTypeVisitor4: public TStubTypeVisitor3 
-{ 
-public: 
-    void OnTagged(const TType* baseType, TStringRef tag) override; 
-}; 
-#endif 
+            ui32 optionalArgsCount,
+            const ICallablePayload* payload) override;
+    void OnVariant(const TType* underlyingType) override;
+    void OnStream(const TType* itemType) override;
+};
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21) 
-using TStubTypeVisitor = TStubTypeVisitor4; 
-#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15) 
-using TStubTypeVisitor = TStubTypeVisitor3; 
-#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13) 
-using TStubTypeVisitor = TStubTypeVisitor2; 
-#else 
-using TStubTypeVisitor = TStubTypeVisitor1; 
-#endif 
- 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
+class TStubTypeVisitor2: public TStubTypeVisitor1
+{
+public:
+    void OnDecimal(ui8 precision, ui8 scale) override;
+};
+#endif
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
+class TStubTypeVisitor3: public TStubTypeVisitor2
+{
+public:
+    void OnResource(TStringRef tag) override;
+};
+#endif
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
+class TStubTypeVisitor4: public TStubTypeVisitor3
+{
+public:
+    void OnTagged(const TType* baseType, TStringRef tag) override;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
+using TStubTypeVisitor = TStubTypeVisitor4;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
+using TStubTypeVisitor = TStubTypeVisitor3;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
+using TStubTypeVisitor = TStubTypeVisitor2;
+#else
+using TStubTypeVisitor = TStubTypeVisitor1;
+#endif
+
 //////////////////////////////////////////////////////////////////////////////
 // TDataTypeInspector
 //////////////////////////////////////////////////////////////////////////////
@@ -82,19 +82,19 @@ public:
     }
 
     explicit operator bool() const { return TypeId_ != 0; }
-    TDataTypeId GetTypeId() const { return TypeId_; } 
+    TDataTypeId GetTypeId() const { return TypeId_; }
 private:
-    void OnDataType(TDataTypeId typeId) override { 
+    void OnDataType(TDataTypeId typeId) override {
         TypeId_ = typeId;
     }
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
     void OnDecimal(ui8, ui8) override {}
 #endif
-    TDataTypeId TypeId_ = 0; 
+    TDataTypeId TypeId_ = 0;
 };
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
 //////////////////////////////////////////////////////////////////////////////
-// TDataAndDecimalTypeInspector 
+// TDataAndDecimalTypeInspector
 //////////////////////////////////////////////////////////////////////////////
 class TDataAndDecimalTypeInspector: public TStubTypeVisitor
 {
@@ -107,26 +107,26 @@ public:
 
     explicit operator bool() const { return TypeId_ != 0; }
     TDataTypeId GetTypeId() const { return TypeId_; }
-    ui8 GetPrecision() const { 
-        return Precision_; 
-    } 
+    ui8 GetPrecision() const {
+        return Precision_;
+    }
 
-    ui8 GetScale() const { 
-        return Scale_; 
-    } 
- 
+    ui8 GetScale() const {
+        return Scale_;
+    }
+
 private:
     void OnDataType(TDataTypeId typeId) override {
         TypeId_ = typeId;
     }
 
     void OnDecimal(ui8 precision, ui8 scale) override {
-        Precision_ = precision; 
-        Scale_ = scale; 
+        Precision_ = precision;
+        Scale_ = scale;
     }
 
     TDataTypeId TypeId_ = 0;
-    ui8 Precision_ = 0, Scale_ = 0; 
+    ui8 Precision_ = 0, Scale_ = 0;
 };
 #endif
 //////////////////////////////////////////////////////////////////////////////
@@ -301,16 +301,16 @@ public:
     ui32 GetArgsCount() const { return ArgsCount_; }
     const TType* GetArgType(ui32 i) const { return ArgsTypes_[i]; }
     ui32 GetOptionalArgsCount() const { return OptionalArgsCount_; }
-    TStringRef GetPayload() const { return HasPayload_ ? Payload_ : TStringRef(); } 
-    TStringRef GetArgumentName(ui32 i) const { return HasPayload_ ? ArgsNames_[i] : TStringRef(); } 
-    ui64 GetArgumentFlags(ui32 i) const { return HasPayload_ ? ArgsFlags_[i] : 0; } 
+    TStringRef GetPayload() const { return HasPayload_ ? Payload_ : TStringRef(); }
+    TStringRef GetArgumentName(ui32 i) const { return HasPayload_ ? ArgsNames_[i] : TStringRef(); }
+    ui64 GetArgumentFlags(ui32 i) const { return HasPayload_ ? ArgsFlags_[i] : 0; }
 
 private:
     void OnCallable(
             const TType* returnType,
             ui32 argsCount, const TType** argsTypes,
-            ui32 optionalArgsCount, 
-            const ICallablePayload* payload) override 
+            ui32 optionalArgsCount,
+            const ICallablePayload* payload) override
     {
         ReturnType_ = returnType;
         ArgsCount_ = argsCount;
@@ -320,17 +320,17 @@ private:
         for (ui32 i = 0; i < argsCount; i++) {
             ArgsTypes_.push_back(argsTypes[i]);
         }
- 
-        HasPayload_ = (payload != nullptr); 
-        if (HasPayload_) { 
-            Payload_ = payload->GetPayload(); 
-            ArgsNames_.reserve(argsCount); 
-            ArgsFlags_.reserve(argsCount); 
-            for (ui32 i = 0; i < argsCount; i++) { 
-                ArgsNames_.push_back(payload->GetArgumentName(i)); 
-                ArgsFlags_.push_back(payload->GetArgumentFlags(i)); 
-            } 
-        } 
+
+        HasPayload_ = (payload != nullptr);
+        if (HasPayload_) {
+            Payload_ = payload->GetPayload();
+            ArgsNames_.reserve(argsCount);
+            ArgsFlags_.reserve(argsCount);
+            for (ui32 i = 0; i < argsCount; i++) {
+                ArgsNames_.push_back(payload->GetArgumentName(i));
+                ArgsFlags_.push_back(payload->GetArgumentFlags(i));
+            }
+        }
     }
 
 private:
@@ -338,188 +338,188 @@ private:
     ui32 ArgsCount_ = ~0;
     TSmallVec<const TType*> ArgsTypes_;
     ui32 OptionalArgsCount_ = ~0;
-    bool HasPayload_ = false; 
-    TStringRef Payload_; 
-    TSmallVec<TStringRef> ArgsNames_; 
-    TSmallVec<ui64> ArgsFlags_; 
+    bool HasPayload_ = false;
+    TStringRef Payload_;
+    TSmallVec<TStringRef> ArgsNames_;
+    TSmallVec<ui64> ArgsFlags_;
 };
 
-////////////////////////////////////////////////////////////////////////////// 
-// TStreamTypeInspector 
-////////////////////////////////////////////////////////////////////////////// 
-class TStreamTypeInspector : public TStubTypeVisitor 
-{ 
-public: 
-    TStreamTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
-        if (typeHelper.GetTypeKind(type) == ETypeKind::Stream) { 
-            typeHelper.VisitType(type, this); 
-        } 
-    } 
- 
-    explicit operator bool() const { return ItemType_ != nullptr; } 
-    const TType* GetItemType() const { return ItemType_; } 
- 
-private: 
-    void OnStream(const TType* itemType) override { 
-        ItemType_ = itemType; 
-    } 
- 
-private: 
-    const TType* ItemType_ = nullptr; 
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TVariantTypeInspector 
-////////////////////////////////////////////////////////////////////////////// 
-class TVariantTypeInspector : public TStubTypeVisitor 
-{ 
-public: 
-    TVariantTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
-        if (typeHelper.GetTypeKind(type) == ETypeKind::Variant) { 
-            typeHelper.VisitType(type, this); 
-        } 
-    } 
- 
-    explicit operator bool() const { return UnderlyingType_ != nullptr; } 
-    const TType* GetUnderlyingType() const { return UnderlyingType_; } 
- 
-private: 
-    void OnVariant(const TType* underlyingType) override { 
-        UnderlyingType_ = underlyingType; 
-    } 
- 
-private: 
-    const TType* UnderlyingType_ = nullptr; 
-}; 
- 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15) 
-////////////////////////////////////////////////////////////////////////////// 
-// TResourceTypeInspector 
-////////////////////////////////////////////////////////////////////////////// 
-class TResourceTypeInspector: public TStubTypeVisitor 
-{ 
-public: 
-    TResourceTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
-        if (typeHelper.GetTypeKind(type) == ETypeKind::Resource) { 
-            typeHelper.VisitType(type, this); 
-        } 
-    } 
- 
-    explicit operator bool() const { return Tag_.Data() != nullptr; } 
-    TStringRef GetTag() const { return Tag_; } 
- 
-private: 
-    void OnResource(TStringRef tag) override { 
-        Tag_ = tag; 
-    } 
- 
-    TStringRef Tag_; 
-}; 
-#endif 
- 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21) 
-////////////////////////////////////////////////////////////////////////////// 
-// TTaggedTypeInspector 
-////////////////////////////////////////////////////////////////////////////// 
-class TTaggedTypeInspector: public TStubTypeVisitor 
-{ 
-public: 
-    TTaggedTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
-        if (typeHelper.GetTypeKind(type) == ETypeKind::Tagged) { 
-            typeHelper.VisitType(type, this); 
-        } 
-    } 
- 
-    explicit operator bool() const { return BaseType_ != nullptr; } 
-    const TType* GetBaseType() const { return BaseType_; } 
-    TStringRef GetTag() const { return Tag_; } 
- 
-private: 
-    void OnTagged(const TType* baseType, TStringRef tag) override { 
-        BaseType_ = baseType; 
-        Tag_ = tag; 
-    } 
- 
-    const TType* BaseType_ = nullptr; 
-    TStringRef Tag_; 
-}; 
-#endif 
- 
-inline void TStubTypeVisitor1::OnDataType(TDataTypeId typeId) 
-{ 
-    Y_UNUSED(typeId); 
-    Y_FAIL("Not implemented"); 
-} 
- 
-inline void TStubTypeVisitor1::OnStruct( 
-        ui32 membersCount, 
-        TStringRef* membersNames, 
-        const TType** membersTypes) 
-{ 
-    Y_UNUSED(membersCount); Y_UNUSED(membersNames); Y_UNUSED(membersTypes); 
-    Y_FAIL("Not implemented"); 
-} 
- 
-inline void TStubTypeVisitor1::OnList(const TType* itemType) 
-{ 
-    Y_UNUSED(itemType); 
-    Y_FAIL("Not implemented"); 
-} 
- 
-inline void TStubTypeVisitor1::OnOptional(const TType* itemType) 
-{ 
-    Y_UNUSED(itemType); 
-    Y_FAIL("Not implemented"); 
-} 
- 
-inline void TStubTypeVisitor1::OnTuple(ui32 elementsCount, const TType** elementsTypes) 
-{ 
-    Y_UNUSED(elementsCount); Y_UNUSED(elementsTypes); 
-    Y_FAIL("Not implemented"); 
-} 
- 
-inline void TStubTypeVisitor1::OnDict(const TType* keyType, const TType* valueType) 
-{ 
-    Y_UNUSED(keyType); Y_UNUSED(valueType); 
-    Y_FAIL("Not implemented"); 
-} 
- 
-inline void TStubTypeVisitor1::OnCallable( 
-        const TType* returnType, 
-        ui32 argsCount, const TType** argsTypes, 
-        ui32 optionalArgsCount, 
-        const ICallablePayload* payload) 
-{ 
-    Y_UNUSED(returnType); Y_UNUSED(argsCount); 
-    Y_UNUSED(argsTypes); Y_UNUSED(optionalArgsCount); 
-    Y_UNUSED(payload); 
-    Y_FAIL("Not implemented"); 
-} 
- 
-inline void TStubTypeVisitor1::OnVariant(const TType* underlyingType) { 
-    Y_UNUSED(underlyingType); 
-    Y_FAIL("Not implemented"); 
-} 
- 
-inline void TStubTypeVisitor1::OnStream(const TType* itemType) { 
-    Y_UNUSED(itemType); 
-    Y_FAIL("Not implemented"); 
-} 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13) 
-inline void TStubTypeVisitor2::OnDecimal(ui8, ui8) { 
-    Y_FAIL("Not implemented"); 
-} 
-#endif 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15) 
-inline void TStubTypeVisitor3::OnResource(TStringRef) { 
-    Y_FAIL("Not implemented"); 
-} 
-#endif 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21) 
-inline void TStubTypeVisitor4::OnTagged(const TType*, TStringRef) { 
-    Y_FAIL("Not implemented"); 
-} 
-#endif 
- 
+//////////////////////////////////////////////////////////////////////////////
+// TStreamTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TStreamTypeInspector : public TStubTypeVisitor
+{
+public:
+    TStreamTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Stream) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return ItemType_ != nullptr; }
+    const TType* GetItemType() const { return ItemType_; }
+
+private:
+    void OnStream(const TType* itemType) override {
+        ItemType_ = itemType;
+    }
+
+private:
+    const TType* ItemType_ = nullptr;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// TVariantTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TVariantTypeInspector : public TStubTypeVisitor
+{
+public:
+    TVariantTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Variant) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return UnderlyingType_ != nullptr; }
+    const TType* GetUnderlyingType() const { return UnderlyingType_; }
+
+private:
+    void OnVariant(const TType* underlyingType) override {
+        UnderlyingType_ = underlyingType;
+    }
+
+private:
+    const TType* UnderlyingType_ = nullptr;
+};
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
+//////////////////////////////////////////////////////////////////////////////
+// TResourceTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TResourceTypeInspector: public TStubTypeVisitor
+{
+public:
+    TResourceTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Resource) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return Tag_.Data() != nullptr; }
+    TStringRef GetTag() const { return Tag_; }
+
+private:
+    void OnResource(TStringRef tag) override {
+        Tag_ = tag;
+    }
+
+    TStringRef Tag_;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
+//////////////////////////////////////////////////////////////////////////////
+// TTaggedTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TTaggedTypeInspector: public TStubTypeVisitor
+{
+public:
+    TTaggedTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Tagged) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return BaseType_ != nullptr; }
+    const TType* GetBaseType() const { return BaseType_; }
+    TStringRef GetTag() const { return Tag_; }
+
+private:
+    void OnTagged(const TType* baseType, TStringRef tag) override {
+        BaseType_ = baseType;
+        Tag_ = tag;
+    }
+
+    const TType* BaseType_ = nullptr;
+    TStringRef Tag_;
+};
+#endif
+
+inline void TStubTypeVisitor1::OnDataType(TDataTypeId typeId)
+{
+    Y_UNUSED(typeId);
+    Y_FAIL("Not implemented");
+}
+
+inline void TStubTypeVisitor1::OnStruct(
+        ui32 membersCount,
+        TStringRef* membersNames,
+        const TType** membersTypes)
+{
+    Y_UNUSED(membersCount); Y_UNUSED(membersNames); Y_UNUSED(membersTypes);
+    Y_FAIL("Not implemented");
+}
+
+inline void TStubTypeVisitor1::OnList(const TType* itemType)
+{
+    Y_UNUSED(itemType);
+    Y_FAIL("Not implemented");
+}
+
+inline void TStubTypeVisitor1::OnOptional(const TType* itemType)
+{
+    Y_UNUSED(itemType);
+    Y_FAIL("Not implemented");
+}
+
+inline void TStubTypeVisitor1::OnTuple(ui32 elementsCount, const TType** elementsTypes)
+{
+    Y_UNUSED(elementsCount); Y_UNUSED(elementsTypes);
+    Y_FAIL("Not implemented");
+}
+
+inline void TStubTypeVisitor1::OnDict(const TType* keyType, const TType* valueType)
+{
+    Y_UNUSED(keyType); Y_UNUSED(valueType);
+    Y_FAIL("Not implemented");
+}
+
+inline void TStubTypeVisitor1::OnCallable(
+        const TType* returnType,
+        ui32 argsCount, const TType** argsTypes,
+        ui32 optionalArgsCount,
+        const ICallablePayload* payload)
+{
+    Y_UNUSED(returnType); Y_UNUSED(argsCount);
+    Y_UNUSED(argsTypes); Y_UNUSED(optionalArgsCount);
+    Y_UNUSED(payload);
+    Y_FAIL("Not implemented");
+}
+
+inline void TStubTypeVisitor1::OnVariant(const TType* underlyingType) {
+    Y_UNUSED(underlyingType);
+    Y_FAIL("Not implemented");
+}
+
+inline void TStubTypeVisitor1::OnStream(const TType* itemType) {
+    Y_UNUSED(itemType);
+    Y_FAIL("Not implemented");
+}
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
+inline void TStubTypeVisitor2::OnDecimal(ui8, ui8) {
+    Y_FAIL("Not implemented");
+}
+#endif
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
+inline void TStubTypeVisitor3::OnResource(TStringRef) {
+    Y_FAIL("Not implemented");
+}
+#endif
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
+inline void TStubTypeVisitor4::OnTagged(const TType*, TStringRef) {
+    Y_FAIL("Not implemented");
+}
+#endif
+
 } // namspace NUdf
 } // namspace NYql

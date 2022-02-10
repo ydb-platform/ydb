@@ -1,7 +1,7 @@
 #include "kqp_transform.h"
 #include "kqp_yql.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
 namespace NKikimr {
 namespace NKqp {

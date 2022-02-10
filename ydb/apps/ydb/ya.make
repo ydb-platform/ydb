@@ -33,9 +33,9 @@ CHECK_DEPENDENT_DIRS(
     ydb/core/grpc_services/validation
     ydb/library
     ydb/public
-    ydb/library/yql/public/decimal 
-    ydb/library/yql/public/issue 
-    ydb/library/yql/public/issue/protos 
+    ydb/library/yql/public/decimal
+    ydb/library/yql/public/issue
+    ydb/library/yql/public/issue/protos
 )
 END()
 

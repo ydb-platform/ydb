@@ -1,6 +1,6 @@
-package NKikimrBlobStorage; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
+package NKikimrBlobStorage;
+option java_package = "ru.yandex.kikimr.proto";
+
 // sets the parameters of VDisk
 message TVDiskConfig {
     optional uint64 FreshBufSizeLogoBlobs = 10;
@@ -23,7 +23,7 @@ message TVDiskConfig {
     optional bool BarrierValidation = 60;
     optional bool EnableOverseerLsnReporting = 61; // deprecated
 };
- 
+
 // organizes hierarchy of VDisk configs: VDisk config may have a base config,
 // local settings override base settings
 message TVDiskKind {

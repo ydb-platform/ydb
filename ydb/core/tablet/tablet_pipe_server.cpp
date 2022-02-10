@@ -4,66 +4,66 @@
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/log.h>
 #include <util/generic/hash_set.h>
- 
-namespace NKikimr { 
- 
-namespace NTabletPipe { 
- 
-    class TServer : public TActor<TServer> { 
-    public: 
+
+namespace NKikimr {
+
+namespace NTabletPipe {
+
+    class TServer : public TActor<TServer> {
+    public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::TABLET_PIPE_SERVER;
         }
 
         TServer(ui64 tabletId, const TActorId& clientId, const TActorId& interconnectSession, ui32 features, ui64 connectCookie)
-            : TActor(&TThis::StateInactive) 
-            , TabletId(tabletId) 
-            , ClientId(clientId) 
-            , InterconnectSession(interconnectSession) 
+            : TActor(&TThis::StateInactive)
+            , TabletId(tabletId)
+            , ClientId(clientId)
+            , InterconnectSession(interconnectSession)
             , ConnectCookie(connectCookie)
             , Features(features)
             , NeedUnsubscribe(false)
             , Leader(true)
             , Connected(false)
-        { 
+        {
             Y_VERIFY(tabletId != 0);
-        } 
- 
-    private: 
-        STFUNC(StateActive) { 
-            switch (ev->GetTypeRewrite()) { 
-                HFunc(TEvTabletPipe::TEvPush, Handle); 
+        }
+
+    private:
+        STFUNC(StateActive) {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(TEvTabletPipe::TEvPush, Handle);
                 HFunc(TEvTabletPipe::TEvMessage, Handle);
                 FFunc(TEvTabletPipe::EvSend, HandleSend); // only for direct (one-node) sends, for generic send see EvPush
-                HFunc(TEvTabletPipe::TEvPeerClosed, Handle); 
+                HFunc(TEvTabletPipe::TEvPeerClosed, Handle);
                 HFunc(TEvTabletPipe::TEvShutdown, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle); 
-                HFunc(TEvInterconnect::TEvNodeDisconnected, Handle); 
+                HFunc(TEvents::TEvPoisonPill, Handle);
+                HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
                 HFunc(TEvents::TEvUndelivered, Handle);
-            } 
-        } 
- 
-        STFUNC(StateInactive) { 
-            switch (ev->GetTypeRewrite()) { 
-                HFunc(TEvTabletPipe::TEvActivate, Handle); 
+            }
+        }
+
+        STFUNC(StateInactive) {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(TEvTabletPipe::TEvActivate, Handle);
                 HFunc(TEvTabletPipe::TEvShutdown, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle); 
-            } 
-        } 
- 
-        STFUNC(StateWaitingSubscribe) { 
-            switch (ev->GetTypeRewrite()) { 
-                HFunc(TEvInterconnect::TEvNodeConnected, Handle); 
-                HFunc(TEvInterconnect::TEvNodeDisconnected, Handle); 
-                HFunc(TEvents::TEvUndelivered, Handle); 
+                HFunc(TEvents::TEvPoisonPill, Handle);
+            }
+        }
+
+        STFUNC(StateWaitingSubscribe) {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(TEvInterconnect::TEvNodeConnected, Handle);
+                HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+                HFunc(TEvents::TEvUndelivered, Handle);
                 HFunc(TEvTabletPipe::TEvShutdown, Handle);
-                HFunc(TEvents::TEvPoisonPill, Handle); 
-            } 
-        } 
- 
-        void Handle(TEvTabletPipe::TEvPush::TPtr& ev, const TActorContext& ctx) { 
+                HFunc(TEvents::TEvPoisonPill, Handle);
+            }
+        }
+
+        void Handle(TEvTabletPipe::TEvPush::TPtr& ev, const TActorContext& ctx) {
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
-            const auto& record = ev->Get()->Record; 
+            const auto& record = ev->Get()->Record;
             const TActorId sender = ActorIdFromProto(record.GetSender());
             LOG_DEBUG_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Push Sender# " << sender << " EventType# " << record.GetType()
@@ -83,7 +83,7 @@ namespace NTabletPipe {
                     record.GetCookie(),
                     ev->OriginScopeId,
                     std::move(ev->TraceId));
-            result->Rewrite(record.GetType(), RecipientId); 
+            result->Rewrite(record.GetType(), RecipientId);
             ctx.ExecutorThread.Send(result.release());
 
             if (ui64 seqNo = record.GetSeqNo()) {
@@ -91,8 +91,8 @@ namespace NTabletPipe {
                     << " Applying new remote seqNo " << seqNo);
                 MaxForwardedSeqNo = Max(MaxForwardedSeqNo, seqNo);
             }
-        } 
- 
+        }
+
         void Handle(TEvTabletPipe::TEvMessage::TPtr& ev, const TActorContext& ctx) {
             auto* msg = ev->Get();
             const auto& originalSender = msg->Sender;
@@ -123,8 +123,8 @@ namespace NTabletPipe {
             }
         }
 
-        void HandleSend(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) { 
-            const auto& originalSender = ev->Recipient; 
+        void HandleSend(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
+            const auto& originalSender = ev->Recipient;
             LOG_DEBUG_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " HandleSend Sender# " << originalSender << " EventType# " << ev->Type
                 << (HadShutdown ? " ignored after shutdown" : ""));
@@ -132,20 +132,20 @@ namespace NTabletPipe {
                 return;
             }
 
-            IEventHandle* result; 
-            if (ev->HasEvent()) { 
-                result = new IEventHandle(ctx.SelfID, originalSender, ev->ReleaseBase().Release(), 0, ev->Cookie); 
-            } else { 
+            IEventHandle* result;
+            if (ev->HasEvent()) {
+                result = new IEventHandle(ctx.SelfID, originalSender, ev->ReleaseBase().Release(), 0, ev->Cookie);
+            } else {
                 result = new IEventHandle(ev->Type, 0, ctx.SelfID,
                                           originalSender,
                                           ev->ReleaseChainBuffer(),
                                           ev->Cookie);
-            } 
- 
-            result->Rewrite(ev->Type, RecipientId); 
-            ctx.ExecutorThread.Send(result); 
-        } 
- 
+            }
+
+            result->Rewrite(ev->Type, RecipientId);
+            ctx.ExecutorThread.Send(result);
+        }
+
         void Handle(TEvTabletPipe::TEvShutdown::TPtr& ev, const TActorContext& ctx) {
             Y_UNUSED(ev);
             if (!Connected) {
@@ -160,75 +160,75 @@ namespace NTabletPipe {
             HadShutdown = true;
         }
 
-        void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) { 
+        void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
             Y_UNUSED(ev);
             SendToClient(ctx, new TEvTabletPipe::TEvPeerClosed(TabletId, ClientId, ctx.SelfID));
-            Reset(ctx); 
-        } 
- 
-        void Handle(TEvTabletPipe::TEvPeerClosed::TPtr& ev, const TActorContext& ctx) { 
+            Reset(ctx);
+        }
+
+        void Handle(TEvTabletPipe::TEvPeerClosed::TPtr& ev, const TActorContext& ctx) {
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
             LOG_DEBUG_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Got PeerClosed from# " << ev->Sender);
-            Reset(ctx); 
-        } 
- 
-        void Reset(const TActorContext& ctx) { 
+            Reset(ctx);
+        }
+
+        void Reset(const TActorContext& ctx) {
             if (Connected) {
                 ctx.Send(RecipientId, new TEvTabletPipe::TEvServerDisconnected(TabletId, ClientId, ctx.SelfID));
             }
-            ctx.Send(OwnerId, new TEvTabletPipe::TEvServerDestroyed(TabletId, ClientId, ctx.SelfID)); 
-            UnsubscribeAndDie(ctx); 
-        } 
- 
-        void Handle(TEvTabletPipe::TEvActivate::TPtr& ev, const TActorContext& ctx) { 
-            OwnerId = ev->Get()->OwnerId; 
-            RecipientId = ev->Get()->RecipientId; 
+            ctx.Send(OwnerId, new TEvTabletPipe::TEvServerDestroyed(TabletId, ClientId, ctx.SelfID));
+            UnsubscribeAndDie(ctx);
+        }
+
+        void Handle(TEvTabletPipe::TEvActivate::TPtr& ev, const TActorContext& ctx) {
+            OwnerId = ev->Get()->OwnerId;
+            RecipientId = ev->Get()->RecipientId;
             Leader = ev->Get()->Leader;
             Y_VERIFY(OwnerId);
             Y_VERIFY(RecipientId);
             if (InterconnectSession) {
                 NeedUnsubscribe = true;
-                ctx.Send(InterconnectSession, new TEvents::TEvSubscribe(), IEventHandle::FlagTrackDelivery); 
-                Become(&TThis::StateWaitingSubscribe); 
-            } else { 
-                OnConnected(ctx); 
-            } 
-        } 
- 
-        void OnConnected(const TActorContext& ctx) { 
-            Become(&TThis::StateActive); 
+                ctx.Send(InterconnectSession, new TEvents::TEvSubscribe(), IEventHandle::FlagTrackDelivery);
+                Become(&TThis::StateWaitingSubscribe);
+            } else {
+                OnConnected(ctx);
+            }
+        }
+
+        void OnConnected(const TActorContext& ctx) {
+            Become(&TThis::StateActive);
             SendToClient(ctx, new TEvTabletPipe::TEvConnectResult(NKikimrProto::OK, TabletId, ClientId, ctx.SelfID, Leader), IEventHandle::FlagTrackDelivery, ConnectCookie);
-            ctx.Send(RecipientId, new TEvTabletPipe::TEvServerConnected(TabletId, ClientId, ctx.SelfID)); 
+            ctx.Send(RecipientId, new TEvTabletPipe::TEvServerConnected(TabletId, ClientId, ctx.SelfID));
             Connected = true;
-        } 
- 
-        void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev, const TActorContext& ctx) { 
+        }
+
+        void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev, const TActorContext& ctx) {
             Y_UNUSED(ev);
-            OnConnected(ctx); 
-        } 
- 
-        void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) { 
+            OnConnected(ctx);
+        }
+
+        void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev, const TActorContext& ctx) {
             LOG_ERROR_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " NodeDisconnected NodeId# " << ev->Get()->NodeId);
             NeedUnsubscribe = false;
-            Reset(ctx); 
-        } 
- 
-        void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) { 
+            Reset(ctx);
+        }
+
+        void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
             // Either interconnect session or remote client no longer exist
             LOG_INFO_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Undelivered Target# " << ev->Sender << " Type# " << ev->Get()->SourceType << " Reason# " << ev->Get()->Reason);
-            Reset(ctx); 
-        } 
- 
-        void UnsubscribeAndDie(const TActorContext& ctx) { 
+            Reset(ctx);
+        }
+
+        void UnsubscribeAndDie(const TActorContext& ctx) {
             if (NeedUnsubscribe)
-                ctx.Send(InterconnectSession, new TEvents::TEvUnsubscribe()); 
- 
-            Die(ctx); 
-        } 
- 
+                ctx.Send(InterconnectSession, new TEvents::TEvUnsubscribe());
+
+            Die(ctx);
+        }
+
         void SendToClient(const TActorContext& ctx, TAutoPtr<IEventBase> msg, ui32 flags = 0, ui64 cookie = 0) {
             TAutoPtr<IEventHandle> ev = new IEventHandle(ClientId, ctx.SelfID, msg.Release(), flags, cookie);
 
@@ -239,8 +239,8 @@ namespace NTabletPipe {
             ctx.ExecutorThread.Send(ev);
         }
 
-    private: 
-        const ui64 TabletId; 
+    private:
+        const ui64 TabletId;
         const TActorId ClientId;
         TActorId OwnerId;
         TActorId RecipientId;
@@ -252,17 +252,17 @@ namespace NTabletPipe {
         bool Leader;
         bool Connected;
         bool HadShutdown = false;
-    }; 
- 
-    class TConnectAcceptor: public IConnectAcceptor { 
-    public: 
+    };
+
+    class TConnectAcceptor: public IConnectAcceptor {
+    public:
         explicit TConnectAcceptor(ui64 tabletId)
-            : TabletId(tabletId) 
+            : TabletId(tabletId)
             , Active(false)
             , Stopped(false)
-        { 
-        } 
- 
+        {
+        }
+
         TActorId Accept(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, TActorId recipientId, bool leader) override {
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
@@ -270,19 +270,19 @@ namespace NTabletPipe {
             TActorId serverId = TActivationContext::Register(server);
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Accept Connect Originator# " << ev->Sender);
-            ServerIds.insert(serverId); 
+            ServerIds.insert(serverId);
             ActivateServer(TabletId, serverId, owner, recipientId, leader);
-            return serverId; 
-        } 
- 
+            return serverId;
+        }
+
         void Reject(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, NKikimrProto::EReplyStatus status, bool leader) override {
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
             const TActorId clientId = ActorIdFromProto(ev->Get()->Record.GetClientId());
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Reject Connect Originator# " << ev->Sender);
             owner.Send(clientId, new TEvTabletPipe::TEvConnectResult(status, TabletId, clientId, TActorId(), leader));
-        } 
- 
+        }
+
         void Stop(TActorIdentity owner) override {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" << " Stop");
             for (const auto& serverId : ServerIds) {
@@ -294,14 +294,14 @@ namespace NTabletPipe {
 
         void Detach(TActorIdentity owner) override {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" << " Detach");
-            for (const auto& serverId : ServerIds) { 
+            for (const auto& serverId : ServerIds) {
                 CloseServer(owner, serverId);
-            } 
+            }
             Active = false;
-            ServerIds.clear(); 
+            ServerIds.clear();
             ActivatePending.clear();
-        } 
- 
+        }
+
         TActorId Enqueue(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner) override {
             Y_UNUSED(owner);
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
@@ -310,27 +310,27 @@ namespace NTabletPipe {
             TActorId serverId = TActivationContext::Register(server);
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Enqueue Connect Originator# " << ev->Sender);
-            ServerIds.insert(serverId); 
-            ActivatePending.insert(serverId); 
-            return serverId; 
-        } 
- 
+            ServerIds.insert(serverId);
+            ActivatePending.insert(serverId);
+            return serverId;
+        }
+
         void Activate(TActorIdentity owner, TActorId recipientId, bool leader) override {
             LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" << " Activate");
-            for (const auto& serverId : ActivatePending) { 
+            for (const auto& serverId : ActivatePending) {
                 ActivateServer(TabletId, serverId, owner, recipientId, leader);
-            } 
- 
-            ActivatePending.clear(); 
+            }
+
+            ActivatePending.clear();
             Active = true;
-        } 
- 
-        void Erase(TEvTabletPipe::TEvServerDestroyed::TPtr &ev) override { 
-            const auto& serverId = ev->Get()->ServerId; 
-            ServerIds.erase(serverId); 
-            ActivatePending.erase(serverId); 
-        } 
- 
+        }
+
+        void Erase(TEvTabletPipe::TEvServerDestroyed::TPtr &ev) override {
+            const auto& serverId = ev->Get()->ServerId;
+            ServerIds.erase(serverId);
+            ActivatePending.erase(serverId);
+        }
+
         bool IsActive() const override {
             return Active;
         }
@@ -339,30 +339,30 @@ namespace NTabletPipe {
             return Stopped;
         }
 
-    private: 
-    private: 
-        const ui64 TabletId; 
+    private:
+    private:
+        const ui64 TabletId;
         THashSet<TActorId> ServerIds;
         THashSet<TActorId> ActivatePending;
         bool Active;
         bool Stopped;
-    }; 
- 
+    };
+
     IActor* CreateServer(ui64 tabletId, const TActorId& clientId, const TActorId& interconnectSession, ui32 features, ui64 connectCookie) {
         return new TServer(tabletId, clientId, interconnectSession, features, connectCookie);
-    } 
- 
-    IConnectAcceptor* CreateConnectAcceptor(ui64 tabletId) { 
-        return new TConnectAcceptor(tabletId); 
-    } 
- 
+    }
+
+    IConnectAcceptor* CreateConnectAcceptor(ui64 tabletId) {
+        return new TConnectAcceptor(tabletId);
+    }
+
     void ActivateServer(ui64 tabletId, TActorId serverId, TActorIdentity owner, TActorId recipientId, bool leader) {
         owner.Send(serverId, new TEvTabletPipe::TEvActivate(tabletId, owner, recipientId, leader));
-    } 
- 
+    }
+
     void CloseServer(TActorIdentity owner, TActorId serverId) {
         owner.Send(serverId, new TEvents::TEvPoisonPill);
-    } 
-} 
- 
-} 
+    }
+}
+
+}

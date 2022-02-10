@@ -24,8 +24,8 @@ class EmptyArguments(object):
         self.use_packages = None
         self.suppress_version_check = False
         self.ydb_udfs_dir = None
-        self.yql_config_path = None 
-        self.auth_config_path = None 
+        self.yql_config_path = None
+        self.auth_config_path = None
         self.debug_logging = []
         self.fixed_ports = False
 
@@ -289,8 +289,8 @@ def deploy(arguments):
         additional_log_configs=additional_log_configs,
         port_allocator=port_allocator,
         use_in_memory_pdisks=use_in_memory_pdisks_flag(),
-        yql_config_path=arguments.yql_config_path, 
-        auth_config_path=arguments.auth_config_path, 
+        yql_config_path=arguments.yql_config_path,
+        auth_config_path=arguments.auth_config_path,
         **optionals
     )
 

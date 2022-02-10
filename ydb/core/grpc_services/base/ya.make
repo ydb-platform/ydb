@@ -16,7 +16,7 @@ PEERDIR(
     ydb/core/grpc_streaming
     ydb/public/api/protos
     ydb/public/sdk/cpp/client/resources
-    ydb/library/yql/public/issue 
+    ydb/library/yql/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

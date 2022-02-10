@@ -1,12 +1,12 @@
 #pragma once
 
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.gen.h> 
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.gen.h>
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 namespace NYql::NNodes {
 
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.decl.inl.h> 
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.decl.inl.h>
 
 struct TTopSortSettings {
     static inline const TString AscendingSort = "Asc";
@@ -38,6 +38,6 @@ public:
     }
 };
 
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.defs.inl.h> 
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.defs.inl.h>
 
 } // namespace NYql::NDq

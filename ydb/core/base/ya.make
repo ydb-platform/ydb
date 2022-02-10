@@ -16,7 +16,7 @@ ENDIF()
 SRCS(
     actor_activity_names.cpp
     appdata.h
-    appdata.cpp 
+    appdata.cpp
     board_lookup.cpp
     board_publish.cpp
     board_replica.cpp
@@ -73,7 +73,7 @@ SRCS(
     tablet.cpp
     tablet.h
     tablet_killer.cpp
-    tablet_pipe.h 
+    tablet_pipe.h
     tablet_pipecache.h
     tablet_resolver.h
     tablet_status_checker.cpp
@@ -97,8 +97,8 @@ PEERDIR(
     library/cpp/logger
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
-    library/cpp/random_provider 
-    library/cpp/time_provider 
+    library/cpp/random_provider
+    library/cpp/time_provider
     ydb/core/base/services
     ydb/core/debug
     ydb/core/erasure
@@ -111,7 +111,7 @@ PEERDIR(
     ydb/library/pretty_types_print/wilson
     ydb/library/wilson
     ydb/public/api/protos/out
-    ydb/library/yql/minikql 
+    ydb/library/yql/minikql
 )
 
 RESOURCE(

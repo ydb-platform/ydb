@@ -74,7 +74,7 @@ Y_UNIT_TEST_SUITE(TPart) {
         TLayoutCook lay;
 
         lay
-            .Col(0, 0,  NScheme::NTypeIds::String) 
+            .Col(0, 0,  NScheme::NTypeIds::String)
             .Col(0, 1,  NScheme::NTypeIds::Uint32)
             .Col(0, 2,  NScheme::NTypeIds::Uint64)
             .Key({0, 1});

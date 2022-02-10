@@ -1,4 +1,4 @@
 C Register
 C AbiVersion
-C SetBackTraceCallback 
-C BindSymbols 
+C SetBackTraceCallback
+C BindSymbols

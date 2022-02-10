@@ -184,13 +184,13 @@ bool IsComparableTypes(const TExprBase& leftNode, const TExprBase& rightNode, bo
                 }
                 break;
             case NYql::NProto::Date:
-                // See arcadia/ydb/library/yql/dq/runtime/dq_arrow_helpers.cpp SwitchMiniKQLDataTypeToArrowType 
+                // See arcadia/ydb/library/yql/dq/runtime/dq_arrow_helpers.cpp SwitchMiniKQLDataTypeToArrowType
                 if (rightTypeId == NYql::NProto::Uint16) {
                     return ECompareOptions::Comparable;
                 }
                 break;
             case NYql::NProto::Datetime:
-                // See arcadia/ydb/library/yql/dq/runtime/dq_arrow_helpers.cpp SwitchMiniKQLDataTypeToArrowType 
+                // See arcadia/ydb/library/yql/dq/runtime/dq_arrow_helpers.cpp SwitchMiniKQLDataTypeToArrowType
                 if (rightTypeId == NYql::NProto::Uint32) {
                     return ECompareOptions::Comparable;
                 }

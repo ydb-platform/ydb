@@ -47,12 +47,12 @@ namespace {
         class TFactory: public THyperscanUdfBase {
         public:
             TFactory(
-                TSourcePosition pos, 
+                TSourcePosition pos,
                 bool surroundMode,
                 THyperscanMatch::EMode mode,
                 size_t regexpsCount = 0)
-                : Pos_(pos) 
-                , SurroundMode(surroundMode) 
+                : Pos_(pos)
+                , SurroundMode(surroundMode)
                 , Mode(mode)
                 , RegexpsCount(regexpsCount)
             {
@@ -68,11 +68,11 @@ namespace {
                         args[0],
                         SurroundMode,
                         Mode,
-                        Pos_, 
+                        Pos_,
                         RegexpsCount));
             }
 
-            TSourcePosition Pos_; 
+            TSourcePosition Pos_;
             bool SurroundMode;
             THyperscanMatch::EMode Mode;
             size_t RegexpsCount;
@@ -104,8 +104,8 @@ namespace {
                         return multiMatch;
                 }
             }
- 
-            Y_FAIL("Unexpected"); 
+
+            Y_FAIL("Unexpected");
         }
 
         THyperscanMatch(
@@ -113,11 +113,11 @@ namespace {
             const TUnboxedValuePod& runConfig,
             bool surroundMode,
             THyperscanMatch::EMode mode,
-            TSourcePosition pos, 
+            TSourcePosition pos,
             size_t regexpsCount)
             : Regex_(runConfig.AsStringRef())
             , Mode(mode)
-            , Pos_(pos) 
+            , Pos_(pos)
             , RegexpsCount(regexpsCount)
         {
             try {
@@ -236,21 +236,21 @@ namespace {
     class THyperscanCapture: public THyperscanUdfBase {
     public:
         class TFactory: public THyperscanUdfBase {
-        public: 
-            TFactory(TSourcePosition pos) 
-                : Pos_(pos) 
-            {} 
- 
-        private: 
+        public:
+            TFactory(TSourcePosition pos)
+                : Pos_(pos)
+            {}
+
+        private:
             TUnboxedValue Run(const IValueBuilder*,
                 const TUnboxedValuePod* args) const final try {
                 return TUnboxedValuePod(new THyperscanCapture(args[0], Pos_));
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
- 
-        private: 
-            TSourcePosition Pos_; 
+
+        private:
+            TSourcePosition Pos_;
         };
 
         static const TStringRef& Name() {
@@ -258,9 +258,9 @@ namespace {
             return name;
         }
 
-        THyperscanCapture(const TUnboxedValuePod& runConfig, TSourcePosition pos) 
-            : Pos_(pos) 
-        { 
+        THyperscanCapture(const TUnboxedValuePod& runConfig, TSourcePosition pos)
+            : Pos_(pos)
+        {
             Regex_ = runConfig.AsStringRef();
             TOptions options = HS_FLAG_SOM_LEFTMOST;
 
@@ -293,7 +293,7 @@ namespace {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
 
-        TSourcePosition Pos_; 
+        TSourcePosition Pos_;
         TString Regex_;
         TDatabase Database_;
         TScratch Scratch_;
@@ -302,21 +302,21 @@ namespace {
     class THyperscanReplace: public THyperscanUdfBase {
     public:
         class TFactory: public THyperscanUdfBase {
-        public: 
-            TFactory(TSourcePosition pos) 
-                : Pos_(pos) 
-            {} 
- 
-        private: 
+        public:
+            TFactory(TSourcePosition pos)
+                : Pos_(pos)
+            {}
+
+        private:
             TUnboxedValue Run(const IValueBuilder*,
                 const TUnboxedValuePod* args) const final try {
                 return TUnboxedValuePod(new THyperscanReplace(args[0], Pos_));
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
- 
-        private: 
-            TSourcePosition Pos_; 
+
+        private:
+            TSourcePosition Pos_;
         };
 
         static const TStringRef& Name() {
@@ -324,9 +324,9 @@ namespace {
             return name;
         }
 
-        THyperscanReplace(const TUnboxedValuePod& runConfig, TSourcePosition pos) 
-            : Pos_(pos) 
-        { 
+        THyperscanReplace(const TUnboxedValuePod& runConfig, TSourcePosition pos)
+            : Pos_(pos)
+        {
             Regex_ = runConfig.AsStringRef();
             TOptions options = HS_FLAG_SOM_LEFTMOST;
 
@@ -370,7 +370,7 @@ namespace {
             UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
         }
 
-        TSourcePosition Pos_; 
+        TSourcePosition Pos_;
         TString Regex_;
         TDatabase Database_;
         TScratch Scratch_;
@@ -418,14 +418,14 @@ namespace {
                         .RunConfig<const char*>();
 
                     if (!typesOnly) {
-                        builder.Implementation(new THyperscanMatch::TFactory(builder.GetSourcePosition(), isGrep, THyperscanMatch::EMode::NORMAL)); 
+                        builder.Implementation(new THyperscanMatch::TFactory(builder.GetSourcePosition(), isGrep, THyperscanMatch::EMode::NORMAL));
                     }
                 } else if (isBacktrackingMatch || isBacktrackingGrep) {
                     builder.SimpleSignature<bool(TOptional<char*>)>()
                         .RunConfig<const char*>();
 
                     if (!typesOnly) {
-                        builder.Implementation(new THyperscanMatch::TFactory(builder.GetSourcePosition(), isBacktrackingGrep, THyperscanMatch::EMode::BACKTRACKING)); 
+                        builder.Implementation(new THyperscanMatch::TFactory(builder.GetSourcePosition(), isBacktrackingGrep, THyperscanMatch::EMode::BACKTRACKING));
                     }
                 } else if (isMultiMatch || isMultiGrep) {
                     auto boolType = builder.SimpleType<bool>();
@@ -447,14 +447,14 @@ namespace {
                             .RunConfig<char*>();
 
                     if (!typesOnly) {
-                        builder.Implementation(new THyperscanCapture::TFactory(builder.GetSourcePosition())); 
+                        builder.Implementation(new THyperscanCapture::TFactory(builder.GetSourcePosition()));
                     }
                 } else if (THyperscanReplace::Name() == name) {
                     builder.SimpleSignature<TOptional<char*>(TOptional<char*>, char*)>()
                         .RunConfig<char*>();
 
                     if (!typesOnly) {
-                        builder.Implementation(new THyperscanReplace::TFactory(builder.GetSourcePosition())); 
+                        builder.Implementation(new THyperscanReplace::TFactory(builder.GetSourcePosition()));
                     }
                 }
             } catch (const std::exception& e) {

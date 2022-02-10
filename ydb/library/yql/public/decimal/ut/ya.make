@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/public/decimal) 
+UNITTEST_FOR(ydb/library/yql/public/decimal)
 
 OWNER(
     a-romanov

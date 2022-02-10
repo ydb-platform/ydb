@@ -43,7 +43,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " tablet# " << Coordinator << " SEND EvCoordinatorSync to# " << Mediator << " Mediator");
-        NTabletPipe::SendData(ctx, PipeClient, new TEvTxCoordinator::TEvCoordinatorSync(++GenCookie, Mediator, Coordinator)); 
+        NTabletPipe::SendData(ctx, PipeClient, new TEvTxCoordinator::TEvCoordinatorSync(++GenCookie, Mediator, Coordinator));
         Become(&TThis::StateSync);
     }
 
@@ -79,8 +79,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
             LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
                 << " tablet# " << Coordinator << " SEND to# " << Mediator << " Mediator TEvCoordinatorStep");
-            NTabletPipe::SendData(ctx, PipeClient, new TEvTxCoordinator::TEvCoordinatorStep( 
-                step, PrevStep, Mediator, Coordinator, CoordinatorGeneration)); 
+            NTabletPipe::SendData(ctx, PipeClient, new TEvTxCoordinator::TEvCoordinatorStep(
+                step, PrevStep, Mediator, Coordinator, CoordinatorGeneration));
             PrevStep = step.Step;
         }
 
@@ -92,8 +92,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
         }
     }
 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) { 
-        TEvTabletPipe::TEvClientConnected *msg = ev->Get(); 
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
+        TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " HANDLE EvClientConnected Status# " << NKikimrProto::EReplyStatus_Name(msg->Status));
 
@@ -106,8 +106,8 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
         // actual work is in sync-reply handling
     }
 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) { 
-        TEvTabletPipe::TEvClientDestroyed *msg = ev->Get(); 
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
+        TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
             << " HANDLE EvClientDestroyed");
         if (msg->ClientId != PipeClient)
@@ -156,8 +156,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProcessing::TEvPlanStepAck, Handle);
             HFunc(TEvTxCoordinator::TEvCoordinatorSyncResult, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle); 
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::PoisonPill, Die);
         }
     }
@@ -166,7 +166,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProcessing::TEvPlanStepAck, Handle);
             HFunc(TEvTxCoordinator::TEvMediatorQueueStep, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             CFunc(TEvents::TSystem::PoisonPill, Die)
         }
     }

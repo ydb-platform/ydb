@@ -24,12 +24,12 @@ PEERDIR(
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tablet_flat
-    ydb/library/yql/dq/common 
-    ydb/library/yql/dq/proto 
-    ydb/library/yql/dq/runtime 
-    ydb/library/yql/dq/tasks 
-    ydb/library/yql/minikql/comp_nodes 
-    ydb/library/yql/minikql/computation 
+    ydb/library/yql/dq/common
+    ydb/library/yql/dq/proto
+    ydb/library/yql/dq/runtime
+    ydb/library/yql/dq/tasks
+    ydb/library/yql/minikql/comp_nodes
+    ydb/library/yql/minikql/computation
 )
 
 YQL_LAST_ABI_VERSION()

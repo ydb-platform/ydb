@@ -7,7 +7,7 @@
 #include "logic_redo_eggs.h"
 #include "util_fmt_line.h"
 #include <ydb/core/base/localdb.h>
-#include <library/cpp/time_provider/time_provider.h> 
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr {
 

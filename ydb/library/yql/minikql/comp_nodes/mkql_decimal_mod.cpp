@@ -1,8 +1,8 @@
 #include "mkql_decimal_div.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h> 
-#include <ydb/library/yql/minikql/mkql_node_builder.h> 
-#include <ydb/library/yql/public/decimal/yql_decimal.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h>
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

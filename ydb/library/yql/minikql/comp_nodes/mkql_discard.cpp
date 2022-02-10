@@ -1,12 +1,12 @@
-#include "mkql_discard.h" 
+#include "mkql_discard.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 class TDiscardFlowWrapper : public TStatelessFlowCodegeneratorRootNode<TDiscardFlowWrapper> {
@@ -105,47 +105,47 @@ private:
 
 class TDiscardWrapper : public TCustomValueCodegeneratorNode<TDiscardWrapper> {
     typedef TCustomValueCodegeneratorNode<TDiscardWrapper> TBaseComputation;
-public: 
-    class TValue : public TComputationValue<TValue> { 
-    public: 
-        TValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream) 
-            : TComputationValue(memInfo) 
-            , Stream(std::move(stream)) 
-        { 
-        } 
- 
+public:
+    class TValue : public TComputationValue<TValue> {
+    public:
+        TValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& stream)
+            : TComputationValue(memInfo)
+            , Stream(std::move(stream))
+        {
+        }
+
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue&) override {
             for (NUdf::TUnboxedValue item;;) {
                 const auto status = Stream.Fetch(item);
-                if (status != NUdf::EFetchStatus::Ok) { 
-                    return status; 
-                } 
-            } 
-        } 
- 
-    private: 
+                if (status != NUdf::EFetchStatus::Ok) {
+                    return status;
+                }
+            }
+        }
+
+    private:
         const NUdf::TUnboxedValue Stream;
-    }; 
- 
-    TDiscardWrapper(TComputationMutables& mutables, IComputationNode* stream) 
-        : TBaseComputation(mutables) 
-        , Stream(stream) 
-    { 
-    } 
- 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
+    };
+
+    TDiscardWrapper(TComputationMutables& mutables, IComputationNode* stream)
+        : TBaseComputation(mutables)
+        , Stream(stream)
+    {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && Fetch)
-            return ctx.HolderFactory.Create<TStreamCodegenValueStateless>(Fetch, &ctx, Stream->GetValue(ctx)); 
+            return ctx.HolderFactory.Create<TStreamCodegenValueStateless>(Fetch, &ctx, Stream->GetValue(ctx));
 #endif
         return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx));
-    } 
- 
-private: 
-    void RegisterDependencies() const final { 
-        DependsOn(Stream); 
-    } 
- 
+    }
+
+private:
+    void RegisterDependencies() const final {
+        DependsOn(Stream);
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
         FetchFunc = GenerateFetch(codegen);
@@ -172,7 +172,7 @@ private:
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         auto args = ctx.Func->arg_begin();
 
@@ -206,20 +206,20 @@ private:
         return ctx.Func;
     }
 
-    using TFetchPtr = TStreamCodegenValueStateless::TFetchPtr; 
+    using TFetchPtr = TStreamCodegenValueStateless::TFetchPtr;
 
     Function* FetchFunc = nullptr;
 
     TFetchPtr Fetch = nullptr;
 #endif
 
-    IComputationNode* const Stream; 
-}; 
- 
+    IComputationNode* const Stream;
+};
+
 }
 
-IComputationNode* WrapDiscard(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg"); 
+IComputationNode* WrapDiscard(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
     const auto type = callable.GetType()->GetReturnType();
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     if (type->IsFlow()) {
@@ -233,9 +233,9 @@ IComputationNode* WrapDiscard(TCallable& callable, const TComputationNodeFactory
     } else if (type->IsStream()) {
         return new TDiscardWrapper(ctx.Mutables, flow);
     }
- 
+
     THROW yexception() << "Expected flow or stream.";
-} 
- 
-} 
-} 
+}
+
+}
+}

@@ -1,30 +1,30 @@
-#include "mkql_coalesce.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_node_builder.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include "mkql_coalesce.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 template<bool Unpack>
 class TCoalesceWrapper : public TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> {
     typedef TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> TBaseComputation;
-public: 
+public:
     TCoalesceWrapper(IComputationNode* left, IComputationNode* right, EValueRepresentation kind)
         : TBaseComputation(left, right, kind)
-    { 
-    } 
- 
+    {
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         if (auto left = this->Left->GetValue(compCtx)) {
             return left.Release().template GetOptionalValueIf<Unpack>();
-        } 
- 
+        }
+
         return this->Right->GetValue(compCtx).Release();
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -55,30 +55,30 @@ public:
         return result;
     }
 #endif
-}; 
- 
+};
+
 }
 
-IComputationNode* WrapCoalesce(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args"); 
- 
-    bool isLeftOptional = false; 
-    const auto& leftType = UnpackOptional(callable.GetInput(0), isLeftOptional); 
-    MKQL_ENSURE(isLeftOptional, "Expected optional"); 
- 
-    bool isRightOptional = false; 
-    if (!leftType->IsSameType(*callable.GetInput(1).GetStaticType())) { 
-        const auto& rightType = UnpackOptional(callable.GetInput(1), isRightOptional); 
-        MKQL_ENSURE(leftType->IsSameType(*rightType), "Mismatch types"); 
-    } 
- 
+IComputationNode* WrapCoalesce(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
+
+    bool isLeftOptional = false;
+    const auto& leftType = UnpackOptional(callable.GetInput(0), isLeftOptional);
+    MKQL_ENSURE(isLeftOptional, "Expected optional");
+
+    bool isRightOptional = false;
+    if (!leftType->IsSameType(*callable.GetInput(1).GetStaticType())) {
+        const auto& rightType = UnpackOptional(callable.GetInput(1), isRightOptional);
+        MKQL_ENSURE(leftType->IsSameType(*rightType), "Mismatch types");
+    }
+
     const auto kind = GetValueRepresentation(callable.GetType()->GetReturnType());
 
     if (isRightOptional)
         return new TCoalesceWrapper<false>(LocateNode(ctx.NodeLocator, callable, 0), LocateNode(ctx.NodeLocator, callable, 1), kind);
     else
         return new TCoalesceWrapper<true>(LocateNode(ctx.NodeLocator, callable, 0), LocateNode(ctx.NodeLocator, callable, 1), kind);
-} 
- 
-} 
-} 
+}
+
+}
+}

@@ -3,18 +3,18 @@
 #include "yql_dq_datasink_type_ann.h"
 #include "yql_dq_recapture.h"
 
-#include <ydb/library/yql/providers/dq/opt/logical_optimize.h> 
-#include <ydb/library/yql/providers/dq/opt/physical_optimize.h> 
-#include <ydb/library/yql/providers/dq/opt/dqs_opt.h> 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h> 
-#include <ydb/library/yql/providers/dq/common/yql_dq_common.h> 
-#include <ydb/library/yql/dq/opt/dq_opt_build.h> 
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h> 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
-#include <ydb/library/yql/providers/common/transform/yql_lazy_init.h> 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/providers/dq/opt/logical_optimize.h>
+#include <ydb/library/yql/providers/dq/opt/physical_optimize.h>
+#include <ydb/library/yql/providers/dq/opt/dqs_opt.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
+#include <ydb/library/yql/dq/opt/dq_opt_build.h>
+#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/transform/yql_lazy_init.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -91,7 +91,7 @@ public:
         for (const auto& entry : taskRunner.Entries) {
             TString prefix, name;
             std::map<TString, TString> labels;
-            if (!NCommon::ParseCounterName(&prefix, &labels, &name, entry.Name)) { 
+            if (!NCommon::ParseCounterName(&prefix, &labels, &name, entry.Name)) {
                 continue;
             }
             auto maybeInput = labels.find("Input");

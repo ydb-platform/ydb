@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_execution.h> 
-#include <ydb/library/yql/dq/runtime/dq_input_channel.h> 
-#include <ydb/library/yql/dq/runtime/dq_output_channel.h> 
-#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h> 
+#include <ydb/library/yql/core/yql_execution.h>
+#include <ydb/library/yql/dq/runtime/dq_input_channel.h>
+#include <ydb/library/yql/dq/runtime/dq_output_channel.h>
+#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
 
 #include <util/string/split.h>
 
@@ -289,6 +289,6 @@ protected:
     mutable THashMap<TString, TInstant> Start;
 };
 
-TCounters AggregateQueryStatsByStage(TCounters& queryStat, const THashMap<ui64, ui64>& task2Stage); 
- 
+TCounters AggregateQueryStatsByStage(TCounters& queryStat, const THashMap<ui64, ui64>& task2Stage);
+
 } // namespace NYql

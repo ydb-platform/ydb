@@ -9,9 +9,9 @@
 #include <ydb/library/yql/utils/fetch/fetch.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/log/context.h>
-#include <ydb/library/yql/utils/multi_resource_lock.h> 
-#include <ydb/library/yql/utils/md5_stream.h> 
-#include <ydb/library/yql/utils/retry.h> 
+#include <ydb/library/yql/utils/multi_resource_lock.h>
+#include <ydb/library/yql/utils/md5_stream.h>
+#include <ydb/library/yql/utils/retry.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/cache/cache.h>
@@ -22,16 +22,16 @@
 #include <util/generic/yexception.h>
 
 #include <util/stream/file.h>
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 #include <util/system/fs.h>
 #include <util/system/fstat.h>
 #include <util/system/guard.h>
-#include <util/system/shellcommand.h> 
+#include <util/system/shellcommand.h>
 #include <util/system/sysstat.h>
 #include <util/system/utime.h>
 
 namespace NYql {
- 
+
 class TFileStorageImpl: public IFileStorage {
 public:
     explicit TFileStorageImpl(const TFileStorageConfig& params)
@@ -161,7 +161,7 @@ public:
             for (const auto& d: Downloaders) {
                 if (d->Accept(url)) {
                     return PutUrl(url, oauthToken, d);
-                } 
+                }
             }
 
             ythrow yexception() << "Unsupported url: " << convertedUrl;
@@ -242,8 +242,8 @@ private:
             << ", LastModified=" << urlMeta.LastModified;
 
         TStorage::TDataPuller puller;
-        TString etag; 
-        TString lastModified; 
+        TString etag;
+        TString lastModified;
         std::tie(puller, etag, lastModified) = downloader->Download(url, oauthToken, urlMeta.ETag, urlMeta.LastModified);
         if (!puller) {
             Y_ENSURE(oldContentLink); // should not fire

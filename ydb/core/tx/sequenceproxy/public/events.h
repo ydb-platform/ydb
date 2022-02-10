@@ -4,7 +4,7 @@
 #include <ydb/core/base/pathid.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
-#include <ydb/library/yql/public/issue/yql_issue.h> 
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <variant>
 

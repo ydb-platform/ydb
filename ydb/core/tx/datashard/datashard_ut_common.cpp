@@ -12,7 +12,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/text_format.h>
@@ -204,7 +204,7 @@ void TTester::CreateSchema(ESchema schema, const TOptions& opts) {
         "Id_Deprecated: 13\n"
         "Path: \"/Root/table1\"\n"
         "Columns { Id: 34 Name: \"key\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n"
-        "Columns { Id: 56 Name: \"value\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n" 
+        "Columns { Id: 56 Name: \"value\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n"
         "Columns { Id: 57 Name: \"uint\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n"
         "KeyColumnIds: [ 34 ]\n"
         ;
@@ -215,8 +215,8 @@ void TTester::CreateSchema(ESchema schema, const TOptions& opts) {
 
         "Path: \"/Root/table2\"\n"
         "Columns { Id: 34 Name: \"key1\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n"
-        "Columns { Id: 35 Name: \"key2\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n" 
-        "Columns { Id: 56 Name: \"value\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n" 
+        "Columns { Id: 35 Name: \"key2\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n"
+        "Columns { Id: 56 Name: \"value\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n"
         "KeyColumnIds: [ 34, 35 ]\n"
         ;
 
@@ -343,7 +343,7 @@ ui32 TFakeProxyTx::SetProgram(TTester& tester, const TString& programText) {
     ShardsCount_ = Engine->GetAffectedShardCount();
     UNIT_ASSERT_VALUES_EQUAL(ShardsCount_, resolvedShards.size());
     return ShardsCount_;
-} 
+}
 
 ui32 TFakeProxyTx::GetShardProgram(ui32 idx, TString& outTxBody) {
     IEngineFlat::TShardData shardData;
@@ -356,8 +356,8 @@ ui32 TFakeProxyTx::GetShardProgram(ui32 idx, TString& outTxBody) {
     tx.SetReadOnly(Engine->IsReadOnlyProgram());
     outTxBody = tx.SerializeAsString();
     return shardData.ShardId;
-} 
- 
+}
+
 void TFakeProxyTx::AddProposeShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event) {
     if (event->IsExecError() || event->IsError()) {
         for (auto err : event->Record.GetError()) {

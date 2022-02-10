@@ -23,21 +23,21 @@ struct Schema : NIceDb::Schema {
     };
 
     struct Permission : Table<2> {
-        struct ID : Column<1, NScheme::NTypeIds::Utf8> {}; 
-        struct Owner : Column<2, NScheme::NTypeIds::Utf8> {}; 
-        struct Action : Column<3, NScheme::NTypeIds::Utf8> {}; 
+        struct ID : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Owner : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Action : Column<3, NScheme::NTypeIds::Utf8> {};
         struct Deadline : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct RequestID : Column<5, NScheme::NTypeIds::Utf8> {}; 
+        struct RequestID : Column<5, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Owner, Action, Deadline, RequestID>;
     };
 
     struct Request : Table<3> {
-        struct ID : Column<1, NScheme::NTypeIds::Utf8> {}; 
-        struct Owner : Column<2, NScheme::NTypeIds::Utf8> {}; 
+        struct ID : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Owner : Column<2, NScheme::NTypeIds::Utf8> {};
         struct Order : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct Content : Column<4, NScheme::NTypeIds::Utf8> {}; 
+        struct Content : Column<4, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Owner, Order, Content>;
@@ -45,8 +45,8 @@ struct Schema : NIceDb::Schema {
 
 
     struct WalleTask : Table<4> {
-        struct TaskID : Column<1, NScheme::NTypeIds::Utf8> {}; 
-        struct RequestID : Column<2, NScheme::NTypeIds::Utf8> {}; 
+        struct TaskID : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct RequestID : Column<2, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<TaskID>;
         using TColumns = TableColumns<TaskID, RequestID>;

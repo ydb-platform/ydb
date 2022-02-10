@@ -24,7 +24,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 SRCS(
     pq_ut_slow.cpp
     pq_ut.h

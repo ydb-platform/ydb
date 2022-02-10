@@ -4,7 +4,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/util.h>
-#include <util/system/sanitizers.h> 
+#include <util/system/sanitizers.h>
 
 namespace NYql {
 
@@ -32,11 +32,11 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
     }
 
     Y_UNIT_TEST(ParseAstTestPerf) {
-#ifdef WITH_VALGRIND 
-        const ui32 n = 1000; 
-#else 
-        const ui32 n = NSan::PlainOrUnderSanitizer(100000, 1000); 
-#endif 
+#ifdef WITH_VALGRIND
+        const ui32 n = 1000;
+#else
+        const ui32 n = NSan::PlainOrUnderSanitizer(100000, 1000);
+#endif
         auto t1 = TInstant::Now();
         for (ui32 i = 0; i < n; ++i) {
             TAstParseResult res = ParseAst(TEST_PROGRAM);
@@ -378,7 +378,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
     }
 
     Y_UNIT_TEST(UnicodePrettyPrint) {
-        ParseAndAdaptPrint("(\"абв αβγ ﬡ\")", "(\"\\u0430\\u0431\\u0432 \\u03B1\\u03B2\\u03B3 \\uFB21\")"); 
+        ParseAndAdaptPrint("(\"абв αβγ ﬡ\")", "(\"\\u0430\\u0431\\u0432 \\u03B1\\u03B2\\u03B3 \\uFB21\")");
     }
 
     Y_UNIT_TEST(SerializeQuotedEmptyAtom) {

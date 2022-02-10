@@ -2,16 +2,16 @@
 #include "yql_pq_helpers.h"
 #include "yql_pq_mkql_compiler.h"
 
-#include <ydb/library/yql/ast/yql_expr.h> 
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h> 
+#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h> 
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h> 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h> 
-#include <ydb/library/yql/providers/pq/common/yql_names.h> 
-#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h> 
-#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h> 
-#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h> 
+#include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 #include <util/string/builder.h>
 

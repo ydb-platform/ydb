@@ -12,7 +12,7 @@
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/client/ydb_extension/extension.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 namespace NYdb {
 
@@ -60,7 +60,7 @@ public:
         const TMaybe<TStringType>& database,
         const TMaybe<TStringType>& discoveryEndpoint,
         const TMaybe<EDiscoveryMode>& discoveryMode,
-        const TMaybe<bool>& enableSsl, 
+        const TMaybe<bool>& enableSsl,
         const TMaybe<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory
     );
     IQueueClientContextPtr CreateContext() override;
@@ -79,7 +79,7 @@ public:
         TRpcRequestSettings::TEndpointPolicy endpointPolicy)
     {
         auto clientConfig = NGrpc::TGRpcClientConfig(dbState->DiscoveryEndpoint);
-        clientConfig.EnableSsl = dbState->EnableSsl; 
+        clientConfig.EnableSsl = dbState->EnableSsl;
         clientConfig.SslCaCert = CaCert_;
         clientConfig.MemQuota = MemoryQuota_;
 

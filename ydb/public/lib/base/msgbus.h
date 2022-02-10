@@ -20,8 +20,8 @@ enum {
     MTYPE_CLIENT_SCHEME_INITROOT = 10405,
     MTYPE_CLIENT_BSADM = 10406,
     MTYPE_CLIENT_SCHEME_NAVIGATE = 10407,
-    MTYPE_CLIENT_TYPES_REQUEST = 10408, 
-    MTYPE_CLIENT_TYPES_RESPONSE = 10409, 
+    MTYPE_CLIENT_TYPES_REQUEST = 10408,
+    MTYPE_CLIENT_TYPES_RESPONSE = 10409,
     MTYPE_CLIENT_CREATE_TABLET_POOL = 10410, // deprecated
     MTYPE_CLIENT_RESOLVE_JOB_RUNNER = 10411, // deprecated
     MTYPE_CLIENT_RUN_JOB = 10412, // deprecated
@@ -197,8 +197,8 @@ public:
         RegisterType(new TBusFakeConfigDummy);
         RegisterType(new TBusSchemeInitRoot);
         RegisterType(new TBusBSAdm);
-        RegisterType(new TBusTypesRequest); 
-        RegisterType(new TBusTypesResponse); 
+        RegisterType(new TBusTypesRequest);
+        RegisterType(new TBusTypesResponse);
         RegisterType(new TBusMessageBusTraceRequest);
         RegisterType(new TBusMessageBusTraceStatus);
         RegisterType(new TBusHiveCreateTablet);

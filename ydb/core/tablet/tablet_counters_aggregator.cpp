@@ -839,7 +839,7 @@ private:
                         auto rangeCount = percentileCounter.GetRangeCount();
                         for (ui32 r = 0; r < rangeCount; ++r) {
                             const char* rangeName = percentileCounter.GetRangeName(r);
-                            auto subgroup = CounterGroup->GetSubgroup("range", rangeName); 
+                            auto subgroup = CounterGroup->GetSubgroup("range", rangeName);
                             auto counter = subgroup->GetCounter(percentileCounterName, isDerivative);
                             counterRBeginIter->push_back(counter);
                         }

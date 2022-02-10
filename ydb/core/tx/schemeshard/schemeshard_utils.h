@@ -10,7 +10,7 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h> 
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
 
 #include <library/cpp/actors/core/actorid.h>
 

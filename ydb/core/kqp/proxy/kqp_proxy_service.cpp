@@ -687,7 +687,7 @@ public:
 
         LogResponse(proxyRequest->TraceId, ev->Get()->Record, proxyRequest->DbCounters);
         Send(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
- 
+
         TKqpRequestInfo requestInfo(proxyRequest->TraceId);
         KQP_PROXY_LOG_D(requestInfo << "Forwarded response to sender actor, requestId: " << requestId
             << ", sender: " << proxyRequest->Sender << ", selfId: " << SelfId());

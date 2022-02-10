@@ -38,11 +38,11 @@ static_assert(sizeof(TInt128) == 16, "Wrong size of TInt128, expected 16");
 
 inline constexpr TInt128 Inf() {
     return TInt128(100000000000000000ULL) * TInt128(1000000000000000000ULL);
-} 
+}
 
 inline constexpr TInt128 Nan() {
     return Inf() + TInt128(1);
-} 
+}
 
 inline constexpr TInt128 Err() {
     return Nan() + TInt128(1);
@@ -83,8 +83,8 @@ template<typename TMkqlProto>
 inline TInt128 FromProto(const TMkqlProto& val) {
     ui64 half[2] = {val.GetLow128(), val.GetHi128()};
     TInt128 val128;
-    std::memcpy(&val128, half, sizeof(val128)); 
-    return val128; 
+    std::memcpy(&val128, half, sizeof(val128));
+    return val128;
 }
 
 template<typename TValue>

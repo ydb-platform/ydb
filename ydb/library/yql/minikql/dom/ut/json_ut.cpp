@@ -1,9 +1,9 @@
 #include <ydb/library/yql/minikql/dom/json.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/yql/minikql/mkql_alloc.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_value_builder.h> 
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_value_builder.h>
 
 using namespace NYql;
 using namespace NYql::NDom;

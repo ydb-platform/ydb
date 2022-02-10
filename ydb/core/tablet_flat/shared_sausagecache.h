@@ -2,7 +2,7 @@
 #include "defs.h"
 #include <ydb/core/protos/shared_cache.pb.h>
 #include <ydb/core/util/cache_cache.h>
-#include <util/system/unaligned_mem.h> 
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr {
 

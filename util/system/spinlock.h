@@ -5,8 +5,8 @@
 
 class TSpinLockBase {
 protected:
-    inline TSpinLockBase() noexcept { 
-        AtomicSet(Val_, 0); 
+    inline TSpinLockBase() noexcept {
+        AtomicSet(Val_, 0);
     }
 
 public:

@@ -1,13 +1,13 @@
 #include "worker_actor.h"
 
-#include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h> 
-#include <ydb/library/yql/providers/dq/runtime/runtime_data.h> 
+#include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h>
+#include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h> 
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 
 #include <library/cpp/actors/core/event_pb.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -290,7 +290,7 @@ private:
         Y_VERIFY(!TaskRunnerActor);
 
         Stat.StartCounter(Stat.GetCounterName("Actor", {{"ClusterName", RuntimeData ? RuntimeData->ClusterName : "local"}}, "ProcessInit"));
-        Y_VERIFY(!Executer); 
+        Y_VERIFY(!Executer);
         Executer = ev->Sender;
         Task = ev->Get()->Record.GetTask();
 

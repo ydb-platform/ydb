@@ -68,7 +68,7 @@ enum class TCodecType : ui16 {
 #pragma pack(push, 2)
 class TCodecSig {
 public:
-    TCodecSig(ui16 raw = 0) 
+    TCodecSig(ui16 raw = 0)
         : Raw(raw)
     { }
 
@@ -76,19 +76,19 @@ public:
         : Raw(ui16(type))
     { }
 
-    TCodecSig(TCodecType type, bool isNullable) 
+    TCodecSig(TCodecType type, bool isNullable)
         : Raw((ui16(isNullable) << 10) | ui16(type))
     { }
 
-    operator ui16() const { 
+    operator ui16() const {
         return Raw;
     }
 
-    TCodecType Type() const { 
+    TCodecType Type() const {
         return static_cast<TCodecType>(Raw & ((1 << 10) - 1));
     }
 
-    bool IsNullable() const { 
+    bool IsNullable() const {
         return Raw & (1 << 10);
     }
 

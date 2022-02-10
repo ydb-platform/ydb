@@ -8,15 +8,15 @@
 #include <util/generic/array_ref.h>
 #include <util/generic/string.h>
 
-#ifdef _win_ 
+#ifdef _win_
     #include "mutex.h"
- 
+
     #ifndef OPTIONAL
         #define OPTIONAL
     #endif
     #include <dbghelp.h>
-#endif 
- 
+#endif
+
 #if defined(_bionic_)
 //TODO
 #else
@@ -48,7 +48,7 @@ extern "C" __stdcall unsigned short CaptureStackBackTrace(unsigned long FramesTo
         #define HAVE_BACKTRACE
     #endif
 #endif
- 
+
 #if defined(USE_GLIBC_BACKTRACE)
     #include <execinfo.h>
 
@@ -104,12 +104,12 @@ size_t BackTrace(void** p, size_t len) {
 }
 #endif
 
-#if defined(USE_WIN_BACKTRACE) 
-size_t BackTrace(void** p, size_t len) { 
-    return CaptureStackBackTrace(0, len, p, nullptr); 
-} 
-#endif 
- 
+#if defined(USE_WIN_BACKTRACE)
+size_t BackTrace(void** p, size_t len) {
+    return CaptureStackBackTrace(0, len, p, nullptr);
+}
+#endif
+
 #if !defined(HAVE_BACKTRACE)
 size_t BackTrace(void**, size_t) {
     return 0;
@@ -148,15 +148,15 @@ TResolvedSymbol ResolveSymbol(void* sym, char* buf, size_t len) {
 
     return ret;
 }
-#elif defined(_win_) 
+#elif defined(_win_)
     #include <util/generic/singleton.h>
 
-namespace { 
+namespace {
     struct TWinSymbolResolverImpl {
         typedef BOOL(WINAPI* TSymInitializeFunc)(HANDLE, PCSTR, BOOL);
         typedef BOOL(WINAPI* TSymCleanupFunc)(HANDLE);
         typedef BOOL(WINAPI* TSymFromAddrFunc)(HANDLE, DWORD64, PDWORD64, PSYMBOL_INFO);
- 
+
         TWinSymbolResolverImpl()
             : InitOk(FALSE)
         {
@@ -164,52 +164,52 @@ namespace {
             if (!Library) {
                 return;
             }
- 
+
             SymInitializeFunc = (TSymInitializeFunc)GetProcAddress(Library, "SymInitialize");
             SymCleanupFunc = (TSymCleanupFunc)GetProcAddress(Library, "SymCleanup");
             SymFromAddrFunc = (TSymFromAddrFunc)GetProcAddress(Library, "SymFromAddr");
             if (SymInitializeFunc && SymCleanupFunc && SymFromAddrFunc) {
                 InitOk = SymInitializeFunc(GetCurrentProcess(), nullptr, TRUE);
             }
-        } 
- 
+        }
+
         ~TWinSymbolResolverImpl() {
             if (InitOk) {
                 SymCleanupFunc(GetCurrentProcess());
             }
- 
+
             if (Library) {
                 FreeLibrary(Library);
             }
-        } 
- 
+        }
+
         TResolvedSymbol Resolve(void* sym, char* buf, size_t len) {
             TGuard<TMutex> guard(Mutex);
- 
+
             TResolvedSymbol ret = {
                 "??",
                 sym};
- 
+
             if (!InitOk || (len <= 1 + sizeof(SYMBOL_INFO))) {
                 return ret;
             }
- 
+
             SYMBOL_INFO* symbol = (SYMBOL_INFO*)buf;
             Zero(*symbol);
- 
+
             symbol->MaxNameLen = len - sizeof(SYMBOL_INFO) - 1;
             symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
- 
+
             DWORD64 displacement = 0;
             BOOL res = SymFromAddrFunc(GetCurrentProcess(), (DWORD64)sym, &displacement, symbol);
             if (res) {
                 ret.NearestSymbol = (void*)symbol->Address;
                 ret.Name = symbol->Name;
             }
- 
+
             return ret;
-        } 
- 
+        }
+
         TMutex Mutex;
         HMODULE Library;
         TSymInitializeFunc SymInitializeFunc;
@@ -217,11 +217,11 @@ namespace {
         TSymFromAddrFunc SymFromAddrFunc;
         BOOL InitOk;
     };
-} 
- 
-TResolvedSymbol ResolveSymbol(void* sym, char* buf, size_t len) { 
-    return Singleton<TWinSymbolResolverImpl>()->Resolve(sym, buf, len); 
-} 
+}
+
+TResolvedSymbol ResolveSymbol(void* sym, char* buf, size_t len) {
+    return Singleton<TWinSymbolResolverImpl>()->Resolve(sym, buf, len);
+}
 #else
 TResolvedSymbol ResolveSymbol(void* sym, char*, size_t) {
     TResolvedSymbol ret = {
@@ -257,10 +257,10 @@ void FormatBackTrace(IOutputStream* out) {
     FormatBackTraceFn(out, array, s);
 }
 
-TFormatBackTraceFn GetFormatBackTraceFn() { 
-    return FormatBackTraceFn; 
-} 
- 
+TFormatBackTraceFn GetFormatBackTraceFn() {
+    return FormatBackTraceFn;
+}
+
 void PrintBackTrace() {
     FormatBackTrace(&Cerr);
 }

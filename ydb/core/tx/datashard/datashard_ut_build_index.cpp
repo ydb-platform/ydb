@@ -7,7 +7,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

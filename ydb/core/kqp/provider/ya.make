@@ -41,21 +41,21 @@ PEERDIR(
     ydb/library/yql/minikql
     ydb/library/yql/public/decimal
     ydb/public/lib/scheme_types
-    ydb/library/yql/core/expr_nodes 
-    ydb/library/yql/providers/common/codec 
-    ydb/library/yql/providers/common/config 
-    ydb/library/yql/providers/common/gateway 
-    ydb/library/yql/providers/common/proto 
-    ydb/library/yql/providers/common/provider 
-    ydb/library/yql/providers/common/schema/expr 
-    ydb/library/yql/providers/result/expr_nodes 
-    ydb/library/yql/providers/result/provider 
+    ydb/library/yql/core/expr_nodes
+    ydb/library/yql/providers/common/codec
+    ydb/library/yql/providers/common/config
+    ydb/library/yql/providers/common/gateway
+    ydb/library/yql/providers/common/proto
+    ydb/library/yql/providers/common/provider
+    ydb/library/yql/providers/common/schema/expr
+    ydb/library/yql/providers/result/expr_nodes
+    ydb/library/yql/providers/result/provider
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 SRCDIR(ydb/library/yql/core/expr_nodes_gen)
- 
+
 RUN_PROGRAM(
     ydb/library/yql/core/expr_nodes_gen/gen yql_expr_nodes_gen.jnj yql_kikimr_expr_nodes.json
         yql_kikimr_expr_nodes.gen.h yql_kikimr_expr_nodes.decl.inl.h yql_kikimr_expr_nodes.defs.inl.h

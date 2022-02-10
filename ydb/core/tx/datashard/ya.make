@@ -228,11 +228,11 @@ PEERDIR(
     ydb/library/dynumber
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli
-    ydb/library/yql/dq/actors/compute 
+    ydb/library/yql/dq/actors/compute
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 IF (OS_WINDOWS)
     CFLAGS(
         -DKIKIMR_DISABLE_S3_OPS

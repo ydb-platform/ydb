@@ -23,6 +23,6 @@ SRCS(
     metering_ut.cpp
 )
 
-YQL_LAST_ABI_VERSION() 
- 
+YQL_LAST_ABI_VERSION()
+
 END()

@@ -1,14 +1,14 @@
 #pragma once
 
-#include <util/system/compiler.h> 
+#include <util/system/compiler.h>
 #include <util/system/defaults.h>
-#include <util/system/unaligned_mem.h> 
+#include <util/system/unaligned_mem.h>
 
 namespace NKikimr {
 
 constexpr size_t MAX_PACKED32_SIZE = 5;
 constexpr size_t MAX_PACKED64_SIZE = 9;
- 
+
 Y_FORCE_INLINE size_t GetPack32Length(ui32 value) {
     if (value < 0x80) {
         return 1;
@@ -53,24 +53,24 @@ Y_FORCE_INLINE size_t GetPack32Length(ui32 value) {
     if (0 == (buffer[0] & 0x1)) {
         count = 1;
         value = ((const ui8*)buffer)[0] >> 1;
-    } else if (0 == (buffer[0] & 0x2)) { 
+    } else if (0 == (buffer[0] & 0x2)) {
         count = 2;
         if (Y_UNLIKELY(length < count)) {
             return 0;
         }
-        value = ReadUnaligned<ui16>((const ui16*)buffer) >> 2; 
-    } else if (0 == (buffer[0] & 0x4)) { 
+        value = ReadUnaligned<ui16>((const ui16*)buffer) >> 2;
+    } else if (0 == (buffer[0] & 0x4)) {
         count = 3;
         if (Y_UNLIKELY(length < count)) {
             return 0;
         }
-        value = (ReadUnaligned<ui16>((const ui16*)buffer) >> 3) | (((const ui8*)buffer)[2] << 13); 
+        value = (ReadUnaligned<ui16>((const ui16*)buffer) >> 3) | (((const ui8*)buffer)[2] << 13);
     } else {
         count = 5;
         if (Y_UNLIKELY(length < count || buffer[0] != 0x7)) {
             return 0;
         }
-        value = ReadUnaligned<ui32>((const ui32*)(buffer + 1)); 
+        value = ReadUnaligned<ui32>((const ui32*)(buffer + 1));
     }
 
     return count;
@@ -102,7 +102,7 @@ Y_FORCE_INLINE size_t GetPack64Length(ui64 value) {
         return 9;
     }
 }
- 
+
 [[nodiscard]] Y_FORCE_INLINE size_t Pack64(ui64 value, char* buffer) {
     if (value < 0x80) {
         buffer[0] = value << 1;
@@ -148,48 +148,48 @@ Y_FORCE_INLINE size_t GetPack64Length(ui64 value) {
     if (0 == (buffer[0] & 0x1)) {
         count = 1;
         value = ((const ui8*)buffer)[0] >> 1;
-    } else if (0 == (buffer[0] & 0x2)) { 
+    } else if (0 == (buffer[0] & 0x2)) {
         count = 2;
         if (Y_UNLIKELY(length < count)) {
             return 0;
         }
-        value = ReadUnaligned<ui16>((const ui16*)buffer) >> 2; 
-    } else if (0 == (buffer[0] & 0x4)) { 
+        value = ReadUnaligned<ui16>((const ui16*)buffer) >> 2;
+    } else if (0 == (buffer[0] & 0x4)) {
         count = 3;
         if (Y_UNLIKELY(length < count)) {
             return 0;
         }
-        value = (ui64(ReadUnaligned<ui16>((const ui16*)buffer)) >> 3) | (ui64(((const ui8*)buffer)[2]) << 13); 
-    } else if (0 == (buffer[0] & 0x8)) { 
+        value = (ui64(ReadUnaligned<ui16>((const ui16*)buffer)) >> 3) | (ui64(((const ui8*)buffer)[2]) << 13);
+    } else if (0 == (buffer[0] & 0x8)) {
         count = 4;
         if (Y_UNLIKELY(length < count)) {
             return 0;
         }
-        value = ReadUnaligned<ui32>((const ui32*)buffer) >> 4; 
-    } else if (0 == (buffer[0] & 0x10)) { 
+        value = ReadUnaligned<ui32>((const ui32*)buffer) >> 4;
+    } else if (0 == (buffer[0] & 0x10)) {
         count = 5;
         if (Y_UNLIKELY(length < count)) {
             return 0;
         }
-        value = (ui64(ReadUnaligned<ui32>((const ui32*)buffer)) >> 5) | (ui64(((const ui8*)buffer)[4]) << 27); 
-    } else if (0 == (buffer[0] & 0x20)) { 
+        value = (ui64(ReadUnaligned<ui32>((const ui32*)buffer)) >> 5) | (ui64(((const ui8*)buffer)[4]) << 27);
+    } else if (0 == (buffer[0] & 0x20)) {
         count = 6;
         if (Y_UNLIKELY(length < count)) {
             return 0;
         }
-        value = (ui64(ReadUnaligned<ui32>((const ui32*)buffer)) >> 6) | (ui64(ReadUnaligned<ui16>(((const ui16*)buffer) + 2)) << 26); 
-    } else if (0 == (buffer[0] & 0x40)) { 
+        value = (ui64(ReadUnaligned<ui32>((const ui32*)buffer)) >> 6) | (ui64(ReadUnaligned<ui16>(((const ui16*)buffer) + 2)) << 26);
+    } else if (0 == (buffer[0] & 0x40)) {
         count = 7;
         if (Y_UNLIKELY(length < count)) {
             return 0;
         }
-        value = (ui64(ReadUnaligned<ui32>((const ui32*)buffer)) >> 7) | (ui64(ReadUnaligned<ui16>(((const ui16*)buffer) + 2)) << 25) | (ui64(((const ui8*)buffer)[6]) << 41); 
+        value = (ui64(ReadUnaligned<ui32>((const ui32*)buffer)) >> 7) | (ui64(ReadUnaligned<ui16>(((const ui16*)buffer) + 2)) << 25) | (ui64(((const ui8*)buffer)[6]) << 41);
     } else {
         count = 9;
         if (Y_UNLIKELY(length < count || buffer[0] != 0x7F)) {
             return 0;
         }
-        value = ReadUnaligned<ui64>((const ui64*)(buffer + 1)); 
+        value = ReadUnaligned<ui64>((const ui64*)(buffer + 1));
     }
 
     return count;

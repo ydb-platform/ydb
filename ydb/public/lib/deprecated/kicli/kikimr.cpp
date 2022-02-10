@@ -9,28 +9,28 @@ namespace NClient {
 ui32 TKikimr::POLLING_TIMEOUT = 10000;
 bool TKikimr::DUMP_REQUESTS = false;
 
-namespace { 
- 
-struct TRetryState { 
-    bool IsAllowedToRetry(TDuration& wait, const TRetryPolicy& policy) { 
-        if (RetryNumber == 0) { 
-           wait = policy.DoFirstRetryInstantly ? TDuration::Zero() : policy.MinRetryTime; 
-        } else { 
+namespace {
+
+struct TRetryState {
+    bool IsAllowedToRetry(TDuration& wait, const TRetryPolicy& policy) {
+        if (RetryNumber == 0) {
+           wait = policy.DoFirstRetryInstantly ? TDuration::Zero() : policy.MinRetryTime;
+        } else {
             wait = TDuration::MicroSeconds(RetryDuration.GetValue() * policy.BackoffMultiplier);
-            wait = Max(policy.MinRetryTime, wait); 
-            wait = Min(policy.MaxRetryTime, wait); 
-        } 
-        ++RetryNumber; 
-        RetryDuration = wait; 
+            wait = Max(policy.MinRetryTime, wait);
+            wait = Min(policy.MaxRetryTime, wait);
+        }
+        ++RetryNumber;
+        RetryDuration = wait;
         return RetryNumber <= policy.RetryLimitCount;
-    } 
- 
+    }
+
     ui32 RetryNumber = 0;
-    TDuration RetryDuration; 
-}; 
- 
-} 
- 
+    TDuration RetryDuration;
+};
+
+}
+
 class TKikimr::TRetryQueue {
 protected:
     struct TQueueItem {

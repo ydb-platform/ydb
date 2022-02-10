@@ -1,7 +1,7 @@
 #include "yql_restricted_yson.h"
 
-#include <ydb/library/yql/utils/parse_double.h> 
-#include <ydb/library/yql/utils/yql_panic.h> 
+#include <ydb/library/yql/utils/parse_double.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/yson/detail.h>
 #include <library/cpp/yson/parser.h>
@@ -70,7 +70,7 @@ public:
     void OnDoubleScalar(double value) override {
         Open();
         Type(TStringBuf("double"));
-        Value(::FloatToString(value)); 
+        Value(::FloatToString(value));
         Close();
     }
 

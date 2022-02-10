@@ -1100,7 +1100,7 @@ fts_stat(FTS* sp, FTSENT* p, int follow)
 {
     dev_t dev;
     ino_t ino;
-    stat_struct *sbp, sb; 
+    stat_struct *sbp, sb;
     int saved_errno;
     /* If user needs stat info, stat buffer already allocated. */
     sbp = ISSET(FTS_NOSTAT) ? &sb : p->fts_statp;
@@ -1122,19 +1122,19 @@ fts_stat(FTS* sp, FTSENT* p, int follow)
      * fail, set the errno from the stat call.
      */
     if (ISSET(FTS_LOGICAL) || follow) {
-        if (STAT_FUNC(p->fts_accpath, sbp)) { 
+        if (STAT_FUNC(p->fts_accpath, sbp)) {
             saved_errno = errno;
             if (!lstat(p->fts_accpath, sbp)) {
                 errno = 0;
                 return (FTS_SLNONE);
             }
             p->fts_errno = saved_errno;
-            memset(sbp, 0, sizeof(stat_struct)); 
+            memset(sbp, 0, sizeof(stat_struct));
             return (FTS_NS);
         }
     } else if (lstat(p->fts_accpath, sbp)) {
         p->fts_errno = errno;
-        memset(sbp, 0, sizeof(stat_struct)); 
+        memset(sbp, 0, sizeof(stat_struct));
         return (FTS_NS);
     }
 
@@ -1239,7 +1239,7 @@ fts_alloc(FTS* sp, const char* name, int namelen)
      */
     len = sizeof(FTSENT) + namelen;
     if (!ISSET(FTS_NOSTAT)) {
-        len += sizeof(stat_struct) + ALIGNBYTES; 
+        len += sizeof(stat_struct) + ALIGNBYTES;
     }
     if ((p = (FTSENT*)malloc(len)) == nullptr) {
         return nullptr;
@@ -1359,7 +1359,7 @@ static int
 fts_safe_changedir(FTS* sp, FTSENT* p, int fd, const char* path)
 {
     int ret, oerrno, newfd;
-    stat_struct sb; 
+    stat_struct sb;
 
     newfd = fd;
     if (ISSET(FTS_NOCHDIR)) {
@@ -1391,11 +1391,11 @@ static int
 fts_safe_changedir(FTS* sp, FTSENT* p, int /*fd*/, const char* path)
 {
     int ret;
-    stat_struct sb; 
+    stat_struct sb;
 
     if (ISSET(FTS_NOCHDIR))
         return (0);
-    if (STAT_FUNC(path, &sb)) { 
+    if (STAT_FUNC(path, &sb)) {
         ret = -1;
         goto bail;
     }

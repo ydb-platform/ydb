@@ -1,10 +1,10 @@
-#include "mkql_collect.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include "mkql_collect.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 class TCollectFlowWrapper : public TMutableCodegeneratorRootNode<TCollectFlowWrapper> {
@@ -112,20 +112,20 @@ private:
     IComputationNode* const Flow;
 };
 
-template <bool IsList> 
+template <bool IsList>
 class TCollectWrapper : public TMutableCodegeneratorNode<TCollectWrapper<IsList>> {
     typedef TMutableCodegeneratorNode<TCollectWrapper<IsList>> TBaseComputation;
-public: 
+public:
     TCollectWrapper(TComputationMutables& mutables, IComputationNode* seq)
         : TBaseComputation(mutables, EValueRepresentation::Boxed), Seq(seq)
     {}
- 
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto seq = Seq->GetValue(ctx);
         if (IsList && seq.GetElements()) {
             return seq.Release();
         }
- 
+
         return ctx.HolderFactory.Collect<!IsList>(seq.Release());
     }
 
@@ -166,9 +166,9 @@ public:
                 CallInst::Create(funcPtr, {factory, ptr, ptr}, "", block);
                 const auto res = new LoadInst(ptr, "res", block);
                 result->addIncoming(res, block);
-            } 
+            }
             BranchInst::Create(done, block);
- 
+
             block = done;
             return result;
         } else {
@@ -187,33 +187,33 @@ public:
                 return res;
             }
         }
-    } 
+    }
 #endif
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Seq);
-    } 
- 
-    IComputationNode* const Seq; 
-}; 
- 
+    }
+
+    IComputationNode* const Seq;
+};
+
 }
 
-IComputationNode* WrapCollect(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg"); 
+IComputationNode* WrapCollect(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
     const auto type = callable.GetInput(0).GetStaticType();
     const auto list = LocateNode(ctx.NodeLocator, callable, 0);
- 
+
     if (type->IsFlow()) {
         return new TCollectFlowWrapper(ctx.Mutables, list);
     } else if (type->IsList()) {
         return new TCollectWrapper<true>(ctx.Mutables, list);
     } else if (type->IsStream()) {
         return new TCollectWrapper<false>(ctx.Mutables, list);
-    } 
+    }
 
     THROW yexception() << "Expected flow, list or stream.";
-} 
- 
-} 
-} 
+}
+
+}
+}

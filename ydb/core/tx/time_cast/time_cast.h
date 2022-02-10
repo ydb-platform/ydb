@@ -95,7 +95,7 @@ struct TEvMediatorTimecast {
 
         TString ToString() const {
             TStringStream str;
-            str << "{TEvUnregisterTablet"; 
+            str << "{TEvUnregisterTablet";
             str << " TabletId# " << TabletId;
             str << "}";
             return str.Str();

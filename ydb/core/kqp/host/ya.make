@@ -25,13 +25,13 @@ PEERDIR(
     ydb/library/yql/core/services
     ydb/library/yql/minikql/invoke_builtins
     ydb/library/yql/sql
-    ydb/library/yql/core 
-    ydb/library/yql/providers/common/codec 
-    ydb/library/yql/providers/common/udf_resolve 
-    ydb/library/yql/providers/config 
-    ydb/library/yql/providers/result/provider 
+    ydb/library/yql/core
+    ydb/library/yql/providers/common/codec
+    ydb/library/yql/providers/common/udf_resolve
+    ydb/library/yql/providers/config
+    ydb/library/yql/providers/result/provider
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 END()

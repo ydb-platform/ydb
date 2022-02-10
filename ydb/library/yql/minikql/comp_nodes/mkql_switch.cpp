@@ -1,14 +1,14 @@
-#include "mkql_switch.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_stats_registry.h> 
-#include <ydb/library/yql/utils/cast.h> 
- 
+#include "mkql_switch.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_stats_registry.h>
+#include <ydb/library/yql/utils/cast.h>
+
 #include <util/string/cast.h>
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+namespace NKikimr {
+namespace NMiniKQL {
+
 using NYql::EnsureDynamicCast;
 
 namespace {
@@ -16,17 +16,17 @@ namespace {
 static const TStatKey Switch_FlushesCount("Switch_FlushesCount", true);
 static const TStatKey Switch_MaxRowsCount("Switch_MaxRowsCount", false);
 
-using TPagedUnboxedValueList = TPagedList<NUdf::TUnboxedValue>; 
- 
-struct TSwitchHandler { 
+using TPagedUnboxedValueList = TPagedList<NUdf::TUnboxedValue>;
+
+struct TSwitchHandler {
     std::vector<ui32, TMKQLAllocator<ui32>> InputIndices;
     IComputationExternalNode* Item = nullptr;
-    IComputationNode* NewItem = nullptr; 
+    IComputationNode* NewItem = nullptr;
     std::optional<ui32> ResultVariantOffset;
-    bool IsOutputVariant = false; 
+    bool IsOutputVariant = false;
     EValueRepresentation Kind = EValueRepresentation::Any;
-}; 
- 
+};
+
 using TSwitchHandlersList = std::vector<TSwitchHandler, TMKQLAllocator<TSwitchHandler>>;
 
 class TState : public TComputationValue<TState> {
@@ -187,7 +187,7 @@ private:
         const auto funcType = FunctionType::get(valueType, {PointerType::getUnqual(GetCompContextType(context))}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         ctx.Ctx = &*ctx.Func->arg_begin();
@@ -496,64 +496,64 @@ template <bool IsInputVariant, bool TrackRss>
 class TSwitchWrapper : public TCustomValueCodegeneratorNode<TSwitchWrapper<IsInputVariant, TrackRss>> {
     typedef TCustomValueCodegeneratorNode<TSwitchWrapper<IsInputVariant, TrackRss>> TBaseComputation;
 private:
-    class TChildStream : public TComputationValue<TChildStream> { 
-    public: 
-        using TBase = TComputationValue<TChildStream>; 
- 
+    class TChildStream : public TComputationValue<TChildStream> {
+    public:
+        using TBase = TComputationValue<TChildStream>;
+
         TChildStream(TMemoryUsageInfo* memInfo, const TSwitchHandler& handler,
             TComputationContext& ctx, const TPagedUnboxedValueList* buffer)
-            : TBase(memInfo) 
+            : TBase(memInfo)
             , Handler(handler)
-            , Ctx(ctx) 
-            , Buffer(buffer) 
+            , Ctx(ctx)
+            , Buffer(buffer)
         {}
- 
+
         void Reset(bool isFinished) {
             BufferIndex = InputIndex = 0U;
             IsFinished = isFinished;
-        } 
- 
+        }
+
     private:
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override { 
-            for (;;) { 
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            for (;;) {
                 if (BufferIndex == Buffer->Size()) {
-                    return IsFinished ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield; 
-                } 
- 
+                    return IsFinished ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Yield;
+                }
+
                 auto current = (*Buffer)[BufferIndex];
-                ui32 streamIndex = 0; 
+                ui32 streamIndex = 0;
                 if constexpr (IsInputVariant) {
-                    streamIndex = current.GetVariantIndex(); 
+                    streamIndex = current.GetVariantIndex();
                     current = current.Release().GetVariantItem();
-                } 
- 
+                }
+
                 for (; InputIndex < Handler.InputIndices.size(); ++InputIndex) {
                     if (Handler.InputIndices[InputIndex] == streamIndex) {
                         if (Handler.InputIndices.size() > 1) {
                             current = Ctx.HolderFactory.CreateVariantHolder(current.Release(), InputIndex);
-                        } 
- 
-                        result = std::move(current); 
-                        ++InputIndex; 
-                        return NUdf::EFetchStatus::Ok; 
-                    } 
-                } 
- 
-                InputIndex = 0; 
+                        }
+
+                        result = std::move(current);
+                        ++InputIndex;
+                        return NUdf::EFetchStatus::Ok;
+                    }
+                }
+
+                InputIndex = 0;
                 ++BufferIndex;
-            } 
-        } 
- 
+            }
+        }
+
         const TSwitchHandler Handler;
-        TComputationContext& Ctx; 
-        const TPagedUnboxedValueList* const Buffer; 
+        TComputationContext& Ctx;
+        const TPagedUnboxedValueList* const Buffer;
         ui32 BufferIndex = 0U;
         ui32 InputIndex = 0U;
         bool IsFinished = false;
-    }; 
- 
+    };
+
     class TValueBase : public TState {
-    public: 
+    public:
         void Add(NUdf::TUnboxedValue&& item) {
             Buffer.Add(std::move(item));
         }
@@ -587,8 +587,8 @@ private:
             : TState(memInfo, handlers.size())
             , Handlers(handlers)
             , Buffer(ctx.HolderFactory.GetPagePool())
-            , Ctx(ctx) 
-        { 
+            , Ctx(ctx)
+        {
             ChildrenInStreams.reserve(Handlers.size());
             ChildrenOutStreams.reserve(Handlers.size());
             for (const auto& handler : Handlers) {
@@ -596,9 +596,9 @@ private:
                 ChildrenInStreams.emplace_back(static_cast<TChildStream*>(stream.AsBoxed().Get()));
                 handler.Item->SetValue(Ctx, stream);
                 ChildrenOutStreams.emplace_back(handler.NewItem->GetValue(Ctx));
-            } 
-        } 
- 
+            }
+        }
+
         const TSwitchHandlersList Handlers;
         TPagedUnboxedValueList Buffer;
         TComputationContext& Ctx;
@@ -615,8 +615,8 @@ private:
         {}
 
     private:
-        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override { 
-            for (;;) { 
+        NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
+            for (;;) {
                 if (this->ChildReadIndex == this->Handlers.size()) {
                     switch (this->InputStatus) {
                         case NUdf::EFetchStatus::Ok: break;
@@ -625,44 +625,44 @@ private:
                             return NUdf::EFetchStatus::Yield;
                         case NUdf::EFetchStatus::Finish:
                             return NUdf::EFetchStatus::Finish;
-                    } 
- 
+                    }
+
                     const auto initUsage = this->MemLimit ? this->Ctx.HolderFactory.GetMemoryUsed() : 0ULL;
- 
+
                     do  {
                         NUdf::TUnboxedValue current;
                         this->InputStatus = this->Stream.Fetch(current);
                         if (NUdf::EFetchStatus::Ok != this->InputStatus) {
                             break;
-                        } 
+                        }
                         this->Add(std::move(current));
                     } while (!this->Ctx.template CheckAdjustedMemLimit<TrackRss>(this->MemLimit, initUsage));
- 
+
                     this->Reset();
-                } 
- 
+                }
+
                 if (!this->Get(result)) {
-                    continue; 
-                } 
- 
+                    continue;
+                }
+
                 const auto& handler = this->Handlers[this->ChildReadIndex];
                 if (const auto offset = handler.ResultVariantOffset) {
-                    ui32 localIndex = 0; 
-                    if (handler.IsOutputVariant) { 
+                    ui32 localIndex = 0;
+                    if (handler.IsOutputVariant) {
                         localIndex = result.GetVariantIndex();
                         result = result.Release().GetVariantItem();
-                    } 
- 
+                    }
+
                     result = this->Ctx.HolderFactory.CreateVariantHolder(result.Release(), *offset + localIndex);
-                } 
- 
-                return NUdf::EFetchStatus::Ok; 
-            } 
-        } 
- 
+                }
+
+                return NUdf::EFetchStatus::Ok;
+            }
+        }
+
         const NUdf::TUnboxedValue Stream;
         const ui64 MemLimit;
-    }; 
+    };
 
 #ifndef MKQL_DISABLE_CODEGEN
     class TCodegenValue : public TStreamCodegenSelfStateValue<TValueBase> {
@@ -677,28 +677,28 @@ public:
     TSwitchWrapper(TComputationMutables& mutables, IComputationNode* stream, ui64 memLimit, TSwitchHandlersList&& handlers)
         : TBaseComputation(mutables)
         , Stream(stream)
-        , MemLimit(memLimit) 
-        , Handlers(std::move(handlers)) 
+        , MemLimit(memLimit)
+        , Handlers(std::move(handlers))
     {}
- 
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && Switch)
             return ctx.HolderFactory.Create<TCodegenValue>(Switch, &ctx, Stream->GetValue(ctx), Handlers);
 #endif
         return ctx.HolderFactory.Create<TValue>(Stream->GetValue(ctx), Handlers, MemLimit, ctx);
-    } 
- 
+    }
+
 
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Stream);
         for (const auto& x : Handlers) {
-            this->Own(x.Item); 
+            this->Own(x.Item);
             this->DependsOn(x.NewItem);
-        } 
-    } 
- 
+        }
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
         SwitchFunc = GenerateSwitch(codegen);
@@ -739,7 +739,7 @@ private:
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, statePtrType, ptrValueType}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         auto args = ctx.Func->arg_begin();
 
@@ -892,41 +892,41 @@ private:
     IComputationNode *const Stream;
     const ui64 MemLimit;
     const TSwitchHandlersList Handlers;
-}; 
- 
+};
+
 }
 
-IComputationNode* WrapSwitch(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() >= 6, "Expected at least 6 args"); 
-    MKQL_ENSURE((callable.GetInputsCount() - 2) % 4 == 0, "Corrupted arguments for Switch"); 
+IComputationNode* WrapSwitch(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() >= 6, "Expected at least 6 args");
+    MKQL_ENSURE((callable.GetInputsCount() - 2) % 4 == 0, "Corrupted arguments for Switch");
     TSwitchHandlersList handlers;
     handlers.reserve(callable.GetInputsCount() >> 2U);
     const auto stream = LocateNode(ctx.NodeLocator, callable, 0);
     const auto memLimit = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().Get<ui64>();
     const auto type = callable.GetType()->GetReturnType();
- 
-    for (ui32 i = 2; i < callable.GetInputsCount(); i += 4) { 
-        TSwitchHandler handler; 
+
+    for (ui32 i = 2; i < callable.GetInputsCount(); i += 4) {
+        TSwitchHandler handler;
         const auto tuple = AS_VALUE(TTupleLiteral, callable.GetInput(i));
-        for (ui32 tupleIndex = 0; tupleIndex < tuple->GetValuesCount(); ++tupleIndex) { 
+        for (ui32 tupleIndex = 0; tupleIndex < tuple->GetValuesCount(); ++tupleIndex) {
             handler.InputIndices.emplace_back(AS_VALUE(TDataLiteral, tuple->GetValue(tupleIndex))->AsValue().Get<ui32>());
-        } 
- 
+        }
+
         const auto itemType = type->IsFlow() ?
             AS_TYPE(TFlowType, callable.GetInput(i + 2))->GetItemType():
             AS_TYPE(TStreamType, callable.GetInput(i + 2))->GetItemType();
         handler.IsOutputVariant = itemType->IsVariant();
         handler.Kind = GetValueRepresentation(itemType);
-        handler.NewItem = LocateNode(ctx.NodeLocator, callable, i + 2); 
+        handler.NewItem = LocateNode(ctx.NodeLocator, callable, i + 2);
         handler.Item = LocateExternalNode(ctx.NodeLocator, callable, i + 1);
         const auto offsetNode = callable.GetInput(i + 3);
-        if (!offsetNode.GetStaticType()->IsVoid()) { 
+        if (!offsetNode.GetStaticType()->IsVoid()) {
             handler.ResultVariantOffset = AS_VALUE(TDataLiteral, offsetNode)->AsValue().Get<ui32>();
-        } 
- 
+        }
+
         handlers.emplace_back(handler);
-    } 
- 
+    }
+
     const bool trackRss = EGraphPerProcess::Single == ctx.GraphPerProcess;
     if (type->IsFlow()) {
         const bool isInputVariant = AS_TYPE(TFlowType, callable.GetInput(0))->GetItemType()->IsVariant();
@@ -954,7 +954,7 @@ IComputationNode* WrapSwitch(TCallable& callable, const TComputationNodeFactoryC
     }
 
     THROW yexception() << "Expected flow or stream.";
-} 
- 
-} 
-} 
+}
+
+}
+}

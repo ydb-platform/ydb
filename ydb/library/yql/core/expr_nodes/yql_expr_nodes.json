@@ -14,7 +14,7 @@
             "Base": "TExprBase",
             "Definition": "Custom",
             "Match": {"Type": "NodeType", "TypeName": "Atom"},
-            "Content": {"Name": "Value", "Type": "TStringBuf"}, 
+            "Content": {"Name": "Value", "Type": "TStringBuf"},
             "Builder": {"Generate": "Custom"}
         },
         {
@@ -73,7 +73,7 @@
             "Name": "TCoArgument",
             "Base": "TExprBase",
             "Match": {"Type": "NodeType", "TypeName": "Argument"},
-            "Content": {"Name": "Name", "Type": "TStringBuf"}, 
+            "Content": {"Name": "Name", "Type": "TStringBuf"},
             "Builder": {"Generate": "Custom"}
         },
         {
@@ -259,8 +259,8 @@
             "Name": "TCoSkipNullMembers",
             "Base": "TCoFilterNullMembersBase",
             "Match": {"Type": "Callable", "Name": "SkipNullMembers"}
-        }, 
-        { 
+        },
+        {
             "Name": "TCoFilterNullElementsBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
@@ -313,13 +313,13 @@
             "Name": "TCoFlatMap",
             "Base": "TCoFlatMapBase",
             "Match": {"Type": "Callable", "Name": "FlatMap"}
-        }, 
-        { 
+        },
+        {
             "Name": "TCoOrderedFlatMap",
             "Base": "TCoFlatMapBase",
             "Match": {"Type": "Callable", "Name": "OrderedFlatMap"}
-        }, 
-        { 
+        },
+        {
             "Name": "TCoFlatMapToEquiJoinBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
@@ -441,8 +441,8 @@
             "Name": "TCoLimit",
             "Base": "TCoCountBase",
             "Match": {"Type": "Callable", "Name": "Limit"}
-        }, 
-        { 
+        },
+        {
             "Name": "TCoSkip",
             "Base": "TCoCountBase",
             "Match": {"Type": "Callable", "Name": "Skip"}
@@ -510,13 +510,13 @@
         {
             "Name": "TCoGroupByKey",
             "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "GroupByKey"}, 
-            "Children": [ 
+            "Match": {"Type": "Callable", "Name": "GroupByKey"},
+            "Children": [
                 {"Index": 1, "Name": "KeySelectorLambda",   "Type": "TCoLambda"},
                 {"Index": 2, "Name": "HandlerLambda",       "Type": "TCoLambda"}
-            ] 
-        }, 
-        { 
+            ]
+        },
+        {
             "Name": "TCoPartitionByKeyBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},
@@ -604,12 +604,12 @@
         {
             "Name": "TCoAggregate",
             "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "Aggregate"}, 
-            "Children": [ 
+            "Match": {"Type": "Callable", "Name": "Aggregate"},
+            "Children": [
                 {"Index": 1, "Name": "Keys",      "Type": "TCoAtomList"},
                 {"Index": 2, "Name": "Handlers",  "Type": "TCoAggregateTupleList"},
-                {"Index": 3, "Name": "Settings",  "Type": "TCoNameValueTupleList"} 
-            ] 
+                {"Index": 3, "Name": "Settings",  "Type": "TCoNameValueTupleList"}
+            ]
         },
         {
             "Name": "TCoFold1",
@@ -778,24 +778,24 @@
         {
             "Name": "TCoUint8",
             "Base": "TCoIntegralCtor",
-            "Match": {"Type": "Callable", "Name": "Uint8"} 
+            "Match": {"Type": "Callable", "Name": "Uint8"}
         },
         {
             "Name": "TCoInt8",
             "Base": "TCoIntegralCtor",
-            "Match": {"Type": "Callable", "Name": "Int8"} 
-        }, 
-        { 
+            "Match": {"Type": "Callable", "Name": "Int8"}
+        },
+        {
             "Name": "TCoUint16",
             "Base": "TCoIntegralCtor",
-            "Match": {"Type": "Callable", "Name": "Uint16"} 
-        }, 
-        { 
+            "Match": {"Type": "Callable", "Name": "Uint16"}
+        },
+        {
             "Name": "TCoInt16",
             "Base": "TCoIntegralCtor",
-            "Match": {"Type": "Callable", "Name": "Int16"} 
-        }, 
-        { 
+            "Match": {"Type": "Callable", "Name": "Int16"}
+        },
+        {
             "Name": "TCoInt32",
             "Base": "TCoIntegralCtor",
             "Match": {"Type": "Callable", "Name": "Int32"}
@@ -1441,11 +1441,11 @@
                 {"Index": 4, "Name": "KeySelectorLambda", "Type": "TCoLambda"}
             ]
         },        {
-            "Name": "TCoAscending", 
-            "Base": "TCoInputBase", 
-            "Match": {"Type": "Callable", "Name": "Ascending"} 
-        }, 
-        { 
+            "Name": "TCoAscending",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "Ascending"}
+        },
+        {
             "Name": "TCoDescending",
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "Descending"}
@@ -1459,8 +1459,8 @@
                 {"Index": 1, "Name": "Name", "Type": "TCoAtom"},
                 {"Index": 2, "Name": "Item", "Type": "TExprBase"}
             ]
-        }, 
-        { 
+        },
+        {
             "Name": "TCoReplaceMember",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "ReplaceMember"},
@@ -1491,10 +1491,10 @@
         {
             "Name": "TCoExtractMembers",
             "Base": "TCoInputBase",
-            "Match": {"Type": "Callable", "Name": "ExtractMembers"}, 
-            "Children": [ 
+            "Match": {"Type": "Callable", "Name": "ExtractMembers"},
+            "Children": [
                 {"Index": 1, "Name": "Members", "Type": "TCoAtomList"}
-            ] 
+            ]
         },
 
         {

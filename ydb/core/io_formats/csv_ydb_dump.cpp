@@ -10,8 +10,8 @@
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/minikql/dom/json.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h> 
-#include <ydb/library/yql/utils/utf8.h> 
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/utils/utf8.h>
 
 #include <util/datetime/base.h>
 #include <util/string/cast.h>

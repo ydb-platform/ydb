@@ -220,7 +220,7 @@ private:
 
     ui64 RandomNumber(ui64 limit) {
         Y_VERIFY(limit > 0, "Invalid limit specified [0,%" PRIu64 ")", limit);
-        return RandomProvider->GenRand64() % limit; 
+        return RandomProvider->GenRand64() % limit;
     }
 
 public:

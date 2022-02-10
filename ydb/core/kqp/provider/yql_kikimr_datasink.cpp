@@ -1,9 +1,9 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h> 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
+#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
+#include <ydb/library/yql/core/yql_expr_optimize.h>
 
 namespace NYql {
 namespace {
@@ -303,11 +303,11 @@ class TKikimrDataSink : public TDataProviderBase
 public:
     TKikimrDataSink(
         const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-        TTypeAnnotationContext& types, 
+        TTypeAnnotationContext& types,
         TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx,
         TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)
-        : FunctionRegistry(functionRegistry) 
+        : FunctionRegistry(functionRegistry)
         , Types(types)
         , Gateway(gateway)
         , SessionCtx(sessionCtx)
@@ -328,10 +328,10 @@ public:
 
     ~TKikimrDataSink() {}
 
-    TStringBuf GetName() const override { 
-        return KikimrProviderName; 
-    } 
- 
+    TStringBuf GetName() const override {
+        return KikimrProviderName;
+    }
+
     TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override {
         auto config = Gateway->GetClusterConfig(cluster);
         if (!config) {
@@ -373,8 +373,8 @@ public:
         return *PhysicalOptProposalTransformer;
     }
 
-    IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override { 
-        Y_UNUSED(instantOnly); 
+    IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
+        Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer;
     }
 
@@ -405,7 +405,7 @@ public:
 
     bool CanParse(const TExprNode& node) override {
         if (node.IsCallable(WriteName)) {
-            return node.Child(1)->Child(0)->Content() == KikimrProviderName; 
+            return node.Child(1)->Child(0)->Content() == KikimrProviderName;
         }
 
         if (KikimrDataSinkFunctions().contains(node.Content()) ||
@@ -417,7 +417,7 @@ public:
         return false;
     }
 
-    bool CanExecute(const TExprNode& node) override { 
+    bool CanExecute(const TExprNode& node) override {
         if (node.IsCallable(TKiExecDataQuery::CallableName())) {
             return true;
         }
@@ -652,7 +652,7 @@ public:
     }
 
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
-        Y_UNUSED(compact); 
+        Y_UNUSED(compact);
         if (CanExecute(node)) {
             children.push_back(node.ChildPtr(0));
             return true;
@@ -781,7 +781,7 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
 TIntrusivePtr<IDataProvider> CreateKikimrDataSink(
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-    TTypeAnnotationContext& types, 
+    TTypeAnnotationContext& types,
     TIntrusivePtr<IKikimrGateway> gateway,
     TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     TIntrusivePtr<IKikimrQueryExecutor> queryExecutor)

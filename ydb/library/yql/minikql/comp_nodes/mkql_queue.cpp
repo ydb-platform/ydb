@@ -1,8 +1,8 @@
 #include "mkql_queue.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/public/udf/udf_string.h>
 
 namespace NKikimr {
@@ -435,7 +435,7 @@ IComputationNode* WrapQueuePeek(TCallable& callable, const TComputationNodeFacto
     MKQL_ENSURE(callable.GetInputsCount() >= reqArgs, "QueuePeek: Expected at least " << reqArgs << " arg");
     auto resourceType = AS_TYPE(TResourceType, callable.GetInput(0));
     TDataType* indexType = AS_TYPE(TDataType, callable.GetInput(1));
-    MKQL_ENSURE(indexType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64 as queue index"); 
+    MKQL_ENSURE(indexType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64 as queue index");
     auto resource = LocateNode(ctx.NodeLocator, callable, 0);
     auto index = LocateNode(ctx.NodeLocator, callable, 1);
     return MakeNodeWithDeps<TQueuePeekWrapper>(callable, ctx, reqArgs, resourceType, resource, index);

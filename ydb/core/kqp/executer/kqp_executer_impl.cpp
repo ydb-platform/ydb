@@ -5,8 +5,8 @@
 
 #include <ydb/public/api/protos/ydb_rate_limiter.pb.h>
 
-#include <ydb/library/yql/dq/runtime/dq_transport.h> 
-#include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h> 
+#include <ydb/library/yql/dq/runtime/dq_transport.h>
+#include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 
 #include <library/cpp/actors/core/log.h>
 

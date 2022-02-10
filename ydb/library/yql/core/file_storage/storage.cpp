@@ -1,8 +1,8 @@
 #include "storage.h"
 
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/rand_guid.h> 
-#include <ydb/library/yql/utils/proc_alive.h> 
+#include <ydb/library/yql/utils/rand_guid.h>
+#include <ydb/library/yql/utils/proc_alive.h>
 
 #include <library/cpp/digest/md5/md5.h>
 
@@ -67,11 +67,11 @@ TFileLink::~TFileLink() {
     }
 
     YQL_LOG(INFO) << "Destroying TFileLink for " << Path.GetPath().Quote();
-    try { 
-        Path.ForceDelete(); 
-    } catch (...) { 
-        YQL_LOG(ERROR) << CurrentExceptionMessage(); 
-    } 
+    try {
+        Path.ForceDelete();
+    } catch (...) {
+        YQL_LOG(ERROR) << CurrentExceptionMessage();
+    }
 }
 
 TFileLinkPtr CreateFakeFileLink(const TFsPath& path, const TString& md5, bool deleteOnDestroy) {

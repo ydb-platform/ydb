@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/kqp.h>
 #include <ydb/core/mon/mon.h>
 
-#include <ydb/library/yql/utils/yql_panic.h> 
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

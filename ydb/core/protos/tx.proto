@@ -1,41 +1,41 @@
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/base.proto";
- 
-package NKikimrTx; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-// smth to coordinator 
-message TProxyTransaction { 
-    message TAffectedEntry { 
-        optional fixed64 TabletId = 1; 
-        optional uint32 Flags = 2; // 8 bit int, 1 - read-set, 2 - write-set 
-    } 
- 
-    repeated TAffectedEntry AffectedSet = 1; 
- 
-    optional uint32 ExecLevel = 3; // only 8 bits used. 
- 
-    optional fixed64 TxId = 4; // proxy domain - 6 bit, proxy id - 10 bit, uniq part - 48 bit. 
- 
-    optional uint64 MinStep = 6; // not plan before 
-    optional uint64 MaxStep = 7; // not plan after 
+
+package NKikimrTx;
+option java_package = "ru.yandex.kikimr.proto";
+
+// smth to coordinator
+message TProxyTransaction {
+    message TAffectedEntry {
+        optional fixed64 TabletId = 1;
+        optional uint32 Flags = 2; // 8 bit int, 1 - read-set, 2 - write-set
+    }
+
+    repeated TAffectedEntry AffectedSet = 1;
+
+    optional uint32 ExecLevel = 3; // only 8 bits used.
+
+    optional fixed64 TxId = 4; // proxy domain - 6 bit, proxy id - 10 bit, uniq part - 48 bit.
+
+    optional uint64 MinStep = 6; // not plan before
+    optional uint64 MaxStep = 7; // not plan after
 
     optional bool IgnoreLowDiskSpace = 8; // plan even disk space is low
-} 
- 
-message TEvProposeTransaction { 
-    optional TProxyTransaction Transaction = 1; 
-    optional fixed64 CoordinatorID = 10; // addressed to, more about paranoid check then anything useful 
-} 
- 
-message TEvProposeTransactionStatus { 
-    optional uint32 Status = 1; // enum defined in tx.h 
- 
-    optional fixed64 StepId = 2; 
- 
-    optional fixed64 TxId = 9; 
-} 
- 
+}
+
+message TEvProposeTransaction {
+    optional TProxyTransaction Transaction = 1;
+    optional fixed64 CoordinatorID = 10; // addressed to, more about paranoid check then anything useful
+}
+
+message TEvProposeTransactionStatus {
+    optional uint32 Status = 1; // enum defined in tx.h
+
+    optional fixed64 StepId = 2;
+
+    optional fixed64 TxId = 9;
+}
+
 // reader to coordinator
 message TEvAcquireReadStep {
     optional fixed64 CoordinatorID = 1; // tablet id of target coordinator, for paranoid checks
@@ -56,16 +56,16 @@ message TEvAcquireReadStepResult {
     optional fixed64 Step = 2;
 }
 
-// coordinator to mediator 
-message TCoordinatorTransaction { 
-    repeated uint64 AffectedSet = 1; // read and write set - joined and then filtered for concrete mediator 
- 
-    optional fixed64 TxId = 2; 
-    optional bytes Body = 3; 
- 
-    optional uint64 Moderator = 5; // tablet id of moderator (if any) 
-} 
- 
+// coordinator to mediator
+message TCoordinatorTransaction {
+    repeated uint64 AffectedSet = 1; // read and write set - joined and then filtered for concrete mediator
+
+    optional fixed64 TxId = 2;
+    optional bytes Body = 3;
+
+    optional uint64 Moderator = 5; // tablet id of moderator (if any)
+}
+
 message TEvSubDomainConfigurationAck {
     enum EStatus {
         SUCCESS = 0; // ok
@@ -77,38 +77,38 @@ message TEvSubDomainConfigurationAck {
     optional fixed64 OnTabletId = 2;
 }
 
-message TEvCoordinatorSync { 
-    optional fixed64 Cookie = 1; 
-    optional fixed64 MediatorID = 9; 
-    optional fixed64 CoordinatorID = 10; 
-} 
- 
-message TEvCoordinatorSyncResult { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
- 
-    optional fixed64 Cookie = 2; 
- 
-    optional fixed64 CompleteStep = 3; 
-    optional fixed64 LatestKnown = 4; 
-    optional fixed64 SubjectiveTime = 5; 
- 
-    optional fixed64 MediatorID = 9; 
-    optional fixed64 CoordinatorID = 10; 
-} 
- 
-message TEvCoordinatorStep { 
-    repeated TCoordinatorTransaction Transactions = 1; 
- 
-    optional fixed64 Step = 2; 
-    optional fixed64 PrevStep = 3; 
- 
-    optional fixed64 MediatorID = 9; 
-    optional fixed64 CoordinatorID = 10; 
-    optional uint64 ActiveCoordinatorGeneration = 11; 
- 
-    optional uint64 TotalTxAffectedEntries = 20; // sum(transactions[i].affectedset.size) 
-} 
- 
+message TEvCoordinatorSync {
+    optional fixed64 Cookie = 1;
+    optional fixed64 MediatorID = 9;
+    optional fixed64 CoordinatorID = 10;
+}
+
+message TEvCoordinatorSyncResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+
+    optional fixed64 Cookie = 2;
+
+    optional fixed64 CompleteStep = 3;
+    optional fixed64 LatestKnown = 4;
+    optional fixed64 SubjectiveTime = 5;
+
+    optional fixed64 MediatorID = 9;
+    optional fixed64 CoordinatorID = 10;
+}
+
+message TEvCoordinatorStep {
+    repeated TCoordinatorTransaction Transactions = 1;
+
+    optional fixed64 Step = 2;
+    optional fixed64 PrevStep = 3;
+
+    optional fixed64 MediatorID = 9;
+    optional fixed64 CoordinatorID = 10;
+    optional uint64 ActiveCoordinatorGeneration = 11;
+
+    optional uint64 TotalTxAffectedEntries = 20; // sum(transactions[i].affectedset.size)
+}
+
 message TEvTxAllocate {
     optional fixed64 RangeSize = 1;
 }
@@ -125,111 +125,111 @@ message TEvTxAllocateResult {
     optional fixed64 RangeEnd = 3;
 }
 
-message TEvCoordinatorStepResult { 
-    enum EStatus { 
-        UNKNOWN_COORDINATOR = 0; // requested coordinator not known 
-        ACCEPTED_DOMAIN = 1; // ok 
-        ACCEPTED_FOREIGN = 2; 
-        DISCARDED_TOOLATE = 3; // foreign request came too late 
-        DISCARDED_TOOEARLY = 4; // request too far in future 
-    } 
- 
-    optional EStatus Status = 1; 
- 
-    optional fixed64 Step = 2; 
- 
-    optional fixed64 CompleteStep = 3; 
-    optional fixed64 LatestKnown = 4; 
-    optional fixed64 SubjectiveTime = 5; 
- 
-    optional fixed64 MediatorID = 9; 
-    optional fixed64 CoordinatorID = 10; 
-} 
- 
-// must be delivered to source coordinator 
-message TEvPlanStepAck { 
-    optional fixed64 TabletId = 1; 
-    optional fixed64 Step = 2; 
-    repeated fixed64 TxId = 3; 
-} 
- 
-// must be delivered to mediator exec queue 
-message TEvPlanStepAccepted { 
-    optional fixed64 TabletId = 1; 
-    optional fixed64 Step = 2; 
-} 
- 
-// mediator to tablet 
-message TMediatorTransaction { 
-    optional fixed64 TxId = 1; 
-    optional fixed64 Coordinator = 2; 
-    optional fixed64 Moderator = 3; 
- 
-    optional bytes Body = 4; 
- 
+message TEvCoordinatorStepResult {
+    enum EStatus {
+        UNKNOWN_COORDINATOR = 0; // requested coordinator not known
+        ACCEPTED_DOMAIN = 1; // ok
+        ACCEPTED_FOREIGN = 2;
+        DISCARDED_TOOLATE = 3; // foreign request came too late
+        DISCARDED_TOOEARLY = 4; // request too far in future
+    }
+
+    optional EStatus Status = 1;
+
+    optional fixed64 Step = 2;
+
+    optional fixed64 CompleteStep = 3;
+    optional fixed64 LatestKnown = 4;
+    optional fixed64 SubjectiveTime = 5;
+
+    optional fixed64 MediatorID = 9;
+    optional fixed64 CoordinatorID = 10;
+}
+
+// must be delivered to source coordinator
+message TEvPlanStepAck {
+    optional fixed64 TabletId = 1;
+    optional fixed64 Step = 2;
+    repeated fixed64 TxId = 3;
+}
+
+// must be delivered to mediator exec queue
+message TEvPlanStepAccepted {
+    optional fixed64 TabletId = 1;
+    optional fixed64 Step = 2;
+}
+
+// mediator to tablet
+message TMediatorTransaction {
+    optional fixed64 TxId = 1;
+    optional fixed64 Coordinator = 2;
+    optional fixed64 Moderator = 3;
+
+    optional bytes Body = 4;
+
     optional NActorsProto.TActorId AckTo = 10; // must be set to source coordinator-mediator queue
-} 
- 
-message TEvMediatorPlanStep { 
-    repeated TMediatorTransaction Transactions = 1; 
- 
-    optional uint64 Step = 2; 
- 
-    optional fixed64 MediatorID = 9; 
-    optional fixed64 TabletID = 10; 
-} 
- 
-message TEvTransactionBatchResult { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional uint64 Step = 2; 
-    optional uint64 TabletID = 10; 
-} 
- 
- 
-// mediator to local 
-message TEvMediatorDone { 
-    optional uint64 Step = 1; 
-    optional uint64 MediatorID = 10; 
-} 
- 
-message TEvMediatorDoneResult { 
-} 
- 
-message TBalanceHop { 
-    optional uint64 Shard = 1; 
-    repeated uint64 Sibling = 2; 
-} 
- 
-message TBalanceTrack { 
-    repeated TBalanceHop Hop = 1; 
-} 
- 
-message TBalanceTrackList { 
-    repeated TBalanceTrack Track = 1; 
-} 
- 
-// tablet to tablet 
-message TEvReadSet { 
-    optional uint64 Step = 1; 
-    optional uint64 TxId = 2; 
-    optional uint64 TabletSource = 3; 
-    optional uint64 TabletDest = 4; 
-    optional uint64 TabletProducer = 5; 
-    optional bytes ReadSet = 6; 
-    optional TBalanceTrackList BalanceTrackList = 7; 
+}
+
+message TEvMediatorPlanStep {
+    repeated TMediatorTransaction Transactions = 1;
+
+    optional uint64 Step = 2;
+
+    optional fixed64 MediatorID = 9;
+    optional fixed64 TabletID = 10;
+}
+
+message TEvTransactionBatchResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional uint64 Step = 2;
+    optional uint64 TabletID = 10;
+}
+
+
+// mediator to local
+message TEvMediatorDone {
+    optional uint64 Step = 1;
+    optional uint64 MediatorID = 10;
+}
+
+message TEvMediatorDoneResult {
+}
+
+message TBalanceHop {
+    optional uint64 Shard = 1;
+    repeated uint64 Sibling = 2;
+}
+
+message TBalanceTrack {
+    repeated TBalanceHop Hop = 1;
+}
+
+message TBalanceTrackList {
+    repeated TBalanceTrack Track = 1;
+}
+
+// tablet to tablet
+message TEvReadSet {
+    optional uint64 Step = 1;
+    optional uint64 TxId = 2;
+    optional uint64 TabletSource = 3;
+    optional uint64 TabletDest = 4;
+    optional uint64 TabletProducer = 5;
+    optional bytes ReadSet = 6;
+    optional TBalanceTrackList BalanceTrackList = 7;
     optional uint64 Seqno = 8; // Key in outReadSet table to facilitate erasing on ACK
-} 
- 
-// tablet to tablet 
-message TEvReadSetAck { 
-    optional uint64 Step = 1; 
-    optional uint64 TxId = 2; 
-    optional uint64 TabletSource = 3; 
-    optional uint64 TabletDest = 4; 
-    optional uint64 TabletConsumer = 5; 
-    optional uint32 Flags = 6; 
+}
+
+// tablet to tablet
+message TEvReadSetAck {
+    optional uint64 Step = 1;
+    optional uint64 TxId = 2;
+    optional uint64 TabletSource = 3;
+    optional uint64 TabletDest = 4;
+    optional uint64 TabletConsumer = 5;
+    optional uint32 Flags = 6;
     optional uint64 Seqno = 7; // Should be equal to TEvReadSet.Seqno which we are ACKing
-} 
+}
 
 message TKeyRange {
     optional bytes From = 1;

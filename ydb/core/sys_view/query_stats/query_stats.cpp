@@ -9,7 +9,7 @@
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>

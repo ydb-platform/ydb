@@ -1,31 +1,31 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_graph_transformer.h> 
-#include <ydb/library/yql/core/yql_type_annotation.h> 
-#include <ydb/library/yql/core/yql_execution.h> 
-#include <ydb/library/yql/core/issue/yql_issue.h> 
+#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <ydb/library/yql/core/yql_execution.h>
+#include <ydb/library/yql/core/issue/yql_issue.h>
 
 #include <util/generic/ptr.h>
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
-class IFunctionRegistry; 
- 
-} 
-} 
- 
+namespace NKikimr {
+namespace NMiniKQL {
+
+class IFunctionRegistry;
+
+}
+}
+
 namespace NYql {
 
 class TTransformationPipeline
 {
 public:
-    TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx); 
+    TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx);
 
     TTransformationPipeline& AddServiceTransformers(EYqlIssueCode issueCode = TIssuesIds::CORE_GC);
     TTransformationPipeline& AddParametersEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, EYqlIssueCode issueCode = TIssuesIds::CORE_PARAM_EVALUATION);
     TTransformationPipeline& AddPreTypeAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
-    TTransformationPipeline& AddExpressionEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, 
+    TTransformationPipeline& AddExpressionEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
         IGraphTransformer* calcTransfomer = nullptr, EYqlIssueCode issueCode = TIssuesIds::CORE_EXPR_EVALUATION);
     TTransformationPipeline& AddPreIOAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
     TTransformationPipeline& AddIOAnnotation(EYqlIssueCode issueCode = TIssuesIds::CORE_PRE_TYPE_ANN);
@@ -43,7 +43,7 @@ public:
     TTransformationPipeline& AddTypeAnnotationTransformer(EYqlIssueCode issueCode = TIssuesIds::CORE_TYPE_ANN);
 
     TTransformationPipeline& Add(TAutoPtr<IGraphTransformer> transformer, const TString& stageName,
-        EYqlIssueCode issueCode = TIssuesIds::DEFAULT_ERROR, const TString& issueMessage = {}); 
+        EYqlIssueCode issueCode = TIssuesIds::DEFAULT_ERROR, const TString& issueMessage = {});
     TTransformationPipeline& Add(IGraphTransformer& transformer, const TString& stageName,
         EYqlIssueCode issueCode = TIssuesIds::DEFAULT_ERROR, const TString& issueMessage = {});
 
@@ -57,13 +57,13 @@ private:
     TVector<TTransformStage> Transformers_;
 };
 
-struct IPipelineConfigurator 
-{ 
-    virtual ~IPipelineConfigurator() = default; 
- 
-    virtual void AfterCreate(TTransformationPipeline* pipeline) const = 0; 
-    virtual void AfterTypeAnnotation(TTransformationPipeline* pipeline) const = 0; 
-    virtual void AfterOptimize(TTransformationPipeline* pipeline) const = 0; 
-}; 
- 
+struct IPipelineConfigurator
+{
+    virtual ~IPipelineConfigurator() = default;
+
+    virtual void AfterCreate(TTransformationPipeline* pipeline) const = 0;
+    virtual void AfterTypeAnnotation(TTransformationPipeline* pipeline) const = 0;
+    virtual void AfterOptimize(TTransformationPipeline* pipeline) const = 0;
+};
+
 } // namspace NYql

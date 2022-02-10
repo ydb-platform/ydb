@@ -1,13 +1,13 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h> 
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h> 
-#include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h> 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sinks.h> 
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h> 
-#include <ydb/library/yql/minikql/mkql_alloc.h> 
+#include <ydb/library/yql/providers/common/ut_helpers/dq_fake_ca.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sinks.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/core/testlib/basics/runtime.h>

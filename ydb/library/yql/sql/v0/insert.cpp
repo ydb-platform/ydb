@@ -1,7 +1,7 @@
 #include "node.h"
 #include "context.h"
 
-#include <ydb/library/yql/utils/yql_panic.h> 
+#include <ydb/library/yql/utils/yql_panic.h>
 
 using namespace NYql;
 
@@ -87,15 +87,15 @@ public:
         Y_UNUSED(ctx);
         YQL_ENSURE(Values.size() == ColumnsHint.size());
 
-        auto structObj = Y("AsStruct"); 
+        auto structObj = Y("AsStruct");
         for (size_t i = 0; i < Values.size(); ++i) {
             TString column = ColumnsHint[i];
             TNodePtr value = Values[i];
 
-            structObj = L(structObj, Q(Y(Q(column), value))); 
+            structObj = L(structObj, Q(Y(Q(column), value)));
         }
 
-        auto updateRow = BuildLambda(Pos, Y("row"), structObj); 
+        auto updateRow = BuildLambda(Pos, Y("row"), structObj);
         return updateRow;
     }
 
@@ -115,32 +115,32 @@ public:
         : TModifySourceBase(pos, columnsHint)
         , OperationHumanName(operationHumanName)
         , Values(values)
-    { 
-        FakeSource = BuildFakeSource(pos); 
-    } 
+    {
+        FakeSource = BuildFakeSource(pos);
+    }
 
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(src);
-        bool hasError = false; 
+        bool hasError = false;
         for (const auto& row: Values) {
             if (ColumnsHint.empty()) {
                 ctx.Error(Pos) << OperationHumanName << " ... VALUES requires specification of table columns";
-                hasError = true; 
-                continue; 
+                hasError = true;
+                continue;
             }
             if (ColumnsHint.size() != row.size()) {
                 ctx.Error(Pos) << "VALUES have " << row.size() << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
-                hasError = true; 
-                continue; 
+                hasError = true;
+                continue;
             }
             for (auto& value: row) {
-                if (!value->Init(ctx, FakeSource.Get())) { 
-                    hasError = true; 
-                    continue; 
+                if (!value->Init(ctx, FakeSource.Get())) {
+                    hasError = true;
+                    continue;
                 }
             }
         }
-        return !hasError; 
+        return !hasError;
     }
 
     TNodePtr Build(TContext& ctx) override {
@@ -170,7 +170,7 @@ public:
 private:
     TString OperationHumanName;
     TVector<TVector<TNodePtr>> Values;
-    TSourcePtr FakeSource; 
+    TSourcePtr FakeSource;
 };
 
 class TModifyBySource: public TModifySourceBase {
@@ -181,9 +181,9 @@ public:
         , Source(std::move(source))
     {}
 
-    void GetInputTables(TTableList& tableList) const override { 
+    void GetInputTables(TTableList& tableList) const override {
         if (Source) {
-            return Source->GetInputTables(tableList); 
+            return Source->GetInputTables(tableList);
         }
     }
 
@@ -227,14 +227,14 @@ public:
             return input;
         }
         auto srcColumn = Source->GetColumns()->List.begin();
-        auto structObj = Y("AsStruct"); 
+        auto structObj = Y("AsStruct");
         for (auto column: ColumnsHint) {
-            structObj = L(structObj, Q(Y(BuildQuotedAtom(Pos, column), 
+            structObj = L(structObj, Q(Y(BuildQuotedAtom(Pos, column),
                 Y("Member", "row", BuildQuotedAtom(Pos, *srcColumn))
             )));
             ++srcColumn;
         }
-        return Y("OrderedMap", input, BuildLambda(Pos, Y("row"), structObj)); 
+        return Y("OrderedMap", input, BuildLambda(Pos, Y("row"), structObj));
     }
 
     TNodePtr DoClone() const final {
@@ -275,7 +275,7 @@ public:
         , Values(std::move(values))
         , Options(std::move(options))
     {
-        FakeSource = BuildFakeSource(pos); 
+        FakeSource = BuildFakeSource(pos);
     }
 
     void ResetSource(TSourcePtr source) {
@@ -291,7 +291,7 @@ public:
             return false;
         }
 
-        TTableList tableList; 
+        TTableList tableList;
         TNodePtr values;
         auto options = Y();
         if (Options) {
@@ -301,7 +301,7 @@ public:
             options = L(Options);
         }
 
-        ISource* underlyingSrc = src; 
+        ISource* underlyingSrc = src;
 
         if (TableSource) {
             ctx.PushBlockShortcuts();
@@ -318,8 +318,8 @@ public:
                 return false;
             }
 
-            Values->GetInputTables(tableList); 
-            underlyingSrc = Values.Get(); 
+            Values->GetInputTables(tableList);
+            underlyingSrc = Values.Get();
             values = Values->Build(ctx);
             if (!values) {
                 return false;
@@ -327,8 +327,8 @@ public:
             unordered = !Values->IsOrdered();
         }
 
-        TNodePtr node(BuildInputTables(Pos, tableList, false)); 
-        if (!node->Init(ctx, underlyingSrc)) { 
+        TNodePtr node(BuildInputTables(Pos, tableList, false));
+        if (!node->Init(ctx, underlyingSrc)) {
             return false;
         }
 
@@ -340,7 +340,7 @@ public:
         }
 
         auto write = BuildWriteTable(Pos, "values", Table, Mode, std::move(options));
-        if (!write->Init(ctx, FakeSource.Get())) { 
+        if (!write->Init(ctx, FakeSource.Get())) {
             return false;
         }
         node = ctx.GroundBlockShortcuts(Pos, node);
@@ -369,7 +369,7 @@ protected:
     EWriteColumnMode Mode;
     TSourcePtr Values;
     TSourcePtr Update;
-    TSourcePtr FakeSource; 
+    TSourcePtr FakeSource;
     TNodePtr Options;
 };
 

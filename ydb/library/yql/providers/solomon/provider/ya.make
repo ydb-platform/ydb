@@ -22,18 +22,18 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/protos
-    ydb/library/yql/dq/expr_nodes 
-    ydb/library/yql/providers/common/config 
-    ydb/library/yql/providers/common/proto 
-    ydb/library/yql/providers/common/provider 
-    ydb/library/yql/providers/common/transform 
-    ydb/library/yql/providers/dq/expr_nodes 
-    ydb/library/yql/providers/result/expr_nodes 
-    ydb/library/yql/providers/solomon/expr_nodes 
-    ydb/library/yql/providers/solomon/proto 
-    ydb/library/yql/dq/opt 
+    ydb/library/yql/dq/expr_nodes
+    ydb/library/yql/providers/common/config
+    ydb/library/yql/providers/common/proto
+    ydb/library/yql/providers/common/provider
+    ydb/library/yql/providers/common/transform
+    ydb/library/yql/providers/dq/expr_nodes
+    ydb/library/yql/providers/result/expr_nodes
+    ydb/library/yql/providers/solomon/expr_nodes
+    ydb/library/yql/providers/solomon/proto
+    ydb/library/yql/dq/opt
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 END()

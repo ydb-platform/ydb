@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h> 
-#include <ydb/library/yql/dq/common/dq_common.h> 
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event_local.h>

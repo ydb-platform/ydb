@@ -22,5 +22,5 @@ RECURSE(
     yaml_config
     workload
     yaml_config
-    yql 
+    yql
 )

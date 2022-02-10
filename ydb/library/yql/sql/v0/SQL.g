@@ -33,10 +33,10 @@ sql_stmt_core:
   | import_stmt
   | export_stmt
   | alter_table_stmt
-  | do_stmt 
-  | define_action_or_subquery_stmt 
-  | evaluate_if_stmt 
-  | evaluate_for_stmt 
+  | do_stmt
+  | define_action_or_subquery_stmt
+  | evaluate_if_stmt
+  | evaluate_for_stmt
 ;
 
 expr: or_subexpr (OR or_subexpr)*;
@@ -71,9 +71,9 @@ con_subexpr: unary_subexpr | unary_op unary_subexpr;
 
 unary_op: PLUS | MINUS | TILDA | NOT;
 
-unary_subexpr:    (id_expr    | atom_expr   ) key_expr* (DOT (bind_parameter | DIGITS | id_or_string) key_expr*)* (COLLATE id)?; 
+unary_subexpr:    (id_expr    | atom_expr   ) key_expr* (DOT (bind_parameter | DIGITS | id_or_string) key_expr*)* (COLLATE id)?;
 
-in_unary_subexpr: (in_id_expr | in_atom_expr) key_expr* (DOT (bind_parameter | DIGITS | id_or_string) key_expr*)* (COLLATE id)?; 
+in_unary_subexpr: (in_id_expr | in_atom_expr) key_expr* (DOT (bind_parameter | DIGITS | id_or_string) key_expr*)* (COLLATE id)?;
 
 atom_expr:
     literal_value
@@ -117,9 +117,9 @@ expr_list: expr (COMMA expr)*;
 
 pure_column_list: LPAREN id_or_string (COMMA id_or_string)* RPAREN;
 
-pure_column_or_named: bind_parameter | id_or_string; 
-pure_column_or_named_list: LPAREN pure_column_or_named (COMMA pure_column_or_named)* RPAREN; 
- 
+pure_column_or_named: bind_parameter | id_or_string;
+pure_column_or_named_list: LPAREN pure_column_or_named (COMMA pure_column_or_named)* RPAREN;
+
 column_name: opt_id_prefix id_or_string;
 
 column_list: column_name (COMMA column_name)*;
@@ -150,7 +150,7 @@ literal_value:
   | CURRENT_DATE // it's unused right now
   | CURRENT_TIMESTAMP // it's unused right now
   | bool_value
-  | EMPTY_ACTION 
+  | EMPTY_ACTION
 ;
 
 bind_parameter: DOLLAR id;
@@ -171,7 +171,7 @@ module_path: DOT? id (DOT id)*;
 import_stmt: IMPORT module_path SYMBOLS named_bind_parameter_list;
 export_stmt: EXPORT bind_parameter_list;
 
-do_stmt: DO (bind_parameter | EMPTY_ACTION) LPAREN expr_list? RPAREN; 
+do_stmt: DO (bind_parameter | EMPTY_ACTION) LPAREN expr_list? RPAREN;
 pragma_stmt: PRAGMA opt_id_prefix id_or_string (EQUALS pragma_value | LPAREN pragma_value (COMMA pragma_value)* RPAREN)?;
 
 pragma_value:
@@ -179,7 +179,7 @@ pragma_value:
   | id
   | STRING
   | bool_value
-  | bind_parameter 
+  | bind_parameter
 ;
 
 /// TODO: NULLS FIRST\LAST?
@@ -194,14 +194,14 @@ select_kind_parenthesis: select_kind_partial | LPAREN select_kind_partial RPAREN
 select_op: UNION (ALL)? | INTERSECT | EXCEPT;
 
 select_kind_partial: select_kind
-  (LIMIT expr ((OFFSET | COMMA) expr)?)? 
+  (LIMIT expr ((OFFSET | COMMA) expr)?)?
   ;
 
-select_kind: (DISCARD)? (process_core | reduce_core | select_core) (INTO RESULT pure_column_or_named)?; 
+select_kind: (DISCARD)? (process_core | reduce_core | select_core) (INTO RESULT pure_column_or_named)?;
 
 process_core:
   PROCESS STREAM? named_single_source (COMMA named_single_source)* (USING call_expr (AS id_or_string)?
-  (WHERE expr)? (HAVING expr)?)? 
+  (WHERE expr)? (HAVING expr)?)?
 ;
 
 reduce_core:
@@ -256,14 +256,14 @@ ordinary_named_column_list:
   | LPAREN named_column_list RPAREN
 ;
 
-flatten_source: named_single_source (FLATTEN ((OPTIONAL|LIST|DICT)? BY ordinary_named_column_list | COLUMNS))?; 
+flatten_source: named_single_source (FLATTEN ((OPTIONAL|LIST|DICT)? BY ordinary_named_column_list | COLUMNS))?;
 
 named_single_source: single_source (AS id_or_string)? (sample_clause | tablesample_clause)?;
 
 single_source:
     table_ref
   | LPAREN select_stmt RPAREN
-  | AT? bind_parameter (LPAREN expr_list? RPAREN)? 
+  | AT? bind_parameter (LPAREN expr_list? RPAREN)?
 ;
 
 sample_clause: SAMPLE expr;
@@ -276,12 +276,12 @@ repeatable_clause: REPEATABLE LPAREN expr RPAREN;
 
 join_op:
     COMMA
-  | (NATURAL)? ((LEFT (ONLY | SEMI_JOIN)? | RIGHT (ONLY | SEMI_JOIN)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) JOIN 
+  | (NATURAL)? ((LEFT (ONLY | SEMI_JOIN)? | RIGHT (ONLY | SEMI_JOIN)? | EXCLUSION | FULL)? (OUTER)? | INNER | CROSS) JOIN
 ;
 
 join_constraint:
     ON expr
-  | USING pure_column_or_named_list 
+  | USING pure_column_or_named_list
 ;
 
 into_table_stmt: (INSERT | INSERT OR ABORT | INSERT OR REVERT | INSERT OR IGNORE | UPSERT | REPLACE) INTO into_simple_table_ref into_values_source;
@@ -297,10 +297,10 @@ values_source_row: LPAREN expr_list RPAREN;
 
 simple_values_source: expr_list | select_stmt;
 
-create_table_stmt: CREATE TABLE simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* RPAREN; 
+create_table_stmt: CREATE TABLE simple_table_ref LPAREN create_table_entry (COMMA create_table_entry)* RPAREN;
 create_table_entry: column_schema | table_constraint;
 
-alter_table_stmt: ALTER TABLE simple_table_ref alter_table_action; 
+alter_table_stmt: ALTER TABLE simple_table_ref alter_table_action;
 alter_table_action: alter_table_add_column | alter_table_drop_column;
 alter_table_add_column: ADD COLUMN? column_schema (COMMA ADD COLUMN? column_schema)*;
 alter_table_drop_column: DROP COLUMN? id;
@@ -314,24 +314,24 @@ table_constraint:
   | ORDER BY LPAREN column_order_by_specification (COMMA column_order_by_specification)* RPAREN
 ;
 
-drop_table_stmt: DROP TABLE (IF EXISTS)? simple_table_ref; 
-define_action_or_subquery_stmt: DEFINE (ACTION|SUBQUERY) bind_parameter LPAREN bind_parameter_list? RPAREN AS define_action_or_subquery_body END DEFINE; 
-define_action_or_subquery_body: (sql_stmt_core SEMI)* SEMI?; 
+drop_table_stmt: DROP TABLE (IF EXISTS)? simple_table_ref;
+define_action_or_subquery_stmt: DEFINE (ACTION|SUBQUERY) bind_parameter LPAREN bind_parameter_list? RPAREN AS define_action_or_subquery_body END DEFINE;
+define_action_or_subquery_body: (sql_stmt_core SEMI)* SEMI?;
 
-evaluate_if_stmt: EVALUATE IF expr do_stmt (ELSE do_stmt)?; 
-evaluate_for_stmt: EVALUATE FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?; 
- 
-table_ref: opt_id_prefix (table_key | id_expr LPAREN table_arg (COMMA table_arg)* RPAREN) table_hints?; 
+evaluate_if_stmt: EVALUATE IF expr do_stmt (ELSE do_stmt)?;
+evaluate_for_stmt: EVALUATE FOR bind_parameter IN expr do_stmt (ELSE do_stmt)?;
+
+table_ref: opt_id_prefix (table_key | id_expr LPAREN table_arg (COMMA table_arg)* RPAREN) table_hints?;
 table_key: id_table_or_at (COLON id_or_string)?;
-table_arg: AT? expr (COLON id_or_string)?; 
+table_arg: AT? expr (COLON id_or_string)?;
 table_hints: WITH (id_or_string | pure_column_list);
 
-simple_table_ref: ((opt_id_prefix id_or_at) | AT? bind_parameter) table_hints?; 
+simple_table_ref: ((opt_id_prefix id_or_at) | AT? bind_parameter) table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
 delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)?;
 update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source);
- 
+
 /// out of 2003 standart
 set_clause_choice: set_clause_list | multiple_column_assignment;
 
@@ -416,7 +416,7 @@ id_expr: IDENTIFIER | keyword_compat | keyword_alter_uncompat | keyword_in_uncom
 in_id_expr: IDENTIFIER | keyword_compat | keyword_alter_uncompat;
 id_table: IDENTIFIER | keyword_restricted;
 id_table_or_at: AT? id_table;
-id_or_at: AT? id; 
+id_or_at: AT? id;
 
 opt_id_prefix: (id_or_string DOT)?;
 
@@ -431,7 +431,7 @@ keyword_expr_uncompat:
   | CURRENT_TIME
   | CURRENT_DATE
   | CURRENT_TIMESTAMP
-  | EMPTY_ACTION 
+  | EMPTY_ACTION
   | EXISTS
   | FROM
   | FULL
@@ -469,7 +469,7 @@ keyword_in_uncompat:
 
 keyword_compat: (
     ABORT
-  | ACTION 
+  | ACTION
   | ADD
   | AFTER
   | ALTER
@@ -486,7 +486,7 @@ keyword_compat: (
   | CASCADE
   | CHECK
   | COLLATE
-  | COLUMNS 
+  | COLUMNS
   | COMMIT
   | CONFLICT
   | CONSTRAINT
@@ -498,23 +498,23 @@ keyword_compat: (
   | DEFAULT
   | DEFERRABLE
   | DEFERRED
-  | DEFINE 
+  | DEFINE
   | DELETE
   | DESC
   | DETACH
-  | DICT 
-  | DISCARD 
-  | DO 
+  | DICT
+  | DISCARD
+  | DO
   | DROP
   | EACH
   | ELSE
   | END
   | ESCAPE
-  | EVALUATE 
+  | EVALUATE
   | EXCEPT
   | EXCLUDE
   | EXCLUSIVE
-  | EXCLUSION 
+  | EXCLUSION
   | EXPLAIN
   | EXPORT
   | FAIL
@@ -546,7 +546,7 @@ keyword_compat: (
   | LEFT
   | LIKE
   | LIMIT
-  | LIST 
+  | LIST
   | MATCH
   | NATURAL
   | NULLS
@@ -555,8 +555,8 @@ keyword_compat: (
   | OF
   | OFFSET
   | ON
-  | ONLY 
-  | OPTIONAL 
+  | ONLY
+  | OPTIONAL
   | OR
   | ORDER
   | OTHERS
@@ -579,7 +579,7 @@ keyword_compat: (
   | REPLACE
   | RESPECT
   | RESTRICT
-  | RESULT 
+  | RESULT
   | REVERT
   | RIGHT
   | RLIKE
@@ -588,10 +588,10 @@ keyword_compat: (
   | ROWS
   | SAMPLE
   | SAVEPOINT
-  | SEMI_JOIN 
+  | SEMI_JOIN
   | SET
   | SETS
-  | SUBQUERY 
+  | SUBQUERY
   | SYMBOLS
   | SYSTEM
   | TABLE
@@ -698,7 +698,7 @@ fragment Y:('y'|'Y');
 fragment Z:('z'|'Z');
 
 ABORT: A B O R T;
-ACTION: A C T I O N; 
+ACTION: A C T I O N;
 ADD: A D D;
 AFTER: A F T E R;
 ALL: A L L;
@@ -721,7 +721,7 @@ CAST: C A S T;
 CHECK: C H E C K;
 COLLATE: C O L L A T E;
 COLUMN: C O L U M N;
-COLUMNS: C O L U M N S; 
+COLUMNS: C O L U M N S;
 COMMIT: C O M M I T;
 COMPACT: C O M P A C T;
 CONFLICT: C O N F L I C T;
@@ -738,26 +738,26 @@ DECLARE: D E C L A R E;
 DEFAULT: D E F A U L T;
 DEFERRABLE: D E F E R R A B L E;
 DEFERRED: D E F E R R E D;
-DEFINE: D E F I N E; 
+DEFINE: D E F I N E;
 DELETE: D E L E T E;
 DESC: D E S C;
 DETACH: D E T A C H;
-DICT: D I C T; 
-DISCARD: D I S C A R D; 
+DICT: D I C T;
+DISCARD: D I S C A R D;
 DISTINCT: D I S T I N C T;
-DO: D O; 
+DO: D O;
 DROP: D R O P;
 EACH: E A C H;
 ELSE: E L S E;
-EMPTY_ACTION: E M P T Y '_' A C T I O N; 
+EMPTY_ACTION: E M P T Y '_' A C T I O N;
 END: E N D;
 ERASE: E R A S E;
 ESCAPE: E S C A P E;
-EVALUATE: E V A L U A T E; 
+EVALUATE: E V A L U A T E;
 EXCEPT: E X C E P T;
 EXCLUDE: E X C L U D E;
 EXCLUSIVE: E X C L U S I V E;
-EXCLUSION: E X C L U S I O N; 
+EXCLUSION: E X C L U S I O N;
 EXISTS: E X I S T S;
 EXPLAIN: E X P L A I N;
 EXPORT: E X P O R T;
@@ -794,7 +794,7 @@ KEY: K E Y;
 LEFT: L E F T;
 LIKE: L I K E;
 LIMIT: L I M I T;
-LIST: L I S T; 
+LIST: L I S T;
 MATCH: M A T C H;
 NATURAL: N A T U R A L;
 NO: N O;
@@ -805,8 +805,8 @@ NULLS: N U L L S;
 OF: O F;
 OFFSET: O F F S E T;
 ON: O N;
-ONLY: O N L Y; 
-OPTIONAL: O P T I O N A L; 
+ONLY: O N L Y;
+OPTIONAL: O P T I O N A L;
 OR: O R;
 ORDER: O R D E R;
 OTHERS: O T H E R S;
@@ -832,7 +832,7 @@ REPEATABLE: R E P E A T A B L E;
 REPLACE: R E P L A C E;
 RESPECT: R E S P E C T;
 RESTRICT: R E S T R I C T;
-RESULT: R E S U L T; 
+RESULT: R E S U L T;
 RETURN: R E T U R N;
 REVERT: R E V E R T;
 RIGHT: R I G H T;
@@ -844,10 +844,10 @@ ROWS: R O W S;
 SAMPLE: S A M P L E;
 SAVEPOINT: S A V E P O I N T;
 SELECT: S E L E C T;
-SEMI_JOIN: S E M I; 
+SEMI_JOIN: S E M I;
 SET: S E T;
 SETS: S E T S;
-SUBQUERY: S U B Q U E R Y; 
+SUBQUERY: S U B Q U E R Y;
 STREAM: S T R E A M;
 SYMBOLS: S Y M B O L S;
 SYSTEM: S Y S T E M;

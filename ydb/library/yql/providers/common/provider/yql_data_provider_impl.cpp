@@ -1,6 +1,6 @@
 #include "yql_data_provider_impl.h"
 
-#include <ydb/library/yql/core/yql_expr_constraint.h> 
+#include <ydb/library/yql/core/yql_expr_constraint.h>
 
 #include <util/system/compiler.h>
 
@@ -88,10 +88,10 @@ TExprNode::TPtr TDataProviderBase::GetClusterInfo(const TString& cluster, TExprC
     return {};
 }
 
-const THashMap<TString, TString>* TDataProviderBase::GetClusterTokens() { 
-    return nullptr; 
-} 
- 
+const THashMap<TString, TString>* TDataProviderBase::GetClusterTokens() {
+    return nullptr;
+}
+
 IGraphTransformer& TDataProviderBase::GetIODiscoveryTransformer() {
     return NullTransformer_;
 }
@@ -205,22 +205,22 @@ bool TDataProviderBase::CanPullResult(const TExprNode& node, TSyncMap& syncList,
     return false;
 }
 
-bool TDataProviderBase::GetExecWorld(const TExprNode& node, TExprNode::TPtr& root) { 
-    root = nullptr; 
-    Y_UNUSED(node); 
-    return false; 
-} 
- 
-bool TDataProviderBase::CanEvaluate(const TExprNode& node) { 
-    Y_UNUSED(node); 
-    return false; 
-} 
- 
-void TDataProviderBase::UndoEvaluationChanges() { 
-    GetCallableExecutionTransformer().Rewind(); 
-    GetEpochsTransformer().Rewind(); 
-} 
- 
+bool TDataProviderBase::GetExecWorld(const TExprNode& node, TExprNode::TPtr& root) {
+    root = nullptr;
+    Y_UNUSED(node);
+    return false;
+}
+
+bool TDataProviderBase::CanEvaluate(const TExprNode& node) {
+    Y_UNUSED(node);
+    return false;
+}
+
+void TDataProviderBase::UndoEvaluationChanges() {
+    GetCallableExecutionTransformer().Rewind();
+    GetEpochsTransformer().Rewind();
+}
+
 TExprNode::TPtr TDataProviderBase::CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) {
     Y_UNUSED(ctx);
     return node;

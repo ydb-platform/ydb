@@ -4,23 +4,23 @@
 #include "yql_dq_datasink.h"
 #include "yql_dq_datasource.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
 
 TDataProviderInitializer GetDqDataProviderInitializer(
-    TExecTransformerFactory execTransformerFactory, 
+    TExecTransformerFactory execTransformerFactory,
     const IDqGateway::TPtr& dqGateway,
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
     const IMetricsRegistryPtr& metrics,
     const TFileStoragePtr& fileStorage,
     bool externalUser)
 {
-    return [execTransformerFactory, dqGateway, compFactory, metrics, fileStorage, externalUser] ( 
+    return [execTransformerFactory, dqGateway, compFactory, metrics, fileStorage, externalUser] (
         const TString& userName,
         const TString& sessionId,
         const TGatewaysConfig* gatewaysConfig,
@@ -52,7 +52,7 @@ TDataProviderInitializer GetDqDataProviderInitializer(
         TDataProviderInfo info;
         info.Names.insert(TString{DqProviderName});
 
-        info.Source = CreateDqDataSource(state, execTransformerFactory); 
+        info.Source = CreateDqDataSource(state, execTransformerFactory);
         info.Sink = CreateDqDataSink(state);
         info.OpenSession = [dqGateway, metrics, gatewaysConfig, state](
             const TString& sessionId,

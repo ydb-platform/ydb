@@ -1,9 +1,9 @@
 #include "dq_state_load_plan.h"
 
-#include <ydb/library/yql/providers/dq/api/protos/service.pb.h> 
-#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h> 
-#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h> 
-#include <ydb/library/yql/providers/pq/task_meta/task_meta.h> 
+#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
+#include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

@@ -19,7 +19,7 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/lib/operation_id/operation_id.h>
 
-#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h> 
+#include <ydb/library/yql/public/issue/protos/issue_severity.pb.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 

@@ -5,12 +5,12 @@
 namespace NKikimr {
 
     TVDiskIncarnationGuid TVDiskIncarnationGuid::Generate() {
-        ui64 guid = TAppData::RandomProvider->GenRand64(); 
+        ui64 guid = TAppData::RandomProvider->GenRand64();
         return TVDiskIncarnationGuid(guid);
     }
 
     TVDiskEternalGuid TVDiskEternalGuid::Generate() {
-        ui64 guid = TAppData::RandomProvider->GenRand64(); 
+        ui64 guid = TAppData::RandomProvider->GenRand64();
         return TVDiskEternalGuid(guid);
     }
 

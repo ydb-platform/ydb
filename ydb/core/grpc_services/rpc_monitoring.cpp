@@ -4,8 +4,8 @@
 #include "rpc_kqp_base.h"
 #include "rpc_request_base.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
-#include <ydb/library/yql/public/issue/yql_issue.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/hfunc.h>

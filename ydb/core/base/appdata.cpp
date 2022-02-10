@@ -1,8 +1,8 @@
-#include "appdata.h" 
+#include "appdata.h"
 #include "tablet_types.h"
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 TAppData::TAppData(
         ui32 sysPoolId, ui32 userPoolId, ui32 ioPoolId, ui32 batchPoolId,
         TMap<TString, ui32> servicePools,
@@ -31,7 +31,7 @@ TAppData::TAppData(
     , KikimrShouldContinue(kikimrShouldContinue)
 {}
 
-TAppData::TDefaultTabletTypes::TDefaultTabletTypes() 
+TAppData::TDefaultTabletTypes::TDefaultTabletTypes()
     : SchemeShard(TTabletTypes::FLAT_SCHEMESHARD)
     , DataShard(TTabletTypes::FLAT_DATASHARD)
     , KeyValue(TTabletTypes::KEYVALUEFLAT)
@@ -47,10 +47,10 @@ TAppData::TDefaultTabletTypes::TDefaultTabletTypes()
     , TestShard(TTabletTypes::TestShard)
     , SequenceShard(TTabletTypes::SequenceShard)
     , ReplicationController(TTabletTypes::ReplicationController)
-{ 
-} 
- 
-TIntrusivePtr<IRandomProvider> TAppData::RandomProvider = CreateDefaultRandomProvider(); 
-TIntrusivePtr<ITimeProvider> TAppData::TimeProvider = CreateDefaultTimeProvider(); 
- 
-} 
+{
+}
+
+TIntrusivePtr<IRandomProvider> TAppData::RandomProvider = CreateDefaultRandomProvider();
+TIntrusivePtr<ITimeProvider> TAppData::TimeProvider = CreateDefaultTimeProvider();
+
+}

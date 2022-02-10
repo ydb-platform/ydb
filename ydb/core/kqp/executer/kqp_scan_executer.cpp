@@ -17,9 +17,9 @@
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/prepare/kqp_query_plan.h>
 
-#include <ydb/library/yql/dq/runtime/dq_columns_resolve.h> 
-#include <ydb/library/yql/dq/tasks/dq_connection_builder.h> 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
+#include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -716,7 +716,7 @@ private:
 
     void Execute() {
         auto& funcRegistry = *AppData()->FunctionRegistry;
-        NMiniKQL::TScopedAlloc alloc(TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators()); 
+        NMiniKQL::TScopedAlloc alloc(TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators());
         NMiniKQL::TTypeEnvironment typeEnv(alloc);
 
         NMiniKQL::TMemoryUsageInfo memInfo("PrepareTasks");

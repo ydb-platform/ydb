@@ -7,8 +7,8 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h> 
-#include <ydb/library/yql/dq/actors/dq.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/state/dq_state_load_plan.h>
 
 #include <util/string/builder.h>

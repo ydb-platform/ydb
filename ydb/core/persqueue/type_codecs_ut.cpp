@@ -10,12 +10,12 @@
 
 namespace NKikimr {
 
-using ICodec = NScheme::ICodec; 
-using TTypeCodecs = NScheme::TTypeCodecs; 
-using TCodecSig = NScheme::TCodecSig; 
-using TCodecType = NScheme::TCodecType; 
-using TDataRef = NScheme::TDataRef; 
- 
+using ICodec = NScheme::ICodec;
+using TTypeCodecs = NScheme::TTypeCodecs;
+using TCodecSig = NScheme::TCodecSig;
+using TCodecType = NScheme::TCodecType;
+using TDataRef = NScheme::TDataRef;
+
 Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
 
     void Metrics(const TVector<TDataRef>& values, const ICodec* codec) {
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         static const bool VALUE_FALSE = false;
         static const bool VALUE_TRUE = true;
 
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TBool::TypeId)); 
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TBool::TypeId));
 
         TVector<TDataRef> values(1000, TDataRef((const char*)&VALUE_FALSE, sizeof(VALUE_FALSE)));
         for (int i = 0; i < 100; ++i) {
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestFixedLenCodec) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId)); 
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId));
 
         TVector<TDataRef> values;
         for (int i = 0; i < 1000; ++i) {
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestVarLenCodec) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId)); 
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TString::TypeId));
 
         TReallyFastRng32 rand(100500);
 
@@ -153,7 +153,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestVarIntCodec) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId)); 
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
 
         TReallyFastRng32 rand(100500);
 
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestZigZagCodec) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId)); 
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
 
         TReallyFastRng32 rand(100500);
 
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     void TestDeltaVarIntCodecImpl(TCodecType type, bool rev) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId)); 
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TUint32::TypeId));
 
         TReallyFastRng32 rand(100500);
 
@@ -230,7 +230,7 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
     }
 
     Y_UNIT_TEST(TestDeltaZigZagCodec) {
-        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId)); 
+        THolder<TTypeCodecs> codecs(new TTypeCodecs(NScheme::TInt32::TypeId));
 
         TReallyFastRng32 rand(100500);
 

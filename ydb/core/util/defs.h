@@ -7,7 +7,7 @@
 #include <library/cpp/actors/interconnect/interconnect_common.h>
 
 #include <util/system/defaults.h>
-#include <util/generic/bt_exception.h> 
+#include <util/generic/bt_exception.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>

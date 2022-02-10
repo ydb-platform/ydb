@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h> 
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
-#include <ydb/library/yql/minikql/mkql_terminator.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/mkql_terminator.h>
 #include "../mkql_factories.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #define UNBOXED_VALUE_STR_EQUAL(unboxed, expected) \
     do { \
         const auto v = (unboxed); \
@@ -21,26 +21,26 @@
 
 
 
-#if defined(_msan_enabled_) || defined(_ubsan_enabled_) || defined(WITH_VALGRIND) 
+#if defined(_msan_enabled_) || defined(_ubsan_enabled_) || defined(WITH_VALGRIND)
 #define Y_UNIT_TEST_TWIN_IMPL_REGISTER(N, OPT)                                       \
     template<bool OPT> void N(NUnitTest::TTestContext&);                                   \
     struct TTestRegistration##N {                                                              \
         TTestRegistration##N() {                                                               \
             TCurrentTest::AddTest(#N "-" #OPT, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false>), false); \
-        }                                                                                      \ 
-    };                                                                                         \ 
-    static TTestRegistration##N testRegistration##N; 
-#else 
+        }                                                                                      \
+    };                                                                                         \
+    static TTestRegistration##N testRegistration##N;
+#else
 #define Y_UNIT_TEST_TWIN_IMPL_REGISTER(N, OPT)                                       \
-    template<bool OPT> void N(NUnitTest::TTestContext&);                                   \ 
-    struct TTestRegistration##N {                                                              \ 
-        TTestRegistration##N() {                                                               \ 
-            TCurrentTest::AddTest(#N "-" #OPT, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false>), false); \ 
+    template<bool OPT> void N(NUnitTest::TTestContext&);                                   \
+    struct TTestRegistration##N {                                                              \
+        TTestRegistration##N() {                                                               \
+            TCurrentTest::AddTest(#N "-" #OPT, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false>), false); \
             TCurrentTest::AddTest(#N "+" #OPT, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true>), false);  \
         }                                                                                      \
     };                                                                                         \
     static TTestRegistration##N testRegistration##N;
-#endif 
+#endif
 
 #define Y_UNIT_TEST_TWIN(N, OPT)      \
     Y_UNIT_TEST_TWIN_IMPL_REGISTER(N, OPT) \
@@ -49,22 +49,22 @@
 
 #define Y_UNIT_TEST_LLVM(N) Y_UNIT_TEST_TWIN(N, LLVM)
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+namespace NKikimr {
+namespace NMiniKQL {
+
 TComputationNodeFactory GetTestFactory();
- 
+
 template<typename T>
 NUdf::TUnboxedValuePod ToValue(T value) {
     return NUdf::TUnboxedValuePod(value);
-} 
- 
+}
+
 template<bool UseLLVM>
 struct TSetup {
     TSetup() {
         FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry());
         RandomProvider = CreateDeterministicRandomProvider(1);
-        TimeProvider = CreateDeterministicTimeProvider(10000000); 
+        TimeProvider = CreateDeterministicTimeProvider(10000000);
 
         Env.Reset(new TTypeEnvironment(Alloc));
         PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry));
@@ -103,5 +103,5 @@ extern const std::vector<std::pair<i8, double>> I8Samples;
 extern const std::vector<std::pair<ui16, double>> Ui16Samples;
 extern const std::vector<std::tuple<ui64, std::string, std::string, double, double, double, double>> TpchSamples;
 
-} 
-} 
+}
+}

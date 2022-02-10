@@ -1,7 +1,7 @@
 #pragma once
 
 #include "mkql_computation_node.h"
-#include "mkql_computation_node_holders.h" 
+#include "mkql_computation_node_holders.h"
 #include "mkql_optional_usage_mask.h"
 
 #include <ydb/library/yql/public/udf/udf_value.h>
@@ -12,9 +12,9 @@
 #include <util/generic/buffer.h>
 #include <util/generic/strbuf.h>
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
 #include <ydb/library/yql/minikql/codegen/codegen.h>
-#endif 
+#endif
 
 #include <utility>
 
@@ -32,7 +32,7 @@ private:
     };
     using TProperties = TEnumBitSet<EProps, EProps::Begin, EProps::End>;
 public:
-    TValuePacker(bool stable, const TType* type, bool tryUseCodegen = false); 
+    TValuePacker(bool stable, const TType* type, bool tryUseCodegen = false);
     TValuePacker(const TValuePacker& other);
 
     // Returned buffer is temporary and should be copied before next Pack() call
@@ -49,10 +49,10 @@ private:
     typedef void(*TPackFunction)(const TRawUV*, ui64*, ui64*);
     TPackFunction MakePackFunction();
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     const NYql::NCodegen::ICodegen::TPtr Codegen;
-#endif 
-    const bool Stable; 
+#endif
+    const bool Stable;
     const TType* Type;
     // TODO: real thread safety with external state
     mutable TBuffer Buffer;
@@ -70,7 +70,7 @@ private:
 class TValuePackerBoxed : public TComputationValue<TValuePackerBoxed>, public TValuePacker {
     typedef TComputationValue<TValuePackerBoxed> TBase;
 public:
-    TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, const TType* type, bool tryUseCodegen = false); 
+    TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, const TType* type, bool tryUseCodegen = false);
     TValuePackerBoxed(TMemoryUsageInfo* memInfo, const TValuePacker& other);
 };
 

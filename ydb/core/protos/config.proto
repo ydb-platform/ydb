@@ -186,7 +186,7 @@ message TDomainsConfig {
         repeated uint64 Mediator = 4;
         repeated uint64 Proxy = 5;
         repeated uint32 SSId = 6;
-        repeated uint32 HiveUid = 7; 
+        repeated uint32 HiveUid = 7;
         optional uint64 PlanResolution = 8;
         optional string Name = 9;
         optional TTxLimits TxLimits = 10; // DEPRECATED
@@ -198,10 +198,10 @@ message TDomainsConfig {
     }
 
     message THiveConfig { // look for another THiveConfig later in this file
-        optional uint32 HiveUid = 1; 
-        optional fixed64 Hive = 2; 
-    } 
- 
+        optional uint32 HiveUid = 1;
+        optional fixed64 Hive = 2;
+    }
+
     message TExecLevel {
     }
 
@@ -222,7 +222,7 @@ message TDomainsConfig {
     repeated TDomain Domain = 1;
     repeated TStateStorage StateStorage = 2;
     repeated TExecLevel ExecLevel = 3;
-    repeated THiveConfig HiveConfig = 4; 
+    repeated THiveConfig HiveConfig = 4;
     repeated TNamedCompactionPolicy NamedCompactionPolicy = 5;
     optional TSecurityConfig SecurityConfig = 6;
     optional bool ForbidImplicitStoragePools = 7 [default = true];
@@ -266,15 +266,15 @@ message TUAClientConfig {
     optional string LogName = 9;
 }
 
-message TLogConfig { 
-    message TEntry { 
-        optional bytes Component = 1; 
-        optional uint32 Level = 2; 
+message TLogConfig {
+    message TEntry {
+        optional bytes Component = 1;
+        optional uint32 Level = 2;
         optional uint32 SamplingLevel = 3;
         optional uint32 SamplingRate = 4;
-    } 
- 
-    repeated TEntry Entry = 1; 
+    }
+
+    repeated TEntry Entry = 1;
     optional bool   SysLog = 2 [default = false];
     optional uint32 DefaultLevel = 3 [default = 4]; // NActors::NLog::PRI_WARN
     optional uint32 DefaultSamplingLevel = 4 [default = 7]; // NActors::NLog::PRI_DEBUG
@@ -288,8 +288,8 @@ message TLogConfig {
     optional bool SysLogToStdErr = 12; // writes logs to stderr as well as in syslog
     optional TUAClientConfig UAClientConfig = 13;
     optional uint64 TimeThresholdMs = 14 [default = 1000];
-} 
- 
+}
+
 message TCompileServiceConfig {
     optional uint32 InflightLimit = 1 [default = 100000];
 }
@@ -311,8 +311,8 @@ message TBootstrap {
 
         BS_DOMAINCONTROLLER = 20;
 
-        SCHEMESHARD = 30; 
-        DATASHARD = 31; 
+        SCHEMESHARD = 30;
+        DATASHARD = 31;
         FLAT_SCHEMESHARD = 32;
         KEYVALUEFLAT = 33;
 

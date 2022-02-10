@@ -1,36 +1,36 @@
-#pragma once 
-#include <ydb/library/yql/ast/yql_expr.h> 
-#include "yql_graph_transformer.h" 
+#pragma once
+#include <ydb/library/yql/ast/yql_expr.h>
+#include "yql_graph_transformer.h"
 #include "yql_type_annotation.h"
-#include <util/generic/hash_set.h> 
-#include <functional> 
- 
-namespace NYql { 
- 
+#include <util/generic/hash_set.h>
+#include <functional>
+
+namespace NYql {
+
 typedef std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&)> TCallableOptimizer;
 typedef std::function<TExprNode::TPtr (const TExprNode::TPtr&, bool&, TExprContext&)> TCallableOptimizerFast;
- 
+
 typedef std::unordered_set<ui64> TProcessedNodesSet;
 
-struct TOptimizeExprSettings { 
-    explicit TOptimizeExprSettings(TTypeAnnotationContext* types) 
-        : Types(types) 
-    {} 
- 
-    bool VisitChanges = false; 
+struct TOptimizeExprSettings {
+    explicit TOptimizeExprSettings(TTypeAnnotationContext* types)
+        : Types(types)
+    {}
+
+    bool VisitChanges = false;
     TProcessedNodesSet* ProcessedNodes = nullptr;
-    bool VisitStarted = false; 
-    IGraphTransformer* CustomInstantTypeTransformer = nullptr; 
+    bool VisitStarted = false;
+    IGraphTransformer* CustomInstantTypeTransformer = nullptr;
     bool VisitLambdas = true;
-    TTypeAnnotationContext* Types; 
+    TTypeAnnotationContext* Types;
     bool VisitTuples = false;
-}; 
- 
+};
+
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizer optimizer,
-    TExprContext& ctx, const TOptimizeExprSettings& settings); 
- 
+    TExprContext& ctx, const TOptimizeExprSettings& settings);
+
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TCallableOptimizerFast& optimizer,
-    TExprContext& ctx, const TOptimizeExprSettings& settings); 
+    TExprContext& ctx, const TOptimizeExprSettings& settings);
 
 IGraphTransformer::TStatus RemapExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, const TNodeOnNodeOwnedMap& remaps,
     TExprContext& ctx, const TOptimizeExprSettings& settings);
@@ -38,14 +38,14 @@ IGraphTransformer::TStatus RemapExpr(const TExprNode::TPtr& input, TExprNode::TP
 
 class IOptimizationContext {
 public:
-    virtual ~IOptimizationContext() = default; 
+    virtual ~IOptimizationContext() = default;
     virtual void RemapNode(const TExprNode& fromNode, const TExprNode::TPtr& toNode) = 0;
 };
 
 typedef std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&, IOptimizationContext&)> TCallableOptimizerEx;
 
 IGraphTransformer::TStatus OptimizeExprEx(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizerEx optimizer,
-    TExprContext& ctx, const TOptimizeExprSettings& settings); 
+    TExprContext& ctx, const TOptimizeExprSettings& settings);
 
 IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx);
 TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap& syncList, TExprContext& ctx);
@@ -74,4 +74,4 @@ bool HaveSharedNodes(const TExprNode::TPtr& firstRoot, const TExprNode::TPtr& se
 
 TExprNode::TPtr CloneCompleteFlow(TExprNode::TPtr&& node, TExprContext& ctx);
 
-} 
+}

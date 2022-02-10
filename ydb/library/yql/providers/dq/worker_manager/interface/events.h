@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h> 
+#include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include "worker_info.h"
-#include <ydb/library/yql/dq/common/dq_common.h> 
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -34,7 +34,7 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         explicit TEvAllocateWorkersResponse(const TString& error, NYql::NDqProto::EErrorCode code = NYql::NDqProto::EUNKNOWN);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<NActors::TActorId>& ids);
         explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<TWorkerInfo::TPtr>& workerInfos);
-        explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<ui32>& nodes); 
+        explicit TEvAllocateWorkersResponse(ui64 resourceId, const TVector<ui32>& nodes);
     };
 
     struct TEvFreeWorkersNotify : NActors::TEventPB<TEvFreeWorkersNotify, NYql::NDqProto::TFreeWorkersNotify,

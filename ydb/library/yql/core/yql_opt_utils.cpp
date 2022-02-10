@@ -1,19 +1,19 @@
-#include "yql_opt_utils.h" 
-#include "yql_expr_optimize.h" 
-#include "yql_expr_type_annotation.h" 
+#include "yql_opt_utils.h"
+#include "yql_expr_optimize.h"
+#include "yql_expr_type_annotation.h"
 #include "yql_type_annotation.h"
 #include "yql_type_helpers.h"
- 
-#include <ydb/library/yql/ast/yql_constraint.h> 
+
+#include <ydb/library/yql/ast/yql_constraint.h>
 #include <ydb/library/yql/utils/log/log.h>
- 
-#include <util/generic/set.h> 
+
+#include <util/generic/set.h>
 #include <util/string/type.h>
- 
-namespace NYql { 
- 
-using namespace NNodes; 
- 
+
+namespace NYql {
+
+using namespace NNodes;
+
 TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx) {
     return ctx.NewCallable(position, "Nothing", {
         ctx.NewCallable(position, "OptionalType", {
@@ -21,23 +21,23 @@ TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx) {
                 ctx.NewAtom(position, "Bool", TNodeFlags::Default) }) }) });
 }
 
-TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx) { 
-   return ctx.NewCallable(position, "Null", {}); 
-} 
- 
-TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& input, 
-   const TExprNode::TPtr& value, TExprContext& ctx) { 
-   return ctx.Builder(position) 
-       .Callable("Map") 
-           .Add(0, input) 
-           .Lambda(1) 
-               .Param("x") 
-               .Set(value) 
-           .Seal() 
-       .Seal() 
-       .Build(); 
-} 
- 
+TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx) {
+   return ctx.NewCallable(position, "Null", {});
+}
+
+TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& input,
+   const TExprNode::TPtr& value, TExprContext& ctx) {
+   return ctx.Builder(position)
+       .Callable("Map")
+           .Add(0, input)
+           .Lambda(1)
+               .Param("x")
+               .Set(value)
+           .Seal()
+       .Seal()
+       .Build();
+}
+
 template <bool Bool>
 TExprNode::TPtr MakeBool(TPositionHandle position, TExprContext& ctx) {
     return ctx.NewCallable(position, "Bool", { ctx.NewAtom(position, Bool ? "true" : "false", TNodeFlags::Default) });
@@ -60,119 +60,119 @@ TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx) 
         .Build();
 }
 
-bool IsJustOrSingleAsList(const TExprNode& node) { 
+bool IsJustOrSingleAsList(const TExprNode& node) {
     return node.ChildrenSize() == 1U && node.IsCallable({"Just", "AsList"});
-} 
- 
+}
+
 bool IsTransparentIfPresent(const TExprNode& node) {
     return (node.IsCallable("FlatMap") || (3U == node.ChildrenSize() && node.IsCallable("IfPresent") && node.Tail().IsCallable("Nothing")))
         && node.Child(1U)->Tail().IsCallable("Just");
 }
 
-bool IsPredicateFlatMap(const TExprNode& node) { 
+bool IsPredicateFlatMap(const TExprNode& node) {
     return node.IsCallable({"FlatListIf", "ListIf", "OptionalIf", "FlatOptionalIf"});
-} 
- 
+}
+
 bool IsFilterFlatMap(const NNodes::TCoLambda& lambda) {
-    const auto& arg = lambda.Args().Arg(0); 
-    const auto& body = lambda.Body(); 
+    const auto& arg = lambda.Args().Arg(0);
+    const auto& body = lambda.Body();
     if (body.Maybe<TCoOptionalIf>() || body.Maybe<TCoListIf>()) {
-        if (body.Ref().Child(1) == arg.Raw()) { 
-            return true; 
-        } 
-    } 
- 
-    return false; 
-} 
- 
-bool IsListReorder(const TExprNode& node) { 
+        if (body.Ref().Child(1) == arg.Raw()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool IsListReorder(const TExprNode& node) {
     return node.IsCallable({"Sort", "Reverse"});
-} 
- 
+}
+
 bool IsRenameFlatMap(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode) {
-    auto lambda = node.Lambda(); 
-    if (!IsJustOrSingleAsList(lambda.Body().Ref())) { 
-        return false; 
-    } 
- 
-    structNode = lambda.Body().Ref().Child(0); 
-    if (!structNode->IsCallable("AsStruct")) { 
-        return false; 
-    } 
- 
-    for (auto& child : structNode->Children()) { 
-        auto item = child->Child(1); 
-        if (!item->IsCallable("Member") || item->Child(0) != lambda.Args().Arg(0).Raw()) { 
-            return false; 
-        } 
-    } 
- 
-    return true; 
-} 
- 
+    auto lambda = node.Lambda();
+    if (!IsJustOrSingleAsList(lambda.Body().Ref())) {
+        return false;
+    }
+
+    structNode = lambda.Body().Ref().Child(0);
+    if (!structNode->IsCallable("AsStruct")) {
+        return false;
+    }
+
+    for (auto& child : structNode->Children()) {
+        auto item = child->Child(1);
+        if (!item->IsCallable("Member") || item->Child(0) != lambda.Args().Arg(0).Raw()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 bool IsPassthroughFlatMap(const TCoFlatMapBase& flatmap, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember) {
     return IsPassthroughLambda(flatmap.Lambda(), passthroughFields, analyzeJustMember);
 }
- 
+
 bool IsPassthroughLambda(const TCoLambda& lambda, TMaybe<THashSet<TStringBuf>>* passthroughFields, bool analyzeJustMember) {
     auto body = lambda.Body();
     auto arg = lambda.Args().Arg(0);
 
-    TMaybeNode<TExprBase> outItem; 
-    if (IsJustOrSingleAsList(body.Ref())) { 
-        outItem = body.Ref().Child(0); 
-    } 
- 
+    TMaybeNode<TExprBase> outItem;
+    if (IsJustOrSingleAsList(body.Ref())) {
+        outItem = body.Ref().Child(0);
+    }
+
     if (body.Maybe<TCoOptionalIf>() || body.Maybe<TCoListIf>()) {
         outItem = body.Cast<TCoConditionalValueBase>().Value();
-    } 
- 
-    if (!outItem) { 
-        return false; 
-    } 
- 
-    if (outItem.Cast().Raw() == arg.Raw()) { 
-        return true; 
-    } 
- 
+    }
+
+    if (!outItem) {
+        return false;
+    }
+
+    if (outItem.Cast().Raw() == arg.Raw()) {
+        return true;
+    }
+
     if (auto maybeStruct = outItem.Maybe<TCoAsStruct>()) {
-        if (passthroughFields) { 
-            passthroughFields->ConstructInPlace(); 
-        } 
- 
-        for (auto child : maybeStruct.Cast()) { 
+        if (passthroughFields) {
+            passthroughFields->ConstructInPlace();
+        }
+
+        for (auto child : maybeStruct.Cast()) {
             auto tuple = child.Cast<TCoNameValueTuple>();
             auto value = tuple.Value();
             if (analyzeJustMember && value.Maybe<TCoJust>()) {
                 value = value.Cast<TCoJust>().Input();
             }
- 
+
             if (!value.Maybe<TCoMember>()) {
-                if (!passthroughFields) { 
-                    return false; 
-                } 
- 
-                continue; 
-            } 
- 
+                if (!passthroughFields) {
+                    return false;
+                }
+
+                continue;
+            }
+
             auto member = value.Cast<TCoMember>();
-            if (member.Struct().Raw() != arg.Raw() || member.Name().Value() != tuple.Name().Value()) { 
-                if (!passthroughFields) { 
-                    return false; 
-                } 
-            } else { 
-                if (passthroughFields) { 
-                    (*passthroughFields)->insert(member.Name().Value()); 
-                } 
-            } 
-        } 
- 
-        return true; 
-    } 
- 
-    return false; 
-} 
- 
+            if (member.Struct().Raw() != arg.Raw() || member.Name().Value() != tuple.Name().Value()) {
+                if (!passthroughFields) {
+                    return false;
+                }
+            } else {
+                if (passthroughFields) {
+                    (*passthroughFields)->insert(member.Name().Value());
+                }
+            }
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
 bool IsTablePropsDependent(const TExprNode& node) {
     bool found = false;
     VisitExpr(node, [&found](const TExprNode& n) {
@@ -208,107 +208,107 @@ TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& sr
 template<class TFieldsSet>
 bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap, bool allowDependsOn) {
     if (arg.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Struct) {
-        return false; 
-    } 
- 
-    if (&arg == start.Get()) { 
-        return false; 
-    } 
- 
+        return false;
+    }
+
+    if (&arg == start.Get()) {
+        return false;
+    }
+
     const auto inputStructType = arg.GetTypeAnn()->Cast<TStructExprType>();
-    if (!IsDepended(*start, arg)) { 
-        return inputStructType->GetSize() > 0; 
-    } 
- 
-    TNodeSet nodes; 
-    VisitExpr(start, [&](const TExprNode::TPtr& node) { 
-        nodes.insert(node.Get()); 
-        return true; 
-    }); 
- 
+    if (!IsDepended(*start, arg)) {
+        return inputStructType->GetSize() > 0;
+    }
+
+    TNodeSet nodes;
+    VisitExpr(start, [&](const TExprNode::TPtr& node) {
+        nodes.insert(node.Get());
+        return true;
+    });
+
     const auto parents = parentsMap.find(&arg);
-    YQL_ENSURE(parents != parentsMap.cend()); 
+    YQL_ENSURE(parents != parentsMap.cend());
     for (const auto& parent : parents->second) {
-        if (nodes.cend() == nodes.find(parent)) { 
-            continue; 
-        } 
- 
-        if (parent->IsCallable("Member")) { 
+        if (nodes.cend() == nodes.find(parent)) {
+            continue;
+        }
+
+        if (parent->IsCallable("Member")) {
             if constexpr (std::is_same_v<typename TFieldsSet::key_type, typename TFieldsSet::value_type>)
                 usedFields.emplace(parent->Tail().Content());
             else
                 usedFields.emplace(parent->Tail().Content(), parent->TailPtr());
         } else if (allowDependsOn && parent->IsCallable("DependsOn")) {
-            continue; 
-        } else { 
-            // unknown node 
-            usedFields.clear(); 
-            return false; 
-        } 
-    } 
- 
-    return usedFields.size() < inputStructType->GetSize(); 
-} 
- 
+            continue;
+        } else {
+            // unknown node
+            usedFields.clear();
+            return false;
+        }
+    }
+
+    return usedFields.size() < inputStructType->GetSize();
+}
+
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TSet<TStringBuf>& usedFields, const TParentsMap& parentsMap, bool allowDependsOn);
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TSet<TString>& usedFields, const TParentsMap& parentsMap, bool allowDependsOn);
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, std::map<std::string_view, TExprNode::TPtr>& usedFields, const TParentsMap& parentsMap, bool allowDependsOn);
 
 template<class TFieldsSet>
 TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TFieldsSet& subsetFields,
-    TExprContext& ctx, bool singleValue) { 
-    if (singleValue) { 
-        TExprNode::TListType structItems; 
-        for (auto field : subsetFields) { 
-            auto name = ctx.NewAtom(position, field); 
-            auto member = ctx.NewCallable(position, "Member", { input , name }); 
-            structItems.push_back(ctx.NewList(position, { name, member })); 
-        } 
- 
-        return ctx.NewCallable(position, "AsStruct", std::move(structItems)); 
-    } 
- 
+    TExprContext& ctx, bool singleValue) {
+    if (singleValue) {
+        TExprNode::TListType structItems;
+        for (auto field : subsetFields) {
+            auto name = ctx.NewAtom(position, field);
+            auto member = ctx.NewCallable(position, "Member", { input , name });
+            structItems.push_back(ctx.NewList(position, { name, member }));
+        }
+
+        return ctx.NewCallable(position, "AsStruct", std::move(structItems));
+    }
+
     TExprNode::TListType fields;
-    for (auto& x : subsetFields) { 
-        fields.emplace_back(ctx.NewAtom(position, x)); 
-    } 
- 
-    return ctx.NewCallable(position, "ExtractMembers", { input, ctx.NewList(position, std::move(fields)) }); 
-} 
- 
+    for (auto& x : subsetFields) {
+        fields.emplace_back(ctx.NewAtom(position, x));
+    }
+
+    return ctx.NewCallable(position, "ExtractMembers", { input, ctx.NewList(position, std::move(fields)) });
+}
+
 template TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TSet<TStringBuf>& subsetFields, TExprContext& ctx, bool singleValue);
 template TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TSet<TString>& subsetFields, TExprContext& ctx, bool singleValue);
 
 
-bool IsDependedImpl(const TExprNode* from, const TExprNode* to, TNodeSet& visited) { 
-    if (from == to) 
-        return true; 
- 
-    if (!visited.emplace(from).second) { 
-        return false; 
-    } 
- 
-    for (const auto& child : from->Children()) { 
-        if (IsDependedImpl(child.Get(), to, visited)) 
-            return true; 
-    } 
- 
-    return false; 
-} 
- 
-bool IsDepended(const TExprNode& from, const TExprNode& to) { 
-    TNodeSet visited; 
-    return IsDependedImpl(&from, &to, visited); 
-} 
- 
+bool IsDependedImpl(const TExprNode* from, const TExprNode* to, TNodeSet& visited) {
+    if (from == to)
+        return true;
+
+    if (!visited.emplace(from).second) {
+        return false;
+    }
+
+    for (const auto& child : from->Children()) {
+        if (IsDependedImpl(child.Get(), to, visited))
+            return true;
+    }
+
+    return false;
+}
+
+bool IsDepended(const TExprNode& from, const TExprNode& to) {
+    TNodeSet visited;
+    return IsDependedImpl(&from, &to, visited);
+}
+
 bool IsEmpty(const TExprNode& node, const TTypeAnnotationContext& typeCtx) {
     return typeCtx.IsConstraintCheckEnabled<TEmptyConstraintNode>() && node.Type() != TExprNode::Argument && node.GetConstraint<TEmptyConstraintNode>() != nullptr;
-} 
- 
-bool IsEmptyOptional(const TExprNode& node) { 
-    return node.IsCallable("Nothing"); 
-} 
- 
+}
+
+bool IsEmptyOptional(const TExprNode& node) {
+    return node.IsCallable("Nothing");
+}
+
 bool IsEmptyContainer(const TExprNode& node) {
     return node.IsCallable({"EmptyList", "EmptyDict"})
         || (1U == node.ChildrenSize() && node.IsCallable({"List", "Nothing", "EmptyIterator", "Dict"}));
@@ -365,33 +365,33 @@ bool HasAnySetting(const TExprNode& settings, const THashSet<TString>& names) {
 
 TExprNode::TPtr RemoveSetting(const TExprNode& settings, const TStringBuf& name, TExprContext& ctx) {
     TExprNode::TListType children;
-    for (auto setting : settings.Children()) { 
+    for (auto setting : settings.Children()) {
         if (setting->ChildrenSize() != 0 && setting->Head().Content() == name) {
-            continue; 
-        } 
- 
-        children.push_back(setting); 
-    } 
- 
-    return ctx.NewList(settings.Pos(), std::move(children)); 
-} 
- 
-TExprNode::TPtr ReplaceSetting(const TExprNode& settings, TPositionHandle pos, const TString& name, const TExprNode::TPtr& value, TExprContext& ctx) { 
-    TExprNode::TListType newChildren; 
-    for (auto setting : settings.Children()) { 
-        if (setting->ChildrenSize() != 0 && setting->Head().Content() == name) { 
-            continue; 
-        } 
- 
-        newChildren.push_back(setting); 
-    } 
- 
-    newChildren.push_back(value ? ctx.NewList(pos, { ctx.NewAtom(pos, name), value }) : ctx.NewList(pos, { ctx.NewAtom(pos, name) })); 
- 
-    auto ret = ctx.NewList(settings.Pos(), std::move(newChildren)); 
-    return ret; 
-} 
- 
+            continue;
+        }
+
+        children.push_back(setting);
+    }
+
+    return ctx.NewList(settings.Pos(), std::move(children));
+}
+
+TExprNode::TPtr ReplaceSetting(const TExprNode& settings, TPositionHandle pos, const TString& name, const TExprNode::TPtr& value, TExprContext& ctx) {
+    TExprNode::TListType newChildren;
+    for (auto setting : settings.Children()) {
+        if (setting->ChildrenSize() != 0 && setting->Head().Content() == name) {
+            continue;
+        }
+
+        newChildren.push_back(setting);
+    }
+
+    newChildren.push_back(value ? ctx.NewList(pos, { ctx.NewAtom(pos, name), value }) : ctx.NewList(pos, { ctx.NewAtom(pos, name) }));
+
+    auto ret = ctx.NewList(settings.Pos(), std::move(newChildren));
+    return ret;
+}
+
 TExprNode::TPtr AddSetting(const TExprNode& settings, TPositionHandle pos, const TString& name, const TExprNode::TPtr& value, TExprContext& ctx) {
     auto newChildren = settings.ChildrenList();
     newChildren.push_back(value ? ctx.NewList(pos, { ctx.NewAtom(pos, name), value }) : ctx.NewList(pos, { ctx.NewAtom(pos, name) }));
@@ -400,7 +400,7 @@ TExprNode::TPtr AddSetting(const TExprNode& settings, TPositionHandle pos, const
     return ret;
 }
 
- 
+
 TExprNode::TPtr MergeSettings(const TExprNode& settings1, const TExprNode& settings2, TExprContext& ctx) {
     auto newChildren = settings1.ChildrenList();
     newChildren.insert(
@@ -466,118 +466,118 @@ TMaybe<TIssue> ParseToDictSettings(const TExprNode& input, TExprContext& ctx, TM
     return TMaybe<TIssue>();
 }
 
-TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TPtr reduced, TExprContext& ctx) { 
-    auto pos = aggregateNode.Pos(); 
-    auto aggregatedColumns = aggregateNode.Child(2); 
-    auto opt = ctx.NewCallable(pos, "ToOptional", { reduced }); 
+TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TPtr reduced, TExprContext& ctx) {
+    auto pos = aggregateNode.Pos();
+    auto aggregatedColumns = aggregateNode.Child(2);
+    auto opt = ctx.NewCallable(pos, "ToOptional", { reduced });
     TExprNode::TListType finalRowNodes;
-    for (ui32 index = 0; index < aggregatedColumns->ChildrenSize(); ++index) { 
-        auto column = aggregatedColumns->Child(index); 
-        auto trait = column->Child(1); 
-        auto defVal = trait->Child(7); 
- 
-        if (column->Child(0)->IsAtom()) { 
-            finalRowNodes.push_back(ctx.Builder(pos) 
-                .List() 
-                    .Atom(0, column->Child(0)->Content()) 
-                    .Callable(1, "Coalesce") 
-                        .Callable(0, "Member") 
-                            .Add(0, opt) 
-                            .Atom(1, column->Child(0)->Content()) 
-                        .Seal() 
-                        .Add(1, defVal) 
-                    .Seal() 
-                .Seal() 
-                .Build()); 
-        } else { 
-            const auto& multiFields = column->Child(0)->Children(); 
-            for (ui32 field = 0; field < multiFields.size(); ++field) { 
-                finalRowNodes.push_back(ctx.Builder(pos) 
-                    .List() 
-                        .Atom(0, multiFields[field]->Content()) 
-                        .Callable(1, "Member") 
-                            .Add(0, opt) 
-                            .Atom(1, multiFields[field]->Content()) 
-                        .Seal() 
-                    .Seal() 
-                    .Build()); 
-            } 
-        } 
-    } 
- 
-    return ctx.Builder(pos) 
-        .Callable("AsList") 
-            .Add(0, ctx.NewCallable(pos, "AsStruct", std::move(finalRowNodes))) 
-        .Seal() 
-        .Build(); 
-} 
- 
+    for (ui32 index = 0; index < aggregatedColumns->ChildrenSize(); ++index) {
+        auto column = aggregatedColumns->Child(index);
+        auto trait = column->Child(1);
+        auto defVal = trait->Child(7);
+
+        if (column->Child(0)->IsAtom()) {
+            finalRowNodes.push_back(ctx.Builder(pos)
+                .List()
+                    .Atom(0, column->Child(0)->Content())
+                    .Callable(1, "Coalesce")
+                        .Callable(0, "Member")
+                            .Add(0, opt)
+                            .Atom(1, column->Child(0)->Content())
+                        .Seal()
+                        .Add(1, defVal)
+                    .Seal()
+                .Seal()
+                .Build());
+        } else {
+            const auto& multiFields = column->Child(0)->Children();
+            for (ui32 field = 0; field < multiFields.size(); ++field) {
+                finalRowNodes.push_back(ctx.Builder(pos)
+                    .List()
+                        .Atom(0, multiFields[field]->Content())
+                        .Callable(1, "Member")
+                            .Add(0, opt)
+                            .Atom(1, multiFields[field]->Content())
+                        .Seal()
+                    .Seal()
+                    .Build());
+            }
+        }
+    }
+
+    return ctx.Builder(pos)
+        .Callable("AsList")
+            .Add(0, ctx.NewCallable(pos, "AsStruct", std::move(finalRowNodes)))
+        .Seal()
+        .Build();
+}
+
 bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const TStringBuf& goal, TExprNode::TListType& members, MemberUpdaterFunc updaterFunc, const TTypeAnnotationNode* nodeType) {
-    if (!nodeType) { 
+    if (!nodeType) {
         nodeType = node->GetTypeAnn();
-        Y_VERIFY_DEBUG(nodeType || !"Unset node type for UpdateStructMembers"); 
-    } 
-    bool filtered = false; 
-    if (node->IsCallable("AsStruct")) { 
-        YQL_CLOG(DEBUG, Core) << "Enumerate struct literal for " << goal; 
-        for (ui32 i = 0; i < node->ChildrenSize(); ++i) { 
-            const auto memberNode = node->ChildPtr(i); 
-            const auto& memberName = memberNode->Child(0)->Content(); 
-            TString useName = TString(memberName); 
+        Y_VERIFY_DEBUG(nodeType || !"Unset node type for UpdateStructMembers");
+    }
+    bool filtered = false;
+    if (node->IsCallable("AsStruct")) {
+        YQL_CLOG(DEBUG, Core) << "Enumerate struct literal for " << goal;
+        for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+            const auto memberNode = node->ChildPtr(i);
+            const auto& memberName = memberNode->Child(0)->Content();
+            TString useName = TString(memberName);
             if (updaterFunc && !updaterFunc(useName, memberNode->GetTypeAnn())) {
-                filtered = true; 
-                continue; 
-            } 
-            if (useName == memberName) { 
-                members.push_back(memberNode); 
-            } else { 
-                auto useNameNode = ctx.NewAtom(node->Pos(), useName); 
-                members.push_back(ctx.NewList(node->Pos(), { useNameNode, memberNode->ChildPtr(1) })); 
-            } 
-        } 
-    } else if (nodeType->GetKind() == ETypeAnnotationKind::Optional) { 
-        YQL_CLOG(DEBUG, Core) << "Enumerate optional struct for " << goal; 
-        auto itemType = nodeType->Cast<TOptionalExprType>()->GetItemType(); 
-        return UpdateStructMembers(ctx, node, goal, members, updaterFunc, itemType); 
-    } else { 
-        YQL_CLOG(DEBUG, Core) << "Enumerate struct object for " << goal; 
-        auto structType = nodeType->Cast<TStructExprType>(); 
-        for (auto item : structType->GetItems()) { 
-            TString useName = TString(item->GetName()); 
-            if (updaterFunc && !updaterFunc(useName, item->GetItemType())) { 
-                filtered = true; 
-                continue; 
-            } 
-            members.push_back(ctx.Builder(node->Pos()) 
-                .List() 
-                    .Atom(0, useName) 
-                    .Callable(1, "Member") 
-                        .Add(0, node) 
-                        .Atom(1, item->GetName()) 
-                    .Seal() 
-                .Seal() 
-                .Build()); 
-        } 
-    } 
-    return filtered; 
-} 
- 
-TExprNode::TPtr ExpandRemoveMember(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    const bool force = node->Content() == "ForceRemoveMember"; 
-    const auto& removeMemberName = node->Child(1)->Content(); 
-    MemberUpdaterFunc removeFunc = [&removeMemberName](TString& memberName, const TTypeAnnotationNode*) { 
-        return memberName != removeMemberName; 
-    }; 
-    TExprNode::TListType members; 
-    if (!UpdateStructMembers(ctx, node->ChildPtr(0), node->Content(), members, removeFunc)) { 
-        if (!force) { 
-            YQL_ENSURE(false, "Unexpected member name: " << removeMemberName); 
-        } 
-        return node->ChildPtr(0); 
-    } 
-    return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members)); 
-} 
- 
+                filtered = true;
+                continue;
+            }
+            if (useName == memberName) {
+                members.push_back(memberNode);
+            } else {
+                auto useNameNode = ctx.NewAtom(node->Pos(), useName);
+                members.push_back(ctx.NewList(node->Pos(), { useNameNode, memberNode->ChildPtr(1) }));
+            }
+        }
+    } else if (nodeType->GetKind() == ETypeAnnotationKind::Optional) {
+        YQL_CLOG(DEBUG, Core) << "Enumerate optional struct for " << goal;
+        auto itemType = nodeType->Cast<TOptionalExprType>()->GetItemType();
+        return UpdateStructMembers(ctx, node, goal, members, updaterFunc, itemType);
+    } else {
+        YQL_CLOG(DEBUG, Core) << "Enumerate struct object for " << goal;
+        auto structType = nodeType->Cast<TStructExprType>();
+        for (auto item : structType->GetItems()) {
+            TString useName = TString(item->GetName());
+            if (updaterFunc && !updaterFunc(useName, item->GetItemType())) {
+                filtered = true;
+                continue;
+            }
+            members.push_back(ctx.Builder(node->Pos())
+                .List()
+                    .Atom(0, useName)
+                    .Callable(1, "Member")
+                        .Add(0, node)
+                        .Atom(1, item->GetName())
+                    .Seal()
+                .Seal()
+                .Build());
+        }
+    }
+    return filtered;
+}
+
+TExprNode::TPtr ExpandRemoveMember(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const bool force = node->Content() == "ForceRemoveMember";
+    const auto& removeMemberName = node->Child(1)->Content();
+    MemberUpdaterFunc removeFunc = [&removeMemberName](TString& memberName, const TTypeAnnotationNode*) {
+        return memberName != removeMemberName;
+    };
+    TExprNode::TListType members;
+    if (!UpdateStructMembers(ctx, node->ChildPtr(0), node->Content(), members, removeFunc)) {
+        if (!force) {
+            YQL_ENSURE(false, "Unexpected member name: " << removeMemberName);
+        }
+        return node->ChildPtr(0);
+    }
+    return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
+}
+
 TExprNode::TPtr ExpandRemovePrefixMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
 
@@ -736,198 +736,198 @@ TExprNode::TPtr ExpandRemovePrefixMembers(const TExprNode::TPtr& node, TExprCont
         .Build();
 }
 
-TExprNode::TPtr ExpandFlattenMembers(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    TExprNode::TListType members; 
-    for (auto& child : node->Children()) { 
-        auto prefix = child->Child(0)->Content(); 
-        MemberUpdaterFunc addPrefixFunc = [&prefix](TString& memberName, const TTypeAnnotationNode*) { 
-            memberName = prefix + memberName; 
-            return true; 
-        }; 
-        UpdateStructMembers(ctx, child->ChildPtr(1), "FlattenMembers", members, addPrefixFunc); 
-    } 
-    return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members)); 
-} 
- 
-TExprNode::TPtr ExpandFlattenStructs(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    TExprNode::TListType members; 
-    auto structObj = node->Child(0); 
+TExprNode::TPtr ExpandFlattenMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
+    TExprNode::TListType members;
+    for (auto& child : node->Children()) {
+        auto prefix = child->Child(0)->Content();
+        MemberUpdaterFunc addPrefixFunc = [&prefix](TString& memberName, const TTypeAnnotationNode*) {
+            memberName = prefix + memberName;
+            return true;
+        };
+        UpdateStructMembers(ctx, child->ChildPtr(1), "FlattenMembers", members, addPrefixFunc);
+    }
+    return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
+}
+
+TExprNode::TPtr ExpandFlattenStructs(const TExprNode::TPtr& node, TExprContext& ctx) {
+    TExprNode::TListType members;
+    auto structObj = node->Child(0);
     for (auto& x : structObj->GetTypeAnn()->Cast<TStructExprType>()->GetItems()) {
-        auto subMember = ctx.Builder(node->Pos()) 
-            .Callable("Member") 
-            .Add(0, structObj) 
-            .Atom(1, x->GetName()) 
-            .Seal() 
-            .Build(); 
- 
-        auto itemType = x->GetItemType(); 
-        if (itemType->GetKind() == ETypeAnnotationKind::Optional) { 
-            itemType = itemType->Cast<TOptionalExprType>()->GetItemType(); 
-        } 
- 
-        if (itemType->GetKind() != ETypeAnnotationKind::Struct) { 
-            members.push_back(ctx.Builder(node->Pos()) 
-                .List() 
-                    .Atom(0, x->GetName()) 
-                    .Add(1, subMember) 
-                .Seal() 
-                .Build()); 
-            continue; 
-        } 
- 
-        UpdateStructMembers(ctx, subMember, "FlattenStructs", members, {}, x->GetItemType()); 
-    } 
-    return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members)); 
-} 
- 
-TExprNode::TPtr ExpandDivePrefixMembers(const TExprNode::TPtr& node, TExprContext& ctx) { 
+        auto subMember = ctx.Builder(node->Pos())
+            .Callable("Member")
+            .Add(0, structObj)
+            .Atom(1, x->GetName())
+            .Seal()
+            .Build();
+
+        auto itemType = x->GetItemType();
+        if (itemType->GetKind() == ETypeAnnotationKind::Optional) {
+            itemType = itemType->Cast<TOptionalExprType>()->GetItemType();
+        }
+
+        if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
+            members.push_back(ctx.Builder(node->Pos())
+                .List()
+                    .Atom(0, x->GetName())
+                    .Add(1, subMember)
+                .Seal()
+                .Build());
+            continue;
+        }
+
+        UpdateStructMembers(ctx, subMember, "FlattenStructs", members, {}, x->GetItemType());
+    }
+    return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
+}
+
+TExprNode::TPtr ExpandDivePrefixMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
     auto prefixes = node->Child(1)->Children();
-    MemberUpdaterFunc filterAndCutByPrefixFunc = [&prefixes](TString& memberName, const TTypeAnnotationNode*) { 
+    MemberUpdaterFunc filterAndCutByPrefixFunc = [&prefixes](TString& memberName, const TTypeAnnotationNode*) {
         for (const auto& p : prefixes) {
             auto prefix = p->Content();
-            if (memberName.StartsWith(prefix)) { 
-                memberName = memberName.substr(prefix.length()); 
-                return true; 
-            } 
-        } 
-        return false; 
-    }; 
-    TExprNode::TListType members; 
-    UpdateStructMembers(ctx, node->ChildPtr(0), "DivePrefixMembers", members, filterAndCutByPrefixFunc); 
-    auto ret = ctx.NewCallable(node->Pos(), "AsStruct", std::move(members)); 
-    return ret; 
-} 
- 
-TExprNode::TPtr ExpandAddMember(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    TExprNode::TListType members; 
-    UpdateStructMembers(ctx, node->ChildPtr(0), "AddMember", members); 
-    members.push_back(ctx.NewList(node->Pos(), { node->ChildPtr(1), node->ChildPtr(2) })); 
-    return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members)); 
-} 
- 
-TExprNode::TPtr ExpandReplaceMember(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    const auto& removeMemberName = node->Child(1)->Content(); 
-    MemberUpdaterFunc cloneFunc = [&removeMemberName](TString& memberName, const TTypeAnnotationNode*) { 
-        return memberName != removeMemberName; 
-    }; 
-    TExprNode::TListType members; 
-    UpdateStructMembers(ctx, node->ChildPtr(0), "ReplaceMember", members, cloneFunc); 
-    members.push_back(ctx.NewList(node->Pos(), { node->ChildPtr(1), node->ChildPtr(2) })); 
-    auto ret = ctx.NewCallable(node->Pos(), "AsStruct", std::move(members)); 
-    return ret; 
-} 
- 
-TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext& ctx) { 
-    ui32 shift = 0; 
-    TStringBuf mode = "auto"; 
-    if (node->Child(0)->IsAtom()) { 
-        mode = node->Child(0)->Content(); 
-        shift = 1; 
-    } 
- 
-    auto structObj = node->ChildPtr(shift); 
-    TExprNode::TListType members; 
-    struct TFlattenInfo { 
-        const TTypeAnnotationNode* Type = nullptr; 
-        TExprNode::TPtr ArgNode = nullptr; 
-        TExprNode::TPtr ListMember = nullptr; 
-        TExprNode::TPtr ColumnNode = nullptr; 
-        bool ReplaceName = false; 
-    }; 
-    TVector<TFlattenInfo> flattens; 
-    TMap<TString, size_t> name2Info; 
-    size_t flattenIndex = 0; 
-    for (auto iter = node->Children().begin() + 1 + shift; iter != node->Children().end(); ++iter) { 
-        auto flattenColumnNode = *iter; 
-        const bool haveAlias = flattenColumnNode->ChildrenSize() == 2; 
-        const TString flattenItemName = (haveAlias) ? TString(flattenColumnNode->Child(1)->Content()) : TString(flattenColumnNode->Content()); 
-        TFlattenInfo flattenInfo; 
-        if (haveAlias) { 
-            flattenColumnNode = flattenColumnNode->Child(0); 
-        } 
-        else { 
-            flattenInfo.ReplaceName = true; 
-        } 
-        const auto useNameNode = ctx.NewAtom(node->Pos(), flattenItemName); 
-        flattenInfo.ArgNode = ctx.NewArgument(node->Pos(), flattenItemName); 
-        flattenInfo.ColumnNode = flattenColumnNode; 
-        members.push_back(ctx.NewList(node->Pos(), { useNameNode, flattenInfo.ArgNode })); 
-        flattens.emplace_back(std::move(flattenInfo)); 
-        name2Info.insert({ TString(flattenColumnNode->Content()), flattenIndex++ }); 
-    } 
-    MemberUpdaterFunc removeAndInfosUpdateFunc = [&flattens, &name2Info](TString& memberName, const TTypeAnnotationNode* type) { 
-        const auto iter = name2Info.find(memberName); 
-        if (iter == name2Info.end()) { 
-            return true; 
-        } 
-        TFlattenInfo& flattenInfo = flattens[iter->second]; 
-        flattenInfo.Type = type; 
-        return !flattenInfo.ReplaceName; 
-    }; 
-    UpdateStructMembers(ctx, structObj, "FlattenByColumns", members, removeAndInfosUpdateFunc); 
-    auto internalResult = ctx.NewCallable(node->Pos(), "AsStruct", std::move(members)); 
-    TDeque<const TFlattenInfo*> flattenPriority; 
-    for (auto& flattenInfo : flattens) { 
-        bool isDict = false; 
-        bool isList = false; 
-        flattenInfo.ListMember = ctx.Builder(structObj->Pos()) 
-            .Callable("Member") 
-            .Add(0, structObj) 
-            .Add(1, flattenInfo.ColumnNode) 
-            .Seal().Build(); 
-        if (mode == "list" && flattenInfo.Type->GetKind() == ETypeAnnotationKind::Optional) { 
-            isList = true; 
-            flattenInfo.ListMember = ctx.Builder(structObj->Pos()) 
-                .Callable("Coalesce") 
-                    .Add(0, flattenInfo.ListMember) 
-                    .Callable(1, "List") 
-                        .Add(0, ExpandType(structObj->Pos(), *flattenInfo.Type->Cast<TOptionalExprType>()->GetItemType(), ctx)) 
-                    .Seal() 
-                .Seal() 
-                .Build(); 
-        } else if (mode == "dict" && flattenInfo.Type->GetKind() == ETypeAnnotationKind::Optional) { 
-            isDict = true; 
-            flattenInfo.ListMember = ctx.Builder(structObj->Pos()) 
-                .Callable("Coalesce") 
-                    .Add(0, flattenInfo.ListMember) 
-                    .Callable(1, "Dict") 
-                        .Add(0, ExpandType(structObj->Pos(), *flattenInfo.Type->Cast<TOptionalExprType>()->GetItemType(), ctx)) 
-                    .Seal() 
-                .Seal() 
-                .Build(); 
-        } else { 
-            isList = flattenInfo.Type->GetKind() == ETypeAnnotationKind::List; 
-            isDict = flattenInfo.Type->GetKind() == ETypeAnnotationKind::Dict; 
-        } 
- 
-        if (isDict) { 
-            flattenInfo.ListMember = ctx.Builder(structObj->Pos()) 
-                .Callable("DictItems") 
-                .Add(0, flattenInfo.ListMember) 
-                .Seal().Build(); 
-        } 
- 
-        if (!isDict && !isList) { 
-            flattenPriority.push_back(&flattenInfo); 
-        } else { 
-            flattenPriority.push_front(&flattenInfo); 
-        } 
-    } 
- 
+            if (memberName.StartsWith(prefix)) {
+                memberName = memberName.substr(prefix.length());
+                return true;
+            }
+        }
+        return false;
+    };
+    TExprNode::TListType members;
+    UpdateStructMembers(ctx, node->ChildPtr(0), "DivePrefixMembers", members, filterAndCutByPrefixFunc);
+    auto ret = ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
+    return ret;
+}
+
+TExprNode::TPtr ExpandAddMember(const TExprNode::TPtr& node, TExprContext& ctx) {
+    TExprNode::TListType members;
+    UpdateStructMembers(ctx, node->ChildPtr(0), "AddMember", members);
+    members.push_back(ctx.NewList(node->Pos(), { node->ChildPtr(1), node->ChildPtr(2) }));
+    return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
+}
+
+TExprNode::TPtr ExpandReplaceMember(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const auto& removeMemberName = node->Child(1)->Content();
+    MemberUpdaterFunc cloneFunc = [&removeMemberName](TString& memberName, const TTypeAnnotationNode*) {
+        return memberName != removeMemberName;
+    };
+    TExprNode::TListType members;
+    UpdateStructMembers(ctx, node->ChildPtr(0), "ReplaceMember", members, cloneFunc);
+    members.push_back(ctx.NewList(node->Pos(), { node->ChildPtr(1), node->ChildPtr(2) }));
+    auto ret = ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
+    return ret;
+}
+
+TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext& ctx) {
+    ui32 shift = 0;
+    TStringBuf mode = "auto";
+    if (node->Child(0)->IsAtom()) {
+        mode = node->Child(0)->Content();
+        shift = 1;
+    }
+
+    auto structObj = node->ChildPtr(shift);
+    TExprNode::TListType members;
+    struct TFlattenInfo {
+        const TTypeAnnotationNode* Type = nullptr;
+        TExprNode::TPtr ArgNode = nullptr;
+        TExprNode::TPtr ListMember = nullptr;
+        TExprNode::TPtr ColumnNode = nullptr;
+        bool ReplaceName = false;
+    };
+    TVector<TFlattenInfo> flattens;
+    TMap<TString, size_t> name2Info;
+    size_t flattenIndex = 0;
+    for (auto iter = node->Children().begin() + 1 + shift; iter != node->Children().end(); ++iter) {
+        auto flattenColumnNode = *iter;
+        const bool haveAlias = flattenColumnNode->ChildrenSize() == 2;
+        const TString flattenItemName = (haveAlias) ? TString(flattenColumnNode->Child(1)->Content()) : TString(flattenColumnNode->Content());
+        TFlattenInfo flattenInfo;
+        if (haveAlias) {
+            flattenColumnNode = flattenColumnNode->Child(0);
+        }
+        else {
+            flattenInfo.ReplaceName = true;
+        }
+        const auto useNameNode = ctx.NewAtom(node->Pos(), flattenItemName);
+        flattenInfo.ArgNode = ctx.NewArgument(node->Pos(), flattenItemName);
+        flattenInfo.ColumnNode = flattenColumnNode;
+        members.push_back(ctx.NewList(node->Pos(), { useNameNode, flattenInfo.ArgNode }));
+        flattens.emplace_back(std::move(flattenInfo));
+        name2Info.insert({ TString(flattenColumnNode->Content()), flattenIndex++ });
+    }
+    MemberUpdaterFunc removeAndInfosUpdateFunc = [&flattens, &name2Info](TString& memberName, const TTypeAnnotationNode* type) {
+        const auto iter = name2Info.find(memberName);
+        if (iter == name2Info.end()) {
+            return true;
+        }
+        TFlattenInfo& flattenInfo = flattens[iter->second];
+        flattenInfo.Type = type;
+        return !flattenInfo.ReplaceName;
+    };
+    UpdateStructMembers(ctx, structObj, "FlattenByColumns", members, removeAndInfosUpdateFunc);
+    auto internalResult = ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
+    TDeque<const TFlattenInfo*> flattenPriority;
+    for (auto& flattenInfo : flattens) {
+        bool isDict = false;
+        bool isList = false;
+        flattenInfo.ListMember = ctx.Builder(structObj->Pos())
+            .Callable("Member")
+            .Add(0, structObj)
+            .Add(1, flattenInfo.ColumnNode)
+            .Seal().Build();
+        if (mode == "list" && flattenInfo.Type->GetKind() == ETypeAnnotationKind::Optional) {
+            isList = true;
+            flattenInfo.ListMember = ctx.Builder(structObj->Pos())
+                .Callable("Coalesce")
+                    .Add(0, flattenInfo.ListMember)
+                    .Callable(1, "List")
+                        .Add(0, ExpandType(structObj->Pos(), *flattenInfo.Type->Cast<TOptionalExprType>()->GetItemType(), ctx))
+                    .Seal()
+                .Seal()
+                .Build();
+        } else if (mode == "dict" && flattenInfo.Type->GetKind() == ETypeAnnotationKind::Optional) {
+            isDict = true;
+            flattenInfo.ListMember = ctx.Builder(structObj->Pos())
+                .Callable("Coalesce")
+                    .Add(0, flattenInfo.ListMember)
+                    .Callable(1, "Dict")
+                        .Add(0, ExpandType(structObj->Pos(), *flattenInfo.Type->Cast<TOptionalExprType>()->GetItemType(), ctx))
+                    .Seal()
+                .Seal()
+                .Build();
+        } else {
+            isList = flattenInfo.Type->GetKind() == ETypeAnnotationKind::List;
+            isDict = flattenInfo.Type->GetKind() == ETypeAnnotationKind::Dict;
+        }
+
+        if (isDict) {
+            flattenInfo.ListMember = ctx.Builder(structObj->Pos())
+                .Callable("DictItems")
+                .Add(0, flattenInfo.ListMember)
+                .Seal().Build();
+        }
+
+        if (!isDict && !isList) {
+            flattenPriority.push_back(&flattenInfo);
+        } else {
+            flattenPriority.push_front(&flattenInfo);
+        }
+    }
+
     TString operation = "OrderedMap";
-    for (const auto& infoPtr : flattenPriority) { 
-        const TFlattenInfo& flattenInfo = *infoPtr; 
-        auto mapLambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { flattenInfo.ArgNode }), std::move(internalResult)); 
-        internalResult = ctx.Builder(node->Pos()) 
-            .Callable(operation) 
-            .Add(0, flattenInfo.ListMember) 
-            .Add(1, mapLambda) 
-            .Seal().Build(); 
+    for (const auto& infoPtr : flattenPriority) {
+        const TFlattenInfo& flattenInfo = *infoPtr;
+        auto mapLambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { flattenInfo.ArgNode }), std::move(internalResult));
+        internalResult = ctx.Builder(node->Pos())
+            .Callable(operation)
+            .Add(0, flattenInfo.ListMember)
+            .Add(1, mapLambda)
+            .Seal().Build();
         operation = "OrderedFlatMap";
-    } 
-    return internalResult; 
-} 
- 
+    }
+    return internalResult;
+}
+
 TExprNode::TPtr ExpandCastStruct(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
     auto targetType = node->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
@@ -954,7 +954,7 @@ void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySel
     } else if (keySelectorBody->IsCallable("Member") && keySelectorBody->Child(0) == keySelectorArg) {
         columns.push_back(keySelectorBody->Child(1)->Content());
     }
-} 
+}
 
 void ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& keySelectorLambda, TVector<bool>& dirs, TVector<TStringBuf>& columns) {
     auto keySelectorBody = keySelectorLambda.Child(1);

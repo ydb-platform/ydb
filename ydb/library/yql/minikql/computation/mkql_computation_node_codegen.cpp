@@ -2,7 +2,7 @@
 #include "mkql_computation_node_holders.h"
 
 #include <ydb/library/yql/minikql/codegen/codegen.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h> 
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <util/string/cast.h>
 
@@ -12,11 +12,11 @@ extern "C" void DeleteBoxed(NKikimr::NUdf::IBoxedValue *const boxed) {
     delete boxed;
 }
 
-extern "C" void DeleteString(void* strData) { 
-    auto& str = *(NKikimr::NUdf::TStringValue*)(&strData); 
-    UdfFreeWithSize(strData, 16 + str.Capacity()); 
-} 
- 
+extern "C" void DeleteString(void* strData) {
+    auto& str = *(NKikimr::NUdf::TStringValue*)(&strData);
+    UdfFreeWithSize(strData, 16 + str.Capacity());
+}
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -147,7 +147,7 @@ Function* GenerateCompareFunction(const NYql::NCodegen::ICodegen::TPtr& codegen,
 
     TCodegenContext ctx(codegen);
     ctx.AlwaysInline = true;
-    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     auto args = ctx.Func->arg_begin();
 
@@ -466,7 +466,7 @@ Function* GenerateEqualsFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, 
 
     TCodegenContext ctx(codegen);
     ctx.AlwaysInline = true;
-    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     auto args = ctx.Func->arg_begin();
 
@@ -594,7 +594,7 @@ Function* GenerateHashFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, co
 
     TCodegenContext ctx(codegen);
     ctx.AlwaysInline = true;
-    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     const auto main = BasicBlock::Create(context, "main", ctx.Func);
     auto block = main;
@@ -681,7 +681,7 @@ Function* GenerateEqualsFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, 
 
     TCodegenContext ctx(codegen);
     ctx.AlwaysInline = true;
-    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     auto args = ctx.Func->arg_begin();
 
@@ -740,7 +740,7 @@ Function* GenerateHashFunction(const NYql::NCodegen::ICodegen::TPtr& codegen, co
 
     TCodegenContext ctx(codegen);
     ctx.AlwaysInline = true;
-    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     const auto main = BasicBlock::Create(context, "main", ctx.Func);
     auto block = main;
@@ -837,8 +837,8 @@ void TExternalCodegeneratorRootNode::FinalizeFunctions(const NYql::NCodegen::ICo
 void TExternalCodegeneratorRootNode::GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) {
     GetValueFunc = GenerateGetValue(codegen);
     SetValueFunc = GenerateSetValue(codegen);
-    codegen->ExportSymbol(GetValueFunc); 
-    codegen->ExportSymbol(SetValueFunc); 
+    codegen->ExportSymbol(GetValueFunc);
+    codegen->ExportSymbol(SetValueFunc);
 }
 
 Function* TExternalCodegeneratorRootNode::GenerateGetValue(const NYql::NCodegen::ICodegen::TPtr& codegen) {
@@ -856,7 +856,7 @@ Function* TExternalCodegeneratorRootNode::GenerateGetValue(const NYql::NCodegen:
         FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(valueType), PointerType::getUnqual(contextType)}, false);
 
     TCodegenContext ctx(codegen);
-    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     auto args = ctx.Func->arg_begin();
     if (codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {
@@ -895,7 +895,7 @@ Function* TExternalCodegeneratorRootNode::GenerateSetValue(const NYql::NCodegen:
 
     const auto funcType = FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(contextType), valueType}, false);
     TCodegenContext ctx(codegen);
-    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
     auto args = ctx.Func->arg_begin();
 
@@ -1257,7 +1257,7 @@ void UnRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
     const auto fnType = FunctionType::get(Type::getVoidTy(context), {boxptr->getType()}, false);
     const auto name = "DeleteBoxed";
     ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DeleteBoxed));
-    const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+    const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
     CallInst::Create(func, {boxptr}, "", block);
 
     BranchInst::Create(live, block);
@@ -1284,7 +1284,7 @@ void CleanupBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) 
     const auto fnType = FunctionType::get(Type::getVoidTy(context), {boxptr->getType()}, false);
     const auto name = "DeleteBoxed";
     ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DeleteBoxed));
-    const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+    const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
     CallInst::Create(func, {boxptr}, "", block);
 
     BranchInst::Create(live, block);
@@ -1403,9 +1403,9 @@ void CheckRefUnboxed(Value* value, const TCodegenContext& ctx, BasicBlock*& bloc
         block = free;
 
         const auto fnType = FunctionType::get(Type::getVoidTy(context), {strptr->getType()}, false);
-        const auto name = "DeleteString"; 
-        ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DeleteString)); 
-        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+        const auto name = "DeleteString";
+        ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DeleteString));
+        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
         CallInst::Create(func, {strptr}, "", block);
         BranchInst::Create(nope, block);
     }
@@ -1447,7 +1447,7 @@ void CheckRefUnboxed(Value* value, const TCodegenContext& ctx, BasicBlock*& bloc
         const auto fnType = FunctionType::get(Type::getVoidTy(context), {boxptr->getType()}, false);
         const auto name = "DeleteBoxed";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DeleteBoxed));
-        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+        const auto func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
 
         CallInst::Create(func, {boxptr}, "", block);
         BranchInst::Create(nope, block);
@@ -1466,7 +1466,7 @@ Function* GenRefCountFunction(const char* label, void (*func)(Value*, const TCod
     const auto funcType = FunctionType::get(Type::getVoidTy(context), {type}, false);
 
     TCodegenContext ctx(codegen);
-    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()).getCallee(); 
+    ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()).getCallee();
 
     auto main = BasicBlock::Create(context, "main", ctx.Func);
     auto value = &*ctx.Func->arg_begin();

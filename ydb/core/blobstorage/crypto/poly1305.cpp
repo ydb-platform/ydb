@@ -132,7 +132,7 @@ poly1305_donna_atmost15bytes:
 #if (!defined(_win_) && !defined(_arm64_))
 constexpr size_t Poly1305::KEY_SIZE;
 constexpr size_t Poly1305::MAC_SIZE;
-#endif 
+#endif
 
 void Poly1305::SetKey(const ui8* key, size_t size)
 {

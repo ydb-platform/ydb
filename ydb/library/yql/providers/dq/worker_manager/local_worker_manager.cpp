@@ -1,14 +1,14 @@
 #include "local_worker_manager.h"
-#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h> 
+#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 
-#include <ydb/library/yql/providers/dq/actors/actor_helpers.h> 
-#include <ydb/library/yql/providers/dq/actors/compute_actor.h> 
-#include <ydb/library/yql/providers/dq/actors/worker_actor.h> 
-#include <ydb/library/yql/providers/dq/runtime/runtime_data.h> 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h> 
-#include <ydb/library/yql/dq/common/dq_resource_quoter.h> 
+#include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
+#include <ydb/library/yql/providers/dq/actors/compute_actor.h>
+#include <ydb/library/yql/providers/dq/actors/worker_actor.h>
+#include <ydb/library/yql/providers/dq/runtime/runtime_data.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
+#include <ydb/library/yql/dq/common/dq_resource_quoter.h>
 
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h> 
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/actors/core/hfunc.h>
@@ -268,7 +268,7 @@ private:
                     actor.Release(), createComputeActor ? NYql::NDq::TEvDq::TEvAbortExecution::Unavailable("Aborted by LWM").Release() : nullptr
                 ));
             }
- 
+
             Options.Counters.ActiveWorkers->Add(count);
         }
 
@@ -292,12 +292,12 @@ private:
 
     void FreeGroup(ui64 id, NActors::TActorId sender = NActors::TActorId()) {
         YQL_LOG(DEBUG) << "Free Group " << id;
-        auto it = AllocatedWorkers.find(id); 
-        if (it != AllocatedWorkers.end()) { 
+        auto it = AllocatedWorkers.find(id);
+        if (it != AllocatedWorkers.end()) {
             for (const auto& actorId : it->second.WorkerActors) {
-                UnregisterChild(actorId); 
+                UnregisterChild(actorId);
             }
- 
+
             if (sender) {
                 Y_VERIFY(it->second.Sender == sender);
             }

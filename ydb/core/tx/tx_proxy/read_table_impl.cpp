@@ -10,8 +10,8 @@
 #include <ydb/core/scheme/scheme_borders.h>
 #include <ydb/core/engine/mkql_proto.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
-#include <ydb/library/yql/public/issue/yql_issue_manager.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/yql_issue_manager.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

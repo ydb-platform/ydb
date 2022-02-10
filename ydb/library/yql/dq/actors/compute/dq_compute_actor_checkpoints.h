@@ -4,7 +4,7 @@
 #include "dq_compute_actor_sinks.h"
 #include "retry_queue.h"
 
-#include <ydb/library/yql/dq/common/dq_common.h> 
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <library/cpp/actors/core/log.h>
 

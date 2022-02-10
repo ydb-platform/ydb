@@ -1,19 +1,19 @@
-package NKikimrServices; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-// 256-whatever range 
-// add each service here 
-enum EServiceKikimr { 
+package NKikimrServices;
+option java_package = "ru.yandex.kikimr.proto";
+
+// 256-whatever range
+// add each service here
+enum EServiceKikimr {
     // This value is reserved boundary. Is must not be aliased with any values
     // TODO: use reseved values upon protobuf update
     // KIKIMR_START = 256;
 
-    BLOBSTORAGE = 257; 
-    STATESTORAGE = 258; 
+    BLOBSTORAGE = 257;
+    STATESTORAGE = 258;
     RESOURCE_BROKER = 259;
 
-    // BLOBSTORAGE section 
-    BS_SKELETON = 260; 
+    // BLOBSTORAGE section
+    BS_SKELETON = 260;
     BS_VDISK_BLOCK = 261;
     BS_VDISK_GC = 262;
     BS_VDISK_GET = 263;
@@ -60,7 +60,7 @@ enum EServiceKikimr {
     BS_LOGCUTTER = 297;
     BS_VDISK_CHUNKS = 299;
 
-    // SCHEMESHARD section 
+    // SCHEMESHARD section
     SCHEMESHARD_DESCRIBE = 295;
     FLAT_TX_SCHEMESHARD = 296;
     SHEME_SHARD = 700; // stillborn tag
@@ -74,18 +74,18 @@ enum EServiceKikimr {
     // BLOBSTORAGE again
     BS_HANDOFF = 298;
 
-    // HIVE section 
-    HIVE = 300; 
-    LOCAL = 301; 
-    BOOTSTRAPPER = 302; 
+    // HIVE section
+    HIVE = 300;
+    LOCAL = 301;
+    BOOTSTRAPPER = 302;
     TENANT_POOL = 303;
     LABELS_MAINTAINER = 305;
 
-    // TABLET section 
-    TABLET_EXECUTOR = 310; 
-    TABLET_MAIN = 311; 
-    TABLET_DATABASE = 312; 
-    TABLET_RESOLVER = 313; 
+    // TABLET section
+    TABLET_EXECUTOR = 310;
+    TABLET_MAIN = 311;
+    TABLET_DATABASE = 312;
+    TABLET_RESOLVER = 313;
     TABLET_SAUSAGECACHE = 314;
     TABLET_FLATEX = 315;
     TABLET_FLATBOOT = 316;
@@ -96,57 +96,57 @@ enum EServiceKikimr {
     SAUSAGE_BIO = 669;
     FAKE_ENV = 670;
 
-    // PIPE section 
-    PIPE_CLIENT = 320; 
+    // PIPE section
+    PIPE_CLIENT = 320;
     PIPE_SERVER = 321;
 
-    // DUMMY section 
-    TX_DUMMY = 330; 
+    // DUMMY section
+    TX_DUMMY = 330;
 
-    // MINIKQL section 
-    MINIKQL_ENGINE = 340; 
+    // MINIKQL section
+    MINIKQL_ENGINE = 340;
     KQP_TASKS_RUNNER = 341;
 
     // JOBRUNNER section - deprecated, left for compatibility with existing logger configuration
-    JOBRUNNER = 350; 
-    JOBRUNNER_PROXY = 351; 
-    JOBRUNNER_CONTRACTOR = 352; 
-    JOB_POOL_MANAGER = 353; 
+    JOBRUNNER = 350;
+    JOBRUNNER_PROXY = 351;
+    JOBRUNNER_CONTRACTOR = 352;
+    JOB_POOL_MANAGER = 353;
     FLAT_JOBRUNNER_POOL_MANAGER = 354;
 
-    // EXECUTION_SERVICE section 
+    // EXECUTION_SERVICE section
     EXECUTION_SERVICE = 360; // deprecated, left for compatibility reasons
     EXECUTION_SERVICE_PROXY = 361; // deprecated, left for compatibility reasons
     KWCALC_PROXY = 362; // deprecated, left for compatibility reasons
     KWCALC_PROXY_WORKER = 363; // deprecated, left for compatibility reasons
-    YQL_EXECUTION = 364; 
-    YAMR_PROXY = 365; 
+    YQL_EXECUTION = 364;
+    YAMR_PROXY = 365;
     YQL_KIKIMR_PROXY = 366;
 
-    // TRIGGER section 
-    TRIGGER = 370; 
+    // TRIGGER section
+    TRIGGER = 370;
 
-    // COORDINATOR section 
-    TX_COORDINATOR = 380; 
-    TX_COORDINATOR_PRIVATE = 381; 
-    TX_COORDINATOR_MEDIATOR_QUEUE = 382; 
+    // COORDINATOR section
+    TX_COORDINATOR = 380;
+    TX_COORDINATOR_PRIVATE = 381;
+    TX_COORDINATOR_MEDIATOR_QUEUE = 382;
 
-    // MEDIATOR section 
-    TX_MEDIATOR = 390; 
-    TX_MEDIATOR_PRIVATE = 391; 
-    TX_MEDIATOR_EXEC_QUEUE = 392; 
-    TX_MEDIATOR_TABLETQUEUE = 393; 
-    TX_MEDIATOR_TIMECAST = 394; 
+    // MEDIATOR section
+    TX_MEDIATOR = 390;
+    TX_MEDIATOR_PRIVATE = 391;
+    TX_MEDIATOR_EXEC_QUEUE = 392;
+    TX_MEDIATOR_TABLETQUEUE = 393;
+    TX_MEDIATOR_TIMECAST = 394;
 
-    // PROXY section 
-    TX_PROXY = 400; 
-    TX_PROXY_SCHEME_CACHE = 401; 
+    // PROXY section
+    TX_PROXY = 400;
+    TX_PROXY_SCHEME_CACHE = 401;
     MSGBUS_PROXY = 403;
     TX_ALLOCATOR = 402;
     TX_ALLOCATOR_CLIENT = 404;
     LONG_TX_SERVICE = 405;
 
-    LOGGER = 410; 
+    LOGGER = 410;
     MSGBUS_TRACER = 411;
     MSGBUS_REQUEST = 412; // deprecated, use RPC_REQUEST
     GRPC_SERVER = 413;
@@ -260,8 +260,8 @@ enum EServiceKikimr {
 
     PERSQUEUE_CLUSTER_TRACKER = 712;
 
-    YQL_PROXY = 713; 
- 
+    YQL_PROXY = 713;
+
     YQL_PRIVATE_PROXY = 714;
 
     YQL_NODES_MANAGER = 715;
@@ -303,7 +303,7 @@ enum EServiceKikimr {
 
     // Replication
     REPLICATION_CONTROLLER = 1200;
-}; 
+};
 
 message TActivity {
 
@@ -812,16 +812,16 @@ message TActivity {
         KQP_DATA_EXECUTER_ACTOR = 493;
         KQP_NODE_SERVICE = 494;
         TX_DATASHARD_SOURCE_OFFSETS_CLIENT = 500;
-        YQL_PROXY_ACTOR = 510; 
+        YQL_PROXY_ACTOR = 510;
         TEST_SHARD_ACTOR = 511;
         FRONT_TEST_SHARD_REQUEST = 512;
         STATE_SERVER_INTERFACE_ACTOR = 513;
         IAM_TOKEN_SERVICE_ACTOR = 514;
-        YQL_EXECUTE_PLAN_ACTOR = 515; 
-        YQL_DB_POOL_ACTOR = 516; 
-        YQL_RUN_ACTOR = 517; 
-        YQL_GET_HISTORY_REQUEST_ACTOR = 518; 
-        YQL_GET_RESULT_DATA_ACTOR = 519; 
+        YQL_EXECUTE_PLAN_ACTOR = 515;
+        YQL_DB_POOL_ACTOR = 516;
+        YQL_RUN_ACTOR = 517;
+        YQL_GET_HISTORY_REQUEST_ACTOR = 518;
+        YQL_GET_RESULT_DATA_ACTOR = 519;
         BLOB_CACHE_ACTOR = 520;
         MONITORING_SERVICE = 521;
         MONITORING_REQUEST = 522;

@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/tx/datashard/datashard_impl.h>
 
-#include <ydb/library/yql/minikql/mkql_node.h> 
+#include <ydb/library/yql/minikql/mkql_node.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

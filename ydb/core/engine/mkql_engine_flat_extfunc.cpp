@@ -1,80 +1,80 @@
-#include "mkql_engine_flat_host.h" 
-#include "mkql_engine_flat_impl.h" 
-#include "mkql_keys.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h> 
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h> 
- 
-#include <util/generic/cast.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
-namespace { 
+#include "mkql_engine_flat_host.h"
+#include "mkql_engine_flat_impl.h"
+#include "mkql_keys.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
+#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+
+#include <util/generic/cast.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+namespace {
 
     TCell ExtractCell(TRuntimeNode value, const TTypeEnvironment& env) {
-        TRuntimeNode data = value; 
-        if (value.GetStaticType()->IsOptional()) { 
-            auto opt = AS_VALUE(TOptionalLiteral, value); 
-            if (!opt->HasItem()) { 
-                return TCell(); 
-            } 
- 
-            data = opt->GetItem(); 
-        } 
- 
+        TRuntimeNode data = value;
+        if (value.GetStaticType()->IsOptional()) {
+            auto opt = AS_VALUE(TOptionalLiteral, value);
+            if (!opt->HasItem()) {
+                return TCell();
+            }
+
+            data = opt->GetItem();
+        }
+
         const auto literal = AS_VALUE(TDataLiteral, data);
         return MakeCell(literal->GetType()->GetSchemeType(), literal->AsValue(), env, false);
-    } 
- 
+    }
+
     void ExtractRow(TVector<TCell>& row, TTupleLiteral* tupleNode, const TTypeEnvironment& env) {
-        row.resize(tupleNode->GetValuesCount()); 
-        for (ui32 i = 0; i < tupleNode->GetValuesCount(); ++i) { 
-            auto value = tupleNode->GetValue(i); 
+        row.resize(tupleNode->GetValuesCount());
+        for (ui32 i = 0; i < tupleNode->GetValuesCount(); ++i) {
+            auto value = tupleNode->GetValue(i);
             row[i] = ExtractCell(value, env);
-        } 
-    } 
- 
+        }
+    }
+
     TCell ExtractCell(const NUdf::TUnboxedValue& value, TType* type, const TTypeEnvironment& env) {
         if (type->IsOptional() && !value) {
             return TCell();
         }
- 
+
         const auto dataType = type->IsOptional()
             ? AS_TYPE(TDataType, AS_TYPE(TOptionalType, type)->GetItemType()) : AS_TYPE(TDataType, type);
- 
+
         return MakeCell(dataType->GetSchemeType(), value, env);
     }
 
     void ExtractRow(const NUdf::TUnboxedValue& row, TTupleType* rowType, TVector<TCell>& cells, const TTypeEnvironment& env) {
         cells.resize(rowType->GetElementsCount());
-        for (ui32 i = 0; i < rowType->GetElementsCount(); ++i) { 
+        for (ui32 i = 0; i < rowType->GetElementsCount(); ++i) {
             cells[i] = ExtractCell(row.GetElement(i), rowType->GetElementType(i), env);
-        } 
-    } 
- 
-    class TAbortHolder : public TComputationValue<TAbortHolder> { 
-    public: 
-        TAbortHolder(TMemoryUsageInfo* memInfo) 
-            : TComputationValue(memInfo) 
-        { 
-        } 
+        }
+    }
+
+    class TAbortHolder : public TComputationValue<TAbortHolder> {
+    public:
+        TAbortHolder(TMemoryUsageInfo* memInfo)
+            : TComputationValue(memInfo)
+        {
+        }
     private:
         void Apply(NUdf::IApplyContext& applyContext) const override {
-            auto& engineCtx = *CheckedCast<TEngineFlatApplyContext*>(&applyContext); 
-            engineCtx.IsAborted = true; 
-        } 
-    }; 
- 
-    class TEmptyRangeHolder : public TComputationValue<TEmptyRangeHolder> { 
-    public: 
+            auto& engineCtx = *CheckedCast<TEngineFlatApplyContext*>(&applyContext);
+            engineCtx.IsAborted = true;
+        }
+    };
+
+    class TEmptyRangeHolder : public TComputationValue<TEmptyRangeHolder> {
+    public:
         TEmptyRangeHolder(const THolderFactory& holderFactory)
             : TComputationValue(&holderFactory.GetMemInfo())
             , EmptyContainer(holderFactory.GetEmptyContainer())
-        { 
-        } 
+        {
+        }
     private:
         NUdf::TUnboxedValue GetElement(ui32 index) const override {
             switch (index) {
@@ -88,23 +88,23 @@ namespace {
         }
 
         const NUdf::TUnboxedValue EmptyContainer;
-    }; 
- 
-    class TResultWrapper : public TMutableComputationNode<TResultWrapper> { 
+    };
+
+    class TResultWrapper : public TMutableComputationNode<TResultWrapper> {
         typedef TMutableComputationNode<TResultWrapper> TBaseComputation;
-    public: 
-        class TResult : public TComputationValue<TResult> { 
-        public: 
-            TResult( 
-                TMemoryUsageInfo* memInfo, 
-                const NUdf::TUnboxedValue& payload, 
-                const TStringBuf& label) 
-                : TComputationValue(memInfo) 
+    public:
+        class TResult : public TComputationValue<TResult> {
+        public:
+            TResult(
+                TMemoryUsageInfo* memInfo,
+                const NUdf::TUnboxedValue& payload,
+                const TStringBuf& label)
+                : TComputationValue(memInfo)
                 , Payloads(1, payload)
                 , Labels(1, label)
-            { 
-            } 
- 
+            {
+            }
+
             TResult(
                 TMemoryUsageInfo* memInfo,
                 const TVector<NUdf::TUnboxedValue>& payloads,
@@ -118,40 +118,40 @@ namespace {
 
         private:
             void Apply(NUdf::IApplyContext& applyContext) const override {
-                auto& engineCtx = *CheckedCast<TEngineFlatApplyContext*>(&applyContext); 
+                auto& engineCtx = *CheckedCast<TEngineFlatApplyContext*>(&applyContext);
                 for (ui32 i = 0; i < Payloads.size(); ++i) {
                     (*engineCtx.ResultValues)[Labels[i]] = Payloads[i];
                 }
-            } 
- 
+            }
+
             TVector<NUdf::TUnboxedValue> Payloads;
             TVector<TStringBuf> Labels;
-        }; 
- 
-        TResultWrapper( 
+        };
+
+        TResultWrapper(
             TComputationMutables& mutables,
-            const TStringBuf& label, 
-            IComputationNode* payload) 
-            : 
+            const TStringBuf& label,
+            IComputationNode* payload)
+            :
             TBaseComputation(mutables),
-            Label(label), 
-            Payload(payload) 
-        { 
-        } 
- 
+            Label(label),
+            Payload(payload)
+        {
+        }
+
         NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
             return ctx.HolderFactory.Create<TResult>(Payload->GetValue(ctx), Label);
-        } 
- 
+        }
+
     private:
         void RegisterDependencies() const final {
             DependsOn(Payload);
-        } 
- 
-        TStringBuf Label; 
-        IComputationNode* const Payload; 
-    }; 
- 
+        }
+
+        TStringBuf Label;
+        IComputationNode* const Payload;
+    };
+
     class TAcquireLocksWrapper : public TMutableComputationNode<TAcquireLocksWrapper> {
         typedef TMutableComputationNode<TAcquireLocksWrapper> TBaseComputation;
     public:
@@ -193,182 +193,182 @@ namespace {
         const NUdf::TUnboxedValue Diagnostics;
     };
 
-    IComputationNode* WrapAsVoid(const TComputationNodeFactoryContext& ctx) { 
+    IComputationNode* WrapAsVoid(const TComputationNodeFactoryContext& ctx) {
         return ctx.NodeFactory.CreateImmutableNode(NUdf::TUnboxedValue::Void());
-    } 
- 
-    class TDummyWrapper : public TMutableComputationNode<TDummyWrapper> { 
+    }
+
+    class TDummyWrapper : public TMutableComputationNode<TDummyWrapper> {
         typedef TMutableComputationNode<TDummyWrapper> TBaseComputation;
-    public: 
+    public:
         TDummyWrapper(TComputationMutables& mutables)
             : TBaseComputation(mutables)
         {}
 
         NUdf::TUnboxedValuePod DoCalculate(TComputationContext&) const {
             Y_FAIL("Failed to build value for dummy node");
-        } 
+        }
     private:
         void RegisterDependencies() const final {}
-    }; 
- 
-    class TEraseRowWrapper : public TMutableComputationNode<TEraseRowWrapper> { 
+    };
+
+    class TEraseRowWrapper : public TMutableComputationNode<TEraseRowWrapper> {
         typedef TMutableComputationNode<TEraseRowWrapper> TBaseComputation;
-    public: 
-        friend class TResult; 
- 
-        class TResult : public TComputationValue<TResult> { 
-        public: 
+    public:
+        friend class TResult;
+
+        class TResult : public TComputationValue<TResult> {
+        public:
             TResult(TMemoryUsageInfo* memInfo, const TEraseRowWrapper* owner, const NUdf::TUnboxedValue& row)
-                : TComputationValue(memInfo) 
-                , Owner(owner) 
-                , Row(row) 
-            { 
-            } 
- 
+                : TComputationValue(memInfo)
+                , Owner(owner)
+                , Row(row)
+            {
+            }
+
         private:
             void Apply(NUdf::IApplyContext& applyContext) const override {
-                auto& engineCtx = *CheckedCast<TEngineFlatApplyContext*>(&applyContext); 
+                auto& engineCtx = *CheckedCast<TEngineFlatApplyContext*>(&applyContext);
                 TVector<TCell> row;
                 ExtractRow(Row, Owner->RowType, row, *engineCtx.Env);
- 
-                if (!engineCtx.Host->IsPathErased(Owner->TableId) && engineCtx.Host->IsMyKey(Owner->TableId, row)) { 
-                    engineCtx.Host->EraseRow(Owner->TableId, row); 
-                } 
-            } 
- 
+
+                if (!engineCtx.Host->IsPathErased(Owner->TableId) && engineCtx.Host->IsMyKey(Owner->TableId, row)) {
+                    engineCtx.Host->EraseRow(Owner->TableId, row);
+                }
+            }
+
             const TEraseRowWrapper *const Owner;
             const NUdf::TUnboxedValue Row;
-        }; 
- 
+        };
+
         TEraseRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row)
             : TBaseComputation(mutables)
             , TableId(tableId)
-            , RowType(rowType) 
-            , Row(row) 
-        { 
-        } 
- 
+            , RowType(rowType)
+            , Row(row)
+        {
+        }
+
         NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
             return ctx.HolderFactory.Create<TResult>(this, Row->GetValue(ctx));
-        } 
- 
+        }
+
     private:
         void RegisterDependencies() const final {
             DependsOn(Row);
-        } 
- 
-        const TTableId TableId; 
-        TTupleType* const RowType; 
-        IComputationNode* const Row; 
-    }; 
- 
-    class TUpdateRowWrapper : public TMutableComputationNode<TUpdateRowWrapper> { 
+        }
+
+        const TTableId TableId;
+        TTupleType* const RowType;
+        IComputationNode* const Row;
+    };
+
+    class TUpdateRowWrapper : public TMutableComputationNode<TUpdateRowWrapper> {
         typedef TMutableComputationNode<TUpdateRowWrapper> TBaseComputation;
-    public: 
-        friend class TResult; 
- 
-        class TResult : public TComputationValue<TResult> { 
-        public: 
+    public:
+        friend class TResult;
+
+        class TResult : public TComputationValue<TResult> {
+        public:
             TResult(TMemoryUsageInfo* memInfo, const TUpdateRowWrapper* owner,
                 NUdf::TUnboxedValue&& row,
                 NUdf::TUnboxedValue&& update)
-                : TComputationValue(memInfo) 
-                , Owner(owner) 
+                : TComputationValue(memInfo)
+                , Owner(owner)
                 , Row(std::move(row))
                 , Update(std::move(update))
-            { 
-            } 
- 
+            {
+            }
+
         private:
             void Apply(NUdf::IApplyContext& applyContext) const override {
-                auto& engineCtx = *CheckedCast<TEngineFlatApplyContext*>(&applyContext); 
+                auto& engineCtx = *CheckedCast<TEngineFlatApplyContext*>(&applyContext);
                 TVector<TCell> row;
                 ExtractRow(Row, Owner->RowType, row, *engineCtx.Env);
- 
-                if (!engineCtx.Host->IsPathErased(Owner->TableId) && engineCtx.Host->IsMyKey(Owner->TableId, row)) { 
-                    auto updateStruct = Owner->UpdateStruct; 
+
+                if (!engineCtx.Host->IsPathErased(Owner->TableId) && engineCtx.Host->IsMyKey(Owner->TableId, row)) {
+                    auto updateStruct = Owner->UpdateStruct;
                     TVector<IEngineFlatHost::TUpdateCommand> commands(updateStruct->GetValuesCount());
-                    for (ui32 i = 0; i < updateStruct->GetValuesCount(); ++i) { 
-                        auto& cmd = commands[i]; 
-                        auto columnIdBuf = updateStruct->GetType()->GetMemberName(i); 
-                        cmd.Column = FromString<ui32>(columnIdBuf); 
-                        auto type = updateStruct->GetType()->GetMemberType(i); 
-                        if (type->IsVoid()) { 
-                            // erase 
-                            cmd.Operation = TKeyDesc::EColumnOperation::Set; 
-                        } 
-                        else if (!type->IsTuple()) { 
-                            // write 
-                            cmd.Operation = TKeyDesc::EColumnOperation::Set; 
+                    for (ui32 i = 0; i < updateStruct->GetValuesCount(); ++i) {
+                        auto& cmd = commands[i];
+                        auto columnIdBuf = updateStruct->GetType()->GetMemberName(i);
+                        cmd.Column = FromString<ui32>(columnIdBuf);
+                        auto type = updateStruct->GetType()->GetMemberType(i);
+                        if (type->IsVoid()) {
+                            // erase
+                            cmd.Operation = TKeyDesc::EColumnOperation::Set;
+                        }
+                        else if (!type->IsTuple()) {
+                            // write
+                            cmd.Operation = TKeyDesc::EColumnOperation::Set;
                             cmd.Value = ExtractCell(Update.GetElement(i), type, *engineCtx.Env);
-                        } else { 
-                            // inplace update 
-                            cmd.Operation = TKeyDesc::EColumnOperation::InplaceUpdate; 
+                        } else {
+                            // inplace update
+                            cmd.Operation = TKeyDesc::EColumnOperation::InplaceUpdate;
                             auto item = Update.GetElement(i);
                             auto mode = item.GetElement(0);
-                            auto modeBuf = mode.AsStringRef(); 
-                            cmd.InplaceUpdateMode = (EInplaceUpdateMode)*(const ui8*)modeBuf.Data(); 
+                            auto modeBuf = mode.AsStringRef();
+                            cmd.InplaceUpdateMode = (EInplaceUpdateMode)*(const ui8*)modeBuf.Data();
                             cmd.Value = ExtractCell(item.GetElement(1),
                                 AS_TYPE(TTupleType, type)->GetElementType(1), *engineCtx.Env);
-                        } 
-                    } 
- 
-                    engineCtx.Host->UpdateRow(Owner->TableId, row, commands); 
-                } 
-            } 
- 
+                        }
+                    }
+
+                    engineCtx.Host->UpdateRow(Owner->TableId, row, commands);
+                }
+            }
+
             const TUpdateRowWrapper *const Owner;
             const NUdf::TUnboxedValue Row;
             const NUdf::TUnboxedValue Update;
-        }; 
- 
+        };
+
         TUpdateRowWrapper(TComputationMutables& mutables, const TTableId& tableId, TTupleType* rowType, IComputationNode* row,
-            TStructLiteral* updateStruct, IComputationNode* update) 
+            TStructLiteral* updateStruct, IComputationNode* update)
             : TBaseComputation(mutables)
             , TableId(tableId)
-            , RowType(rowType) 
-            , Row(row) 
-            , UpdateStruct(updateStruct) 
-            , Update(update) 
-        { 
-        } 
- 
+            , RowType(rowType)
+            , Row(row)
+            , UpdateStruct(updateStruct)
+            , Update(update)
+        {
+        }
+
         NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
             return ctx.HolderFactory.Create<TResult>(this, Row->GetValue(ctx), Update->GetValue(ctx));
-        } 
- 
+        }
+
     private:
         void RegisterDependencies() const final {
             DependsOn(Row);
             DependsOn(Update);
-        } 
- 
-        const TTableId TableId; 
-        TTupleType* const RowType; 
-        IComputationNode* const Row; 
-        TStructLiteral* const UpdateStruct; 
-        IComputationNode* const Update; 
-    }; 
- 
+        }
+
+        const TTableId TableId;
+        TTupleType* const RowType;
+        IComputationNode* const Row;
+        TStructLiteral* const UpdateStruct;
+        IComputationNode* const Update;
+    };
+
     IComputationNode* WrapAsDummy(TComputationMutables& mutables) {
         return new TDummyWrapper(mutables);
-    } 
- 
-    IComputationNode* WrapResult(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-        MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args"); 
- 
-        const auto& labelInput = callable.GetInput(0); 
-        MKQL_ENSURE(labelInput.IsImmediate() && labelInput.GetNode()->GetType()->IsData(), "Expected immediate data"); 
- 
-        const auto& labelData = static_cast<const TDataLiteral&>(*labelInput.GetNode()); 
-        MKQL_ENSURE(labelData.GetType()->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string"); 
- 
+    }
+
+    IComputationNode* WrapResult(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+        MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
+
+        const auto& labelInput = callable.GetInput(0);
+        MKQL_ENSURE(labelInput.IsImmediate() && labelInput.GetNode()->GetType()->IsData(), "Expected immediate data");
+
+        const auto& labelData = static_cast<const TDataLiteral&>(*labelInput.GetNode());
+        MKQL_ENSURE(labelData.GetType()->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string");
+
         TStringBuf label = labelData.AsValue().AsStringRef();
- 
-        auto payloadNode = LocateNode(ctx.NodeLocator, callable, 1); 
+
+        auto payloadNode = LocateNode(ctx.NodeLocator, callable, 1);
         return new TResultWrapper(ctx.Mutables, label, payloadNode);
-    } 
- 
+    }
+
     IComputationNode* WrapAcquireLocks(TCallable& callable, const TComputationNodeFactoryContext& ctx,
         const TVector<IEngineFlat::TTxLock>& txLocks)
     {
@@ -378,7 +378,7 @@ namespace {
         MKQL_ENSURE(lockTxIdInput.IsImmediate() && lockTxIdInput.GetNode()->GetType()->IsData(), "Expected immediate data");
 
         const auto& lockTxIdData = static_cast<const TDataLiteral&>(*lockTxIdInput.GetNode());
-        MKQL_ENSURE(lockTxIdData.GetType()->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64"); 
+        MKQL_ENSURE(lockTxIdData.GetType()->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
 
         auto structType = GetTxLockType(ctx.Env, false);
 
@@ -445,16 +445,16 @@ namespace {
         return new TDiagnosticsWrapper(ctx.Mutables, std::move(diagList));
     }
 
-    IComputationNode* WrapAbort(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-        MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected zero args"); 
+    IComputationNode* WrapAbort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+        MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected zero args");
         return ctx.NodeFactory.CreateImmutableNode(NUdf::TUnboxedValuePod(new TAbortHolder(&ctx.HolderFactory.GetMemInfo())));
-    } 
- 
-    IComputationNode* WrapStepTxId(TCallable& callable, const TComputationNodeFactoryContext& ctx, 
-        const std::pair<ui64, ui64>& stepTxId) { 
-        MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected zero args"); 
+    }
 
-        auto ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, ctx.Env); 
+    IComputationNode* WrapStepTxId(TCallable& callable, const TComputationNodeFactoryContext& ctx,
+        const std::pair<ui64, ui64>& stepTxId) {
+        MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected zero args");
+
+        auto ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, ctx.Env);
         TVector<TType*> tupleTypes(2, ui64Type);
         auto tupleType = TTupleType::Create(tupleTypes.size(), tupleTypes.data(), ctx.Env);
 
@@ -464,8 +464,8 @@ namespace {
         items[1] = NUdf::TUnboxedValuePod(stepTxId.second);
 
         return ctx.NodeFactory.CreateImmutableNode(std::move(tuple));
-    } 
- 
+    }
+
     IComputationNode* WrapConcatenatedResults(TCallable& callable, TIncomingResults::const_iterator resultIt,
         const TComputationNodeFactoryContext& ctx)
     {
@@ -473,7 +473,7 @@ namespace {
         MKQL_ENSURE(returnType->IsList(), "Expected list type");
 
         TUnboxedValueVector lists;
-        TValuePacker listPacker(false, returnType); 
+        TValuePacker listPacker(false, returnType);
         for (const auto& result : resultIt->second) {
             lists.emplace_back(listPacker.Unpack(result, ctx.HolderFactory));
         }
@@ -481,8 +481,8 @@ namespace {
         return ctx.NodeFactory.CreateImmutableNode(ctx.HolderFactory.Create<TExtendListValue>(std::move(lists)));
     }
 
-    IComputationNode* WrapMergedSelectRow(TCallable& callable, TIncomingResults& results, 
-        const THashSet<ui32>& localReadCallables, IEngineFlatHost* host, const TComputationNodeFactoryContext& ctx) 
+    IComputationNode* WrapMergedSelectRow(TCallable& callable, TIncomingResults& results,
+        const THashSet<ui32>& localReadCallables, IEngineFlatHost* host, const TComputationNodeFactoryContext& ctx)
     {
         TUnboxedValueVector values;
         if (localReadCallables.contains(callable.GetUniqueId())) {
@@ -491,9 +491,9 @@ namespace {
 
         auto returnType = callable.GetType()->GetReturnType();
         MKQL_ENSURE(returnType->IsOptional(), "Expected optional type");
-        TValuePacker valuePacker(false, returnType); 
+        TValuePacker valuePacker(false, returnType);
 
-        auto resultIt = results.find(callable.GetUniqueId()); 
+        auto resultIt = results.find(callable.GetUniqueId());
         if (resultIt != results.end()) {
             for (auto& result : resultIt->second) {
                 values.push_back(valuePacker.Unpack(result, ctx.HolderFactory));
@@ -501,20 +501,20 @@ namespace {
         }
 
         if (values.empty()) {
-            return ctx.NodeFactory.CreateOptionalNode(nullptr); 
-        } 
- 
+            return ctx.NodeFactory.CreateOptionalNode(nullptr);
+        }
+
         auto choosenValue = std::move(values.front());
         for (size_t i = 1; i < values.size(); ++i) {
             if (auto& value = values[i]) {
                 MKQL_ENSURE(!choosenValue, "Multiple non-empty results for SelectRow");
                 choosenValue = std::move(value);
-            } 
-        } 
- 
+            }
+        }
+
         return ctx.NodeFactory.CreateImmutableNode(std::move(choosenValue));
-    } 
- 
+    }
+
     class TPartialList : public TCustomListValue {
     public:
         class TIterator : public TComputationValue<TIterator> {
@@ -570,8 +570,8 @@ namespace {
         ui64 ItemsLimit;
     };
 
-    IComputationNode* WrapMergedSelectRange(TCallable& callable, TIncomingResults& results, 
-        const THashSet<ui32>& localReadCallables, IEngineFlatHost* host, const TComputationNodeFactoryContext& ctx, 
+    IComputationNode* WrapMergedSelectRange(TCallable& callable, TIncomingResults& results,
+        const THashSet<ui32>& localReadCallables, IEngineFlatHost* host, const TComputationNodeFactoryContext& ctx,
         const TFlatEngineStrings& strings)
     {
         TUnboxedValueVector values;
@@ -581,9 +581,9 @@ namespace {
 
         auto returnType = GetActualReturnType(callable, ctx.Env, strings);
         MKQL_ENSURE(returnType->IsStruct(), "Expected struct type");
-        TValuePacker valuePacker(false, returnType); 
+        TValuePacker valuePacker(false, returnType);
 
-        auto resultIt = results.find(callable.GetUniqueId()); 
+        auto resultIt = results.find(callable.GetUniqueId());
         if (resultIt != results.end()) {
             for (auto& result : resultIt->second) {
                 values.push_back(valuePacker.Unpack(result, ctx.HolderFactory));
@@ -592,18 +592,18 @@ namespace {
 
         if (values.empty()) {
             return ctx.NodeFactory.CreateImmutableNode(NUdf::TUnboxedValuePod(new TEmptyRangeHolder(ctx.HolderFactory)));
-        } 
- 
+        }
+
         if (values.size() == 1) {
             return ctx.NodeFactory.CreateImmutableNode(std::move(values.front()));
-        } 
- 
-        bool truncatedAny = false; 
-        ui32 keyColumnsCount = 0; 
+        }
+
+        bool truncatedAny = false;
+        ui32 keyColumnsCount = 0;
         TVector<NUdf::TDataTypeId> types;
- 
+
         using TPartKey = std::tuple<const TCell*, NUdf::TUnboxedValue, ui64, ui64, NUdf::TUnboxedValue, bool>;
- 
+
         std::vector<TPartKey> parts;
         std::vector<TSerializedCellVec> dataBuffers;
         parts.reserve(values.size());
@@ -620,64 +620,64 @@ namespace {
             ui64 sizeInBytes = value.GetElement(3).Get<ui64>();
 
             TString firstKey(firstKeyValue.AsStringRef());
-            truncatedAny = truncatedAny || truncated; 
+            truncatedAny = truncatedAny || truncated;
 
             ui64 itemsCount = list.GetListLength();
             if (itemsCount == 0) {
-                continue; 
-            } 
- 
+                continue;
+            }
+
             MKQL_ENSURE(firstKey.size() >= sizeof(ui32), "Corrupted key");
             ui32 partKeyColumnsCount = ReadUnaligned<ui32>(firstKey.data());
-            ui32 typesSize = sizeof(ui32) + partKeyColumnsCount * sizeof(NUdf::TDataTypeId); 
+            ui32 typesSize = sizeof(ui32) + partKeyColumnsCount * sizeof(NUdf::TDataTypeId);
             MKQL_ENSURE(firstKey.size() >= typesSize, "Corrupted key");
             const char* partTypes = firstKey.data() + sizeof(ui32);
-            if (!keyColumnsCount) { 
-                keyColumnsCount = partKeyColumnsCount; 
+            if (!keyColumnsCount) {
+                keyColumnsCount = partKeyColumnsCount;
                 for (ui32 i = 0; i < partKeyColumnsCount; ++i) {
                     auto partType = ReadUnaligned<NUdf::TDataTypeId>(partTypes + i * sizeof(NUdf::TDataTypeId));
                     types.push_back(partType);
                 }
-            } else { 
-                MKQL_ENSURE(keyColumnsCount == partKeyColumnsCount, "Mismatch of key columns count"); 
-                for (ui32 i = 0; i < keyColumnsCount; ++i) { 
+            } else {
+                MKQL_ENSURE(keyColumnsCount == partKeyColumnsCount, "Mismatch of key columns count");
+                for (ui32 i = 0; i < keyColumnsCount; ++i) {
                     auto partType = ReadUnaligned<NUdf::TDataTypeId>(partTypes + i * sizeof(NUdf::TDataTypeId));
                     MKQL_ENSURE(partType == types[i], "Mismatch of key columns type");
-                } 
-            } 
- 
+                }
+            }
+
             dataBuffers.emplace_back(firstKey.substr(typesSize, firstKey.size() - typesSize));
             parts.emplace_back(nullptr, std::move(list), sizeInBytes, itemsCount, std::move(firstKeyValue), truncated);
-        } 
- 
-        for (ui32 i = 0; i < dataBuffers.size(); ++i) { 
+        }
+
+        for (ui32 i = 0; i < dataBuffers.size(); ++i) {
             std::get<0>(parts[i]) = dataBuffers[i].GetCells().data();
-        } 
- 
+        }
+
         bool reverse = false;
         if (callable.GetInputsCount() >= 11) {
             reverse = AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<bool>();
         }
 
-        Sort(parts, [&](const TPartKey& lhs, const TPartKey& rhs) { 
+        Sort(parts, [&](const TPartKey& lhs, const TPartKey& rhs) {
             if (reverse) {
                 return CompareTypedCellVectors(std::get<0>(rhs), std::get<0>(lhs), types.data(), keyColumnsCount) < 0;
             } else {
                 return CompareTypedCellVectors(std::get<0>(lhs), std::get<0>(rhs), types.data(), keyColumnsCount) < 0;
             }
-        }); 
- 
+        });
+
         ui64 itemsLimit = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui64>();
         ui64 bytesLimit = AS_VALUE(TDataLiteral, callable.GetInput(7))->AsValue().Get<ui64>();
- 
+
         TUnboxedValueVector resultLists;
         bool resultTruncated = false;
-        ui64 totalSize = 0; 
+        ui64 totalSize = 0;
         ui64 totalItems = 0;
-        for (auto& part : parts) { 
-            ui64 size = std::get<2>(part); 
+        for (auto& part : parts) {
+            ui64 size = std::get<2>(part);
             bool truncated = std::get<5>(part);
- 
+
             auto list = std::get<1>(part);
             ui64 items = std::get<3>(part);
             if (itemsLimit && itemsLimit < (items + totalItems)) {
@@ -687,9 +687,9 @@ namespace {
                     NUdf::TUnboxedValuePod listPart(new TPartialList(&ctx.HolderFactory.GetMemInfo(), std::move(list), itemsToFetch));
                     resultLists.emplace_back(std::move(listPart));
                 }
- 
+
                 break;
-            } 
+            }
 
             resultLists.emplace_back(std::move(list));
             totalSize += size;
@@ -712,8 +712,8 @@ namespace {
                 resultTruncated = true;
                 break;
             }
-        } 
- 
+        }
+
         if (truncatedAny) {
             MKQL_ENSURE(resultTruncated, "SelectRange merge: result not truncated while truncated parts are present");
         }
@@ -723,7 +723,7 @@ namespace {
         }
 
         auto resultList = ctx.HolderFactory.Create<TExtendListValue>(std::move(resultLists));
- 
+
         NUdf::TUnboxedValue* resultItems = nullptr;
         auto result = ctx.HolderFactory.CreateDirectArrayHolder(4, resultItems);
         resultItems[0] = std::move(resultList);
@@ -732,29 +732,29 @@ namespace {
         resultItems[3] = NUdf::TUnboxedValuePod(totalSize);
 
         return ctx.NodeFactory.CreateImmutableNode(std::move(result));
-    } 
- 
-    IComputationNode* WrapEraseRow(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-        MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arg"); 
- 
-        auto tableNode = callable.GetInput(0); 
-        const auto tableId = ExtractTableId(tableNode); 
-        auto tupleType = AS_TYPE(TTupleType, callable.GetInput(1)); 
- 
+    }
+
+    IComputationNode* WrapEraseRow(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+        MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arg");
+
+        auto tableNode = callable.GetInput(0);
+        const auto tableId = ExtractTableId(tableNode);
+        auto tupleType = AS_TYPE(TTupleType, callable.GetInput(1));
+
         return new TEraseRowWrapper(ctx.Mutables, tableId, tupleType,
-            LocateNode(ctx.NodeLocator, callable, 1)); 
-    } 
- 
+            LocateNode(ctx.NodeLocator, callable, 1));
+    }
+
     IComputationNode* WrapUpdateRow(TCallable& callable, const TComputationNodeFactoryContext& ctx, IEngineFlatHost* host) {
-        MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arg"); 
- 
-        auto tableNode = callable.GetInput(0); 
-        const auto tableId = ExtractTableId(tableNode); 
+        MKQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 arg");
+
+        auto tableNode = callable.GetInput(0);
+        const auto tableId = ExtractTableId(tableNode);
 
         auto tableInfo = host->GetTableInfo(tableId);
         MKQL_ENSURE(tableInfo, "Table not found: " << tableId.PathId.ToString());
 
-        auto tupleType = AS_TYPE(TTupleType, callable.GetInput(1)); 
+        auto tupleType = AS_TYPE(TTupleType, callable.GetInput(1));
         for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
             auto columnId = tableInfo->KeyColumns[i];
             const auto& column = tableInfo->Columns.at(columnId);
@@ -764,12 +764,12 @@ namespace {
             }
         }
 
-        auto structUpdate = AS_VALUE(TStructLiteral, callable.GetInput(2)); 
+        auto structUpdate = AS_VALUE(TStructLiteral, callable.GetInput(2));
         for (ui32 i = 0; i < structUpdate->GetValuesCount(); ++i) {
             auto columnId = FromString<ui32>(structUpdate->GetType()->GetMemberName(i));
             const auto& column = tableInfo->Columns.at(columnId);
             auto type = structUpdate->GetType()->GetMemberType(i);
- 
+
             if (type->IsTuple()) {
                 auto itemType = AS_TYPE(TTupleType, type);
                 if (column.NotNull) {
@@ -785,8 +785,8 @@ namespace {
         }
 
         return new TUpdateRowWrapper(ctx.Mutables, tableId, tupleType,
-            LocateNode(ctx.NodeLocator, callable, 1), structUpdate, LocateNode(ctx.NodeLocator, callable, 2)); 
-    } 
+            LocateNode(ctx.NodeLocator, callable, 1), structUpdate, LocateNode(ctx.NodeLocator, callable, 2));
+    }
 
     IComputationNode* WrapMergedTakeResults(TCallable& callable, TIncomingResults::const_iterator resultIt,
         const TComputationNodeFactoryContext& ctx)
@@ -795,7 +795,7 @@ namespace {
         MKQL_ENSURE(returnType->IsList(), "Expected list type");
 
         TUnboxedValueVector lists;
-        TValuePacker listPacker(false, returnType); 
+        TValuePacker listPacker(false, returnType);
         for (const auto& result : resultIt->second) {
             lists.emplace_back(listPacker.Unpack(result, ctx.HolderFactory));
         }
@@ -803,7 +803,7 @@ namespace {
         auto countNode = callable.GetInput(1);
         MKQL_ENSURE(countNode.IsImmediate() && countNode.GetStaticType()->IsData(), "Expected immediate data");
         const auto& countData = static_cast<const TDataLiteral&>(*countNode.GetNode());
-        MKQL_ENSURE(countData.GetType()->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64"); 
+        MKQL_ENSURE(countData.GetType()->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
         auto takeCount = countData.AsValue().Get<ui64>();
 
         return ctx.NodeFactory.CreateImmutableNode(ctx.Builder->TakeList(ctx.HolderFactory.Create<TExtendListValue>(std::move(lists)), takeCount));
@@ -815,10 +815,10 @@ namespace {
         auto returnType = callable.GetType()->GetReturnType();
         MKQL_ENSURE(returnType->IsData(), "Expected list type");
         const auto& returnDataType = static_cast<const TDataType&>(*returnType);
-        MKQL_ENSURE(returnDataType.GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64"); 
+        MKQL_ENSURE(returnDataType.GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
 
         ui64 totalLength = 0;
-        TValuePacker listPacker(false, returnType); 
+        TValuePacker listPacker(false, returnType);
         for (auto& result : resultIt->second) {
             const auto value = listPacker.Unpack(result, ctx.HolderFactory);
             totalLength += value.Get<ui64>();
@@ -826,57 +826,57 @@ namespace {
 
         return ctx.NodeFactory.CreateImmutableNode(NUdf::TUnboxedValuePod(totalLength));
     }
-} 
- 
+}
+
 TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly) {
-    auto builtins = GetBuiltinFactory(); 
+    auto builtins = GetBuiltinFactory();
     return [builtins, &execData, validateOnly]
-        (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* { 
+        (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         const TEngineFlatSettings& settings = execData.Settings;
         const TFlatEngineStrings& strings = execData.Strings;
 
-        auto res = builtins(callable, ctx); 
-        if (res) 
-            return res; 
- 
-        auto nameStr = callable.GetType()->GetNameStr(); 
-        if (nameStr == strings.Abort) 
-            return WrapAsVoid(ctx); 
- 
-        if (nameStr == strings.StepTxId) 
+        auto res = builtins(callable, ctx);
+        if (res)
+            return res;
+
+        auto nameStr = callable.GetType()->GetNameStr();
+        if (nameStr == strings.Abort)
+            return WrapAsVoid(ctx);
+
+        if (nameStr == strings.StepTxId)
             return WrapStepTxId(callable, ctx, execData.StepTxId);
- 
-        if (nameStr == strings.SetResult) 
-            return WrapAsVoid(ctx); 
- 
-        if (nameStr == strings.SelectRow) { 
-            if (validateOnly) { 
+
+        if (nameStr == strings.SetResult)
+            return WrapAsVoid(ctx);
+
+        if (nameStr == strings.SelectRow) {
+            if (validateOnly) {
                 return WrapAsDummy(ctx.Mutables);
-            } 
-            else { 
+            }
+            else {
                 return WrapMergedSelectRow(
-                    callable, execData.Results, execData.LocalReadCallables, settings.Host, ctx); 
-            } 
-        } 
- 
-        if (nameStr == strings.SelectRange) { 
-            if (validateOnly) { 
+                    callable, execData.Results, execData.LocalReadCallables, settings.Host, ctx);
+            }
+        }
+
+        if (nameStr == strings.SelectRange) {
+            if (validateOnly) {
                 return WrapAsDummy(ctx.Mutables);
-            } 
-            else { 
+            }
+            else {
                 return WrapMergedSelectRange(
-                    callable, execData.Results, execData.LocalReadCallables, settings.Host, ctx, strings); 
-            } 
-        } 
- 
-        if (nameStr == strings.EraseRow) { 
-            return WrapEraseRow(callable, ctx); 
-        } 
- 
-        if (nameStr == strings.UpdateRow) { 
+                    callable, execData.Results, execData.LocalReadCallables, settings.Host, ctx, strings);
+            }
+        }
+
+        if (nameStr == strings.EraseRow) {
+            return WrapEraseRow(callable, ctx);
+        }
+
+        if (nameStr == strings.UpdateRow) {
             return WrapUpdateRow(callable, ctx, settings.Host);
-        } 
- 
+        }
+
         if (nameStr == strings.AcquireLocks) {
             return WrapAsVoid(ctx);
         }
@@ -885,13 +885,13 @@ TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, b
             return WrapAsVoid(ctx);
         }
 
-        return nullptr; 
-    }; 
-} 
- 
+        return nullptr;
+    };
+}
+
 TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData)
 {
-    auto builtins = GetBuiltinFactory(); 
+    auto builtins = GetBuiltinFactory();
     return [builtins, &execData]
         (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode*
     {
@@ -900,25 +900,25 @@ TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData)
         TIncomingResults& results = execData.Results;
 
         auto nameStr = callable.GetType()->GetNameStr();
- 
-        if (nameStr == strings.Abort) 
-            return WrapAbort(callable, ctx); 
- 
-        if (nameStr == strings.StepTxId) 
+
+        if (nameStr == strings.Abort)
+            return WrapAbort(callable, ctx);
+
+        if (nameStr == strings.StepTxId)
             return WrapStepTxId(callable, ctx, execData.StepTxId);
- 
-        if (nameStr == strings.UpdateRow || nameStr == strings.EraseRow) 
-            return WrapAsVoid(ctx); 
- 
-        if (nameStr == strings.SetResult) 
-            return WrapResult(callable, ctx); 
- 
-        if (nameStr == strings.SelectRow) 
-            return WrapMergedSelectRow(callable, results, {}, settings.Host, ctx); 
- 
-        if (nameStr == strings.SelectRange) 
-            return WrapMergedSelectRange(callable, results, {}, settings.Host, ctx, strings); 
- 
+
+        if (nameStr == strings.UpdateRow || nameStr == strings.EraseRow)
+            return WrapAsVoid(ctx);
+
+        if (nameStr == strings.SetResult)
+            return WrapResult(callable, ctx);
+
+        if (nameStr == strings.SelectRow)
+            return WrapMergedSelectRow(callable, results, {}, settings.Host, ctx);
+
+        if (nameStr == strings.SelectRange)
+            return WrapMergedSelectRange(callable, results, {}, settings.Host, ctx, strings);
+
         if (nameStr == strings.AcquireLocks)
             return WrapAcquireLocks(callable, ctx, execData.TxLocks);
 
@@ -931,7 +931,7 @@ TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData)
             // a callable-specific way.
             if (nameStr == strings.Builtins.Filter ||
                 nameStr == strings.Builtins.FilterNullMembers ||
-                nameStr == strings.Builtins.SkipNullMembers || 
+                nameStr == strings.Builtins.SkipNullMembers ||
                 nameStr == strings.Builtins.Map ||
                 nameStr == strings.Builtins.FlatMap ||
                 nameStr == strings.CombineByKeyMerge ||
@@ -948,47 +948,47 @@ TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData)
         }
 
         return builtins(callable, ctx);
-    }; 
-} 
- 
+    };
+}
+
 NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& engineHost,
     const THolderFactory& holderFactory, const TTypeEnvironment& env)
 {
-    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args"); 
-    auto tableNode = callable.GetInput(0); 
-    const auto tableId = ExtractTableId(tableNode); 
-    auto tupleNode = AS_VALUE(TTupleLiteral, callable.GetInput(3)); 
+    MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
+    auto tableNode = callable.GetInput(0);
+    const auto tableId = ExtractTableId(tableNode);
+    auto tupleNode = AS_VALUE(TTupleLiteral, callable.GetInput(3));
     TVector<TCell> row;
     ExtractRow(row, tupleNode, env);
- 
-    auto returnType = callable.GetType()->GetReturnType(); 
-    MKQL_ENSURE(callable.GetInput(1).GetNode()->GetType()->IsType(), "Expected type"); 
 
-    return engineHost.SelectRow(tableId, row, 
+    auto returnType = callable.GetType()->GetReturnType();
+    MKQL_ENSURE(callable.GetInput(1).GetNode()->GetType()->IsType(), "Expected type");
+
+    return engineHost.SelectRow(tableId, row,
         AS_VALUE(TStructLiteral, callable.GetInput(2)), AS_TYPE(TOptionalType, returnType),
         ExtractFlatReadTarget(callable.GetInput(4)), holderFactory);
-} 
- 
+}
+
 NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost& engineHost,
     const THolderFactory& holderFactory, const TTypeEnvironment& env)
 {
     MKQL_ENSURE(callable.GetInputsCount() >= 9 && callable.GetInputsCount() <= 13, "Expected 9 to 13 args");
-    auto tableNode = callable.GetInput(0); 
-    const auto tableId = ExtractTableId(tableNode); 
+    auto tableNode = callable.GetInput(0);
+    const auto tableId = ExtractTableId(tableNode);
     ui32 flags = AS_VALUE(TDataLiteral, callable.GetInput(5))->AsValue().Get<ui32>();
     ui64 itemsLimit = AS_VALUE(TDataLiteral, callable.GetInput(6))->AsValue().Get<ui64>();
     ui64 bytesLimit = AS_VALUE(TDataLiteral, callable.GetInput(7))->AsValue().Get<ui64>();
- 
+
     TVector<TCell> fromValues;
     TVector<TCell> toValues;
     ExtractRow(fromValues, AS_VALUE(TTupleLiteral, callable.GetInput(3)), env);
     ExtractRow(toValues, AS_VALUE(TTupleLiteral, callable.GetInput(4)), env);
- 
-    bool inclusiveFrom = !(flags & TReadRangeOptions::TFlags::ExcludeInitValue); 
-    bool inclusiveTo = !(flags & TReadRangeOptions::TFlags::ExcludeTermValue); 
-    TTableRange range(fromValues, inclusiveFrom, toValues, inclusiveTo); 
-    auto returnType = callable.GetType()->GetReturnType(); 
-    MKQL_ENSURE(callable.GetInput(1).GetNode()->GetType()->IsType(), "Expected type"); 
+
+    bool inclusiveFrom = !(flags & TReadRangeOptions::TFlags::ExcludeInitValue);
+    bool inclusiveTo = !(flags & TReadRangeOptions::TFlags::ExcludeTermValue);
+    TTableRange range(fromValues, inclusiveFrom, toValues, inclusiveTo);
+    auto returnType = callable.GetType()->GetReturnType();
+    MKQL_ENSURE(callable.GetInput(1).GetNode()->GetType()->IsType(), "Expected type");
 
     TListLiteral* skipNullKeys = nullptr;
     if (callable.GetInputsCount() > 9) {
@@ -1006,14 +1006,14 @@ NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost
         forbidNullArgs.second = AS_VALUE(TListLiteral, callable.GetInput(12));
     }
 
-    return engineHost.SelectRange(tableId, range, 
+    return engineHost.SelectRange(tableId, range,
         AS_VALUE(TStructLiteral, callable.GetInput(2)), skipNullKeys, AS_TYPE(TStructType, returnType),
         ExtractFlatReadTarget(callable.GetInput(8)), itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory);
-} 
- 
+}
+
 TStructType* GetTxLockType(const TTypeEnvironment& env, bool v2) {
-    auto ui32Type = TDataType::Create(NUdf::TDataType<ui32>::Id, env); 
-    auto ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, env); 
+    auto ui32Type = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
+    auto ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, env);
 
     if (v2) {
         TVector<std::pair<TString, TType*>> lockStructMembers = {
@@ -1038,12 +1038,12 @@ TStructType* GetTxLockType(const TTypeEnvironment& env, bool v2) {
 
     auto lockStructType = TStructType::Create(lockStructMembers.data(), lockStructMembers.size(), env);
     return lockStructType;
-} 
+}
 
 TStructType* GetDiagnosticsType(const TTypeEnvironment& env) {
-    auto ui32Type = TDataType::Create(NUdf::TDataType<ui32>::Id, env); 
-    auto ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, env); 
-    auto boolType = TDataType::Create(NUdf::TDataType<bool>::Id, env); 
+    auto ui32Type = TDataType::Create(NUdf::TDataType<ui32>::Id, env);
+    auto ui64Type = TDataType::Create(NUdf::TDataType<ui64>::Id, env);
+    auto boolType = TDataType::Create(NUdf::TDataType<bool>::Id, env);
 
     TVector<std::pair<TString, TType*>> diagStructMembers = {
         std::make_pair("ActorIdRawX1", ui64Type),
@@ -1081,15 +1081,15 @@ TType* GetActualReturnType(const TCallable& callable, const TTypeEnvironment& en
             TStructTypeBuilder extendedStructBuilder(env);
             extendedStructBuilder.Add(structType.GetMemberName(0), structType.GetMemberType(0));
             extendedStructBuilder.Add(structType.GetMemberName(1), structType.GetMemberType(1));
-            extendedStructBuilder.Add("_FirstKey", TDataType::Create(NUdf::TDataType<char*>::Id, env)); 
-            extendedStructBuilder.Add("_Size", TDataType::Create(NUdf::TDataType<ui64>::Id, env)); 
+            extendedStructBuilder.Add("_FirstKey", TDataType::Create(NUdf::TDataType<char*>::Id, env));
+            extendedStructBuilder.Add("_Size", TDataType::Create(NUdf::TDataType<ui64>::Id, env));
 
             return extendedStructBuilder.Build();
         }
     }
 
     return returnType;
-} 
+}
 
 }
 }

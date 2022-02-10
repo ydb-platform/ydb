@@ -1,24 +1,24 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     vvvv
     g:kikimr
     g:yql
     g:yql_ydb_core
 )
- 
-SRCS( 
+
+SRCS(
     mkql_computation_node.cpp
     mkql_computation_node.h
     mkql_computation_node_codegen.h
     mkql_computation_node_codegen.cpp
-    mkql_computation_node_graph.cpp 
+    mkql_computation_node_graph.cpp
     mkql_computation_node_graph_saveload.cpp
     mkql_computation_node_graph_saveload.h
-    mkql_computation_node_holders.cpp 
-    mkql_computation_node_impl.h 
+    mkql_computation_node_holders.cpp
+    mkql_computation_node_impl.h
     mkql_computation_node_impl.cpp
-    mkql_computation_node_list.h 
+    mkql_computation_node_list.h
     mkql_computation_node_pack.cpp
     mkql_computation_node_pack.h
     mkql_custom_list.cpp
@@ -27,10 +27,10 @@ SRCS(
     mkql_validate.h
     mkql_value_builder.cpp
     mkql_value_builder.h
-    presort.h 
-    presort.cpp 
-) 
- 
+    presort.h
+    presort.cpp
+)
+
 LLVM_BC(
     mkql_pack_bc.cpp
     NAME mkql_pack.bc
@@ -55,19 +55,19 @@ LLVM_BC(
     GetOptionalValue
 )
 
-PEERDIR( 
+PEERDIR(
     contrib/libs/apache/arrow
     library/cpp/enumbitset
     library/cpp/packedtypes
-    library/cpp/random_provider 
-    library/cpp/time_provider 
+    library/cpp/random_provider
+    library/cpp/time_provider
     ydb/library/yql/minikql
     ydb/library/yql/minikql/arrow
     ydb/library/yql/public/udf
     ydb/library/yql/utils
-) 
- 
-IF (NOT MKQL_DISABLE_CODEGEN) 
+)
+
+IF (NOT MKQL_DISABLE_CODEGEN)
     NO_COMPILER_WARNINGS()
     PEERDIR(
         ydb/library/yql/minikql/codegen
@@ -83,11 +83,11 @@ ELSE()
         -DMKQL_DISABLE_CODEGEN
     )
 ENDIF()
- 
+
 YQL_LAST_ABI_VERSION()
- 
-END() 
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

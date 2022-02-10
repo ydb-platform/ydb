@@ -79,37 +79,37 @@ void DbgPrintValue(TString &res, const TCell &r, ui32 type) {
         res += "NULL";
     } else {
         switch (type) {
-        case NScheme::NTypeIds::Bool: 
+        case NScheme::NTypeIds::Bool:
             res += r.AsValue<bool>() ? "true" : "false";
-            break; 
-        case NScheme::NTypeIds::Byte: 
+            break;
+        case NScheme::NTypeIds::Byte:
             res += ToString(r.AsValue<ui8>());
-            break; 
-        case NScheme::NTypeIds::Int32: 
+            break;
+        case NScheme::NTypeIds::Int32:
             res += ToString(r.AsValue<i32>());
-            break; 
-        case NScheme::NTypeIds::Uint32: 
+            break;
+        case NScheme::NTypeIds::Uint32:
             res += ToString(r.AsValue<ui32>());
-            break; 
-        case NScheme::NTypeIds::Int64: 
+            break;
+        case NScheme::NTypeIds::Int64:
             res += ToString(r.AsValue<i64>());
-            break; 
-        case NScheme::NTypeIds::Uint64: 
+            break;
+        case NScheme::NTypeIds::Uint64:
             res += ToString(r.AsValue<ui64>());
-            break; 
-        case NScheme::NTypeIds::Float: 
+            break;
+        case NScheme::NTypeIds::Float:
             res += ToString(r.AsValue<float>());
-            break; 
-        case NScheme::NTypeIds::Double: 
+            break;
+        case NScheme::NTypeIds::Double:
             res += ToString(r.AsValue<double>());
-            break; 
-        case NScheme::NTypeIds::ActorId: 
+            break;
+        case NScheme::NTypeIds::ActorId:
             res += ToString(r.AsValue<TActorId>());
-            break; 
-        default: 
-            res += EscapeC(r.Data(), r.Size()); 
-        } 
-    } 
+            break;
+        default:
+            res += EscapeC(r.Data(), r.Size());
+        }
+    }
 }
 
 TString DbgPrintTuple(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry) {

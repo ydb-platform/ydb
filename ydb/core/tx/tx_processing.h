@@ -17,7 +17,7 @@ struct TEvTxProcessing {
 
         EvPlanStepAck = EvPlanStep + 512,
         EvPrePlanTxAck, // unused
-        EvReadSetAck, 
+        EvReadSetAck,
         EvPlanStepAccepted,
         EvStreamClearanceResponse,
         EvStreamQuotaResponse,
@@ -115,7 +115,7 @@ struct TEvTxProcessing {
             Record.SetTxId(orderId);
             Record.SetTabletSource(tabletSource);
             Record.SetTabletDest(tabletDest);
-            Record.SetTabletProducer(tabletProducer); 
+            Record.SetTabletProducer(tabletProducer);
             Record.SetReadSet(readSet);
             Record.SetSeqno(seqno);
         }
@@ -134,21 +134,21 @@ struct TEvTxProcessing {
             return str.Str();
         }
     };
- 
+
     struct TEvReadSetAck : public TThrRefBase, public TEventPB<TEvReadSetAck, NKikimrTx::TEvReadSetAck, EvReadSetAck> {
-        TEvReadSetAck() 
-        {} 
- 
+        TEvReadSetAck()
+        {}
+
         TEvReadSetAck(ui64 step, ui64 orderId, ui64 tabletSource, ui64 tabletDest, ui64 tabletConsumer, ui32 flags, ui64 seqno = 0)
-        { 
-            Record.SetStep(step); 
-            Record.SetTxId(orderId); 
-            Record.SetTabletSource(tabletSource); 
-            Record.SetTabletDest(tabletDest); 
-            Record.SetTabletConsumer(tabletConsumer); 
-            Record.SetFlags(flags); 
+        {
+            Record.SetStep(step);
+            Record.SetTxId(orderId);
+            Record.SetTabletSource(tabletSource);
+            Record.SetTabletDest(tabletDest);
+            Record.SetTabletConsumer(tabletConsumer);
+            Record.SetFlags(flags);
             Record.SetSeqno(seqno);
-        } 
+        }
 
         TEvReadSetAck(const TEvReadSet& evReadSet, ui64 tabletConsumer)
         {
@@ -179,7 +179,7 @@ struct TEvTxProcessing {
                                                       NKikimrTx::TEvStreamClearanceRequest,
                                                       EvStreamClearanceRequest>
     {
-    }; 
+    };
 
     struct TEvStreamClearanceResponse: public TEventPB<TEvStreamClearanceResponse,
                                                        NKikimrTx::TEvStreamClearanceResponse,

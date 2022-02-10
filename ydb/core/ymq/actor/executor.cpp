@@ -11,8 +11,8 @@
 #include <ydb/core/ymq/queues/fifo/queries.h>
 #include <ydb/core/ymq/queues/std/queries.h>
 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/utility.h>

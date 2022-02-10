@@ -3,7 +3,7 @@
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/yq/libs/actors/proxy.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/events.h>

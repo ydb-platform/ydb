@@ -4,7 +4,7 @@
 #include "flat_stat_part.h"
 #include "util_fmt_line.h"
 
-#include <library/cpp/time_provider/time_provider.h> 
+#include <library/cpp/time_provider/time_provider.h>
 
 #include <util/generic/queue.h>
 

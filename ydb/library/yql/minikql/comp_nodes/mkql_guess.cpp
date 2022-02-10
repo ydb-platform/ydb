@@ -1,39 +1,39 @@
-#include "mkql_guess.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_node_builder.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include "mkql_guess.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
-template <bool IsOptional> 
+template <bool IsOptional>
 class TGuessWrapper: public TMutableCodegeneratorPtrNode<TGuessWrapper<IsOptional>> {
     typedef TMutableCodegeneratorPtrNode<TGuessWrapper<IsOptional>> TBaseComputation;
-public: 
+public:
     TGuessWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, ui32 index)
         : TBaseComputation(mutables, kind)
         , VarNode(varNode)
-        , Index(index) 
-    { 
-    } 
- 
+        , Index(index)
+    {
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         auto var = VarNode->GetValue(compCtx);
- 
+
         if (IsOptional && !var) {
             return NUdf::TUnboxedValuePod();
-        } 
- 
+        }
+
         const auto currentIndex = var.GetVariantIndex();
-        if (Index == currentIndex) { 
+        if (Index == currentIndex) {
             return var.Release().GetVariantItem().MakeOptional();
-        } else { 
+        } else {
             return NUdf::TUnboxedValuePod();
-        } 
-    } 
- 
+        }
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* pointer, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -123,31 +123,31 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(VarNode);
-    } 
- 
+    }
+
     IComputationNode *const VarNode;
-    const ui32 Index; 
-}; 
- 
+    const ui32 Index;
+};
+
 }
 
-IComputationNode* WrapGuess(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arguments"); 
-    bool isOptional; 
+IComputationNode* WrapGuess(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arguments");
+    bool isOptional;
     const auto unpacked = UnpackOptional(callable.GetInput(0), isOptional);
     const auto varType = AS_TYPE(TVariantType, unpacked);
- 
+
     const auto indexData = AS_VALUE(TDataLiteral, callable.GetInput(1));
     const ui32 index = indexData->AsValue().Get<ui32>();
-    MKQL_ENSURE(index < varType->GetAlternativesCount(), "Bad alternative index"); 
- 
+    MKQL_ENSURE(index < varType->GetAlternativesCount(), "Bad alternative index");
+
     const auto variant = LocateNode(ctx.NodeLocator, callable, 0);
-    if (isOptional) { 
+    if (isOptional) {
         return new TGuessWrapper<true>(ctx.Mutables, GetValueRepresentation(varType->GetAlternativeType(index)), variant, index);
-    } else { 
+    } else {
         return new TGuessWrapper<false>(ctx.Mutables, GetValueRepresentation(varType->GetAlternativeType(index)), variant, index);
-    } 
-} 
- 
-} 
-} 
+    }
+}
+
+}
+}

@@ -16,7 +16,7 @@ PEERDIR(
     ydb/core/blobstorage/base
     ydb/library/aclib
     ydb/public/api/protos
-    ydb/library/yql/public/issue/protos 
+    ydb/library/yql/public/issue/protos
 )
 
 END()

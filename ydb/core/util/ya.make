@@ -7,14 +7,14 @@ OWNER(
 
 SRCS(
     address_classifier.cpp
-    cache.cpp 
-    cache.h 
+    cache.cpp
+    cache.h
     cache_cache.h
     circular_queue.h
     concurrent_rw_hash.cpp
     concurrent_rw_hash.h
-    console.cpp 
-    console.h 
+    console.cpp
+    console.h
     counted_leaky_bucket.h
     defs.h
     failure_injection.cpp
@@ -25,10 +25,10 @@ SRCS(
     fragmented_buffer.cpp
     fragmented_buffer.h
     hazard.cpp
-    hyperlog_counter.cpp 
-    hyperlog_counter.h 
+    hyperlog_counter.cpp
+    hyperlog_counter.h
     interval_set.h
-    intrusive_fixed_hash_set.h 
+    intrusive_fixed_hash_set.h
     intrusive_heap.cpp
     intrusive_heap.h
     intrusive_stack.h
@@ -37,7 +37,7 @@ SRCS(
     memory_tracker.h
     operation_queue.h
     page_map.cpp
-    pb.h 
+    pb.h
     proto_duration.h
     queue_inplace.h
     queue_oneone_inplace.h
@@ -69,7 +69,7 @@ PEERDIR(
     library/cpp/ipmath
     library/cpp/lwtrace
     library/cpp/monlib/dynamic_counters
-    library/cpp/random_provider 
+    library/cpp/random_provider
     ydb/core/base
     ydb/core/protos
 )

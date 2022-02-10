@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h> 
-#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/mkql_node.h> 
+#include <ydb/library/yql/providers/dq/api/protos/task_command_executor.pb.h>
+#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_node.h>
 
 namespace NYql::NTaskRunnerProxy {
 

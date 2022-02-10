@@ -4,9 +4,9 @@
 
 #include <util/generic/cast.h>
 #include <ydb/core/tablet/tablet_exception.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 
 namespace NKikimr {
@@ -114,9 +114,9 @@ public:
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
         const TArrayRef<const TUpdateCommand>& commands) override;
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override; 
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override;
     bool IsPathErased(const TTableId& tableId) const override;
-    bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override; 
+    bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override;
     ui64 GetTableSchemaVersion(const TTableId&) const override;
 
     void SetPeriodicCallback(TPeriodicCallback&& callback) override;

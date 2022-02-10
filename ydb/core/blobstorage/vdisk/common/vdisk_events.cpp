@@ -4,7 +4,7 @@
 namespace NKikimr {
 
     TEvBlobStorage::TEvVPutResult::TEvVPutResult() = default;
- 
+
     TEvBlobStorage::TEvVPutResult::TEvVPutResult(const NKikimrProto::EReplyStatus status,
             const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const ui64 *cookie, TOutOfSpaceStatus oosStatus,
             const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVPut *record,

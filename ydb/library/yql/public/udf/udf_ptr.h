@@ -6,19 +6,19 @@
 namespace NYql {
 namespace NUdf {
 
-namespace NDetails { 
+namespace NDetails {
 struct TDelete {
     template <typename T>
     static void DoDelete(T* ptr) {
         delete ptr;
     }
 };
-} 
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // TUniquePtr
 ///////////////////////////////////////////////////////////////////////////////
-template <typename T, typename D = NDetails::TDelete> 
+template <typename T, typename D = NDetails::TDelete>
 class TUniquePtr
 {
 public:
@@ -74,7 +74,7 @@ public:
 private:
     inline void DoDestroy() {
         if (Ptr_)
-            D::DoDelete(Ptr_); 
+            D::DoDelete(Ptr_);
     }
 
 private:
@@ -168,13 +168,13 @@ public:
         }
     }
 
-    inline void Reset(T* ptr, StealRef) { 
-        if (Ptr_ != ptr) { 
-            UnRef(); 
-            Ptr_ = ptr; 
-        } 
-    } 
- 
+    inline void Reset(T* ptr, StealRef) {
+        if (Ptr_ != ptr) {
+            UnRef();
+            Ptr_ = ptr;
+        }
+    }
+
     inline void Swap(TRefCountedPtr& rhs) {
         T* tmp = Ptr_;
         Ptr_ = rhs.Ptr_;

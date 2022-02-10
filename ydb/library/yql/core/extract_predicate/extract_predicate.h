@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_expr.h> 
-#include <ydb/library/yql/core/yql_type_annotation.h> 
+#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/core/yql_type_annotation.h>
 
 namespace NYql {
 

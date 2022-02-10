@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/dq/runtime/dq_channel_storage.h> 
+#include <ydb/library/yql/dq/runtime/dq_channel_storage.h>
 
 #include <util/generic/hash.h>
 

@@ -24,9 +24,9 @@
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

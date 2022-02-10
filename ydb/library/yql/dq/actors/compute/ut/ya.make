@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/dq/actors/compute) 
+UNITTEST_FOR(ydb/library/yql/dq/actors/compute)
 
 OWNER(
     d-mokhnatkin

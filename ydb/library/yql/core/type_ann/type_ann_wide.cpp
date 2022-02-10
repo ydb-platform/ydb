@@ -1,7 +1,7 @@
 #include "type_ann_wide.h"
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 namespace NYql {
 namespace NTypeAnnImpl {

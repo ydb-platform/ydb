@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/utils/yql_panic.h> 
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/containers/sorted_vector/sorted_vector.h>

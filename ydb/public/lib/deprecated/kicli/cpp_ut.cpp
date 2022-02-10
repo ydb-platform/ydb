@@ -64,8 +64,8 @@ struct TTestEnvironment {
 
     TTestEnvironment(const std::initializer_list<NKikimr::NClient::TColumn>& columns = {
                 NClient::TKeyColumn("Id", NClient::TType::Uint64),
-                NClient::TColumn("Species", NClient::TType::Utf8), 
-                NClient::TColumn("Name", NClient::TType::Utf8), 
+                NClient::TColumn("Species", NClient::TType::Utf8),
+                NClient::TColumn("Name", NClient::TType::Utf8),
                 NClient::TColumn("Weight", NClient::TType::Int64)
             })
         : Server(StartupKikimr(ClientConfig))
@@ -161,8 +161,8 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         auto dc = kikimr.GetSchemaRoot("dc-1");
         auto animals = dc.CreateTable("Animals", {
                 NClient::TKeyColumn("Id", NClient::TType::Uint64),
-                NClient::TColumn("Species", NClient::TType::Utf8), 
-                NClient::TColumn("Name", NClient::TType::Utf8), 
+                NClient::TColumn("Species", NClient::TType::Utf8),
+                NClient::TColumn("Name", NClient::TType::Utf8),
                 NClient::TColumn("Weight", NClient::TType::Int64),
                 NClient::TColumn("MiscY", NClient::TType::Yson),
                 NClient::TColumn("MiscJ", NClient::TType::Json)
@@ -201,7 +201,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
 #if 1 // TODO: it should be an error
         auto sameTable = dc.CreateTable("Animals", {
                 NClient::TKeyColumn("Id", NClient::TType::Uint64),
-                NClient::TColumn("Species", NClient::TType::Utf8) 
+                NClient::TColumn("Species", NClient::TType::Utf8)
             });
 #endif
     }
@@ -227,7 +227,7 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         auto zoo = dc.MakeDirectory("Zoo");
         auto animals = zoo.CreateTable("Animals", {
             NClient::TKeyColumn("Id", NClient::TType::Uint64),
-            NClient::TColumn("Name", NClient::TType::Utf8) 
+            NClient::TColumn("Name", NClient::TType::Utf8)
         });
         UNIT_ASSERT(HasChild(dc, "/dc-1/Zoo"));
         UNIT_ASSERT(HasChild(zoo, "/dc-1/Zoo/Animals"));
@@ -274,8 +274,8 @@ Y_UNIT_TEST_SUITE(ClientLibSchema) {
         auto zoo = dc.MakeDirectory("Zoo");
         auto animals = zoo.CreateTable("Animals", {
                             NClient::TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4),
-                            NClient::TColumn("Species", NClient::TType::Utf8), 
-                            NClient::TColumn("Name", NClient::TType::Utf8), 
+                            NClient::TColumn("Species", NClient::TType::Utf8),
+                            NClient::TColumn("Name", NClient::TType::Utf8),
                             NClient::TColumn("Weight", NClient::TType::Int64)
                         });
         UNIT_ASSERT(zoo.IsDirectory());
@@ -434,8 +434,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                     "("
                     "(let row '('('Id (Uint64 '1))))"
                     "(let myUpd '("
-                    "  '('Species (Utf8 '\"Rat\"))" 
-                    "  '('Name (Utf8 '\"Dobby\"))" 
+                    "  '('Species (Utf8 '\"Rat\"))"
+                    "  '('Name (Utf8 '\"Dobby\"))"
                     "  '('Weight (Int64 '350))))"
                     "(let pgmReturn (AsList"
                     "  (UpdateRow '/dc-1/Zoo/Animals row myUpd)"
@@ -456,8 +456,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "("
                         "(let row '('('Id (Uint64 '1))))"
                         "(let myUpd '("
-                        "  '('Species (Utf8 '\"Rat\"))" 
-                        "  '('Name (Utf8 '\"Dobby\"))" 
+                        "  '('Species (Utf8 '\"Rat\"))"
+                        "  '('Name (Utf8 '\"Dobby\"))"
                         "  '('Weight (Int64 '350))))"
                         "(let pgmReturn (AsList"
                         "  (UpdateRow '/dc-1/Zoo/Animals row myUpd)"
@@ -494,8 +494,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "("
                         "(let row '('('Id (Uint64 '1))))"
                         "(let myUpd '("
-                        "  '('Species (Utf8 '\"Rat\"))" 
-                        "  '('Name (Utf8 '\"Dobby\"))" 
+                        "  '('Species (Utf8 '\"Rat\"))"
+                        "  '('Name (Utf8 '\"Dobby\"))"
                         "  '('Weight (Int64 '350))))"
                         "(let pgmReturn (AsList"
                         "  (UpdateRow '/dc-1/Zoo/Animals row myUpd)"
@@ -532,8 +532,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "("
                         "(let row '('('Id (Uint64 '1))))"
                         "(let myUpd '("
-                        "  '('Species (Utf8 '\"Rat\"))" 
-                        "  '('Name (Utf8 '\"Dobby\"))" 
+                        "  '('Species (Utf8 '\"Rat\"))"
+                        "  '('Name (Utf8 '\"Dobby\"))"
                         "  '('Weight (Int64 '350))))"
                         "(let pgmReturn (AsList"
                         "  (UpdateRow '/dc-1/Zoo/Animals row myUpd)"
@@ -547,8 +547,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "("
                         "(let row '('('Id (Uint64 '2))))"
                         "(let myUpd '("
-                        "  '('Species (Utf8 '\"Rat\"))" 
-                        "  '('Name (Utf8 '\"Korzhik\"))" 
+                        "  '('Species (Utf8 '\"Rat\"))"
+                        "  '('Name (Utf8 '\"Korzhik\"))"
                         "  '('Weight (Int64 '500))))"
                         "(let pgmReturn (AsList"
                         "  (UpdateRow '/dc-1/Zoo/Animals row myUpd)"
@@ -582,9 +582,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         using namespace NClient;
         TTestEnvironment env({
             NClient::TKeyColumn("Id", NClient::TType::Uint64),
-            NClient::TColumn("Species", NClient::TType::Utf8), 
-            NClient::TColumn("Name", NClient::TType::Utf8), 
-            NClient::TColumn("Description", NClient::TType::Utf8), 
+            NClient::TColumn("Species", NClient::TType::Utf8),
+            NClient::TColumn("Name", NClient::TType::Utf8),
+            NClient::TColumn("Description", NClient::TType::Utf8),
             NClient::TColumn("Weight", NClient::TType::Int64)
         });
         NClient::TKikimr& kikimr = env.Kikimr;
@@ -593,9 +593,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "("
                         "(let id (Parameter 'ID (DataType 'Uint64)))"
                         "(let row '('('Id id)))"
-                        "(let sp (Parameter 'SPECIES (DataType 'Utf8)))" 
-                        "(let nm (Parameter 'NAME (DataType 'Utf8)))" 
-                        "(let ds (Parameter 'DESCRIPTION (DataType 'Utf8)))" 
+                        "(let sp (Parameter 'SPECIES (DataType 'Utf8)))"
+                        "(let nm (Parameter 'NAME (DataType 'Utf8)))"
+                        "(let ds (Parameter 'DESCRIPTION (DataType 'Utf8)))"
                         "(let wt (Parameter 'WEIGHT (DataType 'Int64)))"
                         "(let myUpd '("
                         "  '('Species sp)"
@@ -661,8 +661,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "("
                         "(let id (Parameter 'ID (DataType 'Uint64)))"
                         "(let row '('('Id id)))"
-                        "(let sp (Parameter 'SPECIES (DataType 'Utf8)))" 
-                        "(let nm (Parameter 'NAME (DataType 'Utf8)))" 
+                        "(let sp (Parameter 'SPECIES (DataType 'Utf8)))"
+                        "(let nm (Parameter 'NAME (DataType 'Utf8)))"
                         "(let wt (Parameter 'WEIGHT (DataType 'Int64)))"
                         "(let myUpd '("
                         "  '('Species sp)"
@@ -701,7 +701,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto value = result.GetValue();
 
         UNIT_ASSERT_VALUES_EQUAL(value.GetTypeText<TFormatCxx>(),
-                          "struct{optional<list<struct{optional<Utf8> Name;optional<Utf8> Species;optional<Int64> Weight;}>> myRes;}"); 
+                          "struct{optional<list<struct{optional<Utf8> Name;optional<Utf8> Species;optional<Int64> Weight;}>> myRes;}");
         UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatJSON>(),
                           "{\"myRes\": [{\"Name\": \"Dobby\", \"Species\": \"Rat\", \"Weight\": 350}, {\"Name\": \"Korzhik\", \"Species\": \"Rat\", \"Weight\": 500}]}");
         UNIT_ASSERT_VALUES_EQUAL(value.GetValueText<TFormatRowset>(),
@@ -719,8 +719,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                     "("
                     "(let row '('('Id (Uint64 '1))))"
                     "(leg myUpd '("
-                    "  '('Species (Utf8 '\"Rat\"))" 
-                    "  '('Name (Utf8 '\"Dobby\"))" 
+                    "  '('Species (Utf8 '\"Rat\"))"
+                    "  '('Name (Utf8 '\"Dobby\"))"
                     "  '('Weight (Int64 '350))))"
                     "(let pgmReturn (AsList"
                     "  (UpdateRow '/dc-1/Zoo/Animals row myUpd)"
@@ -733,7 +733,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto error = result.GetError();
         UNIT_ASSERT(error.Permanent());
         UNIT_ASSERT_VALUES_EQUAL(error.GetCode(), "MP-0128");
-        UNIT_ASSERT_STRING_CONTAINS(error.GetMessage(), "<main>:1:34: Error: expected either let, return or import"); 
+        UNIT_ASSERT_STRING_CONTAINS(error.GetMessage(), "<main>:1:34: Error: expected either let, return or import");
     }
 
     Y_UNIT_TEST(Test13) {
@@ -744,9 +744,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                     "("
                     "(let row '('('Id (Uint64 '1))))"
                     "(let myUpd '("
-                    "  '('Species (Utf8 '\"Rat\"))" 
-                    "  '('Name (Utf8 '\"Dobby\"))" 
-                    "  '('Weight (Utf8 '350))))" 
+                    "  '('Species (Utf8 '\"Rat\"))"
+                    "  '('Name (Utf8 '\"Dobby\"))"
+                    "  '('Weight (Utf8 '350))))"
                     "(let pgmReturn (AsList"
                     "  (UpdateRow '('/dc-1/Zoo/Animals '0 '0:0) row myUpd)"
                     "))"
@@ -769,9 +769,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                     "("
                     "(let row '('('Id (Uint64 '1))))"
                     "(let myUpd '("
-                    "  '('Species (Utf8 '\"Rat\"))" 
+                    "  '('Species (Utf8 '\"Rat\"))"
                     "  '('Name (Int64 '\"Dobby\"))"
-                    "  '('Weight (Utf8 '350))))" 
+                    "  '('Weight (Utf8 '350))))"
                     "(let pgmReturn (AsList"
                     "  (UpdateRow '/dc-1/Zoo/Animals row myUpd)"
                     "))"
@@ -783,17 +783,17 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto error = result.GetError();
         UNIT_ASSERT(error.Permanent());
         UNIT_ASSERT_VALUES_EQUAL(error.GetCode(), "MP-0128");
-        UNIT_ASSERT_VALUES_EQUAL(error.GetMessage(), "<main>:1:142: Error: At function: AsList\n" 
-        "    <main>:1:77: Error: At function: UpdateRow\n" 
-        "        <main>:1:84: Error: At function: Int64\n" 
-        "            <main>:1:91: Error: Bad atom format for type: Int64, value: \"Dobby\"\n"); 
+        UNIT_ASSERT_VALUES_EQUAL(error.GetMessage(), "<main>:1:142: Error: At function: AsList\n"
+        "    <main>:1:77: Error: At function: UpdateRow\n"
+        "        <main>:1:84: Error: At function: Int64\n"
+        "            <main>:1:91: Error: Bad atom format for type: Int64, value: \"Dobby\"\n");
     }
 
     Y_UNIT_TEST(Test15) {
         TTestEnvironment env({
             NClient::TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4),
-            NClient::TColumn("Species", NClient::TType::Utf8), 
-            NClient::TColumn("Name", NClient::TType::Utf8), 
+            NClient::TColumn("Species", NClient::TType::Utf8),
+            NClient::TColumn("Name", NClient::TType::Utf8),
             NClient::TColumn("Weight", NClient::TType::Int64)
         });
         NClient::TKikimr& kikimr = env.Kikimr;
@@ -803,8 +803,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "("
                         "(let row '('('Id (Uint64 '1))))"
                         "(let myUpd '("
-                        "  '('Species (Utf8 '\"Rat\"))" 
-                        "  '('Name (Utf8 '\"Dobby\"))" 
+                        "  '('Species (Utf8 '\"Rat\"))"
+                        "  '('Name (Utf8 '\"Dobby\"))"
                         "  '('Weight (Int64 '350))))"
                         "(let pgmReturn (AsList"
                         "  (UpdateRow '/dc-1/Zoo/Animals row myUpd)"
@@ -818,8 +818,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "("
                         "(let row '('('Id (Uint64 '2))))"
                         "(let myUpd '("
-                        "  '('Species (Utf8 '\"Rat\"))" 
-                        "  '('Name (Utf8 '\"Korzhik\"))" 
+                        "  '('Species (Utf8 '\"Rat\"))"
+                        "  '('Name (Utf8 '\"Korzhik\"))"
                         "  '('Weight (Int64 '500))))"
                         "(let pgmReturn (AsList"
                         "  (UpdateRow '/dc-1/Zoo/Animals row myUpd)"
@@ -858,8 +858,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         using namespace NClient;
         TTestEnvironment env({
             TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4),
-            TColumn("Species", NClient::TType::String), 
-            TColumn("Name", NClient::TType::String), 
+            TColumn("Species", NClient::TType::String),
+            TColumn("Name", NClient::TType::String),
             TColumn("Weight", NClient::TType::Int64)
         });
         NClient::TKikimr& kikimr = env.Kikimr;
@@ -868,8 +868,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
             auto result = kikimr.Query(
                         "("
                         "(let row '('('Id (Uint64 '1))))"
-                        "(let s (Parameter 'SPECIES (DataType 'String)))" 
-                        "(let n (Parameter 'NAME (DataType 'String)))" 
+                        "(let s (Parameter 'SPECIES (DataType 'String)))"
+                        "(let n (Parameter 'NAME (DataType 'String)))"
                         "(let w (Parameter 'WEIGHT (DataType 'Int64)))"
                         "(let myUpd '("
                         "  '('Species s)"
@@ -880,8 +880,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "))"
                         "(return pgmReturn)"
                         ")").SyncPrepare().GetQuery().SyncExecute(
-                            TParameterValue<TString, NScheme::NTypeIds::String>("SPECIES", "Rat"), 
-                            TParameterValue<TString, NScheme::NTypeIds::String>("NAME", "Dobby"), 
+                            TParameterValue<TString, NScheme::NTypeIds::String>("SPECIES", "Rat"),
+                            TParameterValue<TString, NScheme::NTypeIds::String>("NAME", "Dobby"),
                             TParameter("WEIGHT", (i64)350)
                         );
             UNIT_ASSERT_EQUAL(result.GetStatus(), NMsgBusProxy::MSTATUS_OK);
@@ -891,8 +891,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
             auto result = kikimr.Query(
                         "("
                         "(let row '('('Id (Uint64 '2))))"
-                        "(let s (Parameter 'SPECIES (DataType 'String)))" 
-                        "(let n (Parameter 'NAME (DataType 'String)))" 
+                        "(let s (Parameter 'SPECIES (DataType 'String)))"
+                        "(let n (Parameter 'NAME (DataType 'String)))"
                         "(let w (Parameter 'WEIGHT (DataType 'Int64)))"
                         "(let myUpd '("
                         "  '('Species s)"
@@ -903,8 +903,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                         "))"
                         "(return pgmReturn)"
                         ")").SyncPrepare().GetQuery().SyncExecute(
-                            TParameterValue<TString, NScheme::NTypeIds::String>("SPECIES", "Rat"), 
-                            TParameterValue<TString, NScheme::NTypeIds::String>("NAME", "Korzhik"), 
+                            TParameterValue<TString, NScheme::NTypeIds::String>("SPECIES", "Rat"),
+                            TParameterValue<TString, NScheme::NTypeIds::String>("NAME", "Korzhik"),
                             TParameter("WEIGHT", (i64)500)
                         );
             UNIT_ASSERT_EQUAL(result.GetStatus(), NMsgBusProxy::MSTATUS_OK);
@@ -981,8 +981,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         using namespace NClient;
         TTestEnvironment env({
             TKeyPartitioningColumn("Id", NClient::TType::Uint64, 4),
-            TColumn("Species", NClient::TType::String), 
-            TColumn("Name", NClient::TType::String), 
+            TColumn("Species", NClient::TType::String),
+            TColumn("Name", NClient::TType::String),
             TColumn("Weight", NClient::TType::Int64)
         });
         NClient::TKikimr& kikimr = env.Kikimr;
@@ -991,8 +991,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
             auto result = kikimr.Query(
                         "("
                         "(let row '('('Id (Uint64 '1))))"
-                        "(let s (Parameter 'SPECIES (DataType 'String)))" 
-                        "(let n (Parameter 'NAME (DataType 'String)))" 
+                        "(let s (Parameter 'SPECIES (DataType 'String)))"
+                        "(let n (Parameter 'NAME (DataType 'String)))"
                         "(let w (Parameter 'WEIGHT (DataType 'Int64)))"
                         "(let myUpd '("
                         "  '('Species s)"
@@ -1018,7 +1018,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                     "(\n"
                     "(let id (Parameter 'ID (DataType 'Uint64)))\n"
                     "(let row '('('Id id)))\n"
-                    "(let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64))))\n" 
+                    "(let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64))))\n"
                     "(let an (Parameter 'ANIMAL an_type))\n"
                     "(let sp (Member an 'SPECIES))\n"
                     "(let nm (Member an 'NAME))\n"
@@ -1079,7 +1079,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                     "(\n"
                     "(let id (Parameter 'ID (DataType 'Uint64)))\n"
                     "(let row '('('Id id)))\n"
-                    "(let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64))))\n" 
+                    "(let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64))))\n"
                     "(let an (Parameter 'ANIMAL an_type))\n"
                     "(let sp (Member an 'SPECIES))\n"
                     "(let nm (Member an 'NAME))\n"
@@ -1136,7 +1136,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                         (
                                         (let id (Parameter 'ID (DataType 'Uint64)))
                                         (let row '('('Id id)))
-                                        (let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64)))) 
+                                        (let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64))))
                                         (let an_opt_type (OptionalType an_type))
                                         (let an_opt (Parameter 'ANIMAL an_opt_type))
                                         (let ret
@@ -1220,7 +1220,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                         (
                                         (let id (Parameter 'ID (DataType 'Uint64)))
                                         (let row '('('Id id)))
-                                        (let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64)))) 
+                                        (let an_type (StructType '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64))))
                                         (let an_opt_type (OptionalType an_type))
                                         (let an_opt (Parameter 'ANIMAL an_opt_type))
                                         (let ret
@@ -1288,7 +1288,7 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto updateQuery = kikimr.Query(R"___(
                                         (
-                                        (let an_type (StructType '('ID (DataType 'Uint64)) '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64)))) 
+                                        (let an_type (StructType '('ID (DataType 'Uint64)) '('SPECIES (DataType 'Utf8)) '('NAME (DataType 'Utf8)) '('WEIGHT (DataType 'Int64))))
                                         (let an_lst_type (ListType an_type))
                                         (let an_lst (Parameter 'ANIMALS an_lst_type))
                                         (let ret
@@ -1361,8 +1361,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                     "("
                     "(let row '('('Id (Uint64 '1))))"
                     "(let myUpd '("
-                    "  '('Species (Utf8 '\"Rat\"))" 
-                    "  '('Name (Utf8 '\"Dobby\"))" 
+                    "  '('Species (Utf8 '\"Rat\"))"
+                    "  '('Name (Utf8 '\"Dobby\"))"
                     "  '('Weight (Int64 '350))))"
                     "(let pgmReturn (AsList"
                     "  (UpdateRow '/dc-1/Zoo/Animals row myUpd)"
@@ -1382,8 +1382,8 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                     "("
                     "(let row '('('Id (Uint64 '1))))"
                     "(let myUpd '("
-                    "  '('Species (Utf8 '\"Rat\"))" 
-                    "  '('Name (Utf8 '\"Dobby\"))" 
+                    "  '('Species (Utf8 '\"Rat\"))"
+                    "  '('Name (Utf8 '\"Dobby\"))"
                     "  '('Weight (Int64 '350))))"
                     "(let pgmReturn (AsList"
                     "  (UpdateRow '/dc-1/Zoo/Animals row myUpd)"
@@ -1560,14 +1560,14 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         example.CreateTable("Table", {
                                 TKeyColumn("Key1", NClient::TType::Uint32),
                                 TKeyColumn("Key2", NClient::TType::Uint64),
-                                TColumn("Value", NClient::TType::Utf8) 
+                                TColumn("Value", NClient::TType::Utf8)
                             });
 
         auto rawQuery = kikimr.Query(R"___(
                                         (
                                         (let key1 (Parameter 'KEY1 (DataType 'Uint32)))
                                         (let key2 (Parameter 'KEY2 (DataType 'Uint64)))
-                                        (let val (Parameter 'VALUE (DataType 'Utf8))) 
+                                        (let val (Parameter 'VALUE (DataType 'Utf8)))
                                         (let key '(
                                             '('Key1 key1)
                                             '('Key2 key2)
@@ -1625,9 +1625,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
 
         auto dc = kikimr.GetSchemaRoot("dc-1");
         auto example = dc.MakeDirectory("Example");
-        example.CreateTable("Table1", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)}); 
-        example.CreateTable("Table2", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)}); 
-        example.CreateTable("Table3", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)}); 
+        example.CreateTable("Table1", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)});
+        example.CreateTable("Table2", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)});
+        example.CreateTable("Table3", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)});
         auto query = kikimr.Query(R"___(
                                   # Check 3 tables and write if none of 3 rows already exists
                                   (
@@ -1701,9 +1701,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto dc = kikimr.GetSchemaRoot("dc-1");
         auto example = dc.MakeDirectory("Example");
 
-        example.CreateTable("Table1", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)}); 
-        example.CreateTable("Table2", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)}); 
-        example.CreateTable("Table3", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)}); 
+        example.CreateTable("Table1", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)});
+        example.CreateTable("Table2", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)});
+        example.CreateTable("Table3", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::Utf8)});
 
         auto readQuery = kikimr.Query(R"___(
                                       (
@@ -1752,9 +1752,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                         (let h2 (Parameter 'H2_PARAM (DataType 'Uint64)))
                                         (let h3 (Parameter 'H3_PARAM (DataType 'Uint64)))
 
-                                        (let d1 (Parameter 'D1_PARAM (DataType 'Utf8))) 
-                                        (let d2 (Parameter 'D2_PARAM (DataType 'Utf8))) 
-                                        (let d3 (Parameter 'D3_PARAM (DataType 'Utf8))) 
+                                        (let d1 (Parameter 'D1_PARAM (DataType 'Utf8)))
+                                        (let d2 (Parameter 'D2_PARAM (DataType 'Utf8)))
+                                        (let d3 (Parameter 'D3_PARAM (DataType 'Utf8)))
 
                                         # Read versions from the DB
                                         (let row1 '('('Hash h1)))
@@ -1790,12 +1790,12 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table1 row1 '('('Version (Increment v1))'('Data d1)))))
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table2 row2 '('('Version (Increment v2))'('Data d2)))))
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table3 row3 '('('Version (Increment v3))'('Data d3)))))
-                                                (let list (Append list (SetResult 'myRes (Utf8 '"Updated")))) 
+                                                (let list (Append list (SetResult 'myRes (Utf8 '"Updated"))))
                                                 (return list)
                                             ))
                                             (block '(
                                                 (let emptyList (List (ListType (VoidType))))
-                                                (let emptyList (Append emptyList (SetResult 'myRes (Utf8 '"Version mismatch")))) 
+                                                (let emptyList (Append emptyList (SetResult 'myRes (Utf8 '"Version mismatch"))))
                                                 (return emptyList)
                                             ))
                                         ))
@@ -1846,9 +1846,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto dc = kikimr.GetSchemaRoot("dc-1");
         auto example = dc.MakeDirectory("Example");
 
-        example.CreateTable("Table1", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::String)}); 
-        example.CreateTable("Table2", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::String)}); 
-        example.CreateTable("Table3", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::String)}); 
+        example.CreateTable("Table1", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::String)});
+        example.CreateTable("Table2", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::String)});
+        example.CreateTable("Table3", {TKeyColumn("Hash", NClient::TType::Uint64), TColumn("Version", NClient::TType::Uint64), TColumn("Data", NClient::TType::String)});
 
         auto readQuery = kikimr.Query(R"___(
                                       (
@@ -1897,9 +1897,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                         (let h2 (Parameter 'H2_PARAM (DataType 'Uint64)))
                                         (let h3 (Parameter 'H3_PARAM (DataType 'Uint64)))
 
-                                        (let d1 (Parameter 'D1_PARAM (DataType 'String))) 
-                                        (let d2 (Parameter 'D2_PARAM (DataType 'String))) 
-                                        (let d3 (Parameter 'D3_PARAM (DataType 'String))) 
+                                        (let d1 (Parameter 'D1_PARAM (DataType 'String)))
+                                        (let d2 (Parameter 'D2_PARAM (DataType 'String)))
+                                        (let d3 (Parameter 'D3_PARAM (DataType 'String)))
 
                                         # Read versions from the DB
                                         (let row1 '('('Hash h1)))
@@ -1935,12 +1935,12 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table1 row1 '('('Version (Increment v1))'('Data d1)))))
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table2 row2 '('('Version (Increment v2))'('Data d2)))))
                                                 (let list (Append list (UpdateRow '/dc-1/Example/Table3 row3 '('('Version (Increment v3))'('Data d3)))))
-                                                (let list (Append list (SetResult 'myRes (Utf8 '"Updated")))) 
+                                                (let list (Append list (SetResult 'myRes (Utf8 '"Updated"))))
                                                 (return list)
                                             ))
                                             (block '(
                                                 (let emptyList (List (ListType (VoidType))))
-                                                (let emptyList (Append emptyList (SetResult 'myRes (Utf8 '"Version mismatch")))) 
+                                                (let emptyList (Append emptyList (SetResult 'myRes (Utf8 '"Version mismatch"))))
                                                 (return emptyList)
                                             ))
                                         ))
@@ -1975,9 +1975,9 @@ Y_UNIT_TEST_SUITE(ClientLib) {
                                              TParameter("V1_PARAM", V1.IsNull() ? (ui64)0 : V1),
                                              TParameter("V2_PARAM", V2.IsNull() ? (ui64)0 : V2),
                                              TParameter("V3_PARAM", V3.IsNull() ? (ui64)0 : V3),
-                                             TParameterValue<TString, NScheme::NTypeIds::String>("D1_PARAM", "data" + ToString(H1)), 
-                                             TParameterValue<TString, NScheme::NTypeIds::String>("D2_PARAM", "data" + ToString(H2)), 
-                                             TParameterValue<TString, NScheme::NTypeIds::String>("D3_PARAM", "data" + ToString(H3)) 
+                                             TParameterValue<TString, NScheme::NTypeIds::String>("D1_PARAM", "data" + ToString(H1)),
+                                             TParameterValue<TString, NScheme::NTypeIds::String>("D2_PARAM", "data" + ToString(H2)),
+                                             TParameterValue<TString, NScheme::NTypeIds::String>("D3_PARAM", "data" + ToString(H3))
                                          );
             UNIT_ASSERT_EQUAL(result.GetStatus(), NMsgBusProxy::MSTATUS_OK);
         }
@@ -1992,15 +1992,15 @@ Y_UNIT_TEST_SUITE(ClientLib) {
         auto query = kikimr.Query(R"___(
             (
             (let pb (Parameter 'PB (DataType 'Bool)))
-            (let pui8 (Parameter 'PUI8 (DataType 'Uint8))) 
+            (let pui8 (Parameter 'PUI8 (DataType 'Uint8)))
             (let pi32 (Parameter 'PI32 (DataType 'Int32)))
             (let pui32 (Parameter 'PUI32 (DataType 'Uint32)))
             (let pi64 (Parameter 'PI64 (DataType 'Int64)))
             (let pui64 (Parameter 'PUI64 (DataType 'Uint64)))
             (let pf (Parameter 'PF (DataType 'Float)))
             (let pd (Parameter 'PD (DataType 'Double)))
-            (let ps (Parameter 'PS (DataType 'String))) 
-            (let pu (Parameter 'PU (DataType 'Utf8))) 
+            (let ps (Parameter 'PS (DataType 'String)))
+            (let pu (Parameter 'PU (DataType 'Utf8)))
             (return (AsList
                 (SetResult 'rb pb)
                 (SetResult 'rui8 pui8)

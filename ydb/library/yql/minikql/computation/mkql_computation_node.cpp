@@ -1,31 +1,31 @@
-#include "mkql_computation_node_holders.h" 
-#include "mkql_computation_node_impl.h" 
-#include "mkql_computation_node_pack.h" 
+#include "mkql_computation_node_holders.h"
+#include "mkql_computation_node_impl.h"
+#include "mkql_computation_node_pack.h"
 #include "mkql_value_builder.h"
 #include "mkql_validate.h"
 
-#include <ydb/library/yql/minikql/mkql_node_builder.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_node_printer.h> 
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
-#include <ydb/library/yql/minikql/mkql_type_builder.h> 
-#include <ydb/library/yql/minikql/mkql_utils.h> 
-#include <ydb/library/yql/minikql/mkql_alloc.h> 
- 
-#include <util/generic/set.h> 
-#include <util/generic/algorithm.h> 
-#include <util/random/mersenne.h> 
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_node_printer.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/minikql/mkql_utils.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+
+#include <util/generic/set.h>
+#include <util/generic/algorithm.h>
+#include <util/random/mersenne.h>
 #include <util/random/random.h>
-#include <util/system/tempfile.h> 
+#include <util/system/tempfile.h>
 #include <util/system/fstat.h>
 #include <util/system/rusage.h>
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 #include <util/stream/output.h>
-#include <util/memory/pool.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include <util/memory/pool.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     const NUdf::IValueBuilder* builder,
     TComputationOptsFull& opts,
@@ -85,29 +85,29 @@ void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
 #endif
 }
 
-class TSimpleSecureParamsProvider : public NUdf::ISecureParamsProvider { 
-public: 
-    TSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams) 
-        : SecureParams(secureParams) 
-    {} 
- 
-    bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override { 
-        auto found = SecureParams.FindPtr(TStringBuf(key)); 
-        if (!found) { 
-            return false; 
-        } 
- 
-        value = (TStringBuf)*found; 
-        return true; 
-    } 
- 
-private: 
-    const THashMap<TString, TString> SecureParams; 
-}; 
- 
-std::unique_ptr<NUdf::ISecureParamsProvider> MakeSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams) { 
-    return std::make_unique<TSimpleSecureParamsProvider>(secureParams); 
-} 
- 
-} 
-} 
+class TSimpleSecureParamsProvider : public NUdf::ISecureParamsProvider {
+public:
+    TSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams)
+        : SecureParams(secureParams)
+    {}
+
+    bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override {
+        auto found = SecureParams.FindPtr(TStringBuf(key));
+        if (!found) {
+            return false;
+        }
+
+        value = (TStringBuf)*found;
+        return true;
+    }
+
+private:
+    const THashMap<TString, TString> SecureParams;
+};
+
+std::unique_ptr<NUdf::ISecureParamsProvider> MakeSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams) {
+    return std::make_unique<TSimpleSecureParamsProvider>(secureParams);
+}
+
+}
+}

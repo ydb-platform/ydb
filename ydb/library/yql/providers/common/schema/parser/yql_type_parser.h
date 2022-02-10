@@ -1,8 +1,8 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/yson/consumer.h>
 #include <library/cpp/yson/node/node.h>
- 
+
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -15,12 +15,12 @@ namespace NCommon {
 class TYqlTypeYsonSaverBase {
 public:
     typedef NYson::TYsonConsumerBase TConsumer;
- 
+
     TYqlTypeYsonSaverBase(TConsumer& writer)
         : Writer(writer)
     {
     }
- 
+
 protected:
     void SaveTypeHeader(TStringBuf name);
     void SaveType();
@@ -33,11 +33,11 @@ protected:
     void SaveDataType(const TStringBuf& dataType);
     void SaveDataTypeParams(const TStringBuf& dataType, const TStringBuf& paramOne, const TStringBuf& paramTwo);
     void SaveResourceType(const TStringBuf& tag);
- 
+
 protected:
     NYson::TYsonConsumerBase& Writer;
 };
- 
+
 
 template <typename TDerived>
 class TYqlTypeYsonSaverImpl: public TYqlTypeYsonSaverBase {
@@ -65,7 +65,7 @@ protected:
         baseType.Save(taggedType.GetBaseType());
         Writer.OnEndList();
     }
- 
+
     template <typename TStructType>
     void SaveStructType(const TStructType& structType) {
         SaveTypeHeader("StructType");
@@ -84,7 +84,7 @@ protected:
         Writer.OnEndList();
         Writer.OnEndList();
     }
- 
+
     template <typename TListType>
     void SaveListType(const TListType& listType) {
         SaveTypeHeader("ListType");
@@ -93,7 +93,7 @@ protected:
         item.Save(listType.GetItemType());
         Writer.OnEndList();
     }
- 
+
     template <typename TStreamType>
     void SaveStreamType(const TStreamType& streamType) {
         SaveTypeHeader("StreamType");
@@ -102,7 +102,7 @@ protected:
         item.Save(streamType.GetItemType());
         Writer.OnEndList();
     }
- 
+
     template <typename TOptionalType>
     void SaveOptionalType(const TOptionalType& optionalType) {
         SaveTypeHeader("OptionalType");
@@ -123,7 +123,7 @@ protected:
         val.Save(dictType.GetPayloadType());
         Writer.OnEndList();
     }
- 
+
     template <typename TTupleType>
     void SaveTupleType(const TTupleType& tupleType) {
         SaveTypeHeader("TupleType");
@@ -137,7 +137,7 @@ protected:
         Writer.OnEndList();
         Writer.OnEndList();
     }
- 
+
     template <typename TCallableType>
     void SaveCallableType(const TCallableType& callableType) {
         SaveTypeHeader("CallableType");
@@ -415,6 +415,6 @@ TMaybe<typename TLoader::TType> DoLoadTypeFromYson(TLoader& loader, const NYT::T
 }
 
 bool ParseYson(NYT::TNode& res, const TStringBuf yson, IOutputStream& err);
- 
-} // namespace NCommon 
-} // namespace NYql 
+
+} // namespace NCommon
+} // namespace NYql

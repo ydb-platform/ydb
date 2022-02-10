@@ -8,10 +8,10 @@
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
 
 #include <library/cpp/actors/core/log.h>
 
@@ -35,7 +35,7 @@ NUdf::TUnboxedValue CreateRow(const TVector<TCell>& inRow,
         rowItems[i] = GetCellValue(inRow[i], inType[i]);
     }
 
-    return std::move(row); 
+    return std::move(row);
 }
 
 } // namespace
@@ -182,7 +182,7 @@ struct TRangeResultInfo {
         resultItems[2] = MakeString(FirstKey);
         resultItems[3] = NUdf::TUnboxedValuePod(Bytes);
 
-        return std::move(result); 
+        return std::move(result);
     }
 };
 
@@ -386,7 +386,7 @@ public:
             itemsLimit, bytesLimit, reverse, forbidNullArgs, holderFactory);
     }
 
-    void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) override { 
+    void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).UpdateRow(row, commands);
             return;
@@ -438,7 +438,7 @@ public:
         }
     }
 
-    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override { 
+    void EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) override {
         if (TSysTables::IsSystemTable(tableId)) {
             DataShardSysTable(tableId).EraseRow(row);
             return;
@@ -451,7 +451,7 @@ public:
     }
 
     // Returns whether row belong this shard.
-    bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override { 
+    bool IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const override {
         if (TSysTables::IsSystemTable(tableId))
             return DataShardSysTable(tableId).IsMyKey(row);
 

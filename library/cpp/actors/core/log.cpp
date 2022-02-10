@@ -213,13 +213,13 @@ namespace NActors {
         Metrics->IncDirectMsgs();
         if (Settings && Settings->Satisfies(priority, component, 0ull)) {
             va_list params;
-            va_start(params, c); 
+            va_start(params, c);
             TString formatted;
             vsprintf(formatted, c, params);
 
             auto ok = OutputRecord(time, NLog::EPrio(priority), component, formatted);
             Y_UNUSED(ok);
-            va_end(params); 
+            va_end(params);
         }
     }
 
@@ -334,11 +334,11 @@ namespace NActors {
                 }
                 TABLEBODY() {
                     for (EComponent i = Settings->MinVal; i < Settings->MaxVal; i++) {
-                        auto name = Settings->ComponentName(i); 
-                        if (!*name) 
-                            continue; 
+                        auto name = Settings->ComponentName(i);
+                        if (!*name)
+                            continue;
                         NLog::TComponentSettings componentSettings = Settings->GetComponentSettings(i);
- 
+
                         TABLER() {
                             TABLED() {
                                 str << "<a href='logger?c=" << i << "'>" << name << "</a>";
@@ -368,26 +368,26 @@ namespace NActors {
      */
     void TLoggerActor::HandleMonInfo(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
         const auto& params = ev->Get()->Request.GetParams();
-        NLog::EComponent component = NLog::InvalidComponent; 
-        NLog::EPriority priority = NLog::PRI_DEBUG; 
+        NLog::EComponent component = NLog::InvalidComponent;
+        NLog::EPriority priority = NLog::PRI_DEBUG;
         NLog::EPriority samplingPriority = NLog::PRI_DEBUG;
         ui32 samplingRate = 0;
-        bool hasComponent = false; 
-        bool hasPriority = false; 
+        bool hasComponent = false;
+        bool hasPriority = false;
         bool hasSamplingPriority = false;
         bool hasSamplingRate = false;
         bool hasAllowDrop = false;
         int allowDrop = 0;
-        if (params.Has("c")) { 
-            if (TryFromString(params.Get("c"), component) && (component == NLog::InvalidComponent || Settings->IsValidComponent(component))) { 
-                hasComponent = true; 
-                if (params.Has("p")) { 
-                    int rawPriority; 
-                    if (TryFromString(params.Get("p"), rawPriority) && NLog::TSettings::IsValidPriority((NLog::EPriority)rawPriority)) { 
-                        priority = (NLog::EPriority)rawPriority; 
-                        hasPriority = true; 
-                    } 
-                } 
+        if (params.Has("c")) {
+            if (TryFromString(params.Get("c"), component) && (component == NLog::InvalidComponent || Settings->IsValidComponent(component))) {
+                hasComponent = true;
+                if (params.Has("p")) {
+                    int rawPriority;
+                    if (TryFromString(params.Get("p"), rawPriority) && NLog::TSettings::IsValidPriority((NLog::EPriority)rawPriority)) {
+                        priority = (NLog::EPriority)rawPriority;
+                        hasPriority = true;
+                    }
+                }
                 if (params.Has("sp")) {
                     int rawPriority;
                     if (TryFromString(params.Get("sp"), rawPriority) && NLog::TSettings::IsValidPriority((NLog::EPriority)rawPriority)) {
@@ -400,14 +400,14 @@ namespace NActors {
                         hasSamplingRate = true;
                     }
                 }
-            } 
-        } 
+            }
+        }
         if (params.Has("allowdrop")) {
             if (TryFromString(params.Get("allowdrop"), allowDrop)) {
                 hasAllowDrop = true;
             }
         }
- 
+
         TStringStream str;
         if (hasComponent && !hasPriority && !hasSamplingPriority && !hasSamplingRate) {
             NLog::TComponentSettings componentSettings = Settings->GetComponentSettings(component);
@@ -434,7 +434,7 @@ namespace NActors {
                         }
                     }
                 }
- 
+
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-12") {
                         H4() {
@@ -473,12 +473,12 @@ namespace NActors {
                     }
                 }
             }
- 
-        } else { 
+
+        } else {
             TString explanation;
-            if (hasComponent && hasPriority) { 
+            if (hasComponent && hasPriority) {
                 Settings->SetLevel(priority, component, explanation);
-            } 
+            }
             if (hasComponent && hasSamplingPriority) {
                 Settings->SetSamplingLevel(samplingPriority, component, explanation);
             }
@@ -488,7 +488,7 @@ namespace NActors {
             if (hasAllowDrop) {
                 Settings->SetAllowDrop(allowDrop);
             }
- 
+
             HTML(str) {
                 if (!explanation.empty()) {
                     DIV_CLASS("row") {
@@ -496,8 +496,8 @@ namespace NActors {
                             str << explanation;
                         }
                     }
-                } 
- 
+                }
+
                 DIV_CLASS("row") {
                     DIV_CLASS("col-md-6") {
                         RenderComponentPriorities(str);
@@ -522,7 +522,7 @@ namespace NActors {
                                                 << NLog::PriorityToString(NLog::EPrio(p)) << "</a>";
                                         }
                                     }
-                                } 
+                                }
                             }
                         }
                         H4() {
@@ -567,7 +567,7 @@ namespace NActors {
                 }
                 Metrics->GetOutputHtml(str);
             }
-        } 
+        }
 
         ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
     }
@@ -669,10 +669,10 @@ namespace NActors {
     }
 
     class TStderrBackend: public TLogBackend {
-    public: 
+    public:
         TStderrBackend() {
         }
-        void WriteData(const TLogRecord& rec) override { 
+        void WriteData(const TLogRecord& rec) override {
 #ifdef _MSC_VER
             if (IsDebuggerPresent()) {
                 TString x;
@@ -693,15 +693,15 @@ namespace NActors {
                     Y_UNUSED(err);
                 }
             } while (!isOk);
-        } 
- 
+        }
+
         void ReopenLog() override {
-        } 
- 
-    private: 
+        }
+
+    private:
         const TString Indent;
-    }; 
- 
+    };
+
     class TLineFileLogBackend: public TFileLogBackend {
     public:
         TLineFileLogBackend(const TString& path)
@@ -735,10 +735,10 @@ namespace NActors {
         TVector<TAutoPtr<TLogBackend>> UnderlyingBackends;
     };
 
-    TAutoPtr<TLogBackend> CreateStderrBackend() { 
-        return new TStderrBackend(); 
-    } 
- 
+    TAutoPtr<TLogBackend> CreateStderrBackend() {
+        return new TStderrBackend();
+    }
+
     TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName) {
         return new TLineFileLogBackend(fileName);
     }

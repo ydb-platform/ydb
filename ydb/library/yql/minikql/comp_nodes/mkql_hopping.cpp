@@ -1,10 +1,10 @@
 #include "mkql_hopping.h"
 #include "mkql_saveload.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_stats_registry.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_stats_registry.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 
 #include <util/generic/scope.h>
 
@@ -63,7 +63,7 @@ public:
                 if (bucket.HasValue) {
                     Self->InSave->SetValue(Ctx, NUdf::TUnboxedValue(bucket.Value));
                     if (Self->StateType) {
-                        WriteUnboxedValue(out, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Self->OutSave->GetValue(Ctx)); 
+                        WriteUnboxedValue(out, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Self->OutSave->GetValue(Ctx));
                     }
                 }
             }
@@ -85,7 +85,7 @@ public:
                 bucket.HasValue = ReadBool(in);
                 if (bucket.HasValue) {
                     if (Self->StateType) {
-                        Self->InLoad->SetValue(Ctx, ReadUnboxedValue(in, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx)); 
+                        Self->InLoad->SetValue(Ctx, ReadUnboxedValue(in, Self->Packer.RefMutableObject(Ctx, false, Self->StateType), Ctx));
                     }
                     bucket.Value = Self->OutLoad->GetValue(Ctx);
                 }
@@ -286,19 +286,19 @@ public:
 private:
     void RegisterDependencies() const final {
         DependsOn(Stream);
-        Own(Item); 
-        Own(State); 
-        Own(State2); 
-        Own(Time); 
-        Own(InSave); 
-        Own(InLoad); 
-        DependsOn(OutTime); 
-        DependsOn(OutInit); 
-        DependsOn(OutUpdate); 
-        DependsOn(OutSave); 
-        DependsOn(OutLoad); 
-        DependsOn(OutMerge); 
-        DependsOn(OutFinish); 
+        Own(Item);
+        Own(State);
+        Own(State2);
+        Own(Time);
+        Own(InSave);
+        Own(InLoad);
+        DependsOn(OutTime);
+        DependsOn(OutInit);
+        DependsOn(OutUpdate);
+        DependsOn(OutSave);
+        DependsOn(OutLoad);
+        DependsOn(OutMerge);
+        DependsOn(OutFinish);
         DependsOn(Hop);
         DependsOn(Interval);
         DependsOn(Delay);

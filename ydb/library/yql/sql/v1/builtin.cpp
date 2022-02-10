@@ -3,13 +3,13 @@
 
 #include "list_builtin.h"
 
-#include <ydb/library/yql/ast/yql_type_string.h> 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/ast/yql_type_string.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/core/sql_types/simple_types.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
-#include <ydb/library/yql/minikql/mkql_type_ops.h> 
-#include <ydb/library/yql/public/issue/yql_issue_id.h> 
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/public/issue/yql_issue_id.h>
 
 #include <library/cpp/charset/ci_string.h>
 #include <library/cpp/yson/node/node_io.h>
@@ -25,32 +25,32 @@ using namespace NYql;
 
 namespace NSQLTranslationV1 {
 
-extern const char SubqueryExtendFor[] = "SubqueryExtendFor"; 
-extern const char SubqueryUnionAllFor[] = "SubqueryUnionAllFor"; 
-extern const char SubqueryMergeFor[] = "SubqueryMergeFor"; 
-extern const char SubqueryUnionMergeFor[] = "SubqueryUnionMergeFor"; 
-extern const char SubqueryOrderBy[] = "SubqueryOrderBy"; 
-extern const char SubqueryAssumeOrderBy[] = "SubqueryAssumeOrderBy"; 
- 
-TMaybe<TString> MakeTypeConfig(const TString& ns, const TVector<TNodePtr>& udfArgs) { 
-    if (ns == "clickhouse") { 
-        auto settings = NYT::TNode::CreateMap(); 
-        auto args = NYT::TNode::CreateMap(); 
-        for (ui32 i = 0; i < udfArgs.size(); ++i) { 
-            if (!udfArgs[i]->IsNull() && udfArgs[i]->IsLiteral()) { 
-                args[ToString(i)] = NYT::TNode() 
-                    ("type", udfArgs[i]->GetLiteralType()) 
-                    ("value", udfArgs[i]->GetLiteralValue()); 
-            } 
-        } 
- 
-        settings["args"] = args; 
-        return NYT::NodeToYsonString(settings); 
-    } 
- 
-    return Nothing(); 
-} 
- 
+extern const char SubqueryExtendFor[] = "SubqueryExtendFor";
+extern const char SubqueryUnionAllFor[] = "SubqueryUnionAllFor";
+extern const char SubqueryMergeFor[] = "SubqueryMergeFor";
+extern const char SubqueryUnionMergeFor[] = "SubqueryUnionMergeFor";
+extern const char SubqueryOrderBy[] = "SubqueryOrderBy";
+extern const char SubqueryAssumeOrderBy[] = "SubqueryAssumeOrderBy";
+
+TMaybe<TString> MakeTypeConfig(const TString& ns, const TVector<TNodePtr>& udfArgs) {
+    if (ns == "clickhouse") {
+        auto settings = NYT::TNode::CreateMap();
+        auto args = NYT::TNode::CreateMap();
+        for (ui32 i = 0; i < udfArgs.size(); ++i) {
+            if (!udfArgs[i]->IsNull() && udfArgs[i]->IsLiteral()) {
+                args[ToString(i)] = NYT::TNode()
+                    ("type", udfArgs[i]->GetLiteralType())
+                    ("value", udfArgs[i]->GetLiteralValue());
+            }
+        }
+
+        settings["args"] = args;
+        return NYT::NodeToYsonString(settings);
+    }
+
+    return Nothing();
+}
+
 class TGroupingNode final: public TAstListNode {
 public:
     TGroupingNode(TPosition pos, const TVector<TNodePtr>& args)
@@ -125,7 +125,7 @@ public:
         if (!DoInitAggregation(ctx, src)) {
             return false;
         }
- 
+
         return TAstListNode::DoInit(ctx, src);
     }
 
@@ -177,7 +177,7 @@ private:
             }
         }
 
-        if (!Aggr->InitAggr(ctx, false, src, *this, Args)) { 
+        if (!Aggr->InitAggr(ctx, false, src, *this, Args)) {
             return false;
         }
         return src->AddAggregation(ctx, Aggr);
@@ -195,68 +195,68 @@ protected:
     TVector<TNodePtr> Args;
 };
 
-class TBasicAggrFactory final : public TAstListNode { 
-public: 
-    TBasicAggrFactory(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args) 
-        : TAstListNode(pos) 
-        , Name(name) 
-        , Aggr(aggr) 
-        , Args(args) 
-    {} 
- 
-    TCiString GetName() const { 
-        return Name; 
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) final { 
-        if (!DoInitAggregation(ctx)) { 
-            return false; 
-        } 
- 
-        auto factory = Aggr->AggregationTraitsFactory(); 
-        auto apply = Y("Apply", factory, Y("ListType", "type")); 
+class TBasicAggrFactory final : public TAstListNode {
+public:
+    TBasicAggrFactory(TPosition pos, const TString& name, TAggregationPtr aggr, const TVector<TNodePtr>& args)
+        : TAstListNode(pos)
+        , Name(name)
+        , Aggr(aggr)
+        , Args(args)
+    {}
+
+    TCiString GetName() const {
+        return Name;
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) final {
+        if (!DoInitAggregation(ctx)) {
+            return false;
+        }
+
+        auto factory = Aggr->AggregationTraitsFactory();
+        auto apply = Y("Apply", factory, Y("ListType", "type"));
 
         auto columnIndices = Aggr->GetFactoryColumnIndices();
         if (columnIndices.size() == 1) {
-            apply = L(apply, "extractor"); 
-        } else { 
-            // make several extractors from main that returns a tuple 
+            apply = L(apply, "extractor");
+        } else {
+            // make several extractors from main that returns a tuple
             for (ui32 arg = 0; arg < columnIndices.size(); ++arg) {
                 auto partial = BuildLambda(Pos, Y("row"), Y("Nth", Y("Apply", "extractor", "row"), Q(ToString(columnIndices[arg]))));
-                apply = L(apply, partial); 
-            } 
-        } 
- 
-        Aggr->AddFactoryArguments(apply); 
-        Lambda = BuildLambda(Pos, Y("type", "extractor"), apply); 
-        return TAstListNode::DoInit(ctx, src); 
-    } 
- 
-    TAstNode* Translate(TContext& ctx) const override { 
-        return Lambda->Translate(ctx); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        TAggregationPtr aggrClone = static_cast<IAggregation*>(Aggr->Clone().Release()); 
-        return new TBasicAggrFactory(Pos, Name, aggrClone, CloneContainer(Args)); 
-    } 
- 
-    TAggregationPtr GetAggregation() const override { 
-        return Aggr; 
-    } 
- 
-private: 
-    bool DoInitAggregation(TContext& ctx) { 
-        return Aggr->InitAggr(ctx, true, nullptr, *this, Args); 
-    } 
- 
-protected: 
-    const TString Name; 
-    TAggregationPtr Aggr; 
-    TVector<TNodePtr> Args; 
-    TNodePtr Lambda; 
-}; 
- 
+                apply = L(apply, partial);
+            }
+        }
+
+        Aggr->AddFactoryArguments(apply);
+        Lambda = BuildLambda(Pos, Y("type", "extractor"), apply);
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TAstNode* Translate(TContext& ctx) const override {
+        return Lambda->Translate(ctx);
+    }
+
+    TNodePtr DoClone() const final {
+        TAggregationPtr aggrClone = static_cast<IAggregation*>(Aggr->Clone().Release());
+        return new TBasicAggrFactory(Pos, Name, aggrClone, CloneContainer(Args));
+    }
+
+    TAggregationPtr GetAggregation() const override {
+        return Aggr;
+    }
+
+private:
+    bool DoInitAggregation(TContext& ctx) {
+        return Aggr->InitAggr(ctx, true, nullptr, *this, Args);
+    }
+
+protected:
+    const TString Name;
+    TAggregationPtr Aggr;
+    TVector<TNodePtr> Args;
+    TNodePtr Lambda;
+};
+
 typedef THolder<TBasicAggrFunc> TAggrFuncPtr;
 
 class TLiteralStringAtom: public INode {
@@ -270,31 +270,31 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(src);
-        if (!Node) { 
+        if (!Node) {
             ctx.Error(Pos) << Info;
             return false;
         }
- 
-        if (!Node->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Atom = MakeAtomFromExpression(ctx, Node).Build(); 
+
+        if (!Node->Init(ctx, src)) {
+            return false;
+        }
+
+        Atom = MakeAtomFromExpression(ctx, Node).Build();
         return true;
     }
 
-    bool IsLiteral() const override { 
-        return Atom ? Atom->IsLiteral() : false; 
-    } 
- 
-    TString GetLiteralType() const override { 
-        return Atom ? Atom->GetLiteralType() : ""; 
-    } 
- 
-    TString GetLiteralValue() const override { 
-        return Atom ? Atom->GetLiteralValue() : ""; 
-    } 
- 
+    bool IsLiteral() const override {
+        return Atom ? Atom->IsLiteral() : false;
+    }
+
+    TString GetLiteralType() const override {
+        return Atom ? Atom->GetLiteralType() : "";
+    }
+
+    TString GetLiteralValue() const override {
+        return Atom ? Atom->GetLiteralValue() : "";
+    }
+
     TAstNode* Translate(TContext& ctx) const override {
         return Atom->Translate(ctx);
     }
@@ -323,37 +323,37 @@ public:
     }
 };
 
-class TYqlData: public TCallNode { 
-public: 
+class TYqlData: public TCallNode {
+public:
     TYqlData(TPosition pos, const TString& type, const TVector<TNodePtr>& args)
-        : TCallNode(pos, type, 1, 1, args) 
-    { 
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        auto slot = NUdf::FindDataSlot(GetOpName()); 
+        : TCallNode(pos, type, 1, 1, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        auto slot = NUdf::FindDataSlot(GetOpName());
         if (!slot) {
             ctx.Error(Pos) << "Unexpected type " << GetOpName();
             return false;
         }
 
-        if (*slot == NUdf::EDataSlot::Decimal) { 
+        if (*slot == NUdf::EDataSlot::Decimal) {
             MinArgs = MaxArgs = 3;
         }
 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        auto stringNode = Args[0]; 
-        auto atom = stringNode->GetLiteral("String"); 
-        if (!atom) { 
-            ctx.Error(Pos) << "Expected literal string as argument in " << GetOpName() << " function"; 
-            return false; 
-        } 
- 
-        TString value; 
-        if (*slot == NUdf::EDataSlot::Decimal) { 
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        auto stringNode = Args[0];
+        auto atom = stringNode->GetLiteral("String");
+        if (!atom) {
+            ctx.Error(Pos) << "Expected literal string as argument in " << GetOpName() << " function";
+            return false;
+        }
+
+        TString value;
+        if (*slot == NUdf::EDataSlot::Decimal) {
             const auto precision = Args[1]->GetLiteral("Int32");
             const auto scale = Args[2]->GetLiteral("Int32");
 
@@ -377,27 +377,27 @@ public:
             Args[1] = BuildQuotedAtom(GetPos(), *precision);
             Args[2] = BuildQuotedAtom(GetPos(), *scale);
             return TCallNode::DoInit(ctx, src);
-        } else if (NUdf::GetDataTypeInfo(*slot).Features & (NUdf::DateType | NUdf::TzDateType | NUdf::TimeIntervalType)) { 
+        } else if (NUdf::GetDataTypeInfo(*slot).Features & (NUdf::DateType | NUdf::TzDateType | NUdf::TimeIntervalType)) {
             const auto out = NKikimr::NMiniKQL::ValueFromString(*slot, *atom);
             if (!out) {
-                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName(); 
-                return false; 
-            } 
- 
-            switch (*slot) { 
-            case NUdf::EDataSlot::Date: 
-            case NUdf::EDataSlot::TzDate: 
+                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
+                return false;
+            }
+
+            switch (*slot) {
+            case NUdf::EDataSlot::Date:
+            case NUdf::EDataSlot::TzDate:
                 value = ToString(out.Get<ui16>());
-                break; 
-            case NUdf::EDataSlot::Datetime: 
-            case NUdf::EDataSlot::TzDatetime: 
+                break;
+            case NUdf::EDataSlot::Datetime:
+            case NUdf::EDataSlot::TzDatetime:
                 value = ToString(out.Get<ui32>());
-                break; 
-            case NUdf::EDataSlot::Timestamp: 
-            case NUdf::EDataSlot::TzTimestamp: 
+                break;
+            case NUdf::EDataSlot::Timestamp:
+            case NUdf::EDataSlot::TzTimestamp:
                 value = ToString(out.Get<ui64>());
-                break; 
-            case NUdf::EDataSlot::Interval: 
+                break;
+            case NUdf::EDataSlot::Interval:
                 value = ToString(out.Get<i64>());
                 if ('T' == atom->back()) {
                     ctx.Error(Pos) << "Time prefix 'T' at end of interval constant. The designator 'T' shall be absent if all of the time components are absent.";
@@ -406,13 +406,13 @@ public:
                 break;
             default:
                 Y_FAIL("Unexpected data slot");
-            } 
- 
-            if (NUdf::GetDataTypeInfo(*slot).Features & NUdf::TzDateType) { 
+            }
+
+            if (NUdf::GetDataTypeInfo(*slot).Features & NUdf::TzDateType) {
                 value += ",";
                 value += NKikimr::NMiniKQL::GetTimezoneIANAName(out.GetTimezoneId());
             }
-        } else if (NUdf::EDataSlot::Uuid == *slot) { 
+        } else if (NUdf::EDataSlot::Uuid == *slot) {
             char out[0x10];
             if (!NKikimr::NMiniKQL::ParseUuid(*atom, out)) {
                 ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
@@ -420,39 +420,39 @@ public:
             }
 
             value.assign(out, sizeof(out));
-        } else { 
+        } else {
             if (!NKikimr::NMiniKQL::IsValidStringValue(*slot, *atom)) {
-                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName(); 
-                return false; 
-            } 
- 
+                ctx.Error(Pos) << "Invalid value " << atom->Quote() << " for type " << GetOpName();
+                return false;
+            }
+
             value = *atom;
-        } 
- 
-        Args[0] = BuildQuotedAtom(GetPos(), value); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TPtr DoClone() const final { 
-        return new TYqlData(GetPos(), OpName, CloneContainer(Args)); 
-    } 
-}; 
- 
-class TTableName : public TCallNode { 
-public: 
-    TTableName(TPosition pos, const TVector<TNodePtr>& args, const TString& service) 
-        : TCallNode(pos, "TableName", 0, 2, args) 
-        , Service(service) 
+        }
+
+        Args[0] = BuildQuotedAtom(GetPos(), value);
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const final {
+        return new TYqlData(GetPos(), OpName, CloneContainer(Args));
+    }
+};
+
+class TTableName : public TCallNode {
+public:
+    TTableName(TPosition pos, const TVector<TNodePtr>& args, const TString& service)
+        : TCallNode(pos, "TableName", 0, 2, args)
+        , Service(service)
         , EmptyArgs(args.empty())
-    { 
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        if (Args.empty()) { 
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (Args.empty()) {
             if (!src) {
                 ctx.Error(Pos) << "Unable to use TableName() without source";
                 return false;
@@ -471,345 +471,345 @@ public:
             }
 
             Args.push_back(Y("TablePath", Y("DependsOn", "row")));
-        } 
- 
-        if (Args.size() == 2) { 
-            auto literal = Args[1]->GetLiteral("String"); 
-            if (!literal) { 
-                ctx.Error(Args[1]->GetPos()) << "Expected literal string as second argument in TableName function"; 
-                return false; 
-            } 
- 
+        }
+
+        if (Args.size() == 2) {
+            auto literal = Args[1]->GetLiteral("String");
+            if (!literal) {
+                ctx.Error(Args[1]->GetPos()) << "Expected literal string as second argument in TableName function";
+                return false;
+            }
+
             Args[1] = BuildQuotedAtom(Args[1]->GetPos(), *literal);
-        } else { 
-            if (Service.empty()) { 
-                ctx.Error(GetPos()) << GetOpName() << " requires either one of \"yt\"/\"kikimr\"/\"rtmr\" as second argument or current cluster name"; 
-                return false; 
-            } 
- 
-            Args.push_back(BuildQuotedAtom(GetPos(), Service)); 
-        } 
- 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TPtr DoClone() const final { 
-        return new TTableName(GetPos(), CloneContainer(Args), Service); 
-    } 
- 
-    void DoUpdateState() const override { 
+        } else {
+            if (Service.empty()) {
+                ctx.Error(GetPos()) << GetOpName() << " requires either one of \"yt\"/\"kikimr\"/\"rtmr\" as second argument or current cluster name";
+                return false;
+            }
+
+            Args.push_back(BuildQuotedAtom(GetPos(), Service));
+        }
+
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TPtr DoClone() const final {
+        return new TTableName(GetPos(), CloneContainer(Args), Service);
+    }
+
+    void DoUpdateState() const override {
         if (EmptyArgs) {
             State.Set(ENodeState::Const, false);
         } else {
             TCallNode::DoUpdateState();
         }
-    } 
- 
-private: 
-    TString Service; 
+    }
+
+private:
+    TString Service;
     const bool EmptyArgs;
-}; 
- 
-class TYqlParseType final : public INode { 
-public: 
+};
+
+class TYqlParseType final : public INode {
+public:
     TYqlParseType(TPosition pos, const TVector<TNodePtr>& args)
-        : INode(pos) 
-        , Args(args) 
-    {} 
- 
+        : INode(pos)
+        , Args(args)
+    {}
+
     TAstNode* Translate(TContext& ctx) const override {
-        if (Args.size() != 1) { 
-            ctx.Error(Pos) << "Expected 1 argument in ParseType function"; 
-            return nullptr; 
-        } 
- 
-        auto literal = Args[0]->GetLiteral("String"); 
-        if (!literal) { 
-            ctx.Error(Args[0]->GetPos()) << "Expected literal string as argument in ParseType function"; 
-            return nullptr; 
-        } 
- 
+        if (Args.size() != 1) {
+            ctx.Error(Pos) << "Expected 1 argument in ParseType function";
+            return nullptr;
+        }
+
+        auto literal = Args[0]->GetLiteral("String");
+        if (!literal) {
+            ctx.Error(Args[0]->GetPos()) << "Expected literal string as argument in ParseType function";
+            return nullptr;
+        }
+
         auto parsed = ParseType(*literal, *ctx.Pool, ctx.Issues, Args[0]->GetPos());
-        if (!parsed) { 
-            ctx.Error(Args[0]->GetPos()) << "Failed to parse type"; 
-            return nullptr; 
-        } 
- 
-        return parsed; 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlParseType(Pos, Args); 
-    } 
- 
+        if (!parsed) {
+            ctx.Error(Args[0]->GetPos()) << "Failed to parse type";
+            return nullptr;
+        }
+
+        return parsed;
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlParseType(Pos, Args);
+    }
+
     void DoUpdateState() const final {
         State.Set(ENodeState::Const);
     }
-private: 
+private:
     TVector<TNodePtr> Args;
-}; 
- 
-class TYqlAddTimezone: public TCallNode { 
-public: 
-    TYqlAddTimezone(TPosition pos, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, "AddTimezone", 2, 2, args) 
-    { 
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        Args[1] = Y("TimezoneId", Args[1]); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlAddTimezone(Pos, CloneContainer(Args)); 
-    } 
-}; 
- 
-template <const char* Name> 
-class TYqlSubqueryFor : public TCallNode { 
-public: 
-    TYqlSubqueryFor(TPosition pos, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, Name, 2, 2, args) 
-    { 
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        Args[0] = Y("EvaluateExpr", Args[0]); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlSubqueryFor<Name>(Pos, Args); 
-    } 
-}; 
- 
-template <const char* Name> 
-class TYqlSubqueryOrderBy : public TCallNode { 
-public: 
-    TYqlSubqueryOrderBy(TPosition pos, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, Name, 2, 2, args) 
-    { 
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        Args[1] = Y("EvaluateExpr", Args[1]); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlSubqueryOrderBy<Name>(Pos, Args); 
-    } 
-}; 
- 
- 
-template <bool Strict> 
-class TYqlTypeAssert : public TCallNode { 
-public: 
-    TYqlTypeAssert(TPosition pos, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, Strict ? "EnsureType" : "EnsureConvertibleTo", 2, 3, args) 
-    { 
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
+};
+
+class TYqlAddTimezone: public TCallNode {
+public:
+    TYqlAddTimezone(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "AddTimezone", 2, 2, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        Args[1] = Y("TimezoneId", Args[1]);
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlAddTimezone(Pos, CloneContainer(Args));
+    }
+};
+
+template <const char* Name>
+class TYqlSubqueryFor : public TCallNode {
+public:
+    TYqlSubqueryFor(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, Name, 2, 2, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        Args[0] = Y("EvaluateExpr", Args[0]);
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlSubqueryFor<Name>(Pos, Args);
+    }
+};
+
+template <const char* Name>
+class TYqlSubqueryOrderBy : public TCallNode {
+public:
+    TYqlSubqueryOrderBy(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, Name, 2, 2, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        Args[1] = Y("EvaluateExpr", Args[1]);
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlSubqueryOrderBy<Name>(Pos, Args);
+    }
+};
+
+
+template <bool Strict>
+class TYqlTypeAssert : public TCallNode {
+public:
+    TYqlTypeAssert(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, Strict ? "EnsureType" : "EnsureConvertibleTo", 2, 3, args)
+    {
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
         if (!Args[1]->Init(ctx, src)) {
-            return false; 
-        } 
-        if (Args.size() == 3) { 
-            if (!Args[2]->Init(ctx, src)) { 
-                return false; 
-            } 
- 
-            auto message = MakeAtomFromExpression(ctx, Args[2]).Build(); 
-            Args[2] = message; 
-        } 
- 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlTypeAssert<Strict>(Pos, Args); 
-    } 
-}; 
- 
-class TFromBytes final : public TCallNode { 
-public: 
+            return false;
+        }
+        if (Args.size() == 3) {
+            if (!Args[2]->Init(ctx, src)) {
+                return false;
+            }
+
+            auto message = MakeAtomFromExpression(ctx, Args[2]).Build();
+            Args[2] = message;
+        }
+
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlTypeAssert<Strict>(Pos, Args);
+    }
+};
+
+class TFromBytes final : public TCallNode {
+public:
     TFromBytes(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "FromBytes", 2, 2, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
+        : TCallNode(pos, "FromBytes", 2, 2, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
         if (!ValidateArguments(ctx)) {
-            return false; 
-        } 
- 
-        if (!Args[1]->Init(ctx, src)) { 
-            return false; 
-        } 
+            return false;
+        }
+
+        if (!Args[1]->Init(ctx, src)) {
+            return false;
+        }
         Args[1] = MakeAtomFromExpression(ctx, Y("FormatType", Args[1])).Build();
- 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TFromBytes(Pos, Args); 
-    } 
-}; 
- 
-class TYqlTaggedBase : public TCallNode { 
-public: 
+
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TFromBytes(Pos, Args);
+    }
+};
+
+class TYqlTaggedBase : public TCallNode {
+public:
     TYqlTaggedBase(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
-        : TCallNode(pos, opName, 2, 2, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
+        : TCallNode(pos, opName, 2, 2, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
         if (!ValidateArguments(ctx)) {
-            return false; 
-        } 
- 
-        if (!Args[1]->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
-}; 
- 
-class TYqlAsTagged final : public TYqlTaggedBase { 
-public: 
+            return false;
+        }
+
+        if (!Args[1]->Init(ctx, src)) {
+            return false;
+        }
+
+        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+};
+
+class TYqlAsTagged final : public TYqlTaggedBase {
+public:
     TYqlAsTagged(TPosition pos, const TVector<TNodePtr>& args)
-        : TYqlTaggedBase(pos, "AsTagged", args) 
-    {} 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlAsTagged(Pos, Args); 
-    } 
-}; 
- 
-class TYqlUntag final : public TYqlTaggedBase { 
-public: 
+        : TYqlTaggedBase(pos, "AsTagged", args)
+    {}
+
+    TNodePtr DoClone() const final {
+        return new TYqlAsTagged(Pos, Args);
+    }
+};
+
+class TYqlUntag final : public TYqlTaggedBase {
+public:
     TYqlUntag(TPosition pos, const TVector<TNodePtr>& args)
-        : TYqlTaggedBase(pos, "Untag", args) 
-    {} 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlUntag(Pos, Args); 
-    } 
-}; 
- 
-class TYqlVariant final : public TCallNode { 
-public: 
+        : TYqlTaggedBase(pos, "Untag", args)
+    {}
+
+    TNodePtr DoClone() const final {
+        return new TYqlUntag(Pos, Args);
+    }
+};
+
+class TYqlVariant final : public TCallNode {
+public:
     TYqlVariant(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "Variant", 3, 3, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
+        : TCallNode(pos, "Variant", 3, 3, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
         if (!ValidateArguments(ctx)) {
-            return false; 
-        } 
- 
-        if (!Args[1]->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlVariant(Pos, Args); 
-    } 
-}; 
- 
-class TYqlEnum final : public TCallNode { 
-public: 
-    TYqlEnum(TPosition pos, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, "Enum", 2, 2, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        if (!Args[0]->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlEnum(Pos, Args); 
-    } 
-}; 
- 
-class TYqlAsVariant final : public TCallNode { 
-public: 
-    TYqlAsVariant(TPosition pos, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, "AsVariant", 2, 2, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        if (!Args[1]->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlAsVariant(Pos, Args); 
-    } 
-}; 
- 
-class TYqlAsEnum final : public TCallNode { 
-public: 
-    TYqlAsEnum(TPosition pos, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, "AsEnum", 1, 1, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        if (!Args[0]->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlAsEnum(Pos, Args); 
-    } 
-}; 
- 
+            return false;
+        }
+
+        if (!Args[1]->Init(ctx, src)) {
+            return false;
+        }
+
+        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlVariant(Pos, Args);
+    }
+};
+
+class TYqlEnum final : public TCallNode {
+public:
+    TYqlEnum(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "Enum", 2, 2, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!Args[0]->Init(ctx, src)) {
+            return false;
+        }
+
+        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlEnum(Pos, Args);
+    }
+};
+
+class TYqlAsVariant final : public TCallNode {
+public:
+    TYqlAsVariant(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "AsVariant", 2, 2, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!Args[1]->Init(ctx, src)) {
+            return false;
+        }
+
+        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlAsVariant(Pos, Args);
+    }
+};
+
+class TYqlAsEnum final : public TCallNode {
+public:
+    TYqlAsEnum(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "AsEnum", 1, 1, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!Args[0]->Init(ctx, src)) {
+            return false;
+        }
+
+        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlAsEnum(Pos, Args);
+    }
+};
+
 TNodePtr BuildFileNameArgument(TPosition pos, const TNodePtr& argument) {
     return new TLiteralStringAtom(pos, argument, "FilePath requires string literal as parameter");
 }
@@ -830,18 +830,18 @@ public:
     TNodePtr DoClone() const final {
         return new TYqlAtom(Pos, OpName, Args);
     }
- 
-    bool IsLiteral() const override { 
-        return !Args.empty() ? Args[0]->IsLiteral() : false; 
-    } 
- 
-    TString GetLiteralType() const override { 
-        return !Args.empty() ? Args[0]->GetLiteralType() : ""; 
-    } 
- 
-    TString GetLiteralValue() const override { 
-        return !Args.empty() ? Args[0]->GetLiteralValue() : ""; 
-    } 
+
+    bool IsLiteral() const override {
+        return !Args.empty() ? Args[0]->IsLiteral() : false;
+    }
+
+    TString GetLiteralType() const override {
+        return !Args.empty() ? Args[0]->GetLiteralType() : "";
+    }
+
+    TString GetLiteralValue() const override {
+        return !Args.empty() ? Args[0]->GetLiteralValue() : "";
+    }
 };
 
 class TTryMember final: public TCallNode {
@@ -975,21 +975,21 @@ public:
     }
 };
 
-TString NormalizeTypeString(const TString& str) { 
-    auto ret = to_title(str); 
-    if (ret.StartsWith("Tz")) { 
-        ret = "Tz" + to_title(ret.substr(2)); 
-    } 
+TString NormalizeTypeString(const TString& str) {
+    auto ret = to_title(str);
+    if (ret.StartsWith("Tz")) {
+        ret = "Tz" + to_title(ret.substr(2));
+    }
     if (ret.StartsWith("Json")) {
         ret = "Json" + to_title(ret.substr(4));
     }
     if (ret.StartsWith("Dy")) {
         ret = "Dy" + to_title(ret.substr(2));
     }
- 
-    return ret; 
-} 
- 
+
+    return ret;
+}
+
 static const TSet<TString> AvailableDataTypes = {"Bool", "String", "Uint32", "Uint64", "Int32", "Int64", "Float", "Double", "Utf8", "Yson", "Json", "JsonDocument",
     "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal", "DyNumber"};
 TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, TString* outTypeStrPtr = nullptr) {
@@ -1004,7 +1004,7 @@ TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, 
     auto typeStringPtr = typeStringNode->GetLiteral("String");
     TNodePtr dataTypeNode;
     if (typeStringPtr) {
-        TString typeString = NormalizeTypeString(*typeStringPtr); 
+        TString typeString = NormalizeTypeString(*typeStringPtr);
         if (!AvailableDataTypes.contains(typeString)) {
             ctx.Error(typeStringNode->GetPos()) << "Bad type string: '" << typeString << "'. " << errMsgFunc();
             return {};
@@ -1056,247 +1056,247 @@ public:
     }
 };
 
-class TYqlDataType final : public TCallNode { 
-public: 
-    TYqlDataType(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "DataType", 1, 3, args) 
-    { 
-        FakeSource = BuildFakeSource(pos); 
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        for (ui32 i = 0; i < Args.size(); ++i) { 
-            if (!Args[i]->Init(ctx, FakeSource.Get())) { 
-               return false; 
-            } 
- 
-            Args[i] = MakeAtomFromExpression(ctx, Args[i]).Build(); 
-        } 
- 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlDataType(Pos, Args); 
-    } 
- 
-private: 
-    TSourcePtr FakeSource; 
-}; 
- 
-class TYqlResourceType final : public TCallNode { 
-public: 
-    TYqlResourceType(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "ResourceType", 1, 1, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        if (!Args[0]->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlResourceType(Pos, Args); 
-    } 
-}; 
- 
-class TYqlTaggedType final : public TCallNode { 
-public: 
-    TYqlTaggedType(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "TaggedType", 2, 2, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        if (!Args[1]->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlTaggedType(Pos, Args); 
-    } 
-}; 
- 
-class TYqlCallableType final : public TCallNode { 
-public: 
-    TYqlCallableType(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "CallableType", 2, -1, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        if (!dynamic_cast<TTupleNode*>(Args[0].Get())) { 
-            ui32 numOptArgs; 
-            if (!Parseui32(Args[0], numOptArgs)) { 
-                ctx.Error(Args[0]->GetPos()) << "Expected either tuple or number of optional arguments"; 
-                return false; 
-            } 
- 
-            Args[0] = Q(Y(BuildQuotedAtom(Args[0]->GetPos(), ToString(numOptArgs)))); 
-        } 
- 
-        if (!dynamic_cast<TTupleNode*>(Args[1].Get())) { 
-            Args[1] = Q(Y(Args[1])); 
-        } 
- 
-        for (ui32 index = 2; index < Args.size(); ++index) { 
-            if (!dynamic_cast<TTupleNode*>(Args[index].Get())) { 
-                Args[index] = Q(Y(Args[index])); 
-            } 
-        } 
- 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlCallableType(Pos, Args); 
-    } 
-}; 
- 
-class TYqlTupleElementType final : public TCallNode { 
-public: 
-    TYqlTupleElementType(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "TupleElementType", 2, 2, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        if (!Args[1]->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlTupleElementType(Pos, Args); 
-    } 
-}; 
- 
-class TYqlStructMemberType final : public TCallNode { 
-public: 
-    TYqlStructMemberType(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "StructMemberType", 2, 2, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        if (!Args[1]->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build(); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlStructMemberType(Pos, Args); 
-    } 
-}; 
- 
-class TYqlCallableArgumentType final : public TCallNode { 
-public: 
-    TYqlCallableArgumentType(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, "CallableArgumentType", 2, 2, args) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        ui32 index; 
-        if (!Parseui32(Args[1], index)) { 
-            ctx.Error(Args[1]->GetPos()) << "Expected index of the callable argument"; 
-            return false; 
-        } 
- 
-        Args[1] = BuildQuotedAtom(Args[1]->GetPos(), ToString(index)); 
-        return TCallNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlCallableArgumentType(Pos, Args); 
-    } 
-}; 
- 
-class TStructTypeNode : public TAstListNode { 
-public: 
-    TStructTypeNode(TPosition pos, const TVector<TNodePtr>& exprs)
-        : TAstListNode(pos) 
-        , Exprs(exprs) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        Nodes.push_back(BuildAtom(Pos, "StructType", TNodeFlags::Default)); 
-        for (const auto& expr : Exprs) { 
-            const auto& label = expr->GetLabel(); 
-            if (!label) { 
-                ctx.Error(expr->GetPos()) << "Structure does not allow anonymous members"; 
-                return false; 
-            } 
-            Nodes.push_back(Q(Y(Q(label), expr))); 
-        } 
-        return TAstListNode::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TStructTypeNode(Pos, CloneContainer(Exprs)); 
-    } 
- 
-private: 
-    const TVector<TNodePtr> Exprs;
-}; 
- 
-template <bool IsStrict> 
-class TYqlIf final: public TCallNode {
+class TYqlDataType final : public TCallNode {
 public:
-    TYqlIf(TPosition pos, const TVector<TNodePtr>& args)
-        : TCallNode(pos, IsStrict ? "IfStrict" : "If", 2, 3, args) 
-    {}
+    TYqlDataType(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "DataType", 1, 3, args)
+    {
+        FakeSource = BuildFakeSource(pos);
+    }
 
-private:
-    TCallNode::TPtr DoClone() const override { 
-       return new TYqlIf(GetPos(), CloneContainer(Args));
-    } 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
+    bool DoInit(TContext& ctx, ISource* src) override {
         if (!ValidateArguments(ctx)) {
             return false;
         }
 
-        Args[0] = Y("Coalesce", Args[0], Y("Bool", Q("false"))); 
+        for (ui32 i = 0; i < Args.size(); ++i) {
+            if (!Args[i]->Init(ctx, FakeSource.Get())) {
+               return false;
+            }
+
+            Args[i] = MakeAtomFromExpression(ctx, Args[i]).Build();
+        }
+
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlDataType(Pos, Args);
+    }
+
+private:
+    TSourcePtr FakeSource;
+};
+
+class TYqlResourceType final : public TCallNode {
+public:
+    TYqlResourceType(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "ResourceType", 1, 1, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!Args[0]->Init(ctx, src)) {
+            return false;
+        }
+
+        Args[0] = MakeAtomFromExpression(ctx, Args[0]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlResourceType(Pos, Args);
+    }
+};
+
+class TYqlTaggedType final : public TCallNode {
+public:
+    TYqlTaggedType(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "TaggedType", 2, 2, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!Args[1]->Init(ctx, src)) {
+            return false;
+        }
+
+        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlTaggedType(Pos, Args);
+    }
+};
+
+class TYqlCallableType final : public TCallNode {
+public:
+    TYqlCallableType(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "CallableType", 2, -1, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!dynamic_cast<TTupleNode*>(Args[0].Get())) {
+            ui32 numOptArgs;
+            if (!Parseui32(Args[0], numOptArgs)) {
+                ctx.Error(Args[0]->GetPos()) << "Expected either tuple or number of optional arguments";
+                return false;
+            }
+
+            Args[0] = Q(Y(BuildQuotedAtom(Args[0]->GetPos(), ToString(numOptArgs))));
+        }
+
+        if (!dynamic_cast<TTupleNode*>(Args[1].Get())) {
+            Args[1] = Q(Y(Args[1]));
+        }
+
+        for (ui32 index = 2; index < Args.size(); ++index) {
+            if (!dynamic_cast<TTupleNode*>(Args[index].Get())) {
+                Args[index] = Q(Y(Args[index]));
+            }
+        }
+
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlCallableType(Pos, Args);
+    }
+};
+
+class TYqlTupleElementType final : public TCallNode {
+public:
+    TYqlTupleElementType(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "TupleElementType", 2, 2, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!Args[1]->Init(ctx, src)) {
+            return false;
+        }
+
+        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlTupleElementType(Pos, Args);
+    }
+};
+
+class TYqlStructMemberType final : public TCallNode {
+public:
+    TYqlStructMemberType(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "StructMemberType", 2, 2, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!Args[1]->Init(ctx, src)) {
+            return false;
+        }
+
+        Args[1] = MakeAtomFromExpression(ctx, Args[1]).Build();
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlStructMemberType(Pos, Args);
+    }
+};
+
+class TYqlCallableArgumentType final : public TCallNode {
+public:
+    TYqlCallableArgumentType(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, "CallableArgumentType", 2, 2, args)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        ui32 index;
+        if (!Parseui32(Args[1], index)) {
+            ctx.Error(Args[1]->GetPos()) << "Expected index of the callable argument";
+            return false;
+        }
+
+        Args[1] = BuildQuotedAtom(Args[1]->GetPos(), ToString(index));
+        return TCallNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlCallableArgumentType(Pos, Args);
+    }
+};
+
+class TStructTypeNode : public TAstListNode {
+public:
+    TStructTypeNode(TPosition pos, const TVector<TNodePtr>& exprs)
+        : TAstListNode(pos)
+        , Exprs(exprs)
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        Nodes.push_back(BuildAtom(Pos, "StructType", TNodeFlags::Default));
+        for (const auto& expr : Exprs) {
+            const auto& label = expr->GetLabel();
+            if (!label) {
+                ctx.Error(expr->GetPos()) << "Structure does not allow anonymous members";
+                return false;
+            }
+            Nodes.push_back(Q(Y(Q(label), expr)));
+        }
+        return TAstListNode::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TStructTypeNode(Pos, CloneContainer(Exprs));
+    }
+
+private:
+    const TVector<TNodePtr> Exprs;
+};
+
+template <bool IsStrict>
+class TYqlIf final: public TCallNode {
+public:
+    TYqlIf(TPosition pos, const TVector<TNodePtr>& args)
+        : TCallNode(pos, IsStrict ? "IfStrict" : "If", 2, 3, args)
+    {}
+
+private:
+    TCallNode::TPtr DoClone() const override {
+       return new TYqlIf(GetPos(), CloneContainer(Args));
+    }
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        Args[0] = Y("Coalesce", Args[0], Y("Bool", Q("false")));
         if (Args.size() == 2) {
-            Args.push_back(Y("Null")); 
+            Args.push_back(Y("Null"));
         }
         return TCallNode::DoInit(ctx, src);
     }
@@ -1403,22 +1403,22 @@ private:
     }
 };
 
-class TYqlUdfBase : public TCallNode { 
+class TYqlUdfBase : public TCallNode {
 public:
-    TYqlUdfBase(TPosition pos, const TString& name) 
-        : TCallNode(pos, "Udf", 1, 1, UdfArgs(pos, name)) 
+    TYqlUdfBase(TPosition pos, const TString& name)
+        : TCallNode(pos, "Udf", 1, 1, UdfArgs(pos, name))
     {}
 
-    TYqlUdfBase(TPosition pos, const TString& name, const TVector<TNodePtr>& args, ui32 argsCount = 2) 
-        : TCallNode(pos, "Udf", argsCount, argsCount, UdfArgs(pos, name, &args)) 
+    TYqlUdfBase(TPosition pos, const TString& name, const TVector<TNodePtr>& args, ui32 argsCount = 2)
+        : TCallNode(pos, "Udf", argsCount, argsCount, UdfArgs(pos, name, &args))
     {}
 
-protected: 
-    TYqlUdfBase(TPosition pos, const TString& opName, ui32 minArgs, ui32 maxArgs, const TVector<TNodePtr>& args) 
-        : TCallNode(pos, opName, minArgs, maxArgs, args) 
+protected:
+    TYqlUdfBase(TPosition pos, const TString& opName, ui32 minArgs, ui32 maxArgs, const TVector<TNodePtr>& args)
+        : TCallNode(pos, opName, minArgs, maxArgs, args)
     {}
 
-private: 
+private:
     static TVector<TNodePtr> UdfArgs(TPosition pos, const TString& name, const TVector<TNodePtr>* args = nullptr) {
         TVector<TNodePtr> res = { BuildQuotedAtom(pos, name) };
         if (args) {
@@ -1437,59 +1437,59 @@ private:
     TNodePtr RunConfig;
 };
 
-class TYqlUdf final : public TYqlUdfBase { 
-public: 
-    TYqlUdf(TPosition pos, const TString& name) 
-        : TYqlUdfBase(pos, name) 
-    {} 
- 
-    TYqlUdf(TPosition pos, const TString& name, const TVector<TNodePtr>& args, ui32 argsCount = 2) 
-        : TYqlUdfBase(pos, name, args, argsCount) 
-    {} 
- 
-private: 
-    TYqlUdf(const TYqlUdf& other) 
-        : TYqlUdfBase(other.GetPos(), "Udf", other.MinArgs, other.MaxArgs, CloneContainer(other.Args)) 
-    {} 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlUdf(*this); 
-    } 
-}; 
- 
-class TYqlTypeConfigUdf final : public TYqlUdfBase { 
-public: 
-    TYqlTypeConfigUdf(TPosition pos, const TString& name) 
-        : TYqlUdfBase(pos, name) 
-    {} 
- 
-    TYqlTypeConfigUdf(TPosition pos, const TString& name, const TVector<TNodePtr>& args, ui32 argsCount = 2) 
-        : TYqlUdfBase(pos, name, args, argsCount) 
-    {} 
- 
-private: 
-    TYqlTypeConfigUdf(const TYqlTypeConfigUdf& other) 
-        : TYqlUdfBase(other.GetPos(), "Udf", other.MinArgs, other.MaxArgs, CloneContainer(other.Args)) 
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
-        if (!ValidateArguments(ctx)) { 
-            return false; 
-        } 
- 
-        if (!Args[3]->Init(ctx, src)) { 
-            return false; 
-        } 
- 
-        Args[3] = MakeAtomFromExpression(ctx, Args[3]).Build(); 
-        return TYqlUdfBase::DoInit(ctx, src); 
-    } 
- 
-    TNodePtr DoClone() const final { 
-        return new TYqlTypeConfigUdf(*this); 
-    } 
-}; 
- 
+class TYqlUdf final : public TYqlUdfBase {
+public:
+    TYqlUdf(TPosition pos, const TString& name)
+        : TYqlUdfBase(pos, name)
+    {}
+
+    TYqlUdf(TPosition pos, const TString& name, const TVector<TNodePtr>& args, ui32 argsCount = 2)
+        : TYqlUdfBase(pos, name, args, argsCount)
+    {}
+
+private:
+    TYqlUdf(const TYqlUdf& other)
+        : TYqlUdfBase(other.GetPos(), "Udf", other.MinArgs, other.MaxArgs, CloneContainer(other.Args))
+    {}
+
+    TNodePtr DoClone() const final {
+        return new TYqlUdf(*this);
+    }
+};
+
+class TYqlTypeConfigUdf final : public TYqlUdfBase {
+public:
+    TYqlTypeConfigUdf(TPosition pos, const TString& name)
+        : TYqlUdfBase(pos, name)
+    {}
+
+    TYqlTypeConfigUdf(TPosition pos, const TString& name, const TVector<TNodePtr>& args, ui32 argsCount = 2)
+        : TYqlUdfBase(pos, name, args, argsCount)
+    {}
+
+private:
+    TYqlTypeConfigUdf(const TYqlTypeConfigUdf& other)
+        : TYqlUdfBase(other.GetPos(), "Udf", other.MinArgs, other.MaxArgs, CloneContainer(other.Args))
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
+        if (!ValidateArguments(ctx)) {
+            return false;
+        }
+
+        if (!Args[3]->Init(ctx, src)) {
+            return false;
+        }
+
+        Args[3] = MakeAtomFromExpression(ctx, Args[3]).Build();
+        return TYqlUdfBase::DoInit(ctx, src);
+    }
+
+    TNodePtr DoClone() const final {
+        return new TYqlTypeConfigUdf(*this);
+    }
+};
+
 class TWeakFieldOp final: public TCallNode {
 public:
     TWeakFieldOp(TPosition pos, const TVector<TNodePtr>& args)
@@ -1524,15 +1524,15 @@ public:
 
         const auto memberPos = Args[0]->GetPos();
         TVector<TNodePtr> repackArgs = {BuildAtom(memberPos, "row", NYql::TNodeFlags::Default)};
-        if (auto literal = Args[1]->GetLiteral("String")) { 
-            TString targetType; 
-            if (!GetDataTypeStringNode(ctx, *this, 1, &targetType)) { 
-                return false; 
-            } 
- 
-            repackArgs.push_back(Args[1]->Q(targetType)); 
-        } else { 
-            repackArgs.push_back(Args[1]); 
+        if (auto literal = Args[1]->GetLiteral("String")) {
+            TString targetType;
+            if (!GetDataTypeStringNode(ctx, *this, 1, &targetType)) {
+                return false;
+            }
+
+            repackArgs.push_back(Args[1]->Q(targetType));
+        } else {
+            repackArgs.push_back(Args[1]);
         }
 
         TVector<TNodePtr> column;
@@ -1572,9 +1572,9 @@ public:
     }
 };
 
-template <bool Join> 
+template <bool Join>
 class TTableRow final : public INode {
-public: 
+public:
     TTableRow(TPosition pos, const TVector<TNodePtr>& args)
         : TTableRow(pos, args.size())
     {}
@@ -1582,22 +1582,22 @@ public:
     TTableRow(TPosition pos, ui32 argsCount)
         : INode(pos)
         , ArgsCount(argsCount)
-    {} 
- 
-    bool DoInit(TContext& ctx, ISource* src) override { 
+    {}
+
+    bool DoInit(TContext& ctx, ISource* src) override {
         if (!src || src->IsFake()) {
             ctx.Error(Pos) << "TableRow requires data source";
-            return false; 
-        } 
- 
-        if (ArgsCount > 0) { 
-            ctx.Error(Pos) << "TableRow requires exactly 0 arguments"; 
-            return false; 
-        } 
- 
+            return false;
+        }
+
+        if (ArgsCount > 0) {
+            ctx.Error(Pos) << "TableRow requires exactly 0 arguments";
+            return false;
+        }
+
         src->AllColumns();
         const bool isJoin = src->GetJoin();
-        if (!Join && ctx.SimpleColumns && isJoin) { 
+        if (!Join && ctx.SimpleColumns && isJoin) {
             TNodePtr block = Y();
             const auto& sameKeyMap = src->GetJoin()->GetSameKeysMap();
             if (sameKeyMap) {
@@ -1637,9 +1637,9 @@ public:
         } else {
             Node = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "row") : BuildAtom(Pos, "row", 0);
         }
-        return true; 
-    } 
- 
+        return true;
+    }
+
     TAstNode* Translate(TContext& ctx) const override {
         Y_VERIFY_DEBUG(Node);
         return Node->Translate(ctx);
@@ -1649,15 +1649,15 @@ public:
         State.Set(ENodeState::Const, false);
     }
 
-    TNodePtr DoClone() const final { 
-        return new TTableRow<Join>(Pos, ArgsCount); 
-    } 
- 
-private: 
+    TNodePtr DoClone() const final {
+        return new TTableRow<Join>(Pos, ArgsCount);
+    }
+
+private:
     const size_t ArgsCount;
     TNodePtr Node;
-}; 
- 
+};
+
 TTableRows::TTableRows(TPosition pos, const TVector<TNodePtr>& args)
     : TTableRows(pos, args.size())
 {}
@@ -1922,8 +1922,8 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr na
 }
 
 TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector<TNodePtr>& args,
-        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, TMaybe<TString> typeConfig) { 
-    if (!ctx.Settings.EnableGenericUdfs) { 
+        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType, TMaybe<TString> typeConfig) {
+    if (!ctx.Settings.EnableGenericUdfs) {
         return {};
     }
     TVector<TNodePtr> udfArgs;
@@ -1934,11 +1934,11 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
     } else {
         udfArgs.push_back(BuildUdfUserTypeArg(pos, args, customUserType));
     }
- 
-    if (typeConfig) { 
-        udfArgs.push_back(BuildQuotedAtom(pos, *typeConfig)); 
-    } 
- 
+
+    if (typeConfig) {
+        udfArgs.push_back(BuildQuotedAtom(pos, *typeConfig));
+    }
+
     return udfArgs;
 }
 
@@ -1998,8 +1998,8 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         if (Module == "yql") {
-            Node = new TFuncNodeImpl(Pos, Name); 
-        } else if (Module == "@yql") { 
+            Node = new TFuncNodeImpl(Pos, Name);
+        } else if (Module == "@yql") {
             auto parsedName = StringContent(ctx, Pos, Name);
             if (!parsedName) {
                 return false;
@@ -2019,15 +2019,15 @@ public:
                 ctx.Error(Pos) << "Failed to parse YQL: " << ast.Issues.ToString();
                 return false;
             }
- 
+
             if (src) {
                 src->AllColumns();
             }
         } else if (ctx.Settings.ModuleMapping.contains(Module)) {
             Node = Y("bind", Module + "_module", Q(Name));
-            if (src) { 
-                src->AllColumns(); 
-            } 
+            if (src) {
+                src->AllColumns();
+            }
         } else {
             TNodePtr customUserType = nullptr;
             if (Module == "Tensorflow" && Name == "RunBatch") {
@@ -2038,11 +2038,11 @@ public:
                     Args.erase(Args.begin() + 2);
                 }
             }
- 
+
             if ("Datetime" == Module || ("Yson" == Module && ctx.PragmaYsonFast))
                 Module.append('2');
 
-            TMaybe<TString> typeConfig = MakeTypeConfig(to_lower(Module), Args); 
+            TMaybe<TString> typeConfig = MakeTypeConfig(to_lower(Module), Args);
             if (ForReduce) {
                 TVector<TNodePtr> udfArgs;
                 udfArgs.push_back(BuildQuotedAtom(Pos, TString(Module) + "." + Name));
@@ -2064,14 +2064,14 @@ public:
         return Node->Translate(ctx);
     }
 
-    const TString* FuncName() const override { 
-        return &Name; 
-    } 
- 
-    const TString* ModuleName() const override { 
-        return &Module; 
-    } 
- 
+    const TString* FuncName() const override {
+        return &Name;
+    }
+
+    const TString* ModuleName() const override {
+        return &Module;
+    }
+
     void DoUpdateState() const override {
         State.Set(ENodeState::Const, Node->IsConstant());
         State.Set(ENodeState::Aggregated, Node->IsAggregated());
@@ -2098,18 +2098,18 @@ TNodePtr BuildCallable(TPosition pos, const TString& module, const TString& name
 }
 
 TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args) {
-    if (to_lower(module) == "@yql") { 
-        return BuildCallable(pos, module, name, args); 
-    } 
- 
-    auto fullName = module + "." + name; 
-    if (!args.empty()) { 
-        return new TYqlUdf(pos, fullName, args, args.size() + 1); 
+    if (to_lower(module) == "@yql") {
+        return BuildCallable(pos, module, name, args);
+    }
 
-    } else { 
-        auto varName = ctx.AddSimpleUdf(fullName); 
-        return new TAstAtomNodeImpl(pos, varName, TNodeFlags::ArbitraryContent); 
-    } 
+    auto fullName = module + "." + name;
+    if (!args.empty()) {
+        return new TYqlUdf(pos, fullName, args, args.size() + 1);
+
+    } else {
+        auto varName = ctx.AddSimpleUdf(fullName);
+        return new TAstAtomNodeImpl(pos, varName, TNodeFlags::ArbitraryContent);
+    }
 }
 
 class TScriptUdf final: public INode {
@@ -2123,46 +2123,46 @@ public:
 
     bool DoInit(TContext& ctx, ISource* src) override {
         const bool isPython = ModuleName.find(TStringBuf("Python")) != TString::npos;
-        if (!isPython) { 
-            if (Args.size() != 2) { 
-                ctx.Error(Pos) << ModuleName << " script declaration requires exactly two parameters"; 
-                return false; 
-            } 
-        } else { 
-            if (Args.size() < 1 || Args.size() > 2) { 
-                ctx.Error(Pos) << ModuleName << " script declaration requires one or two parameters"; 
-                return false; 
-            } 
-        } 
- 
-        auto nameAtom = BuildQuotedAtom(Pos, FuncName); 
-        auto scriptNode = Args.back(); 
-        if (!scriptNode->Init(ctx, src)) { 
+        if (!isPython) {
+            if (Args.size() != 2) {
+                ctx.Error(Pos) << ModuleName << " script declaration requires exactly two parameters";
+                return false;
+            }
+        } else {
+            if (Args.size() < 1 || Args.size() > 2) {
+                ctx.Error(Pos) << ModuleName << " script declaration requires one or two parameters";
+                return false;
+            }
+        }
+
+        auto nameAtom = BuildQuotedAtom(Pos, FuncName);
+        auto scriptNode = Args.back();
+        if (!scriptNode->Init(ctx, src)) {
             return false;
         }
-        auto scriptStrPtr = Args.back()->GetLiteral("String"); 
+        auto scriptStrPtr = Args.back()->GetLiteral("String");
         if (scriptStrPtr && scriptStrPtr->size() > SQL_MAX_INLINE_SCRIPT_LEN) {
-            scriptNode = ctx.UniversalAlias("scriptudf", std::move(scriptNode)); 
-        } 
- 
-        INode::TPtr type; 
-        if (Args.size() == 2) { 
-            type = Args[0];
-        } else { 
-            // Python supports getting functions signatures right from docstrings 
-            type = Y("EvaluateType", Y("ParseTypeHandle", Y("Apply", 
-                Y("bind", "core_module", Q("PythonFuncSignature")), 
-                Q(ModuleName), 
-                scriptNode, 
-                Y("String", nameAtom) 
-                ))); 
+            scriptNode = ctx.UniversalAlias("scriptudf", std::move(scriptNode));
         }
- 
-        if (!type->Init(ctx, src)) { 
+
+        INode::TPtr type;
+        if (Args.size() == 2) {
+            type = Args[0];
+        } else {
+            // Python supports getting functions signatures right from docstrings
+            type = Y("EvaluateType", Y("ParseTypeHandle", Y("Apply",
+                Y("bind", "core_module", Q("PythonFuncSignature")),
+                Q(ModuleName),
+                scriptNode,
+                Y("String", nameAtom)
+                )));
+        }
+
+        if (!type->Init(ctx, src)) {
             return false;
         }
- 
-        Node = Y("ScriptUdf", Q(ModuleName), nameAtom, type, scriptNode); 
+
+        Node = Y("ScriptUdf", Q(ModuleName), nameAtom, type, scriptNode);
         return true;
     }
 
@@ -2191,7 +2191,7 @@ private:
     TNodePtr Node;
 };
 
-template <bool Sorted> 
+template <bool Sorted>
 class TYqlToDict final: public TCallNode {
 public:
     TYqlToDict(TPosition pos, const TString& mode, const TVector<TNodePtr>& args)
@@ -2201,7 +2201,7 @@ public:
 
 private:
     TCallNode::TPtr DoClone() const override {
-       return new TYqlToDict<Sorted>(GetPos(), Mode, CloneContainer(Args)); 
+       return new TYqlToDict<Sorted>(GetPos(), Mode, CloneContainer(Args));
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
@@ -2211,7 +2211,7 @@ private:
         }
         Args.push_back(BuildLambda(Pos, Y("val"), Y("Nth", "val", Q("0"))));
         Args.push_back(BuildLambda(Pos, Y("val"), Y("Nth", "val", Q("1"))));
-        Args.push_back(Q(Y(Q(Sorted ? "Sorted" : "Hashed"), Q(Mode)))); 
+        Args.push_back(Q(Y(Q(Sorted ? "Sorted" : "Hashed"), Q(Mode))));
         return TCallNode::DoInit(ctx, src);
     }
 private:
@@ -2296,21 +2296,21 @@ enum EAggrFuncTypeCallback {
     TOP,
     TOP_BY,
     COUNT_DISTINCT_ESTIMATE,
-    LIST, 
+    LIST,
     UDAF
 };
 
-struct TCoreFuncInfo { 
-    TString Name; 
-    ui32 MinArgs; 
-    ui32 MaxArgs; 
-}; 
- 
-using TAggrFuncFactoryCallback = std::function<INode::TPtr(TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory)>; 
+struct TCoreFuncInfo {
+    TString Name;
+    ui32 MinArgs;
+    ui32 MaxArgs;
+};
+
+using TAggrFuncFactoryCallback = std::function<INode::TPtr(TPosition pos, const TVector<TNodePtr>& args, EAggregateMode aggMode, bool isFactory)>;
 using TAggrFuncFactoryCallbackMap = std::unordered_map<TString, TAggrFuncFactoryCallback, THash<TString>>;
 using TBuiltinFactoryCallback = std::function<TNodePtr(TPosition pos, const TVector<TNodePtr>& args)>;
 using TBuiltinFactoryCallbackMap = std::unordered_map<TString, TBuiltinFactoryCallback, THash<TString>>;
-using TCoreFuncMap = std::unordered_map<TString, TCoreFuncInfo, THash<TString>>; 
+using TCoreFuncMap = std::unordered_map<TString, TCoreFuncInfo, THash<TString>>;
 
 TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         const TString& functionName,
@@ -2372,20 +2372,20 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
         case COUNT_DISTINCT_ESTIMATE:
             factory = BuildCountDistinctEstimateFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
-        case LIST: 
-            factory = BuildListFactoryAggregation(pos, realFunctionName, factoryName, aggMode); 
-            break; 
+        case LIST:
+            factory = BuildListFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
+            break;
         case UDAF:
             factory = BuildUserDefinedFactoryAggregation(pos, realFunctionName, factoryName, aggMode);
             break;
         }
-        if (isFactory) { 
-            auto realArgs = args; 
-            realArgs.erase(realArgs.begin()); // skip function name 
-            return new TBasicAggrFactory(pos, functionName, factory, realArgs); 
-        } else { 
-            return new TBasicAggrFunc(pos, functionName, factory, args); 
-        } 
+        if (isFactory) {
+            auto realArgs = args;
+            realArgs.erase(realArgs.begin()); // skip function name
+            return new TBasicAggrFactory(pos, functionName, factory, realArgs);
+        } else {
+            return new TBasicAggrFunc(pos, functionName, factory, args);
+        }
     };
 }
 
@@ -2429,11 +2429,11 @@ TBuiltinFactoryCallback BuildNamedArgcBuiltinFactoryCallback(const TString& name
 template<typename TType>
 TBuiltinFactoryCallback BuildNamedDepsArgcBuiltinFactoryCallback(ui32 reqArgsCount, const TString& name, i32 minArgs, i32 maxArgs) {
     return [reqArgsCount, name, minArgs, maxArgs](TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
-        return new TType(reqArgsCount, pos, name, minArgs, maxArgs, args); 
-    }; 
-} 
- 
-template<typename TType> 
+        return new TType(reqArgsCount, pos, name, minArgs, maxArgs, args);
+    };
+}
+
+template<typename TType>
 TBuiltinFactoryCallback BuildBoolBuiltinFactoryCallback(bool arg) {
     return [arg] (TPosition pos, const TVector<TNodePtr>& args) -> TNodePtr {
         return new TType(pos, args, arg);
@@ -2448,17 +2448,17 @@ TBuiltinFactoryCallback BuildFoldBuiltinFactoryCallback(const TString& name, con
 }
 
 TNodePtr MakePair(TPosition pos, const TVector<TNodePtr>& args) {
-    TNodePtr list = new TAstListNodeImpl(pos, { 
-        args[0], 
-        args.size() > 1 ? args[1] : new TAstListNodeImpl(pos,{ new TAstAtomNodeImpl(pos, "Null", TNodeFlags::Default) }) 
-    }); 
- 
-    return new TAstListNodeImpl(pos, { 
-        new TAstAtomNodeImpl(pos, "quote", TNodeFlags::Default), 
-        list 
-    }); 
-} 
- 
+    TNodePtr list = new TAstListNodeImpl(pos, {
+        args[0],
+        args.size() > 1 ? args[1] : new TAstListNodeImpl(pos,{ new TAstAtomNodeImpl(pos, "Null", TNodeFlags::Default) })
+    });
+
+    return new TAstListNodeImpl(pos, {
+        new TAstAtomNodeImpl(pos, "quote", TNodeFlags::Default),
+        list
+    });
+}
+
 struct TBuiltinFuncData {
     const TBuiltinFactoryCallbackMap BuiltinFuncs;
     const TAggrFuncFactoryCallbackMap AggrFuncs;
@@ -2502,13 +2502,13 @@ struct TBuiltinFuncData {
             {"in", BuildSimpleBuiltinFactoryCallback<TYqlIn>()},
 
             // List builtins
-            {"aslist", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsList", 0, -1)}, 
-            {"asliststrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsListStrict", 0, -1) }, 
+            {"aslist", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsList", 0, -1)},
+            {"asliststrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsListStrict", 0, -1) },
             {"listlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},
             {"listhasitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("HasItems", 1, 1)},
-            {"listextend", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListExtend", 0, -1)}, 
+            {"listextend", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListExtend", 0, -1)},
             {"listextendstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListExtendStrict", 0, -1)},
-            {"listunionall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListUnionAll", 0, -1) }, 
+            {"listunionall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListUnionAll", 0, -1) },
             {"listzip", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListZip", -1, -1)},
             {"listzipall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListZipAll", -1, -1)},
             {"listenumerate", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListEnumerate", 1, 3)},
@@ -2541,41 +2541,41 @@ struct TBuiltinFuncData {
             {"listtakewhileinclusive", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListTakeWhileInclusive") },
             {"listskipwhileinclusive", BuildNamedBuiltinFactoryCallback<TListFilterBuiltin>("ListSkipWhileInclusive") },
             {"listcollect", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListCollect", 1, 1) },
-            {"listnotnull", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListNotNull", 1, 1)}, 
-            {"listflatten", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFlatten", 1, 1)}, 
+            {"listnotnull", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListNotNull", 1, 1)},
+            {"listflatten", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListFlatten", 1, 1)},
 
             // Dict builtins
-            {"dictlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)}, 
-            {"dicthasitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("HasItems", 1, 1)}, 
+            {"dictlength", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Length", 1, 1)},
+            {"dicthasitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("HasItems", 1, 1)},
             {"dictcreate", BuildSimpleBuiltinFactoryCallback<TDictCreateBuiltin>()},
-            {"setcreate", BuildSimpleBuiltinFactoryCallback<TSetCreateBuiltin>()}, 
-            {"asdict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDict", 0, -1)}, 
-            {"asdictstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDictStrict", 0, -1)}, 
-            {"asset", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSet", 0, -1)}, 
-            {"assetstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSetStrict", 0, -1)}, 
-            {"todict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false>>("One")}, 
-            {"tomultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false>>("Many")}, 
-            {"tosorteddict", BuildNamedBuiltinFactoryCallback<TYqlToDict<true>>("One")}, 
-            {"tosortedmultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<true>>("Many")}, 
+            {"setcreate", BuildSimpleBuiltinFactoryCallback<TSetCreateBuiltin>()},
+            {"asdict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDict", 0, -1)},
+            {"asdictstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsDictStrict", 0, -1)},
+            {"asset", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSet", 0, -1)},
+            {"assetstrict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AsSetStrict", 0, -1)},
+            {"todict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false>>("One")},
+            {"tomultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<false>>("Many")},
+            {"tosorteddict", BuildNamedBuiltinFactoryCallback<TYqlToDict<true>>("One")},
+            {"tosortedmultidict", BuildNamedBuiltinFactoryCallback<TYqlToDict<true>>("Many")},
             {"dictkeys", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictKeys", 1, 1) },
             {"dictpayloads", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictPayloads", 1, 1) },
             {"dictitems", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("DictItems", 1, 1) },
             {"dictlookup", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Lookup", 2, 2) },
             {"dictcontains", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Contains", 2, 2) },
- 
+
             // Atom builtins
             {"asatom", BuildSimpleBuiltinFactoryCallback<TYqlAsAtom>()},
             {"secureparam", BuildNamedBuiltinFactoryCallback<TYqlAtom>("SecureParam")},
 
-            {"void", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Void", 0, 0)}, 
-            {"emptylist", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyList", 0, 0)}, 
-            {"emptydict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDict", 0, 0)}, 
-            {"callable", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Callable", 2, 2)}, 
+            {"void", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Void", 0, 0)},
+            {"emptylist", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyList", 0, 0)},
+            {"emptydict", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDict", 0, 0)},
+            {"callable", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Callable", 2, 2)},
             {"way", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Way", 1, 1) },
             {"variant", BuildSimpleBuiltinFactoryCallback<TYqlVariant>() },
-            {"enum", BuildSimpleBuiltinFactoryCallback<TYqlEnum>() }, 
-            {"asvariant", BuildSimpleBuiltinFactoryCallback<TYqlAsVariant>() }, 
-            {"asenum", BuildSimpleBuiltinFactoryCallback<TYqlAsEnum>() }, 
+            {"enum", BuildSimpleBuiltinFactoryCallback<TYqlEnum>() },
+            {"asvariant", BuildSimpleBuiltinFactoryCallback<TYqlAsVariant>() },
+            {"asenum", BuildSimpleBuiltinFactoryCallback<TYqlAsEnum>() },
             {"astagged", BuildSimpleBuiltinFactoryCallback<TYqlAsTagged>() },
             {"untag", BuildSimpleBuiltinFactoryCallback<TYqlUntag>() },
             {"parsetype", BuildSimpleBuiltinFactoryCallback<TYqlParseType>() },
@@ -2618,9 +2618,9 @@ struct TBuiltinFuncData {
             {"currentutcdate", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDate", 0, -1) },
             {"currentutcdatetime", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcDatetime", 0, -1) },
             {"currentutctimestamp", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "CurrentUtcTimestamp", 0, -1) },
-            { "currenttzdate", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(1, "CurrentTzDate", 1, -1) }, 
-            { "currenttzdatetime", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(1, "CurrentTzDatetime", 1, -1) }, 
-            { "currenttztimestamp", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(1, "CurrentTzTimestamp", 1, -1) }, 
+            { "currenttzdate", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(1, "CurrentTzDate", 1, -1) },
+            { "currenttzdatetime", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(1, "CurrentTzDatetime", 1, -1) },
+            { "currenttztimestamp", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(1, "CurrentTzTimestamp", 1, -1) },
             {"currentoperationid", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentOperationId", 0, 0) },
             {"currentoperationsharedid", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentOperationSharedId", 0, 0) },
             {"currentauthenticateduser", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CurrentAuthenticatedUser", 0, 0) },
@@ -2651,13 +2651,13 @@ struct TBuiltinFuncData {
             {"varianttypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VariantTypeHandle", 1, 1) },
             {"voidtypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("VoidTypeHandle", 0, 0) },
             {"nulltypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("NullTypeHandle", 0, 0) },
-            {"emptylisttypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyListTypeHandle", 0, 0) }, 
-            {"emptydicttypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDictTypeHandle", 0, 0) }, 
+            {"emptylisttypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyListTypeHandle", 0, 0) },
+            {"emptydicttypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EmptyDictTypeHandle", 0, 0) },
             {"callabletypecomponents", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeComponents", 1, 1) },
             {"callableargument", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableArgument", 1, 3) },
             {"callabletypehandle", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("CallableTypeHandle", 2, 4) },
             {"formatcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FormatCode", 1, 1) },
-            {"worldcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("WorldCode", 0, 0) }, 
+            {"worldcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("WorldCode", 0, 0) },
             {"atomcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("AtomCode", 1, 1) },
             {"listcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ListCode", 0, -1) },
             {"funccode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("FuncCode", 1, -1) },
@@ -2665,17 +2665,17 @@ struct TBuiltinFuncData {
             {"evaluatecode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EvaluateCode", 1, 1) },
             {"reprcode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ReprCode", 1, 1) },
             {"quotecode", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("QuoteCode", 1, 1) },
-            {"lambdaargumentscount", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("LambdaArgumentsCount", 1, 1) }, 
-            {"subqueryextend", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SubqueryExtend", 1, -1) }, 
-            {"subqueryunionall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SubqueryUnionAll", 1, -1) }, 
-            {"subquerymerge", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SubqueryMerge", 1, -1) }, 
-            {"subqueryunionmerge", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SubqueryUnionMerge", 1, -1) }, 
-            {"subqueryextendfor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryExtendFor>>() }, 
-            {"subqueryunionallfor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryUnionAllFor>>() }, 
-            {"subquerymergefor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryMergeFor>>() }, 
-            {"subqueryunionmergefor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryUnionMergeFor>>() }, 
-            {"subqueryorderby", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryOrderBy<SubqueryOrderBy>>() }, 
-            {"subqueryassumeorderby", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryOrderBy<SubqueryAssumeOrderBy>>() }, 
+            {"lambdaargumentscount", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("LambdaArgumentsCount", 1, 1) },
+            {"subqueryextend", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SubqueryExtend", 1, -1) },
+            {"subqueryunionall", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SubqueryUnionAll", 1, -1) },
+            {"subquerymerge", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SubqueryMerge", 1, -1) },
+            {"subqueryunionmerge", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SubqueryUnionMerge", 1, -1) },
+            {"subqueryextendfor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryExtendFor>>() },
+            {"subqueryunionallfor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryUnionAllFor>>() },
+            {"subquerymergefor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryMergeFor>>() },
+            {"subqueryunionmergefor", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryFor<SubqueryUnionMergeFor>>() },
+            {"subqueryorderby", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryOrderBy<SubqueryOrderBy>>() },
+            {"subqueryassumeorderby", BuildSimpleBuiltinFactoryCallback<TYqlSubqueryOrderBy<SubqueryAssumeOrderBy>>() },
 
             // Tuple builtins
             {"astuple", BuildSimpleBuiltinFactoryCallback<TTupleNode>()},
@@ -2708,8 +2708,8 @@ struct TBuiltinFuncData {
             {"randomuuid", BuildNamedDepsArgcBuiltinFactoryCallback<TCallNodeDepArgs>(0, "RandomUuid", 1, -1) },
             {"tablepath", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("TablePath") },
             {"tablerecordindex", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("TableRecord") },
-            {"tablerow", BuildSimpleBuiltinFactoryCallback<TTableRow<false>>() }, 
-            {"jointablerow", BuildSimpleBuiltinFactoryCallback<TTableRow<true>>() }, 
+            {"tablerow", BuildSimpleBuiltinFactoryCallback<TTableRow<false>>() },
+            {"jointablerow", BuildSimpleBuiltinFactoryCallback<TTableRow<true>>() },
             {"tablerows", BuildSimpleBuiltinFactoryCallback<TTableRows>() },
             {"weakfield", BuildSimpleBuiltinFactoryCallback<TWeakFieldOp>()},
 
@@ -2720,8 +2720,8 @@ struct TBuiltinFuncData {
             {"rownumber", BuildNamedArgcBuiltinFactoryCallback<TWinRowNumber>("RowNumber", 0, 0)},
             {"rank", BuildNamedArgcBuiltinFactoryCallback<TWinRank>("Rank", 0, 1)},
             {"denserank", BuildNamedArgcBuiltinFactoryCallback<TWinRank>("DenseRank", 0, 1)},
-            {"lead", BuildNamedArgcBuiltinFactoryCallback<TWinLeadLag>("Lead", 1, 2)}, 
-            {"lag", BuildNamedArgcBuiltinFactoryCallback<TWinLeadLag>("Lag", 1, 2)}, 
+            {"lead", BuildNamedArgcBuiltinFactoryCallback<TWinLeadLag>("Lead", 1, 2)},
+            {"lag", BuildNamedArgcBuiltinFactoryCallback<TWinLeadLag>("Lag", 1, 2)},
 
             // Session window
             {"sessionwindow", BuildSimpleBuiltinFactoryCallback<TSessionWindow>()},
@@ -2757,7 +2757,7 @@ struct TBuiltinFuncData {
             {"every", BuildAggrFuncFactoryCallback("Every", "and_traits_factory")},
             {"booland", BuildAggrFuncFactoryCallback("BoolAnd", "and_traits_factory")},
             {"boolor", BuildAggrFuncFactoryCallback("BoolOr", "or_traits_factory")},
-            {"boolxor", BuildAggrFuncFactoryCallback("BoolXor", "xor_traits_factory")}, 
+            {"boolxor", BuildAggrFuncFactoryCallback("BoolXor", "xor_traits_factory")},
 
             {"bitand", BuildAggrFuncFactoryCallback("BitAnd", "bit_and_traits_factory")},
             {"bitor", BuildAggrFuncFactoryCallback("BitOr", "bit_or_traits_factory")},
@@ -2766,9 +2766,9 @@ struct TBuiltinFuncData {
             {"avg", BuildAggrFuncFactoryCallback("Avg", "avg_traits_factory")},
             {"avgif", BuildAggrFuncFactoryCallback("AvgIf", "avg_if_traits_factory", PAYLOAD_PREDICATE) },
 
-            {"agglist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)}, 
-            {"aggrlist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)}, 
-            {"aggregatelist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)}, 
+            {"agglist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)},
+            {"aggrlist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)},
+            {"aggregatelist", BuildAggrFuncFactoryCallback("AggregateList", "list2_traits_factory", LIST)},
             {"agglistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)},
             {"aggrlistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)},
             {"aggregatelistdistinct", BuildAggrFuncFactoryCallback("AggregateListDistinct", "set_traits_factory", LIST)},
@@ -2851,25 +2851,25 @@ struct TBuiltinFuncData {
             {"setunion", { "SetUnion", 2, 3}},
             {"setdifference", { "SetDifference", 2, 2}},
             {"setsymmetricdifference", { "SetSymmetricDifference", 2, 3}},
-            {"listaggregate", { "ListAggregate", 2, 2}}, 
-            {"dictaggregate", { "DictAggregate", 2, 2}}, 
-            {"aggregatetransforminput", { "AggregateTransformInput", 2, 2}}, 
-            {"aggregatetransformoutput", { "AggregateTransformOutput", 2, 2}}, 
-            {"aggregateflatten", { "AggregateFlatten", 1, 1}}, 
-            {"choosemembers", { "ChooseMembers", 2, 2}}, 
-            {"removemembers", { "RemoveMembers", 2, 2}}, 
-            {"forceremovemembers", { "ForceRemoveMembers", 2, 2}}, 
-            {"structmembers", { "StructMembers", 1, 1}}, 
-            {"gathermembers", { "GatherMembers", 1, 1}}, 
-            {"renamemembers", { "RenameMembers", 2, 2}}, 
-            {"forcerenamemembers", { "ForceRenameMembers", 2, 2}}, 
-            {"spreadmembers", { "SpreadMembers", 2, 2}}, 
-            {"forcespreadmembers", { "ForceSpreadMembers", 2, 2}}, 
+            {"listaggregate", { "ListAggregate", 2, 2}},
+            {"dictaggregate", { "DictAggregate", 2, 2}},
+            {"aggregatetransforminput", { "AggregateTransformInput", 2, 2}},
+            {"aggregatetransformoutput", { "AggregateTransformOutput", 2, 2}},
+            {"aggregateflatten", { "AggregateFlatten", 1, 1}},
+            {"choosemembers", { "ChooseMembers", 2, 2}},
+            {"removemembers", { "RemoveMembers", 2, 2}},
+            {"forceremovemembers", { "ForceRemoveMembers", 2, 2}},
+            {"structmembers", { "StructMembers", 1, 1}},
+            {"gathermembers", { "GatherMembers", 1, 1}},
+            {"renamemembers", { "RenameMembers", 2, 2}},
+            {"forcerenamemembers", { "ForceRenameMembers", 2, 2}},
+            {"spreadmembers", { "SpreadMembers", 2, 2}},
+            {"forcespreadmembers", { "ForceSpreadMembers", 2, 2}},
         };
         return coreFuncs;
     }
 };
- 
+
 TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVector<TNodePtr>& args,
     const TString& originalNameSpace, EAggregateMode aggMode, bool* mustUseNamed, bool warnOnYqlNameSpace) {
 
@@ -2887,27 +2887,27 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     TString normalizedName(name);
     TString nameSpace(originalNameSpace);
     TString ns = to_lower(nameSpace);
-    if (ns.empty()) { 
+    if (ns.empty()) {
         TMaybe<TIssue> error = NormalizeName(pos, normalizedName);
-        if (!error.Empty()) { 
-            return new TInvalidBuiltin(pos, error->Message); 
-        } 
- 
-        auto coreFunc = coreFuncs.find(normalizedName); 
-        if (coreFunc != coreFuncs.end()) { 
-            ns = "core"; 
-            name = coreFunc->second.Name; 
-            if (args.size() < coreFunc->second.MinArgs || args.size() > coreFunc->second.MaxArgs) { 
-                return new TInvalidBuiltin(pos, TStringBuilder() << name << " expected from " 
-                    << coreFunc->second.MinArgs << " to " << coreFunc->second.MaxArgs << " arguments, but got: " << args.size()); 
-            } 
- 
-            if (coreFunc->second.MinArgs != coreFunc->second.MaxArgs) { 
-                name += ToString(args.size()); 
-            } 
-        } 
-    } 
- 
+        if (!error.Empty()) {
+            return new TInvalidBuiltin(pos, error->Message);
+        }
+
+        auto coreFunc = coreFuncs.find(normalizedName);
+        if (coreFunc != coreFuncs.end()) {
+            ns = "core";
+            name = coreFunc->second.Name;
+            if (args.size() < coreFunc->second.MinArgs || args.size() > coreFunc->second.MaxArgs) {
+                return new TInvalidBuiltin(pos, TStringBuilder() << name << " expected from "
+                    << coreFunc->second.MinArgs << " to " << coreFunc->second.MaxArgs << " arguments, but got: " << args.size());
+            }
+
+            if (coreFunc->second.MinArgs != coreFunc->second.MaxArgs) {
+                name += ToString(args.size());
+            }
+        }
+    }
+
     TString moduleResource;
     if (ctx.Settings.ModuleMapping.contains(ns)) {
         moduleResource = ctx.Settings.ModuleMapping.at(ns);
@@ -2944,16 +2944,16 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             break;
     }
 
-    if (ns == "yql" || ns == "@yql") { 
+    if (ns == "yql" || ns == "@yql") {
         if (warnOnYqlNameSpace && GetEnv("YQL_DETERMINISTIC_MODE").empty()) {
             ctx.Warning(pos, TIssuesIds::YQL_S_EXPRESSIONS_CALL)
                 << "It is not recommended to directly access s-expressions functions via YQL::" << Endl
                 << "This mechanism is mostly intended for temporary workarounds or internal testing purposes";
         }
- 
-        if (ns == "yql") { 
-            return new TCallNodeImpl(pos, name, -1, -1, args); 
-        } 
+
+        if (ns == "yql") {
+            return new TCallNodeImpl(pos, name, -1, -1, args);
+        }
     } else if (moduleResource) {
         auto exportName = ns == "core" ? name : "$" + name;
         TVector<TNodePtr> applyArgs = {
@@ -2966,29 +2966,29 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     } else if (ns == "hyperscan" || ns == "pcre" || ns == "pire" || ns.StartsWith("re2")) {
         TString moduleName(nameSpace);
         moduleName.to_title();
-        if ((args.size() == 1 || args.size() == 2) && (name.StartsWith("Multi") || (ns.StartsWith("re2") && name == "Capture"))) { 
-            TVector<TNodePtr> multiArgs{ 
-                ns.StartsWith("re2") && name == "Capture" ? MakePair(pos, args) : args[0], 
-                new TCallNodeImpl(pos, "Void", 0, 0, {}), 
-                args[0] 
-            }; 
-            auto fullName = moduleName + "." + name; 
-            return new TYqlTypeConfigUdf(pos, fullName, multiArgs, multiArgs.size() + 1); 
-        } else if (!(ns.StartsWith("re2") && name == "Options")) { 
-            auto newArgs = args; 
-            if (ns.StartsWith("re2")) { 
-                // convert run config is tuple of string and optional options 
-                if (args.size() == 1 || args.size() == 2) { 
-                    newArgs[0] = MakePair(pos, args); 
-                    if (args.size() == 2) { 
-                        newArgs.pop_back(); 
-                    } 
-                } else { 
-                    return new TInvalidBuiltin(pos, TStringBuilder() << ns << "." << name << " expected one or two arguments."); 
-                } 
-            } 
- 
-            return BuildUdf(ctx, pos, moduleName, name, newArgs); 
+        if ((args.size() == 1 || args.size() == 2) && (name.StartsWith("Multi") || (ns.StartsWith("re2") && name == "Capture"))) {
+            TVector<TNodePtr> multiArgs{
+                ns.StartsWith("re2") && name == "Capture" ? MakePair(pos, args) : args[0],
+                new TCallNodeImpl(pos, "Void", 0, 0, {}),
+                args[0]
+            };
+            auto fullName = moduleName + "." + name;
+            return new TYqlTypeConfigUdf(pos, fullName, multiArgs, multiArgs.size() + 1);
+        } else if (!(ns.StartsWith("re2") && name == "Options")) {
+            auto newArgs = args;
+            if (ns.StartsWith("re2")) {
+                // convert run config is tuple of string and optional options
+                if (args.size() == 1 || args.size() == 2) {
+                    newArgs[0] = MakePair(pos, args);
+                    if (args.size() == 2) {
+                        newArgs.pop_back();
+                    }
+                } else {
+                    return new TInvalidBuiltin(pos, TStringBuilder() << ns << "." << name << " expected one or two arguments.");
+                }
+            }
+
+            return BuildUdf(ctx, pos, moduleName, name, newArgs);
         }
     } else if (ns == "datetime2" && (name == "Format" || name == "Parse")) {
         return BuildUdf(ctx, pos, nameSpace, name, args);
@@ -3086,8 +3086,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             } else {
                 return new TInvalidBuiltin(pos, TStringBuilder() << "Can not create objects of type " << type);
             }
-        } 
- 
+        }
+
         if (normalizedName == "decimal") {
             if (args.size() == 2) {
                 TVector<TNodePtr> dataTypeArgs = { BuildQuotedAtom(pos, "Decimal", TNodeFlags::Default) };
@@ -3103,55 +3103,55 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             return new TYqlData(pos, "Decimal", args);
         }
 
-        if (normalizedName == "tablename") { 
-            return new TTableName(pos, args, ctx.Scoped->CurrService); 
-        } 
- 
-        if (normalizedName == "aggregationfactory") { 
-            if (args.size() < 1 || !args[0]->GetLiteral("String")) { 
-                return new TInvalidBuiltin(pos, "AGGREGATION_FACTORY requries a function name"); 
-            } 
- 
-            auto aggNormalizedName = *args[0]->GetLiteral("String"); 
-            auto error = NormalizeName(pos, aggNormalizedName); 
-            if (!error.Empty()) { 
-                return new TInvalidBuiltin(pos, error->Message); 
-            } 
- 
-            if (aggNormalizedName == "aggregateby") { 
-                return new TInvalidBuiltin(pos, "AGGREGATE_BY is not allowed to use with AGGREGATION_FACTORY"); 
-            } 
- 
-            if (aggNormalizedName == "multiaggregateby") { 
-                return new TInvalidBuiltin(pos, "MULTI_AGGREGATE_BY is not allowed to use with AGGREGATION_FACTORY"); 
-            } 
- 
-            auto aggrCallback = aggrFuncs.find(aggNormalizedName); 
-            if (aggrCallback == aggrFuncs.end()) { 
-                return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String")); 
-            } 
- 
-            if (aggMode == EAggregateMode::Distinct) { 
+        if (normalizedName == "tablename") {
+            return new TTableName(pos, args, ctx.Scoped->CurrService);
+        }
+
+        if (normalizedName == "aggregationfactory") {
+            if (args.size() < 1 || !args[0]->GetLiteral("String")) {
+                return new TInvalidBuiltin(pos, "AGGREGATION_FACTORY requries a function name");
+            }
+
+            auto aggNormalizedName = *args[0]->GetLiteral("String");
+            auto error = NormalizeName(pos, aggNormalizedName);
+            if (!error.Empty()) {
+                return new TInvalidBuiltin(pos, error->Message);
+            }
+
+            if (aggNormalizedName == "aggregateby") {
+                return new TInvalidBuiltin(pos, "AGGREGATE_BY is not allowed to use with AGGREGATION_FACTORY");
+            }
+
+            if (aggNormalizedName == "multiaggregateby") {
+                return new TInvalidBuiltin(pos, "MULTI_AGGREGATE_BY is not allowed to use with AGGREGATION_FACTORY");
+            }
+
+            auto aggrCallback = aggrFuncs.find(aggNormalizedName);
+            if (aggrCallback == aggrFuncs.end()) {
+                return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown aggregation function: " << *args[0]->GetLiteral("String"));
+            }
+
+            if (aggMode == EAggregateMode::Distinct) {
                 return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");
-            } 
- 
-            return (*aggrCallback).second(pos, args, aggMode, true).Release(); 
-        } 
- 
-        if (normalizedName == "aggregateby" || normalizedName == "multiaggregateby") { 
-            const bool multi = (normalizedName == "multiaggregateby"); 
-            if (args.size() != 2) { 
-                return new TInvalidBuiltin(pos, TStringBuilder() << (multi ? "MULTI_AGGREGATE_BY" : "AGGREGATE_BY") << " requries two arguments"); 
-            } 
- 
-            auto name = multi ? "MultiAggregateBy" : "AggregateBy"; 
-            auto aggr = BuildFactoryAggregation(pos, name, "", aggMode, multi); 
-            return new TBasicAggrFunc(pos, name, aggr, args); 
-        } 
- 
+            }
+
+            return (*aggrCallback).second(pos, args, aggMode, true).Release();
+        }
+
+        if (normalizedName == "aggregateby" || normalizedName == "multiaggregateby") {
+            const bool multi = (normalizedName == "multiaggregateby");
+            if (args.size() != 2) {
+                return new TInvalidBuiltin(pos, TStringBuilder() << (multi ? "MULTI_AGGREGATE_BY" : "AGGREGATE_BY") << " requries two arguments");
+            }
+
+            auto name = multi ? "MultiAggregateBy" : "AggregateBy";
+            auto aggr = BuildFactoryAggregation(pos, name, "", aggMode, multi);
+            return new TBasicAggrFunc(pos, name, aggr, args);
+        }
+
         auto aggrCallback = aggrFuncs.find(normalizedName);
         if (aggrCallback != aggrFuncs.end()) {
-            return (*aggrCallback).second(pos, args, aggMode, false).Release(); 
+            return (*aggrCallback).second(pos, args, aggMode, false).Release();
         }
         if (aggMode == EAggregateMode::Distinct) {
             return new TInvalidBuiltin(pos, "DISTINCT can only be used in aggregation functions");
@@ -3160,29 +3160,29 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         auto builtinCallback = builtinFuncs.find(normalizedName);
         if (builtinCallback != builtinFuncs.end()) {
             return (*builtinCallback).second(pos, args);
-        } else if (normalizedName == "asstruct" || normalizedName == "structtype") { 
-            if (args.empty()) { 
-                return new TCallNodeImpl(pos, normalizedName == "asstruct" ? "AsStruct" : "StructType", 0, 0, args); 
-            } 
- 
+        } else if (normalizedName == "asstruct" || normalizedName == "structtype") {
+            if (args.empty()) {
+                return new TCallNodeImpl(pos, normalizedName == "asstruct" ? "AsStruct" : "StructType", 0, 0, args);
+            }
+
             if (mustUseNamed && *mustUseNamed) {
                 *mustUseNamed = false;
                 YQL_ENSURE(args.size() == 2);
                 Y_VERIFY_DEBUG(dynamic_cast<TTupleNode*>(args[0].Get()));
                 auto posArgs = static_cast<TTupleNode*>(args[0].Get());
                 if (posArgs->IsEmpty()) {
-                    if (normalizedName == "asstruct") { 
-                        return args[1]; 
-                    } else { 
-                        Y_VERIFY_DEBUG(dynamic_cast<TStructNode*>(args[1].Get())); 
+                    if (normalizedName == "asstruct") {
+                        return args[1];
+                    } else {
+                        Y_VERIFY_DEBUG(dynamic_cast<TStructNode*>(args[1].Get()));
                         auto namedArgs = static_cast<TStructNode*>(args[1].Get());
                         return new TStructTypeNode(pos, namedArgs->GetExprs());
-                    } 
+                    }
                 }
             }
-            return new TInvalidBuiltin(pos, TStringBuilder() << 
-                (normalizedName == "asstruct" ? "AsStruct" : "StructType") << 
-                " requires all argument to be named"); 
+            return new TInvalidBuiltin(pos, TStringBuilder() <<
+                (normalizedName == "asstruct" ? "AsStruct" : "StructType") <<
+                " requires all argument to be named");
         } else if (normalizedName == "expandstruct") {
             if (mustUseNamed) {
                 if (!*mustUseNamed) {
@@ -3209,7 +3209,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown builtin: " << name);
         }
     }
- 
+
     TNodePtr positionalArgs;
     TNodePtr namedArgs;
     if (mustUseNamed && *mustUseNamed) {
@@ -3229,8 +3229,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         nameSpace = "Yson";
         if (name == "Serialize") {
             name = "SerializeJson";
-        } 
-        else if (name == "Parse") { 
+        }
+        else if (name == "Parse") {
             name = "ParseJson";
         }
     }
@@ -3276,25 +3276,25 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         }
     }
 
-    if (ns == "datetime2" && name == "Update") { 
-        if (namedArgs) { 
-            TStructNode* castedNamedArgs = dynamic_cast<TStructNode*>(namedArgs.Get()); 
-            Y_VERIFY_DEBUG(castedNamedArgs); 
-            auto exprs = castedNamedArgs->GetExprs(); 
-            for (auto& arg : exprs) { 
-                if (arg->GetLabel() == "Timezone") { 
-                    arg = new TCallNodeImpl(pos, "TimezoneId", 1, 1, { arg }); 
-                    arg->SetLabel("TimezoneId"); 
-                } 
-            } 
- 
-            namedArgs = BuildStructure(pos, exprs); 
-            usedArgs.pop_back(); 
-            usedArgs.push_back(namedArgs); 
-        }; 
-    } 
- 
-    TMaybe<TString> typeConfig = MakeTypeConfig(ns, usedArgs); 
+    if (ns == "datetime2" && name == "Update") {
+        if (namedArgs) {
+            TStructNode* castedNamedArgs = dynamic_cast<TStructNode*>(namedArgs.Get());
+            Y_VERIFY_DEBUG(castedNamedArgs);
+            auto exprs = castedNamedArgs->GetExprs();
+            for (auto& arg : exprs) {
+                if (arg->GetLabel() == "Timezone") {
+                    arg = new TCallNodeImpl(pos, "TimezoneId", 1, 1, { arg });
+                    arg->SetLabel("TimezoneId");
+                }
+            }
+
+            namedArgs = BuildStructure(pos, exprs);
+            usedArgs.pop_back();
+            usedArgs.push_back(namedArgs);
+        };
+    }
+
+    TMaybe<TString> typeConfig = MakeTypeConfig(ns, usedArgs);
     return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, customUserType, typeConfig);
 }
 

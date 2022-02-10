@@ -1,17 +1,17 @@
 #include "context.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
-#include <ydb/library/yql/utils/yql_panic.h> 
-#include <ydb/library/yql/utils/yql_paths.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/library/yql/utils/yql_paths.h>
 
 #include <util/folder/pathsplit.h>
 #include <util/string/join.h>
-#include <util/stream/null.h> 
+#include <util/stream/null.h>
 
-#ifdef GetMessage 
-#undef GetMessage 
-#endif 
- 
+#ifdef GetMessage
+#undef GetMessage
+#endif
+
 using namespace NYql;
 
 namespace NSQLTranslationV1 {
@@ -21,7 +21,7 @@ namespace {
 TNodePtr AddTablePathPrefix(TContext& ctx, TStringBuf prefixPath, const TDeferredAtom& path) {
     Y_UNUSED(ctx);
     if (prefixPath.empty()) {
-        return path.Build(); 
+        return path.Build();
     }
 
     if (path.GetLiteral()) {
@@ -78,21 +78,21 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
 {
-    for (auto lib : settings.Libraries) { 
-        Libraries[lib] = Nothing(); 
-    } 
- 
-    Scoped = MakeIntrusive<TScopedState>(); 
-    AllScopes.push_back(Scoped); 
-    if (settings.DefaultCluster) { 
-        Scoped->CurrCluster = TDeferredAtom({}, settings.DefaultCluster); 
-        auto provider = GetClusterProvider(settings.DefaultCluster); 
-        YQL_ENSURE(provider); 
-        Scoped->CurrService = *provider; 
-    } 
- 
-    Position.File = settings.File; 
- 
+    for (auto lib : settings.Libraries) {
+        Libraries[lib] = Nothing();
+    }
+
+    Scoped = MakeIntrusive<TScopedState>();
+    AllScopes.push_back(Scoped);
+    if (settings.DefaultCluster) {
+        Scoped->CurrCluster = TDeferredAtom({}, settings.DefaultCluster);
+        auto provider = GetClusterProvider(settings.DefaultCluster);
+        YQL_ENSURE(provider);
+        Scoped->CurrService = *provider;
+    }
+
+    Position.File = settings.File;
+
     for (auto& flag: settings.Flags) {
         bool value = true;
         TStringBuf key = flag;
@@ -114,9 +114,9 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
 
 TContext::~TContext()
 {
-    for (auto& x: AllScopes) { 
-        x->Clear(); 
-    } 
+    for (auto& x: AllScopes) {
+        x->Clear();
+    }
 }
 
 const NYql::TPosition& TContext::Pos() const {
@@ -163,31 +163,31 @@ void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction a
 }
 
 IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TPosition pos) {
-    if (severity == TSeverityIds::S_WARNING) { 
+    if (severity == TSeverityIds::S_WARNING) {
         auto action = WarningPolicy.GetAction(code);
         if (action == EWarningAction::ERROR) {
             severity = TSeverityIds::S_ERROR;
             HasPendingErrors = true;
         } else if (action == EWarningAction::DISABLE) {
             return Cnull;
-        } 
+        }
     }
 
-    // we have the last cell for issue, let's fill it with our internal error 
-    if (severity >= TSeverityIds::S_WARNING) { 
-        const bool aboveHalf = Issues.Size() > Settings.MaxErrors / 2; 
-        if (aboveHalf) { 
-            return Cnull; 
-        } 
-    } else { 
-        if (Settings.MaxErrors == Issues.Size() + 1) { 
-            Issues.AddIssue(TIssue(NYql::TPosition(), TString(TStringBuf("Too many issues")))); 
-            Issues.back().SetCode(UNEXPECTED_ERROR, TSeverityIds::S_ERROR); 
-        } 
- 
-        if (Settings.MaxErrors <= Issues.Size()) { 
-            ythrow NProtoAST::TTooManyErrors() << "Too many issues"; 
-        } 
+    // we have the last cell for issue, let's fill it with our internal error
+    if (severity >= TSeverityIds::S_WARNING) {
+        const bool aboveHalf = Issues.Size() > Settings.MaxErrors / 2;
+        if (aboveHalf) {
+            return Cnull;
+        }
+    } else {
+        if (Settings.MaxErrors == Issues.Size() + 1) {
+            Issues.AddIssue(TIssue(NYql::TPosition(), TString(TStringBuf("Too many issues"))));
+            Issues.back().SetCode(UNEXPECTED_ERROR, TSeverityIds::S_ERROR);
+        }
+
+        if (Settings.MaxErrors <= Issues.Size()) {
+            ythrow NProtoAST::TTooManyErrors() << "Too many issues";
+        }
     }
 
     Issues.AddIssue(TIssue(pos, TString()));
@@ -224,19 +224,19 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
     return true;
 }
 
-TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) { 
+TNodePtr TContext::GetPrefixedPath(const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& path) {
     auto* clusterPrefix = cluster.GetLiteral() ? ClusterPathPrefixes.FindPtr(*cluster.GetLiteral()) : nullptr;
     if (clusterPrefix && !clusterPrefix->empty()) {
         return AddTablePathPrefix(*this, *clusterPrefix, path);
     } else {
-        auto* providerPrefix = ProviderPathPrefixes.FindPtr(service); 
+        auto* providerPrefix = ProviderPathPrefixes.FindPtr(service);
         if (providerPrefix && !providerPrefix->empty()) {
             return AddTablePathPrefix(*this, *providerPrefix, path);
         } else if (!PathPrefix.empty()) {
             return AddTablePathPrefix(*this, PathPrefix, path);
         }
 
-        return path.Build(); 
+        return path.Build();
     }
 }
 
@@ -278,64 +278,64 @@ TString TContext::AddImport(const TVector<TString>& modulePath) {
     return iter->second;
 }
 
-TString TContext::AddSimpleUdf(const TString& udf) { 
-    auto& name = SimpleUdfs[udf]; 
+TString TContext::AddSimpleUdf(const TString& udf) {
+    auto& name = SimpleUdfs[udf];
     if (name.empty()) {
-        name = TStringBuilder() << "Udf" << SimpleUdfs.size(); 
-    } 
- 
-    return name; 
-} 
- 
+        name = TStringBuilder() << "Udf" << SimpleUdfs.size();
+    }
+
+    return name;
+}
+
 void TContext::SetPackageVersion(const TString& packageName, ui32 version) {
     PackageVersions[packageName] = version;
 }
 
-void TScopedState::UseCluster(const TString& service, const TDeferredAtom& cluster) { 
-    YQL_ENSURE(!cluster.Empty()); 
-    if (cluster.GetLiteral()) { 
-        if (!Local.UsedPlainClusters.insert(*cluster.GetLiteral()).second) { 
-            return; 
-        } 
-    } else { 
-        if (!Local.UsedExprClusters.insert(cluster.Build().Get()).second) { 
-            return; 
-        } 
-    } 
-    Local.UsedClusters.push_back({service, cluster}); 
-} 
- 
-void TScopedState::AddExprCluster(TNodePtr expr, TContext& ctx) { 
-    auto node = expr.Get(); 
-    if (Local.ExprClustersMap.count(node)) { 
-        return; 
-    } 
-    auto name = ctx.MakeName("cluster"); 
-    auto wrappedNode = expr->Y("EvaluateAtom", expr); 
-    Local.ExprClustersMap.insert({node, {name, wrappedNode}}); 
-    Local.ExprClusters.push_back(expr); 
-} 
- 
-const TVector<std::pair<TString, TDeferredAtom>>& TScopedState::GetUsedClusters() { 
-    return Local.UsedClusters; 
-} 
- 
-TNodePtr TScopedState::WrapCluster(const TDeferredAtom& cluster, TContext& ctx) { 
-    auto node = cluster.Build(); 
-    if (!cluster.GetLiteral()) { 
-        AddExprCluster(node, ctx); 
-        auto exprIt = Local.ExprClustersMap.find(node.Get()); 
-        YQL_ENSURE(exprIt != Local.ExprClustersMap.end()); 
-        return node->AstNode(exprIt->second.first); 
-    } 
- 
-    return node; 
-} 
- 
-void TScopedState::Clear() { 
-   *this = TScopedState(); 
-} 
- 
+void TScopedState::UseCluster(const TString& service, const TDeferredAtom& cluster) {
+    YQL_ENSURE(!cluster.Empty());
+    if (cluster.GetLiteral()) {
+        if (!Local.UsedPlainClusters.insert(*cluster.GetLiteral()).second) {
+            return;
+        }
+    } else {
+        if (!Local.UsedExprClusters.insert(cluster.Build().Get()).second) {
+            return;
+        }
+    }
+    Local.UsedClusters.push_back({service, cluster});
+}
+
+void TScopedState::AddExprCluster(TNodePtr expr, TContext& ctx) {
+    auto node = expr.Get();
+    if (Local.ExprClustersMap.count(node)) {
+        return;
+    }
+    auto name = ctx.MakeName("cluster");
+    auto wrappedNode = expr->Y("EvaluateAtom", expr);
+    Local.ExprClustersMap.insert({node, {name, wrappedNode}});
+    Local.ExprClusters.push_back(expr);
+}
+
+const TVector<std::pair<TString, TDeferredAtom>>& TScopedState::GetUsedClusters() {
+    return Local.UsedClusters;
+}
+
+TNodePtr TScopedState::WrapCluster(const TDeferredAtom& cluster, TContext& ctx) {
+    auto node = cluster.Build();
+    if (!cluster.GetLiteral()) {
+        AddExprCluster(node, ctx);
+        auto exprIt = Local.ExprClustersMap.find(node.Get());
+        YQL_ENSURE(exprIt != Local.ExprClustersMap.end());
+        return node->AstNode(exprIt->second.first);
+    }
+
+    return node;
+}
+
+void TScopedState::Clear() {
+   *this = TScopedState();
+}
+
 TNodePtr TScopedState::LookupNode(const TString& name) {
     auto mapIt = NamedNodes.find(name);
     if (mapIt == NamedNodes.end()) {
@@ -346,24 +346,24 @@ TNodePtr TScopedState::LookupNode(const TString& name) {
     return mapIt->second.front()->Node->Clone();
 }
 
-bool TContext::HasNonYtProvider(const ISource& source) const { 
+bool TContext::HasNonYtProvider(const ISource& source) const {
     TTableList tableList;
     source.GetInputTables(tableList);
- 
+
     TSet<TString> clusters;
     for (auto& it: tableList) {
-        if (it.Service != YtProviderName) { 
-            return true; 
+        if (it.Service != YtProviderName) {
+            return true;
         }
     }
 
-    for (auto& cl: Scoped->Local.UsedClusters) { 
-        if (cl.first != YtProviderName) { 
-            return true; 
+    for (auto& cl: Scoped->Local.UsedClusters) {
+        if (cl.first != YtProviderName) {
+            return true;
         }
     }
 
-    return false; 
+    return false;
 }
 
 bool TContext::UseUnordered(const ISource& source) const {
@@ -491,7 +491,7 @@ TString TTranslation::PushNamedNode(TPosition namePos, const TString& name, cons
     auto node = builder(resultName);
     Y_VERIFY_DEBUG(node);
     auto mapIt = Ctx.Scoped->NamedNodes.find(resultName);
-    if (mapIt == Ctx.Scoped->NamedNodes.end()) { 
+    if (mapIt == Ctx.Scoped->NamedNodes.end()) {
         auto result = Ctx.Scoped->NamedNodes.insert(std::make_pair(resultName, TDeque<TNodeWithUsageInfoPtr>()));
         Y_VERIFY_DEBUG(result.second);
         mapIt = result.first;
@@ -513,8 +513,8 @@ TString TTranslation::PushNamedAtom(TPosition namePos, const TString& name) {
 }
 
 void TTranslation::PopNamedNode(const TString& name) {
-    auto mapIt = Ctx.Scoped->NamedNodes.find(name); 
-    Y_VERIFY_DEBUG(mapIt != Ctx.Scoped->NamedNodes.end()); 
+    auto mapIt = Ctx.Scoped->NamedNodes.find(name);
+    Y_VERIFY_DEBUG(mapIt != Ctx.Scoped->NamedNodes.end());
     Y_VERIFY_DEBUG(mapIt->second.size() > 0);
     auto& top = mapIt->second.front();
     if (!top->IsUsed && !Ctx.HasPendingErrors && !name.StartsWith("$_")) {
@@ -522,7 +522,7 @@ void TTranslation::PopNamedNode(const TString& name) {
     }
     mapIt->second.pop_front();
     if (mapIt->second.empty()) {
-        Ctx.Scoped->NamedNodes.erase(mapIt); 
+        Ctx.Scoped->NamedNodes.erase(mapIt);
     }
 }
 

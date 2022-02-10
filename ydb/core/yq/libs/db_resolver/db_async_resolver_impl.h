@@ -1,6 +1,6 @@
 #pragma once
 #include "db_async_resolver.h"
-#include <ydb/library/yql/providers/dq/actors/actor_helpers.h> 
+#include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 
 namespace NYq {
 

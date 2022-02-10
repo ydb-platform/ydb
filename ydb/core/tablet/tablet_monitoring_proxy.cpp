@@ -16,10 +16,10 @@
 ////////////////////////////////////////////
 namespace NKikimr { namespace NTabletMonitoringProxy {
 
-namespace { 
- 
-class TForwardingActor : public TActorBootstrapped<TForwardingActor> { 
-public: 
+namespace {
+
+class TForwardingActor : public TActorBootstrapped<TForwardingActor> {
+public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TABLET_FORWARDING_ACTOR;
     }
@@ -28,16 +28,16 @@ public:
         : Config(config)
         , TargetTablet(targetTablet)
         , ForceFollower(forceFollower)
-        , Sender(sender) 
-        , Query(query) 
+        , Sender(sender)
+        , Query(query)
         , Method(method)
     {}
- 
+
     TForwardingActor(const TTabletMonitoringProxyConfig& config, ui64 targetTablet, bool forceFollower, const TActorId& sender, const TString& query)
         : TForwardingActor(config, targetTablet, forceFollower, sender, query, HTTP_METHOD::HTTP_METHOD_GET)
     {}
 
-    void Bootstrap(const TActorContext& ctx) { 
+    void Bootstrap(const TActorContext& ctx) {
         NTabletPipe::TClientConfig config;
         config.AllowFollower = ForceFollower;
         config.ForceFollower = ForceFollower;
@@ -47,44 +47,44 @@ public:
         PipeClient = ctx.ExecutorThread.RegisterActor(NTabletPipe::CreateClient(ctx.SelfID, TargetTablet, config));
         NTabletPipe::SendData(ctx, PipeClient, new NMon::TEvRemoteHttpInfo(Query, Method));
 
-        ctx.Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup()); 
-        Become(&TThis::StateWork); 
-    } 
- 
-    STFUNC(StateWork) { 
-        switch (ev->GetTypeRewrite()) { 
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle); 
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle); 
-            HFunc(NMon::TEvRemoteHttpInfoRes, Handle); 
+        ctx.Schedule(TDuration::Seconds(60), new TEvents::TEvWakeup());
+        Become(&TThis::StateWork);
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            HFunc(NMon::TEvRemoteHttpInfoRes, Handle);
             HFunc(NMon::TEvRemoteBinaryInfoRes, Handle);
             HFunc(NMon::TEvRemoteJsonInfoRes, Handle);
-            CFunc(TEvents::TSystem::Wakeup, Wakeup); 
-        } 
-    } 
- 
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) { 
-        if (!ev->Get()->ServerId) { 
+            CFunc(TEvents::TSystem::Wakeup, Wakeup);
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
+        if (!ev->Get()->ServerId) {
             auto reply = Sprintf("Tablet pipe with %" PRIu64 " is not connected with status: %s"
                                  " (<a href=\"?SsId=%" PRIu64 "\">see State Storage</a>)",
                                  ev->Get()->TabletId,
                                  NKikimrProto::EReplyStatus_Name(ev->Get()->Status).c_str(),
                                  ev->Get()->TabletId);
             Notify(ctx, reply);
-            Die(ctx); 
-        } 
-    } 
- 
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) { 
+            Die(ctx);
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
-        Notify(ctx, "Tablet pipe is reset"); 
-        Die(ctx); 
-    } 
- 
-    void Handle(NMon::TEvRemoteHttpInfoRes::TPtr &ev, const TActorContext &ctx) { 
-        Notify(ctx, ev->Get()->Html); 
-        Detach(ctx); 
-    } 
- 
+        Notify(ctx, "Tablet pipe is reset");
+        Die(ctx);
+    }
+
+    void Handle(NMon::TEvRemoteHttpInfoRes::TPtr &ev, const TActorContext &ctx) {
+        Notify(ctx, ev->Get()->Html);
+        Detach(ctx);
+    }
+
     void Handle(NMon::TEvRemoteBinaryInfoRes::TPtr& ev, const TActorContext& ctx) {
         ctx.Send(Sender, new NMon::TEvHttpInfoRes(ev->Get()->Blob, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
         Detach(ctx);
@@ -96,31 +96,31 @@ public:
     }
 
     void Notify(const TActorContext &ctx, const TString& html) {
-        ctx.Send(Sender, new NMon::TEvHttpInfoRes(html)); 
-    } 
- 
-    void Wakeup(const TActorContext &ctx) { 
-        Notify(ctx, "Timeout"); 
-        Detach(ctx); 
-    } 
- 
-    void Detach(const TActorContext &ctx) { 
-        NTabletPipe::CloseClient(ctx, PipeClient); 
-        Die(ctx); 
-    } 
- 
-private: 
+        ctx.Send(Sender, new NMon::TEvHttpInfoRes(html));
+    }
+
+    void Wakeup(const TActorContext &ctx) {
+        Notify(ctx, "Timeout");
+        Detach(ctx);
+    }
+
+    void Detach(const TActorContext &ctx) {
+        NTabletPipe::CloseClient(ctx, PipeClient);
+        Die(ctx);
+    }
+
+private:
     const TTabletMonitoringProxyConfig Config;
-    const ui64 TargetTablet; 
+    const ui64 TargetTablet;
     const bool ForceFollower;
     const TActorId Sender;
     const TString Query;
     TActorId PipeClient;
     const HTTP_METHOD Method;
-}; 
- 
-} 
- 
+};
+
+}
+
 ////////////////////////////////////////////
 class TTabletMonitoringProxyActor : public TActorBootstrapped<TTabletMonitoringProxyActor> {
 public:
@@ -219,10 +219,10 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         if (tabletId) {
             TString url = TStringBuilder() << msg->Request.GetPathInfo() << "?" << cgi->Print();
             ctx.ExecutorThread.RegisterActor(new TForwardingActor(Config, tabletId, false, ev->Sender, std::move(url), msg->Request.GetMethod()));
-            return; 
-        } 
+            return;
+        }
     }
- 
+
     if (cgi->Has("SsId")) {
         const TString &ssIdParam = cgi->Get("SsId");
         const ui64 tabletId = TryParseTabletId(ssIdParam);
@@ -234,7 +234,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
     }
 
 
-    TStringStream str; 
+    TStringStream str;
 
     const NKikimr::TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
     auto& domains = domainsInfo->Domains;
@@ -381,7 +381,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"Watch\"/>" << Endl;
         str << "</form>" << Endl;
     }
-    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str())); 
+    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str()));
 }
 
 ////////////////////////////////////////////

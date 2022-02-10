@@ -10,10 +10,10 @@
 namespace NKikimr {
 namespace NPQ {
 
-    inline TString ToStringLocalTimeUpToSeconds(const TInstant &time) { 
-        return time.GetValue() ? time.ToStringLocalUpToSeconds() : "0"; 
-    } 
- 
+    inline TString ToStringLocalTimeUpToSeconds(const TInstant &time) {
+        return time.GetValue() ? time.ToStringLocalUpToSeconds() : "0";
+    }
+
     /// Intablet cache proxy: Partition <-> CacheProxy <-> KV
     class TPQCacheProxy : public TActorBootstrapped<TPQCacheProxy> {
     public:

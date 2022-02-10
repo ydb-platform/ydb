@@ -1,9 +1,9 @@
 #include "mkql_squeeze_state.h"
 #include "mkql_saveload.h"
 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_pack.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -66,7 +66,7 @@ void TSqueezeState::Load(TComputationContext& ctx, const NUdf::TStringRef& state
 
 const TValuePacker& TSqueezeState::GetPacker() const {
     if (!Packer && StateType)
-        Packer = MakeHolder<TValuePacker>(false, StateType); 
+        Packer = MakeHolder<TValuePacker>(false, StateType);
     return *Packer;
 }
 

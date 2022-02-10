@@ -1,8 +1,8 @@
 #include "mkql_computation_node_graph_saveload.h"
 #include "mkql_computation_node_holders.h"
 
-#include <ydb/library/yql/minikql/pack_num.h> 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h> 
+#include <ydb/library/yql/minikql/pack_num.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -26,7 +26,7 @@ void TraverseGraph(const NUdf::TUnboxedValue* roots, ui32 rootCount, TVector<NUd
     }
 
     for (ui32 from = 0, to = values.size(); from != to; ++from) {
-        auto current = values[from]; 
+        auto current = values[from];
         auto count = current.GetTraverseCount();
 
         for (ui32 i = 0; i < count; ++i) {

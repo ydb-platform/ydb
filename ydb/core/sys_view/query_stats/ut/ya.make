@@ -17,7 +17,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 SRCS(
     query_stats_ut.cpp
 )

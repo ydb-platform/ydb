@@ -7,7 +7,7 @@
 
 #include <util/string/ascii.h>
 #include <util/string/split.h>
-#include <util/string/strip.h> 
+#include <util/string/strip.h>
 #include <util/string/subst.h>
 #include <util/system/compiler.h>
 #include <util/generic/map.h>
@@ -25,8 +25,8 @@ void SanitizeNonAscii(TString& s) {
             }
         }
     }
-} 
- 
+}
+
 TTextWalker& TTextWalker::Advance(char c) {
     if (c == '\n') {
         HaveCr = false;
@@ -211,65 +211,65 @@ void TIssues::PrintWithProgramTo(
     }
 }
 
-TIssue ExceptionToIssue(const std::exception& e, const TPosition& pos) { 
-    TStringBuf messageBuf = e.what(); 
-    auto parsedPos = TryParseTerminationMessage(messageBuf); 
-    auto issue = TIssue(parsedPos.GetOrElse(pos), messageBuf); 
-    const TErrorException* errorException = dynamic_cast<const TErrorException*>(&e); 
-    if (errorException) { 
-        issue.SetCode(errorException->GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR); 
-    } else { 
-        issue.SetCode(UNEXPECTED_ERROR, ESeverity::TSeverityIds_ESeverityId_S_FATAL); 
-    } 
-    return issue; 
-} 
- 
+TIssue ExceptionToIssue(const std::exception& e, const TPosition& pos) {
+    TStringBuf messageBuf = e.what();
+    auto parsedPos = TryParseTerminationMessage(messageBuf);
+    auto issue = TIssue(parsedPos.GetOrElse(pos), messageBuf);
+    const TErrorException* errorException = dynamic_cast<const TErrorException*>(&e);
+    if (errorException) {
+        issue.SetCode(errorException->GetCode(), ESeverity::TSeverityIds_ESeverityId_S_ERROR);
+    } else {
+        issue.SetCode(UNEXPECTED_ERROR, ESeverity::TSeverityIds_ESeverityId_S_FATAL);
+    }
+    return issue;
+}
+
 static constexpr TStringBuf TerminationMessageMarker = "Terminate was called, reason(";
- 
-TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message) { 
-    size_t len = 0; 
-    size_t startPos = message.find(TerminationMessageMarker); 
-    size_t endPos = 0; 
-    if (startPos != TString::npos) { 
+
+TMaybe<TPosition> TryParseTerminationMessage(TStringBuf& message) {
+    size_t len = 0;
+    size_t startPos = message.find(TerminationMessageMarker);
+    size_t endPos = 0;
+    if (startPos != TString::npos) {
         endPos = message.find(')', startPos + TerminationMessageMarker.size());
-        if (endPos != TString::npos) { 
+        if (endPos != TString::npos) {
             TStringBuf lenText = message.Tail(startPos + TerminationMessageMarker.size())
                 .Trunc(endPos - startPos - TerminationMessageMarker.size());
-            try { 
-                len = FromString<size_t>(lenText); 
-            } catch (const TFromStringException&) { 
-                len = 0; 
-            } 
-        } 
-    } 
- 
-    if (len) { 
-        message = message.Tail(endPos + 3).Trunc(len); 
-        auto s = message; 
-        TMaybe<TStringBuf> file; 
-        TMaybe<TStringBuf> row; 
-        TMaybe<TStringBuf> column; 
-        GetNext(s, ':', file); 
-        GetNext(s, ':', row); 
-        GetNext(s, ':', column); 
-        ui32 rowValue, columnValue; 
-        if (file && row && column && TryFromString(*row, rowValue) && TryFromString(*column, columnValue)) { 
-            message = StripStringLeft(s); 
-            return TPosition(columnValue, rowValue, TString(*file)); 
-        } 
-    } 
- 
-    return Nothing(); 
-} 
- 
+            try {
+                len = FromString<size_t>(lenText);
+            } catch (const TFromStringException&) {
+                len = 0;
+            }
+        }
+    }
+
+    if (len) {
+        message = message.Tail(endPos + 3).Trunc(len);
+        auto s = message;
+        TMaybe<TStringBuf> file;
+        TMaybe<TStringBuf> row;
+        TMaybe<TStringBuf> column;
+        GetNext(s, ':', file);
+        GetNext(s, ':', row);
+        GetNext(s, ':', column);
+        ui32 rowValue, columnValue;
+        if (file && row && column && TryFromString(*row, rowValue) && TryFromString(*column, columnValue)) {
+            message = StripStringLeft(s);
+            return TPosition(columnValue, rowValue, TString(*file));
+        }
+    }
+
+    return Nothing();
+}
+
 } // namspace NYql
 
 template <>
 void Out<NYql::TPosition>(IOutputStream& out, const NYql::TPosition& pos) {
-    out << (pos.File ? pos.File : "<main>"); 
-    if (pos) { 
-        out << ":" << pos.Row << ':' << pos.Column; 
-    } 
+    out << (pos.File ? pos.File : "<main>");
+    if (pos) {
+        out << ":" << pos.Row << ':' << pos.Column;
+    }
 }
 
 template<>

@@ -3,10 +3,10 @@
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/dynumber/dynumber.h>
 
-#include <ydb/library/yql/providers/common/codec/yql_codec_results.h> 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
-#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h> 
-#include <ydb/library/yql/public/decimal/yql_decimal.h> 
+#include <ydb/library/yql/providers/common/codec/yql_codec_results.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 namespace NYql {
 
@@ -228,47 +228,47 @@ void WriteValueToYson(const TStringStream& stream, NCommon::TYsonResultWriter& w
     }
 }
 
-TExprNode::TPtr MakeAtomForDataType(EDataSlot slot, const NKikimrMiniKQL::TValue& value, 
+TExprNode::TPtr MakeAtomForDataType(EDataSlot slot, const NKikimrMiniKQL::TValue& value,
     TPositionHandle pos, TExprContext& ctx)
 {
-    if (slot == EDataSlot::Bool) { 
+    if (slot == EDataSlot::Bool) {
         return ctx.NewAtom(pos, ToString(value.GetBool()));
-    } else if (slot == EDataSlot::Uint8) { 
+    } else if (slot == EDataSlot::Uint8) {
         return ctx.NewAtom(pos, ToString(ui8(value.GetUint32())));
-    } else if (slot == EDataSlot::Int8) { 
-        return ctx.NewAtom(pos, ToString(i8(value.GetInt32()))); 
-    } else if (slot == EDataSlot::Int16) { 
-        return ctx.NewAtom(pos, ToString(i16(value.GetInt32()))); 
-    } else if (slot == EDataSlot::Uint16) { 
-        return ctx.NewAtom(pos, ToString(ui16(value.GetUint32()))); 
-    } else if (slot == EDataSlot::Int32) { 
-        return ctx.NewAtom(pos, ToString(value.GetInt32()));
-    } else if (slot == EDataSlot::Uint32) { 
-        return ctx.NewAtom(pos, ToString(value.GetUint32()));
-    } else if (slot == EDataSlot::Int64) { 
-        return ctx.NewAtom(pos, ToString(value.GetInt64()));
-    } else if (slot == EDataSlot::Uint64) { 
-        return ctx.NewAtom(pos, ToString(value.GetUint64()));
-    } else if (slot == EDataSlot::Float) { 
-        return ctx.NewAtom(pos, ToString(value.GetFloat()));
-    } else if (slot == EDataSlot::Double) { 
-        return ctx.NewAtom(pos, ToString(value.GetDouble()));
-    } else if (slot == EDataSlot::String) { 
-        return ctx.NewAtom(pos, value.GetBytes());
-    } else if (slot == EDataSlot::Utf8) { 
-        return ctx.NewAtom(pos, value.GetText());
-    } else if (slot == EDataSlot::Yson) { 
-        return ctx.NewAtom(pos, value.GetBytes());
-    } else if (slot == EDataSlot::Json) { 
-        return ctx.NewAtom(pos, value.GetText());
-    } else if (slot == EDataSlot::Date) { 
+    } else if (slot == EDataSlot::Int8) {
+        return ctx.NewAtom(pos, ToString(i8(value.GetInt32())));
+    } else if (slot == EDataSlot::Int16) {
+        return ctx.NewAtom(pos, ToString(i16(value.GetInt32())));
+    } else if (slot == EDataSlot::Uint16) {
         return ctx.NewAtom(pos, ToString(ui16(value.GetUint32())));
-    } else if (slot == EDataSlot::Datetime) { 
+    } else if (slot == EDataSlot::Int32) {
+        return ctx.NewAtom(pos, ToString(value.GetInt32()));
+    } else if (slot == EDataSlot::Uint32) {
         return ctx.NewAtom(pos, ToString(value.GetUint32()));
-    } else if (slot == EDataSlot::Timestamp) { 
+    } else if (slot == EDataSlot::Int64) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
+    } else if (slot == EDataSlot::Uint64) {
         return ctx.NewAtom(pos, ToString(value.GetUint64()));
-    } else if (slot == EDataSlot::Interval) { 
-        return ctx.NewAtom(pos, ToString(value.GetInt64())); 
+    } else if (slot == EDataSlot::Float) {
+        return ctx.NewAtom(pos, ToString(value.GetFloat()));
+    } else if (slot == EDataSlot::Double) {
+        return ctx.NewAtom(pos, ToString(value.GetDouble()));
+    } else if (slot == EDataSlot::String) {
+        return ctx.NewAtom(pos, value.GetBytes());
+    } else if (slot == EDataSlot::Utf8) {
+        return ctx.NewAtom(pos, value.GetText());
+    } else if (slot == EDataSlot::Yson) {
+        return ctx.NewAtom(pos, value.GetBytes());
+    } else if (slot == EDataSlot::Json) {
+        return ctx.NewAtom(pos, value.GetText());
+    } else if (slot == EDataSlot::Date) {
+        return ctx.NewAtom(pos, ToString(ui16(value.GetUint32())));
+    } else if (slot == EDataSlot::Datetime) {
+        return ctx.NewAtom(pos, ToString(value.GetUint32()));
+    } else if (slot == EDataSlot::Timestamp) {
+        return ctx.NewAtom(pos, ToString(value.GetUint64()));
+    } else if (slot == EDataSlot::Interval) {
+        return ctx.NewAtom(pos, ToString(value.GetInt64()));
     } else {
        return nullptr;
     }
@@ -381,7 +381,7 @@ NKikimrMiniKQL::TResult* KikimrResultToProto(const NKikimrMiniKQL::TResult& resu
     auto* truncatedMember = packedType->MutableStruct()->AddMember();
     truncatedMember->SetName("Truncated");
     truncatedMember->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    truncatedMember->MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<bool>::Id); 
+    truncatedMember->MutableType()->MutableData()->SetScheme(NKikimr::NUdf::TDataType<bool>::Id);
 
     auto* packedValue = packedResult->MutableValue();
     auto* dataValue = packedValue->AddStruct();
@@ -548,7 +548,7 @@ bool ExportTypeToKikimrProto(const TTypeAnnotationNode& type, NKikimrMiniKQL::TT
 
         case ETypeAnnotationKind::Data: {
             protoType.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-            auto slot = type.Cast<TDataExprType>()->GetSlot(); 
+            auto slot = type.Cast<TDataExprType>()->GetSlot();
             auto typeId = NKikimr::NUdf::GetDataTypeInfo(slot).TypeId;
             if (typeId == NYql::NProto::TypeIds::Decimal) {
                 auto dataProto = protoType.MutableData();
@@ -642,13 +642,13 @@ TExprNode::TPtr ParseKikimrProtoValue(const NKikimrMiniKQL::TType& type, const N
             auto dataTypeNode = typeNode->Cast<TDataExprType>();
             YQL_ENSURE(dataTypeNode);
 
-            auto valueAtom = MakeAtomForDataType(dataTypeNode->GetSlot(), value, pos, ctx); 
+            auto valueAtom = MakeAtomForDataType(dataTypeNode->GetSlot(), value, pos, ctx);
             if (!valueAtom) {
                 ctx.AddError(TIssue(position, TStringBuilder() << "Unsupported data type: "
-                    << dataTypeNode->GetName())); 
+                    << dataTypeNode->GetName()));
                 return nullptr;
             }
-            return ctx.NewCallable(pos, dataTypeNode->GetName(), {valueAtom}); 
+            return ctx.NewCallable(pos, dataTypeNode->GetName(), {valueAtom});
         }
 
         case NKikimrMiniKQL::ETypeKind::Optional: {
@@ -856,7 +856,7 @@ TMaybe<TString> GetTableListResult(const IKikimrGateway::TListPathResult& res,
 {
     NKikimrMiniKQL::TType stringType;
     stringType.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    stringType.MutableData()->SetScheme(NKikimr::NUdf::TDataType<char*>::Id); 
+    stringType.MutableData()->SetScheme(NKikimr::NUdf::TDataType<char*>::Id);
 
     NKikimrMiniKQL::TResult result;
     auto& structType = *result.MutableType();
@@ -920,7 +920,7 @@ TMaybe<TString> GetTableMetadataResult(const TKikimrTableDescription& table,
     NKikimrMiniKQL::TResult result;
     auto& resultType = *result.MutableType();
     resultType.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    resultType.MutableData()->SetScheme(NKikimr::NUdf::TDataType<NKikimr::NUdf::TYson>::Id); 
+    resultType.MutableData()->SetScheme(NKikimr::NUdf::TDataType<NKikimr::NUdf::TYson>::Id);
 
     result.MutableValue()->SetBytes(metaYson);
 

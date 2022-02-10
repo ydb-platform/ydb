@@ -36,8 +36,8 @@ public:
     }
 
     {%- if node.Content %}
-        {% if node.Content.Type == "TStringBuf" %} 
-    TStringBuf {{ node.Content.Name }}() const { 
+        {% if node.Content.Type == "TStringBuf" %}
+    TStringBuf {{ node.Content.Name }}() const {
         return this->Ref().Content();
     }
         {% else %}
@@ -65,7 +65,7 @@ public:
         {%- if node.Match.Type == "Callable" %}
         return node->IsCallable(TStringBuf("{{ node.Match.Name }}"));
         {% elif node.Match.Type == "NodeType" %}
-        return node->Type() == TExprNode::{{ node.Match.TypeName }}; 
+        return node->Type() == TExprNode::{{ node.Match.TypeName }};
         {% elif node.Match.Type == "CallableBase" %}
         static THashSet<TStringBuf> namesToMatch = {
             {%- for name in node.aux.namesToMatch %}
@@ -217,7 +217,7 @@ public:
 
         fluentFunc(fluentBuilder);
         {{child.aux.holderName}} = fluentBuilder.Build();
-        return *static_cast<TBuilder<TParent, TDerived>*>(this); 
+        return *static_cast<TBuilder<TParent, TDerived>*>(this);
     }
 
     TBuilder<TBuilder<TParent, TDerived>, {{child.Type}}> {{child.Name}}() {
@@ -231,7 +231,7 @@ public:
     template<typename TNode>
     TBuilder<TBuilder<TParent, TDerived>, TNode> {{child.Name}}() {
         return TBuilder<TBuilder<TParent, TDerived>, TNode>(this->Ctx, this->Pos,
-            [this] (const TNode& node) mutable -> TBuilder<TParent, TDerived>&{ 
+            [this] (const TNode& node) mutable -> TBuilder<TParent, TDerived>&{
                 {{child.aux.holderName}} = node;
                 return *static_cast<TBuilder<TParent, TDerived>*>(this);
             }, this->GetArgFunc);
@@ -280,7 +280,7 @@ namespace NGenerated {
 {% for node in nodes %}
     {%- if node.aux.generateBuilderStub %}
         {%- if node.Builder.Kind == "Node" %}
-template<typename TParent> 
+template<typename TParent>
 using {{ node.aux.stubBuilderAliasName }} =
     NGenerated::{{ node.aux.stubBuilderName }}<{{ model.NodeBuilderBase }}, TParent, TNodeBuilder, {{ node.Name }},
         TMaybeNode, {{ node.aux.builderUsages | join(", ") }}>;
@@ -373,4 +373,4 @@ class UnknownBuilder {
     {%- endif %}
 {%- endfor %}
 
-{% endif %} 
+{% endif %}

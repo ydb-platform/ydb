@@ -1,9 +1,9 @@
-#pragma once 
+#pragma once
 
-#include <ydb/library/yql/minikql/mkql_node.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
- 
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/array_base.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
@@ -86,4 +86,4 @@ void AppendElement(NYql::NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder
 
 
 } // NArrow
-} // NYql 
+} // NYql

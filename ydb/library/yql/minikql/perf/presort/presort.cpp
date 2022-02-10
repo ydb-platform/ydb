@@ -1,8 +1,8 @@
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
-#include <ydb/library/yql/minikql/defs.h> 
-#include <ydb/library/yql/minikql/computation/presort.h> 
-#include <ydb/library/yql/minikql/mkql_alloc.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/minikql/defs.h>
+#include <ydb/library/yql/minikql/computation/presort.h>
+#include <ydb/library/yql/minikql/mkql_alloc.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/library/yql/public/udf/udf_types.h>
 
 #include <library/cpp/presort/presort.h>

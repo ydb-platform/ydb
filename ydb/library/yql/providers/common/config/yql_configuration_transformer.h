@@ -2,7 +2,7 @@
 
 #include "yql_dispatch.h"
 
-#include <ydb/library/yql/core/yql_type_annotation.h> 
+#include <ydb/library/yql/core/yql_type_annotation.h>
 
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>

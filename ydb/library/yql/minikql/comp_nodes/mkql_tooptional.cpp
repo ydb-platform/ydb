@@ -1,20 +1,20 @@
-#include "mkql_tooptional.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include "mkql_tooptional.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 template <bool IsOptional>
 class THeadWrapper : public TMutableCodegeneratorPtrNode<THeadWrapper<IsOptional>> {
     typedef TMutableCodegeneratorPtrNode<THeadWrapper<IsOptional>> TBaseComputation;
-public: 
+public:
     THeadWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list)
         : TBaseComputation(mutables, kind), List(list)
     {}
- 
+
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         const auto& value = List->GetValue(ctx);
         if (const auto ptr = value.GetElements()) {
@@ -27,10 +27,10 @@ public:
                 return result.Release().MakeOptionalIf<IsOptional>();
             }
         }
- 
+
         return NUdf::TUnboxedValue();
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     void DoGenerateGetValue(const TCodegenContext& ctx, Value* result, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -208,22 +208,22 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(List);
-    } 
- 
-    IComputationNode* const List; 
-}; 
- 
+    }
+
+    IComputationNode* const List;
+};
+
 }
 
 IComputationNode* WrapHead(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args"); 
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args");
     if (AS_TYPE(TOptionalType, callable.GetType()->GetReturnType())->IsOptional()) {
         return new THeadWrapper<true>(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), LocateNode(ctx.NodeLocator, callable, 0));
     } else {
         return new THeadWrapper<false>(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), LocateNode(ctx.NodeLocator, callable, 0));
     }
 }
- 
+
 IComputationNode* WrapLast(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args");
     if (AS_TYPE(TOptionalType, callable.GetType()->GetReturnType())->IsOptional()) {
@@ -231,7 +231,7 @@ IComputationNode* WrapLast(TCallable& callable, const TComputationNodeFactoryCon
     } else {
         return new TLastWrapper<false>(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), LocateNode(ctx.NodeLocator, callable, 0));
     }
-} 
- 
-} 
-} 
+}
+
+}
+}

@@ -1,11 +1,11 @@
-#include "mkql_take.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include "mkql_take.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 class TTakeFlowWrapper : public TStatefulFlowCodegeneratorNode<TTakeFlowWrapper> {
@@ -185,38 +185,38 @@ private:
 
 class TTakeStreamWrapper : public TMutableComputationNode<TTakeStreamWrapper> {
     typedef TMutableComputationNode<TTakeStreamWrapper> TBaseComputation;
-public: 
-    class TStreamValue : public TComputationValue<TStreamValue> { 
-    public: 
-        using TBase = TComputationValue<TStreamValue>; 
- 
-        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, ui64 count) 
-            : TBase(memInfo) 
-            , Input_(std::move(input)) 
-            , Count_(count) 
-            , Index_(0) 
-        {} 
- 
+public:
+    class TStreamValue : public TComputationValue<TStreamValue> {
+    public:
+        using TBase = TComputationValue<TStreamValue>;
+
+        TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, ui64 count)
+            : TBase(memInfo)
+            , Input_(std::move(input))
+            , Count_(count)
+            , Index_(0)
+        {}
+
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (Index_ >= Count_) { 
-                return NUdf::EFetchStatus::Finish; 
-            } 
- 
+            if (Index_ >= Count_) {
+                return NUdf::EFetchStatus::Finish;
+            }
+
             const auto status = Input_.Fetch(result);
-            if (status != NUdf::EFetchStatus::Ok) { 
-                return status; 
-            } 
- 
-            ++Index_; 
-            return status; 
-        } 
- 
+            if (status != NUdf::EFetchStatus::Ok) {
+                return status;
+            }
+
+            ++Index_;
+            return status;
+        }
+
         const NUdf::TUnboxedValue Input_;
-        const ui64 Count_; 
-        ui64 Index_; 
-    }; 
- 
+        const ui64 Count_;
+        ui64 Index_;
+    };
+
     TTakeStreamWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , List(list)
@@ -244,10 +244,10 @@ public:
     TTakeWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationNode* count)
         : TBaseComputation(mutables, list->GetRepresentation())
         , List(list)
-        , Count(count) 
-    { 
-    } 
- 
+        , Count(count)
+    {
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.TakeList(ctx.Builder, List->GetValue(ctx).Release(), Count->GetValue(ctx).Get<ui64>());
     }
@@ -278,25 +278,25 @@ public:
             CallInst::Create(funcPtr, {factory, retPtr, builder, retPtr, count}, "", block);
             const auto result = new LoadInst(retPtr, "result", block);
             return result;
-        } 
-    } 
+        }
+    }
 #endif
 private:
     void RegisterDependencies() const final {
         DependsOn(List);
         DependsOn(Count);
-    } 
- 
-    IComputationNode* const List; 
-    IComputationNode* const Count; 
-}; 
- 
+    }
+
+    IComputationNode* const List;
+    IComputationNode* const Count;
+};
+
 }
 
-IComputationNode* WrapTake(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args"); 
+IComputationNode* WrapTake(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
     const auto type = callable.GetInput(0).GetStaticType();
- 
+
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0);
     const auto count = LocateNode(ctx.NodeLocator, callable, 1);
     if (type->IsFlow()) {
@@ -308,10 +308,10 @@ IComputationNode* WrapTake(TCallable& callable, const TComputationNodeFactoryCon
         return new TTakeStreamWrapper(ctx.Mutables, flow, count);
     } else if (type->IsList()) {
         return new TTakeWrapper(ctx.Mutables, flow, count);
-    } 
+    }
 
     THROW yexception() << "Expected flow, list or stream.";
-} 
- 
-} 
-} 
+}
+
+}
+}

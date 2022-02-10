@@ -197,7 +197,7 @@ namespace NKikimr {
             , Task(std::move(task))
             , NodeId(Task->ServiceId.NodeId())
             , NotifyId(notifyId)
-            , JobId(TAppData::RandomProvider->GenRand64()) 
+            , JobId(TAppData::RandomProvider->GenRand64())
         {}
     };
 

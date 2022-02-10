@@ -116,7 +116,7 @@ namespace NKikimr {
 
         void GenerateGuid() {
             Y_VERIFY(Step == EFirstRunStep::ACTION_GenerateGuid);
-            Guid = TAppData::RandomProvider->GenRand64(); 
+            Guid = TAppData::RandomProvider->GenRand64();
             Step = EFirstRunStep::ACTION_WriteInProgressToQuorum;
         }
 

@@ -1,8 +1,8 @@
 #include "yql_pq_mkql_compiler.h"
 
-#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h> 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h> 
-#include <ydb/library/yql/providers/common/mkql/parser.h> 
+#include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/common/mkql/parser.h>
 
 namespace NYql {
 

@@ -58,7 +58,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 RESOURCE(
     ydb/core/kqp/kqp_default_settings.txt kqp_default_settings.txt
 )

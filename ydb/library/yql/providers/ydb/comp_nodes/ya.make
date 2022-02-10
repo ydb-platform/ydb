@@ -9,7 +9,7 @@ PEERDIR(
     ydb/library/yql/providers/common/structured_token
     ydb/public/lib/experimental
     ydb/public/sdk/cpp/client/ydb_driver
-    ydb/library/yql/providers/ydb/proto 
+    ydb/library/yql/providers/ydb/proto
 )
 
 SRCS(

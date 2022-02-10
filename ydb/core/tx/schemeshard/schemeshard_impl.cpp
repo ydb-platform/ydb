@@ -9,7 +9,7 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
-#include <ydb/library/yql/minikql/mkql_type_ops.h> 
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
 
 namespace NKikimr {
 namespace NSchemeShard {

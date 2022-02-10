@@ -10,7 +10,7 @@
 
 #include <util/generic/size_literals.h>
 
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h> 
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
 namespace NKikimr {
 namespace NKqp {

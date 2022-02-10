@@ -4,11 +4,11 @@
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
 #include <ydb/core/kqp/opt/physical/effects/kqp_opt_phy_effects_rules.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
-#include <ydb/library/yql/core/yql_opt_utils.h> 
-#include <ydb/library/yql/dq/opt/dq_opt.h> 
-#include <ydb/library/yql/dq/opt/dq_opt_phy.h> 
-#include <ydb/library/yql/providers/common/transform/yql_optimize.h> 
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/dq/opt/dq_opt_phy.h>
+#include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 
 namespace NKikimr::NKqp::NOpt {
 

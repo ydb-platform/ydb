@@ -1,7 +1,7 @@
 #include "yql_kikimr_provider_impl.h"
 #include "kqp_opt_helpers.h"
 
-#include <ydb/library/yql/core/yql_opt_utils.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h>
 
 namespace NYql {
 namespace {

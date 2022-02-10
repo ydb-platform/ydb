@@ -45,7 +45,7 @@ RECURSE(
     ymq
     driver_lib
     yq
-    yql_testlib 
+    yql_testlib
 )
 
 RECURSE_FOR_TESTS(

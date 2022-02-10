@@ -6,11 +6,11 @@
 #include "type_check.h"
 #include "value.h"
 
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h> 
-#include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathLexer.h> 
-#include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.h> 
-#include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h> 
-#include <ydb/library/yql/parser/proto_ast/proto_ast.h> 
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathLexer.h>
+#include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.h>
+#include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h>
+#include <ydb/library/yql/parser/proto_ast/proto_ast.h>
 
 #include <google/protobuf/message.h>
 

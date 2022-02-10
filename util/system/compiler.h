@@ -179,14 +179,14 @@
     #define Y_HIDDEN
 #endif
 
-#if defined(__GNUC__) 
+#if defined(__GNUC__)
     #define Y_PUBLIC __attribute__((visibility("default")))
-#endif 
- 
-#if !defined(Y_PUBLIC) 
+#endif
+
+#if !defined(Y_PUBLIC)
     #define Y_PUBLIC
-#endif 
- 
+#endif
+
 #if !defined(Y_UNUSED) && !defined(__cplusplus)
     #define Y_UNUSED(var) (void)(var)
 #endif

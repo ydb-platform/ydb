@@ -1,8 +1,8 @@
 #include "mkql_builtins_compare.h"
-#include "mkql_builtins_datetime.h" 
+#include "mkql_builtins_datetime.h"
 #include "mkql_builtins_decimal.h"
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h> 
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -162,19 +162,19 @@ struct TDiffDateEquals : public TCompareArithmeticBinary<TLeft, TRight, TDiffDat
         return std::is_same<TLeft, TRight>::value ?
             Equals<TLeft, TRight, Aggr>(left, right):
             Equals<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
-    } 
- 
-#ifndef MKQL_DISABLE_CODEGEN 
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    { 
+    {
         auto& context = ctx.Codegen->GetContext();
         return std::is_same<TLeft, TRight>::value ?
             GenEquals<TLeft, TRight, Aggr>(left, right, context, block):
             GenEquals<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
-    } 
-#endif 
-}; 
- 
+    }
+#endif
+};
+
 template <typename TLeft, typename TRight, bool Aggr>
 struct TAggrTzDateEquals : public TArithmeticConstraintsBinary<TLeft, TRight, bool>, public TAggrEquals {
     static_assert(std::is_same<TLeft, TRight>::value, "Must be same type.");
@@ -262,7 +262,7 @@ void RegisterEquals(IBuiltinFunctionRegistry& registry) {
     const auto name = "Equals";
 
     RegisterComparePrimitive<TEquals, TCompareArgsOpt>(registry, name);
-    RegisterCompareDatetime<TDiffDateEquals, TCompareArgsOpt>(registry, name); 
+    RegisterCompareDatetime<TDiffDateEquals, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomEquals, TCompareArgsOpt>(registry, name);
     RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalEquals, TCompareArgsOpt>(registry, name);

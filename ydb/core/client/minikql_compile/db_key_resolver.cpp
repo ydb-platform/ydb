@@ -5,9 +5,9 @@
 
 namespace NYql {
 
-IDbSchemeResolver::TEvents::TEvResolveTablesResult::TEvResolveTablesResult(TTableResults&& result) 
-    : Result(std::move(result)) 
-{ 
-} 
- 
+IDbSchemeResolver::TEvents::TEvResolveTablesResult::TEvResolveTablesResult(TTableResults&& result)
+    : Result(std::move(result))
+{
+}
+
 } // namespace NYql

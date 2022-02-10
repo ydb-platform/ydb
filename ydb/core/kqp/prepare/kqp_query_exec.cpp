@@ -100,7 +100,7 @@ bool GetPredicateValue(const TKiConditionalEffect& effect, const TKqlTransformCo
 bool ProcessEffect(TExprBase& effect, const THashMap<TString, NKikimrKqp::TParameterBinding>& bindingsMap,
     const TKqlTransformContext& transformCtx, TExprContext& ctx)
 {
-    TOptimizeExprSettings optSettings(nullptr); 
+    TOptimizeExprSettings optSettings(nullptr);
     optSettings.VisitChanges = true;
     TExprNode::TPtr output;
     auto status = OptimizeExpr(effect.Ptr(), output,

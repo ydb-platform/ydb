@@ -8,10 +8,10 @@ SRCS(
 
 PEERDIR(
     library/cpp/deprecated/split
-    library/cpp/random_provider 
+    library/cpp/random_provider
     library/cpp/string_utils/base64
     library/cpp/threading/future
-    library/cpp/time_provider 
+    library/cpp/time_provider
     library/cpp/yson
     library/cpp/yson/node
     ydb/library/yql/core/extract_predicate
@@ -19,16 +19,16 @@ PEERDIR(
     ydb/library/yql/core/services
     ydb/library/yql/sql
     ydb/library/yql/utils/log
-    ydb/library/yql/core 
-    ydb/library/yql/core/type_ann 
-    ydb/library/yql/providers/common/config 
-    ydb/library/yql/providers/common/proto 
-    ydb/library/yql/providers/common/provider 
-    ydb/library/yql/providers/common/udf_resolve 
-    ydb/library/yql/providers/config 
-    ydb/library/yql/providers/result/provider 
+    ydb/library/yql/core
+    ydb/library/yql/core/type_ann
+    ydb/library/yql/providers/common/config
+    ydb/library/yql/providers/common/proto
+    ydb/library/yql/providers/common/provider
+    ydb/library/yql/providers/common/udf_resolve
+    ydb/library/yql/providers/config
+    ydb/library/yql/providers/result/provider
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 END()

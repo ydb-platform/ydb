@@ -5,9 +5,9 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
-#include <ydb/library/yql/ast/yql_ast.h> 
-#include <ydb/library/yql/ast/yql_expr.h> 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
+#include <ydb/library/yql/ast/yql_ast.h>
+#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
 
 #include <library/cpp/json/json_reader.h>
 

@@ -1,8 +1,8 @@
 #include "yql_kikimr_gateway.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
-#include <ydb/library/yql/utils/yql_panic.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/core/base/table_index.h>
 
@@ -95,10 +95,10 @@ TMaybe<TString> TKikimrClusterMapping::GetClusterSetting(const TString& cluster,
 }
 
 TString TKikimrClusterMapping::GetDefaultClusterName() const {
-    if (!DefaultClusterName) { 
-        ythrow yexception() << "TKikimrGatewayConfig: No default cluster"; 
-    } 
- 
+    if (!DefaultClusterName) {
+        ythrow yexception() << "TKikimrGatewayConfig: No default cluster";
+    }
+
     return DefaultClusterName;
 }
 

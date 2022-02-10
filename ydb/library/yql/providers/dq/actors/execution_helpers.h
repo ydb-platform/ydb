@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h> 
+#include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 
 #include <util/generic/guid.h>
 

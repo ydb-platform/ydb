@@ -2,12 +2,12 @@
 #include "dq_output.h"
 #include "dq_channel_storage.h"
 
-#include <ydb/library/yql/dq/common/dq_common.h> 
-#include <ydb/library/yql/dq/proto/dq_transport.pb.h> 
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h> 
+#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/dq/proto/dq_transport.pb.h>
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/mkql_node.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_node.h>
 
 #include <util/generic/size_literals.h>
 

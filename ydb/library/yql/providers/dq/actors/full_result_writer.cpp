@@ -1,15 +1,15 @@
 #include "proto_builder.h"
 #include "full_result_writer.h"
 
-#include <ydb/library/yql/providers/dq/actors/actor_helpers.h> 
-#include <ydb/library/yql/providers/dq/actors/events.h> 
-#include <ydb/library/yql/providers/dq/api/protos/service.pb.h> 
+#include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
+#include <ydb/library/yql/providers/dq/actors/events.h>
+#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 
-#include <ydb/library/yql/core/issue/yql_issue.h> 
+#include <ydb/library/yql/core/issue/yql_issue.h>
 
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/utils/failure_injector/failure_injector.h> 
-#include <ydb/library/yql/utils/yql_panic.h> 
+#include <ydb/library/yql/utils/failure_injector/failure_injector.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/actors/core/actor.h>
 

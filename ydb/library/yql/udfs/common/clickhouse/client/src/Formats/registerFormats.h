@@ -1,9 +1,9 @@
-#pragma once 
- 
-namespace DB 
-{ 
- 
-void registerFormats(); 
- 
-} 
- 
+#pragma once
+
+namespace DB
+{
+
+void registerFormats();
+
+}
+

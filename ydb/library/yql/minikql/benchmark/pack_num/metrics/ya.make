@@ -19,7 +19,7 @@ TEST_SRCS(
 )
 
 DEPENDS(
-    ydb/library/yql/minikql/benchmark/pack_num 
+    ydb/library/yql/minikql/benchmark/pack_num
 )
 
 END()

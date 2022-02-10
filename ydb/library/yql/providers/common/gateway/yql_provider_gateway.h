@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/core/issue/yql_issue.h> 
-#include <ydb/library/yql/public/issue/yql_issue_manager.h> 
+#include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/public/issue/yql_issue_manager.h>
 
 #include <library/cpp/threading/future/future.h>
 

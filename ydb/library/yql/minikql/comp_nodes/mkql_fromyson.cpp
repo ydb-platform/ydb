@@ -1,7 +1,7 @@
 #include "mkql_fromyson.h"
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_node_builder.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -15,7 +15,7 @@ public:
     TFromYsonSimpleTypeWrapper(TComputationMutables& mutables, IComputationNode* data, NUdf::TDataTypeId schemeType)
         : TBaseComputation(mutables)
         , Data(data)
-        , SchemeType(NUdf::GetDataSlot(schemeType)) 
+        , SchemeType(NUdf::GetDataSlot(schemeType))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
@@ -33,7 +33,7 @@ private:
     }
 
     IComputationNode* const Data;
-    const NUdf::EDataSlot SchemeType; 
+    const NUdf::EDataSlot SchemeType;
 };
 
 }

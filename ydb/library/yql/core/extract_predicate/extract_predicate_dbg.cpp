@@ -2,8 +2,8 @@
 #include "extract_predicate.h"
 
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 namespace NYql {
 namespace {

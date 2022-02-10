@@ -3,7 +3,7 @@ option cc_enable_arenas = true;
 
 import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_value.proto";
-import "ydb/library/yql/dq/proto/dq_tasks.proto"; 
+import "ydb/library/yql/dq/proto/dq_tasks.proto";
 
 package Yql.DqsProto;
 
@@ -78,8 +78,8 @@ message ExecuteGraphRequest {
     repeated string Columns = 6;
     string Session = 7;
     repeated TAttr Settings = 8;
-    map<string, string> SecureParams = 9; 
-    bool Discard = 12; 
+    map<string, string> SecureParams = 9;
+    bool Discard = 12;
     map<string, string> GraphParams = 13;
 }
 

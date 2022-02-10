@@ -1,4 +1,4 @@
-YQL_UDF(url_udf) 
+YQL_UDF(url_udf)
 
 YQL_ABI_VERSION(
     2
@@ -17,7 +17,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/yql/public/udf
-    ydb/library/yql/udfs/common/url_base/lib 
+    ydb/library/yql/udfs/common/url_base/lib
 )
 
 END()

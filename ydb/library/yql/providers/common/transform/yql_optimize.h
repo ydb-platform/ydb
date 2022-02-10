@@ -1,9 +1,9 @@
-#pragma once 
- 
-#include <ydb/library/yql/core/yql_graph_transformer.h> 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
-#include <ydb/library/yql/ast/yql_expr.h> 
+#pragma once
+
+#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/utils/log/log_component.h>
 
 #include <util/generic/vector.h>
@@ -15,8 +15,8 @@
 #include <functional>
 #include <initializer_list>
 
-namespace NYql { 
- 
+namespace NYql {
+
 class TOptimizeTransformerBase: public TSyncTransformerBase {
 public:
     using TGetParents = std::function<const TParentsMap*()>;

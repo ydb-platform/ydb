@@ -6,7 +6,7 @@
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/base/tablet_pipecache.h>
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>

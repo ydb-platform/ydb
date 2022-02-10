@@ -678,9 +678,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
                         "Name: \"Table2\""
                             "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                            "Columns { Name: \"key2\"       Type: \"Utf8\"}" 
+                            "Columns { Name: \"key2\"       Type: \"Utf8\"}"
                             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-                            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "Columns { Name: \"YaValue\"    Type: \"Yson\"}"
                             "Columns { Name: \"MoreValue\"  Type: \"Json\"}"
                             "KeyColumnNames: [\"RowId\", \"key1\", \"key2\"]"
@@ -693,18 +693,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
                         "Name: \"Table3\""
                             "Columns { Name: \"RowId\"      Type: \"Yson\"}"
-                            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"RowId\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
                         "Name: \"Table3\""
                             "Columns { Name: \"RowId\"      Type: \"Json\"}"
-                            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"RowId\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
                         "Name: \"Table3\""
                             "Columns { Name: \"RowId\"      Type: \"Json\"}"
                             "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"RowId\", \"key1\"]");
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
                         "Name: \"\""
@@ -2489,9 +2489,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateTable(runtime, ++txId, "/MyRoot",
                         "Name: \"PartitionedTable1\""
                             "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                            "Columns { Name: \"key2\"       Type: \"Utf8\"}" 
+                            "Columns { Name: \"key2\"       Type: \"Utf8\"}"
                             "Columns { Name: \"key3\"       Type: \"Uint64\"}"
-                            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
                             "UniformPartitionsCount: 10"
                         );
@@ -2525,10 +2525,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateTable(runtime, txId, "/MyRoot", R"(
                         Name: "PartitionedTable1"
                             Columns { Name: "key1"       Type: "Uint32"}
-                            Columns { Name: "key2"       Type: "Utf8"} 
+                            Columns { Name: "key2"       Type: "Utf8"}
                             Columns { Name: "key3"       Type: "Uint64"}
                             Columns { Name: "key4"       Type: "Int32"}
-                            Columns { Name: "Value"      Type: "Utf8"} 
+                            Columns { Name: "Value"      Type: "Utf8"}
                             KeyColumnNames: ["key1", "key2", "key3", "key4"]
                             SplitBoundary { KeyPrefix {
                                 Tuple { Optional { Uint32 : 100 } }
@@ -2763,15 +2763,15 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
                         "Name: \"Table1\""
                             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-                            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"RowId\"]"
                         );
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
                         "Name: \"Table2\""
                             "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                            "Columns { Name: \"key2\"       Type: \"Utf8\"}" 
+                            "Columns { Name: \"key2\"       Type: \"Utf8\"}"
                             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-                            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"RowId\", \"key1\", \"key2\"]"
                         );
         TestModificationResult(runtime, txId-2, NKikimrScheme::StatusAccepted);
@@ -2845,9 +2845,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateTable(runtime, ++txId, "/MyRoot",
                         "Name: \"Table\""
                             "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                            "Columns { Name: \"key2\"       Type: \"Utf8\"}" 
+                            "Columns { Name: \"key2\"       Type: \"Utf8\"}"
                             "Columns { Name: \"key3\"       Type: \"Uint64\"}"
-                            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
                             "UniformPartitionsCount: 2"
                         );
@@ -2937,9 +2937,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateTable(runtime, ++txId, "/MyRoot", //124
                         "Name: \"Table\""
                             "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                            "Columns { Name: \"key2\"       Type: \"Utf8\"}" 
+                            "Columns { Name: \"key2\"       Type: \"Utf8\"}"
                             "Columns { Name: \"key3\"       Type: \"Uint64\"}"
-                            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
                             "UniformPartitionsCount: 2"
                         );
@@ -4102,7 +4102,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Name: "Table"
                             Columns { Name: "key2"   Type: "Uint32"}
                             Columns { Name: "key1"   Type: "Uint64"}
-                            Columns { Name: "value"  Type: "Utf8"} 
+                            Columns { Name: "value"  Type: "Utf8"}
                             KeyColumnNames: ["key1", "key2"]
                             PartitionConfig {
                                 TxReadSizeLimit: 100
@@ -5147,7 +5147,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Name: "Table"
                             Columns { Name: "key2"   Type: "Uint32"}
                             Columns { Name: "key1"   Type: "Uint64"}
-                            Columns { Name: "value"  Type: "Utf8"} 
+                            Columns { Name: "value"  Type: "Utf8"}
                             KeyColumnNames: ["key1", "key2"]
                             PartitionConfig {
                                 NamedCompactionPolicy: "SystemTableDefault"
@@ -5213,7 +5213,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             Columns { Name: "key"   Type: "Uint64"}
-                            Columns { Name: "value"  Type: "Utf8"} 
+                            Columns { Name: "value"  Type: "Utf8"}
                             KeyColumnNames: ["key"]
                             PartitionConfig {
                                 FollowerCount: 100
@@ -5223,7 +5223,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
                             Columns { Name: "key"   Type: "Uint64"}
-                            Columns { Name: "value"  Type: "Utf8"} 
+                            Columns { Name: "value"  Type: "Utf8"}
                             KeyColumnNames: ["key"]
                             PartitionConfig {
                                 FollowerCount: 1
@@ -5357,7 +5357,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         //////////
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
                             Name: "Table"
-                            Columns { Name: "value" Type: "Utf8" } 
+                            Columns { Name: "value" Type: "Utf8" }
                             PartitionConfig {
                                 AllowFollowerPromotion: false
                             }
@@ -6243,14 +6243,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TString tcfg1 = "Name: \"Table\""
             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
             "KeyColumnNames: [\"RowId\"]";
 
         TString tcfg2 = "Name: \"PartTable\""
                     "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                    "Columns { Name: \"key2\"       Type: \"Utf8\"}" 
+                    "Columns { Name: \"key2\"       Type: \"Utf8\"}"
                     "Columns { Name: \"key3\"       Type: \"Uint64\"}"
-                    "Columns { Name: \"value\"      Type: \"Utf8\"}" 
+                    "Columns { Name: \"value\"      Type: \"Utf8\"}"
                     "KeyColumnNames: [\"key1\", \"key2\", \"key3\"]"
                     "UniformPartitionsCount: 10";
 
@@ -6305,7 +6305,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TString tcfg = "Name: \"Table\""
             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
             "KeyColumnNames: [\"RowId\"]";
 
         //
@@ -6335,7 +6335,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TString tableConfig = "Name: \"DropMeBaby\""
             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
             "KeyColumnNames: [\"RowId\"]";
 
         TString pqGroupConfig = "Name: \"DropMeBaby\""
@@ -6818,7 +6818,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncCreateTable(runtime, ++txId, "/MyRoot/DirA",
                             "Name: \"Table1\""
                             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-                            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"RowId\"]");
         AsyncMkDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "AAA");
         AsyncMkDir(runtime, ++txId, "/MyRoot/DirA/SubDirA", "BBB");
@@ -6858,7 +6858,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         AsyncCreateTable(runtime, ++txId, "/MyRoot",
                         "Name: \"Table1\""
                             "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-                            "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                             "KeyColumnNames: [\"RowId\"]");
         // Set ReadOnly
         SetSchemeshardReadOnlyMode(runtime, true);
@@ -6880,7 +6880,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateTable(runtime, ++txId, "/MyRoot",
                                 "Name: \"Table1\""
                                     "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-                                    "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                                    "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                                     "KeyColumnNames: [\"RowId\"]",
                                 {NKikimrScheme::StatusReadOnly});
 

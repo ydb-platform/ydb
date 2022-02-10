@@ -1,6 +1,6 @@
 #include "type_check.h"
 
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h> 
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
 
 namespace NYql::NJsonPath {
 
@@ -129,4 +129,4 @@ void TJsonPathTypeChecker::Error(const TAstNodePtr node, const TStringBuf messag
     Issues.back().SetCode(TIssuesIds::JSONPATH_TYPE_CHECK_ERROR, TSeverityIds::S_ERROR);
 }
 
-} 
+}

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "kqp_tasks_graph.h"
-#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h> 
+#include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr {

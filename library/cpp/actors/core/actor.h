@@ -3,7 +3,7 @@
 #include "event.h"
 #include "monotonic.h"
 #include <util/system/tls.h>
-#include <library/cpp/actors/util/local_process_key.h> 
+#include <library/cpp/actors/util/local_process_key.h>
 
 namespace NActors {
     class TActorSystem;
@@ -383,16 +383,16 @@ namespace NActors {
         }
     };
 
-    struct TActorActivityTag {}; 
- 
-    inline size_t GetActivityTypeCount() { 
-        return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetCount(); 
-    } 
- 
-    inline TStringBuf GetActivityTypeName(size_t index) { 
-        return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(index); 
-    } 
- 
+    struct TActorActivityTag {};
+
+    inline size_t GetActivityTypeCount() {
+        return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetCount();
+    }
+
+    inline TStringBuf GetActivityTypeName(size_t index) {
+        return TLocalProcessKeyState<TActorActivityTag>::GetInstance().GetNameByIndex(index);
+    }
+
     template <typename TDerived>
     class TActor: public IActor {
     private:
@@ -415,8 +415,8 @@ namespace NActors {
                 //        static_cast<IActor::EActorActivity>(TDerived::ActorActivityType()));
                 //}
             }
-        } 
- 
+        }
+
     protected:
         //* Comment this function to find unmarked activities
         static constexpr IActor::EActivityType ActorActivityType() {

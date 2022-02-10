@@ -1,7 +1,7 @@
 package NYql;
 option java_package = "ru.yandex.yql.proto";
 
-import "ydb/library/yql/protos/clickhouse.proto"; 
+import "ydb/library/yql/protos/clickhouse.proto";
 
 /////////////////////////////// common ///////////////////////////////
 
@@ -65,8 +65,8 @@ message TYtClusterConfig {
     optional bool Default = 3 [default = false]; // Default cluster
     optional string YTToken = 4; // token to use at YT servers
     optional string YTName = 5; // YT cluster name
- 
-    repeated TAttr Settings = 100; 
+
+    repeated TAttr Settings = 100;
 }
 
 message TYtGatewayConfig {
@@ -82,7 +82,7 @@ message TYtGatewayConfig {
     optional string YtDebugLogFile = 10; // File for full YT debug log
     optional uint64 YtDebugLogSize = 11 [default = 0]; // Max YT debug log size
     optional bool YtDebugLogAlwaysWrite = 12 [default = false]; // Write YT debug log always or on error only
-    optional string LocalChainFile = 14; // File to dump table contet in test mode 
+    optional string LocalChainFile = 14; // File to dump table contet in test mode
 
     repeated TRemoteFilePattern RemoteFilePatterns = 100;
     repeated TYtClusterConfig ClusterMapping = 101; // Accepted cluster shortcuts. All names not from this list will be rejected
@@ -113,17 +113,17 @@ message TKikimrClusterConfig {
     optional TKikimrGrpcData Grpc = 4;
     optional string Database = 5;
     optional uint32 TvmId = 6 [default = 0];
-    optional string Token = 7; 
+    optional string Token = 7;
     optional string ProxyUrl = 8;
     optional string Location = 9;
     optional bool IsFromMvp = 10;
     optional ETokenType TokenType = 11;
-    repeated TAttr Settings = 101; 
+    repeated TAttr Settings = 101;
 }
 
 message TKikimrGatewayConfig {
     repeated TKikimrClusterConfig ClusterMapping = 1;
-    repeated TAttr DefaultSettings = 2; 
+    repeated TAttr DefaultSettings = 2;
 }
 
 /////////////////////////////// Kikimr MVP ///////////////////////////////
@@ -147,9 +147,9 @@ message TYdbClusterConfig {
     optional string Token = 3;
     optional TKikimrGrpcData Grpc = 4;
     optional uint32 TvmId = 5 [default = 0];
-    optional string Database = 6; 
-    optional string Id = 7; 
-    optional bool Secure = 8; 
+    optional string Database = 6;
+    optional string Id = 7;
+    optional bool Secure = 8;
     optional string ServiceAccountId = 9;
     optional string ServiceAccountIdSignature = 10;
     optional bool AddBearerToToken = 11; // whether to use prefix "Bearer " in token
@@ -177,8 +177,8 @@ message TClickHouseClusterConfig {
     optional string CHTokenYavVersionId = 8;
     optional string CHTokenYavKey = 9;
     optional NYql.NProto.TClickHouseRunnerConfig Runner = 10;
-    optional uint32 NativeHostPort = 11 [default = 9000]; 
-    optional bool NativeSecure = 12 [default = false]; 
+    optional uint32 NativeHostPort = 11 [default = 9000];
+    optional bool NativeSecure = 12 [default = false];
     optional string Id = 13;
 }
 

@@ -1,7 +1,7 @@
 #include "dirut.h"
 #include "iterator.h"
 #include "filelist.h"
-#include "fts.h" 
+#include "fts.h"
 #include "pathsplit.h"
 #include "path.h"
 

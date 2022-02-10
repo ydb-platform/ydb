@@ -1,7 +1,7 @@
 #pragma once
-#include <ydb/library/yql/dq/common/dq_common.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/public/issue/yql_issue.h> 
+#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <util/generic/ptr.h>
 

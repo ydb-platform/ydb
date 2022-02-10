@@ -1,6 +1,6 @@
 #include "yql_mounts.h"
 
-#include <ydb/library/yql/core/yql_library_compiler.h> 
+#include <ydb/library/yql/core/yql_library_compiler.h>
 
 #include <library/cpp/resource/resource.h>
 
@@ -44,7 +44,7 @@ namespace NYql {
                     block.Type = EUserDataType::RAW_INLINE_DATA;
                     break;
                 case EDisposition::RESOURCE:
-                case EDisposition::RESOURCE_FILE: 
+                case EDisposition::RESOURCE_FILE:
                     block.Data = NResource::Find(item.Content_);
                     block.Type = EUserDataType::RAW_INLINE_DATA;
                     break;
@@ -78,7 +78,7 @@ namespace NYql {
                 switch (item.Disposition_) {
                     case EDisposition::INLINE:
                     case EDisposition::RESOURCE:
-                    case EDisposition::RESOURCE_FILE: 
+                    case EDisposition::RESOURCE_FILE:
                     case EDisposition::FILESYSTEM: {
                         if (item.Disposition_ == EDisposition::FILESYSTEM) {
                             TFsPath path(block.Data);
@@ -110,21 +110,21 @@ namespace NYql {
         return userData;
     }
 
-    TUserDataTable GetYqlModuleResolverImpl( 
-        TExprContext* rawCtx, 
+    TUserDataTable GetYqlModuleResolverImpl(
+        TExprContext* rawCtx,
         IModuleResolver::TPtr& moduleResolver,
-        const TVector<NUserData::TUserData>& userData, 
-        const THashMap<TString, TString>& clusterMapping, 
+        const TVector<NUserData::TUserData>& userData,
+        const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags,
-        bool optimizeLibraries, 
-        THolder<TExprContext> ownedCtx) 
+        bool optimizeLibraries,
+        THolder<TExprContext> ownedCtx)
     {
-        auto ctx = rawCtx ? rawCtx : ownedCtx.Get(); 
-        Y_ENSURE(ctx); 
+        auto ctx = rawCtx ? rawCtx : ownedCtx.Get();
+        Y_ENSURE(ctx);
         TUserDataTable mounts = GetYqlDefaultMounts();
 
         TModulesTable modulesTable;
-        if (!CompileLibraries(mounts, *ctx, modulesTable, optimizeLibraries)) { 
+        if (!CompileLibraries(mounts, *ctx, modulesTable, optimizeLibraries)) {
             return {};
         }
 
@@ -132,33 +132,33 @@ namespace NYql {
             AddUserDataToTable(mounts, item);
         }
 
-        moduleResolver = std::make_shared<TModuleResolver>(std::move(modulesTable), ctx->NextUniqueId, 
-            clusterMapping, sqlFlags, optimizeLibraries, std::move(ownedCtx)); 
+        moduleResolver = std::make_shared<TModuleResolver>(std::move(modulesTable), ctx->NextUniqueId,
+            clusterMapping, sqlFlags, optimizeLibraries, std::move(ownedCtx));
         return mounts;
     }
 
-    TUserDataTable GetYqlModuleResolver( 
-        TExprContext& ctx, 
-        IModuleResolver::TPtr& moduleResolver, 
-        const TVector<NUserData::TUserData>& userData, 
-        const THashMap<TString, TString>& clusterMapping, 
-        const THashSet<TString>& sqlFlags, 
-        bool optimizeLibraries) { 
-        return GetYqlModuleResolverImpl(&ctx, moduleResolver, userData, clusterMapping, sqlFlags, optimizeLibraries, nullptr); 
-    } 
- 
+    TUserDataTable GetYqlModuleResolver(
+        TExprContext& ctx,
+        IModuleResolver::TPtr& moduleResolver,
+        const TVector<NUserData::TUserData>& userData,
+        const THashMap<TString, TString>& clusterMapping,
+        const THashSet<TString>& sqlFlags,
+        bool optimizeLibraries) {
+        return GetYqlModuleResolverImpl(&ctx, moduleResolver, userData, clusterMapping, sqlFlags, optimizeLibraries, nullptr);
+    }
+
     bool GetYqlDefaultModuleResolver(
         TExprContext& ctx,
-        IModuleResolver::TPtr& moduleResolver, 
+        IModuleResolver::TPtr& moduleResolver,
         const THashMap<TString, TString>& clusterMapping,
-        bool optimizeLibraries) { 
-        return !GetYqlModuleResolverImpl(&ctx, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, nullptr).empty(); 
+        bool optimizeLibraries) {
+        return !GetYqlModuleResolverImpl(&ctx, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, nullptr).empty();
     }
- 
-    bool GetYqlDefaultModuleResolverWithContext( 
-        IModuleResolver::TPtr& moduleResolver, 
-        const THashMap<TString, TString>& clusterMapping, 
-        bool optimizeLibraries) { 
-        return !GetYqlModuleResolverImpl(nullptr, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, MakeHolder<TExprContext>()).empty(); 
-    } 
+
+    bool GetYqlDefaultModuleResolverWithContext(
+        IModuleResolver::TPtr& moduleResolver,
+        const THashMap<TString, TString>& clusterMapping,
+        bool optimizeLibraries) {
+        return !GetYqlModuleResolverImpl(nullptr, moduleResolver, {}, clusterMapping, {}, optimizeLibraries, MakeHolder<TExprContext>()).empty();
+    }
 }

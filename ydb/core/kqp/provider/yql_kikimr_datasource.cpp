@@ -1,10 +1,10 @@
 #include "yql_kikimr_provider_impl.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h> 
-#include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h> 
+#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 namespace NYql {
 namespace {
@@ -118,7 +118,7 @@ public:
 
             futures.push_back(future.Apply([result, queryType]
                 (const NThreading::TFuture<IKikimrGateway::TTableMetadataResult>& future) {
-                    YQL_ENSURE(!future.HasException()); 
+                    YQL_ENSURE(!future.HasException());
                     const auto& value = future.GetValue();
                     switch (queryType) {
                         case EKikimrQueryType::Unspecified: {
@@ -154,7 +154,7 @@ public:
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
-        YQL_ENSURE(AsyncFuture.HasValue()); 
+        YQL_ENSURE(AsyncFuture.HasValue());
 
         for (auto& it : LoadResults) {
             const auto& table = it.first;
@@ -164,7 +164,7 @@ public:
                 res.ReportIssues(ctx.IssueManager);
                 auto& tableDesc = SessionCtx->Tables().GetTable(it.first.first, it.first.second);
 
-                YQL_ENSURE(res.Metadata); 
+                YQL_ENSURE(res.Metadata);
                 tableDesc.Metadata = res.Metadata;
 
                 bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
@@ -274,7 +274,7 @@ public:
         TTypeAnnotationContext& types,
         TIntrusivePtr<IKikimrGateway> gateway,
         TIntrusivePtr<TKikimrSessionContext> sessionCtx)
-        : FunctionRegistry(functionRegistry) 
+        : FunctionRegistry(functionRegistry)
         , Types(types)
         , Gateway(gateway)
         , SessionCtx(sessionCtx)
@@ -294,10 +294,10 @@ public:
 
     ~TKikimrDataSource() {}
 
-    TStringBuf GetName() const override { 
-        return KikimrProviderName; 
-    } 
- 
+    TStringBuf GetName() const override {
+        return KikimrProviderName;
+    }
+
     bool Initialize(TExprContext& ctx) override {
         TString defaultToken;
         if (auto credential = Types.FindCredential(TString("default_") + KikimrProviderName)) {
@@ -352,8 +352,8 @@ public:
         return *LoadTableMetadataTransformer;
     }
 
-    IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override { 
-        Y_UNUSED(instantOnly); 
+    IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
+        Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer;
     }
 
@@ -380,7 +380,7 @@ public:
 
     bool CanParse(const TExprNode& node) override {
         if (node.IsCallable(ReadName)) {
-            return node.Child(1)->Child(0)->Content() == KikimrProviderName; 
+            return node.Child(1)->Child(0)->Content() == KikimrProviderName;
         }
 
         if (node.IsCallable(TKiReadTable::CallableName()) || node.IsCallable(TKiReadTableScheme::CallableName()) || node.IsCallable(TKiReadTableList::CallableName())) {
@@ -427,7 +427,7 @@ public:
         return false;
     }
 
-    bool CanExecute(const TExprNode& node) override { 
+    bool CanExecute(const TExprNode& node) override {
         if (node.IsCallable(TKiReadTableScheme::CallableName()) || node.IsCallable(TKiReadTableList::CallableName())) {
             return true;
         }
@@ -448,7 +448,7 @@ public:
         }
 
         TKikimrKey key(ctx);
-        if (!key.Extract(*read->Child(2))) { 
+        if (!key.Extract(*read->Child(2))) {
             return nullptr;
         }
 
@@ -464,7 +464,7 @@ public:
                 newName = TKiReadTableList::CallableName();
                 break;
             default:
-                YQL_ENSURE(false, "Unsupported Kikimr KeyType."); 
+                YQL_ENSURE(false, "Unsupported Kikimr KeyType.");
         }
 
         auto newRead = ctx.RenameNode(*read, newName);
@@ -489,8 +489,8 @@ public:
             }
         }
 
-        auto retChildren = node->ChildrenList(); 
-        retChildren[0] = newRead; 
+        auto retChildren = node->ChildrenList();
+        retChildren[0] = newRead;
         auto ret = ctx.ChangeChildren(*node, std::move(retChildren));
         return ret;
     }
@@ -568,7 +568,7 @@ public:
     }
 
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
-        Y_UNUSED(compact); 
+        Y_UNUSED(compact);
         if (CanExecute(node)) {
             children.push_back(node.ChildPtr(0));
             return true;

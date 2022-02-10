@@ -1,10 +1,10 @@
-#include "mkql_builtins_impl.h" 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
-namespace { 
- 
+#include "mkql_builtins_impl.h"
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+namespace {
+
 template<typename TInput, typename TOutput>
 struct TShiftLeft : public TShiftArithmeticBinary<TInput, TOutput, TShiftLeft<TInput, TOutput>> {
     static TOutput Do(TInput arg, ui8 bits)
@@ -12,7 +12,7 @@ struct TShiftLeft : public TShiftArithmeticBinary<TInput, TOutput, TShiftLeft<TI
         return (bits < sizeof(arg) * CHAR_BIT) ? (arg << bits) : 0;
     }
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* arg, Value* bits, const TCodegenContext&, BasicBlock*& block)
     {
         const auto zero = ConstantInt::get(arg->getType(), 0);
@@ -25,12 +25,12 @@ struct TShiftLeft : public TShiftArithmeticBinary<TInput, TOutput, TShiftLeft<TI
     }
 #endif
 };
- 
-} 
- 
+
+}
+
 void RegisterShiftLeft(IBuiltinFunctionRegistry& registry) {
     RegisterUnsignedShiftFunctionOpt<TShiftLeft, TBinaryShiftArgsOpt>(registry, "ShiftLeft");
-} 
- 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+}
+
+} // namespace NMiniKQL
+} // namespace NKikimr

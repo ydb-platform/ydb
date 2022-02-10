@@ -1,6 +1,6 @@
-#pragma once 
- 
-namespace NYql { 
- 
-} // namespace NYql 
- 
+#pragma once
+
+namespace NYql {
+
+} // namespace NYql
+

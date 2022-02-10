@@ -1,11 +1,11 @@
-#include "mkql_builtins_impl.h" 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
-namespace { 
- 
+#include "mkql_builtins_impl.h"
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+namespace {
+
 template <bool StartOptional, bool CountOptional>
 struct TSubString {
     static NUdf::TUnboxedValuePod Execute(NUdf::TUnboxedValuePod string, NUdf::TUnboxedValuePod start, NUdf::TUnboxedValuePod count)
@@ -15,7 +15,7 @@ struct TSubString {
             CountOptional && !count ? std::numeric_limits<ui32>::max() : count.Get<ui32>()
         );
     }
- 
+
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* string, Value* st, Value* cn, const TCodegenContext& ctx, BasicBlock*& block)
     {
@@ -52,8 +52,8 @@ struct TSubString {
         }
     }
 #endif
-}; 
- 
+};
+
 template <typename TInput>
 void RegisterSubstringnOpt(IBuiltinFunctionRegistry& registry, const char* name) {
     RegisterFunctionImpl<TSubString<false, false>, TTernaryArgs<TInput, TInput, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, false, false, false>, TTernaryWrap<false>>(registry, name);
@@ -67,14 +67,14 @@ void RegisterSubstringnOpt(IBuiltinFunctionRegistry& registry, const char* name)
 
     RegisterFunctionImpl<TSubString<true, true>, TTernaryArgs<TInput, TInput, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, false, true, true>, TTernaryWrap<false>>(registry, name);
     RegisterFunctionImpl<TSubString<true, true>, TTernaryArgs<TInput, TInput, NUdf::TDataType<ui32>, NUdf::TDataType<ui32>, true, true, true>, TTernaryWrap<true>>(registry, name);
-} 
- 
+}
+
 }
 
 void RegisterSubstring(IBuiltinFunctionRegistry& registry) {
     RegisterSubstringnOpt<NUdf::TDataType<char*>>(registry, "Substring");
     RegisterSubstringnOpt<NUdf::TDataType<NUdf::TUtf8>>(registry, "Substring");
-} 
- 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+}
+
+} // namespace NMiniKQL
+} // namespace NKikimr

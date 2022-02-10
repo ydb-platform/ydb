@@ -16,13 +16,13 @@ void TIssueManager::LeaveScope() {
         // Last scope, just dump it
         auto maybeIssue = RawIssues_.top().first;
         if (maybeIssue) {
-            if ((*maybeIssue)->GetCode() == Max<ui32>()) { 
-                for (const auto& nestedIssue : (*maybeIssue.Get())->GetSubIssues()) { 
-                    CompletedIssues_.AddIssue(*nestedIssue); 
-                } 
-            } else { 
-                CompletedIssues_.AddIssue(**maybeIssue); 
-            } 
+            if ((*maybeIssue)->GetCode() == Max<ui32>()) {
+                for (const auto& nestedIssue : (*maybeIssue.Get())->GetSubIssues()) {
+                    CompletedIssues_.AddIssue(*nestedIssue);
+                }
+            } else {
+                CompletedIssues_.AddIssue(**maybeIssue);
+            }
         }
         RawIssues_.pop();
         return;
@@ -52,21 +52,21 @@ void TIssueManager::LeaveScope() {
     RawIssues_.pop();
     if (RawIssues_.top().first.Empty()) {
         RawIssues_.top().first = RawIssues_.top().second();
-        if (!*RawIssues_.top().first) { 
-            RawIssues_.top().first = new TIssue(); 
-            (*RawIssues_.top().first)->SetCode(Max<ui32>(), ESeverity::TSeverityIds_ESeverityId_S_INFO); 
-        } else { 
+        if (!*RawIssues_.top().first) {
+            RawIssues_.top().first = new TIssue();
+            (*RawIssues_.top().first)->SetCode(Max<ui32>(), ESeverity::TSeverityIds_ESeverityId_S_INFO);
+        } else {
            (*RawIssues_.top().first)->Severity = ESeverity::TSeverityIds_ESeverityId_S_INFO;
         }
     }
- 
+
     if (subIssue->GetCode() == Max<ui32>()) {
         for (const auto& nestedIssue : subIssue->GetSubIssues()) {
-            RawIssues_.top().first->Get()->AddSubIssue(nestedIssue); 
-        } 
-    } else { 
+            RawIssues_.top().first->Get()->AddSubIssue(nestedIssue);
+        }
+    } else {
         RawIssues_.top().first->Get()->AddSubIssue(subIssue);
-    } 
+    }
 }
 
 void TIssueManager::LeaveAllScopes() {
@@ -105,22 +105,22 @@ void TIssueManager::RaiseIssue(const TIssue& issue) {
     }
     if (RawIssues_.top().first.Empty()) {
         RawIssues_.top().first = RawIssues_.top().second();
-        if (!*RawIssues_.top().first) { 
-            RawIssues_.top().first = new TIssue(); 
-            (*RawIssues_.top().first)->SetCode(Max<ui32>(), ESeverity::TSeverityIds_ESeverityId_S_INFO); 
-        } else { 
-            (*RawIssues_.top().first)->Severity = ESeverity::TSeverityIds_ESeverityId_S_INFO; 
-       } 
+        if (!*RawIssues_.top().first) {
+            RawIssues_.top().first = new TIssue();
+            (*RawIssues_.top().first)->SetCode(Max<ui32>(), ESeverity::TSeverityIds_ESeverityId_S_INFO);
+        } else {
+            (*RawIssues_.top().first)->Severity = ESeverity::TSeverityIds_ESeverityId_S_INFO;
+       }
     }
     RawIssues_.top().first->Get()->AddSubIssue(p);
 }
 
-void TIssueManager::RaiseIssues(const TIssues& issues) { 
-    for (const auto& x : issues) { 
-        RaiseIssue(x); 
-    } 
-} 
- 
+void TIssueManager::RaiseIssues(const TIssues& issues) {
+    for (const auto& x : issues) {
+        RaiseIssue(x);
+    }
+}
+
 bool TIssueManager::RaiseWarning(TIssue issue) {
     bool isWarning = true;
     if (issue.GetSeverity() == ESeverity::TSeverityIds_ESeverityId_S_WARNING) {

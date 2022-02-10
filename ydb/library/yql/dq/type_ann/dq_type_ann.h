@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_graph_transformer.h> 
-#include <ydb/library/yql/core/yql_type_annotation.h> 
+#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/core/yql_type_annotation.h>
 
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h> 
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 
 namespace NYql::NDq {
 

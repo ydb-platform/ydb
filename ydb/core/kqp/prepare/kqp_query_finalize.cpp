@@ -4,7 +4,7 @@
 #include <ydb/core/tx/datashard/sys_tables.h>
 
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/issue/yql_issue.h> 
+#include <ydb/library/yql/core/issue/yql_issue.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -89,8 +89,8 @@ TExprBase GetEraseLocksEffects(const TString& cluster, TPositionHandle pos, TCoP
 }
 
 const TTypeAnnotationNode* GetTxLockListType(TExprContext& ctx) {
-    auto ui32Type = ctx.MakeType<TDataExprType>(EDataSlot::Uint32); 
-    auto ui64Type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64); 
+    auto ui32Type = ctx.MakeType<TDataExprType>(EDataSlot::Uint32);
+    auto ui64Type = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
     TVector<const TItemExprType*> lockItems;
     lockItems.reserve(6);
     lockItems.push_back(ctx.MakeType<TItemExprType>("LockId", ui64Type));

@@ -26,7 +26,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 SRCS(
     proxy_ext_tenant_ut.cpp
     proxy_ut_helpers.cpp

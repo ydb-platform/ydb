@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/dq/runtime) 
+UNITTEST_FOR(ydb/library/yql/dq/runtime)
 
 OWNER(g:yql_ydb_core)
 
@@ -20,5 +20,5 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 END()

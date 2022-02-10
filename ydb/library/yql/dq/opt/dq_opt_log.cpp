@@ -2,11 +2,11 @@
 
 #include "dq_opt.h"
 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
-#include <ydb/library/yql/core/yql_opt_aggregate.h> 
-#include <ydb/library/yql/core/yql_opt_window.h> 
-#include <ydb/library/yql/core/yql_opt_utils.h> 
-#include <ydb/library/yql/core/yql_type_annotation.h> 
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_opt_aggregate.h>
+#include <ydb/library/yql/core/yql_opt_window.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/core/yql_type_annotation.h>
 
 
 using namespace NYql::NNodes;

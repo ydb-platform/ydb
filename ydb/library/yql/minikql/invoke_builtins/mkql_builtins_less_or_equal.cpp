@@ -1,8 +1,8 @@
 #include "mkql_builtins_compare.h"
-#include "mkql_builtins_datetime.h" 
+#include "mkql_builtins_datetime.h"
 #include "mkql_builtins_decimal.h"
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h> 
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -155,19 +155,19 @@ struct TDiffDateLessOrEqual : public TCompareArithmeticBinary<TLeft, TRight, TDi
         return std::is_same<TLeft, TRight>::value ?
             LessOrEqual<TLeft, TRight, Aggr>(left, right):
             LessOrEqual<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
-    } 
- 
-#ifndef MKQL_DISABLE_CODEGEN 
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    { 
+    {
         auto& context = ctx.Codegen->GetContext();
         return std::is_same<TLeft, TRight>::value ?
             GenLessOrEqual<TLeft, TRight, Aggr>(left, right, context, block):
             GenLessOrEqual<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
-    } 
-#endif 
-}; 
- 
+    }
+#endif
+};
+
 template<typename TLeft, typename TRight, bool Aggr>
 struct TAggrTzDateLessOrEqual : public TCompareArithmeticBinaryWithTimezone<TLeft, TRight, TAggrTzDateLessOrEqual<TLeft, TRight, Aggr>>, public TAggrLessOrEqual {
     static bool Do(TLeft left, TRight right)
@@ -259,7 +259,7 @@ void RegisterLessOrEqual(IBuiltinFunctionRegistry& registry) {
     const auto name = "LessOrEqual";
 
     RegisterComparePrimitive<TLessOrEqual, TCompareArgsOpt>(registry, name);
-    RegisterCompareDatetime<TDiffDateLessOrEqual, TCompareArgsOpt>(registry, name); 
+    RegisterCompareDatetime<TDiffDateLessOrEqual, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomLessOrEqual, TCompareArgsOpt>(registry, name);
     RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalLessOrEqual, TCompareArgsOpt>(registry, name);

@@ -6,10 +6,10 @@
 #include <ydb/library/yql/public/udf/udf_validate.h>
 
 #include <util/generic/noncopyable.h>
-#include <util/memory/pool.h> 
+#include <util/memory/pool.h>
 
-#include <ydb/library/yql/minikql/mkql_node.h> 
-#include <ydb/library/yql/minikql/mkql_terminator.h> 
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/mkql_terminator.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -17,8 +17,8 @@ namespace NMiniKQL {
 ///////////////////////////////////////////////////////////////////////////////
 // TDefaultValueBuilder
 ///////////////////////////////////////////////////////////////////////////////
-class TDefaultValueBuilder final: public NUdf::IValueBuilder, private TNonCopyable, public ITerminator, 
-    public NUdf::IDateBuilder 
+class TDefaultValueBuilder final: public NUdf::IValueBuilder, private TNonCopyable, public ITerminator,
+    public NUdf::IDateBuilder
 {
 public:
     TDefaultValueBuilder(const THolderFactory& holderFactory, NUdf::EValidatePolicy policy = NUdf::EValidatePolicy::Fail);
@@ -50,23 +50,23 @@ public:
 
     NUdf::TUnboxedValue NewArray(ui32 count, NUdf::TUnboxedValue*& itemsPtr) const final;
     NUdf::TUnboxedValue NewVariant(ui32 index, NUdf::TUnboxedValue&& value) const final;
-    const NUdf::IDateBuilder& GetDateBuilder() const final { 
-        return *this; 
-    } 
+    const NUdf::IDateBuilder& GetDateBuilder() const final {
+        return *this;
+    }
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef &value) const final;
-    const NUdf::TSourcePosition* CalleePosition() const final; 
-    NUdf::TUnboxedValue Run(const NUdf::TSourcePosition& callee, const NUdf::IBoxedValue& value, const NUdf::TUnboxedValuePod* args) const; 
-    NUdf::TFlatDataBlockPtr NewFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const; 
-    NUdf::TFlatArrayBlockPtr NewFlatArrayBlock(ui32 count) const; 
-    NUdf::TSingleBlockPtr NewSingleBlock(const NUdf::TUnboxedValue& value) const; 
+    const NUdf::TSourcePosition* CalleePosition() const final;
+    NUdf::TUnboxedValue Run(const NUdf::TSourcePosition& callee, const NUdf::IBoxedValue& value, const NUdf::TUnboxedValuePod* args) const;
+    NUdf::TFlatDataBlockPtr NewFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const;
+    NUdf::TFlatArrayBlockPtr NewFlatArrayBlock(ui32 count) const;
+    NUdf::TSingleBlockPtr NewSingleBlock(const NUdf::TUnboxedValue& value) const;
 
     bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const final;
     bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) const final;
- 
+
     bool MakeDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui32& value, ui16 tzId = 0) const final;
     bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second, ui16 tzId = 0) const final;
- 
+
     bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek) const final;
 
     // in minutes
@@ -76,10 +76,10 @@ public:
         ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
     bool FullSplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
         ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
- 
-    bool FindTimezoneName(ui32 id, NUdf::TStringRef& name) const final; 
-    bool FindTimezoneId(const NUdf::TStringRef& name, ui32& id) const final; 
- 
+
+    bool FindTimezoneName(ui32 id, NUdf::TStringRef& name) const final;
+    bool FindTimezoneId(const NUdf::TStringRef& name, ui32& id) const final;
+
     bool EnrichDate2(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const final;
     bool FullSplitDate2(ui16 value, ui32& year, ui32& month, ui32& day,
         ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
@@ -91,7 +91,7 @@ private:
     NUdf::EValidatePolicy Policy_;
     const NUdf::ISecureParamsProvider* SecureParamsProvider_ = nullptr;
     const NUdf::TSourcePosition** CalleePositionPtr_ = nullptr;
-    mutable bool Rethrow_ = false; 
+    mutable bool Rethrow_ = false;
 };
 
 } // namespace NMiniKQL

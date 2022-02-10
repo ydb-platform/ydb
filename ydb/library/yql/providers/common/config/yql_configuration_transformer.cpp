@@ -1,9 +1,9 @@
 #include "yql_configuration_transformer.h"
 
-#include <ydb/library/yql/core/yql_graph_transformer.h> 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
+#include <ydb/library/yql/core/yql_graph_transformer.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 #include <util/generic/maybe.h>
 

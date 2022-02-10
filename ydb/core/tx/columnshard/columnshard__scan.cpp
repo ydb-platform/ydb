@@ -6,11 +6,11 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/columnshard_txs.h>
 #include <ydb/core/tablet_flat/flat_row_celled.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/core/kqp/kqp_compute.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
-#include <ydb/library/yql/core/issue/yql_issue.h> 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 namespace NKikimr::NColumnShard {
 

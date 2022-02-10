@@ -81,11 +81,11 @@ namespace NMonitoring {
         }
     };
 
-#ifdef _MSC_VER 
-#pragma warning(push) 
-#pragma warning(disable : 4522) // multiple assignment operators specified 
-#endif                          // _MSC_VER 
- 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable : 4522) // multiple assignment operators specified
+#endif                          // _MSC_VER
+
     struct TCounterForPtr: public TDeprecatedCounter, public TCountableBase {
         TCounterForPtr(bool derivative = false, EVisibility vis = EVisibility::Public)
             : TDeprecatedCounter(0ULL, derivative)
@@ -95,7 +95,7 @@ namespace NMonitoring {
 
         TCounterForPtr(const TCounterForPtr&) = delete;
         TCounterForPtr& operator=(const TCounterForPtr& other) = delete;
- 
+
         void Accept(
             const TString& labelName, const TString& labelValue,
             ICountableConsumer& consumer) const override {
@@ -181,10 +181,10 @@ namespace NMonitoring {
 
     using THistogramPtr = TIntrusivePtr<THistogramCounter>;
 
-#ifdef _MSC_VER 
-#pragma warning(pop) 
-#endif 
- 
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
     struct TDynamicCounters;
 
     typedef TIntrusivePtr<TDynamicCounters> TDynamicCounterPtr;

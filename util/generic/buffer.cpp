@@ -51,7 +51,7 @@ void TBuffer::Append(const char* buf, size_t len) {
 
     Y_ASSERT(len <= Avail());
 
-    MemCopy(Data() + Pos_, buf, len); 
+    MemCopy(Data() + Pos_, buf, len);
     NSan::Unpoison(Data() + Pos_, len);
     Pos_ += len;
 

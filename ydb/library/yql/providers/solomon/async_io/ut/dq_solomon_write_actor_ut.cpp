@@ -1,7 +1,7 @@
 #include "ut_helpers.h"
 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
-#include <ydb/library/yql/utils/yql_panic.h> 
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

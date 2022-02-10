@@ -24,7 +24,7 @@ public:
     // Async discovery mode is used because this client is created inside SDK threads.
     // See YDB-1231 and YDB-1232.
     TImpl(const TString& clusterEndpoint, std::shared_ptr<TGRpcConnectionsImpl> connections, const TPersQueueClientSettings& settings)
-        : TClientImplCommon(std::move(connections), settings.Database_, clusterEndpoint, EDiscoveryMode::Async, settings.EnableSsl_, settings.CredentialsProviderFactory_) 
+        : TClientImplCommon(std::move(connections), settings.Database_, clusterEndpoint, EDiscoveryMode::Async, settings.EnableSsl_, settings.CredentialsProviderFactory_)
         , Settings(settings)
         , CustomEndpoint(clusterEndpoint)
     {

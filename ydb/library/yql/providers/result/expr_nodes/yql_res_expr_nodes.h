@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.gen.h> 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.gen.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 namespace NYql {
 namespace NNodes {
 
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.decl.inl.h> 
+#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.decl.inl.h>
 
 class TResultDataSink: public NGenerated::TResultDataSinkStub<TExprBase, TCallable, TCoAtom> {
 public:
@@ -35,7 +35,7 @@ public:
     }
 };
 
-#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.defs.inl.h> 
+#include <ydb/library/yql/providers/result/expr_nodes/yql_res_expr_nodes.defs.inl.h>
 
 template<typename TParent>
 class TNodeBuilder<TParent, TResultDataSink> : TNodeBuilderBase

@@ -26,7 +26,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 SRCS(
     keyvalue_ut.cpp
     keyvalue_collector_ut.cpp

@@ -5,10 +5,10 @@
 #include "udf_string_ref.h"
 
 #include <util/generic/strbuf.h>
-#include <util/system/align.h> 
+#include <util/system/align.h>
 
-#include <new> 
- 
+#include <new>
+
 namespace NYql {
 namespace NUdf {
 
@@ -24,10 +24,10 @@ class TStringValue
         friend class TStringValue;
     public:
         inline TData(ui32 size, ui32 cap)
-            : Size_(size) 
+            : Size_(size)
             , Refs_(1)
             , Capacity_(cap)
-            , Reserved_(0) 
+            , Reserved_(0)
         {
             Y_UNUSED(Reserved_);
         }
@@ -47,11 +47,11 @@ class TStringValue
 #endif
             Y_VERIFY_DEBUG(Refs_ > 0);
             if (!--Refs_) {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8) 
-                UdfFreeWithSize(this, sizeof(*this) + Capacity_); 
-#else 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
+                UdfFreeWithSize(this, sizeof(*this) + Capacity_);
+#else
                 UdfFree(this);
-#endif 
+#endif
             }
         }
         inline void ReleaseRef() {
@@ -68,11 +68,11 @@ class TStringValue
                 return;
 #endif
             if (!Refs_) {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8) 
-                UdfFreeWithSize(this, sizeof(*this) + Capacity_); 
-#else 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
+                UdfFreeWithSize(this, sizeof(*this) + Capacity_);
+#else
                 UdfFree(this);
-#endif 
+#endif
             }
         }
 
@@ -80,20 +80,20 @@ class TStringValue
         inline ui32 Size() const { return Size_; }
         inline bool Empty() const { return Size_ == 0; }
         inline ui32 Capacity() const { return Capacity_; }
- 
-        inline i32 LockRef() noexcept { 
-            Y_VERIFY_DEBUG(Refs_ != -1); 
-            auto ret = Refs_; 
-            Refs_ = -1; 
-            return ret; 
-        } 
- 
-        inline void UnlockRef(i32 prev) noexcept { 
-            Y_VERIFY_DEBUG(Refs_ == -1); 
-            Y_VERIFY_DEBUG(prev != -1); 
-            Refs_ = prev; 
-        } 
- 
+
+        inline i32 LockRef() noexcept {
+            Y_VERIFY_DEBUG(Refs_ != -1);
+            auto ret = Refs_;
+            Refs_ = -1;
+            return ret;
+        }
+
+        inline void UnlockRef(i32 prev) noexcept {
+            Y_VERIFY_DEBUG(Refs_ == -1);
+            Y_VERIFY_DEBUG(prev != -1);
+            Refs_ = prev;
+        }
+
     private:
         ui32 Size_;
         i32  Refs_;
@@ -104,7 +104,7 @@ class TStringValue
     UDF_ASSERT_TYPE_SIZE(TData, 16);
 
 public:
-    inline explicit TStringValue(ui32 size): Data_(AllocateData(size, size)) {} 
+    inline explicit TStringValue(ui32 size): Data_(AllocateData(size, size)) {}
     inline explicit TStringValue(TData* data): Data_(data) { Ref(); }
 
     inline TStringValue(const TStringValue& rhs): Data_(rhs.Data_) { Ref(); }
@@ -156,14 +156,14 @@ public:
         }
     }
 
-    inline i32 RefCount() const { 
+    inline i32 RefCount() const {
         return Data_->RefCount();
     }
 
     bool TryExpandOn(ui32 len) {
-        if (RefCount() < 0) 
-           return false; 
- 
+        if (RefCount() < 0)
+           return false;
+
         const auto size = Data_->Size_ + len;
         if (Data_->Capacity_ < size)
             return false;
@@ -172,14 +172,14 @@ public:
         return true;
     }
 
-    inline i32 LockRef() noexcept { 
-        return Data_->LockRef(); 
-    } 
- 
-    inline void UnlockRef(i32 prev) noexcept { 
-        Data_->UnlockRef(prev); 
-    } 
- 
+    inline i32 LockRef() noexcept {
+        return Data_->LockRef();
+    }
+
+    inline void UnlockRef(i32 prev) noexcept {
+        Data_->UnlockRef(prev);
+    }
+
 private:
     inline TData* GetBuf() const {
         return Data_;
@@ -194,16 +194,16 @@ private:
         return nullptr;
     }
 
-public: 
-    static TData* AllocateData(ui32 len, ui32 cap) { 
-        cap = AlignUp(cap, ui32(16)); 
-        const auto dataSize = sizeof(TData) + cap; 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8) 
-        return ::new(UdfAllocateWithSize(dataSize)) TData(len, cap); 
-#else 
-        return ::new(UdfAllocate(dataSize)) TData(len, cap); 
-#endif 
-    } 
+public:
+    static TData* AllocateData(ui32 len, ui32 cap) {
+        cap = AlignUp(cap, ui32(16));
+        const auto dataSize = sizeof(TData) + cap;
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
+        return ::new(UdfAllocateWithSize(dataSize)) TData(len, cap);
+#else
+        return ::new(UdfAllocate(dataSize)) TData(len, cap);
+#endif
+    }
 
     TData* Data_;
 };

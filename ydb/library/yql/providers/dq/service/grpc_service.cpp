@@ -2,24 +2,24 @@
 
 #include <ydb/library/yql/utils/log/log.h>
 
-#include <ydb/library/yql/providers/dq/actors/actor_helpers.h> 
-#include <ydb/library/yql/providers/dq/actors/executer_actor.h> 
-#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h> 
-#include <ydb/library/yql/providers/dq/actors/execution_helpers.h> 
-#include <ydb/library/yql/providers/dq/actors/result_aggregator.h> 
-#include <ydb/library/yql/providers/dq/actors/events.h> 
-#include <ydb/library/yql/providers/dq/actors/task_controller.h> 
-#include <ydb/library/yql/providers/dq/actors/graph_execution_events_actor.h> 
+#include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
+#include <ydb/library/yql/providers/dq/actors/executer_actor.h>
+#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
+#include <ydb/library/yql/providers/dq/actors/execution_helpers.h>
+#include <ydb/library/yql/providers/dq/actors/result_aggregator.h>
+#include <ydb/library/yql/providers/dq/actors/events.h>
+#include <ydb/library/yql/providers/dq/actors/task_controller.h>
+#include <ydb/library/yql/providers/dq/actors/graph_execution_events_actor.h>
 
-#include <ydb/library/yql/providers/dq/counters/counters.h> 
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h> 
-#include <ydb/library/yql/providers/dq/common/yql_dq_common.h> 
+#include <ydb/library/yql/providers/dq/counters/counters.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
 //#include <yql/tools/yqlworker/dq/worker_manager/benchmark.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <library/cpp/grpc/server/grpc_counters.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -145,7 +145,7 @@ namespace NYql::NDqs {
                 for (const auto& [k, v] : QueryStat.Get()) {
                     std::map<TString, TString> labels;
                     TString prefix, name;
-                    if (NCommon::ParseCounterName(&prefix, &labels, &name, k)) { 
+                    if (NCommon::ParseCounterName(&prefix, &labels, &name, k)) {
                         if (prefix == "Actor") {
                             auto group = Counters->GetSubgroup("counters", "Actor");
                             for (const auto& [k, v] : labels) {
@@ -155,7 +155,7 @@ namespace NYql::NDqs {
                         }
                     }
                 }
-                auto aggregatedQueryStat = AggregateQueryStatsByStage(QueryStat, Task2Stage); 
+                auto aggregatedQueryStat = AggregateQueryStatsByStage(QueryStat, Task2Stage);
 
                 aggregatedQueryStat.FlushCounters(ResponseBuffer);
 

@@ -408,7 +408,7 @@ public:
 protected:
     void Handle(TEvPrivate::TEvUpdateMsgBusStats::TPtr, const TActorContext &ctx) {
         NKikimrWhiteboard::TSystemStateInfo systemStateInfo;
-        auto inFlightPercent = SessionConfig.MaxInFlight > 0 ? Session->GetInFlight() * 100 / SessionConfig.MaxInFlight : 0; 
+        auto inFlightPercent = SessionConfig.MaxInFlight > 0 ? Session->GetInFlight() * 100 / SessionConfig.MaxInFlight : 0;
         if (inFlightPercent < 75) {
             systemStateInfo.SetMessageBusState(NKikimrWhiteboard::EFlag::Green);
         } else
@@ -488,8 +488,8 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusBSAdm, msg);
     case MTYPE_CLIENT_SCHEME_NAVIGATE:
         return ClientProxyRequest<TEvBusProxy::TEvNavigate>(msg);
-    case MTYPE_CLIENT_TYPES_REQUEST: 
-        return GetTypes(msg); 
+    case MTYPE_CLIENT_TYPES_REQUEST:
+        return GetTypes(msg);
     case MTYPE_CLIENT_HIVE_CREATE_TABLET:
     case MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET:
         return ClientActorRequest(CreateMessageBusHiveCreateTablet, msg);
@@ -585,15 +585,15 @@ void TMessageBusServer::ClientActorRequest(ActorCreationFunc func, TBusMessageCo
 }
 
 void TMessageBusServer::GetTypes(TBusMessageContext &msg) {
-    if (IActor *x = CreateMessageBusGetTypes(msg)) { 
+    if (IActor *x = CreateMessageBusGetTypes(msg)) {
         ActorSystem->Register(x, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
-    } else { 
-        auto reply = new TBusTypesResponse(); 
-        reply->Record.SetStatus(MSTATUS_ERROR); 
-        msg.SendReplyMove(reply); 
-    } 
-} 
- 
+    } else {
+        auto reply = new TBusTypesResponse();
+        reply->Record.SetStatus(MSTATUS_ERROR);
+        msg.SendReplyMove(reply);
+    }
+}
+
 void TMessageBusServer::UnknownMessage(TBusMessageContext &msg) {
     msg.SendReplyMove(new TBusResponseStatus(MSTATUS_UNKNOWN, "undocumented error 9"));
 }

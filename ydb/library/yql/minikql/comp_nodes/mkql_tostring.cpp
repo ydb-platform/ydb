@@ -1,13 +1,13 @@
-#include "mkql_tostring.h" 
+#include "mkql_tostring.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_node_builder.h> 
-#include <ydb/library/yql/minikql/mkql_type_ops.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
-#include <ydb/library/yql/public/decimal/yql_decimal.h> 
- 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
+
 #include <ydb/library/yql/public/udf/udf_terminator.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -23,38 +23,38 @@ extern "C" NYql::NUdf::TUnboxedValuePod DecimalToString(NYql::NDecimal::TInt128 
 }
 #endif
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
-template <bool IsOptional> 
+template <bool IsOptional>
 class TDecimalToStringWrapper : public TMutableCodegeneratorNode<TDecimalToStringWrapper<IsOptional>> {
     typedef TMutableCodegeneratorNode<TDecimalToStringWrapper<IsOptional>> TBaseComputation;
-public: 
+public:
     TDecimalToStringWrapper(TComputationMutables& mutables, IComputationNode* data, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::String)
         , Data(data)
         , Precision(precision)
         , Scale(scale)
-    { 
+    {
         MKQL_ENSURE(precision > 0 && precision <= NYql::NDecimal::MaxPrecision, "Wrong precision.");
         MKQL_ENSURE(scale <= precision, "Wrong scale.");
-    } 
- 
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& dataValue = Data->GetValue(ctx);
         if (IsOptional && !dataValue) {
             return NUdf::TUnboxedValuePod();
-        } 
+        }
 
         if (const auto str = NYql::NDecimal::ToString(dataValue.GetInt128(), Precision, Scale)) {
             return MakeString(NUdf::TStringRef(str, std::strlen(str)));
         }
 
         Throw();
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -65,13 +65,13 @@ public:
 
         const auto name = "DecimalToString";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalToString));
-        llvm::Value* func; 
+        llvm::Value* func;
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto fnType = FunctionType::get(valType, { valType, psType, psType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
         } else {
             const auto fnType = FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, psType, psType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
         }
 
         const auto fail = BasicBlock::Create(context, "fail", ctx.Func);
@@ -135,16 +135,16 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Data);
-    } 
- 
+    }
+
     [[noreturn]] static void Throw() {
         UdfTerminate("Ivalid Decimal value.");
     }
 
-    IComputationNode* const Data; 
+    IComputationNode* const Data;
     const ui8 Precision, Scale;
-}; 
- 
+};
+
 template <bool IsOptional>
 class TToStringWrapper : public TMutableCodegeneratorNode<TToStringWrapper<IsOptional>> {
     typedef TMutableCodegeneratorNode<TToStringWrapper<IsOptional>> TBaseComputation;
@@ -174,13 +174,13 @@ public:
 
         const auto name = "DataToString";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DataToString));
-        llvm::Value* func; 
+        llvm::Value* func;
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto fnType = FunctionType::get(valType, { valType, slotType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
         } else {
             const auto fnType = FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, slotType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
         }
 
         const auto zero = ConstantInt::get(valType, 0ULL);
@@ -258,13 +258,13 @@ public:
 
 }
 
-IComputationNode* WrapToString(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg"); 
- 
-    bool isOptional; 
+IComputationNode* WrapToString(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
+
+    bool isOptional;
     const auto dataType = UnpackOptionalData(callable.GetInput(0), isOptional);
     const auto schemeType = dataType->GetSchemeType();
- 
+
     const auto data = LocateNode(ctx.NodeLocator, callable, 0);
     if (NUdf::EDataTypeFeatures::StringType & NUdf::GetDataTypeInfo(NUdf::GetDataSlot(schemeType)).Features) {
         return new TAsIsWrapper(data);
@@ -275,14 +275,14 @@ IComputationNode* WrapToString(TCallable& callable, const TComputationNodeFactor
         } else {
             return new TDecimalToStringWrapper<false>(ctx.Mutables, data, params.first, params.second);
         }
-    } else { 
+    } else {
         if (isOptional) {
             return new TToStringWrapper<true>(ctx.Mutables, data, schemeType);
         } else {
             return new TToStringWrapper<false>(ctx.Mutables, data, schemeType);
         }
-    } 
-} 
- 
-} 
-} 
+    }
+}
+
+}
+}

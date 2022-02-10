@@ -1,8 +1,8 @@
 #include "mkql_computation_node_ut.h"
 
-#include <ydb/library/yql/minikql/mkql_runtime_version.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/mkql_runtime_version.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(!item.GetElement(0));
-        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 2);
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
@@ -348,20 +348,20 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
         const auto list = pb.NewList(optionalType, {pb.NewEmptyOptional(optionalType), pb.NewOptional(data2)});
 
         const auto pgmReturn = pb.Filter(list,
-            [&](TRuntimeNode item) { 
+            [&](TRuntimeNode item) {
             return pb.Exists(item);
-        }); 
- 
+        });
+
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(item);
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    } 
- 
+    }
+
     Y_UNIT_TEST_LLVM(TestFilterOverStream) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -382,12 +382,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
         const auto graph = setup.BuildGraph(pgmReturn);
         const auto iterator = graph->GetValue();
         NUdf::TUnboxedValue item;
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2); 
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item)); 
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 5); 
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
-        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item)); 
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
+        UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
     }
 
     Y_UNIT_TEST_LLVM(TestFilterOverFlow) {
@@ -426,22 +426,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
         const auto data = pb.NewEmptyOptional(dataType);
         const auto data2 = pb.NewOptional(pb.NewDataLiteral<ui32>(2U));
         const auto list = pb.NewList(dataType, {data, data2});
- 
+
         const auto pgmReturn = pb.Filter(pb.LazyList(list),
             [&](TRuntimeNode item) { return pb.Exists(item); }
         );
- 
+
         const auto graph = setup.BuildGraph(pgmReturn);
- 
+
         const auto iterator = graph->GetValue().GetListIterator();
         NUdf::TUnboxedValue item;
         UNIT_ASSERT(iterator.Next(item));
         UNIT_ASSERT(item);
-        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2); 
+        UNIT_ASSERT_VALUES_EQUAL(item.template Get<ui32>(), 2);
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
-    } 
- 
+    }
+
     Y_UNIT_TEST_LLVM(TestFilterByString) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -1114,7 +1114,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLFiltersTest) {
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Finish, iterator.Fetch(item));
     }
-} 
- 
-} 
-} 
+}
+
+}
+}

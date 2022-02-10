@@ -1,12 +1,12 @@
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h> 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h> 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <util/random/random.h>
 #include <util/system/sanitizers.h>
-#include <array> 
+#include <array>
 
 namespace NYql {
 using namespace NKikimr::NMiniKQL;
@@ -19,7 +19,7 @@ using namespace NKikimr::NMiniKQL;
         Y_UNIT_TEST(SimplePercentile) {
             auto mutableFunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
             auto randomProvider = CreateDeterministicRandomProvider(1);
-            auto timeProvider = CreateDeterministicTimeProvider(10000000); 
+            auto timeProvider = CreateDeterministicTimeProvider(10000000);
             NUdf::TUniquePtr<NUdf::IUdfModule> module = NUdf::CreateStatModule();
             mutableFunctionRegistry->AddModule("", "Stat", std::move(module));
             TScopedAlloc alloc;

@@ -22,7 +22,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 SRCS(
     sequencer_ut.cpp
     storage_pool_info_ut.cpp

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/dq/state) 
+UNITTEST_FOR(ydb/library/yql/dq/state)
 
 OWNER(
     g:yql

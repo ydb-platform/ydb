@@ -1,25 +1,25 @@
 #pragma once
-#include "udf_version.h" 
+#include "udf_version.h"
 #include <util/system/types.h>
 #include <new>
 #include <cstddef>
 #include <limits>
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8) 
-extern "C" void* UdfAllocateWithSize(ui64 size); 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
+extern "C" void* UdfAllocateWithSize(ui64 size);
 extern "C" void UdfFreeWithSize(const void* mem, ui64 size);
-#ifdef __clang__ 
-[[deprecated]] 
-#endif 
-extern "C" void* UdfAllocate(ui64 size); 
-#ifdef __clang__ 
-[[deprecated]] 
-#endif 
-extern "C" void UdfFree(const void* mem); 
-#else 
-extern "C" void* UdfAllocate(ui64 size); 
-extern "C" void UdfFree(const void* mem); 
-#endif 
+#ifdef __clang__
+[[deprecated]]
+#endif
+extern "C" void* UdfAllocate(ui64 size);
+#ifdef __clang__
+[[deprecated]]
+#endif
+extern "C" void UdfFree(const void* mem);
+#else
+extern "C" void* UdfAllocate(ui64 size);
+extern "C" void UdfFree(const void* mem);
+#endif
 
 namespace NYql {
 namespace NUdf {
@@ -66,38 +66,38 @@ struct TStdAllocatorForUdf
 
 struct TWithUdfAllocator {
     void* operator new(size_t sz) {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8) 
-        return UdfAllocateWithSize(sz); 
-#else 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
+        return UdfAllocateWithSize(sz);
+#else
         return UdfAllocate(sz);
-#endif 
+#endif
     }
 
     void* operator new[](size_t sz) {
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8) 
-        return UdfAllocateWithSize(sz); 
-#else 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
+        return UdfAllocateWithSize(sz);
+#else
         return UdfAllocate(sz);
-#endif 
+#endif
     }
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8) 
-    void operator delete(void *mem, std::size_t sz) noexcept { 
-        return UdfFreeWithSize(mem, sz); 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
+    void operator delete(void *mem, std::size_t sz) noexcept {
+        return UdfFreeWithSize(mem, sz);
     }
 
-    void operator delete[](void *mem, std::size_t sz) noexcept { 
-        return UdfFreeWithSize(mem, sz); 
+    void operator delete[](void *mem, std::size_t sz) noexcept {
+        return UdfFreeWithSize(mem, sz);
     }
-#else 
-    void operator delete(void *mem) noexcept { 
+#else
+    void operator delete(void *mem) noexcept {
         return UdfFree(mem);
     }
 
-    void operator delete[](void *mem) noexcept { 
+    void operator delete[](void *mem) noexcept {
         return UdfFree(mem);
     }
-#endif 
+#endif
 };
 
 } // namespace NUdf

@@ -1,30 +1,30 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/mkql_node.h> 
+#include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 
 namespace NKikimr {
 namespace NMiniKQL {
 
-static constexpr NUdf::TDataTypeId LegacyPairUi64Ui64 = 0x101; 
- 
-struct TSelectColumn { 
-    TStringBuf Label; 
-    ui32 ColumnId = 0; 
-    NUdf::TDataTypeId SchemeType = 0; 
- 
-    TSelectColumn() 
-    {} 
- 
-    TSelectColumn(TStringBuf label, ui32 columnId, NUdf::TDataTypeId schemeType) 
-        : Label(label) 
-        , ColumnId(columnId) 
-        , SchemeType(schemeType) 
-    {} 
-}; 
- 
+static constexpr NUdf::TDataTypeId LegacyPairUi64Ui64 = 0x101;
+
+struct TSelectColumn {
+    TStringBuf Label;
+    ui32 ColumnId = 0;
+    NUdf::TDataTypeId SchemeType = 0;
+
+    TSelectColumn()
+    {}
+
+    TSelectColumn(TStringBuf label, ui32 columnId, NUdf::TDataTypeId schemeType)
+        : Label(label)
+        , ColumnId(columnId)
+        , SchemeType(schemeType)
+    {}
+};
+
 struct TReadRangeOptions
 {
     struct TFlags {
@@ -122,8 +122,8 @@ class TKikimrProgramBuilder: public TProgramBuilder
 public:
     struct TBindFlags {
         enum {
-            OptimizeLiterals = 0x1, 
-            Default = OptimizeLiterals, 
+            OptimizeLiterals = 0x1,
+            Default = OptimizeLiterals,
             DisableOptimization = 0
         };
     };
@@ -224,22 +224,22 @@ public:
     TParametersBuilder GetParametersBuilder() const {
         return TParametersBuilder(Env);
     }
- 
-    //-- special functions 
-    TRuntimeNode Abort(); 
-    TRuntimeNode StepTxId(); 
-    TRuntimeNode SetResult(const TStringBuf& label, TRuntimeNode payload); 
 
-    using TProgramBuilder::NewDataLiteral; 
+    //-- special functions
+    TRuntimeNode Abort();
+    TRuntimeNode StepTxId();
+    TRuntimeNode SetResult(const TStringBuf& label, TRuntimeNode payload);
+
+    using TProgramBuilder::NewDataLiteral;
 private:
-    TRuntimeNode NewDataLiteral(const std::pair<ui64, ui64>& data) const; 
+    TRuntimeNode NewDataLiteral(const std::pair<ui64, ui64>& data) const;
     TRuntimeNode BuildTableId(const TTableId& tableId) const;
     TVector<TRuntimeNode> FixKeysType(
         const TArrayRef<const ui32>& keyTypes,
         const TKeyColumnValues& row) const;
     TRuntimeNode RewriteNullType(
         TRuntimeNode value,
-        NUdf::TDataTypeId expectedType) const; 
+        NUdf::TDataTypeId expectedType) const;
     TInternName NullInternName;
     TTupleType* TableIdType;
 };

@@ -5,7 +5,7 @@
 #include <ydb/library/yql/public/udf/udf_type_ops.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
 
 // TODO: remove const_casts
 
@@ -15,47 +15,47 @@ namespace {
 
 static const TString UdfName("UDF");
 
-class TCallablePayload : public NUdf::ICallablePayload { 
-public: 
-    TCallablePayload(NMiniKQL::TNode* node) 
-    { 
-        auto structObj = AS_VALUE(NMiniKQL::TStructLiteral, NMiniKQL::TRuntimeNode(node, true)); 
-        auto argsIndex = structObj->GetType()->GetMemberIndex("Args"); 
-        auto payloadIndex = structObj->GetType()->GetMemberIndex("Payload"); 
+class TCallablePayload : public NUdf::ICallablePayload {
+public:
+    TCallablePayload(NMiniKQL::TNode* node)
+    {
+        auto structObj = AS_VALUE(NMiniKQL::TStructLiteral, NMiniKQL::TRuntimeNode(node, true));
+        auto argsIndex = structObj->GetType()->GetMemberIndex("Args");
+        auto payloadIndex = structObj->GetType()->GetMemberIndex("Payload");
         Payload_ = AS_VALUE(NMiniKQL::TDataLiteral, structObj->GetValue(payloadIndex))->AsValue().AsStringRef();
-        auto args = structObj->GetValue(argsIndex); 
-        auto argsList = AS_VALUE(NMiniKQL::TListLiteral, args); 
-        auto itemType = AS_TYPE(NMiniKQL::TStructType, AS_TYPE(NMiniKQL::TListType, args)->GetItemType()); 
-        auto nameIndex = itemType->GetMemberIndex("Name"); 
-        auto flagsIndex = itemType->GetMemberIndex("Flags"); 
-        ArgsNames_.reserve(argsList->GetItemsCount()); 
-        ArgsFlags_.reserve(argsList->GetItemsCount()); 
-        for (ui32 i = 0; i < argsList->GetItemsCount(); ++i) { 
-            auto arg = AS_VALUE(NMiniKQL::TStructLiteral, argsList->GetItems()[i]); 
+        auto args = structObj->GetValue(argsIndex);
+        auto argsList = AS_VALUE(NMiniKQL::TListLiteral, args);
+        auto itemType = AS_TYPE(NMiniKQL::TStructType, AS_TYPE(NMiniKQL::TListType, args)->GetItemType());
+        auto nameIndex = itemType->GetMemberIndex("Name");
+        auto flagsIndex = itemType->GetMemberIndex("Flags");
+        ArgsNames_.reserve(argsList->GetItemsCount());
+        ArgsFlags_.reserve(argsList->GetItemsCount());
+        for (ui32 i = 0; i < argsList->GetItemsCount(); ++i) {
+            auto arg = AS_VALUE(NMiniKQL::TStructLiteral, argsList->GetItems()[i]);
             ArgsNames_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(nameIndex))->AsValue().AsStringRef());
-            ArgsFlags_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(flagsIndex))->AsValue().Get<ui64>()); 
-        } 
-    } 
+            ArgsFlags_.push_back(AS_VALUE(NMiniKQL::TDataLiteral, arg->GetValue(flagsIndex))->AsValue().Get<ui64>());
+        }
+    }
 
-    NUdf::TStringRef GetPayload() const override { 
-        return Payload_; 
-    } 
- 
-    NUdf::TStringRef GetArgumentName(ui32 index) const override { 
-        return ArgsNames_[index]; 
-    } 
- 
-    ui64 GetArgumentFlags(ui32 index) const override { 
-        return ArgsFlags_[index]; 
-    } 
- 
-private: 
-    NUdf::TStringRef Payload_; 
+    NUdf::TStringRef GetPayload() const override {
+        return Payload_;
+    }
+
+    NUdf::TStringRef GetArgumentName(ui32 index) const override {
+        return ArgsNames_[index];
+    }
+
+    ui64 GetArgumentFlags(ui32 index) const override {
+        return ArgsFlags_[index];
+    }
+
+private:
+    NUdf::TStringRef Payload_;
     TVector<NUdf::TStringRef> ArgsNames_;
     TVector<ui64> ArgsFlags_;
-}; 
- 
-///////////////////////////////////////////////////////////////////////////// 
+};
+
+/////////////////////////////////////////////////////////////////////////////
 // TOptionalTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
 class TOptionalTypeBuilder: public NUdf::IOptionalTypeBuilder
@@ -66,7 +66,7 @@ public:
     {
     }
 
-    NUdf::IOptionalTypeBuilder& Item(NUdf::TDataTypeId typeId) override { 
+    NUdf::IOptionalTypeBuilder& Item(NUdf::TDataTypeId typeId) override {
         ItemType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
         return *this;
     }
@@ -91,7 +91,7 @@ public:
 
 private:
     const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
-    const NMiniKQL::TType* ItemType_ = nullptr; 
+    const NMiniKQL::TType* ItemType_ = nullptr;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -105,7 +105,7 @@ public:
     {
     }
 
-    NUdf::IListTypeBuilder& Item(NUdf::TDataTypeId typeId) override { 
+    NUdf::IListTypeBuilder& Item(NUdf::TDataTypeId typeId) override {
         ItemType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
         return *this;
     }
@@ -129,48 +129,48 @@ public:
 
 private:
     const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
-    const NMiniKQL::TType* ItemType_ = nullptr; 
+    const NMiniKQL::TType* ItemType_ = nullptr;
 };
 
 //////////////////////////////////////////////////////////////////////////////
-// TStreamTypeBuilder 
-////////////////////////////////////////////////////////////////////////////// 
-class TStreamTypeBuilder : public NUdf::IStreamTypeBuilder 
-{ 
-public: 
-    TStreamTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent) 
-        : Parent_(parent) 
-    { 
-    } 
- 
-    NUdf::IStreamTypeBuilder& Item(NUdf::TDataTypeId typeId) override { 
-        ItemType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env()); 
-        return *this; 
-    } 
- 
-    NUdf::IStreamTypeBuilder& Item(const NUdf::TType* type) override { 
-        ItemType_ = static_cast<const NMiniKQL::TType*>(type); 
-        return *this; 
-    } 
- 
-    NUdf::IStreamTypeBuilder& Item( 
-        const NUdf::ITypeBuilder& typeBuilder) override 
-    { 
-        ItemType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
-        return *this; 
-    } 
- 
-    NUdf::TType* Build() const override { 
-        return NMiniKQL::TStreamType::Create( 
-            const_cast<NMiniKQL::TType*>(ItemType_), Parent_.Env()); 
-    } 
- 
-private: 
-    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_; 
-    const NMiniKQL::TType* ItemType_ = nullptr; 
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
+// TStreamTypeBuilder
+//////////////////////////////////////////////////////////////////////////////
+class TStreamTypeBuilder : public NUdf::IStreamTypeBuilder
+{
+public:
+    TStreamTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
+        : Parent_(parent)
+    {
+    }
+
+    NUdf::IStreamTypeBuilder& Item(NUdf::TDataTypeId typeId) override {
+        ItemType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
+        return *this;
+    }
+
+    NUdf::IStreamTypeBuilder& Item(const NUdf::TType* type) override {
+        ItemType_ = static_cast<const NMiniKQL::TType*>(type);
+        return *this;
+    }
+
+    NUdf::IStreamTypeBuilder& Item(
+        const NUdf::ITypeBuilder& typeBuilder) override
+    {
+        ItemType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
+        return *this;
+    }
+
+    NUdf::TType* Build() const override {
+        return NMiniKQL::TStreamType::Create(
+            const_cast<NMiniKQL::TType*>(ItemType_), Parent_.Env());
+    }
+
+private:
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
+    const NMiniKQL::TType* ItemType_ = nullptr;
+};
+
+//////////////////////////////////////////////////////////////////////////////
 // TDictTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
 class TDictTypeBuilder: public NUdf::IDictTypeBuilder
@@ -181,10 +181,10 @@ public:
     {
     }
 
-    NUdf::IDictTypeBuilder& Key(NUdf::TDataTypeId typeId) override { 
-        auto slot = NUdf::FindDataSlot(typeId); 
-        Y_VERIFY(slot, "unknown type: %d", (int)typeId); 
-        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable"); 
+    NUdf::IDictTypeBuilder& Key(NUdf::TDataTypeId typeId) override {
+        auto slot = NUdf::FindDataSlot(typeId);
+        Y_VERIFY(slot, "unknown type: %d", (int)typeId);
+        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
         KeyType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
         return *this;
     }
@@ -203,7 +203,7 @@ public:
         return *this;
     }
 
-    NUdf::IDictTypeBuilder& Value(NUdf::TDataTypeId typeId) override { 
+    NUdf::IDictTypeBuilder& Value(NUdf::TDataTypeId typeId) override {
         ValueType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
         return *this;
     }
@@ -229,74 +229,74 @@ public:
 private:
     void CheckKeyType() const {
         auto t = AS_TYPE(NMiniKQL::TDataType, const_cast<NMiniKQL::TType*>(KeyType_));
-        auto keySchemeType = t->GetSchemeType(); 
-        auto slot = NUdf::FindDataSlot(keySchemeType); 
-        Y_VERIFY(slot, "unknown type: %d", (int)keySchemeType); 
-        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable"); 
+        auto keySchemeType = t->GetSchemeType();
+        auto slot = NUdf::FindDataSlot(keySchemeType);
+        Y_VERIFY(slot, "unknown type: %d", (int)keySchemeType);
+        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
     }
 
 private:
     const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
-    const NMiniKQL::TType* KeyType_ = nullptr; 
-    const NMiniKQL::TType* ValueType_ = nullptr; 
+    const NMiniKQL::TType* KeyType_ = nullptr;
+    const NMiniKQL::TType* ValueType_ = nullptr;
 };
 
 //////////////////////////////////////////////////////////////////////////////
-// TSetTypeBuilder 
+// TSetTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
-class TSetTypeBuilder : public NUdf::ISetTypeBuilder 
-{ 
-public: 
-    TSetTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent) 
-        : Parent_(parent) 
-    { 
-    } 
- 
-    NUdf::ISetTypeBuilder& Key(NUdf::TDataTypeId typeId) override { 
-        auto slot = NUdf::FindDataSlot(typeId); 
-        Y_VERIFY(slot, "unknown type: %d", (int)typeId); 
-        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable"); 
-        KeyType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env()); 
-        return *this; 
-    } 
- 
-    NUdf::ISetTypeBuilder& Key(const NUdf::TType* type) override { 
-        KeyType_ = static_cast<const NMiniKQL::TType*>(type); 
-        CheckKeyType(); 
-        return *this; 
-    } 
- 
-    NUdf::ISetTypeBuilder& Key( 
-        const NUdf::ITypeBuilder& typeBuilder) override 
-    { 
-        KeyType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
-        CheckKeyType(); 
-        return *this; 
-    } 
- 
-    NUdf::TType* Build() const override { 
-        return NMiniKQL::TDictType::Create( 
-            const_cast<NMiniKQL::TType*>(KeyType_), 
-            Parent_.Env().GetVoid()->GetType(), Parent_.Env()); 
-    } 
- 
-private: 
-    void CheckKeyType() const { 
-        auto t = AS_TYPE(NMiniKQL::TDataType, const_cast<NMiniKQL::TType*>(KeyType_)); 
-        auto keySchemeType = t->GetSchemeType(); 
-        auto slot = NUdf::FindDataSlot(keySchemeType); 
-        Y_VERIFY(slot, "unknown type: %d", (int)keySchemeType); 
-        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable"); 
-    } 
- 
-private: 
-    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_; 
-    const NMiniKQL::TType* KeyType_ = nullptr; 
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
-// TStructTypeBuilder 
-////////////////////////////////////////////////////////////////////////////// 
+class TSetTypeBuilder : public NUdf::ISetTypeBuilder
+{
+public:
+    TSetTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
+        : Parent_(parent)
+    {
+    }
+
+    NUdf::ISetTypeBuilder& Key(NUdf::TDataTypeId typeId) override {
+        auto slot = NUdf::FindDataSlot(typeId);
+        Y_VERIFY(slot, "unknown type: %d", (int)typeId);
+        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
+        KeyType_ = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
+        return *this;
+    }
+
+    NUdf::ISetTypeBuilder& Key(const NUdf::TType* type) override {
+        KeyType_ = static_cast<const NMiniKQL::TType*>(type);
+        CheckKeyType();
+        return *this;
+    }
+
+    NUdf::ISetTypeBuilder& Key(
+        const NUdf::ITypeBuilder& typeBuilder) override
+    {
+        KeyType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
+        CheckKeyType();
+        return *this;
+    }
+
+    NUdf::TType* Build() const override {
+        return NMiniKQL::TDictType::Create(
+            const_cast<NMiniKQL::TType*>(KeyType_),
+            Parent_.Env().GetVoid()->GetType(), Parent_.Env());
+    }
+
+private:
+    void CheckKeyType() const {
+        auto t = AS_TYPE(NMiniKQL::TDataType, const_cast<NMiniKQL::TType*>(KeyType_));
+        auto keySchemeType = t->GetSchemeType();
+        auto slot = NUdf::FindDataSlot(keySchemeType);
+        Y_VERIFY(slot, "unknown type: %d", (int)keySchemeType);
+        Y_VERIFY(NUdf::GetDataTypeInfo(*slot).Features & NUdf::CanCompare, "key type is not comparable");
+    }
+
+private:
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
+    const NMiniKQL::TType* KeyType_ = nullptr;
+};
+
+//////////////////////////////////////////////////////////////////////////////
+// TStructTypeBuilder
+//////////////////////////////////////////////////////////////////////////////
 class TStructTypeBuilder: public NUdf::IStructTypeBuilder
 {
 public:
@@ -311,7 +311,7 @@ public:
 
     NUdf::IStructTypeBuilder& AddField(
             const NUdf::TStringRef& name,
-            NUdf::TDataTypeId typeId, 
+            NUdf::TDataTypeId typeId,
             ui32* index) override
     {
         auto type = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
@@ -351,40 +351,40 @@ private:
 };
 
 //////////////////////////////////////////////////////////////////////////////
-// TEnumTypeBuilder 
-////////////////////////////////////////////////////////////////////////////// 
-class TEnumTypeBuilder : public NUdf::IEnumTypeBuilder 
-{ 
-public: 
-    TEnumTypeBuilder( 
-        const NMiniKQL::TFunctionTypeInfoBuilder& parent, 
-        ui32 itemsCount) 
-        : Parent_(parent) 
-        , StructBuilder_(Parent_.Env()) 
-    { 
-        StructBuilder_.Reserve(itemsCount); 
-    } 
- 
-    NUdf::IEnumTypeBuilder& AddField( 
-        const NUdf::TStringRef& name, 
-        ui32* index) override 
-    { 
-        StructBuilder_.Add(name, Parent_.Env().GetVoid()->GetType(), index); 
-        return *this; 
-    } 
- 
-    NUdf::TType* Build() const override { 
-        auto structType = StructBuilder_.Build(); 
-        StructBuilder_.FillIndexes(); 
-        return NMiniKQL::TVariantType::Create(structType, Parent_.Env()); 
-    } 
- 
-private: 
-    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_; 
-    mutable NMiniKQL::TStructTypeBuilder StructBuilder_; 
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
+// TEnumTypeBuilder
+//////////////////////////////////////////////////////////////////////////////
+class TEnumTypeBuilder : public NUdf::IEnumTypeBuilder
+{
+public:
+    TEnumTypeBuilder(
+        const NMiniKQL::TFunctionTypeInfoBuilder& parent,
+        ui32 itemsCount)
+        : Parent_(parent)
+        , StructBuilder_(Parent_.Env())
+    {
+        StructBuilder_.Reserve(itemsCount);
+    }
+
+    NUdf::IEnumTypeBuilder& AddField(
+        const NUdf::TStringRef& name,
+        ui32* index) override
+    {
+        StructBuilder_.Add(name, Parent_.Env().GetVoid()->GetType(), index);
+        return *this;
+    }
+
+    NUdf::TType* Build() const override {
+        auto structType = StructBuilder_.Build();
+        StructBuilder_.FillIndexes();
+        return NMiniKQL::TVariantType::Create(structType, Parent_.Env());
+    }
+
+private:
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
+    mutable NMiniKQL::TStructTypeBuilder StructBuilder_;
+};
+
+//////////////////////////////////////////////////////////////////////////////
 // TTupleTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
 class TTupleTypeBuilder: public NUdf::ITupleTypeBuilder
@@ -398,7 +398,7 @@ public:
         ElementTypes_.reserve(itemsCount);
     }
 
-    NUdf::ITupleTypeBuilder& Add(NUdf::TDataTypeId typeId) override { 
+    NUdf::ITupleTypeBuilder& Add(NUdf::TDataTypeId typeId) override {
         auto type = NMiniKQL::TDataType::Create(typeId, Parent_.Env());
         ElementTypes_.push_back(type);
         return *this;
@@ -429,41 +429,41 @@ private:
     TVector<NMiniKQL::TType*> ElementTypes_;
 };
 
-///////////////////////////////////////////////////////////////////////////// 
-// TVariantTypeBuilder 
+/////////////////////////////////////////////////////////////////////////////
+// TVariantTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
-class TVariantTypeBuilder : public NUdf::IVariantTypeBuilder 
-{ 
-public: 
-    TVariantTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent) 
-        : Parent_(parent) 
-    { 
-    } 
- 
-    NUdf::IVariantTypeBuilder& Over(const NUdf::TType* type) override { 
-        UnderlyingType_ = static_cast<const NMiniKQL::TType*>(type); 
-        return *this; 
-    } 
- 
-    NUdf::IVariantTypeBuilder& Over( 
-        const NUdf::ITypeBuilder& typeBuilder) override 
-    { 
-        UnderlyingType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build()); 
-        return *this; 
-    } 
- 
-    NUdf::TType* Build() const override { 
-        return NMiniKQL::TVariantType::Create( 
-            const_cast<NMiniKQL::TType*>(UnderlyingType_), 
-            Parent_.Env()); 
-    } 
- 
-private: 
-    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_; 
-    const NMiniKQL::TType* UnderlyingType_ = nullptr; 
-}; 
- 
-////////////////////////////////////////////////////////////////////////////// 
+class TVariantTypeBuilder : public NUdf::IVariantTypeBuilder
+{
+public:
+    TVariantTypeBuilder(const NMiniKQL::TFunctionTypeInfoBuilder& parent)
+        : Parent_(parent)
+    {
+    }
+
+    NUdf::IVariantTypeBuilder& Over(const NUdf::TType* type) override {
+        UnderlyingType_ = static_cast<const NMiniKQL::TType*>(type);
+        return *this;
+    }
+
+    NUdf::IVariantTypeBuilder& Over(
+        const NUdf::ITypeBuilder& typeBuilder) override
+    {
+        UnderlyingType_ = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
+        return *this;
+    }
+
+    NUdf::TType* Build() const override {
+        return NMiniKQL::TVariantType::Create(
+            const_cast<NMiniKQL::TType*>(UnderlyingType_),
+            Parent_.Env());
+    }
+
+private:
+    const NMiniKQL::TFunctionTypeInfoBuilder& Parent_;
+    const NMiniKQL::TType* UnderlyingType_ = nullptr;
+};
+
+//////////////////////////////////////////////////////////////////////////////
 // TCallableTypeBuilder
 //////////////////////////////////////////////////////////////////////////////
 class TCallableTypeBuilder: public NUdf::ICallableTypeBuilder
@@ -479,7 +479,7 @@ public:
     }
 
     NUdf::ICallableTypeBuilder& Returns(
-            NUdf::TDataTypeId typeId) override 
+            NUdf::TDataTypeId typeId) override
     {
         ReturnType_ = NMiniKQL::TDataType::Create(typeId, Env_);
         return *this;
@@ -500,7 +500,7 @@ public:
         return *this;
     }
 
-    NUdf::ICallableTypeBuilder& Arg(NUdf::TDataTypeId typeId) override { 
+    NUdf::ICallableTypeBuilder& Arg(NUdf::TDataTypeId typeId) override {
         auto type = NMiniKQL::TDataType::Create(typeId, Env_);
         ArgsTypes_.push_back(type);
         return *this;
@@ -556,21 +556,21 @@ public:
             TVector<NMiniKQL::TArgInfo>& args)
         : NUdf::IFunctionArgTypesBuilder(parent)
         , Env_(parent.Env())
-        , Args_(args) 
+        , Args_(args)
     {
     }
 
-    NUdf::IFunctionArgTypesBuilder& Add(NUdf::TDataTypeId typeId) override { 
+    NUdf::IFunctionArgTypesBuilder& Add(NUdf::TDataTypeId typeId) override {
         auto type = NMiniKQL::TDataType::Create(typeId, Env_);
         Args_.emplace_back();
-        Args_.back().Type_ = type; 
+        Args_.back().Type_ = type;
         return *this;
     }
 
     NUdf::IFunctionArgTypesBuilder& Add(const NUdf::TType* type) override {
         auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
         Args_.emplace_back();
-        Args_.back().Type_ = const_cast<NMiniKQL::TType*>(mkqlType); 
+        Args_.back().Type_ = const_cast<NMiniKQL::TType*>(mkqlType);
         return *this;
     }
 
@@ -579,20 +579,20 @@ public:
     {
         auto type = static_cast<NMiniKQL::TType*>(typeBuilder.Build());
         Args_.emplace_back();
-        Args_.back().Type_ = type; 
+        Args_.back().Type_ = type;
         return *this;
     }
 
-    NUdf::IFunctionArgTypesBuilder& Name(const NUdf::TStringRef& name) override { 
+    NUdf::IFunctionArgTypesBuilder& Name(const NUdf::TStringRef& name) override {
         Args_.back().Name_ = Env_.InternName(name);
-        return *this; 
-    } 
- 
-    NUdf::IFunctionArgTypesBuilder& Flags(ui64 flags) override { 
-        Args_.back().Flags_ = flags; 
-        return *this; 
-    } 
- 
+        return *this;
+    }
+
+    NUdf::IFunctionArgTypesBuilder& Flags(ui64 flags) override {
+        Args_.back().Flags_ = flags;
+        return *this;
+    }
+
 private:
     const NMiniKQL::TTypeEnvironment& Env_;
     TVector<NMiniKQL::TArgInfo>& Args_;
@@ -605,14 +605,14 @@ private:
 struct TTypeNotSupported : public yexception
 {};
 
-class TEmptyHash final : public NUdf::IHash { 
-public: 
-    ui64 Hash(NUdf::TUnboxedValuePod value) const override { 
-        Y_UNUSED(value); 
-        return 0; 
-    } 
-}; 
- 
+class TEmptyHash final : public NUdf::IHash {
+public:
+    ui64 Hash(NUdf::TUnboxedValuePod value) const override {
+        Y_UNUSED(value);
+        return 0;
+    }
+};
+
 template <NMiniKQL::TType::EKind Kind, NUdf::EDataSlot Slot = NUdf::EDataSlot::Bool>
 class THash;
 
@@ -653,7 +653,7 @@ public:
         ui64 result = 0ULL;
         NKikimr::NMiniKQL::TThresher<false>::DoForEachItem(value,
             [&result, this] (NUdf::TUnboxedValue&& item) {
-                result = CombineHashes(result, Hash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(item))); 
+                result = CombineHashes(result, Hash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(item)));
             }
         );
         return result;
@@ -663,70 +663,70 @@ private:
     const NUdf::IHash::TPtr Hash_;
 };
 
-template <> 
-class THash<NMiniKQL::TType::EKind::Dict> final : public NUdf::IHash { 
-public: 
-    explicit THash(const NMiniKQL::TType* type) 
-    { 
-        auto dictType = static_cast<const NMiniKQL::TDictType*>(type); 
-        KeyHash_ = MakeHashImpl(dictType->GetKeyType()); 
-        PayloadHash_ = MakeHashImpl(dictType->GetPayloadType()); 
-    } 
- 
-    ui64 Hash(NUdf::TUnboxedValuePod value) const override { 
-        auto iter = value.GetDictIterator(); 
-        if (value.IsSortedDict()) { 
-            ui64 result = 0ULL; 
-            NUdf::TUnboxedValue key, payload; 
-            while (iter.NextPair(key, payload)) { 
-                result = CombineHashes(result, KeyHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(key))); 
-                result = CombineHashes(result, PayloadHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(payload))); 
-            } 
- 
-            return result; 
-        } else { 
-            TVector<ui64, NKikimr::NMiniKQL::TMKQLAllocator<ui64>> hashes; 
-            hashes.reserve(value.GetDictLength()); 
- 
-            NUdf::TUnboxedValue key, payload; 
-            while (iter.NextPair(key, payload)) { 
-                auto keyHash = KeyHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(key)); 
-                auto payloadHash = PayloadHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(payload)); 
-                hashes.emplace_back(CombineHashes(keyHash, payloadHash)); 
-            } 
- 
-            Sort(hashes.begin(), hashes.end()); 
- 
-            ui64 result = 0ULL; 
-            for (const auto& x : hashes) { 
-                result = CombineHashes(result, x); 
-            } 
- 
-            return result; 
-        } 
-    } 
- 
-private: 
-    NUdf::IHash::TPtr KeyHash_; 
-    NUdf::IHash::TPtr PayloadHash_; 
-}; 
- 
+template <>
+class THash<NMiniKQL::TType::EKind::Dict> final : public NUdf::IHash {
+public:
+    explicit THash(const NMiniKQL::TType* type)
+    {
+        auto dictType = static_cast<const NMiniKQL::TDictType*>(type);
+        KeyHash_ = MakeHashImpl(dictType->GetKeyType());
+        PayloadHash_ = MakeHashImpl(dictType->GetPayloadType());
+    }
+
+    ui64 Hash(NUdf::TUnboxedValuePod value) const override {
+        auto iter = value.GetDictIterator();
+        if (value.IsSortedDict()) {
+            ui64 result = 0ULL;
+            NUdf::TUnboxedValue key, payload;
+            while (iter.NextPair(key, payload)) {
+                result = CombineHashes(result, KeyHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(key)));
+                result = CombineHashes(result, PayloadHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(payload)));
+            }
+
+            return result;
+        } else {
+            TVector<ui64, NKikimr::NMiniKQL::TMKQLAllocator<ui64>> hashes;
+            hashes.reserve(value.GetDictLength());
+
+            NUdf::TUnboxedValue key, payload;
+            while (iter.NextPair(key, payload)) {
+                auto keyHash = KeyHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(key));
+                auto payloadHash = PayloadHash_->Hash(static_cast<const NUdf::TUnboxedValuePod&>(payload));
+                hashes.emplace_back(CombineHashes(keyHash, payloadHash));
+            }
+
+            Sort(hashes.begin(), hashes.end());
+
+            ui64 result = 0ULL;
+            for (const auto& x : hashes) {
+                result = CombineHashes(result, x);
+            }
+
+            return result;
+        }
+    }
+
+private:
+    NUdf::IHash::TPtr KeyHash_;
+    NUdf::IHash::TPtr PayloadHash_;
+};
+
 class TVectorHash : public NUdf::IHash {
 public:
     ui64 Hash(NUdf::TUnboxedValuePod value) const override {
         ui64 result = 0ULL;
-        auto elements = value.GetElements(); 
-        if (elements) { 
-            for (ui32 i = 0; i < Hash_.size(); ++i) { 
-                result = CombineHashes(result, Hash_[i]->Hash(static_cast<const NUdf::TUnboxedValuePod&>(elements[i]))); 
+        auto elements = value.GetElements();
+        if (elements) {
+            for (ui32 i = 0; i < Hash_.size(); ++i) {
+                result = CombineHashes(result, Hash_[i]->Hash(static_cast<const NUdf::TUnboxedValuePod&>(elements[i])));
             }
-        } else { 
-            for (ui32 i = 0; i < Hash_.size(); ++i) { 
-                auto item = value.GetElement(i); 
-                result = CombineHashes(result, Hash_[i]->Hash(static_cast<const NUdf::TUnboxedValuePod&>(item))); 
-            } 
-        } 
- 
+        } else {
+            for (ui32 i = 0; i < Hash_.size(); ++i) {
+                auto item = value.GetElement(i);
+                result = CombineHashes(result, Hash_[i]->Hash(static_cast<const NUdf::TUnboxedValuePod&>(item)));
+            }
+        }
+
         return result;
     }
 
@@ -760,52 +760,52 @@ public:
     }
 };
 
-template <> 
-class THash<NMiniKQL::TType::EKind::Variant> final : public NUdf::IHash { 
-public: 
-    explicit THash(const NMiniKQL::TType* type) { 
-        auto variantType = static_cast<const NMiniKQL::TVariantType*>(type); 
-        if (variantType->GetUnderlyingType()->IsStruct()) { 
-            auto structType = static_cast<const NMiniKQL::TStructType*>(variantType->GetUnderlyingType()); 
-            ui32 count = structType->GetMembersCount(); 
-            Hash_.reserve(count); 
-            for (ui32 i = 0; i < count; ++i) { 
-                Hash_.push_back(MakeHashImpl(structType->GetMemberType(i))); 
-            } 
-        } else { 
-            auto tupleType = static_cast<const NMiniKQL::TTupleType*>(variantType->GetUnderlyingType()); 
-            ui32 count = tupleType->GetElementsCount(); 
-            Hash_.reserve(count); 
-            for (ui32 i = 0; i < count; ++i) { 
-                Hash_.push_back(MakeHashImpl(tupleType->GetElementType(i))); 
-            } 
-        } 
-    } 
- 
-    ui64 Hash(NUdf::TUnboxedValuePod value) const override { 
-        auto index = value.GetVariantIndex(); 
-        MKQL_ENSURE(index < Hash_.size(), "Incorrect index"); 
-        auto item = value.GetVariantItem(); 
-        return CombineHashes(ui64(index), Hash_[index]->Hash(static_cast<const NUdf::TUnboxedValuePod&>(item))); 
-    } 
- 
-private: 
-    std::vector<NUdf::IHash::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::IHash::TPtr>> Hash_; 
-}; 
- 
+template <>
+class THash<NMiniKQL::TType::EKind::Variant> final : public NUdf::IHash {
+public:
+    explicit THash(const NMiniKQL::TType* type) {
+        auto variantType = static_cast<const NMiniKQL::TVariantType*>(type);
+        if (variantType->GetUnderlyingType()->IsStruct()) {
+            auto structType = static_cast<const NMiniKQL::TStructType*>(variantType->GetUnderlyingType());
+            ui32 count = structType->GetMembersCount();
+            Hash_.reserve(count);
+            for (ui32 i = 0; i < count; ++i) {
+                Hash_.push_back(MakeHashImpl(structType->GetMemberType(i)));
+            }
+        } else {
+            auto tupleType = static_cast<const NMiniKQL::TTupleType*>(variantType->GetUnderlyingType());
+            ui32 count = tupleType->GetElementsCount();
+            Hash_.reserve(count);
+            for (ui32 i = 0; i < count; ++i) {
+                Hash_.push_back(MakeHashImpl(tupleType->GetElementType(i)));
+            }
+        }
+    }
+
+    ui64 Hash(NUdf::TUnboxedValuePod value) const override {
+        auto index = value.GetVariantIndex();
+        MKQL_ENSURE(index < Hash_.size(), "Incorrect index");
+        auto item = value.GetVariantItem();
+        return CombineHashes(ui64(index), Hash_[index]->Hash(static_cast<const NUdf::TUnboxedValuePod&>(item)));
+    }
+
+private:
+    std::vector<NUdf::IHash::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::IHash::TPtr>> Hash_;
+};
+
 //////////////////////////////////////////////////////////////////////////////
 // TEquate
 //////////////////////////////////////////////////////////////////////////////
-class TEmptyEquate final : public NUdf::IEquate { 
-public: 
-    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        Y_UNUSED(lhs); 
-        Y_UNUSED(rhs); 
-        return true; 
-    } 
-}; 
- 
- 
+class TEmptyEquate final : public NUdf::IEquate {
+public:
+    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        Y_UNUSED(lhs);
+        Y_UNUSED(rhs);
+        return true;
+    }
+};
+
+
 template <NMiniKQL::TType::EKind Kind, NUdf::EDataSlot Slot = NUdf::EDataSlot::Bool>
 class TEquate;
 
@@ -908,49 +908,49 @@ private:
     const NUdf::IEquate::TPtr Equate_;
 };
 
-template <> 
-class TEquate<NMiniKQL::TType::EKind::Dict> final : public NUdf::IEquate { 
-public: 
-    explicit TEquate(const NMiniKQL::TType* type) 
-    { 
-        auto dictType = static_cast<const NMiniKQL::TDictType*>(type); 
-        PayloadEquate_ = MakeEquateImpl(dictType->GetPayloadType()); 
-    } 
- 
-    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        if (lhs.GetDictLength() != rhs.GetDictLength()) { 
-            return false; 
-        } 
- 
-        auto lhsIter = lhs.GetDictIterator(); 
-        NUdf::TUnboxedValue lhsKey, lhsPayload; 
-        while (lhsIter.NextPair(lhsKey, lhsPayload)) { 
-            auto lookup = rhs.Lookup(lhsKey); 
-            if (!lookup) { 
-                return false; 
-            } 
- 
-            NUdf::TUnboxedValue unpacked = lookup.GetOptionalValue(); 
-            if (!PayloadEquate_->Equals(lhsPayload, unpacked)) { 
-                return false; 
-            } 
-        } 
- 
-        return true; 
-    } 
- 
-private: 
-    NUdf::IEquate::TPtr PayloadEquate_; 
-}; 
- 
- 
+template <>
+class TEquate<NMiniKQL::TType::EKind::Dict> final : public NUdf::IEquate {
+public:
+    explicit TEquate(const NMiniKQL::TType* type)
+    {
+        auto dictType = static_cast<const NMiniKQL::TDictType*>(type);
+        PayloadEquate_ = MakeEquateImpl(dictType->GetPayloadType());
+    }
+
+    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        if (lhs.GetDictLength() != rhs.GetDictLength()) {
+            return false;
+        }
+
+        auto lhsIter = lhs.GetDictIterator();
+        NUdf::TUnboxedValue lhsKey, lhsPayload;
+        while (lhsIter.NextPair(lhsKey, lhsPayload)) {
+            auto lookup = rhs.Lookup(lhsKey);
+            if (!lookup) {
+                return false;
+            }
+
+            NUdf::TUnboxedValue unpacked = lookup.GetOptionalValue();
+            if (!PayloadEquate_->Equals(lhsPayload, unpacked)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+private:
+    NUdf::IEquate::TPtr PayloadEquate_;
+};
+
+
 class TVectorEquate : public NUdf::IEquate {
 public:
     bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         for (size_t i = 0; i < Equate_.size(); ++i) {
-            if (!Equate_[i]->Equals( 
-                static_cast<const NUdf::TUnboxedValuePod&>(lhs.GetElement(i)), 
-                static_cast<const NUdf::TUnboxedValuePod&>(rhs.GetElement(i)))) { 
+            if (!Equate_[i]->Equals(
+                static_cast<const NUdf::TUnboxedValuePod&>(lhs.GetElement(i)),
+                static_cast<const NUdf::TUnboxedValuePod&>(rhs.GetElement(i)))) {
                 return false;
             }
         }
@@ -987,64 +987,64 @@ public:
     }
 };
 
-template <> 
-class TEquate<NMiniKQL::TType::EKind::Variant> final : public NUdf::IEquate { 
-public: 
-    explicit TEquate(const NMiniKQL::TType* type) { 
-        auto variantType = static_cast<const NMiniKQL::TVariantType*>(type); 
-        if (variantType->GetUnderlyingType()->IsStruct()) { 
-            auto structType = static_cast<const NMiniKQL::TStructType*>(variantType->GetUnderlyingType()); 
-            ui32 count = structType->GetMembersCount(); 
-            Equate_.reserve(count); 
-            for (ui32 i = 0; i < count; ++i) { 
-                Equate_.push_back(MakeEquateImpl(structType->GetMemberType(i))); 
-            } 
-        } 
-        else { 
-            auto tupleType = static_cast<const NMiniKQL::TTupleType*>(variantType->GetUnderlyingType()); 
-            ui32 count = tupleType->GetElementsCount(); 
-            Equate_.reserve(count); 
-            for (ui32 i = 0; i < count; ++i) { 
-                Equate_.push_back(MakeEquateImpl(tupleType->GetElementType(i))); 
-            } 
-        } 
-    } 
- 
-    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        auto lhsIndex = lhs.GetVariantIndex(); 
-        auto rhsIndex = rhs.GetVariantIndex(); 
-        if (lhsIndex != rhsIndex) { 
-            return false; 
-        } 
- 
-        MKQL_ENSURE(lhsIndex < Equate_.size(), "Incorrect index"); 
-        auto lhsItem = lhs.GetVariantItem(); 
-        auto rhsItem = rhs.GetVariantItem(); 
-        return Equate_[lhsIndex]->Equals(static_cast<const NUdf::TUnboxedValuePod&>(lhsItem), static_cast<const NUdf::TUnboxedValuePod&>(rhsItem)); 
-    } 
- 
-private: 
-    std::vector<NUdf::IEquate::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::IEquate::TPtr>> Equate_; 
-}; 
- 
+template <>
+class TEquate<NMiniKQL::TType::EKind::Variant> final : public NUdf::IEquate {
+public:
+    explicit TEquate(const NMiniKQL::TType* type) {
+        auto variantType = static_cast<const NMiniKQL::TVariantType*>(type);
+        if (variantType->GetUnderlyingType()->IsStruct()) {
+            auto structType = static_cast<const NMiniKQL::TStructType*>(variantType->GetUnderlyingType());
+            ui32 count = structType->GetMembersCount();
+            Equate_.reserve(count);
+            for (ui32 i = 0; i < count; ++i) {
+                Equate_.push_back(MakeEquateImpl(structType->GetMemberType(i)));
+            }
+        }
+        else {
+            auto tupleType = static_cast<const NMiniKQL::TTupleType*>(variantType->GetUnderlyingType());
+            ui32 count = tupleType->GetElementsCount();
+            Equate_.reserve(count);
+            for (ui32 i = 0; i < count; ++i) {
+                Equate_.push_back(MakeEquateImpl(tupleType->GetElementType(i)));
+            }
+        }
+    }
+
+    bool Equals(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        auto lhsIndex = lhs.GetVariantIndex();
+        auto rhsIndex = rhs.GetVariantIndex();
+        if (lhsIndex != rhsIndex) {
+            return false;
+        }
+
+        MKQL_ENSURE(lhsIndex < Equate_.size(), "Incorrect index");
+        auto lhsItem = lhs.GetVariantItem();
+        auto rhsItem = rhs.GetVariantItem();
+        return Equate_[lhsIndex]->Equals(static_cast<const NUdf::TUnboxedValuePod&>(lhsItem), static_cast<const NUdf::TUnboxedValuePod&>(rhsItem));
+    }
+
+private:
+    std::vector<NUdf::IEquate::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::IEquate::TPtr>> Equate_;
+};
+
 //////////////////////////////////////////////////////////////////////////////
 // TCompare
 //////////////////////////////////////////////////////////////////////////////
-class TEmptyCompare final : public NUdf::ICompare { 
-public: 
-    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        Y_UNUSED(lhs); 
-        Y_UNUSED(rhs); 
-        return false; 
-    } 
- 
-    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        Y_UNUSED(lhs); 
-        Y_UNUSED(rhs); 
-        return 0; 
-    } 
-}; 
- 
+class TEmptyCompare final : public NUdf::ICompare {
+public:
+    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        Y_UNUSED(lhs);
+        Y_UNUSED(rhs);
+        return false;
+    }
+
+    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        Y_UNUSED(lhs);
+        Y_UNUSED(rhs);
+        return 0;
+    }
+};
+
 template <NMiniKQL::TType::EKind Kind, NUdf::EDataSlot Slot = NUdf::EDataSlot::Bool>
 class TCompare;
 
@@ -1117,9 +1117,9 @@ public:
 
     int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
         for (size_t i = 0; i < Compare_.size(); ++i) {
-            auto cmp = Compare_[i]->Compare( 
-                static_cast<const NUdf::TUnboxedValuePod&>(lhs.GetElement(i)), 
-                static_cast<const NUdf::TUnboxedValuePod&>(rhs.GetElement(i))); 
+            auto cmp = Compare_[i]->Compare(
+                static_cast<const NUdf::TUnboxedValuePod&>(lhs.GetElement(i)),
+                static_cast<const NUdf::TUnboxedValuePod&>(rhs.GetElement(i)));
             if (cmp != 0) {
                 return cmp;
             }
@@ -1131,108 +1131,108 @@ private:
     std::vector<NUdf::ICompare::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::ICompare::TPtr>> Compare_;
 };
 
-template <> 
+template <>
 class TCompare<NMiniKQL::TType::EKind::Variant> final : public NUdf::ICompare {
-public: 
+public:
     explicit TCompare(const NMiniKQL::TType* type) {
         auto variantType = static_cast<const NMiniKQL::TVariantType*>(type);
         if (variantType->GetUnderlyingType()->IsStruct()) {
             throw TTypeNotSupported() << "Variant over struct is unordered";
-        } 
+        }
         auto tupleType = static_cast<const NMiniKQL::TTupleType*>(variantType->GetUnderlyingType());
         ui32 count = tupleType->GetElementsCount();
-        Compare_.reserve(count); 
-        for (ui32 i = 0; i < count; ++i) { 
+        Compare_.reserve(count);
+        for (ui32 i = 0; i < count; ++i) {
             Compare_.push_back(MakeCompareImpl(tupleType->GetElementType(i)));
-        } 
-    } 
- 
-    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        return Compare(lhs, rhs) < 0; 
-    } 
- 
-    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        auto lhsIndex = lhs.GetVariantIndex(); 
-        auto rhsIndex = rhs.GetVariantIndex(); 
-        if (lhsIndex < rhsIndex) { 
-            return -1; 
-        } 
- 
-        if (lhsIndex > rhsIndex) { 
-            return 1; 
-        } 
- 
-        MKQL_ENSURE(lhsIndex < Compare_.size(), "Incorrect index"); 
-        auto lhsItem = lhs.GetVariantItem(); 
-        auto rhsItem = rhs.GetVariantItem(); 
-        return Compare_[lhsIndex]->Compare(static_cast<const NUdf::TUnboxedValuePod&>(lhsItem), static_cast<const NUdf::TUnboxedValuePod&>(rhsItem)); 
-    } 
- 
-private: 
-    std::vector<NUdf::ICompare::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::ICompare::TPtr>> Compare_; 
-}; 
- 
-template <> 
-class TCompare<NMiniKQL::TType::EKind::List> final : public NUdf::ICompare { 
-public: 
+        }
+    }
+
+    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        return Compare(lhs, rhs) < 0;
+    }
+
+    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        auto lhsIndex = lhs.GetVariantIndex();
+        auto rhsIndex = rhs.GetVariantIndex();
+        if (lhsIndex < rhsIndex) {
+            return -1;
+        }
+
+        if (lhsIndex > rhsIndex) {
+            return 1;
+        }
+
+        MKQL_ENSURE(lhsIndex < Compare_.size(), "Incorrect index");
+        auto lhsItem = lhs.GetVariantItem();
+        auto rhsItem = rhs.GetVariantItem();
+        return Compare_[lhsIndex]->Compare(static_cast<const NUdf::TUnboxedValuePod&>(lhsItem), static_cast<const NUdf::TUnboxedValuePod&>(rhsItem));
+    }
+
+private:
+    std::vector<NUdf::ICompare::TPtr, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::ICompare::TPtr>> Compare_;
+};
+
+template <>
+class TCompare<NMiniKQL::TType::EKind::List> final : public NUdf::ICompare {
+public:
     explicit TCompare(const NMiniKQL::TType* type)
         : Compare_(MakeCompareImpl(static_cast<const NMiniKQL::TListType*>(type)->GetItemType()))
-    {} 
- 
-    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        return Compare(lhs, rhs) < 0; 
-    } 
- 
-    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override { 
-        auto lhsElems = lhs.GetElements(); 
-        auto rhsElems = rhs.GetElements(); 
-        if (lhsElems && rhsElems) { 
-            ui32 lhsCount = lhs.GetListLength(); 
-            ui32 rhsCount = rhs.GetListLength(); 
-            for (ui32 index = 0;;++index) { 
-                if (index >= lhsCount || index >= rhsCount) { 
-                    if (lhsCount == rhsCount) { 
-                        return 0; 
-                    } 
- 
-                    return lhsCount > rhsCount ? 1 : -1; 
-                } 
- 
-                auto cmp = Compare_->Compare( 
-                    static_cast<const NUdf::TUnboxedValuePod&>(lhsElems[index]), 
-                    static_cast<const NUdf::TUnboxedValuePod&>(rhsElems[index])); 
-                if (cmp) { 
-                    return cmp; 
-                } 
-            } 
-        } 
- 
-        auto lhsIter = lhs.GetListIterator(); 
-        auto rhsIter = rhs.GetListIterator(); 
-        for (;;) { 
-            NUdf::TUnboxedValue lhsItem; 
-            NUdf::TUnboxedValue rhsItem; 
-            bool hasLeft = lhsIter.Next(lhsItem); 
-            bool hasRight = rhsIter.Next(rhsItem); 
-            if (!hasLeft || !hasRight) { 
-                if (hasLeft == hasRight) { 
-                    return 0; 
-                } 
- 
-                return hasLeft ? 1 : -1; 
-            } 
- 
-            auto cmp = Compare_->Compare(static_cast<const NUdf::TUnboxedValuePod&>(lhsItem), static_cast<const NUdf::TUnboxedValuePod&>(rhsItem)); 
-            if (cmp) { 
-                return cmp; 
-            } 
-        } 
-    } 
- 
-private: 
-    const NUdf::ICompare::TPtr Compare_; 
-}; 
- 
+    {}
+
+    bool Less(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        return Compare(lhs, rhs) < 0;
+    }
+
+    int Compare(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) const override {
+        auto lhsElems = lhs.GetElements();
+        auto rhsElems = rhs.GetElements();
+        if (lhsElems && rhsElems) {
+            ui32 lhsCount = lhs.GetListLength();
+            ui32 rhsCount = rhs.GetListLength();
+            for (ui32 index = 0;;++index) {
+                if (index >= lhsCount || index >= rhsCount) {
+                    if (lhsCount == rhsCount) {
+                        return 0;
+                    }
+
+                    return lhsCount > rhsCount ? 1 : -1;
+                }
+
+                auto cmp = Compare_->Compare(
+                    static_cast<const NUdf::TUnboxedValuePod&>(lhsElems[index]),
+                    static_cast<const NUdf::TUnboxedValuePod&>(rhsElems[index]));
+                if (cmp) {
+                    return cmp;
+                }
+            }
+        }
+
+        auto lhsIter = lhs.GetListIterator();
+        auto rhsIter = rhs.GetListIterator();
+        for (;;) {
+            NUdf::TUnboxedValue lhsItem;
+            NUdf::TUnboxedValue rhsItem;
+            bool hasLeft = lhsIter.Next(lhsItem);
+            bool hasRight = rhsIter.Next(rhsItem);
+            if (!hasLeft || !hasRight) {
+                if (hasLeft == hasRight) {
+                    return 0;
+                }
+
+                return hasLeft ? 1 : -1;
+            }
+
+            auto cmp = Compare_->Compare(static_cast<const NUdf::TUnboxedValuePod&>(lhsItem), static_cast<const NUdf::TUnboxedValuePod&>(rhsItem));
+            if (cmp) {
+                return cmp;
+            }
+        }
+    }
+
+private:
+    const NUdf::ICompare::TPtr Compare_;
+};
+
 } // namespace
 
 namespace NMiniKQL {
@@ -1242,31 +1242,31 @@ namespace NMiniKQL {
 //////////////////////////////////////////////////////////////////////////////
 TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder(
         const TTypeEnvironment& env,
-        NUdf::ITypeInfoHelper::TPtr typeInfoHelper, 
-        const TStringBuf& moduleName, 
-        NUdf::ICountersProvider* countersProvider, 
-        const NUdf::TSourcePosition& pos, 
-        const NUdf::ISecureParamsProvider* provider) 
+        NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
+        const TStringBuf& moduleName,
+        NUdf::ICountersProvider* countersProvider,
+        const NUdf::TSourcePosition& pos,
+        const NUdf::ISecureParamsProvider* provider)
     : Env_(env)
     , ReturnType_(nullptr)
     , RunConfigType_(Env_.GetTypeOfVoid())
     , UserType_(Env_.GetTypeOfVoid())
-    , TypeInfoHelper_(typeInfoHelper) 
-    , ModuleName_(moduleName) 
-    , CountersProvider_(countersProvider) 
-    , Pos_(pos) 
-    , SecureParamsProvider_(provider) 
+    , TypeInfoHelper_(typeInfoHelper)
+    , ModuleName_(moduleName)
+    , CountersProvider_(countersProvider)
+    , Pos_(pos)
+    , SecureParamsProvider_(provider)
 {
 }
 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ImplementationImpl( 
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ImplementationImpl(
         NUdf::TUniquePtr<NUdf::IBoxedValue> impl)
 {
     Implementation_ = std::move(impl);
     return *this;
 }
 
-NUdf::IFunctionTypeInfoBuilder7& TFunctionTypeInfoBuilder::IRImplementationImpl( 
+NUdf::IFunctionTypeInfoBuilder7& TFunctionTypeInfoBuilder::IRImplementationImpl(
     const NUdf::TStringRef& moduleIR,
     const NUdf::TStringRef& moduleIRUniqId,
     const NUdf::TStringRef& functionName
@@ -1277,58 +1277,58 @@ NUdf::IFunctionTypeInfoBuilder7& TFunctionTypeInfoBuilder::IRImplementationImpl(
     return *this;
 }
 
-NUdf::TType* TFunctionTypeInfoBuilder::Null() const { 
-    return Env_.GetTypeOfNull(); 
-} 
- 
-NUdf::TType* TFunctionTypeInfoBuilder::EmptyList() const { 
-    return Env_.GetTypeOfEmptyList(); 
-} 
- 
-NUdf::TType* TFunctionTypeInfoBuilder::EmptyDict() const { 
-    return Env_.GetTypeOfEmptyDict(); 
-} 
- 
-NUdf::IFunctionTypeInfoBuilder9& TFunctionTypeInfoBuilder::BlockImplementationImpl( 
-        NUdf::TUniquePtr<NUdf::IBoxedValue> impl) 
-{ 
-    BlockImplementation_ = std::move(impl); 
-    return *this; 
-} 
- 
-NUdf::ISetTypeBuilder::TPtr TFunctionTypeInfoBuilder::Set() const { 
-    return new TSetTypeBuilder(*this); 
-} 
- 
-NUdf::IEnumTypeBuilder::TPtr TFunctionTypeInfoBuilder::Enum(ui32 expectedItems) const { 
-    return new TEnumTypeBuilder(*this, expectedItems); 
-} 
- 
-NUdf::TType* TFunctionTypeInfoBuilder::Tagged(const NUdf::TType* baseType, const NUdf::TStringRef& tag) const { 
-    return TTaggedType::Create(const_cast<TType*>(static_cast<const TType*>(baseType)), tag, Env_); 
-} 
- 
-bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const { 
-    if (SecureParamsProvider_) 
-        return SecureParamsProvider_->GetSecureParam(key, value); 
-    return false; 
-} 
- 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl( 
-        NUdf::TDataTypeId typeId) 
+NUdf::TType* TFunctionTypeInfoBuilder::Null() const {
+    return Env_.GetTypeOfNull();
+}
+
+NUdf::TType* TFunctionTypeInfoBuilder::EmptyList() const {
+    return Env_.GetTypeOfEmptyList();
+}
+
+NUdf::TType* TFunctionTypeInfoBuilder::EmptyDict() const {
+    return Env_.GetTypeOfEmptyDict();
+}
+
+NUdf::IFunctionTypeInfoBuilder9& TFunctionTypeInfoBuilder::BlockImplementationImpl(
+        NUdf::TUniquePtr<NUdf::IBoxedValue> impl)
+{
+    BlockImplementation_ = std::move(impl);
+    return *this;
+}
+
+NUdf::ISetTypeBuilder::TPtr TFunctionTypeInfoBuilder::Set() const {
+    return new TSetTypeBuilder(*this);
+}
+
+NUdf::IEnumTypeBuilder::TPtr TFunctionTypeInfoBuilder::Enum(ui32 expectedItems) const {
+    return new TEnumTypeBuilder(*this, expectedItems);
+}
+
+NUdf::TType* TFunctionTypeInfoBuilder::Tagged(const NUdf::TType* baseType, const NUdf::TStringRef& tag) const {
+    return TTaggedType::Create(const_cast<TType*>(static_cast<const TType*>(baseType)), tag, Env_);
+}
+
+bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const {
+    if (SecureParamsProvider_)
+        return SecureParamsProvider_->GetSecureParam(key, value);
+    return false;
+}
+
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
+        NUdf::TDataTypeId typeId)
 {
     ReturnType_ = TDataType::Create(typeId, Env_);
     return *this;
 }
 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl( 
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
         const NUdf::TType* type)
 {
     ReturnType_ = static_cast<const NMiniKQL::TType*>(type);
     return *this;
 }
 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl( 
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
         const NUdf::ITypeBuilder& typeBuilder)
 {
     ReturnType_ = static_cast<TType*>(typeBuilder.Build());
@@ -1338,56 +1338,56 @@ NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::ReturnsImpl(
 NUdf::IFunctionArgTypesBuilder::TPtr TFunctionTypeInfoBuilder::Args(
         ui32 expectedItem)
 {
-    Args_.reserve(expectedItem); 
-    return new TFunctionArgTypesBuilder(*this, Args_); 
+    Args_.reserve(expectedItem);
+    return new TFunctionArgTypesBuilder(*this, Args_);
 }
 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::OptionalArgsImpl(ui32 optionalArgs) { 
-    OptionalArgs_ = optionalArgs; 
-    return *this; 
-} 
- 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::PayloadImpl(const NUdf::TStringRef& payload) { 
-    Payload_ = payload; 
-    return *this; 
-} 
- 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::RunConfigImpl( 
-        NUdf::TDataTypeId typeId) 
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::OptionalArgsImpl(ui32 optionalArgs) {
+    OptionalArgs_ = optionalArgs;
+    return *this;
+}
+
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::PayloadImpl(const NUdf::TStringRef& payload) {
+    Payload_ = payload;
+    return *this;
+}
+
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::RunConfigImpl(
+        NUdf::TDataTypeId typeId)
 {
     RunConfigType_ = TDataType::Create(typeId, Env_);
     return *this;
 }
 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::RunConfigImpl( 
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::RunConfigImpl(
         const NUdf::TType* type)
 {
     RunConfigType_ = static_cast<const NMiniKQL::TType*>(type);
     return *this;
 }
 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::RunConfigImpl( 
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::RunConfigImpl(
         const NUdf::ITypeBuilder& typeBuilder)
 {
     RunConfigType_ = static_cast<TType*>(typeBuilder.Build());
     return *this;
 }
 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl( 
-        NUdf::TDataTypeId typeId) 
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl(
+        NUdf::TDataTypeId typeId)
 {
     UserType_ = TDataType::Create(typeId, Env_);
     return *this;
 }
 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl( 
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl(
         const NUdf::TType* type)
 {
     UserType_ = static_cast<const NMiniKQL::TType*>(type);
     return *this;
 }
 
-NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl( 
+NUdf::IFunctionTypeInfoBuilder1& TFunctionTypeInfoBuilder::UserTypeImpl(
         const NUdf::ITypeBuilder& typeBuilder)
 {
     UserType_ = static_cast<TType*>(typeBuilder.Build());
@@ -1404,24 +1404,24 @@ void TFunctionTypeInfoBuilder::SetError(const NUdf::TStringRef& error)
 void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
 {
     if (ReturnType_) {
-        TCallableTypeBuilder builder(Env_, UdfName, const_cast<NMiniKQL::TType*>(ReturnType_)); 
-        for (const auto& arg : Args_) { 
-            builder.Add(arg.Type_); 
+        TCallableTypeBuilder builder(Env_, UdfName, const_cast<NMiniKQL::TType*>(ReturnType_));
+        for (const auto& arg : Args_) {
+            builder.Add(arg.Type_);
             if (!arg.Name_.Str().empty()) {
                 builder.SetArgumentName(arg.Name_.Str());
-            } 
- 
-            if (arg.Flags_ != 0) { 
-                builder.SetArgumentFlags(arg.Flags_); 
-            } 
-        } 
- 
+            }
+
+            if (arg.Flags_ != 0) {
+                builder.SetArgumentFlags(arg.Flags_);
+            }
+        }
+
         if (!Payload_.empty()) {
-            builder.SetPayload(Payload_); 
-        } 
- 
-        builder.SetOptionalArgs(OptionalArgs_); 
-        funcInfo->FunctionType = builder.Build(); 
+            builder.SetPayload(Payload_);
+        }
+
+        builder.SetOptionalArgs(OptionalArgs_);
+        funcInfo->FunctionType = builder.Build();
     }
 
     funcInfo->RunConfigType = RunConfigType_;
@@ -1430,10 +1430,10 @@ void TFunctionTypeInfoBuilder::Build(TFunctionTypeInfo* funcInfo)
     funcInfo->ModuleIR = std::move(ModuleIR_);
     funcInfo->ModuleIRUniqID = std::move(ModuleIRUniqID_);
     funcInfo->IRFunctionName = std::move(IRFunctionName_);
-    funcInfo->BlockImplementation = std::move(BlockImplementation_); 
+    funcInfo->BlockImplementation = std::move(BlockImplementation_);
 }
 
-NUdf::TType* TFunctionTypeInfoBuilder::Primitive(NUdf::TDataTypeId typeId) const 
+NUdf::TType* TFunctionTypeInfoBuilder::Primitive(NUdf::TDataTypeId typeId) const
 {
     return TDataType::Create(typeId, Env_);
 }
@@ -1481,42 +1481,42 @@ NUdf::TType* TFunctionTypeInfoBuilder::Void() const
     return Env_.GetTypeOfVoid();
 }
 
-NUdf::TType* TFunctionTypeInfoBuilder::Resource(const NUdf::TStringRef& tag) const { 
-    return TResourceType::Create(tag, Env_); 
-} 
- 
-NUdf::IVariantTypeBuilder::TPtr TFunctionTypeInfoBuilder::Variant() const { 
-    return new TVariantTypeBuilder(*this); 
-} 
- 
-NUdf::IStreamTypeBuilder::TPtr TFunctionTypeInfoBuilder::Stream() const { 
-    return new TStreamTypeBuilder(*this); 
-} 
- 
-NUdf::ITypeInfoHelper::TPtr TFunctionTypeInfoBuilder::TypeInfoHelper() const {
-    return TypeInfoHelper_; 
+NUdf::TType* TFunctionTypeInfoBuilder::Resource(const NUdf::TStringRef& tag) const {
+    return TResourceType::Create(tag, Env_);
 }
 
-NUdf::TCounter TFunctionTypeInfoBuilder::GetCounter(const NUdf::TStringRef& name, bool deriv) { 
-    if (CountersProvider_) { 
-        return CountersProvider_->GetCounter(ModuleName_, name, deriv); 
-    } 
- 
-    return {}; 
-} 
- 
-NUdf::TScopedProbe TFunctionTypeInfoBuilder::GetScopedProbe(const NUdf::TStringRef& name) { 
-    if (CountersProvider_) { 
-        return CountersProvider_->GetScopedProbe(ModuleName_, name); 
-    } 
- 
-    return {}; 
-} 
- 
-NUdf::TSourcePosition TFunctionTypeInfoBuilder::GetSourcePosition() { 
-    return Pos_; 
-} 
- 
+NUdf::IVariantTypeBuilder::TPtr TFunctionTypeInfoBuilder::Variant() const {
+    return new TVariantTypeBuilder(*this);
+}
+
+NUdf::IStreamTypeBuilder::TPtr TFunctionTypeInfoBuilder::Stream() const {
+    return new TStreamTypeBuilder(*this);
+}
+
+NUdf::ITypeInfoHelper::TPtr TFunctionTypeInfoBuilder::TypeInfoHelper() const {
+    return TypeInfoHelper_;
+}
+
+NUdf::TCounter TFunctionTypeInfoBuilder::GetCounter(const NUdf::TStringRef& name, bool deriv) {
+    if (CountersProvider_) {
+        return CountersProvider_->GetCounter(ModuleName_, name, deriv);
+    }
+
+    return {};
+}
+
+NUdf::TScopedProbe TFunctionTypeInfoBuilder::GetScopedProbe(const NUdf::TStringRef& name) {
+    if (CountersProvider_) {
+        return CountersProvider_->GetScopedProbe(ModuleName_, name);
+    }
+
+    return {};
+}
+
+NUdf::TSourcePosition TFunctionTypeInfoBuilder::GetSourcePosition() {
+    return Pos_;
+}
+
 NUdf::IHash::TPtr TFunctionTypeInfoBuilder::MakeHash(const NUdf::TType* type) {
     try {
         auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
@@ -1547,172 +1547,172 @@ NUdf::ICompare::TPtr TFunctionTypeInfoBuilder::MakeCompare(const NUdf::TType* ty
     }
 }
 
-NUdf::ETypeKind TTypeInfoHelper::GetTypeKind(const NUdf::TType* type) const { 
-    if (!type) { 
-        return NUdf::ETypeKind::Unknown; 
-    } 
- 
-    auto mkqlType = static_cast<const NMiniKQL::TType*>(type); 
-    switch (mkqlType->GetKind()) { 
-    case NMiniKQL::TType::EKind::Data: return NUdf::ETypeKind::Data; 
-    case NMiniKQL::TType::EKind::Struct: return NUdf::ETypeKind::Struct; 
-    case NMiniKQL::TType::EKind::List: return NUdf::ETypeKind::List; 
-    case NMiniKQL::TType::EKind::Optional: return NUdf::ETypeKind::Optional; 
-    case NMiniKQL::TType::EKind::Tuple: return NUdf::ETypeKind::Tuple; 
-    case NMiniKQL::TType::EKind::Dict: return NUdf::ETypeKind::Dict; 
-    case NMiniKQL::TType::EKind::Callable: return NUdf::ETypeKind::Callable; 
-    case NMiniKQL::TType::EKind::Resource: return NUdf::ETypeKind::Resource; 
-    case NMiniKQL::TType::EKind::Variant: return NUdf::ETypeKind::Variant; 
-    case NMiniKQL::TType::EKind::Void: return NUdf::ETypeKind::Void; 
-    case NMiniKQL::TType::EKind::Stream: return NUdf::ETypeKind::Stream; 
-    case NMiniKQL::TType::EKind::Null: return NUdf::ETypeKind::Null; 
-    case NMiniKQL::TType::EKind::EmptyList: return NUdf::ETypeKind::EmptyList; 
-    case NMiniKQL::TType::EKind::EmptyDict: return NUdf::ETypeKind::EmptyDict; 
-    case NMiniKQL::TType::EKind::Tagged: return NUdf::ETypeKind::Tagged; 
-    default: 
+NUdf::ETypeKind TTypeInfoHelper::GetTypeKind(const NUdf::TType* type) const {
+    if (!type) {
+        return NUdf::ETypeKind::Unknown;
+    }
+
+    auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
+    switch (mkqlType->GetKind()) {
+    case NMiniKQL::TType::EKind::Data: return NUdf::ETypeKind::Data;
+    case NMiniKQL::TType::EKind::Struct: return NUdf::ETypeKind::Struct;
+    case NMiniKQL::TType::EKind::List: return NUdf::ETypeKind::List;
+    case NMiniKQL::TType::EKind::Optional: return NUdf::ETypeKind::Optional;
+    case NMiniKQL::TType::EKind::Tuple: return NUdf::ETypeKind::Tuple;
+    case NMiniKQL::TType::EKind::Dict: return NUdf::ETypeKind::Dict;
+    case NMiniKQL::TType::EKind::Callable: return NUdf::ETypeKind::Callable;
+    case NMiniKQL::TType::EKind::Resource: return NUdf::ETypeKind::Resource;
+    case NMiniKQL::TType::EKind::Variant: return NUdf::ETypeKind::Variant;
+    case NMiniKQL::TType::EKind::Void: return NUdf::ETypeKind::Void;
+    case NMiniKQL::TType::EKind::Stream: return NUdf::ETypeKind::Stream;
+    case NMiniKQL::TType::EKind::Null: return NUdf::ETypeKind::Null;
+    case NMiniKQL::TType::EKind::EmptyList: return NUdf::ETypeKind::EmptyList;
+    case NMiniKQL::TType::EKind::EmptyDict: return NUdf::ETypeKind::EmptyDict;
+    case NMiniKQL::TType::EKind::Tagged: return NUdf::ETypeKind::Tagged;
+    default:
         Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
-        return NUdf::ETypeKind::Unknown; 
-    } 
-} 
- 
-void TTypeInfoHelper::VisitType(const NUdf::TType* type, NUdf::ITypeVisitor* visitor) const 
-{ 
-    if (!type) { 
-        return; 
-    } 
- 
-    Y_VERIFY_DEBUG(visitor->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(1, 0))); 
-    auto mkqlType = static_cast<const NMiniKQL::TType*>(type); 
- 
-#define MKQL_HANDLE_UDF_TYPE(TypeKind) \ 
-case NMiniKQL::TType::EKind::TypeKind: { \ 
-    auto mkqlType = static_cast<const NMiniKQL::T##TypeKind##Type*>(type); \ 
-    Do##TypeKind(mkqlType, visitor); \ 
-    break; \ 
-} 
- 
-    switch (mkqlType->GetKind()) { 
-        MKQL_HANDLE_UDF_TYPE(Data) 
-        MKQL_HANDLE_UDF_TYPE(Struct) 
-        MKQL_HANDLE_UDF_TYPE(List) 
-        MKQL_HANDLE_UDF_TYPE(Optional) 
-        MKQL_HANDLE_UDF_TYPE(Tuple) 
-        MKQL_HANDLE_UDF_TYPE(Dict) 
-        MKQL_HANDLE_UDF_TYPE(Callable) 
-        MKQL_HANDLE_UDF_TYPE(Variant) 
-        MKQL_HANDLE_UDF_TYPE(Stream) 
-        MKQL_HANDLE_UDF_TYPE(Resource) 
-        MKQL_HANDLE_UDF_TYPE(Tagged) 
-    default: 
+        return NUdf::ETypeKind::Unknown;
+    }
+}
+
+void TTypeInfoHelper::VisitType(const NUdf::TType* type, NUdf::ITypeVisitor* visitor) const
+{
+    if (!type) {
+        return;
+    }
+
+    Y_VERIFY_DEBUG(visitor->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(1, 0)));
+    auto mkqlType = static_cast<const NMiniKQL::TType*>(type);
+
+#define MKQL_HANDLE_UDF_TYPE(TypeKind) \
+case NMiniKQL::TType::EKind::TypeKind: { \
+    auto mkqlType = static_cast<const NMiniKQL::T##TypeKind##Type*>(type); \
+    Do##TypeKind(mkqlType, visitor); \
+    break; \
+}
+
+    switch (mkqlType->GetKind()) {
+        MKQL_HANDLE_UDF_TYPE(Data)
+        MKQL_HANDLE_UDF_TYPE(Struct)
+        MKQL_HANDLE_UDF_TYPE(List)
+        MKQL_HANDLE_UDF_TYPE(Optional)
+        MKQL_HANDLE_UDF_TYPE(Tuple)
+        MKQL_HANDLE_UDF_TYPE(Dict)
+        MKQL_HANDLE_UDF_TYPE(Callable)
+        MKQL_HANDLE_UDF_TYPE(Variant)
+        MKQL_HANDLE_UDF_TYPE(Stream)
+        MKQL_HANDLE_UDF_TYPE(Resource)
+        MKQL_HANDLE_UDF_TYPE(Tagged)
+    default:
         Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
-    } 
- 
-#undef MKQL_HANDLE_UDF_TYPE 
-} 
- 
-bool TTypeInfoHelper::IsSameType(const NUdf::TType* type1, const NUdf::TType* type2) const { 
-    if (!type1 || !type2) { 
-        return false; 
-    } 
- 
-    auto mkqlType1 = static_cast<const NMiniKQL::TType*>(type1); 
-    auto mkqlType2 = static_cast<const NMiniKQL::TType*>(type2); 
-    return mkqlType1->IsSameType(*mkqlType2); 
-} 
- 
-void TTypeInfoHelper::DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v) { 
+    }
+
+#undef MKQL_HANDLE_UDF_TYPE
+}
+
+bool TTypeInfoHelper::IsSameType(const NUdf::TType* type1, const NUdf::TType* type2) const {
+    if (!type1 || !type2) {
+        return false;
+    }
+
+    auto mkqlType1 = static_cast<const NMiniKQL::TType*>(type1);
+    auto mkqlType2 = static_cast<const NMiniKQL::TType*>(type2);
+    return mkqlType1->IsSameType(*mkqlType2);
+}
+
+void TTypeInfoHelper::DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v) {
     const auto typeId = dt->GetSchemeType();
-    v->OnDataType(typeId); 
+    v->OnDataType(typeId);
     if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 13))) {
         if (NUdf::TDataType<NUdf::TDecimal>::Id == typeId) {
             const auto& params = static_cast<const NMiniKQL::TDataDecimalType*>(dt)->GetParams();
             v->OnDecimal(params.first, params.second);
         }
     }
-} 
- 
-void TTypeInfoHelper::DoStruct(const NMiniKQL::TStructType* st, NUdf::ITypeVisitor* v) { 
-    ui32 membersCount = st->GetMembersCount(); 
- 
-    TSmallVec<NUdf::TStringRef> membersNames; 
-    TSmallVec<const NUdf::TType*> membersTypes; 
-    membersNames.reserve(membersCount); 
-    membersTypes.reserve(membersCount); 
- 
-    for (ui32 i = 0; i < membersCount; i++) { 
-        membersNames.push_back(st->GetMemberName(i)); 
-        membersTypes.push_back(st->GetMemberType(i)); 
-    } 
- 
-    v->OnStruct(membersCount, membersNames.data(), membersTypes.data()); 
-} 
- 
-void TTypeInfoHelper::DoList(const NMiniKQL::TListType* lt, NUdf::ITypeVisitor* v) { 
-    v->OnList(lt->GetItemType()); 
-} 
- 
-void TTypeInfoHelper::DoOptional(const NMiniKQL::TOptionalType* lt, NUdf::ITypeVisitor* v) { 
-    v->OnOptional(lt->GetItemType()); 
-} 
- 
-void TTypeInfoHelper::DoTuple(const NMiniKQL::TTupleType* tt, NUdf::ITypeVisitor* v) { 
-    ui32 elementsCount = tt->GetElementsCount(); 
- 
-    TSmallVec<const NUdf::TType*> elementsTypes; 
-    elementsTypes.reserve(elementsCount); 
- 
-    for (ui32 i = 0; i < elementsCount; i++) { 
-        elementsTypes.push_back(tt->GetElementType(i)); 
-    } 
- 
-    v->OnTuple(elementsCount, elementsTypes.data()); 
-} 
- 
-void TTypeInfoHelper::DoDict(const NMiniKQL::TDictType* dt, NUdf::ITypeVisitor* v) { 
-    v->OnDict(dt->GetKeyType(), dt->GetPayloadType()); 
-} 
- 
-void TTypeInfoHelper::DoCallable(const NMiniKQL::TCallableType* ct, NUdf::ITypeVisitor* v) { 
-    auto returnType = ct->GetReturnType(); 
-    ui32 argsCount = ct->GetArgumentsCount(); 
-    ui32 optionalArgsCount = ct->GetOptionalArgumentsCount(); 
- 
-    TSmallVec<const NUdf::TType*> argsTypes; 
-    argsTypes.reserve(argsCount); 
- 
-    for (ui32 i = 0; i < argsCount; i++) { 
-        argsTypes.push_back(ct->GetArgumentType(i)); 
-    } 
- 
-    if (ct->GetPayload()) { 
-        TCallablePayload payload(ct->GetPayload()); 
-        v->OnCallable(returnType, argsCount, argsTypes.data(), optionalArgsCount, &payload); 
-    } 
-    else { 
-        v->OnCallable(returnType, argsCount, argsTypes.data(), optionalArgsCount, nullptr); 
-    } 
-} 
- 
-void TTypeInfoHelper::DoVariant(const NMiniKQL::TVariantType* vt, NUdf::ITypeVisitor* v) { 
+}
+
+void TTypeInfoHelper::DoStruct(const NMiniKQL::TStructType* st, NUdf::ITypeVisitor* v) {
+    ui32 membersCount = st->GetMembersCount();
+
+    TSmallVec<NUdf::TStringRef> membersNames;
+    TSmallVec<const NUdf::TType*> membersTypes;
+    membersNames.reserve(membersCount);
+    membersTypes.reserve(membersCount);
+
+    for (ui32 i = 0; i < membersCount; i++) {
+        membersNames.push_back(st->GetMemberName(i));
+        membersTypes.push_back(st->GetMemberType(i));
+    }
+
+    v->OnStruct(membersCount, membersNames.data(), membersTypes.data());
+}
+
+void TTypeInfoHelper::DoList(const NMiniKQL::TListType* lt, NUdf::ITypeVisitor* v) {
+    v->OnList(lt->GetItemType());
+}
+
+void TTypeInfoHelper::DoOptional(const NMiniKQL::TOptionalType* lt, NUdf::ITypeVisitor* v) {
+    v->OnOptional(lt->GetItemType());
+}
+
+void TTypeInfoHelper::DoTuple(const NMiniKQL::TTupleType* tt, NUdf::ITypeVisitor* v) {
+    ui32 elementsCount = tt->GetElementsCount();
+
+    TSmallVec<const NUdf::TType*> elementsTypes;
+    elementsTypes.reserve(elementsCount);
+
+    for (ui32 i = 0; i < elementsCount; i++) {
+        elementsTypes.push_back(tt->GetElementType(i));
+    }
+
+    v->OnTuple(elementsCount, elementsTypes.data());
+}
+
+void TTypeInfoHelper::DoDict(const NMiniKQL::TDictType* dt, NUdf::ITypeVisitor* v) {
+    v->OnDict(dt->GetKeyType(), dt->GetPayloadType());
+}
+
+void TTypeInfoHelper::DoCallable(const NMiniKQL::TCallableType* ct, NUdf::ITypeVisitor* v) {
+    auto returnType = ct->GetReturnType();
+    ui32 argsCount = ct->GetArgumentsCount();
+    ui32 optionalArgsCount = ct->GetOptionalArgumentsCount();
+
+    TSmallVec<const NUdf::TType*> argsTypes;
+    argsTypes.reserve(argsCount);
+
+    for (ui32 i = 0; i < argsCount; i++) {
+        argsTypes.push_back(ct->GetArgumentType(i));
+    }
+
+    if (ct->GetPayload()) {
+        TCallablePayload payload(ct->GetPayload());
+        v->OnCallable(returnType, argsCount, argsTypes.data(), optionalArgsCount, &payload);
+    }
+    else {
+        v->OnCallable(returnType, argsCount, argsTypes.data(), optionalArgsCount, nullptr);
+    }
+}
+
+void TTypeInfoHelper::DoVariant(const NMiniKQL::TVariantType* vt, NUdf::ITypeVisitor* v) {
     v->OnVariant(vt->GetUnderlyingType());
-} 
- 
-void TTypeInfoHelper::DoStream(const NMiniKQL::TStreamType* st, NUdf::ITypeVisitor* v) { 
-    v->OnStream(st->GetItemType()); 
-} 
- 
-void TTypeInfoHelper::DoResource(const NMiniKQL::TResourceType* rt, NUdf::ITypeVisitor* v) { 
-    if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 15))) { 
-        v->OnResource(rt->GetTag()); 
-    } 
-} 
- 
-void TTypeInfoHelper::DoTagged(const NMiniKQL::TTaggedType* tt, NUdf::ITypeVisitor* v) { 
-    if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 21))) { 
-        v->OnTagged(tt->GetBaseType(), tt->GetTag()); 
-    } 
-} 
- 
+}
+
+void TTypeInfoHelper::DoStream(const NMiniKQL::TStreamType* st, NUdf::ITypeVisitor* v) {
+    v->OnStream(st->GetItemType());
+}
+
+void TTypeInfoHelper::DoResource(const NMiniKQL::TResourceType* rt, NUdf::ITypeVisitor* v) {
+    if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 15))) {
+        v->OnResource(rt->GetTag());
+    }
+}
+
+void TTypeInfoHelper::DoTagged(const NMiniKQL::TTaggedType* tt, NUdf::ITypeVisitor* v) {
+    if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 21))) {
+        v->OnTagged(tt->GetBaseType(), tt->GetTag());
+    }
+}
+
 NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type) {
     switch (type->GetKind()) {
         case NMiniKQL::TType::EKind::Data: {

@@ -3,7 +3,7 @@
 #include <ydb/core/yq/libs/events/event_subspace.h>
 #include <ydb/core/yq/libs/checkpoint_storage/proto/graph_description.pb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h> 
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_pb.h>

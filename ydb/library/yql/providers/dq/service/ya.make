@@ -20,16 +20,16 @@ PEERDIR(
     library/cpp/threading/future
     ydb/library/yql/sql
     ydb/public/api/protos
-    ydb/library/yql/providers/common/metrics 
-    ydb/library/yql/providers/dq/actors 
-    ydb/library/yql/providers/dq/api/grpc 
-    ydb/library/yql/providers/dq/common 
-    ydb/library/yql/providers/dq/counters 
-    ydb/library/yql/providers/dq/interface 
-    ydb/library/yql/providers/dq/worker_manager 
-    ydb/library/yql/providers/dq/worker_manager/interface 
+    ydb/library/yql/providers/common/metrics
+    ydb/library/yql/providers/dq/actors
+    ydb/library/yql/providers/dq/api/grpc
+    ydb/library/yql/providers/dq/common
+    ydb/library/yql/providers/dq/counters
+    ydb/library/yql/providers/dq/interface
+    ydb/library/yql/providers/dq/worker_manager
+    ydb/library/yql/providers/dq/worker_manager/interface
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 END()

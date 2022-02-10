@@ -5,7 +5,7 @@
 #include "yql_udf_resolver.h"
 #include "yql_user_data.h"
 
-#include <ydb/library/yql/protos/yql_mount.pb.h> 
+#include <ydb/library/yql/protos/yql_mount.pb.h>
 
 #include <util/generic/maybe.h>
 
@@ -47,7 +47,7 @@ public:
     static TString MakeFolderName(const TStringBuf& name);
     static TUserDataKey ComposeUserDataKey(const TStringBuf& name);
     static TString MakeRelativeName(const TStringBuf& name);
-    TVector<TString> GetLibraries() const; 
+    TVector<TString> GetLibraries() const;
 
     // working with frozen files
     // download file and fill FrozenFile property of data block

@@ -5,13 +5,13 @@
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/event_pb.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/mkql_node.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_node.h>
 
-#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h> 
-#include <ydb/library/yql/dq/common/dq_common.h> 
-#include <ydb/library/yql/dq/proto/dq_transport.pb.h> 
-#include <ydb/library/yql/dq/proto/dq_tasks.pb.h> 
+#include <ydb/library/yql/dq/runtime/dq_tasks_runner.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/dq/proto/dq_transport.pb.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 
 
 namespace NYql::NDq {

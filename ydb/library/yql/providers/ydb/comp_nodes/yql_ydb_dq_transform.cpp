@@ -1,9 +1,9 @@
 #include "yql_ydb_dq_transform.h"
 
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
-#include <ydb/library/yql/providers/ydb/proto/range.pb.h> 
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/providers/ydb/proto/range.pb.h>
 
 namespace NYql {
 

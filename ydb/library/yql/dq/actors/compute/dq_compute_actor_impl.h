@@ -11,12 +11,12 @@
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/tablet_flat/util_basics.h> // TODO: IDestructable
 
-#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h> 
-#include <ydb/library/yql/dq/common/dq_common.h> 
-#include <ydb/library/yql/dq/proto/dq_tasks.pb.h> 
-#include <ydb/library/yql/core/issue/yql_issue.h> 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h> 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/core/issue/yql_issue.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/interconnect.h>
 
@@ -1341,9 +1341,9 @@ private:
 
     void FillStats(NDqProto::TDqComputeActorStats* dst, bool last) {
         if (!BasicStats) {
-            return; 
-        } 
- 
+            return;
+        }
+
         if (last) {
             ReportEventElapsedTime();
         }

@@ -1,12 +1,12 @@
-#include <ydb/library/yql/minikql/mkql_node.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_graph_saveload.h> 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h> 
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_graph_saveload.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -19,7 +19,7 @@ namespace {
     }
 
     TIntrusivePtr<ITimeProvider> CreateTimeProvider() {
-        return CreateDeterministicTimeProvider(10000000); 
+        return CreateDeterministicTimeProvider(10000000);
     }
 
     TComputationNodeFactory GetAuxCallableFactory() {
@@ -78,18 +78,18 @@ namespace {
         ui32 YieldPos;
         ui32 Index;
 
-        ui32 GetTraverseCount() const override { 
-            return 0; 
-        } 
- 
-        NUdf::TUnboxedValue Save() const override { 
-            return NUdf::TUnboxedValue::Zero(); 
-        } 
- 
-        void Load(const NUdf::TStringRef& state) override { 
-            Y_UNUSED(state); 
-        } 
- 
+        ui32 GetTraverseCount() const override {
+            return 0;
+        }
+
+        NUdf::TUnboxedValue Save() const override {
+            return NUdf::TUnboxedValue::Zero();
+        }
+
+        void Load(const NUdf::TStringRef& state) override {
+            Y_UNUSED(state);
+        }
+
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
             if (Index >= Items.size()) {
                 return NUdf::EFetchStatus::Finish;

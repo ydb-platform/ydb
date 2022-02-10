@@ -31,9 +31,9 @@ NUdf::TUnboxedValuePod AppendString(const NUdf::TUnboxedValuePod value, const NU
             }
         }
 
-        auto data = NUdf::TStringValue::AllocateData(newSize, newSize + newSize / 2); 
-        NUdf::TStringValue str(data); 
-        data->UnRef(); 
+        auto data = NUdf::TStringValue::AllocateData(newSize, newSize + newSize / 2);
+        NUdf::TStringValue str(data);
+        data->UnRef();
         std::memcpy(str.Data(), valueRef.Data(), valueRef.Size());
         std::memcpy(str.Data() + valueRef.Size(), ref.Data(), ref.Size());
         return NUdf::TUnboxedValuePod(std::move(str));
@@ -57,9 +57,9 @@ NUdf::TUnboxedValuePod PrependString(const NUdf::TStringRef ref, const NUdf::TUn
         std::memcpy(buf + ref.Size(), valueRef.Data(), valueRef.Size());
         return result;
     } else {
-        auto data = NUdf::TStringValue::AllocateData(newSize, newSize + newSize / 2); 
-        NUdf::TStringValue str(data); 
-        data->UnRef(); 
+        auto data = NUdf::TStringValue::AllocateData(newSize, newSize + newSize / 2);
+        NUdf::TStringValue str(data);
+        data->UnRef();
         std::memcpy(str.Data(), ref.Data(), ref.Size());
         std::memcpy(str.Data() + ref.Size(), valueRef.Data(), valueRef.Size());
         value.DeleteUnreferenced();
@@ -97,9 +97,9 @@ NUdf::TUnboxedValuePod ConcatStrings(const NUdf::TUnboxedValuePod first, const N
             }
         }
 
-        auto data = NUdf::TStringValue::AllocateData(newSize, newSize + newSize / 2); 
-        NUdf::TStringValue str(data); 
-        data->UnRef(); 
+        auto data = NUdf::TStringValue::AllocateData(newSize, newSize + newSize / 2);
+        NUdf::TStringValue str(data);
+        data->UnRef();
         std::memcpy(str.Data(), leftRef.Data(), leftRef.Size());
         std::memcpy(str.Data() + leftRef.Size(), rightRef.Data(), rightRef.Size());
         second.DeleteUnreferenced();

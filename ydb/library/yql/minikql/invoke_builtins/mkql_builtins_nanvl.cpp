@@ -1,12 +1,12 @@
 #include "mkql_builtins_decimal.h"
- 
+
 #include <cmath>
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
-namespace { 
- 
+namespace NKikimr {
+namespace NMiniKQL {
+
+namespace {
+
 template <typename TLeft, typename TRight, typename TOutput, bool IsRightOptional>
 struct TNanvl {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
@@ -28,7 +28,7 @@ struct TNanvl {
         }
     }
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen->GetContext();
@@ -37,7 +37,7 @@ struct TNanvl {
         const auto fnType = FunctionType::get(Type::getInt1Ty(context), {val->getType()}, false);
         const auto name = std::is_same<TLeft, float>() ? "MyFloatIsNan" : "MyDoubleIsNan";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<bool(*)(TLeft)>(&std::isnan)));
-        const auto func = module.getOrInsertFunction(name, fnType).getCallee(); 
+        const auto func = module.getOrInsertFunction(name, fnType).getCallee();
         const auto isnan = CallInst::Create(func, {val}, "isnan", block);
 
         const auto lout = std::is_same<TLeft, TOutput>() ? left : SetterFor<TOutput>(StaticCast<TLeft, TOutput>(val, context, block), context, block);
@@ -81,8 +81,8 @@ void RegisterBinaryNavlLeftOpt(IBuiltinFunctionRegistry& registry, const char* n
     RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout, true>, TArgs<TInput1, TInput2, TOutput, false, true>, TBinaryWrap<false, false>>(registry, name);
     RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout, false>, TArgs<TInput1, TInput2, TOutput, true, false>, TBinaryWrap<true, false>>(registry, name);
     RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout, true>, TArgs<TInput1, TInput2, TOutput, true, true>, TBinaryWrap<true, false>>(registry, name);
-} 
- 
+}
+
 void RegisterBinaryNavlFunction(IBuiltinFunctionRegistry& registry, const char* name) {
     RegisterBinaryNavlLeftOpt<NUdf::TDataType<float>, NUdf::TDataType<float>, NUdf::TDataType<float>, TNanvl, TBinaryArgsOpt>(registry, name);
     RegisterBinaryNavlLeftOpt<NUdf::TDataType<float>, NUdf::TDataType<double>, NUdf::TDataType<double>, TNanvl, TBinaryArgsOpt>(registry, name);
@@ -102,7 +102,7 @@ void RegisterBinaryNavlDecimal(IBuiltinFunctionRegistry& registry, const char* n
 void RegisterNanvl(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryNavlFunction(registry, "Nanvl");
     RegisterBinaryNavlDecimal(registry, "Nanvl");
-} 
- 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+}
+
+} // namespace NMiniKQL
+} // namespace NKikimr

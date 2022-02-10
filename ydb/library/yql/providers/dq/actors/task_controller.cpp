@@ -5,17 +5,17 @@
 #include "actor_helpers.h"
 #include "executer_actor.h"
 
-#include <ydb/library/yql/providers/dq/counters/counters.h> 
+#include <ydb/library/yql/providers/dq/counters/counters.h>
 
-#include <ydb/library/yql/providers/dq/common/yql_dq_common.h> 
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/core/kqp/kqp.h>
 
 #include <library/cpp/actors/core/actorsystem.h>
@@ -181,7 +181,7 @@ private:
         case AGGR_TIMER_TAG:
             if (AggrPeriod) {
                 if (ServiceCounters.Counters) {
-                    ExportStats(AggregateQueryStatsByStage(TaskStat, Stages), 0); 
+                    ExportStats(AggregateQueryStatsByStage(TaskStat, Stages), 0);
                 }
                 Schedule(AggrPeriod, new TEvents::TEvWakeup(AGGR_TIMER_TAG));
             }
@@ -190,9 +190,9 @@ private:
     };
 
     NMonitoring::TDynamicCounterPtr GroupForExport(const TCounters& stat, const TString& counterName, ui64 taskId, TString& name, std::map<TString, TString>& labels) {
-        Y_UNUSED(stat); 
+        Y_UNUSED(stat);
         TString prefix;
-        if (NCommon::ParseCounterName(&prefix, &labels, &name, counterName)) { 
+        if (NCommon::ParseCounterName(&prefix, &labels, &name, counterName)) {
             if (prefix == "TaskRunner" && (taskId == 0 || labels["Task"] == ToString(taskId))) {
                 auto group = (taskId == 0) ? ServiceCounters.Counters : ServiceCounters.Counters->GetSubgroup("Stage", ToString(Stages[taskId]));
                 for (const auto& [k, v] : labels) {
@@ -491,7 +491,7 @@ private:
 
     void Finish() {
         if (ServiceCounters.Counters && AggrPeriod) {
-            ExportStats(AggregateQueryStatsByStage(TaskStat, Stages), 0); // force metrics upload on Finish when Aggregated 
+            ExportStats(AggregateQueryStatsByStage(TaskStat, Stages), 0); // force metrics upload on Finish when Aggregated
         }
         Send(ExecuterId, new TEvGraphFinished());
         Finished = true;
@@ -507,7 +507,7 @@ private:
     }
 
     TCounters FinalStat() {
-        return AggrPeriod ? AggregateQueryStatsByStage(TaskStat, Stages) : TaskStat; 
+        return AggrPeriod ? AggregateQueryStatsByStage(TaskStat, Stages) : TaskStat;
     }
 
     bool ChannelsUpdated = false;

@@ -36,7 +36,7 @@ static const char tau[] = "expand 16-byte k";
 #if (!defined(_win_) && !defined(_arm64_))
 constexpr size_t ChaCha::KEY_SIZE;
 constexpr size_t ChaCha::BLOCK_SIZE;
-#endif 
+#endif
 
 void ChaCha::SetKey(const ui8* key, size_t size)
 {

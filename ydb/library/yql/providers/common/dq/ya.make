@@ -9,7 +9,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/providers/dq/interface 
+    ydb/library/yql/providers/dq/interface
 )
 
 END()

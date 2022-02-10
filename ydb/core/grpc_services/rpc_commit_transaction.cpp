@@ -4,8 +4,8 @@
 #include "rpc_kqp_base.h"
 #include "rpc_common.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
-#include <ydb/library/yql/public/issue/yql_issue.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 namespace NKikimr {
 namespace NGRpcService {

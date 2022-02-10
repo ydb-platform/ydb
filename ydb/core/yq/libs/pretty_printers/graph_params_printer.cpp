@@ -5,7 +5,7 @@
 #include <ydb/library/protobuf_printer/protobuf_printer.h>
 #include <ydb/library/protobuf_printer/stream_helper.h>
 
-#include <ydb/library/yql/providers/dq/api/protos/service.pb.h> 
+#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 
 #include <google/protobuf/message.h>
 #include <google/protobuf/text_format.h>

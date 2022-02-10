@@ -1,47 +1,47 @@
-#include "mkql_logical.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_node_builder.h> 
-#include "mkql_check_args.h" 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include "mkql_logical.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include "mkql_check_args.h"
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
-template <bool IsLeftOptional, bool IsRightOptional> 
+template <bool IsLeftOptional, bool IsRightOptional>
 class TAndWrapper : public TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
-public: 
+public:
     TAndWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
-    { 
-        Y_UNUSED(mutables); 
-    } 
- 
+    {
+        Y_UNUSED(mutables);
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& left = this->Left->GetValue(ctx);
         if (!IsLeftOptional || left) {
             if (!left.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(false);
-            } 
-        } 
- 
+            }
+        }
+
         const auto& right = this->Right->GetValue(ctx);
         if (!IsRightOptional || right) {
             if (!right.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(false);
-            } 
-        } 
- 
-        // both either true (just true) or nothing 
+            }
+        }
+
+        // both either true (just true) or nothing
         if (IsLeftOptional && !left || IsRightOptional && !right) {
             return NUdf::TUnboxedValuePod();
-        } 
- 
+        }
+
         return NUdf::TUnboxedValuePod(true);
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -79,41 +79,41 @@ public:
         return result;
     }
 #endif
-}; 
- 
-template <bool IsLeftOptional, bool IsRightOptional> 
+};
+
+template <bool IsLeftOptional, bool IsRightOptional>
 class TOrWrapper : public TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
-public: 
+public:
     TOrWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
-    { 
-        Y_UNUSED(mutables); 
-    } 
- 
+    {
+        Y_UNUSED(mutables);
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& left = this->Left->GetValue(ctx);
         if (!IsLeftOptional || left) {
             if (left.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(true);
-            } 
-        } 
- 
+            }
+        }
+
         const auto& right = this->Right->GetValue(ctx);
         if (!IsRightOptional || right) {
             if (right.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(true);
-            } 
-        } 
- 
-        // both either false (just false) or nothing 
+            }
+        }
+
+        // both either false (just false) or nothing
         if (IsLeftOptional && !left || IsRightOptional && !right) {
             return NUdf::TUnboxedValuePod();
-        } 
- 
+        }
+
         return NUdf::TUnboxedValuePod(false);
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -151,33 +151,33 @@ public:
         return result;
     }
 #endif
-}; 
- 
-template <bool IsLeftOptional, bool IsRightOptional> 
+};
+
+template <bool IsLeftOptional, bool IsRightOptional>
 class TXorWrapper : public TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
-public: 
+public:
     TXorWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
-    { 
-        Y_UNUSED(mutables); 
-    } 
- 
+    {
+        Y_UNUSED(mutables);
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& left = this->Left->GetValue(ctx);
         if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
         }
- 
+
         const auto& right = this->Right->GetValue(ctx);
         if (IsRightOptional && !right) {
             return NUdf::TUnboxedValuePod();
-        } 
- 
+        }
+
         const bool res = left.template Get<bool>() != right.template Get<bool>();
         return NUdf::TUnboxedValuePod(res);
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -241,25 +241,25 @@ public:
         }
     }
 #endif
-}; 
- 
-template <bool IsOptional> 
+};
+
+template <bool IsOptional>
 class TNotWrapper : public TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> {
     typedef TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> TBaseComputation;
-public: 
+public:
     TNotWrapper(IComputationNode* arg)
         : TBaseComputation(arg)
     {}
- 
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& arg) const {
         if (IsOptional && !arg) {
             return NUdf::TUnboxedValuePod();
-        } 
- 
+        }
+
         const bool res = !arg.template Get<bool>();
         return NUdf::TUnboxedValuePod(res);
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* arg, BasicBlock*& block) const {
         const auto xorr = BinaryOperator::CreateXor(arg, ConstantInt::get(arg->getType(), 1), "xor", block);
@@ -267,69 +267,69 @@ public:
         return result;
     }
 #endif
-}; 
- 
-template <template <bool, bool> class TWrapper> 
+};
+
+template <template <bool, bool> class TWrapper>
 IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     const auto nodeLocator = ctx.NodeLocator;
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args"); 
- 
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
+
     const auto leftType = callable.GetInput(0).GetStaticType();
     const auto rightType = callable.GetInput(1).GetStaticType();
-    CheckBinaryFunctionArgs(leftType, rightType, true, true); 
- 
+    CheckBinaryFunctionArgs(leftType, rightType, true, true);
+
     const bool isLeftOptional = leftType->IsOptional();
     const bool isRightOptional = rightType->IsOptional();
     const auto left = LocateNode(nodeLocator, callable, 0);
     const auto right = LocateNode(nodeLocator, callable, 1);
-    if (isLeftOptional) { 
-        if (isRightOptional) { 
+    if (isLeftOptional) {
+        if (isRightOptional) {
             return new TWrapper<true, true>(ctx.Mutables, left, right);
-        } else { 
+        } else {
             return new TWrapper<true, false>(ctx.Mutables, left, right);
-        } 
-    } 
-    else { 
-        if (isRightOptional) { 
+        }
+    }
+    else {
+        if (isRightOptional) {
             return new TWrapper<false, true>(ctx.Mutables, left, right);
-        } else { 
+        } else {
             return new TWrapper<false, false>(ctx.Mutables, left, right);
-        } 
-    } 
-} 
- 
+        }
+    }
 }
 
-IComputationNode* WrapAnd(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+}
+
+IComputationNode* WrapAnd(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapLogicalFunction<TAndWrapper>(callable, ctx);
-} 
- 
-IComputationNode* WrapOr(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+}
+
+IComputationNode* WrapOr(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapLogicalFunction<TOrWrapper>(callable, ctx);
-} 
- 
-IComputationNode* WrapXor(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+}
+
+IComputationNode* WrapXor(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapLogicalFunction<TXorWrapper>(callable, ctx);
-} 
- 
-IComputationNode* WrapNot(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg"); 
- 
-    bool isOptional; 
-    const auto& dataType = UnpackOptionalData(callable.GetInput(0), isOptional); 
- 
+}
+
+IComputationNode* WrapNot(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
+
+    bool isOptional;
+    const auto& dataType = UnpackOptionalData(callable.GetInput(0), isOptional);
+
     const auto schemeType = dataType->GetSchemeType();
-    MKQL_ENSURE(schemeType == NUdf::TDataType<bool>::Id, "Expected bool"); 
+    MKQL_ENSURE(schemeType == NUdf::TDataType<bool>::Id, "Expected bool");
     const auto node = LocateNode(ctx.NodeLocator, callable, 0);
- 
-    if (isOptional) { 
+
+    if (isOptional) {
         return new TNotWrapper<true>(node);
-    } 
-    else { 
+    }
+    else {
         return new TNotWrapper<false>(node);
-    } 
-} 
- 
- 
-} 
-} 
+    }
+}
+
+
+}
+}

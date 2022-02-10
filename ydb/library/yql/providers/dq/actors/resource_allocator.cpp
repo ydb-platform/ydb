@@ -1,14 +1,14 @@
 #include "resource_allocator.h"
-#include <ydb/library/yql/providers/dq/actors/actor_helpers.h> 
+#include <ydb/library/yql/providers/dq/actors/actor_helpers.h>
 #include "execution_helpers.h"
 
-#include <ydb/library/yql/utils/yql_panic.h> 
+#include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 
-#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h> 
-#include <ydb/library/yql/providers/dq/counters/counters.h> 
+#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
+#include <ydb/library/yql/providers/dq/counters/counters.h>
 
 namespace NYql {
 
@@ -42,7 +42,7 @@ public:
     static constexpr char ActorName[] = "YQL_DQ_RESOURCE_ALLOCATOR";
 
     TResourceAllocator(
-        TActorId gwmActor, 
+        TActorId gwmActor,
         TActorId senderId,
         TActorId controlId,
         ui32 workerCount,
@@ -52,7 +52,7 @@ public:
         const TVector<NYql::NDqProto::TDqTask>& tasks,
         const TString& computeActorType)
         : TRichActor<TResourceAllocator>(&TResourceAllocator::Handle)
-        , GwmActor(gwmActor) 
+        , GwmActor(gwmActor)
         , SenderId(senderId)
         , ControlId(controlId)
         , RequestedCount(workerCount)
@@ -229,7 +229,7 @@ private:
             for (const auto& failedWorker : FailedWorkers) {
                 *request->Record.AddFailedWorkerGuid() = failedWorker.GetGuid();
             }
-            Send(GwmActor, request.Release()); 
+            Send(GwmActor, request.Release());
         }
     }
 
@@ -296,7 +296,7 @@ private:
         Send(SenderId, response.Release());
     }
 
-    const TActorId GwmActor; 
+    const TActorId GwmActor;
     const TActorId SenderId;
     const TActorId ControlId;
 
@@ -327,7 +327,7 @@ private:
 };
 
 NActors::IActor* CreateResourceAllocator(
-    TActorId gwmActor, 
+    TActorId gwmActor,
     TActorId senderId,
     TActorId controlId,
     ui32 size,

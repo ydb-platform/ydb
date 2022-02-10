@@ -1,6 +1,6 @@
 #include "yql_solomon_gateway.h"
 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 
 namespace NYql {
 

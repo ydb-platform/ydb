@@ -8,7 +8,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/yson/node
-    ydb/library/yql/utils 
+    ydb/library/yql/utils
 )
 
 END()

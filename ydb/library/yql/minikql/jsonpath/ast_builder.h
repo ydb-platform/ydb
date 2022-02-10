@@ -2,7 +2,7 @@
 
 #include "ast_nodes.h"
 
-#include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h> 
+#include <ydb/library/yql/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h>
 
 namespace NYql::NJsonPath {
 

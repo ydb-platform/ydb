@@ -1,104 +1,104 @@
-#include "yql_config_provider.h" 
+#include "yql_config_provider.h"
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h> 
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
-#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
-#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h> 
-#include <ydb/library/yql/core/yql_execution.h> 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
-#include <ydb/library/yql/core/type_ann/type_ann_core.h> 
-#include <ydb/library/yql/ast/yql_gc_nodes.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/core/yql_execution.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/type_ann/type_ann_core.h>
+#include <ydb/library/yql/ast/yql_gc_nodes.h>
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/fetch/fetch.h>
-#include <ydb/library/yql/utils/retry.h> 
+#include <ydb/library/yql/utils/retry.h>
 
 #include <library/cpp/json/json_reader.h>
 
-#include <util/string/cast.h> 
- 
+#include <util/string/cast.h>
+
 #include <vector>
 
-namespace NYql { 
- 
-namespace { 
+namespace NYql {
+
+namespace {
     using namespace NNodes;
 
     class TConfigCallableExecutionTransformer : public TSyncTransformerBase {
-    public: 
-        TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types) 
-            : Types(types) 
-        { 
-            Y_UNUSED(Types); 
-        } 
- 
+    public:
+        TConfigCallableExecutionTransformer(const TTypeAnnotationContext& types)
+            : Types(types)
+        {
+            Y_UNUSED(Types);
+        }
+
         TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
             output = input;
             YQL_ENSURE(input->Type() == TExprNode::Callable);
             if (input->Content() == "Pull") {
                 auto requireStatus = RequireChild(*input, 0);
-                if (requireStatus.Level != TStatus::Ok) { 
-                    return requireStatus; 
-                } 
- 
+                if (requireStatus.Level != TStatus::Ok) {
+                    return requireStatus;
+                }
+
                 IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(*input);
                 YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson);
                 NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings);
 
                 auto nodeToPull = input->Child(0)->Child(0);
                 if (nodeToPull->IsCallable(ConfReadName)) {
-                    auto key = nodeToPull->Child(2); 
-                    auto tag = key->Child(0)->Child(0)->Content(); 
-                    if (tag == "data_sinks" || tag == "data_sources") { 
-                        TStringStream out; 
+                    auto key = nodeToPull->Child(2);
+                    auto tag = key->Child(0)->Child(0)->Content();
+                    if (tag == "data_sinks" || tag == "data_sources") {
+                        TStringStream out;
                         NYson::TYsonWriter writer(&out, ysonFormat);
-                        writer.OnBeginMap(); 
-                        writer.OnKeyedItem("Data"); 
-                        writer.OnBeginList(); 
-                        if (tag == "data_sinks") { 
-                            writer.OnListItem(); 
-                            writer.OnStringScalar(KikimrProviderName); 
-                            writer.OnListItem(); 
-                            writer.OnStringScalar(YtProviderName); 
-                            writer.OnListItem(); 
-                            writer.OnStringScalar(ResultProviderName); 
-                        } else if (tag == "data_sources") { 
-                            writer.OnListItem(); 
-                            writer.OnStringScalar(KikimrProviderName); 
-                            writer.OnListItem(); 
-                            writer.OnStringScalar(YtProviderName); 
-                            writer.OnListItem(); 
-                            writer.OnStringScalar(ConfigProviderName); 
-                        } 
-                        writer.OnEndList(); 
-                        writer.OnEndMap(); 
- 
+                        writer.OnBeginMap();
+                        writer.OnKeyedItem("Data");
+                        writer.OnBeginList();
+                        if (tag == "data_sinks") {
+                            writer.OnListItem();
+                            writer.OnStringScalar(KikimrProviderName);
+                            writer.OnListItem();
+                            writer.OnStringScalar(YtProviderName);
+                            writer.OnListItem();
+                            writer.OnStringScalar(ResultProviderName);
+                        } else if (tag == "data_sources") {
+                            writer.OnListItem();
+                            writer.OnStringScalar(KikimrProviderName);
+                            writer.OnListItem();
+                            writer.OnStringScalar(YtProviderName);
+                            writer.OnListItem();
+                            writer.OnStringScalar(ConfigProviderName);
+                        }
+                        writer.OnEndList();
+                        writer.OnEndMap();
+
                         input->SetResult(ctx.NewAtom(input->Pos(), out.Str()));
                         input->SetState(TExprNode::EState::ExecutionComplete);
-                        return TStatus::Ok; 
-                    } else { 
+                        return TStatus::Ok;
+                    } else {
                         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unsupported tag: " << tag));
-                        return TStatus::Error; 
-                    } 
-                } 
- 
+                        return TStatus::Error;
+                    }
+                }
+
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Unknown node to pull, type: "
-                    << nodeToPull->Type() << ", content: " << nodeToPull->Content())); 
-                return TStatus::Error; 
-            } 
- 
+                    << nodeToPull->Type() << ", content: " << nodeToPull->Content()));
+                return TStatus::Error;
+            }
+
             if (input->Content() == ConfReadName) {
                 auto requireStatus = RequireChild(*input, 0);
-                if (requireStatus.Level != TStatus::Ok) { 
-                    return requireStatus; 
-                } 
- 
+                if (requireStatus.Level != TStatus::Ok) {
+                    return requireStatus;
+                }
+
                 input->SetState(TExprNode::EState::ExecutionComplete);
                 input->SetResult(ctx.NewWorld(input->Pos()));
-                return TStatus::Ok; 
-            } 
- 
+                return TStatus::Ok;
+            }
+
             if (input->Content() == ConfigureName) {
                 auto requireStatus = RequireChild(*input, 0);
                 if (requireStatus.Level != TStatus::Ok) {
@@ -111,33 +111,33 @@ namespace {
             }
 
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Failed to execute node: " << input->Content()));
-            return TStatus::Error; 
-        } 
- 
-    private: 
-        const TTypeAnnotationContext& Types; 
-    }; 
- 
+            return TStatus::Error;
+        }
+
+    private:
+        const TTypeAnnotationContext& Types;
+    };
+
     class TConfigProvider : public TDataProviderBase {
-    public: 
-        struct TFunctions { 
+    public:
+        struct TFunctions {
             THashSet<TStringBuf> Names;
- 
-            TFunctions() { 
+
+            TFunctions() {
                 Names.insert(ConfReadName);
-            } 
-        }; 
- 
+            }
+        };
+
         TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TAllowSettingPolicy& policy)
             : Types(types)
             , CoreConfig(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
             , Policy(policy)
-        {} 
- 
-        TStringBuf GetName() const override { 
-            return ConfigProviderName; 
-        } 
- 
+        {}
+
+        TStringBuf GetName() const override {
+            return ConfigProviderName;
+        }
+
         bool Initialize(TExprContext& ctx) override {
             if (CoreConfig) {
                 TPosition pos;
@@ -155,16 +155,16 @@ namespace {
         }
 
         bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
-            if (!EnsureArgsCount(node, 1, ctx)) { 
-                return false; 
-            } 
- 
+            if (!EnsureArgsCount(node, 1, ctx)) {
+                return false;
+            }
+
             cluster = Nothing();
-            return true; 
-        } 
- 
+            return true;
+        }
+
         bool MatchCategory(const TExprNode& node) {
-            return (node.Child(1)->Child(0)->Content() == ConfigProviderName); 
+            return (node.Child(1)->Child(0)->Content() == ConfigProviderName);
         }
 
         bool CanParse(const TExprNode& node) override {
@@ -175,26 +175,26 @@ namespace {
             }
 
             return false;
-        } 
- 
-        IGraphTransformer& GetConfigurationTransformer() override { 
-            if (ConfigurationTransformer) { 
-                return *ConfigurationTransformer; 
+        }
+
+        IGraphTransformer& GetConfigurationTransformer() override {
+            if (ConfigurationTransformer) {
+                return *ConfigurationTransformer;
             }
 
             ConfigurationTransformer = CreateFunctorTransformer(
                 [this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                 output = input;
-                if (ctx.Step.IsDone(TExprStep::Configure)) { 
-                    return IGraphTransformer::TStatus::Ok; 
-                } 
+                if (ctx.Step.IsDone(TExprStep::Configure)) {
+                    return IGraphTransformer::TStatus::Ok;
+                }
 
-                bool hasPendingEvaluations = false; 
-                TOptimizeExprSettings settings(nullptr); 
-                settings.VisitChanges = true; 
+                bool hasPendingEvaluations = false;
+                TOptimizeExprSettings settings(nullptr);
+                settings.VisitChanges = true;
                 auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
                     auto res = node;
-                    if (!hasPendingEvaluations && node->Content() == ConfigureName) { 
+                    if (!hasPendingEvaluations && node->Content() == ConfigureName) {
                         if (!EnsureMinArgsCount(*node, 2, ctx)) {
                             return {};
                         }
@@ -205,29 +205,29 @@ namespace {
 
                         if (node->Child(1)->Child(0)->Content() != ConfigProviderName) {
                             return node;
-                        } 
- 
+                        }
+
                         if (!EnsureMinArgsCount(*node, 3, ctx)) {
                             return {};
-                        } 
- 
+                        }
+
                         if (!EnsureAtom(*node->Child(2), ctx)) {
                             return {};
-                        } 
- 
+                        }
+
                         TStringBuf command = node->Child(2)->Content();
                         TVector<TStringBuf> args;
                         for (size_t i = 3; i < node->ChildrenSize(); ++i) {
                             if (node->Child(i)->IsCallable("EvaluateAtom")) {
-                                hasPendingEvaluations = true; 
+                                hasPendingEvaluations = true;
                                 return res;
-                            } 
+                            }
                             if (!EnsureAtom(*node->Child(i), ctx)) {
                                 return {};
-                            } 
+                            }
                             args.push_back(node->Child(i)->Content());
-                        } 
- 
+                        }
+
                         if (!ApplyFlag(ctx.GetPosition(node->Child(2)->Pos()), command, args, ctx)) {
                             return {};
                         }
@@ -240,91 +240,91 @@ namespace {
                     }
 
                     return res;
-                }, ctx, settings); 
+                }, ctx, settings);
 
-                return status; 
-            }); 
- 
-            return *ConfigurationTransformer; 
+                return status;
+            });
+
+            return *ConfigurationTransformer;
         }
 
-        IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override { 
-            Y_UNUSED(instantOnly); 
-            if (!TypeAnnotationTransformer) { 
+        IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
+            Y_UNUSED(instantOnly);
+            if (!TypeAnnotationTransformer) {
                 TypeAnnotationTransformer = CreateFunctorTransformer(
                     [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
                     output = input;
                     if (input->Content() == ConfReadName) {
                         if (!EnsureWorldType(*input->Child(0), ctx)) {
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
                         if (!EnsureSpecificDataSource(*input->Child(1), ConfigProviderName, ctx)) {
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
                         auto key = input->Child(2);
-                        if (!key->IsCallable("Key")) { 
+                        if (!key->IsCallable("Key")) {
                             ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Expected key"));
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
-                        if (key->ChildrenSize() == 0) { 
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        if (key->ChildrenSize() == 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Empty key is not allowed"));
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
-                        auto tag = key->Child(0)->Child(0)->Content(); 
-                        if (key->Child(0)->ChildrenSize() > 1) { 
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        auto tag = key->Child(0)->Child(0)->Content();
+                        if (key->Child(0)->ChildrenSize() > 1) {
                             ctx.AddError(TIssue(ctx.GetPosition(key->Child(0)->Pos()), "Only tag must be specified"));
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
-                        if (key->ChildrenSize() > 1) { 
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        if (key->ChildrenSize() > 1) {
                             ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Too many tags"));
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
                         auto fields = input->Child(3);
-                        if (!EnsureTuple(*fields, ctx)) { 
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
-                        if (fields->ChildrenSize() != 0) { 
+                        if (!EnsureTuple(*fields, ctx)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        if (fields->ChildrenSize() != 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(fields->Pos()), "Fields tuple must be empty"));
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
                         if (!input->Child(3)->GetTypeAnn() || !input->Child(3)->IsComposable()) {
                             ctx.AddError(TIssue(ctx.GetPosition(input->Child(3)->Pos()), "Expected composable data"));
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
                         auto settings = input->Child(4);
-                        if (!EnsureTuple(*settings, ctx)) { 
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
-                        if (settings->ChildrenSize() != 0) { 
+                        if (!EnsureTuple(*settings, ctx)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        if (settings->ChildrenSize() != 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), "Unsupported settings"));
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
-                        auto stringAnnotation = ctx.MakeType<TDataExprType>(EDataSlot::String); 
-                        auto listOfString = ctx.MakeType<TListExprType>(stringAnnotation); 
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        auto stringAnnotation = ctx.MakeType<TDataExprType>(EDataSlot::String);
+                        auto listOfString = ctx.MakeType<TListExprType>(stringAnnotation);
                         TTypeAnnotationNode::TListType children;
                         children.push_back(input->Child(0)->GetTypeAnn());
-                        if (tag == "data_sources" || tag == "data_sinks") { 
-                            children.push_back(listOfString); 
-                        } else { 
+                        if (tag == "data_sources" || tag == "data_sinks") {
+                            children.push_back(listOfString);
+                        } else {
                             ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), TStringBuilder() << "Unknown tag: " << tag));
-                            return IGraphTransformer::TStatus::Error; 
-                        } 
- 
-                        auto tupleAnn = ctx.MakeType<TTupleExprType>(children); 
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        auto tupleAnn = ctx.MakeType<TTupleExprType>(children);
                         input->SetTypeAnn(tupleAnn);
-                        return IGraphTransformer::TStatus::Ok; 
-                    } 
+                        return IGraphTransformer::TStatus::Ok;
+                    }
                     else if (input->Content() == ConfigureName) {
                         if (!EnsureWorldType(*input->Child(0), ctx)) {
                             return IGraphTransformer::TStatus::Error;
@@ -335,30 +335,30 @@ namespace {
                     }
 
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Config) Unsupported function: " << input->Content()));
-                    return IGraphTransformer::TStatus::Error; 
-                }); 
-            } 
- 
-            return *TypeAnnotationTransformer; 
-        } 
- 
+                    return IGraphTransformer::TStatus::Error;
+                });
+            }
+
+            return *TypeAnnotationTransformer;
+        }
+
         TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
             auto read = node->Child(0);
             TString newName;
             if (read->Content() == ReadName) {
                 newName = ConfReadName;
-            } 
-            else { 
-                YQL_ENSURE(false, "Expected Read!"); 
-            } 
- 
+            }
+            else {
+                YQL_ENSURE(false, "Expected Read!");
+            }
+
             YQL_CLOG(INFO, ProviderConfig) << "RewriteIO";
             auto newRead = ctx.RenameNode(*read, newName);
-            auto retChildren = node->ChildrenList(); 
-            retChildren[0] = newRead; 
+            auto retChildren = node->ChildrenList();
+            retChildren[0] = newRead;
             return ctx.ChangeChildren(*node, std::move(retChildren));
-        } 
- 
+        }
+
         bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override {
             Y_UNUSED(syncList);
 
@@ -372,46 +372,46 @@ namespace {
             return false;
         }
 
-        bool CanExecute(const TExprNode& node) override { 
+        bool CanExecute(const TExprNode& node) override {
             if (ConfigProviderFunctions().contains(node.Content()) ||
                 node.Content() == ConfigureName)
             {
                 return MatchCategory(node);
-            } 
- 
-            return false; 
-        } 
- 
-        IGraphTransformer& GetCallableExecutionTransformer() override { 
-            if (!CallableExecutionTransformer) { 
-                CallableExecutionTransformer = new TConfigCallableExecutionTransformer(Types); 
-            } 
- 
-            return *CallableExecutionTransformer; 
-        } 
- 
+            }
+
+            return false;
+        }
+
+        IGraphTransformer& GetCallableExecutionTransformer() override {
+            if (!CallableExecutionTransformer) {
+                CallableExecutionTransformer = new TConfigCallableExecutionTransformer(Types);
+            }
+
+            return *CallableExecutionTransformer;
+        }
+
         bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
-            Y_UNUSED(compact); 
-            if (CanExecute(node)) { 
+            Y_UNUSED(compact);
+            if (CanExecute(node)) {
                 children.push_back(node.ChildPtr(0));
-            } 
- 
-            return false; 
-        } 
- 
+            }
+
+            return false;
+        }
+
         void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
             YQL_ENSURE(node.IsCallable(RightName));
 
-            writer.OnKeyedItem("PullOperation"); 
+            writer.OnKeyedItem("PullOperation");
             writer.OnStringScalar(node.Child(0)->Content());
-        } 
- 
+        }
+
         TString GetProviderPath(const TExprNode& node) override {
             Y_UNUSED(node);
-            return "config"; 
-        } 
- 
-    private: 
+            return "config";
+        }
+
+    private:
         bool IsSettingAllowed(const TPosition& pos, TStringBuf name, TExprContext& ctx) {
             if (Policy && !Policy(name)) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Changing setting " << name << " is not allowed"));
@@ -425,11 +425,11 @@ namespace {
                 return false;
             }
 
-            if (name == "UnsecureCredential") { 
-                if (!AddCredential(pos, args, ctx)) { 
-                    return false; 
-                } 
-            } else if (name == "ImportUdfs") { 
+            if (name == "UnsecureCredential") {
+                if (!AddCredential(pos, args, ctx)) {
+                    return false;
+                }
+            } else if (name == "ImportUdfs") {
                 if (!ImportUdfs(pos, args, ctx)) {
                     return false;
                 }
@@ -781,25 +781,25 @@ namespace {
             return true;
         }
 
-        bool AddCredential(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) { 
-            if (args.size() != 4) { 
-                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 4 arguments, but got " << args.size())); 
-                return false; 
-            } 
- 
-            if (Types.FindCredential(args[0])) { 
-                return true; 
-            } 
- 
-            if (Types.Credentials.empty()) { 
-                ctx.AddError(TIssue(pos, TStringBuilder() << "No credential table")); 
-                return false; 
-            } 
- 
-            Types.Credentials.back()->emplace( TString(args[0]), TCredential(TString(args[1]), TString(args[2]), TString(args[3])) ); 
-            return true; 
-        } 
- 
+        bool AddCredential(const TPosition& pos, const TVector<TStringBuf>& args, TExprContext& ctx) {
+            if (args.size() != 4) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 4 arguments, but got " << args.size()));
+                return false;
+            }
+
+            if (Types.FindCredential(args[0])) {
+                return true;
+            }
+
+            if (Types.Credentials.empty()) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "No credential table"));
+                return false;
+            }
+
+            Types.Credentials.back()->emplace( TString(args[0]), TCredential(TString(args[1]), TString(args[2]), TString(args[3])) );
+            return true;
+        }
+
         bool AddFileByUrlImpl(const TStringBuf alias, const TStringBuf url, const TPosition pos, TExprContext& ctx) {
             if (url.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Empty URL for file '" << alias << "'."));
@@ -990,22 +990,22 @@ namespace {
 
     private:
         TTypeAnnotationContext& Types;
-        TAutoPtr<IGraphTransformer> TypeAnnotationTransformer; 
-        TAutoPtr<IGraphTransformer> ConfigurationTransformer; 
-        TAutoPtr<IGraphTransformer> CallableExecutionTransformer; 
+        TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
+        TAutoPtr<IGraphTransformer> ConfigurationTransformer;
+        TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
         const TYqlCoreConfig* CoreConfig;
         const TAllowSettingPolicy Policy;
-    }; 
-} 
- 
+    };
+}
+
 TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config,
     const TAllowSettingPolicy& policy)
 {
     return new TConfigProvider(types, config, policy);
-} 
- 
+}
+
 const THashSet<TStringBuf>& ConfigProviderFunctions() {
-    return Singleton<TConfigProvider::TFunctions>()->Names; 
-} 
- 
-} 
+    return Singleton<TConfigProvider::TFunctions>()->Names;
+}
+
+}

@@ -18,10 +18,10 @@ public:
         const TMaybe<TString>& database,
         const TMaybe<TString>& discoveryEndpoint,
         const TMaybe<EDiscoveryMode>& discoveryMode,
-        const TMaybe<bool>& enableSsl, 
+        const TMaybe<bool>& enableSsl,
         const TMaybe<std::shared_ptr<ICredentialsProviderFactory>>& credentialsProviderFactory)
         : Connections_(std::move(connections))
-        , DbDriverState_(Connections_->GetDriverState(database, discoveryEndpoint, discoveryMode, enableSsl, credentialsProviderFactory)) 
+        , DbDriverState_(Connections_->GetDriverState(database, discoveryEndpoint, discoveryMode, enableSsl, credentialsProviderFactory))
     {
         Y_VERIFY(DbDriverState_);
     }
@@ -35,7 +35,7 @@ public:
                 settings.Database_,
                 settings.DiscoveryEndpoint_,
                 settings.DiscoveryMode_,
-                settings.EnableSsl_, 
+                settings.EnableSsl_,
                 settings.CredentialsProviderFactory_
             )
         )

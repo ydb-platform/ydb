@@ -1,32 +1,32 @@
 #include "yql_transform_pipeline.h"
-#include "yql_eval_expr.h" 
-#include "yql_eval_params.h" 
+#include "yql_eval_expr.h"
+#include "yql_eval_params.h"
 
-#include <ydb/library/yql/core/type_ann/type_ann_core.h> 
-#include <ydb/library/yql/core/type_ann/type_ann_expr.h> 
-#include <ydb/library/yql/core/yql_execution.h> 
-#include <ydb/library/yql/core/yql_expr_csee.h> 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
-#include <ydb/library/yql/core/yql_expr_constraint.h> 
-#include <ydb/library/yql/core/yql_gc_transformer.h> 
-#include <ydb/library/yql/core/common_opt/yql_co_transformer.h> 
-#include <ydb/library/yql/core/yql_opt_proposed_by_data.h> 
-#include <ydb/library/yql/core/yql_opt_rewrite_io.h> 
+#include <ydb/library/yql/core/type_ann/type_ann_core.h>
+#include <ydb/library/yql/core/type_ann/type_ann_expr.h>
+#include <ydb/library/yql/core/yql_execution.h>
+#include <ydb/library/yql/core/yql_expr_csee.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/yql_expr_constraint.h>
+#include <ydb/library/yql/core/yql_gc_transformer.h>
+#include <ydb/library/yql/core/common_opt/yql_co_transformer.h>
+#include <ydb/library/yql/core/yql_opt_proposed_by_data.h>
+#include <ydb/library/yql/core/yql_opt_rewrite_io.h>
 
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 
-TTransformationPipeline::TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx) 
+TTransformationPipeline::TTransformationPipeline(TIntrusivePtr<TTypeAnnotationContext> ctx)
     : TypeAnnotationContext_(ctx)
-{} 
+{}
 
 TTransformationPipeline& TTransformationPipeline::Add(TAutoPtr<IGraphTransformer> transformer, const TString& stageName,
-    EYqlIssueCode issueCode, const TString& issueMessage) 
+    EYqlIssueCode issueCode, const TString& issueMessage)
 {
     if (transformer) {
-        Transformers_.push_back(TTransformStage(transformer, stageName, issueCode, issueMessage)); 
+        Transformers_.push_back(TTransformStage(transformer, stageName, issueCode, issueMessage));
     }
     return *this;
 }
@@ -44,39 +44,39 @@ TTransformationPipeline& TTransformationPipeline::AddServiceTransformers(EYqlIss
 }
 
 TTransformationPipeline& TTransformationPipeline::AddParametersEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, EYqlIssueCode issueCode) {
-    auto& typeCtx = *TypeAnnotationContext_; 
-    Transformers_.push_back(TTransformStage(CreateFunctorTransformer( 
-        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
-        return EvaluateParameters(input, output, typeCtx, ctx, functionRegistry); 
-    }), "EvaluateParameters", issueCode)); 
- 
-    return *this; 
-} 
- 
-TTransformationPipeline& TTransformationPipeline::AddExpressionEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry, 
+    auto& typeCtx = *TypeAnnotationContext_;
+    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
+        [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        return EvaluateParameters(input, output, typeCtx, ctx, functionRegistry);
+    }), "EvaluateParameters", issueCode));
+
+    return *this;
+}
+
+TTransformationPipeline& TTransformationPipeline::AddExpressionEvaluation(const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     IGraphTransformer* calcTransfomer, EYqlIssueCode issueCode) {
-    auto typeCtx = TypeAnnotationContext_; 
-    auto funcReg = &functionRegistry; 
-    Transformers_.push_back(TTransformStage(CreateFunctorTransformer( 
-        [=](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
-        return EvaluateExpression(input, output, *typeCtx, ctx, *funcReg, calcTransfomer); 
-    }), "EvaluateExpression", issueCode)); 
- 
-    return *this; 
-} 
- 
+    auto typeCtx = TypeAnnotationContext_;
+    auto funcReg = &functionRegistry;
+    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
+        [=](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        return EvaluateExpression(input, output, *typeCtx, ctx, *funcReg, calcTransfomer);
+    }), "EvaluateExpression", issueCode));
+
+    return *this;
+}
+
 TTransformationPipeline& TTransformationPipeline::AddPreTypeAnnotation(EYqlIssueCode issueCode) {
-    auto& typeCtx = *TypeAnnotationContext_; 
+    auto& typeCtx = *TypeAnnotationContext_;
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply), "ExpandApply",
         issueCode));
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
         [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            return ValidateProviders(input, output, ctx, typeCtx); 
+            return ValidateProviders(input, output, ctx, typeCtx);
         }), "ValidateProviders", issueCode));
 
     Transformers_.push_back(TTransformStage(
         CreateConfigureTransformer(*TypeAnnotationContext_), "Configure", issueCode));
- 
+
     return *this;
 }
 
@@ -100,9 +100,9 @@ TTransformationPipeline& TTransformationPipeline::AddIOAnnotation(EYqlIssueCode 
             return RewriteIO(input, output, typeCtx, ctx);
         }), "RewriteIO", issueCode));
 
-    return *this; 
-} 
- 
+    return *this;
+}
+
 TTransformationPipeline& TTransformationPipeline::AddTypeAnnotation(EYqlIssueCode issueCode) {
     AddTypeAnnotationTransformer();
     Transformers_.push_back(TTransformStage(
@@ -136,16 +136,16 @@ TTransformationPipeline& TTransformationPipeline::AddPostTypeAnnotation(bool for
 
 TTransformationPipeline& TTransformationPipeline::AddCommonOptimization(EYqlIssueCode issueCode) {
     // auto instantCallableTransformer =
-    //    CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_, true); 
-    // TypeAnnotationContext_->CustomInstantTypeTransformer = 
-    //     CreateTypeAnnotationTransformer(instantCallableTransformer, *TypeAnnotationContext_); 
+    //    CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_, true);
+    // TypeAnnotationContext_->CustomInstantTypeTransformer =
+    //     CreateTypeAnnotationTransformer(instantCallableTransformer, *TypeAnnotationContext_);
     Transformers_.push_back(TTransformStage(
         CreateCommonOptTransformer(TypeAnnotationContext_.Get()),
         "CommonOptimization",
         issueCode));
-    return *this; 
-} 
- 
+    return *this;
+}
+
 TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(
         CreateCommonOptFinalTransformer(TypeAnnotationContext_.Get()),
@@ -176,12 +176,12 @@ TTransformationPipeline& TTransformationPipeline::AddOptimization(bool checkWorl
         AddFinalCommonOptimization(issueCode);
     }
     AddCheckExecution(checkWorld, issueCode);
-    return *this; 
-} 
- 
+    return *this;
+}
+
 TTransformationPipeline& TTransformationPipeline::AddCheckExecution(bool checkWorld, EYqlIssueCode issueCode) {
     Transformers_.push_back(TTransformStage(
-        CreateCheckExecutionTransformer(*TypeAnnotationContext_, checkWorld), 
+        CreateCheckExecutionTransformer(*TypeAnnotationContext_, checkWorld),
         "CheckExecution",
         issueCode));
     return *this;
@@ -223,7 +223,7 @@ TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(
 
 TTransformationPipeline& TTransformationPipeline::AddTypeAnnotationTransformer(EYqlIssueCode issueCode)
 {
-    auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_); 
+    auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(*TypeAnnotationContext_);
     return AddTypeAnnotationTransformer(callableTransformer, issueCode);
 }
 

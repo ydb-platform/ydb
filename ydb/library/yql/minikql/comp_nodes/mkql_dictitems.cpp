@@ -1,22 +1,22 @@
-#include "mkql_dictitems.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include "mkql_dictitems.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 class TDictItemsWrapper : public TCustomValueCodegeneratorNode<TDictItemsWrapper> {
     typedef TCustomValueCodegeneratorNode<TDictItemsWrapper> TBaseComputation;
-public: 
+public:
     using TSelf = TDictItemsWrapper;
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     class TCodegenValue : public TComputationValue<TCodegenValue> {
-    public: 
+    public:
         using TNextPtr = TCodegenIterator::TNextPtr;
 
         TCodegenValue(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& dict)
@@ -47,21 +47,21 @@ public:
         TComputationContext* const Ctx;
         const NUdf::TUnboxedValue Dict;
     };
-#endif 
+#endif
 
     class TValue : public TComputationValue<TValue> {
     public:
         class TIterator : public TComputationValue<TIterator> {
-        public: 
+        public:
             TIterator(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& inner,
                 TComputationContext& compCtx, const TSelf* self)
                 : TComputationValue<TIterator>(memInfo)
                 , Inner(std::move(inner))
                 , CompCtx(compCtx)
-                , Self(self) 
-            { 
-            } 
- 
+                , Self(self)
+            {
+            }
+
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
                 NUdf::TUnboxedValue key, payload;
@@ -82,32 +82,32 @@ public:
             const NUdf::TUnboxedValue Inner;
             TComputationContext& CompCtx;
             const TSelf* const Self;
-        }; 
- 
-        TValue( 
-            TMemoryUsageInfo* memInfo, 
+        };
+
+        TValue(
+            TMemoryUsageInfo* memInfo,
             const NUdf::TUnboxedValue&& dict,
             TComputationContext& compCtx, const TSelf* self)
             : TComputationValue<TValue>(memInfo)
             , Dict(std::move(dict))
             , CompCtx(compCtx)
-            , Self(self) 
-        { 
-        } 
- 
+            , Self(self)
+        {
+        }
+
     private:
         ui64 GetListLength() const final {
             return Dict.GetDictLength();
         }
- 
+
         bool HasListItems() const final {
             return Dict.HasDictItems();
-        } 
- 
+        }
+
         bool HasFastListLength() const final {
             return true;
-        } 
- 
+        }
+
         NUdf::TUnboxedValue GetListIterator() const final {
             return CompCtx.HolderFactory.Create<TIterator>(Dict.GetDictIterator(), CompCtx, Self);
         }
@@ -115,31 +115,31 @@ public:
         const NUdf::TUnboxedValue Dict;
         TComputationContext& CompCtx;
         const TSelf* const Self;
-    }; 
- 
+    };
+
     TDictItemsWrapper(TComputationMutables& mutables, IComputationNode* dict)
         : TBaseComputation(mutables)
         , Dict(dict)
         , ResPair(mutables)
     {}
- 
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
         if (ctx.ExecuteLLVM && Next)
             return ctx.HolderFactory.Create<TCodegenValue>(Next, &ctx, Dict->GetValue(ctx));
 #endif
         return ctx.HolderFactory.Create<TValue>(Dict->GetValue(ctx), ctx, this);
-    } 
- 
+    }
+
 private:
     void RegisterDependencies() const final {
         DependsOn(Dict);
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     void GenerateFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
         NextFunc = GenerateNext(codegen);
-        codegen->ExportSymbol(NextFunc); 
+        codegen->ExportSymbol(NextFunc);
     }
 
     void FinalizeFunctions(const NYql::NCodegen::ICodegen::TPtr& codegen) final {
@@ -164,7 +164,7 @@ private:
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         auto args = ctx.Func->arg_begin();
 
@@ -215,10 +215,10 @@ private:
     TNextPtr Next = nullptr;
 #endif
 
-    IComputationNode* const Dict; 
+    IComputationNode* const Dict;
     const TContainerCacheOnContext ResPair;
-}; 
- 
+};
+
 template <bool KeysOrPayloads>
 class TDictHalfsWrapper : public TMutableComputationNode<TDictHalfsWrapper<KeysOrPayloads>> {
     typedef TMutableComputationNode<TDictHalfsWrapper<KeysOrPayloads>> TBaseComputation;
@@ -273,7 +273,7 @@ private:
 
 }
 
-IComputationNode* WrapDictItems(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+IComputationNode* WrapDictItems(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1 ||  callable.GetInputsCount() == 2, "Expected one or two args");
     const auto node = LocateNode(ctx.NodeLocator, callable, 0);
 
@@ -283,28 +283,28 @@ IComputationNode* WrapDictItems(TCallable& callable, const TComputationNodeFacto
 
     const auto mode = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().Get<ui32>();
     switch (static_cast<EDictItems>(mode)) {
-    case EDictItems::Both: 
+    case EDictItems::Both:
         return new TDictItemsWrapper(ctx.Mutables, node);
-    case EDictItems::Keys: 
+    case EDictItems::Keys:
         return new TDictHalfsWrapper<true>(ctx.Mutables, node);
-    case EDictItems::Payloads: 
+    case EDictItems::Payloads:
         return new TDictHalfsWrapper<false>(ctx.Mutables, node);
-    default: 
-        Y_FAIL("Unknown mode: %" PRIu32, mode); 
-    } 
-} 
- 
+    default:
+        Y_FAIL("Unknown mode: %" PRIu32, mode);
+    }
+}
+
 IComputationNode* WrapDictKeys(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected one arg");
     const auto node = LocateNode(ctx.NodeLocator, callable, 0);
     return new TDictHalfsWrapper<true>(ctx.Mutables, node);
-} 
+}
 
 IComputationNode* WrapDictPayloads(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected one arg");
     const auto node = LocateNode(ctx.NodeLocator, callable, 0);
     return new TDictHalfsWrapper<false>(ctx.Mutables, node);
-} 
+}
 
 }
 }

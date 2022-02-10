@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h> 
+#include <ydb/library/yql/providers/pq/provider/yql_pq_gateway.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>

@@ -7,10 +7,10 @@
 
 namespace NKikimr {
 
-    inline TString ToStringLocalTimeUpToSeconds(const TInstant &time) { 
-        return time.GetValue() ? time.ToStringLocalUpToSeconds() : "0"; 
-    } 
- 
+    inline TString ToStringLocalTimeUpToSeconds(const TInstant &time) {
+        return time.GetValue() ? time.ToStringLocalUpToSeconds() : "0";
+    }
+
     ////////////////////////////////////////////////////////////////////////////
     // RunInBatchPool
     ////////////////////////////////////////////////////////////////////////////

@@ -51,7 +51,7 @@ inline bool HasData<double>(const TProtoValue& value, NScheme::TTypeId schemeTyp
 
 template <>
 inline bool HasData<TStringBuf>(const TProtoValue& value, NScheme::TTypeId schemeType) {
-    if (schemeType == NScheme::NTypeIds::Utf8) { 
+    if (schemeType == NScheme::NTypeIds::Utf8) {
         return value.HasText();
     } else {
         return value.HasBytes();
@@ -110,7 +110,7 @@ inline double GetData<double>(const TProtoValue& value, NScheme::TTypeId schemeT
 template <>
 inline TStringBuf GetData<TStringBuf>(const TProtoValue& value, NScheme::TTypeId schemeType) {
     ENSURE_HAS_DATA(TStringBuf, value, schemeType);
-    if (schemeType == NScheme::NTypeIds::Utf8) { 
+    if (schemeType == NScheme::NTypeIds::Utf8) {
         return value.GetText();
     } else {
         return value.GetBytes();

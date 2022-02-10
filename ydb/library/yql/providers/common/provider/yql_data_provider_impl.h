@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_data_provider.h> 
-#include <ydb/library/yql/core/yql_graph_transformer.h> 
+#include <ydb/library/yql/core/yql_data_provider.h>
+#include <ydb/library/yql/core/yql_graph_transformer.h>
 
 #include <util/generic/ptr.h>
 
@@ -44,7 +44,7 @@ public:
     bool Initialize(TExprContext& ctx) override;
     IGraphTransformer& GetConfigurationTransformer() override;
     TExprNode::TPtr GetClusterInfo(const TString& cluster, TExprContext& ctx) override;
-    const THashMap<TString, TString>* GetClusterTokens() override; 
+    const THashMap<TString, TString>* GetClusterTokens() override;
     IGraphTransformer& GetIODiscoveryTransformer() override;
     IGraphTransformer& GetEpochsTransformer() override;
     IGraphTransformer& GetIntentDeterminationTransformer() override;
@@ -64,9 +64,9 @@ public:
     bool IsPersistent(const TExprNode& node) override;
     bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) override;
     bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override;
-    bool GetExecWorld(const TExprNode& node, TExprNode::TPtr& root) override; 
-    bool CanEvaluate(const TExprNode& node) override; 
-    void UndoEvaluationChanges() override; 
+    bool GetExecWorld(const TExprNode& node, TExprNode::TPtr& root) override;
+    bool CanEvaluate(const TExprNode& node) override;
+    void UndoEvaluationChanges() override;
     TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) override;
     TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
         IOptimizationContext& optCtx) override;

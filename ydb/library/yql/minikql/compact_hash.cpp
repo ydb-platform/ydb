@@ -11,7 +11,7 @@ namespace NCHash {
 void TListPoolBase::FreeListPage(TListHeader* p) {
     Y_ASSERT(TAlignedPagePool::GetPageStart(p) == p);
     p->~TListHeader();
-    PagePool_.ReturnPage(p); 
+    PagePool_.ReturnPage(p);
 }
 
 size_t TListPoolBase::TUsedPages::PrintStat(const TStringBuf& header, IOutputStream& out) const {

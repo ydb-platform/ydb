@@ -21,6 +21,6 @@ PEERDIR(
     ydb/services/cms
 )
 
-YQL_LAST_ABI_VERSION() 
- 
+YQL_LAST_ABI_VERSION()
+
 END()

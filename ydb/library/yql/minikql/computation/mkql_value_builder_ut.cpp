@@ -1,8 +1,8 @@
 #include "mkql_value_builder.h"
 #include "mkql_computation_node_holders.h"
 
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -15,7 +15,7 @@ class TMiniKQLValueBuilderTest: public TTestBase {
 public:
     TMiniKQLValueBuilderTest()
         : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
-        , Env(Alloc) 
+        , Env(Alloc)
         , MemInfo("Memory")
         , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())
         , Builder(HolderFactory)

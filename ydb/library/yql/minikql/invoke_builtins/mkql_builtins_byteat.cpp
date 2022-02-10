@@ -1,24 +1,24 @@
-#include "mkql_builtins_impl.h" 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
-namespace { 
- 
-template <typename TInput, typename TOutput, bool IsOptional> 
-struct TByteAtArgs { 
-    static const TFunctionParamMetadata Value[4]; 
-}; 
- 
-template <typename TInput, typename TOutput, bool IsOptional> 
-const TFunctionParamMetadata TByteAtArgs<TInput, TOutput, IsOptional>::Value[4] = { 
-    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable }, 
-    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 }, 
-    { NUdf::TDataType<ui32>::Id, 0 }, 
-    { 0, 0 } 
-}; 
- 
- 
+#include "mkql_builtins_impl.h"
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+namespace {
+
+template <typename TInput, typename TOutput, bool IsOptional>
+struct TByteAtArgs {
+    static const TFunctionParamMetadata Value[4];
+};
+
+template <typename TInput, typename TOutput, bool IsOptional>
+const TFunctionParamMetadata TByteAtArgs<TInput, TOutput, IsOptional>::Value[4] = {
+    { TOutput::Id, TFunctionParamMetadata::FlagIsNullable },
+    { TInput::Id, IsOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
+    { NUdf::TDataType<ui32>::Id, 0 },
+    { 0, 0 }
+};
+
+
 template <typename TInput, typename TOutput>
 struct TByteAt {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
@@ -30,9 +30,9 @@ struct TByteAt {
         }
 
         return NUdf::TUnboxedValuePod(ui8(buffer.Data()[index]));
-    } 
+    }
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen->GetContext();
@@ -103,9 +103,9 @@ struct TByteAt {
     }
 #endif
 };
- 
-} 
- 
+
+}
+
 void RegisterByteAt(IBuiltinFunctionRegistry& registry) {
     const auto name = "ByteAt";
     RegisterFunctionImpl<TByteAt<NUdf::TDataType<char*>, NUdf::TDataType<ui8>>,
@@ -116,7 +116,7 @@ void RegisterByteAt(IBuiltinFunctionRegistry& registry) {
         TByteAtArgs<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<ui8>, false>, TBinaryWrap<false, false>>(registry, name);
     RegisterFunctionImpl<TByteAt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<ui8>>,
         TByteAtArgs<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<ui8>, true>, TBinaryWrap<true, false>>(registry, name);
-} 
- 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+}
+
+} // namespace NMiniKQL
+} // namespace NKikimr

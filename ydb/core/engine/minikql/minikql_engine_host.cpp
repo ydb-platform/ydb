@@ -3,8 +3,8 @@
 #include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
 #include <ydb/core/tablet_flat/flat_row_state.h>
 #include <ydb/core/tablet_flat/flat_table_stats.h>
-#include <ydb/library/yql/minikql/computation/mkql_custom_list.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/computation/mkql_custom_list.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <ydb/core/tx/datashard/sys_tables.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -80,11 +80,11 @@ bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTi
     }
 
     if (key.RowOperation == TKeyDesc::ERowOperation::Read) {
-        if (key.Range.Point) { 
-            EH_VALIDATE(key.KeyColumnTypes.size() == tableInfo->KeyColumns.size(), TypeCheckFailed); 
-        } else { 
-            EH_VALIDATE(key.KeyColumnTypes.size() <= tableInfo->KeyColumns.size(), TypeCheckFailed); 
-        } 
+        if (key.Range.Point) {
+            EH_VALIDATE(key.KeyColumnTypes.size() == tableInfo->KeyColumns.size(), TypeCheckFailed);
+        } else {
+            EH_VALIDATE(key.KeyColumnTypes.size() <= tableInfo->KeyColumns.size(), TypeCheckFailed);
+        }
 
         for (size_t i = 0; i < key.Columns.size(); i++) {
             const TKeyDesc::TColumnOp& cop = key.Columns[i];
@@ -104,7 +104,7 @@ bool TEngineHost::IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTi
             auto* cinfo = Scheme.GetColumnInfo(tableInfo, cop.Column);
             EH_VALIDATE(cinfo, TypeCheckFailed); // Unknown column
             NScheme::TTypeId vtype = cinfo->PType;
-            EH_VALIDATE(!cop.ExpectedType || cop.ExpectedType == vtype, TypeCheckFailed); 
+            EH_VALIDATE(!cop.ExpectedType || cop.ExpectedType == vtype, TypeCheckFailed);
             EH_VALIDATE(cop.Operation == TKeyDesc::EColumnOperation::Set, OperationNotSupported); // TODO[serxa]: support inplace operations in IsValidKey
         }
     } else if (key.RowOperation == TKeyDesc::ERowOperation::Erase) {
@@ -267,7 +267,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     //  optinal<struct<optional<data>,
     //                 ...
     //                 optional<data>>>
-    // And that struct type has column tags stored inside it's member names as numbers 
+    // And that struct type has column tags stored inside it's member names as numbers
 
     Y_UNUSED(returnType);
     Y_UNUSED(readTarget);
@@ -351,22 +351,22 @@ public:
         }
     }
 
-    void* operator new(size_t sz) = delete; 
-    void* operator new[](size_t sz) = delete; 
-    void operator delete(void *mem, std::size_t sz) { 
-        auto ptr = (TSelectRangeLazyRow*)mem; 
-        auto extraSize = ptr->Size() * sizeof(NUdf::TUnboxedValue) + ptr->GetMaskSize() * sizeof(ui64); 
-        MKQLFreeWithSize(mem, sz + extraSize); 
-    } 
- 
-    void operator delete[](void *mem, std::size_t sz) = delete; 
- 
+    void* operator new(size_t sz) = delete;
+    void* operator new[](size_t sz) = delete;
+    void operator delete(void *mem, std::size_t sz) {
+        auto ptr = (TSelectRangeLazyRow*)mem;
+        auto extraSize = ptr->Size() * sizeof(NUdf::TUnboxedValue) + ptr->GetMaskSize() * sizeof(ui64);
+        MKQLFreeWithSize(mem, sz + extraSize);
+    }
+
+    void operator delete[](void *mem, std::size_t sz) = delete;
+
     static NUdf::TUnboxedValue Create(const TDbTupleRef& dbData, const THolderFactory& holderFactory,
         const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId) {
         ui32 size = dbData.ColumnCount + systemColumnTags.size();
 
         ui32 maskSize = size > 0 ? (size - 1) / 64 + 1 : 0;
-        void* buffer = MKQLAllocWithSize(sizeof(TSelectRangeLazyRow) 
+        void* buffer = MKQLAllocWithSize(sizeof(TSelectRangeLazyRow)
             + size * sizeof(NUdf::TUnboxedValue)
             + maskSize * sizeof(ui64));
 
@@ -418,10 +418,10 @@ private:
         return DbData.ColumnCount + SystemColumnTags.size();
     }
 
-    inline ui32 GetMaskSize() const { 
-        return MaskSize; 
-    } 
- 
+    inline ui32 GetMaskSize() const {
+        return MaskSize;
+    }
+
     inline void BuildValue(ui32 index) const {
         Y_VERIFY_DEBUG(MaskSize > 0);
 
@@ -850,7 +850,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
 }
 
 // Updates the single row. Column in commands must be unique.
-void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) { 
+void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row, const TArrayRef<const TUpdateCommand>& commands) {
     ui64 localTid = LocalTableId(tableId);
     Y_VERIFY(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
@@ -865,7 +865,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
         Y_VERIFY(upd.Operation == TKeyDesc::EColumnOperation::Set); // TODO[serxa]: support inplace update in update row
         NScheme::TTypeId vtype = Scheme.GetColumnInfo(tableInfo, upd.Column)->PType;
         ops.emplace_back(upd.Column, NTable::ECellOp::Set,
-            upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtype)); 
+            upd.Value.IsNull() ? TRawTypeValue() : TRawTypeValue(upd.Value.Data(), upd.Value.Size(), vtype));
         valueBytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
     }
 
@@ -889,7 +889,7 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
 }
 
 // Erases the single row.
-void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) { 
+void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>& row) {
     ui64 localTid = LocalTableId(tableId);
     Y_VERIFY(localTid, "table not exist");
     const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(localTid);
@@ -923,7 +923,7 @@ bool TEngineHost::IsPathErased(const TTableId& tableId) const {
 }
 
 // Returns whether row belong this shard.
-bool TEngineHost::IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const { 
+bool TEngineHost::IsMyKey(const TTableId& tableId, const TArrayRef<const TCell>& row) const {
     Y_UNUSED(tableId); Y_UNUSED(row);
     return true;
 }
@@ -948,8 +948,8 @@ void TEngineHost::SetPeriodicCallback(TPeriodicCallback&& callback) {
 
 void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TSmallVec<NTable::TTag>& systemColumnTags) {
     // Find out tags that should be read in Select*() functions
-    tags.reserve(columnIds->GetValuesCount()); 
-    for (ui32 i = 0; i < columnIds->GetValuesCount(); i++) { 
+    tags.reserve(columnIds->GetValuesCount());
+    for (ui32 i = 0; i < columnIds->GetValuesCount(); i++) {
         NTable::TTag columnId = AS_VALUE(TDataLiteral, columnIds->GetValue(i))->AsValue().Get<ui32>();
         if (IsSystemColumn(columnId)) {
             systemColumnTags.push_back(columnId);

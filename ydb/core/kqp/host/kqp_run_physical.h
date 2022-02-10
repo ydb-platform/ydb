@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/prepare/kqp_prepare.h>
 
-#include <ydb/library/yql/core/yql_graph_transformer.h> 
+#include <ydb/library/yql/core/yql_graph_transformer.h>
 
 namespace NKikimr {
 namespace NKqp {

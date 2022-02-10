@@ -22,7 +22,7 @@ PEERDIR(
     ydb/core/kesus/tablet
     ydb/core/tx/scheme_cache
     ydb/core/util
-    ydb/library/yql/public/issue 
+    ydb/library/yql/public/issue
 )
 
 END()

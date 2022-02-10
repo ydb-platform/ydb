@@ -14,9 +14,9 @@ namespace NKikimr {
 struct TDomainsInfo : public TThrRefBase {
     static const ui32 FirstUserTag = 32;
     static const ui32 FakeRootTag = 0xFFFFE;
-    static const ui32 MaxUserTag = 0xFFFFF; 
-    static const ui32 BadDomainId = 0xFFFFFFFFu; 
-    static const ui64 BadTabletId = 0xFFFFFFFFFFFFFFFFull; 
+    static const ui32 MaxUserTag = 0xFFFFF;
+    static const ui32 BadDomainId = 0xFFFFFFFFu;
+    static const ui64 BadTabletId = 0xFFFFFFFFFFFFFFFFull;
     static const ui32 DomainBits = 5;
     static const ui32 MaxDomainId = (1 << DomainBits) - 1;
 
@@ -78,7 +78,7 @@ struct TDomainsInfo : public TThrRefBase {
         using TStoragePoolKinds = THashMap<TString, NKikimrBlobStorage::TDefineStoragePool>;
 
         const ui32 DomainUid;
-        const ui32 DefaultStateStorageGroup; 
+        const ui32 DefaultStateStorageGroup;
         const ui32 DefaultSchemeBoardGroup;
         const ui64 SchemeRoot;
         const TString Name;
@@ -86,7 +86,7 @@ struct TDomainsInfo : public TThrRefBase {
         const TVector<ui64> Mediators;
         const TVector<ui64> TxAllocators;
         const TVector<ui32> StateStorageGroups;
-        const ui32 DefaultHiveUid; 
+        const ui32 DefaultHiveUid;
         const TVector<ui32> HiveUids;
         const ui64 DomainPlanResolution;
         const TStoragePoolKinds StoragePoolTypes;
@@ -110,7 +110,7 @@ struct TDomainsInfo : public TThrRefBase {
             , Mediators(std::move(mediators))
             , TxAllocators(std::move(allocators))
             , StateStorageGroups(std::move(stateStorageGroup))
-            , DefaultHiveUid(defaultHiveUid) 
+            , DefaultHiveUid(defaultHiveUid)
             , HiveUids(std::move(hivesUids))
             , DomainPlanResolution(domainPlanResolution)
             , StoragePoolTypes(poolTypes)
@@ -264,24 +264,24 @@ struct TDomainsInfo : public TThrRefBase {
         for (auto group: domain->StateStorageGroups) {
             DomainByStateStorageGroup[group] = domain;
         }
- 
-        for (auto hiveUid : domain->HiveUids) { 
-            DomainByHiveUid[hiveUid] = domain; 
-        } 
+
+        for (auto hiveUid : domain->HiveUids) {
+            DomainByHiveUid[hiveUid] = domain;
+        }
     }
 
-    void AddHive(ui32 hiveUid, ui64 hive) { 
-        HivesByHiveUid[hiveUid] = hive; 
-    } 
- 
-    void ClearDomainsAndHive() { 
-        Domains.clear(); 
+    void AddHive(ui32 hiveUid, ui64 hive) {
+        HivesByHiveUid[hiveUid] = hive;
+    }
+
+    void ClearDomainsAndHive() {
+        Domains.clear();
         DomainByName.clear();
-        DomainByStateStorageGroup.clear(); 
-        DomainByHiveUid.clear(); 
-        HivesByHiveUid.clear(); 
-    } 
- 
+        DomainByStateStorageGroup.clear();
+        DomainByHiveUid.clear();
+        HivesByHiveUid.clear();
+    }
+
     ui32 GetDefaultStateStorageGroup(ui32 domainUid) const {
         auto it = Domains.find(domainUid);
         Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid);
@@ -292,8 +292,8 @@ struct TDomainsInfo : public TThrRefBase {
         auto it = Domains.find(domainUid);
         Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid);
         return it->second->DefaultHiveUid;
-    } 
- 
+    }
+
     ui32 GetStateStorageGroupDomainUid(ui32 stateStorageGroup) const {
         auto it = DomainByStateStorageGroup.find(stateStorageGroup);
         Y_VERIFY(it != DomainByStateStorageGroup.end(), "stateStorageGroup = %" PRIu32, stateStorageGroup);
@@ -305,7 +305,7 @@ struct TDomainsInfo : public TThrRefBase {
         if (const auto *x = DomainByStateStorageGroup.FindPtr(ssid))
             return x->Get()->DomainUid;
         else
-            return BadDomainId; 
+            return BadDomainId;
     }
 
     const TDomain& GetDomain(ui32 domainUid) const {
@@ -313,7 +313,7 @@ struct TDomainsInfo : public TThrRefBase {
         Y_VERIFY(it != Domains.end(), "domainUid = %" PRIu32, domainUid);
         return *(it->second);
     }
- 
+
     const TDomain* GetDomainByName(TStringBuf name) const {
         auto it = DomainByName.find(name);
         if (it != DomainByName.end())
@@ -323,19 +323,19 @@ struct TDomainsInfo : public TThrRefBase {
 
     ui64 GetHive(ui32 hiveUid) const {
         auto it = HivesByHiveUid.find(hiveUid);
-        if (it != HivesByHiveUid.end()) 
-            return it->second; 
-        else 
-            return BadTabletId; 
-    } 
- 
+        if (it != HivesByHiveUid.end())
+            return it->second;
+        else
+            return BadTabletId;
+    }
+
     ui32 GetHiveDomainUid(ui32 hiveUid) const {
         auto it = DomainByHiveUid.find(hiveUid);
-        if (it != DomainByHiveUid.end()) 
-            return it->second->DomainUid; 
-        else 
-            return BadDomainId; 
-    } 
+        if (it != DomainByHiveUid.end())
+            return it->second->DomainUid;
+        else
+            return BadDomainId;
+    }
 
     ui32 GetHiveUidByHiveId(ui64 hiveTabletId) const {
         for (const auto &xpair : HivesByHiveUid)

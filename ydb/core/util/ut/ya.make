@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/core/util)
- 
+
 OWNER(vvvv g:kikimr)
- 
+
 FORK_SUBTESTS()
 IF (WITH_VALGRIND)
     SPLIT_FACTOR(30)
@@ -13,13 +13,13 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-PEERDIR( 
+PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
     library/cpp/threading/future
-) 
- 
-SRCS( 
+)
+
+SRCS(
     address_classifier_ut.cpp
     bits_ut.cpp
     btree_cow_ut.cpp
@@ -32,7 +32,7 @@ SRCS(
     hazard_ut.cpp
     hyperlog_counter_ut.cpp
     interval_set_ut.cpp
-    intrusive_fixed_hash_set_ut.cpp 
+    intrusive_fixed_hash_set_ut.cpp
     intrusive_heap_ut.cpp
     intrusive_stack_ut.cpp
     lf_stack_ut.cpp
@@ -48,6 +48,6 @@ SRCS(
     token_bucket_ut.cpp
     ulid_ut.cpp
     wildcard_ut.cpp
-) 
- 
-END() 
+)
+
+END()

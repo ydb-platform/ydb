@@ -1,9 +1,9 @@
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/tablet_counters.proto";
- 
-package NKikimrTabletBase; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
+
+package NKikimrTabletBase;
+option java_package = "ru.yandex.kikimr.proto";
+
 // we have changed type without changing it's number because there is a binary compatibility with ui32 and enums
 message TTabletTypes {
     enum EType {
@@ -60,72 +60,72 @@ message TTabletTypes {
     }
 }
 
-message TTabletLogEntry { 
-    // normal log entries 
-    repeated uint32 DependsOn = 1; 
-    repeated NKikimrProto.TLogoBlobID References = 2; 
-    optional fixed64 Snapshot = 3; 
-    optional uint32 Confirmed = 4; 
-    optional bool IsSnapshot = 5; 
- 
+message TTabletLogEntry {
+    // normal log entries
+    repeated uint32 DependsOn = 1;
+    repeated NKikimrProto.TLogoBlobID References = 2;
+    optional fixed64 Snapshot = 3;
+    optional uint32 Confirmed = 4;
+    optional bool IsSnapshot = 5;
+
     repeated NKikimrProto.TLogoBlobID GcDiscovered = 6;
     repeated NKikimrProto.TLogoBlobID GcLeft = 7;
 
     optional bool IsTotalSnapshot = 8;
 
-    // zero log entry 
-    optional fixed64 ZeroConfirmed = 10; 
-    optional uint32 ZeroTailSz = 11; 
-    repeated fixed64 ZeroTailBitmask = 12; 
+    // zero log entry
+    optional fixed64 ZeroConfirmed = 10;
+    optional uint32 ZeroTailSz = 11;
+    repeated fixed64 ZeroTailBitmask = 12;
 
     optional bytes EmbeddedLogBody = 13;
-} 
- 
-message TTabletChannelInfo { 
-    message THistoryEntry { 
-        optional uint32 FromGeneration = 1; 
-        optional uint32 GroupID = 2; 
-    } 
- 
-    optional uint32 Channel = 1; 
-    optional uint32 ChannelType = 2; 
-    repeated THistoryEntry History = 3; 
-    optional string ChannelErasureName = 4; 
+}
+
+message TTabletChannelInfo {
+    message THistoryEntry {
+        optional uint32 FromGeneration = 1;
+        optional uint32 GroupID = 2;
+    }
+
+    optional uint32 Channel = 1;
+    optional uint32 ChannelType = 2;
+    repeated THistoryEntry History = 3;
+    optional string ChannelErasureName = 4;
     optional string StoragePool = 5;
-} 
- 
-message TTabletStorageInfo { 
-    optional fixed64 TabletID = 1; 
-    repeated TTabletChannelInfo Channels = 2; 
+}
+
+message TTabletStorageInfo {
+    optional fixed64 TabletID = 1;
+    repeated TTabletChannelInfo Channels = 2;
     optional TTabletTypes.EType TabletType = 3;
     optional uint32 Version = 4;
     optional uint64 TenantIdOwner = 5;
     optional uint64 TenantIdLocalId = 6;
-} 
- 
-message TEvPing { 
-    optional fixed64 TabletID = 1; 
-    optional uint64 Flags = 2; 
-} 
- 
-message TEvPong { 
-    optional fixed64 TabletID = 1; 
-    optional uint64 Flags = 2; 
-} 
- 
-message TEvReadLocalBase { 
-    optional bytes RootKey = 1; 
-    optional bool SaveScheme = 2; 
-} 
- 
-message TEvReadLocalBaseResult { 
-    optional uint64 Origin = 1; 
-    optional bytes RootKey = 2; 
-    optional bool IsError = 3; 
-    optional bytes DocBuffer = 4; 
-    optional bytes Scheme = 5; 
-} 
- 
+}
+
+message TEvPing {
+    optional fixed64 TabletID = 1;
+    optional uint64 Flags = 2;
+}
+
+message TEvPong {
+    optional fixed64 TabletID = 1;
+    optional uint64 Flags = 2;
+}
+
+message TEvReadLocalBase {
+    optional bytes RootKey = 1;
+    optional bool SaveScheme = 2;
+}
+
+message TEvReadLocalBaseResult {
+    optional uint64 Origin = 1;
+    optional bytes RootKey = 2;
+    optional bool IsError = 3;
+    optional bytes DocBuffer = 4;
+    optional bytes Scheme = 5;
+}
+
 message TEvFollowerAttach {
     optional fixed64 TabletId = 1;
     optional uint32 FollowerAttempt = 2;

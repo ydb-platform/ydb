@@ -10,7 +10,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/dq/actors/protos 
+    ydb/library/yql/dq/actors/protos
 )
 
 END()

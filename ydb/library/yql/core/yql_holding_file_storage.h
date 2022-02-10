@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/core/yql_user_data.h> 
+#include <ydb/library/yql/core/yql_user_data.h>
 #include <ydb/library/yql/core/file_storage/file_storage.h>
 #include <util/generic/map.h>
 

@@ -11,10 +11,10 @@ namespace NNodeBroker {
 struct Schema : NIceDb::Schema {
     struct Nodes : Table<1> {
         struct ID : Column<1, NScheme::NTypeIds::Uint32> {};
-        struct Host : Column<2, NScheme::NTypeIds::Utf8> {}; 
+        struct Host : Column<2, NScheme::NTypeIds::Utf8> {};
         struct Port : Column<3, NScheme::NTypeIds::Uint32> {};
-        struct ResolveHost : Column<4, NScheme::NTypeIds::Utf8> {}; 
-        struct Address : Column<5, NScheme::NTypeIds::Utf8> {}; 
+        struct ResolveHost : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct Address : Column<5, NScheme::NTypeIds::Utf8> {};
         struct DataCenter : Column<6, NScheme::NTypeIds::Uint64> {};
         struct Room : Column<7, NScheme::NTypeIds::Uint64> {};
         struct Rack : Column<8, NScheme::NTypeIds::Uint64> {};

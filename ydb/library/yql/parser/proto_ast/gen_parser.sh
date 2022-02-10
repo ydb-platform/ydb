@@ -1,7 +1,7 @@
 #/bin/sh -e
 
 if ! [ -d "./org/antlr/codegen/templates/" ]; then
-    echo "gen_parser.sh must be called from yql/library/proto_ast folder" 
+    echo "gen_parser.sh must be called from yql/library/proto_ast folder"
     exit 1;
 fi
 

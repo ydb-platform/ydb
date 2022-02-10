@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb/library/yql/providers/common/config/yql_dispatch.h> 
-#include <ydb/library/yql/providers/common/config/yql_setting.h> 
+#include <ydb/library/yql/providers/common/config/yql_dispatch.h>
+#include <ydb/library/yql/providers/common/config/yql_setting.h>
 #include <ydb/core/protos/config.pb.h>
 
 namespace NYql {

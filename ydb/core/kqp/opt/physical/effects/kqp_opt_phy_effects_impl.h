@@ -4,8 +4,8 @@
 #include <ydb/core/kqp/opt/physical/kqp_opt_phy_impl.h>
 #include <ydb/core/kqp/provider/kqp_opt_helpers.h>
 
-#include <ydb/library/yql/core/yql_opt_utils.h> 
-#include <ydb/library/yql/dq/opt/dq_opt.h> 
+#include <ydb/library/yql/core/yql_opt_utils.h>
+#include <ydb/library/yql/dq/opt/dq_opt.h>
 
 namespace NKikimr::NKqp::NOpt {
 

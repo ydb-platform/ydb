@@ -1,7 +1,7 @@
 #include "kqp_locks_helper.h"
 
-#include <ydb/library/yql/minikql/mkql_node.h> 
-#include <ydb/library/yql/utils/yql_panic.h> 
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 
 namespace NKikimr::NKqp {

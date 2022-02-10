@@ -36,16 +36,16 @@ PEERDIR(
     ydb/core/protos
     ydb/core/scheme
     ydb/core/ydb_convert
-    ydb/library/yql/minikql 
-    ydb/library/yql/minikql/comp_nodes 
-    ydb/library/yql/minikql/computation 
-    ydb/library/yql/utils 
-    ydb/library/yql/dq/actors/protos 
-    ydb/library/yql/dq/runtime 
+    ydb/library/yql/minikql
+    ydb/library/yql/minikql/comp_nodes
+    ydb/library/yql/minikql/computation
+    ydb/library/yql/utils
+    ydb/library/yql/dq/actors/protos
+    ydb/library/yql/dq/runtime
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 GENERATE_ENUM_SERIALIZATION(kqp_spilling.h)
 
 END()

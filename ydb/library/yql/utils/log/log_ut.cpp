@@ -11,7 +11,7 @@
 #include <util/system/getpid.h>
 #include <util/string/split.h>
 #include <util/string/cast.h>
-#include <util/string/subst.h> 
+#include <util/string/subst.h>
 
 #include <regex>
 
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         TString defaultStr, coreStr, sqlStr, commonStr, ytStr,
                 kikimrStr, rtmrStr, performanceStr, perfStr, _;
         Split(out.Str(), '\n', defaultStr, coreStr, sqlStr,
-              commonStr, ytStr, 
+              commonStr, ytStr,
               kikimrStr, rtmrStr,
               performanceStr, perfStr, _);
 
@@ -261,12 +261,12 @@ Y_UNIT_TEST_SUITE(TLogTest)
 
             TString throwedLogCtx = ThrowedLogContextPath();
             TStringBuf file, line, context;
-            TStringBuf(throwedLogCtx).Split(".cpp:", file, line); 
+            TStringBuf(throwedLogCtx).Split(".cpp:", file, line);
             line.Split(':', line, context);
 
-            TString expectedFile(__LOCATION__.File); 
-            SubstGlobal(expectedFile, LOCSLASH_C, '/'); 
-            UNIT_ASSERT_STRINGS_EQUAL(TString(file)+".cpp", expectedFile); 
+            TString expectedFile(__LOCATION__.File);
+            SubstGlobal(expectedFile, LOCSLASH_C, '/');
+            UNIT_ASSERT_STRINGS_EQUAL(TString(file)+".cpp", expectedFile);
             int lineNumber;
             UNIT_ASSERT(TryFromString<int>(line, lineNumber));
             UNIT_ASSERT(lineNumber > 0);
@@ -398,7 +398,7 @@ Y_UNIT_TEST_SUITE(TLogTest)
         }
     }
 
- 
+
     int Func1(int a, char b) {
         YQL_PROFILE_FUNC(INFO);
         return a + b;
@@ -424,11 +424,11 @@ Y_UNIT_TEST_SUITE(TLogTest)
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::INFO);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Perf);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Performance);
-#ifdef _win_ 
-            std::regex re("Execution of \\[NTestSuiteTLogTest::Func1\\] took [0-9\\.]+us"); 
-#else 
+#ifdef _win_
+            std::regex re("Execution of \\[NTestSuiteTLogTest::Func1\\] took [0-9\\.]+us");
+#else
             std::regex re("Execution of \\[Func1\\] took [0-9\\.]+us");
-#endif 
+#endif
             bool isMatch = std::regex_match(logRow.Message.c_str(), re);
             UNIT_ASSERT_C(isMatch, "Unexpected message: " << logRow.Message);
         }
@@ -437,11 +437,11 @@ Y_UNIT_TEST_SUITE(TLogTest)
             UNIT_ASSERT_EQUAL(logRow.Level, ELevel::WARN);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Perf);
             UNIT_ASSERT_EQUAL(logRow.Component, EComponent::Performance);
-#ifdef _win_ 
-            std::regex re("Execution of \\[int __cdecl NTestSuiteTLogTest::Func2\\(int,char\\)\\] took [0-9\\.]+us"); 
-#else 
+#ifdef _win_
+            std::regex re("Execution of \\[int __cdecl NTestSuiteTLogTest::Func2\\(int,char\\)\\] took [0-9\\.]+us");
+#else
             std::regex re("Execution of \\[int NTestSuiteTLogTest::Func2\\(int, char\\)\\] took [0-9\\.]+us");
-#endif 
+#endif
             bool isMatch = std::regex_match(logRow.Message.c_str(), re);
             UNIT_ASSERT_C(isMatch, "Unexpected message: " << logRow.Message);
         }

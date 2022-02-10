@@ -5,7 +5,7 @@
 #include "factory.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/library/yql/public/decimal/yql_decimal.h> 
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <util/stream/str.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>

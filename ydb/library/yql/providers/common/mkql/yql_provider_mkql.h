@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb/library/yql/ast/yql_expr.h> 
-#include <ydb/library/yql/minikql/mkql_node.h> 
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
+#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 namespace NYql {
 namespace NCommon {
@@ -83,16 +83,16 @@ public:
     void AddCallable(const std::string_view& name, TCompiler compiler) override;
     void AddCallable(const std::initializer_list<std::string_view>& names, TCompiler compiler) override;
     void OverrideCallable(const std::string_view& name, TCompiler compiler) override;
- 
-private: 
-    class TShared : public TMkqlCallableCompilerBase { 
-    public: 
-        TShared(); 
-    }; 
- 
-    const TShared& GetShared() const { 
-        return *Singleton<TShared>(); 
-    } 
+
+private:
+    class TShared : public TMkqlCallableCompilerBase {
+    public:
+        TShared();
+    };
+
+    const TShared& GetShared() const {
+        return *Singleton<TShared>();
+    }
 };
 
 NKikimr::NMiniKQL::TRuntimeNode CombineByKeyImpl(const TExprNode& node, TMkqlBuildContext& ctx);

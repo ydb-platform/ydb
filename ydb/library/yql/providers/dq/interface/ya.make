@@ -11,10 +11,10 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/yson
-    ydb/library/yql/ast 
-    ydb/library/yql/core 
+    ydb/library/yql/ast
+    ydb/library/yql/core
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 END()

@@ -1,34 +1,34 @@
-#include "mkql_builtins_impl.h" 
+#include "mkql_builtins_impl.h"
 #include "mkql_builtins_datetime.h"
- 
-#include <ydb/library/yql/minikql/mkql_type_ops.h> 
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
-namespace { 
- 
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
+namespace {
+
 template<typename TLeft, typename TRight, typename TOutput>
 struct TDiv : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TDiv<TLeft, TRight, TOutput>> {
     static_assert(std::is_floating_point<TOutput>::value, "expected floating point");
- 
+
     static TOutput Do(TOutput left, TOutput right)
     {
         return left / right;
-    } 
+    }
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext&, BasicBlock*& block)
     {
         return BinaryOperator::CreateFDiv(left, right, "div", block);
     }
 #endif
 };
- 
+
 template <typename TLeft, typename TRight, typename TOutput>
 struct TIntegralDiv {
     static_assert(std::is_integral<TOutput>::value, "integral type expected");
- 
+
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
     {
         const auto lv = static_cast<TOutput>(left.template Get<TLeft>());
@@ -36,14 +36,14 @@ struct TIntegralDiv {
 
         if (rv == 0 ||
             (std::is_signed<TOutput>::value && sizeof(TOutput) <= sizeof(TLeft) && rv == TOutput(-1) && lv == Min<TOutput>()))
-        { 
+        {
             return NUdf::TUnboxedValuePod();
-        } 
+        }
 
         return NUdf::TUnboxedValuePod(lv / rv);
-    } 
+    }
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
         auto& context = ctx.Codegen->GetContext();
@@ -79,31 +79,31 @@ struct TIntegralDiv {
     }
 #endif
 };
- 
+
 template <typename TLeft, typename TRight, typename TOutput>
-struct TNumDivInterval { 
+struct TNumDivInterval {
     static_assert(std::is_integral<TLeft>::value, "left must be integral");
     static_assert(std::is_integral<TRight>::value, "right must be integral");
-    static_assert(std::is_same<TOutput, i64>::value, "expected i64"); 
- 
+    static_assert(std::is_same<TOutput, i64>::value, "expected i64");
+
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right)
-    { 
-        const auto lv = static_cast<TOutput>(left.template Get<TLeft>()); 
-        const auto rv = static_cast<TOutput>(right.template Get<TRight>()); 
- 
-        if (rv == 0 || 
-            (std::is_signed<TOutput>::value && rv == TOutput(-1) && lv == Min<TOutput>())) 
-        { 
-            return NUdf::TUnboxedValuePod(); 
-        } 
- 
+    {
+        const auto lv = static_cast<TOutput>(left.template Get<TLeft>());
+        const auto rv = static_cast<TOutput>(right.template Get<TRight>());
+
+        if (rv == 0 ||
+            (std::is_signed<TOutput>::value && rv == TOutput(-1) && lv == Min<TOutput>()))
+        {
+            return NUdf::TUnboxedValuePod();
+        }
+
         const auto ret = lv / rv;
         return IsBadInterval(ret) ? NUdf::TUnboxedValuePod() : NUdf::TUnboxedValuePod(FromScaledDate<TOutput>(ret));;
-    } 
- 
-#ifndef MKQL_DISABLE_CODEGEN 
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    { 
+    {
         auto& context = ctx.Codegen->GetContext();
         const auto lv = StaticCast<TLeft, TOutput>(GetterFor<TLeft>(left, context, block), context, block);
         const auto rv = StaticCast<TRight, TOutput>(GetterFor<TRight>(right, context, block), context, block);
@@ -133,10 +133,10 @@ struct TNumDivInterval {
 
         block = done;
         return result;
-    } 
-#endif 
-}; 
- 
+    }
+#endif
+};
+
 }
 
 void RegisterDiv(IBuiltinFunctionRegistry& registry) {
@@ -146,23 +146,23 @@ void RegisterDiv(IBuiltinFunctionRegistry& registry) {
     RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<NUdf::TInterval>,
         NUdf::TDataType<i64>, TIntegralDiv, TBinaryArgsOptWithNullableResult>(registry, "Div");
 
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<ui8>, 
-        NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div"); 
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<ui8>,
+        NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
     RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i8>,
         NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
     RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<ui16>,
         NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
     RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i16>,
         NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<ui32>, 
-        NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div"); 
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i32>, 
-        NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div"); 
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<ui64>, 
-        NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div"); 
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i64>, 
-        NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div"); 
-} 
- 
-} // namespace NMiniKQL 
-} // namespace NKikimr 
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<ui32>,
+        NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i32>,
+        NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<ui64>,
+        NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TInterval>, NUdf::TDataType<i64>,
+        NUdf::TDataType<NUdf::TInterval>, TNumDivInterval, TBinaryArgsOptWithNullableResult>(registry, "Div");
+}
+
+} // namespace NMiniKQL
+} // namespace NKikimr

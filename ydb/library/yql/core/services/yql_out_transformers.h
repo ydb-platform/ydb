@@ -3,8 +3,8 @@
 #include <ydb/library/yql/core/services/yql_transform_pipeline.h>
 #include <ydb/library/yql/core/services/yql_plan.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/core/yql_type_annotation.h> 
-#include <ydb/library/yql/core/yql_graph_transformer.h> 
+#include <ydb/library/yql/core/yql_type_annotation.h>
+#include <ydb/library/yql/core/yql_graph_transformer.h>
 
 #include <library/cpp/yson/public.h>
 

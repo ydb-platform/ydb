@@ -19,7 +19,7 @@ namespace NKikimr {
 
             ui32 Generate() const {
                 ui32 range = Max - Min + 1;
-                return Min + TAppData::RandomProvider->GenRand64() % range; 
+                return Min + TAppData::RandomProvider->GenRand64() % range;
             }
         };
     } // NSizeGenerator

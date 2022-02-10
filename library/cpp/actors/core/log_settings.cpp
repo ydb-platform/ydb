@@ -112,12 +112,12 @@ namespace NActors {
                     AtomicSet(ComponentInfo[i], settings.Raw.Data);
                 }
 
-                TStringStream str; 
+                TStringStream str;
 
                 str << titleName
                     << " for all components has been changed to "
                     << PriorityToString(EPrio(priority));
-                explanation = str.Str(); 
+                explanation = str.Str();
                 return 0;
             } else {
                 if (!IsValidComponent(component)) {
@@ -213,18 +213,18 @@ namespace NActors {
             UseLocalTimestamps = value;
         }
 
-        EComponent TSettings::FindComponent(const TStringBuf& componentName) const { 
+        EComponent TSettings::FindComponent(const TStringBuf& componentName) const {
             if (componentName.empty())
-                return InvalidComponent; 
- 
-            for (EComponent component = MinVal; component <= MaxVal; ++component) { 
-                if (ComponentNames[component] == componentName) 
-                    return component; 
-            } 
- 
-            return InvalidComponent; 
-        } 
- 
+                return InvalidComponent;
+
+            for (EComponent component = MinVal; component <= MaxVal; ++component) {
+                if (ComponentNames[component] == componentName)
+                    return component;
+            }
+
+            return InvalidComponent;
+        }
+
     }
 
 }

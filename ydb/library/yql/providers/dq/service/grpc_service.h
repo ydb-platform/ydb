@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h> 
+#include <ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h>
 
-#include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h> 
-#include <ydb/library/yql/providers/dq/api/protos/service.pb.h> 
+#include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
+#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
 
 #include <library/cpp/grpc/server/grpc_request.h>
 #include <library/cpp/grpc/server/grpc_server.h>

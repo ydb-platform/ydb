@@ -17,7 +17,7 @@ enum class EType {
 enum class EDisposition {
     INLINE,
     RESOURCE,
-    RESOURCE_FILE, 
+    RESOURCE_FILE,
     URL,
     FILESYSTEM
 };

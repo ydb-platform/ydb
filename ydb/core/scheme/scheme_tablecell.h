@@ -4,10 +4,10 @@
 #include "scheme_type_id.h"
 #include "scheme_type_order.h"
 #include "scheme_types_defs.h"
- 
+
 #include <util/generic/hash.h>
-#include <util/system/unaligned_mem.h> 
- 
+#include <util/system/unaligned_mem.h>
+
 #include <type_traits>
 
 namespace NKikimr {
@@ -120,7 +120,7 @@ using TCellsRef = TConstArrayRef<const TCell>;
 // NULL is considered equal to another NULL and less than non-NULL
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
 inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrder type) {
-    using TPair = std::pair<ui64, ui64>; 
+    using TPair = std::pair<ui64, ui64>;
     if (a.IsNull())
         return b.IsNull() ? 0 : -1;
     if (b.IsNull())
@@ -133,8 +133,8 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
     {                                               \
         Y_VERIFY_DEBUG(a.IsInline());                      \
         Y_VERIFY_DEBUG(b.IsInline());                      \
-        castType va = ReadUnaligned<castType>((const castType*)a.InlineData()); \ 
-        castType vb = ReadUnaligned<castType>((const castType*)b.InlineData()); \ 
+        castType va = ReadUnaligned<castType>((const castType*)a.InlineData()); \
+        castType vb = ReadUnaligned<castType>((const castType*)b.InlineData()); \
         return va == vb ? 0 : ((va < vb) != type.IsDescending() ? -1 : 1);   \
     }
 
@@ -149,7 +149,7 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
     SIMPLE_TYPE_SWITCH(Bool,   ui8);
     SIMPLE_TYPE_SWITCH(Double, double);
     SIMPLE_TYPE_SWITCH(Float,  float);
-    SIMPLE_TYPE_SWITCH(PairUi64Ui64,  TPair); 
+    SIMPLE_TYPE_SWITCH(PairUi64Ui64,  TPair);
     SIMPLE_TYPE_SWITCH(Date,   ui16);
     SIMPLE_TYPE_SWITCH(Datetime,  ui32);
     SIMPLE_TYPE_SWITCH(Timestamp, ui64);
@@ -157,10 +157,10 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
 
 #undef SIMPLE_TYPE_SWITCH
 
-    case NKikimr::NScheme::NTypeIds::String: 
-    case NKikimr::NScheme::NTypeIds::String4k: 
-    case NKikimr::NScheme::NTypeIds::String2m: 
-    case NKikimr::NScheme::NTypeIds::Utf8: 
+    case NKikimr::NScheme::NTypeIds::String:
+    case NKikimr::NScheme::NTypeIds::String4k:
+    case NKikimr::NScheme::NTypeIds::String2m:
+    case NKikimr::NScheme::NTypeIds::Utf8:
     case NKikimr::NScheme::NTypeIds::Json:
     case NKikimr::NScheme::NTypeIds::Yson:
     // XXX: using memcmp is meaningless for both JsonDocument and Json
@@ -242,17 +242,17 @@ inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
     case NYql::NProto::TypeIds::Uint16:
         return THash<ui16>()(*(const ui16*)cell.Data());
     case NYql::NProto::TypeIds::Int32:
-        return THash<i32>()(ReadUnaligned<i32>((const i32*)cell.Data())); 
+        return THash<i32>()(ReadUnaligned<i32>((const i32*)cell.Data()));
     case NYql::NProto::TypeIds::Uint32:
-        return THash<ui32>()(ReadUnaligned<ui32>((const ui32*)cell.Data())); 
+        return THash<ui32>()(ReadUnaligned<ui32>((const ui32*)cell.Data()));
     case NYql::NProto::TypeIds::Int64:
-        return THash<i64>()(ReadUnaligned<i64>((const i64*)cell.Data())); 
+        return THash<i64>()(ReadUnaligned<i64>((const i64*)cell.Data()));
     case NYql::NProto::TypeIds::Uint64:
-        return THash<ui64>()(ReadUnaligned<ui64>((const ui64*)cell.Data())); 
+        return THash<ui64>()(ReadUnaligned<ui64>((const ui64*)cell.Data()));
     case NYql::NProto::TypeIds::Float:
-        return THash<float>()(ReadUnaligned<float>((const float*)cell.Data())); 
+        return THash<float>()(ReadUnaligned<float>((const float*)cell.Data()));
     case NYql::NProto::TypeIds::Double:
-        return THash<double>()(ReadUnaligned<double>((const double*)cell.Data())); 
+        return THash<double>()(ReadUnaligned<double>((const double*)cell.Data()));
 
     case NYql::NProto::TypeIds::Date:
         return THash<ui16>()(ReadUnaligned<ui16>((const ui16*)cell.Data()));
@@ -466,9 +466,9 @@ public:
         ui16 cnt = cells.size();
         res.append((const char*)&cnt, sizeof(ui16));
         for (auto& c : cells) {
-            TValue header; 
-            header.Size = c.Size(); 
-            header.IsNull = c.IsNull(); 
+            TValue header;
+            header.Size = c.Size();
+            header.IsNull = c.IsNull();
             res.append((const char*)&header, sizeof(header));
             res.append(c.Data(), c.Size());
         }

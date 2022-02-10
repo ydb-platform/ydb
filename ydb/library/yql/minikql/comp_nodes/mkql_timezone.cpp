@@ -1,108 +1,108 @@
-#include "mkql_timezone.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_builder.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
-#include <ydb/library/yql/minikql/mkql_type_ops.h> 
- 
+#include "mkql_timezone.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
+
 #include <util/string/cast.h>
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
-class TTimezoneIdWrapper : public TMutableComputationNode<TTimezoneIdWrapper> { 
-    typedef TMutableComputationNode<TTimezoneIdWrapper> TBaseComputation; 
-public: 
-    TTimezoneIdWrapper(TComputationMutables& mutables, IComputationNode* value) 
-        : TBaseComputation(mutables) 
-        , Value(value) 
-    {} 
- 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
-        auto value = Value->GetValue(ctx); 
-        if (!value) { 
-            return {}; 
-        } 
- 
-        auto id = FindTimezoneId(value.AsStringRef()); 
-        if (!id) { 
-            return {}; 
-        } 
- 
-        return NUdf::TUnboxedValuePod(ui16(*id)); 
-    } 
- 
-private: 
-    void RegisterDependencies() const final { 
-        DependsOn(Value); 
-    } 
- 
-    IComputationNode* const Value; 
-}; 
- 
-class TTimezoneNameWrapper : public TMutableComputationNode<TTimezoneNameWrapper> { 
-    typedef TMutableComputationNode<TTimezoneNameWrapper> TBaseComputation; 
-public: 
-    TTimezoneNameWrapper(TComputationMutables& mutables, IComputationNode* value) 
-        : TBaseComputation(mutables) 
-        , Value(value) 
-    {} 
- 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
-        auto value = Value->GetValue(ctx); 
-        if (!value) { 
-            return {}; 
-        } 
- 
-        auto name = FindTimezoneIANAName(value.Get<ui16>()); 
-        if (!name) { 
-            return {}; 
-        } 
- 
-        return MakeString(*name); 
-    } 
- 
-private: 
-    void RegisterDependencies() const final { 
-        DependsOn(Value); 
-    } 
- 
-    IComputationNode* const Value; 
-}; 
- 
+class TTimezoneIdWrapper : public TMutableComputationNode<TTimezoneIdWrapper> {
+    typedef TMutableComputationNode<TTimezoneIdWrapper> TBaseComputation;
+public:
+    TTimezoneIdWrapper(TComputationMutables& mutables, IComputationNode* value)
+        : TBaseComputation(mutables)
+        , Value(value)
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        auto value = Value->GetValue(ctx);
+        if (!value) {
+            return {};
+        }
+
+        auto id = FindTimezoneId(value.AsStringRef());
+        if (!id) {
+            return {};
+        }
+
+        return NUdf::TUnboxedValuePod(ui16(*id));
+    }
+
+private:
+    void RegisterDependencies() const final {
+        DependsOn(Value);
+    }
+
+    IComputationNode* const Value;
+};
+
+class TTimezoneNameWrapper : public TMutableComputationNode<TTimezoneNameWrapper> {
+    typedef TMutableComputationNode<TTimezoneNameWrapper> TBaseComputation;
+public:
+    TTimezoneNameWrapper(TComputationMutables& mutables, IComputationNode* value)
+        : TBaseComputation(mutables)
+        , Value(value)
+    {}
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        auto value = Value->GetValue(ctx);
+        if (!value) {
+            return {};
+        }
+
+        auto name = FindTimezoneIANAName(value.Get<ui16>());
+        if (!name) {
+            return {};
+        }
+
+        return MakeString(*name);
+    }
+
+private:
+    void RegisterDependencies() const final {
+        DependsOn(Value);
+    }
+
+    IComputationNode* const Value;
+};
+
 template <bool IsOptional1, bool IsOptional2>
 class TAddTimezoneWrapper : public TMutableCodegeneratorNode<TAddTimezoneWrapper<IsOptional1, IsOptional2>> {
     typedef TMutableCodegeneratorNode<TAddTimezoneWrapper<IsOptional1, IsOptional2>> TBaseComputation;
-public: 
-    TAddTimezoneWrapper(TComputationMutables& mutables, IComputationNode* value, IComputationNode* id) 
+public:
+    TAddTimezoneWrapper(TComputationMutables& mutables, IComputationNode* value, IComputationNode* id)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , Datetime(value)
-        , Id(id) 
+        , Id(id)
         , TimezonesCount(InitTimezones())
         , BlackList(GetTzBlackList())
     {}
- 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto value = Datetime->GetValue(ctx);
         if (IsOptional1 && !value) {
-            return {}; 
-        } 
- 
+            return {};
+        }
+
         const auto zone = Id->GetValue(ctx);
         if (IsOptional2 && !zone) {
-            return {}; 
-        } 
- 
+            return {};
+        }
+
         const auto id = zone.Get<ui16>();
         if (!IsValidTimezoneId(id)) {
             return {};
         }
 
         value.SetTimezoneId(id);
-        return value.Release(); 
-    } 
- 
+        return value.Release();
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -154,48 +154,48 @@ public:
         return result;
     }
 #endif
-private: 
-    void RegisterDependencies() const final { 
+private:
+    void RegisterDependencies() const final {
         this->DependsOn(Datetime);
         this->DependsOn(Id);
-    } 
- 
+    }
+
     IComputationNode* const Datetime;
-    IComputationNode* const Id; 
+    IComputationNode* const Id;
     const ui16 TimezonesCount;
     const std::vector<ui16> BlackList;
-}; 
- 
+};
+
 }
 
-IComputationNode* WrapTimezoneId(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg"); 
-    bool isOptional; 
+IComputationNode* WrapTimezoneId(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
+    bool isOptional;
     const auto dataType = UnpackOptionalData(callable.GetInput(0), isOptional);
-    MKQL_ENSURE(dataType->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string"); 
+    MKQL_ENSURE(dataType->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string");
     const auto value = LocateNode(ctx.NodeLocator, callable, 0);
-    return new TTimezoneIdWrapper(ctx.Mutables, value); 
-} 
- 
-IComputationNode* WrapTimezoneName(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg"); 
-    bool isOptional; 
+    return new TTimezoneIdWrapper(ctx.Mutables, value);
+}
+
+IComputationNode* WrapTimezoneName(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
+    bool isOptional;
     const auto dataType = UnpackOptionalData(callable.GetInput(0), isOptional);
     MKQL_ENSURE(dataType->GetSchemeType() == NUdf::TDataType<ui16>::Id, "Expected Uint16");
     const auto value = LocateNode(ctx.NodeLocator, callable, 0);
-    return new TTimezoneNameWrapper(ctx.Mutables, value); 
-} 
- 
-IComputationNode* WrapAddTimezone(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arg"); 
-    bool isOptional1; 
+    return new TTimezoneNameWrapper(ctx.Mutables, value);
+}
+
+IComputationNode* WrapAddTimezone(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 arg");
+    bool isOptional1;
     const auto dataType1 = UnpackOptionalData(callable.GetInput(0), isOptional1);
     MKQL_ENSURE(NUdf::GetDataTypeInfo(*dataType1->GetDataSlot()).Features & NUdf::DateType, "Expected date type");
- 
-    bool isOptional2; 
+
+    bool isOptional2;
     const auto dataType2 = UnpackOptionalData(callable.GetInput(1), isOptional2);
-    MKQL_ENSURE(dataType2->GetSchemeType() == NUdf::TDataType<ui16>::Id, "Expected ui16"); 
- 
+    MKQL_ENSURE(dataType2->GetSchemeType() == NUdf::TDataType<ui16>::Id, "Expected ui16");
+
     const auto value = LocateNode(ctx.NodeLocator, callable, 0);
     const auto id = LocateNode(ctx.NodeLocator, callable, 1);
     if (isOptional1 && isOptional2) {
@@ -207,8 +207,8 @@ IComputationNode* WrapAddTimezone(TCallable& callable, const TComputationNodeFac
     } else {
         return new TAddTimezoneWrapper<false, false>(ctx.Mutables, value, id);
     }
-} 
- 
-} 
- 
-} 
+}
+
+}
+
+}

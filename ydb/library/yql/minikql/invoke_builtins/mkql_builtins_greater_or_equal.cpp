@@ -1,8 +1,8 @@
 #include "mkql_builtins_compare.h"
-#include "mkql_builtins_datetime.h" 
+#include "mkql_builtins_datetime.h"
 #include "mkql_builtins_decimal.h"
 
-#include <ydb/library/yql/minikql/mkql_type_ops.h> 
+#include <ydb/library/yql/minikql/mkql_type_ops.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -155,19 +155,19 @@ struct TDiffDateGreaterOrEqual : public TCompareArithmeticBinary<TLeft, TRight, 
         return std::is_same<TLeft, TRight>::value ?
             GreaterOrEqual<TLeft, TRight, Aggr>(left, right):
             GreaterOrEqual<TScaledDate, TScaledDate, Aggr>(ToScaledDate<TLeft>(left), ToScaledDate<TRight>(right));
-    } 
- 
-#ifndef MKQL_DISABLE_CODEGEN 
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
-    { 
+    {
         auto& context = ctx.Codegen->GetContext();
         return std::is_same<TLeft, TRight>::value ?
             GenGreaterOrEqual<TLeft, TRight, Aggr>(left, right, context, block):
             GenGreaterOrEqual<TScaledDate, TScaledDate, Aggr>(GenToScaledDate<TLeft>(left, context, block), GenToScaledDate<TRight>(right, context, block), context, block);
-    } 
-#endif 
-}; 
- 
+    }
+#endif
+};
+
 template<typename TLeft, typename TRight, bool Aggr>
 struct TAggrTzDateGreaterOrEqual : public TCompareArithmeticBinaryWithTimezone<TLeft, TRight, TAggrTzDateGreaterOrEqual<TLeft, TRight, Aggr>>, public TAggrGreaterOrEqual {
     static bool Do(TLeft left, TRight right)
@@ -259,7 +259,7 @@ void RegisterGreaterOrEqual(IBuiltinFunctionRegistry& registry) {
     const auto name = "GreaterOrEqual";
 
     RegisterComparePrimitive<TGreaterOrEqual, TCompareArgsOpt>(registry, name);
-    RegisterCompareDatetime<TDiffDateGreaterOrEqual, TCompareArgsOpt>(registry, name); 
+    RegisterCompareDatetime<TDiffDateGreaterOrEqual, TCompareArgsOpt>(registry, name);
 
     RegisterCompareStrings<TCustomGreaterOrEqual, TCompareArgsOpt>(registry, name);
     RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, TDecimalGreaterOrEqual, TCompareArgsOpt>(registry, name);

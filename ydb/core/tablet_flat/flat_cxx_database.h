@@ -3,9 +3,9 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/util/tuples.h>
 #include <ydb/core/util/templates.h>
- 
+
 #include <util/system/type_name.h>
-#include <util/system/unaligned_mem.h> 
+#include <util/system/unaligned_mem.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <utility>
 
@@ -106,27 +106,27 @@ public:
         Y_VERIFY((Type() == NScheme::NTypeIds::Uint64
                   || Type() == NScheme::NTypeIds::Timestamp)
                  && Size() == sizeof(ui64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
-        return ReadUnaligned<ui64>(reinterpret_cast<const ui64*>(Data())); 
+        return ReadUnaligned<ui64>(reinterpret_cast<const ui64*>(Data()));
     }
 
     operator i64() const {
         Y_VERIFY((Type() == NScheme::NTypeIds::Int64
                   || Type() == NScheme::NTypeIds::Interval)
                  && Size() == sizeof(i64), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
-        return ReadUnaligned<i64>(reinterpret_cast<const i64*>(Data())); 
+        return ReadUnaligned<i64>(reinterpret_cast<const i64*>(Data()));
     }
 
     operator ui32() const {
         Y_VERIFY((Type() == NScheme::NTypeIds::Uint32
                   || Type() == NScheme::NTypeIds::Datetime)
                  && Size() == sizeof(ui32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
-        ui32 value = ReadUnaligned<ui32>(reinterpret_cast<const ui32*>(Data())); 
+        ui32 value = ReadUnaligned<ui32>(reinterpret_cast<const ui32*>(Data()));
         return value;
     }
 
     operator i32() const {
         Y_VERIFY(Type() == NScheme::NTypeIds::Int32 && Size() == sizeof(i32), "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
-        i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data())); 
+        i32 value = ReadUnaligned<i32>(reinterpret_cast<const i32*>(Data()));
         return value;
     }
 
@@ -163,17 +163,17 @@ public:
     }
 
     operator TString() const {
-        Y_VERIFY(Type() == NScheme::NTypeIds::Utf8 
-               || Type() == NScheme::NTypeIds::String 
-               || Type() == NScheme::NTypeIds::String2m 
-               || Type() == NScheme::NTypeIds::String4k, "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
+        Y_VERIFY(Type() == NScheme::NTypeIds::Utf8
+               || Type() == NScheme::NTypeIds::String
+               || Type() == NScheme::NTypeIds::String2m
+               || Type() == NScheme::NTypeIds::String4k, "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
         return TString(reinterpret_cast<const char*>(Data()), Size());
     }
 
     operator TBuffer() const {
-        Y_VERIFY(Type() == NScheme::NTypeIds::String 
-               || Type() == NScheme::NTypeIds::String2m 
-               || Type() == NScheme::NTypeIds::String4k, "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size()); 
+        Y_VERIFY(Type() == NScheme::NTypeIds::String
+               || Type() == NScheme::NTypeIds::String2m
+               || Type() == NScheme::NTypeIds::String4k, "Data=%" PRIxPTR ", Type=%" PRIi64 ", Size=%" PRIi64, (ui64)Data(), (i64)Type(), (i64)Size());
         return TBuffer(reinterpret_cast<const char*>(Data()), Size());
     }
 
@@ -190,7 +190,7 @@ public:
     template <typename ElementType>
     operator TVector<ElementType>() const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
-        Y_VERIFY(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m); 
+        Y_VERIFY(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
         Y_VERIFY(Size() % sizeof(ElementType) == 0);
         std::size_t count = Size() / sizeof(ElementType);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
@@ -201,7 +201,7 @@ public:
     template <typename ElementType>
     void ExtractArray(THashSet<ElementType> &container) const {
         static_assert(std::is_pod<ElementType>::value, "ElementType should be a POD type");
-        Y_VERIFY(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m); 
+        Y_VERIFY(Type() == NScheme::NTypeIds::String || Type() == NScheme::NTypeIds::String4k || Type() == NScheme::NTypeIds::String2m);
         Y_VERIFY(Size() % sizeof(ElementType) == 0);
         const ElementType *begin = reinterpret_cast<const ElementType*>(Data());
         const ElementType *end = begin + Size() / sizeof(ElementType);
@@ -220,9 +220,9 @@ template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Uint32> { typedef ui32 T
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Int32> { typedef i32 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Uint64> { typedef ui64 Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Int64> { typedef i64 Type; };
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::String> { typedef TString Type; }; 
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::String4k> : NSchemeTypeMapper<NScheme::NTypeIds::String> {}; 
-template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Utf8> { typedef TString Type; }; 
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::String> { typedef TString Type; };
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::String4k> : NSchemeTypeMapper<NScheme::NTypeIds::String> {};
+template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Utf8> { typedef TString Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::ActorId> { typedef TActorId Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::PairUi64Ui64> { typedef std::pair<ui64, ui64> Type; };
 template <> struct NSchemeTypeMapper<NScheme::NTypeIds::Double> { typedef double Type; };
@@ -237,7 +237,7 @@ template <NScheme::TTypeId ValType>
 class TConvertTypeValue : public TRawTypeValue {
 public:
     TConvertTypeValue(const TRawTypeValue& value)
-        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? 0 : ValType) 
+        : TRawTypeValue(value.Data(), value.Size(), value.IsEmpty() ? 0 : ValType)
     {}
 
     template <typename ValueType> static typename NSchemeTypeMapper<ValType>::Type ConvertFrom(ValueType value) {

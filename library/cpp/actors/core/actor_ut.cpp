@@ -513,7 +513,7 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
             , Counter(counter)
         {
         }
- 
+
         bool DoBeforeReceiving(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
             *Counter += 1;
             if (ev->Type == TEvents::THelloWorld::Ping) {
@@ -527,16 +527,16 @@ Y_UNIT_TEST_SUITE(TestDecorator) {
 
     struct TTestActor : TActorBootstrapped<TTestActor> {
         static constexpr char ActorName[] = "TestActor";
- 
+
         void Bootstrap()
         {
             const auto& activityTypeIndex = GetActivityType();
-            Y_ENSURE(activityTypeIndex < GetActivityTypeCount()); 
-            Y_ENSURE(GetActivityTypeName(activityTypeIndex) == "TestActor"); 
+            Y_ENSURE(activityTypeIndex < GetActivityTypeCount());
+            Y_ENSURE(GetActivityTypeName(activityTypeIndex) == "TestActor");
             PassAway();
         }
     };
- 
+
     Y_UNIT_TEST(Basic) {
         THolder<TActorSystemSetup> setup = MakeHolder<TActorSystemSetup>();
         setup->NodeId = 0;

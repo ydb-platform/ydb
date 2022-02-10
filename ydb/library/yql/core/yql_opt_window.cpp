@@ -1,13 +1,13 @@
-#include "yql_opt_window.h" 
-#include "yql_opt_utils.h" 
-#include "yql_expr_type_annotation.h" 
- 
+#include "yql_opt_window.h"
+#include "yql_opt_utils.h"
+#include "yql_expr_type_annotation.h"
+
 #include <ydb/library/yql/utils/log/log.h>
 
-namespace NYql { 
- 
-using namespace NNodes; 
- 
+namespace NYql {
+
+using namespace NNodes;
+
 namespace {
 
 const TStringBuf SessionStartMemberName = "_yql_window_session_start";

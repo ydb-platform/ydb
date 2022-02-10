@@ -372,7 +372,7 @@ void THive::Handle(TEvBlobStorage::TEvControllerSelectGroupsResult::TPtr& ev) {
         BLOG_ERROR("THive::Handle TEvControllerSelectGroupsResult: " << rec.GetStatus());
     }
 }
- 
+
 void THive::Handle(TEvLocal::TEvTabletStatus::TPtr& ev) {
     TNodeId nodeId = ev->Sender.NodeId();
     TNodeInfo* node = FindNode(nodeId);
@@ -1914,10 +1914,10 @@ THive::THiveStats THive::GetStats() const {
         double minUsage = std::max(stats.MinUsage, minUsageToBalance);
         double maxUsage = std::max(stats.MaxUsage, minUsageToBalance);
         stats.Scatter = (maxUsage - minUsage) / maxUsage;
-    } 
+    }
     return stats;
 }
- 
+
 double THive::GetScatter() const {
     THiveStats stats = GetStats();
     return stats.Scatter;

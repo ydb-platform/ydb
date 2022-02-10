@@ -157,7 +157,7 @@ namespace NActors {
             int SetLevel(EPriority priority, EComponent component, TString& explanation);
             int SetSamplingLevel(EPriority priority, EComponent component, TString& explanation);
             int SetSamplingRate(ui32 sampling, EComponent component, TString& explanation);
-            EComponent FindComponent(const TStringBuf& componentName) const; 
+            EComponent FindComponent(const TStringBuf& componentName) const;
             static int PowerOf2Mask(int val);
             static bool IsValidPriority(EPriority priority);
             bool IsValidComponent(EComponent component);

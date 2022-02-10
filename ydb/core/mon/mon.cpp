@@ -448,10 +448,10 @@ namespace NActors {
         if (fields.Index) {
             fields.Index->Register(page);
             fields.Index->SortPages();
-        } else { 
-            Register(page); 
-        } 
- 
+        } else {
+            Register(page);
+        }
+
         return page;
     }
 

@@ -19,7 +19,7 @@ int lstat(const char* fileName, stat_struct* fileStat) {
     int result;
     result = _wstat64(buf, fileStat);
     if (result == 0) {
-        SetLastError(0); 
+        SetLastError(0);
         findHandle = FindFirstFileW(buf, &findBuf);
         if (findBuf.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT &&
             (findBuf.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT || findBuf.dwReserved0 == IO_REPARSE_TAG_SYMLINK))

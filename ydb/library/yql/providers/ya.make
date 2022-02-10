@@ -1,13 +1,13 @@
 OWNER(g:yql)
 
 RECURSE(
-    clickhouse 
+    clickhouse
     common
-    config 
-    dq 
-    pq 
-    result 
-    s3 
-    solomon 
-    ydb 
+    config
+    dq
+    pq
+    result
+    s3
+    solomon
+    ydb
 )

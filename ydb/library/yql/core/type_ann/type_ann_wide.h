@@ -2,8 +2,8 @@
 
 #include "type_ann_impl.h"
 
-#include <ydb/library/yql/ast/yql_expr.h> 
-#include <ydb/library/yql/ast/yql_expr_types.h> 
+#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/ast/yql_expr_types.h>
 
 namespace NYql {
 namespace NTypeAnnImpl {

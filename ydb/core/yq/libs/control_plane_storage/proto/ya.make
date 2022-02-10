@@ -4,8 +4,8 @@ PROTO_LIBRARY()
 
 PEERDIR(
     ydb/public/api/protos
-    ydb/library/yql/dq/proto 
-    ydb/library/yql/providers/dq/api/protos 
+    ydb/library/yql/dq/proto
+    ydb/library/yql/providers/dq/api/protos
 )
 
 SRCS(

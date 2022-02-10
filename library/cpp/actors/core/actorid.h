@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include <util/stream/output.h> // for IOutputStream
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 
 namespace NActors {
     // used as global uniq address of actor
@@ -187,10 +187,10 @@ template <>
 inline void Out<NActors::TActorId>(IOutputStream& o, const NActors::TActorId& x) {
     return x.Out(o);
 }
- 
-template <> 
+
+template <>
 struct THash<NActors::TActorId> {
     inline ui64 operator()(const NActors::TActorId& x) const {
-        return x.Hash(); 
-    } 
-}; 
+        return x.Hash();
+    }
+};

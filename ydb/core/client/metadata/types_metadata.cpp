@@ -29,7 +29,7 @@ void DeserializeMetadata(TStringBuf buffer, NScheme::TTypeMetadataRegistry* regi
     deserializedMetadata.reserve(metadata.TypeSize());
     for (const auto& protoType : metadata.GetType()) {
         TTypeMetadata typeMetadata(
-                    protoType.GetId(), protoType.GetName()); 
+                    protoType.GetId(), protoType.GetName());
         deserializedMetadata.push_back(typeMetadata);
     }
 

@@ -1,8 +1,8 @@
 #include "yql_kikimr_query_traits.h"
 #include "yql_kikimr_expr_nodes.h"
 
-#include <ydb/library/yql/ast/yql_expr.h> 
-#include <ydb/library/yql/core/yql_expr_optimize.h> 
+#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NKikimr {

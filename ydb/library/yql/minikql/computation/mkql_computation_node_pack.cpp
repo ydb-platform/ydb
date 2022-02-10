@@ -1,23 +1,23 @@
 #include "mkql_computation_node_pack.h"
 #include "mkql_computation_node_holders.h"
-#include "presort.h" 
+#include "presort.h"
 
-#include <ydb/library/yql/public/decimal/yql_decimal.h> 
-#include <ydb/library/yql/public/decimal/yql_decimal_serialize.h> 
-#include <ydb/library/yql/minikql/defs.h> 
-#include <ydb/library/yql/minikql/pack_num.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/public/decimal/yql_decimal_serialize.h>
+#include <ydb/library/yql/minikql/defs.h>
+#include <ydb/library/yql/minikql/pack_num.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <library/cpp/packedtypes/zigzag.h>
 #include <library/cpp/resource/resource.h>
-#include <ydb/library/yql/utils/fp_bits.h> 
+#include <ydb/library/yql/utils/fp_bits.h>
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/Instructions.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
-#endif 
+#endif
 
 #include <util/system/yassert.h>
 #include <util/system/sanitizers.h>
@@ -25,9 +25,9 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
 using namespace llvm;
-#endif 
+#endif
 
 namespace NDetails {
 
@@ -51,16 +51,16 @@ void PackInt32(i32 val, TBuffer& buf) {
     PackUInt32(ZigZagEncode(val), buf);
 }
 
-void PackUInt16(ui16 val, TBuffer& buf) { 
-    size_t off = buf.Size(); 
-    buf.Advance(MAX_PACKED32_SIZE); 
-    buf.EraseBack(MAX_PACKED32_SIZE - Pack32(val, buf.Data() + off)); 
-} 
- 
-void PackInt16(i16 val, TBuffer& buf) { 
-    PackUInt16(ZigZagEncode(val), buf); 
-} 
- 
+void PackUInt16(ui16 val, TBuffer& buf) {
+    size_t off = buf.Size();
+    buf.Advance(MAX_PACKED32_SIZE);
+    buf.EraseBack(MAX_PACKED32_SIZE - Pack32(val, buf.Data() + off));
+}
+
+void PackInt16(i16 val, TBuffer& buf) {
+    PackUInt16(ZigZagEncode(val), buf);
+}
+
 ui64 UnpackUInt64(TStringBuf& buf) {
     ui64 res = 0;
     size_t read = Unpack64(buf.data(), buf.length(), res);
@@ -85,19 +85,19 @@ i32 UnpackInt32(TStringBuf& buf) {
     return ZigZagDecode(UnpackUInt32(buf));
 }
 
-ui16 UnpackUInt16(TStringBuf& buf) { 
-    ui32 res = 0; 
+ui16 UnpackUInt16(TStringBuf& buf) {
+    ui32 res = 0;
     size_t read = Unpack32(buf.data(), buf.length(), res);
-    MKQL_ENSURE(read, "Bad ui32 packed data"); 
-    buf.Skip(read); 
-    MKQL_ENSURE(res <= Max<ui16>(), "Corrupted data"); 
-    return res; 
-} 
- 
-i16 UnpackInt16(TStringBuf& buf) { 
-    return ZigZagDecode(UnpackUInt16(buf)); 
-} 
- 
+    MKQL_ENSURE(read, "Bad ui32 packed data");
+    buf.Skip(read);
+    MKQL_ENSURE(res <= Max<ui16>(), "Corrupted data");
+    return res;
+}
+
+i16 UnpackInt16(TStringBuf& buf) {
+    return ZigZagDecode(UnpackUInt16(buf));
+}
+
 template <typename T>
 void PutRawData(T val, TBuffer& buf) {
     buf.Append(reinterpret_cast<const char*>(&val), sizeof(T));
@@ -115,7 +115,7 @@ T GetRawData(TStringBuf& buf) {
 } // NDetails
 
 namespace {
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     TString MakeName(const TStringBuf& common, const TType* type) {
         TStringStream out;
         out << common << intptr_t(type);
@@ -129,40 +129,40 @@ namespace {
         switch (type->GetKind()) {
             case TType::EKind::Data: {
                 const auto dataType = static_cast<const TDataType*>(type);
-                switch (*dataType->GetDataSlot()) { 
-                    case NUdf::EDataSlot::Bool: 
+                switch (*dataType->GetDataSlot()) {
+                    case NUdf::EDataSlot::Bool:
                         CallInst::Create(module.getFunction("PackBool"), {value, buffer}, "", block);
                         break;
-                    case NUdf::EDataSlot::Int8: 
-                        Y_FAIL("Not impl"); 
-                        break; 
-                    case NUdf::EDataSlot::Uint8: 
+                    case NUdf::EDataSlot::Int8:
+                        Y_FAIL("Not impl");
+                        break;
+                    case NUdf::EDataSlot::Uint8:
                         CallInst::Create(module.getFunction("PackByte"), {value, buffer}, "", block);
                         break;
-                    case NUdf::EDataSlot::Int16: 
-                        Y_FAIL("Not impl"); 
-                        break; 
-                    case NUdf::EDataSlot::Uint16: 
-                        Y_FAIL("Not impl"); 
-                        break; 
-                    case NUdf::EDataSlot::Int32: 
+                    case NUdf::EDataSlot::Int16:
+                        Y_FAIL("Not impl");
+                        break;
+                    case NUdf::EDataSlot::Uint16:
+                        Y_FAIL("Not impl");
+                        break;
+                    case NUdf::EDataSlot::Int32:
                         CallInst::Create(module.getFunction("PackInt32"), {value, buffer}, "", block);
                         break;
-                    case NUdf::EDataSlot::Uint32: 
+                    case NUdf::EDataSlot::Uint32:
                         CallInst::Create(module.getFunction("PackUInt32"), {value, buffer}, "", block);
                         break;
-                    case NUdf::EDataSlot::Int64: 
+                    case NUdf::EDataSlot::Int64:
                         CallInst::Create(module.getFunction("PackInt64"), {value, buffer}, "", block);
                         break;
-                    case NUdf::EDataSlot::Uint64: 
+                    case NUdf::EDataSlot::Uint64:
                         CallInst::Create(module.getFunction("PackUInt64"), {value, buffer}, "", block);
                         break;
-                    case NUdf::EDataSlot::Float: 
-                        CallInst::Create(module.getFunction("PackFloat"), { value, buffer }, "", block); 
-                        break; 
-                    case NUdf::EDataSlot::Double: 
-                        CallInst::Create(module.getFunction("PackDouble"), { value, buffer }, "", block); 
-                        break; 
+                    case NUdf::EDataSlot::Float:
+                        CallInst::Create(module.getFunction("PackFloat"), { value, buffer }, "", block);
+                        break;
+                    case NUdf::EDataSlot::Double:
+                        CallInst::Create(module.getFunction("PackDouble"), { value, buffer }, "", block);
+                        break;
                     default:
                         CallInst::Create(module.getFunction(useTopLength ? "PackStringData" : "PackString"), {value, buffer}, "", block);
                         break;
@@ -314,7 +314,7 @@ namespace {
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto packFuncType = FunctionType::get(Type::getVoidTy(context), {ptrValueType, Type::getInt64PtrTy(context), Type::getInt64PtrTy(context)}, false);
-        const auto pack = cast<Function>(module.getOrInsertFunction(name.c_str(), packFuncType).getCallee()); 
+        const auto pack = cast<Function>(module.getOrInsertFunction(name.c_str(), packFuncType).getCallee());
 
         auto argsIt = pack->arg_begin();
         const auto value = argsIt;
@@ -334,38 +334,38 @@ namespace {
 
         return pack;
     }
-#endif 
+#endif
 }
 
-TValuePacker::TValuePacker(bool stable, const TType* type, bool tryUseCodegen) 
-#ifndef MKQL_DISABLE_CODEGEN 
+TValuePacker::TValuePacker(bool stable, const TType* type, bool tryUseCodegen)
+#ifndef MKQL_DISABLE_CODEGEN
 #ifdef __llvm__
     : Codegen(tryUseCodegen ? NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native) : NYql::NCodegen::ICodegen::TPtr())
 #else
     : Codegen()
 #endif
-    , Stable(stable) 
-#else 
-    : Stable(stable) 
-#endif 
-    , Type(type) 
+    , Stable(stable)
+#else
+    : Stable(stable)
+#endif
+    , Type(type)
     , Properties(ScanTypeProperties(Type))
     , OptionalMaskReserve(Properties.Test(EProps::UseOptionalMask) ? 1 : 0)
     , PackFunc(MakePackFunction())
 {
-#ifndef MKQL_DISABLE_CODEGEN 
+#ifndef MKQL_DISABLE_CODEGEN
     if (Codegen) {
         Codegen->Verify();
         Codegen->Compile();
     }
-#else 
-    Y_UNUSED(tryUseCodegen); 
-#endif 
+#else
+    Y_UNUSED(tryUseCodegen);
+#endif
 }
 
 TValuePacker::TValuePacker(const TValuePacker& other)
-    : Stable(other.Stable) 
-    , Type(other.Type) 
+    : Stable(other.Stable)
+    , Type(other.Type)
     , Properties(other.Properties)
     , OptionalMaskReserve(other.OptionalMaskReserve)
     , PackFunc(other.PackFunc)
@@ -390,28 +390,28 @@ std::pair<ui32, bool> TValuePacker::SkipEmbeddedLength(TStringBuf& buf) {
 }
 
 NUdf::TUnboxedValue TValuePacker::Unpack(TStringBuf buf, const THolderFactory& holderFactory) const {
-    auto pair = SkipEmbeddedLength(buf); 
-    ui32 length = pair.first; 
-    bool emptySingleOptional = pair.second; 
+    auto pair = SkipEmbeddedLength(buf);
+    ui32 length = pair.first;
+    bool emptySingleOptional = pair.second;
 
     if (Properties.Test(EProps::UseOptionalMask)) {
         OptionalUsageMask.Reset(buf);
     }
     NUdf::TUnboxedValue res;
-    if (Properties.Test(EProps::SingleOptional) && emptySingleOptional) { 
+    if (Properties.Test(EProps::SingleOptional) && emptySingleOptional) {
         res = NUdf::TUnboxedValuePod();
-    } else if (Type->IsStruct()) { 
+    } else if (Type->IsStruct()) {
         auto structType = static_cast<const TStructType*>(Type);
         NUdf::TUnboxedValue * items = nullptr;
         res = TopStruct.NewArray(holderFactory, structType->GetMembersCount(), items);
-        for (ui32 index = 0; index < structType->GetMembersCount(); ++index) { 
-            auto memberType = structType->GetMemberType(index); 
+        for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
+            auto memberType = structType->GetMemberType(index);
             *items++ = UnpackImpl(memberType, buf, length, holderFactory);
-        } 
-    } else { 
-        res = UnpackImpl(Type, buf, length, holderFactory); 
-    } 
- 
+        }
+    } else {
+        res = UnpackImpl(Type, buf, length, holderFactory);
+    }
+
     MKQL_ENSURE(buf.empty(), "Bad packed data. Not fully data read");
     return res;
 }
@@ -422,73 +422,73 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
     switch (type->GetKind()) {
     case TType::EKind::Void:
         return NUdf::TUnboxedValuePod::Void();
-    case TType::EKind::Null: 
-        return NUdf::TUnboxedValuePod(); 
-    case TType::EKind::EmptyList: 
-        return holderFactory.GetEmptyContainer(); 
-    case TType::EKind::EmptyDict: 
-        return holderFactory.GetEmptyContainer(); 
+    case TType::EKind::Null:
+        return NUdf::TUnboxedValuePod();
+    case TType::EKind::EmptyList:
+        return holderFactory.GetEmptyContainer();
+    case TType::EKind::EmptyDict:
+        return holderFactory.GetEmptyContainer();
 
     case TType::EKind::Data: {
         auto dataType = static_cast<const TDataType*>(type);
-        switch (*dataType->GetDataSlot()) { 
-        case NUdf::EDataSlot::Bool: 
+        switch (*dataType->GetDataSlot()) {
+        case NUdf::EDataSlot::Bool:
             return NUdf::TUnboxedValuePod(NDetails::GetRawData<bool>(buf));
-        case NUdf::EDataSlot::Int8: 
-            return NUdf::TUnboxedValuePod(NDetails::GetRawData<i8>(buf)); 
-        case NUdf::EDataSlot::Uint8: 
+        case NUdf::EDataSlot::Int8:
+            return NUdf::TUnboxedValuePod(NDetails::GetRawData<i8>(buf));
+        case NUdf::EDataSlot::Uint8:
             return NUdf::TUnboxedValuePod(NDetails::GetRawData<ui8>(buf));
-        case NUdf::EDataSlot::Int16: 
-            return NUdf::TUnboxedValuePod(NDetails::UnpackInt16(buf)); 
-        case NUdf::EDataSlot::Uint16: 
-            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt16(buf)); 
-        case NUdf::EDataSlot::Int32: 
+        case NUdf::EDataSlot::Int16:
+            return NUdf::TUnboxedValuePod(NDetails::UnpackInt16(buf));
+        case NUdf::EDataSlot::Uint16:
+            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt16(buf));
+        case NUdf::EDataSlot::Int32:
             return NUdf::TUnboxedValuePod(NDetails::UnpackInt32(buf));
-        case NUdf::EDataSlot::Uint32: 
+        case NUdf::EDataSlot::Uint32:
             return NUdf::TUnboxedValuePod(NDetails::UnpackUInt32(buf));
-        case NUdf::EDataSlot::Int64: 
+        case NUdf::EDataSlot::Int64:
             return NUdf::TUnboxedValuePod(NDetails::UnpackInt64(buf));
-        case NUdf::EDataSlot::Uint64: 
+        case NUdf::EDataSlot::Uint64:
             return NUdf::TUnboxedValuePod(NDetails::UnpackUInt64(buf));
-        case NUdf::EDataSlot::Float: 
+        case NUdf::EDataSlot::Float:
             return NUdf::TUnboxedValuePod(NDetails::GetRawData<float>(buf));
-        case NUdf::EDataSlot::Double: 
+        case NUdf::EDataSlot::Double:
             return NUdf::TUnboxedValuePod(NDetails::GetRawData<double>(buf));
-        case NUdf::EDataSlot::Date: 
-            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt16(buf)); 
-        case NUdf::EDataSlot::Datetime: 
-            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt32(buf)); 
-        case NUdf::EDataSlot::Timestamp: 
-            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt64(buf)); 
-        case NUdf::EDataSlot::Interval: 
-            return NUdf::TUnboxedValuePod(NDetails::UnpackInt64(buf)); 
-        case NUdf::EDataSlot::TzDate: { 
-            auto value = NDetails::UnpackUInt16(buf); 
-            auto tzId = NDetails::UnpackUInt16(buf); 
-            auto ret = NUdf::TUnboxedValuePod(value); 
-            ret.SetTimezoneId(tzId); 
-            return ret; 
-        } 
-        case NUdf::EDataSlot::TzDatetime: { 
-            auto value = NDetails::UnpackUInt32(buf); 
-            auto tzId = NDetails::UnpackUInt16(buf); 
-            auto ret = NUdf::TUnboxedValuePod(value); 
-            ret.SetTimezoneId(tzId); 
-            return ret; 
-        } 
-        case NUdf::EDataSlot::TzTimestamp: { 
-            auto value = NDetails::UnpackUInt64(buf); 
-            auto tzId = NDetails::UnpackUInt16(buf); 
-            auto ret = NUdf::TUnboxedValuePod(value); 
-            ret.SetTimezoneId(tzId); 
-            return ret; 
-        } 
-        case NUdf::EDataSlot::Uuid: { 
+        case NUdf::EDataSlot::Date:
+            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt16(buf));
+        case NUdf::EDataSlot::Datetime:
+            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt32(buf));
+        case NUdf::EDataSlot::Timestamp:
+            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt64(buf));
+        case NUdf::EDataSlot::Interval:
+            return NUdf::TUnboxedValuePod(NDetails::UnpackInt64(buf));
+        case NUdf::EDataSlot::TzDate: {
+            auto value = NDetails::UnpackUInt16(buf);
+            auto tzId = NDetails::UnpackUInt16(buf);
+            auto ret = NUdf::TUnboxedValuePod(value);
+            ret.SetTimezoneId(tzId);
+            return ret;
+        }
+        case NUdf::EDataSlot::TzDatetime: {
+            auto value = NDetails::UnpackUInt32(buf);
+            auto tzId = NDetails::UnpackUInt16(buf);
+            auto ret = NUdf::TUnboxedValuePod(value);
+            ret.SetTimezoneId(tzId);
+            return ret;
+        }
+        case NUdf::EDataSlot::TzTimestamp: {
+            auto value = NDetails::UnpackUInt64(buf);
+            auto tzId = NDetails::UnpackUInt16(buf);
+            auto ret = NUdf::TUnboxedValuePod(value);
+            ret.SetTimezoneId(tzId);
+            return ret;
+        }
+        case NUdf::EDataSlot::Uuid: {
             MKQL_ENSURE(16 <= buf.size(), "Bad packed data. Buffer too small");
             const char* ptr = buf.data();
-            buf.Skip(16); 
-            return MakeString(NUdf::TStringRef(ptr, 16)); 
-        } 
+            buf.Skip(16);
+            return MakeString(NUdf::TStringRef(ptr, 16));
+        }
         case NUdf::EDataSlot::Decimal: {
             const auto des = NYql::NDecimal::Deserialize(buf.data());
             MKQL_ENSURE(!NYql::NDecimal::IsError(des.first), "Bad packed data: invalid decimal.");
@@ -558,7 +558,7 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
         auto dictType = static_cast<const TDictType*>(type);
         auto keyType = dictType->GetKeyType();
         auto payloadType = dictType->GetPayloadType();
-        auto dictBuilder = holderFactory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed); 
+        auto dictBuilder = holderFactory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
 
         ui64 len = NDetails::UnpackUInt64(buf);
         for (ui64 i = 0; i < len; ++i) {
@@ -647,106 +647,106 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
     switch (type->GetKind()) {
     case TType::EKind::Void:
         break;
-    case TType::EKind::Null: 
-        break; 
-    case TType::EKind::EmptyList: 
-        break; 
-    case TType::EKind::EmptyDict: 
-        break; 
+    case TType::EKind::Null:
+        break;
+    case TType::EKind::EmptyList:
+        break;
+    case TType::EKind::EmptyDict:
+        break;
 
     case TType::EKind::Data: {
         auto dataType = static_cast<const TDataType*>(type);
-        switch (*dataType->GetDataSlot()) { 
-        case NUdf::EDataSlot::Bool: 
+        switch (*dataType->GetDataSlot()) {
+        case NUdf::EDataSlot::Bool:
             NDetails::PutRawData(value.Get<bool>(), Buffer);
             break;
-        case NUdf::EDataSlot::Int8: 
-            NDetails::PutRawData(value.Get<i8>(), Buffer); 
-            break; 
-        case NUdf::EDataSlot::Uint8: 
+        case NUdf::EDataSlot::Int8:
+            NDetails::PutRawData(value.Get<i8>(), Buffer);
+            break;
+        case NUdf::EDataSlot::Uint8:
             NDetails::PutRawData(value.Get<ui8>(), Buffer);
             break;
-        case NUdf::EDataSlot::Int16: 
-            NDetails::PackInt16(value.Get<i16>(), Buffer); 
-            break; 
-        case NUdf::EDataSlot::Uint16: 
-            NDetails::PackUInt16(value.Get<ui16>(), Buffer); 
-            break; 
-        case NUdf::EDataSlot::Int32: 
+        case NUdf::EDataSlot::Int16:
+            NDetails::PackInt16(value.Get<i16>(), Buffer);
+            break;
+        case NUdf::EDataSlot::Uint16:
+            NDetails::PackUInt16(value.Get<ui16>(), Buffer);
+            break;
+        case NUdf::EDataSlot::Int32:
             NDetails::PackInt32(value.Get<i32>(), Buffer);
             break;
-        case NUdf::EDataSlot::Uint32: 
+        case NUdf::EDataSlot::Uint32:
             NDetails::PackUInt32(value.Get<ui32>(), Buffer);
             break;
-        case NUdf::EDataSlot::Int64: 
+        case NUdf::EDataSlot::Int64:
             NDetails::PackInt64(value.Get<i64>(), Buffer);
             break;
-        case NUdf::EDataSlot::Uint64: 
+        case NUdf::EDataSlot::Uint64:
             NDetails::PackUInt64(value.Get<ui64>(), Buffer);
             break;
-        case NUdf::EDataSlot::Float: { 
-            float x = value.Get<float>(); 
-            if (Stable) { 
-                NYql::CanonizeFpBits<float>(&x); 
-            } 
- 
-            NDetails::PutRawData(x, Buffer); 
+        case NUdf::EDataSlot::Float: {
+            float x = value.Get<float>();
+            if (Stable) {
+                NYql::CanonizeFpBits<float>(&x);
+            }
+
+            NDetails::PutRawData(x, Buffer);
             break;
-        } 
-        case NUdf::EDataSlot::Double: { 
-            double x = value.Get<double>(); 
-            if (Stable) { 
-                NYql::CanonizeFpBits<double>(&x); 
-            } 
- 
-            NDetails::PutRawData(x, Buffer); 
+        }
+        case NUdf::EDataSlot::Double: {
+            double x = value.Get<double>();
+            if (Stable) {
+                NYql::CanonizeFpBits<double>(&x);
+            }
+
+            NDetails::PutRawData(x, Buffer);
             break;
-        } 
-        case NUdf::EDataSlot::Date: 
-            NDetails::PackUInt32(value.Get<ui16>(), Buffer); 
-            break; 
-        case NUdf::EDataSlot::Datetime: 
-            NDetails::PackUInt32(value.Get<ui32>(), Buffer); 
-            break; 
-        case NUdf::EDataSlot::Timestamp: 
-            NDetails::PackUInt64(value.Get<ui64>(), Buffer); 
-            break; 
-        case NUdf::EDataSlot::Interval: 
-            NDetails::PackInt64(value.Get<i64>(), Buffer); 
-            break; 
-        case NUdf::EDataSlot::Uuid: { 
-            auto ref = value.AsStringRef(); 
-            Buffer.Append(ref.Data(), ref.Size()); 
-            break; 
-        } 
-        case NUdf::EDataSlot::TzDate: { 
-            NDetails::PackUInt16(value.Get<ui16>(), Buffer); 
-            NDetails::PackUInt16(value.GetTimezoneId(), Buffer); 
-            break; 
-        } 
-        case NUdf::EDataSlot::TzDatetime: { 
-            NDetails::PackUInt32(value.Get<ui32>(), Buffer); 
-            NDetails::PackUInt16(value.GetTimezoneId(), Buffer); 
-            break; 
-        } 
-        case NUdf::EDataSlot::TzTimestamp: { 
-            NDetails::PackUInt64(value.Get<ui64>(), Buffer); 
-            NDetails::PackUInt16(value.GetTimezoneId(), Buffer); 
-            break; 
-        } 
+        }
+        case NUdf::EDataSlot::Date:
+            NDetails::PackUInt32(value.Get<ui16>(), Buffer);
+            break;
+        case NUdf::EDataSlot::Datetime:
+            NDetails::PackUInt32(value.Get<ui32>(), Buffer);
+            break;
+        case NUdf::EDataSlot::Timestamp:
+            NDetails::PackUInt64(value.Get<ui64>(), Buffer);
+            break;
+        case NUdf::EDataSlot::Interval:
+            NDetails::PackInt64(value.Get<i64>(), Buffer);
+            break;
+        case NUdf::EDataSlot::Uuid: {
+            auto ref = value.AsStringRef();
+            Buffer.Append(ref.Data(), ref.Size());
+            break;
+        }
+        case NUdf::EDataSlot::TzDate: {
+            NDetails::PackUInt16(value.Get<ui16>(), Buffer);
+            NDetails::PackUInt16(value.GetTimezoneId(), Buffer);
+            break;
+        }
+        case NUdf::EDataSlot::TzDatetime: {
+            NDetails::PackUInt32(value.Get<ui32>(), Buffer);
+            NDetails::PackUInt16(value.GetTimezoneId(), Buffer);
+            break;
+        }
+        case NUdf::EDataSlot::TzTimestamp: {
+            NDetails::PackUInt64(value.Get<ui64>(), Buffer);
+            NDetails::PackUInt16(value.GetTimezoneId(), Buffer);
+            break;
+        }
         case NUdf::EDataSlot::Decimal: {
             char buff[0x10U];
             Buffer.Append(buff, NYql::NDecimal::Serialize(value.GetInt128(), buff));
             break;
         }
-        default: { 
+        default: {
             auto stringRef = value.AsStringRef();
             if (!Properties.Test(EProps::UseTopLength)) {
                 NDetails::PackUInt32(stringRef.Size(), Buffer);
             }
             Buffer.Append(stringRef.Data(), stringRef.Size());
         }
-        } 
+        }
         break;
     }
 
@@ -813,17 +813,17 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
         auto keyType = dictType->GetKeyType();
         auto payloadType = dictType->GetPayloadType();
 
-        auto length = value.GetDictLength(); 
-        NDetails::PackUInt64(length, Buffer); 
+        auto length = value.GetDictLength();
+        NDetails::PackUInt64(length, Buffer);
         const auto iter = value.GetDictIterator();
-        if (Stable && !value.IsSortedDict()) { 
-            // no key duplicates here 
-            TKeyTypes types; 
-            bool isTuple; 
-            bool encoded; 
-            GetDictionaryKeyTypes(keyType, types, isTuple, encoded); 
-            if (encoded) { 
-                TGenericPresortEncoder packer(keyType); 
+        if (Stable && !value.IsSortedDict()) {
+            // no key duplicates here
+            TKeyTypes types;
+            bool isTuple;
+            bool encoded;
+            GetDictionaryKeyTypes(keyType, types, isTuple, encoded);
+            if (encoded) {
+                TGenericPresortEncoder packer(keyType);
                 decltype(EncodedDictBuffers)::value_type dictBuffer;
                 if (!EncodedDictBuffers.empty()) {
                     dictBuffer = std::move(EncodedDictBuffers.back());
@@ -831,22 +831,22 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
                     dictBuffer.clear();
                 }
                 dictBuffer.reserve(length);
-                for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) { 
-                    NUdf::TUnboxedValue encodedKey = MakeString(packer.Encode(key, false)); 
+                for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
+                    NUdf::TUnboxedValue encodedKey = MakeString(packer.Encode(key, false));
                     dictBuffer.emplace_back(std::move(encodedKey), std::move(key), std::move(payload));
-                } 
- 
+                }
+
                 Sort(dictBuffer.begin(), dictBuffer.end(), [&](const auto& left, const auto& right) {
-                    return CompareKeys(std::get<0>(left), std::get<0>(right), types, isTuple) < 0; 
-                }); 
- 
+                    return CompareKeys(std::get<0>(left), std::get<0>(right), types, isTuple) < 0;
+                });
+
                 for (const auto& x : dictBuffer) {
-                    PackImpl(keyType, std::get<1>(x)); 
-                    PackImpl(payloadType, std::get<2>(x)); 
-                } 
+                    PackImpl(keyType, std::get<1>(x));
+                    PackImpl(payloadType, std::get<2>(x));
+                }
                 dictBuffer.clear();
                 EncodedDictBuffers.push_back(std::move(dictBuffer));
-            } else { 
+            } else {
                 decltype(DictBuffers)::value_type dictBuffer;
                 if (!DictBuffers.empty()) {
                     dictBuffer = std::move(DictBuffers.back());
@@ -854,23 +854,23 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
                     dictBuffer.clear();
                 }
                 dictBuffer.reserve(length);
-                for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) { 
+                for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
                     dictBuffer.emplace_back(std::move(key), std::move(payload));
-                } 
- 
-                Sort(dictBuffer.begin(), dictBuffer.end(), TKeyPayloadPairLess(types, isTuple)); 
+                }
+
+                Sort(dictBuffer.begin(), dictBuffer.end(), TKeyPayloadPairLess(types, isTuple));
                 for (const auto& p: dictBuffer) {
                     PackImpl(keyType, p.first);
                     PackImpl(payloadType, p.second);
-                } 
+                }
                 dictBuffer.clear();
                 DictBuffers.push_back(std::move(dictBuffer));
-            } 
-        } else { 
-            for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) { 
-                PackImpl(keyType, key); 
-                PackImpl(payloadType, payload); 
-            } 
+            }
+        } else {
+            for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
+                PackImpl(keyType, key);
+                PackImpl(payloadType, payload);
+            }
         }
         break;
     }
@@ -913,13 +913,13 @@ TValuePacker::TProperties TValuePacker::ScanTypeProperties(const TType* type) {
 
     if (type->GetKind() == TType::EKind::Data) {
         auto dataType = static_cast<const TDataType*>(type);
-        switch (*dataType->GetDataSlot()) { 
+        switch (*dataType->GetDataSlot()) {
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Json:
         case NUdf::EDataSlot::Yson:
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::JsonDocument:
-            // Reuse entire packed value length for strings 
+            // Reuse entire packed value length for strings
             props.Set(EProps::UseTopLength);
             break;
         default:
@@ -932,9 +932,9 @@ TValuePacker::TProperties TValuePacker::ScanTypeProperties(const TType* type) {
 bool TValuePacker::HasOptionalFields(const TType* type) {
     switch (type->GetKind()) {
     case TType::EKind::Void:
-    case TType::EKind::Null: 
-    case TType::EKind::EmptyList: 
-    case TType::EKind::EmptyDict: 
+    case TType::EKind::Null:
+    case TType::EKind::EmptyList:
+    case TType::EKind::EmptyDict:
     case TType::EKind::Data:
         return false;
 
@@ -986,20 +986,20 @@ bool TValuePacker::HasOptionalFields(const TType* type) {
 
 TValuePacker::TPackFunction
 TValuePacker::MakePackFunction() {
-#ifdef MKQL_DISABLE_CODEGEN 
-    return nullptr; 
-#else 
+#ifdef MKQL_DISABLE_CODEGEN
+    return nullptr;
+#else
     if (!Codegen)
         return nullptr;
 
     Codegen->LoadBitCode(NResource::Find("/llvm_bc/mkql_pack.bc"), "mkql_pack");
     return reinterpret_cast<TPackFunction>(Codegen->GetPointerToFunction(CreatePackFunction(Type, Properties.Test(EProps::UseTopLength), Codegen->GetModule(), Codegen->GetContext())));
-#endif 
+#endif
 }
 
-TValuePackerBoxed::TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, const TType* type, bool tryUseCodegen) 
+TValuePackerBoxed::TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, const TType* type, bool tryUseCodegen)
     : TBase(memInfo)
-    , TValuePacker(stable, type, tryUseCodegen) 
+    , TValuePacker(stable, type, tryUseCodegen)
 {}
 
 TValuePackerBoxed::TValuePackerBoxed(TMemoryUsageInfo* memInfo, const TValuePacker& other)

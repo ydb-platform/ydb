@@ -1001,7 +1001,7 @@ private:
     };
 
 public:
-    inline TImpl(const char* host, ui16 port, int flags) 
+    inline TImpl(const char* host, ui16 port, int flags)
         : Info_(nullptr, TAddrInfoDeleter{})
     {
         const TString port_st(ToString(port));
@@ -1060,7 +1060,7 @@ public:
 
 private:
     using TAddrInfoPtr = std::unique_ptr<struct addrinfo, TAddrInfoDeleter>;
- 
+
     TAddrInfoPtr Info_;
 };
 

@@ -7,8 +7,8 @@
 #include <ydb/library/yql/public/udf/udf_types.h>
 #include <ydb/library/yql/minikql/dom/yson.h>
 #include <ydb/library/yql/minikql/dom/json.h>
-#include <ydb/library/yql/utils/utf8.h> 
-#include <ydb/library/yql/public/decimal/yql_decimal.h> 
+#include <ydb/library/yql/utils/utf8.h>
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/dynumber/dynumber.h>

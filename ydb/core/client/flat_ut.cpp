@@ -135,17 +135,17 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.CreateTable("/dc-1/Berkanavt/tables",
                                    "Name: \"Table1\""
                                        "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                                       "Columns { Name: \"key2\"       Type: \"Utf8\"}" 
+                                       "Columns { Name: \"key2\"       Type: \"Utf8\"}"
                                        "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-                                       "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                                       "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                                        "KeyColumnNames: [\"RowId\", \"key1\", \"key2\"]"
                                    );
 
         annoyingClient.CreateTable("/dc-1/Berkanavt/tables",
                                    "Name: \"Students\""
                                         "Columns { Name: \"Id\"          Type: \"Uint32\"}"
-                                        "Columns { Name: \"Name\"        Type: \"Utf8\"}" 
-                                        "Columns { Name: \"LastName\"    Type: \"Utf8\"}" 
+                                        "Columns { Name: \"Name\"        Type: \"Utf8\"}"
+                                        "Columns { Name: \"LastName\"    Type: \"Utf8\"}"
                                         "Columns { Name: \"Age\"         Type: \"Uint32\"}"
                                         "KeyColumnNames: [\"Id\"]"
                                         "UniformPartitionsCount: 10"
@@ -153,8 +153,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.CreateTable("/dc-1/Berkanavt/tables",
                                    "Name: \"Classes\""
                                         "Columns { Name: \"Id\"         Type: \"Uint32\"}"
-                                        "Columns { Name: \"Name\"       Type: \"Utf8\"}" 
-                                        "Columns { Name: \"ProfessorName\" Type: \"Utf8\"}" 
+                                        "Columns { Name: \"Name\"       Type: \"Utf8\"}"
+                                        "Columns { Name: \"ProfessorName\" Type: \"Utf8\"}"
                                         "Columns { Name: \"Level\"      Type: \"Uint32\"}"
                                         "KeyColumnNames: [\"Id\"]"
                                    );
@@ -183,8 +183,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                     "("
                     "(let row '('('Id (Uint32 '42))))"
                     "(let myUpd '("
-                    "    '('Name (Utf8 'Robert))" 
-                    "    '('LastName (Utf8 '\"\\\"); DROP TABLE Students; --\"))" 
+                    "    '('Name (Utf8 'Robert))"
+                    "    '('LastName (Utf8 '\"\\\"); DROP TABLE Students; --\"))"
                     "    '('Age (Uint32 '21))))"
                     "(let pgmReturn (AsList"
                     "    (UpdateRow '/dc-1/Berkanavt/tables/Students row myUpd)"
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                     "(let row '('('Id (Uint32 '3))))"
                     "(let myUpd '("
                     "    '('Name name)"
-                    "    '('LastName (Utf8 'Tables))" 
+                    "    '('LastName (Utf8 'Tables))"
                     "    '('Age (Uint32 '21))))"
                     "(let pgmReturn (AsList"
                     "    (UpdateRow '/dc-1/Berkanavt/tables/Students row myUpd)"
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         annoyingClient.CreateTable("/dc-1/test/perf",
                                    R"(Name: "FlatDaoPerfTestClient"
-                                       Columns { Name: "ls"             Type: "Utf8"} 
+                                       Columns { Name: "ls"             Type: "Utf8"}
                                        Columns { Name: "kg"             Type: "Uint32"}
                                        Columns { Name: "localId"        Type: "Uint64"}
                                        Columns { Name: "createdSeconds" Type: "Uint64"}
@@ -290,7 +290,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             annoyingClient.FlatQuery(Sprintf(
                     R"(
                     (
-                    (let key '('('ls (Utf8 '%d)) )) 
+                    (let key '('('ls (Utf8 '%d)) ))
                     (let myUpd '(
                         '('kg (Uint32 '101))
                         '('localId (Uint64 '102))
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                         ((return (AsList
                             (SetResult 'x
                                 (SelectRange '"/dc-1/test/perf/FlatDaoPerfTestClient"
-                                    '('ExcFrom 'ExcTo '('ls (Utf8 '"") (Void))) 
+                                    '('ExcFrom 'ExcTo '('ls (Utf8 '"") (Void)))
                                     '('ls 'kg 'localId 'createdSeconds 'mode1)
                                     '('('BytesLimit (Uint64 '3000000)))
                                 )
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         annoyingClient.CreateTable("/dc-1/test/perf",
                                    R"(Name: "FlatDaoPerfTestClient"
                                        Columns { Name: "hash"           Type: "Uint32"}
-                                       Columns { Name: "ls"             Type: "Utf8"} 
+                                       Columns { Name: "ls"             Type: "Utf8"}
                                        Columns { Name: "kg"             Type: "Uint32"}
                                        Columns { Name: "localId"        Type: "Uint64"}
                                        Columns { Name: "createdSeconds" Type: "Uint64"}
@@ -416,7 +416,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                                 (ListType
                                     (StructType
                                         '('hash (DataType 'Uint32))
-                                        '('ls (DataType 'Utf8)) 
+                                        '('ls (DataType 'Utf8))
                                         '('kg (DataType 'Uint32))
                                         '('localId (DataType 'Uint64))
                                         '('createdSeconds (DataType 'Uint64))
@@ -485,7 +485,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                     (let params (AddParameter params 'p (AsList
                         (AsStruct
                             '('hash             (Uint32 '0))
-                            '('ls               (Utf8 'A)) 
+                            '('ls               (Utf8 'A))
                             '('kg               (Uint32 '10))
                             '('localId          (Uint64 '20))
                             '('createdSeconds   (Uint64 '30))
@@ -493,7 +493,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                         )
                         (AsStruct
                             '('hash             (Uint32 '1500000000))
-                            '('ls               (Utf8 'B)) 
+                            '('ls               (Utf8 'B))
                             '('kg               (Uint32 '10))
                             '('localId          (Uint64 '20))
                             '('createdSeconds   (Uint64 '30))
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                         )
                         (AsStruct
                             '('hash             (Uint32 '3000000000))
-                            '('ls               (Utf8 'C)) 
+                            '('ls               (Utf8 'C))
                             '('kg               (Uint32 '10))
                             '('localId          (Uint64 '20))
                             '('createdSeconds   (Uint64 '30))
@@ -1034,9 +1034,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                                    R"___(
                                        Name: "TestTable2"
                                        Columns { Name: "Group" Type: "Uint32" }
-                                       Columns { Name: "Name" Type: "String" } 
+                                       Columns { Name: "Name" Type: "String" }
                                        Columns { Name: "Amount" Type: "Uint64" }
-                                       Columns { Name: "Comment" Type: "String"} 
+                                       Columns { Name: "Comment" Type: "String"}
                                        KeyColumnNames: "Group"
                                        KeyColumnNames: "Name"
                                    )___"
@@ -1051,8 +1051,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                     (let $3 (List $2))
                     (let $4 (Uint32 '"1002"))
                     (let $5 '('"Group" $4 $4))
-                    (let $6 (String '"Name2")) 
-                    (let $7 (String '"Name1")) 
+                    (let $6 (String '"Name2"))
+                    (let $7 (String '"Name1"))
                     (let $8 '('"Name" $6 $7))
                     (let $9 '('"ExcFrom" '"IncTo" $5 $8))
                     (let $10 '('"Group" '"Name" '"Amount"))
@@ -1149,7 +1149,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         bool ok = annoyingClient.LocalQuery(schemeShardTabletId, Sprintf(R"(
                                    (
                                         (let key '('('Id (Uint64 '3)))) # SysParam_IsReadOnlyMode
-                                        (let value '('('Value (Utf8 '"%s")))) 
+                                        (let value '('('Value (Utf8 '"%s"))))
                                         (let ret (AsList (UpdateRow 'SysParams key value)))
                                         (return ret)
                                    ))", (isReadOnly ? "1" : "0")), result);
@@ -1327,9 +1327,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         status = annoyingClient.CreateTable("/dc-1/Berkanavt",
                                    "Name: \"Unused\""
                                        "Columns { Name: \"key1\"       Type: \"Uint32\"}"
-                                       "Columns { Name: \"key2\"       Type: \"Utf8\"}" 
+                                       "Columns { Name: \"key2\"       Type: \"Utf8\"}"
                                        "Columns { Name: \"RowId\"      Type: \"Uint64\"}"
-                                       "Columns { Name: \"Value\"      Type: \"Utf8\"}" 
+                                       "Columns { Name: \"Value\"      Type: \"Utf8\"}"
                                        "KeyColumnNames: [\"RowId\", \"key1\", \"key2\"]"
                                    );
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
@@ -1337,8 +1337,8 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         status = annoyingClient.CreateTable("/dc-1/Berkanavt/tables",
                                    "Name: \"Students\""
                                         "Columns { Name: \"Id\"          Type: \"Uint32\"}"
-                                        "Columns { Name: \"Name\"        Type: \"Utf8\"}" 
-                                        "Columns { Name: \"LastName\"    Type: \"Utf8\"}" 
+                                        "Columns { Name: \"Name\"        Type: \"Utf8\"}"
+                                        "Columns { Name: \"LastName\"    Type: \"Utf8\"}"
                                         "Columns { Name: \"Age\"         Type: \"Uint32\"}"
                                         "KeyColumnNames: [\"Id\"]"
                                         "UniformPartitionsCount: 10"
@@ -1456,7 +1456,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         const char * table = "Name: \"Table\""
                             "Columns { Name: \"Key\"    Type: \"Uint32\"}"
-                            "Columns { Name: \"Value\"  Type: \"Utf8\"}" 
+                            "Columns { Name: \"Value\"  Type: \"Utf8\"}"
                             "KeyColumnNames: [\"Key\"]"
                             "UniformPartitionsCount: 2";
 
@@ -1466,7 +1466,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TString insertRowQuery = "("
                 "(let key '('('Key (Uint32 '%u))))"
-                "(let value '('('Value (Utf8 '%s))))" 
+                "(let value '('('Value (Utf8 '%s))))"
                 "(let ret_ (AsList"
                 "    (UpdateRow '/dc-1/Dir/Table key value)"
                 "))"
@@ -1521,7 +1521,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         TString table =
                 " Name: \"Table\""
                 " Columns { Name: \"Key\"    Type: \"Uint32\"}"
-                " Columns { Name: \"Value\"  Type: \"Utf8\"}" 
+                " Columns { Name: \"Value\"  Type: \"Utf8\"}"
                 " KeyColumnNames: [\"Key\"]"
                 " UniformPartitionsCount: 2 "
                 + tableConfig;
@@ -1532,7 +1532,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TString insertRowQuery = "("
                 "(let key '('('Key (Uint32 '%u))))"
-                "(let value '('('Value (Utf8 '%s))))" 
+                "(let value '('('Value (Utf8 '%s))))"
                 "(let ret_ (AsList"
                 "    (UpdateRow '/dc-1/Dir/Table key value)"
                 "))"
@@ -1592,7 +1592,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         const char * table =
                 " Name: \"Table\""
                 " Columns { Name: \"Key\"    Type: \"Uint32\"}"
-                " Columns { Name: \"Value\"  Type: \"Utf8\"}" 
+                " Columns { Name: \"Value\"  Type: \"Utf8\"}"
                 " KeyColumnNames: [\"Key\"]"
                 " SplitBoundary { KeyPrefix { Tuple { Optional { Uint32 : 10000 } } }}"
                 " PartitionConfig { TxReadSizeLimit: 100000000 } ";
@@ -1603,7 +1603,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TString insertRowQuery = "("
                 "(let key '('('Key (Uint32 '%u))))"
-                "(let value '('('Value (Utf8 '%s))))" 
+                "(let value '('('Value (Utf8 '%s))))"
                 "(let ret_ (AsList"
                 "    (UpdateRow '/dc-1/Dir/Table key value)"
                 "))"
@@ -1664,7 +1664,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         const char * table =
                 " Name: \"Table\""
                 " Columns { Name: \"Key\"    Type: \"Uint32\"}"
-                " Columns { Name: \"Value\"  Type: \"Utf8\"}" 
+                " Columns { Name: \"Value\"  Type: \"Utf8\"}"
                 " KeyColumnNames: [\"Key\"]"
                 " UniformPartitionsCount: 2"
                 " PartitionConfig { TxReadSizeLimit: 100000000 } ";
@@ -1675,7 +1675,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
         TString insertRowQuery = "("
                 "(let key '('('Key (Uint32 '%u))))"
-                "(let value '('('Value (Utf8 '%s))))" 
+                "(let value '('('Value (Utf8 '%s))))"
                 "(let ret_ (AsList"
                 "    (UpdateRow '/dc-1/Dir/Table key value)"
                 "))"
@@ -1690,7 +1690,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                 "("
                 "(let key1 '('('Key (Uint32 '4242))))"
                 "(let row (SelectRow '/dc-1/Dir/Table key1 '('Value)))"
-                "(let val (IfPresent row (lambda '(r) ( Coalesce (Member r 'Value) (Utf8 'AAA))) (Utf8 'BBB)))" 
+                "(let val (IfPresent row (lambda '(r) ( Coalesce (Member r 'Value) (Utf8 'AAA))) (Utf8 'BBB)))"
                 "(let key2 '('('Key (Uint32 '3333333333))))"
                 "(let upd (UpdateRow '/dc-1/Dir/Table key2 '('('Value val))))"
                 "(let range1 '('ExcFrom '('Key (Uint32 '0) (Void))))"
@@ -1745,7 +1745,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
     void WriteRow(TFlatMsgBusClient& annoyingClient, TString table, ui32 key, TString value) {
         TString insertRowQuery = "("
                 "(let key '('('Key (Uint32 '%u))))"
-                "(let value '('('Value (Utf8 '%s))))" 
+                "(let value '('('Value (Utf8 '%s))))"
                 "(let ret_ (AsList"
                 "    (UpdateRow '/dc-1/Dir/%s key value)"
                 "))"
@@ -1792,7 +1792,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         const char * table = R"___(
                 Name: "TableOld"
                 Columns { Name: "Key"    Type: "Uint32"}
-                Columns { Name: "Value"  Type: "Utf8"} 
+                Columns { Name: "Value"  Type: "Utf8"}
                 Columns { Name: "Large"  Type: "String" Family: 0 }
                 Columns { Name: "unused001"  Type: "Bool"}
                 Columns { Name: "unused002"  Type: "Uint32"}

@@ -147,21 +147,21 @@ public:
     virtual ~TDbSchemeResolver() {}
 
     virtual NThreading::TFuture<TTableResults> ResolveTables(const TVector<TTable>& tables) override {
-        TTableResults results; 
-        for (auto& table : tables) { 
-            TTableResult result(TTableResult::Error, "Not implemented"); 
-            result.Table = table; 
-            results.push_back(result); 
-        } 
- 
-        return NThreading::MakeFuture(results); 
-    } 
- 
+        TTableResults results;
+        for (auto& table : tables) {
+            TTableResult result(TTableResult::Error, "Not implemented");
+            result.Table = table;
+            results.push_back(result);
+        }
+
+        return NThreading::MakeFuture(results);
+    }
+
     virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) override {
         TAutoPtr<NActors::IActor> proxyActor(new TTableProxyActor(SchemeCacheActor, responseTo, tables));
         HostActorSystem->Register(proxyActor.Release(), TMailboxType::HTSwap, HostActorSystem->AppData<TAppData>()->UserPoolId);
-    } 
- 
+    }
+
 private:
     TActorSystem *HostActorSystem;
     TActorId SchemeCacheActor;

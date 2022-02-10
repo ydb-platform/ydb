@@ -1,27 +1,27 @@
-#include "mkql_removemember.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include "mkql_removemember.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 class TRemoveMemberWrapper : public TMutableCodegeneratorFallbackNode<TRemoveMemberWrapper> {
     typedef TMutableCodegeneratorFallbackNode<TRemoveMemberWrapper> TBaseComputation;
-public: 
+public:
     TRemoveMemberWrapper(TComputationMutables& mutables, IComputationNode* structObj, ui32 index, std::vector<EValueRepresentation>&& representations)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , StructObj(structObj)
-        , Index(index) 
+        , Index(index)
         , Representations(std::move(representations))
         , Cache(mutables)
     {}
- 
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& baseStruct = StructObj->GetValue(ctx);
- 
+
         NUdf::TUnboxedValue* itemsPtr = nullptr;
         const auto result = Cache.NewArray(ctx, Representations.size() - 1U, itemsPtr);
         if (Representations.size() > 1) {
@@ -30,7 +30,7 @@ public:
                 for (ui32 i = 0; i < Index; ++i) {
                     *itemsPtr++ = ptr[i];
                 }
- 
+
                 for (ui32 i = Index + 1; i < Representations.size(); ++i) {
                     *itemsPtr++ = ptr[i];
                 }
@@ -43,11 +43,11 @@ public:
                     *itemsPtr++ = baseStruct.GetElement(i);
                 }
             }
-        } 
- 
+        }
+
         return result;
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         if (Representations.size() > CodegenArraysFallbackLimit)
@@ -127,26 +127,26 @@ public:
 private:
     void RegisterDependencies() const final {
         DependsOn(StructObj);
-    } 
- 
-    IComputationNode* const StructObj; 
-    const ui32 Index; 
+    }
+
+    IComputationNode* const StructObj;
+    const ui32 Index;
     const std::vector<EValueRepresentation> Representations;
 
     const TContainerCacheOnContext Cache;
-}; 
- 
+};
+
 }
 
-IComputationNode* WrapRemoveMember(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args"); 
- 
+IComputationNode* WrapRemoveMember(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
+
     const auto structType = AS_TYPE(TStructType, callable.GetInput(0));
     const auto indexData = AS_VALUE(TDataLiteral, callable.GetInput(1));
- 
+
     const ui32 index = indexData->AsValue().Get<ui32>();
-    MKQL_ENSURE(index < structType->GetMembersCount(), "Bad member index"); 
- 
+    MKQL_ENSURE(index < structType->GetMembersCount(), "Bad member index");
+
     std::vector<EValueRepresentation> representations;
     representations.reserve(structType->GetMembersCount());
     for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
@@ -155,7 +155,7 @@ IComputationNode* WrapRemoveMember(TCallable& callable, const TComputationNodeFa
 
     const auto structObj = LocateNode(ctx.NodeLocator, callable, 0);
     return new TRemoveMemberWrapper(ctx.Mutables, structObj, index, std::move(representations));
-} 
- 
-} 
-} 
+}
+
+}
+}

@@ -13,9 +13,9 @@
 
 #include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h> 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
-#include <ydb/library/yql/public/issue/yql_issue_manager.h> 
+#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/yql_issue_manager.h>
 
 #include <ydb/core/grpc_streaming/grpc_streaming.h>
 #include <ydb/core/tx/scheme_board/events.h>

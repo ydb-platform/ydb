@@ -3,50 +3,50 @@ import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/issue_id.proto";
 import "ydb/core/protos/query_stats.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
- 
+
 import "ydb/public/api/protos/ydb_issue_message.proto";
 
-package NKikimrTxUserProxy; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
-message TRWTransaction { 
-    message TPredicate { 
-        optional bytes Key = 1; 
-        optional bytes Value = 2; // TRawTypeValue 
-        optional uint32 ValueType = 3; 
-        optional bool MustNotExist = 4; 
-        optional bool MustExist = 5; 
-    } 
- 
-    message TRead { 
-        optional bytes Key = 1; 
- 
-        optional uint32 ExpectedPayloadType = 10; 
-    } 
- 
-    message TWrite { 
-        optional bytes Key = 1; 
-        optional bytes Value = 2; // TRawTypeValue 
-        optional uint32 ValueType = 3; 
-        optional bool Erase = 4; 
-    } 
- 
-    repeated TPredicate Predicate = 1; 
-    repeated TRead Read = 2; 
-    repeated TWrite Write = 3; 
-} 
- 
-message TReadTransaction { 
-    message TRead { 
-        optional bytes Key = 1; 
- 
-        optional uint32 ExpectedPayloadType = 10; 
-    } 
- 
-    optional fixed64 StepId = 2; 
-    optional fixed64 OrderId = 3; 
-} 
- 
+package NKikimrTxUserProxy;
+option java_package = "ru.yandex.kikimr.proto";
+
+message TRWTransaction {
+    message TPredicate {
+        optional bytes Key = 1;
+        optional bytes Value = 2; // TRawTypeValue
+        optional uint32 ValueType = 3;
+        optional bool MustNotExist = 4;
+        optional bool MustExist = 5;
+    }
+
+    message TRead {
+        optional bytes Key = 1;
+
+        optional uint32 ExpectedPayloadType = 10;
+    }
+
+    message TWrite {
+        optional bytes Key = 1;
+        optional bytes Value = 2; // TRawTypeValue
+        optional uint32 ValueType = 3;
+        optional bool Erase = 4;
+    }
+
+    repeated TPredicate Predicate = 1;
+    repeated TRead Read = 2;
+    repeated TWrite Write = 3;
+}
+
+message TReadTransaction {
+    message TRead {
+        optional bytes Key = 1;
+
+        optional uint32 ExpectedPayloadType = 10;
+    }
+
+    optional fixed64 StepId = 2;
+    optional fixed64 OrderId = 3;
+}
+
 message TKeyRange {
     // Key as a tuple of values. Missing key column values are treated as NULL.
     optional NKikimrMiniKQL.TParams From = 1;
@@ -167,9 +167,9 @@ message TMiniKQLCompileResults {
     repeated Ydb.Issue.IssueMessage ParamsCompileErrors = 21;
 };
 
-message TTransaction { 
+message TTransaction {
     optional TMiniKQLTransaction MiniKQLTransaction = 4;
- 
+
     optional uint32 Flags = 6; // See ydb/core/tx/tx_datashard.h NKikimr::NTxDataShard::TTxFlags
     optional string UserRequestId = 8;
 
@@ -183,19 +183,19 @@ message TTransaction {
     optional TDiscardVolatileSnapshotTx DiscardVolatileSnapshot = 32;
 
     optional TCommitWritesTx CommitWrites = 40;
-} 
- 
-message TEvProposeTransaction { 
-    optional TTransaction Transaction = 1; 
-    optional uint64 ProxyFlags = 2; 
+}
+
+message TEvProposeTransaction {
+    optional TTransaction Transaction = 1;
+    optional uint64 ProxyFlags = 2;
     optional uint64 ExecTimeoutPeriod = 3;
     optional string UserToken = 4; // already built and serialized user's token
     optional bool StreamResponse = 5;
     optional uint64 CancelAfterMs = 6;
     optional string DatabaseName = 7;
     optional string RequestType = 8;
-} 
- 
+}
+
 message TTxProxyTimings {
     optional uint64 WallClockAccepted = 10;
     optional uint64 WallClockResolved = 11;
@@ -208,32 +208,32 @@ message TTxProxyTimings {
     optional uint64 ElapsedExecComplete = 18;
 }
 
-message TEvProposeTransactionStatus { 
-    optional uint32 Status = 1; 
-    optional fixed64 TxId = 2; 
-    optional fixed64 Step = 3; 
- 
+message TEvProposeTransactionStatus {
+    optional uint32 Status = 1;
+    optional fixed64 TxId = 2;
+    optional fixed64 Step = 3;
+
     optional NKikimrIssues.TStatusIds.EStatusCode StatusCode = 7;
     repeated Ydb.Issue.IssueMessage Issues = 8;
 
-    optional uint32 ExecutionEngineStatus = 10; 
-    optional uint32 ExecutionEngineResponseStatus = 11; 
+    optional uint32 ExecutionEngineStatus = 10;
+    optional uint32 ExecutionEngineResponseStatus = 11;
     optional bytes ExecutionEngineResponse = 12; // Native document.
-    optional bytes MiniKQLErrors = 13; 
-    optional bytes DataShardErrors = 14; 
-    repeated fixed64 ComplainingDataShards = 15; 
-    repeated bytes UnresolvedKeys = 16; // text 
- 
+    optional bytes MiniKQLErrors = 13;
+    optional bytes DataShardErrors = 14;
+    repeated fixed64 ComplainingDataShards = 15;
+    repeated bytes UnresolvedKeys = 16; // text
+
     optional TMiniKQLCompileResults MiniKQLCompileResults = 17;
     optional NKikimrMiniKQL.TResult ExecutionEngineEvaluatedResponse = 18;
- 
+
     optional NKikimrQueryStats.TTxStats TxStats = 19;
     optional TTxProxyTimings Timings = 20;
     optional bool HadFollowerReads = 21;
- 
-    optional uint32 SchemeShardStatus = 30; 
-    optional uint32 SchemeShardReportedId = 31; 
-    optional bytes SchemeShardReason = 32; 
+
+    optional uint32 SchemeShardStatus = 30;
+    optional uint32 SchemeShardReportedId = 31;
+    optional bytes SchemeShardReason = 32;
     optional fixed64 SchemeShardTabletId = 33;
     optional uint64 PathId = 34;
     optional uint64 PathCreateTxId = 35;
@@ -243,9 +243,9 @@ message TEvProposeTransactionStatus {
 
     optional bytes SerializedReadTableResponse = 50;
     optional uint32 ReadTableResponseVersion = 51;
-} 
- 
-message TEvNavigate { 
+}
+
+message TEvNavigate {
     reserved 1; // optional bytes Path = 1;
     reserved 2; // optional uint32 ReadMaterializedFamily = 2;
     reserved 3; // optional bytes TextPath = 3;
@@ -255,20 +255,20 @@ message TEvNavigate {
 
     optional string UserToken = 6; // already built and serialized user's token
     optional string DatabaseName = 7;
-} 
- 
+}
+
 // This message is no longer used
 message TEvNavigateStatus_Deprecated {
-    optional uint32 Status = 1; 
- 
-    optional bytes SchemePrefix = 10; 
-    optional bytes SchemePart = 11; 
- 
-    optional uint32 SchemeShardStatus = 30; 
-    optional uint32 SchemeShardReportedId = 31; 
+    optional uint32 Status = 1;
+
+    optional bytes SchemePrefix = 10;
+    optional bytes SchemePart = 11;
+
+    optional uint32 SchemeShardStatus = 30;
+    optional uint32 SchemeShardReportedId = 31;
 
     optional NKikimrSchemeOp.TPathDescription PathDescription = 40;
-} 
+}
 
 message TEvInvalidateTable {
     optional uint64 SchemeShardId = 1;

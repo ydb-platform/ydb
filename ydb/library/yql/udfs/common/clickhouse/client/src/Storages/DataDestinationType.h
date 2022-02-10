@@ -1,16 +1,16 @@
-#pragma once 
- 
- 
-namespace DB 
-{ 
- 
-enum class DataDestinationType 
-{ 
-    DISK, 
-    VOLUME, 
-    TABLE, 
-    DELETE, 
-    SHARD, 
-}; 
- 
-} 
+#pragma once
+
+
+namespace DB
+{
+
+enum class DataDestinationType
+{
+    DISK,
+    VOLUME,
+    TABLE,
+    DELETE,
+    SHARD,
+};
+
+}

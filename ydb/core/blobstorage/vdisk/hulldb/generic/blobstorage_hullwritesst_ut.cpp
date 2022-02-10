@@ -18,11 +18,11 @@ namespace NKikimr {
         // Definitions
         ////////////////////////////////////////////////////////////////////////////////////////
         typedef TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob> TSstLogoBlob;
-        typedef TSstLogoBlob::TWriter TWriterLogoBlob; 
+        typedef TSstLogoBlob::TWriter TWriterLogoBlob;
         typedef TCompactRecordMergerIndexPass<TKeyLogoBlob, TMemRecLogoBlob> TTLogoBlobCompactRecordMerger;
 
         typedef TLevelSegment<TKeyBlock, TMemRecBlock> TSstBlock;
-        typedef TSstBlock::TWriter TWriterBlock; 
+        typedef TSstBlock::TWriter TWriterBlock;
         typedef TCompactRecordMergerIndexPass<TKeyBlock, TMemRecBlock> TBlockCompactRecordMerger;
         TTestContexts TestCtx;
 

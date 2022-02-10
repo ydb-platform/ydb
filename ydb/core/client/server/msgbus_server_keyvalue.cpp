@@ -4,11 +4,11 @@
 namespace NKikimr {
 namespace NMsgBusProxy {
 
-namespace { 
+namespace {
     const ui32 DefaultTimeoutMs = 1000 * 90; // 90 seconds is a good default
     const ui64 MaxAllowedTimeoutMs = 1000 * 60 * 30; // 30 minutes is an instanely long request
-} 
- 
+}
+
 template <typename ResponseType>
 class TMessageBusKeyValue
         : public TMessageBusSimpleTabletRequest<TMessageBusKeyValue<ResponseType>, TEvKeyValue::TEvResponse, NKikimrServices::TActivity::FRONT_KV_REQUEST> {

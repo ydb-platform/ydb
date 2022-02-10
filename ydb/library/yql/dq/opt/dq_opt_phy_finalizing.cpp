@@ -1,8 +1,8 @@
 #include "dq_opt_phy_finalizing.h"
 
-#include <ydb/library/yql/dq/type_ann/dq_type_ann.h> 
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/utils/log/log.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h> 
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
 
 #include <algorithm>
 

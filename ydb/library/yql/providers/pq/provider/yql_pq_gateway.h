@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h> 
-#include <ydb/library/yql/providers/pq/cm_client/interface/client.h> 
+#include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
+#include <ydb/library/yql/providers/pq/cm_client/interface/client.h>
 
 #include <library/cpp/threading/future/core/future.h>
 

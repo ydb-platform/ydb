@@ -1,192 +1,192 @@
-#include "mkql_node_builder.h" 
-#include "mkql_node_printer.h" 
+#include "mkql_node_builder.h"
+#include "mkql_node_printer.h"
 #include <ydb/library/yql/public/udf/udf_type_inspection.h>
-#include "mkql_type_builder.h" 
- 
+#include "mkql_type_builder.h"
+
 #include <library/cpp/testing/unittest/registar.h>
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 Y_UNIT_TEST_SUITE(TMiniKQLNodeBuilderTest) {
     Y_UNIT_TEST(TestDataBuild) {
-        TScopedAlloc alloc; 
-        TTypeEnvironment env(alloc); 
-        auto d2 = BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)456), NUdf::EDataSlot::Uint32, env); 
-        UNIT_ASSERT_EQUAL(d2->GetType()->GetSchemeType(), NUdf::TDataType<ui32>::Id); 
-    } 
- 
+        TScopedAlloc alloc;
+        TTypeEnvironment env(alloc);
+        auto d2 = BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)456), NUdf::EDataSlot::Uint32, env);
+        UNIT_ASSERT_EQUAL(d2->GetType()->GetSchemeType(), NUdf::TDataType<ui32>::Id);
+    }
+
     Y_UNIT_TEST(TestStructTypeBuilder) {
-        TScopedAlloc alloc; 
-        TTypeEnvironment env(alloc); 
-        auto type = TStructTypeBuilder(env) 
-            .Add("Field1", env.GetVoid()->GetGenericType()) 
-            .Add("Field2", TDataType::Create(NUdf::TDataType<ui32>::Id, env)) 
-            .Build(); 
-        UNIT_ASSERT_EQUAL(type->GetKind(), TType::EKind::Struct); 
-    } 
- 
+        TScopedAlloc alloc;
+        TTypeEnvironment env(alloc);
+        auto type = TStructTypeBuilder(env)
+            .Add("Field1", env.GetVoid()->GetGenericType())
+            .Add("Field2", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
+            .Build();
+        UNIT_ASSERT_EQUAL(type->GetKind(), TType::EKind::Struct);
+    }
+
     Y_UNIT_TEST(TestStructLiteralBuilder) {
-        TScopedAlloc alloc; 
-        TTypeEnvironment env(alloc); 
-        auto structObj = TStructLiteralBuilder(env) 
-            .Add("Field1", TRuntimeNode(env.GetVoid(), true)) 
-            .Add("Field2", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true)) 
-            .Build(); 
-        UNIT_ASSERT_EQUAL(structObj->GetType()->GetKind(), TType::EKind::Struct); 
- 
-        auto structObj2 = TStructLiteralBuilder(env) 
-            .Add("Field2", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true)) 
-            .Add("Field1", TRuntimeNode(env.GetVoid(), true)) 
-            .Build(); 
-        UNIT_ASSERT(structObj->GetType()->IsSameType(*structObj2->GetType())); 
-    } 
- 
+        TScopedAlloc alloc;
+        TTypeEnvironment env(alloc);
+        auto structObj = TStructLiteralBuilder(env)
+            .Add("Field1", TRuntimeNode(env.GetVoid(), true))
+            .Add("Field2", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true))
+            .Build();
+        UNIT_ASSERT_EQUAL(structObj->GetType()->GetKind(), TType::EKind::Struct);
+
+        auto structObj2 = TStructLiteralBuilder(env)
+            .Add("Field2", TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true))
+            .Add("Field1", TRuntimeNode(env.GetVoid(), true))
+            .Build();
+        UNIT_ASSERT(structObj->GetType()->IsSameType(*structObj2->GetType()));
+    }
+
     Y_UNIT_TEST(TestListLiteralBuilder) {
-        TScopedAlloc alloc; 
-        TTypeEnvironment env(alloc); 
-        auto list = TListLiteralBuilder(env, TDataType::Create(NUdf::TDataType<ui32>::Id, env)) 
-            .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)132), NUdf::EDataSlot::Uint32, env), true)) 
-            .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true)) 
-            .Build(); 
-        UNIT_ASSERT_EQUAL(list->GetType()->GetKind(), TType::EKind::List); 
-        UNIT_ASSERT_EQUAL(list->GetItemsCount(), 2); 
-    } 
- 
+        TScopedAlloc alloc;
+        TTypeEnvironment env(alloc);
+        auto list = TListLiteralBuilder(env, TDataType::Create(NUdf::TDataType<ui32>::Id, env))
+            .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)132), NUdf::EDataSlot::Uint32, env), true))
+            .Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true))
+            .Build();
+        UNIT_ASSERT_EQUAL(list->GetType()->GetKind(), TType::EKind::List);
+        UNIT_ASSERT_EQUAL(list->GetItemsCount(), 2);
+    }
+
     Y_UNIT_TEST(TestCallableTypeBuilder) {
-        TScopedAlloc alloc; 
-        TTypeEnvironment env(alloc); 
-        auto callableType = TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env)) 
+        TScopedAlloc alloc;
+        TTypeEnvironment env(alloc);
+        auto callableType = TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
             .Add(env.GetVoid()->GetType())
             .Add(env.GetTypeOfVoid())
-            .Build(); 
- 
-        UNIT_ASSERT_EQUAL(callableType->GetKind(), TType::EKind::Callable); 
-        UNIT_ASSERT_EQUAL(callableType->GetName(), "func"); 
-        UNIT_ASSERT_EQUAL(callableType->GetArgumentsCount(), 2); 
-    } 
- 
+            .Build();
+
+        UNIT_ASSERT_EQUAL(callableType->GetKind(), TType::EKind::Callable);
+        UNIT_ASSERT_EQUAL(callableType->GetName(), "func");
+        UNIT_ASSERT_EQUAL(callableType->GetArgumentsCount(), 2);
+    }
+
     Y_UNIT_TEST(TestCallableTypeBuilderWithNamesAndFlags) {
-        TScopedAlloc alloc; 
-        TTypeEnvironment env(alloc); 
-        auto callableType = TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env)) 
-            .Add(env.GetVoid()->GetType()) 
-            .Add(env.GetTypeOfVoid()) 
-            .SetArgumentName("Arg2") 
-            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap) 
-            .Add(env.GetListOfVoid()->GetType()) 
-            .SetArgumentName("Arg3") 
-            .Build(); 
- 
-        UNIT_ASSERT_EQUAL(callableType->GetKind(), TType::EKind::Callable); 
-        UNIT_ASSERT_EQUAL(callableType->GetName(), "func"); 
-        UNIT_ASSERT_EQUAL(callableType->GetArgumentsCount(), 3); 
- 
-        TTypeInfoHelper typeHelper; 
-        NUdf::TCallableTypeInspector callableInspector(typeHelper, callableType); 
-        UNIT_ASSERT(callableInspector); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgsCount(), 3); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(0), NUdf::TStringRef()); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(1), NUdf::TStringRef("Arg2")); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(2), NUdf::TStringRef("Arg3")); 
- 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(0), 0); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(1), NUdf::ICallablePayload::TArgumentFlags::AutoMap); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(2), 0); 
-    } 
- 
+        TScopedAlloc alloc;
+        TTypeEnvironment env(alloc);
+        auto callableType = TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
+            .Add(env.GetVoid()->GetType())
+            .Add(env.GetTypeOfVoid())
+            .SetArgumentName("Arg2")
+            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap)
+            .Add(env.GetListOfVoid()->GetType())
+            .SetArgumentName("Arg3")
+            .Build();
+
+        UNIT_ASSERT_EQUAL(callableType->GetKind(), TType::EKind::Callable);
+        UNIT_ASSERT_EQUAL(callableType->GetName(), "func");
+        UNIT_ASSERT_EQUAL(callableType->GetArgumentsCount(), 3);
+
+        TTypeInfoHelper typeHelper;
+        NUdf::TCallableTypeInspector callableInspector(typeHelper, callableType);
+        UNIT_ASSERT(callableInspector);
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgsCount(), 3);
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(0), NUdf::TStringRef());
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(1), NUdf::TStringRef("Arg2"));
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(2), NUdf::TStringRef("Arg3"));
+
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(0), 0);
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(1), NUdf::ICallablePayload::TArgumentFlags::AutoMap);
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(2), 0);
+    }
+
     Y_UNIT_TEST(TestCallableTypeBuilderBadOrderArgNames) {
-        TScopedAlloc alloc; 
-        TTypeEnvironment env(alloc); 
-        UNIT_ASSERT_EXCEPTION(TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env)) 
-            .Add(env.GetVoid()->GetType()) 
-            .Add(env.GetTypeOfVoid()) 
-            .SetArgumentName("Arg2") 
-            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap) 
-            .Add(env.GetListOfVoid()->GetType()) 
-            .Build(), yexception); 
-    } 
- 
+        TScopedAlloc alloc;
+        TTypeEnvironment env(alloc);
+        UNIT_ASSERT_EXCEPTION(TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
+            .Add(env.GetVoid()->GetType())
+            .Add(env.GetTypeOfVoid())
+            .SetArgumentName("Arg2")
+            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap)
+            .Add(env.GetListOfVoid()->GetType())
+            .Build(), yexception);
+    }
+
     Y_UNIT_TEST(TestCallableTypeBuilderDuplicateArgNames) {
-        TScopedAlloc alloc; 
-        TTypeEnvironment env(alloc); 
-        UNIT_ASSERT_EXCEPTION(TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env)) 
-            .Add(env.GetVoid()->GetType()) 
-            .Add(env.GetTypeOfVoid()) 
-            .SetArgumentName("Arg2") 
-            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap) 
-            .Add(env.GetListOfVoid()->GetType()) 
-            .SetArgumentName("Arg2") 
-            .Build(), yexception); 
-    } 
- 
+        TScopedAlloc alloc;
+        TTypeEnvironment env(alloc);
+        UNIT_ASSERT_EXCEPTION(TCallableTypeBuilder(env, "func", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
+            .Add(env.GetVoid()->GetType())
+            .Add(env.GetTypeOfVoid())
+            .SetArgumentName("Arg2")
+            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap)
+            .Add(env.GetListOfVoid()->GetType())
+            .SetArgumentName("Arg2")
+            .Build(), yexception);
+    }
+
     Y_UNIT_TEST(TestDictLiteralBuilder) {
-        TScopedAlloc alloc; 
-        TTypeEnvironment env(alloc); 
-        auto dict = TDictLiteralBuilder(env, TDataType::Create(NUdf::TDataType<ui32>::Id, env), 
-            TDataType::Create(NUdf::TDataType<char*>::Id, env)).Add( 
-                TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)132), NUdf::EDataSlot::Uint32, env), true), 
-                TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod::Embedded("abc"), NUdf::TDataType<char*>::Id, env), true) 
-            ).Add( 
-                TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true), 
-                TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod::Embedded("def"), NUdf::TDataType<char*>::Id, env), true) 
-            ).Build(); 
- 
-        UNIT_ASSERT_EQUAL(dict->GetType()->GetKind(), TType::EKind::Dict); 
-        UNIT_ASSERT_EQUAL(dict->GetItemsCount(), 2); 
-    } 
- 
+        TScopedAlloc alloc;
+        TTypeEnvironment env(alloc);
+        auto dict = TDictLiteralBuilder(env, TDataType::Create(NUdf::TDataType<ui32>::Id, env),
+            TDataType::Create(NUdf::TDataType<char*>::Id, env)).Add(
+                TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)132), NUdf::EDataSlot::Uint32, env), true),
+                TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod::Embedded("abc"), NUdf::TDataType<char*>::Id, env), true)
+            ).Add(
+                TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod((ui32)234), NUdf::EDataSlot::Uint32, env), true),
+                TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod::Embedded("def"), NUdf::TDataType<char*>::Id, env), true)
+            ).Build();
+
+        UNIT_ASSERT_EQUAL(dict->GetType()->GetKind(), TType::EKind::Dict);
+        UNIT_ASSERT_EQUAL(dict->GetItemsCount(), 2);
+    }
+
     Y_UNIT_TEST(TestCallableBuilder) {
-        TScopedAlloc alloc; 
-        TTypeEnvironment env(alloc); 
-        auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env)) 
-            .Add(TRuntimeNode(env.GetEmptyStruct(), true)) 
-            .Add(TRuntimeNode(env.GetVoid(), true)) 
-            .Build(); 
- 
-        UNIT_ASSERT_EQUAL(callable1->GetType()->GetKind(), TType::EKind::Callable); 
-        UNIT_ASSERT_EQUAL(callable1->GetInputsCount(), 2); 
- 
-        auto callable2 = TCallableBuilder(env, "func2", TDataType::Create(NUdf::TDataType<ui32>::Id, env)) 
-            .Add(TRuntimeNode(callable1, false)) 
+        TScopedAlloc alloc;
+        TTypeEnvironment env(alloc);
+        auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
+            .Add(TRuntimeNode(env.GetEmptyStruct(), true))
             .Add(TRuntimeNode(env.GetVoid(), true))
-            .Build(); 
- 
-        UNIT_ASSERT_EQUAL(callable2->GetType()->GetKind(), TType::EKind::Callable); 
-        UNIT_ASSERT_EQUAL(callable2->GetType()->GetArgumentsCount(), 2); 
+            .Build();
+
+        UNIT_ASSERT_EQUAL(callable1->GetType()->GetKind(), TType::EKind::Callable);
+        UNIT_ASSERT_EQUAL(callable1->GetInputsCount(), 2);
+
+        auto callable2 = TCallableBuilder(env, "func2", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
+            .Add(TRuntimeNode(callable1, false))
+            .Add(TRuntimeNode(env.GetVoid(), true))
+            .Build();
+
+        UNIT_ASSERT_EQUAL(callable2->GetType()->GetKind(), TType::EKind::Callable);
+        UNIT_ASSERT_EQUAL(callable2->GetType()->GetArgumentsCount(), 2);
         UNIT_ASSERT_EQUAL(callable2->GetType()->GetArgumentType(0)->GetKind(), TType::EKind::Data);
         UNIT_ASSERT_EQUAL(callable2->GetType()->GetArgumentType(1)->GetKind(), TType::EKind::Void);
-        UNIT_ASSERT_EQUAL(callable2->GetInputsCount(), 2); 
-    } 
- 
+        UNIT_ASSERT_EQUAL(callable2->GetInputsCount(), 2);
+    }
+
     Y_UNIT_TEST(TestCallableBuilderWithNamesAndFlags) {
-        TScopedAlloc alloc; 
-        TTypeEnvironment env(alloc); 
-        auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env)) 
-            .Add(TRuntimeNode(env.GetEmptyStruct(), true)) 
-            .Add(TRuntimeNode(env.GetVoid(), true)) 
-            .SetArgumentName("Arg2") 
-            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap) 
-            .Add(TRuntimeNode(env.GetEmptyTuple(), true)) 
-            .SetArgumentName("Arg3") 
-            .Build(); 
- 
-        UNIT_ASSERT_EQUAL(callable1->GetType()->GetKind(), TType::EKind::Callable); 
-        UNIT_ASSERT_EQUAL(callable1->GetInputsCount(), 3); 
- 
-        TTypeInfoHelper typeHelper; 
-        NUdf::TCallableTypeInspector callableInspector(typeHelper, callable1->GetType()); 
-        UNIT_ASSERT(callableInspector); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgsCount(), 3); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(0), NUdf::TStringRef()); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(1), NUdf::TStringRef("Arg2")); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(2), NUdf::TStringRef("Arg3")); 
- 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(0), 0); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(1), NUdf::ICallablePayload::TArgumentFlags::AutoMap); 
-        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(2), 0); 
-    } 
-} 
- 
-} 
-} 
+        TScopedAlloc alloc;
+        TTypeEnvironment env(alloc);
+        auto callable1 = TCallableBuilder(env, "func1", TDataType::Create(NUdf::TDataType<ui32>::Id, env))
+            .Add(TRuntimeNode(env.GetEmptyStruct(), true))
+            .Add(TRuntimeNode(env.GetVoid(), true))
+            .SetArgumentName("Arg2")
+            .SetArgumentFlags(NUdf::ICallablePayload::TArgumentFlags::AutoMap)
+            .Add(TRuntimeNode(env.GetEmptyTuple(), true))
+            .SetArgumentName("Arg3")
+            .Build();
+
+        UNIT_ASSERT_EQUAL(callable1->GetType()->GetKind(), TType::EKind::Callable);
+        UNIT_ASSERT_EQUAL(callable1->GetInputsCount(), 3);
+
+        TTypeInfoHelper typeHelper;
+        NUdf::TCallableTypeInspector callableInspector(typeHelper, callable1->GetType());
+        UNIT_ASSERT(callableInspector);
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgsCount(), 3);
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(0), NUdf::TStringRef());
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(1), NUdf::TStringRef("Arg2"));
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentName(2), NUdf::TStringRef("Arg3"));
+
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(0), 0);
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(1), NUdf::ICallablePayload::TArgumentFlags::AutoMap);
+        UNIT_ASSERT_EQUAL(callableInspector.GetArgumentFlags(2), 0);
+    }
+}
+
+}
+}

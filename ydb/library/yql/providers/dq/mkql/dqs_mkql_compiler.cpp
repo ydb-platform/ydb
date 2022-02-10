@@ -1,8 +1,8 @@
 #include "dqs_mkql_compiler.h"
 
-#include <ydb/library/yql/providers/dq/interface/yql_dq_integration.h> 
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h> 
-#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h> 
+#include <ydb/library/yql/providers/dq/interface/yql_dq_integration.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/common/mkql/yql_provider_mkql.h>
 
 namespace NYql::NDqs {
 
@@ -25,9 +25,9 @@ void RegisterDqsMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, cons
     for (const auto& ds: ctx.DataSinks) {
         if (const auto dq = ds->GetDqIntegration()) {
             integrations.emplace(dq);
-        } 
-    } 
+        }
+    }
     std::for_each(integrations.cbegin(), integrations.cend(), std::bind(&IDqIntegration::RegisterMkqlCompiler, std::placeholders::_1, std::ref(compiler)));
-} 
- 
+}
+
 }

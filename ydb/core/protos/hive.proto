@@ -4,10 +4,10 @@ import "ydb/core/protos/tablet.proto";
 import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/follower_group.proto";
- 
-package NKikimrHive; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
+
+package NKikimrHive;
+option java_package = "ru.yandex.kikimr.proto";
+
 enum ETabletBootMode {
     // Default boot mode, hive tries to keep leader tablet running
     TABLET_BOOT_MODE_DEFAULT = 0;
@@ -42,27 +42,27 @@ enum EMigrationState {
     MIGRATION_COMPLETE = 3;
 }
 
-message TChannelInfo { 
-    message THistorySlot { 
-        optional uint32 FromGeneration = 1; 
-        optional uint32 GroupID = 2; 
+message TChannelInfo {
+    message THistorySlot {
+        optional uint32 FromGeneration = 1;
+        optional uint32 GroupID = 2;
         optional uint64 Timestamp = 3; // ms
-    } 
- 
-    optional uint32 Id = 1; 
+    }
+
+    optional uint32 Id = 1;
     optional uint32 Type = 2; // erasure
-    repeated THistorySlot History = 3; 
-} 
- 
-message TEvBootTablet { 
-    optional fixed64 TabletID = 1; 
-} 
- 
-message TEvBootTabletReply { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
+    repeated THistorySlot History = 3;
+}
+
+message TEvBootTablet {
+    optional fixed64 TabletID = 1;
+}
+
+message TEvBootTabletReply {
+    optional NKikimrProto.EReplyStatus Status = 1;
     optional string StatusMsg = 2;
-} 
- 
+}
+
 message TTabletCategory {
     optional uint64 TabletCategoryID = 1; // it's required, actually
     optional uint64 MaxDisconnectTimeout = 2; // ms
@@ -78,12 +78,12 @@ message TDataCentersPreference {
     repeated TDataCentersGroup DataCentersGroups = 1;
 }
 
-message TEvCreateTablet { 
-    optional fixed64 Owner = 1; 
-    optional uint64 OwnerIdx = 2; 
+message TEvCreateTablet {
+    optional fixed64 Owner = 1;
+    optional uint64 OwnerIdx = 2;
     optional NKikimrTabletBase.TTabletTypes.EType TabletType = 3;
-    optional uint32 AssignStateStorage = 4; 
-    repeated uint32 AllowedNodeIDs = 7; 
+    optional uint32 AssignStateStorage = 4;
+    repeated uint32 AllowedNodeIDs = 7;
     repeated uint64 AllowedDataCenterNumIDs = 14 [deprecated=true]; // array of DC IDs allowed to run the tablet; obsolete; use AllowedDataCenters instead
     optional TTabletCategory TabletCategory = 16;
     repeated TFollowerGroup FollowerGroups = 17;
@@ -105,57 +105,57 @@ message TEvCreateTablet {
     optional bool AllowFollowerPromotion = 12 [default = false]; // DEPRECATED
     optional bool CrossDataCenterFollowers = 13 [default = false]; // enable to make followers automatically in every DC (one follower per one datacenter) - DEPRECATED
     optional uint32 CrossDataCenterFollowerCount = 15; // follower count per one datacenter - DEPRECATED
-} 
- 
+}
+
 message TEvLookupTablet {
     optional fixed64 Owner = 1;
     optional uint64 OwnerIdx = 2;
 }
 
-message TEvCreateTabletReply { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional fixed64 Owner = 2; 
-    optional uint64 OwnerIdx = 3; 
-    optional fixed64 TabletID = 4; 
-    optional fixed64 Origin = 5; 
+message TEvCreateTabletReply {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional fixed64 Owner = 2;
+    optional uint64 OwnerIdx = 3;
+    optional fixed64 TabletID = 4;
+    optional fixed64 Origin = 5;
     optional EErrorReason ErrorReason = 6;
     optional TForwardRequest ForwardRequest = 7;
-} 
- 
-message TEvTabletCreationResult { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional fixed64 TabletID = 2; 
-} 
- 
-message TEvStopTablet { 
-    optional fixed64 TabletID = 1; 
+}
+
+message TEvTabletCreationResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional fixed64 TabletID = 2;
+}
+
+message TEvStopTablet {
+    optional fixed64 TabletID = 1;
     optional NActorsProto.TActorId ActorToNotify = 2;
-} 
- 
+}
+
 message TEvStopTabletResult {
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional fixed64 TabletID = 2; 
-} 
- 
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional fixed64 TabletID = 2;
+}
+
 message TEvResumeTabletResult {
     optional NKikimrProto.EReplyStatus Status = 1;
     optional fixed64 TabletID = 2;
 }
 
-message TChannelRequest { 
-    optional uint32 Id = 1; 
-    optional uint32 Type = 2; 
-    optional uint32 Locality = 3; 
-} 
- 
-message TEvReconfigureTablet { 
-    optional fixed64 TabletID = 1; 
-    optional bool Autoboot = 2; 
- 
-    optional uint32 ChannelReconfigureGeneration = 3; 
-    repeated TChannelRequest Channels = 4; 
-} 
- 
+message TChannelRequest {
+    optional uint32 Id = 1;
+    optional uint32 Type = 2;
+    optional uint32 Locality = 3;
+}
+
+message TEvReconfigureTablet {
+    optional fixed64 TabletID = 1;
+    optional bool Autoboot = 2;
+
+    optional uint32 ChannelReconfigureGeneration = 3;
+    repeated TChannelRequest Channels = 4;
+}
+
 message TEvAdoptTablet {
     optional fixed64 TabletID = 1;
 
@@ -176,13 +176,13 @@ message TEvAdoptTabletReply {
     optional string Explain = 6;
 }
 
-message TEvReconfigureTabletReply { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional fixed64 TabletID = 2; 
-    optional bool Autoboot = 3; 
-    repeated TChannelInfo Channels = 4; 
-} 
- 
+message TEvReconfigureTabletReply {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional fixed64 TabletID = 2;
+    optional bool Autoboot = 3;
+    repeated TChannelInfo Channels = 4;
+}
+
 message TEvDeleteTablet {
     optional fixed64 ShardOwnerId = 1;
     repeated uint64 ShardLocalIdx = 2;
@@ -212,17 +212,17 @@ message TEvDeleteOwnerTabletsReply {
 }
 
 
-message TEvLookupChannelInfo { 
-    optional fixed64 TabletID = 1; 
-    repeated uint32 Channels = 2; 
-    repeated uint32 ForGeneration = 3; 
-} 
- 
-message TEvChannelInfo { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional fixed64 TabletID = 2; 
-    repeated TChannelInfo ChannelInfo = 3; 
-} 
+message TEvLookupChannelInfo {
+    optional fixed64 TabletID = 1;
+    repeated uint32 Channels = 2;
+    repeated uint32 ForGeneration = 3;
+}
+
+message TEvChannelInfo {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional fixed64 TabletID = 2;
+    repeated TChannelInfo ChannelInfo = 3;
+}
 
 message TTabletMetrics {
     optional fixed64 TabletID = 1;

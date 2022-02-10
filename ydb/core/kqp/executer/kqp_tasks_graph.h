@@ -6,8 +6,8 @@
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
-#include <ydb/library/yql/dq/tasks/dq_connection_builder.h> 
-#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h> 
+#include <ydb/library/yql/dq/tasks/dq_connection_builder.h>
+#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
 
 namespace NKikimrTxDataShard {
 class TKqpTransaction_TDataTaskMeta_TKeyRange;

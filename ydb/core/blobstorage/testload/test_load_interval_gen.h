@@ -42,7 +42,7 @@ namespace NKikimr {
             }
 
             TDuration Generate() const {
-                const double x = Max(Xmin, TAppData::RandomProvider->GenRandReal2()); 
+                const double x = Max(Xmin, TAppData::RandomProvider->GenRandReal2());
                 return TDuration::Seconds(-log(x) / Frequency);
             }
         };

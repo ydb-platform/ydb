@@ -9,8 +9,8 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_processing.h>
 
-#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 namespace NKikimr {
 namespace NMsgBusProxy {
@@ -115,8 +115,8 @@ public:
                 if (mkqlTx.GetParams().HasProto()) {
                     try {
                         TAlignedPagePoolCounters counters(AppData(ctx)->Counters, "params");
-                        NMiniKQL::TScopedAlloc alloc(counters, AppData(ctx)->FunctionRegistry->SupportsSizedAllocators()); 
-                        NMiniKQL::TTypeEnvironment env(alloc); 
+                        NMiniKQL::TScopedAlloc alloc(counters, AppData(ctx)->FunctionRegistry->SupportsSizedAllocators());
+                        NMiniKQL::TTypeEnvironment env(alloc);
                         NMiniKQL::TRuntimeNode node = NMiniKQL::ImportValueFromProto(mkqlTx.GetParams().GetProto(), env);
                         TString bin = NMiniKQL::SerializeRuntimeNode(node, env);
                         mkqlTx.MutableParams()->ClearProto();
@@ -292,12 +292,12 @@ void TMessageBusServerRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatu
         return ReplyWithResult(MSTATUS_OK, msg->Record, ctx);
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout:
         return ReplyWithResult(MSTATUS_INPROGRESS, msg->Record, ctx);
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyNotReady: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyNotReady:
         return HandleError(MSTATUS_NOTREADY, status, ctx);
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecAborted:
         return HandleError(MSTATUS_ABORTED, status, ctx);
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::EmptyAffectedSet:
-    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError: 
+    case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::DomainLocalityError:
     case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResultUnavailable:

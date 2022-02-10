@@ -1,6 +1,6 @@
 #include "events.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 namespace NYql::NDqs {
     TEvDqTask::TEvDqTask(NDqProto::TDqTask task) {

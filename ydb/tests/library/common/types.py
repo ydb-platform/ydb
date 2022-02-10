@@ -268,9 +268,9 @@ class PType(AbstractTypeEnum):
     # Rework Pair later
     PairUi64Ui64 = _ptype_from(257, int_between(0, 2 ** 64 - 1), int)
 
-    String = _ptype_from(4097, string_with_length(4), str) 
-    SmallBoundedString = _ptype_from(4113, string_with_length(4), str) 
-    LargeBoundedString = _ptype_from(4114, string_with_length(500), str) 
+    String = _ptype_from(4097, string_with_length(4), str)
+    SmallBoundedString = _ptype_from(4113, string_with_length(4), str)
+    LargeBoundedString = _ptype_from(4114, string_with_length(500), str)
 
     Utf8 = _ptype_from(4608, string_with_length(500), from_bytes)
 

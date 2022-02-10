@@ -4,7 +4,7 @@
 #include <util/string/builder.h>
 #include <util/system/compiler.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <ydb/library/yql/utils/utf8.h> 
+#include <ydb/library/yql/utils/utf8.h>
 
 #include <cstdlib>
 
@@ -43,9 +43,9 @@ namespace {
     ///////////////////////////////////////////////////////////////////////////
     class TAstParserContext {
     public:
-        inline TAstParserContext(const TStringBuf& str, TMemoryPool* externalPool, const TString& file) 
+        inline TAstParserContext(const TStringBuf& str, TMemoryPool* externalPool, const TString& file)
             : Str_(str)
-            , Position_(1, 1, file) 
+            , Position_(1, 1, file)
             , Offset_(0)
             , Pool_(externalPool)
         {
@@ -117,22 +117,22 @@ namespace {
     ///////////////////////////////////////////////////////////////////////////
     class TAstParser {
     public:
-        TAstParser(const TStringBuf& str, TMemoryPool* externalPool, const TString& file) 
-            : Ctx_(str, externalPool, file) 
+        TAstParser(const TStringBuf& str, TMemoryPool* externalPool, const TString& file)
+            : Ctx_(str, externalPool, file)
         {
         }
 
         TAstParseResult Parse() {
-            TAstNode* root = nullptr; 
-            if (!IsUtf8(Ctx_.Str())) { 
-               AddError("Invalid UTF8 input"); 
-            } else { 
-               root = ParseList(0U); 
+            TAstNode* root = nullptr;
+            if (!IsUtf8(Ctx_.Str())) {
+               AddError("Invalid UTF8 input");
+            } else {
+               root = ParseList(0U);
 
-               SkipSpace(); 
-               if (!Ctx_.AtEnd()) { 
-                  AddError("Unexpected symbols after end of root list"); 
-               } 
+               SkipSpace();
+               if (!Ctx_.AtEnd()) {
+                  AddError("Unexpected symbols after end of root list");
+               }
             }
 
             TAstParseResult result;
@@ -585,51 +585,51 @@ namespace {
             }
         }
     }
- 
-    void DestroyNode(TAstNode* node) { 
-        if (node->IsList()) { 
-            for (ui32 i = 0; i < node->GetChildrenCount(); ++i) { 
-                DestroyNode(node->GetChild(i)); 
-            } 
-        } 
- 
-        if (node != &TAstNode::QuoteAtom) { 
-            node->Destroy(); 
-        } 
-    } 
+
+    void DestroyNode(TAstNode* node) {
+        if (node->IsList()) {
+            for (ui32 i = 0; i < node->GetChildrenCount(); ++i) {
+                DestroyNode(node->GetChild(i));
+            }
+        }
+
+        if (node != &TAstNode::QuoteAtom) {
+            node->Destroy();
+        }
+    }
 } // namespace
 
-TAstParseResult::~TAstParseResult() { 
-    Destroy(); 
-} 
- 
-TAstParseResult::TAstParseResult(TAstParseResult&& other) 
-    : Pool(std::move(other.Pool)) 
-    , Root(other.Root) 
-    , Issues(std::move(other.Issues)) 
-{ 
-    other.Root = nullptr; 
-} 
- 
-TAstParseResult& TAstParseResult::operator=(TAstParseResult&& other) { 
-    Destroy(); 
-    Pool = std::move(other.Pool); 
-    Root = other.Root; 
-    other.Root = nullptr; 
-    Issues = std::move(other.Issues); 
-    return *this; 
-} 
- 
-void TAstParseResult::Destroy() { 
-    if (Root) { 
-        DestroyNode(Root); 
-        Root = nullptr; 
-    } 
-} 
- 
-TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool, const TString& file) 
+TAstParseResult::~TAstParseResult() {
+    Destroy();
+}
+
+TAstParseResult::TAstParseResult(TAstParseResult&& other)
+    : Pool(std::move(other.Pool))
+    , Root(other.Root)
+    , Issues(std::move(other.Issues))
 {
-    TAstParser parser(str, externalPool, file); 
+    other.Root = nullptr;
+}
+
+TAstParseResult& TAstParseResult::operator=(TAstParseResult&& other) {
+    Destroy();
+    Pool = std::move(other.Pool);
+    Root = other.Root;
+    other.Root = nullptr;
+    Issues = std::move(other.Issues);
+    return *this;
+}
+
+void TAstParseResult::Destroy() {
+    if (Root) {
+        DestroyNode(Root);
+        Root = nullptr;
+    }
+}
+
+TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool, const TString& file)
+{
+    TAstParser parser(str, externalPool, file);
     return parser.Parse();
 }
 

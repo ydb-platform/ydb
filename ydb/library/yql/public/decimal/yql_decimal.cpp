@@ -1,9 +1,9 @@
 #include "yql_decimal.h"
 
 #include <cstring>
-#include <ostream> 
-#include <string> 
- 
+#include <ostream>
+#include <string>
+
 namespace NYql {
 namespace NDecimal {
 
@@ -17,7 +17,7 @@ TUint128 GetDivider(ui8 scale) {
 }
 
 bool IsError(TInt128 v) {
-    return v > Nan() || v < -Nan(); 
+    return v > Nan() || v < -Nan();
 }
 
 bool IsNan(TInt128 v) {
@@ -185,7 +185,7 @@ TInt128 FromString(const TStringBuf& str, ui8 precision, ui8 scale) {
                 const char c = *s++;
                 if (!std::isdigit(c))
                     return Err();
- 
+
                 plus = c != '0';
             }
         }

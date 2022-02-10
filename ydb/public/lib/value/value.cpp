@@ -1,6 +1,6 @@
 #include "value.h"
 
-#include <ydb/library/yql/public/decimal/yql_decimal.h> 
+#include <ydb/library/yql/public/decimal/yql_decimal.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
 
@@ -181,14 +181,14 @@ TWriteValue& TWriteValue::Void() {
 
 TWriteValue& TWriteValue::Bytes(const char* value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::String); 
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::String);
     Value.SetBytes(value);
     return *this;
 }
 
 TWriteValue& TWriteValue::Bytes(const TString& value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::String); 
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::String);
     Value.SetBytes(value);
     return *this;
 }
@@ -242,10 +242,10 @@ TWriteValue& TWriteValue::Timestamp(ui64 value) {
     return *this;
 }
 
-TWriteValue& TWriteValue::Interval(i64 value) { 
+TWriteValue& TWriteValue::Interval(i64 value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::Interval);
-    Value.SetInt64(value); 
+    Value.SetInt64(value);
     return *this;
 }
 
@@ -258,32 +258,32 @@ TWriteValue& TWriteValue::operator =(bool value) {
 
 TWriteValue& TWriteValue::operator =(ui8 value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Uint8); 
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Uint8);
     Value.SetUint32(value);
     return *this;
 }
 
-TWriteValue& TWriteValue::operator =(i8 value) { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Int8); 
-    Value.SetInt32(value); 
-    return *this; 
-} 
- 
-TWriteValue& TWriteValue::operator =(ui16 value) { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Uint16); 
-    Value.SetUint32(value); 
-    return *this; 
-} 
- 
-TWriteValue& TWriteValue::operator =(i16 value) { 
-    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data); 
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Int16); 
-    Value.SetInt32(value); 
-    return *this; 
-} 
- 
+TWriteValue& TWriteValue::operator =(i8 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Int8);
+    Value.SetInt32(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::operator =(ui16 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Uint16);
+    Value.SetUint32(value);
+    return *this;
+}
+
+TWriteValue& TWriteValue::operator =(i16 value) {
+    Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Int16);
+    Value.SetInt32(value);
+    return *this;
+}
+
 TWriteValue& TWriteValue::operator =(ui64 value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
     Type.MutableData()->SetScheme(NScheme::NTypeIds::Uint64);
@@ -328,14 +328,14 @@ TWriteValue& TWriteValue::operator =(float value) {
 
 TWriteValue& TWriteValue::operator =(const TString& value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Utf8); 
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Utf8);
     Value.SetText(value);
     return *this;
 }
 
 TWriteValue& TWriteValue::operator =(const char* value) {
     Type.SetKind(NKikimrMiniKQL::ETypeKind::Data);
-    Type.MutableData()->SetScheme(NScheme::NTypeIds::Utf8); 
+    Type.MutableData()->SetScheme(NScheme::NTypeIds::Utf8);
     Value.SetText(value);
     return *this;
 }
@@ -395,12 +395,12 @@ TString TValue::GetDataText() const {
         return ToString(Value.GetDouble());
     case NScheme::NTypeIds::Float:
         return ToString(Value.GetFloat());
-    case NScheme::NTypeIds::Utf8: 
+    case NScheme::NTypeIds::Utf8:
     case NScheme::NTypeIds::Json:
         return Value.GetText();
-    case NScheme::NTypeIds::String: 
-    case NScheme::NTypeIds::String4k: 
-    case NScheme::NTypeIds::String2m: 
+    case NScheme::NTypeIds::String:
+    case NScheme::NTypeIds::String4k:
+    case NScheme::NTypeIds::String2m:
         return Value.GetBytes();
     case NScheme::NTypeIds::Decimal:
         {
@@ -583,11 +583,11 @@ template <> TString TValue::GetValueText<TFormatJSON>(const TFormatJSON& format)
         return "null";
     case NKikimrMiniKQL::ETypeKind::Data: {
         switch (Type.GetData().GetScheme()) {
-        case NScheme::NTypeIds::Utf8: 
+        case NScheme::NTypeIds::Utf8:
             return "\"" + EscapeJsonUTF8(GetDataText()) + "\"";
-        case NScheme::NTypeIds::String: 
-        case NScheme::NTypeIds::String4k: 
-        case NScheme::NTypeIds::String2m: 
+        case NScheme::NTypeIds::String:
+        case NScheme::NTypeIds::String4k:
+        case NScheme::NTypeIds::String2m:
             if (format.BinaryAsBase64) {
                 return "\"" + Base64Encode(GetDataText()) + "\"";
             } else {
@@ -916,34 +916,34 @@ TValue::operator bool() const {
 }
 
 TValue::operator ui8() const {
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Uint8); 
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Uint8);
     Y_ASSERT(Value.HasUint32());
     return Value.GetUint32();
 }
 
-TValue::operator ui16() const { 
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Uint16); 
-    Y_ASSERT(Value.HasUint32()); 
-    return Value.GetUint32(); 
-} 
- 
-TValue::operator i8() const { 
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Int8); 
-    Y_ASSERT(Value.HasInt32()); 
-    return Value.GetInt32(); 
-} 
- 
-TValue::operator i16() const { 
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Int16); 
-    Y_ASSERT(Value.HasInt32()); 
-    return Value.GetInt32(); 
-} 
- 
+TValue::operator ui16() const {
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Uint16);
+    Y_ASSERT(Value.HasUint32());
+    return Value.GetUint32();
+}
+
+TValue::operator i8() const {
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Int8);
+    Y_ASSERT(Value.HasInt32());
+    return Value.GetInt32();
+}
+
+TValue::operator i16() const {
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Int16);
+    Y_ASSERT(Value.HasInt32());
+    return Value.GetInt32();
+}
+
 TValue::operator TString() const {
-    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Utf8 
-            || Type.GetData().GetScheme() == NScheme::NTypeIds::String 
-            || Type.GetData().GetScheme() == NScheme::NTypeIds::String4k 
-            || Type.GetData().GetScheme() == NScheme::NTypeIds::String2m 
+    Y_ASSERT(Type.GetData().GetScheme() == NScheme::NTypeIds::Utf8
+            || Type.GetData().GetScheme() == NScheme::NTypeIds::String
+            || Type.GetData().GetScheme() == NScheme::NTypeIds::String4k
+            || Type.GetData().GetScheme() == NScheme::NTypeIds::String2m
             || Type.GetData().GetScheme() == NScheme::NTypeIds::Yson
             || Type.GetData().GetScheme() == NScheme::NTypeIds::Json
             );

@@ -1,6 +1,6 @@
 #include "mkql_computation_node_ut.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NKikimr {
 namespace NMiniKQL {

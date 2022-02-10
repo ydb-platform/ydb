@@ -6,8 +6,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_query_traits.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
-#include <ydb/library/yql/dq/actors/dq.h> 
-#include <ydb/library/yql/public/issue/yql_issue.h> 
+#include <ydb/library/yql/dq/actors/dq.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <util/generic/guid.h>
 #include <util/generic/ptr.h>

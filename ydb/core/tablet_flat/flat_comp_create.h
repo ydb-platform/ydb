@@ -3,7 +3,7 @@
 #include "flat_comp.h"
 #include "util_fmt_line.h"
 
-#include <library/cpp/time_provider/time_provider.h> 
+#include <library/cpp/time_provider/time_provider.h>
 
 namespace NKikimr {
 namespace NTable {

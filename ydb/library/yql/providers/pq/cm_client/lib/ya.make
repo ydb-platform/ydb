@@ -16,8 +16,8 @@ PEERDIR(
     logbroker/public/api/grpc
     logbroker/public/api/protos
     ydb/public/sdk/cpp/client/ydb_types/credentials
-    ydb/library/yql/providers/pq/cm_client/interface 
-    ydb/library/yql/public/issue 
+    ydb/library/yql/providers/pq/cm_client/interface
+    ydb/library/yql/public/issue
 )
 
 END()

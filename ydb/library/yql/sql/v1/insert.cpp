@@ -1,7 +1,7 @@
 #include "node.h"
 #include "context.h"
 
-#include <ydb/library/yql/utils/yql_panic.h> 
+#include <ydb/library/yql/utils/yql_panic.h>
 
 using namespace NYql;
 
@@ -86,15 +86,15 @@ public:
         Y_UNUSED(ctx);
         YQL_ENSURE(Values.size() == ColumnsHint.size());
 
-        auto structObj = Y("AsStruct"); 
+        auto structObj = Y("AsStruct");
         for (size_t i = 0; i < Values.size(); ++i) {
             TString column = ColumnsHint[i];
             TNodePtr value = Values[i];
 
-            structObj = L(structObj, Q(Y(Q(column), value))); 
+            structObj = L(structObj, Q(Y(Q(column), value)));
         }
 
-        auto updateRow = BuildLambda(Pos, Y("row"), structObj); 
+        auto updateRow = BuildLambda(Pos, Y("row"), structObj);
         return updateRow;
     }
 
@@ -114,32 +114,32 @@ public:
         : TModifySourceBase(pos, columnsHint)
         , OperationHumanName(operationHumanName)
         , Values(values)
-    { 
-        FakeSource = BuildFakeSource(pos); 
-    } 
+    {
+        FakeSource = BuildFakeSource(pos);
+    }
 
     bool DoInit(TContext& ctx, ISource* src) override {
         Y_UNUSED(src);
-        bool hasError = false; 
+        bool hasError = false;
         for (const auto& row: Values) {
             if (ColumnsHint.empty()) {
                 ctx.Error(Pos) << OperationHumanName << " ... VALUES requires specification of table columns";
-                hasError = true; 
-                continue; 
+                hasError = true;
+                continue;
             }
             if (ColumnsHint.size() != row.size()) {
                 ctx.Error(Pos) << "VALUES have " << row.size() << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
-                hasError = true; 
-                continue; 
+                hasError = true;
+                continue;
             }
             for (auto& value: row) {
-                if (!value->Init(ctx, FakeSource.Get())) { 
-                    hasError = true; 
-                    continue; 
+                if (!value->Init(ctx, FakeSource.Get())) {
+                    hasError = true;
+                    continue;
                 }
             }
         }
-        return !hasError; 
+        return !hasError;
     }
 
     TNodePtr Build(TContext& ctx) override {
@@ -154,7 +154,7 @@ public:
             }
             tuple = L(tuple, rowValues);
         }
-        return Y("PersistableRepr", Q(tuple)); 
+        return Y("PersistableRepr", Q(tuple));
     }
 
     TNodePtr DoClone() const final {
@@ -169,7 +169,7 @@ public:
 private:
     TString OperationHumanName;
     TVector<TVector<TNodePtr>> Values;
-    TSourcePtr FakeSource; 
+    TSourcePtr FakeSource;
 };
 
 class TModifyBySource: public TModifySourceBase {
@@ -180,9 +180,9 @@ public:
         , Source(std::move(source))
     {}
 
-    void GetInputTables(TTableList& tableList) const override { 
+    void GetInputTables(TTableList& tableList) const override {
         if (Source) {
-            return Source->GetInputTables(tableList); 
+            return Source->GetInputTables(tableList);
         }
     }
 
@@ -228,12 +228,12 @@ public:
         auto srcColumn = Source->GetColumns()->List.begin();
         auto structObj = Y("AsStruct"); // ordered struct
         for (auto column: ColumnsHint) {
-            structObj = L(structObj, Q(Y(BuildQuotedAtom(Pos, column), 
+            structObj = L(structObj, Q(Y(BuildQuotedAtom(Pos, column),
                 Y("Member", "row", BuildQuotedAtom(Pos, *srcColumn))
             )));
             ++srcColumn;
         }
-        return Y("OrderedMap", input, BuildLambda(Pos, Y("row"), structObj)); 
+        return Y("OrderedMap", input, BuildLambda(Pos, Y("row"), structObj));
     }
 
     TNodePtr DoClone() const final {
@@ -263,16 +263,16 @@ TSourcePtr BuildUpdateValues(TPosition pos, const TVector<TString>& columnsHint,
 
 class TWriteColumnsNode: public TAstListNode {
 public:
-    TWriteColumnsNode(TPosition pos, TScopedStatePtr scoped, 
-        const TTableRef& table, EWriteColumnMode mode, TSourcePtr values = nullptr, TNodePtr options = nullptr) 
+    TWriteColumnsNode(TPosition pos, TScopedStatePtr scoped,
+        const TTableRef& table, EWriteColumnMode mode, TSourcePtr values = nullptr, TNodePtr options = nullptr)
         : TAstListNode(pos)
-        , Scoped(scoped) 
+        , Scoped(scoped)
         , Table(table)
         , Mode(mode)
         , Values(std::move(values))
         , Options(std::move(options))
     {
-        FakeSource = BuildFakeSource(pos); 
+        FakeSource = BuildFakeSource(pos);
     }
 
     void ResetSource(TSourcePtr source) {
@@ -284,7 +284,7 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        TTableList tableList; 
+        TTableList tableList;
         TNodePtr values;
         auto options = Y();
         if (Options) {
@@ -294,7 +294,7 @@ public:
             options = L(Options);
         }
 
-        ISource* underlyingSrc = src; 
+        ISource* underlyingSrc = src;
 
         if (TableSource) {
             if (!TableSource->Init(ctx, src) || !TableSource->InitFilters(ctx)) {
@@ -309,8 +309,8 @@ public:
                 return false;
             }
 
-            Values->GetInputTables(tableList); 
-            underlyingSrc = Values.Get(); 
+            Values->GetInputTables(tableList);
+            underlyingSrc = Values.Get();
             values = Values->Build(ctx);
             if (!values) {
                 return false;
@@ -318,8 +318,8 @@ public:
             unordered = (EOrderKind::None == Values->GetOrderKind());
         }
 
-        TNodePtr node(BuildInputTables(Pos, tableList, false, Scoped)); 
-        if (!node->Init(ctx, underlyingSrc)) { 
+        TNodePtr node(BuildInputTables(Pos, tableList, false, Scoped));
+        if (!node->Init(ctx, underlyingSrc)) {
             return false;
         }
 
@@ -330,8 +330,8 @@ public:
             options = L(options, Q(Y(Q("update"), Update->Build(ctx))));
         }
 
-        auto write = BuildWriteTable(Pos, "values", Table, Mode, std::move(options), Scoped); 
-        if (!write->Init(ctx, FakeSource.Get())) { 
+        auto write = BuildWriteTable(Pos, "values", Table, Mode, std::move(options), Scoped);
+        if (!write->Init(ctx, FakeSource.Get())) {
             return false;
         }
         if (values) {
@@ -354,13 +354,13 @@ public:
     }
 
 protected:
-    TScopedStatePtr Scoped; 
+    TScopedStatePtr Scoped;
     TTableRef Table;
     TSourcePtr TableSource;
     EWriteColumnMode Mode;
     TSourcePtr Values;
     TSourcePtr Update;
-    TSourcePtr FakeSource; 
+    TSourcePtr FakeSource;
     TNodePtr Options;
 };
 
@@ -368,21 +368,21 @@ EWriteColumnMode ToWriteColumnsMode(ESQLWriteColumnMode sqlWriteColumnMode) {
     return sqlIntoMode2WriteColumn.at(sqlWriteColumnMode);
 }
 
-TNodePtr BuildWriteColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, EWriteColumnMode mode, TSourcePtr values, TNodePtr options) { 
+TNodePtr BuildWriteColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, EWriteColumnMode mode, TSourcePtr values, TNodePtr options) {
     YQL_ENSURE(values, "Invalid values node");
-    return new TWriteColumnsNode(pos, scoped, table, mode, std::move(values), std::move(options)); 
+    return new TWriteColumnsNode(pos, scoped, table, mode, std::move(values), std::move(options));
 }
 
-TNodePtr BuildUpdateColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr values, TSourcePtr source) { 
+TNodePtr BuildUpdateColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr values, TSourcePtr source) {
     YQL_ENSURE(values, "Invalid values node");
-    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, scoped, table, EWriteColumnMode::Update); 
+    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, scoped, table, EWriteColumnMode::Update);
     writeNode->ResetSource(std::move(source));
     writeNode->ResetUpdate(std::move(values));
     return writeNode;
 }
 
-TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source) { 
-    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, scoped, table, EWriteColumnMode::Delete); 
+TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source) {
+    TIntrusivePtr<TWriteColumnsNode> writeNode = new TWriteColumnsNode(pos, scoped, table, EWriteColumnMode::Delete);
     writeNode->ResetSource(std::move(source));
     return writeNode;
 }

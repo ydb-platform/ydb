@@ -1,11 +1,11 @@
 UNITTEST_FOR(ydb/core/actorlib_impl)
- 
+
 OWNER(
     alexvru
     ddoarn
     g:kikimr
 )
- 
+
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE == "thread")
@@ -18,23 +18,23 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
-PEERDIR( 
+PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/interconnect
     library/cpp/getopt
     library/cpp/svnversion
     ydb/core/testlib/actors
     ydb/core/testlib/basics
-) 
- 
-SRCS( 
+)
+
+SRCS(
     actor_activity_ut.cpp
     actor_bootstrapped_ut.cpp
     actor_tracker_ut.cpp
     test_interconnect_ut.cpp
     test_protocols_ut.cpp
-) 
- 
+)
+
 YQL_LAST_ABI_VERSION()
- 
-END() 
+
+END()

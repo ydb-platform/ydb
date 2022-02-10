@@ -1,8 +1,8 @@
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_async_compute_actor.h>
 
-#include <ydb/library/yql/providers/dq/api/protos/service.pb.h> 
-#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h> 
+#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
+#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
 
 #include <util/generic/size_literals.h>
 
@@ -25,7 +25,7 @@ IActor* CreateComputeActor(
     const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory)
 {
     auto memoryLimits = NDq::TComputeMemoryLimits();
-    memoryLimits.ChannelBufferSize = 1000000; 
+    memoryLimits.ChannelBufferSize = 1000000;
     memoryLimits.ScanBufferSize = 16_MB;
     // light == heavy since we allow extra allocation
     memoryLimits.MkqlLightProgramMemoryLimit = options.MkqlInitialMemoryLimit;

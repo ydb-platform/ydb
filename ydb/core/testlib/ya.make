@@ -105,7 +105,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 IF (GCC)
     CFLAGS(
         -fno-devirtualize-speculatively

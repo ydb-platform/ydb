@@ -45,6 +45,6 @@ PEERDIR(
     ydb/services/persqueue_v1
 )
 
-YQL_LAST_ABI_VERSION() 
- 
+YQL_LAST_ABI_VERSION()
+
 END()

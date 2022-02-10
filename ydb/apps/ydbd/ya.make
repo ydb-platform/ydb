@@ -36,28 +36,28 @@ PEERDIR(
     ydb/library/pdisk_io
     ydb/library/security
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
-    ydb/library/yql/udfs/common/clickhouse/client 
-    ydb/library/yql/udfs/common/datetime 
-    ydb/library/yql/udfs/common/datetime2 
-    ydb/library/yql/udfs/common/digest 
-    ydb/library/yql/udfs/common/histogram 
-    ydb/library/yql/udfs/common/hyperloglog 
-    ydb/library/yql/udfs/common/hyperscan 
-    ydb/library/yql/udfs/common/ip_base 
-    ydb/library/yql/udfs/common/json 
-    ydb/library/yql/udfs/common/json2 
-    ydb/library/yql/udfs/common/math 
-    ydb/library/yql/udfs/common/pire 
-    ydb/library/yql/udfs/common/re2 
-    ydb/library/yql/udfs/common/set 
-    ydb/library/yql/udfs/common/stat 
-    ydb/library/yql/udfs/common/string 
-    ydb/library/yql/udfs/common/top 
-    ydb/library/yql/udfs/common/topfreq 
-    ydb/library/yql/udfs/common/unicode_base 
-    ydb/library/yql/udfs/common/url_base 
-    ydb/library/yql/udfs/common/yson2 
-    ydb/library/yql/udfs/logs/dsv 
+    ydb/library/yql/udfs/common/clickhouse/client
+    ydb/library/yql/udfs/common/datetime
+    ydb/library/yql/udfs/common/datetime2
+    ydb/library/yql/udfs/common/digest
+    ydb/library/yql/udfs/common/histogram
+    ydb/library/yql/udfs/common/hyperloglog
+    ydb/library/yql/udfs/common/hyperscan
+    ydb/library/yql/udfs/common/ip_base
+    ydb/library/yql/udfs/common/json
+    ydb/library/yql/udfs/common/json2
+    ydb/library/yql/udfs/common/math
+    ydb/library/yql/udfs/common/pire
+    ydb/library/yql/udfs/common/re2
+    ydb/library/yql/udfs/common/set
+    ydb/library/yql/udfs/common/stat
+    ydb/library/yql/udfs/common/string
+    ydb/library/yql/udfs/common/top
+    ydb/library/yql/udfs/common/topfreq
+    ydb/library/yql/udfs/common/unicode_base
+    ydb/library/yql/udfs/common/url_base
+    ydb/library/yql/udfs/common/yson2
+    ydb/library/yql/udfs/logs/dsv
 )
 
 #

@@ -28,12 +28,12 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/tx/scheme_board
     ydb/core/util
-    ydb/library/yql/minikql/invoke_builtins 
+    ydb/library/yql/minikql/invoke_builtins
     ydb/library/yql/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 IF (GCC)
     CFLAGS(
         -fno-devirtualize-speculatively

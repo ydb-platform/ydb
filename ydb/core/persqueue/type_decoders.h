@@ -69,12 +69,12 @@ private:
 template <typename TDerived, ui16 Type, bool IsNullable>
 class TChunkDecoderBase : public TDefaultChunkDecoder {
 public:
-    inline static TCodecSig Sig() { 
-        return TCodecSig(TCodecType(Type), IsNullable); 
-    } 
+    inline static TCodecSig Sig() {
+        return TCodecSig(TCodecType(Type), IsNullable);
+    }
 
-    TCodecSig Signature() const override { return Sig(); } 
- 
+    TCodecSig Signature() const override { return Sig(); }
+
     IChunkDecoder::TPtr ReadNext(const TDataRef& data, const TTypeCodecs* codecs) const override {
         return ReadNextImpl(data, codecs);
     }

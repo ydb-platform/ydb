@@ -12,10 +12,10 @@ PEERDIR(
     ydb/library/yql/minikql/comp_nodes
     ydb/library/yql/minikql/computation
     ydb/library/yql/public/udf
-    ydb/library/yql/dq/actors/protos 
-    ydb/library/yql/dq/common 
-    ydb/library/yql/dq/expr_nodes 
-    ydb/library/yql/dq/type_ann 
+    ydb/library/yql/dq/actors/protos
+    ydb/library/yql/dq/common
+    ydb/library/yql/dq/expr_nodes
+    ydb/library/yql/dq/type_ann
 )
 
 SRCS(
@@ -35,7 +35,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(dq_tasks_runner.h)
 
 YQL_LAST_ABI_VERSION()
- 
+
 END()
 
 RECURSE_FOR_TESTS(

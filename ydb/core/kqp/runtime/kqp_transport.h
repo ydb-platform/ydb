@@ -3,9 +3,9 @@
 #include <ydb/core/kqp/common/kqp_gateway.h>
 #include <ydb/core/protos/kqp.pb.h>
 
-#include <ydb/library/yql/ast/yql_expr.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
 namespace NKikimr {
 namespace NKqp {

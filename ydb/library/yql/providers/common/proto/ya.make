@@ -8,7 +8,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/yql/protos 
+    ydb/library/yql/protos
 )
 
 IF (NOT PY_PROTOS_FOR)

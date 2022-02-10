@@ -7,8 +7,8 @@
 #include <ydb/core/engine/mkql_engine_flat.h>
 #include <ydb/core/client/minikql_compile/yql_expr_minikql.h>
 #include <ydb/core/client/minikql_compile/compile_context.h>
-#include <ydb/library/yql/minikql/mkql_node_serialization.h> 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/core/base/appdata.h>
 
 namespace NKikimr {
@@ -120,7 +120,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
             }
 
             TAlignedPagePoolCounters counters(appData->Counters, "local_tx");
-            TScopedAlloc alloc(counters, appData->FunctionRegistry->SupportsSizedAllocators()); 
+            TScopedAlloc alloc(counters, appData->FunctionRegistry->SupportsSizedAllocators());
             TTypeEnvironment typeEnv(alloc);
             auto future = ConvertToMiniKQL(expr, appData->FunctionRegistry, &typeEnv, nullptr);
             future.Wait();
@@ -153,7 +153,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
         }
 
         TAlignedPagePoolCounters counters(appData->Counters, "local_tx");
-        TScopedAlloc alloc(counters, appData->FunctionRegistry->SupportsSizedAllocators()); 
+        TScopedAlloc alloc(counters, appData->FunctionRegistry->SupportsSizedAllocators());
         TTypeEnvironment typeEnv(alloc);
         TLocalDbSchemeResolver dbResolver(txc.DB.GetScheme(), TabletId);
         const auto unguard = Unguard(alloc);
@@ -246,8 +246,8 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
             TAlignedPagePoolCounters poolCounters(appData->Counters, "local_tx");
 
             TEngineFlatSettings proxySettings(
-                IEngineFlat::EProtocol::V1, 
-                functionRegistry, 
+                IEngineFlat::EProtocol::V1,
+                functionRegistry,
                 *TAppData::RandomProvider, *TAppData::TimeProvider,
                 nullptr, poolCounters
             );
@@ -268,7 +268,7 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 }
             }
 
-            EngineResultStatusCode = proxyEngine->PrepareShardPrograms(IEngineFlat::TShardLimits(1, 0)); 
+            EngineResultStatusCode = proxyEngine->PrepareShardPrograms(IEngineFlat::TShardLimits(1, 0));
             if (EngineResultStatusCode != IEngineFlat::EResult::Ok)
                 return MakeResponse(proxyEngine.Get(), ctx);
 
@@ -290,8 +290,8 @@ class TFlatLocalMiniKQL : public NTabletFlatExecutor::ITransaction {
                 TEngineHostCounters hostCounters;
                 TLocalMiniKQLHost host(txc.DB, hostCounters, TEngineHostSettings(TabletId, false), Factory);
                 TEngineFlatSettings engineSettings(
-                    IEngineFlat::EProtocol::V1, 
-                    functionRegistry, 
+                    IEngineFlat::EProtocol::V1,
+                    functionRegistry,
                     *TAppData::RandomProvider, *TAppData::TimeProvider,
                     &host, poolCounters
                 );

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/yql/providers/pq/provider) 
+UNITTEST_FOR(ydb/library/yql/providers/pq/provider)
 
 OWNER(g:yql)
 
@@ -15,14 +15,14 @@ PEERDIR(
     ydb/library/yql/minikql/invoke_builtins
     ydb/library/yql/public/udf/service/exception_policy
     ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
-    ydb/library/yql/dq/comp_nodes 
-    ydb/library/yql/providers/common/comp_nodes 
-    ydb/library/yql/providers/dq/provider 
+    ydb/library/yql/dq/comp_nodes
+    ydb/library/yql/providers/common/comp_nodes
+    ydb/library/yql/providers/dq/provider
     ydb/library/yql/providers/dq/local_gateway
-    ydb/library/yql/providers/pq/gateway/dummy 
-    ydb/library/yql/providers/pq/provider 
-    ydb/library/yql/providers/solomon/gateway 
-    ydb/library/yql/providers/solomon/provider 
+    ydb/library/yql/providers/pq/gateway/dummy
+    ydb/library/yql/providers/pq/provider
+    ydb/library/yql/providers/solomon/gateway
+    ydb/library/yql/providers/solomon/provider
 )
 
 YQL_LAST_ABI_VERSION()

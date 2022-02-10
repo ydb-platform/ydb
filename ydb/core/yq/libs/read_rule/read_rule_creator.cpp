@@ -5,8 +5,8 @@
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
-#include <ydb/library/yql/providers/dq/api/protos/service.pb.h> 
-#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h> 
+#include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>

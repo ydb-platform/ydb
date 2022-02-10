@@ -23,17 +23,17 @@ public:
     void OnVoid() {
         Writer.OnStringScalar(VoidString);
     }
-    void OnNull() { 
-        Writer.OnEntity(); 
-    } 
-    void OnEmptyList() { 
-        Writer.OnBeginList(); 
-        Writer.OnEndList(); 
-    } 
-    void OnEmptyDict() { 
-        Writer.OnBeginList(); 
-        Writer.OnEndList(); 
-    } 
+    void OnNull() {
+        Writer.OnEntity();
+    }
+    void OnEmptyList() {
+        Writer.OnBeginList();
+        Writer.OnEndList();
+    }
+    void OnEmptyDict() {
+        Writer.OnBeginList();
+        Writer.OnEndList();
+    }
     void OnEntity() {
         Writer.OnEntity();
     }

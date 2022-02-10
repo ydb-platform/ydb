@@ -1,7 +1,7 @@
 #include "mkql_computation_node_ut.h"
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -2121,7 +2121,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest) {
         UNIT_ASSERT(!iterator.Next(item));
         UNIT_ASSERT(!iterator.Next(item));
     }
-} 
- 
-} 
-} 
+}
+
+}
+}

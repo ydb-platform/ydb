@@ -22,14 +22,14 @@
 #include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <library/cpp/actors/core/executor_thread.h>
 #include <library/cpp/actors/util/should_continue.h>
-#include <library/cpp/random_provider/random_provider.h> 
-#include <library/cpp/time_provider/time_provider.h> 
+#include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NActors { 
-    class TMon; 
-} 
- 
+namespace NActors {
+    class TMon;
+}
+
 namespace NMonitoring {
     class TBusNgMonPage;
 }
@@ -87,7 +87,7 @@ struct TAppData {
     NYdb::TDriver* YdbDriver = nullptr;
     const NPDisk::IIoContextFactory* IoContextFactory = nullptr;
 
-    struct TDefaultTabletTypes { 
+    struct TDefaultTabletTypes {
         TTabletTypes::EType SchemeShard;
         TTabletTypes::EType DataShard;
         TTabletTypes::EType KeyValue;
@@ -104,29 +104,29 @@ struct TAppData {
         TTabletTypes::EType SequenceShard;
         TTabletTypes::EType ReplicationController;
 
-        TDefaultTabletTypes(); 
-    }; 
- 
-    TDefaultTabletTypes DefaultTabletTypes; 
- 
-    static TIntrusivePtr<IRandomProvider> RandomProvider; 
-    static TIntrusivePtr<ITimeProvider> TimeProvider; 
+        TDefaultTabletTypes();
+    };
+
+    TDefaultTabletTypes DefaultTabletTypes;
+
+    static TIntrusivePtr<IRandomProvider> RandomProvider;
+    static TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<TDomainsInfo> DomainsInfo;
     TIntrusivePtr<TChannelProfiles> ChannelProfiles;
     TIntrusivePtr<TDynamicNameserviceConfig> DynamicNameserviceConfig;
- 
+
     ui64 ProxySchemeCacheNodes;
     ui64 ProxySchemeCacheDistrNodes;
 
     ui64 CompilerSchemeCachePaths;
     ui64 CompilerSchemeCacheTables;
 
-    NActors::TMon* Mon; 
-    NMonitoring::TDynamicCounterPtr Counters; 
+    NActors::TMon* Mon;
+    NMonitoring::TDynamicCounterPtr Counters;
     NMonitoring::TBusNgMonPage* BusMonPage;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
- 
+
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
 
     THolder<NKikimrBlobStorage::TNodeWardenServiceSet> StaticBlobStorageConfig;

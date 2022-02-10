@@ -1,26 +1,26 @@
-#include "mkql_toindexdict.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include "mkql_toindexdict.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 class TToIndexDictWrapper : public TMutableCodegeneratorNode<TToIndexDictWrapper> {
     typedef TMutableCodegeneratorNode<TToIndexDictWrapper> TBaseComputation;
-public: 
+public:
     TToIndexDictWrapper(TComputationMutables& mutables, IComputationNode* list)
         : TBaseComputation(mutables, list->GetRepresentation())
         , List(list)
-    { 
-    } 
- 
+    {
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.ToIndexDict(ctx.Builder, List->GetValue(ctx).Release());
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -56,17 +56,17 @@ public:
 private:
     void RegisterDependencies() const final {
         DependsOn(List);
-    } 
- 
-    IComputationNode* const List; 
-}; 
- 
+    }
+
+    IComputationNode* const List;
+};
+
 }
 
-IComputationNode* WrapToIndexDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args"); 
+IComputationNode* WrapToIndexDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args");
     return new TToIndexDictWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
-} 
- 
-} 
-} 
+}
+
+}
+}

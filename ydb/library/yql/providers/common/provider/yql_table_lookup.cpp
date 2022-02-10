@@ -1,6 +1,6 @@
 #include "yql_table_lookup.h"
 
-#include <ydb/library/yql/ast/yql_expr.h> 
+#include <ydb/library/yql/ast/yql_expr.h>
 #include <array>
 
 namespace NYql {
@@ -93,21 +93,21 @@ TMaybeNode<TExprBase> BuildColumnRangePredicate(const TString& column, const TCo
     }
 
     if (range.IsPoint()) {
-        return BuildColumnCompare<TCoCmpEqual>(row, column, range.GetFrom().GetValue(), ctx); 
+        return BuildColumnCompare<TCoCmpEqual>(row, column, range.GetFrom().GetValue(), ctx);
     }
 
     TMaybeNode<TExprBase> fromPredicate;
     if (range.GetFrom().IsDefined()) {
         fromPredicate = range.GetFrom().IsInclusive()
-            ? BuildColumnCompare<TCoCmpGreaterOrEqual>(row, column, range.GetFrom().GetValue(), ctx) 
-            : BuildColumnCompare<TCoCmpGreater>(row, column, range.GetFrom().GetValue(), ctx); 
+            ? BuildColumnCompare<TCoCmpGreaterOrEqual>(row, column, range.GetFrom().GetValue(), ctx)
+            : BuildColumnCompare<TCoCmpGreater>(row, column, range.GetFrom().GetValue(), ctx);
     }
 
     TMaybeNode<TExprBase> toPredicate;
     if (range.GetTo().IsDefined()) {
         toPredicate = range.GetTo().IsInclusive()
-            ? BuildColumnCompare<TCoCmpLessOrEqual>(row, column, range.GetTo().GetValue(), ctx) 
-            : BuildColumnCompare<TCoCmpLess>(row, column, range.GetTo().GetValue(), ctx); 
+            ? BuildColumnCompare<TCoCmpLessOrEqual>(row, column, range.GetTo().GetValue(), ctx)
+            : BuildColumnCompare<TCoCmpLess>(row, column, range.GetTo().GetValue(), ctx);
     }
 
     if (fromPredicate && toPredicate) {
@@ -253,19 +253,19 @@ public:
         return KeyColumns;
     }
 
-    TColumnRange GetColumnRange(const TStringBuf& column) const { 
+    TColumnRange GetColumnRange(const TStringBuf& column) const {
         auto* keyRange = ColumnRanges.FindPtr(column);
         YQL_ENSURE(keyRange);
 
         return *keyRange;
     }
 
-    bool HasColumnRange(const TStringBuf& column) const { 
+    bool HasColumnRange(const TStringBuf& column) const {
         auto* keyRange = ColumnRanges.FindPtr(column);
         return keyRange != nullptr;
     }
 
-    void SetColumnRange(const TStringBuf& column, const TColumnRange& range) { 
+    void SetColumnRange(const TStringBuf& column, const TColumnRange& range) {
         auto it = ColumnRanges.find(column);
         YQL_ENSURE(it != ColumnRanges.end());
 
@@ -710,7 +710,7 @@ TTableLookupBuilder CollectLookups(TExprBase row, TExprBase predicate,
         }
 
         auto value = maybeValue.Cast();
-        auto column = maybeMember.Cast().Name().Value(); 
+        auto column = maybeMember.Cast().Name().Value();
 
         TMaybe<TColumnRange> columnRange;
 

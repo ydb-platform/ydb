@@ -80,10 +80,10 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     NMonitoring::TDynamicCounters::TCounterPtr TimecastLagCounter;
 
     void SendToTablet(TTabletEntry::TStep *tabletStep, ui64 tablet, const TActorContext &ctx) {
-        auto evx = new TEvTxProcessing::TEvPlanStep(tabletStep->StepRef->Step, Mediator, tablet); 
-        evx->Record.MutableTransactions()->Reserve(tabletStep->Transactions.size()); 
+        auto evx = new TEvTxProcessing::TEvPlanStep(tabletStep->StepRef->Step, Mediator, tablet);
+        evx->Record.MutableTransactions()->Reserve(tabletStep->Transactions.size());
         for (const TTx &tx : tabletStep->Transactions) {
-            NKikimrTx::TMediatorTransaction *x = evx->Record.AddTransactions(); 
+            NKikimrTx::TMediatorTransaction *x = evx->Record.AddTransactions();
             x->SetTxId(tx.TxId);
             if (tx.Moderator)
                 x->SetModerator(tx.Moderator);
@@ -192,7 +192,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         TTabletEntry &tabletEntry = PerTabletPlanQueue[tablet];
         Y_VERIFY(tabletEntry.State == TTabletEntry::StateConnect);
 
-        if (!Pipes->OnConnect(ev)) { 
+        if (!Pipes->OnConnect(ev)) {
             if (msg->Dead) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
                     << " Mediator# " << Mediator << " HANDLE TEvClientConnected(Dead=true)");
@@ -225,7 +225,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
             << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
 
-        Pipes->OnDisconnect(ev); 
+        Pipes->OnDisconnect(ev);
 
         TTabletEntry &tabletEntry = PerTabletPlanQueue[tablet];
         Y_VERIFY(tabletEntry.State == TTabletEntry::StateConnected);

@@ -4,7 +4,7 @@ OWNER(
     vvvv
     g:kikimr
     g:yql
-    g:yql_ydb_core 
+    g:yql_ydb_core
 )
 
 SRCS(
@@ -20,8 +20,8 @@ SRCS(
     yql_errors.h
     yql_expr.cpp
     yql_expr.h
-    yql_expr_builder.cpp 
-    yql_expr_builder.h 
+    yql_expr_builder.cpp
+    yql_expr_builder.h
     yql_expr_types.cpp
     yql_expr_types.h
     yql_gc_nodes.cpp
@@ -40,11 +40,11 @@ PEERDIR(
     library/cpp/yson
     ydb/library/yql/public/udf
     ydb/library/yql/utils
-    ydb/library/yql/core/issue 
+    ydb/library/yql/core/issue
 )
 
 END()
- 
-RECURSE_FOR_TESTS( 
-    ut 
-) 
+
+RECURSE_FOR_TESTS(
+    ut
+)

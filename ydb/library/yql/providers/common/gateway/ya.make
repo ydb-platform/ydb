@@ -12,7 +12,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/threading/future
-    ydb/library/yql/ast 
+    ydb/library/yql/ast
 )
 
 END()

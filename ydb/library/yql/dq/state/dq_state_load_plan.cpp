@@ -1,8 +1,8 @@
 #include "dq_state_load_plan.h"
 
-#include <ydb/library/yql/core/issue/protos/issue_id.pb.h> 
-#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h> 
-#include <ydb/library/yql/providers/pq/task_meta/task_meta.h> 
+#include <ydb/library/yql/core/issue/protos/issue_id.pb.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
+#include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
 
 #include <util/digest/multi.h>
 #include <util/generic/hash_set.h>

@@ -8,9 +8,9 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/cast.h>
 
-#ifdef _win_ 
-#include <windows.h> 
-#endif 
+#ifdef _win_
+#include <windows.h>
+#endif
 
 template <class T1, class T2>
 inline T2 ModPowerOf2(const T1& a, const T2& b)
@@ -35,7 +35,7 @@ void UnalignedDeallocate(ui8* p);
 inline void SecureWipeBuffer(ui8* buf, size_t size)
 {
 #ifdef _win_
-    ::SecureZeroMemory(buf, size); 
+    ::SecureZeroMemory(buf, size);
 #else
     ::memset(buf, 0, size);
 

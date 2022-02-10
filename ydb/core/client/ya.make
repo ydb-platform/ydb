@@ -18,7 +18,7 @@ END()
 
 RECURSE(
     metadata
-    minikql_compile 
+    minikql_compile
     minikql_result_lib
     scheme_cache_lib
     server

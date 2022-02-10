@@ -12,8 +12,8 @@ PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/interconnect/mock
     library/cpp/actors/protos
-    library/cpp/random_provider 
-    library/cpp/time_provider 
+    library/cpp/random_provider
+    library/cpp/time_provider
 )
 
 IF (GCC)

@@ -19,7 +19,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 REQUIREMENTS(network:full ram:13)
 
 END()

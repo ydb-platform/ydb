@@ -2,7 +2,7 @@
 
 #include "yql_setting.h"
 
-#include <ydb/library/yql/core/yql_expr_type_annotation.h> 
+#include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 

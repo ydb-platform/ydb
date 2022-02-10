@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/minikql/mkql_alloc.h> 
+#include <ydb/library/yql/minikql/mkql_alloc.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/memory_pool.h>
 

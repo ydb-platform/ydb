@@ -2,11 +2,11 @@
 
 #include "yql_codec_buf.h"
 
-#include <ydb/library/yql/minikql/mkql_node.h> 
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/ast/yql_expr.h> 
+#include <ydb/library/yql/minikql/mkql_node.h>
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/ast/yql_expr.h>
 
 #include <util/generic/strbuf.h>
 #include <util/generic/maybe.h>
@@ -16,13 +16,13 @@
 
 #include <list>
 #include <vector>
- 
+
 namespace NYT {
     class TNode;
 }
 
 namespace NYql {
-namespace NCommon { 
+namespace NCommon {
 
 void WriteYsonValue(
     NYson::TYsonConsumerBase& writer,
@@ -59,46 +59,46 @@ struct TCodecContext {
     );
 };
 
-void SkipYson(char cmd, TInputBuf& buf); 
-void CopyYson(char cmd, TInputBuf& buf, TVector<char>& yson); 
-void CopyYsonWithAttrs(char cmd, TInputBuf& buf, TVector<char>& yson); 
+void SkipYson(char cmd, TInputBuf& buf);
+void CopyYson(char cmd, TInputBuf& buf, TVector<char>& yson);
+void CopyYsonWithAttrs(char cmd, TInputBuf& buf, TVector<char>& yson);
 NKikimr::NUdf::TUnboxedValue ReadYsonValue(NKikimr::NMiniKQL::TType* type, const NKikimr::NMiniKQL::THolderFactory& holderFactory, char cmd, TInputBuf& buf, bool isTableFormat);
- 
-TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonValue(const NKikimr::NMiniKQL::THolderFactory& holderFactory, 
+
+TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonValue(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const TStringBuf& yson, NKikimr::NMiniKQL::TType* type, IOutputStream* err, bool isTableFormat);
-TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonNode(const NKikimr::NMiniKQL::THolderFactory& holderFactory, 
-    const NYT::TNode& node, NKikimr::NMiniKQL::TType* type, IOutputStream* err); 
- 
+TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonNode(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    const NYT::TNode& node, NKikimr::NMiniKQL::TType* type, IOutputStream* err);
+
 TMaybe<NKikimr::NUdf::TUnboxedValue> ParseYsonNodeInResultFormat(const NKikimr::NMiniKQL::THolderFactory& holderFactory,
     const NYT::TNode& node, NKikimr::NMiniKQL::TType* type, IOutputStream* err);
 
-extern "C" void ReadYsonContainerValue(NKikimr::NMiniKQL::TType* type, 
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf, 
-    bool wrapOptional); 
- 
+extern "C" void ReadYsonContainerValue(NKikimr::NMiniKQL::TType* type,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf,
+    bool wrapOptional);
+
 NKikimr::NUdf::TUnboxedValue ReadSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
     const NKikimr::NMiniKQL::THolderFactory& holderFactory, TInputBuf& buf);
- 
+
 NKikimr::NUdf::TUnboxedValue ReadSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, NCommon::TInputBuf& buf);
 extern "C" void ReadContainerNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf, 
-    bool wrapOptional); 
- 
-extern "C" void WriteYsonContainerValue(NKikimr::NMiniKQL::TType* type, 
-    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf); 
- 
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf,
+    bool wrapOptional);
+
+extern "C" void WriteYsonContainerValue(NKikimr::NMiniKQL::TType* type,
+    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
+
 void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
- 
+
 void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
-    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf); 
- 
+    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
+
 extern "C" void WriteContainerNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags,
-    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf); 
- 
+    const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf);
+
 void WriteYsonValueInTableFormat(TOutputBuf& buf, NKikimr::NMiniKQL::TType* type, const NKikimr::NUdf::TUnboxedValuePod& value, bool topLevel);
- 
-TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikimr::NUdf::TUnboxedValuePod& value, TExprContext& ctx, 
+
+TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikimr::NUdf::TUnboxedValuePod& value, TExprContext& ctx,
     TPositionHandle pos = {});
- 
-} // namespace NCommon 
+
+} // namespace NCommon
 } // namespace NYql

@@ -1,33 +1,33 @@
 import "library/cpp/actors/protos/actors.proto";
 import "ydb/core/protos/base.proto";
- 
-package NKikimrStateStorage; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
+
+package NKikimrStateStorage;
+option java_package = "ru.yandex.kikimr.proto";
+
 // todo: add followers info
- 
-message TEvLookup { 
-    optional fixed64 TabletID = 1; 
-    optional uint64 Cookie = 2; 
-}; 
- 
-message TEvInfo { 
-    optional NKikimrProto.EReplyStatus Status = 1; 
-    optional fixed64 TabletID = 2; 
-    optional uint64 Cookie = 3; 
+
+message TEvLookup {
+    optional fixed64 TabletID = 1;
+    optional uint64 Cookie = 2;
+};
+
+message TEvInfo {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional fixed64 TabletID = 2;
+    optional uint64 Cookie = 3;
     optional NActorsProto.TActorId CurrentLeader = 4;
     optional NActorsProto.TActorId CurrentLeaderTablet = 5;
-    optional uint32 CurrentGeneration = 6; 
-    optional uint32 CurrentStep = 7; 
-    optional bool Locked = 8; 
-    optional uint64 LockedFor = 9; 
-    optional uint64 Signature = 10; 
+    optional uint32 CurrentGeneration = 6;
+    optional uint32 CurrentStep = 7;
+    optional bool Locked = 8;
+    optional uint64 LockedFor = 9;
+    optional uint64 Signature = 10;
     repeated NActorsProto.TActorId Follower = 11;
     repeated NActorsProto.TActorId FollowerTablet = 12;
     repeated NActorsProto.TActorId FollowerCandidates = 13;
     optional fixed32 ConfigContentHash = 14;
-}; 
- 
+};
+
 message TEvReplicaShutdown {
 };
 
@@ -38,17 +38,17 @@ message TEvDump {
     repeated TEvInfo Info = 1;
 };
 
-message TEvUpdate { 
-    optional fixed64 TabletID = 1; 
-    optional uint64 Cookie = 2; 
+message TEvUpdate {
+    optional fixed64 TabletID = 1;
+    optional uint64 Cookie = 2;
     optional NActorsProto.TActorId ProposedLeader = 3;
     optional NActorsProto.TActorId ProposedLeaderTablet = 4;
-    optional uint32 ProposedGeneration = 5; 
-    optional uint32 ProposedStep = 6; 
-    optional uint64 Signature = 7; 
+    optional uint32 ProposedGeneration = 5;
+    optional uint32 ProposedStep = 6;
+    optional uint64 Signature = 7;
     optional bool IsGuardian = 8;
-}; 
- 
+};
+
 message TEvDelete {
     optional fixed64 TabletID = 1;
 };
@@ -70,13 +70,13 @@ message TEvUnregisterFollower {
     optional NActorsProto.TActorId Follower = 2;
 }
 
-message TEvLock { 
-    optional fixed64 TabletID = 1; 
-    optional uint64 Cookie = 2; 
+message TEvLock {
+    optional fixed64 TabletID = 1;
+    optional uint64 Cookie = 2;
     optional NActorsProto.TActorId ProposedLeader = 3;
-    optional uint32 ProposedGeneration = 4; 
-    optional uint64 Signature = 5; 
-}; 
+    optional uint32 ProposedGeneration = 4;
+    optional uint64 Signature = 5;
+};
 
 message TEvReplicaLeaderDemoted {
     optional fixed64 TabletID = 1;

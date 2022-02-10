@@ -108,7 +108,7 @@ class KikimrConfigGenerator(object):
             grpc_tls_data_path=None,
             yql_config_path=None,
             enable_datastreams=False,
-            auth_config_path=None, 
+            auth_config_path=None,
             disable_mvcc=False,
             enable_public_api_external_blobs=False,
     ):
@@ -157,8 +157,8 @@ class KikimrConfigGenerator(object):
         self.__number_of_pdisks_per_node = 1 + len(dynamic_pdisks)
         self.__load_udfs = load_udfs
         self.__udfs_path = udfs_path
-        self.__yql_config_path = yql_config_path 
-        self.__auth_config_path = auth_config_path 
+        self.__yql_config_path = yql_config_path
+        self.__auth_config_path = auth_config_path
         self.__slot_count = slot_count
         self._dcs = [1]
         if erasure == Erasure.MIRROR_3_DC:
@@ -324,18 +324,18 @@ class KikimrConfigGenerator(object):
         with open(os.path.join(configs_path, "config.yaml"), "w") as writer:
             writer.write(yaml.safe_dump(self.yaml_config))
 
-        if self.__yql_config_path: 
-            config_file_path = os.path.join(configs_path, "yql.txt") 
-            with open(self.__yql_config_path, "r") as source_config: 
-                with open(config_file_path, "w") as config_file: 
-                    config_file.write(source_config.read()) 
+        if self.__yql_config_path:
+            config_file_path = os.path.join(configs_path, "yql.txt")
+            with open(self.__yql_config_path, "r") as source_config:
+                with open(config_file_path, "w") as config_file:
+                    config_file.write(source_config.read())
 
-        if self.__auth_config_path: 
-            config_file_path = os.path.join(configs_path, "auth.txt") 
-            with open(self.__auth_config_path, "r") as source_config: 
-                with open(config_file_path, "w") as config_file: 
-                    config_file.write(source_config.read()) 
- 
+        if self.__auth_config_path:
+            config_file_path = os.path.join(configs_path, "auth.txt")
+            with open(self.__auth_config_path, "r") as source_config:
+                with open(config_file_path, "w") as config_file:
+                    config_file.write(source_config.read())
+
     def get_yql_udfs_to_load(self):
         if not self.__load_udfs:
             return []

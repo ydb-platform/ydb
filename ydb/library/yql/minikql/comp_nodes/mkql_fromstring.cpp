@@ -1,13 +1,13 @@
-#include "mkql_fromstring.h" 
+#include "mkql_fromstring.h"
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_node_builder.h> 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_node_builder.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins_decimal.h>
 
 #include <ydb/library/yql/public/udf/udf_terminator.h>
- 
+
 #ifndef MKQL_DISABLE_CODEGEN
 extern "C" NKikimr::NUdf::TUnboxedValuePod DataFromString(const NKikimr::NUdf::TUnboxedValuePod data, NKikimr::NUdf::EDataSlot slot) {
     return NKikimr::NMiniKQL::ValueFromString(slot, data.AsStringRef());
@@ -18,21 +18,21 @@ extern "C" NYql::NDecimal::TInt128 DecimalFromString(const NKikimr::NUdf::TUnbox
 }
 #endif
 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
-template <bool IsStrict, bool IsOptional> 
+template <bool IsStrict, bool IsOptional>
 class TDecimalFromStringWrapper : public TMutableCodegeneratorNode<TDecimalFromStringWrapper<IsStrict, IsOptional>> {
     typedef TMutableCodegeneratorNode<TDecimalFromStringWrapper<IsStrict, IsOptional>> TBaseComputation;
-public: 
+public:
     TDecimalFromStringWrapper(TComputationMutables& mutables, IComputationNode* data, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , Data(data)
         , Precision(precision)
         , Scale(scale)
-    { 
+    {
         MKQL_ENSURE(precision > 0 && precision <= NYql::NDecimal::MaxPrecision, "Wrong precision.");
         MKQL_ENSURE(scale <= precision, "Wrong scale.");
     }
@@ -52,8 +52,8 @@ public:
         } else {
             return NUdf::TUnboxedValuePod();
         }
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -64,13 +64,13 @@ public:
 
         const auto name = "DecimalFromString";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalFromString));
-        llvm::Value* func; 
+        llvm::Value* func;
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto fnType = FunctionType::get(valType, { valType, psType, psType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
         } else {
             const auto fnType = FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, psType, psType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
         }
 
         const auto zero = ConstantInt::get(valType, 0ULL);
@@ -166,7 +166,7 @@ public:
         const auto& data = Data->GetValue(ctx);
         if (IsOptional && !data) {
             return NUdf::TUnboxedValuePod();
-        } 
+        }
 
         if (const auto out = ValueFromString(SchemeType, data.AsStringRef())) {
             return out;
@@ -174,11 +174,11 @@ public:
 
         if (IsStrict) {
             Throw(data, SchemeType);
-        } else { 
+        } else {
             return NUdf::TUnboxedValuePod();
-        } 
-    } 
- 
+        }
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -189,13 +189,13 @@ public:
 
         const auto name = "DataFromString";
         ctx.Codegen->AddGlobalMapping(name, reinterpret_cast<const void*>(&DataFromString));
-        llvm::Value* func; 
+        llvm::Value* func;
         if (NYql::NCodegen::ETarget::Windows != ctx.Codegen->GetEffectiveTarget()) {
             const auto fnType = FunctionType::get(valType, { valType, slotType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
         } else {
             const auto fnType = FunctionType::get(Type::getVoidTy(context), { valTypePtr, valTypePtr, slotType }, false);
-            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee(); 
+            func = ctx.Codegen->GetModule().getOrInsertFunction(name, fnType).getCallee();
         }
 
         const auto zero = ConstantInt::get(valType, 0ULL);
@@ -255,8 +255,8 @@ public:
 private:
     void RegisterDependencies() const final {
         this->DependsOn(Data);
-    } 
- 
+    }
+
     [[noreturn]] static void Throw(const NUdf::TUnboxedValuePod data, NUdf::EDataSlot slot) {
         const auto& ref = data.AsStringRef();
         UdfTerminate((TStringBuilder() << "could not convert "
@@ -264,22 +264,22 @@ private:
             << " to " << NUdf::GetDataTypeInfo(slot).Name).data());
     }
 
-    IComputationNode* const Data; 
-    const NUdf::EDataSlot SchemeType; 
-}; 
- 
+    IComputationNode* const Data;
+    const NUdf::EDataSlot SchemeType;
+};
+
 }
 
-IComputationNode* WrapFromString(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+IComputationNode* WrapFromString(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 2, "Expected 2 args");
- 
-    bool isOptional; 
+
+    bool isOptional;
     const auto dataType = UnpackOptionalData(callable.GetInput(0), isOptional);
     MKQL_ENSURE(dataType->GetSchemeType() == NUdf::TDataType<char*>::Id || dataType->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id, "Expected String");
- 
+
     const auto schemeTypeData = AS_VALUE(TDataLiteral, callable.GetInput(1));
     const auto schemeType = schemeTypeData->AsValue().Get<ui32>();
- 
+
     const auto data = LocateNode(ctx.NodeLocator, callable, 0);
     if (NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) {
         MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
@@ -299,18 +299,18 @@ IComputationNode* WrapFromString(TCallable& callable, const TComputationNodeFact
             return new TFromStringWrapper<false, false>(ctx.Mutables, data, static_cast<NUdf::TDataTypeId>(schemeType));
         }
     }
-} 
- 
-IComputationNode* WrapStrictFromString(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
+}
+
+IComputationNode* WrapStrictFromString(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 2, "Expected 2 args");
- 
-    bool isOptional; 
+
+    bool isOptional;
     const auto dataType = UnpackOptionalData(callable.GetInput(0), isOptional);
     MKQL_ENSURE(dataType->GetSchemeType() == NUdf::TDataType<char*>::Id || dataType->GetSchemeType() == NUdf::TDataType<NUdf::TUtf8>::Id, "Expected String");
- 
+
     const auto schemeTypeData = AS_VALUE(TDataLiteral, callable.GetInput(1));
     const auto schemeType = schemeTypeData->AsValue().Get<ui32>();
- 
+
     const auto data = LocateNode(ctx.NodeLocator, callable, 0);
     if (NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) {
         MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
@@ -330,8 +330,8 @@ IComputationNode* WrapStrictFromString(TCallable& callable, const TComputationNo
         } else {
             return new TFromStringWrapper<true, false>(ctx.Mutables, data, static_cast<NUdf::TDataTypeId>(schemeType));
         }
-    } 
-} 
- 
-} 
-} 
+    }
+}
+
+}
+}

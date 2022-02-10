@@ -3,8 +3,8 @@
 #include "binary.h"
 #include "value.h"
 
-#include <ydb/library/yql/public/issue/yql_issue.h> 
-#include <ydb/library/yql/utils/yql_panic.h> 
+#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/public/udf/udf_value.h>
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/public/udf/udf_allocator.h>

@@ -1,13 +1,13 @@
 #include <util/random/shuffle.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/library/yql/minikql/mkql_function_registry.h> 
-#include <ydb/library/yql/minikql/mkql_program_builder.h> 
-#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node.h> 
-#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h> 
+#include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/mkql_program_builder.h>
+#include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
+#include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <util/random/random.h>
 #include <array>
-#include <ydb/library/yql/udfs/common/topfreq/static/topfreq_udf.h> 
+#include <ydb/library/yql/udfs/common/topfreq/static/topfreq_udf.h>
 
 namespace NYql {
     using namespace NKikimr::NMiniKQL;
@@ -20,7 +20,7 @@ namespace NYql {
         TSetup()
             : MutableFunctionRegistry_(CreateFunctionRegistry(CreateBuiltinRegistry())->Clone())
             , RandomProvider_(CreateDeterministicRandomProvider(1))
-            , TimeProvider_(CreateDeterministicTimeProvider(10000000)) 
+            , TimeProvider_(CreateDeterministicTimeProvider(10000000))
             , Alloc_()
             , Env_(Alloc_)
         {

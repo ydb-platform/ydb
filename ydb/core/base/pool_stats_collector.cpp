@@ -4,7 +4,7 @@
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
-#include <ydb/library/yql/minikql/aligned_page_pool.h> 
+#include <ydb/library/yql/minikql/aligned_page_pool.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/helpers/pool_stats_collector.h>

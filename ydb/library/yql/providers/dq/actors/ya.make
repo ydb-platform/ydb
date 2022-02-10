@@ -30,22 +30,22 @@ PEERDIR(
     ydb/library/yql/utils/log
     ydb/public/api/protos
     ydb/public/lib/yson_value
-    ydb/library/yql/dq/common 
-    ydb/library/yql/dq/proto 
-    ydb/library/yql/dq/runtime 
-    ydb/library/yql/dq/tasks 
-    ydb/library/yql/utils/failure_injector 
-    ydb/library/yql/providers/dq/api/grpc 
-    ydb/library/yql/providers/dq/api/protos 
-    ydb/library/yql/providers/dq/common 
-    ydb/library/yql/providers/dq/config 
-    ydb/library/yql/providers/dq/counters 
-    ydb/library/yql/providers/dq/interface 
-    ydb/library/yql/providers/dq/planner 
-    ydb/library/yql/providers/dq/task_runner 
-    ydb/library/yql/providers/dq/task_runner_actor 
-    ydb/library/yql/providers/dq/worker_manager 
-    ydb/library/yql/providers/dq/worker_manager/interface 
+    ydb/library/yql/dq/common
+    ydb/library/yql/dq/proto
+    ydb/library/yql/dq/runtime
+    ydb/library/yql/dq/tasks
+    ydb/library/yql/utils/failure_injector
+    ydb/library/yql/providers/dq/api/grpc
+    ydb/library/yql/providers/dq/api/protos
+    ydb/library/yql/providers/dq/common
+    ydb/library/yql/providers/dq/config
+    ydb/library/yql/providers/dq/counters
+    ydb/library/yql/providers/dq/interface
+    ydb/library/yql/providers/dq/planner
+    ydb/library/yql/providers/dq/task_runner
+    ydb/library/yql/providers/dq/task_runner_actor
+    ydb/library/yql/providers/dq/worker_manager
+    ydb/library/yql/providers/dq/worker_manager/interface
 )
 
 YQL_LAST_ABI_VERSION()

@@ -2,10 +2,10 @@ UNITTEST_FOR(ydb/core/client/minikql_compile)
 
 OWNER(vvvv)
 
-ALLOCATOR(J) 
- 
+ALLOCATOR(J)
+
 SRCS(
-    yql_expr_minikql_compile_ut.cpp 
+    yql_expr_minikql_compile_ut.cpp
 )
 
 PEERDIR(
@@ -15,7 +15,7 @@ PEERDIR(
     ydb/core/client/server
     ydb/core/tablet
     ydb/core/testlib
-    ydb/library/yql/minikql 
+    ydb/library/yql/minikql
     ydb/library/yql/public/udf/service/exception_policy
 )
 

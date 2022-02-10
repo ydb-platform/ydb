@@ -1,4 +1,4 @@
-YQL_UDF(pire_udf) 
+YQL_UDF(pire_udf)
 
 YQL_ABI_VERSION(
     2
@@ -6,7 +6,7 @@ YQL_ABI_VERSION(
     0
 )
 
-OWNER(g:yql g:yql_ydb_core) 
+OWNER(g:yql g:yql_ydb_core)
 
 SRCS(
     pire_udf.cpp

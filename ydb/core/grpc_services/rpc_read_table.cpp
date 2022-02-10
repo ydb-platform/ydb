@@ -5,8 +5,8 @@
 #include "rpc_kqp_base.h"
 #include "local_rate_limiter.h"
 
-#include <ydb/library/yql/public/issue/yql_issue_message.h> 
-#include <ydb/library/yql/public/issue/yql_issue.h> 
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>

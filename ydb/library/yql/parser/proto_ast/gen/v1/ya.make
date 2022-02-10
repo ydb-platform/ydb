@@ -1,17 +1,17 @@
 LIBRARY()
 
 PEERDIR (
-    ydb/library/yql/parser/proto_ast/gen/v1_proto 
+    ydb/library/yql/parser/proto_ast/gen/v1_proto
 )
 
-OWNER(g:yql g:yql_ydb_core) 
+OWNER(g:yql g:yql_ydb_core)
 
 SET(antlr_output ${ARCADIA_BUILD_ROOT}/${MODDIR})
 SET(antlr_templates ${antlr_output}/org/antlr/codegen/templates)
 SET(sql_grammar ${antlr_output}/SQLv1.g)
 
 SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
-SET(PROTOBUF_HEADER_PATH ydb/library/yql/parser/proto_ast/gen/v1_proto) 
+SET(PROTOBUF_HEADER_PATH ydb/library/yql/parser/proto_ast/gen/v1_proto)
 
 SET(LEXER_PARSER_NAMESPACE NALPDefault)
 
@@ -19,12 +19,12 @@ SET(GRAMMAR_STRING_CORE_SINGLE "\"~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)\""
 SET(GRAMMAR_STRING_CORE_DOUBLE "\"~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)\"")
 SET(GRAMMAR_MULTILINE_COMMENT_CORE       "\".\"")
 
-CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in ${antlr_templates}/Cpp/Cpp.stg) 
-CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1.g.in ${sql_grammar}) 
+CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/Cpp/Cpp.stg.in ${antlr_templates}/Cpp/Cpp.stg)
+CONFIGURE_FILE(${ARCADIA_ROOT}/ydb/library/yql/sql/v1/SQLv1.g.in ${sql_grammar})
 
 NO_COMPILER_WARNINGS()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/ya.make.incl) 
+INCLUDE(${ARCADIA_ROOT}/ydb/library/yql/parser/proto_ast/org/antlr/codegen/templates/ya.make.incl)
 
 RUN_ANTLR(
     ${sql_grammar}

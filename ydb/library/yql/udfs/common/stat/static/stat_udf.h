@@ -12,7 +12,7 @@ namespace {
 
     typedef TBoxedResource<TDigest, DigestResourceName> TDigestResource;
     typedef TRefCountedPtr<TDigestResource> TDigestResourcePtr;
- 
+
     SIMPLE_UDF_OPTIONS(TTDigest_Create, TResource<DigestResourceName>(double, TOptional<double>, TOptional<double>), builder.OptionalArgs(2)) {
         Y_UNUSED(valueBuilder);
         const double delta = args[1].GetOrDefault<double>(0.01);
@@ -22,8 +22,8 @@ namespace {
         }
 
         return TUnboxedValuePod(new TDigestResource(delta, K, args[0].Get<double>()));
-    } 
- 
+    }
+
     SIMPLE_UDF(TTDigest_AddValue, TResource<DigestResourceName>(TResource<DigestResourceName>, double)) {
         Y_UNUSED(valueBuilder);
         TDigestResource::Validate(args[0]);

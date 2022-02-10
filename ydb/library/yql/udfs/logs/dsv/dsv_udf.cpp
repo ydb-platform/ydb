@@ -69,7 +69,7 @@ public:
             } else {
                 separator = valueBuilder->NewString("\t");
             }
- 
+
             return TUnboxedValuePod(new TDsvReadRecord(separator, ResultIndexes_, KsvIndexes_));
         }
         catch (const std::exception& e) {
@@ -145,7 +145,7 @@ private:
 };
 
 #define TYPE_TO_STRING(type) \
-case TDataType<type>::Id: part += ToString(member.Get<type>()); break; 
+case TDataType<type>::Id: part += ToString(member.Get<type>()); break;
 
 class TDsvSerialize: public TBoxedValue
 {
@@ -202,7 +202,7 @@ public:
     }
 
     void CleanupOnTerminate() const final {}
- 
+
     void GetAllFunctions(IFunctionsSink& sink) const final {
         sink.Add(TStringRef::Of("ReadRecord"));
         sink.Add(TStringRef::Of("Parse"));
@@ -211,7 +211,7 @@ public:
 
     void BuildFunctionTypeInfo(
             const TStringRef& name,
-            TType* userType, 
+            TType* userType,
             const TStringRef& typeConfig,
             ui32 flags,
             IFunctionTypeInfoBuilder& builder) const final try

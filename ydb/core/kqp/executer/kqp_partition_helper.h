@@ -2,11 +2,11 @@
 
 #include "kqp_tasks_graph.h"
 
-#include <ydb/library/yql/dq/common/dq_value.h> 
-#include <ydb/library/yql/dq/proto/dq_tasks.pb.h> 
-#include <ydb/library/yql/dq/proto/dq_transport.pb.h> 
+#include <ydb/library/yql/dq/common/dq_value.h>
+#include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/dq/proto/dq_transport.pb.h>
 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
 #include <util/generic/variant.h>
 

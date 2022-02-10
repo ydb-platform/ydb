@@ -25,11 +25,11 @@ PEERDIR(
     ydb/library/yql/core/facade
     ydb/library/yql/public/udf
     ydb/public/lib/base
-    ydb/library/yql/core 
-    ydb/library/yql/providers/common/provider 
-    ydb/library/yql/providers/common/udf_resolve 
+    ydb/library/yql/core
+    ydb/library/yql/providers/common/provider
+    ydb/library/yql/providers/common/udf_resolve
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 END()

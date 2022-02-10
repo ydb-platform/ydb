@@ -1,8 +1,8 @@
 #include "mkql_value_builder.h"
 #include "mkql_validate.h"
 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
-#include <ydb/library/yql/minikql/mkql_string_util.h> 
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+#include <ydb/library/yql/minikql/mkql_string_util.h>
 #include <library/cpp/yson/node/node_io.h>
 
 #include <util/system/env.h>
@@ -34,20 +34,20 @@ void TDefaultValueBuilder::Terminate(const char* message) const {
     TStringBuf reason = (message ? TStringBuf(message) : TStringBuf("(unknown)"));
     TString fullMessage = TStringBuilder() <<
         "Terminate was called, reason(" << reason.size() << "): " << reason << Endl;
-    HolderFactory_.CleanupModulesOnTerminate(); 
-    if (Policy_ == NUdf::EValidatePolicy::Exception) { 
-        if (Rethrow_ && std::current_exception()) { 
-            throw; 
-        } 
- 
-        Rethrow_ = true; 
-        ythrow yexception() << fullMessage; 
+    HolderFactory_.CleanupModulesOnTerminate();
+    if (Policy_ == NUdf::EValidatePolicy::Exception) {
+        if (Rethrow_ && std::current_exception()) {
+            throw;
+        }
+
+        Rethrow_ = true;
+        ythrow yexception() << fullMessage;
     }
- 
-    Cerr << fullMessage; 
-    abort(); 
-} 
- 
+
+    Cerr << fullMessage;
+    abort();
+}
+
 NUdf::TUnboxedValue TDefaultValueBuilder::NewStringNotFilled(ui32 size) const
 {
     return MakeStringNotFilled(size);
@@ -185,55 +185,55 @@ bool TDefaultValueBuilder::GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui3
     return ::NKikimr::NMiniKQL::GetTimezoneShift(year, month, day, hour, minute, second, tzId, value);
 }
 
-const NUdf::TSourcePosition* TDefaultValueBuilder::CalleePosition() const { 
+const NUdf::TSourcePosition* TDefaultValueBuilder::CalleePosition() const {
     return *CalleePositionPtr_;
-} 
- 
-NUdf::TUnboxedValue TDefaultValueBuilder::Run(const NUdf::TSourcePosition& callee, const NUdf::IBoxedValue& value, const NUdf::TUnboxedValuePod* args) const { 
+}
+
+NUdf::TUnboxedValue TDefaultValueBuilder::Run(const NUdf::TSourcePosition& callee, const NUdf::IBoxedValue& value, const NUdf::TUnboxedValuePod* args) const {
     const auto prev = *CalleePositionPtr_;
     *CalleePositionPtr_ = &callee;
     const auto ret = NUdf::TBoxedValueAccessor::Run(value, this, args);
     *CalleePositionPtr_ = prev;
-    return ret; 
-} 
- 
-NUdf::TFlatDataBlockPtr TDefaultValueBuilder::NewFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const { 
-    return HolderFactory_.CreateFlatDataBlock(initialSize, initialCapacity); 
-} 
- 
-NUdf::TFlatArrayBlockPtr TDefaultValueBuilder::NewFlatArrayBlock(ui32 count) const { 
-    return HolderFactory_.CreateFlatArrayBlock(count); 
-} 
- 
-NUdf::TSingleBlockPtr TDefaultValueBuilder::NewSingleBlock(const NUdf::TUnboxedValue& value) const { 
-    return HolderFactory_.CreateSingleBlock(value); 
-} 
- 
-bool TDefaultValueBuilder::FindTimezoneName(ui32 id, NUdf::TStringRef& name) const { 
-    auto res = ::NKikimr::NMiniKQL::FindTimezoneIANAName(id); 
-    if (!res) { 
-        return false; 
-    } 
- 
-    name = *res; 
-    return true; 
-} 
- 
-bool TDefaultValueBuilder::FindTimezoneId(const NUdf::TStringRef& name, ui32& id) const { 
-    auto res = ::NKikimr::NMiniKQL::FindTimezoneId(name); 
-    if (!res) { 
-        return false; 
-    } 
- 
-    id = *res; 
-    return true; 
-} 
- 
+    return ret;
+}
+
+NUdf::TFlatDataBlockPtr TDefaultValueBuilder::NewFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const {
+    return HolderFactory_.CreateFlatDataBlock(initialSize, initialCapacity);
+}
+
+NUdf::TFlatArrayBlockPtr TDefaultValueBuilder::NewFlatArrayBlock(ui32 count) const {
+    return HolderFactory_.CreateFlatArrayBlock(count);
+}
+
+NUdf::TSingleBlockPtr TDefaultValueBuilder::NewSingleBlock(const NUdf::TUnboxedValue& value) const {
+    return HolderFactory_.CreateSingleBlock(value);
+}
+
+bool TDefaultValueBuilder::FindTimezoneName(ui32 id, NUdf::TStringRef& name) const {
+    auto res = ::NKikimr::NMiniKQL::FindTimezoneIANAName(id);
+    if (!res) {
+        return false;
+    }
+
+    name = *res;
+    return true;
+}
+
+bool TDefaultValueBuilder::FindTimezoneId(const NUdf::TStringRef& name, ui32& id) const {
+    auto res = ::NKikimr::NMiniKQL::FindTimezoneId(name);
+    if (!res) {
+        return false;
+    }
+
+    id = *res;
+    return true;
+}
+
 bool TDefaultValueBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const {
     if (SecureParamsProvider_)
         return SecureParamsProvider_->GetSecureParam(key, value);
     return false;
 }
- 
+
 } // namespace NMiniKQL
 } // namespace Nkikimr

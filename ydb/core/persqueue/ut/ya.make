@@ -28,7 +28,7 @@ PEERDIR(
 )
 
 YQL_LAST_ABI_VERSION()
- 
+
 SRCS(
     internals_ut.cpp
     mirrorer_ut.cpp

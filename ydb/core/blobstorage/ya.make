@@ -33,8 +33,8 @@ IF (MSVC)
     CFLAGS(
         /wd4503
     )
-ENDIF() 
- 
+ENDIF()
+
 END()
 
 RECURSE(

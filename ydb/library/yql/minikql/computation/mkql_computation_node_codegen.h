@@ -6,7 +6,7 @@
 #include <ydb/library/yql/minikql/codegen/codegen.h>
 #include <type_traits>
 
-#ifdef MKQL_DISABLE_CODEGEN 
+#ifdef MKQL_DISABLE_CODEGEN
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -19,7 +19,7 @@ template <typename TDerived>
 using TDecoratorCodegeneratorNode = TDecoratorComputationNode<TDerived>;
 
 template <typename TDerived>
-using TBinaryCodegeneratorNode = TBinaryComputationNode<TDerived>; 
+using TBinaryCodegeneratorNode = TBinaryComputationNode<TDerived>;
 
 template <typename TDerived>
 using TMutableCodegeneratorNode = TMutableComputationNode<TDerived>;
@@ -159,7 +159,7 @@ template<typename Method>
 inline size_t GetMethodIndex(Method method) {
     uintptr_t ptr;
     std::memcpy(&ptr, &method, sizeof(uintptr_t));
-    return GetMethodPtrIndex(ptr); 
+    return GetMethodPtrIndex(ptr);
 }
 
 template<typename Method>
@@ -628,7 +628,7 @@ protected:
         const auto funcType = FunctionType::get(Type::getInt128Ty(context), {PointerType::getUnqual(GetCompContextType(context))}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         auto main = BasicBlock::Create(context, "main", ctx.Func);
         ctx.Ctx = &*ctx.Func->arg_begin();
@@ -719,7 +719,7 @@ protected:
         const auto funcType = FunctionType::get(Type::getInt128Ty(context), {PointerType::getUnqual(contextType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         auto main = BasicBlock::Create(context, "main", ctx.Func);
         ctx.Ctx = &*ctx.Func->arg_begin();
@@ -862,7 +862,7 @@ private:
             FunctionType::get(Type::getVoidTy(context) , {PointerType::getUnqual(valueType), PointerType::getUnqual(contextType)}, false);
 
         TCodegenContext ctx(codegen);
-        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee()); 
+        ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
 
         auto args = ctx.Func->arg_begin();
         if (codegen->GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {
@@ -1177,13 +1177,13 @@ private:
     const NUdf::TUnboxedValue List;
 };
 
-class TStreamCodegenValueStateless : public TComputationValue<TStreamCodegenValueStateless> { 
+class TStreamCodegenValueStateless : public TComputationValue<TStreamCodegenValueStateless> {
 public:
-    using TBase = TComputationValue<TStreamCodegenValueStateless>; 
+    using TBase = TComputationValue<TStreamCodegenValueStateless>;
 
     using TFetchPtr = NUdf::EFetchStatus (*)(TComputationContext*, NUdf::TUnboxedValuePod, NUdf::TUnboxedValuePod&);
 
-    TStreamCodegenValueStateless(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream) 
+    TStreamCodegenValueStateless(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream)
         : TBase(memInfo)
         , FetchFunc(fetch)
         , Ctx(ctx)
@@ -1199,14 +1199,14 @@ protected:
         return Stream;
     }
 
-    NUdf::TUnboxedValue Save() const override { 
-        return NUdf::TUnboxedValue::Zero(); 
-    } 
- 
-    void Load(const NUdf::TStringRef& state) override { 
-        Y_UNUSED(state); 
-    } 
- 
+    NUdf::TUnboxedValue Save() const override {
+        return NUdf::TUnboxedValue::Zero();
+    }
+
+    void Load(const NUdf::TStringRef& state) override {
+        Y_UNUSED(state);
+    }
+
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
         return FetchFunc(Ctx, static_cast<const NUdf::TUnboxedValuePod&>(Stream), result);
     }

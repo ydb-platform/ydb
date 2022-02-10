@@ -1,34 +1,34 @@
-#include "mkql_prepend.h" 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h> 
-#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h> 
-#include <ydb/library/yql/minikql/mkql_node_cast.h> 
- 
-namespace NKikimr { 
-namespace NMiniKQL { 
- 
+#include "mkql_prepend.h"
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
+
+namespace NKikimr {
+namespace NMiniKQL {
+
 namespace {
 
 template<bool IsVoid>
 class TPrependWrapper : public TMutableCodegeneratorNode<TPrependWrapper<IsVoid>> {
     typedef TMutableCodegeneratorNode<TPrependWrapper<IsVoid>> TBaseComputation;
-public: 
+public:
     TPrependWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(mutables, right->GetRepresentation())
         , Left(left)
-        , Right(right) 
-    { 
-    } 
- 
+        , Right(right)
+    {
+    }
+
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto left = Left->GetValue(ctx);
         auto right = Right->GetValue(ctx);
- 
+
         if (IsVoid && !left.IsBoxed())
             return right.Release();
 
         return ctx.HolderFactory.Prepend(left.Release(), right.Release());
-    } 
- 
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -98,29 +98,29 @@ private:
     void RegisterDependencies() const final {
         this->DependsOn(Left);
         this->DependsOn(Right);
-    } 
- 
-    IComputationNode* const Left; 
-    IComputationNode* const Right; 
-}; 
- 
+    }
+
+    IComputationNode* const Left;
+    IComputationNode* const Right;
+};
+
 }
 
-IComputationNode* WrapPrepend(TCallable& callable, const TComputationNodeFactoryContext& ctx) { 
-    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args"); 
- 
+IComputationNode* WrapPrepend(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
+    MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
+
     const auto leftType = callable.GetInput(0).GetStaticType();
     const auto rightType = AS_TYPE(TListType, callable.GetInput(1));
- 
+
     MKQL_ENSURE(rightType->GetItemType()->IsSameType(*leftType), "Mismatch item type");
- 
+
     const auto left = LocateNode(ctx.NodeLocator, callable, 0);
     const auto right = LocateNode(ctx.NodeLocator, callable, 1);
     if (leftType->IsVoid())
         return new TPrependWrapper<true>(ctx.Mutables, left, right);
     else
         return new TPrependWrapper<false>(ctx.Mutables, left, right);
-} 
- 
-} 
-} 
+}
+
+}
+}

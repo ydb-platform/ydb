@@ -17,23 +17,23 @@ public:
     enum class EFlags {
         CanBeValueInKey = 0x01,
         CanCompare = 0x02,
-        CanEquate = 0x04, 
-        CanHash = 0x08, 
-        HasDeterministicCompare = 0x10, 
-        HasDeterministicEquals = 0x20, 
-        HasDeterministicToString = 0x40, 
-        HasDeterministicHash = 0x80, 
-        HasDeterministicBytes = 0x100, 
+        CanEquate = 0x04,
+        CanHash = 0x08,
+        HasDeterministicCompare = 0x10,
+        HasDeterministicEquals = 0x20,
+        HasDeterministicToString = 0x40,
+        HasDeterministicHash = 0x80,
+        HasDeterministicBytes = 0x100,
     };
 
-    virtual ~ITypeMetadata() {} 
+    virtual ~ITypeMetadata() {}
 
     virtual TTypeId GetTypeId() const = 0;
-    virtual const char* GetName() const = 0; 
-}; 
+    virtual const char* GetName() const = 0;
+};
 
 class IType : public ITypeMetadata {
-friend class ITypeSP; 
+friend class ITypeSP;
 friend class TTypeRegistry;
 };
 

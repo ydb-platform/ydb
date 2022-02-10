@@ -9,7 +9,7 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/grpc/client
-    ydb/library/yql/public/issue 
+    ydb/library/yql/public/issue
 )
 
 END()

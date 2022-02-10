@@ -1,42 +1,42 @@
 #include "yql_type_annotation.h"
 
 #include "yql_expr_type_annotation.h"
-#include "yql_library_compiler.h" 
+#include "yql_library_compiler.h"
 #include "yql_type_helpers.h"
 
-#include <ydb/library/yql/sql/sql.h> 
-#include <ydb/library/yql/sql/settings/translation_settings.h> 
-#include <ydb/library/yql/ast/yql_constraint.h> 
+#include <ydb/library/yql/sql/sql.h>
+#include <ydb/library/yql/sql/settings/translation_settings.h>
+#include <ydb/library/yql/ast/yql_constraint.h>
 #include <ydb/library/yql/utils/log/log.h>
- 
-#include <util/stream/file.h> 
+
+#include <util/stream/file.h>
 #include <util/string/join.h>
 
 namespace NYql {
- 
-using namespace NKikimr; 
- 
+
+using namespace NKikimr;
+
 bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
     if (!InitializeResult) {
         InitializeResult = DoInitialize(ctx);
-    } 
+    }
 
     return *InitializeResult;
 }
 
 bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
-    for (auto& x : DataSources) { 
+    for (auto& x : DataSources) {
         if (!x->Initialize(ctx)) {
-            return false; 
-        } 
-    } 
- 
-    for (auto& x : DataSinks) { 
+            return false;
+        }
+    }
+
+    for (auto& x : DataSinks) {
         if (!x->Initialize(ctx)) {
-            return false; 
-        } 
-    } 
- 
+            return false;
+        }
+    }
+
     Y_ENSURE(UserDataStorage);
     UserDataStorage->FillUserDataTokens();
 
@@ -47,9 +47,9 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     //DisableConstraintCheck.emplace(TMultiConstraintNode::Name());
     //DisableConstraintCheck.emplace(TVarIndexConstraintNode::Name());
 
-    return true; 
-} 
- 
+    return true;
+}
+
 TString FormatColumnOrder(const TMaybe<TColumnOrder>& columnOrder) {
     TStringStream ss;
     if (columnOrder) {
@@ -137,7 +137,7 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
     return IGraphTransformer::TStatus::Ok;
 }
 
-const TCredential* TTypeAnnotationContext::FindCredential(const TStringBuf& name) const { 
+const TCredential* TTypeAnnotationContext::FindCredential(const TStringBuf& name) const {
     for (auto& x : Credentials) {
         auto data = x->FindPtr(name);
         if (data) {
@@ -159,32 +159,32 @@ TString TTypeAnnotationContext::FindCredentialContent(const TStringBuf& name1, c
     return defaultContent;
 }
 
-TString TTypeAnnotationContext::GetDefaultDataSource() const { 
+TString TTypeAnnotationContext::GetDefaultDataSource() const {
     if (!PureResultDataSource.empty()) {
-        YQL_ENSURE(Find(AvailablePureResultDataSources.begin(), 
-            AvailablePureResultDataSources.end(), PureResultDataSource) 
-            != AvailablePureResultDataSources.end()); 
-        return PureResultDataSource; 
-    } 
- 
+        YQL_ENSURE(Find(AvailablePureResultDataSources.begin(),
+            AvailablePureResultDataSources.end(), PureResultDataSource)
+            != AvailablePureResultDataSources.end());
+        return PureResultDataSource;
+    }
+
     Y_ENSURE(!AvailablePureResultDataSources.empty());
-    return AvailablePureResultDataSources.front(); 
-} 
- 
-bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName) { 
-    moduleName = ""; 
-    funcName = ""; 
-    return name.TrySplit('.', moduleName, funcName); 
-} 
- 
-TString TModuleResolver::NormalizeModuleName(const TString& path) { 
-    if (path.EndsWith(".sql") || path.EndsWith(".yql")) { 
-        return path.substr(0, path.size() - 4); 
-    } 
- 
-    return path; 
-} 
- 
+    return AvailablePureResultDataSources.front();
+}
+
+bool SplitUdfName(TStringBuf name, TStringBuf& moduleName, TStringBuf& funcName) {
+    moduleName = "";
+    funcName = "";
+    return name.TrySplit('.', moduleName, funcName);
+}
+
+TString TModuleResolver::NormalizeModuleName(const TString& path) {
+    if (path.EndsWith(".sql") || path.EndsWith(".yql")) {
+        return path.substr(0, path.size() - 4);
+    }
+
+    return path;
+}
+
 void TModuleResolver::RegisterPackage(const TString& package) {
     KnownPackages.insert(package);
 }
@@ -197,7 +197,7 @@ bool TModuleResolver::SetPackageDefaultVersion(const TString& package, ui32 vers
     return true;
 }
 
-const TExportTable* TModuleResolver::GetModule(const TString& module) const { 
+const TExportTable* TModuleResolver::GetModule(const TString& module) const {
     // ParentModules and Modules should not have common keys
     const TString normalizedModuleName = NormalizeModuleName(module);
     if (ParentModules) {
@@ -207,45 +207,45 @@ const TExportTable* TModuleResolver::GetModule(const TString& module) const {
     }
 
     return Modules.FindPtr(normalizedModuleName);
-} 
- 
-bool TModuleResolver::AddFromUrl(const TStringBuf& file, const TStringBuf& url, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) { 
-    if (!UserData) { 
-        ctx.AddError(TIssue(TPosition(), "Loading libraries is prohibited")); 
-        return false; 
-    } 
- 
-    TUserDataBlock block; 
-    block.Type = EUserDataType::URL; 
-    block.Data = url; 
-    block.Data = SubstParameters(block.Data); 
-    UserData->AddUserDataBlock(file, block); 
- 
-    return AddFromFile(file, ctx, syntaxVersion, packageVersion); 
-} 
- 
+}
+
+bool TModuleResolver::AddFromUrl(const TStringBuf& file, const TStringBuf& url, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) {
+    if (!UserData) {
+        ctx.AddError(TIssue(TPosition(), "Loading libraries is prohibited"));
+        return false;
+    }
+
+    TUserDataBlock block;
+    block.Type = EUserDataType::URL;
+    block.Data = url;
+    block.Data = SubstParameters(block.Data);
+    UserData->AddUserDataBlock(file, block);
+
+    return AddFromFile(file, ctx, syntaxVersion, packageVersion);
+}
+
 bool TModuleResolver::AddFromFile(const TStringBuf& file, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion) {
     if (!UserData) {
         ctx.AddError(TIssue(TPosition(), "Loading libraries is prohibited"));
-        return false; 
-    } 
- 
-    const auto fullName = TUserDataStorage::MakeFullName(file); 
-    bool isSql = file.EndsWith(".sql"); 
-    bool isYql = file.EndsWith(".yql"); 
-    if (!isSql && !isYql) { 
+        return false;
+    }
+
+    const auto fullName = TUserDataStorage::MakeFullName(file);
+    bool isSql = file.EndsWith(".sql");
+    bool isYql = file.EndsWith(".yql");
+    if (!isSql && !isYql) {
         ctx.AddError(TIssue(TStringBuilder() << "Unsupported syntax of library file, expected one of (.sql, .yql): " << file));
-        return false; 
-    } 
- 
+        return false;
+    }
+
     const TUserDataBlock* block = UserData->FindUserDataBlock(fullName);
- 
-    if (!block) { 
+
+    if (!block) {
         ctx.AddError(TIssue(TStringBuilder() << "File not found: " << file));
-        return false; 
-    } 
- 
-    auto moduleName = TModuleResolver::NormalizeModuleName(TString(file)); 
+        return false;
+    }
+
+    auto moduleName = TModuleResolver::NormalizeModuleName(TString(file));
     if (GetModule(moduleName) || Libs.contains(moduleName)) {
         auto it = Libs.find(moduleName);
         if (it != Libs.end() && it->second.contains(packageVersion)) {
@@ -253,29 +253,29 @@ bool TModuleResolver::AddFromFile(const TStringBuf& file, TExprContext& ctx, ui1
             // ctx.AddError(TIssue({0,0,TString(fullName)}, TStringBuilder() << "File is already loaded as library"));
             return true;  // false
         }
-    } 
- 
-    TString body; 
+    }
+
+    TString body;
     switch (block->Type) {
     case EUserDataType::RAW_INLINE_DATA:
-        body = block->Data; 
+        body = block->Data;
         break;
     case EUserDataType::PATH:
-        body = TFileInput(block->Data).ReadAll(); 
+        body = TFileInput(block->Data).ReadAll();
         break;
     case EUserDataType::URL:
-        if (!UrlLoader) { 
+        if (!UrlLoader) {
             ctx.AddError(TIssue(TStringBuilder() << "Unable to load file \"" << file
                 << "\" from url, because url loader is not available"));
-            return false; 
-        } 
- 
+            return false;
+        }
+
         body = UrlLoader->Load(block->Data, block->UrlToken);
         break;
     default:
         throw yexception() << "Unknown block type " << block->Type;
-    } 
- 
+    }
+
     return AddFromMemory(fullName, moduleName, isYql, body, ctx, syntaxVersion, packageVersion);
 }
 
@@ -307,45 +307,45 @@ bool TModuleResolver::AddFromMemory(const TStringBuf& file, const TString& body,
 }
 
 bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& moduleName, bool isYql, const TString& body, TExprContext& ctx, ui16 syntaxVersion, ui32 packageVersion, std::vector<TString>* exports, std::vector<TString>* imports) {
-    TAstParseResult astRes; 
-    if (isYql) { 
-        astRes = ParseAst(body, nullptr, fullName); 
-        if (!astRes.IsOk()) { 
-            ctx.IssueManager.AddIssues(astRes.Issues); 
+    TAstParseResult astRes;
+    if (isYql) {
+        astRes = ParseAst(body, nullptr, fullName);
+        if (!astRes.IsOk()) {
+            ctx.IssueManager.AddIssues(astRes.Issues);
             ctx.AddError(TIssue(TStringBuilder() << "Failed to parse YQL: " << fullName));
-            return false; 
-        } 
-    } else { 
-        NSQLTranslation::TTranslationSettings settings; 
-        settings.Mode = NSQLTranslation::ESqlMode::LIBRARY; 
-        settings.File = fullName; 
-        settings.ClusterMapping = ClusterMapping; 
+            return false;
+        }
+    } else {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.Mode = NSQLTranslation::ESqlMode::LIBRARY;
+        settings.File = fullName;
+        settings.ClusterMapping = ClusterMapping;
         settings.Flags = SqlFlags;
-        settings.SyntaxVersion = syntaxVersion; 
-        settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent; 
-        astRes = SqlToYql(body, settings); 
-        if (!astRes.IsOk()) { 
-            ctx.IssueManager.AddIssues(astRes.Issues); 
+        settings.SyntaxVersion = syntaxVersion;
+        settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
+        astRes = SqlToYql(body, settings);
+        if (!astRes.IsOk()) {
+            ctx.IssueManager.AddIssues(astRes.Issues);
             ctx.AddError(TIssue(TStringBuilder() << "Failed to parse SQL: " << fullName));
-            return false; 
-        } 
-    } 
- 
-    TLibraryCohesion cohesion; 
-    if (!CompileExpr(*astRes.Root, cohesion, LibsContext)) { 
-        ctx.IssueManager.AddIssues(LibsContext.IssueManager.GetIssues()); 
+            return false;
+        }
+    }
+
+    TLibraryCohesion cohesion;
+    if (!CompileExpr(*astRes.Root, cohesion, LibsContext)) {
+        ctx.IssueManager.AddIssues(LibsContext.IssueManager.GetIssues());
         ctx.AddError(TIssue(TStringBuilder() << "Failed to compile: " << fullName));
-        return false; 
-    } 
- 
-    if (OptimizeLibraries) { 
-        if (!OptimizeLibrary(cohesion, LibsContext)) { 
-            ctx.IssueManager.AddIssues(LibsContext.IssueManager.GetIssues()); 
+        return false;
+    }
+
+    if (OptimizeLibraries) {
+        if (!OptimizeLibrary(cohesion, LibsContext)) {
+            ctx.IssueManager.AddIssues(LibsContext.IssueManager.GetIssues());
             ctx.AddError(TIssue(TStringBuilder() << "Failed to optimize: " << fullName));
-            return false; 
-        } 
-    } 
- 
+            return false;
+        }
+    }
+
     if (exports) {
         exports->clear();
         for (auto p : cohesion.Exports.Symbols()) {
@@ -361,28 +361,28 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
     }
 
     Libs[moduleName][packageVersion] = std::move(cohesion);
-    return true; 
-} 
- 
-bool TModuleResolver::Link(TExprContext& ctx) { 
+    return true;
+}
+
+bool TModuleResolver::Link(TExprContext& ctx) {
     std::function<const TExportTable*(const TString&)> f = [this](const TString& normalizedModuleName) -> const TExportTable* {
         return this->GetModule(normalizedModuleName);
     };
 
     THashMap<TString, TLibraryCohesion> libs = FilterLibsByVersion();
     if (!LinkLibraries(libs, ctx, LibsContext, f)) {
-        return false; 
-    } 
- 
+        return false;
+    }
+
     for (auto& x : libs) {
-        Modules.emplace(x.first, std::move(x.second.Exports)); 
-    } 
- 
-    Libs.clear(); 
+        Modules.emplace(x.first, std::move(x.second.Exports));
+    }
+
+    Libs.clear();
     PackageVersions.clear();
-    return true; 
-} 
- 
+    return true;
+}
+
 THashMap<TString, TLibraryCohesion> TModuleResolver::FilterLibsByVersion() const {
     THashMap<TString, TLibraryCohesion> result;
     for (auto p : Libs) {
@@ -428,16 +428,16 @@ TString TModuleResolver::ExtractPackageNameFromModule(TStringBuf moduleName) {
     return TString(project) + "." + package;
 }
 
-void TModuleResolver::UpdateNextUniqueId(TExprContext& ctx) const { 
+void TModuleResolver::UpdateNextUniqueId(TExprContext& ctx) const {
     if (UserData && ctx.NextUniqueId < LibsContext.NextUniqueId) {
-        ctx.NextUniqueId = LibsContext.NextUniqueId; 
-    } 
-} 
- 
-ui64 TModuleResolver::GetNextUniqueId() const { 
-    return LibsContext.NextUniqueId; 
-} 
- 
+        ctx.NextUniqueId = LibsContext.NextUniqueId;
+    }
+}
+
+ui64 TModuleResolver::GetNextUniqueId() const {
+    return LibsContext.NextUniqueId;
+}
+
 IModuleResolver::TPtr TModuleResolver::CreateMutableChild() const {
     if (UserData || UrlLoader) {
         throw yexception() << "Module resolver should not contain user data and URL loader";
@@ -446,66 +446,66 @@ IModuleResolver::TPtr TModuleResolver::CreateMutableChild() const {
     return std::make_shared<TModuleResolver>(&Modules, LibsContext.NextUniqueId, ClusterMapping, SqlFlags, OptimizeLibraries, KnownPackages, Libs);
 }
 
-TString TModuleResolver::SubstParameters(const TString& str) { 
-    if (!Parameters) { 
-        return str; 
-    } 
- 
-    size_t pos = 0; 
-    try { 
-        TStringBuilder res; 
-        bool insideBrackets = false; 
-        TStringBuilder paramBuilder; 
-        for (char c : str) { 
-            if (c == '{') { 
-                if (insideBrackets) { 
-                    throw yexception() << "Unpexpected {"; 
-                } 
- 
-                insideBrackets = true; 
-                continue; 
-            } 
- 
-            if (c == '}') { 
-                if (!insideBrackets) { 
-                    throw yexception() << "Unexpected }"; 
-                } 
- 
-                insideBrackets = false; 
-                TString param = paramBuilder; 
-                paramBuilder.clear(); 
-                const auto& map = Parameters->AsMap(); 
-                auto it = map.find(param); 
-                if (it == map.end()) { 
-                    throw yexception() << "No such parameter: '" << param << "'"; 
-                } 
- 
-                const auto& value = it->second["Data"]; 
-                if (!value.IsString()) { 
-                    throw yexception() << "Parameter value must be a string"; 
-                } 
- 
-                res << value.AsString(); 
-                continue; 
-            } 
- 
-            if (insideBrackets) { 
-                paramBuilder << c; 
-            } else { 
-                res << c; 
-            } 
- 
-            ++pos; 
-        } 
- 
-        if (insideBrackets) { 
-            throw yexception() << "Missing }"; 
-        } 
- 
-        return res; 
-    } catch (yexception& e) { 
-        throw yexception() << "Failed to substitute parameters into url: " << str << ", reason:" << e.what() << ", position: " << pos; 
-    } 
-} 
- 
+TString TModuleResolver::SubstParameters(const TString& str) {
+    if (!Parameters) {
+        return str;
+    }
+
+    size_t pos = 0;
+    try {
+        TStringBuilder res;
+        bool insideBrackets = false;
+        TStringBuilder paramBuilder;
+        for (char c : str) {
+            if (c == '{') {
+                if (insideBrackets) {
+                    throw yexception() << "Unpexpected {";
+                }
+
+                insideBrackets = true;
+                continue;
+            }
+
+            if (c == '}') {
+                if (!insideBrackets) {
+                    throw yexception() << "Unexpected }";
+                }
+
+                insideBrackets = false;
+                TString param = paramBuilder;
+                paramBuilder.clear();
+                const auto& map = Parameters->AsMap();
+                auto it = map.find(param);
+                if (it == map.end()) {
+                    throw yexception() << "No such parameter: '" << param << "'";
+                }
+
+                const auto& value = it->second["Data"];
+                if (!value.IsString()) {
+                    throw yexception() << "Parameter value must be a string";
+                }
+
+                res << value.AsString();
+                continue;
+            }
+
+            if (insideBrackets) {
+                paramBuilder << c;
+            } else {
+                res << c;
+            }
+
+            ++pos;
+        }
+
+        if (insideBrackets) {
+            throw yexception() << "Missing }";
+        }
+
+        return res;
+    } catch (yexception& e) {
+        throw yexception() << "Failed to substitute parameters into url: " << str << ", reason:" << e.what() << ", position: " << pos;
+    }
+}
+
 } // namespace NYql

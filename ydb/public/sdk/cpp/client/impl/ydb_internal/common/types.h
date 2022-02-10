@@ -7,7 +7,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/ydb.h>
 
-#include <ydb/library/yql/public/issue/yql_issue.h> 
+#include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <library/cpp/grpc/client/grpc_client_low.h>
 

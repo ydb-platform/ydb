@@ -1,15 +1,15 @@
 #pragma once
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h> 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sinks.h> 
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sources.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_sinks.h>
 
-#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h> 
-#include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h> 
+#include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
+#include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
 
-#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h> 
-#include <ydb/library/yql/providers/dq/task_runner/task_runner_invoker.h> 
+#include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
+#include <ydb/library/yql/providers/dq/task_runner/task_runner_invoker.h>
 
-#include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h> 
+#include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h>
 
 namespace NYql {
 

@@ -23,7 +23,7 @@ SRCS(
     tablet_counters_app.cpp
     tablet_counters_app.h
     tablet_counters_protobuf.h
-    tablet_exception.h 
+    tablet_exception.h
     tablet_impl.h
     tablet_tracing_signals.cpp
     tablet_tracing_signals.h
@@ -34,10 +34,10 @@ SRCS(
     tablet_monitoring_proxy.cpp
     tablet_monitoring_proxy.h
     tablet_pipecache.cpp
-    tablet_pipe_client.cpp 
-    tablet_pipe_client_cache.cpp 
-    tablet_pipe_client_cache.h 
-    tablet_pipe_server.cpp 
+    tablet_pipe_client.cpp
+    tablet_pipe_client_cache.cpp
+    tablet_pipe_client_cache.h
+    tablet_pipe_server.cpp
     tablet_req_blockbs.cpp
     tablet_req_delete.cpp
     tablet_req_findlatest.cpp

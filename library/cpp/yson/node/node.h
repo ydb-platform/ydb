@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/generic/bt_exception.h>
-#include <util/generic/cast.h> 
+#include <util/generic/cast.h>
 #include <util/generic/hash.h>
 #include <util/generic/variant.h>
 #include <util/generic/vector.h>
@@ -159,12 +159,12 @@ public:
     TListType& UncheckedAsList() noexcept;
     TMapType& UncheckedAsMap() noexcept;
 
-    // integer types cast 
+    // integer types cast
     // makes overflow checks
     template<typename T>
     T IntCast() const;
 
-    // integers <-> double <-> string 
+    // integers <-> double <-> string
     // makes overflow checks
     template<typename T>
     T ConvertTo() const;
@@ -296,49 +296,49 @@ inline bool TNode::IsArithmetic() const {
 
 template<typename T>
 inline T TNode::IntCast() const {
-    if constexpr (std::is_integral<T>::value) { 
-        try { 
-            switch (GetType()) { 
-                case TNode::Uint64: 
-                    return SafeIntegerCast<T>(AsUint64()); 
-                case TNode::Int64: 
-                    return SafeIntegerCast<T>(AsInt64()); 
-                default: 
-                    ythrow TTypeError() << "IntCast() called for type " << GetType(); 
+    if constexpr (std::is_integral<T>::value) {
+        try {
+            switch (GetType()) {
+                case TNode::Uint64:
+                    return SafeIntegerCast<T>(AsUint64());
+                case TNode::Int64:
+                    return SafeIntegerCast<T>(AsInt64());
+                default:
+                    ythrow TTypeError() << "IntCast() called for type " << GetType();
             }
-        } catch(TBadCastException& exc) { 
-            ythrow TTypeError() << "TBadCastException during IntCast(): " << exc.what(); 
-        } 
-    } else { 
-        static_assert(sizeof(T) != sizeof(T), "implemented only for std::is_integral types"); 
+        } catch(TBadCastException& exc) {
+            ythrow TTypeError() << "TBadCastException during IntCast(): " << exc.what();
+        }
+    } else {
+        static_assert(sizeof(T) != sizeof(T), "implemented only for std::is_integral types");
     }
 }
 
 template<typename T>
 inline T TNode::ConvertTo() const {
-    if constexpr (std::is_integral<T>::value) { 
-        switch (GetType()) { 
-            case NYT::TNode::String: 
-                return ::FromString(AsString()); 
-            case NYT::TNode::Int64: 
-            case NYT::TNode::Uint64: 
-                return IntCast<T>(); 
-            case NYT::TNode::Double: 
+    if constexpr (std::is_integral<T>::value) {
+        switch (GetType()) {
+            case NYT::TNode::String:
+                return ::FromString(AsString());
+            case NYT::TNode::Int64:
+            case NYT::TNode::Uint64:
+                return IntCast<T>();
+            case NYT::TNode::Double:
                 if (AsDouble() < Min<T>() || AsDouble() > MaxFloor<T>() || !std::isfinite(AsDouble())) {
-                    ythrow TTypeError() << AsDouble() << " can't be converted to " << TypeName<T>(); 
-                } 
-                return AsDouble(); 
-            case NYT::TNode::Bool: 
-                return AsBool(); 
-            case NYT::TNode::List: 
-            case NYT::TNode::Map: 
-            case NYT::TNode::Null: 
-            case NYT::TNode::Undefined: 
-                ythrow TTypeError() << "ConvertTo<" << TypeName<T>() << ">() called for type " << GetType(); 
-        }; 
-    } else { 
-        static_assert(sizeof(T) != sizeof(T), "should have template specialization"); 
-    } 
+                    ythrow TTypeError() << AsDouble() << " can't be converted to " << TypeName<T>();
+                }
+                return AsDouble();
+            case NYT::TNode::Bool:
+                return AsBool();
+            case NYT::TNode::List:
+            case NYT::TNode::Map:
+            case NYT::TNode::Null:
+            case NYT::TNode::Undefined:
+                ythrow TTypeError() << "ConvertTo<" << TypeName<T>() << ">() called for type " << GetType();
+        };
+    } else {
+        static_assert(sizeof(T) != sizeof(T), "should have template specialization");
+    }
 }
 
 template<>

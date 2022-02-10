@@ -504,9 +504,9 @@ public:
      */
     TString ToStringLocalUpToSeconds() const;
 
-    TString FormatLocalTime(const char* format) const noexcept; 
-    TString FormatGmTime(const char* format) const noexcept; 
- 
+    TString FormatLocalTime(const char* format) const noexcept;
+    TString FormatGmTime(const char* format) const noexcept;
+
     /// See #TryParseIso8601.
     static TInstant ParseIso8601(TStringBuf);
     /// See #TryParseRfc822.

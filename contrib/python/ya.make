@@ -779,7 +779,7 @@ RECURSE(
     ptyprocess
     publicsuffix2
     pure-eval
-    pure-python-adb 
+    pure-python-adb
     pure-sasl
     py
     py-asciimath

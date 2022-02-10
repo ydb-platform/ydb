@@ -12,7 +12,7 @@ RECURSE(
     singleton
     smart_pointers
     sort
-    string
+    string 
     vector_count_ctor
     vector_count_ctor/metrics
     cont_speed

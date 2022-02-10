@@ -7,7 +7,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
-#include "defaults.h" 
+#include "defaults.h"
 #include "progname.h"
 
 bool SetHighestThreadPriority();

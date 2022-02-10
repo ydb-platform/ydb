@@ -616,6 +616,6 @@ namespace NUri {
         }
         Y_ASSERT(0);
         return "";
-    } 
- 
+    }
+
 }

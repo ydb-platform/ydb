@@ -13,8 +13,8 @@
     #include <WinSock2.h>
 #endif
 
-#include "defaults.h" 
-#include "yassert.h" 
+#include "defaults.h"
+#include "yassert.h"
 #include "hostname.h"
 
 namespace {

@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/string/cast.h>
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 #include <util/system/tempfile.h>
 #include <util/memory/blob.h>
 
@@ -49,7 +49,7 @@ void TArchiveTest::TestCreate() {
 void TArchiveTest::TestRead() {
     CreateArchive();
     TTempFile tmpFile(ARCHIVE);
-    TBlob blob = TBlob::FromFileSingleThreaded(ARCHIVE); 
+    TBlob blob = TBlob::FromFileSingleThreaded(ARCHIVE);
     TArchiveReader r(blob);
 
     UNIT_ASSERT_EQUAL(r.Count(), 1000);

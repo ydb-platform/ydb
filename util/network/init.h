@@ -33,16 +33,16 @@ using SOCKET = int;
 using nfds_t = ULONG;
 
     #undef Yield
- 
+
 struct sockaddr_un {
     short sun_family;
     char sun_path[108];
 };
- 
+
     #define PF_LOCAL AF_UNIX
     #define NETDB_INTERNAL -1
     #define NETDB_SUCCESS 0
- 
+
 #endif
 
 #if defined(_win_) || defined(_darwin_)

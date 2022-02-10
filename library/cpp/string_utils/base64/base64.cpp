@@ -89,7 +89,7 @@ static const char base64_bkw[] = {
     '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
     '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
     '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0'};
- 
+
 static_assert(Y_ARRAY_SIZE(base64_bkw) == 256, "wrong size");
 
 // Base64 for url encoding, RFC3548
@@ -133,13 +133,13 @@ static inline char* Base64EncodeImpl(char* outstr, const unsigned char* instr, s
         } else {
             *outstr++ = base64_etab[GetBase64EncodedIndex1(instr[idx], '\0')];
             *outstr++ = pad;
-        } 
+        }
         *outstr++ = pad;
-    } 
+    }
     *outstr = 0;
 
-    return outstr; 
-} 
+    return outstr;
+}
 
 static char* Base64EncodePlain(char* outstr, const unsigned char* instr, size_t len) {
     return Base64EncodeImpl<false>(outstr, instr, len);

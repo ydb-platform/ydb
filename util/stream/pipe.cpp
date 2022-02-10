@@ -39,7 +39,7 @@ TPipeBase::TPipeBase(const TString& command, const char* mode)
 TPipeBase::~TPipeBase() = default;
 
 TPipeInput::TPipeInput(const TString& command)
-    : TPipeBase(command, "r") 
+    : TPipeBase(command, "r")
 {
 }
 
@@ -62,7 +62,7 @@ size_t TPipeInput::DoRead(void* buf, size_t len) {
 }
 
 TPipeOutput::TPipeOutput(const TString& command)
-    : TPipeBase(command, "w") 
+    : TPipeBase(command, "w")
 {
 }
 

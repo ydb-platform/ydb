@@ -3,9 +3,9 @@
 #include <util/system/defaults.h>
 #include <util/generic/strbuf.h>
 
-#include <cstring> 
+#include <cstring>
 
-enum MimeTypes { 
+enum MimeTypes {
     MIME_UNKNOWN = 0,
     MIME_TEXT = 1,
     MIME_HTML = 2,
@@ -58,9 +58,9 @@ enum MimeTypes {
     MIME_WOFF2 = 44,
     MIME_TTF = 45,
     MIME_WEBMANIFEST = 46,
-    MIME_MAX 
-}; 
- 
+    MIME_MAX
+};
+
 extern const char* MimeNames[MIME_MAX];
 
 const char* mimetypeByExt(const char* fname, const char* check_ext = nullptr);

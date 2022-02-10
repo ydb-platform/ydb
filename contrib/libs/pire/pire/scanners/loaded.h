@@ -194,7 +194,7 @@ public:
 
 		size_t shift = (newState - oldState) * StateSize();
 		Transition tr;
-		tr.shift = (ui32)shift; 
+		tr.shift = (ui32)shift;
 		tr.action = action;
 		m_jumps[TransitionIndex(oldState, c)] = tr;
 	}

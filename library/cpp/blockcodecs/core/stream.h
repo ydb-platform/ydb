@@ -7,7 +7,7 @@
 #include <util/generic/buffer.h>
 
 namespace NBlockCodecs {
-    struct ICodec; 
+    struct ICodec;
 
     class TCodedOutput: public IOutputStream {
     public:

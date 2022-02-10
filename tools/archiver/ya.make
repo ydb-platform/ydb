@@ -15,6 +15,6 @@ SRCS(
     main.cpp
 )
 
-SET(IDE_FOLDER "_Builders") 
+SET(IDE_FOLDER "_Builders")
 
 END()

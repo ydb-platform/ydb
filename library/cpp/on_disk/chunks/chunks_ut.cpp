@@ -90,8 +90,8 @@ public:
                 writer.Save(stream);
             }
             {
-                TBlob temp = TBlob::FromStreamSingleThreaded(stream); 
-                TGeneralVector<ui32> reader(temp); 
+                TBlob temp = TBlob::FromStreamSingleThreaded(stream);
+                TGeneralVector<ui32> reader(temp);
                 UNIT_ASSERT_EQUAL(reader.GetSize(), N);
                 for (size_t i = 0; i < N; ++i) {
                     ui32 value;
@@ -112,7 +112,7 @@ public:
                 writer.Save(stream);
             }
             {
-                TBlob temp = TBlob::FromStreamSingleThreaded(stream); 
+                TBlob temp = TBlob::FromStreamSingleThreaded(stream);
                 TGeneralVector<TString> reader(temp);
                 UNIT_ASSERT_EQUAL(reader.GetSize(), N);
                 for (size_t i = 0; i < N; ++i) {
@@ -135,8 +135,8 @@ public:
                 writer.Save(stream);
             }
             {
-                TBlob temp = TBlob::FromStreamSingleThreaded(stream); 
-                TGeneralVector<TItem> reader(temp); 
+                TBlob temp = TBlob::FromStreamSingleThreaded(stream);
+                TGeneralVector<TItem> reader(temp);
                 UNIT_ASSERT_EQUAL(reader.GetSize(), N);
 
                 TItem value;
@@ -163,8 +163,8 @@ public:
                 writer.Save(stream);
             }
             {
-                TBlob temp = TBlob::FromStreamSingleThreaded(stream); 
-                TGeneralVector<int*> reader(temp); 
+                TBlob temp = TBlob::FromStreamSingleThreaded(stream);
+                TGeneralVector<int*> reader(temp);
                 UNIT_ASSERT_EQUAL(reader.GetSize(), N);
                 for (size_t i = 0; i < N; ++i) {
                     int* value;
@@ -186,8 +186,8 @@ public:
                 writer.Save(stream);
             }
             {
-                TBlob temp = TBlob::FromStreamSingleThreaded(stream); 
-                TGeneralVector<TItem> reader(temp); 
+                TBlob temp = TBlob::FromStreamSingleThreaded(stream);
+                TGeneralVector<TItem> reader(temp);
                 UNIT_ASSERT_EQUAL(reader.GetSize(), N);
                 for (size_t i = 0; i < N; ++i) {
                     TItem value;
@@ -214,7 +214,7 @@ public:
         }
 
         {
-            TBlob fIn = TBlob::FromFileSingleThreaded(FILENAME); 
+            TBlob fIn = TBlob::FromFileSingleThreaded(FILENAME);
             TStringsVector vct(GetBlock(fIn, 0));
             UNIT_ASSERT_EQUAL(vct.Get(0), "");
             UNIT_ASSERT_EQUAL(vct.Get(1), "test");
@@ -250,7 +250,7 @@ public:
         }
 
         {
-            TBlob mf = TBlob::FromFileSingleThreaded(filename); 
+            TBlob mf = TBlob::FromFileSingleThreaded(filename);
             TNamedChunkedDataReader reader(mf);
 
             UNIT_ASSERT(reader.GetBlocksCount() == 3);
@@ -297,7 +297,7 @@ private:
             writer.WriteFooter();
         }
         {
-            TBlob blob = TBlob::FromBufferSingleThreaded(buffer); 
+            TBlob blob = TBlob::FromBufferSingleThreaded(buffer);
             TChunkedDataReader data(blob);
             // printf("%d\n", (int)data.GetBlockLen(3));
             UNIT_ASSERT_EQUAL(4, data.GetBlockLen(0));
@@ -317,7 +317,7 @@ private:
             writer.WriteFooter();
         }
         {
-            TBlob blob = TBlob::FromBufferSingleThreaded(buffer); 
+            TBlob blob = TBlob::FromBufferSingleThreaded(buffer);
             TChunkedDataReader data(blob);
             // printf("%d\n", (int)data.GetBlockLen(1));
             UNIT_ASSERT_EQUAL(0, data.GetBlockLen(0));

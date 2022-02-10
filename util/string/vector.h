@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "cast.h"
 #include "split.h"
 

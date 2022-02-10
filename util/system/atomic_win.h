@@ -4,7 +4,7 @@
 
 #define USE_GENERIC_SETGET
 
-#if defined(_i386_) 
+#if defined(_i386_)
 
     #pragma intrinsic(_InterlockedIncrement)
     #pragma intrinsic(_InterlockedDecrement)
@@ -92,14 +92,14 @@ static inline intptr_t AtomicGetAndCas(TAtomic* a, intptr_t exchange, intptr_t c
     return _InterlockedCompareExchange64((volatile __int64*)a, exchange, compare);
 }
 
-static inline intptr_t AtomicOr(TAtomic& a, intptr_t b) { 
-    return _InterlockedOr64(&a, b) | b; 
-} 
- 
-static inline intptr_t AtomicAnd(TAtomic& a, intptr_t b) { 
-    return _InterlockedAnd64(&a, b) & b; 
-} 
- 
+static inline intptr_t AtomicOr(TAtomic& a, intptr_t b) {
+    return _InterlockedOr64(&a, b) | b;
+}
+
+static inline intptr_t AtomicAnd(TAtomic& a, intptr_t b) {
+    return _InterlockedAnd64(&a, b) & b;
+}
+
 static inline intptr_t AtomicXor(TAtomic& a, intptr_t b) {
     return _InterlockedXor64(&a, b) ^ b;
 }

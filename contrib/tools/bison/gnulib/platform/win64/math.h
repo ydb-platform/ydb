@@ -34,8 +34,8 @@
 #define _GL_M4_MATH_H
 
 #if _MSC_VER >= 1800 // [
-#else // ] _MSC_VER >= 1600 [ 
- 
+#else // ] _MSC_VER >= 1600 [
+
 #ifndef _GL_INLINE_HEADER_BEGIN
  #error "Please include config.h first."
 #endif
@@ -1289,7 +1289,7 @@ _GL_WARN_ON_USE (frexpf, "frexpf is unportable - "
      If x is zero: mantissa = x, exp = 0.
      If x is infinite or NaN: mantissa = x, exp unspecified.
    Store exp in *EXPPTR and return mantissa.  */
-#if 0 
+#if 0
 # if 1
 #  if !(defined __cplusplus && defined GNULIB_NAMESPACE)
 #   define frexp rpl_frexp
@@ -1314,7 +1314,7 @@ _GL_WARN_ON_USE (frexp, "frexp is unportable - "
      If x is zero: mantissa = x, exp = 0.
      If x is infinite or NaN: mantissa = x, exp unspecified.
    Store exp in *EXPPTR and return mantissa.  */
-#if 0 
+#if 0
 # if !(defined __cplusplus && defined GNULIB_NAMESPACE)
 #  undef frexpl
 #  define frexpl rpl_frexpl
@@ -2593,7 +2593,7 @@ _GL_WARN_REAL_FLOATING_DECL (signbit);
 
 _GL_INLINE_HEADER_END
 
-#endif 
- 
+#endif
+
 #endif /* _GL_M4_MATH_H */
 #endif /* _GL_M4_MATH_H */

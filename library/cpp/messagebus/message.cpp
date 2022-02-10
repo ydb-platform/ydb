@@ -9,7 +9,7 @@
 
 using namespace NBus;
 
-namespace NBus { 
+namespace NBus {
     using namespace NBus::NPrivate;
 
     TBusIdentity::TBusIdentity()
@@ -156,7 +156,7 @@ namespace NBus {
         ReplyTo = data.Connection->PeerAddrSocketAddr;
         SetCompressed(compressed || IsCompressedResponse());
     }
- 
+
     void TBusMessage::SetCompressed(bool v) {
         if (v) {
             GetHeader()->FlagsInternal |= MESSAGE_COMPRESS_INTERNAL;

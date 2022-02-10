@@ -81,7 +81,7 @@ void THttpHeaders::RemoveHeader(const TStringBuf header) {
     }
 }
 
-void THttpHeaders::AddOrReplaceHeader(const THttpInputHeader& header) { 
+void THttpHeaders::AddOrReplaceHeader(const THttpInputHeader& header) {
     for (auto& hdr : Headers_) {
         if (AsciiCompareIgnoreCase(hdr.Name(), header.Name()) == 0) {
             hdr = header;

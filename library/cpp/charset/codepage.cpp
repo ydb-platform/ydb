@@ -132,7 +132,7 @@ private:
 
     TData Data;
     TMemoryPool Pool;
- 
+
 private:
     inline void AddNameWithCheck(const TString& name, ECharset code) {
         if (Data.find(name.c_str()) == Data.end()) {
@@ -189,7 +189,7 @@ public:
             return CODES_UNKNOWN;
 
         return it->second;
-    } 
+    }
 };
 
 ECharset CharsetByName(TStringBuf name) {

@@ -1,4 +1,4 @@
-#include "execpath.h" 
+#include "execpath.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 

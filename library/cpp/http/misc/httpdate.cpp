@@ -26,14 +26,14 @@
 * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 * SUCH DAMAGE.
 */
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 
 #include <sys/types.h>
-#include <cctype> 
-#include <cstdio> 
-#include <cstdlib> 
-#include <cstring> 
-#include <ctime> 
+#include <cctype>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
 
 #include <util/system/compat.h>   /* stricmp */
 #include <util/system/yassert.h>

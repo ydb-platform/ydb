@@ -63,7 +63,7 @@ int Opt::Get(int* longOptionIndex) {
 
     try {
         bool r = OptsParser_->Next();
-        Ind = (int)OptsParser_->Pos_; 
+        Ind = (int)OptsParser_->Pos_;
         if (!r) {
             return EOF;
         } else {
@@ -74,7 +74,7 @@ int Opt::Get(int* longOptionIndex) {
             } else {
                 const Ion* ion = (const Ion*)OptsParser_->CurOpt()->UserValue();
                 if (longOptionIndex) {
-                    *longOptionIndex = int(ion - Ions_); 
+                    *longOptionIndex = int(ion - Ions_);
                 }
                 char c = OptsParser_->CurOpt()->GetCharOr0();
                 return c != 0 ? c : ion->val;
@@ -93,7 +93,7 @@ void Opt::DummyHelp(IOutputStream& os) {
 }
 
 int Opt::GetArgC() const {
-    return (int)OptsParser_->Argc_; 
+    return (int)OptsParser_->Argc_;
 }
 
 const char** Opt::GetArgV() const {

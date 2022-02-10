@@ -15,11 +15,11 @@
 
 #define LINKTEXT_MAX 1024
 
-#ifdef WIN32 
+#ifdef WIN32
     #ifndef PATH_MAX
         #define PATH_MAX _MAX_PATH
     #endif
-#else 
+#else
 
     #ifndef MAX_PATH
         #define MAX_PATH PATH_MAX

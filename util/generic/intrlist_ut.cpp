@@ -236,12 +236,12 @@ static void CheckIterationAfterCut(const TMyList& l, const TMyList& l2, size_t N
     UNIT_ASSERT_EQUAL(c, 0);
 }
 
-static void TestCutFront(int N, int M) { 
+static void TestCutFront(int N, int M) {
     TMyList l(N);
     TMyList l2(0);
 
     TMyList::TIterator it = l.Begin();
-    for (int i = 0; i < M; ++i) { 
+    for (int i = 0; i < M; ++i) {
         ++it;
     }
 
@@ -249,12 +249,12 @@ static void TestCutFront(int N, int M) {
     CheckIterationAfterCut(l2, l, N, M);
 }
 
-static void TestCutBack(int N, int M) { 
+static void TestCutBack(int N, int M) {
     TMyList l(N);
     TMyList l2(0);
 
     TMyList::TIterator it = l.Begin();
-    for (int i = 0; i < M; ++i) { 
+    for (int i = 0; i < M; ++i) {
         ++it;
     }
 
@@ -291,7 +291,7 @@ static void CheckIterationAfterAppend(const TMyList& l, size_t N, size_t M) {
     UNIT_ASSERT_EQUAL(it, l.End());
 }
 
-static void TestAppend(int N, int M) { 
+static void TestAppend(int N, int M) {
     TMyList l(N);
     TMyList l2(M);
     l.Append(l2);

@@ -45,7 +45,7 @@ void Opt2::EatArgv(const char* optspec, const char* long_alias) {
         if (*s == '?' || *s == '-')
             ythrow yexception() << "Opt2: Symbol '" << *s << "' can not be used in optspec because it is reserved";
         Specs.push_back(Opt2Param());
-        SpecsMap[(ui8)*s] = (ui8)Specs.size(); // actual index + 1 
+        SpecsMap[(ui8)*s] = (ui8)Specs.size(); // actual index + 1
         Specs.back().opt = *s;
         if (s[1] == ':') {
             Specs.back().HasArg = true;

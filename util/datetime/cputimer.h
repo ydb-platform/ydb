@@ -7,7 +7,7 @@
 #include <util/stream/str.h>
 
 class TTimer {
-private: 
+private:
     TInstant Start_;
     TStringStream Message_;
 
@@ -108,17 +108,17 @@ public:
 #endif
 
 class TTimeLogger {
-private: 
+private:
     TString Message;
     bool Verbose;
-    bool OK; 
+    bool OK;
     time_t Begin;
     ui64 BeginCycles;
- 
+
 public:
     TTimeLogger(const TString& message, bool verbose = true);
-    ~TTimeLogger(); 
+    ~TTimeLogger();
 
-    void SetOK(); 
+    void SetOK();
     double ElapsedTime() const;
-}; 
+};

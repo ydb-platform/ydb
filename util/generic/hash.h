@@ -958,12 +958,12 @@ template <class V>
 __yhashtable_iterator<V>& __yhashtable_iterator<V>::operator++() {
     Y_ASSERT(cur);
     cur = cur->next;
-    if ((uintptr_t)cur & 1) { 
+    if ((uintptr_t)cur & 1) {
         node** bucket = (node**)((uintptr_t)cur & ~1);
         while (*bucket == nullptr)
             ++bucket;
         Y_ASSERT(*bucket != nullptr);
-        cur = (node*)((uintptr_t)*bucket & ~1); 
+        cur = (node*)((uintptr_t)*bucket & ~1);
     }
     return *this;
 }
@@ -979,12 +979,12 @@ template <class V>
 __yhashtable_const_iterator<V>& __yhashtable_const_iterator<V>::operator++() {
     Y_ASSERT(cur);
     cur = cur->next;
-    if ((uintptr_t)cur & 1) { 
+    if ((uintptr_t)cur & 1) {
         node** bucket = (node**)((uintptr_t)cur & ~1);
         while (*bucket == nullptr)
             ++bucket;
         Y_ASSERT(*bucket != nullptr);
-        cur = (node*)((uintptr_t)*bucket & ~1); 
+        cur = (node*)((uintptr_t)*bucket & ~1);
     }
     return *this;
 }

@@ -226,8 +226,8 @@ namespace NBus {
 
         /// serialized protocol specific data into TBusData
         void Serialize(const TBusMessage* mess, TBuffer& data) override;
- 
+
         TAutoPtr<TBusMessage> Deserialize(ui16 messageType, TArrayRef<const char> payload) override;
     };
- 
+
 }

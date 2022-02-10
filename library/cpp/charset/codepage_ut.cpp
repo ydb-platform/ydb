@@ -9,8 +9,8 @@
 
 #if defined(_MSC_VER)
 #pragma warning(disable : 4309) /*truncation of constant value*/
-#endif 
- 
+#endif
+
 namespace {
     const char yandexUpperCase[] =
         "\x81\x82\x83\x84\x85\x86\x87"

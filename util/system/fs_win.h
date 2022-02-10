@@ -1,11 +1,11 @@
-#pragma once 
- 
-#include "winint.h" 
-#include "defaults.h" 
- 
+#pragma once
+
+#include "winint.h"
+#include "defaults.h"
+
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
- 
+
 namespace NFsPrivate {
     bool WinRename(const TString& oldPath, const TString& newPath);
 

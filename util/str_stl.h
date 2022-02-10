@@ -59,8 +59,8 @@ namespace NHashPrivate {
 
 template <class T>
 struct hash: public NHashPrivate::THashHelper<T, std::is_scalar<T>::value && !std::is_integral<T>::value> {
-}; 
- 
+};
+
 template <typename T>
 struct hash<const T*> {
     inline size_t operator()(const T* t) const noexcept {
@@ -76,11 +76,11 @@ template <>
 struct hash<const char*>: ::NHashPrivate::TStringHash<char> {
 };
 
-template <> 
+template <>
 struct THash<TStringBuf>: ::NHashPrivate::TStringHash<char> {
 };
 
-template <> 
+template <>
 struct hash<TString>: ::NHashPrivate::TStringHash<char> {
 };
 
@@ -236,7 +236,7 @@ struct TCIEqualTo<TString> {
 template <class T>
 struct TLess: public std::less<T> {
 };
- 
+
 template <>
 struct TLess<TString>: public TLess<TStringBuf> {
     using is_transparent = void;

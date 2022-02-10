@@ -69,17 +69,17 @@ TBasicString<wchar16, std::char_traits<wchar16>>::AppendUtf8(const ::TStringBuf&
 template <>
 bool TBasicString<wchar16, std::char_traits<wchar16>>::to_lower(size_t pos, size_t n) {
     return ToLower(*this, pos, n);
-} 
- 
+}
+
 template <>
 bool TBasicString<wchar16, std::char_traits<wchar16>>::to_upper(size_t pos, size_t n) {
     return ToUpper(*this, pos, n);
-} 
- 
+}
+
 template <>
 bool TBasicString<wchar16, std::char_traits<wchar16>>::to_title(size_t pos, size_t n) {
     return ToTitle(*this, pos, n);
-} 
+}
 
 template <>
 TUtf32String&

@@ -1,18 +1,18 @@
 #include "exthttpcodes.h"
 
-#include <cstring> 
- 
+#include <cstring>
+
 const ui16 CrazyServer = ShouldDelete | MarkSuspect;
- 
+
 struct http_flag {
     ui16 http;
     ui16 flag;
 };
-static http_flag HTTP_FLAG[] = { 
+static http_flag HTTP_FLAG[] = {
     {HTTP_CONTINUE, MarkSuspect},            // 100
     {HTTP_SWITCHING_PROTOCOLS, CrazyServer}, // 101
     {HTTP_PROCESSING, CrazyServer},          // 102
- 
+
     {HTTP_OK, ShouldReindex},                            // 200
     {HTTP_CREATED, CrazyServer},                         // 201
     {HTTP_ACCEPTED, ShouldDelete},                       // 202
@@ -23,7 +23,7 @@ static http_flag HTTP_FLAG[] = {
     {HTTP_MULTI_STATUS, CrazyServer},                    // 207
     {HTTP_ALREADY_REPORTED, CrazyServer},                // 208
     {HTTP_IM_USED, CrazyServer},                         // 226
- 
+
     {HTTP_MULTIPLE_CHOICES, CheckLinks | ShouldDelete},                  // 300
     {HTTP_MOVED_PERMANENTLY, CheckLocation | ShouldDelete | MoveRedir},  // 301
     {HTTP_FOUND, CheckLocation | ShouldDelete | MoveRedir},              // 302
@@ -32,7 +32,7 @@ static http_flag HTTP_FLAG[] = {
     {HTTP_USE_PROXY, ShouldDelete},                                      // 305
     {HTTP_TEMPORARY_REDIRECT, CheckLocation | ShouldDelete | MoveRedir}, // 307
     {HTTP_PERMANENT_REDIRECT, CheckLocation | ShouldDelete | MoveRedir}, // 308
- 
+
     {HTTP_BAD_REQUEST, CrazyServer},                                       // 400
     {HTTP_UNAUTHORIZED, ShouldDelete},                                     // 401
     {HTTP_PAYMENT_REQUIRED, ShouldDelete},                                 // 402
@@ -53,7 +53,7 @@ static http_flag HTTP_FLAG[] = {
     {HTTP_EXPECTATION_FAILED, ShouldDelete},                               // 417
     {HTTP_I_AM_A_TEAPOT, CrazyServer},                                     // 418
     {HTTP_AUTHENTICATION_TIMEOUT, ShouldDelete},                           // 419
- 
+
     {HTTP_MISDIRECTED_REQUEST, CrazyServer},                                // 421
     {HTTP_UNPROCESSABLE_ENTITY, CrazyServer},                               // 422
     {HTTP_LOCKED, ShouldDelete},                                            // 423
@@ -62,7 +62,7 @@ static http_flag HTTP_FLAG[] = {
     {HTTP_PRECONDITION_REQUIRED, ShouldDelete},                             // 428
     {HTTP_TOO_MANY_REQUESTS, ShouldDisconnect | ShouldRetry | MarkSuspect}, // 429
     {HTTP_UNAVAILABLE_FOR_LEGAL_REASONS, ShouldDelete},                     // 451
- 
+
     {HTTP_INTERNAL_SERVER_ERROR, MarkSuspect},                                // 500
     {HTTP_NOT_IMPLEMENTED, ShouldDelete | ShouldDisconnect},                  // 501
     {HTTP_BAD_GATEWAY, MarkSuspect},                                          // 502
@@ -116,7 +116,7 @@ static http_flag HTTP_FLAG[] = {
     {HTTP_FETCHER_BAD_RESPONSE, 0},                                      // 1040
     {HTTP_FETCHER_MB_ERROR, 0},                                          // 1041
     {HTTP_SSL_CERT_ERROR, 0},                                            // 1042
- 
+
     // Custom (replace HTTP 200/304)
     {EXT_HTTP_MIRRMOVE, 0},                                          // 2000
     {EXT_HTTP_MANUAL_DELETE, ShouldDelete},                          // 2001
@@ -142,34 +142,34 @@ static http_flag HTTP_FLAG[] = {
     {EXT_HTTP_EMPTY_RESPONSE, ShouldDelete},                         // 2024
     {EXT_HTTP_REL_CANONICAL, ShouldDelete | CheckLinks | MoveRedir}, // 2025
     {0, 0}};
- 
+
 static ui16* prepare_flags(http_flag* arg) {
-    static ui16 flags[EXT_HTTP_CODE_MAX]; 
+    static ui16 flags[EXT_HTTP_CODE_MAX];
     http_flag* ptr;
-    size_t i; 
- 
+    size_t i;
+
     // устанавливаем значение по умолчанию для кодов не перечисленных в таблице выше
     for (i = 0; i < EXT_HTTP_CODE_MAX; ++i)
-        flags[i] = CrazyServer; 
- 
+        flags[i] = CrazyServer;
+
     // устанавливаем флаги для перечисленных кодов
     for (ptr = arg; ptr->http; ++ptr)
         flags[ptr->http & (EXT_HTTP_CODE_MAX - 1)] = ptr->flag;
- 
+
     // для стандартных кодов ошибок берем флаги из первого кода каждой группы и проставляем их
     // всем кодам не перечисленным в таблице выше
     for (size_t group = 0; group < 1000; group += 100)
         for (size_t j = group + 1; j < group + 100; ++j)
             flags[j] = flags[group];
- 
+
     // предыдущий цикл затер некоторые флаги перечисленные в таблице выше
     // восстанавливаем их
     for (ptr = arg; ptr->http; ++ptr)
         flags[ptr->http & (EXT_HTTP_CODE_MAX - 1)] = ptr->flag;
- 
-    return flags; 
-} 
- 
+
+    return flags;
+}
+
 ui16* http2status = prepare_flags(HTTP_FLAG);
 
 TStringBuf ExtHttpCodeStr(int code) noexcept {

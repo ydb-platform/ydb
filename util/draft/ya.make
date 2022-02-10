@@ -2,14 +2,14 @@ LIBRARY()
 
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
- 
+
 NO_UTIL()
- 
+
 IF (TSTRING_IS_STD_STRING)
     CFLAGS(GLOBAL -DTSTRING_IS_STD_STRING)
 ENDIF()
 
-SRCS( 
+SRCS(
     date.cpp
     datetime.cpp
     enum.cpp
@@ -17,9 +17,9 @@ SRCS(
     ip.cpp
     matrix.cpp
     memory.cpp
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

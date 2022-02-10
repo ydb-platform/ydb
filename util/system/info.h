@@ -1,6 +1,6 @@
 #pragma once
 
-#include "defaults.h" 
+#include "defaults.h"
 
 namespace NSystemInfo {
     size_t NumberOfCpus();

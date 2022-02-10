@@ -74,10 +74,10 @@ namespace NBus {
         int GetPort() const {
             return ServicePort;
         }
- 
+
         virtual ~TBusProtocol() {
         }
- 
+
         /// \brief serialized protocol specific data into TBusData
         /// \note buffer passed to the function (data) is not empty, use append functions
         virtual void Serialize(const TBusMessage* mess, TBuffer& data) = 0;
@@ -175,7 +175,7 @@ namespace NBus {
         TBusLocator* GetLocator() const {
             return Locator.Get();
         }
- 
+
         TBusClientSessionPtr CreateSource(TBusProtocol* proto, IBusClientHandler* handler, const TBusClientSessionConfig& config, const TString& name = "");
         TBusSyncClientSessionPtr CreateSyncSource(TBusProtocol* proto, const TBusClientSessionConfig& config, bool needReply = true, const TString& name = "");
         TBusServerSessionPtr CreateDestination(TBusProtocol* proto, IBusServerHandler* hander, const TBusServerSessionConfig& config, const TString& name = "");

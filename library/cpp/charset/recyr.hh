@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdlib> 
+#include <cstdlib>
 
 #include <util/charset/recode_result.h>
 #include <util/generic/ptr.h>
@@ -49,7 +49,7 @@ inline RECODE_RESULT RecodeFromUnicode(ECharset to, const TCharType* in, char* o
 inline RECODE_RESULT RecodeFromUnicode(ECharset theEncoding, const wchar16* chars, size_t length,
                                        char* bytes, size_t size, size_t* read = nullptr, size_t* written = nullptr) {
     size_t w = 0, r = 0;
-    RECODE_RESULT rc = ::RecodeFromUnicode(theEncoding, chars, bytes, length, size, r, w); 
+    RECODE_RESULT rc = ::RecodeFromUnicode(theEncoding, chars, bytes, length, size, r, w);
     if (read)
         *read = r;
     if (written)
@@ -93,8 +93,8 @@ inline RECODE_RESULT Recode(ECharset from, ECharset to, const char* in, char* ou
     res = RecodeFromUnicode(to, wide.Get(), out, wideWritten, outSize, wideRead, outWritten);
 
     return res;
-} 
- 
+}
+
 inline RECODE_RESULT Recode(ECharset from, ECharset to, const char* in, char* out, size_t inSize, size_t outSize) {
     size_t inRead = 0;
     size_t outWritten = 0;
@@ -156,7 +156,7 @@ inline TString RecodeToHTMLEntities(ECharset from, const TString& in) {
         res = NCodepagePrivate::_recodeToHTMLEntities(from, in.c_str(), out.begin(), in.length(), out.length(), inRead, outWritten);
     }
     if (res != RECODE_OK) {
-        ythrow yexception() << "Recode to HTML entities failed"; 
+        ythrow yexception() << "Recode to HTML entities failed";
     }
 
     out.resize(outWritten - 1);

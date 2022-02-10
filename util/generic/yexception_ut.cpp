@@ -21,8 +21,8 @@ static inline void Throw2DontMove() {
 
 #if defined(_MSC_VER)
     #pragma warning(disable : 4702) /*unreachable code*/
-#endif 
- 
+#endif
+
 static void CallbackFun(int i) {
     throw i;
 }

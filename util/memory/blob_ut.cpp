@@ -1,7 +1,7 @@
 #include "blob.h"
 
 #include <library/cpp/testing/unittest/registar.h>
- 
+
 #include <util/system/tempfile.h>
 #include <util/folder/path.h>
 #include <util/stream/output.h>
@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(TBlobTest) {
     Y_UNIT_TEST(TestSubBlob) {
         TBlob child;
         const char* p = nullptr;
- 
+
         {
             TBlob parent = TBlob::CopySingleThreaded("0123456789", 10);
             UNIT_ASSERT_EQUAL(parent.Length(), 10);
@@ -21,12 +21,12 @@ Y_UNIT_TEST_SUITE(TBlobTest) {
             UNIT_ASSERT_EQUAL(memcmp(p, "0123456789", 10), 0);
             child = parent.SubBlob(2, 5);
         } // Don't worry about parent
- 
+
         UNIT_ASSERT_EQUAL(child.Length(), 3);
         UNIT_ASSERT_EQUAL(memcmp(child.AsCharPtr(), "234", 3), 0);
         UNIT_ASSERT_EQUAL(p + 2, child.AsCharPtr());
     }
- 
+
     Y_UNIT_TEST(TestFromStream) {
         TString s("sjklfgsdyutfuyas54fa78s5f89a6df790asdf7");
         TMemoryInput mi(s.data(), s.size());

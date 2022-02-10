@@ -2,7 +2,7 @@
 
 // Functions for manipulating signal sets
 
-#include "compat.h" 
+#include "compat.h"
 
 #if defined _unix_
     #include <pthread.h>
@@ -20,39 +20,39 @@ using sigset_t = ui32;
 
 inline int SigEmptySet(sigset_t* set) {
 #if defined _unix_
-    return sigemptyset(set); 
+    return sigemptyset(set);
 #else
     Y_UNUSED(set);
-    return 0; 
+    return 0;
 #endif
 }
 
 inline int SigFillSet(sigset_t* set) {
 #if defined _unix_
-    return sigfillset(set); 
+    return sigfillset(set);
 #else
     Y_UNUSED(set);
-    return 0; 
+    return 0;
 #endif
 }
 
 inline int SigAddSet(sigset_t* set, int signo) {
 #if defined _unix_
-    return sigaddset(set, signo); 
+    return sigaddset(set, signo);
 #else
     Y_UNUSED(set);
     Y_UNUSED(signo);
-    return 0; 
+    return 0;
 #endif
 }
 
 inline int SigDelSet(sigset_t* set, int signo) {
 #if defined _unix_
-    return sigdelset(set, signo); 
+    return sigdelset(set, signo);
 #else
     Y_UNUSED(set);
     Y_UNUSED(signo);
-    return 0; 
+    return 0;
 #endif
 }
 
@@ -62,7 +62,7 @@ inline int SigIsMember(const sigset_t* set, int signo) {
 #else
     Y_UNUSED(set);
     Y_UNUSED(signo);
-    return 0; 
+    return 0;
 #endif
 }
 

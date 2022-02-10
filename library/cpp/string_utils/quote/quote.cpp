@@ -112,12 +112,12 @@ static inline It1 Escape(It1 to, It2 from, It3 end, const bool* escape_map = cha
             *to++ = d2x((unsigned char)*from & 0xF);
         } else {
             *to++ = (*from == ' ' ? '+' : *from);
-        } 
+        }
 
         ++from;
-    } 
+    }
 
-    *to = 0; 
+    *to = 0;
 
     return to;
 }
@@ -220,7 +220,7 @@ char* CGIUnescape(char* to, const char* from) {
 
 char* CGIUnescape(char* to, const char* from, size_t len) {
     return Unescape(to, from, from + len, TFromHexLenLimited(from + len));
-} 
+}
 
 void CGIUnescape(TString& url) {
     if (url.empty()) {
@@ -234,7 +234,7 @@ void CGIUnescape(TString& url) {
         url = CGIUnescapeRet(url);
     }
 }
- 
+
 TString CGIUnescapeRet(const TStringBuf from) {
     TString to;
     to.ReserveAndResize(CgiUnescapeBufLen(from.size()));
@@ -249,13 +249,13 @@ char* UrlUnescape(char* to, TStringBuf from) {
         if ('%' == ch && 2 <= from.length())
             ch = TFromHexZeroTerm::x2c(from);
         *to++ = ch;
-    } 
+    }
 
-    *to = 0; 
+    *to = 0;
 
     return to;
-} 
- 
+}
+
 void UrlUnescape(TString& url) {
     if (url.empty()) {
         return;
@@ -267,8 +267,8 @@ void UrlUnescape(TString& url) {
     } else {
         url = UrlUnescapeRet(url);
     }
-} 
- 
+}
+
 TString UrlUnescapeRet(const TStringBuf from) {
     TString to;
     to.ReserveAndResize(CgiUnescapeBufLen(from.size()));
@@ -288,20 +288,20 @@ char* UrlEscape(char* to, const char* from, bool forceEscape) {
             *to++ = d2x((unsigned char)*from >> 4);
             *to++ = d2x((unsigned char)*from & 0xF);
         } else
-            *to++ = *from; 
+            *to++ = *from;
         ++from;
-    } 
+    }
 
-    *to = 0; 
+    *to = 0;
 
     return to;
-} 
- 
+}
+
 void UrlEscape(TString& url, bool forceEscape) {
     TTempBuf tempBuf(CgiEscapeBufLen(url.size()));
     char* to = tempBuf.Data();
     url.AssignNoAlias(to, UrlEscape(to, url.data(), forceEscape));
-} 
+}
 
 TString UrlEscapeRet(const TStringBuf from, bool forceEscape) {
     TString to;

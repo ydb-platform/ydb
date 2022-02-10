@@ -1,4 +1,4 @@
-#include "systime.h" 
+#include "systime.h"
 
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
@@ -11,32 +11,32 @@ void FileTimeToTimeval(const FILETIME* ft, timeval* tv) {
         ui64 ft_scalar;
         FILETIME ft_struct;
     } nt_time;
-    nt_time.ft_struct = *ft; 
-    tv->tv_sec = (long)((nt_time.ft_scalar - NANOINTERVAL) / LL(10000000)); 
-    tv->tv_usec = (i32)((nt_time.ft_scalar / LL(10)) % LL(1000000)); 
-} 
- 
+    nt_time.ft_struct = *ft;
+    tv->tv_sec = (long)((nt_time.ft_scalar - NANOINTERVAL) / LL(10000000));
+    tv->tv_usec = (i32)((nt_time.ft_scalar / LL(10)) % LL(1000000));
+}
+
 int gettimeofday(timeval* tp, void*) {
-    FILETIME ft; 
-    GetSystemTimeAsFileTime(&ft); 
-    FileTimeToTimeval(&ft, tp); 
-    return 0; 
-} 
- 
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    FileTimeToTimeval(&ft, tp);
+    return 0;
+}
+
 tm* localtime_r(const time_t* clock, tm* result) {
-    tzset(); 
-    tm* res = localtime(clock); 
-    if (res) { 
-        memcpy(result, res, sizeof(tm)); 
-        return result; 
-    } 
-    return 0; 
-} 
- 
+    tzset();
+    tm* res = localtime(clock);
+    if (res) {
+        memcpy(result, res, sizeof(tm));
+        return result;
+    }
+    return 0;
+}
+
 tm* gmtime_r(const time_t* clock, tm* result) {
     return gmtime_s(result, clock) == 0 ? result : 0;
-} 
- 
+}
+
 char* ctime_r(const time_t* clock, char* buf) {
     char* res = ctime(clock);
     if (res) {
@@ -54,7 +54,7 @@ char* ctime_r(const time_t* clock, char* buf) {
 #define LEAPYEAR(year) (!((year) % 4) && (((year) % 100) || !((year) % 400)))
 #define YEARSIZE(year) (LEAPYEAR(year) ? 366 : 365)
 #define FOURCENTURIES (400 * 365 + 100 - 3)
- 
+
 //! Inverse of gmtime: converts struct tm to time_t, assuming the data
 //! in tm is UTC rather than local timezone. This implementation
 //! returns the number of seconds since 1970-01-01, converted to time_t.
@@ -83,7 +83,7 @@ time_t TimeGM(const struct tm* t) {
 
     unsigned long secs = days * 86400ul + t->tm_hour * 3600 + t->tm_min * 60 + t->tm_sec;
     return (time_t)secs;
-} 
+}
 
 struct tm* GmTimeR(const time_t* timer, struct tm* tmbuf) {
     static const int _ytab[2][12] = {

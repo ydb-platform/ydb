@@ -293,76 +293,76 @@ void TPointerTest::TestCopyPtr() {
 
     UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
 }
- 
+
 class TOp: public TSimpleRefCount<TOp>, public TNonCopyable {
-public: 
-    static int Cnt; 
+public:
+    static int Cnt;
 
-public: 
-    TOp() { 
-        ++Cnt; 
-    } 
+public:
+    TOp() {
+        ++Cnt;
+    }
     virtual ~TOp() {
-        --Cnt; 
-    } 
-}; 
- 
-int TOp::Cnt = 0; 
- 
-class TOp2: public TOp {
-public: 
-    TIntrusivePtr<TOp> Op; 
+        --Cnt;
+    }
+};
 
-public: 
-    TOp2(const TIntrusivePtr<TOp>& op) 
-        : Op(op) 
-    { 
-        ++Cnt; 
-    } 
+int TOp::Cnt = 0;
+
+class TOp2: public TOp {
+public:
+    TIntrusivePtr<TOp> Op;
+
+public:
+    TOp2(const TIntrusivePtr<TOp>& op)
+        : Op(op)
+    {
+        ++Cnt;
+    }
     ~TOp2() override {
-        --Cnt; 
-    } 
-}; 
- 
-class TOp3 { 
-public: 
-    TIntrusivePtr<TOp2> Op2; 
-}; 
- 
-void Attach(TOp3* op3, TIntrusivePtr<TOp>* op) { 
-    TIntrusivePtr<TOp2> op2 = new TOp2(*op); 
-    op3->Op2 = op2.Get(); 
-    *op = op2.Get(); 
-} 
- 
+        --Cnt;
+    }
+};
+
+class TOp3 {
+public:
+    TIntrusivePtr<TOp2> Op2;
+};
+
+void Attach(TOp3* op3, TIntrusivePtr<TOp>* op) {
+    TIntrusivePtr<TOp2> op2 = new TOp2(*op);
+    op3->Op2 = op2.Get();
+    *op = op2.Get();
+}
+
 void TPointerTest::TestIntrPtr() {
-    { 
-        TIntrusivePtr<TOp> p, p2; 
-        TOp3 op3; 
-        { 
+    {
+        TIntrusivePtr<TOp> p, p2;
+        TOp3 op3;
+        {
             TVector<TIntrusivePtr<TOp>> f1;
-            { 
+            {
                 TVector<TIntrusivePtr<TOp>> f2;
-                f2.push_back(new TOp); 
-                p = new TOp; 
-                f2.push_back(p); 
-                Attach(&op3, &f2[1]); 
-                f1 = f2; 
+                f2.push_back(new TOp);
+                p = new TOp;
+                f2.push_back(p);
+                Attach(&op3, &f2[1]);
+                f1 = f2;
                 UNIT_ASSERT_VALUES_EQUAL(f1[0]->RefCount(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(f1[1]->RefCount(), 3);
-                UNIT_ASSERT_EQUAL(f1[1].Get(), op3.Op2.Get()); 
+                UNIT_ASSERT_EQUAL(f1[1].Get(), op3.Op2.Get());
                 UNIT_ASSERT_VALUES_EQUAL(op3.Op2->RefCount(), 3);
                 UNIT_ASSERT_VALUES_EQUAL(op3.Op2->Op->RefCount(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 4);
-            } 
-            p2 = p; 
-        } 
+            }
+            p2 = p;
+        }
         UNIT_ASSERT_VALUES_EQUAL(op3.Op2->RefCount(), 1);
         UNIT_ASSERT_VALUES_EQUAL(op3.Op2->Op->RefCount(), 3);
         UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 3);
-    } 
+    }
     UNIT_ASSERT_VALUES_EQUAL(TOp::Cnt, 0);
-} 
+}
 
 namespace NTestIntrusiveConvertion {
     struct TA: public TSimpleRefCount<TA> {

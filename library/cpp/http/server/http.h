@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "conn.h"
 #include "options.h"
 
@@ -97,8 +97,8 @@ private:
 
 private:
     THolder<TImpl> Impl_;
-}; 
- 
+};
+
 /**
  * @deprecated Use TRequestReplier instead
  */

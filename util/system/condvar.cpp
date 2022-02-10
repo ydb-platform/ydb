@@ -121,7 +121,7 @@ public:
         int ret = pthread_cond_broadcast(&Cond_);
         Y_VERIFY(ret == 0, "pthread_cond_broadcast failed: %s", LastSystemErrorText(ret));
     }
- 
+
 private:
     pthread_cond_t Cond_;
 };

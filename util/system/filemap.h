@@ -7,7 +7,7 @@
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/utility.h>
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/generic/flags.h>
 #include <util/generic/string.h>
 
@@ -117,7 +117,7 @@ public:
     TFileMap(const TFileMap& fm) noexcept;
 
     ~TFileMap();
- 
+
     TMapResult Map(i64 offset, size_t size);
     TMapResult ResizeAndRemap(i64 offset, size_t size);
     void Unmap();
@@ -125,7 +125,7 @@ public:
     void Flush(void* ptr, size_t size) {
         Flush(ptr, size, true);
     }
- 
+
     void Flush() {
         Flush(Ptr(), MappedSize());
     }
@@ -288,11 +288,11 @@ private:
 };
 
 class TMappedAllocation: TMoveOnly {
-public: 
+public:
     TMappedAllocation(size_t size = 0, bool shared = false, void* addr = nullptr);
     ~TMappedAllocation() {
-        Dealloc(); 
-    } 
+        Dealloc();
+    }
     TMappedAllocation(TMappedAllocation&& other) {
         this->swap(other);
     }
@@ -301,13 +301,13 @@ public:
         return *this;
     }
     void* Alloc(size_t size, void* addr = nullptr);
-    void Dealloc(); 
-    void* Ptr() const { 
+    void Dealloc();
+    void* Ptr() const {
         return Ptr_;
-    } 
-    char* Data(ui32 pos = 0) const { 
+    }
+    char* Data(ui32 pos = 0) const {
         return (char*)(Ptr_ ? ((char*)Ptr_ + pos) : nullptr);
-    } 
+    }
     char* Begin() const noexcept {
         return (char*)Ptr();
     }
@@ -316,66 +316,66 @@ public:
     }
     size_t MappedSize() const {
         return Size_;
-    } 
+    }
     void swap(TMappedAllocation& with);
 
-private: 
+private:
     void* Ptr_ = nullptr;
     size_t Size_ = 0;
     bool Shared_ = false;
 #ifdef _win_
     void* Mapping_ = nullptr;
 #endif
-}; 
- 
+};
+
 template <class T>
 class TMappedArray: private TMappedAllocation {
-public: 
+public:
     TMappedArray(size_t siz = 0)
         : TMappedAllocation(0)
     {
-        if (siz) 
-            Create(siz); 
-    } 
+        if (siz)
+            Create(siz);
+    }
     ~TMappedArray() {
-        Destroy(); 
-    } 
+        Destroy();
+    }
     T* Create(size_t siz) {
         Y_ASSERT(MappedSize() == 0 && Ptr() == nullptr);
         T* arr = (T*)Alloc((sizeof(T) * siz));
         if (!arr)
             return nullptr;
         Y_ASSERT(MappedSize() == sizeof(T) * siz);
-        for (size_t n = 0; n < siz; n++) 
+        for (size_t n = 0; n < siz; n++)
             new (&arr[n]) T();
         return arr;
-    } 
-    void Destroy() { 
-        T* arr = (T*)Ptr(); 
-        if (arr) { 
-            for (size_t n = 0; n < size(); n++) 
-                arr[n].~T(); 
-            Dealloc(); 
-        } 
-    } 
+    }
+    void Destroy() {
+        T* arr = (T*)Ptr();
+        if (arr) {
+            for (size_t n = 0; n < size(); n++)
+                arr[n].~T();
+            Dealloc();
+        }
+    }
     T& operator[](size_t pos) {
         Y_ASSERT(pos < size());
-        return ((T*)Ptr())[pos]; 
-    } 
+        return ((T*)Ptr())[pos];
+    }
     const T& operator[](size_t pos) const {
         Y_ASSERT(pos < size());
-        return ((T*)Ptr())[pos]; 
-    } 
+        return ((T*)Ptr())[pos];
+    }
     T* begin() {
         return (T*)Ptr();
     }
     T* end() {
         return (T*)((char*)Ptr() + MappedSize());
     }
-    size_t size() const { 
+    size_t size() const {
         return MappedSize() / sizeof(T);
-    } 
+    }
     void swap(TMappedArray<T>& with) {
         TMappedAllocation::swap(with);
-    } 
-}; 
+    }
+};

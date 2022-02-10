@@ -6,7 +6,7 @@
 
 #include <util/system/defaults.h>
 #include <util/system/byteorder.h>
- 
+
 #if defined(_unix_)
     #include <netdb.h>
     #include <sys/types.h>
@@ -51,16 +51,16 @@ using namespace NAddr;
 #if defined(_win_)
 
 int inet_aton(const char* cp, struct in_addr* inp) {
-    sockaddr_in addr; 
-    addr.sin_family = AF_INET; 
-    int psz = sizeof(addr); 
+    sockaddr_in addr;
+    addr.sin_family = AF_INET;
+    int psz = sizeof(addr);
     if (0 == WSAStringToAddress((char*)cp, AF_INET, nullptr, (LPSOCKADDR)&addr, &psz)) {
-        memcpy(inp, &addr.sin_addr, sizeof(in_addr)); 
-        return 1; 
-    } 
-    return 0; 
-} 
- 
+        memcpy(inp, &addr.sin_addr, sizeof(in_addr));
+        return 1;
+    }
+    return 0;
+}
+
     #if (_WIN32_WINNT < 0x0600)
 const char* inet_ntop(int af, const void* src, char* dst, socklen_t size) {
     if (af != AF_INET) {
@@ -238,8 +238,8 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept {
 }
     #endif
 
-#endif 
- 
+#endif
+
 bool GetRemoteAddr(SOCKET Socket, char* str, socklen_t size) {
     if (!size) {
         return false;
@@ -267,7 +267,7 @@ bool GetRemoteAddr(SOCKET Socket, char* str, socklen_t size) {
 
 void SetSocketTimeout(SOCKET s, long timeout) {
     SetSocketTimeout(s, timeout, 0);
-} 
+}
 
 void SetSocketTimeout(SOCKET s, long sec, long msec) {
 #ifdef SO_SNDTIMEO
@@ -282,15 +282,15 @@ void SetSocketTimeout(SOCKET s, long sec, long msec) {
     CheckedSetSockOpt(s, SOL_SOCKET, SO_SNDTIMEO, timeout, "send timeout");
 #endif
 }
- 
+
 void SetLinger(SOCKET s, bool on, unsigned len) {
-#ifdef SO_LINGER 
-    struct linger l = {on, (u_short)len}; 
+#ifdef SO_LINGER
+    struct linger l = {on, (u_short)len};
 
     CheckedSetSockOpt(s, SOL_SOCKET, SO_LINGER, l, "linger");
-#endif 
-} 
- 
+#endif
+}
+
 void SetZeroLinger(SOCKET s) {
     SetLinger(s, 1, 0);
 }
@@ -659,7 +659,7 @@ static inline SOCKET DoConnectImpl(const struct addrinfo* res, const TInstant& d
 
         SetNonBlock(s, true);
 
-        if (connect(s, res->ai_addr, (int)res->ai_addrlen)) { 
+        if (connect(s, res->ai_addr, (int)res->ai_addrlen)) {
             int err = LastSystemError();
 
             if (err == EINPROGRESS || err == EAGAIN || err == EWOULDBLOCK) {
@@ -671,13 +671,13 @@ static inline SOCKET DoConnectImpl(const struct addrinfo* res, const TInstant& d
                     POLLOUT,
                     0};
 
-                const ssize_t n = PollD(&p, 1, deadLine); 
+                const ssize_t n = PollD(&p, 1, deadLine);
 
                 /*
                  * timeout occured
                  */
                 if (n < 0) {
-                    ythrow TSystemError(-(int)n) << "can not connect"; 
+                    ythrow TSystemError(-(int)n) << "can not connect";
                 }
 
                 CheckedGetSockOpt(s, SOL_SOCKET, SO_ERROR, err, "socket error");
@@ -902,7 +902,7 @@ size_t TSocketInput::DoRead(void* buf, size_t len) {
         return (size_t)ret;
     }
 
-    ythrow TSystemError(-(int)ret) << "can not read from socket input stream"; 
+    ythrow TSystemError(-(int)ret) << "can not read from socket input stream";
 }
 
 TSocketOutput::TSocketOutput(const TSocket& s) noexcept
@@ -936,7 +936,7 @@ void TSocketOutput::DoWriteV(const TPart* parts, size_t count) {
     const ssize_t ret = S_.SendV(parts, count);
 
     if (ret < 0) {
-        ythrow TSystemError(-(int)ret) << "can not writev to socket output stream"; 
+        ythrow TSystemError(-(int)ret) << "can not writev to socket output stream";
     }
 
     /*
@@ -1157,7 +1157,7 @@ static inline bool FlagsAreEnabled(int fd, int flags) {
 #endif
 
 #if defined(_win_)
-static inline void SetNonBlockSocket(SOCKET fd, int value) { 
+static inline void SetNonBlockSocket(SOCKET fd, int value) {
     unsigned long inbuf = value;
     unsigned long outbuf = 0;
     DWORD written = 0;
@@ -1171,7 +1171,7 @@ static inline void SetNonBlockSocket(SOCKET fd, int value) {
     }
 }
 
-static inline bool IsNonBlockSocket(SOCKET fd) { 
+static inline bool IsNonBlockSocket(SOCKET fd) {
     unsigned long buf = 0;
 
     if (WSAIoctl(fd, FIONBIO, 0, 0, &buf, sizeof(buf), 0, 0, 0) == SOCKET_ERROR) {
@@ -1182,7 +1182,7 @@ static inline bool IsNonBlockSocket(SOCKET fd) {
 }
 #endif
 
-void SetNonBlock(SOCKET fd, bool value) { 
+void SetNonBlock(SOCKET fd, bool value) {
 #if defined(_unix_)
     #if defined(FIONBIO)
     Y_UNUSED(SetFlag); // shut up clang about unused function
@@ -1201,7 +1201,7 @@ void SetNonBlock(SOCKET fd, bool value) {
 #endif
 }
 
-bool IsNonBlock(SOCKET fd) { 
+bool IsNonBlock(SOCKET fd) {
 #if defined(_unix_)
     return FlagsAreEnabled(fd, O_NONBLOCK);
 #elif defined(_win_)

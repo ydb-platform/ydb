@@ -1,9 +1,9 @@
 #pragma once
- 
-#include <util/system/defaults.h> 
+
+#include <util/system/defaults.h>
 #include <library/cpp/http/misc/httpcodes.h>
- 
-enum ExtHttpCodes { 
+
+enum ExtHttpCodes {
     // Custom
     HTTP_EXTENDED = 1000,
     HTTP_BAD_RESPONSE_HEADER = 1000,
@@ -50,8 +50,8 @@ enum ExtHttpCodes {
     HTTP_FETCHER_MB_ERROR = 1041,
     HTTP_SSL_CERT_ERROR = 1042,
     HTTP_PROXY_REQUEST_CANCELED = 1051,
- 
-    // Custom (replace HTTP 200/304) 
+
+    // Custom (replace HTTP 200/304)
     EXT_HTTP_EXT_SUCCESS_BEGIN = 2000, // to check if code variable is in success interval
     EXT_HTTP_MIRRMOVE = 2000,
     EXT_HTTP_MANUAL_DELETE = 2001,
@@ -104,22 +104,22 @@ enum ExtHttpCodes {
     EXT_HTTP_WRONGMULTILANG = 3023,
     EXT_HTTP_SOFTMIRRORS = 3024,
     EXT_HTTP_BIGLEVEL = 3025,
- 
-    // fast robot codes 
- 
+
+    // fast robot codes
+
     EXT_HTTP_FASTHOPS = 4000,
     EXT_HTTP_NODOC = 4001,
 
     EXT_HTTP_MAX
-}; 
- 
-enum HttpFlags { 
-    // connection 
-    ShouldDisconnect = 1, 
+};
+
+enum HttpFlags {
+    // connection
+    ShouldDisconnect = 1,
     ShouldRetry = 2,
     // UNUSED 4
- 
-    // indexer 
+
+    // indexer
     ShouldReindex = 8,
     ShouldDelete = 16,
     CheckLocation = 32,
@@ -129,13 +129,13 @@ enum HttpFlags {
     // UNUSED 512
     MoveRedir = 1024,
     CanBeFake = 2048,
-}; 
- 
+};
+
 const size_t EXT_HTTP_CODE_MAX = 1 << 12;
- 
-static inline int Http2Status(int code) { 
+
+static inline int Http2Status(int code) {
     extern ui16* http2status;
     return http2status[code & (EXT_HTTP_CODE_MAX - 1)];
-} 
+}
 
 TStringBuf ExtHttpCodeStr(int code) noexcept;

@@ -29,7 +29,7 @@ namespace NFs {
     /// @returns         true on success or false otherwise
     /// LastSystemError() is set in case of failure
     bool Remove(const TString& path);
- 
+
     /// Remove a file or directory with contents
     ///
     /// @param[in] path  Path to file or directory

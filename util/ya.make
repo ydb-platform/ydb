@@ -9,11 +9,11 @@ NO_UTIL()
 
 # stream
 # string
-PEERDIR( 
+PEERDIR(
     util/charset
     contrib/libs/zlib
     contrib/libs/double-conversion
-) 
+)
 
 PEERDIR(
     contrib/libs/libc_compat

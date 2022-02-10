@@ -1,11 +1,11 @@
-#include "fstat.h" 
-#include "file.h" 
-#include "sysstat.h" 
-#include "fs.h" 
- 
+#include "fstat.h"
+#include "file.h"
+#include "sysstat.h"
+#include "fs.h"
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
- 
+
 #include <util/folder/path.h>
 
 Y_UNIT_TEST_SUITE(TestFileStat) {
@@ -26,11 +26,11 @@ Y_UNIT_TEST_SUITE(TestFileStat) {
                 UNIT_ASSERT(fs.NLinks == 1);
                 oFs = fs;
             }
- 
+
             UNIT_ASSERT(file.IsOpen());
             UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 7);
             file.Close();
-        } 
+        }
         TFileStat cFs(fileName);
         UNIT_ASSERT(cFs.IsFile());
         UNIT_ASSERT(!cFs.IsDir());
@@ -45,7 +45,7 @@ Y_UNIT_TEST_SUITE(TestFileStat) {
         UNIT_ASSERT_VALUES_EQUAL(cFs.INode, oFs.INode);
         UNIT_ASSERT(unlink(fileName.data()) == 0);
     }
- 
+
     Y_UNIT_TEST(DirTest) {
         Mkdir("tmpd", MODE0777);
         TFileStat fs("tmpd");
@@ -60,8 +60,8 @@ Y_UNIT_TEST_SUITE(TestFileStat) {
         UNIT_ASSERT(!fs.IsSymlink());
         UNIT_ASSERT(fs.Size == 0);
         UNIT_ASSERT(fs.CTime == 0);
-    } 
- 
+    }
+
     Y_UNIT_TEST(SymlinkToExistingFileTest) {
         const auto path = GetOutputPath() / "file_1";
         const auto link = GetOutputPath() / "symlink_1";

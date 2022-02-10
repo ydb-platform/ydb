@@ -94,5 +94,5 @@ Y_FORCE_INLINE ui64 GetCycleCount() noexcept {
     return x;
 #else
     #error "unsupported arch"
-#endif 
+#endif
 }

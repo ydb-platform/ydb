@@ -46,8 +46,8 @@ inline ui32 crc32(const char* buf, size_t buflen, ui32 crcinit = CRC32INIT) {
 
 inline ui32 crc32(const void* buf, size_t buflen, ui32 crcinit = CRC32INIT) {
     return crc32((const char*)buf, buflen, crcinit);
-} 
- 
+}
+
 // Copyright (C) Sewell Development Corporation, 1994 - 1998.
 inline ui64 crc64(const void* buf, size_t buflen, ui64 crcinit = CRC64INIT) {
     const unsigned char* ptr = (const unsigned char*)buf;

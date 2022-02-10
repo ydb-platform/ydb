@@ -4,7 +4,7 @@
 
 #include <util/generic/ptr.h>
 #include <util/generic/noncopyable.h>
- 
+
 #include <new>
 
 #if defined(_darwin_)
@@ -124,7 +124,7 @@
 
 #define Y_THREAD(T) ::NTls::TValue<T>
 #define Y_STATIC_THREAD(T) static Y_THREAD(T)
- 
+
 // gcc and msvc support automatic tls for POD types
 #if defined(Y_DISABLE_THRKEY_OPTIMIZATION)
 // nothing to do
@@ -169,8 +169,8 @@ namespace NTls {
         class TImpl;
         THolder<TImpl> Impl_;
     };
- 
-    struct TCleaner { 
+
+    struct TCleaner {
         inline ~TCleaner() {
             TKey::Cleanup();
         }
@@ -220,7 +220,7 @@ namespace NTls {
             : Constructor_(new TDefaultConstructor())
             , Key_(Dtor)
         {
-        } 
+        }
 
         template <class T1>
         inline TValue(const T1& value)
@@ -236,7 +236,7 @@ namespace NTls {
 
         inline operator const T&() const {
             return Get();
-        } 
+        }
 
         inline operator T&() {
             return Get();

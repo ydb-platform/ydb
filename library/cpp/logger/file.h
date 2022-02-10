@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "backend.h"
 
 #include <util/generic/fwd.h>
@@ -16,4 +16,4 @@ public:
 private:
     class TImpl;
     TAtomicSharedPtr<TImpl> Impl_;
-}; 
+};

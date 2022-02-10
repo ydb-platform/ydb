@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
             output.Write(r.data(), r.size());
             output.Finish();
         }
- 
+
         {
             TSocketInput si(s);
             THttpInput input(&si);
@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
 
         SendMinimalHttpRequest(s, "www.yandex.lo", "/");
 
-        TSocketInput si(s); 
+        TSocketInput si(s);
         THttpInput input(&si);
         unsigned httpCode = ParseHttpRetCode(input.FirstLine());
         UNIT_ASSERT_VALUES_EQUAL(httpCode, 200u);
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         TransferData(&input, &dbg);
         server.Stop();
     }
- 
+
     Y_UNIT_TEST(TestResponseWithBlanks) {
         TString res = "qqqqqq\r\n\r\nsdasdsad\r\n";
         TPortManager pm;
@@ -292,13 +292,13 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         TStringOutput strOut(str);
         TBufferedOutput bufOut(&strOut, 8192);
         THttpOutput httpOut(&bufOut);
- 
+
         httpOut.EnableKeepAlive(true);
         httpOut.EnableCompression(true);
 
         const char* header = "GET / HTTP/1.1\r\nHost: yandex.ru\r\n\r\n";
         httpOut << header;
- 
+
         unsigned curLen = str.size();
         const char* body = "<html>Hello</html>";
         httpOut << body;
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         httpOut.Flush();
         UNIT_ASSERT_VALUES_EQUAL(curLen + strlen(body), str.size());
     }
- 
+
     Y_UNIT_TEST(TestOutputPostFlush) {
         TString str;
         TString checkStr;

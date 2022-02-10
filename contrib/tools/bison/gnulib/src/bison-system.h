@@ -53,10 +53,10 @@
   (STRNCMP_LIT (S, Literal) == 0)
 
 # include <unistd.h>
-#if (defined _MSC_VER) && (_MSC_VER < 1800) 
-#else 
+#if (defined _MSC_VER) && (_MSC_VER < 1800)
+#else
 # include <inttypes.h>
-#endif 
+#endif
 
 # ifndef UINTPTR_MAX
 /* This isn't perfect, but it's good enough for Bison, which needs

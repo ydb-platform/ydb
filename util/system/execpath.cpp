@@ -29,7 +29,7 @@
 
 #include "filemap.h"
 #include "execpath.h"
-#include "fs.h" 
+#include "fs.h"
 
 #if defined(_freebsd_)
 static inline bool GoodPath(const TString& path) {

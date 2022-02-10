@@ -1,13 +1,13 @@
-#include "fs_win.h" 
-#include "defaults.h" 
-#include "maxlen.h" 
- 
-#include <util/folder/dirut.h> 
-#include <util/charset/wide.h> 
+#include "fs_win.h"
+#include "defaults.h"
+#include "maxlen.h"
+
+#include <util/folder/dirut.h>
+#include <util/charset/wide.h>
 #include "file.h"
- 
+
 #include <winioctl.h>
- 
+
 namespace NFsPrivate {
     static LPCWSTR UTF8ToWCHAR(const TStringBuf str, TUtf16String& wstr) {
         wstr.resize(str.size());
@@ -17,8 +17,8 @@ namespace NFsPrivate {
         wstr.erase(written);
         static_assert(sizeof(WCHAR) == sizeof(wchar16), "expect sizeof(WCHAR) == sizeof(wchar16)");
         return (const WCHAR*)wstr.data();
-    } 
- 
+    }
+
     static TString WCHARToUTF8(const LPWSTR wstr, size_t len) {
         static_assert(sizeof(WCHAR) == sizeof(wchar16), "expect sizeof(WCHAR) == sizeof(wchar16)");
 
@@ -49,7 +49,7 @@ namespace NFsPrivate {
         }
 
         return MoveFileExW(opPtr, npPtr, MOVEFILE_REPLACE_EXISTING) != 0;
-    } 
+    }
 
     bool WinRemove(const TString& path) {
         TUtf16String wstr;
@@ -64,9 +64,9 @@ namespace NFsPrivate {
                 return ::RemoveDirectoryW(wname) != 0;
             return ::DeleteFileW(wname) != 0;
         }
- 
+
         return false;
-    } 
+    }
 
     bool WinSymLink(const TString& targetName, const TString& linkName) {
         TString tName(targetName);
@@ -96,11 +96,11 @@ namespace NFsPrivate {
                     LPCWSTR ptrFullTarget = UTF8ToWCHAR(fullTarget, fullTargetW);
                     attr = ::GetFileAttributesW(ptrFullTarget);
                 }
-            } 
-        } 
+            }
+        }
         return 0 != CreateSymbolicLinkW(lname, wname, attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) ? SYMBOLIC_LINK_FLAG_DIRECTORY : 0);
-    } 
- 
+    }
+
     bool WinHardLink(const TString& existingPath, const TString& newPath) {
         TUtf16String ep, np;
         LPCWSTR epPtr = UTF8ToWCHAR(existingPath, ep);
@@ -144,29 +144,29 @@ namespace NFsPrivate {
         return CreateDirectoryW(ptr, (LPSECURITY_ATTRIBUTES) nullptr);
     }
     // edited part of <Ntifs.h> from Windows DDK
- 
-#define SYMLINK_FLAG_RELATIVE 1 
- 
+
+#define SYMLINK_FLAG_RELATIVE 1
+
     struct TReparseBufferHeader {
         USHORT SubstituteNameOffset;
         USHORT SubstituteNameLength;
         USHORT PrintNameOffset;
         USHORT PrintNameLength;
     };
- 
+
     struct TSymbolicLinkReparseBuffer: public TReparseBufferHeader {
         ULONG Flags; // 0 or SYMLINK_FLAG_RELATIVE
         wchar16 PathBuffer[1];
     };
- 
+
     struct TMountPointReparseBuffer: public TReparseBufferHeader {
         wchar16 PathBuffer[1];
     };
- 
+
     struct TGenericReparseBuffer {
         wchar16 DataBuffer[1];
     };
- 
+
     struct REPARSE_DATA_BUFFER {
         ULONG ReparseTag;
         USHORT ReparseDataLength;
@@ -176,10 +176,10 @@ namespace NFsPrivate {
             TMountPointReparseBuffer MountPointReparseBuffer;
             TGenericReparseBuffer GenericReparseBuffer;
         };
-    }; 
- 
+    };
+
     // the end of edited part of <Ntifs.h>
- 
+
     TString WinReadLink(const TString& name) {
         TFileHandle h = CreateFileWithUtf8Name(name, GENERIC_READ, FILE_SHARE_READ, OPEN_EXISTING,
                                                FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS, true);
@@ -200,34 +200,34 @@ namespace NFsPrivate {
                 }
                 //this reparse point is unsupported in arcadia
                 return TString();
-            } else { 
+            } else {
                 if (GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
                     buf = TTempBuf(buf.Size() * 2);
                 } else {
                     ythrow yexception() << "can't read link " << name;
                 }
-            } 
-        } 
-    } 
- 
+            }
+        }
+    }
+
     // we can't use this function to get an analog of unix inode due to a lot of NTFS folders do not have this GUID
     //(it will be 'create' case really)
     /*
-bool GetObjectId(const char* path, GUID* id) { 
-    TFileHandle h = CreateFileWithUtf8Name(path, 0, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, 
+bool GetObjectId(const char* path, GUID* id) {
+    TFileHandle h = CreateFileWithUtf8Name(path, 0, FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
                                 OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT|FILE_FLAG_BACKUP_SEMANTICS, true);
-    if (h.IsOpen()) { 
-        FILE_OBJECTID_BUFFER fob; 
-        DWORD resSize = 0; 
+    if (h.IsOpen()) {
+        FILE_OBJECTID_BUFFER fob;
+        DWORD resSize = 0;
         if (DeviceIoControl(h, FSCTL_CREATE_OR_GET_OBJECT_ID, nullptr, 0, &fob, sizeof(fob), &resSize, nullptr)) {
             Y_ASSERT(resSize == sizeof(fob));
-            memcpy(id, &fob.ObjectId, sizeof(GUID)); 
-            return true; 
-        } 
-    } 
-    memset(id, 0, sizeof(GUID)); 
-    return false; 
-} 
-*/ 
+            memcpy(id, &fob.ObjectId, sizeof(GUID));
+            return true;
+        }
+    }
+    memset(id, 0, sizeof(GUID));
+    return false;
+}
+*/
 
 }

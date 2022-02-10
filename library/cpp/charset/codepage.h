@@ -159,12 +159,12 @@ ECharset CharsetByName(TStringBuf name);
 ECharset CharsetByNameOrDie(TStringBuf name);
 
 inline ECharset CharsetByCodePage(const CodePage* CP) {
-    return CP->CPEnum; 
-} 
+    return CP->CPEnum;
+}
 
 inline const char* NameByCharset(ECharset e) {
     return ::NCodepagePrivate::TCodepagesMap::Instance().NameByCharset(e);
-} 
+}
 
 inline const char* NameByCharsetSafe(ECharset e) {
     if (CODES_UNKNOWN < e && e < CODES_MAX)
@@ -174,8 +174,8 @@ inline const char* NameByCharsetSafe(ECharset e) {
 }
 
 inline const char* NameByCodePage(const CodePage* CP) {
-    return CP->Names[0]; 
-} 
+    return CP->Names[0];
+}
 
 inline const CodePage* CodePageByName(const char* name) {
     ECharset code = CharsetByName(name);

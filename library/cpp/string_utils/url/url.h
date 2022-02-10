@@ -42,17 +42,17 @@ size_t GetSchemePrefixSize(const TStringBuf url) noexcept;
 Y_PURE_FUNCTION
 TStringBuf GetSchemePrefix(const TStringBuf url) noexcept;
 
-//! removes protocol prefixes 'http://' and 'https://' from given URL 
-//! @note if URL has no prefix or some other prefix the function does nothing 
+//! removes protocol prefixes 'http://' and 'https://' from given URL
+//! @note if URL has no prefix or some other prefix the function does nothing
 //! @param url    URL from which the prefix should be removed
 //! @param ignorehttps if true, leaves https://
-//! @return a new URL without protocol prefix 
+//! @return a new URL without protocol prefix
 Y_PURE_FUNCTION
 TStringBuf CutHttpPrefix(const TStringBuf url, bool ignorehttps = false) noexcept;
 
 Y_PURE_FUNCTION
 TWtringBuf CutHttpPrefix(const TWtringBuf url, bool ignorehttps = false) noexcept;
- 
+
 Y_PURE_FUNCTION
 TStringBuf CutSchemePrefix(const TStringBuf url) noexcept;
 
@@ -132,7 +132,7 @@ TStringBuf GetPathAndQuery(const TStringBuf url, bool trimFragment = true) noexc
  */
 Y_PURE_FUNCTION
 TStringBuf GetOnlyHost(const TStringBuf url) noexcept;
- 
+
 Y_PURE_FUNCTION
 TStringBuf GetParentDomain(const TStringBuf host, size_t level) noexcept; // ("www.ya.ru", 2) -> "ya.ru"
 

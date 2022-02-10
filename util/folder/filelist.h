@@ -18,7 +18,7 @@ public:
         EM_FILES_DIRS_SLINKS = EM_FILES | EM_DIRS | EM_SLINKS
     };
     Y_DECLARE_FLAGS(EMask, EMaskFlag)
- 
+
     TFileEntitiesList(EMask mask)
         : Mask(mask)
     {
@@ -50,11 +50,11 @@ public:
 
     void Fill(const TString& dirname, TStringBuf prefix, TStringBuf suffix, int depth, bool sort = false);
 
-    void Restart() { 
+    void Restart() {
         Cur = FileNames.Data();
-        CurName = 0; 
-    } 
- 
+        CurName = 0;
+    }
+
 protected:
     TBuffer FileNames;
     size_t FileNamesSize, CurName;

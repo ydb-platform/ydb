@@ -12,11 +12,11 @@ enum ECharset {
     CODES_RESERVED_3,       // reserved code: use it for new encodings before adding them to the end of the list
     CODES_WIN_EAST,         // [ 7] WINDOWS_1250     WIN PL
     CODES_ISO_EAST,         // [ 8] ISO_8859_2       ISO PL
-    // our superset of subset of windows-1251 
+    // our superset of subset of windows-1251
     CODES_YANDEX,   // [ 9] YANDEX
     CODES_UTF_16BE, // [10] UTF_16BE
     CODES_UTF_16LE, // [11] UTF_16LE
-    // missing standard codepages 
+    // missing standard codepages
     CODES_IBM855,       // [12] IBM_855
     CODES_UTF8,         // [13] UTF8
     CODES_UNKNOWNPLANE, // [14] Unrecognized characters are mapped into the PUA: U+F000..U+F0FF

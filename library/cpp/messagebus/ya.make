@@ -1,4 +1,4 @@
-LIBRARY() 
+LIBRARY()
 
 OWNER(g:messagebus)
 

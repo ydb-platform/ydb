@@ -28,5 +28,5 @@ void
 perror (const char *string)
 {
   if (string != NULL && *string != '\0')
-    fprintf (stderr, "%s\n", string); 
+    fprintf (stderr, "%s\n", string);
 }

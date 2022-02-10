@@ -593,12 +593,12 @@ int main(int argc, char* argv[]) {
     /* unix foo */
     setvbuf(stdout, nullptr, _IONBF, 0);
     setvbuf(stderr, nullptr, _IONBF, 0);
-    Umask(0); 
+    Umask(0);
     SetAsyncSignalHandler(SIGINT, stopsignal);
     SetAsyncSignalHandler(SIGTERM, stopsignal);
-#ifndef _win_ 
+#ifndef _win_
     SetAsyncSignalHandler(SIGUSR1, stopsignal);
-#endif 
+#endif
     signal(SIGPIPE, SIG_IGN);
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
@@ -641,7 +641,7 @@ int main(int argc, char* argv[]) {
     TIntrusivePtr<TBusWww> www(new TBusWww);
 
     ServerAddresses = ParseNodes(TheConfig->Nodes);
- 
+
     if (TheConfig->ServerPort) {
         if (TheConfig->ServerUseModules) {
             ServerUsingModule = new TPerftestUsingModule();

@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/resource/resource.h>
 
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 #include <util/generic/vector.h>
 #include <util/system/tempfile.h>
 #include <util/generic/singleton.h>

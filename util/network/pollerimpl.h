@@ -360,7 +360,7 @@ struct TSelectPollerNoTemplate {
             (*this)[fd].Set(data, filter);
         }
 
-        inline void Remove(SOCKET fd) { 
+        inline void Remove(SOCKET fd) {
             erase(fd);
         }
 
@@ -424,7 +424,7 @@ public:
         closesocket(Signal_[1]);
     }
 
-    inline void SetImpl(void* data, SOCKET fd, int what) { 
+    inline void SetImpl(void* data, SOCKET fd, int what) {
         with_lock (CommandLock_) {
             Commands_.push_back(TCommand(fd, what, data));
         }
@@ -512,7 +512,7 @@ public:
         tout.tv_sec = timeout / 1000000;
         tout.tv_usec = timeout % 1000000;
 
-        int ret = ContSelect(int(maxFdNum + 1), in, out, errFds, &tout); 
+        int ret = ContSelect(int(maxFdNum + 1), in, out, errFds, &tout);
 
         if (ret > 0 && FD_ISSET(WaitSock(), in)) {
             --ret;
@@ -524,7 +524,7 @@ public:
         TEvent* eventsStart = events;
 
         for (typename TFds::iterator it = Fds_.begin(); it != Fds_.end(); ++it) {
-            const SOCKET fd = it->first; 
+            const SOCKET fd = it->first;
             THandle& handle = it->second;
 
             if (FD_ISSET(fd, errFds)) {
@@ -659,7 +659,7 @@ public:
 
     using TEvent = typename TBase::TEvent;
 
-    inline void Set(void* data, SOCKET fd, int what) { 
+    inline void Set(void* data, SOCKET fd, int what) {
         if (what) {
             this->SetImpl(data, fd, what);
         } else {

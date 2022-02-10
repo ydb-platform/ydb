@@ -174,7 +174,7 @@ PCRE_EXP_DATA_DEFN only if they are not already set. */
 /* When compiling with the MSVC compiler, it is sometimes necessary to include
 a "calling convention" before exported function names. (This is secondhand
 information; I know nothing about MSVC myself). For example, something like
- 
+
   void __cdecl function(....)
 
 might be needed. In order so make this easy, all the exported functions have
@@ -183,8 +183,8 @@ set, we ensure here that it has no effect. */
 
 #ifndef PCRE_CALL_CONVENTION
 #define PCRE_CALL_CONVENTION
-#endif 
- 
+#endif
+
 /* We need to have types that specify unsigned 8, 16 and 32-bit integers. We
 cannot determine these outside the compilation (e.g. by running a program as
 part of "configure") because PCRE is often cross-compiled for use on other

@@ -5,7 +5,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
- 
+
 #include <cctype>
 
 /*
@@ -175,7 +175,7 @@ const char* mimetypeByExt(const char* fname, const char* check_ext) {
     size_t i;
     ext_p++;
     for (i = 0; i < TMimeTypes::MAX_EXT_LEN && ext_p[i]; i++)
-        ext[i] = (char)tolower(ext_p[i]); 
+        ext[i] = (char)tolower(ext_p[i]);
     ext[i] = 0;
 
     if (check_ext != nullptr) {

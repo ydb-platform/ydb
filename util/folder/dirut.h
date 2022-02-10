@@ -1,17 +1,17 @@
 #pragma once
 
 #include <util/system/defaults.h>
-#include <util/system/sysstat.h> 
+#include <util/system/sysstat.h>
 #include <util/system/fs.h>
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
 
-#include <sys/types.h> 
- 
+#include <sys/types.h>
+
 #include <cerrno>
 #include <cstdlib>
 
-#ifdef _win32_ 
+#ifdef _win32_
     #include <util/system/winint.h>
     #include <direct.h>
     #include <malloc.h>
@@ -35,14 +35,14 @@ char* mkdtemp(char* path);
     #ifndef DT_DIR
         #include <sys/stat.h>
     #endif
-#endif 
+#endif
 
 bool IsDir(const TString& path);
 
 int mkpath(char* path, int mode = 0777);
 
 TString GetHomeDir();
- 
+
 void MakeDirIfNotExist(const char* path, int mode = 0777);
 
 inline void MakeDirIfNotExist(const TString& path, int mode = 0777) {

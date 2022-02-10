@@ -29,10 +29,10 @@ NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 
-CFLAGS( 
+CFLAGS(
     GLOBAL -DPCRE_STATIC
-    -DHAVE_CONFIG_H 
-) 
+    -DHAVE_CONFIG_H
+)
 
 # JIT adds ≈108KB to binary size which may be critical for mobile and embedded devices binary distributions
 DEFAULT(ARCADIA_PCRE_ENABLE_JIT yes)

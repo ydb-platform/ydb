@@ -89,7 +89,7 @@ namespace {
 
         inline TId SystemThreadId() const noexcept {
     #if _WIN32_WINNT < 0x0502
-            return (TId)ThreadId; 
+            return (TId)ThreadId;
     #else
             return (TId)GetThreadId(Handle);
     #endif
@@ -106,7 +106,7 @@ namespace {
             ::CloseHandle(Handle);
         }
 
-        static ui32 __stdcall Proxy(void* ptr) { 
+        static ui32 __stdcall Proxy(void* ptr) {
             NTls::TCleaner cleaner;
 
             (void)cleaner;
@@ -121,7 +121,7 @@ namespace {
                 p->Result = p->Proc(p->Data);
             }
 
-            return 0; 
+            return 0;
         }
 
         inline void Start() {
@@ -148,7 +148,7 @@ namespace {
     };
 
     using TThreadBase = TWinThread;
-#else 
+#else
     //unix
 
     #define PCHECK(x, y)                                    \
@@ -273,8 +273,8 @@ private:
 TThread::TThread(const TParams& p)
     : Impl_(new TImpl(p))
 {
-} 
- 
+}
+
 TThread::TThread(TThreadProc threadProc, void* param)
     : Impl_(new TImpl(TParams(threadProc, param)))
 {

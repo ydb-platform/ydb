@@ -1,17 +1,17 @@
 #pragma once
- 
+
 #include "init.h"
 
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
-#include <util/system/error.h> 
+#include <util/system/error.h>
 #include <util/stream/output.h>
 #include <util/stream/input.h>
 #include <util/generic/ptr.h>
 #include <util/generic/yexception.h>
 #include <util/generic/noncopyable.h>
 #include <util/datetime/base.h>
- 
+
 #include <cerrno>
 
 #ifndef INET_ADDRSTRLEN
@@ -50,14 +50,14 @@ int poll(struct pollfd fds[], nfds_t nfds, int timeout) noexcept;
 int inet_aton(const char* cp, struct in_addr* inp);
 
     #define get_host_error() WSAGetLastError()
- 
+
     #define SHUT_RD SD_RECEIVE
     #define SHUT_WR SD_SEND
     #define SHUT_RDWR SD_BOTH
 
     #define INFTIM (-1)
-#endif 
- 
+#endif
+
 template <class T>
 static inline int SetSockOpt(SOCKET s, int level, int optname, T opt) noexcept {
     return setsockopt(s, level, optname, (const char*)&opt, sizeof(opt));
@@ -141,8 +141,8 @@ bool HasLocalAddress(SOCKET socket);
  **/
 extern "C" bool IsReusePortAvailable();
 
-bool IsNonBlock(SOCKET fd); 
-void SetNonBlock(SOCKET fd, bool nonBlock = true); 
+bool IsNonBlock(SOCKET fd);
+void SetNonBlock(SOCKET fd, bool nonBlock = true);
 
 struct addrinfo;
 

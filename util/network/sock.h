@@ -4,7 +4,7 @@
 #include <util/system/defaults.h>
 #include <util/string/cast.h>
 #include <util/stream/output.h>
-#include <util/system/sysstat.h> 
+#include <util/system/sysstat.h>
 
 #if defined(_win_) || defined(_cygwin_)
     #include <util/system/file.h>
@@ -193,7 +193,7 @@ struct TSockAddrLocal: public sockaddr_un, public ISockAddr {
         if (ret < 0)
             return -errno;
 
-        ret = Chmod(sun_path, mode); 
+        ret = Chmod(sun_path, mode);
         if (ret < 0)
             return -errno;
         return 0;
@@ -365,7 +365,7 @@ public:
 
     static ssize_t Check(ssize_t ret, const char* op = "") {
         if (ret < 0)
-            ythrow TSystemError(-(int)ret) << "socket operation " << op; 
+            ythrow TSystemError(-(int)ret) << "socket operation " << op;
         return ret;
     }
 };
@@ -461,7 +461,7 @@ public:
             s = accept((SOCKET) * this, nullptr, nullptr);
         }
 
-        if (s == INVALID_SOCKET) 
+        if (s == INVALID_SOCKET)
             return -errno;
 
         TSocketHolder sock(s);
@@ -569,7 +569,7 @@ protected:
             return (size_t)ret;
         }
 
-        ythrow TSystemError(-(int)ret) << "can not read from socket input stream"; 
+        ythrow TSystemError(-(int)ret) << "can not read from socket input stream";
     }
 };
 
@@ -597,7 +597,7 @@ protected:
             const ssize_t ret = Socket->Send(ptr, len);
 
             if (ret < 0) {
-                ythrow TSystemError(-(int)ret) << "can not write to socket output stream"; 
+                ythrow TSystemError(-(int)ret) << "can not write to socket output stream";
             }
 
             Y_ASSERT((size_t)ret <= len);

@@ -11,7 +11,7 @@
 
 #include <functional>
 
-struct TMonitor; 
+struct TMonitor;
 
 namespace NMonitoring {
     struct IHttpRequest {

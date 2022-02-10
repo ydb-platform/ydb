@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "exthttpcodes.h"
 
 #include <library/cpp/mime/types/mime.h>
@@ -11,11 +11,11 @@
 #include <util/system/maxlen.h>
 
 #include <ctime>
-#include <cstdio> 
-#include <cstdlib> 
-#include <cstring> 
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <algorithm>
- 
+
 // This is ugly solution but here a lot of work to do it the right way.
 #define FETCHER_URL_MAX 8192
 
@@ -29,16 +29,16 @@ extern const i32 DEFAULT_RESPONSE_TIMEOUT;  /// == -1
 #define MAX_LANGREGION_LEN 4
 #define MAXWORD_LEN 55
 
-enum HTTP_COMPRESSION { 
+enum HTTP_COMPRESSION {
     HTTP_COMPRESSION_UNSET = 0,
     HTTP_COMPRESSION_ERROR = 1,
-    HTTP_COMPRESSION_IDENTITY = 2, 
+    HTTP_COMPRESSION_IDENTITY = 2,
     HTTP_COMPRESSION_GZIP = 3,
     HTTP_COMPRESSION_DEFLATE = 4,
-    HTTP_COMPRESSION_COMPRESS = 5, 
+    HTTP_COMPRESSION_COMPRESS = 5,
     HTTP_COMPRESSION_MAX = 6
-}; 
- 
+};
+
 enum HTTP_METHOD {
     HTTP_METHOD_UNDEFINED = -1,
     HTTP_METHOD_OPTIONS,
@@ -78,25 +78,25 @@ public:
     TString base;
 
 public:
-    void Init() { 
+    void Init() {
         error = 0;
-        header_size = 0; 
-        entity_size = 0; 
-        content_length = -1; 
-        http_time = -1; 
-        http_minor = -1; 
-        mime_type = -1; 
-        charset = -1; 
-        compression_method = HTTP_COMPRESSION_UNSET; 
-        transfer_chunked = -1; 
+        header_size = 0;
+        entity_size = 0;
+        content_length = -1;
+        http_time = -1;
+        http_minor = -1;
+        mime_type = -1;
+        charset = -1;
+        compression_method = HTTP_COMPRESSION_UNSET;
+        transfer_chunked = -1;
         connection_closed = HTTP_CONNECTION_UNDEFINED;
         content_range_start = -1;
         content_range_end = -1;
         content_range_entity_length = -1;
         base.clear();
-    } 
- 
-    void Print() const { 
+    }
+
+    void Print() const {
         printf("content_length: %" PRIi64 "\n", content_length);
         printf("http_time: %" PRIi64 "\n", http_time);
         printf("http_minor: %" PRIi8 "\n", http_minor);
@@ -110,22 +110,22 @@ public:
         printf("content_range_entity_length: %" PRIi64 "\n", content_range_entity_length);
         printf("base: \"%s\"\n", base.c_str());
         printf("error: %" PRIi16 "\n", error);
-    } 
- 
-    int SetBase(const char* path, 
+    }
+
+    int SetBase(const char* path,
                 const char* hostNamePtr = nullptr,
                 int hostNameLength = 0) {
         if (*path == '/') {
             base = "http://";
             base += TStringBuf(hostNamePtr, hostNameLength);
             base += path;
-        } else { 
+        } else {
             base = path;
-        } 
-        return error; 
-    } 
-}; 
- 
+        }
+        return error;
+    }
+};
+
 enum { HREFLANG_MAX = FETCHER_URL_MAX * 2 };
 /// Class represents Http Response Header.
 struct THttpHeader: public THttpBaseHeader {
@@ -165,7 +165,7 @@ public:
 };
 
 struct THttpRequestHeader: public THttpBaseHeader {
-public: 
+public:
     TString request_uri;
     char host[HOST_MAX];
     char from[MAXWORD_LEN];
@@ -184,7 +184,7 @@ public:
     THttpRequestHeader() {
         Init();
     }
- 
+
     void Init() {
         request_uri.clear();
         host[0] = 0;
@@ -201,7 +201,7 @@ public:
         if_modified_since = DEFAULT_IF_MODIFIED_SINCE;
         THttpBaseHeader::Init();
     }
- 
+
     void Print() const {
         THttpBaseHeader::Print();
         printf("request_uri: \"%s\"\n", request_uri.c_str());
@@ -213,7 +213,7 @@ public:
         printf("max_age: %" PRIi32 "\n", max_age);
         printf("if_modified_since: %" PRIi64 "\n", if_modified_since);
     }
- 
+
     /// It doesn't care about errors in request or headers, where
     /// request_uri equals to '*'.
     /// This returns copy of the string, which you have to delete.
@@ -225,20 +225,20 @@ public:
             url = HTTP_PREFIX;
             url += host;
             url += request_uri;
-        } 
+        }
         return url;
     }
- 
+
     char* GetUrl(char* buffer, size_t size) {
         if (host[0] == 0 || !strcmp(host, "")) {
             strlcpy(buffer, request_uri.c_str(), size);
         } else {
             snprintf(buffer, size, "http://%s%s", host, request_uri.c_str());
-        } 
+        }
         return buffer;
     }
 };
- 
+
 class THttpAuthHeader: public THttpHeader {
 public:
     char* realm;
@@ -282,6 +282,6 @@ public:
             printf("stale: %d\n", stale);
             printf("algorithm: %d\n", algorithm);
             printf("qop_auth: %d\n", qop_auth);
-        } 
+        }
     }
-}; 
+};

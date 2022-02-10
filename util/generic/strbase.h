@@ -9,7 +9,7 @@
 
 #include <util/charset/unidata.h>
 #include <util/system/platform.h>
-#include <util/system/yassert.h> 
+#include <util/system/yassert.h>
 
 #include <contrib/libs/libc_compat/string.h>
 

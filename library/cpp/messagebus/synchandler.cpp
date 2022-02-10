@@ -142,7 +142,7 @@ namespace NBus {
 
                 // deletion of message and reply is a job of application.
                 pMessage->Data = nullptr;
- 
+
                 return reply;
             }
         };

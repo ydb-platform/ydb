@@ -22,7 +22,7 @@
 #include <cerrno>
 #include <cstring>
 #include <ctime>
- 
+
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -139,7 +139,7 @@ public:
         try {
             ((TImpl*)param)->ListenSocket();
         } catch (...) {
- 
+
         }
 
         return nullptr;
@@ -149,7 +149,7 @@ public:
         THolder<TClientRequest> obj(Cb_->CreateClient());
 
         obj->Conn_.Reset(c.Release());
- 
+
         return obj;
     }
 
@@ -171,7 +171,7 @@ public:
     void SaveErrorCode() {
         ErrorCode = WSAGetLastError();
     }
- 
+
     int GetErrorCode() const {
         return ErrorCode;
     }
@@ -218,7 +218,7 @@ public:
             ListenThread.Reset(nullptr);
         }
     }
- 
+
     void Stop() {
         Shutdown();
 
@@ -309,7 +309,7 @@ public:
 
             Server_->AddRequestFromSocket(s, TInstant::Now(), SockAddrRef_);
         }
- 
+
         SOCKET GetSocket() const noexcept {
             return S_;
         }
@@ -338,13 +338,13 @@ public:
 
             return;
         }
- 
+
         Requests->Start(Options_.nThreads, Options_.MaxQueueSize);
         FailRequests->Start(Options_.nFThreads, Options_.MaxFQueueSize);
         Cb_->OnListenStart();
         ListenerRunningOK = true;
         ListenStartEvent.Signal();
- 
+
         TVector<void*> events;
         events.resize(1);
 
@@ -378,7 +378,7 @@ public:
                 Cb_->OnException();
             }
         }
- 
+
         while (!Reqs.Empty()) {
             THolder<TListenSocket> ls(Reqs.PopFront());
 
@@ -586,20 +586,20 @@ void TClientConnection::OnPollEvent(TInstant now) {
 
             return;
         }
-    } 
+    }
 
     THolder<TClientRequest> obj(HttpServ_->CreateRequest(this_));
     AcceptMoment = now;
 
     HttpServ_->AddRequest(obj, Reject_);
-} 
- 
+}
+
 void TClientConnection::Activate(TInstant now) noexcept {
     HttpServ_->Connections->Erase(this, now);
     LastUsed = now;
     ++ReceivedRequests;
-} 
- 
+}
+
 void TClientConnection::DeActivate() {
     HttpServ_->Connections->Add(this);
 }

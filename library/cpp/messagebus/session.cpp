@@ -4,7 +4,7 @@
 
 using namespace NBus;
 
-namespace NBus { 
+namespace NBus {
     TBusSession::TBusSession() {
     }
 

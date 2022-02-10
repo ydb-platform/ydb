@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include "fwd.h"
 #include "reserve.h"
 
@@ -129,4 +129,4 @@ public:
             this->erase(this->begin() + size, this->end());
         }
     }
-}; 
+};

@@ -188,9 +188,9 @@ private:
     }
 };
 
-UNIT_TEST_SUITE_REGISTRATION(TAtomicTest<TAtomic>); 
- 
-#ifndef _MSC_VER 
+UNIT_TEST_SUITE_REGISTRATION(TAtomicTest<TAtomic>);
+
+#ifndef _MSC_VER
 // chooses type *other than* T1
 template <typename T1, typename T2, typename T3>
 struct TChooser {
@@ -216,7 +216,7 @@ public:
     TString Name() const noexcept override {
         return "TAtomicTest<TAltAtomic>";
     }
- 
+
     static TString StaticName() noexcept {
         return "TAtomicTest<TAltAtomic>";
     }
@@ -224,4 +224,4 @@ public:
 
 UNIT_TEST_SUITE_REGISTRATION(TTTest);
 
-#endif 
+#endif

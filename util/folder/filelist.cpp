@@ -36,5 +36,5 @@ void TFileEntitiesList::Fill(const TString& dirname, TStringBuf prefix, TStringB
         }
     }
 
-    Restart(); 
+    Restart();
 }

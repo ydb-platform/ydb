@@ -564,11 +564,11 @@ int main( int argc, const char **argv )
 				"\" is the same as the input file" << endp;
 	}
 
-    for (char* p = (char*)id.inputFileName; *p != 0; p++) { 
-        if (*p == '\\') 
-            *p = '/'; 
-    } 
- 
+    for (char* p = (char*)id.inputFileName; *p != 0; p++) {
+        if (*p == '\\')
+            *p = '/';
+    }
+
 	process( id );
 
 	return 0;

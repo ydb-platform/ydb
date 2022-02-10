@@ -54,14 +54,14 @@
  * EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <util/system/compat.h> 
-#include "systime.h" 
+#include <util/system/compat.h>
+#include "systime.h"
 #ifdef _win32_
     #ifndef lint
         #ifndef NOID
 static char copyright[] =
     "@(#) Copyright (c) 1994 Powerdog Industries.  All rights reserved.";
-static char sccsid[] = "@(#)strptime.c    0.1 (Powerdog) 94/03/27"; 
+static char sccsid[] = "@(#)strptime.c    0.1 (Powerdog) 94/03/27";
         #endif /* !defined NOID */
     #endif     /* not lint */
     //__FBSDID("$FreeBSD: src/lib/libc/stdtime/strptime.c,v 1.35 2003/11/17 04:19:15 nectar Exp $");
@@ -176,31 +176,31 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
     char c;
     const char* ptr;
     int i;
-    size_t len = 0; 
-    int Ealternative, Oalternative; 
+    size_t len = 0;
+    int Ealternative, Oalternative;
     struct lc_time_T* tptr = __get_current_time_locale();
 
-    ptr = fmt; 
-    while (*ptr != 0) { 
-        if (*buf == 0) 
-            break; 
+    ptr = fmt;
+    while (*ptr != 0) {
+        if (*buf == 0)
+            break;
 
-        c = *ptr++; 
+        c = *ptr++;
 
-        if (c != '%') { 
-            if (isspace((unsigned char)c)) 
-                while (*buf != 0 && isspace((unsigned char)*buf)) 
+        if (c != '%') {
+            if (isspace((unsigned char)c))
+                while (*buf != 0 && isspace((unsigned char)*buf))
                     ++buf;
-            else if (c != *buf++) 
-                return 0; 
-            continue; 
-        } 
+            else if (c != *buf++)
+                return 0;
+            continue;
+        }
 
-        Ealternative = 0; 
-        Oalternative = 0; 
+        Ealternative = 0;
+        Oalternative = 0;
     label:
-        c = *ptr++; 
-        switch (c) { 
+        c = *ptr++;
+        switch (c) {
             case 0:
             case '%':
                 if (*buf++ != '%')
@@ -234,13 +234,13 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
                 buf = _strptime(buf, tptr->c_fmt, tm, GMTp);
                 if (buf == 0)
                     return 0;
-                break; 
+                break;
 
             case 'D':
                 buf = _strptime(buf, "%m/%d/%y", tm, GMTp);
                 if (buf == 0)
                     return 0;
-                break; 
+                break;
 
             case 'E':
                 if (Ealternative || Oalternative)
@@ -304,7 +304,7 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
                     return 0;
 
                 tm->tm_yday = i - 1;
-                break; 
+                break;
 
             case 'M':
             case 'S':
@@ -312,7 +312,7 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
                     break;
 
                 if (!isdigit((unsigned char)*buf))
-                    return 0; 
+                    return 0;
 
                 len = 2;
                 for (i = 0; len && *buf != 0 && isdigit((unsigned char)*buf); buf++) {
@@ -341,13 +341,13 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
             case 'k':
             case 'l':
                 /*
-             * Of these, %l is the only specifier explicitly 
-             * documented as not being zero-padded.  However, 
-             * there is no harm in allowing zero-padding. 
-             * 
-             * XXX The %l specifier may gobble one too many 
-             * digits if used incorrectly. 
-             */ 
+             * Of these, %l is the only specifier explicitly
+             * documented as not being zero-padded.  However,
+             * there is no harm in allowing zero-padding.
+             *
+             * XXX The %l specifier may gobble one too many
+             * digits if used incorrectly.
+             */
                 if (!isdigit((unsigned char)*buf))
                     return 0;
 
@@ -361,7 +361,7 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
                     if (i > 23)
                         return 0;
                 } else if (i > 12)
-                    return 0; 
+                    return 0;
 
                 tm->tm_hour = i;
 
@@ -372,9 +372,9 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
 
             case 'p':
                 /*
-             * XXX This is bogus if parsed before hour-related 
-             * specifiers. 
-             */ 
+             * XXX This is bogus if parsed before hour-related
+             * specifiers.
+             */
                 len = strlen(tptr->am);
                 if (strnicmp(buf, tptr->am, len) == 0) {
                     if (tm->tm_hour > 12)
@@ -410,20 +410,20 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
                         break;
                 }
                 if (i == asizeof(tptr->weekday))
-                    return 0; 
+                    return 0;
 
                 tm->tm_wday = i;
-                buf += len; 
-                break; 
+                buf += len;
+                break;
 
             case 'U':
             case 'W':
                 /*
-             * XXX This is bogus, as we can not assume any valid 
-             * information present in the tm structure at this 
-             * point to calculate a real value, so just check the 
-             * range for now. 
-             */ 
+             * XXX This is bogus, as we can not assume any valid
+             * information present in the tm structure at this
+             * point to calculate a real value, so just check the
+             * range for now.
+             */
                 if (!isdigit((unsigned char)*buf))
                     return 0;
 
@@ -459,13 +459,13 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
             case 'd':
             case 'e':
                 /*
-             * The %e specifier is explicitly documented as not 
-             * being zero-padded but there is no harm in allowing 
-             * such padding. 
-             * 
-             * XXX The %e specifier may gobble one too many 
-             * digits if used incorrectly. 
-             */ 
+             * The %e specifier is explicitly documented as not
+             * being zero-padded but there is no harm in allowing
+             * such padding.
+             *
+             * XXX The %e specifier may gobble one too many
+             * digits if used incorrectly.
+             */
                 if (!isdigit((unsigned char)*buf))
                     return 0;
 
@@ -501,13 +501,13 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
                         len = strlen(tptr->month[i]);
                         if (strnicmp(buf, tptr->month[i],
                                      len) == 0)
-                            break; 
+                            break;
                         len = strlen(tptr->mon[i]);
                         if (strnicmp(buf, tptr->mon[i],
                                      len) == 0)
                             break;
-                    } 
-                } 
+                    }
+                }
                 if (i == asizeof(tptr->month))
                     return 0;
 
@@ -548,7 +548,7 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
                     errno = sverrno;
                     return 0;
                 }
-                errno = sverrno; 
+                errno = sverrno;
                 buf = cp;
                 GmTimeR(&t, tm);
                 *GMTp = 1;
@@ -587,7 +587,7 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
                 char* zonestr;
 
                 for (cp = buf; *cp && isupper((unsigned char)*cp); ++cp) { /*empty*/
-                } 
+                }
                 if (cp - buf) {
                     zonestr = (char*)alloca(cp - buf + 1);
                     strncpy(zonestr, buf, cp - buf);
@@ -605,23 +605,23 @@ _strptime(const char* buf, const char* fmt, struct tm* tm, int* GMTp)
                     buf += cp - buf;
                 }
             } break;
-        } 
-    } 
+        }
+    }
     return (char*)buf;
 }
 
 char* strptime(const char* buf, const char* fmt, struct tm* tm)
 {
     char* ret;
-    int gmt; 
+    int gmt;
 
-    gmt = 0; 
-    ret = _strptime(buf, fmt, tm, &gmt); 
-    if (ret && gmt) { 
-        time_t t = timegm(tm); 
-        localtime_r(&t, tm); 
-    } 
+    gmt = 0;
+    ret = _strptime(buf, fmt, tm, &gmt);
+    if (ret && gmt) {
+        time_t t = timegm(tm);
+        localtime_r(&t, tm);
+    }
 
-    return (ret); 
+    return (ret);
 }
 #endif //_win32_

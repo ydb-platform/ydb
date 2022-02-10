@@ -6,7 +6,7 @@
 #include "buffered.h"
 #include "mem.h"
 
-#include <util/system/file.h> 
+#include <util/system/file.h>
 #include <utility>
 
 /**

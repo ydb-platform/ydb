@@ -1,8 +1,8 @@
-#include "network.h" 
- 
+#include "network.h"
+
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
-#include <util/network/init.h> 
+#include <util/network/init.h>
 #include <util/network/socket.h>
 #include <util/system/platform.h>
 
@@ -19,7 +19,7 @@ namespace {
         }
 
         int one = 1;
-        int r1 = SetSockOpt(fd, SOL_SOCKET, SO_REUSEADDR, one); 
+        int r1 = SetSockOpt(fd, SOL_SOCKET, SO_REUSEADDR, one);
         if (r1 < 0) {
             ythrow TSystemError() << "failed to setsockopt SO_REUSEADDR";
         }

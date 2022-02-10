@@ -24,17 +24,17 @@ TBusMessageQueuePtr NBus::CreateMessageQueue(const TBusQueueConfig& config, TBus
 
 TBusMessageQueuePtr NBus::CreateMessageQueue(const TBusQueueConfig& config, const char* name) {
     return CreateMessageQueue(config, new TBusLocator, name);
-} 
- 
+}
+
 TBusMessageQueuePtr NBus::CreateMessageQueue(TExecutorPtr executor, const char* name) {
     return CreateMessageQueue(TBusQueueConfig(), executor, new TBusLocator, name);
 }
 
 TBusMessageQueuePtr NBus::CreateMessageQueue(const char* name) {
-    TBusQueueConfig config; 
+    TBusQueueConfig config;
     return CreateMessageQueue(config, name);
-} 
- 
+}
+
 namespace {
     TBusQueueConfig QueueConfigFillDefaults(const TBusQueueConfig& orig, const TString& name) {
         TBusQueueConfig patched = orig;
@@ -148,8 +148,8 @@ TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IB
     } catch (...) {
         Y_FAIL("create destination failure: %s", CurrentExceptionMessage().c_str());
     }
-} 
- 
+}
+
 TBusServerSessionPtr TBusMessageQueue::CreateDestination(TBusProtocol* proto, IBusServerHandler* handler, const TBusServerSessionConfig& config, const TVector<TBindResult>& bindTo, const TString& name) {
     TRemoteServerSessionPtr session(new TRemoteServerSession(this, proto, handler, config, name));
     try {
@@ -179,15 +179,15 @@ void TBusMessageQueue::Destroy(TBusSession* session) {
 
 void TBusMessageQueue::DestroyAllSessions() {
     TList<TIntrusivePtr<TBusSessionImpl>> sessions;
-    { 
-        TGuard<TMutex> scope(Lock); 
+    {
+        TGuard<TMutex> scope(Lock);
         sessions = Sessions;
-    } 
- 
+    }
+
     for (auto& session : sessions) {
         Y_VERIFY(session->IsDown(), "Session must be shut down prior to queue shutdown");
     }
-} 
+}
 
 void TBusMessageQueue::Schedule(IScheduleItemAutoPtr i) {
     Scheduler.Schedule(i);

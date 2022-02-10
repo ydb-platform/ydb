@@ -22,8 +22,8 @@ ALLOW library/python/django -> devtools/ya/yalibrary/makelists
 ALLOW library/python/django_abc_data -> intranet/sync_tools
 ALLOW library/python/coredump_filter -> sandbox/sdk2/helpers/coredump_filter
 ALLOW library/python/cqueue -> skynet/api/copier
-ALLOW library/python/monitoring/solo/handlers/solomon/v3/base -> solomon/protos/api/v3 
-ALLOW library/python/monitoring/solo/objects/solomon/v3 -> solomon/protos/api/v3 
+ALLOW library/python/monitoring/solo/handlers/solomon/v3/base -> solomon/protos/api/v3
+ALLOW library/python/monitoring/solo/objects/solomon/v3 -> solomon/protos/api/v3
 ALLOW library/python/nirvana -> yt/python/client
 ALLOW library/python/type_info -> yt/python/client
 ALLOW library/python/ylock -> yt/python/yt/wrapper

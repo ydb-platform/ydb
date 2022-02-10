@@ -84,8 +84,8 @@ public:
     i64 GetClientCount() const;
 
     class TImpl;
-    size_t GetRequestQueueSize() const;
-    size_t GetFailQueueSize() const;
+    size_t GetRequestQueueSize() const; 
+    size_t GetFailQueueSize() const; 
 
     const IThreadPool& GetRequestQueue() const;
     const IThreadPool& GetFailQueue() const;

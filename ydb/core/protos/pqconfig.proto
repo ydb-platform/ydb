@@ -1,6 +1,6 @@
 import "ydb/public/api/protos/draft/persqueue_error_codes.proto";
 import "ydb/public/api/protos/draft/persqueue_common.proto";
- 
+
 import "ydb/core/protos/base.proto";
 import "ydb/core/protos/msgbus_kv.proto";
 import "ydb/core/protos/node_limits.proto";
@@ -9,11 +9,11 @@ import "ydb/core/protos/services.proto";
 
 import "library/cpp/actors/protos/actors.proto";
 
- 
+
 package NKikimrPQ;
 option java_package = "ru.yandex.kikimr.proto";
 
- 
+
 message TPartitionMeta {
     optional uint64 StartOffset = 1;
     optional uint64 EndOffset = 2;
@@ -42,11 +42,11 @@ message TPQConfig {
     optional NKikimrClient.TKeyValueRequest.ETactic Tactic = 13 [default = MAX_THROUGHPUT];
 
     optional bool RequireCredentialsInNewProtocol = 14 [default = false];
- 
-    optional string ClusterTablePath = 15 [default = "/Root/PQ/Config/V2/Cluster"]; 
-    optional string VersionTablePath = 16 [default = "/Root/PQ/Config/V2/Versions"]; 
- 
-    optional uint32 ClustersUpdateTimeoutOnErrorSec = 17 [default = 1]; 
+
+    optional string ClusterTablePath = 15 [default = "/Root/PQ/Config/V2/Cluster"];
+    optional string VersionTablePath = 16 [default = "/Root/PQ/Config/V2/Versions"];
+
+    optional uint32 ClustersUpdateTimeoutOnErrorSec = 17 [default = 1];
 
     optional uint32 WriteInitLatencyBigMs    = 19 [default = 900];
     optional uint32 ReadInitLatencyBigMs     = 20 [default = 900];
@@ -675,13 +675,13 @@ message TClientInfoResponse {
     optional uint64 ResponseTimestamp = 4;
     repeated TClientInfo ClientInfo = 5;
 }
- 
-message TPQClusterDiscoveryConfig { 
-    optional bool Enabled = 1; 
-    optional uint32 TimedCountersUpdateIntervalSeconds = 2 [default = 15]; 
-    optional NKikimrNetClassifier.TNetData CloudNetData = 3; 
+
+message TPQClusterDiscoveryConfig {
+    optional bool Enabled = 1;
+    optional uint32 TimedCountersUpdateIntervalSeconds = 2 [default = 15];
+    optional NKikimrNetClassifier.TNetData CloudNetData = 3;
     optional uint64 RequestInflightLimit = 4;
-} 
+}
 
 message TYdsNextToken {
     required uint64 CreationTimestamp = 1;

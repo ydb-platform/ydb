@@ -90,14 +90,14 @@ public:
 
     TSendMessageResponse SendMessage(const TSendMessageRequest& req);
 
-    TModifyPermissionsResponse ModifyPermissions(const TModifyPermissionsRequest& req); 
- 
+    TModifyPermissionsResponse ModifyPermissions(const TModifyPermissionsRequest& req);
+
     TGetQueueAttributesResponse GetQueueAttributes(const TGetQueueAttributesRequest& req);
 
     TSetQueueAttributesResponse SetQueueAttributes(const TSetQueueAttributesRequest& req);
 
-    TListPermissionsResponse ListPermissions(const TListPermissionsRequest& req); 
- 
+    TListPermissionsResponse ListPermissions(const TListPermissionsRequest& req);
+
 private:
     class TImpl;
     THolder<TImpl> Impl_;

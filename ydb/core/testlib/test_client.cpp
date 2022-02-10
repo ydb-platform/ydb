@@ -158,7 +158,7 @@ namespace Tests {
             return;
 
         TAppPrepare app; /* will cook TAppData */
-        app.SetNetDataSourceUrl(Settings->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl()); 
+        app.SetNetDataSourceUrl(Settings->NetClassifierConfig.GetUpdaterConfig().GetNetDataSourceUrl());
         app.SetEnableKqpSpilling(Settings->EnableKqpSpilling);
         app.SetKeepSnapshotTimeout(Settings->KeepSnapshotTimeout);
         app.SetChangesQueueItemsLimit(Settings->ChangesQueueItemsLimit);
@@ -255,8 +255,8 @@ namespace Tests {
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
 
-        GRpcServerRootCounters = MakeIntrusive<NMonitoring::TDynamicCounters>(); 
-        auto& counters = GRpcServerRootCounters; 
+        GRpcServerRootCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto& counters = GRpcServerRootCounters;
 
         auto& appData = Runtime->GetAppData();
 
@@ -307,7 +307,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcYdbScriptingService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcOperationService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
-        GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxyId)); 
+        GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxyId));
@@ -692,13 +692,13 @@ namespace Tests {
             TActorId kesusServiceId = Runtime->Register(kesusService, nodeIdx);
             Runtime->RegisterService(NKesus::MakeKesusProxyServiceId(), kesusServiceId, nodeIdx);
         }
- 
+
         {
             IActor* pqClusterTracker = NPQ::NClusterTracker::CreateClusterTracker();
             TActorId pqClusterTrackerId = Runtime->Register(pqClusterTracker, nodeIdx);
             Runtime->RegisterService(NPQ::NClusterTracker::MakeClusterTrackerID(), pqClusterTrackerId, nodeIdx);
         }
- 
+
         {
             IActor* netClassifier = NNetClassifier::CreateNetClassifier();
             TActorId netClassifierId = Runtime->Register(netClassifier, nodeIdx);

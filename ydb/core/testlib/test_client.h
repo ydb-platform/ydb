@@ -91,8 +91,8 @@ namespace Tests {
         ui16 GrpcPort = 0;
         NKikimrProto::TAuthConfig AuthConfig;
         NKikimrPQ::TPQConfig PQConfig;
-        NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig; 
-        NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig; 
+        NKikimrPQ::TPQClusterDiscoveryConfig PQClusterDiscoveryConfig;
+        NKikimrNetClassifier::TNetClassifierConfig NetClassifierConfig;
         ui32 Domain = TestDomain;
         bool SupportsRedirect = true;
         TString TracePath;
@@ -222,10 +222,10 @@ namespace Tests {
 
         void SetupDefaultProfiles();
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const { 
-            return GRpcServerRootCounters; 
-        } 
- 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const {
+            return GRpcServerRootCounters;
+        }
+
         void ShutdownGRpc() {
             if (GRpcServer) {
                 GRpcServer->Stop();
@@ -257,7 +257,7 @@ namespace Tests {
         const NBus::TBusServerSessionConfig BusServerSessionConfig; //BusServer hold const & on config
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
         std::unique_ptr<NGrpc::TGRpcServer> GRpcServer;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters; 
+        TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
     };
 
     class TClient {

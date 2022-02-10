@@ -11,7 +11,7 @@
 #include <ydb/public/lib/value/value.h>
 
 #include <library/cpp/scheme/scheme.h>
- 
+
 #include <util/generic/maybe.h>
 #include <util/generic/utility.h>
 #include <util/string/cast.h>
@@ -33,7 +33,7 @@ public:
         for (const auto& attr : Request().attributes()) {
             Attributes_[attr.GetName()] = attr.GetValue();
         }
- 
+
         CopySecurityToken(Request());
     }
 
@@ -53,9 +53,9 @@ private:
 
         const bool clampValues = !Cfg().GetEnableQueueAttributesValidation();
         ValidatedAttributes_ = TQueueAttributes::FromAttributesAndConfig(Attributes_, Cfg(), IsFifoQueue(), clampValues);
-        if (!ValidatedAttributes_.Validate()) { 
-            MakeError(Response_.MutableSetQueueAttributes(), *ValidatedAttributes_.Error, ValidatedAttributes_.ErrorText); 
-            return false; 
+        if (!ValidatedAttributes_.Validate()) {
+            MakeError(Response_.MutableSetQueueAttributes(), *ValidatedAttributes_.Error, ValidatedAttributes_.ErrorText);
+            return false;
         }
 
         return true;
@@ -75,18 +75,18 @@ private:
             .Counters(QueueCounters_)
             .RetryOnTimeout();
 
-        builder.Params().OptionalUint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount); 
-        builder.Params().OptionalUtf8("DLQ_TARGET_ARN", ValidatedAttributes_.RedrivePolicy.TargetArn); 
-        builder.Params().OptionalUtf8("DLQ_TARGET_NAME", ValidatedAttributes_.RedrivePolicy.TargetQueueName); 
- 
-        builder.Params().OptionalUint64("VISIBILITY", ToMilliSeconds(ValidatedAttributes_.VisibilityTimeout)); 
-        builder.Params().OptionalUint64("DELAY", ToMilliSeconds(ValidatedAttributes_.DelaySeconds)); 
-        builder.Params().OptionalUint64("RETENTION", ToMilliSeconds(ValidatedAttributes_.MessageRetentionPeriod)); 
-        builder.Params().OptionalUint64("WAIT", ToMilliSeconds(ValidatedAttributes_.ReceiveMessageWaitTimeSeconds)); 
-        builder.Params().OptionalUint64("MAX_MESSAGE_SIZE", ValidatedAttributes_.MaximumMessageSize); 
+        builder.Params().OptionalUint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount);
+        builder.Params().OptionalUtf8("DLQ_TARGET_ARN", ValidatedAttributes_.RedrivePolicy.TargetArn);
+        builder.Params().OptionalUtf8("DLQ_TARGET_NAME", ValidatedAttributes_.RedrivePolicy.TargetQueueName);
+
+        builder.Params().OptionalUint64("VISIBILITY", ToMilliSeconds(ValidatedAttributes_.VisibilityTimeout));
+        builder.Params().OptionalUint64("DELAY", ToMilliSeconds(ValidatedAttributes_.DelaySeconds));
+        builder.Params().OptionalUint64("RETENTION", ToMilliSeconds(ValidatedAttributes_.MessageRetentionPeriod));
+        builder.Params().OptionalUint64("WAIT", ToMilliSeconds(ValidatedAttributes_.ReceiveMessageWaitTimeSeconds));
+        builder.Params().OptionalUint64("MAX_MESSAGE_SIZE", ValidatedAttributes_.MaximumMessageSize);
 
         if (IsFifoQueue()) {
-            builder.Params().OptionalBool("CONTENT_BASED_DEDUPLICATION", ValidatedAttributes_.ContentBasedDeduplication); 
+            builder.Params().OptionalBool("CONTENT_BASED_DEDUPLICATION", ValidatedAttributes_.ContentBasedDeduplication);
         }
 
         builder.Params().Utf8("USER_NAME", UserName_);
@@ -95,19 +95,19 @@ private:
     }
 
     void DoAction() override {
-        Become(&TThis::StateFunc); 
- 
-        if (ValidatedAttributes_.HasClampedAttributes()) { 
+        Become(&TThis::StateFunc);
+
+        if (ValidatedAttributes_.HasClampedAttributes()) {
             RLOG_SQS_WARN("Clamped some queue attribute values for account " << UserName_ << " and queue name " << GetQueueName());
-        } 
- 
-        if (ValidatedAttributes_.RedrivePolicy.TargetQueueName && *ValidatedAttributes_.RedrivePolicy.TargetQueueName) { 
+        }
+
+        if (ValidatedAttributes_.RedrivePolicy.TargetQueueName && *ValidatedAttributes_.RedrivePolicy.TargetQueueName) {
             Send(MakeSqsServiceID(SelfId().NodeId()), new TSqsEvents::TEvGetQueueId(RequestId_, UserName_, *ValidatedAttributes_.RedrivePolicy.TargetQueueName, FolderId_));
-        } else { 
+        } else {
             RequestAttributesChange();
-        } 
-    } 
- 
+        }
+    }
+
     TString DoGetQueueName() const override {
         return Request().GetQueueName();
     }
@@ -121,21 +121,21 @@ private:
     }
 
     void HandleQueueId(TSqsEvents::TEvQueueId::TPtr& ev) {
-        if (ev->Get()->Failed) { 
+        if (ev->Get()->Failed) {
             RLOG_SQS_WARN("Get queue id failed");
-            MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE); 
-        } else if (!ev->Get()->Exists) { 
+            MakeError(MutableErrorDesc(), NErrors::INTERNAL_FAILURE);
+        } else if (!ev->Get()->Exists) {
             MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE, "Target DLQ does not exist.");
-        } else if (ev->Get()->QueueId == GetQueueName()) { 
-            MakeError(MutableErrorDesc(), NErrors::INVALID_PARAMETER_VALUE, "Using the queue itself as a dead letter queue is not allowed."); 
-        } else { 
+        } else if (ev->Get()->QueueId == GetQueueName()) {
+            MakeError(MutableErrorDesc(), NErrors::INVALID_PARAMETER_VALUE, "Using the queue itself as a dead letter queue is not allowed.");
+        } else {
            RequestAttributesChange();
-           return; 
-        } 
- 
+           return;
+        }
+
         SendReplyAndDie();
-    } 
- 
+    }
+
     void HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         const ui32 status = record.GetStatus();
@@ -159,8 +159,8 @@ private:
 
 private:
     THashMap<TString, TString> Attributes_;
- 
-    TQueueAttributes ValidatedAttributes_; 
+
+    TQueueAttributes ValidatedAttributes_;
 };
 
 IActor* CreateSetQueueAttributesActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

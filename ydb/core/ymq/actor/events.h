@@ -1,6 +1,6 @@
 #pragma once
 #include "defs.h"
- 
+
 #include <ydb/core/base/defs.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -20,7 +20,7 @@
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/generic/maybe.h>
 #include <util/generic/ptr.h>
 
@@ -69,7 +69,7 @@ struct TSqsEvents {
         /// Update queue attributes cache
         EvClearQueueAttributesCache,
         /// Incrementing of atomic counter
-        EvAtomicCounterIncrementResult, 
+        EvAtomicCounterIncrementResult,
 
         /// Request for finding leader node for the given queue
         EvGetLeaderNodeForQueueRequest,
@@ -81,10 +81,10 @@ struct TSqsEvents {
         EvQueueId,
 
         // Cloud specific
-        EvGetQueueFolderIdAndCustomName, 
-        EvQueueFolderIdAndCustomName, 
-        EvCountQueues, 
-        EvCountQueuesResponse, 
+        EvGetQueueFolderIdAndCustomName,
+        EvQueueFolderIdAndCustomName,
+        EvCountQueues,
+        EvCountQueuesResponse,
 
         // Send/Receive/Delete requests. Action actor sends these requests to queue leader
         EvSendMessageBatch,
@@ -107,8 +107,8 @@ struct TSqsEvents {
 
         EvMigrationDone,
 
-        EvReportProcessedRequestAttributes, 
- 
+        EvReportProcessedRequestAttributes,
+
         EvInsertQueueCounters,
 
         EvUserSettingsChanged,
@@ -116,14 +116,14 @@ struct TSqsEvents {
         EvReadQueuesList,
         EvQueuesList,
 
-        EvDeadLetterQueueNotification, 
- 
-        EvSchemeTraversalResult, 
- 
-        EvGarbageCleaningResult, 
- 
-        EvGarbageSearchResult, 
- 
+        EvDeadLetterQueueNotification,
+
+        EvSchemeTraversalResult,
+
+        EvGarbageCleaningResult,
+
+        EvGarbageSearchResult,
+
         EvCleanupQueryComplete,
 
         EvEnd,
@@ -350,21 +350,21 @@ struct TSqsEvents {
         }
     };
 
-    struct TEvAtomicCounterIncrementResult : public NActors::TEventLocal<TEvAtomicCounterIncrementResult, EvAtomicCounterIncrementResult> { 
-        bool Success; 
-        TString Error; 
-        ui64 NewValue; 
- 
-        TEvAtomicCounterIncrementResult(bool success, const TString& error = TString(), ui64 newValue = 0) 
-            : Success(success) 
-            , Error(error) 
-            , NewValue(newValue) 
-        { 
-        } 
- 
-        TEvAtomicCounterIncrementResult(const TEvAtomicCounterIncrementResult& other) = default; 
-    }; 
- 
+    struct TEvAtomicCounterIncrementResult : public NActors::TEventLocal<TEvAtomicCounterIncrementResult, EvAtomicCounterIncrementResult> {
+        bool Success;
+        TString Error;
+        ui64 NewValue;
+
+        TEvAtomicCounterIncrementResult(bool success, const TString& error = TString(), ui64 newValue = 0)
+            : Success(success)
+            , Error(error)
+            , NewValue(newValue)
+        {
+        }
+
+        TEvAtomicCounterIncrementResult(const TEvAtomicCounterIncrementResult& other) = default;
+    };
+
     struct TEvPurgeQueue : public NActors::TEventLocal<TEvPurgeQueue, EvPurgeQueue> {
         /// Queue path in the catalog
         TQueuePath QueuePath;
@@ -516,29 +516,29 @@ struct TSqsEvents {
         bool Exists = false;
         bool Failed = false;
         TString QueueId; // resource id in case of Yandex.Cloud mode and queue name in case of Yandex
-        ui64 Version = 0; // last queue version registered in service actor 
-        ui64 ShardsCount = 0; // number of queue shards 
+        ui64 Version = 0; // last queue version registered in service actor
+        ui64 ShardsCount = 0; // number of queue shards
 
-        TEvQueueId(const bool failed = false) 
+        TEvQueueId(const bool failed = false)
             : Failed(failed)
         {
         }
 
-        explicit TEvQueueId(const TString queueId, const ui64 version, const ui64 shardsCount) 
+        explicit TEvQueueId(const TString queueId, const ui64 version, const ui64 shardsCount)
             : Exists(true)
             , QueueId(std::move(queueId))
-            , Version(version) 
-            , ShardsCount(shardsCount) 
+            , Version(version)
+            , ShardsCount(shardsCount)
         {
         }
     };
 
-    struct TEvGetQueueFolderIdAndCustomName : public NActors::TEventLocal<TEvGetQueueFolderIdAndCustomName, EvGetQueueFolderIdAndCustomName> { 
+    struct TEvGetQueueFolderIdAndCustomName : public NActors::TEventLocal<TEvGetQueueFolderIdAndCustomName, EvGetQueueFolderIdAndCustomName> {
         TString RequestId;
         TString UserName;
         TString QueueName;
 
-        TEvGetQueueFolderIdAndCustomName(TString requestId, TString userName, TString queueName) 
+        TEvGetQueueFolderIdAndCustomName(TString requestId, TString userName, TString queueName)
             : RequestId(std::move(requestId))
             , UserName(std::move(userName))
             , QueueName(std::move(queueName))
@@ -546,51 +546,51 @@ struct TSqsEvents {
         }
     };
 
-    struct TEvQueueFolderIdAndCustomName : public NActors::TEventLocal<TEvQueueFolderIdAndCustomName, EvQueueFolderIdAndCustomName> { 
+    struct TEvQueueFolderIdAndCustomName : public NActors::TEventLocal<TEvQueueFolderIdAndCustomName, EvQueueFolderIdAndCustomName> {
         bool Exists = false;
         bool Failed = false;
         TString QueueFolderId;
-        TString QueueCustomName; 
+        TString QueueCustomName;
 
-        TEvQueueFolderIdAndCustomName(bool failed = false) 
+        TEvQueueFolderIdAndCustomName(bool failed = false)
             : Failed(failed)
         {
         }
 
-        explicit TEvQueueFolderIdAndCustomName(TString queueFolderId, TString queueCustomName) 
+        explicit TEvQueueFolderIdAndCustomName(TString queueFolderId, TString queueCustomName)
             : Exists(true)
             , QueueFolderId(std::move(queueFolderId))
-            , QueueCustomName(std::move(queueCustomName)) 
+            , QueueCustomName(std::move(queueCustomName))
         {
         }
     };
 
-    struct TEvCountQueues : public NActors::TEventLocal<TEvCountQueues, EvCountQueues> { 
-        TString RequestId; 
-        TString UserName; 
-        TString FolderId; 
- 
-        TEvCountQueues(TString requestId, TString userName, TString folderId) 
-            : RequestId(std::move(requestId)) 
-            , UserName(std::move(userName)) 
-            , FolderId(std::move(folderId)) 
-        { 
-        } 
-    }; 
- 
-    struct TEvCountQueuesResponse : public NActors::TEventLocal<TEvCountQueuesResponse, EvCountQueuesResponse> { 
-        bool Failed = false; 
-        bool Exists = false; 
-        ui64 Count = 0; 
- 
-        explicit TEvCountQueuesResponse(bool failed, bool exists = false, ui64 count = 0) 
-            : Failed(failed) 
-            , Exists(exists) 
-            , Count(count) 
-        { 
-        } 
-    }; 
- 
+    struct TEvCountQueues : public NActors::TEventLocal<TEvCountQueues, EvCountQueues> {
+        TString RequestId;
+        TString UserName;
+        TString FolderId;
+
+        TEvCountQueues(TString requestId, TString userName, TString folderId)
+            : RequestId(std::move(requestId))
+            , UserName(std::move(userName))
+            , FolderId(std::move(folderId))
+        {
+        }
+    };
+
+    struct TEvCountQueuesResponse : public NActors::TEventLocal<TEvCountQueuesResponse, EvCountQueuesResponse> {
+        bool Failed = false;
+        bool Exists = false;
+        ui64 Count = 0;
+
+        explicit TEvCountQueuesResponse(bool failed, bool exists = false, ui64 count = 0)
+            : Failed(failed)
+            , Exists(exists)
+            , Count(count)
+        {
+        }
+    };
+
     struct TEvSendMessageBatch : public NActors::TEventLocal<TEvSendMessageBatch, EvSendMessageBatch> {
         struct TMessageEntry {
             TString MessageId;
@@ -750,10 +750,10 @@ struct TSqsEvents {
         {
         }
     };
- 
-    struct TEvReportProcessedRequestAttributes : public NActors::TEventLocal<TEvReportProcessedRequestAttributes, EvReportProcessedRequestAttributes> { 
-        TProcessedRequestAttributes Data; 
-    }; 
+
+    struct TEvReportProcessedRequestAttributes : public NActors::TEventLocal<TEvReportProcessedRequestAttributes, EvReportProcessedRequestAttributes> {
+        TProcessedRequestAttributes Data;
+    };
 
     struct TEvInsertQueueCounters : public NActors::TEventLocal<TEvInsertQueueCounters, EvInsertQueueCounters> {
         TEvInsertQueueCounters(const TString& user, const TString& queue, ui64 leaderTabletId)
@@ -792,7 +792,7 @@ struct TSqsEvents {
             ui64 LeaderTabletId = 0;
             TString CustomName;
             TString FolderId;
-            TString DlqName; 
+            TString DlqName;
             ui64 Version = 0;
             ui64 ShardsCount = 0;
             TInstant CreatedTimestamp;
@@ -810,72 +810,72 @@ struct TSqsEvents {
         {
         }
     };
- 
+
     // Used by service to notify dead letter queue leader
-    struct TEvDeadLetterQueueNotification : public NActors::TEventLocal<TEvDeadLetterQueueNotification, EvDeadLetterQueueNotification> { 
-    }; 
- 
-    using TSchemePath = TVector<TString>; 
-    using TSchemeCacheNavigate = NSchemeCache::TSchemeCacheNavigate; 
- 
-    struct TSchemeNode { 
-        TSchemePath Path; 
-        TSchemeCacheNavigate::EKind Kind = TSchemeCacheNavigate::EKind::KindUnknown; 
-        TInstant CreationTs = TInstant::Zero(); 
- 
-        THashMap<TString, TSchemeNode> Children; 
-    }; 
- 
-    struct TEvSchemeTraversalResult : public NActors::TEventLocal<TEvSchemeTraversalResult, EvSchemeTraversalResult> { 
-        explicit TEvSchemeTraversalResult(bool success = true) 
-            : Success(success) 
-        { 
-        } 
- 
-        bool Success = true; 
-        THolder<TSchemeNode> RootHolder; 
-    }; 
- 
-    struct TEvGarbageCleaningResult : public NActors::TEventLocal<TEvGarbageCleaningResult, EvGarbageCleaningResult> { 
-        explicit TEvGarbageCleaningResult(bool success = true) { 
-            Record.Success = success; 
-        } 
- 
-        struct TCleaningResult { 
-            bool Success = true; 
- 
-            TString Account; 
-            TString HintPath; 
-            TVector<TString> RemovedNodes; 
- 
-            TInstant StartedAt; 
-            TDuration Duration; 
-        }; 
- 
-        TCleaningResult Record; 
-    }; 
- 
-    struct TEvGarbageSearchResult : public NActors::TEventLocal<TEvGarbageSearchResult, EvGarbageSearchResult> { 
-        explicit TEvGarbageSearchResult(bool success = true) 
-            : Success(success) 
-        { 
-        } 
- 
-        struct TGarbageHint { 
-            enum class EReason { 
-                Unknown, 
-                UnusedVersion, 
-                UnregisteredQueue 
-            }; 
- 
-            TString Account; 
-            TSchemeNode SchemeNode; 
-            EReason Reason = EReason::Unknown; 
-        }; 
- 
-        bool Success = true; 
-        THashMap<TString, TGarbageHint> GarbageHints; 
-    }; 
+    struct TEvDeadLetterQueueNotification : public NActors::TEventLocal<TEvDeadLetterQueueNotification, EvDeadLetterQueueNotification> {
+    };
+
+    using TSchemePath = TVector<TString>;
+    using TSchemeCacheNavigate = NSchemeCache::TSchemeCacheNavigate;
+
+    struct TSchemeNode {
+        TSchemePath Path;
+        TSchemeCacheNavigate::EKind Kind = TSchemeCacheNavigate::EKind::KindUnknown;
+        TInstant CreationTs = TInstant::Zero();
+
+        THashMap<TString, TSchemeNode> Children;
+    };
+
+    struct TEvSchemeTraversalResult : public NActors::TEventLocal<TEvSchemeTraversalResult, EvSchemeTraversalResult> {
+        explicit TEvSchemeTraversalResult(bool success = true)
+            : Success(success)
+        {
+        }
+
+        bool Success = true;
+        THolder<TSchemeNode> RootHolder;
+    };
+
+    struct TEvGarbageCleaningResult : public NActors::TEventLocal<TEvGarbageCleaningResult, EvGarbageCleaningResult> {
+        explicit TEvGarbageCleaningResult(bool success = true) {
+            Record.Success = success;
+        }
+
+        struct TCleaningResult {
+            bool Success = true;
+
+            TString Account;
+            TString HintPath;
+            TVector<TString> RemovedNodes;
+
+            TInstant StartedAt;
+            TDuration Duration;
+        };
+
+        TCleaningResult Record;
+    };
+
+    struct TEvGarbageSearchResult : public NActors::TEventLocal<TEvGarbageSearchResult, EvGarbageSearchResult> {
+        explicit TEvGarbageSearchResult(bool success = true)
+            : Success(success)
+        {
+        }
+
+        struct TGarbageHint {
+            enum class EReason {
+                Unknown,
+                UnusedVersion,
+                UnregisteredQueue
+            };
+
+            TString Account;
+            TSchemeNode SchemeNode;
+            EReason Reason = EReason::Unknown;
+        };
+
+        bool Success = true;
+        THashMap<TString, TGarbageHint> GarbageHints;
+    };
     struct TEvCleanupQueryComplete : public NActors::TEventLocal<TEvCleanupQueryComplete, EvCleanupQueryComplete> {
         explicit TEvCleanupQueryComplete(const TString& name, ui64 type)
             : Name(name)

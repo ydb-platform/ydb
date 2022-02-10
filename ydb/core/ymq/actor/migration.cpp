@@ -350,7 +350,7 @@ void TQueueMigrationActor::StartAltering() {
     CheckAddColumn("Attributes", "DlqArn", NScheme::NTypeIds::Utf8);
     CheckAddColumn("Attributes", "MaxReceiveCount", NScheme::NTypeIds::Uint64);
     CheckAddColumn("Attributes", "ShowDetailedCountersDeadline", NScheme::NTypeIds::Uint64);
- 
+
     CheckAddColumn("State", "InflyVersion", NScheme::NTypeIds::Uint64);
     if (!IsFifoQueue) {
         for (ui64 shard = 0; shard < ShardsCount; ++shard) {

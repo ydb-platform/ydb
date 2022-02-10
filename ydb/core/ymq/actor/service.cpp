@@ -1,9 +1,9 @@
 #include "service.h"
- 
+
 #include "auth_factory.h"
 #include "cfg.h"
 #include "executor.h"
-#include "garbage_collector.h" 
+#include "garbage_collector.h"
 #include "local_rate_limiter_allocator.h"
 #include "params.h"
 #include "proxy_service.h"
@@ -78,8 +78,8 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
         , QueueName_(std::move(queueName))
         , CustomName_(std::move(customName))
         , FolderId_(std::move(folderId))
-        , Version_(version) 
-        , ShardsCount_(shardsCount) 
+        , Version_(version)
+        , ShardsCount_(shardsCount)
         , RootUrl_(std::move(rootUrl))
         , LeaderTabletId_(leaderTabletId)
         , Counters_(userCounters->CreateQueueCounters(QueueName_, FolderId_, insertCounters))
@@ -182,8 +182,8 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     TString QueueName_;
     TString CustomName_;
     TString FolderId_;
-    ui64 Version_; 
-    ui64 ShardsCount_; 
+    ui64 Version_;
+    ui64 ShardsCount_;
     TString RootUrl_;
     ui64 LeaderTabletId_ = 0;
     TIntrusivePtr<TQueueCounters> Counters_;
@@ -239,14 +239,14 @@ struct TSqsService::TUserInfo : public TAtomicRefCount<TUserInfo> {
         }
     }
 
-    size_t CountQueuesInFolder(const TString& folderId) const { 
-        if (!folderId) { 
-            return QueueByNameAndFolder_.size(); // for YaSQS 
-        } 
- 
-        return std::count_if(QueueByNameAndFolder_.begin(), QueueByNameAndFolder_.end(), [&folderId](const auto& p) { return p.first.second == folderId; }); 
-    } 
- 
+    size_t CountQueuesInFolder(const TString& folderId) const {
+        if (!folderId) {
+            return QueueByNameAndFolder_.size(); // for YaSQS
+        }
+
+        return std::count_if(QueueByNameAndFolder_.begin(), QueueByNameAndFolder_.end(), [&folderId](const auto& p) { return p.first.second == folderId; });
+    }
+
     TString UserName_;
     std::shared_ptr<const std::map<TString, TString>> Settings_ = std::make_shared<const std::map<TString, TString>>();
     TIntrusivePtr<TUserCounters> Counters_;
@@ -262,8 +262,8 @@ struct TSqsService::TUserInfo : public TAtomicRefCount<TUserInfo> {
     THashMultiMap<TString, TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> GetLeaderNodeRequests_; // queue name -> request
     THashMultiMap<TString, TSqsEvents::TEvGetConfiguration::TPtr> GetConfigurationRequests_; // queue name -> request
     THashMultiMap<std::pair<TString, TString>, TSqsEvents::TEvGetQueueId::TPtr> GetQueueIdRequests_; // <queue custom name, folder id> -> request
-    THashMultiMap<TString, TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr> GetQueueFolderIdAndCustomNameRequests_; // queue name -> request 
-    THashMultiMap<TString, TSqsEvents::TEvCountQueues::TPtr> CountQueuesRequests_; // folder id -> request 
+    THashMultiMap<TString, TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr> GetQueueFolderIdAndCustomNameRequests_; // queue name -> request
+    THashMultiMap<TString, TSqsEvents::TEvCountQueues::TPtr> CountQueuesRequests_; // folder id -> request
 };
 
 static TString GetEndpoint(const NKikimrConfig::TSqsConfig& config) {
@@ -310,8 +310,8 @@ void TSqsService::Bootstrap() {
     Register(new TUserSettingsReader(AggregatedUserCounters_->GetTransactionCounters()));
     QueuesListReader_ = Register(new TQueuesListReader(AggregatedUserCounters_->GetTransactionCounters()));
 
-    Register(CreateGarbageCollector(SchemeCache_, QueuesListReader_)); 
- 
+    Register(CreateGarbageCollector(SchemeCache_, QueuesListReader_));
+
     RequestSqsUsersList();
     RequestSqsQueuesList();
 
@@ -541,8 +541,8 @@ void TSqsService::AnswerNotExists(TSqsEvents::TEvGetQueueId::TPtr& ev, const TUs
 void TSqsService::AnswerNotExists(TSqsEvents::TEvCountQueues::TPtr& ev, const TUserInfoPtr&) {
     RLOG_SQS_REQ_DEBUG(ev->Get()->RequestId, "No user [" << ev->Get()->UserName << "] found while counting queues");
     Send(ev->Sender, new TSqsEvents::TEvCountQueuesResponse(false));
-} 
- 
+}
+
 void TSqsService::AnswerFailed(TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr& ev, const TUserInfoPtr&) {
     Send(ev->Sender, new TSqsEvents::TEvGetLeaderNodeForQueueResponse(ev->Get()->RequestId, ev->Get()->UserName, ev->Get()->QueueName, TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::Error));
 }
@@ -568,8 +568,8 @@ void TSqsService::AnswerFailed(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPt
 
 void TSqsService::AnswerFailed(TSqsEvents::TEvCountQueues::TPtr& ev, const TUserInfoPtr&) {
     Send(ev->Sender, new TSqsEvents::TEvCountQueuesResponse(true));
-} 
- 
+}
+
 void TSqsService::Answer(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr& ev, const TQueueInfoPtr& queueInfo) {
     Send(ev->Sender, new TSqsEvents::TEvQueueFolderIdAndCustomName(queueInfo->FolderId_, queueInfo->CustomName_));
 }
@@ -699,13 +699,13 @@ void TSqsService::HandleGetQueueFolderIdAndCustomName(TSqsEvents::TEvGetQueueFol
 
 void TSqsService::HandleCountQueues(TSqsEvents::TEvCountQueues::TPtr& ev) {
     TUserInfoPtr user = GetUserOrWait(ev);
-    if (!user) { 
-        return; 
-    } 
- 
+    if (!user) {
+        return;
+    }
+
     Send(ev->Sender, new TSqsEvents::TEvCountQueuesResponse(false, true, user->CountQueuesInFolder(ev->Get()->FolderId)));
-} 
- 
+}
+
 template <class TEvent>
 TSqsService::TUserInfoPtr TSqsService::GetUserOrWait(TAutoPtr<TEvent>& ev) {
     const TString& reqId = ev->Get()->RequestId;
@@ -861,7 +861,7 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                 ++usersIt;
             }
         }
- 
+
         NotifyLocalDeadLetterQueuesLeaders(ev->Get()->SortedQueues);
     } else {
         for (const auto& [userName, user] : Users_) {
@@ -869,45 +869,45 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
         }
     }
 }
- 
+
 void TSqsService::NotifyLocalDeadLetterQueuesLeaders(const std::vector<TSqsEvents::TEvQueuesList::TQueueRecord>& sortedQueues) const {
-    using TKnownDeadLetterQueues = THashMap<TString, THashSet<std::pair<TString, TString>>>; 
- 
-    TKnownDeadLetterQueues knownDlqs; 
-    for (const auto& queueRecord : sortedQueues) { 
-        if (queueRecord.DlqName) { 
-            knownDlqs[queueRecord.UserName].insert(std::make_pair(queueRecord.DlqName, queueRecord.FolderId)); // account -> custom name + folder id pair 
-        } 
-    } 
- 
-    for (const auto& [account, dlqs] : knownDlqs) { 
-        auto accountIt = Users_.find(account); 
-        if (accountIt != Users_.end()) { 
-            for (const auto& customNameAndFolderPair : dlqs) { 
-                auto queueInfoIt = accountIt->second->QueueByNameAndFolder_.find(customNameAndFolderPair); 
-                if (queueInfoIt != accountIt->second->QueueByNameAndFolder_.end()) { 
-                    const auto& queueInfo = *queueInfoIt->second; 
+    using TKnownDeadLetterQueues = THashMap<TString, THashSet<std::pair<TString, TString>>>;
+
+    TKnownDeadLetterQueues knownDlqs;
+    for (const auto& queueRecord : sortedQueues) {
+        if (queueRecord.DlqName) {
+            knownDlqs[queueRecord.UserName].insert(std::make_pair(queueRecord.DlqName, queueRecord.FolderId)); // account -> custom name + folder id pair
+        }
+    }
+
+    for (const auto& [account, dlqs] : knownDlqs) {
+        auto accountIt = Users_.find(account);
+        if (accountIt != Users_.end()) {
+            for (const auto& customNameAndFolderPair : dlqs) {
+                auto queueInfoIt = accountIt->second->QueueByNameAndFolder_.find(customNameAndFolderPair);
+                if (queueInfoIt != accountIt->second->QueueByNameAndFolder_.end()) {
+                    const auto& queueInfo = *queueInfoIt->second;
                     if (queueInfo.LocalLeader_) {
                         Send(queueInfo.LocalLeader_, new TSqsEvents::TEvDeadLetterQueueNotification);
-                    } 
-                } 
-            } 
-        } 
-    } 
-} 
- 
+                    }
+                }
+            }
+        }
+    }
+}
+
 void TSqsService::AnswerCountQueuesRequests(const TUserInfoPtr& user) {
     while (!user->CountQueuesRequests_.empty()) {
         const TString folderId = user->CountQueuesRequests_.begin()->first;
         const auto queuesCount = user->CountQueuesInFolder(folderId);
- 
+
         auto requests = user->CountQueuesRequests_.equal_range(folderId);
- 
+
         for (auto i = requests.first; i != requests.second; ++i) {
             auto& req = i->second;
             Send(req->Sender, new TSqsEvents::TEvCountQueuesResponse(false, true, queuesCount));
-        } 
- 
+        }
+
         user->CountQueuesRequests_.erase(requests.first, requests.second);
     }
 }
@@ -1034,8 +1034,8 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
                                                                               ui64 leaderTabletId,
                                                                               const TString& customName,
                                                                               const TString& folderId,
-                                                                              const ui64 version, 
-                                                                              const ui64 shardsCount, 
+                                                                              const ui64 version,
+                                                                              const ui64 shardsCount,
                                                                               const TInstant createdTimestamp) {
     auto user = MutableUser(userName, false); // don't move requests because they are already moved in our caller
     const TInstant now = TActivationContext::Now();
@@ -1079,12 +1079,12 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
     }
 
     {
-        auto requests = user->GetQueueFolderIdAndCustomNameRequests_.equal_range(queue); 
+        auto requests = user->GetQueueFolderIdAndCustomNameRequests_.equal_range(queue);
         for (auto i = requests.first; i != requests.second; ++i) {
             auto& req = i->second;
             Answer(req, queueInfo);
         }
-        user->GetQueueFolderIdAndCustomNameRequests_.erase(requests.first, requests.second); 
+        user->GetQueueFolderIdAndCustomNameRequests_.erase(requests.first, requests.second);
     }
 
     queueInfo->ConnectToLeaderTablet();
@@ -1209,8 +1209,8 @@ void TSqsService::InsertWaitingRequest(TSqsEvents::TEvGetQueueId::TPtr&& ev) {
     GetQueueIdRequests_.emplace(ev->Get()->UserName, std::move(ev));
 }
 
-void TSqsService::InsertWaitingRequest(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr&& ev) { 
-    GetQueueFolderIdAndCustomNameRequests_.emplace(ev->Get()->UserName, std::move(ev)); 
+void TSqsService::InsertWaitingRequest(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr&& ev) {
+    GetQueueFolderIdAndCustomNameRequests_.emplace(ev->Get()->UserName, std::move(ev));
 }
 
 void TSqsService::InsertWaitingRequest(TSqsEvents::TEvGetConfiguration::TPtr&& ev) {
@@ -1221,16 +1221,16 @@ void TSqsService::InsertWaitingRequest(TSqsEvents::TEvGetLeaderNodeForQueueReque
     GetLeaderNodeRequests_.emplace(ev->Get()->UserName, std::move(ev));
 }
 
-void TSqsService::InsertWaitingRequest(TSqsEvents::TEvCountQueues::TPtr&& ev) { 
-    CountQueuesRequests_.emplace(ev->Get()->UserName, std::move(ev)); 
-} 
- 
+void TSqsService::InsertWaitingRequest(TSqsEvents::TEvCountQueues::TPtr&& ev) {
+    CountQueuesRequests_.emplace(ev->Get()->UserName, std::move(ev));
+}
+
 void TSqsService::InsertWaitingRequest(TSqsEvents::TEvGetQueueId::TPtr&& ev, const TUserInfoPtr& userInfo) {
     userInfo->GetQueueIdRequests_.emplace(std::make_pair(ev->Get()->CustomQueueName, ev->Get()->FolderId), std::move(ev));
 }
 
-void TSqsService::InsertWaitingRequest(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr&& ev, const TUserInfoPtr& userInfo) { 
-    userInfo->GetQueueFolderIdAndCustomNameRequests_.emplace(ev->Get()->QueueName, std::move(ev)); 
+void TSqsService::InsertWaitingRequest(TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr&& ev, const TUserInfoPtr& userInfo) {
+    userInfo->GetQueueFolderIdAndCustomNameRequests_.emplace(ev->Get()->QueueName, std::move(ev));
 }
 
 void TSqsService::InsertWaitingRequest(TSqsEvents::TEvGetConfiguration::TPtr&& ev, const TUserInfoPtr& userInfo) {
@@ -1241,10 +1241,10 @@ void TSqsService::InsertWaitingRequest(TSqsEvents::TEvGetLeaderNodeForQueueReque
     userInfo->GetLeaderNodeRequests_.emplace(ev->Get()->QueueName, std::move(ev));
 }
 
-void TSqsService::InsertWaitingRequest(TSqsEvents::TEvCountQueues::TPtr&& ev, const TUserInfoPtr& userInfo) { 
-    userInfo->CountQueuesRequests_.emplace(ev->Get()->FolderId, std::move(ev)); 
-} 
- 
+void TSqsService::InsertWaitingRequest(TSqsEvents::TEvCountQueues::TPtr&& ev, const TUserInfoPtr& userInfo) {
+    userInfo->CountQueuesRequests_.emplace(ev->Get()->FolderId, std::move(ev));
+}
+
 template <class TMultimap>
 size_t TSqsService::MoveUserRequests(const TUserInfoPtr& userInfo, TMultimap& map) {
     size_t moved = 0;

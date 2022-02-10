@@ -27,7 +27,7 @@ SRCS(
     cli_fakeinitshard.cpp
     cli_keyvalue.cpp
     cli_persqueue.cpp
-    cli_persqueue_cluster_discovery.cpp 
+    cli_persqueue_cluster_discovery.cpp
     cli_persqueue_stress.cpp
     cli_load.cpp
     cli_minikql_compile_and_exec.cpp

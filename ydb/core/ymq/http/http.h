@@ -51,14 +51,14 @@ private:
         if (SecurityToken_ && !config.GetYandexCloudMode()) {
             // it's also TVM-compatible due to universal TicketParser
             request->MutableCredentials()->SetOAuthToken(SecurityToken_);
-        } 
+        }
     }
- 
+
     TString GetRequestPathPart(TStringBuf path, size_t partIdx) const;
     TString ExtractQueueNameFromPath(const TStringBuf path);
     TString ExtractAccountNameFromPath(const TStringBuf path);
 
-    ui64 CalculateRequestSizeInBytes(const THttpInput& input, const ui64 contentLength) const; 
+    ui64 CalculateRequestSizeInBytes(const THttpInput& input, const ui64 contentLength) const;
     void ExtractQueueAndAccountNames(const TStringBuf path);
 
     TString HttpHeadersLogString(const THttpInput& input);
@@ -80,13 +80,13 @@ private:
     void SetupDeleteMessageBatch(TDeleteMessageBatchRequest* const req);
     void SetupDeleteQueue(TDeleteQueueRequest* const req);
     void SetupListPermissions(TListPermissionsRequest* const req);
-    void SetupListDeadLetterSourceQueues(TListDeadLetterSourceQueuesRequest* const req); 
+    void SetupListDeadLetterSourceQueues(TListDeadLetterSourceQueuesRequest* const req);
     void SetupPrivateDeleteQueueBatch(TDeleteQueueBatchRequest* const req);
     void SetupPrivatePurgeQueueBatch(TPurgeQueueBatchRequest* const req);
     void SetupPrivateGetQueueAttributesBatch(TGetQueueAttributesBatchRequest* const req);
     void SetupDeleteUser(TDeleteUserRequest* const req);
     void SetupListQueues(TListQueuesRequest* const req);
-    void SetupPrivateCountQueues(TCountQueuesRequest* const req); 
+    void SetupPrivateCountQueues(TCountQueuesRequest* const req);
     void SetupListUsers(TListUsersRequest* const req);
     void SetupModifyPermissions(TModifyPermissionsRequest* const req);
     void SetupReceiveMessage(TReceiveMessageRequest* const req);
@@ -120,7 +120,7 @@ private:
     TString ApiMethod_;
 
     THolder<TAwsRequestSignV4> AwsSignature_;
- 
+
     TMaybe<TBuffer> InputData;
     TString HttpMethod;
     TMaybe<TSqsHttpResponse> Response_;
@@ -129,8 +129,8 @@ private:
     // Source values parsed from headers
     TString SourceAddress_;
 
-    ui64 RequestSizeInBytes_ = 0; 
- 
+    ui64 RequestSizeInBytes_ = 0;
+
     bool IsPrivateRequest_ = false; // Has "/private" path prefix
     TInstant StartTime_ = TInstant::Now();
 };
@@ -169,7 +169,7 @@ private:
     const NKikimrConfig::TSqsConfig Config;
     NActors::TActorSystem* ActorSystem_ = nullptr;
     TIntrusivePtr<THttpCounters> HttpCounters_; // http subsystem counters
-    THolder<TCloudAuthCounters> CloudAuthCounters_; // cloud_auth subsystem counters 
+    THolder<TCloudAuthCounters> CloudAuthCounters_; // cloud_auth subsystem counters
     TIntrusivePtr<TUserCounters> AggregatedUserCounters_; // aggregated counters for user in core subsystem
     ui32 PoolId_ = 0;
 };

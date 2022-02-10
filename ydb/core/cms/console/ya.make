@@ -59,7 +59,7 @@ SRCS(
     log_settings_configurator.h
     modifications_validator.cpp
     modifications_validator.h
-    net_classifier_updater.cpp 
+    net_classifier_updater.cpp
     shared_cache_configurator.cpp
     shared_cache_configurator.h
     tx_processor.cpp

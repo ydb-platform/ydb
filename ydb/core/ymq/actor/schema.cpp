@@ -27,26 +27,26 @@ extern const TString RPS_QUOTA_NAME = "RPSQuota";
 
 namespace {
 
-static const char* const GetNextAtomicValueQuery = R"__( 
-    ( 
-        (let counterTable '%1$s/.AtomicCounter) 
-        (let counterRow '( 
-            '('counter_key (Uint64 '0)))) 
-        (let counterSelect '( 
-            'value)) 
-        (let counterRead 
-            (SelectRow counterTable counterRow counterSelect)) 
-        (let newValue 
-            (Add (Member counterRead 'value) (Uint64 '1))) 
-        (let counterUpdate '( 
-            '('value newValue))) 
-        (return (Extend 
-            (AsList (SetResult 'value newValue)) 
-            (AsList (UpdateRow counterTable counterRow counterUpdate)) 
-        )) 
-    ) 
-)__"; 
- 
+static const char* const GetNextAtomicValueQuery = R"__(
+    (
+        (let counterTable '%1$s/.AtomicCounter)
+        (let counterRow '(
+            '('counter_key (Uint64 '0))))
+        (let counterSelect '(
+            'value))
+        (let counterRead
+            (SelectRow counterTable counterRow counterSelect))
+        (let newValue
+            (Add (Member counterRead 'value) (Uint64 '1)))
+        (let counterUpdate '(
+            '('value newValue)))
+        (return (Extend
+            (AsList (SetResult 'value newValue))
+            (AsList (UpdateRow counterTable counterRow counterUpdate))
+        ))
+    )
+)__";
+
 static bool SuccessStatusCode(ui32 code) {
     switch (NTxProxy::TResultStatus::EStatus(code)) {
         case NTxProxy::TResultStatus::EStatus::ExecComplete:
@@ -110,31 +110,31 @@ static void SetOnePartitionPerShardSettings(NKikimrSchemeOp::TTableDescription& 
     }
 }
 
-} // namespace 
- 
-THolder<TEvTxUserProxy::TEvProposeTransaction> 
-    MakeExecuteEvent(const TString& query) 
-{ 
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-    auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction(); 
-    trans->SetMode(NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE_AND_EXEC); 
-    trans->SetFlatMKQL(true); 
-    trans->MutableProgram()->SetText(query); 
- 
-    return ev; 
-} 
- 
-THolder<TEvTxUserProxy::TEvProposeTransaction> 
+} // namespace
+
+THolder<TEvTxUserProxy::TEvProposeTransaction>
+    MakeExecuteEvent(const TString& query)
+{
+    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
+    trans->SetMode(NKikimrTxUserProxy::TMiniKQLTransaction::COMPILE_AND_EXEC);
+    trans->SetFlatMKQL(true);
+    trans->MutableProgram()->SetText(query);
+
+    return ev;
+}
+
+THolder<TEvTxUserProxy::TEvProposeTransaction>
     MakeCreateTableEvent(const TString& root,
                          const TTable& table,
-                         size_t queueShardsCount) 
+                         size_t queueShardsCount)
 {
     auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
     // Transaction info
     auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
 
     if (table.Shard != -1) {
-        trans->SetWorkingDir(TString::Join(root, "/", ToString(table.Shard))); 
+        trans->SetWorkingDir(TString::Join(root, "/", ToString(table.Shard)));
     } else {
         trans->SetWorkingDir(root);
     }
@@ -182,37 +182,37 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
     return ev;
 }
 
-THolder<TEvTxUserProxy::TEvProposeTransaction> 
-    MakeDeleteTableEvent(const TString& root, 
-                         const TTable& table) 
-{ 
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-    // Transaction info 
-    auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme(); 
-    if (table.Shard == -1) { 
-        trans->SetWorkingDir(root); 
-    } else { 
-        trans->SetWorkingDir(root + "/" + ToString(table.Shard)); 
-    } 
+THolder<TEvTxUserProxy::TEvProposeTransaction>
+    MakeDeleteTableEvent(const TString& root,
+                         const TTable& table)
+{
+    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    // Transaction info
+    auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
+    if (table.Shard == -1) {
+        trans->SetWorkingDir(root);
+    } else {
+        trans->SetWorkingDir(root + "/" + ToString(table.Shard));
+    }
     trans->SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
-    trans->MutableDrop()->SetName(table.Name); 
- 
-    return ev; 
-} 
- 
-THolder<TEvTxUserProxy::TEvProposeTransaction> 
-    MakeRemoveDirectoryEvent(const TString& root, const TString& name) 
-{ 
-    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-    // Transaction info 
-    auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme(); 
-    trans->SetWorkingDir(root); 
+    trans->MutableDrop()->SetName(table.Name);
+
+    return ev;
+}
+
+THolder<TEvTxUserProxy::TEvProposeTransaction>
+    MakeRemoveDirectoryEvent(const TString& root, const TString& name)
+{
+    auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    // Transaction info
+    auto* trans = ev->Record.MutableTransaction()->MutableModifyScheme();
+    trans->SetWorkingDir(root);
     trans->SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);
-    trans->MutableDrop()->SetName(name); 
- 
-    return ev; 
-} 
- 
+    trans->MutableDrop()->SetName(name);
+
+    return ev;
+}
+
 THolder<TEvTxUserProxy::TEvProposeTransaction>
     MakeCreateKesusEvent(const TString& root,
                          const TString& kesusName)
@@ -248,12 +248,12 @@ THolder<TEvTxUserProxy::TEvProposeTransaction>
 }
 
 TCreateUserSchemaActor::TCreateUserSchemaActor(const TString& root,
-                                               const TString& userName, 
+                                               const TString& userName,
                                                const TActorId& sender,
                                                const TString& requestId,
                                                TIntrusivePtr<TUserCounters> userCounters)
     : Root_(root)
-    , UserName_(userName) 
+    , UserName_(userName)
     , Sender_(sender)
     , SI_(static_cast<int>(ECreating::MakeDirectory))
     , RequestId_(requestId)
@@ -459,36 +459,36 @@ void TDeleteUserSchemaActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
 }
 
 TAtomicCounterActor::TAtomicCounterActor(const TActorId& sender, const TString& rootPath, const TString& requestId)
-    : Sender_(sender) 
-    , RootPath_(rootPath) 
-    , RequestId_(requestId) 
-{ 
-} 
- 
-TAtomicCounterActor::~TAtomicCounterActor() = default; 
- 
+    : Sender_(sender)
+    , RootPath_(rootPath)
+    , RequestId_(requestId)
+{
+}
+
+TAtomicCounterActor::~TAtomicCounterActor() = default;
+
 void TAtomicCounterActor::Bootstrap() {
-    Become(&TThis::StateFunc); 
-    auto ev = MakeExecuteEvent(Sprintf(GetNextAtomicValueQuery, RootPath_.c_str())); 
+    Become(&TThis::StateFunc);
+    auto ev = MakeExecuteEvent(Sprintf(GetNextAtomicValueQuery, RootPath_.c_str()));
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), true, TQueuePath(), nullptr));
-} 
- 
+}
+
 void TAtomicCounterActor::HandleExecuted(TSqsEvents::TEvExecuted::TPtr& ev) {
-    const auto& record = ev->Get()->Record; 
-    const auto status = record.GetStatus(); 
- 
-    if (SuccessStatusCode(status)) { 
-        const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse())); 
+    const auto& record = ev->Get()->Record;
+    const auto status = record.GetStatus();
+
+    if (SuccessStatusCode(status)) {
+        const TValue val(TValue::Create(record.GetExecutionEngineEvaluatedResponse()));
         Send(Sender_,
-                 MakeHolder<TSqsEvents::TEvAtomicCounterIncrementResult>(true, "ok", val["value"])); 
-    } else { 
+                 MakeHolder<TSqsEvents::TEvAtomicCounterIncrementResult>(true, "ok", val["value"]));
+    } else {
         RLOG_SQS_ERROR("Failed to increment the atomic counter: bad status code");
         Send(Sender_,
-                 MakeHolder<TSqsEvents::TEvAtomicCounterIncrementResult>(false)); 
-    } 
+                 MakeHolder<TSqsEvents::TEvAtomicCounterIncrementResult>(false));
+    }
     PassAway();
-} 
- 
+}
+
 template <class TEvCmd, class TEvCmdResult>
 class TQuoterCmdRunner : public TActorBootstrapped<TQuoterCmdRunner<TEvCmd, TEvCmdResult>> {
 public:

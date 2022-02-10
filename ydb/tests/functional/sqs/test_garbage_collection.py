@@ -9,7 +9,7 @@ import pytest
 from hamcrest import assert_that, equal_to, less_than_or_equal_to
 
 from sqs_requests_client import SqsHttpApi
- 
+
 from sqs_matchers import ReadResponseMatcher
 
 from sqs_test_base import to_bytes

@@ -66,14 +66,14 @@ void TPQWriteService::Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpda
 
 
 void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx) {
-    Y_VERIFY(ev->Get()->ClustersList); 
-    Y_VERIFY(ev->Get()->ClustersList->Clusters.size()); 
+    Y_VERIFY(ev->Get()->ClustersList);
+    Y_VERIFY(ev->Get()->ClustersList->Clusters.size());
 
-    const auto& clusters = ev->Get()->ClustersList->Clusters; 
- 
-    LocalCluster = ""; 
-    Enabled = false; 
- 
+    const auto& clusters = ev->Get()->ClustersList->Clusters;
+
+    LocalCluster = "";
+    Enabled = false;
+
     // Rebalance load on installation clusters: if preferred cluster is enabled and session is alive long enough close it so client can recreate it in preferred cluster
     auto remoteClusterEnabledDelay = TDuration::Seconds(AppData(ctx)->PQConfig.GetRemoteClusterEnabledDelaySec());
     auto closeClientSessionWithEnabledRemotePreferredClusterDelay = TDuration::Seconds(AppData(ctx)->PQConfig.GetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec());
@@ -86,7 +86,7 @@ void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvCluster
             Enabled = cluster.IsEnabled;
             continue;
         }
- 
+
         remoteClusters.emplace(cluster.Name);
 
         if (!cluster.IsEnabled) {
@@ -126,7 +126,7 @@ void TPQWriteService::Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvCluster
                     const auto& workerID = Sessions[session.first];
                     Send(workerID, new TEvPQProxy::TEvDieCommand(closeReason, PersQueue::ErrorCode::PREFERRED_CLUSTER_MISMATCHED));
                 }
-            } 
+            }
         }
     }
 }
@@ -180,7 +180,7 @@ void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPt
     TString localCluster = AvailableLocalCluster(ctx);
     if (HaveClusters && localCluster.empty()) {
         ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
-        if (LocalCluster) { 
+        if (LocalCluster) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - cluster disabled");
             ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), grpc::Status::OK); //CANCELLED
         } else {

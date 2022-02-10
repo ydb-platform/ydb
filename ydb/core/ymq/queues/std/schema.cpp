@@ -11,9 +11,9 @@ TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutos
         TColumn("MaximumMessageSize",        NScheme::NTypeIds::Uint64),
         TColumn("MessageRetentionPeriod",    NScheme::NTypeIds::Uint64),
         TColumn("ReceiveMessageWaitTime",    NScheme::NTypeIds::Uint64),
-        TColumn("VisibilityTimeout",         NScheme::NTypeIds::Uint64), 
-        TColumn("DlqName",                   NScheme::NTypeIds::Utf8), 
-        TColumn("DlqArn",                    NScheme::NTypeIds::Utf8), 
+        TColumn("VisibilityTimeout",         NScheme::NTypeIds::Uint64),
+        TColumn("DlqName",                   NScheme::NTypeIds::Utf8),
+        TColumn("DlqArn",                    NScheme::NTypeIds::Utf8),
         TColumn("MaxReceiveCount",           NScheme::NTypeIds::Uint64),
         TColumn("ShowDetailedCountersDeadline", NScheme::NTypeIds::Uint64)};
 
@@ -35,8 +35,8 @@ TVector<TTable> GetStandardTables(ui64 shards, ui64 partitions, bool enableAutos
         TColumn("Offset",                    NScheme::NTypeIds::Uint64, true),
         TColumn("Attributes",                NScheme::NTypeIds::String),
         TColumn("Data",                      NScheme::NTypeIds::String),
-        TColumn("MessageId",                 NScheme::NTypeIds::String), 
-        TColumn("SenderId",                  NScheme::NTypeIds::String)}; 
+        TColumn("MessageId",                 NScheme::NTypeIds::String),
+        TColumn("SenderId",                  NScheme::NTypeIds::String)};
 
     const TVector<TColumn> MessagesColumns = {
         TColumn("Offset",                    NScheme::NTypeIds::Uint64, true),

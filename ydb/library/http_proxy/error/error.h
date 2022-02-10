@@ -84,7 +84,7 @@ extern const TErrorClass RECEIPT_HANDLE_IS_INVALID;
 // GetQueueAttributes errors
 // https://docs.aws.amazon.com/en_us/AWSSimpleQueueService/latest/APIReference/API_GetQueueAttributes.html
 extern const TErrorClass INVALID_ATTRIBUTE_NAME;
-extern const TErrorClass INVALID_ATTRIBUTE_VALUE; 
+extern const TErrorClass INVALID_ATTRIBUTE_VALUE;
 
 // Leader resolving errors
 extern const TErrorClass LEADER_RESOLVING_ERROR;

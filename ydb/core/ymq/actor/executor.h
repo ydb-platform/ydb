@@ -36,10 +36,10 @@ public:
         Shard_ = shard;
         return *this;
     }
-    TExecutorBuilder& QueueVersion(ui64 version) { 
-        QueueVersion_ = version; 
-        return *this; 
-    } 
+    TExecutorBuilder& QueueVersion(ui64 version) {
+        QueueVersion_ = version;
+        return *this;
+    }
     TExecutorBuilder& QueueLeader(const TActorId& queueLeaderActor) {
         QueueLeaderActor_ = queueLeaderActor;
         return *this;
@@ -60,10 +60,10 @@ public:
         QueryId_ = id;
         return *this;
     }
-    TExecutorBuilder& Fifo(bool isFifo) { 
-        IsFifoQueue_ = isFifo; 
-        return *this; 
-    } 
+    TExecutorBuilder& Fifo(bool isFifo) {
+        IsFifoQueue_ = isFifo;
+        return *this;
+    }
     TExecutorBuilder& Mode(NKikimrTxUserProxy::TMiniKQLTransaction::EMode mode) {
         Request().Record.MutableTransaction()->MutableMiniKQLTransaction()->SetMode(mode);
         return *this;
@@ -126,7 +126,7 @@ private:
         return QueryId_ != EQueryId::QUERY_VECTOR_SIZE;
     }
 
-    const char* GetQueryById(size_t idx); 
+    const char* GetQueryById(size_t idx);
 
 private:
     const TActorId Parent_;
@@ -134,11 +134,11 @@ private:
     THolder<TEvTxUserProxy::TEvProposeTransaction> ProposeTransactionRequest_;
     TMaybe<TParameters> Parameters_;
     bool RetryOnTimeout_ = false;
-    bool IsFifoQueue_ = false; 
+    bool IsFifoQueue_ = false;
     TString UserName_;
     TString QueueName_;
     ui64 Shard_ = 0;
-    ui64 QueueVersion_ = 0; 
+    ui64 QueueVersion_ = 0;
     TActorId QueueLeaderActor_;
     TSqsEvents::TExecutedCallback Callback_;
     EQueryId QueryId_ = EQueryId::QUERY_VECTOR_SIZE;
@@ -197,10 +197,10 @@ private:
     void PassAway();
 
     void HandleCompile(TMiniKQLCompileServiceEvents::TEvCompileStatus::TPtr& ev);
- 
-    template<typename TKikimrResultRecord> 
+
+    template<typename TKikimrResultRecord>
     bool ShouldRetryOnFail(const TKikimrResultRecord& record) const;
- 
+
     void HandleResponse(TResponse::TPtr& ev);
     void HandleWakeup(TEvWakeup::TPtr& ev);
     void HandleResult(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev);

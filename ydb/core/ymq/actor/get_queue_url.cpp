@@ -23,14 +23,14 @@ public:
     {
         CopyAccountName(Request());
         Response_.MutableGetQueueUrl()->SetRequestId(RequestId_);
- 
+
         CopySecurityToken(Request());
     }
 
-    static constexpr bool NeedExistingQueue() { 
-        return false; 
-    } 
- 
+    static constexpr bool NeedExistingQueue() {
+        return false;
+    }
+
 private:
     bool DoValidate() override {
         if (!GetQueueName()) {
@@ -68,11 +68,11 @@ private:
         } else {
             if (ev->Get()->Exists) {
                 auto* result = Response_.MutableGetQueueUrl();
-                if (IsCloud()) { 
+                if (IsCloud()) {
                     result->SetQueueUrl(MakeQueueUrl(TString::Join(ev->Get()->QueueId, "/", GetQueueName())));
-                } else { 
+                } else {
                     result->SetQueueUrl(MakeQueueUrl(ev->Get()->QueueId));
-                } 
+                }
             } else {
                 MakeError(MutableErrorDesc(), NErrors::NON_EXISTENT_QUEUE);
             }

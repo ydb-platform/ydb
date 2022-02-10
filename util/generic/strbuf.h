@@ -171,63 +171,63 @@ public:
         return data() != nullptr;
     }
 
-public: 
-    /** 
-     * Tries to split string in two parts using given delimiter character. 
-     * Searches for the delimiter, scanning string from the beginning. 
-     * The delimiter is excluded from the result. Both out parameters are 
-     * left unmodified if there was no delimiter character in string. 
-     * 
-     * @param[in] delim                 Delimiter character. 
-     * @param[out] l                    The first part of split result. 
-     * @param[out] r                    The second part of split result. 
-     * @returns                         Whether the split was actually performed. 
-     */ 
+public:
+    /**
+     * Tries to split string in two parts using given delimiter character.
+     * Searches for the delimiter, scanning string from the beginning.
+     * The delimiter is excluded from the result. Both out parameters are
+     * left unmodified if there was no delimiter character in string.
+     *
+     * @param[in] delim                 Delimiter character.
+     * @param[out] l                    The first part of split result.
+     * @param[out] r                    The second part of split result.
+     * @returns                         Whether the split was actually performed.
+     */
     inline bool TrySplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
         return TrySplitOn(TBase::find(delim), l, r);
     }
 
-    /** 
-     * Tries to split string in two parts using given delimiter character. 
-     * Searches for the delimiter, scanning string from the end. 
-     * The delimiter is excluded from the result. Both out parameters are 
-     * left unmodified if there was no delimiter character in string. 
-     * 
-     * @param[in] delim                 Delimiter character. 
-     * @param[out] l                    The first part of split result. 
-     * @param[out] r                    The second part of split result. 
-     * @returns                         Whether the split was actually performed. 
-     */ 
+    /**
+     * Tries to split string in two parts using given delimiter character.
+     * Searches for the delimiter, scanning string from the end.
+     * The delimiter is excluded from the result. Both out parameters are
+     * left unmodified if there was no delimiter character in string.
+     *
+     * @param[in] delim                 Delimiter character.
+     * @param[out] l                    The first part of split result.
+     * @param[out] r                    The second part of split result.
+     * @returns                         Whether the split was actually performed.
+     */
     inline bool TryRSplit(TCharType delim, TdSelf& l, TdSelf& r) const noexcept {
         return TrySplitOn(TBase::rfind(delim), l, r);
     }
 
-    /** 
-     * Tries to split string in two parts using given delimiter sequence. 
-     * Searches for the delimiter, scanning string from the beginning. 
-     * The delimiter sequence is excluded from the result. Both out parameters 
-     * are left unmodified if there was no delimiter character in string. 
-     * 
-     * @param[in] delim                 Delimiter sequence. 
-     * @param[out] l                    The first part of split result. 
-     * @param[out] r                    The second part of split result. 
-     * @returns                         Whether the split was actually performed. 
-     */ 
+    /**
+     * Tries to split string in two parts using given delimiter sequence.
+     * Searches for the delimiter, scanning string from the beginning.
+     * The delimiter sequence is excluded from the result. Both out parameters
+     * are left unmodified if there was no delimiter character in string.
+     *
+     * @param[in] delim                 Delimiter sequence.
+     * @param[out] l                    The first part of split result.
+     * @param[out] r                    The second part of split result.
+     * @returns                         Whether the split was actually performed.
+     */
     inline bool TrySplit(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
         return TrySplitOn(TBase::find(delim), l, r, delim.size());
     }
 
-    /** 
-     * Tries to split string in two parts using given delimiter sequence. 
-     * Searches for the delimiter, scanning string from the end. 
-     * The delimiter sequence is excluded from the result. Both out parameters 
-     * are left unmodified if there was no delimiter character in string. 
-     * 
-     * @param[in] delim                 Delimiter sequence. 
-     * @param[out] l                    The first part of split result. 
-     * @param[out] r                    The second part of split result. 
-     * @returns                         Whether the split was actually performed. 
-     */ 
+    /**
+     * Tries to split string in two parts using given delimiter sequence.
+     * Searches for the delimiter, scanning string from the end.
+     * The delimiter sequence is excluded from the result. Both out parameters
+     * are left unmodified if there was no delimiter character in string.
+     *
+     * @param[in] delim                 Delimiter sequence.
+     * @param[out] l                    The first part of split result.
+     * @param[out] r                    The second part of split result.
+     * @returns                         Whether the split was actually performed.
+     */
     inline bool TryRSplit(TdSelf delim, TdSelf& l, TdSelf& r) const noexcept {
         return TrySplitOn(TBase::rfind(delim), l, r, delim.size());
     }
@@ -521,7 +521,7 @@ private:
 
     template <typename TDelimiterType>
     inline void SplitTemplate(TDelimiterType delim, TdSelf& l, TdSelf& r) const noexcept {
-        if (!TrySplit(delim, l, r)) { 
+        if (!TrySplit(delim, l, r)) {
             l = *this;
             r = TdSelf();
         }
@@ -529,7 +529,7 @@ private:
 
     template <typename TDelimiterType>
     inline void RSplitTemplate(TDelimiterType delim, TdSelf& l, TdSelf& r) const noexcept {
-        if (!TryRSplit(delim, l, r)) { 
+        if (!TryRSplit(delim, l, r)) {
             r = *this;
             l = TdSelf();
         }

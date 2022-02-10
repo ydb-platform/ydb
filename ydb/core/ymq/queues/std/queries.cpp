@@ -415,14 +415,14 @@ const char* const DeleteMessageQuery = R"__(
 
 const char* const SetQueueAttributesQuery = R"__(
     (
-        (let delay           (Parameter 'DELAY             (OptionalType (DataType 'Uint64)))) 
-        (let retention       (Parameter 'RETENTION         (OptionalType (DataType 'Uint64)))) 
-        (let visibility      (Parameter 'VISIBILITY        (OptionalType (DataType 'Uint64)))) 
-        (let wait            (Parameter 'WAIT              (OptionalType (DataType 'Uint64)))) 
-        (let maxMessageSize  (Parameter 'MAX_MESSAGE_SIZE  (OptionalType (DataType 'Uint64)))) 
-        (let maxReceiveCount (Parameter 'MAX_RECEIVE_COUNT (OptionalType (DataType 'Uint64)))) 
-        (let dlqArn          (Parameter 'DLQ_TARGET_ARN    (OptionalType (DataType 'Utf8String)))) 
-        (let dlqName         (Parameter 'DLQ_TARGET_NAME   (OptionalType (DataType 'Utf8String)))) 
+        (let delay           (Parameter 'DELAY             (OptionalType (DataType 'Uint64))))
+        (let retention       (Parameter 'RETENTION         (OptionalType (DataType 'Uint64))))
+        (let visibility      (Parameter 'VISIBILITY        (OptionalType (DataType 'Uint64))))
+        (let wait            (Parameter 'WAIT              (OptionalType (DataType 'Uint64))))
+        (let maxMessageSize  (Parameter 'MAX_MESSAGE_SIZE  (OptionalType (DataType 'Uint64))))
+        (let maxReceiveCount (Parameter 'MAX_RECEIVE_COUNT (OptionalType (DataType 'Uint64))))
+        (let dlqArn          (Parameter 'DLQ_TARGET_ARN    (OptionalType (DataType 'Utf8String))))
+        (let dlqName         (Parameter 'DLQ_TARGET_NAME   (OptionalType (DataType 'Utf8String))))
         (let userName        (Parameter 'USER_NAME         (DataType 'Utf8String)))
 
         (let attrsTable '%1$s/Attributes)
@@ -434,10 +434,10 @@ const char* const SetQueueAttributesQuery = R"__(
             'MessageRetentionPeriod
             'ReceiveMessageWaitTime
             'VisibilityTimeout
-            'MaximumMessageSize 
-            'DlqName 
-            'DlqArn 
-            'MaxReceiveCount)) 
+            'MaximumMessageSize
+            'DlqName
+            'DlqArn
+            'MaxReceiveCount))
         (let attrsRead (SelectRow attrsTable attrsRow attrsSelect))
 
         (let attrsUpdate '(
@@ -445,9 +445,9 @@ const char* const SetQueueAttributesQuery = R"__(
             '('MessageRetentionPeriod (Coalesce retention (Member attrsRead 'MessageRetentionPeriod)))
             '('ReceiveMessageWaitTime (Coalesce wait (Member attrsRead 'ReceiveMessageWaitTime)))
             '('VisibilityTimeout (Coalesce visibility (Member attrsRead 'VisibilityTimeout)))
-            '('MaxReceiveCount (Coalesce maxReceiveCount (Member attrsRead 'MaxReceiveCount))) 
-            '('DlqName (Coalesce dlqName (Member attrsRead 'DlqName))) 
-            '('DlqArn (Coalesce dlqArn (Member attrsRead 'DlqArn))) 
+            '('MaxReceiveCount (Coalesce maxReceiveCount (Member attrsRead 'MaxReceiveCount)))
+            '('DlqName (Coalesce dlqName (Member attrsRead 'DlqName)))
+            '('DlqArn (Coalesce dlqArn (Member attrsRead 'DlqArn)))
             '('MaximumMessageSize (Coalesce maxMessageSize (Member attrsRead 'MaximumMessageSize)))))
 
         (let queuesTable '%5$s/.Queues)
@@ -464,7 +464,7 @@ const char* const SetQueueAttributesQuery = R"__(
             '('DlqName (Coalesce dlqName (Member queuesRowRead 'DlqName)))))
 
         (return (AsList
-            (UpdateRow attrsTable attrsRow attrsUpdate) 
+            (UpdateRow attrsTable attrsRow attrsUpdate)
             (UpdateRow queuesTable queuesRow queuesRowUpdate)))
     )
 )__";
@@ -482,9 +482,9 @@ const char* const InternalGetQueueAttributesQuery = R"__(
             'MaximumMessageSize
             'MessageRetentionPeriod
             'ReceiveMessageWaitTime
-            'MaxReceiveCount 
-            'DlqName 
-            'DlqArn 
+            'MaxReceiveCount
+            'DlqName
+            'DlqArn
             'VisibilityTimeout
             'ShowDetailedCountersDeadline))
 
@@ -500,24 +500,24 @@ const char* const ListQueuesQuery = R"__(
 
         (let queuesTable '%5$s/.Queues)
 
-        (let skipFolderIdFilter (Equal folderId (Utf8String '""))) 
- 
+        (let skipFolderIdFilter (Equal folderId (Utf8String '"")))
+
         (let queuesRange '(
             '('Account userName userName)
             '('QueueName (Utf8String '"") (Void))))
-        (let queueSelect '('QueueName 'QueueId 'QueueState 'FifoQueue 'CreatedTimestamp 'CustomQueueName 'FolderId 'MasterTabletId 'Version 'Shards)) 
+        (let queueSelect '('QueueName 'QueueId 'QueueState 'FifoQueue 'CreatedTimestamp 'CustomQueueName 'FolderId 'MasterTabletId 'Version 'Shards))
         (let queues (Member (SelectRange queuesTable queuesRange queueSelect '()) 'List))
 
         (let filtered (Filter queues (lambda '(item) (block '(
-            (return (Coalesce 
-                (And 
-                    (Or 
-                        (Equal (Member item 'QueueState) (Uint64 '1)) 
-                        (Equal (Member item 'QueueState) (Uint64 '3))) 
-                    (Or 
-                        (Equal (Member item 'FolderId) folderId) 
-                        skipFolderIdFilter)) 
-                (Bool 'false))) 
+            (return (Coalesce
+                (And
+                    (Or
+                        (Equal (Member item 'QueueState) (Uint64 '1))
+                        (Equal (Member item 'QueueState) (Uint64 '3)))
+                    (Or
+                        (Equal (Member item 'FolderId) folderId)
+                        skipFolderIdFilter))
+                (Bool 'false)))
         )))))
 
         (return (AsList
@@ -532,8 +532,8 @@ const char* const LoadMessageQuery = R"__(
                 '('RandomId (DataType 'Uint64))
                 '('Offset   (DataType 'Uint64))
                 '('CurrentVisibilityDeadline (DataType 'Uint64))
-                '('DlqIndex (DataType 'Uint64)) 
-                '('IsDeadLetter (DataType 'Bool)) 
+                '('DlqIndex (DataType 'Uint64))
+                '('IsDeadLetter (DataType 'Bool))
                 '('VisibilityDeadline (DataType 'Uint64))))))
         (let now     (Parameter 'NOW     (DataType 'Uint64)))
         (let readId  (Parameter 'READ_ID (DataType 'Uint64)))
@@ -563,7 +563,7 @@ const char* const LoadMessageQuery = R"__(
                     (let fields '(
                         'Attributes
                         'Data
-                        'SenderId 
+                        'SenderId
                         'MessageId))
                     (return (SelectRow dataTable row fields)))))
 
@@ -596,12 +596,12 @@ const char* const LoadMessageQuery = R"__(
                         '('LoadId readId)
                         '('Attributes (Member data 'Attributes))
                         '('Data (Member data 'Data))
-                        '('SenderId (Member data 'SenderId)) 
+                        '('SenderId (Member data 'SenderId))
                         '('MessageId (Member data 'MessageId))
                         '('FirstReceiveTimestamp receiveTimestamp)
                         '('LockTimestamp now)
-                        '('IsDeadLetter (Member item 'IsDeadLetter)) 
-                        '('DlqIndex (Member item 'DlqIndex)) 
+                        '('IsDeadLetter (Member item 'IsDeadLetter))
+                        '('DlqIndex (Member item 'DlqIndex))
                         '('ReceiveCount (Add (Member read 'ReceiveCount) (Uint32 '1)))
                         '('SentTimestamp (Member read 'SentTimestamp))
                         '('VisibilityDeadline (If valid (Member item 'VisibilityDeadline) (Member read 'VisibilityDeadline)))
@@ -615,7 +615,7 @@ const char* const LoadMessageQuery = R"__(
 
         (return (Extend
             (AsList (SetResult 'result records))
-            (AsList (SetResult 'movedMessagesCount (Uint64 '0))) 
+            (AsList (SetResult 'movedMessagesCount (Uint64 '0)))
 
             (Map result (lambda '(item) (block '(
                 (let row '(
@@ -630,204 +630,204 @@ const char* const LoadMessageQuery = R"__(
     )
 )__";
 
-const char* const LoadOrRedriveMessageQuery = R"__( 
-    ( 
-        (let keys (Parameter 'KEYS 
-            (ListType (StructType 
-                '('RandomId (DataType 'Uint64)) 
-                '('Offset   (DataType 'Uint64)) 
-                '('CurrentVisibilityDeadline (DataType 'Uint64)) 
-                '('DlqIndex (DataType 'Uint64)) 
-                '('IsDeadLetter (DataType 'Bool)) 
-                '('VisibilityDeadline (DataType 'Uint64)))))) 
- 
-        (let now     (Parameter 'NOW     (DataType 'Uint64))) 
-        (let readId  (Parameter 'READ_ID (DataType 'Uint64))) 
-        (let shard   (Parameter 'SHARD   (DataType 'Uint64))) 
-        (let deadLettersCount (Parameter 'DEAD_LETTERS_COUNT (DataType 'Uint64))) 
- 
-        (let sourceMessageDataTable     '%1$s/%2$lu/MessageData) 
-        (let sourceSentTsIdxTable       '%1$s/%2$lu/SentTimestampIdx) 
-        (let sourceInflyTable           '%1$s/%2$lu/Infly) 
-        (let sourceStateTable           '%1$s/State) 
- 
-        (let deadLetterMessageDataTable '%3$s/%4$lu/MessageData) 
-        (let deadLetterMessagesTable    '%3$s/%4$lu/Messages) 
-        (let deadLetterSentTsIdxTable   '%3$s/%4$lu/SentTimestampIdx) 
-        (let deadLetterStateTable       '%3$s/State) 
- 
-        (let sourceStateRow '( 
-            '('State (Uint64 '%2$lu)))) 
-        (let sourceStateSelect '( 
-            'MessageCount 
-            'LastModifiedTimestamp 
-            'InflyCount)) 
-        (let sourceStateRead (SelectRow sourceStateTable sourceStateRow sourceStateSelect)) 
- 
-        (let records 
-            (MapParameter keys (lambda '(item) (block '( 
-                (let read (block '( 
-                    (let row '( 
-                        '('Offset (Member item 'Offset)))) 
-                    (let fields '( 
-                        'LoadId 
-                        'FirstReceiveTimestamp 
-                        'ReceiveCount 
-                        'SentTimestamp 
-                        'VisibilityDeadline)) 
-                    (return (SelectRow sourceInflyTable row fields))))) 
- 
-                (let data (block '( 
-                    (let row '( 
-                        '('RandomId (Member item 'RandomId)) 
-                        '('Offset   (Member item 'Offset)))) 
-                    (let fields '( 
-                        'Attributes 
-                        'Data 
-                        'SenderId 
-                        'MessageId)) 
-                    (return (SelectRow sourceMessageDataTable row fields))))) 
- 
-                (let receiveTimestamp 
-                    (If (Coalesce (Equal (Member read 'FirstReceiveTimestamp) (Uint64 '0)) (Bool 'false)) now (Member read 'FirstReceiveTimestamp))) 
- 
-                (let valid 
-                    (Coalesce 
-                        (Or 
-                            (Equal (Member read 'VisibilityDeadline) (Member item 'CurrentVisibilityDeadline)) 
-                            (And 
-                                (Equal (Member read 'LoadId) readId) 
-                                (Equal (Member read 'VisibilityDeadline) (Member item 'VisibilityDeadline)))) 
-                        (Bool 'false))) 
- 
-                (return 
-                    (AsStruct 
-                        '('Offset (Member item 'Offset)) 
-                        '('RandomId (Member item 'RandomId)) 
-                        '('IsDeadLetter (Member item 'IsDeadLetter)) 
-                        '('DlqIndex (Member item 'DlqIndex)) 
-                        '('LoadId readId) 
-                        '('Attributes (Member data 'Attributes)) 
-                        '('Data (Member data 'Data)) 
-                        '('SenderId (Member data 'SenderId)) 
-                        '('MessageId (Member data 'MessageId)) 
-                        '('FirstReceiveTimestamp receiveTimestamp) 
-                        '('LockTimestamp now) 
-                        '('ReceiveCount (Add (Member read 'ReceiveCount) (Uint32 '1))) 
-                        '('SentTimestamp (Member read 'SentTimestamp)) 
-                        '('VisibilityDeadline (If valid (Member item 'VisibilityDeadline) (Member read 'VisibilityDeadline))) 
-                        '('Valid valid) 
-                        '('Exists (Exists read)))) 
-                    ))))) 
- 
-        (let validMessages 
-            (Filter records (lambda '(item) (block '( 
-                (return (Coalesce (Member item 'Valid) (Bool 'false)))))))) 
- 
-        (let messagesToMove 
-            (Filter validMessages (lambda '(item) (block '( 
-                (return (Coalesce (Member item 'IsDeadLetter) (Bool 'false)))))))) 
- 
-        (let messagesToUpdate 
-            (Filter validMessages (lambda '(item) (block '( 
-                (return (Coalesce (Not (Member item 'IsDeadLetter)) (Bool 'false)))))))) 
- 
-        (let deadLetterStateRow '( 
-            '('State (Uint64 '%4$lu)))) 
-        (let deadLetterStateSelect '( 
-            'MessageCount 
-            'WriteOffset 
-            'LastModifiedTimestamp)) 
-        (let deadLetterStateRead (SelectRow deadLetterStateTable deadLetterStateRow deadLetterStateSelect)) 
- 
-        (let newDlqMessagesCount (Add (Member deadLetterStateRead 'MessageCount) (Length messagesToMove))) 
-        (let newDlqWriteOffset (Add (Member deadLetterStateRead 'WriteOffset) deadLettersCount)) 
-        (let dlqStartOffset (Add (Member deadLetterStateRead 'WriteOffset) (Uint64 '1))) 
- 
-        (let dlqMostRecentTimestamp (Max (Member deadLetterStateRead 'LastModifiedTimestamp) now)) 
- 
-        (let deadLetterStateUpdate '( 
-            '('LastModifiedTimestamp dlqMostRecentTimestamp) 
-            '('MessageCount newDlqMessagesCount) 
-            '('WriteOffset newDlqWriteOffset))) 
- 
+const char* const LoadOrRedriveMessageQuery = R"__(
+    (
+        (let keys (Parameter 'KEYS
+            (ListType (StructType
+                '('RandomId (DataType 'Uint64))
+                '('Offset   (DataType 'Uint64))
+                '('CurrentVisibilityDeadline (DataType 'Uint64))
+                '('DlqIndex (DataType 'Uint64))
+                '('IsDeadLetter (DataType 'Bool))
+                '('VisibilityDeadline (DataType 'Uint64))))))
+
+        (let now     (Parameter 'NOW     (DataType 'Uint64)))
+        (let readId  (Parameter 'READ_ID (DataType 'Uint64)))
+        (let shard   (Parameter 'SHARD   (DataType 'Uint64)))
+        (let deadLettersCount (Parameter 'DEAD_LETTERS_COUNT (DataType 'Uint64)))
+
+        (let sourceMessageDataTable     '%1$s/%2$lu/MessageData)
+        (let sourceSentTsIdxTable       '%1$s/%2$lu/SentTimestampIdx)
+        (let sourceInflyTable           '%1$s/%2$lu/Infly)
+        (let sourceStateTable           '%1$s/State)
+
+        (let deadLetterMessageDataTable '%3$s/%4$lu/MessageData)
+        (let deadLetterMessagesTable    '%3$s/%4$lu/Messages)
+        (let deadLetterSentTsIdxTable   '%3$s/%4$lu/SentTimestampIdx)
+        (let deadLetterStateTable       '%3$s/State)
+
+        (let sourceStateRow '(
+            '('State (Uint64 '%2$lu))))
+        (let sourceStateSelect '(
+            'MessageCount
+            'LastModifiedTimestamp
+            'InflyCount))
+        (let sourceStateRead (SelectRow sourceStateTable sourceStateRow sourceStateSelect))
+
+        (let records
+            (MapParameter keys (lambda '(item) (block '(
+                (let read (block '(
+                    (let row '(
+                        '('Offset (Member item 'Offset))))
+                    (let fields '(
+                        'LoadId
+                        'FirstReceiveTimestamp
+                        'ReceiveCount
+                        'SentTimestamp
+                        'VisibilityDeadline))
+                    (return (SelectRow sourceInflyTable row fields)))))
+
+                (let data (block '(
+                    (let row '(
+                        '('RandomId (Member item 'RandomId))
+                        '('Offset   (Member item 'Offset))))
+                    (let fields '(
+                        'Attributes
+                        'Data
+                        'SenderId
+                        'MessageId))
+                    (return (SelectRow sourceMessageDataTable row fields)))))
+
+                (let receiveTimestamp
+                    (If (Coalesce (Equal (Member read 'FirstReceiveTimestamp) (Uint64 '0)) (Bool 'false)) now (Member read 'FirstReceiveTimestamp)))
+
+                (let valid
+                    (Coalesce
+                        (Or
+                            (Equal (Member read 'VisibilityDeadline) (Member item 'CurrentVisibilityDeadline))
+                            (And
+                                (Equal (Member read 'LoadId) readId)
+                                (Equal (Member read 'VisibilityDeadline) (Member item 'VisibilityDeadline))))
+                        (Bool 'false)))
+
+                (return
+                    (AsStruct
+                        '('Offset (Member item 'Offset))
+                        '('RandomId (Member item 'RandomId))
+                        '('IsDeadLetter (Member item 'IsDeadLetter))
+                        '('DlqIndex (Member item 'DlqIndex))
+                        '('LoadId readId)
+                        '('Attributes (Member data 'Attributes))
+                        '('Data (Member data 'Data))
+                        '('SenderId (Member data 'SenderId))
+                        '('MessageId (Member data 'MessageId))
+                        '('FirstReceiveTimestamp receiveTimestamp)
+                        '('LockTimestamp now)
+                        '('ReceiveCount (Add (Member read 'ReceiveCount) (Uint32 '1)))
+                        '('SentTimestamp (Member read 'SentTimestamp))
+                        '('VisibilityDeadline (If valid (Member item 'VisibilityDeadline) (Member read 'VisibilityDeadline)))
+                        '('Valid valid)
+                        '('Exists (Exists read))))
+                    )))))
+
+        (let validMessages
+            (Filter records (lambda '(item) (block '(
+                (return (Coalesce (Member item 'Valid) (Bool 'false))))))))
+
+        (let messagesToMove
+            (Filter validMessages (lambda '(item) (block '(
+                (return (Coalesce (Member item 'IsDeadLetter) (Bool 'false))))))))
+
+        (let messagesToUpdate
+            (Filter validMessages (lambda '(item) (block '(
+                (return (Coalesce (Not (Member item 'IsDeadLetter)) (Bool 'false))))))))
+
+        (let deadLetterStateRow '(
+            '('State (Uint64 '%4$lu))))
+        (let deadLetterStateSelect '(
+            'MessageCount
+            'WriteOffset
+            'LastModifiedTimestamp))
+        (let deadLetterStateRead (SelectRow deadLetterStateTable deadLetterStateRow deadLetterStateSelect))
+
+        (let newDlqMessagesCount (Add (Member deadLetterStateRead 'MessageCount) (Length messagesToMove)))
+        (let newDlqWriteOffset (Add (Member deadLetterStateRead 'WriteOffset) deadLettersCount))
+        (let dlqStartOffset (Add (Member deadLetterStateRead 'WriteOffset) (Uint64 '1)))
+
+        (let dlqMostRecentTimestamp (Max (Member deadLetterStateRead 'LastModifiedTimestamp) now))
+
+        (let deadLetterStateUpdate '(
+            '('LastModifiedTimestamp dlqMostRecentTimestamp)
+            '('MessageCount newDlqMessagesCount)
+            '('WriteOffset newDlqWriteOffset)))
+
         (let newSourceMessagesCount (Sub (Member sourceStateRead 'MessageCount) (Length messagesToMove)))
-        (let sourceStateUpdate '( 
-            '('LastModifiedTimestamp (Max (Member sourceStateRead 'LastModifiedTimestamp) now)) 
+        (let sourceStateUpdate '(
+            '('LastModifiedTimestamp (Max (Member sourceStateRead 'LastModifiedTimestamp) now))
             '('MessageCount newSourceMessagesCount)
-            '('InflyCount (Sub (Member sourceStateRead 'InflyCount) (Length messagesToMove))))) 
- 
-        (return (Extend 
+            '('InflyCount (Sub (Member sourceStateRead 'InflyCount) (Length messagesToMove)))))
+
+        (return (Extend
             (AsList (SetResult 'result records))
-            (AsList (SetResult 'movedMessagesCount (Length messagesToMove))) 
+            (AsList (SetResult 'movedMessagesCount (Length messagesToMove)))
             (AsList (SetResult 'newMessagesCount newSourceMessagesCount))
-            (AsList (UpdateRow deadLetterStateTable deadLetterStateRow deadLetterStateUpdate)) 
-            (AsList (UpdateRow sourceStateTable sourceStateRow sourceStateUpdate)) 
- 
-            (Map messagesToUpdate (lambda '(item) (block '( 
-                (let row '( 
-                    '('Offset (Member item 'Offset)))) 
-                (let update '( 
-                    '('LoadId                readId) 
-                    '('FirstReceiveTimestamp (Member item 'FirstReceiveTimestamp)) 
-                    '('LockTimestamp         (Member item 'LockTimestamp)) 
-                    '('ReceiveCount          (Member item 'ReceiveCount)) 
-                    '('VisibilityDeadline    (Member item 'VisibilityDeadline)))) 
-                (return (UpdateRow sourceInflyTable row update)))))) 
- 
-            (Map messagesToMove (lambda '(item) (block '( 
-                (let msgRow '( 
-                    '('Offset (Add dlqStartOffset (Member item 'DlqIndex))))) 
-                (let delayDeadline (Uint64 '0)) 
-                (let messageUpdate '( 
-                    '('RandomId readId) 
-                    '('SentTimestamp dlqMostRecentTimestamp) 
-                    '('DelayDeadline delayDeadline))) 
-                (return (UpdateRow deadLetterMessagesTable msgRow messageUpdate)))))) 
- 
-            (Map messagesToMove (lambda '(item) (block '( 
-                (let sentTsRow '( 
-                    '('SentTimestamp dlqMostRecentTimestamp) 
-                    '('Offset (Add dlqStartOffset (Member item 'DlqIndex))))) 
-                (let delayDeadline (Uint64 '0)) 
-                (let sentTsUpdate '( 
-                    '('RandomId readId) 
-                    '('DelayDeadline delayDeadline))) 
-                (return (UpdateRow deadLetterSentTsIdxTable sentTsRow sentTsUpdate)))))) 
- 
-            (Map messagesToMove (lambda '(item) (block '( 
-                (let dataRow '( 
-                    '('RandomId readId) 
-                    '('Offset (Add dlqStartOffset (Member item 'DlqIndex))))) 
- 
-                (let dataUpdate '( 
-                    '('Data (Member item 'Data)) 
-                    '('Attributes (Member item 'Attributes)) 
-                    '('SenderId (Member item 'SenderId)) 
-                    '('MessageId (Member item 'MessageId)))) 
-                (return (UpdateRow deadLetterMessageDataTable dataRow dataUpdate)))))) 
- 
-            (Map messagesToMove (lambda '(item) (block '( 
-                (let inflyRow '( 
-                    '('Offset (Member item 'Offset)))) 
-                (return (EraseRow sourceInflyTable inflyRow)))))) 
- 
-            (Map messagesToMove (lambda '(item) (block '( 
-                (let dataRow '( 
-                    '('RandomId (Member item 'RandomId)) 
-                    '('Offset (Member item 'Offset)))) 
- 
-                (return (EraseRow sourceMessageDataTable dataRow)))))) 
- 
-            (Map messagesToMove (lambda '(item) (block '( 
-                (let sentTsRow '( 
-                    '('SentTimestamp (Member item 'SentTimestamp)) 
-                    '('Offset (Member item 'Offset)))) 
-                (return (EraseRow sourceSentTsIdxTable sentTsRow)))))) 
-            )) 
-    ) 
-)__"; 
- 
+            (AsList (UpdateRow deadLetterStateTable deadLetterStateRow deadLetterStateUpdate))
+            (AsList (UpdateRow sourceStateTable sourceStateRow sourceStateUpdate))
+
+            (Map messagesToUpdate (lambda '(item) (block '(
+                (let row '(
+                    '('Offset (Member item 'Offset))))
+                (let update '(
+                    '('LoadId                readId)
+                    '('FirstReceiveTimestamp (Member item 'FirstReceiveTimestamp))
+                    '('LockTimestamp         (Member item 'LockTimestamp))
+                    '('ReceiveCount          (Member item 'ReceiveCount))
+                    '('VisibilityDeadline    (Member item 'VisibilityDeadline))))
+                (return (UpdateRow sourceInflyTable row update))))))
+
+            (Map messagesToMove (lambda '(item) (block '(
+                (let msgRow '(
+                    '('Offset (Add dlqStartOffset (Member item 'DlqIndex)))))
+                (let delayDeadline (Uint64 '0))
+                (let messageUpdate '(
+                    '('RandomId readId)
+                    '('SentTimestamp dlqMostRecentTimestamp)
+                    '('DelayDeadline delayDeadline)))
+                (return (UpdateRow deadLetterMessagesTable msgRow messageUpdate))))))
+
+            (Map messagesToMove (lambda '(item) (block '(
+                (let sentTsRow '(
+                    '('SentTimestamp dlqMostRecentTimestamp)
+                    '('Offset (Add dlqStartOffset (Member item 'DlqIndex)))))
+                (let delayDeadline (Uint64 '0))
+                (let sentTsUpdate '(
+                    '('RandomId readId)
+                    '('DelayDeadline delayDeadline)))
+                (return (UpdateRow deadLetterSentTsIdxTable sentTsRow sentTsUpdate))))))
+
+            (Map messagesToMove (lambda '(item) (block '(
+                (let dataRow '(
+                    '('RandomId readId)
+                    '('Offset (Add dlqStartOffset (Member item 'DlqIndex)))))
+
+                (let dataUpdate '(
+                    '('Data (Member item 'Data))
+                    '('Attributes (Member item 'Attributes))
+                    '('SenderId (Member item 'SenderId))
+                    '('MessageId (Member item 'MessageId))))
+                (return (UpdateRow deadLetterMessageDataTable dataRow dataUpdate))))))
+
+            (Map messagesToMove (lambda '(item) (block '(
+                (let inflyRow '(
+                    '('Offset (Member item 'Offset))))
+                (return (EraseRow sourceInflyTable inflyRow))))))
+
+            (Map messagesToMove (lambda '(item) (block '(
+                (let dataRow '(
+                    '('RandomId (Member item 'RandomId))
+                    '('Offset (Member item 'Offset))))
+
+                (return (EraseRow sourceMessageDataTable dataRow))))))
+
+            (Map messagesToMove (lambda '(item) (block '(
+                (let sentTsRow '(
+                    '('SentTimestamp (Member item 'SentTimestamp))
+                    '('Offset (Member item 'Offset))))
+                (return (EraseRow sourceSentTsIdxTable sentTsRow))))))
+            ))
+    )
+)__";
+
 const char* const WriteMessageQuery = R"__(
     (
         (let randomId  (Parameter 'RANDOM_ID  (DataType 'Uint64)))
@@ -1031,7 +1031,7 @@ const char* const LoadInflyQuery = R"__(
             'Offset
             'RandomId
             'DelayDeadline
-            'ReceiveCount 
+            'ReceiveCount
             'VisibilityDeadline))
         (let infly (Member (SelectRange inflyTable range fields '()) 'List))
 
@@ -1069,53 +1069,53 @@ const char* const GetStateQuery = R"__(
     )
 )__";
 
-const char* const ListDeadLetterSourceQueuesQuery = R"__( 
-     ( 
+const char* const ListDeadLetterSourceQueuesQuery = R"__(
+     (
         (let folderId (Parameter 'FOLDERID  (DataType 'Utf8String)))
         (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
- 
+
         (let queuesTable '%5$s/.Queues)
 
         (let queuesRow '(
             '('Account userName)
-            '('QueueName (Utf8String '"%4$s")))) 
- 
+            '('QueueName (Utf8String '"%4$s"))))
+
         (let queuesRowSelect '(
-            'QueueName 
-            'CustomQueueName)) 
- 
+            'QueueName
+            'CustomQueueName))
+
         (let queuesRowRead (SelectRow queuesTable queuesRow queuesRowSelect))
- 
-        (let skipFolderIdFilter (Equal folderId (Utf8String '""))) 
- 
-        (let dlqName 
+
+        (let skipFolderIdFilter (Equal folderId (Utf8String '"")))
+
+        (let dlqName
             (If skipFolderIdFilter (Member queuesRowRead 'QueueName) (Coalesce (Member queuesRowRead 'CustomQueueName) (Utf8String '""))))
- 
+
         (let queuesRange '(
             '('Account userName userName)
-            '('QueueName (Utf8String '"") (Void)))) 
-        (let queueSelect '('QueueName 'QueueState 'FolderId 'DlqName 'CustomQueueName)) 
+            '('QueueName (Utf8String '"") (Void))))
+        (let queueSelect '('QueueName 'QueueState 'FolderId 'DlqName 'CustomQueueName))
         (let queues (Member (SelectRange queuesTable queuesRange queueSelect '()) 'List))
- 
-        (let filtered (Filter queues (lambda '(item) (block '( 
-            (return (Coalesce 
-                (And 
-                    (And 
-                        (Or 
-                            (Equal (Member item 'QueueState) (Uint64 '1)) 
-                            (Equal (Member item 'QueueState) (Uint64 '3))) 
-                        (Or 
-                            (Equal (Member item 'FolderId) folderId) 
-                            skipFolderIdFilter)) 
-                     (Equal (Member item 'DlqName) dlqName)) 
-                (Bool 'false))) 
-        ))))) 
- 
-        (return (AsList 
-            (SetResult 'queues filtered))) 
-    ) 
-)__"; 
- 
+
+        (let filtered (Filter queues (lambda '(item) (block '(
+            (return (Coalesce
+                (And
+                    (And
+                        (Or
+                            (Equal (Member item 'QueueState) (Uint64 '1))
+                            (Equal (Member item 'QueueState) (Uint64 '3)))
+                        (Or
+                            (Equal (Member item 'FolderId) folderId)
+                            skipFolderIdFilter))
+                     (Equal (Member item 'DlqName) dlqName))
+                (Bool 'false)))
+        )))))
+
+        (return (AsList
+            (SetResult 'queues filtered)))
+    )
+)__";
+
 const char* const GetUserSettingsQuery = R"__(
     (
         (let fromUser  (Parameter 'FROM_USER  (DataType 'Utf8String)))
@@ -1142,29 +1142,29 @@ const char* const GetUserSettingsQuery = R"__(
     )
 )__";
 
-const char* const GetMessageCountMetricsQuery = R"__( 
-    ( 
-        (let shard  (Parameter 'SHARD  (DataType 'Uint64))) 
- 
-        (let stateTable '%1$s/State) 
- 
-        (let stateRow '( 
-            '('State shard))) 
-        (let stateSelect '( 
-            'MessageCount 
-            'InflyCount 
-            'CreatedTimestamp)) 
- 
-        (let stateRead 
-            (SelectRow stateTable stateRow stateSelect)) 
- 
-        (return (AsList 
-            (SetResult 'messagesCount (Member stateRead 'MessageCount)) 
-            (SetResult 'inflyMessagesCount (Member stateRead 'InflyCount)) 
-            (SetResult 'createdTimestamp (Member stateRead 'CreatedTimestamp)))) 
-    ) 
-)__"; 
- 
+const char* const GetMessageCountMetricsQuery = R"__(
+    (
+        (let shard  (Parameter 'SHARD  (DataType 'Uint64)))
+
+        (let stateTable '%1$s/State)
+
+        (let stateRow '(
+            '('State shard)))
+        (let stateSelect '(
+            'MessageCount
+            'InflyCount
+            'CreatedTimestamp))
+
+        (let stateRead
+            (SelectRow stateTable stateRow stateSelect))
+
+        (return (AsList
+            (SetResult 'messagesCount (Member stateRead 'MessageCount))
+            (SetResult 'inflyMessagesCount (Member stateRead 'InflyCount))
+            (SetResult 'createdTimestamp (Member stateRead 'CreatedTimestamp))))
+    )
+)__";
+
 const char* const GetQueuesListQuery = R"__(
     (
         (let fromUser  (Parameter 'FROM_USER  (DataType 'Utf8String)))
@@ -1182,7 +1182,7 @@ const char* const GetQueuesListQuery = R"__(
             'QueueState
             'CreatedTimestamp
             'CustomQueueName
-            'DlqName 
+            'DlqName
             'FolderId
             'MasterTabletId
             'Version
@@ -1232,16 +1232,16 @@ const char* GetStdQueryById(size_t id) {
         return AddMessagesToInflyQuery;
     case GET_STATE_ID: // 19
         return GetStateQuery;
-    case LIST_DEAD_LETTER_SOURCE_QUEUES_ID: // 20 
-        return ListDeadLetterSourceQueuesQuery; 
-    case LOAD_OR_REDRIVE_MESSAGE_ID: // 21 
-        return LoadOrRedriveMessageQuery; 
+    case LIST_DEAD_LETTER_SOURCE_QUEUES_ID: // 20
+        return ListDeadLetterSourceQueuesQuery;
+    case LOAD_OR_REDRIVE_MESSAGE_ID: // 21
+        return LoadOrRedriveMessageQuery;
     case GET_USER_SETTINGS_ID: // 23
         return GetUserSettingsQuery;
     case GET_QUEUES_LIST_ID: // 24
         return GetQueuesListQuery;
-    case GET_MESSAGE_COUNT_METRIC_ID: // 14 
-        return GetMessageCountMetricsQuery; 
+    case GET_MESSAGE_COUNT_METRIC_ID: // 14
+        return GetMessageCountMetricsQuery;
     }
     return nullptr;
 }

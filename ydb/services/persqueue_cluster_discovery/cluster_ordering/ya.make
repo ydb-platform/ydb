@@ -1,13 +1,13 @@
-OWNER( 
-    radix 
+OWNER(
+    radix
     g:kikimr
     g:logbroker
-) 
- 
-LIBRARY() 
- 
-SRCS( 
-    weighed_ordering.cpp 
-) 
- 
-END() 
+)
+
+LIBRARY()
+
+SRCS(
+    weighed_ordering.cpp
+)
+
+END()

@@ -62,7 +62,7 @@ size_t ErrorsCount(const NKikimrClient::TSqsResponse& response, TAPIStatusesCoun
         RESPONSE_CASE(DeleteQueue)
         RESPONSE_BATCH_CASE(DeleteQueueBatch)
         RESPONSE_CASE(DeleteUser)
-        RESPONSE_CASE(ListPermissions) 
+        RESPONSE_CASE(ListPermissions)
         RESPONSE_CASE(GetQueueAttributes)
         RESPONSE_BATCH_CASE(GetQueueAttributesBatch)
         RESPONSE_CASE(GetQueueUrl)
@@ -75,8 +75,8 @@ size_t ErrorsCount(const NKikimrClient::TSqsResponse& response, TAPIStatusesCoun
         RESPONSE_CASE(SendMessage)
         RESPONSE_BATCH_CASE(SendMessageBatch)
         RESPONSE_CASE(SetQueueAttributes)
-        RESPONSE_CASE(ListDeadLetterSourceQueues) 
-        RESPONSE_CASE(CountQueues) 
+        RESPONSE_CASE(ListDeadLetterSourceQueues)
+        RESPONSE_CASE(CountQueues)
 
     case NKikimrClient::TSqsResponse::RESPONSE_NOT_SET:
         return 0;

@@ -14,24 +14,24 @@
 
 namespace NKikimr::NSQS {
 
-#define SQS_REQUEST_CASE_WRAP(action)                    \ 
-    case NKikimrClient::TSqsRequest::Y_CAT(k, action): { \ 
-        SQS_REQUEST_CASE(action)                         \ 
-        break;                                           \ 
-    } 
- 
-// DO NOT proxy account creation or queue listing 
- 
-#define SQS_SWITCH_REQUEST_CUSTOM(request, enumerate, default_case) \ 
-    switch ((request).GetRequestCase()) {                           \ 
-        enumerate(SQS_REQUEST_CASE_WRAP)                            \ 
-        default:                                                    \ 
-            default_case;                                           \ 
-    } 
- 
-#define SQS_SWITCH_REQUEST(request, default_case)       \ 
-    SQS_SWITCH_REQUEST_CUSTOM(request, ENUMERATE_PROXY_ACTIONS, default_case) 
- 
+#define SQS_REQUEST_CASE_WRAP(action)                    \
+    case NKikimrClient::TSqsRequest::Y_CAT(k, action): { \
+        SQS_REQUEST_CASE(action)                         \
+        break;                                           \
+    }
+
+// DO NOT proxy account creation or queue listing
+
+#define SQS_SWITCH_REQUEST_CUSTOM(request, enumerate, default_case) \
+    switch ((request).GetRequestCase()) {                           \
+        enumerate(SQS_REQUEST_CASE_WRAP)                            \
+        default:                                                    \
+            default_case;                                           \
+    }
+
+#define SQS_SWITCH_REQUEST(request, default_case)       \
+    SQS_SWITCH_REQUEST_CUSTOM(request, ENUMERATE_PROXY_ACTIONS, default_case)
+
 class TProxyActor
     : public TActorBootstrapped<TProxyActor>
 {
@@ -81,7 +81,7 @@ private:
     NKikimrClient::TSqsRequest Request_;
     TString QueueName_;
     TString UserName_;
-    TString FolderId_; 
+    TString FolderId_;
     THolder<IReplyCallback> Cb_;
     bool ErrorResponse_ = false;
     TInstant StartTs_;

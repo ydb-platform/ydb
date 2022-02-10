@@ -11,35 +11,35 @@ from sqs_matchers import ReadResponseMatcher, extract_message_ids
 from sqs_test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation, VISIBILITY_CHANGE_METHOD_PARAMS
 
 
-class SqsFifoMicroBatchTest(KikimrSqsTestBase): 
-    @classmethod 
-    def _setup_config_generator(cls): 
-        config_generator = super(SqsFifoMicroBatchTest, cls)._setup_config_generator() 
+class SqsFifoMicroBatchTest(KikimrSqsTestBase):
+    @classmethod
+    def _setup_config_generator(cls):
+        config_generator = super(SqsFifoMicroBatchTest, cls)._setup_config_generator()
         config_generator.yaml_config['sqs_config']['group_selection_batch_size'] = 2
-        return config_generator 
- 
-    def test_micro_batch_read(self): 
-        self.queue_name = self.queue_name + '.fifo' 
-        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True) 
-        seq_no = 0 
-        max_number_of_messages = 3 
-        for i in range(max_number_of_messages): 
-            self._send_message_and_assert(created_queue_url, 'test_send_message', seq_no=str(seq_no), group_id=str(seq_no)) 
-            seq_no += 1 
- 
-        for i in range(2): 
-            msgs = self._sqs_api.receive_message(created_queue_url, max_number_of_messages=max_number_of_messages, visibility_timeout=0, receive_request_attempt_id='test') 
-            assert_that(len(set([msgs[i]['MessageId'] for i in range(len(msgs))])), equal_to(len(msgs))) 
- 
- 
-class TestSqsFifoMicroBatchesWithTenant(get_test_with_sqs_tenant_installation(SqsFifoMicroBatchTest)): 
-    pass 
- 
- 
-class TestSqsFifoMicroBatchesWithPath(get_test_with_sqs_installation_by_path(SqsFifoMicroBatchTest)): 
-    pass 
- 
- 
+        return config_generator
+
+    def test_micro_batch_read(self):
+        self.queue_name = self.queue_name + '.fifo'
+        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=True)
+        seq_no = 0
+        max_number_of_messages = 3
+        for i in range(max_number_of_messages):
+            self._send_message_and_assert(created_queue_url, 'test_send_message', seq_no=str(seq_no), group_id=str(seq_no))
+            seq_no += 1
+
+        for i in range(2):
+            msgs = self._sqs_api.receive_message(created_queue_url, max_number_of_messages=max_number_of_messages, visibility_timeout=0, receive_request_attempt_id='test')
+            assert_that(len(set([msgs[i]['MessageId'] for i in range(len(msgs))])), equal_to(len(msgs)))
+
+
+class TestSqsFifoMicroBatchesWithTenant(get_test_with_sqs_tenant_installation(SqsFifoMicroBatchTest)):
+    pass
+
+
+class TestSqsFifoMicroBatchesWithPath(get_test_with_sqs_installation_by_path(SqsFifoMicroBatchTest)):
+    pass
+
+
 class SqsFifoMessagingTest(KikimrSqsTestBase):
     def setup_method(self, method=None):
         super(SqsFifoMessagingTest, self).setup_method(method)

@@ -56,10 +56,10 @@ public:
     METHOD_IMPL(PurgeQueue,              "can't purge queue");
     METHOD_IMPL(ReceiveMessage,          "can't receive a message");
     METHOD_IMPL(SendMessage,             "can't enqueue a message");
-    METHOD_IMPL(ModifyPermissions,       "can't modify permissions"); 
+    METHOD_IMPL(ModifyPermissions,       "can't modify permissions");
     METHOD_IMPL(GetQueueAttributes,      "can't get queue attributes");
     METHOD_IMPL(SetQueueAttributes,      "can't set queue attributes");
-    METHOD_IMPL(ListPermissions,         "can't list permissions"); 
+    METHOD_IMPL(ListPermissions,         "can't list permissions");
 
 #undef METHOD_IMPL
 
@@ -130,10 +130,10 @@ TSendMessageResponse TQueueClient::SendMessage(const TSendMessageRequest& req) {
     return Impl_->SendMessage(req);
 }
 
-TModifyPermissionsResponse TQueueClient::ModifyPermissions(const TModifyPermissionsRequest& req) { 
-    return Impl_->ModifyPermissions(req); 
-} 
- 
+TModifyPermissionsResponse TQueueClient::ModifyPermissions(const TModifyPermissionsRequest& req) {
+    return Impl_->ModifyPermissions(req);
+}
+
 TGetQueueAttributesResponse TQueueClient::GetQueueAttributes(const TGetQueueAttributesRequest& req) {
     return Impl_->GetQueueAttributes(req);
 }
@@ -142,8 +142,8 @@ TSetQueueAttributesResponse TQueueClient::SetQueueAttributes(const TSetQueueAttr
     return Impl_->SetQueueAttributes(req);
 }
 
-TListPermissionsResponse TQueueClient::ListPermissions(const TListPermissionsRequest& req) { 
-    return Impl_->ListPermissions(req); 
-} 
- 
+TListPermissionsResponse TQueueClient::ListPermissions(const TListPermissionsRequest& req) {
+    return Impl_->ListPermissions(req);
+}
+
 } // namespace NKikimr::NSQS

@@ -51,7 +51,7 @@
 #include <ydb/core/kesus/tablet/tablet.h>
 
 #include <ydb/core/keyvalue/keyvalue.h>
- 
+
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/test_tablet/state_server_interface.h>
 
@@ -142,7 +142,7 @@
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 
 #include <library/cpp/actors/protos/services_common.pb.h>
- 
+
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/core/event_local.h>
@@ -1833,33 +1833,33 @@ void TPersQueueL2CacheInitializer::InitializeServices(NActors::TActorSystemSetup
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
-// TNetClassifierInitializer 
- 
-TNetClassifierInitializer::TNetClassifierInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-{} 
- 
-void TNetClassifierInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) { 
-    IActor* actor = NNetClassifier::CreateNetClassifier(); 
- 
+// TNetClassifierInitializer
+
+TNetClassifierInitializer::TNetClassifierInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TNetClassifierInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    IActor* actor = NNetClassifier::CreateNetClassifier();
+
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-        NNetClassifier::MakeNetClassifierID(), 
-        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId))); 
-} 
- 
-// TPersQueueClusterTracker 
- 
-TPersQueueClusterTrackerInitializer::TPersQueueClusterTrackerInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) 
-{} 
- 
-void TPersQueueClusterTrackerInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) { 
-    IActor* actor = NPQ::NClusterTracker::CreateClusterTracker(); 
+        NNetClassifier::MakeNetClassifierID(),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
+// TPersQueueClusterTracker
+
+TPersQueueClusterTrackerInitializer::TPersQueueClusterTrackerInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TPersQueueClusterTrackerInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    IActor* actor = NPQ::NClusterTracker::CreateClusterTracker();
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-        NPQ::NClusterTracker::MakeClusterTrackerID(), 
-        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId))); 
-} 
- 
+        NPQ::NClusterTracker::MakeClusterTrackerID(),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
 // TPersQueueLibSharedInstanceInitializer
 
 TPersQueueLibSharedInstanceInitializer::TPersQueueLibSharedInstanceInitializer(const TKikimrRunConfig& runConfig)
@@ -2108,7 +2108,7 @@ void TSqsServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
                 NSQS::MakeSqsProxyServiceID(NodeId),
                 TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
         }
- 
+
         Factories->SqsAuthFactory->Initialize(
             setup->LocalServices, *appData, Config.GetSqsConfig());
     }

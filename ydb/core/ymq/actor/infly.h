@@ -41,11 +41,11 @@ class TInflyMessage : public TInflyMessageWithVisibilityDeadlineKey, public TInf
 public:
     TInflyMessage() = default;
 
-    TInflyMessage(const ui64 offset, const ui64 randomId, const TInstant visibilityDeadline, const ui32 receiveCount) 
+    TInflyMessage(const ui64 offset, const ui64 randomId, const TInstant visibilityDeadline, const ui32 receiveCount)
         : Offset(offset)
         , RandomId(randomId)
         , VisibilityDeadline(visibilityDeadline)
-        , ReceiveCount(receiveCount) 
+        , ReceiveCount(receiveCount)
     {
     }
 
@@ -61,23 +61,23 @@ public:
         return VisibilityDeadline;
     }
 
-    ui32 GetReceiveCount() const { 
-        return ReceiveCount; 
-    } 
- 
-    void SetVisibilityDeadline(const TInstant visibilityDeadline) { 
+    ui32 GetReceiveCount() const {
+        return ReceiveCount;
+    }
+
+    void SetVisibilityDeadline(const TInstant visibilityDeadline) {
         VisibilityDeadline = visibilityDeadline;
     }
 
-    void SetReceiveCount(const ui32 receiveCount) { 
-        ReceiveCount = receiveCount; 
-    } 
- 
+    void SetReceiveCount(const ui32 receiveCount) {
+        ReceiveCount = receiveCount;
+    }
+
 private:
     ui64 Offset = 0;
     ui64 RandomId = 0;
     TInstant VisibilityDeadline;
-    ui32 ReceiveCount = 0; 
+    ui32 ReceiveCount = 0;
 };
 
 class TInflyMessages : public TAtomicRefCount<TInflyMessages> {
@@ -109,8 +109,8 @@ public:
             return !operator!();
         }
 
-        void SetVisibilityDeadlineAndReceiveCount(ui64 offset, TInstant visibilityDeadline, const ui32 receiveCount); 
- 
+        void SetVisibilityDeadlineAndReceiveCount(ui64 offset, TInstant visibilityDeadline, const ui32 receiveCount);
+
         THolder<TInflyMessage> Delete(ui64 offset);
         bool Has(ui64 offset) const;
 

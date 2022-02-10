@@ -109,11 +109,11 @@ TInflyMessages::TReceiveCandidates::TReceiveCandidates(TIntrusivePtr<TInflyMessa
 {
 }
 
-void TInflyMessages::TReceiveCandidates::SetVisibilityDeadlineAndReceiveCount(ui64 offset, TInstant visibilityDeadline, const ui32 receiveCount) { 
+void TInflyMessages::TReceiveCandidates::SetVisibilityDeadlineAndReceiveCount(ui64 offset, TInstant visibilityDeadline, const ui32 receiveCount) {
     Y_ASSERT(Parent && ReceivedMessages);
     if (auto* msg = ReceivedMessages->Find(offset)) {
         msg->Message().SetVisibilityDeadline(visibilityDeadline);
-        msg->Message().SetReceiveCount(receiveCount); 
+        msg->Message().SetReceiveCount(receiveCount);
     }
 }
 

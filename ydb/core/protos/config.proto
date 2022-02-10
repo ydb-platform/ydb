@@ -703,25 +703,25 @@ message TSqsConfig {
 
     // Max time value for long polling (param WaitTimeSeconds for ReceiveMessage)
     optional uint64 MaxWaitTimeoutMs = 10 [default = 20000];
- 
-    optional uint32 SchemeCacheSoftRefreshTimeSeconds = 11 [default = 5]; 
-    optional uint32 SchemeCacheHardRefreshTimeSeconds = 12 [default = 10]; 
- 
-    optional bool ForceAccessControl = 13 [default = false]; 
-    repeated string AccountsWithoutMandatoryAuth = 14; 
- 
-    optional bool YandexCloudMode = 15 [default = false]; 
-    optional uint32 YandexCloudServiceId = 16; // only 15 lesser bits should be used! 
-    optional string YandexCloudAccessServiceAddress = 29; // host:port 
-    optional string YandexCloudFolderServiceAddress = 30; // host:port 
-    optional string YandexCloudServiceRegion = 39 [default = "ru-central1"]; 
 
-    optional uint32 MeteringFlushingIntervalMs = 51 [default = 5000]; 
-    optional string MeteringLogFilePath = 52; 
- 
-    repeated string MeteringCloudNetCidr = 53; 
-    repeated string MeteringYandexNetCidr = 54; 
- 
+    optional uint32 SchemeCacheSoftRefreshTimeSeconds = 11 [default = 5];
+    optional uint32 SchemeCacheHardRefreshTimeSeconds = 12 [default = 10];
+
+    optional bool ForceAccessControl = 13 [default = false];
+    repeated string AccountsWithoutMandatoryAuth = 14;
+
+    optional bool YandexCloudMode = 15 [default = false];
+    optional uint32 YandexCloudServiceId = 16; // only 15 lesser bits should be used!
+    optional string YandexCloudAccessServiceAddress = 29; // host:port
+    optional string YandexCloudFolderServiceAddress = 30; // host:port
+    optional string YandexCloudServiceRegion = 39 [default = "ru-central1"];
+
+    optional uint32 MeteringFlushingIntervalMs = 51 [default = 5000];
+    optional string MeteringLogFilePath = 52;
+
+    repeated string MeteringCloudNetCidr = 53;
+    repeated string MeteringYandexNetCidr = 54;
+
     // TODO: remove both
     optional uint32 MastersDescriberUpdateTimeMs = 17 [default = 10000];
     optional uint32 MasterConnectTimeoutMs = 18 [default = 10000];
@@ -741,10 +741,10 @@ message TSqsConfig {
     optional uint64 MaxNumberOfReceiveMessages = 24 [default = 10]; // MaxNumberOfMessages parameter in ReceiveMessage
 
     optional uint64 RequestTimeoutMs = 25 [default = 600000];
- 
-    optional bool ForceQueueCreationV2 = 26 [default = true]; // deprecated, TODO: remove from config 
-    optional bool ForceQueueDeletionV2 = 27 [default = true]; // deprecated, TODO: remove from config 
-    optional bool EnableDeadLetterQueues = 41 [default = false]; 
+
+    optional bool ForceQueueCreationV2 = 26 [default = true]; // deprecated, TODO: remove from config
+    optional bool ForceQueueDeletionV2 = 27 [default = true]; // deprecated, TODO: remove from config
+    optional bool EnableDeadLetterQueues = 41 [default = false];
 
     optional bool CreateLegacyDurationCounters = 28;
 
@@ -814,7 +814,7 @@ message TSqsConfig {
     }
 
     optional TQuotingConfig QuotingConfig = 47;
-    optional bool EnableQueueAttributesValidation = 48 [default = true]; 
+    optional bool EnableQueueAttributesValidation = 48 [default = true];
 
     message TAccountSettingsDefaults {
         optional int64 MaxQueuesCount = 1 [default = 50];
@@ -832,13 +832,13 @@ message TSqsConfig {
     optional uint64 QueuesListReadBatchSize = 59 [default = 1000];
 
     optional bool ValidateMessageBody = 60;
- 
-    optional uint64 DlqNotificationGracePeriodMs = 61 [default = 60000]; 
+
+    optional uint64 DlqNotificationGracePeriodMs = 61 [default = 60000];
 
     optional uint64 AddMessagesToInflyCheckPeriodMs = 62 [default = 30000];
     optional uint64 AddMessagesToInflyMinCheckAttempts = 63 [default = 10];
- 
-    optional uint64 MinimumGarbageAgeSeconds = 64 [default = 3600]; 
+
+    optional uint64 MinimumGarbageAgeSeconds = 64 [default = 3600];
 
     optional bool MeteringByNetClassifierOnly = 65 [default = false];
 
@@ -1370,9 +1370,9 @@ message TAppConfig {
     optional NKikimrSharedCache.TSharedCacheConfig SharedCacheConfig = 38; // dynamic configuration via cms
     optional TImmediateControlsConfig ImmediateControlsConfig = 39;
     optional TAllocatorConfig AllocatorConfig = 40;
-    optional NKikimrPQ.TPQClusterDiscoveryConfig PQClusterDiscoveryConfig = 41; 
-    optional NKikimrNetClassifier.TNetClassifierConfig NetClassifierConfig = 42; 
-    optional NKikimrNetClassifier.TNetClassifierDistributableConfig NetClassifierDistributableConfig = 43; // also dynamic via cms 
+    optional NKikimrPQ.TPQClusterDiscoveryConfig PQClusterDiscoveryConfig = 41;
+    optional NKikimrNetClassifier.TNetClassifierConfig NetClassifierConfig = 42;
+    optional NKikimrNetClassifier.TNetClassifierDistributableConfig NetClassifierDistributableConfig = 43; // also dynamic via cms
     optional NKikimrResourceBroker.TResourceBrokerConfig ResourceBrokerConfig = 44;
     optional TMeteringConfig MeteringConfig = 45;
     optional THiveConfig HiveConfig = 46;

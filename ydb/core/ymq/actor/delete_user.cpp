@@ -2,7 +2,7 @@
 #include "error.h"
 #include "executor.h"
 #include "log.h"
-#include "queue_schema.h" 
+#include "queue_schema.h"
 
 #include <ydb/public/lib/value/value.h>
 
@@ -25,7 +25,7 @@ public:
     {
         CopyAccountName(Request());
         Response_.MutableDeleteUser()->SetRequestId(RequestId_);
- 
+
         CopySecurityToken(Request());
     }
 
@@ -51,8 +51,8 @@ private:
             .QueryId(LIST_QUEUES_ID)
             .Counters(QueueCounters_)
             .RetryOnTimeout()
-            .Params() 
-                .Utf8("FOLDERID", "") 
+            .Params()
+                .Utf8("FOLDERID", "")
                 .Utf8("USER_NAME", UserName_)
             .ParentBuilder().Start();
     }
@@ -94,7 +94,7 @@ private:
                 Queues_.insert(name);
 
                 Register(
-                    new TDeleteQueueSchemaActorV2( 
+                    new TDeleteQueueSchemaActorV2(
                         TQueuePath(Cfg().GetRoot(), Request().GetUserName(), name), SelfId(), RequestId_, UserCounters_)
                 );
             }

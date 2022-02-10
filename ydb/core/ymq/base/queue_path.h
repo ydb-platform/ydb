@@ -8,7 +8,7 @@ struct TQueuePath {
     TString Root;
     TString UserName;
     TString QueueName;
-    TString VersionSuffix; 
+    TString VersionSuffix;
 
     TQueuePath()
     { }
@@ -20,11 +20,11 @@ struct TQueuePath {
         : Root(root)
         , UserName(userName)
         , QueueName(queueName)
-    { 
-        if (version) { 
-            VersionSuffix = TString::Join("v", ToString(version)); 
-        } 
-    } 
+    {
+        if (version) {
+            VersionSuffix = TString::Join("v", ToString(version));
+        }
+    }
 
     operator TString() const {
         return GetQueuePath();
@@ -35,14 +35,14 @@ struct TQueuePath {
     }
 
     TString GetVersionedQueuePath() const {
-        auto tmp = GetQueuePath(); 
-        if (!VersionSuffix) { 
-            return tmp; 
-        } else { 
-            return Join("/", tmp, VersionSuffix); 
-        } 
-    } 
- 
+        auto tmp = GetQueuePath();
+        if (!VersionSuffix) {
+            return tmp;
+        } else {
+            return Join("/", tmp, VersionSuffix);
+        }
+    }
+
     TString GetUserPath() const {
         return Join("/", Root, UserName);
     }

@@ -3,89 +3,89 @@
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/net_classifier_updater.h>
 #include <ydb/core/testlib/test_client.h>
- 
+
 #include <library/cpp/actors/http/http_proxy.cpp>
- 
+
 #include <library/cpp/protobuf/util/is_equal.h>
- 
+
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/json/json_writer.h>
- 
-#include <util/string/builder.h> 
- 
-namespace NKikimr::NNetClassifierUpdaterTests { 
- 
-using namespace NConsole; 
-using namespace Tests; 
- 
+
+#include <util/string/builder.h>
+
+namespace NKikimr::NNetClassifierUpdaterTests {
+
+using namespace NConsole;
+using namespace Tests;
+
 using TNetClassifierUpdaterConfig = NKikimrNetClassifier::TNetClassifierUpdaterConfig;
 const TString NETWORKS_URI = "/fancy_path/networks.tsv";
 
-static NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* MakeHttpResponse(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request, const TString& netData) { 
-    const TString content = TStringBuilder() << "HTTP/1.1 200 OK\r\nConnection: Close\r\nContent-Type: application/octet-stream\r\nContent-Length: " 
-                                             << netData.size() << "\r\n\r\n" << netData; 
-    NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString(content); 
- 
-    return new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse); 
-} 
- 
-template<typename TDistributableConfProto> 
-bool CheckDistributableConfig(const TDistributableConfProto& config, const NKikimrNetClassifier::TNetData& expectedNetData) { 
-    if (config.GetPackedNetData()) { 
-        UNIT_ASSERT(config.GetLastUpdateDatetimeUTC()); 
-        UNIT_ASSERT(config.GetLastUpdateTimestamp()); 
- 
-        UNIT_ASSERT_STRINGS_EQUAL( 
-            TInstant::MicroSeconds(config.GetLastUpdateTimestamp()).ToRfc822String(), 
-            config.GetLastUpdateDatetimeUTC() 
-        ); 
- 
-        const TString serializedNetData = NNetClassifierUpdater::UnpackNetData(config.GetPackedNetData()); 
-        UNIT_ASSERT(serializedNetData); 
- 
-        NKikimrNetClassifier::TNetData netData; 
-        UNIT_ASSERT(netData.ParseFromString(serializedNetData)); 
- 
-        UNIT_ASSERT(NProtoBuf::IsEqual(netData, expectedNetData)); 
- 
-        return true; 
-    } 
- 
-    return false; 
-} 
- 
-static NKikimrNetClassifier::TNetData FormNetData() { 
-    NKikimrNetClassifier::TNetData netData; 
- 
-    { 
-        auto& subnet = *netData.AddSubnets(); 
-        subnet.SetMask("2a02:6b8:fc0a::/48"); 
-        subnet.SetLabel("SAS"); 
-    } 
-    { 
-        auto& subnet = *netData.AddSubnets(); 
-        subnet.SetMask("87.250.239.224/31"); 
-        subnet.SetLabel("VLA"); 
-    } 
- 
-    return netData; 
-} 
- 
-static TString ConvertToTsv(const NKikimrNetClassifier::TNetData& netData) { 
-    TStringBuilder builder; 
- 
-    for (size_t i = 0; i < netData.SubnetsSize(); ++i) { 
-        const auto& subnet = netData.GetSubnets(i); 
-        if (i) { 
-            builder << "\n"; 
-        } 
-        builder << subnet.GetMask() << "\t" << subnet.GetLabel(); 
-    } 
- 
-    return builder; 
-} 
- 
+static NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* MakeHttpResponse(NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request, const TString& netData) {
+    const TString content = TStringBuilder() << "HTTP/1.1 200 OK\r\nConnection: Close\r\nContent-Type: application/octet-stream\r\nContent-Length: "
+                                             << netData.size() << "\r\n\r\n" << netData;
+    NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString(content);
+
+    return new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse);
+}
+
+template<typename TDistributableConfProto>
+bool CheckDistributableConfig(const TDistributableConfProto& config, const NKikimrNetClassifier::TNetData& expectedNetData) {
+    if (config.GetPackedNetData()) {
+        UNIT_ASSERT(config.GetLastUpdateDatetimeUTC());
+        UNIT_ASSERT(config.GetLastUpdateTimestamp());
+
+        UNIT_ASSERT_STRINGS_EQUAL(
+            TInstant::MicroSeconds(config.GetLastUpdateTimestamp()).ToRfc822String(),
+            config.GetLastUpdateDatetimeUTC()
+        );
+
+        const TString serializedNetData = NNetClassifierUpdater::UnpackNetData(config.GetPackedNetData());
+        UNIT_ASSERT(serializedNetData);
+
+        NKikimrNetClassifier::TNetData netData;
+        UNIT_ASSERT(netData.ParseFromString(serializedNetData));
+
+        UNIT_ASSERT(NProtoBuf::IsEqual(netData, expectedNetData));
+
+        return true;
+    }
+
+    return false;
+}
+
+static NKikimrNetClassifier::TNetData FormNetData() {
+    NKikimrNetClassifier::TNetData netData;
+
+    {
+        auto& subnet = *netData.AddSubnets();
+        subnet.SetMask("2a02:6b8:fc0a::/48");
+        subnet.SetLabel("SAS");
+    }
+    {
+        auto& subnet = *netData.AddSubnets();
+        subnet.SetMask("87.250.239.224/31");
+        subnet.SetLabel("VLA");
+    }
+
+    return netData;
+}
+
+static TString ConvertToTsv(const NKikimrNetClassifier::TNetData& netData) {
+    TStringBuilder builder;
+
+    for (size_t i = 0; i < netData.SubnetsSize(); ++i) {
+        const auto& subnet = netData.GetSubnets(i);
+        if (i) {
+            builder << "\n";
+        }
+        builder << subnet.GetMask() << "\t" << subnet.GetLabel();
+    }
+
+    return builder;
+}
+
 
 static TString ConvertToJson(const NKikimrNetClassifier::TNetData& netData) {
 
@@ -126,7 +126,7 @@ NKikimrNetClassifier::TNetClassifierUpdaterConfig CreateUpdaterConfig(
     return updaterConfig;
 }
 
-Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) { 
+Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
     void TestGetUpdatesFromHttpServer(
         const TString& sourceResponce,
         const NKikimrNetClassifier::TNetData& expectedNetData,
@@ -134,54 +134,54 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
         const TVector<TString>& netBoxTags = {}
     ) {
         NMonitoring::TMetricRegistry sensors;
- 
-        TPortManager pm; 
-        const ui16 port = pm.GetPort(2134); 
-        const ui64 netDataSourcePort = pm.GetPort(13334); 
-        TServerSettings settings(port); 
-        auto& updaterConfig = *settings.NetClassifierConfig.MutableUpdaterConfig(); 
+
+        TPortManager pm;
+        const ui16 port = pm.GetPort(2134);
+        const ui64 netDataSourcePort = pm.GetPort(13334);
+        TServerSettings settings(port);
+        auto& updaterConfig = *settings.NetClassifierConfig.MutableUpdaterConfig();
         updaterConfig =  CreateUpdaterConfig(netDataSourcePort, format, netBoxTags);
-        TServer cleverServer = TServer(settings); 
-        auto& actorSystem = *cleverServer.GetRuntime(); 
- 
-        NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors); 
+        TServer cleverServer = TServer(settings);
+        auto& actorSystem = *cleverServer.GetRuntime();
+
+        NActors::IActor* proxy = NHttp::CreateHttpProxy(sensors);
         NActors::TActorId proxyId = actorSystem.Register(proxy);
- 
-        actorSystem.Send( 
+
+        actorSystem.Send(
             new NActors::IEventHandle(proxyId, TActorId(), new NHttp::TEvHttpProxy::TEvAddListeningPort(netDataSourcePort)), 0, true
-        ); 
- 
+        );
+
         NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
- 
+
         actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler(NETWORKS_URI, serverId)), 0, true);
 
-        TAutoPtr<NActors::IEventHandle> handle; 
-        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle); 
+        TAutoPtr<NActors::IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
         UNIT_ASSERT_EQUAL(request->Request->URL, NETWORKS_URI);
- 
+
         actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, MakeHttpResponse(request, sourceResponce)), 0, true);
         const TActorId sender = actorSystem.AllocateEdgeActor();
- 
-        size_t iterations = 0; 
-        while (true) { 
-            UNIT_ASSERT(++iterations < 60); 
- 
-            const auto kind = static_cast<ui32>(NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem); 
-            actorSystem.Send( 
-                new IEventHandle(MakeConfigsDispatcherID(sender.NodeId()), sender, 
-                    new TEvConfigsDispatcher::TEvGetConfigRequest(kind) 
-                )); 
- 
-            const auto event = cleverServer.GetRuntime()->GrabEdgeEvent<TEvConfigsDispatcher::TEvGetConfigResponse>(handle); 
- 
+
+        size_t iterations = 0;
+        while (true) {
+            UNIT_ASSERT(++iterations < 60);
+
+            const auto kind = static_cast<ui32>(NKikimrConsole::TConfigItem::NetClassifierDistributableConfigItem);
+            actorSystem.Send(
+                new IEventHandle(MakeConfigsDispatcherID(sender.NodeId()), sender,
+                    new TEvConfigsDispatcher::TEvGetConfigRequest(kind)
+                ));
+
+            const auto event = cleverServer.GetRuntime()->GrabEdgeEvent<TEvConfigsDispatcher::TEvGetConfigResponse>(handle);
+
             if (CheckDistributableConfig(event->Config->GetNetClassifierDistributableConfig(), expectedNetData)) {
-                break; 
-            } 
- 
-            // wait for the proper update 
-            Sleep(TDuration::Seconds(1)); 
-        } 
-    } 
+                break;
+            }
+
+            // wait for the proper update
+            Sleep(TDuration::Seconds(1));
+        }
+    }
 
     Y_UNIT_TEST(TestGetUpdatesFromHttpServer) {
         auto netData = FormNetData();
@@ -252,6 +252,6 @@ Y_UNIT_TEST_SUITE(TNetClassifierUpdaterTest) {
             TestGetUpdatesFromHttpServer(netboxResponce, data, TNetClassifierUpdaterConfig::NETBOX, {"qwerty"});
         }
     }
-} 
- 
-} // namespace NKikimr::NNetClassifierUpdaterTests 
+}
+
+} // namespace NKikimr::NNetClassifierUpdaterTests

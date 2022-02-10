@@ -10,7 +10,7 @@
 #include <library/cpp/actors/core/actorsystem.h>
 
 #include <util/generic/hash.h>
-#include <util/generic/maybe.h> 
+#include <util/generic/maybe.h>
 #include <util/system/mutex.h>
 
 namespace NKikimr {
@@ -74,7 +74,7 @@ private:
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 
     ui32 MaxSessions;
-    TMaybe<TString> LocalCluster; 
+    TMaybe<TString> LocalCluster;
     bool Enabled;
     TString SelectSourceIdQuery;
     TString UpdateSourceIdQuery;

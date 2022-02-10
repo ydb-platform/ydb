@@ -6,7 +6,7 @@ OWNER(
 UNITTEST()
 
 SRCS(
-    queue_id_ut.cpp 
+    queue_id_ut.cpp
     params_ut.cpp
 )
 

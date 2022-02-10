@@ -4,14 +4,14 @@ message TAuthentification {
     optional string UserName = 1;
 }
 
-message TCredentials { 
-    oneof AccessKey { 
-        string OAuthToken = 1; 
-        string TvmTicket = 2; 
-        string StaticCreds = 3; // Cloud only 
-    } 
-} 
- 
+message TCredentials {
+    oneof AccessKey {
+        string OAuthToken = 1;
+        string TvmTicket = 2;
+        string StaticCreds = 3; // Cloud only
+    }
+}
+
 message TError {
     message TDebug {
         optional uint32 TransactionStatusCode = 1;
@@ -38,7 +38,7 @@ message TMessageAttribute {
 }
 
 message TChangeMessageVisibilityRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// Name of queue.
@@ -60,7 +60,7 @@ message TChangeMessageVisibilityResponse {
 }
 
 message TChangeMessageVisibilityBatchRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// Name of queue.
@@ -75,7 +75,7 @@ message TChangeMessageVisibilityBatchResponse {
 }
 
 message TCreateQueueRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// Name of queue. Should be unique for specified user.
@@ -90,7 +90,7 @@ message TCreateQueueRequest {
     optional bool EnableAutosplit = 8;
     /// Size in bytes when partition will be splitted on two parts.
     optional uint64 SizeToSplit = 9 [default = 1073741824]; // 1GB
-    /// Enable internal tables' transactions out of order execution. 
+    /// Enable internal tables' transactions out of order execution.
     optional bool EnableOutOfOrderTransactionsExecution = 6 [default = true];
 }
 
@@ -102,7 +102,7 @@ message TCreateQueueResponse {
 }
 
 message TCreateUserRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// Then user name we want to create.
@@ -115,7 +115,7 @@ message TCreateUserResponse {
 }
 
 message TGetQueueAttributesRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     optional string QueueName = 2;
@@ -157,10 +157,10 @@ message TGetQueueAttributesResponse {
     optional bool FifoQueue = 13;
     /// Is the content-based deduplication is enabled.
     optional bool ContentBasedDeduplication = 14;
-    /// Contains maxReceiveCount and target DLQ ARN, defines DLQ params 
-    optional string RedrivePolicy = 16; 
-    /// Contains queue ARN 
-    optional string QueueArn = 17; 
+    /// Contains maxReceiveCount and target DLQ ARN, defines DLQ params
+    optional string RedrivePolicy = 16;
+    /// Contains queue ARN
+    optional string QueueArn = 17;
 }
 
 message TGetQueueAttributesBatchRequest {
@@ -179,7 +179,7 @@ message TGetQueueAttributesBatchResponse {
 }
 
 message TGetQueueUrlRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// The name of the queue whose URL must be fetched.
@@ -193,7 +193,7 @@ message TGetQueueUrlResponse {
 }
 
 message TDeleteMessageRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     optional string QueueName = 2;
@@ -210,7 +210,7 @@ message TDeleteMessageResponse {
 }
 
 message TDeleteMessageBatchRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     optional string QueueName = 2;
@@ -224,7 +224,7 @@ message TDeleteMessageBatchResponse {
 }
 
 message TDeleteQueueRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     optional string QueueName = 2;
@@ -253,7 +253,7 @@ message TDeleteQueueBatchResponse {
 }
 
 message TDeleteUserRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// Then user name we want to delete.
@@ -266,7 +266,7 @@ message TDeleteUserResponse {
 }
 
 message TListQueuesRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// A string to use for filtering the list results.
@@ -286,7 +286,7 @@ message TListQueuesResponse {
 }
 
 message TListUsersRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// A string to use for filtering the list results.
@@ -302,7 +302,7 @@ message TListUsersResponse {
 }
 
 message TPurgeQueueRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     optional string QueueName = 2;
@@ -331,7 +331,7 @@ message TPurgeQueueBatchResponse {
 }
 
 message TReceiveMessageRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     optional string QueueName = 2;
@@ -384,8 +384,8 @@ message TReceiveMessageResponse {
         optional uint64 SentTimestamp = 10;
         /// The large, non-consecutive number that SQS assigns to each message.
         optional uint64 SequenceNumber = 11;
-        /// Message sender's SID, may be empty in case of unauthenticated writes. 
-        optional string SenderId = 13; 
+        /// Message sender's SID, may be empty in case of unauthenticated writes.
+        optional string SenderId = 13;
     }
 
     optional TError Error = 1;
@@ -398,7 +398,7 @@ message TReceiveMessageResponse {
 }
 
 message TSendMessageRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// The name of the queue in which the message should be placed.
@@ -434,7 +434,7 @@ message TSendMessageResponse {
 }
 
 message TSendMessageBatchRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// The name of the queue in which the message should be placed.
@@ -449,7 +449,7 @@ message TSendMessageBatchResponse {
 }
 
 message TSetQueueAttributesRequest {
-    optional TCredentials Credentials = 100; 
+    optional TCredentials Credentials = 100;
     /// Sender's authentification.
     optional TAuthentification Auth = 1;
     /// The name of the queue.
@@ -462,90 +462,90 @@ message TSetQueueAttributesResponse {
     optional TError Error = 1;
     optional string RequestId = 2;
 }
- 
-message TPermissions { 
-    optional string Subject = 1; 
-    repeated string PermissionNames = 2; // https://st.yandex-team.ru/SQS-3 
-} 
- 
-message TPermissionsAction { 
-    oneof Action { 
-        TPermissions Grant = 1; 
-        TPermissions Revoke = 2; 
-        TPermissions Set = 3; 
-    } 
-} 
- 
-message TModifyPermissionsRequest { 
-    optional TCredentials Credentials = 100; 
-    optional string Resource = 1; 
-    repeated TPermissionsAction Actions = 2; 
-    optional bool ClearACL = 3 [default = false]; 
-    optional TAuthentification Auth = 4; // for compatibility only 
-} 
- 
-message TModifyPermissionsResponse { 
-    optional TError Error = 1; 
-    optional string RequestId = 2; 
-} 
- 
-message TListPermissionsRequest { 
-    optional TCredentials Credentials = 100; 
-    optional string Path = 1; 
-    optional TAuthentification Auth = 2; // for compatibility only 
-} 
- 
-message TQueuePermissions { 
-    repeated TPermissions Permissions = 1; 
-    repeated TPermissions EffectivePermissions = 2; 
-} 
- 
-message TAccountPermissions { 
-    repeated TPermissions Permissions = 1; 
-    repeated TPermissions EffectivePermissions = 2; 
-} 
- 
-message TDirectoryPermissions { 
-    repeated TPermissions Permissions = 1; 
-    repeated TPermissions EffectivePermissions = 2; 
-} 
- 
-message TListPermissionsResponse { 
-    optional TError Error = 1; 
-    optional string RequestId = 2; 
- 
-    oneof NodeType { 
-        TQueuePermissions QueuePermissions = 3; 
-        TQueuePermissions AccountPermissions = 4; 
-        TQueuePermissions DirectoryPermissions = 5; // not used right now 
-    } 
-} 
- 
-message TListDeadLetterSourceQueuesRequest { 
-    optional TCredentials Credentials = 100; 
-    /// The name of the queue. 
-    optional string QueueName = 1; 
+
+message TPermissions {
+    optional string Subject = 1;
+    repeated string PermissionNames = 2; // https://st.yandex-team.ru/SQS-3
+}
+
+message TPermissionsAction {
+    oneof Action {
+        TPermissions Grant = 1;
+        TPermissions Revoke = 2;
+        TPermissions Set = 3;
+    }
+}
+
+message TModifyPermissionsRequest {
+    optional TCredentials Credentials = 100;
+    optional string Resource = 1;
+    repeated TPermissionsAction Actions = 2;
+    optional bool ClearACL = 3 [default = false];
+    optional TAuthentification Auth = 4; // for compatibility only
+}
+
+message TModifyPermissionsResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
+}
+
+message TListPermissionsRequest {
+    optional TCredentials Credentials = 100;
+    optional string Path = 1;
+    optional TAuthentification Auth = 2; // for compatibility only
+}
+
+message TQueuePermissions {
+    repeated TPermissions Permissions = 1;
+    repeated TPermissions EffectivePermissions = 2;
+}
+
+message TAccountPermissions {
+    repeated TPermissions Permissions = 1;
+    repeated TPermissions EffectivePermissions = 2;
+}
+
+message TDirectoryPermissions {
+    repeated TPermissions Permissions = 1;
+    repeated TPermissions EffectivePermissions = 2;
+}
+
+message TListPermissionsResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
+
+    oneof NodeType {
+        TQueuePermissions QueuePermissions = 3;
+        TQueuePermissions AccountPermissions = 4;
+        TQueuePermissions DirectoryPermissions = 5; // not used right now
+    }
+}
+
+message TListDeadLetterSourceQueuesRequest {
+    optional TCredentials Credentials = 100;
+    /// The name of the queue.
+    optional string QueueName = 1;
     optional TAuthentification Auth = 2;
-} 
- 
-message TListDeadLetterSourceQueuesResponse { 
-    message TQueueType { 
-        optional string QueueName = 1; 
-        optional string QueueUrl = 2; 
-    } 
-    optional TError Error = 1; 
-    optional string RequestId = 2; 
-    repeated TQueueType Queues = 3; 
-} 
- 
-message TCountQueuesRequest { 
-    optional TCredentials Credentials = 100; 
-    optional TAuthentification Auth = 1; 
-} 
- 
-message TCountQueuesResponse { 
-    optional TError Error = 1; 
-    optional string RequestId = 2; 
- 
-    optional uint64 Count = 3; 
-} 
+}
+
+message TListDeadLetterSourceQueuesResponse {
+    message TQueueType {
+        optional string QueueName = 1;
+        optional string QueueUrl = 2;
+    }
+    optional TError Error = 1;
+    optional string RequestId = 2;
+    repeated TQueueType Queues = 3;
+}
+
+message TCountQueuesRequest {
+    optional TCredentials Credentials = 100;
+    optional TAuthentification Auth = 1;
+}
+
+message TCountQueuesResponse {
+    optional TError Error = 1;
+    optional string RequestId = 2;
+
+    optional uint64 Count = 3;
+}

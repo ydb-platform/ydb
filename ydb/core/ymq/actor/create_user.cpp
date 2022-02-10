@@ -19,7 +19,7 @@ public:
     {
         CopyAccountName(Request());
         Response_.MutableCreateUser()->SetRequestId(RequestId_);
- 
+
         CopySecurityToken(Request());
     }
 

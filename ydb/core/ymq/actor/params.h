@@ -47,12 +47,12 @@ public:
         return *this;
     }
 
-    TParameters& Uint32(const TString& name, ui32 value) { 
-        DataType(name, NScheme::NTypeIds::Uint32); 
-        Params_->MutableValue()->AddStruct()->SetUint32(value); 
-        return *this; 
-    } 
- 
+    TParameters& Uint32(const TString& name, ui32 value) {
+        DataType(name, NScheme::NTypeIds::Uint32);
+        Params_->MutableValue()->AddStruct()->SetUint32(value);
+        return *this;
+    }
+
     TParameters& OptionalBool(const TString& name, const TMaybe<bool>& value) {
         OptionalDataType(name, NScheme::NTypeIds::Bool);
         if (value) {
@@ -79,17 +79,17 @@ public:
         return *this;
     }
 
-    TParameters& OptionalUtf8(const TString& name, const TMaybe<TString>& value) { 
-        OptionalDataType(name, NScheme::NTypeIds::Utf8); 
-        if (value) { 
-            Params_->MutableValue()->AddStruct()->MutableOptional()->SetText(*value); 
-        } else { 
-            Params_->MutableValue()->AddStruct(); 
-        } 
- 
-        return *this; 
-    } 
- 
+    TParameters& OptionalUtf8(const TString& name, const TMaybe<TString>& value) {
+        OptionalDataType(name, NScheme::NTypeIds::Utf8);
+        if (value) {
+            Params_->MutableValue()->AddStruct()->MutableOptional()->SetText(*value);
+        } else {
+            Params_->MutableValue()->AddStruct();
+        }
+
+        return *this;
+    }
+
 private:
     void DataType(const TString& name, NScheme::TTypeId typeId) {
         auto* member = Params_->MutableType()->MutableStruct()->AddMember();

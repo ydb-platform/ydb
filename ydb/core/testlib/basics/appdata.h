@@ -75,7 +75,7 @@ namespace NKikimr {
         TMap<ui32, NKikimrProto::TKeyConfig> Keys;
         bool EnableKqpSpilling = false;
         NKikimrConfig::TCompactionConfig CompactionConfig;
-        TString NetDataSourceUrl; 
+        TString NetDataSourceUrl;
         NKikimrConfig::THiveConfig HiveConfig;
         NKikimrConfig::TDataShardConfig DataShardConfig;
         NKikimrConfig::TMeteringConfig MeteringConfig;

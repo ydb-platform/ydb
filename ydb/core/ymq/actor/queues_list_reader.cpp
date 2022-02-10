@@ -24,8 +24,8 @@ STATEFN(TQueuesListReader::StateFunc) {
 }
 
 void TQueuesListReader::HandleReadQueuesList(TSqsEvents::TEvReadQueuesList::TPtr& ev) {
-    Recipients.insert(ev->Sender); 
- 
+    Recipients.insert(ev->Sender);
+
     if (!ListingQueues) {
         ListingQueues = true;
         Result = MakeHolder<TSqsEvents::TEvQueuesList>();
@@ -60,7 +60,7 @@ void TQueuesListReader::OnRequestCompiled(const TSqsEvents::TEvExecuted::TRecord
         NextRequest();
     } else {
         LOG_SQS_WARN("Get queues list request compilation failed: " << record);
-        Fail(); 
+        Fail();
     }
 }
 
@@ -126,7 +126,7 @@ void TQueuesListReader::OnQueuesList(const TSqsEvents::TEvExecuted::TRecord& rec
             }
             rec.FolderId = row["FolderId"];
             rec.ShardsCount = row["Shards"];
-            rec.DlqName = row["DlqName"]; 
+            rec.DlqName = row["DlqName"];
             rec.CreatedTimestamp = TInstant::MilliSeconds(ui64(row["CreatedTimestamp"]));
         }
 
@@ -137,38 +137,38 @@ void TQueuesListReader::OnQueuesList(const TSqsEvents::TEvExecuted::TRecord& rec
             NextRequest();
         } else {
             std::sort(Result->SortedQueues.begin(), Result->SortedQueues.end()); // If .Queues table consists of many shards, result is possibly not sorted.
-            Success(); 
+            Success();
         }
     } else {
         LOG_SQS_WARN("Get queues list request failed: " << record);
-        Fail(); 
+        Fail();
     }
 }
 
-void TQueuesListReader::Success() { 
-    if (Recipients.size() == 1) { 
-        Send(*Recipients.begin(), std::move(Result)); 
-    } else { 
-        for (const auto& recipientId : Recipients) { 
-            auto result = MakeHolder<TSqsEvents::TEvQueuesList>(); 
-            result->SortedQueues = Result->SortedQueues; 
-            result->Success = Result->Success; 
-            Send(recipientId, result.Release()); 
-        } 
-    } 
- 
-    Recipients.clear(); 
- 
+void TQueuesListReader::Success() {
+    if (Recipients.size() == 1) {
+        Send(*Recipients.begin(), std::move(Result));
+    } else {
+        for (const auto& recipientId : Recipients) {
+            auto result = MakeHolder<TSqsEvents::TEvQueuesList>();
+            result->SortedQueues = Result->SortedQueues;
+            result->Success = Result->Success;
+            Send(recipientId, result.Release());
+        }
+    }
+
+    Recipients.clear();
+
     ListingQueues = false;
 }
 
-void TQueuesListReader::Fail() { 
-    for (const auto& recipientId : Recipients) { 
-        Send(recipientId, new TSqsEvents::TEvQueuesList(false)); 
-    } 
- 
-    Recipients.clear(); 
- 
+void TQueuesListReader::Fail() {
+    for (const auto& recipientId : Recipients) {
+        Send(recipientId, new TSqsEvents::TEvQueuesList(false));
+    }
+
+    Recipients.clear();
+
     ListingQueues = false;
 }
 

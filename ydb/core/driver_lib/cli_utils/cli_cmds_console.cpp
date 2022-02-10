@@ -119,8 +119,8 @@ public:
         ConfigFiles["FeatureFlags"] = "feature_flags.txt";
         ConfigFiles["SqsConfig"] = "sqs.txt";
         ConfigFiles["PQConfig"] = "pq.txt";
-        ConfigFiles["PQClusterDiscoveryConfig"] = "pqcd.txt"; 
-        ConfigFiles["NetClassifierConfig"] = "netclassifier.txt"; 
+        ConfigFiles["PQClusterDiscoveryConfig"] = "pqcd.txt";
+        ConfigFiles["NetClassifierConfig"] = "netclassifier.txt";
         ConfigFiles["KeyConfig"] = "key.txt";
         ConfigFiles["PDiskKeyConfig"] = "pdisk_key.txt";
         ConfigFiles["ClusterYamlConfig"] = "cluster.yaml";

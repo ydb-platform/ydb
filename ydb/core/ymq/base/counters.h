@@ -1,5 +1,5 @@
 #pragma once
- 
+
 #include <ydb/core/protos/config.pb.h>
 
 #include <ydb/core/ymq/base/action.h>
@@ -22,7 +22,7 @@ namespace NKikimr::NSQS {
 struct TUserCounters;
 struct TQueueCounters;
 struct THttpCounters;
-struct TCloudAuthCounters; 
+struct TCloudAuthCounters;
 
 #define INC_COUNTER(countersPack, counter)       \
     if (countersPack) {                          \
@@ -587,7 +587,7 @@ struct TQueueCounters : public TAtomicRefCount<TQueueCounters> {
     TLazyCachedCounter received_bytes_per_second;
 
     TLazyCachedCounter MessagesMovedToDLQ; // Count of messages that were moved to DLQ.
- 
+
     TLazyCachedCounter SendMessage_DeduplicationCount; // Count of messages that were deduplicated (for fifo only).
     TLazyCachedCounter deduplicated_count_per_second;
     TLazyCachedCounter SendMessage_Count; // Count of messages that were sent. // User metric for cloud console.
@@ -762,7 +762,7 @@ private:
 };
 
 // Cloud specific counters.
-struct TCloudAuthCounters { 
+struct TCloudAuthCounters {
     // Durations for different security actions types.
     TLazyCachedHistogram AuthenticateDuration; // Histogram with buckets for durations (== 18 counters).
     TLazyCachedHistogram AuthorizeDuration; // Histogram with buckets for durations (== 18 counters).
@@ -771,23 +771,23 @@ struct TCloudAuthCounters {
     explicit TCloudAuthCounters(const NKikimrConfig::TSqsConfig& cfg, TIntrusivePtr<NMonitoring::TDynamicCounters> cloudAuthCountersRoot)
         : Cfg(&cfg)
     {
-        InitCounters(std::move(cloudAuthCountersRoot)); 
-    } 
- 
-    void IncCounter(const NCloudAuth::EActionType actionType, const NCloudAuth::ECredentialType credentialType, int grpcStatus); 
- 
-    static constexpr int GRPC_STATUSES_COUNT = 18; 
+        InitCounters(std::move(cloudAuthCountersRoot));
+    }
 
-private: 
-    void InitCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> cloudAuthCounters); 
- 
-private: 
+    void IncCounter(const NCloudAuth::EActionType actionType, const NCloudAuth::ECredentialType credentialType, int grpcStatus);
+
+    static constexpr int GRPC_STATUSES_COUNT = 18;
+
+private:
+    void InitCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> cloudAuthCounters);
+
+private:
     const NKikimrConfig::TSqsConfig* Cfg = nullptr;
     TLazyCachedCounter CloudAuthCounters[NCloudAuth::EActionType::ActionTypesCount] // 3 types.
                                         [NCloudAuth::ECredentialType::CredentialTypesCount] // 2 types.
                                         [GRPC_STATUSES_COUNT]; // 18 types.
-}; 
- 
+};
+
 // Metering counters in SQS core subsystem.
 struct TMeteringCounters : public TAtomicRefCount<TMeteringCounters> {
     THashMap<TString, TLazyCachedCounter> ClassifierRequestsResults;

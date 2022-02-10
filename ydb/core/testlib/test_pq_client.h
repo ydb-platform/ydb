@@ -14,9 +14,9 @@
 #include <library/cpp/tvmauth/unittest.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/string/printf.h> 
+#include <util/string/printf.h>
 #include <util/system/tempfile.h>
- 
+
 namespace NKikimr {
 namespace NPersQueueTests {
 
@@ -612,7 +612,7 @@ public:
         RunYqlSchemeQuery(R"___(
             CREATE TABLE [/Root/PQ/Config/V2/Cluster] (
                 name Utf8,
-                balancer Utf8, 
+                balancer Utf8,
                 local Bool,
                 enabled Bool,
                 weight Uint64,
@@ -626,11 +626,11 @@ public:
         )___");
 
         RunYqlSchemeQuery(R"___(
-            CREATE TABLE [/Root/PQ/Config/V2/Versions] ( 
-                name Utf8, 
-                version Int64, 
-                PRIMARY KEY (name) 
-            ); 
+            CREATE TABLE [/Root/PQ/Config/V2/Versions] (
+                name Utf8,
+                version Int64,
+                PRIMARY KEY (name)
+            );
         )___");
 
         TStringBuilder upsertClusters;
@@ -700,25 +700,25 @@ public:
                 ("user5", "1"),
                 ("user3", "2");
             UPSERT INTO [/Root/PQ/Config/V2/Producer] (name, tvmClientId) VALUES
-                ("user4", "2"), 
-                ("topic1", "1"); 
+                ("user4", "2"),
+                ("topic1", "1");
         )___");
     }
 
-    void UpdateDC(const TString& name, bool local, bool enabled) { 
-        const TString query = Sprintf( 
-            R"___( 
-                UPSERT INTO [/Root/PQ/Config/V2/Cluster] (name, local, enabled) VALUES 
-                    ("%s", %s, %s); 
-                UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) 
-                    SELECT name, version + 1 FROM [/Root/PQ/Config/V2/Versions] WHERE name == "Cluster"; 
-            )___", name.c_str(), (local ? "true" : "false"), (enabled ? "true" : "false")); 
- 
+    void UpdateDC(const TString& name, bool local, bool enabled) {
+        const TString query = Sprintf(
+            R"___(
+                UPSERT INTO [/Root/PQ/Config/V2/Cluster] (name, local, enabled) VALUES
+                    ("%s", %s, %s);
+                UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version)
+                    SELECT name, version + 1 FROM [/Root/PQ/Config/V2/Versions] WHERE name == "Cluster";
+            )___", name.c_str(), (local ? "true" : "false"), (enabled ? "true" : "false"));
+
         RunYqlDataQuery(query);
-    } 
- 
+    }
+
     void DisableDC() {
-        UpdateDC("dc1", true, false); 
+        UpdateDC("dc1", true, false);
     }
 
     void RestartSchemeshard(TTestActorRuntime* runtime) {

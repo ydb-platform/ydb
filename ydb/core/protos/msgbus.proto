@@ -608,13 +608,13 @@ message TSqsRequest {
         NKikimr.NSQS.TCreateUserRequest CreateUser = 15;
         NKikimr.NSQS.TDeleteUserRequest DeleteUser = 16;
         NKikimr.NSQS.TListUsersRequest ListUsers = 17;
-        NKikimr.NSQS.TModifyPermissionsRequest ModifyPermissions = 18; 
-        NKikimr.NSQS.TListPermissionsRequest ListPermissions = 19; 
+        NKikimr.NSQS.TModifyPermissionsRequest ModifyPermissions = 18;
+        NKikimr.NSQS.TListPermissionsRequest ListPermissions = 19;
         NKikimr.NSQS.TDeleteQueueBatchRequest DeleteQueueBatch = 20;
         NKikimr.NSQS.TPurgeQueueBatchRequest PurgeQueueBatch = 21;
         NKikimr.NSQS.TGetQueueAttributesBatchRequest GetQueueAttributesBatch = 22;
-        NKikimr.NSQS.TListDeadLetterSourceQueuesRequest ListDeadLetterSourceQueues = 23; 
-        NKikimr.NSQS.TCountQueuesRequest CountQueues = 24; 
+        NKikimr.NSQS.TListDeadLetterSourceQueuesRequest ListDeadLetterSourceQueues = 23;
+        NKikimr.NSQS.TCountQueuesRequest CountQueues = 24;
     }
     optional string RequestId = 30;
     optional bool RequestRateLimit = 31 [default = true];
@@ -639,18 +639,18 @@ message TSqsResponse {
         NKikimr.NSQS.TCreateUserResponse CreateUser = 15;
         NKikimr.NSQS.TDeleteUserResponse DeleteUser = 16;
         NKikimr.NSQS.TListUsersResponse ListUsers = 17;
-        NKikimr.NSQS.TModifyPermissionsResponse ModifyPermissions = 18; 
-        NKikimr.NSQS.TListPermissionsResponse ListPermissions = 19; 
+        NKikimr.NSQS.TModifyPermissionsResponse ModifyPermissions = 18;
+        NKikimr.NSQS.TListPermissionsResponse ListPermissions = 19;
         NKikimr.NSQS.TDeleteQueueBatchResponse DeleteQueueBatch = 20;
         NKikimr.NSQS.TPurgeQueueBatchResponse PurgeQueueBatch = 21;
         NKikimr.NSQS.TGetQueueAttributesBatchResponse GetQueueAttributesBatch = 22;
-        NKikimr.NSQS.TListDeadLetterSourceQueuesResponse ListDeadLetterSourceQueues = 23; 
-        NKikimr.NSQS.TCountQueuesResponse CountQueues = 24; 
+        NKikimr.NSQS.TListDeadLetterSourceQueuesResponse ListDeadLetterSourceQueues = 23;
+        NKikimr.NSQS.TCountQueuesResponse CountQueues = 24;
     }
     optional string RequestId = 30;
-    optional string FolderId = 31; 
-    optional string ResourceId = 32; 
-    optional bool IsFifo = 33; 
+    optional string FolderId = 31;
+    optional string ResourceId = 32;
+    optional bool IsFifo = 33;
 }
 
 message TS3ListingRequest {

@@ -31,7 +31,7 @@
 #include "platform.h"
 #include "defs.h"
 
-#include <string>
+#include <string> 
 
 namespace Pire {
 
@@ -283,67 +283,67 @@ void Run(const Scanner& sc, typename Scanner::State& st, const char* begin, cons
 	Run(sc, st, TStringBuf(begin, end));
 }
 
-/// Returns default constructed string_view{} if there is no matching prefix
-/// Returns str.substr(0, 0) if matching prefix is empty
+/// Returns default constructed string_view{} if there is no matching prefix 
+/// Returns str.substr(0, 0) if matching prefix is empty 
 template<class Scanner>
-std::string_view LongestPrefix(const Scanner& sc, std::string_view str, bool throughBeginMark = false, bool throughEndMark = false)
+std::string_view LongestPrefix(const Scanner& sc, std::string_view str, bool throughBeginMark = false, bool throughEndMark = false) 
 {
 	typename Scanner::State st;
 	sc.Initialize(st);
 	if (throughBeginMark)
 		Pire::Step(sc, st, BeginMark);
-	const char* pos = (sc.Final(st) ? str.data() : nullptr);
+	const char* pos = (sc.Final(st) ? str.data() : nullptr); 
 	Impl::DoRun(sc, st, str, Impl::LongestPrefixPred<Scanner>(pos));
 	if (throughEndMark) {
 		Pire::Step(sc, st, EndMark);
 		if (sc.Final(st))
-			pos = str.data() + str.size();
+			pos = str.data() + str.size(); 
 	}
-	return pos ? str.substr(0, pos - str.data()) : std::string_view{};
+	return pos ? str.substr(0, pos - str.data()) : std::string_view{}; 
 }
 
 template<class Scanner>
 const char* LongestPrefix(const Scanner& sc, const char* begin, const char* end, bool throughBeginMark = false, bool throughEndMark = false)
 {
-	auto prefix = LongestPrefix(sc, std::string_view(begin, end - begin), throughBeginMark, throughEndMark);
-	return prefix.data() + prefix.size();
+	auto prefix = LongestPrefix(sc, std::string_view(begin, end - begin), throughBeginMark, throughEndMark); 
+	return prefix.data() + prefix.size(); 
 }
 
-/// Returns default constructed string_view{} if there is no matching prefix
-/// Returns str.substr(0, 0) if matching prefix is empty
+/// Returns default constructed string_view{} if there is no matching prefix 
+/// Returns str.substr(0, 0) if matching prefix is empty 
 template<class Scanner>
-std::string_view ShortestPrefix(const Scanner& sc, std::string_view str, bool throughBeginMark = false, bool throughEndMark = false)
+std::string_view ShortestPrefix(const Scanner& sc, std::string_view str, bool throughBeginMark = false, bool throughEndMark = false) 
 {
 	typename Scanner::State st;
 	sc.Initialize(st);
 	if (throughBeginMark)
 		Pire::Step(sc, st, BeginMark);
 	if (sc.Final(st))
-		return str.substr(0, 0);
-	const char* pos = nullptr;
+		return str.substr(0, 0); 
+	const char* pos = nullptr; 
 	Impl::DoRun(sc, st, str, Impl::ShortestPrefixPred<Scanner>(pos));
 	if (throughEndMark) {
 		Pire::Step(sc, st, EndMark);
-		if (sc.Final(st) && !pos)
-			pos = str.data() + str.size();
+		if (sc.Final(st) && !pos) 
+			pos = str.data() + str.size(); 
 	}
-	return pos ? str.substr(0, pos - str.data()) : std::string_view{};
+	return pos ? str.substr(0, pos - str.data()) : std::string_view{}; 
 }
 
 template<class Scanner>
 const char* ShortestPrefix(const Scanner& sc, const char* begin, const char* end, bool throughBeginMark = false, bool throughEndMark = false)
 {
-    auto prefix = ShortestPrefix(sc, std::string_view(begin, end - begin), throughBeginMark, throughEndMark);
-    return prefix.data() + prefix.size();
+    auto prefix = ShortestPrefix(sc, std::string_view(begin, end - begin), throughBeginMark, throughEndMark); 
+    return prefix.data() + prefix.size(); 
 }
 
 	
 /// The same as above, but scans string in reverse direction
 /// (consider using Fsm::Reverse() for using in this function).
-/// Returns default constructed string_view{} if there is no matching suffix
-/// Returns str.substr(str.size(), 0) if matching suffix is empty
+/// Returns default constructed string_view{} if there is no matching suffix 
+/// Returns str.substr(str.size(), 0) if matching suffix is empty 
 template<class Scanner>
-inline std::string_view LongestSuffix(const Scanner& scanner, std::string_view str, bool throughEndMark = false, bool throughBeginMark = false)
+inline std::string_view LongestSuffix(const Scanner& scanner, std::string_view str, bool throughEndMark = false, bool throughBeginMark = false) 
 {
 	typename Scanner::State state;
 	scanner.Initialize(state);
@@ -352,38 +352,38 @@ inline std::string_view LongestSuffix(const Scanner& scanner, std::string_view s
 	PIRE_IFDEBUG(Cdbg << "Running LongestSuffix on string " << ystring(str) << Endl);
 	PIRE_IFDEBUG(Cdbg << "Initial state " << StDump(scanner, state) << Endl);
 
-	std::string_view suffix{};
-	auto begin = str.data() + str.size();
-	while (begin != str.data() && !scanner.Dead(state)) {
+	std::string_view suffix{}; 
+	auto begin = str.data() + str.size(); 
+	while (begin != str.data() && !scanner.Dead(state)) { 
 		if (scanner.Final(state))
-			suffix = str.substr(begin - str.data());
-		--begin;
-		Step(scanner, state, (unsigned char)*begin);
-		PIRE_IFDEBUG(Cdbg << *begin << " => state " << StDump(scanner, state) << Endl);
+			suffix = str.substr(begin - str.data()); 
+		--begin; 
+		Step(scanner, state, (unsigned char)*begin); 
+		PIRE_IFDEBUG(Cdbg << *begin << " => state " << StDump(scanner, state) << Endl); 
 	}
 	if (scanner.Final(state))
-		suffix = str.substr(begin - str.data());
+		suffix = str.substr(begin - str.data()); 
 	if (throughBeginMark) {
 		Step(scanner, state, BeginMark);
 		if (scanner.Final(state))
-			suffix = str.substr(begin - str.data());
+			suffix = str.substr(begin - str.data()); 
 	}
-	return suffix;
+	return suffix; 
 }
 
 template<class Scanner>
 inline const char* LongestSuffix(const Scanner& scanner, const char* rbegin, const char* rend, bool throughEndMark = false, bool throughBeginMark = false) {
-	auto suffix = LongestSuffix(scanner, std::string_view(rend + 1, rbegin - rend), throughEndMark, throughBeginMark);
-    return suffix.data() ? suffix.data() - 1 : nullptr;
+	auto suffix = LongestSuffix(scanner, std::string_view(rend + 1, rbegin - rend), throughEndMark, throughBeginMark); 
+    return suffix.data() ? suffix.data() - 1 : nullptr; 
 }
 
 /// The same as above, but scans string in reverse direction
-/// Returns default constructed string_view{} if there is no matching suffix
-/// Returns str.substr(str.size(), 0) if matching suffix is empty
+/// Returns default constructed string_view{} if there is no matching suffix 
+/// Returns str.substr(str.size(), 0) if matching suffix is empty 
 template<class Scanner>
-inline std::string_view ShortestSuffix(const Scanner& scanner, std::string_view str, bool throughEndMark = false, bool throughBeginMark = false)
+inline std::string_view ShortestSuffix(const Scanner& scanner, std::string_view str, bool throughEndMark = false, bool throughBeginMark = false) 
 {
-	auto begin = str.data() + str.size();
+	auto begin = str.data() + str.size(); 
 	typename Scanner::State state;
 	scanner.Initialize(state);
 	if (throughEndMark)
@@ -391,20 +391,20 @@ inline std::string_view ShortestSuffix(const Scanner& scanner, std::string_view 
 	PIRE_IFDEBUG(Cdbg << "Running ShortestSuffix on string " << ystring(str) << Endl);
 	PIRE_IFDEBUG(Cdbg << "Initial state " << StDump(scanner, state) << Endl);
 
-	while (begin != str.data() && !scanner.Final(state) && !scanner.Dead(state)) {
-		--begin;
-		scanner.Next(state, (unsigned char)*begin);
+	while (begin != str.data() && !scanner.Final(state) && !scanner.Dead(state)) { 
+		--begin; 
+		scanner.Next(state, (unsigned char)*begin); 
 		PIRE_IFDEBUG(Cdbg << *rbegin << " => state " << StDump(scanner, state) << Endl);
 	}
 	if (throughBeginMark)
 		Step(scanner, state, BeginMark);
-	return scanner.Final(state) ? str.substr(begin - str.data()) : std::string_view{};
+	return scanner.Final(state) ? str.substr(begin - str.data()) : std::string_view{}; 
 }
 
 template<class Scanner>
 inline const char* ShortestSuffix(const Scanner& scanner, const char* rbegin, const char* rend, bool throughEndMark = false, bool throughBeginMark = false) {
-	auto suffix = ShortestSuffix(scanner, std::string_view(rend + 1, rbegin - rend), throughEndMark, throughBeginMark);
-	return suffix.data() ? suffix.data() - 1 : nullptr;
+	auto suffix = ShortestSuffix(scanner, std::string_view(rend + 1, rbegin - rend), throughEndMark, throughBeginMark); 
+	return suffix.data() ? suffix.data() - 1 : nullptr; 
 }
 
 

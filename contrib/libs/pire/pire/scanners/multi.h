@@ -24,7 +24,7 @@
 #ifndef PIRE_SCANNERS_MULTI_H
 #define PIRE_SCANNERS_MULTI_H
 
-#include <cstring>
+#include <cstring> 
 #include <string.h>
 #include <contrib/libs/pire/pire/approx_matching.h>
 #include <contrib/libs/pire/pire/fsm.h>
@@ -348,7 +348,7 @@ protected:
 	template<class Eq>
 	void Init(size_t states, const Partition<Char, Eq>& letters, size_t finalStatesCount, size_t startState, size_t regexpsCount = 1)
 	{
-		std::memset(&m, 0, sizeof(m));
+		std::memset(&m, 0, sizeof(m)); 
 		m.relocationSignature = Relocation::Signature;
 		m.shortcuttingSignature = Shortcutting::Signature;
 		m.statesCount = states;
@@ -407,7 +407,7 @@ protected:
 		m.relocationSignature = Relocation::Signature;
 		m.shortcuttingSignature = Shortcutting::Signature;
 		m_buffer = BufferType(new char[BufSize() + sizeof(size_t)]);
-		std::memset(m_buffer.Get(), 0, BufSize() + sizeof(size_t));
+		std::memset(m_buffer.Get(), 0, BufSize() + sizeof(size_t)); 
 		Markup(AlignUp(m_buffer.Get(), sizeof(size_t)));
 
 		// Values in letter-to-leterclass table take into account row header size
@@ -513,12 +513,12 @@ protected:
 	void FinishBuild()
 	{
 		Y_ASSERT(m_buffer);
-		auto finalWriter = m_final;
+		auto finalWriter = m_final; 
 		for (size_t state = 0; state != Size(); ++state) {
-			m_finalIndex[state] = finalWriter - m_final;
+			m_finalIndex[state] = finalWriter - m_final; 
 			if (Header(IndexToState(state)).Common.Flags & FinalFlag)
-				*finalWriter++ = 0;
-			*finalWriter++ = static_cast<size_t>(-1);
+				*finalWriter++ = 0; 
+			*finalWriter++ = static_cast<size_t>(-1); 
 		}
 		BuildShortcuts();
 	}
@@ -1022,12 +1022,12 @@ public:
 		this->SetSc(THolder<Scanner>(new Scanner));
 		Sc().Init(states.size(), Letters(), finalTableSize, size_t(0), Lhs().RegexpsCount() + Rhs().RegexpsCount());
 
-		auto finalWriter = Sc().m_final;
+		auto finalWriter = Sc().m_final; 
 		for (size_t state = 0; state != states.size(); ++state) {
-			Sc().m_finalIndex[state] = finalWriter - Sc().m_final;
-			finalWriter = Shift(Lhs().AcceptedRegexps(states[state].first), 0, finalWriter);
-			finalWriter = Shift(Rhs().AcceptedRegexps(states[state].second), Lhs().RegexpsCount(), finalWriter);
-			*finalWriter++ = static_cast<size_t>(-1);
+			Sc().m_finalIndex[state] = finalWriter - Sc().m_final; 
+			finalWriter = Shift(Lhs().AcceptedRegexps(states[state].first), 0, finalWriter); 
+			finalWriter = Shift(Rhs().AcceptedRegexps(states[state].second), Lhs().RegexpsCount(), finalWriter); 
+			*finalWriter++ = static_cast<size_t>(-1); 
 
 			Sc().SetTag(state, ((Lhs().Final(states[state].first) || Rhs().Final(states[state].second)) ? Scanner::FinalFlag : 0)
 				| ((Lhs().Dead(states[state].first) && Rhs().Dead(states[state].second)) ? Scanner::DeadFlag : 0));

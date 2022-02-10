@@ -612,7 +612,7 @@ Fsm& Fsm::Reverse()
 				out.Connect(j, from, i.first);
 
 	// Invert initial and final states
-	out.m_final.clear();
+	out.m_final.clear(); 
 	out.SetFinal(initial, true);
 	for (auto i : m_final)
 		out.Connect(Size(), i, Epsilon);

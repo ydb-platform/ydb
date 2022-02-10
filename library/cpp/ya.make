@@ -132,10 +132,10 @@ RECURSE(
     geo
     geobase
     geobase/ut
-    geohash
-    geohash/tile
-    geohash/tile/ut
-    geohash/ut
+    geohash 
+    geohash/tile 
+    geohash/tile/ut 
+    geohash/ut 
     geolocation
     geotarget
     getopt

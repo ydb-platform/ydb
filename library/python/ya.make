@@ -145,7 +145,7 @@ RECURSE(
     pytest/allure
     pytest/empty
     pytest/plugins
-    python-blackboxer
+    python-blackboxer 
     python-django-tanker
     python-django-yauth/tests
     python-django-yauth
@@ -207,7 +207,7 @@ RECURSE(
     windows
     windows/ut
     yandex_tracker_client
-    yenv
+    yenv 
     yt
     yt/test
     ylock

@@ -341,7 +341,7 @@ RECURSE(
     environs
     envoy
     ephem
-    escapism
+    escapism 
     etcd3
     excel-formulas-calculator
     execnet
@@ -565,9 +565,9 @@ RECURSE(
     junitparser
     jupyter_client
     jupyter_core
-    jupyter-telemetry
+    jupyter-telemetry 
     jupyterhub
-    jupyterhub-traefik-proxy
+    jupyterhub-traefik-proxy 
     jupytext
     kaitaistruct
     kazoo
@@ -716,7 +716,7 @@ RECURSE(
     Parsley
     parso
     partd
-    passlib
+    passlib 
     patch
     patched
     path.py

@@ -614,17 +614,17 @@ bool TryFromStringImpl<TUtf16String>(const wchar16* data, size_t len, TUtf16Stri
     DEF_INT_SPEC_I(signed TYPE, i64, ID##SBounds) \
     DEF_INT_SPEC_I(unsigned TYPE, ui64, ID##UBounds)
 
-#define DEF_INT_SPEC_FIXED_WIDTH(TYPE, ID) \
-    DEF_INT_SPEC_I(TYPE, i64, ID##SBounds) \
-    DEF_INT_SPEC_I(u##TYPE, ui64, ID##UBounds)
-
-DEF_INT_SPEC_FIXED_WIDTH(i8, b)
+#define DEF_INT_SPEC_FIXED_WIDTH(TYPE, ID) \ 
+    DEF_INT_SPEC_I(TYPE, i64, ID##SBounds) \ 
+    DEF_INT_SPEC_I(u##TYPE, ui64, ID##UBounds) 
+ 
+DEF_INT_SPEC_FIXED_WIDTH(i8, b) 
 DEF_INT_SPEC(short, s)
 DEF_INT_SPEC(int, i)
 DEF_INT_SPEC(long, l)
 DEF_INT_SPEC(long long, ll)
 
-#undef DEF_INT_SPEC_FIXED_WIDTH
+#undef DEF_INT_SPEC_FIXED_WIDTH 
 #undef DEF_INT_SPEC
 #undef DEF_INT_SPEC_I
 #undef DEF_INT_SPEC_II

@@ -94,16 +94,16 @@ namespace NMonitoring {
                 TimeSeries_.Add(time, snapshot.Get());
             }
 
-            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override { 
+            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override {
                 State_.Expect(TEncoderState::EState::METRIC);
-                TimeSeries_.Add(time, snapshot.Get()); 
-            } 
- 
+                TimeSeries_.Add(time, snapshot.Get());
+            }
+
             void OnLogHistogram(TInstant ts, TLogHistogramSnapshotPtr snapshot) override {
                 State_.Expect(TEncoderState::EState::METRIC);
                 TimeSeries_.Add(ts, snapshot.Get());
-            } 
- 
+            }
+
             void Close() override {
             }
 
@@ -132,11 +132,11 @@ namespace NMonitoring {
                     (*Out_) << *value.AsHistogram();
                     break;
                 case EMetricValueType::SUMMARY:
-                    (*Out_) << *value.AsSummaryDouble(); 
-                    break; 
-                case EMetricValueType::LOGHISTOGRAM: 
+                    (*Out_) << *value.AsSummaryDouble();
+                    break;
+                case EMetricValueType::LOGHISTOGRAM:
                     (*Out_) << *value.AsLogHistogram();
-                    break; 
+                    break;
                 case EMetricValueType::UNKNOWN:
                     ythrow yexception() << "unknown metric value type";
                 }

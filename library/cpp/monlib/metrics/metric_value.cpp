@@ -12,15 +12,15 @@ namespace NMonitoring {
                 SnapshotUnRef<EMetricValueType::HISTOGRAM>(p);
             }
         } else if (ValueType_ == EMetricValueType::SUMMARY) {
-            for (TPoint& p: Points_) { 
+            for (TPoint& p: Points_) {
                 SnapshotUnRef<EMetricValueType::SUMMARY>(p);
-            } 
-        } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) { 
-            for (TPoint& p: Points_) { 
-                SnapshotUnRef<EMetricValueType::LOGHISTOGRAM>(p); 
-            } 
+            }
+        } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) {
+            for (TPoint& p: Points_) {
+                SnapshotUnRef<EMetricValueType::LOGHISTOGRAM>(p);
+            }
         }
- 
+
         Points_.clear();
         ValueType_ = EMetricValueType::UNKNOWN;
     }

@@ -45,11 +45,11 @@ namespace NMonitoring {
                 case EMetricType::HIST_RATE:
                     Out_->Write("histogram");
                     break;
-                case EMetricType::LOGHIST: 
-                    // TODO(@kbalakirev): implement this case 
-                    break; 
+                case EMetricType::LOGHIST:
+                    // TODO(@kbalakirev): implement this case
+                    break;
                 case EMetricType::DSUMMARY:
-                    ythrow yexception() << "writing summary type is forbiden"; 
+                    ythrow yexception() << "writing summary type is forbiden";
                 case EMetricType::UNKNOWN:
                     ythrow yexception() << "unknown metric type: " << MetricTypeToStr(type)
                                         << ", name: " << name;
@@ -90,14 +90,14 @@ namespace NMonitoring {
                 WriteValue(name, NPrometheus::COUNT_SUFFIX, labels, "", "", time, totalCount);
             }
 
-            void WriteSummaryDouble(TStringBuf name, const TLabels& labels, TInstant time, ISummaryDoubleSnapshot* s) { 
-                WriteValue(name, NPrometheus::SUM_SUFFIX, labels, "", "", time, s->GetSum()); 
-                WriteValue(name, NPrometheus::MIN_SUFFIX, labels, "", "", time, s->GetMin()); 
-                WriteValue(name, NPrometheus::MAX_SUFFIX, labels, "", "", time, s->GetMax()); 
-                WriteValue(name, NPrometheus::LAST_SUFFIX, labels, "", "", time, s->GetLast()); 
-                WriteValue(name, NPrometheus::COUNT_SUFFIX, labels, "", "", time, s->GetCount()); 
-            } 
- 
+            void WriteSummaryDouble(TStringBuf name, const TLabels& labels, TInstant time, ISummaryDoubleSnapshot* s) {
+                WriteValue(name, NPrometheus::SUM_SUFFIX, labels, "", "", time, s->GetSum());
+                WriteValue(name, NPrometheus::MIN_SUFFIX, labels, "", "", time, s->GetMin());
+                WriteValue(name, NPrometheus::MAX_SUFFIX, labels, "", "", time, s->GetMax());
+                WriteValue(name, NPrometheus::LAST_SUFFIX, labels, "", "", time, s->GetLast());
+                WriteValue(name, NPrometheus::COUNT_SUFFIX, labels, "", "", time, s->GetCount());
+            }
+
             void WriteLn() {
                 Out_->Write('\n');
             }
@@ -220,7 +220,7 @@ namespace NMonitoring {
                 if (ValueType == EMetricValueType::HISTOGRAM) {
                     Value.AsHistogram()->UnRef();
                 } else if (ValueType == EMetricValueType::SUMMARY) {
-                    Value.AsSummaryDouble()->UnRef(); 
+                    Value.AsSummaryDouble()->UnRef();
                 }
                 ValueType = EMetricValueType::UNKNOWN;
                 Value = {};
@@ -232,14 +232,14 @@ namespace NMonitoring {
                 if (ValueType == EMetricValueType::HISTOGRAM) {
                     Value.AsHistogram()->UnRef();
                 } else if (ValueType == EMetricValueType::SUMMARY) {
-                    Value.AsSummaryDouble()->UnRef(); 
+                    Value.AsSummaryDouble()->UnRef();
                 }
                 ValueType = TValueType<T>::Type;
                 Value = TMetricValue(value);
                 if (ValueType == EMetricValueType::HISTOGRAM) {
                     Value.AsHistogram()->Ref();
                 } else if (ValueType == EMetricValueType::SUMMARY) {
-                    Value.AsSummaryDouble()->Ref(); 
+                    Value.AsSummaryDouble()->Ref();
                 }
             }
         };
@@ -335,16 +335,16 @@ namespace NMonitoring {
                 MetricState_.SetValue(snapshot.Get());
             }
 
-            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override { 
+            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override {
                 State_.Expect(TEncoderState::EState::METRIC);
                 MetricState_.Time = time;
                 MetricState_.SetValue(snapshot.Get());
-            } 
- 
-            void OnLogHistogram(TInstant, TLogHistogramSnapshotPtr) override { 
-                // TODO(@kbalakirev): implement this function 
-            } 
- 
+            }
+
+            void OnLogHistogram(TInstant, TLogHistogramSnapshotPtr) override {
+                // TODO(@kbalakirev): implement this function
+            }
+
             void Close() override {
             }
 
@@ -366,7 +366,7 @@ namespace NMonitoring {
                 const TString& metricName = ToString(nameLabel->Value());
                 if (MetricState_.Type != EMetricType::DSUMMARY) {
                     Writer_.WriteType(MetricState_.Type, metricName);
-                } 
+                }
 
                 if (MetricState_.Time == TInstant::Zero()) {
                     MetricState_.Time = CommonTime_;
@@ -382,8 +382,8 @@ namespace NMonitoring {
                         MetricState_.Time,
                         MetricState_.Value.AsHistogram());
                 } else if (type == EMetricType::DSUMMARY) {
-                    Writer_.WriteSummaryDouble( 
-                        metricName, 
+                    Writer_.WriteSummaryDouble(
+                        metricName,
                         MetricState_.Labels,
                         MetricState_.Time,
                         MetricState_.Value.AsSummaryDouble());

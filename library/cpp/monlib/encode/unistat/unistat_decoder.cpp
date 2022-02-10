@@ -211,7 +211,7 @@ namespace NMonitoring {
                     case EMetricType::HIST_RATE:
                         Consumer_->OnHistogram(Timestamp_, MetricContext_.Value.AsHistogram());
                         break;
-                    case EMetricType::LOGHIST: 
+                    case EMetricType::LOGHIST:
                     case EMetricType::DSUMMARY:
                     case EMetricType::IGAUGE:
                     case EMetricType::COUNTER:

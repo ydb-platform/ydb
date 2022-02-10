@@ -93,55 +93,55 @@ namespace NMonitoring {
                 Buf_.EndObject();
             }
 
-            void WriteValue(ISummaryDoubleSnapshot* s) { 
+            void WriteValue(ISummaryDoubleSnapshot* s) {
                 Y_ENSURE(Style_ == EJsonStyle::Solomon);
 
                 Buf_.WriteKey(TStringBuf("summary"));
-                Buf_.BeginObject(); 
- 
+                Buf_.BeginObject();
+
                 Buf_.WriteKey(TStringBuf("sum"));
-                Buf_.WriteDouble(s->GetSum()); 
- 
+                Buf_.WriteDouble(s->GetSum());
+
                 Buf_.WriteKey(TStringBuf("min"));
-                Buf_.WriteDouble(s->GetMin()); 
- 
+                Buf_.WriteDouble(s->GetMin());
+
                 Buf_.WriteKey(TStringBuf("max"));
-                Buf_.WriteDouble(s->GetMax()); 
- 
+                Buf_.WriteDouble(s->GetMax());
+
                 Buf_.WriteKey(TStringBuf("last"));
-                Buf_.WriteDouble(s->GetLast()); 
- 
+                Buf_.WriteDouble(s->GetLast());
+
                 Buf_.WriteKey(TStringBuf("count"));
-                Buf_.WriteULongLong(s->GetCount()); 
- 
-                Buf_.EndObject(); 
-            } 
- 
-            void WriteValue(TLogHistogramSnapshot* s) { 
+                Buf_.WriteULongLong(s->GetCount());
+
+                Buf_.EndObject();
+            }
+
+            void WriteValue(TLogHistogramSnapshot* s) {
                 Y_ENSURE(Style_ == EJsonStyle::Solomon);
 
                 Buf_.WriteKey(TStringBuf("log_hist"));
-                Buf_.BeginObject(); 
- 
+                Buf_.BeginObject();
+
                 Buf_.WriteKey(TStringBuf("base"));
-                Buf_.WriteDouble(s->Base()); 
- 
+                Buf_.WriteDouble(s->Base());
+
                 Buf_.WriteKey(TStringBuf("zeros_count"));
-                Buf_.WriteULongLong(s->ZerosCount()); 
- 
+                Buf_.WriteULongLong(s->ZerosCount());
+
                 Buf_.WriteKey(TStringBuf("start_power"));
-                Buf_.WriteInt(s->StartPower()); 
- 
+                Buf_.WriteInt(s->StartPower());
+
                 Buf_.WriteKey(TStringBuf("buckets"));
-                Buf_.BeginList(); 
-                for (size_t i = 0; i < s->Count(); ++i) { 
-                    Buf_.WriteDouble(s->Bucket(i)); 
-                } 
-                Buf_.EndList(); 
- 
-                Buf_.EndObject(); 
-            } 
- 
+                Buf_.BeginList();
+                for (size_t i = 0; i < s->Count(); ++i) {
+                    Buf_.WriteDouble(s->Bucket(i));
+                }
+                Buf_.EndList();
+
+                Buf_.EndObject();
+            }
+
             void WriteValue(EMetricValueType type, TMetricValue value) {
                 switch (type) {
                     case EMetricValueType::DOUBLE:
@@ -161,13 +161,13 @@ namespace NMonitoring {
                         break;
 
                     case EMetricValueType::SUMMARY:
-                        WriteValue(value.AsSummaryDouble()); 
-                        break; 
- 
-                    case EMetricValueType::LOGHISTOGRAM: 
-                        WriteValue(value.AsLogHistogram()); 
-                        break; 
- 
+                        WriteValue(value.AsSummaryDouble());
+                        break;
+
+                    case EMetricValueType::LOGHISTOGRAM:
+                        WriteValue(value.AsLogHistogram());
+                        break;
+
                     case EMetricValueType::UNKNOWN:
                         ythrow yexception() << "unknown metric value type";
                 }
@@ -358,16 +358,16 @@ namespace NMonitoring {
                 Write<IHistogramSnapshot*>(time, snapshot.Get());
             }
 
-            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override { 
+            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override {
                 State_.Expect(TEncoderState::EState::METRIC);
-                Write<ISummaryDoubleSnapshot*>(time, snapshot.Get()); 
-            } 
- 
-            void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) override { 
+                Write<ISummaryDoubleSnapshot*>(time, snapshot.Get());
+            }
+
+            void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) override {
                 State_.Expect(TEncoderState::EState::METRIC);
-                Write<TLogHistogramSnapshot*>(time, snapshot.Get()); 
-            } 
- 
+                Write<TLogHistogramSnapshot*>(time, snapshot.Get());
+            }
+
             template <typename T>
             void Write(TInstant time, T value) {
                 State_.Expect(TEncoderState::EState::METRIC);

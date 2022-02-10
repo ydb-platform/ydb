@@ -1,9 +1,9 @@
-#include "summary_snapshot.h" 
- 
-#include <util/stream/output.h> 
- 
+#include "summary_snapshot.h"
+
+#include <util/stream/output.h>
+
 #include <iostream>
- 
+
 
 namespace {
 
@@ -16,11 +16,11 @@ auto& Output(TStream& o, const NMonitoring::ISummaryDoubleSnapshot& s) {
     o << TStringBuf("max: ") << s.GetMax() << TStringBuf(", ");
     o << TStringBuf("last: ") << s.GetLast() << TStringBuf(", ");
     o << TStringBuf("count: ") << s.GetCount();
- 
+
     o << TStringBuf("}");
 
     return o;
-} 
+}
 
 } // namespace
 

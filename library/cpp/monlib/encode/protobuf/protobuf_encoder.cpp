@@ -19,9 +19,9 @@ namespace NMonitoring {
                 case EMetricType::HIST_RATE:
                     return NProto::HIST_RATE;
                 case EMetricType::DSUMMARY:
-                    return NProto::DSUMMARY; 
-                case EMetricType::LOGHIST: 
-                    return NProto::LOGHISTOGRAM; 
+                    return NProto::DSUMMARY;
+                case EMetricType::LOGHIST:
+                    return NProto::LOGHISTOGRAM;
                 case EMetricType::UNKNOWN:
                     return NProto::UNKNOWN;
             }
@@ -37,23 +37,23 @@ namespace NMonitoring {
             }
         }
 
-        void FillSummaryDouble(const ISummaryDoubleSnapshot& snapshot, NProto::TSummaryDouble* summary) { 
-            summary->SetSum(snapshot.GetSum()); 
-            summary->SetMin(snapshot.GetMin()); 
-            summary->SetMax(snapshot.GetMax()); 
-            summary->SetLast(snapshot.GetLast()); 
-            summary->SetCount(snapshot.GetCount()); 
-        } 
- 
-        void FillLogHistogram(const TLogHistogramSnapshot& snapshot, NProto::TLogHistogram* logHist) { 
-            logHist->SetBase(snapshot.Base()); 
-            logHist->SetZerosCount(snapshot.ZerosCount()); 
-            logHist->SetStartPower(snapshot.StartPower()); 
-            for (ui32 i = 0; i < snapshot.Count(); ++i) { 
-                logHist->AddBuckets(snapshot.Bucket(i)); 
-            } 
-        } 
- 
+        void FillSummaryDouble(const ISummaryDoubleSnapshot& snapshot, NProto::TSummaryDouble* summary) {
+            summary->SetSum(snapshot.GetSum());
+            summary->SetMin(snapshot.GetMin());
+            summary->SetMax(snapshot.GetMax());
+            summary->SetLast(snapshot.GetLast());
+            summary->SetCount(snapshot.GetCount());
+        }
+
+        void FillLogHistogram(const TLogHistogramSnapshot& snapshot, NProto::TLogHistogram* logHist) {
+            logHist->SetBase(snapshot.Base());
+            logHist->SetZerosCount(snapshot.ZerosCount());
+            logHist->SetStartPower(snapshot.StartPower());
+            for (ui32 i = 0; i < snapshot.Count(); ++i) {
+                logHist->AddBuckets(snapshot.Bucket(i));
+            }
+        }
+
         ///////////////////////////////////////////////////////////////////////////////
         // TSingleamplesEncoder
         ///////////////////////////////////////////////////////////////////////////////
@@ -121,18 +121,18 @@ namespace NMonitoring {
                 FillHistogram(*snapshot, Sample_->MutableHistogram());
             }
 
-            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override { 
+            void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override {
                 Y_ENSURE(Sample_, "metric not started");
-                Sample_->SetTime(time.MilliSeconds()); 
-                FillSummaryDouble(*snapshot, Sample_->MutableSummaryDouble()); 
-            } 
- 
-            void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) override { 
+                Sample_->SetTime(time.MilliSeconds());
+                FillSummaryDouble(*snapshot, Sample_->MutableSummaryDouble());
+            }
+
+            void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) override {
                 Y_ENSURE(Sample_, "metric not started");
-                Sample_->SetTime(time.MilliSeconds()); 
-                FillLogHistogram(*snapshot, Sample_->MutableLogHistogram()); 
-            } 
- 
+                Sample_->SetTime(time.MilliSeconds());
+                FillLogHistogram(*snapshot, Sample_->MutableLogHistogram());
+            }
+
             void Close() override {
             }
 
@@ -215,18 +215,18 @@ namespace NMonitoring {
 
             void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override {
                 Y_ENSURE(Sample_, "metric not started");
-                NProto::TPoint* point = Sample_->AddPoints(); 
-                point->SetTime(time.MilliSeconds()); 
-                FillSummaryDouble(*snapshot, point->MutableSummaryDouble()); 
-            } 
- 
-            void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) override { 
+                NProto::TPoint* point = Sample_->AddPoints();
+                point->SetTime(time.MilliSeconds());
+                FillSummaryDouble(*snapshot, point->MutableSummaryDouble());
+            }
+
+            void OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr snapshot) override {
                 Y_ENSURE(Sample_, "metric not started");
-                NProto::TPoint* point = Sample_->AddPoints(); 
-                point->SetTime(time.MilliSeconds()); 
-                FillLogHistogram(*snapshot, point->MutableLogHistogram()); 
-            } 
- 
+                NProto::TPoint* point = Sample_->AddPoints();
+                point->SetTime(time.MilliSeconds());
+                FillLogHistogram(*snapshot, point->MutableLogHistogram());
+            }
+
             void Close() override {
             }
 

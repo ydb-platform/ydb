@@ -34,8 +34,8 @@ public:
     void OnUint64(TInstant time, ui64 value) override;
 
     void OnHistogram(TInstant time, IHistogramSnapshotPtr snapshot) override;
-    void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override; 
-    void OnLogHistogram(TInstant, TLogHistogramSnapshotPtr) override; 
+    void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override;
+    void OnLogHistogram(TInstant, TLogHistogramSnapshotPtr) override;
 
 protected:
     using TPooledStr = TStringPoolBuilder::TValue;

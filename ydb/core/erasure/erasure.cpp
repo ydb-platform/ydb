@@ -1547,10 +1547,10 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
             // The (f1) case, but no full data needed, only parts
             TRACE("case# f1" << Endl);
             VERBOSE_COUT(__LINE__ << " of " << __FILE__ << Endl);
-            if (isStripe) { 
-                Refurbish(buffer, dataSize); 
-                p.PrepareInputDataPointers<isStripe>(buffer.Detach()); 
-            } 
+            if (isStripe) {
+                Refurbish(buffer, dataSize);
+                p.PrepareInputDataPointers<isStripe>(buffer.Detach());
+            }
             p.XorRestorePart<isStripe, true, false, false>(partSet, missingDataPartIdxA);
             TRACE("case# f1 split" << Endl);
             p.EoSplit<isStripe, true>(partSet);
@@ -1592,9 +1592,9 @@ void EoBlockRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TD
                 return;
             }
             TRACE(__LINE__ << Endl);
-            if (isStripe) { 
-                Refurbish(buffer, dataSize); 
-            } 
+            if (isStripe) {
+                Refurbish(buffer, dataSize);
+            }
         }
         if (isStripe) {
             TRACE(__LINE__ << Endl);
@@ -2575,7 +2575,7 @@ void MirrorRestore(TErasureType::ECrcMode crcMode, const TErasureType &type, TDa
 
 
 }
-static void VerifyPartSizes(TDataPartSet& partSet, size_t definedPartEndIdx) { 
+static void VerifyPartSizes(TDataPartSet& partSet, size_t definedPartEndIdx) {
     size_t partSize = partSet.Parts[0].size();
     for (size_t idx = 0; idx < partSet.Parts.size(); ++idx) {
         Y_VERIFY(partSet.Parts[idx].size() == partSize);

@@ -1103,7 +1103,7 @@ RECURSE(
     tzlocal
     ua-parser
     udatetime
-    uhashring 
+    uhashring
     ujson
     ulid2
     umalqurra

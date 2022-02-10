@@ -2,8 +2,8 @@
 
 #include "histogram_collector.h"
 #include "metric_value_type.h"
-#include "summary_collector.h" 
-#include "log_histogram_snapshot.h" 
+#include "summary_collector.h"
+#include "log_histogram_snapshot.h"
 
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
@@ -43,20 +43,20 @@ namespace NMonitoring {
         static constexpr auto Type = EMetricValueType::UINT64;
     };
 
-    template <> 
-    struct TValueType<TLogHistogramSnapshot*> { 
-        static constexpr auto Type = EMetricValueType::LOGHISTOGRAM; 
-    }; 
- 
+    template <>
+    struct TValueType<TLogHistogramSnapshot*> {
+        static constexpr auto Type = EMetricValueType::LOGHISTOGRAM;
+    };
+
     template <typename T>
     struct TValueType<T*, typename std::enable_if_t<std::is_base_of<IHistogramSnapshot, T>::value>> {
         static constexpr auto Type = EMetricValueType::HISTOGRAM;
     };
 
-    template <typename T> 
-    struct TValueType<T*, typename std::enable_if_t<std::is_base_of<ISummaryDoubleSnapshot, T>::value>> { 
+    template <typename T>
+    struct TValueType<T*, typename std::enable_if_t<std::is_base_of<ISummaryDoubleSnapshot, T>::value>> {
         static constexpr auto Type = EMetricValueType::SUMMARY;
-    }; 
+    };
 
     ///////////////////////////////////////////////////////////////////////////
     // TMetricValue
@@ -90,13 +90,13 @@ namespace NMonitoring {
         }
 
         explicit TMetricValue(ISummaryDoubleSnapshot* summary) noexcept {
-            Value_.Summary = summary; 
-        } 
- 
-        explicit TMetricValue(TLogHistogramSnapshot* logHist) noexcept { 
-            Value_.LogHistogram = logHist; 
-        } 
- 
+            Value_.Summary = summary;
+        }
+
+        explicit TMetricValue(TLogHistogramSnapshot* logHist) noexcept {
+            Value_.LogHistogram = logHist;
+        }
+
         double AsDouble() const noexcept {
             return Value_.Double;
         }
@@ -114,9 +114,9 @@ namespace NMonitoring {
                 case EMetricValueType::HISTOGRAM:
                     ythrow yexception() << "histogram cannot be casted to Double";
                 case EMetricValueType::SUMMARY:
-                    ythrow yexception() << "summary cannot be casted to Double"; 
-                case EMetricValueType::LOGHISTOGRAM: 
-                    ythrow yexception() << "loghistogram cannot be casted to Double"; 
+                    ythrow yexception() << "summary cannot be casted to Double";
+                case EMetricValueType::LOGHISTOGRAM:
+                    ythrow yexception() << "loghistogram cannot be casted to Double";
                 case EMetricValueType::UNKNOWN:
                     ythrow yexception() << "unknown value type";
             }
@@ -140,9 +140,9 @@ namespace NMonitoring {
                 case EMetricValueType::HISTOGRAM:
                     ythrow yexception() << "histogram cannot be casted to Uint64";
                 case EMetricValueType::SUMMARY:
-                    ythrow yexception() << "summary cannot be casted to Uint64"; 
-                case EMetricValueType::LOGHISTOGRAM: 
-                    ythrow yexception() << "loghistogram cannot be casted to Uint64"; 
+                    ythrow yexception() << "summary cannot be casted to Uint64";
+                case EMetricValueType::LOGHISTOGRAM:
+                    ythrow yexception() << "loghistogram cannot be casted to Uint64";
                 case EMetricValueType::UNKNOWN:
                     ythrow yexception() << "unknown value type";
             }
@@ -166,9 +166,9 @@ namespace NMonitoring {
                 case EMetricValueType::HISTOGRAM:
                     ythrow yexception() << "histogram cannot be casted to Int64";
                 case EMetricValueType::SUMMARY:
-                    ythrow yexception() << "summary cannot be casted to Int64"; 
-                case EMetricValueType::LOGHISTOGRAM: 
-                    ythrow yexception() << "loghistogram cannot be casted to Int64"; 
+                    ythrow yexception() << "summary cannot be casted to Int64";
+                case EMetricValueType::LOGHISTOGRAM:
+                    ythrow yexception() << "loghistogram cannot be casted to Int64";
                 case EMetricValueType::UNKNOWN:
                     ythrow yexception() << "unknown value type";
             }
@@ -187,10 +187,10 @@ namespace NMonitoring {
             return Value_.Histogram;
         }
 
-        ISummaryDoubleSnapshot* AsSummaryDouble() const noexcept { 
-            return Value_.Summary; 
-        } 
- 
+        ISummaryDoubleSnapshot* AsSummaryDouble() const noexcept {
+            return Value_.Summary;
+        }
+
         ISummaryDoubleSnapshot* AsSummaryDouble(EMetricValueType type) const {
             if (type != EMetricValueType::SUMMARY) {
                 ythrow yexception() << type << " cannot be casted to SummaryDouble";
@@ -199,26 +199,26 @@ namespace NMonitoring {
             return Value_.Summary;
         }
 
-        TLogHistogramSnapshot* AsLogHistogram() const noexcept { 
-            return Value_.LogHistogram; 
-        } 
- 
-        TLogHistogramSnapshot* AsLogHistogram(EMetricValueType type) const { 
-            if (type != EMetricValueType::LOGHISTOGRAM) { 
-                ythrow yexception() << type << " cannot be casted to LogHistogram"; 
-            } 
- 
-            return Value_.LogHistogram; 
-        } 
- 
+        TLogHistogramSnapshot* AsLogHistogram() const noexcept {
+            return Value_.LogHistogram;
+        }
+
+        TLogHistogramSnapshot* AsLogHistogram(EMetricValueType type) const {
+            if (type != EMetricValueType::LOGHISTOGRAM) {
+                ythrow yexception() << type << " cannot be casted to LogHistogram";
+            }
+
+            return Value_.LogHistogram;
+        }
+
     protected:
         union {
             double Double;
             i64 Int64;
             ui64 Uint64;
             IHistogramSnapshot* Histogram;
-            ISummaryDoubleSnapshot* Summary; 
-            TLogHistogramSnapshot* LogHistogram; 
+            ISummaryDoubleSnapshot* Summary;
+            TLogHistogramSnapshot* LogHistogram;
         } Value_;
     };
 
@@ -290,18 +290,18 @@ namespace NMonitoring {
             return TBase::AsSummaryDouble(ValueType_);
         }
 
-        TLogHistogramSnapshot* AsLogHistogram() const { 
-            return TBase::AsLogHistogram(ValueType_); 
-        } 
- 
+        TLogHistogramSnapshot* AsLogHistogram() const {
+            return TBase::AsLogHistogram(ValueType_);
+        }
+
     private:
         void Ref() {
             if (ValueType_ == EMetricValueType::SUMMARY) {
                 TBase::AsSummaryDouble()->Ref();
             } else if (ValueType_ == EMetricValueType::HISTOGRAM) {
                 TBase::AsHistogram()->Ref();
-            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) { 
-                TBase::AsLogHistogram()->Ref(); 
+            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) {
+                TBase::AsLogHistogram()->Ref();
             }
         }
 
@@ -310,8 +310,8 @@ namespace NMonitoring {
                 TBase::AsSummaryDouble()->UnRef();
             } else if (ValueType_ == EMetricValueType::HISTOGRAM) {
                 TBase::AsHistogram()->UnRef();
-            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) { 
-                TBase::AsLogHistogram()->UnRef(); 
+            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) {
+                TBase::AsLogHistogram()->UnRef();
             }
         }
 
@@ -401,7 +401,7 @@ namespace NMonitoring {
             } else if (ValueType_ == EMetricValueType::HISTOGRAM) {
                 TPoint& p = Points_.back();
                 p.GetValue().AsHistogram()->Ref();
-            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) { 
+            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) {
                 TPoint& p = Points_.back();
                 p.GetValue().AsLogHistogram()->Ref();
             }
@@ -424,16 +424,16 @@ namespace NMonitoring {
                     point.GetValue().AsHistogram()->Ref();
                 }
             } else if (ValueType_ == EMetricValueType::SUMMARY) {
-                for (size_t i = prevSize; i < Points_.size(); ++i) { 
-                    TPoint& point = Points_[i]; 
-                    point.GetValue().AsSummaryDouble()->Ref(); 
-                } 
-            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) { 
-                for (size_t i = prevSize; i < Points_.size(); ++i) { 
-                    TPoint& point = Points_[i]; 
-                    point.GetValue().AsLogHistogram()->Ref(); 
-                } 
-            } 
+                for (size_t i = prevSize; i < Points_.size(); ++i) {
+                    TPoint& point = Points_[i];
+                    point.GetValue().AsSummaryDouble()->Ref();
+                }
+            } else if (ValueType_ == EMetricValueType::LOGHISTOGRAM) {
+                for (size_t i = prevSize; i < Points_.size(); ++i) {
+                    TPoint& point = Points_[i];
+                    point.GetValue().AsLogHistogram()->Ref();
+                }
+            }
         }
 
         template <typename TConsumer>
@@ -480,50 +480,50 @@ namespace NMonitoring {
     };
 
     template <EMetricValueType valueType, typename TPoint>
-    static inline void SnapshotUnRef(TPoint& point) { 
+    static inline void SnapshotUnRef(TPoint& point) {
         if constexpr (valueType == EMetricValueType::HISTOGRAM) {
-            if (auto* hist = point.GetValue().AsHistogram()) { 
-                hist->UnRef(); 
-            } 
+            if (auto* hist = point.GetValue().AsHistogram()) {
+                hist->UnRef();
+            }
         } else if constexpr (valueType == EMetricValueType::SUMMARY) {
-            if (auto* summary = point.GetValue().AsSummaryDouble()) { 
-                summary->UnRef(); 
-            } 
-        } else if constexpr (valueType == EMetricValueType::LOGHISTOGRAM) { 
-            if (auto* logHist = point.GetValue().AsLogHistogram()) { 
-                logHist->UnRef(); 
-            } 
-        } 
-    } 
- 
+            if (auto* summary = point.GetValue().AsSummaryDouble()) {
+                summary->UnRef();
+            }
+        } else if constexpr (valueType == EMetricValueType::LOGHISTOGRAM) {
+            if (auto* logHist = point.GetValue().AsLogHistogram()) {
+                logHist->UnRef();
+            }
+        }
+    }
+
     template <EMetricValueType valueType, typename TPoint>
-    static void EraseDuplicates(TVector<TPoint>& points) { 
-        // we have to manually clean reference to a snapshot from point 
-        // while removing duplicates 
-        auto result = points.rbegin(); 
-        for (auto it = result + 1; it != points.rend(); ++it) { 
-            if (result->GetTime() != it->GetTime() && ++result != it) { 
+    static void EraseDuplicates(TVector<TPoint>& points) {
+        // we have to manually clean reference to a snapshot from point
+        // while removing duplicates
+        auto result = points.rbegin();
+        for (auto it = result + 1; it != points.rend(); ++it) {
+            if (result->GetTime() != it->GetTime() && ++result != it) {
                 SnapshotUnRef<valueType>(*result);
-                *result = *it;    // (2) copy 
-                it->ClearValue(); // (3) clean pointer in the source 
-            } 
-        } 
- 
-        // erase tail points 
-        for (auto it = result + 1; it != points.rend(); ++it) { 
+                *result = *it;    // (2) copy
+                it->ClearValue(); // (3) clean pointer in the source
+            }
+        }
+
+        // erase tail points
+        for (auto it = result + 1; it != points.rend(); ++it) {
             SnapshotUnRef<valueType>(*it);
-        } 
-        points.erase(points.begin(), (result + 1).base()); 
-    } 
- 
-    template <typename TPoint> 
+        }
+        points.erase(points.begin(), (result + 1).base());
+    }
+
+    template <typename TPoint>
     void SortPointsByTs(EMetricValueType valueType, TVector<TPoint>& points) {
         if (points.size() < 2) {
             return;
         }
 
-        if (valueType != EMetricValueType::HISTOGRAM && valueType != EMetricValueType::SUMMARY 
-            && valueType != EMetricValueType::LOGHISTOGRAM) { 
+        if (valueType != EMetricValueType::HISTOGRAM && valueType != EMetricValueType::SUMMARY
+            && valueType != EMetricValueType::LOGHISTOGRAM) {
             // Stable sort + saving only the last point inside a group of duplicates
             StableSortBy(points, NPrivate::POINT_KEY_FN);
             auto it = UniqueBy(points.rbegin(), points.rend(), NPrivate::POINT_KEY_FN);
@@ -532,11 +532,11 @@ namespace NMonitoring {
             StableSortBy(points, NPrivate::POINT_KEY_FN);
             if (valueType == EMetricValueType::HISTOGRAM) {
                 EraseDuplicates<EMetricValueType::HISTOGRAM>(points);
-            } else if (valueType == EMetricValueType::LOGHISTOGRAM) { 
-                EraseDuplicates<EMetricValueType::LOGHISTOGRAM>(points); 
-            } else { 
+            } else if (valueType == EMetricValueType::LOGHISTOGRAM) {
+                EraseDuplicates<EMetricValueType::LOGHISTOGRAM>(points);
+            } else {
                 EraseDuplicates<EMetricValueType::SUMMARY>(points);
-            } 
+            }
         }
     }
 }

@@ -461,10 +461,10 @@ private:
             return Ptr ? Iter->End - Ptr : 0;
         }
 
-        size_t ChunkOffset() const { 
-            return Ptr ? Ptr - Iter->Begin : 0; 
-        } 
- 
+        size_t ChunkOffset() const {
+            return Ptr ? Ptr - Iter->Begin : 0;
+        }
+
         // Advance to next contiguous block of data.
         void AdvanceToNextContiguousBlock() {
             CheckValid();

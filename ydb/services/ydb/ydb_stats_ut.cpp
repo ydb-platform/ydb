@@ -145,10 +145,10 @@ public:
 
     void OnHistogram(TInstant, NMonitoring::IHistogramSnapshotPtr) override { }
 
-    void OnLogHistogram(TInstant, NMonitoring::TLogHistogramSnapshotPtr) override { } 
- 
-    void OnSummaryDouble(TInstant, NMonitoring::ISummaryDoubleSnapshotPtr) override { } 
- 
+    void OnLogHistogram(TInstant, NMonitoring::TLogHistogramSnapshotPtr) override { }
+
+    void OnSummaryDouble(TInstant, NMonitoring::ISummaryDoubleSnapshotPtr) override { }
+
     ECounterType State = ECounterType::UNKNOWN;
     TStatCounters Counters;
 };

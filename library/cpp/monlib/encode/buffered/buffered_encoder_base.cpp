@@ -132,18 +132,18 @@ void TBufferedEncoderBase::OnHistogram(TInstant time, IHistogramSnapshotPtr s) {
     metric.TimeSeries.Add(time, s.Get());
 }
 
-void TBufferedEncoderBase::OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr s) { 
+void TBufferedEncoderBase::OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr s) {
     State_.Expect(TEncoderState::EState::METRIC);
     TMetric& metric = Metrics_.back();
     metric.TimeSeries.Add(time, s.Get());
-} 
- 
-void TBufferedEncoderBase::OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr s) { 
+}
+
+void TBufferedEncoderBase::OnLogHistogram(TInstant time, TLogHistogramSnapshotPtr s) {
     State_.Expect(TEncoderState::EState::METRIC);
     TMetric& metric = Metrics_.back();
     metric.TimeSeries.Add(time, s.Get());
-} 
- 
+}
+
 TString TBufferedEncoderBase::FormatLabels(const TPooledLabels& labels) const {
     auto formattedLabels = TVector<TString>(Reserve(labels.size() + CommonLabels_.size()));
     auto addLabel = [&](const TPooledLabel& l) {

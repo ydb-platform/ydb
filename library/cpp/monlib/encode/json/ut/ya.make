@@ -29,11 +29,11 @@ RESOURCE(
     test_decode_to_encode.json /test_decode_to_encode.json
     crash.json /crash.json
     hist_crash.json /hist_crash.json
-    summary_value.json /summary_value.json 
-    summary_inf.json /summary_inf.json 
-    summary_timeseries.json /summary_timeseries.json 
-    log_histogram_value.json /log_histogram_value.json 
-    log_histogram_timeseries.json /log_histogram_timeseries.json 
+    summary_value.json /summary_value.json
+    summary_inf.json /summary_inf.json
+    summary_timeseries.json /summary_timeseries.json
+    log_histogram_value.json /log_histogram_value.json
+    log_histogram_timeseries.json /log_histogram_timeseries.json
 )
 
 PEERDIR(

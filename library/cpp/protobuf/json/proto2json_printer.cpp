@@ -442,8 +442,8 @@ namespace NProtobufJson {
                                         const FieldDescriptor& field,
                                         IJsonOutput& json,
                                         const TStringBuf key) {
- 
- 
+
+
         if (field.is_repeated())
             PrintRepeatedField(proto, field, json, key);
         else
@@ -456,21 +456,21 @@ namespace NProtobufJson {
 
         json.BeginObject();
 
-        // Iterate over all non-extension fields 
+        // Iterate over all non-extension fields
         for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {
             const FieldDescriptor* field = descriptor->field(f);
             Y_ASSERT(field);
             PrintField(proto, *field, json);
         }
 
-        // Check extensions via ListFields 
-        std::vector<const FieldDescriptor*> fields; 
-        auto* ref = proto.GetReflection(); 
-        ref->ListFields(proto, &fields); 
- 
-        for (const FieldDescriptor* field : fields) { 
-            Y_ASSERT(field); 
-            if (field->is_extension()) { 
+        // Check extensions via ListFields
+        std::vector<const FieldDescriptor*> fields;
+        auto* ref = proto.GetReflection();
+        ref->ListFields(proto, &fields);
+
+        for (const FieldDescriptor* field : fields) {
+            Y_ASSERT(field);
+            if (field->is_extension()) {
                 switch (GetConfig().ExtensionFieldNameMode) {
                     case TProto2JsonConfig::ExtFldNameFull:
                         PrintField(proto, *field, json, field->full_name());
@@ -479,9 +479,9 @@ namespace NProtobufJson {
                         PrintField(proto, *field, json);
                         break;
                 }
-            } 
-        } 
- 
+            }
+        }
+
         if (closeMap) {
             json.EndObject();
         }

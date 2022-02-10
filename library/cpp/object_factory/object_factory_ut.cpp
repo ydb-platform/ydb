@@ -123,25 +123,25 @@ using TMoveableOnly2Factory = TParametrizedObjectFactory<IMoveableOnlyInterface,
 
 static TMoveableOnly2Factory::TRegistrator<TMoveableOnly2> MoveableOnly2Reg("move2");
 
-class TDirectOrderDifferentSignature : public TDirectOrder { 
-public: 
-    TDirectOrderDifferentSignature(const TString& provider, TArgument& argument) : 
-        TDirectOrder(provider, 0.01f, argument) 
-    { 
-    } 
+class TDirectOrderDifferentSignature : public TDirectOrder {
+public:
+    TDirectOrderDifferentSignature(const TString& provider, TArgument& argument) :
+        TDirectOrder(provider, 0.01f, argument)
+    {
+    }
 
-}; 
+};
 
-struct TDirectOrderDSCreator: public IFactoryObjectCreator<ICommonInterface, const TString&, float, TArgument&> { 
-    ICommonInterface* Create(const TString& provider, float factor, TArgument& argument) const override { 
-        Y_UNUSED(factor); 
-        return new TDirectOrderDifferentSignature(provider, argument); 
-    } 
-}; 
- 
- 
-static TTestFactory::TRegistrator<TDirectOrderDifferentSignature> DirectDs("direct_ds", new TDirectOrderDSCreator); 
- 
+struct TDirectOrderDSCreator: public IFactoryObjectCreator<ICommonInterface, const TString&, float, TArgument&> {
+    ICommonInterface* Create(const TString& provider, float factor, TArgument& argument) const override {
+        Y_UNUSED(factor);
+        return new TDirectOrderDifferentSignature(provider, argument);
+    }
+};
+
+
+static TTestFactory::TRegistrator<TDirectOrderDifferentSignature> DirectDs("direct_ds", new TDirectOrderDSCreator);
+
 Y_UNIT_TEST_SUITE(TestObjectFactory) {
     Y_UNIT_TEST(TestParametrized) {
         TArgument directArg{"Name", nullptr};
@@ -177,13 +177,13 @@ Y_UNIT_TEST_SUITE(TestObjectFactory) {
 
         UNIT_ASSERT(moveableOnly2->GetValue() == "value2");
     }
- 
-    Y_UNIT_TEST(TestDifferentSignature) { 
-        TArgument directArg{"Name", nullptr}; 
-        THolder<ICommonInterface> directDs(TTestFactory::Construct("direct_ds", "prov", 0.42, directArg)); 
- 
-        UNIT_ASSERT(!!directDs); 
- 
-        UNIT_ASSERT_EQUAL(directDs->GetValue(), "prov0.01Name"); 
-    } 
+
+    Y_UNIT_TEST(TestDifferentSignature) {
+        TArgument directArg{"Name", nullptr};
+        THolder<ICommonInterface> directDs(TTestFactory::Construct("direct_ds", "prov", 0.42, directArg));
+
+        UNIT_ASSERT(!!directDs);
+
+        UNIT_ASSERT_EQUAL(directDs->GetValue(), "prov0.01Name");
+    }
 }

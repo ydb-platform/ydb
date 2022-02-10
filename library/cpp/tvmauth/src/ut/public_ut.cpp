@@ -12,23 +12,23 @@ using namespace NTvmAuth;
 
 Y_UNIT_TEST_SUITE(CommonPublicInterfaceTestSuite){
     Y_UNIT_TEST(StatusTest){
-        UNIT_ASSERT_VALUES_EQUAL("OK", 
+        UNIT_ASSERT_VALUES_EQUAL("OK",
                                   StatusToString(ETicketStatus::Ok));
-        UNIT_ASSERT_VALUES_EQUAL("Expired ticket", 
+        UNIT_ASSERT_VALUES_EQUAL("Expired ticket",
                                   StatusToString(ETicketStatus::Expired));
-        UNIT_ASSERT_VALUES_EQUAL("Invalid BlackBox environment", 
+        UNIT_ASSERT_VALUES_EQUAL("Invalid BlackBox environment",
                                   StatusToString(ETicketStatus::InvalidBlackboxEnv));
-        UNIT_ASSERT_VALUES_EQUAL("Invalid ticket destination", 
+        UNIT_ASSERT_VALUES_EQUAL("Invalid ticket destination",
                                   StatusToString(ETicketStatus::InvalidDst));
-        UNIT_ASSERT_VALUES_EQUAL("Invalid ticket type", 
+        UNIT_ASSERT_VALUES_EQUAL("Invalid ticket type",
                                   StatusToString(ETicketStatus::InvalidTicketType));
-        UNIT_ASSERT_VALUES_EQUAL("Malformed ticket", 
+        UNIT_ASSERT_VALUES_EQUAL("Malformed ticket",
                                   StatusToString(ETicketStatus::Malformed));
-        UNIT_ASSERT_VALUES_EQUAL("Invalid ticket signature", 
+        UNIT_ASSERT_VALUES_EQUAL("Invalid ticket signature",
                                   StatusToString(ETicketStatus::SignBroken));
-        UNIT_ASSERT_VALUES_EQUAL("Context does not have required key to check ticket: public keys are too old", 
+        UNIT_ASSERT_VALUES_EQUAL("Context does not have required key to check ticket: public keys are too old",
                                   StatusToString(ETicketStatus::MissingKey));
-        UNIT_ASSERT_VALUES_EQUAL("Unsupported ticket version", 
+        UNIT_ASSERT_VALUES_EQUAL("Unsupported ticket version",
                                   StatusToString(ETicketStatus::UnsupportedVersion));
     }
 }
@@ -77,7 +77,7 @@ Y_UNIT_TEST_SUITE(PublicInterfaceServiceTestSuite) {
 
     Y_UNIT_TEST(ContextSignTest) {
         TServiceContext context(SECRET, OUR_ID, NUnittest::TVMKNIFE_PUBLIC_KEYS);
-        UNIT_ASSERT_VALUES_EQUAL( 
+        UNIT_ASSERT_VALUES_EQUAL(
             "NsPTYak4Cfk-4vgau5lab3W4GPiTtb2etuj3y4MDPrk",
             context.SignCgiParamsForTvm(IntToString<10>(std::numeric_limits<time_t>::max()), "13,28", ""));
     }
@@ -126,14 +126,14 @@ Y_UNIT_TEST_SUITE(PublicInterfaceServiceTestSuite) {
         TServiceContext context(SECRET, OUR_ID, NUnittest::TVMKNIFE_PUBLIC_KEYS);
         auto checkedTicket = context.Check(VALID_SERVICE_TICKET_2);
         UNIT_ASSERT_EQUAL(ETicketStatus::Ok, checkedTicket.GetStatus());
-        UNIT_ASSERT_VALUES_EQUAL("ticket_type=serv;expiration_time=9223372036854775807;src=229;dst=28;scope=bb:sess1;scope=bb:sess10;scope=bb:sess100;scope=bb:sess11;scope=bb:sess12;scope=bb:sess13;scope=bb:sess14;scope=bb:sess15;scope=bb:sess16;scope=bb:sess17;scope=bb:sess18;scope=bb:sess19;scope=bb:sess2;scope=bb:sess20;scope=bb:sess21;scope=bb:sess22;scope=bb:sess23;scope=bb:sess24;scope=bb:sess25;scope=bb:sess26;scope=bb:sess27;scope=bb:sess28;scope=bb:sess29;scope=bb:sess3;scope=bb:sess30;scope=bb:sess31;scope=bb:sess32;scope=bb:sess33;scope=bb:sess34;scope=bb:sess35;scope=bb:sess36;scope=bb:sess37;scope=bb:sess38;scope=bb:sess39;scope=bb:sess4;scope=bb:sess40;scope=bb:sess41;scope=bb:sess42;scope=bb:sess43;scope=bb:sess44;scope=bb:sess45;scope=bb:sess46;scope=bb:sess47;scope=bb:sess48;scope=bb:sess49;scope=bb:sess5;scope=bb:sess50;scope=bb:sess51;scope=bb:sess52;scope=bb:sess53;scope=bb:sess54;scope=bb:sess55;scope=bb:sess56;scope=bb:sess57;scope=bb:sess58;scope=bb:sess59;scope=bb:sess6;scope=bb:sess60;scope=bb:sess61;scope=bb:sess62;scope=bb:sess63;scope=bb:sess64;scope=bb:sess65;scope=bb:sess66;scope=bb:sess67;scope=bb:sess68;scope=bb:sess69;scope=bb:sess7;scope=bb:sess70;scope=bb:sess71;scope=bb:sess72;scope=bb:sess73;scope=bb:sess74;scope=bb:sess75;scope=bb:sess76;scope=bb:sess77;scope=bb:sess78;scope=bb:sess79;scope=bb:sess8;scope=bb:sess80;scope=bb:sess81;scope=bb:sess82;scope=bb:sess83;scope=bb:sess84;scope=bb:sess85;scope=bb:sess86;scope=bb:sess87;scope=bb:sess88;scope=bb:sess89;scope=bb:sess9;scope=bb:sess90;scope=bb:sess91;scope=bb:sess92;scope=bb:sess93;scope=bb:sess94;scope=bb:sess95;scope=bb:sess96;scope=bb:sess97;scope=bb:sess98;scope=bb:sess99;", checkedTicket.DebugInfo()); 
+        UNIT_ASSERT_VALUES_EQUAL("ticket_type=serv;expiration_time=9223372036854775807;src=229;dst=28;scope=bb:sess1;scope=bb:sess10;scope=bb:sess100;scope=bb:sess11;scope=bb:sess12;scope=bb:sess13;scope=bb:sess14;scope=bb:sess15;scope=bb:sess16;scope=bb:sess17;scope=bb:sess18;scope=bb:sess19;scope=bb:sess2;scope=bb:sess20;scope=bb:sess21;scope=bb:sess22;scope=bb:sess23;scope=bb:sess24;scope=bb:sess25;scope=bb:sess26;scope=bb:sess27;scope=bb:sess28;scope=bb:sess29;scope=bb:sess3;scope=bb:sess30;scope=bb:sess31;scope=bb:sess32;scope=bb:sess33;scope=bb:sess34;scope=bb:sess35;scope=bb:sess36;scope=bb:sess37;scope=bb:sess38;scope=bb:sess39;scope=bb:sess4;scope=bb:sess40;scope=bb:sess41;scope=bb:sess42;scope=bb:sess43;scope=bb:sess44;scope=bb:sess45;scope=bb:sess46;scope=bb:sess47;scope=bb:sess48;scope=bb:sess49;scope=bb:sess5;scope=bb:sess50;scope=bb:sess51;scope=bb:sess52;scope=bb:sess53;scope=bb:sess54;scope=bb:sess55;scope=bb:sess56;scope=bb:sess57;scope=bb:sess58;scope=bb:sess59;scope=bb:sess6;scope=bb:sess60;scope=bb:sess61;scope=bb:sess62;scope=bb:sess63;scope=bb:sess64;scope=bb:sess65;scope=bb:sess66;scope=bb:sess67;scope=bb:sess68;scope=bb:sess69;scope=bb:sess7;scope=bb:sess70;scope=bb:sess71;scope=bb:sess72;scope=bb:sess73;scope=bb:sess74;scope=bb:sess75;scope=bb:sess76;scope=bb:sess77;scope=bb:sess78;scope=bb:sess79;scope=bb:sess8;scope=bb:sess80;scope=bb:sess81;scope=bb:sess82;scope=bb:sess83;scope=bb:sess84;scope=bb:sess85;scope=bb:sess86;scope=bb:sess87;scope=bb:sess88;scope=bb:sess89;scope=bb:sess9;scope=bb:sess90;scope=bb:sess91;scope=bb:sess92;scope=bb:sess93;scope=bb:sess94;scope=bb:sess95;scope=bb:sess96;scope=bb:sess97;scope=bb:sess98;scope=bb:sess99;", checkedTicket.DebugInfo());
     }
 
     Y_UNIT_TEST(Ticket3Test) {
         TServiceContext context(SECRET, OUR_ID, NUnittest::TVMKNIFE_PUBLIC_KEYS);
         auto checkedTicket = context.Check(VALID_SERVICE_TICKET_3);
         UNIT_ASSERT_EQUAL(ETicketStatus::Ok, checkedTicket.GetStatus());
-        UNIT_ASSERT_VALUES_EQUAL("ticket_type=serv;expiration_time=9223372036854775807;src=229;dst=28;", checkedTicket.DebugInfo()); 
+        UNIT_ASSERT_VALUES_EQUAL("ticket_type=serv;expiration_time=9223372036854775807;src=229;dst=28;", checkedTicket.DebugInfo());
     }
 
     Y_UNIT_TEST(TicketCheckingTest) {
@@ -168,21 +168,21 @@ Y_UNIT_TEST_SUITE(PublicInterfaceServiceTestSuite) {
     }
 
     Y_UNIT_TEST(RemoveSignatureTest) {
-        UNIT_ASSERT_VALUES_EQUAL("1:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:asdxcvbxcvniueliuweklsvds", 
+        UNIT_ASSERT_VALUES_EQUAL("1:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:asdxcvbxcvniueliuweklsvds",
                                   NUtils::RemoveTicketSignature("1:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:asdxcvbxcvniueliuweklsvds"));
-        UNIT_ASSERT_VALUES_EQUAL("2:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:asdxcvbxcvniueliuweklsvds", 
+        UNIT_ASSERT_VALUES_EQUAL("2:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:asdxcvbxcvniueliuweklsvds",
                                   NUtils::RemoveTicketSignature("2:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:asdxcvbxcvniueliuweklsvds"));
-        UNIT_ASSERT_VALUES_EQUAL("4:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:asdxcvbxcvniueliuweklsvds", 
+        UNIT_ASSERT_VALUES_EQUAL("4:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:asdxcvbxcvniueliuweklsvds",
                                   NUtils::RemoveTicketSignature("4:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:asdxcvbxcvniueliuweklsvds"));
-        UNIT_ASSERT_VALUES_EQUAL("3.serv.ASDkljbjhsdbfLJHABFJHBslfbsfjs.asdxcvbxcvniueliuweklsvds", 
+        UNIT_ASSERT_VALUES_EQUAL("3.serv.ASDkljbjhsdbfLJHABFJHBslfbsfjs.asdxcvbxcvniueliuweklsvds",
                                   NUtils::RemoveTicketSignature("3.serv.ASDkljbjhsdbfLJHABFJHBslfbsfjs.asdxcvbxcvniueliuweklsvds"));
-        UNIT_ASSERT_VALUES_EQUAL("3:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:", 
+        UNIT_ASSERT_VALUES_EQUAL("3:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:",
                                   NUtils::RemoveTicketSignature("3:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:asdxcvbxcvniueliuweklsvds"));
-        UNIT_ASSERT_VALUES_EQUAL("3:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:", 
+        UNIT_ASSERT_VALUES_EQUAL("3:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:",
                                   NUtils::RemoveTicketSignature("3:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs:asdxcvbxcvniueliuweklsvds"));
-        UNIT_ASSERT_VALUES_EQUAL("3:serv:", 
+        UNIT_ASSERT_VALUES_EQUAL("3:serv:",
                                   NUtils::RemoveTicketSignature("3:serv:ASDkljbjhsdbfLJHABFJHBslfbsfjs.asdxcvbxcvniueliuweklsvds"));
-        UNIT_ASSERT_VALUES_EQUAL("asdxcbvfgdsgfasdfxczvdsgfxcdvbcbvf", 
+        UNIT_ASSERT_VALUES_EQUAL("asdxcbvfgdsgfasdfxczvdsgfxcdvbcbvf",
                                   NUtils::RemoveTicketSignature("asdxcbvfgdsgfasdfxczvdsgfxcdvbcbvf"));
     }
 

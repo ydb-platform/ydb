@@ -21,19 +21,19 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
         TString hash = TDiskReader::GetHash("asd");
         UNIT_ASSERT(hash);
         UNIT_ASSERT_VALUES_EQUAL(32, hash.size());
-        UNIT_ASSERT_VALUES_EQUAL("Zj5_qYg31bPlqjBW76z8IV0rCsHmv-iN-McV6ybS1-g", NUtils::Bin2base64url(hash)); 
+        UNIT_ASSERT_VALUES_EQUAL("Zj5_qYg31bPlqjBW76z8IV0rCsHmv-iN-McV6ybS1-g", NUtils::Bin2base64url(hash));
     }
 
     Y_UNIT_TEST(Timestamp) {
         time_t t = 100500;
 
         TString s = TDiskWriter::WriteTimestamp(t);
-        UNIT_ASSERT_VALUES_EQUAL("lIgBAAAAAAA", NUtils::Bin2base64url(s)); 
+        UNIT_ASSERT_VALUES_EQUAL("lIgBAAAAAAA", NUtils::Bin2base64url(s));
         UNIT_ASSERT_VALUES_EQUAL(t, TDiskReader::GetTimestamp(s));
 
         t = 123123123213089;
         s = TDiskWriter::WriteTimestamp(t);
-        UNIT_ASSERT_VALUES_EQUAL("IdMF1vpvAAA", NUtils::Bin2base64url(s)); 
+        UNIT_ASSERT_VALUES_EQUAL("IdMF1vpvAAA", NUtils::Bin2base64url(s));
         UNIT_ASSERT_VALUES_EQUAL(t, TDiskReader::GetTimestamp(s));
 
         t = time(nullptr);
@@ -56,9 +56,9 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
 
         TDiskReader r("qwerty", &l);
         UNIT_ASSERT(r.ParseData(toFile));
-        UNIT_ASSERT_VALUES_EQUAL(DATA, r.Data()); 
+        UNIT_ASSERT_VALUES_EQUAL(DATA, r.Data());
         UNIT_ASSERT_VALUES_EQUAL(time, r.Time());
-        UNIT_ASSERT_VALUES_EQUAL("6: File 'qwerty' was successfully read\n", 
+        UNIT_ASSERT_VALUES_EQUAL("6: File 'qwerty' was successfully read\n",
                                  l.Stream.Str());
     }
 
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
         TString toFile = TDiskWriter::PrepareData(TIME, DATA);
         TDiskReader r("qwerty", &l);
         UNIT_ASSERT(!r.ParseData(toFile.substr(0, 17)));
-        UNIT_ASSERT_VALUES_EQUAL("4: File 'qwerty' is too small\n", 
+        UNIT_ASSERT_VALUES_EQUAL("4: File 'qwerty' is too small\n",
                                  l.Stream.Str());
     }
 
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
         toFile[17] = toFile[17] + 1;
         TDiskReader r("qwerty", &l);
         UNIT_ASSERT(!r.ParseData(toFile));
-        UNIT_ASSERT_VALUES_EQUAL("4: Content of 'qwerty' was incorrectly changed\n", 
+        UNIT_ASSERT_VALUES_EQUAL("4: Content of 'qwerty' was incorrectly changed\n",
                                  l.Stream.Str());
     }
 
@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
 
         TDiskReader r(GetFilePath("ok.cache"), &l);
         UNIT_ASSERT(r.Read());
-        UNIT_ASSERT_VALUES_EQUAL(DATA, r.Data()); 
+        UNIT_ASSERT_VALUES_EQUAL(DATA, r.Data());
         UNIT_ASSERT_VALUES_EQUAL(TIME, r.Time());
         UNIT_ASSERT_C(l.Stream.Str().find("was successfully read") != TString::npos, l.Stream.Str());
     }
@@ -98,7 +98,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
 
         TDiskReader r("missing", &l);
         UNIT_ASSERT(!r.Read());
-        UNIT_ASSERT_VALUES_EQUAL("7: File 'missing' does not exist\n", 
+        UNIT_ASSERT_VALUES_EQUAL("7: File 'missing' does not exist\n",
                                  l.Stream.Str());
     }
 
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(ClientDisk) {
 
         TDiskReader r(path, &l);
         UNIT_ASSERT_C(r.Read(), l.Stream.Str());
-        UNIT_ASSERT_VALUES_EQUAL(DATA, r.Data()); 
+        UNIT_ASSERT_VALUES_EQUAL(DATA, r.Data());
         UNIT_ASSERT(TInstant::Now() - r.Time() < TDuration::Minutes(5));
         UNIT_ASSERT_C(l.Stream.Str().find("was successfully read") != TString::npos, l.Stream.Str());
 

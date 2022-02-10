@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(ParserTestSuite) {
         UNIT_ASSERT_EXCEPTION(TParserTvmKeys::ParseStrV1("3:asds"), TMalformedTvmKeysException);
         UNIT_ASSERT_EXCEPTION(TParserTvmKeys::ParseStrV1("1:+a/sds"), TMalformedTvmKeysException);
 
-        UNIT_ASSERT_VALUES_EQUAL("sdsd", NUtils::Bin2base64url(TParserTvmKeys::ParseStrV1("1:sdsd"))); 
+        UNIT_ASSERT_VALUES_EQUAL("sdsd", NUtils::Bin2base64url(TParserTvmKeys::ParseStrV1("1:sdsd")));
     }
 
     Y_UNIT_TEST(TicketsStrV3) {

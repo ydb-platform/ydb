@@ -365,8 +365,8 @@ namespace {
 
         void DoFlush() override {
             if (fflush(F_) != 0) {
-                ythrow TSystemError() << "fflush failed";
-            }
+                ythrow TSystemError() << "fflush failed"; 
+            } 
         }
 
     private:

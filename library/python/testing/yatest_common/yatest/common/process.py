@@ -368,8 +368,8 @@ class _Execution(object):
             raise ExecutionError(self)
 
         # Don't search for sanitize errors if stderr was redirected
-        self.verify_sanitize_errors() 
- 
+        self.verify_sanitize_errors()
+
     def verify_no_coredumps(self):
         """
         Verify there is no coredump from this binary. If there is then report backtrace.
@@ -383,7 +383,7 @@ class _Execution(object):
             else:
                 yatest_logger.warning("Core dump file recovering is skipped: module cores isn't available")
 
-    def verify_sanitize_errors(self): 
+    def verify_sanitize_errors(self):
         """
         Verify there are no sanitizer (ASAN, MSAN, TSAN, etc) errors for this binary. If there are any report them.
         """

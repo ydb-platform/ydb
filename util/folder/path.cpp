@@ -365,7 +365,7 @@ void TFsPath::DeleteIfExists() const {
 
 void TFsPath::MkDir(const int mode) const {
     CheckDefined();
-    if (!Exists()) { 
+    if (!Exists()) {
         int r = Mkdir(this->c_str(), mode);
         if (r != 0) {
             // TODO (stanly) will still fail on Windows because
@@ -375,11 +375,11 @@ void TFsPath::MkDir(const int mode) const {
                 ythrow TIoSystemError() << "could not create directory " << Path_;
             }
         }
-    } 
+    }
 }
 
 void TFsPath::MkDirs(const int mode) const {
-    CheckDefined(); 
+    CheckDefined();
     if (!Exists()) {
         Parent().MkDirs(mode);
         MkDir(mode);
@@ -423,41 +423,41 @@ void TFsPath::ForceDelete() const {
 }
 
 void TFsPath::CopyTo(const TString& newPath, bool force) const {
-    if (IsDirectory()) { 
-        if (force) { 
-            TFsPath(newPath).MkDirs(); 
-        } else if (!TFsPath(newPath).IsDirectory()) { 
+    if (IsDirectory()) {
+        if (force) {
+            TFsPath(newPath).MkDirs();
+        } else if (!TFsPath(newPath).IsDirectory()) {
             ythrow TIoException() << "Target path is not a directory " << newPath;
-        } 
+        }
         TVector<TFsPath> children;
-        List(children); 
-        for (auto&& i : children) { 
-            i.CopyTo(newPath + "/" + i.GetName(), force); 
-        } 
-    } else { 
-        if (force) { 
-            TFsPath(newPath).Parent().MkDirs(); 
-        } else { 
-            if (!TFsPath(newPath).Parent().IsDirectory()) { 
+        List(children);
+        for (auto&& i : children) {
+            i.CopyTo(newPath + "/" + i.GetName(), force);
+        }
+    } else {
+        if (force) {
+            TFsPath(newPath).Parent().MkDirs();
+        } else {
+            if (!TFsPath(newPath).Parent().IsDirectory()) {
                 ythrow TIoException() << "Parent (" << TFsPath(newPath).Parent() << ") of a target path is not a directory " << newPath;
-            } 
-            if (TFsPath(newPath).Exists()) { 
+            }
+            if (TFsPath(newPath).Exists()) {
                 ythrow TIoException() << "Path already exists " << newPath;
-            } 
-        } 
-        NFs::Copy(Path_, newPath); 
-    } 
-} 
- 
+            }
+        }
+        NFs::Copy(Path_, newPath);
+    }
+}
+
 void TFsPath::ForceRenameTo(const TString& newPath) const {
-    try { 
-        RenameTo(newPath); 
+    try {
+        RenameTo(newPath);
     } catch (const TIoSystemError& /* error */) {
-        CopyTo(newPath, true); 
-        ForceDelete(); 
-    } 
-} 
- 
+        CopyTo(newPath, true);
+        ForceDelete();
+    }
+}
+
 TFsPath TFsPath::Cwd() {
     return TFsPath(::NFs::CurrentWorkingDirectory());
 }

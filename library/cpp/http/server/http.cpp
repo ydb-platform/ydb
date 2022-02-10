@@ -660,14 +660,14 @@ bool TClientRequest::CheckLoopback() {
     return true;
 }
 
-void TClientRequest::ReleaseConnection() { 
+void TClientRequest::ReleaseConnection() {
     if (Conn_ && HttpConn_ && HttpServ()->Options().KeepAliveEnabled && HttpConn_->CanBeKeepAlive() && (!HttpServ()->Options().RejectExcessConnections || !HttpServ()->MaxRequestsReached())) {
-        Output().Finish(); 
-        Conn_->DeActivate(); 
+        Output().Finish();
+        Conn_->DeActivate();
         Y_UNUSED(Conn_.Release());
-    } 
-} 
- 
+    }
+}
+
 void TClientRequest::ResetConnection() {
     if (HttpConn_) {
         // send RST packet to client
@@ -706,7 +706,7 @@ void TClientRequest::Process(void* ThreadSpecificResource) {
         }
 
         if (Reply(ThreadSpecificResource)) {
-            ReleaseConnection(); 
+            ReleaseConnection();
 
             /*
              * *this will be destroyed...

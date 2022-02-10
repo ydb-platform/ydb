@@ -1574,7 +1574,7 @@ static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
 static Y_FORCE_INLINE void* LFAlloc(size_t _nSize) {
     void* res = LFAllocImpl(_nSize);
 #ifdef DBG_FILL_MEMORY
-    if (FillMemoryOnAllocation && res && (_nSize <= DBG_FILL_MAX_SIZE)) { 
+    if (FillMemoryOnAllocation && res && (_nSize <= DBG_FILL_MAX_SIZE)) {
         memset(res, 0xcf, _nSize);
     }
 #endif
@@ -1817,12 +1817,12 @@ static bool LFAlloc_SetParam(const char* param, const char* value) {
         LB_LIMIT_TOTAL_SIZE = (atoi(value) + N_PAGE_SIZE - 1) / N_PAGE_SIZE;
         return true;
     }
-#ifdef DBG_FILL_MEMORY 
-    if (!strcmp(param, "FillMemoryOnAllocation")) { 
-        FillMemoryOnAllocation = !strcmp(value, "true"); 
-        return true; 
-    } 
-#endif 
+#ifdef DBG_FILL_MEMORY
+    if (!strcmp(param, "FillMemoryOnAllocation")) {
+        FillMemoryOnAllocation = !strcmp(value, "true");
+        return true;
+    }
+#endif
     if (!strcmp(param, "TransparentHugePages")) {
         TransparentHugePages = !strcmp(value, "true");
         return true;

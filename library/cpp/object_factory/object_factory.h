@@ -38,7 +38,7 @@ namespace NObjectFactory {
             return new TDerivedProduct(std::forward<TArgs>(args)...);
         }
     };
- 
+
     template <class TBaseProduct, class TDerivedProduct>
     class TFactoryObjectCreator<TBaseProduct, TDerivedProduct, void>: public IFactoryObjectCreator<TBaseProduct, void> {
         TDerivedProduct* Create() const override {
@@ -82,12 +82,12 @@ namespace NObjectFactory {
             typename ICreators::const_iterator i = Creators.find(key);
             return i == Creators.end() ? nullptr : i->second.Get();
         }
- 
+
         bool HasImpl(const TKey& key) const {
             TReadGuard guard(CreatorsLock);
             return Creators.find(key) != Creators.end();
         }
- 
+
     private:
         typedef TSimpleSharedPtr<IFactoryObjectCreator<TProduct, TArgs...>> ICreatorPtr;
         typedef TMap<TKey, ICreatorPtr> ICreators;
@@ -119,8 +119,8 @@ namespace NObjectFactory {
                 result = Singleton<TObjectFactory<TProduct, TKey>>()->Create(defKey);
             }
             return result;
-        } 
- 
+        }
+
         static TProduct* Construct(const TKey& key) {
             TProduct* result = Singleton<TObjectFactory<TProduct, TKey>>()->Create(key);
             return result;
@@ -139,8 +139,8 @@ namespace NObjectFactory {
 
         static bool Has(const TKey& key) {
             return Singleton<TObjectFactory<TProduct, TKey>>()->HasImpl(key);
-        } 
- 
+        }
+
         static void GetRegisteredKeys(TSet<TKey>& keys) {
             return Singleton<TObjectFactory<TProduct, TKey>>()->GetKeys(keys);
         }
@@ -168,7 +168,7 @@ namespace NObjectFactory {
             TRegistrator(const TKey& key, IFactoryObjectCreator<TProduct, void>* creator) {
                 Singleton<TObjectFactory<TProduct, TKey>>()->template Register<Product>(key, creator);
             }
- 
+
             TRegistrator(const TKey& key) {
                 Singleton<TObjectFactory<TProduct, TKey>>()->template Register<Product>(key);
             }
@@ -179,7 +179,7 @@ namespace NObjectFactory {
             }
         };
     };
- 
+
     template <class TProduct, class TKey, class... TArgs>
     class TParametrizedObjectFactory: public IObjectFactory<TProduct, TKey, TArgs...> {
     public:
@@ -190,7 +190,7 @@ namespace NObjectFactory {
 
         static bool Has(const TKey& key) {
             return Singleton<TParametrizedObjectFactory<TProduct, TKey, TArgs...>>()->HasImpl(key);
-        } 
+        }
 
         static TProduct* Construct(const TKey& key, TArgs... args) {
             return Singleton<TParametrizedObjectFactory<TProduct, TKey, TArgs...>>()->Create(key, std::forward<TArgs>(args)...);
@@ -224,7 +224,7 @@ namespace NObjectFactory {
             TRegistrator(const TKey& key, IFactoryObjectCreator<TProduct, TArgs...>* creator) {
                 Singleton<TParametrizedObjectFactory<TProduct, TKey, TArgs...>>()->template Register<Product>(key, creator);
             }
- 
+
             TRegistrator(const TKey& key) {
                 Singleton<TParametrizedObjectFactory<TProduct, TKey, TArgs...>>()->template Register<Product>(key);
             }
@@ -233,10 +233,10 @@ namespace NObjectFactory {
                 : TRegistrator(Product::GetTypeName())
             {
             }
- 
-            TString GetName() const { 
-                return Product::GetTypeName(); 
-            } 
+
+            TString GetName() const {
+                return Product::GetTypeName();
+            }
         };
     };
 

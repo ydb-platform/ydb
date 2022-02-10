@@ -15,7 +15,7 @@ class TFsTest: public TTestBase {
     UNIT_TEST(TestCreateRemove);
     UNIT_TEST(TestRename);
     UNIT_TEST(TestSymlink);
-    UNIT_TEST(TestHardlink); 
+    UNIT_TEST(TestHardlink);
     UNIT_TEST(TestCwdOpts);
     UNIT_TEST(TestEnsureExists);
     UNIT_TEST_SUITE_END();
@@ -24,7 +24,7 @@ public:
     void TestCreateRemove();
     void TestRename();
     void TestSymlink();
-    void TestHardlink(); 
+    void TestHardlink();
     void TestCwdOpts();
     void TestEnsureExists();
 };
@@ -97,10 +97,10 @@ void TFsTest::TestCreateRemove() {
 }
 
 void RunRenameTest(TFsPath src, TFsPath dst) {
-    // if previous running was failed 
+    // if previous running was failed
     TFsPath dir1 = "dir";
     TFsPath dir2 = "dst_dir";
- 
+
     NFs::Remove(src);
     NFs::Remove(dst);
 
@@ -109,22 +109,22 @@ void RunRenameTest(TFsPath src, TFsPath dst) {
     NFs::Remove(dir2 / src);
     NFs::Remove(dir2);
 
-    { 
+    {
         TFile file(src, CreateNew | WrOnly);
-        file.Write("123", 3); 
-    } 
- 
+        file.Write("123", 3);
+    }
+
     UNIT_ASSERT(NFs::Rename(src, dst));
     UNIT_ASSERT(NFs::Exists(dst));
     UNIT_ASSERT(!NFs::Exists(src));
 
-    { 
+    {
         TFile file(dst, OpenExisting);
-        UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 3); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 3);
+    }
 
     NFs::MakeDirectory(dir1);
-    { 
+    {
         TFile file(dir1 / src, CreateNew | WrOnly);
         file.Write("123", 3);
     }
@@ -166,26 +166,26 @@ static void RunHardlinkTest(const TFsPath& src, const TFsPath& dst) {
     }
     {
         TFile file(src, OpenExisting | WrOnly);
-        file.Write("1234", 4); 
-    } 
-    { 
+        file.Write("1234", 4);
+    }
+    {
         TFile file(dst, OpenExisting | RdOnly);
-        UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 4); 
-    } 
-    { 
+        UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 4);
+    }
+    {
         TFile file(dst, OpenExisting | WrOnly);
-        file.Write("12345", 5); 
-    } 
+        file.Write("12345", 5);
+    }
 
-    { 
+    {
         TFile file(src, OpenExisting | RdOnly);
-        UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 5); 
-    } 
+        UNIT_ASSERT_VALUES_EQUAL(file.GetLength(), 5);
+    }
 
     UNIT_ASSERT(NFs::Remove(dst));
     UNIT_ASSERT(NFs::Remove(src));
-} 
- 
+}
+
 void TFsTest::TestHardlink() {
     RunHardlinkTest("tempfile", "hardlinkfile");
     RunHardlinkTest("tempfile_абвг", "hardlinkfile_абвг"); //utf-8 names

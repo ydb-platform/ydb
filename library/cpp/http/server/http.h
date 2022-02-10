@@ -126,7 +126,7 @@ public:
     bool CheckLoopback();
     void ProcessFailRequest(int failstate);
 
-    void ReleaseConnection(); 
+    void ReleaseConnection();
 
     void ResetConnection();
 

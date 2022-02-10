@@ -153,7 +153,7 @@ inline size_t WriteSymbol(wchar16 s, T& dest) noexcept {
 template <class T>
 inline size_t WriteSymbol(wchar32 s, T& dest) noexcept {
     if (s > 0xFFFF) {
-        if (s >= ::NUnicode::UnicodeInstancesLimit()) { 
+        if (s >= ::NUnicode::UnicodeInstancesLimit()) {
             return WriteSymbol(static_cast<wchar16>(BROKEN_RUNE), dest);
         }
 

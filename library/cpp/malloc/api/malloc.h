@@ -12,7 +12,7 @@ namespace NMalloc {
         bool (*SetParam)(const char* param, const char* value);
         const char* (*GetParam)(const char* param);
 
-        bool (*CheckParam)(const char* param, bool defaultValue); 
+        bool (*CheckParam)(const char* param, bool defaultValue);
     };
 
     extern volatile bool IsAllocatorCorrupted;

@@ -27,13 +27,13 @@ namespace NJson {
     class IScanCallback {
     public:
         virtual ~IScanCallback() = default;
- 
+
         virtual bool Do(const TString& path, TJsonValue* parent, TJsonValue& value) = 0;
     };
- 
+
     class TJsonValue {
         void Clear() noexcept;
- 
+
     public:
         typedef THashMap<TString, TJsonValue> TMapType;
         typedef TDeque<TJsonValue> TArray;
@@ -96,7 +96,7 @@ namespace NJson {
         // returns NULL on failure
         const TJsonValue* GetValueByPath(TStringBuf path, char delimiter = '.') const noexcept;
         TJsonValue* GetValueByPath(TStringBuf path, char delimiter = '.') noexcept;
- 
+
         void EraseValue(TStringBuf key);
         void EraseValue(size_t index);
 
@@ -178,7 +178,7 @@ namespace NJson {
 
         /// Non-robust comparison.
         bool operator==(const TJsonValue& rhs) const;
- 
+
         bool operator!=(const TJsonValue& rhs) const {
             return !(*this == rhs);
         }

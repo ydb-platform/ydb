@@ -23,7 +23,7 @@ public:
     virtual void ReopenLogNoFlush();
 
     virtual ELogPriority FiltrationLevel() const;
- 
+
     static void ReopenAllBackends(bool flush = true);
 
     virtual size_t QueueSize() const;

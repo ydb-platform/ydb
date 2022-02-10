@@ -12,10 +12,10 @@
 
 #include <library/cpp/logger/log.h>
 
-namespace NLoggingImpl { 
-    const size_t SingletonPriority = 500; 
-} 
- 
+namespace NLoggingImpl {
+    const size_t SingletonPriority = 500;
+}
+
 template <class T>
 T* CreateDefaultLogger() {
     return nullptr;
@@ -35,15 +35,15 @@ namespace NLoggingImpl {
 
     public:
         inline static bool Usage() {
-            return SingletonWithPriority<TPtr, SingletonPriority>()->Instance.Get(); 
+            return SingletonWithPriority<TPtr, SingletonPriority>()->Instance.Get();
         }
 
         inline static T* Get() {
-            return SingletonWithPriority<TPtr, SingletonPriority>()->Instance.Get(); 
+            return SingletonWithPriority<TPtr, SingletonPriority>()->Instance.Get();
         }
 
         inline static void Set(T* v) {
-            SingletonWithPriority<TPtr, SingletonPriority>()->Instance.Reset(v); 
+            SingletonWithPriority<TPtr, SingletonPriority>()->Instance.Reset(v);
         }
     };
 
@@ -62,8 +62,8 @@ public:
         Y_ASSERT(TLoggerOperator::Usage());
         return *TLoggerOperator::Get();
     }
-}; 
- 
+};
+
 namespace NLoggingImpl {
 
     TString GetLocalTimeSSimple();

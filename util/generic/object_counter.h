@@ -23,10 +23,10 @@ public:
         AtomicIncrement(Count_);
     }
 
-    inline TObjectCounter(const TObjectCounter& /*item*/) noexcept { 
-        AtomicIncrement(Count_); 
-    } 
- 
+    inline TObjectCounter(const TObjectCounter& /*item*/) noexcept {
+        AtomicIncrement(Count_);
+    }
+
     inline ~TObjectCounter() {
         AtomicDecrement(Count_);
     }

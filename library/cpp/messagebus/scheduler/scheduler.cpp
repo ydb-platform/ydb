@@ -26,11 +26,11 @@ TScheduler::~TScheduler() {
     Y_VERIFY(StopThread, "state check");
 }
 
-size_t TScheduler::Size() const { 
-    TGuard<TLock> guard(Lock); 
-    return Items.size() + (!!NextItem ? 1 : 0); 
-} 
- 
+size_t TScheduler::Size() const {
+    TGuard<TLock> guard(Lock);
+    return Items.size() + (!!NextItem ? 1 : 0);
+}
+
 void TScheduler::Stop() {
     {
         TGuard<TLock> guard(Lock);
@@ -39,11 +39,11 @@ void TScheduler::Stop() {
         CondVar.Signal();
     }
     Thread.Get();
- 
-    if (!!NextItem) { 
-        NextItem.Destroy(); 
-    } 
- 
+
+    if (!!NextItem) {
+        NextItem.Destroy();
+    }
+
     for (auto& item : Items) {
         item.Destroy();
     }
@@ -105,7 +105,7 @@ void TScheduler::SchedulerThread() {
                 continue;
             }
 
-            current = NextItem.Release(); 
+            current = NextItem.Release();
         }
 
         current->Do();

@@ -118,22 +118,22 @@ namespace NJson {
         Buf.WriteJsonValue(v, SortKeys, FloatToStringMode, DoubleNDigits);
     }
 
-    void TJsonWriter::Write(const TJsonValue& v) { 
-        Buf.WriteJsonValue(&v, SortKeys, FloatToStringMode, DoubleNDigits); 
-    } 
- 
+    void TJsonWriter::Write(const TJsonValue& v) {
+        Buf.WriteJsonValue(&v, SortKeys, FloatToStringMode, DoubleNDigits);
+    }
+
     TString WriteJson(const TJsonValue* value, bool formatOutput, bool sortkeys, bool validateUtf8) {
         TStringStream ss;
         WriteJson(&ss, value, formatOutput, sortkeys, validateUtf8);
         return ss.Str();
     }
- 
+
     TString WriteJson(const TJsonValue& value, bool formatOutput, bool sortkeys, bool validateUtf8) {
         TStringStream ss;
         WriteJson(&ss, &value, formatOutput, sortkeys, validateUtf8);
         return ss.Str();
     }
- 
+
     void WriteJson(IOutputStream* out, const TJsonValue* val, bool formatOutput, bool sortkeys, bool validateUtf8) {
         TJsonWriter w(out, formatOutput, sortkeys, validateUtf8);
         w.Write(val);

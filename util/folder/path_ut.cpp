@@ -56,36 +56,36 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TFsPathTests) {
     Y_UNIT_TEST(TestMkDirs) {
-        const TFsPath path = "a/b/c/d/e/f"; 
-        path.ForceDelete(); 
-        TFsPath current = path; 
-        ui32 checksCounter = 0; 
-        while (current != ".") { 
-            UNIT_ASSERT(!path.Exists()); 
-            ++checksCounter; 
-            current = current.Parent(); 
-        } 
+        const TFsPath path = "a/b/c/d/e/f";
+        path.ForceDelete();
+        TFsPath current = path;
+        ui32 checksCounter = 0;
+        while (current != ".") {
+            UNIT_ASSERT(!path.Exists());
+            ++checksCounter;
+            current = current.Parent();
+        }
         UNIT_ASSERT_VALUES_EQUAL(checksCounter, 6);
- 
-        path.MkDirs(); 
-        UNIT_ASSERT(path.Exists()); 
- 
-        current = path; 
-        while (current != ".") { 
-            UNIT_ASSERT(path.Exists()); 
-            current = current.Parent(); 
-        } 
-    } 
- 
+
+        path.MkDirs();
+        UNIT_ASSERT(path.Exists());
+
+        current = path;
+        while (current != ".") {
+            UNIT_ASSERT(path.Exists());
+            current = current.Parent();
+        }
+    }
+
     Y_UNIT_TEST(MkDirFreak) {
-        TFsPath path; 
+        TFsPath path;
         UNIT_ASSERT_EXCEPTION(path.MkDir(), TIoException);
         UNIT_ASSERT_EXCEPTION(path.MkDirs(), TIoException);
-        path = "."; 
-        path.MkDir(); 
-        path.MkDirs(); 
-    } 
- 
+        path = ".";
+        path.MkDir();
+        path.MkDirs();
+    }
+
     Y_UNIT_TEST(Parent) {
 #ifdef _win_
         UNIT_ASSERT_VALUES_EQUAL(TFsPath("\\etc/passwd").Parent(), TFsPath("\\etc"));
@@ -149,25 +149,25 @@ Y_UNIT_TEST_SUITE(TFsPathTests) {
     }
 
     Y_UNIT_TEST(TestForceRename) {
-        TTestDirectory xx("TestForceRename"); 
-        TFsPath fMain = xx.Child("main"); 
- 
-        TFsPath f1 = fMain.Child("f1"); 
-        f1.MkDirs(); 
-        TFsPath f1Child = f1.Child("f1child"); 
-        f1Child.Touch(); 
- 
-        TFsPath f2 = fMain.Child("f2"); 
-        f2.MkDirs(); 
- 
-        fMain.ForceRenameTo("TestForceRename/main1"); 
- 
-        UNIT_ASSERT(!xx.Child("main").Exists()); 
-        UNIT_ASSERT(xx.Child("main1").Child("f1").Exists()); 
-        UNIT_ASSERT(xx.Child("main1").Child("f2").Exists()); 
-        UNIT_ASSERT(xx.Child("main1").Child("f1").Child("f1child").Exists()); 
-    } 
- 
+        TTestDirectory xx("TestForceRename");
+        TFsPath fMain = xx.Child("main");
+
+        TFsPath f1 = fMain.Child("f1");
+        f1.MkDirs();
+        TFsPath f1Child = f1.Child("f1child");
+        f1Child.Touch();
+
+        TFsPath f2 = fMain.Child("f2");
+        f2.MkDirs();
+
+        fMain.ForceRenameTo("TestForceRename/main1");
+
+        UNIT_ASSERT(!xx.Child("main").Exists());
+        UNIT_ASSERT(xx.Child("main1").Child("f1").Exists());
+        UNIT_ASSERT(xx.Child("main1").Child("f2").Exists());
+        UNIT_ASSERT(xx.Child("main1").Child("f1").Child("f1child").Exists());
+    }
+
     Y_UNIT_TEST(TestRenameFail) {
         UNIT_ASSERT_EXCEPTION(TFsPath("sfsfsfsdfsfsdfdf").RenameTo("sdfsdf"), TIoException);
     }

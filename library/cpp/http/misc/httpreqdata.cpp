@@ -65,9 +65,9 @@ const char* TBaseServerRequestData::RemoteAddr() const {
 }
 
 const char* TBaseServerRequestData::HeaderIn(TStringBuf key) const {
-    auto it = HeadersIn_.find(key); 
+    auto it = HeadersIn_.find(key);
 
-    if (it == HeadersIn_.end()) { 
+    if (it == HeadersIn_.end()) {
         return nullptr;
     }
 
@@ -108,7 +108,7 @@ const char* TBaseServerRequestData::Environment(const char* key) const {
 }
 
 void TBaseServerRequestData::Clear() {
-    HeadersIn_.clear(); 
+    HeadersIn_.clear();
     Addr = Path = Search = nullptr;
     OrigSearch = {};
     SearchLength = 0;
@@ -180,7 +180,7 @@ bool TBaseServerRequestData::Parse(const char* origReq) {
 }
 
 void TBaseServerRequestData::AddHeader(const TString& name, const TString& value) {
-    HeadersIn_[name] = value; 
+    HeadersIn_[name] = value;
 
     if (stricmp(name.data(), "Host") == 0) {
         size_t hostLen = strcspn(value.data(), ":");
@@ -192,5 +192,5 @@ void TBaseServerRequestData::AddHeader(const TString& name, const TString& value
 
 void TBaseServerRequestData::SetPath(const TString& path) {
     PathStorage = TBuffer(path.data(), path.size() + 1);
-    Path = PathStorage.Data(); 
+    Path = PathStorage.Data();
 }

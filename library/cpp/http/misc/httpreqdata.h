@@ -61,11 +61,11 @@ public:
     const char* HeaderIn(TStringBuf key) const;
 
     const THttpHeadersContainer& HeadersIn() const {
-        return HeadersIn_; 
-    } 
- 
+        return HeadersIn_;
+    }
+
     inline size_t HeadersCount() const noexcept {
-        return HeadersIn_.size(); 
+        return HeadersIn_.size();
     }
 
     TString HeaderByIndex(size_t n) const noexcept;
@@ -87,7 +87,7 @@ public:
     void AddHeader(const TString& name, const TString& value);
 
 private:
-    TBuffer PathStorage; 
+    TBuffer PathStorage;
     mutable char* Addr;
     TString Host;
     TString Port;

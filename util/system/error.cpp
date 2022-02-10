@@ -26,19 +26,19 @@ void ClearLastSystemError() {
 
 int LastSystemError() {
 #if defined(_win_)
-    int ret = GetLastError(); 
+    int ret = GetLastError();
 
-    if (ret) 
+    if (ret)
         return ret;
 
-    ret = WSAGetLastError(); 
- 
-    if (ret) 
-        return ret; 
-    // when descriptors number are over maximum, errno set in this variable 
-    ret = *(_errno()); 
-    return ret; 
- 
+    ret = WSAGetLastError();
+
+    if (ret)
+        return ret;
+    // when descriptors number are over maximum, errno set in this variable
+    ret = *(_errno());
+    return ret;
+
 #else
     return errno;
 #endif

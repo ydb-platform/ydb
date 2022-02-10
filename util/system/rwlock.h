@@ -55,24 +55,24 @@ struct TWriteGuardOps {
 };
 
 template <class T>
-struct TTryWriteGuardOps: public TWriteGuardOps<T> { 
+struct TTryWriteGuardOps: public TWriteGuardOps<T> {
     static inline bool TryAcquire(T* t) noexcept {
-        return t->TryAcquireWrite(); 
-    } 
-}; 
- 
-template <class T> 
+        return t->TryAcquireWrite();
+    }
+};
+
+template <class T>
 using TReadGuardBase = TGuard<T, TReadGuardOps<T>>;
 template <class T>
 using TTryReadGuardBase = TTryGuard<T, TTryReadGuardOps<T>>;
 
 template <class T>
 using TWriteGuardBase = TGuard<T, TWriteGuardOps<T>>;
-template <class T> 
-using TTryWriteGuardBase = TTryGuard<T, TTryWriteGuardOps<T>>; 
+template <class T>
+using TTryWriteGuardBase = TTryGuard<T, TTryWriteGuardOps<T>>;
 
 using TReadGuard = TReadGuardBase<TRWMutex>;
 using TTryReadGuard = TTryReadGuardBase<TRWMutex>;
 
 using TWriteGuard = TWriteGuardBase<TRWMutex>;
-using TTryWriteGuard = TTryWriteGuardBase<TRWMutex>; 
+using TTryWriteGuard = TTryWriteGuardBase<TRWMutex>;

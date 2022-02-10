@@ -234,22 +234,22 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
     }
 
     Y_UNIT_TEST(GetValueByPathTest) {
-        { 
-            TJsonValue lhs; 
-            TJsonValue first; 
-            TJsonValue second; 
-            TJsonValue last; 
-            first.InsertValue("e", "f"); 
-            second.InsertValue("c", first); 
-            last.InsertValue("a", second); 
-            lhs.InsertValue("l", last); 
- 
-            TJsonValue result; 
+        {
+            TJsonValue lhs;
+            TJsonValue first;
+            TJsonValue second;
+            TJsonValue last;
+            first.InsertValue("e", "f");
+            second.InsertValue("c", first);
+            last.InsertValue("a", second);
+            lhs.InsertValue("l", last);
+
+            TJsonValue result;
             UNIT_ASSERT(lhs.GetValueByPath("l/a/c/e", result, '/'));
-            UNIT_ASSERT(result.GetStringRobust() == "f"); 
+            UNIT_ASSERT(result.GetStringRobust() == "f");
             UNIT_ASSERT(!lhs.GetValueByPath("l/a/c/se", result, '/'));
             UNIT_ASSERT(lhs.GetValueByPath("l/a/c", result, '/'));
-            UNIT_ASSERT(result.GetStringRobust() == "{\"e\":\"f\"}"); 
+            UNIT_ASSERT(result.GetStringRobust() == "{\"e\":\"f\"}");
 
             // faster TStringBuf version
             UNIT_ASSERT_EQUAL(*lhs.GetValueByPath("l", '/'), last);
@@ -282,9 +282,9 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
             UNIT_ASSERT(lhs.SetValueByPath("l/a/c/se", "h", '/'));
             UNIT_ASSERT(lhs.GetValueByPath("l/a/c/se", result, '/'));
             UNIT_ASSERT(result.GetStringRobust() == "h");
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST(GetValueByPathConstTest) {
         TJsonValue lhs;
         TJsonValue first;

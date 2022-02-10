@@ -13,10 +13,10 @@ namespace {
     }
 
     bool CheckEmptyParam(const char*, bool defaultValue) {
-        return defaultValue; 
-    } 
+        return defaultValue;
+    }
 }
- 
+
 namespace NMalloc {
     volatile bool IsAllocatorCorrupted = false;
 
@@ -24,7 +24,7 @@ namespace NMalloc {
         : Name()
         , SetParam(SetEmptyParam)
         , GetParam(GetEmptyParam)
-        , CheckParam(CheckEmptyParam) 
+        , CheckParam(CheckEmptyParam)
     {
     }
 

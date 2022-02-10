@@ -85,7 +85,7 @@ public:
 
     // Call `FiltrationLevel()` of the underlying backend.
     ELogPriority FiltrationLevel() const noexcept;
- 
+
     // Set current log formatter.
     void SetFormatter(TLogFormatter formatter) noexcept;
 

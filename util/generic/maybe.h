@@ -9,16 +9,16 @@
 #include <util/stream/output.h>
 #include <util/ysaveload.h>
 
-namespace NMaybe { 
-    struct TPolicyUndefinedExcept { 
+namespace NMaybe {
+    struct TPolicyUndefinedExcept {
         [[noreturn]] static void OnEmpty(const std::type_info& valueTypeInfo);
-    }; 
- 
-    struct TPolicyUndefinedFail { 
+    };
+
+    struct TPolicyUndefinedFail {
         [[noreturn]] static void OnEmpty(const std::type_info& valueTypeInfo);
-    }; 
-} 
- 
+    };
+}
+
 struct TNothing {
     explicit constexpr TNothing(int) noexcept {
     }
@@ -448,9 +448,9 @@ private:
     }
 };
 
-template <class T> 
-using TMaybeFail = TMaybe<T, NMaybe::TPolicyUndefinedFail>; 
- 
+template <class T>
+using TMaybeFail = TMaybe<T, NMaybe::TPolicyUndefinedFail>;
+
 template <class T, class TPolicy = ::NMaybe::TPolicyUndefinedExcept>
 constexpr TMaybe<std::decay_t<T>, TPolicy> MakeMaybe(T&& value) {
     return TMaybe<std::decay_t<T>, TPolicy>(std::forward<T>(value));

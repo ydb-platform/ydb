@@ -340,44 +340,44 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
     }
 
     Y_UNIT_TEST(EraseValueFromArray) {
-        {
-            TJsonValue vec;
-            vec.AppendValue(TJsonValue(0));
-            vec.AppendValue(TJsonValue(1));
-            vec.AppendValue(TJsonValue("2"));
-            vec.AppendValue(TJsonValue("3.14"));
-
-            TJsonValue vec1;
-            vec1.AppendValue(TJsonValue(0));
-            vec1.AppendValue(TJsonValue("2"));
-            vec1.AppendValue(TJsonValue("3.14"));
-
-            TJsonValue vec2;
-            vec2.AppendValue(TJsonValue(0));
-            vec2.AppendValue(TJsonValue("2"));
-
-            TJsonValue vec3;
-            vec3.AppendValue(TJsonValue("2"));
-
-            TJsonValue vec4(JSON_ARRAY);
-
-            UNIT_ASSERT(vec.IsArray());
-            UNIT_ASSERT(vec.GetArray().size() == 4);
-            vec.EraseValue(1);
-            UNIT_ASSERT(vec.GetArray().size() == 3);
-            UNIT_ASSERT(vec == vec1);
-            vec.EraseValue(2);
-            UNIT_ASSERT(vec.GetArray().size() == 2);
-            UNIT_ASSERT(vec == vec2);
-            vec.EraseValue(0);
-            UNIT_ASSERT(vec.GetArray().size() == 1);
-            UNIT_ASSERT(vec == vec3);
-            vec.EraseValue(0);
-            UNIT_ASSERT(vec.GetArray().size() == 0);
-            UNIT_ASSERT(vec == vec4);
-        }
-    }
-
+        { 
+            TJsonValue vec; 
+            vec.AppendValue(TJsonValue(0)); 
+            vec.AppendValue(TJsonValue(1)); 
+            vec.AppendValue(TJsonValue("2")); 
+            vec.AppendValue(TJsonValue("3.14")); 
+ 
+            TJsonValue vec1; 
+            vec1.AppendValue(TJsonValue(0)); 
+            vec1.AppendValue(TJsonValue("2")); 
+            vec1.AppendValue(TJsonValue("3.14")); 
+ 
+            TJsonValue vec2; 
+            vec2.AppendValue(TJsonValue(0)); 
+            vec2.AppendValue(TJsonValue("2")); 
+ 
+            TJsonValue vec3; 
+            vec3.AppendValue(TJsonValue("2")); 
+ 
+            TJsonValue vec4(JSON_ARRAY); 
+ 
+            UNIT_ASSERT(vec.IsArray()); 
+            UNIT_ASSERT(vec.GetArray().size() == 4); 
+            vec.EraseValue(1); 
+            UNIT_ASSERT(vec.GetArray().size() == 3); 
+            UNIT_ASSERT(vec == vec1); 
+            vec.EraseValue(2); 
+            UNIT_ASSERT(vec.GetArray().size() == 2); 
+            UNIT_ASSERT(vec == vec2); 
+            vec.EraseValue(0); 
+            UNIT_ASSERT(vec.GetArray().size() == 1); 
+            UNIT_ASSERT(vec == vec3); 
+            vec.EraseValue(0); 
+            UNIT_ASSERT(vec.GetArray().size() == 0); 
+            UNIT_ASSERT(vec == vec4); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(NonConstMethodsTest) {
         {
             TJsonValue src;

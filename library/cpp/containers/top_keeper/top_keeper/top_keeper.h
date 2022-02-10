@@ -1,25 +1,25 @@
-#pragma once
-
-#include <util/generic/vector.h>
-#include <util/generic/algorithm.h>
-#include <util/generic/maybe.h>
-#include <util/str_stl.h>
-
+#pragma once 
+ 
+#include <util/generic/vector.h> 
+#include <util/generic/algorithm.h> 
+#include <util/generic/maybe.h> 
+#include <util/str_stl.h> 
+ 
 template <class T, class TComparator = TGreater<T>, bool sort = true, class Alloc = std::allocator<T>>
-class TTopKeeper {
-private:
-    class TVectorWithMin {
-    private:
+class TTopKeeper { 
+private: 
+    class TVectorWithMin { 
+    private: 
         TVector<T, Alloc> Internal;
-        size_t HalfMaxSize;
-        TComparator Comparer;
+        size_t HalfMaxSize; 
+        TComparator Comparer; 
         size_t MinElementIndex;
 
-    private:
+    private: 
         void Reserve() {
             Internal.reserve(2 * HalfMaxSize);
         }
-
+ 
         template <class UT>
         bool Insert(UT&& value) noexcept {
             if (Y_UNLIKELY(0 == HalfMaxSize)) {
@@ -45,16 +45,16 @@ private:
             return true;
         }
 
-    public:
+    public: 
         using value_type = T;
 
-        TVectorWithMin(const size_t halfMaxSize, const TComparator& comp)
-            : HalfMaxSize(halfMaxSize)
-            , Comparer(comp)
-        {
+        TVectorWithMin(const size_t halfMaxSize, const TComparator& comp) 
+            : HalfMaxSize(halfMaxSize) 
+            , Comparer(comp) 
+        { 
             Reserve();
-        }
-
+        } 
+ 
         template <class TAllocParam>
         TVectorWithMin(const size_t halfMaxSize, const TComparator& comp, TAllocParam&& param)
             : Internal(std::forward<TAllocParam>(param))
@@ -64,27 +64,27 @@ private:
             Reserve();
         }
 
-        void SortAccending() {
-            Sort(Internal.begin(), Internal.end(), Comparer);
-        }
-
-        void Partition() {
+        void SortAccending() { 
+            Sort(Internal.begin(), Internal.end(), Comparer); 
+        } 
+ 
+        void Partition() { 
             if (Y_UNLIKELY(HalfMaxSize == 0)) {
                 return;
             }
             if (Y_LIKELY(Internal.size() >= HalfMaxSize)) {
                 NthElement(Internal.begin(), Internal.begin() + HalfMaxSize - 1, Internal.end(), Comparer);
-                Internal.erase(Internal.begin() + HalfMaxSize, Internal.end());
+                Internal.erase(Internal.begin() + HalfMaxSize, Internal.end()); 
 
                 //we should update MinElementIndex cause we just altered Internal
                 MinElementIndex = HalfMaxSize - 1;
-            }
-        }
-
+            } 
+        } 
+ 
         bool Push(const T& value) {
             return Insert(value);
         }
-
+ 
         bool Push(T&& value) {
             return Insert(std::move(value));
         }
@@ -92,18 +92,18 @@ private:
         template <class... TArgs>
         bool Emplace(TArgs&&... args) {
             return Insert(T(std::forward<TArgs>(args)...)); // TODO: make it "real" emplace, not that fake one
-        }
-
-        void SetMaxSize(size_t newHalfMaxSize) {
-            HalfMaxSize = newHalfMaxSize;
+        } 
+ 
+        void SetMaxSize(size_t newHalfMaxSize) { 
+            HalfMaxSize = newHalfMaxSize; 
             Reserve();
-            Partition();
-        }
-
-        size_t GetSize() const {
-            return Internal.size();
-        }
-
+            Partition(); 
+        } 
+ 
+        size_t GetSize() const { 
+            return Internal.size(); 
+        } 
+ 
         const auto& GetInternal() const {
             return Internal;
         }
@@ -117,31 +117,31 @@ private:
             return values;
         }
 
-        const T& Back() const {
-            return Internal.back();
-        }
-
-        void Pop() {
-            Internal.pop_back();
-        }
-
-        void Reset() {
-            Internal.clear();
+        const T& Back() const { 
+            return Internal.back(); 
+        } 
+ 
+        void Pop() { 
+            Internal.pop_back(); 
+        } 
+ 
+        void Reset() { 
+            Internal.clear(); 
             //MinElementIndex will reset itself when we start adding new values
-        }
-    };
-
+        } 
+    }; 
+ 
     void CheckNotFinalized() {
         Y_ENSURE(!Finalized, "Cannot insert after finalizing (Pop() / GetNext() / Finalize())! "
                              "Use TLimitedHeap for this scenario");
     }
 
-    size_t MaxSize;
+    size_t MaxSize; 
     const TComparator Comparer;
-    TVectorWithMin Internal;
-    bool Finalized;
-
-public:
+    TVectorWithMin Internal; 
+    bool Finalized; 
+ 
+public: 
     TTopKeeper()
         : MaxSize(0)
         , Comparer()
@@ -150,14 +150,14 @@ public:
     {
     }
 
-    TTopKeeper(size_t maxSize, const TComparator& comp = TComparator())
-        : MaxSize(maxSize)
-        , Comparer(comp)
-        , Internal(maxSize, comp)
-        , Finalized(false)
-    {
-    }
-
+    TTopKeeper(size_t maxSize, const TComparator& comp = TComparator()) 
+        : MaxSize(maxSize) 
+        , Comparer(comp) 
+        , Internal(maxSize, comp) 
+        , Finalized(false) 
+    { 
+    } 
+ 
     template <class TAllocParam>
     TTopKeeper(size_t maxSize, const TComparator& comp, TAllocParam&& param)
         : MaxSize(maxSize)
@@ -167,32 +167,32 @@ public:
     {
     }
 
-    void Finalize() {
+    void Finalize() { 
         if (Y_LIKELY(Finalized)) {
-            return;
-        }
-        Internal.Partition();
-        if (sort) {
-            Internal.SortAccending();
-        }
-        Finalized = true;
-    }
-
-    const T& GetNext() {
+            return; 
+        } 
+        Internal.Partition(); 
+        if (sort) { 
+            Internal.SortAccending(); 
+        } 
+        Finalized = true; 
+    } 
+ 
+    const T& GetNext() { 
         Y_ENSURE(!IsEmpty(), "Trying GetNext from empty heap!");
-        Finalize();
-        return Internal.Back();
-    }
-
-    void Pop() {
+        Finalize(); 
+        return Internal.Back(); 
+    } 
+ 
+    void Pop() { 
         Y_ENSURE(!IsEmpty(), "Trying Pop from empty heap!");
-        Finalize();
-        Internal.Pop();
-        if (IsEmpty()) {
-            Reset();
-        }
-    }
-
+        Finalize(); 
+        Internal.Pop(); 
+        if (IsEmpty()) { 
+            Reset(); 
+        } 
+    } 
+ 
     T ExtractOne() {
         Y_ENSURE(!IsEmpty(), "Trying ExtractOne from empty heap!");
         Finalize();
@@ -212,8 +212,8 @@ public:
     bool Insert(const T& value) {
         CheckNotFinalized();
         return Internal.Push(value);
-    }
-
+    } 
+ 
     bool Insert(T&& value) {
         CheckNotFinalized();
         return Internal.Push(std::move(value));
@@ -230,27 +230,27 @@ public:
         return Internal.GetInternal();
     }
 
-    bool IsEmpty() const {
-        return Internal.GetSize() == 0;
-    }
-
-    size_t GetSize() const {
-        return Min(Internal.GetSize(), MaxSize);
-    }
-
-    size_t GetMaxSize() const {
-        return MaxSize;
-    }
-
-    void SetMaxSize(size_t newMaxSize) {
+    bool IsEmpty() const { 
+        return Internal.GetSize() == 0; 
+    } 
+ 
+    size_t GetSize() const { 
+        return Min(Internal.GetSize(), MaxSize); 
+    } 
+ 
+    size_t GetMaxSize() const { 
+        return MaxSize; 
+    } 
+ 
+    void SetMaxSize(size_t newMaxSize) { 
         Y_ENSURE(!Finalized, "Cannot resize after finalizing (Pop() / GetNext() / Finalize())! "
                              "Use TLimitedHeap for this scenario");
-        MaxSize = newMaxSize;
-        Internal.SetMaxSize(newMaxSize);
-    }
-
-    void Reset() {
-        Internal.Reset();
-        Finalized = false;
-    }
-};
+        MaxSize = newMaxSize; 
+        Internal.SetMaxSize(newMaxSize); 
+    } 
+ 
+    void Reset() { 
+        Internal.Reset(); 
+        Finalized = false; 
+    } 
+}; 

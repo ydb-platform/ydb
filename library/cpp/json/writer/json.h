@@ -6,7 +6,7 @@
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/stream/str.h>
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 
 namespace NJson {
     class TJsonValue;
@@ -48,8 +48,8 @@ namespace NJsonWriter {
         TValueContext WriteInt(int i);
         TValueContext WriteLongLong(long long i);
         TValueContext WriteULongLong(unsigned long long i);
-        TValueContext WriteFloat(float f, EFloatToStringMode mode = PREC_NDIGITS, int ndigits = 6); 
-        TValueContext WriteDouble(double f, EFloatToStringMode mode = PREC_NDIGITS, int ndigits = 10); 
+        TValueContext WriteFloat(float f, EFloatToStringMode mode = PREC_NDIGITS, int ndigits = 6);
+        TValueContext WriteDouble(double f, EFloatToStringMode mode = PREC_NDIGITS, int ndigits = 10);
         TValueContext WriteBool(bool b);
         TValueContext WriteNull();
         TValueContext WriteJsonValue(const NJson::TJsonValue* value, bool sortKeys = false, EFloatToStringMode mode = PREC_NDIGITS, int ndigits = 10);
@@ -176,7 +176,7 @@ namespace NJsonWriter {
         TOutContext WriteDouble(double, EFloatToStringMode, int ndigits);
         TOutContext WriteJsonValue(const NJson::TJsonValue* value, bool sortKeys = false);
         TOutContext UnsafeWriteValue(const TStringBuf&);
- 
+
         TValueContext BeginList();
         TPairContext BeginObject();
 

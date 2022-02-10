@@ -129,7 +129,7 @@ RECURSE(
     bz2file
     cached-property
     cachelib
-    cachetools 
+    cachetools
     catalogue
     cattrs
     cbor2
@@ -171,7 +171,7 @@ RECURSE(
     configparser
     confluent-kafka
     constantly
-    contextdecorator 
+    contextdecorator
     contextlib2
     convertdate
     cookies
@@ -323,7 +323,7 @@ RECURSE(
     dotmap
     dparse
     dpath
-    dpkt 
+    dpkt
     drf-extensions
     drf_ujson
     drf-yasg
@@ -422,7 +422,7 @@ RECURSE(
     frozenlist
     fsspec
     ftfy
-    funcparserlib 
+    funcparserlib
     funcsigs
     functools32
     furl
@@ -982,7 +982,7 @@ RECURSE(
     Scrapy
     seaborn
     selectors2
-    selenium 
+    selenium
     semantic-version
     semver
     Send2Trash

@@ -572,25 +572,25 @@ namespace NKikimr {
             }
         }
 
-        bool Validate(TString& errorReason) {
-            if (!Record.HasBlobID()) {
-                errorReason = "TEvVPut rejected by VDisk. It has no query";
-            } else if (!Record.HasVDiskID()) {
-                errorReason = "TEvVPut rejected by VDisk. It has no VDiskID";
-            } else if (!Record.MutableVDiskID()->HasGroupID()) {
-                errorReason = "TEvVPut rejected by VDisk. It has no VDiskID::GroupID";
-            } else if (Record.MutableMsgQoS() == nullptr) {
-                errorReason = "TEvVPut rejected by VDisk. MsgQoS is undefined";
-            } else if (!Record.MutableMsgQoS()->HasExtQueueId()) {
-                errorReason = "TEvVPut rejected by VDisk. ExtQueueId is undefined";
-            } else if (GetPayloadCount() == 0 && !Record.HasBuffer()) {
-                errorReason = "TEvVPut rejected by VDisk. Payload empty and no buffer provided";
-            } else {
-                return true;
-            }
+        bool Validate(TString& errorReason) { 
+            if (!Record.HasBlobID()) { 
+                errorReason = "TEvVPut rejected by VDisk. It has no query"; 
+            } else if (!Record.HasVDiskID()) { 
+                errorReason = "TEvVPut rejected by VDisk. It has no VDiskID"; 
+            } else if (!Record.MutableVDiskID()->HasGroupID()) { 
+                errorReason = "TEvVPut rejected by VDisk. It has no VDiskID::GroupID"; 
+            } else if (Record.MutableMsgQoS() == nullptr) { 
+                errorReason = "TEvVPut rejected by VDisk. MsgQoS is undefined"; 
+            } else if (!Record.MutableMsgQoS()->HasExtQueueId()) { 
+                errorReason = "TEvVPut rejected by VDisk. ExtQueueId is undefined"; 
+            } else if (GetPayloadCount() == 0 && !Record.HasBuffer()) { 
+                errorReason = "TEvVPut rejected by VDisk. Payload empty and no buffer provided"; 
+            } else { 
+                return true; 
+            } 
 
-            return false;
-        }
+            return false; 
+        } 
 
         TString ToString() const override {
             return ToString(Record);
@@ -742,13 +742,13 @@ namespace NKikimr {
             if (status != NKikimrProto::OK && errorReason) {
                 Record.SetErrorReason(errorReason);
             }
-            if (request.HasBlobID()) {
-                Record.MutableBlobID()->CopyFrom(request.GetBlobID());
-            }
+            if (request.HasBlobID()) { 
+                Record.MutableBlobID()->CopyFrom(request.GetBlobID()); 
+            } 
 
-            if (request.HasVDiskID()) {
-                Record.MutableVDiskID()->CopyFrom(request.GetVDiskID());
-            }
+            if (request.HasVDiskID()) { 
+                Record.MutableVDiskID()->CopyFrom(request.GetVDiskID()); 
+            } 
             if (request.HasCookie()) {
                 Record.SetCookie(request.GetCookie());
             }
@@ -835,24 +835,24 @@ namespace NKikimr {
             }
         }
 
-        bool Validate(TString& errorReason) {
-            if (Record.ItemsSize() == 0) {
-                errorReason =  "TEvVMultiPut rejected by VDisk. It has 0 blobs to put";
-            } else if (!Record.HasVDiskID()) {
-                errorReason = "TEvVMultiPut rejected by VDisk. VDiskID is undefined";
-            } else if (!Record.MutableVDiskID()->HasGroupID()) {
-                errorReason = "TEvVMultiPut rejected by VDisk. It has no VDiskID::GroupID";
-            } else if (Record.MutableMsgQoS() == nullptr) {
-                errorReason = "TEvVMultiPut rejected by VDisk. MsgQoS is undefined";
-            } else if (!Record.MutableMsgQoS()->HasExtQueueId()) {
-                errorReason =  "TEvVMultiPut rejected by VDisk. ExtQueueId is undefined";
-            } else {
-                return true;
-            }
-
-            return false;
-        }
-
+        bool Validate(TString& errorReason) { 
+            if (Record.ItemsSize() == 0) { 
+                errorReason =  "TEvVMultiPut rejected by VDisk. It has 0 blobs to put"; 
+            } else if (!Record.HasVDiskID()) { 
+                errorReason = "TEvVMultiPut rejected by VDisk. VDiskID is undefined"; 
+            } else if (!Record.MutableVDiskID()->HasGroupID()) { 
+                errorReason = "TEvVMultiPut rejected by VDisk. It has no VDiskID::GroupID"; 
+            } else if (Record.MutableMsgQoS() == nullptr) { 
+                errorReason = "TEvVMultiPut rejected by VDisk. MsgQoS is undefined"; 
+            } else if (!Record.MutableMsgQoS()->HasExtQueueId()) { 
+                errorReason =  "TEvVMultiPut rejected by VDisk. ExtQueueId is undefined"; 
+            } else { 
+                return true; 
+            } 
+ 
+            return false; 
+        } 
+ 
         TString ToString() const override {
             TStringStream str;
             str << "{EvVMultiPut";
@@ -967,9 +967,9 @@ namespace NKikimr {
                 AddVPutResult(status, errorReason, logoBlobId, cookie);
             }
 
-            if (request.HasVDiskID()) {
-                Record.MutableVDiskID()->CopyFrom(request.GetVDiskID());
-            }
+            if (request.HasVDiskID()) { 
+                Record.MutableVDiskID()->CopyFrom(request.GetVDiskID()); 
+            } 
             if (request.HasCookie()) {
                 Record.SetCookie(request.GetCookie());
             }
@@ -1117,23 +1117,23 @@ namespace NKikimr {
 #endif
         }
 
-        bool Validate(TString& errorReason) {
-            if (!Record.HasRangeQuery() && Record.ExtremeQueriesSize() == 0) {
-                errorReason = "TEvVGet rejected by VDisk. It has no query";
-            } else if (!Record.HasVDiskID()) {
-                errorReason = "TEvVGet rejected by VDisk. It has no VDiskID";
-            } else if (!Record.MutableVDiskID()->HasGroupID()) {
-                errorReason = "TEvVGet rejected by VDisk. It has no VDiskID::GroupID";
-            } else if (Record.MutableMsgQoS() == nullptr) {
-                errorReason = "TEvVGet rejected by VDisk. MsgQoS is undefined";
-            } else if (! Record.MutableMsgQoS()->HasExtQueueId()) {
-                errorReason = "TEvVGet rejected by VDisk. ExtQueueId is undefined";
-            } else {
-                return true;
-            }
-            return false;
-        }
-
+        bool Validate(TString& errorReason) { 
+            if (!Record.HasRangeQuery() && Record.ExtremeQueriesSize() == 0) { 
+                errorReason = "TEvVGet rejected by VDisk. It has no query"; 
+            } else if (!Record.HasVDiskID()) { 
+                errorReason = "TEvVGet rejected by VDisk. It has no VDiskID"; 
+            } else if (!Record.MutableVDiskID()->HasGroupID()) { 
+                errorReason = "TEvVGet rejected by VDisk. It has no VDiskID::GroupID"; 
+            } else if (Record.MutableMsgQoS() == nullptr) { 
+                errorReason = "TEvVGet rejected by VDisk. MsgQoS is undefined"; 
+            } else if (! Record.MutableMsgQoS()->HasExtQueueId()) { 
+                errorReason = "TEvVGet rejected by VDisk. ExtQueueId is undefined"; 
+            } else { 
+                return true; 
+            } 
+            return false; 
+        } 
+ 
         TString ToString() const override {
             return ToString(Record);
         }
@@ -1370,10 +1370,10 @@ namespace NKikimr {
                 AddResult(queryStatus, id, shift, nullptr, 0, cookie);
             }
 
-            if (request.HasVDiskID()) {
-                TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID());
-                VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID());
-            }
+            if (request.HasVDiskID()) { 
+                TVDiskID vDiskId = VDiskIDFromVDiskID(request.GetVDiskID()); 
+                VDiskIDFromVDiskID(vDiskId, Record.MutableVDiskID()); 
+            } 
             if (request.HasCookie()) {
                 Record.SetCookie(request.GetCookie());
             }
@@ -2053,7 +2053,7 @@ namespace NKikimr {
             LogoBlobIDFromLogoBlobID(patchedPartBlobId, Record.MutablePatchedPartBlobId());
 
             Y_VERIFY(request.HasVDiskID());
-            Record.MutableVDiskID()->CopyFrom(request.GetVDiskID());
+            Record.MutableVDiskID()->CopyFrom(request.GetVDiskID()); 
             Y_VERIFY(request.HasCookie());
             Record.SetCookie(request.GetCookie());
         }

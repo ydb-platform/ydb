@@ -65,8 +65,8 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
     };
 
     void MakePatchingTest(TString erasure) {
-        TEnvironmentSetup env(true, GetErasureTypeByString(erasure));
-        TTestInfo test = InitTest(env);
+        TEnvironmentSetup env(true, GetErasureTypeByString(erasure)); 
+        TTestInfo test = InitTest(env); 
 
         constexpr ui32 size = 100;
         TString data(size, 'a');
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         TString patchedData1 = ApplyDiffs(data, diffs1);
         TLogoBlobID patchedBlobId1(1, 1, 1, 0, size, 0);
         TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(originalBlobId, &patchedBlobId1, 0,
-                test.Info->GroupID, test.Info->GroupID);
+                test.Info->GroupID, test.Info->GroupID); 
         SendPatch(test, originalBlobId, patchedBlobId1, 0, diffs1, NKikimrProto::OK);
         SendGet(test, patchedBlobId1, patchedData1, NKikimrProto::OK);
 
@@ -91,14 +91,14 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         TString patchedData2 = ApplyDiffs(data, diffs2);
         TLogoBlobID patchedBlobId2(1, 1, 2, 0, size, 0);
         TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(originalBlobId, &patchedBlobId2, 0,
-                test.Info->GroupID, test.Info->GroupID);
+                test.Info->GroupID, test.Info->GroupID); 
         SendPatch(test, originalBlobId, patchedBlobId2, 0, diffs2, NKikimrProto::OK);
         SendGet(test, patchedBlobId2, patchedData2, NKikimrProto::OK);
 
         TLogoBlobID patchedBlobId3(1, 1, 3, 0, size, 0);
         TLogoBlobID truePatchedBlobId3(1, 1, 3, 0, size, 0);
         TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(originalBlobId, &truePatchedBlobId3, TLogoBlobID::MaxCookie,
-                test.Info->GroupID, test.Info->GroupID);
+                test.Info->GroupID, test.Info->GroupID); 
         UNIT_ASSERT(patchedBlobId3 != truePatchedBlobId3);
         NKikimrProto::EReplyStatus statusWhenNotMatchingCookie = (erasure == "block-4-2" ? NKikimrProto::ERROR : NKikimrProto::OK);
         SendPatch(test, originalBlobId, patchedBlobId3, TLogoBlobID::MaxCookie, diffs2, statusWhenNotMatchingCookie);
@@ -107,8 +107,8 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
     }
 
     void MakeStressPatchingTest(TString erasure) {
-        TEnvironmentSetup env(true, GetErasureTypeByString(erasure));
-        TTestInfo test = InitTest(env);
+        TEnvironmentSetup env(true, GetErasureTypeByString(erasure)); 
+        TTestInfo test = InitTest(env); 
 
         constexpr ui32 size = 100;
         TString data(size, 'a');
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(BlobPatching) {
         for (ui32 patchIdx = 0; patchIdx < patchCount; ++patchIdx) {
             TLogoBlobID patchedBlobId(1, 1, patchIdx + 1, 0, size, 0);
             TEvBlobStorage::TEvPatch::GetBlobIdWithSamePlacement(originalBlobId, &patchedBlobId, TLogoBlobID::MaxCookie,
-                    test.Info->GroupID, test.Info->GroupID);
+                    test.Info->GroupID, test.Info->GroupID); 
             SendPatch(test, originalBlobId, patchedBlobId, 0, diffs, NKikimrProto::OK);
             SendGet(test, patchedBlobId, patchedData, NKikimrProto::OK);
         }

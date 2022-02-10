@@ -288,7 +288,7 @@ namespace NKikimr {
                          " InFlightCost# %" PRIu64 " msgCtx# %s Deadlines# %" PRIu64,
                          NKikimrBlobStorage::EVDiskInternalQueueId_Name(IntQueueId).data(),
                          InFlightCount, InFlightBytes, InFlightCost, msgCtx.ToString().data(), Deadlines);
-
+ 
                 --InFlightCount;
                 InFlightCost -= msgCtx.Cost;
                 InFlightBytes -= msgCtx.RecByteSize;
@@ -1035,7 +1035,7 @@ namespace NKikimr {
 
             // check queue compatibility: it's a contract between BlobStorage Proxy and VDisk,
             // we don't work if queues are incompatible
-
+ 
             bool compatible = Compatible(extQueueId, intQueueId);
             Y_VERIFY(compatible, "%s: %s: extQueue is incompatible with intQueue; intQueue# %s extQueue# %s",
                    VCtx->VDiskLogPrefix.data(), msgName, NKikimrBlobStorage::EVDiskInternalQueueId_Name(intQueueId).data(),
@@ -1676,11 +1676,11 @@ namespace NKikimr {
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVDefrag>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVBaldSyncLog>;
 
-        template <typename TEv>
-        static constexpr bool IsValidatable = std::is_same_v<TEv, TEvBlobStorage::TEvVMultiPut>
-                || std::is_same_v<TEv, TEvBlobStorage::TEvVGet>
-                || std::is_same_v<TEv, TEvBlobStorage::TEvVPut>;
-
+        template <typename TEv> 
+        static constexpr bool IsValidatable = std::is_same_v<TEv, TEvBlobStorage::TEvVMultiPut> 
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVGet> 
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVPut>; 
+ 
         template<typename TEventType>
         void CheckExecute(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
             if constexpr (IsPatchEvent<TEventType>) {
@@ -1692,13 +1692,13 @@ namespace NKikimr {
             }
         }
 
-        template <typename TEv>
-        bool Validate(TEv* ev, TString& errorReason) const {
-            if constexpr (IsValidatable<TEv>) {
-                return ev->Validate(errorReason);
-            }
-            return true;
-        }
+        template <typename TEv> 
+        bool Validate(TEv* ev, TString& errorReason) const { 
+            if constexpr (IsValidatable<TEv>) { 
+                return ev->Validate(errorReason); 
+            } 
+            return true; 
+        } 
 
         template <typename TEventType>
         void Check(TAutoPtr<TEventHandle<TEventType>>& ev, const TActorContext& ctx) {
@@ -1713,17 +1713,17 @@ namespace NKikimr {
             }
         }
 
-        template<typename TEv>
-        void ValidateEvent(TAutoPtr<TEventHandle<TEv>>& ev, const TActorContext& ctx) {
-            TString errorReason;
-            bool isQueryValid = Validate(ev->Get(), errorReason);
-            if (!isQueryValid) {
-                Reply(ev, ctx, NKikimrProto::ERROR, errorReason, TAppData::TimeProvider->Now());
-                return;
-            }
-            Check(ev, ctx);
-        };
-
+        template<typename TEv> 
+        void ValidateEvent(TAutoPtr<TEventHandle<TEv>>& ev, const TActorContext& ctx) { 
+            TString errorReason; 
+            bool isQueryValid = Validate(ev->Get(), errorReason); 
+            if (!isQueryValid) { 
+                Reply(ev, ctx, NKikimrProto::ERROR, errorReason, TAppData::TimeProvider->Now()); 
+                return; 
+            } 
+            Check(ev, ctx); 
+        }; 
+ 
         void ForwardToSkeleton(STFUNC_SIG) {
             ctx.Send(ev->Forward(SkeletonId));
         }
@@ -1738,9 +1738,9 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVPatchStart, Check)
             HFunc(TEvBlobStorage::TEvVPatchDiff, Check)
             HFunc(TEvBlobStorage::TEvVPatchXorDiff, Check)
-            HFunc(TEvBlobStorage::TEvVPut, ValidateEvent)
-            HFunc(TEvBlobStorage::TEvVMultiPut, ValidateEvent)
-            HFunc(TEvBlobStorage::TEvVGet, ValidateEvent)
+            HFunc(TEvBlobStorage::TEvVPut, ValidateEvent) 
+            HFunc(TEvBlobStorage::TEvVMultiPut, ValidateEvent) 
+            HFunc(TEvBlobStorage::TEvVGet, ValidateEvent) 
             HFunc(TEvBlobStorage::TEvVBlock, Check)
             HFunc(TEvBlobStorage::TEvVGetBlock, Check)
             HFunc(TEvBlobStorage::TEvVCollectGarbage, Check)

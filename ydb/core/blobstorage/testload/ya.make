@@ -35,7 +35,7 @@ SRCS(
     test_load_time_series.h
     test_load_vdisk_write.cpp
     test_load_write.cpp
-    test_load_kqp.cpp
+    test_load_kqp.cpp 
 )
 
 END()

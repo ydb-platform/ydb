@@ -35,7 +35,7 @@ public:
 
         const auto& mkql = kql.GetMkqls(CurrentMkqlIndex);
 
-        AcquireLocks = ShouldAcquireLocks(kql);
+        AcquireLocks = ShouldAcquireLocks(kql); 
 
         Promise = NewPromise();
 
@@ -142,7 +142,7 @@ private:
 
         future = Gateway->ExecuteMkqlPrepared(Cluster, mkql.GetProgram(), std::move(execParams),
             TransformCtx->GetMkqlSettings(false, Gateway->GetCurrentTime()),
-            TxState->Tx().GetSnapshot());
+            TxState->Tx().GetSnapshot()); 
         return true;
     }
 
@@ -156,34 +156,34 @@ private:
         return CompileExpr(*astRes.Root, expr, ctx, nullptr);
     }
 
-    bool ShouldAcquireLocks(const NKikimrKqp::TPreparedKql& kql) {
-        if (*TxState->Tx().EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) {
-            return false;
-        }
-
-        if (TxState->Tx().Locks.Broken()) {
-            return false; // Do not acquire locks after first lock issue
-        }
-
-        if (!TxState->Tx().DeferredEffects.Empty() || !kql.GetEffects().empty()) {
-            return true; // Acquire locks in read write tx
-        }
-
-        if (!TransformCtx->Settings.GetCommitTx()) {
-            return true; // It is not a commit tx
-        }
-
-        if (TxState->Tx().GetSnapshot().IsValid()) {
-            return false; // Read only tx with snapshot, no need to acquire locks
-        }
-
-        if (CurrentMkqlIndex == kql.MkqlsSize() - 1 && !TxState->Tx().Locks.HasLocks()) {
-            return false; // Final phase of read only tx, no need to acquire locks
-        }
-
-        return true;
-    }
-
+    bool ShouldAcquireLocks(const NKikimrKqp::TPreparedKql& kql) { 
+        if (*TxState->Tx().EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) { 
+            return false; 
+        } 
+ 
+        if (TxState->Tx().Locks.Broken()) { 
+            return false; // Do not acquire locks after first lock issue 
+        } 
+ 
+        if (!TxState->Tx().DeferredEffects.Empty() || !kql.GetEffects().empty()) { 
+            return true; // Acquire locks in read write tx 
+        } 
+ 
+        if (!TransformCtx->Settings.GetCommitTx()) { 
+            return true; // It is not a commit tx 
+        } 
+ 
+        if (TxState->Tx().GetSnapshot().IsValid()) { 
+            return false; // Read only tx with snapshot, no need to acquire locks 
+        } 
+ 
+        if (CurrentMkqlIndex == kql.MkqlsSize() - 1 && !TxState->Tx().Locks.HasLocks()) { 
+            return false; // Final phase of read only tx, no need to acquire locks 
+        } 
+ 
+        return true; 
+    } 
+ 
 private:
     TIntrusivePtr<IKqpGateway> Gateway;
     TString Cluster;

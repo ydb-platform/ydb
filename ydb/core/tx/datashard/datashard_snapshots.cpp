@@ -10,12 +10,12 @@ namespace NDataShard {
 void TSnapshotManager::Reset() {
     MinWriteVersion = TRowVersion::Min();
 
-    MvccState = EMvccState::MvccUnspecified;
-    KeepSnapshotTimeout = 0;
-    IncompleteEdge = TRowVersion::Min();
-    CompleteEdge = TRowVersion::Min();
-    LowWatermark = TRowVersion::Min();
-
+    MvccState = EMvccState::MvccUnspecified; 
+    KeepSnapshotTimeout = 0; 
+    IncompleteEdge = TRowVersion::Min(); 
+    CompleteEdge = TRowVersion::Min(); 
+    LowWatermark = TRowVersion::Min(); 
+ 
     CommittedCompleteEdge = TRowVersion::Min();
 
     Snapshots.clear();
@@ -27,13 +27,13 @@ bool TSnapshotManager::Reload(NIceDb::TNiceDb& db) {
     bool ready = true;
 
     TRowVersion minWriteVersion = TRowVersion::Min();
-    TRowVersion completeEdge = TRowVersion::Min();
-    TRowVersion incompleteEdge = TRowVersion::Min();
-    TRowVersion lowWatermark = TRowVersion::Min();
-
-    ui32 mvccState = 0;
-    ui64 keepSnapshotTimeout = 0;
-
+    TRowVersion completeEdge = TRowVersion::Min(); 
+    TRowVersion incompleteEdge = TRowVersion::Min(); 
+    TRowVersion lowWatermark = TRowVersion::Min(); 
+ 
+    ui32 mvccState = 0; 
+    ui64 keepSnapshotTimeout = 0; 
+ 
     TSnapshotMap snapshots;
 
     ready &= Self->SysGetUi64(db, Schema::Sys_MinWriteVersionStep, minWriteVersion.Step);
@@ -84,23 +84,23 @@ bool TSnapshotManager::Reload(NIceDb::TNiceDb& db) {
     if (ready) {
         // We have a consistent view of snapshots table, apply
         MinWriteVersion = minWriteVersion;
-        MvccState = static_cast<EMvccState>(mvccState);
-        KeepSnapshotTimeout = keepSnapshotTimeout;
-        CompleteEdge = completeEdge;
-        IncompleteEdge = incompleteEdge;
-        LowWatermark = lowWatermark;
+        MvccState = static_cast<EMvccState>(mvccState); 
+        KeepSnapshotTimeout = keepSnapshotTimeout; 
+        CompleteEdge = completeEdge; 
+        IncompleteEdge = incompleteEdge; 
+        LowWatermark = lowWatermark; 
         CommittedCompleteEdge = completeEdge;
         Snapshots = std::move(snapshots);
     }
 
-    if (ready) {
+    if (ready) { 
         Self->SetCounter(COUNTER_MVCC_ENABLED, IsMvccEnabled() ? 1 : 0);
-    }
-
+    } 
+ 
     return ready;
 }
 
-void TSnapshotManager::InitExpireQueue(TInstant now) {
+void TSnapshotManager::InitExpireQueue(TInstant now) { 
     if (ExpireQueue) {
         // Remove all snapshots already in the queue
         while (auto* snapshot = ExpireQueue.Top()) {
@@ -131,38 +131,38 @@ void TSnapshotManager::SetMinWriteVersion(NIceDb::TNiceDb& db, TRowVersion write
     MinWriteVersion = writeVersion;
 }
 
-TRowVersion TSnapshotManager::GetCompleteEdge() const {
-    return CompleteEdge;
-}
-
+TRowVersion TSnapshotManager::GetCompleteEdge() const { 
+    return CompleteEdge; 
+} 
+ 
 TRowVersion TSnapshotManager::GetCommittedCompleteEdge() const {
     return CommittedCompleteEdge;
 }
 
-void TSnapshotManager::SetCompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& version) {
+void TSnapshotManager::SetCompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& version) { 
     using Schema = TDataShard::Schema;
-
-    Self->PersistSys(db, Schema::SysMvcc_CompleteEdgeStep, version.Step);
-    Self->PersistSys(db, Schema::SysMvcc_CompleteEdgeTxId, version.TxId);
-    CompleteEdge = version;
-}
-
+ 
+    Self->PersistSys(db, Schema::SysMvcc_CompleteEdgeStep, version.Step); 
+    Self->PersistSys(db, Schema::SysMvcc_CompleteEdgeTxId, version.TxId); 
+    CompleteEdge = version; 
+} 
+ 
 bool TSnapshotManager::PromoteCompleteEdge(const TRowVersion& version, TTransactionContext& txc) {
     if (!IsMvccEnabled())
-        return false;
-
+        return false; 
+ 
     if (CompleteEdge >= version)
-        return false;
-
-    NIceDb::TNiceDb db(txc.DB);
+        return false; 
+ 
+    NIceDb::TNiceDb db(txc.DB); 
     SetCompleteEdge(db, version);
     txc.OnCommitted([this, edge = CompleteEdge] {
         this->CommittedCompleteEdge = edge;
     });
-
-    return true;
-}
-
+ 
+    return true; 
+} 
+ 
 bool TSnapshotManager::PromoteCompleteEdge(TOperation* op, TTransactionContext& txc) {
     if (!IsMvccEnabled())
         return false;
@@ -180,100 +180,100 @@ bool TSnapshotManager::PromoteCompleteEdge(ui64 writeStep, TTransactionContext& 
     return PromoteCompleteEdge(TRowVersion(writeStep, 0), txc);
 }
 
-TRowVersion TSnapshotManager::GetIncompleteEdge() const {
-    return IncompleteEdge;
-}
-
-void TSnapshotManager::SetIncompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& version) {
+TRowVersion TSnapshotManager::GetIncompleteEdge() const { 
+    return IncompleteEdge; 
+} 
+ 
+void TSnapshotManager::SetIncompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& version) { 
     using Schema = TDataShard::Schema;
-
-    Self->PersistSys(db, Schema::SysMvcc_IncompleteEdgeStep, version.Step);
-    Self->PersistSys(db, Schema::SysMvcc_IncompleteEdgeTxId, version.TxId);
-    IncompleteEdge = version;
-}
-
-bool TSnapshotManager::PromoteIncompleteEdge(TOperation* op, TTransactionContext& txc) {
+ 
+    Self->PersistSys(db, Schema::SysMvcc_IncompleteEdgeStep, version.Step); 
+    Self->PersistSys(db, Schema::SysMvcc_IncompleteEdgeTxId, version.TxId); 
+    IncompleteEdge = version; 
+} 
+ 
+bool TSnapshotManager::PromoteIncompleteEdge(TOperation* op, TTransactionContext& txc) { 
     if (!IsMvccEnabled())
-        return false;
-
-    Y_ASSERT(op && op->GetStep());
-
-    if (TRowVersion version(op->GetStep(), op->GetTxId()); version > IncompleteEdge) {
-        NIceDb::TNiceDb db(txc.DB);
-        SetIncompleteEdge(db, version);
-
-        return true;
-    }
-
-    return false;
-}
-
-void TSnapshotManager::SetKeepSnapshotTimeout(NIceDb::TNiceDb& db, ui64 keepSnapshotTimeout) {
+        return false; 
+ 
+    Y_ASSERT(op && op->GetStep()); 
+ 
+    if (TRowVersion version(op->GetStep(), op->GetTxId()); version > IncompleteEdge) { 
+        NIceDb::TNiceDb db(txc.DB); 
+        SetIncompleteEdge(db, version); 
+ 
+        return true; 
+    } 
+ 
+    return false; 
+} 
+ 
+void TSnapshotManager::SetKeepSnapshotTimeout(NIceDb::TNiceDb& db, ui64 keepSnapshotTimeout) { 
     using Schema = TDataShard::Schema;
-
-    // TODO validate new value
-    Self->PersistSys(db, Schema::SysMvcc_KeepSnapshotTimeout, keepSnapshotTimeout);
-    KeepSnapshotTimeout = keepSnapshotTimeout;
-}
-
-TRowVersion TSnapshotManager::GetLowWatermark() const {
-    return LowWatermark;
-}
-
-void TSnapshotManager::SetLowWatermark(NIceDb::TNiceDb& db, TRowVersion watermark) {
+ 
+    // TODO validate new value 
+    Self->PersistSys(db, Schema::SysMvcc_KeepSnapshotTimeout, keepSnapshotTimeout); 
+    KeepSnapshotTimeout = keepSnapshotTimeout; 
+} 
+ 
+TRowVersion TSnapshotManager::GetLowWatermark() const { 
+    return LowWatermark; 
+} 
+ 
+void TSnapshotManager::SetLowWatermark(NIceDb::TNiceDb& db, TRowVersion watermark) { 
     using Schema = TDataShard::Schema;
-
-    Self->PersistSys(db, Schema::SysMvcc_LowWatermarkStep, watermark.Step);
-    Self->PersistSys(db, Schema::SysMvcc_LowWatermarkTxId, watermark.TxId);
-
-    LowWatermark = watermark;
-}
-
-bool TSnapshotManager::AdvanceWatermark(NTable::TDatabase& db, const TRowVersion& to) {
-    if (LowWatermark >= to)
-        return false;
-
-    RemoveRowVersions(db, LowWatermark, to);
-
-    NIceDb::TNiceDb nicedb(db);
-    SetLowWatermark(nicedb, to);
-
-    return true;
-}
-
-void TSnapshotManager::RemoveRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to) {
-    for (auto& it : Self->GetUserTables()) {
-        auto begin = Snapshots.lower_bound(TSnapshotKey(Self->GetPathOwnerId(), it.first, from.Step, from.TxId));
-        auto end = Snapshots.upper_bound(TSnapshotKey(Self->GetPathOwnerId(), it.first, to.Step, to.TxId));
-        TRowVersion from0 = from;
+ 
+    Self->PersistSys(db, Schema::SysMvcc_LowWatermarkStep, watermark.Step); 
+    Self->PersistSys(db, Schema::SysMvcc_LowWatermarkTxId, watermark.TxId); 
+ 
+    LowWatermark = watermark; 
+} 
+ 
+bool TSnapshotManager::AdvanceWatermark(NTable::TDatabase& db, const TRowVersion& to) { 
+    if (LowWatermark >= to) 
+        return false; 
+ 
+    RemoveRowVersions(db, LowWatermark, to); 
+ 
+    NIceDb::TNiceDb nicedb(db); 
+    SetLowWatermark(nicedb, to); 
+ 
+    return true; 
+} 
+ 
+void TSnapshotManager::RemoveRowVersions(NTable::TDatabase& db, const TRowVersion& from, const TRowVersion& to) { 
+    for (auto& it : Self->GetUserTables()) { 
+        auto begin = Snapshots.lower_bound(TSnapshotKey(Self->GetPathOwnerId(), it.first, from.Step, from.TxId)); 
+        auto end = Snapshots.upper_bound(TSnapshotKey(Self->GetPathOwnerId(), it.first, to.Step, to.TxId)); 
+        TRowVersion from0 = from; 
         for (auto it0 = begin; it0 != end && from0 < to; it0++) {
-            auto to0 = TRowVersion(it0->first.Step, it0->first.TxId);
-            if (from0 < to0)
-                db.RemoveRowVersions(it.second->LocalTid, from0, to0);
-            from0 = to0.Next();
-        }
-        if (from0 < to)
-            db.RemoveRowVersions(it.second->LocalTid, from0, to);
-    }
-}
-
-ui64 TSnapshotManager::GetKeepSnapshotTimeout() const {
-    return KeepSnapshotTimeout ? KeepSnapshotTimeout : AppData()->DataShardConfig.GetKeepSnapshotTimeout();
-}
-
+            auto to0 = TRowVersion(it0->first.Step, it0->first.TxId); 
+            if (from0 < to0) 
+                db.RemoveRowVersions(it.second->LocalTid, from0, to0); 
+            from0 = to0.Next(); 
+        } 
+        if (from0 < to) 
+            db.RemoveRowVersions(it.second->LocalTid, from0, to); 
+    } 
+} 
+ 
+ui64 TSnapshotManager::GetKeepSnapshotTimeout() const { 
+    return KeepSnapshotTimeout ? KeepSnapshotTimeout : AppData()->DataShardConfig.GetKeepSnapshotTimeout(); 
+} 
+ 
 TDuration TSnapshotManager::GetCleanupSnapshotPeriod() const {
     return TDuration::MilliSeconds(AppData()->DataShardConfig.GetCleanupSnapshotPeriod());
 }
 
 bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext& txc, EMvccState state) {
-    Y_VERIFY(state != EMvccState::MvccUnspecified);
-
-    if (MvccState == state)
-        return false;
-
+    Y_VERIFY(state != EMvccState::MvccUnspecified); 
+ 
+    if (MvccState == state) 
+        return false; 
+ 
     using Schema = TDataShard::Schema;
-    const TRowVersion opVersion(step, txId);
-
+    const TRowVersion opVersion(step, txId); 
+ 
     // We need to choose a version that is at least as large as all previous edges
     TRowVersion nextVersion = Max(opVersion, MinWriteVersion, CompleteEdge, IncompleteEdge);
 
@@ -291,49 +291,49 @@ bool TSnapshotManager::ChangeMvccState(ui64 step, ui64 txId, TTransactionContext
         RemoveRowVersions(txc.DB, MinWriteVersion, nextVersion);
     }
 
-    switch (state) {
-        case EMvccState::MvccEnabled: {
+    switch (state) { 
+        case EMvccState::MvccEnabled: { 
             NIceDb::TNiceDb nicedb(txc.DB);
-
-            Self->PersistSys(nicedb, Schema::SysMvcc_State, (ui32)state);
-            MvccState = state;
-
+ 
+            Self->PersistSys(nicedb, Schema::SysMvcc_State, (ui32)state); 
+            MvccState = state; 
+ 
             SetCompleteEdge(nicedb, nextVersion);
             SetIncompleteEdge(nicedb, nextVersion);
             SetLowWatermark(nicedb, nextVersion);
-
-            break;
-        }
-
-        case EMvccState::MvccDisabled: {
+ 
+            break; 
+        } 
+ 
+        case EMvccState::MvccDisabled: { 
             NIceDb::TNiceDb nicedb(txc.DB);
-
+ 
             SetMinWriteVersion(nicedb, nextVersion);
-
-            Self->PersistSys(nicedb, Schema::SysMvcc_State, (ui32)state);
-            MvccState = state;
-
+ 
+            Self->PersistSys(nicedb, Schema::SysMvcc_State, (ui32)state); 
+            MvccState = state; 
+ 
             const auto minVersion = TRowVersion::Min();
-            SetCompleteEdge(nicedb, minVersion);
-            SetIncompleteEdge(nicedb, minVersion);
-            SetLowWatermark(nicedb, minVersion);
-
-            break;
-        }
-
-        default:
-            Y_FAIL("Unexpected mvcc state# %d", (ui32)state);
-    }
-
+            SetCompleteEdge(nicedb, minVersion); 
+            SetIncompleteEdge(nicedb, minVersion); 
+            SetLowWatermark(nicedb, minVersion); 
+ 
+            break; 
+        } 
+ 
+        default: 
+            Y_FAIL("Unexpected mvcc state# %d", (ui32)state); 
+    } 
+ 
     txc.OnCommitted([this, edge = CompleteEdge] {
         this->CommittedCompleteEdge = edge;
     });
-
+ 
     Self->SetCounter(COUNTER_MVCC_ENABLED, IsMvccEnabled() ? 1 : 0);
 
-    return true;
-}
-
+    return true; 
+} 
+ 
 const TSnapshot* TSnapshotManager::FindAvailable(const TSnapshotKey& key) const {
     auto it = Snapshots.find(key);
     if (it != Snapshots.end() && !it->second.HasFlags(TSnapshot::FlagRemoved)) {
@@ -485,7 +485,7 @@ void TSnapshotManager::DoRemoveSnapshot(NTable::TDatabase& db, const TSnapshotKe
     // Mark snapshot as no longer accessible in local database
     const TRowVersion rowVersion(key.Step, key.TxId);
     if (!IsMvccEnabled() || rowVersion < LowWatermark)
-        db.RemoveRowVersions(localTableId, rowVersion, rowVersion.Next());
+        db.RemoveRowVersions(localTableId, rowVersion, rowVersion.Next()); 
 }
 
 bool TSnapshotManager::CleanupRemovedSnapshots(NTable::TDatabase& db) {
@@ -509,7 +509,7 @@ bool TSnapshotManager::CleanupRemovedSnapshots(NTable::TDatabase& db) {
     return removed;
 }
 
-void TSnapshotManager::InitSnapshotExpireTime(const TSnapshotKey& key, TInstant now) {
+void TSnapshotManager::InitSnapshotExpireTime(const TSnapshotKey& key, TInstant now) { 
     auto it = Snapshots.find(key);
     if (it != Snapshots.end() &&
         it->second.HasFlags(TSnapshot::FlagTimeout) &&
@@ -533,15 +533,15 @@ bool TSnapshotManager::RefreshSnapshotExpireTime(const TSnapshotKey& key, TInsta
     return false;
 }
 
-TDuration TSnapshotManager::CleanupTimeout() const {
-    TInstant now = NActors::TActivationContext::Now();
+TDuration TSnapshotManager::CleanupTimeout() const { 
+    TInstant now = NActors::TActivationContext::Now(); 
 
-    TDuration snapshotTimeout = TDuration::Max();
-    TDuration mvccGcTimeout = TDuration::Max();
-
-    if (auto* snapshot = ExpireQueue.Top())
-        snapshotTimeout = snapshot->ExpireTime - now;
-
+    TDuration snapshotTimeout = TDuration::Max(); 
+    TDuration mvccGcTimeout = TDuration::Max(); 
+ 
+    if (auto* snapshot = ExpireQueue.Top()) 
+        snapshotTimeout = snapshot->ExpireTime - now; 
+ 
     if (IsMvccEnabled()) {
         if (LowWatermark == CompleteEdge) {
             mvccGcTimeout = GetCleanupSnapshotPeriod();
@@ -557,9 +557,9 @@ TDuration TSnapshotManager::CleanupTimeout() const {
                 }
             }
         }
-    }
-
-    return Min(snapshotTimeout, mvccGcTimeout);
+    } 
+ 
+    return Min(snapshotTimeout, mvccGcTimeout); 
 }
 
 bool TSnapshotManager::HasExpiringSnapshots() const {
@@ -583,24 +583,24 @@ bool TSnapshotManager::RemoveExpiredSnapshots(NTable::TDatabase& db, TInstant no
     }
 
     if (!IsMvccEnabled())
-        return removed;
-
-    ui64 keepSnapshotTimeout = GetKeepSnapshotTimeout();
-    TRowVersion proposed = TRowVersion(Max(now.MilliSeconds(), keepSnapshotTimeout) - keepSnapshotTimeout, 0);
-    TRowVersion leastPlanned = TRowVersion::Max();
-    if (auto it = Self->Pipeline.GetPlan().begin(); it != Self->Pipeline.GetPlan().end())
-        leastPlanned = TRowVersion(it->Step, it->TxId);
-
-    // holds current snapshot operations
-    TRowVersion leastAcquired = TRowVersion::Max();
-    for (auto &it : Self->Pipeline.GetImmediateOps()) {
-        if (it.second->IsMvccSnapshotRead())
+        return removed; 
+ 
+    ui64 keepSnapshotTimeout = GetKeepSnapshotTimeout(); 
+    TRowVersion proposed = TRowVersion(Max(now.MilliSeconds(), keepSnapshotTimeout) - keepSnapshotTimeout, 0); 
+    TRowVersion leastPlanned = TRowVersion::Max(); 
+    if (auto it = Self->Pipeline.GetPlan().begin(); it != Self->Pipeline.GetPlan().end()) 
+        leastPlanned = TRowVersion(it->Step, it->TxId); 
+ 
+    // holds current snapshot operations 
+    TRowVersion leastAcquired = TRowVersion::Max(); 
+    for (auto &it : Self->Pipeline.GetImmediateOps()) { 
+        if (it.second->IsMvccSnapshotRead()) 
             leastAcquired = Min(leastAcquired, it.second->GetMvccSnapshot());
-    }
-
-    removed |= AdvanceWatermark(db, Min(proposed, leastPlanned, leastAcquired, CompleteEdge));
+    } 
+ 
+    removed |= AdvanceWatermark(db, Min(proposed, leastPlanned, leastAcquired, CompleteEdge)); 
     LastAdvanceWatermark = NActors::TActivationContext::Monotonic();
-
+ 
     return removed;
 }
 

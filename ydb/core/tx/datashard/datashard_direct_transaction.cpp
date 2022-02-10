@@ -31,12 +31,12 @@ void TDirectTransaction::BuildExecutionPlan(bool loaded)
 }
 
 bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
-    auto [readVersion, writeVersion] = self->GetReadWriteVersions();
-    if (!Impl->Execute(self, txc, readVersion, writeVersion))
-        return false;
-
+    auto [readVersion, writeVersion] = self->GetReadWriteVersions(); 
+    if (!Impl->Execute(self, txc, readVersion, writeVersion)) 
+        return false; 
+ 
     self->PromoteCompleteEdge(writeVersion.Step, txc);
-    return true;
+    return true; 
 }
 
 void TDirectTransaction::SendResult(TDataShard* self, const TActorContext& ctx) {

@@ -428,15 +428,15 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TConfigsCacheInitializer : public IKikimrServicesInitializer {
-private:
-    TString PathToConfigCacheFile;
-public:
-    TConfigsCacheInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
+class TConfigsCacheInitializer : public IKikimrServicesInitializer { 
+private: 
+    TString PathToConfigCacheFile; 
+public: 
+    TConfigsCacheInitializer(const TKikimrRunConfig& runConfig); 
+ 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override; 
+}; 
+ 
 class TTabletInfoInitializer : public IKikimrServicesInitializer {
 public:
     TTabletInfoInitializer(const TKikimrRunConfig& runConfig);

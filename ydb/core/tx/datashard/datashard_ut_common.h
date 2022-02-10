@@ -51,7 +51,7 @@ public:
         bool DelayReadSet;
         bool DelayData;
         bool RebootOnDelay;
-        std::optional<bool> Mvcc;
+        std::optional<bool> Mvcc; 
         ui64 ExecutorCacheSize;
 
         TOptions(ui64 firstStep = 0)
@@ -66,7 +66,7 @@ public:
 
         void EnableOutOfOrder(ui32 num = 8) { NumActiveTx = num; }
         void EnableSoftUpdates() { SoftUpdates = true; }
-        void EnableMvcc(std::optional<bool> enabled = {true}) { Mvcc = enabled; }
+        void EnableMvcc(std::optional<bool> enabled = {true}) { Mvcc = enabled; } 
 
         TString PartConfig() const {
             TString pipelineConfig = Sprintf(R"(PipelineConfig {
@@ -82,7 +82,7 @@ public:
             return Sprintf(R"(PartitionConfig {
                 %s
                 %s
-            })", cacheSize.data(), pipelineConfig.data());
+            })", cacheSize.data(), pipelineConfig.data()); 
         }
     };
 
@@ -98,7 +98,7 @@ public:
     TTester(ESchema schema, const TString& dispatchName, std::function<void (TTestActorRuntime&)> setup,
             bool& activeZone, const TOptions& opts = TOptions());
 
-    static void Setup(TTestActorRuntime& runtime, const TOptions& opts = TOptions());
+    static void Setup(TTestActorRuntime& runtime, const TOptions& opts = TOptions()); 
 
 private:
     ESchema Schema;
@@ -422,21 +422,21 @@ struct TShardedTableOptions {
 #undef TABLE_OPTION_IMPL
 };
 
-#define Y_UNIT_TEST_WITH_MVCC_IMPL(N, OPT)                                                                         \
-    template<bool OPT> void N(NUnitTest::TTestContext&);                                                           \
-    struct TTestRegistration##N {                                                                                  \
-        TTestRegistration##N() {                                                                                   \
-            TCurrentTest::AddTest(#N, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false>), false);          \
-            TCurrentTest::AddTest("Mvcc" #N, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true>), false);    \
-        }                                                                                                          \
-    };                                                                                                             \
-    static TTestRegistration##N testRegistration##N;                                                               \
-    template<bool OPT>                                                                                             \
-    void N(NUnitTest::TTestContext&)
-
-#define Y_UNIT_TEST_WITH_MVCC(N) Y_UNIT_TEST_WITH_MVCC_IMPL(N, UseMvcc)
-#define WithMvcc UseMvcc
-
+#define Y_UNIT_TEST_WITH_MVCC_IMPL(N, OPT)                                                                         \ 
+    template<bool OPT> void N(NUnitTest::TTestContext&);                                                           \ 
+    struct TTestRegistration##N {                                                                                  \ 
+        TTestRegistration##N() {                                                                                   \ 
+            TCurrentTest::AddTest(#N, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false>), false);          \ 
+            TCurrentTest::AddTest("Mvcc" #N, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true>), false);    \ 
+        }                                                                                                          \ 
+    };                                                                                                             \ 
+    static TTestRegistration##N testRegistration##N;                                                               \ 
+    template<bool OPT>                                                                                             \ 
+    void N(NUnitTest::TTestContext&) 
+ 
+#define Y_UNIT_TEST_WITH_MVCC(N) Y_UNIT_TEST_WITH_MVCC_IMPL(N, UseMvcc) 
+#define WithMvcc UseMvcc 
+ 
 #define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
     template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
     struct TTestRegistration##N {                                                                                                    \

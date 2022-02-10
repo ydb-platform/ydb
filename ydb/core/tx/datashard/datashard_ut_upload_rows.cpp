@@ -124,11 +124,11 @@ static void DoUploadRows(
 
 Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadRows) {
+    Y_UNIT_TEST_WITH_MVCC(TestUploadRows) { 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvcc(WithMvcc) 
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -139,7 +139,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 4, false);
+        CreateShardedTable(server, sender, "/Root", "table-1", 4, false); 
 
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::SUCCESS);
 
@@ -148,11 +148,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::INT32, Ydb::StatusIds::SCHEME_ERROR);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadRowsDropColumnRace) {
+    Y_UNIT_TEST_WITH_MVCC(TestUploadRowsDropColumnRace) { 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvcc(WithMvcc) 
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 4, false);
+        CreateShardedTable(server, sender, "/Root", "table-1", 4, false); 
 
         auto waitFor = [&](const auto& condition, const TString& description) {
             if (!condition()) {
@@ -207,11 +207,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoWaitUploadTestRows(server, sender, Ydb::StatusIds::SCHEME_ERROR);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadRowsLocks) {
+    Y_UNIT_TEST_WITH_MVCC(TestUploadRowsLocks) { 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvcc(WithMvcc) 
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -222,7 +222,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         InitRoot(server, sender);
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false); 
 
         // Upsert some initial values
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
@@ -260,11 +260,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         }
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRows) {
+    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRows) { 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvcc(WithMvcc) 
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         auto policy = NLocalDb::CreateDefaultUserTablePolicy();
         policy->KeepEraseMarkers = true;
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get());
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get()); 
 
         // Apply some blind operations on an incomplete table
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
@@ -325,11 +325,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
                 "key = 10, value = (empty maybe)\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowData) {
+    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowData) { 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvcc(WithMvcc) 
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -344,7 +344,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         auto policy = NLocalDb::CreateDefaultUserTablePolicy();
         policy->KeepEraseMarkers = true;
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled); 
 
         // Apply some blind operations on an incomplete table
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
@@ -406,11 +406,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
                 "key = 10, value = (empty maybe)\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowDataSplitThenPublish) {
+    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowDataSplitThenPublish) { 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvcc(WithMvcc) 
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -425,7 +425,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         auto policy = NLocalDb::CreateDefaultUserTablePolicy();
         policy->KeepEraseMarkers = true;
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled); 
 
         // Apply some blind operations on an incomplete table
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
@@ -505,11 +505,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
                 "key = 10, value = (empty maybe)\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowDataPublishThenSplit) {
+    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowDataPublishThenSplit) { 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvcc(WithMvcc) 
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -524,7 +524,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         auto policy = NLocalDb::CreateDefaultUserTablePolicy();
         policy->KeepEraseMarkers = true;
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled); 
 
         // Apply some blind operations on an incomplete table
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
@@ -607,11 +607,11 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
                 "key = 10, value = (empty maybe)\n");
     }
 
-    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowDataAlterSplitThenPublish) {
+    Y_UNIT_TEST_WITH_MVCC(TestUploadShadowRowsShadowDataAlterSplitThenPublish) { 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvcc(WithMvcc) 
             .SetUseRealThreads(false);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
@@ -626,7 +626,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         auto policy = NLocalDb::CreateDefaultUserTablePolicy();
         policy->KeepEraseMarkers = true;
 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled); 
 
         // Apply some blind operations on an incomplete table
         ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");

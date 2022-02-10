@@ -114,7 +114,7 @@ public:
 
     // tx activity
 
-    TOperation::TPtr GetNextPlannedOp(ui64 step, ui64 txId) const;
+    TOperation::TPtr GetNextPlannedOp(ui64 step, ui64 txId) const; 
     TOperation::TPtr GetNextActiveOp(bool dryRun);
     bool IsReadyOp(TOperation::TPtr op);
 
@@ -327,22 +327,22 @@ public:
     void ActivateWaitingSchemeOps(const TActorContext& ctx) const;
     void MaybeActivateWaitingSchemeOps(const TActorContext& ctx) const;
 
-    ui64 WaitingTxs() const { return WaitingDataTxOps.size(); }
-    bool AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
+    ui64 WaitingTxs() const { return WaitingDataTxOps.size(); } 
+    bool AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx); 
     void ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx);
-    void ActivateWaitingTxOps(const TActorContext& ctx);
-
-    TRowVersion GetReadEdge() const;
+    void ActivateWaitingTxOps(const TActorContext& ctx); 
+ 
+    TRowVersion GetReadEdge() const; 
     TRowVersion GetUnreadableEdge() const;
-
+ 
     void AddCompletingOp(const TOperation::TPtr& op);
     void RemoveCompletingOp(const TOperation::TPtr& op);
     TOperation::TPtr FindCompletingOp(ui64 txId) const;
 
-    void AddCommittingOp(const TOperation::TPtr& op);
-    void RemoveCommittingOp(const TOperation::TPtr& op);
-    bool WaitCompletion(const TOperation::TPtr& op) const;
-
+    void AddCommittingOp(const TOperation::TPtr& op); 
+    void RemoveCommittingOp(const TOperation::TPtr& op); 
+    bool WaitCompletion(const TOperation::TPtr& op) const; 
+ 
     /**
      * Marks all active planned transactions before this version as logically "complete"
      */
@@ -359,66 +359,66 @@ private:
         TVector<std::pair<EExecutionUnitKind, TExecutionProfile::TUnitProfile>> UnitProfiles;
     };
 
-    class TCommittingDataTxOps {
-    private:
-        struct TItem {
-            ui64 Step;
-            ui64 TxId;
-            mutable ui32 Counter;
-
-            TItem(const TRowVersion& from)
-                : Step(from.Step)
-                , TxId(from.TxId)
-                , Counter(1u)
-            {}
-
-            friend constexpr bool operator<(const TItem& a, const TItem& b) {
-                return a.Step < b.Step || (a.Step == b.Step && a.TxId < b.TxId);
-            }
-
-            friend constexpr bool operator<(const TItem& a, const TRowVersion& b) {
-                return a.Step < b.Step || (a.Step == b.Step && a.TxId < b.TxId);
-            }
-        };
-
-        using TItemsSet = TSet<TItem>;
-        using TTxIdMap = THashMap<ui64, TItemsSet::iterator>;
-    public:
-        inline void Add(ui64 txId, TRowVersion version) {
-            auto res = ItemsSet.emplace(version);
-            if (!res.second)
-                res.first->Counter += 1;
-            TxIdMap.emplace(txId, res.first);
-        }
-
-        inline void Add(TRowVersion version) {
-            auto res = ItemsSet.emplace(version);
-            if (!res.second)
-                res.first->Counter += 1;
-        }
-
-        inline void Remove(ui64 txId) {
-            if (auto it = TxIdMap.find(txId); it != TxIdMap.end()) {
-                if (--it->second->Counter == 0)
-                    ItemsSet.erase(it->second);
-                TxIdMap.erase(it);
-            }
-        }
-
-        inline void Remove(TRowVersion version) {
-            if (auto it = ItemsSet.find(version); it != ItemsSet.end() && --it->Counter == 0)
-                ItemsSet.erase(it);
-        }
-
-        inline bool HasOpsBelow(TRowVersion upperBound) const {
-            return bool(ItemsSet) && *ItemsSet.begin() < upperBound;
-        }
-
-    private:
-        TTxIdMap TxIdMap;
-        TItemsSet ItemsSet;
-    };
-
+    class TCommittingDataTxOps { 
+    private: 
+        struct TItem { 
+            ui64 Step; 
+            ui64 TxId; 
+            mutable ui32 Counter; 
+ 
+            TItem(const TRowVersion& from) 
+                : Step(from.Step) 
+                , TxId(from.TxId) 
+                , Counter(1u) 
+            {} 
+ 
+            friend constexpr bool operator<(const TItem& a, const TItem& b) { 
+                return a.Step < b.Step || (a.Step == b.Step && a.TxId < b.TxId); 
+            } 
+ 
+            friend constexpr bool operator<(const TItem& a, const TRowVersion& b) { 
+                return a.Step < b.Step || (a.Step == b.Step && a.TxId < b.TxId); 
+            } 
+        }; 
+ 
+        using TItemsSet = TSet<TItem>; 
+        using TTxIdMap = THashMap<ui64, TItemsSet::iterator>; 
+    public: 
+        inline void Add(ui64 txId, TRowVersion version) { 
+            auto res = ItemsSet.emplace(version); 
+            if (!res.second) 
+                res.first->Counter += 1; 
+            TxIdMap.emplace(txId, res.first); 
+        } 
+ 
+        inline void Add(TRowVersion version) { 
+            auto res = ItemsSet.emplace(version); 
+            if (!res.second) 
+                res.first->Counter += 1; 
+        } 
+ 
+        inline void Remove(ui64 txId) { 
+            if (auto it = TxIdMap.find(txId); it != TxIdMap.end()) { 
+                if (--it->second->Counter == 0) 
+                    ItemsSet.erase(it->second); 
+                TxIdMap.erase(it); 
+            } 
+        } 
+ 
+        inline void Remove(TRowVersion version) { 
+            if (auto it = ItemsSet.find(version); it != ItemsSet.end() && --it->Counter == 0) 
+                ItemsSet.erase(it); 
+        } 
+ 
+        inline bool HasOpsBelow(TRowVersion upperBound) const { 
+            return bool(ItemsSet) && *ItemsSet.begin() < upperBound; 
+        } 
+ 
+    private: 
+        TTxIdMap TxIdMap; 
+        TItemsSet ItemsSet; 
+    }; 
+ 
     using TSortedOps = TMap<TStepOrder, TOperation::TPtr>;
 
     ///
@@ -456,9 +456,9 @@ private:
     TWaitingSchemeOpsOrder WaitingSchemeOpsOrder;
     TWaitingSchemeOps WaitingSchemeOps;
 
-    TMultiMap<TRowVersion, TEvDataShard::TEvProposeTransaction::TPtr> WaitingDataTxOps;
-    TCommittingDataTxOps CommittingOps;
-
+    TMultiMap<TRowVersion, TEvDataShard::TEvProposeTransaction::TPtr> WaitingDataTxOps; 
+    TCommittingDataTxOps CommittingOps; 
+ 
     THashMap<ui64, TOperation::TPtr> CompletingOps;
 
     bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId);

@@ -784,7 +784,7 @@ void TTenantTestRuntime::Setup(bool createTenantPools)
         SetLogPriority(NKikimrServices::CMS_CONFIGS, NLog::PRI_TRACE);
         SetLogPriority(NKikimrServices::CMS_TENANTS, NLog::PRI_TRACE);
         SetLogPriority(NKikimrServices::CONFIGS_DISPATCHER, NLog::PRI_TRACE);
-        SetLogPriority(NKikimrServices::CONFIGS_CACHE, NLog::PRI_TRACE);
+        SetLogPriority(NKikimrServices::CONFIGS_CACHE, NLog::PRI_TRACE); 
         SetLogPriority(NKikimrServices::HIVE, NLog::PRI_DEBUG);
         SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG);
         SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);

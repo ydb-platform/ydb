@@ -254,8 +254,8 @@ namespace NTable {
                 }
             }
 
-            InvisibleRowSkips++;
-
+            InvisibleRowSkips++; 
+ 
             while ((chain = chain->Next)) {
                 if (chain->RowVersion.Step != Max<ui64>()) {
                     if (chain->RowVersion <= rowVersion) {
@@ -352,7 +352,7 @@ namespace NTable {
         const TIntrusiveConstPtr<TKeyNulls> Nulls;
         const TRemap* Remap = nullptr;
         IPages * const Env = nullptr;
-        ui64 InvisibleRowSkips = 0;
+        ui64 InvisibleRowSkips = 0; 
 
     private:
         NMem::TTreeIterator RowIt;

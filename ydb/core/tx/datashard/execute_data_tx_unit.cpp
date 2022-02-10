@@ -169,7 +169,7 @@ EExecutionStatus TExecuteDataTxUnit::Execute(TOperation::TPtr op,
 }
 
 void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
-                                       TTransactionContext& txc,
+                                       TTransactionContext& txc, 
                                        const TActorContext& ctx) {
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
     IEngineFlat* engine = tx->GetDataTx()->GetEngine();
@@ -177,10 +177,10 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     DataShard.ReleaseCache(*tx);
     tx->GetDataTx()->ResetCounters();
 
-    auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
-    tx->GetDataTx()->SetReadVersion(readVersion);
-    tx->GetDataTx()->SetWriteVersion(writeVersion);
-
+    auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx); 
+    tx->GetDataTx()->SetReadVersion(readVersion); 
+    tx->GetDataTx()->SetWriteVersion(writeVersion); 
+ 
     // TODO: is it required to always prepare outgoing read sets?
     if (!engine->IsAfterOutgoingReadsetsExtracted()) {
         engine->PrepareOutgoingReadsets();
@@ -236,8 +236,8 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
         result->SetExecutionError(ConvertErrCode(engineResult), engine->GetErrors());
     } else {
         result->SetTxResult(engine->GetShardReply(DataShard.TabletID()));
-
-        if (op->IsImmediate() && !op->IsReadOnly())
+ 
+        if (op->IsImmediate() && !op->IsReadOnly()) 
             DataShard.PromoteCompleteEdge(writeVersion.Step, txc);
 
         if (auto changes = tx->GetDataTx()->GetCollectedChanges()) {
@@ -264,12 +264,12 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     }
 
     if (counters.InvisibleRowSkips) {
-        DataShard.SysLocksTable().BreakSetLocks(op->LockTxId());
+        DataShard.SysLocksTable().BreakSetLocks(op->LockTxId()); 
     }
-
+ 
     AddLocksToResult(op);
-
-    Pipeline.AddCommittingOp(op);
+ 
+    Pipeline.AddCommittingOp(op); 
 }
 
 void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op) {

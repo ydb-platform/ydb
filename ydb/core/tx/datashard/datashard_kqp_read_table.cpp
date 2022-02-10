@@ -221,10 +221,10 @@ protected:
     virtual EFetchResult ReadValue(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const = 0;
 
     EFetchResult ReadNext(NUdf::TUnboxedValue* const* output) const {
-        bool breakLocks = false;
+        bool breakLocks = false; 
         while (Iterator->Next(NTable::ENext::Data) == NTable::EReady::Data) {
             if (!breakLocks && (breakLocks = bool(Iterator->Stats.InvisibleRowSkips))) {
-                ComputeCtx.BreakSetLocks();
+                ComputeCtx.BreakSetLocks(); 
             }
             TDbTupleRef rowKey = Iterator->GetKey();
 
@@ -293,12 +293,12 @@ protected:
         }
 
         if (!breakLocks && bool(Iterator->Stats.InvisibleRowSkips)) {
-            ComputeCtx.BreakSetLocks();
+            ComputeCtx.BreakSetLocks(); 
         }
-
+ 
         auto deletedRowSkips = std::exchange(Iterator->Stats.DeletedRowSkips, 0);
         auto invisibleRowSkips = std::exchange(Iterator->Stats.InvisibleRowSkips, 0);
-
+ 
         ShardTableStats.SelectRangeDeletedRowSkips += deletedRowSkips;
         ShardTableStats.InvisibleRowSkips += invisibleRowSkips;
 

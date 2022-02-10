@@ -75,7 +75,7 @@ EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
         }
     }
 
-    if (!op->HasResultSentFlag() && (op->IsDirty() || !Pipeline.WaitCompletion(op)))
+    if (!op->HasResultSentFlag() && (op->IsDirty() || !Pipeline.WaitCompletion(op))) 
         CompleteRequest(op, ctx);
 
     if (!DataShard.IsFollower())
@@ -113,7 +113,7 @@ void TFinishProposeUnit::Complete(TOperation::TPtr op,
 
     Pipeline.ForgetUnproposedTx(op->GetTxId());
     if (op->IsImmediate()) {
-        Pipeline.RemoveCommittingOp(op);
+        Pipeline.RemoveCommittingOp(op); 
         Pipeline.RemoveActiveOp(op);
 
         DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
@@ -149,7 +149,7 @@ void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
         DataShard.IncCounter(COUNTER_PREPARE_SUCCESS_COMPLETE_LATENCY, duration);
     } else {
         DataShard.CheckSplitCanStart(ctx);
-        DataShard.CheckMvccStateChangeCanStart(ctx);
+        DataShard.CheckMvccStateChangeCanStart(ctx); 
     }
 
     if (op->HasNeedDiagnosticsFlag())

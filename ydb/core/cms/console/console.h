@@ -37,9 +37,9 @@ struct TEvConsole {
         EvCheckConfigUpdatesRequest,
         EvListConfigValidatorsRequest,
         EvToggleConfigValidatorRequest,
-        EvConfigSubscriptionRequest,
-        EvConfigSubscriptionCanceled,
-        EvConfigSubscriptionNotification,
+        EvConfigSubscriptionRequest, 
+        EvConfigSubscriptionCanceled, 
+        EvConfigSubscriptionNotification, 
 
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
@@ -67,8 +67,8 @@ struct TEvConsole {
         EvCheckConfigUpdatesResponse,
         EvListConfigValidatorsResponse,
         EvToggleConfigValidatorResponse,
-        EvConfigSubscriptionResponse,
-        EvConfigSubscriptionError,
+        EvConfigSubscriptionResponse, 
+        EvConfigSubscriptionError, 
 
         EvEnd
     };
@@ -188,58 +188,58 @@ struct TEvConsole {
         }
     };
 
-    struct TEvConfigSubscriptionRequest : public TEventShortDebugPB<TEvConfigSubscriptionRequest, NKikimrConsole::TConfigSubscriptionRequest, EvConfigSubscriptionRequest> {};
-
-    struct TEvConfigSubscriptionResponse : public TEventShortDebugPB<TEvConfigSubscriptionResponse, NKikimrConsole::TConfigSubscriptionResponse, EvConfigSubscriptionResponse> {
-        TEvConfigSubscriptionResponse() = default;
-
-        TEvConfigSubscriptionResponse(ui64 generation, Ydb::StatusIds::StatusCode code, TString reason = TString()) {
-            Record.SetGeneration(generation);
-            Record.MutableStatus()->SetCode(code);
-            if (reason)
-                Record.MutableStatus()->SetReason(std::move(reason));
-        }
-    };
-
-    struct TEvConfigSubscriptionError : public TEventShortDebugPB<TEvConfigSubscriptionError, NKikimrConsole::TConfigSubscriptionError, EvConfigSubscriptionError> {
-        TEvConfigSubscriptionError() = default;
-
-        TEvConfigSubscriptionError(Ydb::StatusIds::StatusCode code, TString reason)
-        {
-            Record.SetCode(code);
-            Record.SetReason(std::move(reason));
-        }
-    };
-
-    struct TEvConfigSubscriptionCanceled : public TEventShortDebugPB<TEvConfigSubscriptionCanceled, NKikimrConsole::TConfigSubscriptionCanceled, EvConfigSubscriptionCanceled> {
-        TEvConfigSubscriptionCanceled() = default;
-
-        explicit TEvConfigSubscriptionCanceled(ui64 generation)
-        {
-            Record.SetGeneration(generation);
-        }
-    };
-
-    struct TEvConfigSubscriptionNotification : public TEventShortDebugPB<TEvConfigSubscriptionNotification, NKikimrConsole::TConfigSubscriptionNotification, EvConfigSubscriptionNotification> {
-        TEvConfigSubscriptionNotification() = default;
-
-        TEvConfigSubscriptionNotification(ui64 generation, NKikimrConfig::TAppConfig &&config, const THashSet<ui32> &affectedKinds)
-        {
-            Record.SetGeneration(generation);
-            Record.MutableConfig()->Swap(&config);
-            for (ui32 kind : affectedKinds)
-                Record.AddAffectedKinds(kind);
-        }
-
-        TEvConfigSubscriptionNotification(ui64 generation, const NKikimrConfig::TAppConfig &config, const THashSet<ui32> &affectedKinds)
-        {
-            Record.SetGeneration(generation);
-            Record.MutableConfig()->CopyFrom(config);
-            for (ui32 kind : affectedKinds)
-                Record.AddAffectedKinds(kind);
-        }
-    };
-
+    struct TEvConfigSubscriptionRequest : public TEventShortDebugPB<TEvConfigSubscriptionRequest, NKikimrConsole::TConfigSubscriptionRequest, EvConfigSubscriptionRequest> {}; 
+ 
+    struct TEvConfigSubscriptionResponse : public TEventShortDebugPB<TEvConfigSubscriptionResponse, NKikimrConsole::TConfigSubscriptionResponse, EvConfigSubscriptionResponse> { 
+        TEvConfigSubscriptionResponse() = default; 
+ 
+        TEvConfigSubscriptionResponse(ui64 generation, Ydb::StatusIds::StatusCode code, TString reason = TString()) { 
+            Record.SetGeneration(generation); 
+            Record.MutableStatus()->SetCode(code); 
+            if (reason) 
+                Record.MutableStatus()->SetReason(std::move(reason)); 
+        } 
+    }; 
+ 
+    struct TEvConfigSubscriptionError : public TEventShortDebugPB<TEvConfigSubscriptionError, NKikimrConsole::TConfigSubscriptionError, EvConfigSubscriptionError> { 
+        TEvConfigSubscriptionError() = default; 
+ 
+        TEvConfigSubscriptionError(Ydb::StatusIds::StatusCode code, TString reason) 
+        { 
+            Record.SetCode(code); 
+            Record.SetReason(std::move(reason)); 
+        } 
+    }; 
+ 
+    struct TEvConfigSubscriptionCanceled : public TEventShortDebugPB<TEvConfigSubscriptionCanceled, NKikimrConsole::TConfigSubscriptionCanceled, EvConfigSubscriptionCanceled> { 
+        TEvConfigSubscriptionCanceled() = default; 
+ 
+        explicit TEvConfigSubscriptionCanceled(ui64 generation) 
+        { 
+            Record.SetGeneration(generation); 
+        } 
+    }; 
+ 
+    struct TEvConfigSubscriptionNotification : public TEventShortDebugPB<TEvConfigSubscriptionNotification, NKikimrConsole::TConfigSubscriptionNotification, EvConfigSubscriptionNotification> { 
+        TEvConfigSubscriptionNotification() = default; 
+ 
+        TEvConfigSubscriptionNotification(ui64 generation, NKikimrConfig::TAppConfig &&config, const THashSet<ui32> &affectedKinds) 
+        { 
+            Record.SetGeneration(generation); 
+            Record.MutableConfig()->Swap(&config); 
+            for (ui32 kind : affectedKinds) 
+                Record.AddAffectedKinds(kind); 
+        } 
+ 
+        TEvConfigSubscriptionNotification(ui64 generation, const NKikimrConfig::TAppConfig &config, const THashSet<ui32> &affectedKinds) 
+        { 
+            Record.SetGeneration(generation); 
+            Record.MutableConfig()->CopyFrom(config); 
+            for (ui32 kind : affectedKinds) 
+                Record.AddAffectedKinds(kind); 
+        } 
+    }; 
+ 
     /**
      * If operation is unknown then TEvNotifyOperationCompletionResponse
      * is sent with NOT_FOUND status error.

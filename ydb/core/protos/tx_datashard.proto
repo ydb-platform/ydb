@@ -282,12 +282,12 @@ message TSnapshotTransferReadSet {
     optional bytes BorrowedSnapshot = 1;
     optional uint64 MinWriteVersionStep = 2;
     optional uint64 MinWriteVersionTxId = 3;
-    optional uint64 MvccCompleteEdgeStep = 4;
-    optional uint64 MvccCompleteEdgeTxId = 5;
-    optional uint64 MvccIncompleteEdgeStep = 6;
-    optional uint64 MvccIncompleteEdgeTxId = 7;
-    optional uint64 MvccLowWatermarkStep = 8;
-    optional uint64 MvccLowWatermarkTxId = 9;
+    optional uint64 MvccCompleteEdgeStep = 4; 
+    optional uint64 MvccCompleteEdgeTxId = 5; 
+    optional uint64 MvccIncompleteEdgeStep = 6; 
+    optional uint64 MvccIncompleteEdgeTxId = 7; 
+    optional uint64 MvccLowWatermarkStep = 8; 
+    optional uint64 MvccLowWatermarkTxId = 9; 
 }
 
 message TSnapshotTransferInfo {
@@ -464,11 +464,11 @@ enum ETransactionKind {
     // kinds. See NKikimr::NDataShard::EOperationKind.
 }
 
-message TMvccSnapshot {
-    optional uint64 Step = 10;
-    optional uint64 TxId = 11;
-}
-
+message TMvccSnapshot { 
+    optional uint64 Step = 10; 
+    optional uint64 TxId = 11; 
+} 
+ 
 message TEvProposeTransaction {
     optional ETransactionKind TxKind = 1;
     optional NActorsProto.TActorId Source = 2;
@@ -479,7 +479,7 @@ message TEvProposeTransaction {
     optional uint64 SchemeShardId = 7;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 8;
     optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
-    optional TMvccSnapshot MvccSnapshot = 10;
+    optional TMvccSnapshot MvccSnapshot = 10; 
 }
 
 message TEvCancelTransactionProposal {
@@ -676,12 +676,12 @@ message TEvSplitTransferSnapshot {
     optional uint64 MinWriteVersionStep = 5;
     optional uint64 MinWriteVersionTxId = 6;
     repeated TPersistentSnapshot PersistentSnapshots = 7;
-    optional uint64 MvccCompleteEdgeStep = 8;
-    optional uint64 MvccCompleteEdgeTxId = 9;
-    optional uint64 MvccIncompleteEdgeStep = 10;
-    optional uint64 MvccIncompleteEdgeTxId = 11;
-    optional uint64 MvccLowWatermarkStep = 12;
-    optional uint64 MvccLowWatermarkTxId = 13;
+    optional uint64 MvccCompleteEdgeStep = 8; 
+    optional uint64 MvccCompleteEdgeTxId = 9; 
+    optional uint64 MvccIncompleteEdgeStep = 10; 
+    optional uint64 MvccIncompleteEdgeTxId = 11; 
+    optional uint64 MvccLowWatermarkStep = 12; 
+    optional uint64 MvccLowWatermarkTxId = 13; 
     optional bool WaitForActivation = 14;
 
     // Generation of the sender tablet

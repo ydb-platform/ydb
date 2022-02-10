@@ -150,8 +150,8 @@ private:
             HFuncTraced(TEvInterconnect::TEvNodesInfo, Handle);
             HFuncTraced(TEvPrivate::TEvCleanupSubscriptions, Handle);
             HFuncTraced(TEvPrivate::TEvStateLoaded, Handle);
-            FFunc(TEvConsole::EvConfigSubscriptionRequest, ForwardToConfigsProvider);
-            FFunc(TEvConsole::EvConfigSubscriptionCanceled, ForwardToConfigsProvider);
+            FFunc(TEvConsole::EvConfigSubscriptionRequest, ForwardToConfigsProvider); 
+            FFunc(TEvConsole::EvConfigSubscriptionCanceled, ForwardToConfigsProvider); 
 
         default:
             Y_FAIL("TConfigsManager::StateWork unexpected event type: %" PRIx32 " event: %s",

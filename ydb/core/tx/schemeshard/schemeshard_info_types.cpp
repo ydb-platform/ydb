@@ -565,10 +565,10 @@ bool TPartitionConfigMerger::ApplyChanges(
         result.SetShadowData(changes.GetShadowData());
     }
 
-    if (changes.HasKeepSnapshotTimeout()) {
-        result.SetKeepSnapshotTimeout(changes.GetKeepSnapshotTimeout());
-    }
-
+    if (changes.HasKeepSnapshotTimeout()) { 
+        result.SetKeepSnapshotTimeout(changes.GetKeepSnapshotTimeout()); 
+    } 
+ 
     return true;
 }
 
@@ -1181,9 +1181,9 @@ void TTableInfo::FinishAlter() {
             partitionConfig.ClearColumnFamilies();
             partitionConfig.AddColumnFamilies()->CopyFrom(*newConfig.GetColumnFamilies().rbegin());
         }
-        if (newConfig.HasKeepSnapshotTimeout()) {
-            partitionConfig.SetKeepSnapshotTimeout(newConfig.GetKeepSnapshotTimeout());
-        }
+        if (newConfig.HasKeepSnapshotTimeout()) { 
+            partitionConfig.SetKeepSnapshotTimeout(newConfig.GetKeepSnapshotTimeout()); 
+        } 
     }
 
     // Avoid ShadowData==false in the resulting config

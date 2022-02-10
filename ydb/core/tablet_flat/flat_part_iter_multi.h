@@ -869,7 +869,7 @@ namespace NTable {
                         return EReady::Data;
                     }
                     SkipEraseVersion = true;
-                    InvisibleRowSkips++;
+                    InvisibleRowSkips++; 
                 }
 
                 TRowVersion current = data->IsVersioned() ? data->GetMinVersion(info) : Part->MinRowVersion;
@@ -878,8 +878,8 @@ namespace NTable {
                     return EReady::Data;
                 }
 
-                InvisibleRowSkips++;
-
+                InvisibleRowSkips++; 
+ 
                 if (!data->HasHistory()) {
                     // There is no history, reset
                     SkipEraseVersion = false;
@@ -1168,7 +1168,7 @@ namespace NTable {
     public:
         const TPart* const Part;
         IPages* const Env;
-        ui64 InvisibleRowSkips = 0;
+        ui64 InvisibleRowSkips = 0; 
 
     private:
         const TPinout Pinout;
@@ -1499,8 +1499,8 @@ namespace NTable {
         {
             Y_VERIFY_DEBUG(CurrentIt);
             auto ready = CurrentIt->SkipToRowVersion(rowVersion, committedTransactions);
-            InvisibleRowSkips += std::exchange(CurrentIt->InvisibleRowSkips, 0);
-            return ready;
+            InvisibleRowSkips += std::exchange(CurrentIt->InvisibleRowSkips, 0); 
+            return ready; 
         }
 
         bool IsDelta() const noexcept
@@ -1584,7 +1584,7 @@ namespace NTable {
         TTagsRef const Tags;
         TIntrusiveConstPtr<TKeyNulls> const Nulls;
         IPages* const Env;
-        ui64 InvisibleRowSkips = 0;
+        ui64 InvisibleRowSkips = 0; 
 
     private:
         TRun::const_iterator Current;

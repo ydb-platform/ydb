@@ -130,7 +130,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
         if (readForTableShadow) {
             rowState.Init(tagsForSelect.size());
 
-            auto ready = txc.DB.Select(localTableId, key, tagsForSelect, rowState, 0 /* readFlags */, readVersion);
+            auto ready = txc.DB.Select(localTableId, key, tagsForSelect, rowState, 0 /* readFlags */, readVersion); 
             if (ready == NTable::EReady::Page) {
                 pageFault = true;
             }

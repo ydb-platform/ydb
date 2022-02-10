@@ -79,9 +79,9 @@ public:
     EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row,
                         ui64 readFlags = 0, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
 
-    EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row, TSelectStats& stats,
-                  ui64 readFlags = 0, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
-
+    EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row, TSelectStats& stats, 
+                  ui64 readFlags = 0, TRowVersion snapshot = TRowVersion::Max()) const noexcept; 
+ 
     bool Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
                         TTagsRef tags, ui64 readFlags, ui64 itemsLimit, ui64 bytesLimit,
                         EDirection direction = EDirection::Forward,

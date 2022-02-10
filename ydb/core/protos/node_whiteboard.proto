@@ -237,11 +237,11 @@ message TEvBSGroupStateResponse {
     optional uint32 ResponseDuration = 3; // filled during collect
 }
 
-enum EConfigState {
-    Consistent = 0;
-    Outdated = 1;
-}
-
+enum EConfigState { 
+    Consistent = 0; 
+    Outdated = 1; 
+} 
+ 
 message TSystemStateInfo {
     message TPoolStats {
         optional string Name = 1;
@@ -285,7 +285,7 @@ message TSystemStateInfo {
     optional string ClusterName = 25;
     optional uint64 MemoryUsed = 26;
     optional uint64 MemoryLimit = 27;
-    optional EConfigState ConfigState = 28 [default = Consistent];
+    optional EConfigState ConfigState = 28 [default = Consistent]; 
     optional uint64 MemoryUsedInAlloc = 29;
     optional double MaxDiskUsage = 30;
     optional NActorsInterconnect.TNodeLocation Location = 31;

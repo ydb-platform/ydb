@@ -288,96 +288,96 @@ public:
     }
 };
 
-class TSubscriptionClientSender : public TActorBootstrapped<TSubscriptionClientSender> {
-    using TBase = TActorBootstrapped<TSubscriptionClientSender>;
+class TSubscriptionClientSender : public TActorBootstrapped<TSubscriptionClientSender> { 
+    using TBase = TActorBootstrapped<TSubscriptionClientSender>; 
+ 
+private: 
+    TInMemorySubscription::TPtr Subscription; 
+    TActorId OwnerId; 
+ 
+    ui64 NextOrder; 
 
-private:
-    TInMemorySubscription::TPtr Subscription;
-    TActorId OwnerId;
-
-    ui64 NextOrder;
-
-public:
-    TSubscriptionClientSender(TInMemorySubscription::TPtr subscription, const TActorId &ownerId)
-        : Subscription(subscription)
-        , OwnerId(ownerId)
-        , NextOrder(1)
-    {
-    }
-
-    void Bootstrap(const TActorContext &ctx) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") send TEvConfigSubscriptionResponse");
-
-        Send(Subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionResponse(Subscription->Generation, Ydb::StatusIds::SUCCESS),
-             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
-        Become(&TThis::StateWork);
-    }
-
-    STFUNC(StateWork) {
-        TRACE_EVENT(NKikimrServices::CMS_CONFIGS);
-
-        switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
-            HFuncTraced(TEvents::TEvUndelivered, Handle);
-            HFuncTraced(TEvInterconnect::TEvNodeDisconnected, Handle);
-            IgnoreFunc(TEvInterconnect::TEvNodeConnected);
-
-            default:
-                Y_FAIL("unexpected event type: %" PRIx32 " event: %s",
-                       ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
-                break;
-        }
-    }
-
-    void Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx)
-    {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") received poison pill, "
-                                                 << "will die.");
-        Die(ctx);
-    }
-
-    void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx)
-    {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") received undelivered notification, "
-                                            << "will disconnect.");
-
-        Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerDisconnected(Subscription));
-        Die(ctx);
-    }
-
-    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &/*ev*/, const TActorContext &ctx)
-    {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") received node disconnected notification, "
-                                                 << "will disconnect.");
-
-        Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerDisconnected(Subscription));
-        Die(ctx);
-    }
-
-    void Handle(NConsole::TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev, const TActorContext& ctx)
-    {
-        TAutoPtr<NConsole::TEvConsole::TEvConfigSubscriptionNotification> notification = ev->Release();
-        notification.Get()->Record.SetOrder(NextOrder++);
-
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") send TEvConfigSubscriptionNotificationRequest: "
-                                                 << notification.Get()->Record.ShortDebugString());
-
-        Send(Subscription->Subscriber, notification.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
-    }
-
-protected:
-    void Die(const TActorContext &ctx) override {
-        Send(TActivationContext::InterconnectProxy(Subscription->Subscriber.NodeId()), new TEvents::TEvUnsubscribe);
-
-        TBase::Die(ctx);
-    }
-};
+public: 
+    TSubscriptionClientSender(TInMemorySubscription::TPtr subscription, const TActorId &ownerId) 
+        : Subscription(subscription) 
+        , OwnerId(ownerId) 
+        , NextOrder(1) 
+    { 
+    } 
+ 
+    void Bootstrap(const TActorContext &ctx) { 
+        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") send TEvConfigSubscriptionResponse"); 
+ 
+        Send(Subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionResponse(Subscription->Generation, Ydb::StatusIds::SUCCESS), 
+             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession); 
+        Become(&TThis::StateWork); 
+    } 
+ 
+    STFUNC(StateWork) { 
+        TRACE_EVENT(NKikimrServices::CMS_CONFIGS); 
+ 
+        switch (ev->GetTypeRewrite()) { 
+            HFuncTraced(TEvConsole::TEvConfigSubscriptionNotification, Handle); 
+            HFuncTraced(TEvents::TEvPoisonPill, Handle); 
+            HFuncTraced(TEvents::TEvUndelivered, Handle); 
+            HFuncTraced(TEvInterconnect::TEvNodeDisconnected, Handle); 
+            IgnoreFunc(TEvInterconnect::TEvNodeConnected); 
+ 
+            default: 
+                Y_FAIL("unexpected event type: %" PRIx32 " event: %s", 
+                       ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?"); 
+                break; 
+        } 
+    } 
+ 
+    void Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx) 
+    { 
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") received poison pill, " 
+                                                 << "will die."); 
+        Die(ctx); 
+    } 
+ 
+    void Handle(TEvents::TEvUndelivered::TPtr &/*ev*/, const TActorContext &ctx) 
+    { 
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") received undelivered notification, " 
+                                            << "will disconnect."); 
+ 
+        Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerDisconnected(Subscription)); 
+        Die(ctx); 
+    } 
+ 
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &/*ev*/, const TActorContext &ctx) 
+    { 
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") received node disconnected notification, " 
+                                                 << "will disconnect."); 
+ 
+        Send(OwnerId, new TConfigsProvider::TEvPrivate::TEvWorkerDisconnected(Subscription)); 
+        Die(ctx); 
+    } 
+ 
+    void Handle(NConsole::TEvConsole::TEvConfigSubscriptionNotification::TPtr &ev, const TActorContext& ctx) 
+    { 
+        TAutoPtr<NConsole::TEvConsole::TEvConfigSubscriptionNotification> notification = ev->Release(); 
+        notification.Get()->Record.SetOrder(NextOrder++); 
+ 
+        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                    "TSubscriptionClientSender(" << Subscription->Subscriber.ToString() << ") send TEvConfigSubscriptionNotificationRequest: " 
+                                                 << notification.Get()->Record.ShortDebugString()); 
+ 
+        Send(Subscription->Subscriber, notification.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession); 
+    } 
+ 
+protected: 
+    void Die(const TActorContext &ctx) override { 
+        Send(TActivationContext::InterconnectProxy(Subscription->Subscriber.NodeId()), new TEvents::TEvUnsubscribe); 
+ 
+        TBase::Die(ctx); 
+    } 
+}; 
 } // anonymous namespace
 
 void TConfigsProvider::Bootstrap(const TActorContext &ctx)
@@ -388,11 +388,11 @@ void TConfigsProvider::Bootstrap(const TActorContext &ctx)
 
 void TConfigsProvider::Die(const TActorContext &ctx)
 {
-    for (auto &it : InMemoryIndex.GetSubscriptions()) {
-        Send(it.second->Subscriber, new TEvConsole::TEvConfigSubscriptionCanceled(it.second->Generation));
-        Send(it.second->Worker, new TEvents::TEvPoisonPill());
-    }
-
+    for (auto &it : InMemoryIndex.GetSubscriptions()) { 
+        Send(it.second->Subscriber, new TEvConsole::TEvConfigSubscriptionCanceled(it.second->Generation)); 
+        Send(it.second->Worker, new TEvents::TEvPoisonPill()); 
+    } 
+ 
     TBase::Die(ctx);
 }
 
@@ -408,14 +408,14 @@ void TConfigsProvider::ApplyConfigModifications(const TConfigModifications &modi
     LOG_TRACE(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider: applying config midifications");
 
     TSubscriptionSet subscriptions;
-    TInMemorySubscriptionSet inMemorySubscriptions;
+    TInMemorySubscriptionSet inMemorySubscriptions; 
 
     for (auto id : modifications.RemovedItems) {
         auto item = ConfigIndex.GetItem(id);
         LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider: remove " << item->ToString());
         ConfigIndex.RemoveItem(id);
         SubscriptionIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, subscriptions);
-        InMemoryIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, inMemorySubscriptions);
+        InMemoryIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, inMemorySubscriptions); 
     }
     for (auto &pr : modifications.ModifiedItems) {
         auto item = ConfigIndex.GetItem(pr.first);
@@ -427,21 +427,21 @@ void TConfigsProvider::ApplyConfigModifications(const TConfigModifications &modi
         ConfigIndex.AddItem(pr.second);
 
         SubscriptionIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, subscriptions);
-        InMemoryIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, inMemorySubscriptions);
-        if (item->UsageScope != pr.second->UsageScope) {
+        InMemoryIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, inMemorySubscriptions); 
+        if (item->UsageScope != pr.second->UsageScope) { 
             SubscriptionIndex.CollectAffectedSubscriptions(pr.second->UsageScope, item->Kind, subscriptions);
-            InMemoryIndex.CollectAffectedSubscriptions(pr.second->UsageScope, item->Kind, inMemorySubscriptions);
-        }
+            InMemoryIndex.CollectAffectedSubscriptions(pr.second->UsageScope, item->Kind, inMemorySubscriptions); 
+        } 
     }
     for (auto item : modifications.AddedItems) {
         LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider: add new " << item->ToString());
         ConfigIndex.AddItem(item);
         SubscriptionIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, subscriptions);
-        InMemoryIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, inMemorySubscriptions);
+        InMemoryIndex.CollectAffectedSubscriptions(item->UsageScope, item->Kind, inMemorySubscriptions); 
     }
 
     CheckSubscriptions(subscriptions, ctx);
-    CheckSubscriptions(inMemorySubscriptions, ctx);
+    CheckSubscriptions(inMemorySubscriptions, ctx); 
 }
 
 void TConfigsProvider::ApplySubscriptionModifications(const TSubscriptionModifications &modifications,
@@ -508,13 +508,13 @@ void TConfigsProvider::CheckSubscriptions(const TSubscriptionSet &subscriptions,
         CheckSubscription(subscription, ctx);
 }
 
-void TConfigsProvider::CheckSubscriptions(const TInMemorySubscriptionSet &subscriptions,
-                                          const TActorContext &ctx)
-{
-    for (auto &subscription : subscriptions)
-        CheckSubscription(subscription, ctx);
-}
-
+void TConfigsProvider::CheckSubscriptions(const TInMemorySubscriptionSet &subscriptions, 
+                                          const TActorContext &ctx) 
+{ 
+    for (auto &subscription : subscriptions) 
+        CheckSubscription(subscription, ctx); 
+} 
+ 
 void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
                                          const TActorContext &ctx)
 {
@@ -573,164 +573,164 @@ void TConfigsProvider::CheckSubscription(TSubscription::TPtr subscription,
     subscription->Worker = ctx.RegisterWithSameMailbox(worker);
 }
 
-void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscription,
-                                         const TActorContext &ctx)
-{
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TConfigsProvider: check if update is required for volatile subscription"
-                    << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation);
-
-    auto config = ConfigIndex.BuildConfig(subscription->NodeId, subscription->Host,
-                                          subscription->Tenant, subscription->NodeType,
-                                          subscription->ItemKinds);
-
-    THashMap<ui32, TConfigId> currKindIdMap;
-    THashMap<ui32, TConfigId> prevKindIdMap;
-
-    for (auto kind : subscription->ItemKinds) {
-        auto it = config->ConfigItems.find(kind);
-        if (it != config->ConfigItems.end()) {
-            auto &id = currKindIdMap[kind];
-            for (auto &item : it->second) {
-                if (item->MergeStrategy == NKikimrConsole::TConfigItem::OVERWRITE)
-                    id.ItemIds.clear();
-                id.ItemIds.push_back(std::make_pair(item->Id, item->Generation));
-            }
-        }
-    }
-    for (auto &item : subscription->LastProvided.GetItems()) {
-        auto &id = prevKindIdMap[item.kind()];
-        id.ItemIds.push_back(std::make_pair(item.GetId(), item.GetGeneration()));
-    }
-
-    THashSet<ui32> affectedKinds;
-    NKikimrConfig::TConfigVersion version;
-
-    for (auto &curr : currKindIdMap) {
-        auto prev = prevKindIdMap.find(curr.first);
-
-        if (prev == prevKindIdMap.end() || curr.second != prev->second) {
-            // There are changes for the kind
-            affectedKinds.insert(curr.first);
-            for (auto &pr : curr.second.ItemIds) {
-                auto itemId = version.AddItems();
-                itemId->SetKind(curr.first);
-                itemId->SetId(pr.first);
-                itemId->SetGeneration(pr.second);
-            }
-        } else if (prev != prevKindIdMap.end()) {
-            // There are no changes for the kind, lets just fill in current config ids
-            for (auto &pr : curr.second.ItemIds) {
-                auto itemId = version.AddItems();
-                itemId->SetKind(curr.first);
-                itemId->SetId(pr.first);
-                itemId->SetGeneration(pr.second);
-            }
-        }
-
-        if (prev != prevKindIdMap.end())
-            prevKindIdMap.erase(prev);
-    }
-
-    for (auto &prev : prevKindIdMap) {
-        // We already deleted all currently presented config kinds, so this one is definitely deleted
-        affectedKinds.insert(prev.first);
-    }
-
-    if (affectedKinds.empty()) {
-        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider: no changes found for subscription"
-                        << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation);
-        return;
-    }
-
-    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS,
-                "TConfigsProvider: new config found for subscription"
-                    << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation
-                    << " version=" << version.ShortDebugString());
-
-    subscription->LastProvided.Swap(&version);
-
-    NKikimrConfig::TAppConfig appConfig;
-    config->ComputeConfig(affectedKinds, appConfig, true);
-
-    Send(subscription->Worker, new TEvConsole::TEvConfigSubscriptionNotification(subscription->Generation, std::move(appConfig), affectedKinds));
-}
-
-void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx)
-{
-        auto subscriber = ev->Sender;
-        auto &rec = ev->Get()->Record;
-
-        auto existing = InMemoryIndex.GetSubscription(subscriber);
-        if (existing) {
-            if (existing->Generation >= rec.GetGeneration()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                            "TConfigsProvider received stale subscription request "
-                            << subscriber.ToString() << ":" << rec.GetGeneration());
-                return;
-            }
-
-            InMemoryIndex.RemoveSubscription(subscriber);
-            Send(existing->Worker, new TEvents::TEvPoisonPill());
-        }
-
-        TInMemorySubscription::TPtr subscription = new TInMemorySubscription();
-
-        subscription->Subscriber = subscriber;
-        subscription->Generation = rec.GetGeneration();
-
-        subscription->NodeId = rec.GetOptions().GetNodeId();
-        subscription->Host = rec.GetOptions().GetHost();
-        subscription->Tenant = rec.GetOptions().GetTenant();
-        subscription->NodeType = rec.GetOptions().GetNodeType();
-
-        subscription->ItemKinds.insert(rec.GetConfigItemKinds().begin(), rec.GetConfigItemKinds().end());
-        subscription->LastProvided.CopyFrom(rec.GetKnownVersion());
-
-        InMemoryIndex.AddSubscription(subscription);
-
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider registered new subscription "
-                    << subscriber.ToString() << ":" << rec.GetGeneration());
-
+void TConfigsProvider::CheckSubscription(TInMemorySubscription::TPtr subscription, 
+                                         const TActorContext &ctx) 
+{ 
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                "TConfigsProvider: check if update is required for volatile subscription" 
+                    << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation); 
+ 
+    auto config = ConfigIndex.BuildConfig(subscription->NodeId, subscription->Host, 
+                                          subscription->Tenant, subscription->NodeType, 
+                                          subscription->ItemKinds); 
+ 
+    THashMap<ui32, TConfigId> currKindIdMap; 
+    THashMap<ui32, TConfigId> prevKindIdMap; 
+ 
+    for (auto kind : subscription->ItemKinds) { 
+        auto it = config->ConfigItems.find(kind); 
+        if (it != config->ConfigItems.end()) { 
+            auto &id = currKindIdMap[kind]; 
+            for (auto &item : it->second) { 
+                if (item->MergeStrategy == NKikimrConsole::TConfigItem::OVERWRITE) 
+                    id.ItemIds.clear(); 
+                id.ItemIds.push_back(std::make_pair(item->Id, item->Generation)); 
+            } 
+        } 
+    } 
+    for (auto &item : subscription->LastProvided.GetItems()) { 
+        auto &id = prevKindIdMap[item.kind()]; 
+        id.ItemIds.push_back(std::make_pair(item.GetId(), item.GetGeneration())); 
+    } 
+ 
+    THashSet<ui32> affectedKinds; 
+    NKikimrConfig::TConfigVersion version; 
+ 
+    for (auto &curr : currKindIdMap) { 
+        auto prev = prevKindIdMap.find(curr.first); 
+ 
+        if (prev == prevKindIdMap.end() || curr.second != prev->second) { 
+            // There are changes for the kind 
+            affectedKinds.insert(curr.first); 
+            for (auto &pr : curr.second.ItemIds) { 
+                auto itemId = version.AddItems(); 
+                itemId->SetKind(curr.first); 
+                itemId->SetId(pr.first); 
+                itemId->SetGeneration(pr.second); 
+            } 
+        } else if (prev != prevKindIdMap.end()) { 
+            // There are no changes for the kind, lets just fill in current config ids 
+            for (auto &pr : curr.second.ItemIds) { 
+                auto itemId = version.AddItems(); 
+                itemId->SetKind(curr.first); 
+                itemId->SetId(pr.first); 
+                itemId->SetGeneration(pr.second); 
+            } 
+        } 
+ 
+        if (prev != prevKindIdMap.end()) 
+            prevKindIdMap.erase(prev); 
+    } 
+ 
+    for (auto &prev : prevKindIdMap) { 
+        // We already deleted all currently presented config kinds, so this one is definitely deleted 
+        affectedKinds.insert(prev.first); 
+    } 
+ 
+    if (affectedKinds.empty()) { 
+        LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                    "TConfigsProvider: no changes found for subscription" 
+                        << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation); 
+        return; 
+    } 
+ 
+    LOG_TRACE_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                "TConfigsProvider: new config found for subscription" 
+                    << " " << subscription->Subscriber.ToString() << ":" << subscription->Generation 
+                    << " version=" << version.ShortDebugString()); 
+ 
+    subscription->LastProvided.Swap(&version); 
+ 
+    NKikimrConfig::TAppConfig appConfig; 
+    config->ComputeConfig(affectedKinds, appConfig, true); 
+ 
+    Send(subscription->Worker, new TEvConsole::TEvConfigSubscriptionNotification(subscription->Generation, std::move(appConfig), affectedKinds)); 
+} 
+ 
+void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx) 
+{ 
+        auto subscriber = ev->Sender; 
+        auto &rec = ev->Get()->Record; 
+ 
+        auto existing = InMemoryIndex.GetSubscription(subscriber); 
+        if (existing) { 
+            if (existing->Generation >= rec.GetGeneration()) { 
+                LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                            "TConfigsProvider received stale subscription request " 
+                            << subscriber.ToString() << ":" << rec.GetGeneration()); 
+                return; 
+            } 
+ 
+            InMemoryIndex.RemoveSubscription(subscriber); 
+            Send(existing->Worker, new TEvents::TEvPoisonPill()); 
+        } 
+ 
+        TInMemorySubscription::TPtr subscription = new TInMemorySubscription(); 
+ 
+        subscription->Subscriber = subscriber; 
+        subscription->Generation = rec.GetGeneration(); 
+ 
+        subscription->NodeId = rec.GetOptions().GetNodeId(); 
+        subscription->Host = rec.GetOptions().GetHost(); 
+        subscription->Tenant = rec.GetOptions().GetTenant(); 
+        subscription->NodeType = rec.GetOptions().GetNodeType(); 
+ 
+        subscription->ItemKinds.insert(rec.GetConfigItemKinds().begin(), rec.GetConfigItemKinds().end()); 
+        subscription->LastProvided.CopyFrom(rec.GetKnownVersion()); 
+ 
+        InMemoryIndex.AddSubscription(subscription); 
+ 
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                    "TConfigsProvider registered new subscription " 
+                    << subscriber.ToString() << ":" << rec.GetGeneration()); 
+ 
         subscription->Worker = RegisterWithSameMailbox(new TSubscriptionClientSender(subscription, SelfId()));
-
-        CheckSubscription(subscription, ctx);
-    }
-
-void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx)
-{
-    auto subscriber = ev->Sender;
-    auto &rec = ev->Get()->Record;
-
-    auto subscription = InMemoryIndex.GetSubscription(subscriber);
-    if (!subscription || subscription->Generation > rec.GetGeneration()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
-                    "TConfigsProvider received stale subscription canceled request "
-                    << subscriber.ToString() << ":" << rec.GetGeneration());
-        return;
-    }
-
-    Y_VERIFY(subscription->Worker);
-
-    InMemoryIndex.RemoveSubscription(subscriber);
-    Send(subscription->Worker, new TEvents::TEvPoisonPill());
-}
-
-void TConfigsProvider::Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const TActorContext &ctx)
-{
-    auto subscription = ev->Get()->Subscription;
-    auto existing = InMemoryIndex.GetSubscription(subscription->Subscriber);
-    if (existing == subscription) {
-        InMemoryIndex.RemoveSubscription(subscription->Subscriber);
-        Send(subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionCanceled(subscription->Generation));
-
-        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider removed subscription "
-                    << subscription->Subscriber<< ":" << subscription->Generation << " (subscription worker died)");
-    }
-}
-
+ 
+        CheckSubscription(subscription, ctx); 
+    } 
+ 
+void TConfigsProvider::Handle(TEvConsole::TEvConfigSubscriptionCanceled::TPtr &ev, const TActorContext &ctx) 
+{ 
+    auto subscriber = ev->Sender; 
+    auto &rec = ev->Get()->Record; 
+ 
+    auto subscription = InMemoryIndex.GetSubscription(subscriber); 
+    if (!subscription || subscription->Generation > rec.GetGeneration()) { 
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, 
+                    "TConfigsProvider received stale subscription canceled request " 
+                    << subscriber.ToString() << ":" << rec.GetGeneration()); 
+        return; 
+    } 
+ 
+    Y_VERIFY(subscription->Worker); 
+ 
+    InMemoryIndex.RemoveSubscription(subscriber); 
+    Send(subscription->Worker, new TEvents::TEvPoisonPill()); 
+} 
+ 
+void TConfigsProvider::Handle(TEvPrivate::TEvWorkerDisconnected::TPtr &ev, const TActorContext &ctx) 
+{ 
+    auto subscription = ev->Get()->Subscription; 
+    auto existing = InMemoryIndex.GetSubscription(subscription->Subscriber); 
+    if (existing == subscription) { 
+        InMemoryIndex.RemoveSubscription(subscription->Subscriber); 
+        Send(subscription->Subscriber, new TEvConsole::TEvConfigSubscriptionCanceled(subscription->Generation)); 
+ 
+        LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS, "TConfigsProvider removed subscription " 
+                    << subscription->Subscriber<< ":" << subscription->Generation << " (subscription worker died)"); 
+    } 
+} 
+ 
 void TConfigsProvider::Handle(TEvConsole::TEvCheckConfigUpdatesRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;
@@ -942,7 +942,7 @@ void TConfigsProvider::Handle(TEvConsole::TEvGetNodeConfigRequest::TPtr &ev, con
         kinds.insert(kind);
 
     auto config = ConfigIndex.GetNodeConfig(rec.GetNode(), kinds);
-    config->ComputeConfig(*response->Record.MutableConfig(), true);
+    config->ComputeConfig(*response->Record.MutableConfig(), true); 
 
     if (Config.EnableValidationOnNodeConfigRequest) {
         auto registry = TValidatorsRegistry::Instance();

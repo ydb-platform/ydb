@@ -1,11 +1,11 @@
 #pragma once
 
-#include "const.h"
+#include "const.h" 
 #include "snapshot_key.h"
-
+ 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
-
+ 
 #include <ydb/core/util/intrusive_heap.h>
 
 #include <util/generic/hash.h>
@@ -15,9 +15,9 @@
 namespace NKikimr {
 namespace NDataShard {
 
-using NTabletFlatExecutor::TTransactionContext;
-
-class TOperation;
+using NTabletFlatExecutor::TTransactionContext; 
+ 
+class TOperation; 
 class TDataShard;
 
 class TSnapshot {
@@ -75,12 +75,12 @@ public:
     };
 };
 
-enum class EMvccState {
-    MvccUnspecified = 0,
-    MvccEnabled = 1,
-    MvccDisabled = 2
-};
-
+enum class EMvccState { 
+    MvccUnspecified = 0, 
+    MvccEnabled = 1, 
+    MvccDisabled = 2 
+}; 
+ 
 class TSnapshotManager {
 public:
     using TSnapshotMap = TMap<TSnapshotKey, TSnapshot, TLess<void>>;
@@ -110,51 +110,51 @@ public:
 
     bool Reload(NIceDb::TNiceDb& db);
 
-    void InitExpireQueue(TInstant now);
+    void InitExpireQueue(TInstant now); 
 
     TRowVersion GetMinWriteVersion() const;
 
     void SetMinWriteVersion(NIceDb::TNiceDb& db, TRowVersion writeVersion);
 
-    TRowVersion GetCompleteEdge() const;
+    TRowVersion GetCompleteEdge() const; 
     TRowVersion GetCommittedCompleteEdge() const;
-
-    void SetCompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& version);
-
+ 
+    void SetCompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& version); 
+ 
     bool PromoteCompleteEdge(const TRowVersion& version, TTransactionContext& txc);
-    bool PromoteCompleteEdge(TOperation* op, TTransactionContext& txc);
+    bool PromoteCompleteEdge(TOperation* op, TTransactionContext& txc); 
     bool PromoteCompleteEdge(ui64 writeStep, TTransactionContext& txc);
-
-    TRowVersion GetIncompleteEdge() const;
-
-    void SetIncompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& version);
-
-    bool PromoteIncompleteEdge(TOperation* op, TTransactionContext& txc);
-
+ 
+    TRowVersion GetIncompleteEdge() const; 
+ 
+    void SetIncompleteEdge(NIceDb::TNiceDb& db, const TRowVersion& version); 
+ 
+    bool PromoteIncompleteEdge(TOperation* op, TTransactionContext& txc); 
+ 
     EMvccState GetMvccState() const {
         return MvccState;
     }
-
+ 
     bool IsMvccEnabled() const {
         // Note: mvcc is disabled during MvccUnspecified
         return MvccState == EMvccState::MvccEnabled;
     }
-
+ 
     bool ChangeMvccState(ui64 step, ui64 txId, TTransactionContext& txc, EMvccState state);
 
-    ui64 GetKeepSnapshotTimeout() const;
+    ui64 GetKeepSnapshotTimeout() const; 
     TDuration GetCleanupSnapshotPeriod() const;
-
-    void SetKeepSnapshotTimeout(NIceDb::TNiceDb& db, ui64 keepSnapshotTimeout);
-
-    TRowVersion GetLowWatermark() const;
-
-    void SetLowWatermark(NIceDb::TNiceDb &db, TRowVersion watermark);
-
-    bool AdvanceWatermark(NTable::TDatabase& db, const TRowVersion& to);
-
-    void RemoveRowVersions(NTable::TDatabase &db, const TRowVersion &from, const TRowVersion &to);
-
+ 
+    void SetKeepSnapshotTimeout(NIceDb::TNiceDb& db, ui64 keepSnapshotTimeout); 
+ 
+    TRowVersion GetLowWatermark() const; 
+ 
+    void SetLowWatermark(NIceDb::TNiceDb &db, TRowVersion watermark); 
+ 
+    bool AdvanceWatermark(NTable::TDatabase& db, const TRowVersion& to); 
+ 
+    void RemoveRowVersions(NTable::TDatabase &db, const TRowVersion &from, const TRowVersion &to); 
+ 
     const TSnapshotMap& GetSnapshots() const {
         return Snapshots;
     }
@@ -178,10 +178,10 @@ public:
     bool RemoveSnapshot(NTable::TDatabase& db, const TSnapshotKey& key);
     bool CleanupRemovedSnapshots(NTable::TDatabase& db);
 
-    void InitSnapshotExpireTime(const TSnapshotKey& key, TInstant now);
+    void InitSnapshotExpireTime(const TSnapshotKey& key, TInstant now); 
     bool RefreshSnapshotExpireTime(const TSnapshotKey& key, TInstant now);
 
-    TDuration CleanupTimeout() const;
+    TDuration CleanupTimeout() const; 
     bool HasExpiringSnapshots() const;
     bool RemoveExpiredSnapshots(NTable::TDatabase& db, TInstant now);
 
@@ -201,12 +201,12 @@ private:
     TDataShard* const Self;
     TRowVersion MinWriteVersion;
 
-    EMvccState MvccState = EMvccState::MvccUnspecified;
-    ui64 KeepSnapshotTimeout = 0;
-    TRowVersion IncompleteEdge = TRowVersion::Min();
-    TRowVersion CompleteEdge = TRowVersion::Min();
-    TRowVersion LowWatermark = TRowVersion::Min();
-
+    EMvccState MvccState = EMvccState::MvccUnspecified; 
+    ui64 KeepSnapshotTimeout = 0; 
+    TRowVersion IncompleteEdge = TRowVersion::Min(); 
+    TRowVersion CompleteEdge = TRowVersion::Min(); 
+    TRowVersion LowWatermark = TRowVersion::Min(); 
+ 
     TRowVersion CommittedCompleteEdge = TRowVersion::Min();
 
     TSnapshotMap Snapshots;

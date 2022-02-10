@@ -83,8 +83,8 @@ private:
     {
         TRACE_EVENT(NKikimrServices::CMS);
         switch (ev->GetTypeRewrite()) {
-            FFunc(TEvConsole::EvConfigSubscriptionRequest, ForwardToConfigsManager);
-            FFunc(TEvConsole::EvConfigSubscriptionCanceled, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvConfigSubscriptionRequest, ForwardToConfigsManager); 
+            FFunc(TEvConsole::EvConfigSubscriptionCanceled, ForwardToConfigsManager); 
             FFunc(TEvConsole::EvAddConfigSubscriptionRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvAlterTenantRequest, ForwardToTenantsManager);
             FFunc(TEvConsole::EvCheckConfigUpdatesRequest, ForwardToConfigsManager);

@@ -35,7 +35,7 @@ protected:
         request.StatsMode = GetStatsMode(TransformCtx->QueryCtx->StatsMode);
         request.DisableLlvmForUdfStages = TransformCtx->Config->DisableLlvmForUdfStages();
         request.LlvmEnabled = TransformCtx->Config->GetEnableLlvm() != EOptionalFlag::Disabled;
-        request.Snapshot = TxState->Tx().GetSnapshot();
+        request.Snapshot = TxState->Tx().GetSnapshot(); 
 
         switch (tx->GetType()) {
             case NKqpProto::TKqpPhyTx::TYPE_COMPUTE:
@@ -165,7 +165,7 @@ public:
     TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext&) {
         output = input;
 
-        if (TxState->Tx().GetSnapshot().IsValid()) {
+        if (TxState->Tx().GetSnapshot().IsValid()) { 
             Gateway->DiscardPersistentSnapshot(TxState->Tx().SnapshotHandle);
         }
 

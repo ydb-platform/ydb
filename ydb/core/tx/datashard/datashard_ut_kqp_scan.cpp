@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
      * kill tablet after that. So in order to complete scan ComputeActor need to handle scan restart after
      * each ScanData.
      */
-    Y_UNIT_TEST_WITH_MVCC(ScanRetryRead) {
+    Y_UNIT_TEST_WITH_MVCC(ScanRetryRead) { 
         NKikimrConfig::TAppConfig appCfg;
 
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
@@ -58,7 +58,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvcc(WithMvcc) 
             .SetNodeCount(2)
             .SetAppConfig(appCfg)
             .SetUseRealThreads(false);
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         // EnableLogging(runtime);
 
         InitRoot(server, sender);
-        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
         ExecSQL(server, sender, FillTableQuery());
 
         TSet<TActorId> scans;
@@ -136,7 +136,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                         Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": pass" << Endl);
                         Cerr.Flush();
                     }
-
+ 
                     break;
                 }
 
@@ -157,13 +157,13 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     /*
      * Force remote scans by meddling with EvShardsResolveStatus. Check that remote scan actually took place.
      */
-    Y_UNIT_TEST_WITH_MVCC(RemoteShardScan) {
+    Y_UNIT_TEST_WITH_MVCC(RemoteShardScan) { 
         NKikimrConfig::TAppConfig appCfg;
 
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvcc(WithMvcc) 
             .SetNodeCount(2)
             .SetAppConfig(appCfg)
             .SetUseRealThreads(false);
@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         // EnableLogging(runtime);
 
         InitRoot(server, sender);
-        CreateShardedTable(server, sender, "/Root", "table-1", 7);
+        CreateShardedTable(server, sender, "/Root", "table-1", 7); 
         ExecSQL(server, sender, FillTableQuery());
 
         ui64 firstNodeId = server->GetRuntime()->GetNodeId(0);
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_VALUES_EQUAL(result, 596400);
     }
 
-    Y_UNIT_TEST_WITH_MVCC(ScanDuringSplit) {
+    Y_UNIT_TEST_WITH_MVCC(ScanDuringSplit) { 
         NKikimrConfig::TAppConfig appCfg;
 
         auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvcc(WithMvcc) 
             .SetNodeCount(2)
             .SetAppConfig(appCfg)
             .SetUseRealThreads(false);
@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         SetSplitMergePartCountLimit(&runtime, -1);
 
         InitRoot(server, sender);
-        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
         ExecSQL(server, sender, FillTableQuery());
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
@@ -356,7 +356,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                         Cerr << (TStringBuilder() << "-- EvScanData from new tablet" << ev->Sender << ": pass" << Endl);
                         Cerr.Flush();
                     }
-
+ 
                     break;
                 }
 

@@ -45,38 +45,38 @@ private:
     void Handle(TEvKqpSnapshot::TEvCreateSnapshotRequest::TPtr& ev) {
         ClientActorId = ev->Sender;
         Tables = ev->Get()->Tables;
-        MvccSnapshot = ev->Get()->MvccSnapshot;
+        MvccSnapshot = ev->Get()->MvccSnapshot; 
 
         LOG_D("KqpSnapshotManager: got snapshot request from " << ClientActorId);
 
-        if (MvccSnapshot) {
-            auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database));
-
-            Become(&TThis::StateAwaitAcquireResult);
-        } else {
-            auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-            req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds());
-            req->Record.SetDatabaseName(Database);
-            auto* createSnapshot = req->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
-            for (const TString& tablePath : Tables) {
-                createSnapshot->AddTables()->SetTablePath(tablePath);
-            }
-            createSnapshot->SetTimeoutMs(SnapshotTimeout.MilliSeconds());
-            createSnapshot->SetIgnoreSystemViews(true);
-
-            Send(MakeTxProxyID(), req.Release());
-            Become(&TThis::StateAwaitCreation);
+        if (MvccSnapshot) { 
+            auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId()); 
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database)); 
+ 
+            Become(&TThis::StateAwaitAcquireResult); 
+        } else { 
+            auto req = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
+            req->Record.SetExecTimeoutPeriod(RequestTimeout.MilliSeconds()); 
+            req->Record.SetDatabaseName(Database); 
+            auto* createSnapshot = req->Record.MutableTransaction()->MutableCreateVolatileSnapshot(); 
+            for (const TString& tablePath : Tables) { 
+                createSnapshot->AddTables()->SetTablePath(tablePath); 
+            } 
+            createSnapshot->SetTimeoutMs(SnapshotTimeout.MilliSeconds()); 
+            createSnapshot->SetIgnoreSystemViews(true); 
+ 
+            Send(MakeTxProxyID(), req.Release()); 
+            Become(&TThis::StateAwaitCreation); 
         }
-    }
+    } 
 
-    STATEFN(StateAwaitAcquireResult) {
-        switch (ev->GetTypeRewrite()) {
-            hFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
-            hFunc(TEvents::TEvPoison, HandlePoison);
-            default:
-                HandleUnexpectedEvent("AwaitAcquireResult", ev->GetTypeRewrite());
-        }
+    STATEFN(StateAwaitAcquireResult) { 
+        switch (ev->GetTypeRewrite()) { 
+            hFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle); 
+            hFunc(TEvents::TEvPoison, HandlePoison); 
+            default: 
+                HandleUnexpectedEvent("AwaitAcquireResult", ev->GetTypeRewrite()); 
+        } 
     }
 
     STATEFN(StateAwaitCreation) {
@@ -88,33 +88,33 @@ private:
         }
     }
 
-    void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
-        Y_VERIFY(MvccSnapshot);
-        Y_VERIFY(Tables.empty());
-
-        const auto& record = ev->Get()->Record;
-        if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
-            Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
-
-            LOG_D("KqpSnapshotManager: snapshot " << Snapshot.Step << ":" << Snapshot.TxId << " acquired");
-
-            bool sent = Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
-                    Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {}));
-            Y_VERIFY_DEBUG(sent);
-
-            PassAway();
-        } else {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(record.GetIssues(), issues);
-            LOG_E("KqpSnapshotManager: CreateSnapshot got unexpected status="
-                      << record.GetStatus() << ", issues:" << issues.ToString());
-            ReplyErrorAndDie(NKikimrIssues::TStatusIds::ERROR, std::move(issues));
-        }
-    }
-
+    void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) { 
+        Y_VERIFY(MvccSnapshot); 
+        Y_VERIFY(Tables.empty()); 
+ 
+        const auto& record = ev->Get()->Record; 
+        if (record.GetStatus() == Ydb::StatusIds::SUCCESS) { 
+            Snapshot = IKqpGateway::TKqpSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId()); 
+ 
+            LOG_D("KqpSnapshotManager: snapshot " << Snapshot.Step << ":" << Snapshot.TxId << " acquired"); 
+ 
+            bool sent = Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse( 
+                    Snapshot, NKikimrIssues::TStatusIds::SUCCESS, /* issues */ {})); 
+            Y_VERIFY_DEBUG(sent); 
+ 
+            PassAway(); 
+        } else { 
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(record.GetIssues(), issues); 
+            LOG_E("KqpSnapshotManager: CreateSnapshot got unexpected status=" 
+                      << record.GetStatus() << ", issues:" << issues.ToString()); 
+            ReplyErrorAndDie(NKikimrIssues::TStatusIds::ERROR, std::move(issues)); 
+        } 
+    } 
+ 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        Y_VERIFY(!MvccSnapshot);
-
+        Y_VERIFY(!MvccSnapshot); 
+ 
         using EStatus = TEvTxUserProxy::TEvProposeTransactionStatus::EStatus;
 
         const auto* msg = ev->Get();
@@ -222,7 +222,7 @@ private:
     }
 
     void ReplyErrorAndDie(NKikimrIssues::TStatusIds::EStatusCode status, NYql::TIssues&& issues) {
-        if (CurrentStateFunc() == &TThis::StateAwaitCreation || CurrentStateFunc() == &TThis::StateAwaitAcquireResult) {
+        if (CurrentStateFunc() == &TThis::StateAwaitCreation || CurrentStateFunc() == &TThis::StateAwaitAcquireResult) { 
             Send(ClientActorId, new TEvKqpSnapshot::TEvCreateSnapshotResponse(
                 IKqpGateway::TKqpSnapshot::InvalidSnapshot, status, std::move(issues)));
         } else {
@@ -237,8 +237,8 @@ private:
     TActorId ClientActorId;
     IKqpGateway::TKqpSnapshot Snapshot;
 
-    bool MvccSnapshot = false;
-
+    bool MvccSnapshot = false; 
+ 
     TSchedulerCookieHolder RequestTimeoutCookieHolder_;
 
     const double SnapshotToRequestTimeoutRatio = 1.5;

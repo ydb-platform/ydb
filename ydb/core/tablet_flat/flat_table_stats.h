@@ -31,13 +31,13 @@ namespace NTable {
         TPartStats& operator-=(const TPartStats& rhs);
     };
 
-    struct TSelectStats {
-        ui64 Sieved = 0;
-        ui64 Weeded = 0;
-        ui64 NoKey = 0;
-        ui64 Invisible = 0;
-    };
-
+    struct TSelectStats { 
+        ui64 Sieved = 0; 
+        ui64 Weeded = 0; 
+        ui64 NoKey = 0; 
+        ui64 Invisible = 0; 
+    }; 
+ 
     struct TCompactionStats {
         THashSet<ui64> PartOwners;
         ui64 PartCount = 0;

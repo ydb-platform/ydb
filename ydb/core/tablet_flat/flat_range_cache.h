@@ -23,16 +23,16 @@ struct TKeyRangeEntry {
     TArrayRef<TCell> ToKey;
     bool FromInclusive;
     bool ToInclusive;
-    TRowVersion MaxVersion;
+    TRowVersion MaxVersion; 
 
     TKeyRangeEntry() = default;
 
-    TKeyRangeEntry(TArrayRef<TCell> fromKey, TArrayRef<TCell> toKey, bool fromInclusive, bool toInclusive, TRowVersion maxVersion)
+    TKeyRangeEntry(TArrayRef<TCell> fromKey, TArrayRef<TCell> toKey, bool fromInclusive, bool toInclusive, TRowVersion maxVersion) 
         : FromKey(fromKey)
         , ToKey(toKey)
         , FromInclusive(fromInclusive)
         , ToInclusive(toInclusive)
-        , MaxVersion(maxVersion)
+        , MaxVersion(maxVersion) 
     { }
 };
 
@@ -476,7 +476,7 @@ public:
         } else {
             --it;
         }
-
+ 
         bool found = it != end() && InsideRight(it, key);
         return { it, found };
     }
@@ -492,17 +492,17 @@ public:
     /**
      * Extends left side of the entry up to the specified key
      */
-    void ExtendLeft(const_iterator it, TArrayRef<TCell> newLeft, bool leftInclusive, TRowVersion version);
+    void ExtendLeft(const_iterator it, TArrayRef<TCell> newLeft, bool leftInclusive, TRowVersion version); 
 
     /**
      * Extends right side of the entry up to the specified key
      */
-    void ExtendRight(const_iterator it, TArrayRef<TCell> newRight, bool rightInclusive, TRowVersion version);
+    void ExtendRight(const_iterator it, TArrayRef<TCell> newRight, bool rightInclusive, TRowVersion version); 
 
     /**
      * Merges adjacent entries left and right
      */
-    const_iterator Merge(const_iterator left, const_iterator right, TRowVersion version);
+    const_iterator Merge(const_iterator left, const_iterator right, TRowVersion version); 
 
     /**
      * Adds a new entry with specified boundaries

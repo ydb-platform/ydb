@@ -181,7 +181,7 @@ public:
             return TStatus::Ok;
         }
 
-        return ExecuteProgram(program, ctx, hasDataEffects, ShouldWaitForResults(hasDataEffects));
+        return ExecuteProgram(program, ctx, hasDataEffects, ShouldWaitForResults(hasDataEffects)); 
     }
 
     TFuture<void> DoGetAsyncFuture(const TExprNode& input) final {
@@ -262,28 +262,28 @@ private:
         RollbackOnErrorInProgress
     };
 
-    TStatus ExecuteProgram(TKiProgram program, TExprContext& ctx, bool hasDataEffects, bool waitForResults) {
-        if (waitForResults) {
-            Promise = NewPromise();
+    TStatus ExecuteProgram(TKiProgram program, TExprContext& ctx, bool hasDataEffects, bool waitForResults) { 
+        if (waitForResults) { 
+            Promise = NewPromise(); 
             MkqlExecuteResult = ExecuteMkql(program, Gateway, Cluster, ctx, TxState, TransformCtx, hasDataEffects);
 
-            auto promise = Promise;
-            MkqlExecuteResult.Future.Apply([promise](const TFuture<IKqpGateway::TMkqlResult> future) mutable {
-                YQL_ENSURE(future.HasValue());
-                promise.SetValue();
-            });
+            auto promise = Promise; 
+            MkqlExecuteResult.Future.Apply([promise](const TFuture<IKqpGateway::TMkqlResult> future) mutable { 
+                YQL_ENSURE(future.HasValue()); 
+                promise.SetValue(); 
+            }); 
 
-            return TStatus::Async;
-        }
-
-        YQL_ENSURE(!hasDataEffects);
-
+            return TStatus::Async; 
+        } 
+ 
+        YQL_ENSURE(!hasDataEffects); 
+ 
         ExecuteMkql(program, Gateway, Cluster, ctx, TxState, TransformCtx, false);
-
-        ResetTxState(true);
-        State = EFinalizeState::Initial;
-
-        return TStatus::Ok;
+ 
+        ResetTxState(true); 
+        State = EFinalizeState::Initial; 
+ 
+        return TStatus::Ok; 
     }
 
     TStatus RollbackOnError(TExprContext& ctx) {
@@ -306,7 +306,7 @@ private:
         }
 
         State = EFinalizeState::RollbackOnErrorInProgress;
-        return ExecuteProgram(program, ctx, false, true);
+        return ExecuteProgram(program, ctx, false, true); 
     }
 
     TExprList GetResultsNode(TExprBase program, TExprContext& ctx) {
@@ -429,8 +429,8 @@ private:
     TExprBase GetCommitEffects(TPositionHandle pos, TExprContext& ctx, bool& hasDataEffects) {
         hasDataEffects = !TxState->Tx().DeferredEffects.Empty();
 
-        Y_VERIFY_DEBUG(!hasDataEffects || !TxState->Tx().Locks.Broken());
-
+        Y_VERIFY_DEBUG(!hasDataEffects || !TxState->Tx().Locks.Broken()); 
+ 
         auto deferredEffects = GetDeferredEffectsList(TxState->Tx().DeferredEffects, pos, ctx);
 
         if (!TxState->Tx().Locks.HasLocks()) {
@@ -446,9 +446,9 @@ private:
             .Type(ExpandType(pos, *GetTxLockListType(ctx), ctx))
             .Done();
 
-        if (!hasDataEffects && TxState->Tx().GetSnapshot().IsValid())
-            return GetEraseLocksEffects(Cluster, pos, locksParamNode, ctx);
-
+        if (!hasDataEffects && TxState->Tx().GetSnapshot().IsValid()) 
+            return GetEraseLocksEffects(Cluster, pos, locksParamNode, ctx); 
+ 
         auto lockArg = Build<TCoArgument>(ctx, pos)
             .Name("lockArg")
             .Done();
@@ -570,26 +570,26 @@ private:
         return effects;
     }
 
-    bool ShouldWaitForResults(bool hasDataEffects) {
-        if (State != EFinalizeState::CommitInProgress) {
-            return true;
-        }
-
-        if (hasDataEffects) {
-            return true;
-        }
-
-        if (!TxState->Tx().GetSnapshot().IsValid()) {
-            return true;
-        }
-
-        if (HasProgramResults) {
-            return true;
-        }
-
-        return false;
-    }
-
+    bool ShouldWaitForResults(bool hasDataEffects) { 
+        if (State != EFinalizeState::CommitInProgress) { 
+            return true; 
+        } 
+ 
+        if (hasDataEffects) { 
+            return true; 
+        } 
+ 
+        if (!TxState->Tx().GetSnapshot().IsValid()) { 
+            return true; 
+        } 
+ 
+        if (HasProgramResults) { 
+            return true; 
+        } 
+ 
+        return false; 
+    } 
+ 
 private:
     TIntrusivePtr<IKqpGateway> Gateway;
     TString Cluster;

@@ -250,8 +250,8 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
                                    Settings.DisableByKeyFilter ? (ui64)NTable::NoByKey : 0,
                                    adjustLimit(key.RangeLimits.ItemsLimit),
                                    adjustLimit(key.RangeLimits.BytesLimit),
-                                   key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
-                                   GetReadVersion(key.TableId));
+                                   key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward, 
+                                   GetReadVersion(key.TableId)); 
         ret &= ready;
     }
 
@@ -295,12 +295,12 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     Counters.NSelectRow++;
     Settings.KeyAccessSampler->AddSample(tableId, row);
 
-    NTable::TSelectStats stats;
+    NTable::TSelectStats stats; 
     ui64 flags = Settings.DisableByKeyFilter ? (ui64)NTable::NoByKey : 0;
-    const auto ready = Db.Select(localTid, key, tags, dbRow, stats, flags, GetReadVersion(tableId));
-
-    Counters.InvisibleRowSkips += stats.Invisible;
-
+    const auto ready = Db.Select(localTid, key, tags, dbRow, stats, flags, GetReadVersion(tableId)); 
+ 
+    Counters.InvisibleRowSkips += stats.Invisible; 
+ 
     if (NTable::EReady::Page == ready) {
         if (auto collector = GetChangeCollector(tableId)) {
             collector->Reset();
@@ -504,9 +504,9 @@ public:
                 List.EngineHost.GetCounters().SelectRangeDeletedRowSkips
                     += std::exchange(Iter->Stats.DeletedRowSkips, 0);
 
-                List.EngineHost.GetCounters().InvisibleRowSkips
-                    += std::exchange(Iter->Stats.InvisibleRowSkips, 0);
-
+                List.EngineHost.GetCounters().InvisibleRowSkips 
+                    += std::exchange(Iter->Stats.InvisibleRowSkips, 0); 
+ 
                 // Skip null keys
                 Y_VERIFY(List.SkipNullKeys.size() <= tuple.ColumnCount);
                 bool skipRow = false;
@@ -569,7 +569,7 @@ public:
             }
 
             List.EngineHost.GetCounters().SelectRangeDeletedRowSkips += std::exchange(Iter->Stats.DeletedRowSkips, 0);
-            List.EngineHost.GetCounters().InvisibleRowSkips += std::exchange(Iter->Stats.InvisibleRowSkips, 0);
+            List.EngineHost.GetCounters().InvisibleRowSkips += std::exchange(Iter->Stats.InvisibleRowSkips, 0); 
 
             if (Iter->Last() ==  NTable::EReady::Page) {
                 if (auto collector = List.EngineHost.GetChangeCollector(List.TableId)) {
@@ -661,13 +661,13 @@ public:
         keyRange.MinInclusive = tableRange.InclusiveFrom;
         keyRange.MaxInclusive = tableRange.InclusiveTo;
         if (Reverse) {
-            auto read = Db.IterateRangeReverse(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId));
+            auto read = Db.IterateRangeReverse(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId)); 
 
             return NUdf::TUnboxedValuePod(
                 new TIterator<NTable::TTableReverseIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)
             );
         } else {
-            auto read = Db.IterateRange(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId));
+            auto read = Db.IterateRange(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId)); 
 
             return NUdf::TUnboxedValuePod(
                 new TIterator<NTable::TTableIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)

@@ -32,7 +32,7 @@ public:
     const NDataShard::TUserTable* GetTable(const TTableId& tableId) const;
     void ReadTable(const TTableId& tableId, const TTableRange& range) const;
     void ReadTable(const TTableId& tableId, const TArrayRef<const TCell>& key) const;
-    void BreakSetLocks() const;
+    void BreakSetLocks() const; 
     void SetLockTxId(ui64 lockTxId);
     ui64 GetShardId() const;
 
@@ -49,9 +49,9 @@ public:
 
     void Clear();
 
-    void SetReadVersion(TRowVersion readVersion);
-    TRowVersion GetReadVersion() const;
-
+    void SetReadVersion(TRowVersion readVersion); 
+    TRowVersion GetReadVersion() const; 
+ 
     TEngineHostCounters& GetTaskCounters(ui64 taskId) { return TaskCounters[taskId]; }
     TEngineHostCounters& GetDatashardCounters() { return DatashardCounters; }
 
@@ -69,7 +69,7 @@ private:
     ui64 LockTxId = 0;
     bool PersistentChannels = false;
     bool TabletNotReady = false;
-    TRowVersion ReadVersion = TRowVersion::Min();
+    TRowVersion ReadVersion = TRowVersion::Min(); 
     THashMap<std::pair<ui64, ui64>, TActorId> OutputChannels;
 };
 

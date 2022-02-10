@@ -147,7 +147,7 @@ EExecutionStatus TAlterTableUnit::Execute(TOperation::TPtr op,
         tableId.LocalPathId = pathId.GetLocalId();
     }
 
-    TUserTable::TPtr info = DataShard.AlterUserTable(ctx, txc, alterTableTx);
+    TUserTable::TPtr info = DataShard.AlterUserTable(ctx, txc, alterTableTx); 
 
     DataShard.AddUserTable(tableId, info);
 

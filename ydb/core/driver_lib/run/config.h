@@ -59,7 +59,7 @@ union TBasicKikimrServicesMask {
         bool EnableSysViewService:1;
         bool EnableMeteringWriter:1;
         bool EnableSchemeBoardMonitoring:1;
-        bool EnableConfigsCache:1;
+        bool EnableConfigsCache:1; 
         bool EnableLongTxService:1;
         bool EnableHealthCheckService:1;
         bool EnableYandexQuery:1;

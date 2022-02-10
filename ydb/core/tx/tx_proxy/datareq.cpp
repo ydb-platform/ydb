@@ -55,7 +55,7 @@ struct TFlatMKQLRequest : public TThrRefBase {
     bool ReadOnlyProgram;
     TMaybe<ui64> PerShardKeysSizeLimitBytes;
     NKikimrTxUserProxy::TMiniKQLTransaction::TLimits Limits;
-    TRowVersion Snapshot = TRowVersion::Min();
+    TRowVersion Snapshot = TRowVersion::Min(); 
 
     TMap<ui64, TAutoPtr<TBalanceCoverageBuilder>> BalanceCoverageBuilders;
 
@@ -963,7 +963,7 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
 
     TxProxyMon->TxPrepareBuildShardProgramsHgram->Collect((afterBuild - beforeBuild).MicroSeconds());
 
-    if (engine.GetAffectedShardCount() > 1 || FlatMKQLRequest->Snapshot) // TODO KIKIMR-11912
+    if (engine.GetAffectedShardCount() > 1 || FlatMKQLRequest->Snapshot) // TODO KIKIMR-11912 
         CanUseFollower = false;
 
     TDuration shardCancelAfter = ExecTimeoutPeriod;
@@ -981,7 +981,7 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
 
         NKikimrTxDataShard::TDataTransaction dataTransaction;
         dataTransaction.SetMiniKQL(shardData.Program);
-        dataTransaction.SetImmediate(shardData.Immediate || FlatMKQLRequest->Snapshot && FlatMKQLRequest->ReadOnlyProgram);
+        dataTransaction.SetImmediate(shardData.Immediate || FlatMKQLRequest->Snapshot && FlatMKQLRequest->ReadOnlyProgram); 
         dataTransaction.SetReadOnly(FlatMKQLRequest->ReadOnlyProgram);
         dataTransaction.SetCancelAfterMs(shardCancelAfter.MilliSeconds());
         dataTransaction.SetCancelDeadlineMs(shardCancelDeadline.MilliSeconds());
@@ -1047,16 +1047,16 @@ void TDataReq::ProcessFlatMKQLResolve(NSchemeCache::TSchemeCacheRequest *cacheRe
             << " followers " << (CanUseFollower ? "allowed" : "disallowed") << " marker# P4");
 
         const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
-        TEvDataShard::TEvProposeTransaction* ev;
-        if (FlatMKQLRequest->Snapshot && FlatMKQLRequest->ReadOnlyProgram) {
-            ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
-                ctx.SelfID, TxId, transactionBuffer, FlatMKQLRequest->Snapshot, TxFlags | NTxDataShard::TTxFlags::Immediate);
-        } else {
-            ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA,
-                ctx.SelfID, TxId, transactionBuffer, TxFlags | (shardData.Immediate ? NTxDataShard::TTxFlags::Immediate : 0));
-        }
+        TEvDataShard::TEvProposeTransaction* ev; 
+        if (FlatMKQLRequest->Snapshot && FlatMKQLRequest->ReadOnlyProgram) { 
+            ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA, 
+                ctx.SelfID, TxId, transactionBuffer, FlatMKQLRequest->Snapshot, TxFlags | NTxDataShard::TTxFlags::Immediate); 
+        } else { 
+            ev = new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_DATA, 
+                ctx.SelfID, TxId, transactionBuffer, TxFlags | (shardData.Immediate ? NTxDataShard::TTxFlags::Immediate : 0)); 
+        } 
 
-        Send(pipeCache, new TEvPipeCache::TEvForward(ev, shardData.ShardId, true));
+        Send(pipeCache, new TEvPipeCache::TEvForward(ev, shardData.ShardId, true)); 
 
         FlatMKQLRequest->BalanceCoverageBuilders[shardData.ShardId] = new TBalanceCoverageBuilder();
     }
@@ -1289,8 +1289,8 @@ void TDataReq::Handle(TEvTxProxyReq::TEvMakeRequest::TPtr &ev, const TActorConte
             if (mkqlTxBody.HasLimits()) {
                 FlatMKQLRequest->Limits.CopyFrom(mkqlTxBody.GetLimits());
             }
-            if (mkqlTxBody.HasSnapshotStep() && mkqlTxBody.HasSnapshotTxId())
-                FlatMKQLRequest->Snapshot = TRowVersion(mkqlTxBody.GetSnapshotStep(), mkqlTxBody.GetSnapshotTxId());
+            if (mkqlTxBody.HasSnapshotStep() && mkqlTxBody.HasSnapshotTxId()) 
+                FlatMKQLRequest->Snapshot = TRowVersion(mkqlTxBody.GetSnapshotStep(), mkqlTxBody.GetSnapshotTxId()); 
             NMiniKQL::TEngineFlatSettings settings(NMiniKQL::IEngineFlat::EProtocol::V1, functionRegistry,
                                                    *TAppData::RandomProvider, *TAppData::TimeProvider,
                                                    nullptr, TxProxyMon->AllocPoolCounters);

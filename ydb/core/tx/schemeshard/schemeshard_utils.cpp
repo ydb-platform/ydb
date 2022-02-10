@@ -450,9 +450,9 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     if (baseTablePartitionConfig.HasEraseCacheMaxBytes()) {
         result.SetEraseCacheMaxBytes(baseTablePartitionConfig.GetEraseCacheMaxBytes());
     }
-    if (baseTablePartitionConfig.HasKeepSnapshotTimeout()) {
-        result.SetKeepSnapshotTimeout(baseTablePartitionConfig.GetKeepSnapshotTimeout());
-    }
+    if (baseTablePartitionConfig.HasKeepSnapshotTimeout()) { 
+        result.SetKeepSnapshotTimeout(baseTablePartitionConfig.GetKeepSnapshotTimeout()); 
+    } 
     // skip repeated NKikimrStorageSettings.TStorageRoom StorageRooms = 17;
     // skip optional NKikimrHive.TFollowerGroup FollowerGroup = 23;
 

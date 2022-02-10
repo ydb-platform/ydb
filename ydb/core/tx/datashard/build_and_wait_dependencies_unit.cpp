@@ -49,7 +49,7 @@ bool TBuildAndWaitDependenciesUnit::IsReadyToExecute(TOperation::TPtr op) const
 {
     // Dependencies were not built yet. Allow to execute to build dependencies.
     if (!op->IsWaitingDependencies())
-        return true;
+        return true; 
 
     // Perform fast checks for existing blockers
     if (HasDirectBlockers(op))
@@ -129,8 +129,8 @@ EExecutionStatus TBuildAndWaitDependenciesUnit::Execute(TOperation::TPtr op,
         if (hadWrites) {
             return EExecutionStatus::ExecutedNoMoreRestarts;
         }
-    }
-
+    } 
+ 
     return EExecutionStatus::Executed;
 }
 
@@ -144,7 +144,7 @@ void TBuildAndWaitDependenciesUnit::BuildDependencies(const TOperation::TPtr &op
     // don't preserve schema, so dropping columns or tables is unsafe until
     // they are completed.
     if (op->IsSchemeTx() && !op->IsReadOnly()) {
-        auto *tx = dynamic_cast<TActiveTransaction*>(op.Get());
+        auto *tx = dynamic_cast<TActiveTransaction*>(op.Get()); 
         Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 
         for (const auto &pr : Pipeline.GetActivePlannedOps()) {
@@ -158,7 +158,7 @@ void TBuildAndWaitDependenciesUnit::BuildDependencies(const TOperation::TPtr &op
 
         // For DropTable we must also wait for all immediate operations to complete
         auto &schemeTx = tx->GetSchemeTx();
-        if (schemeTx.HasDropTable()) {
+        if (schemeTx.HasDropTable()) { 
             for (const auto &pr : Pipeline.GetImmediateOps()) {
                 op->AddSpecialDependency(pr.second);
             }

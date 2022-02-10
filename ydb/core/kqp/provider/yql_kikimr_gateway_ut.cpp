@@ -143,7 +143,7 @@ void TestRunSimpleCommon(TIntrusivePtr<IKqpGateway> gateway) {
     )");
 
     auto responseFuture = gateway->ExecuteMkql(TestCluster, program, TKqpParamsMap(),
-        IKqpGateway::TMkqlSettings(), IKqpGateway::TKqpSnapshot::InvalidSnapshot);
+        IKqpGateway::TMkqlSettings(), IKqpGateway::TKqpSnapshot::InvalidSnapshot); 
     responseFuture.Wait();
     auto response = responseFuture.GetValue();
     response.Issues().PrintTo(Cerr);

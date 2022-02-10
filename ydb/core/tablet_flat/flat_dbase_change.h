@@ -25,7 +25,7 @@ namespace NTable {
             ui64 SelectSieved = 0;
             ui64 SelectWeeded = 0;
             ui64 SelectNoKey = 0;
-            ui64 SelectInvisible = 0;
+            ui64 SelectInvisible = 0; 
         };
 
         struct TRemovedRowVersions {

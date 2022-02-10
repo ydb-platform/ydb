@@ -56,25 +56,25 @@ public:
         }
 
         // Write user tables with a minimal safe version (avoiding snapshots)
-        return Self->GetLocalReadWriteVersions().WriteVersion;
+        return Self->GetLocalReadWriteVersions().WriteVersion; 
     }
 
-    TRowVersion GetReadVersion(const TTableId& tableId) const override {
+    TRowVersion GetReadVersion(const TTableId& tableId) const override { 
         using Schema = TDataShard::Schema;
-
-        Y_VERIFY_S(tableId.PathId.OwnerId == Self->TabletID(),
-                   "Unexpected table " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId
-                                       << " for datashard " << Self->TabletID()
-                                       << " in a local minikql tx");
-
-        if (tableId.PathId.LocalPathId < Schema::MinLocalTid) {
-            // System tables are not versioned
-            return TRowVersion::Max();
-        }
-
-        return Self->GetLocalReadWriteVersions().ReadVersion;
-    }
-
+ 
+        Y_VERIFY_S(tableId.PathId.OwnerId == Self->TabletID(), 
+                   "Unexpected table " << tableId.PathId.OwnerId << ":" << tableId.PathId.LocalPathId 
+                                       << " for datashard " << Self->TabletID() 
+                                       << " in a local minikql tx"); 
+ 
+        if (tableId.PathId.LocalPathId < Schema::MinLocalTid) { 
+            // System tables are not versioned 
+            return TRowVersion::Max(); 
+        } 
+ 
+        return Self->GetLocalReadWriteVersions().ReadVersion; 
+    } 
+ 
 private:
     TDataShard* const Self;
 };
@@ -103,7 +103,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , LastKnownMediator(INVALID_TABLET_ID)
     , RegistrationSended(false)
     , LoanReturnTracker(info->TabletID)
-    , MvccSwitchState(TSwitchState::READY)
+    , MvccSwitchState(TSwitchState::READY) 
     , SplitSnapshotStarted(false)
     , SplitSrcSnapshotSender(this)
     , DstSplitOpId(0)
@@ -843,9 +843,9 @@ TUserTable::TPtr TDataShard::CreateUserTable(TTransactionContext& txc,
 
     Pipeline.UpdateConfig(db, partConfig.GetPipelineConfig());
 
-    if (partConfig.HasKeepSnapshotTimeout())
-        SnapshotManager.SetKeepSnapshotTimeout(db, partConfig.GetKeepSnapshotTimeout());
-
+    if (partConfig.HasKeepSnapshotTimeout()) 
+        SnapshotManager.SetKeepSnapshotTimeout(db, partConfig.GetKeepSnapshotTimeout()); 
+ 
     PersistSys(db, Schema::Sys_LastLocalTid, LastLocalTid);
     PersistUserTable(db, tableId, *tableInfo);
 
@@ -958,9 +958,9 @@ TUserTable::TPtr TDataShard::AlterUserTable(const TActorContext& ctx, TTransacti
         }
 
         tableInfo->SetSchema(tableDescr);
-
-        if (configDelta.HasKeepSnapshotTimeout())
-            SnapshotManager.SetKeepSnapshotTimeout(db, configDelta.GetKeepSnapshotTimeout());
+ 
+        if (configDelta.HasKeepSnapshotTimeout()) 
+            SnapshotManager.SetKeepSnapshotTimeout(db, configDelta.GetKeepSnapshotTimeout()); 
     }
 
     PersistUserTable(db, tableId, *tableInfo);
@@ -1193,15 +1193,15 @@ bool TDataShard::IsMvccEnabled() const {
 
 TReadWriteVersions TDataShard::GetLocalReadWriteVersions() const {
     if (!IsMvccEnabled())
-        return {TRowVersion::Max(), SnapshotManager.GetMinWriteVersion()};
-
-    TRowVersion edge = Max(SnapshotManager.GetCompleteEdge(), SnapshotManager.GetIncompleteEdge());
-    if (auto nextOp = Pipeline.GetNextPlannedOp(edge.Step, edge.TxId))
-        return TRowVersion(nextOp->GetStep(), nextOp->GetTxId());
-
-    return TRowVersion((++edge).Step, ::Max<ui64>());
-}
-
+        return {TRowVersion::Max(), SnapshotManager.GetMinWriteVersion()}; 
+ 
+    TRowVersion edge = Max(SnapshotManager.GetCompleteEdge(), SnapshotManager.GetIncompleteEdge()); 
+    if (auto nextOp = Pipeline.GetNextPlannedOp(edge.Step, edge.TxId)) 
+        return TRowVersion(nextOp->GetStep(), nextOp->GetTxId()); 
+ 
+    return TRowVersion((++edge).Step, ::Max<ui64>()); 
+} 
+ 
 TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const {
     Y_VERIFY_DEBUG(IsMvccEnabled());
 
@@ -1209,12 +1209,12 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
         if (op->IsMvccSnapshotRead()) {
             return op->GetMvccSnapshot();
         }
-
+ 
         if (op->GetStep()) {
             return TRowVersion(op->GetStep(), op->GetTxId());
         }
     }
-
+ 
     TRowVersion edge;
     TRowVersion readEdge = SnapshotManager.GetCompleteEdge();
     TRowVersion writeEdge = Max(readEdge, SnapshotManager.GetIncompleteEdge());
@@ -1233,21 +1233,21 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
             edge = writeEdge;
             break;
     }
-
+ 
     // If there's any planned operation that is above our edge, it would be a
     // suitable version for a new immediate operation. We effectively try to
     // execute "before" that point if possible.
-    if (auto nextOp = Pipeline.GetNextPlannedOp(edge.Step, edge.TxId))
-        return TRowVersion(nextOp->GetStep(), nextOp->GetTxId());
-
+    if (auto nextOp = Pipeline.GetNextPlannedOp(edge.Step, edge.TxId)) 
+        return TRowVersion(nextOp->GetStep(), nextOp->GetTxId()); 
+ 
     // This is currently active step for immediate writes, not that when
     // writeEdge is equal to some (PlanStep, Max<ui64>()) that means everything
     // up to this point is "fixed" and cannot be changed. In that case we
     // choose at least PlanStep + 1 for new writes.
     ui64 writeStep = Max(MediatorTimeCastEntry ? MediatorTimeCastEntry->Get(TabletID()) : 0, (++writeEdge).Step);
-    return TRowVersion(writeStep, ::Max<ui64>());
-}
-
+    return TRowVersion(writeStep, ::Max<ui64>()); 
+} 
+ 
 TReadWriteVersions TDataShard::GetReadWriteVersions(TOperation* op) const {
     if (!IsMvccEnabled())
         return {TRowVersion::Max(), SnapshotManager.GetMinWriteVersion()};
@@ -1385,11 +1385,11 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
         reject = true;
         rejectStatus = NKikimrTxDataShard::TEvProposeTransactionResult::ERROR;
         rejectReasons.push_back("is in a pre/offline state assuming this is due to a finished split (wrong shard state)");
-    } else if (MvccSwitchState == TSwitchState::SWITCHING) {
-        reject = true;
-        rejectReasons.push_back(TStringBuilder()
-            << "is in process of mvcc state change"
-            << " state " << DatashardStateName(State));
+    } else if (MvccSwitchState == TSwitchState::SWITCHING) { 
+        reject = true; 
+        rejectReasons.push_back(TStringBuilder() 
+            << "is in process of mvcc state change" 
+            << " state " << DatashardStateName(State)); 
     }
 
     if (Pipeline.HasDrop()) {
@@ -1415,7 +1415,7 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
             rejectReasons.push_back("decided to reject due to given RejectProbability");
     }
 
-    size_t totalInFly = (TxInFly() + ImmediateInFly() + ProposeQueue.Size() + TxWaiting());
+    size_t totalInFly = (TxInFly() + ImmediateInFly() + ProposeQueue.Size() + TxWaiting()); 
     if (totalInFly > GetMaxTxInFly()) {
         reject = true;
         rejectReasons.push_back("MaxTxInFly was exceeded");
@@ -1498,15 +1498,15 @@ void TDataShard::Handle(TEvDataShard::TEvProposeTransaction::TPtr &ev, const TAc
         return;
     }
 
-    if (CheckTxNeedWait(ev)) {
-         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-            "Handle TEvProposeTransaction delayed at " << TabletID() << " until interesting plan step will come");
-        if (Pipeline.AddWaitingTxOp(ev, ctx)) {
+    if (CheckTxNeedWait(ev)) { 
+         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
+            "Handle TEvProposeTransaction delayed at " << TabletID() << " until interesting plan step will come"); 
+        if (Pipeline.AddWaitingTxOp(ev, ctx)) { 
             UpdateProposeQueueSize();
-            return;
-        }
-    }
-
+            return; 
+        } 
+    } 
+ 
     IncCounter(COUNTER_PREPARE_REQUEST);
 
     if (CheckDataTxRejectAndReply(ev->Get(), ctx)) {
@@ -1901,51 +1901,51 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, 
     Y_VERIFY(ev->Get()->TabletId == TabletID());
     MediatorTimeCastEntry = ev->Get()->Entry;
     Y_VERIFY(MediatorTimeCastEntry);
-
-    Pipeline.ActivateWaitingTxOps(ctx);
+ 
+    Pipeline.ActivateWaitingTxOps(ctx); 
 }
 
 void TDataShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx) {
-    const auto* msg = ev->Get();
-    Y_VERIFY(msg->TabletId == TabletID());
-
-    Y_VERIFY(MediatorTimeCastEntry);
-    ui64 step = MediatorTimeCastEntry->Get(TabletID());
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Notified by mediator time cast with PlanStep# " << step << " at tablet " << TabletID());
-
-    for (auto it = MediatorTimeCastWaitingSteps.begin(); it != MediatorTimeCastWaitingSteps.end() && *it <= step;)
-        it = MediatorTimeCastWaitingSteps.erase(it);
-
-    Pipeline.ActivateWaitingTxOps(ctx);
-}
-
+    const auto* msg = ev->Get(); 
+    Y_VERIFY(msg->TabletId == TabletID()); 
+ 
+    Y_VERIFY(MediatorTimeCastEntry); 
+    ui64 step = MediatorTimeCastEntry->Get(TabletID()); 
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Notified by mediator time cast with PlanStep# " << step << " at tablet " << TabletID()); 
+ 
+    for (auto it = MediatorTimeCastWaitingSteps.begin(); it != MediatorTimeCastWaitingSteps.end() && *it <= step;) 
+        it = MediatorTimeCastWaitingSteps.erase(it); 
+ 
+    Pipeline.ActivateWaitingTxOps(ctx); 
+} 
+ 
 bool TDataShard::WaitPlanStep(ui64 step) {
-    if (step <= Pipeline.GetLastPlannedTx().Step)
-        return false;
-
-    if (MediatorTimeCastEntry && step <= MediatorTimeCastEntry->Get(TabletID()))
-        return false;
-
-    if (!RegistrationSended)
-        return false;
-
-    if (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin()) {
-        MediatorTimeCastWaitingSteps.insert(step);
-        Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast");
-        return true;
-    }
-
-    return false;
-}
-
+    if (step <= Pipeline.GetLastPlannedTx().Step) 
+        return false; 
+ 
+    if (MediatorTimeCastEntry && step <= MediatorTimeCastEntry->Get(TabletID())) 
+        return false; 
+ 
+    if (!RegistrationSended) 
+        return false; 
+ 
+    if (MediatorTimeCastWaitingSteps.empty() || step < *MediatorTimeCastWaitingSteps.begin()) { 
+        MediatorTimeCastWaitingSteps.insert(step); 
+        Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvWaitPlanStep(TabletID(), step)); 
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Waiting for PlanStep# " << step << " from mediator time cast"); 
+        return true; 
+    } 
+ 
+    return false; 
+} 
+ 
 bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr& ev) const {
     if (MvccSwitchState == TSwitchState::SWITCHING) {
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "New transaction needs to wait because of mvcc state switching");
-        return true;
+        return true; 
     }
-
-    auto &rec = ev->Get()->Record;
+ 
+    auto &rec = ev->Get()->Record; 
     if (rec.HasMvccSnapshot()) {
         TRowVersion rowVersion(rec.GetMvccSnapshot().GetStep(), rec.GetMvccSnapshot().GetTxId());
         TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge();
@@ -1956,8 +1956,8 @@ bool TDataShard::CheckTxNeedWait(const TEvDataShard::TEvProposeTransaction::TPtr
     }
 
     return false;
-}
-
+} 
+ 
 bool TDataShard::CheckChangesQueueOverflow() const {
     const auto* appData = AppData();
     const auto sizeLimit = appData->DataShardConfig.GetChangesQueueItemsLimit();
@@ -2591,7 +2591,7 @@ void TDataShard::ExecuteProgressTx(TOperation::TPtr op, const TActorContext& ctx
 
 TDuration TDataShard::CleanupTimeout() const {
     const TDuration pipelineTimeout = Pipeline.CleanupTimeout();
-    const TDuration snapshotTimeout = SnapshotManager.CleanupTimeout();
+    const TDuration snapshotTimeout = SnapshotManager.CleanupTimeout(); 
     const TDuration minTimeout = TDuration::Seconds(1);
     const TDuration maxTimeout = TDuration::MilliSeconds(DefaultTxStepDeadline() / 2);
     return Max(minTimeout, Min(pipelineTimeout, snapshotTimeout, maxTimeout));

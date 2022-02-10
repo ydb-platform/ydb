@@ -29,11 +29,11 @@ private:
         return Factory->GetWriteVersion(tableId);
     }
 
-    TRowVersion GetReadVersion(const TTableId& tableId) const override
-    {
-        return Factory->GetReadVersion(tableId);
-    }
-
+    TRowVersion GetReadVersion(const TTableId& tableId) const override 
+    { 
+        return Factory->GetReadVersion(tableId); 
+    } 
+ 
     IChangeCollector* GetChangeCollector(const TTableId& tableId) const override
     {
         return Factory->GetChangeCollector(tableId);

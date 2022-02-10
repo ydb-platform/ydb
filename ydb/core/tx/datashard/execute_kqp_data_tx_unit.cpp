@@ -126,9 +126,9 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         auto execCtx = DefaultKqpExecutionContext();
         tasksRunner.Prepare(DefaultKqpDataReqMemoryLimits(), *execCtx);
 
-        auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
-        dataTx->SetReadVersion(readVersion);
-        dataTx->SetWriteVersion(writeVersion);
+        auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx); 
+        dataTx->SetReadVersion(readVersion); 
+        dataTx->SetWriteVersion(writeVersion); 
 
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
 
@@ -154,7 +154,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         if (op->IsImmediate() && !op->IsReadOnly()) {
             DataShard.PromoteCompleteEdge(writeVersion.Step, txc);
         }
-
+ 
         if (auto changes = dataTx->GetCollectedChanges()) {
             op->ChangeRecords().reserve(changes.size());
             for (const auto& change : changes) {
@@ -196,8 +196,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         }
     }
 
-    Pipeline.AddCommittingOp(op);
-
+    Pipeline.AddCommittingOp(op); 
+ 
     DataShard.IncCounter(COUNTER_WAIT_EXECUTE_LATENCY_MS, waitExecuteLatency.MilliSeconds());
     DataShard.IncCounter(COUNTER_WAIT_TOTAL_LATENCY_MS, waitTotalLatency.MilliSeconds());
     op->ResetCurrentTimer();

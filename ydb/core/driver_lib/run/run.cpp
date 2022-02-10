@@ -204,7 +204,7 @@ public:
         appData->FeatureFlags = Config.GetFeatureFlags();
         appData->AllowHugeKeyValueDeletes = Config.GetFeatureFlags().GetAllowHugeKeyValueDeletes();
         appData->EnableKqpSpilling = Config.GetTableServiceConfig().GetSpillingServiceConfig().GetLocalFileConfig().GetEnable();
-
+ 
         appData->CompactionConfig = Config.GetCompactionConfig();
     }
 };
@@ -1284,10 +1284,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TConfigsDispatcherInitializer(runConfig));
     }
 
-    if (serviceMask.EnableConfigsCache) {
-        sil->AddServiceInitializer(new TConfigsCacheInitializer(runConfig));
-    }
-
+    if (serviceMask.EnableConfigsCache) { 
+        sil->AddServiceInitializer(new TConfigsCacheInitializer(runConfig)); 
+    } 
+ 
     if (serviceMask.EnableTabletInfo) {
         sil->AddServiceInitializer(new TTabletInfoInitializer(runConfig));
     }

@@ -149,7 +149,7 @@ public:
     EOperationKind GetKind() const { return Kind; }
 
     bool IsDataTx() const { return Kind == EOperationKind::DataTx; }
-    bool IsDirectTx() const { return Kind == EOperationKind::DirectTx; }
+    bool IsDirectTx() const { return Kind == EOperationKind::DirectTx; } 
     bool IsSchemeTx() const { return Kind == EOperationKind::SchemeTx; }
     bool IsReadTable() const { return Kind == EOperationKind::ReadTable; }
     bool IsSnapshotTx() const { return Kind == EOperationKind::Snapshot; }
@@ -331,9 +331,9 @@ public:
     bool HasStoredFlag() const { return HasFlag(TTxFlags::Stored); }
     void SetStoredFlag(bool val = true) { SetFlag(TTxFlags::Stored, val); }
 
-    bool HasWaitCompletionFlag() const { return HasFlag(TTxFlags::WaitCompletion); }
-    void SetWaitCompletionFlag(bool val = true) { SetFlag(TTxFlags::WaitCompletion, val); }
-
+    bool HasWaitCompletionFlag() const { return HasFlag(TTxFlags::WaitCompletion); } 
+    void SetWaitCompletionFlag(bool val = true) { SetFlag(TTxFlags::WaitCompletion, val); } 
+ 
     ///////////////////////////////////
     //     OPERATION ID AND PLAN     //
     ///////////////////////////////////
@@ -373,7 +373,7 @@ public:
         MvccSnapshot = snapshot;
         MvccSnapshotRepeatable = isRepeatable;
     }
-
+ 
     ///////////////////////////////////
     //     DEBUG AND MONITORING      //
     ///////////////////////////////////

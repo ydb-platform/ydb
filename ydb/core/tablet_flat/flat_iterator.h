@@ -24,7 +24,7 @@ enum class ENext {
 
 struct TIteratorStats {
     ui64 DeletedRowSkips = 0;
-    ui64 InvisibleRowSkips = 0;
+    ui64 InvisibleRowSkips = 0; 
 };
 
 template<class TIteratorOps>
@@ -61,28 +61,28 @@ class TTableItBase : TNonCopyable {
             FreeKey(&FirstErased);
         }
 
-        void OnEraseKey(TArrayRef<const TCell> key, TRowVersion version) {
-            if (!Cache)
+        void OnEraseKey(TArrayRef<const TCell> key, TRowVersion version) { 
+            if (!Cache) 
                 return;
-
-            if (FutureEntryValid && Cache.CrossedAtRight(FutureEntry, key)) {
-                // The iterator is still in future range, will skip all checks
-                return;
+ 
+            if (FutureEntryValid && Cache.CrossedAtRight(FutureEntry, key)) { 
+                // The iterator is still in future range, will skip all checks 
+                return; 
             }
 
-            FutureEntryValid = false;
-
-            if (NextEntryValid && Cache.CrossedAtLeft(NextEntry, key)) {
+            FutureEntryValid = false; 
+ 
+            if (NextEntryValid && Cache.CrossedAtLeft(NextEntry, key)) { 
                 // We have just crossed the gap into the next entry
                 FreeKey(&LastErased);
                 if (PrevEntryValid) {
                     // Merge the two adjacent entries that we have
                     Y_VERIFY_DEBUG(!FirstErased);
-                    Y_VERIFY_DEBUG(MaxVersion >= PrevEntry->MaxVersion);
-                    NextEntry = Cache.MergeAdjacent(PrevEntry, NextEntry, ::Max(MaxVersion, version));
+                    Y_VERIFY_DEBUG(MaxVersion >= PrevEntry->MaxVersion); 
+                    NextEntry = Cache.MergeAdjacent(PrevEntry, NextEntry, ::Max(MaxVersion, version)); 
                 } else if (FirstErased) {
                     // Extend the next entry with an earlier key
-                    Cache.ExtendBackward(NextEntry, TakeKey(&FirstErased), true, ::Max(MaxVersion, version));
+                    Cache.ExtendBackward(NextEntry, TakeKey(&FirstErased), true, ::Max(MaxVersion, version)); 
                 }
                 Cache.Touch(NextEntry);
                 Cache.EvictOld();
@@ -90,18 +90,18 @@ class TTableItBase : TNonCopyable {
                 PrevEntryValid = false;
                 NextEntryValid = false;
                 ErasedCount = 0;
-                MaxVersion = TRowVersion::Min();
+                MaxVersion = TRowVersion::Min(); 
 
                 Y_VERIFY_DEBUG(!FirstErased);
                 Y_VERIFY_DEBUG(!LastErased);
 
-                if (NextEntry->MaxVersion > It->SnapshotVersion) {
-                    // The range is in future, the iterator cannot use it
-                    FutureEntry = NextEntry;
-                    FutureEntryValid = true;
-                    return;
-                }
-
+                if (NextEntry->MaxVersion > It->SnapshotVersion) { 
+                    // The range is in future, the iterator cannot use it 
+                    FutureEntry = NextEntry; 
+                    FutureEntryValid = true; 
+                    return; 
+                } 
+ 
                 if (!TOps::EndKey(NextEntry)) {
                     // We know that everything to +inf is erased
                     It->Iterators.clear();
@@ -120,14 +120,14 @@ class TTableItBase : TNonCopyable {
                 PrevEntryValid = true;
                 NextEntry = Cache.Next(PrevEntry);
                 NextEntryValid = true;
-                MaxVersion = PrevEntry->MaxVersion;
+                MaxVersion = PrevEntry->MaxVersion; 
                 return;
             }
 
             if (PrevEntryValid || FirstErased) {
                 FreeKey(&LastErased);
                 LastErased = Cache.AllocateKey(key);
-                MaxVersion = ::Max(MaxVersion, version);
+                MaxVersion = ::Max(MaxVersion, version); 
                 ++ErasedCount;
                 return;
             }
@@ -140,19 +140,19 @@ class TTableItBase : TNonCopyable {
                 return;
             }
 
-            Y_VERIFY_DEBUG(!PrevEntryValid);
-            Y_VERIFY_DEBUG(!NextEntryValid);
-
+            Y_VERIFY_DEBUG(!PrevEntryValid); 
+            Y_VERIFY_DEBUG(!NextEntryValid); 
+ 
             // Check if this key is an already known erase key
             auto res = Cache.FindKey(key);
             if (res.second) {
-                if (res.first->MaxVersion > It->SnapshotVersion) {
-                    // The range is in future, the iterator cannot use it
-                    FutureEntry = res.first;
-                    FutureEntryValid = true;
-                    return;
-                }
-
+                if (res.first->MaxVersion > It->SnapshotVersion) { 
+                    // The range is in future, the iterator cannot use it 
+                    FutureEntry = res.first; 
+                    FutureEntryValid = true; 
+                    return; 
+                } 
+ 
                 Cache.Touch(res.first);
                 if (!It->SkipTo(TOps::EndKey(res.first), !TOps::EndInclusive(res.first))) {
                     // We've got some missing page, cannot iterate further
@@ -162,7 +162,7 @@ class TTableItBase : TNonCopyable {
                 PrevEntryValid = true;
                 NextEntry = Cache.Next(PrevEntry);
                 NextEntryValid = true;
-                MaxVersion = PrevEntry->MaxVersion;
+                MaxVersion = PrevEntry->MaxVersion; 
                 return;
             }
 
@@ -174,7 +174,7 @@ class TTableItBase : TNonCopyable {
             }
 
             FirstErased = Cache.AllocateKey(key);
-            MaxVersion = version;
+            MaxVersion = version; 
             ++ErasedCount;
         }
 
@@ -186,12 +186,12 @@ class TTableItBase : TNonCopyable {
             if (ErasedCount > 0 && LastErased) {
                 if (PrevEntryValid) {
                     Y_VERIFY_DEBUG(!FirstErased);
-                    Cache.ExtendForward(PrevEntry, TakeKey(&LastErased), true, MaxVersion);
+                    Cache.ExtendForward(PrevEntry, TakeKey(&LastErased), true, MaxVersion); 
                     Cache.EvictOld();
                 } else if (ErasedCount >= Cache.MinRows()) {
                     // We have enough erased rows to make a new cache entry
                     Y_VERIFY_DEBUG(FirstErased);
-                    Cache.AddRange(TakeKey(&FirstErased), TakeKey(&LastErased), MaxVersion);
+                    Cache.AddRange(TakeKey(&FirstErased), TakeKey(&LastErased), MaxVersion); 
                     Cache.EvictOld();
                 }
             }
@@ -200,9 +200,9 @@ class TTableItBase : TNonCopyable {
             FreeKey(&FirstErased);
             PrevEntryValid = false;
             NextEntryValid = false;
-            FutureEntryValid = false;
+            FutureEntryValid = false; 
             ErasedCount = 0;
-            MaxVersion = TRowVersion::Min();
+            MaxVersion = TRowVersion::Min(); 
         }
 
     private:
@@ -224,14 +224,14 @@ class TTableItBase : TNonCopyable {
         TOps Cache;
         TKeyRangeCache::const_iterator PrevEntry;
         TKeyRangeCache::const_iterator NextEntry;
-        TKeyRangeCache::const_iterator FutureEntry;
+        TKeyRangeCache::const_iterator FutureEntry; 
         TArrayRef<TCell> FirstErased;
         TArrayRef<TCell> LastErased;
         size_t ErasedCount = 0;
-        TRowVersion MaxVersion = TRowVersion::Min();
+        TRowVersion MaxVersion = TRowVersion::Min(); 
         bool PrevEntryValid = false;
         bool NextEntryValid = false;
-        bool FutureEntryValid = false;
+        bool FutureEntryValid = false; 
     };
 
 public:
@@ -262,7 +262,7 @@ public:
     {
         TEraseCachingState eraseCache(this);
 
-        bool isHead = true;
+        bool isHead = true; 
         for (Ready = EReady::Data; Ready == EReady::Data; ) {
             if (Stage == EStage::Seek) {
                 Ready = Start();
@@ -288,12 +288,12 @@ public:
             } else {
                 ++Stats.DeletedRowSkips; /* skip internal technical row states w/o data */
                 if (ErasedKeysCache) {
-                    if (isHead) {
-                        eraseCache.OnEraseKey(GetKey().Cells(), GetRowVersion());
-                    } else {
-                        eraseCache.Flush();
-                        isHead = true;
-                    }
+                    if (isHead) { 
+                        eraseCache.OnEraseKey(GetKey().Cells(), GetRowVersion()); 
+                    } else { 
+                        eraseCache.Flush(); 
+                        isHead = true; 
+                    } 
                 }
             }
         }
@@ -782,15 +782,15 @@ inline EReady TTableItBase<TIteratorOps>::Snap(TRowVersion rowVersion) noexcept
         switch (ai.Type) {
             case EType::Mem: {
                 auto ready = MemIters[ai.Index]->SkipToRowVersion(rowVersion, CommittedTransactions);
-                Stats.InvisibleRowSkips += std::exchange(MemIters[ai.Index]->InvisibleRowSkips, 0);
-                if (ready) {
+                Stats.InvisibleRowSkips += std::exchange(MemIters[ai.Index]->InvisibleRowSkips, 0); 
+                if (ready) { 
                     return EReady::Data;
                 }
                 break;
             }
             case EType::Run: {
                 auto ready = RunIters[ai.Index]->SkipToRowVersion(rowVersion, CommittedTransactions);
-                Stats.InvisibleRowSkips += std::exchange(RunIters[ai.Index]->InvisibleRowSkips, 0);
+                Stats.InvisibleRowSkips += std::exchange(RunIters[ai.Index]->InvisibleRowSkips, 0); 
                 if (ready == EReady::Data) {
                     return EReady::Data;
                 } else if (ready != EReady::Gone) {

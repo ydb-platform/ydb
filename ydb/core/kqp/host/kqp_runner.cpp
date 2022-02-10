@@ -183,7 +183,7 @@ public:
 
         PreparedRunTransformer = TTransformationPipeline(typesCtx)
             .Add(TLogExprTransformer::Sync("PreparedRun iteration", logComp, logLevel), "KqlPreparedRun")
-            .Add(CreateKqpAcquireMvccSnapshotTransformer(Gateway, TxState, TransformCtx), "AcquireMvccSnapshot")
+            .Add(CreateKqpAcquireMvccSnapshotTransformer(Gateway, TxState, TransformCtx), "AcquireMvccSnapshot") 
             .Add(CreateKqpExecutePreparedTransformer(Gateway, Cluster, TxState, TransformCtx), "ExecutePrepared")
             .Add(CreateKqpFinalizeTransformer(Gateway, Cluster, TxState, TransformCtx), "Finalize")
             .Build(false);
@@ -238,7 +238,7 @@ public:
             .Build(false);
 
         PhysicalRunQueryTransformer = TTransformationPipeline(typesCtx)
-            .Add(CreateKqpAcquireMvccSnapshotTransformer(Gateway, TxState, TransformCtx, true), "AcquireMvccSnapshot")
+            .Add(CreateKqpAcquireMvccSnapshotTransformer(Gateway, TxState, TransformCtx, true), "AcquireMvccSnapshot") 
             .Add(CreateKqpExecutePhysicalDataTransformer(Gateway, Cluster, TxState, TransformCtx), "ExecutePhysical")
             .Build(false);
 
@@ -598,7 +598,7 @@ private:
         TransformCtx->PhysicalQuery = &phyQuery;
         TransformCtx->ReplyTarget = target;
 
-        Y_ASSERT(!TxState->Tx().GetSnapshot().IsValid());
+        Y_ASSERT(!TxState->Tx().GetSnapshot().IsValid()); 
 
         return MakeIntrusive<TScanAsyncRunResult>(world, ctx, *ScanRunQueryTransformer);
     }
@@ -640,55 +640,55 @@ private:
     TAutoPtr<IGraphTransformer> ScanRunQueryTransformer;
 };
 
-class TKqpAcquireMvccSnapshotTransformer : public TGraphTransformerBase {
-public:
-    TKqpAcquireMvccSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKqlTransformContext> transformCtx,
-        TIntrusivePtr<TKqpTransactionState> txState, bool newEngine)
-        : Gateway(std::move(gateway))
-        , TransformCtx(std::move(transformCtx))
-        , NewEngine(newEngine)
-        , TxState(std::move(txState))
-    {}
-
-    TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext&) override {
-        output = input;
-
-        if (!NeedSnapshot())
-            return TStatus::Ok;
-
-        auto timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - Gateway->GetCurrentTime();
-        if (!timeout) {
-            // TODO: Just cancel request.
-            timeout = TDuration::MilliSeconds(1);
-        }
-        SnapshotFuture = Gateway->AcquireMvccSnapshot(timeout);
-
-        Promise = NewPromise();
-
-        SnapshotFuture.Apply([promise = Promise](const TFuture<IKqpGateway::TKqpSnapshotHandle> future) mutable {
-            YQL_ENSURE(future.HasValue());
-            promise.SetValue();
-        });
-
-        return TStatus::Async;
-    }
-
-    NThreading::TFuture<void> DoGetAsyncFuture(const NYql::TExprNode&) override {
-        return Promise.GetFuture();
-    }
-
-    TStatus DoApplyAsyncChanges(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) override {
-        output = input;
-
-        auto handle = SnapshotFuture.ExtractValue();
-
-        if (handle.Snapshot.IsValid()) {
-            TxState->Tx().SnapshotHandle = handle;
-
-            return TStatus::Ok;
-        }
-
-        TIssue issue("Failed to acquire snapshot");
+class TKqpAcquireMvccSnapshotTransformer : public TGraphTransformerBase { 
+public: 
+    TKqpAcquireMvccSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKqlTransformContext> transformCtx, 
+        TIntrusivePtr<TKqpTransactionState> txState, bool newEngine) 
+        : Gateway(std::move(gateway)) 
+        , TransformCtx(std::move(transformCtx)) 
+        , NewEngine(newEngine) 
+        , TxState(std::move(txState)) 
+    {} 
+ 
+    TStatus DoTransform(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext&) override { 
+        output = input; 
+ 
+        if (!NeedSnapshot()) 
+            return TStatus::Ok; 
+ 
+        auto timeout = TransformCtx->QueryCtx->Deadlines.TimeoutAt - Gateway->GetCurrentTime(); 
+        if (!timeout) { 
+            // TODO: Just cancel request. 
+            timeout = TDuration::MilliSeconds(1); 
+        } 
+        SnapshotFuture = Gateway->AcquireMvccSnapshot(timeout); 
+ 
+        Promise = NewPromise(); 
+ 
+        SnapshotFuture.Apply([promise = Promise](const TFuture<IKqpGateway::TKqpSnapshotHandle> future) mutable { 
+            YQL_ENSURE(future.HasValue()); 
+            promise.SetValue(); 
+        }); 
+ 
+        return TStatus::Async; 
+    } 
+ 
+    NThreading::TFuture<void> DoGetAsyncFuture(const NYql::TExprNode&) override { 
+        return Promise.GetFuture(); 
+    } 
+ 
+    TStatus DoApplyAsyncChanges(NYql::TExprNode::TPtr input, NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx) override { 
+        output = input; 
+ 
+        auto handle = SnapshotFuture.ExtractValue(); 
+ 
+        if (handle.Snapshot.IsValid()) { 
+            TxState->Tx().SnapshotHandle = handle; 
+ 
+            return TStatus::Ok; 
+        } 
+ 
+        TIssue issue("Failed to acquire snapshot"); 
         switch (handle.Status) {
             case NKikimrIssues::TStatusIds::SCHEME_ERROR:
                 issue.SetCode(NYql::TIssuesIds::KIKIMR_SCHEME_ERROR, NYql::TSeverityIds::S_ERROR);
@@ -706,35 +706,35 @@ public:
         }
 
         for (const auto& subIssue: handle.Issues()) {
-            issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
+            issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue)); 
         }
-        ctx.AddError(issue);
-        return TStatus::Error;
-    }
-
-private:
-    bool NeedSnapshot() {
-        if (*TxState->Tx().EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE)
-            return false;
-
-        if (!TransformCtx->Config->FeatureFlags.GetEnableMvccSnapshotReads())
-            return false;
-
-        if (TxState->Tx().GetSnapshot().IsValid())
-            return false;
-
-        auto settings = TransformCtx->Settings;
-        if (settings.GetRollbackTx())
-            return false;
-        if (!settings.GetCommitTx())
-            return true;
-
+        ctx.AddError(issue); 
+        return TStatus::Error; 
+    } 
+ 
+private: 
+    bool NeedSnapshot() { 
+        if (*TxState->Tx().EffectiveIsolationLevel != NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE) 
+            return false; 
+ 
+        if (!TransformCtx->Config->FeatureFlags.GetEnableMvccSnapshotReads()) 
+            return false; 
+ 
+        if (TxState->Tx().GetSnapshot().IsValid()) 
+            return false; 
+ 
+        auto settings = TransformCtx->Settings; 
+        if (settings.GetRollbackTx()) 
+            return false; 
+        if (!settings.GetCommitTx()) 
+            return true; 
+ 
         size_t readPhases = 0;
         bool hasEffects = false;
 
-        if (NewEngine) {
-            YQL_ENSURE(TransformCtx->PhysicalQuery);
-            auto &query = *TransformCtx->PhysicalQuery;
+        if (NewEngine) { 
+            YQL_ENSURE(TransformCtx->PhysicalQuery); 
+            auto &query = *TransformCtx->PhysicalQuery; 
 
             for (const auto &tx : query.GetTransactions()) {
                 switch (tx.GetType()) {
@@ -758,8 +758,8 @@ private:
 
             readPhases += kql.GetMkqls().size();
             hasEffects = !kql.GetEffects().empty();
-        }
-
+        } 
+ 
         // We don't want snapshot when there are effects at the moment,
         // because it hurts performance when there are multiple single-shard
         // reads and a single distributed commit. Taking snapshot costs
@@ -776,26 +776,26 @@ private:
         // for read-only transactions, and costs less than a final distributed
         // commit.
         return readPhases > 1;
-    }
-
-private:
-    TIntrusivePtr<IKqpGateway> Gateway;
-    TIntrusivePtr<TKqlTransformContext> TransformCtx;
-
-    bool NewEngine;
-
-    NThreading::TFuture<IKqpGateway::TKqpSnapshotHandle> SnapshotFuture;
-    NThreading::TPromise<void> Promise;
-    TIntrusivePtr<TKqpTransactionState> TxState;
-};
-
+    } 
+ 
+private: 
+    TIntrusivePtr<IKqpGateway> Gateway; 
+    TIntrusivePtr<TKqlTransformContext> TransformCtx; 
+ 
+    bool NewEngine; 
+ 
+    NThreading::TFuture<IKqpGateway::TKqpSnapshotHandle> SnapshotFuture; 
+    NThreading::TPromise<void> Promise; 
+    TIntrusivePtr<TKqpTransactionState> TxState; 
+}; 
+ 
 } // namespace
 
-TAutoPtr<NYql::IGraphTransformer> CreateKqpAcquireMvccSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway,
-    TIntrusivePtr<TKqpTransactionState> txState, TIntrusivePtr<TKqlTransformContext> transformCtx, bool newEngine) {
-    return new TKqpAcquireMvccSnapshotTransformer(gateway, transformCtx, txState, newEngine);
-}
-
+TAutoPtr<NYql::IGraphTransformer> CreateKqpAcquireMvccSnapshotTransformer(TIntrusivePtr<IKqpGateway> gateway, 
+    TIntrusivePtr<TKqpTransactionState> txState, TIntrusivePtr<TKqlTransformContext> transformCtx, bool newEngine) { 
+    return new TKqpAcquireMvccSnapshotTransformer(gateway, transformCtx, txState, newEngine); 
+} 
+ 
 TIntrusivePtr<IKqpRunner> CreateKqpRunner(TIntrusivePtr<IKqpGateway> gateway, const TString& cluster,
     TIntrusivePtr<TTypeAnnotationContext> typesCtx, TIntrusivePtr<TKikimrSessionContext> sessionCtx,
     const NMiniKQL::IFunctionRegistry& funcRegistry)

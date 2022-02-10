@@ -436,15 +436,15 @@ void AssignIds(const TVector<ui64> &ids,
 }
 
 
-inline void CheckEqualsIgnoringVersion(NKikimrConfig::TAppConfig config1, NKikimrConfig::TAppConfig config2)
-{
-    config1.ClearVersion();
-    config2.ClearVersion();
-
-    UNIT_ASSERT_VALUES_EQUAL(config1.ShortDebugString(), config2.ShortDebugString());
-}
-
-
+inline void CheckEqualsIgnoringVersion(NKikimrConfig::TAppConfig config1, NKikimrConfig::TAppConfig config2) 
+{ 
+    config1.ClearVersion(); 
+    config2.ClearVersion(); 
+ 
+    UNIT_ASSERT_VALUES_EQUAL(config1.ShortDebugString(), config2.ShortDebugString()); 
+} 
+ 
+ 
 } // namespace NUT
 } // namespace NConsole
 } // namesapce NKikimr

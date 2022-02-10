@@ -78,37 +78,37 @@ void TKeyRangeCache::DeallocateKey(TArrayRef<TCell> key) {
     Pool->Deallocate((void*)key.data(), sizeof(TCell) * key.size());
 }
 
-void TKeyRangeCache::ExtendLeft(const_iterator it, TArrayRef<TCell> newLeft, bool leftInclusive, TRowVersion version) {
+void TKeyRangeCache::ExtendLeft(const_iterator it, TArrayRef<TCell> newLeft, bool leftInclusive, TRowVersion version) { 
     Y_VERIFY_DEBUG(it != end());
     TKeyRangeEntryLRU& entry = const_cast<TKeyRangeEntryLRU&>(*it);
     DeallocateKey(entry.FromKey);
     entry.FromKey = newLeft;
     entry.FromInclusive = leftInclusive;
-    entry.MaxVersion = ::Max(entry.MaxVersion, version);
+    entry.MaxVersion = ::Max(entry.MaxVersion, version); 
 }
 
-void TKeyRangeCache::ExtendRight(const_iterator it, TArrayRef<TCell> newRight, bool rightInclusive, TRowVersion version) {
+void TKeyRangeCache::ExtendRight(const_iterator it, TArrayRef<TCell> newRight, bool rightInclusive, TRowVersion version) { 
     Y_VERIFY_DEBUG(it != end());
     TKeyRangeEntryLRU& entry = const_cast<TKeyRangeEntryLRU&>(*it);
     DeallocateKey(entry.ToKey);
     entry.ToKey = newRight;
     entry.ToInclusive = rightInclusive;
-    entry.MaxVersion = ::Max(entry.MaxVersion, version);
+    entry.MaxVersion = ::Max(entry.MaxVersion, version); 
 }
 
-TKeyRangeCache::const_iterator TKeyRangeCache::Merge(const_iterator left, const_iterator right, TRowVersion version) {
+TKeyRangeCache::const_iterator TKeyRangeCache::Merge(const_iterator left, const_iterator right, TRowVersion version) { 
     Y_VERIFY_DEBUG(left != end());
     Y_VERIFY_DEBUG(right != end());
     Y_VERIFY_DEBUG(left != right);
     TKeyRangeEntry rightCopy = *right;
     Entries.erase(right);
     DeallocateKey(rightCopy.FromKey);
-    ExtendRight(left, rightCopy.ToKey, rightCopy.ToInclusive, ::Max(rightCopy.MaxVersion, version));
+    ExtendRight(left, rightCopy.ToKey, rightCopy.ToInclusive, ::Max(rightCopy.MaxVersion, version)); 
     return left;
 }
 
 TKeyRangeCache::const_iterator TKeyRangeCache::Add(TKeyRangeEntry entry) {
-    auto res = Entries.emplace(entry.FromKey, entry.ToKey, entry.FromInclusive, entry.ToInclusive, entry.MaxVersion);
+    auto res = Entries.emplace(entry.FromKey, entry.ToKey, entry.FromInclusive, entry.ToInclusive, entry.MaxVersion); 
     Y_VERIFY_DEBUG(res.second);
     TKeyRangeEntryLRU& newEntry = const_cast<TKeyRangeEntryLRU&>(*res.first);
     Fresh.PushBack(&newEntry);

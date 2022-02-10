@@ -707,7 +707,7 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
         }
     }
 
-    if (EraseCacheEnabled) {
+    if (EraseCacheEnabled) { 
         if (!ErasedKeysCache) {
             ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig);
         }
@@ -745,7 +745,7 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
         }
     }
 
-    if (EraseCacheEnabled) {
+    if (EraseCacheEnabled) { 
         if (!ErasedKeysCache) {
             ErasedKeysCache = new TKeyRangeCache(*Scheme->Keys, EraseCacheConfig);
         }
@@ -788,7 +788,7 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
                 snapshotFound = true;
                 it->Apply(row, CommittedTransactions);
             }
-            result.Invisible += it->InvisibleRowSkips;
+            result.Invisible += it->InvisibleRowSkips; 
         }
     }
 
@@ -803,7 +803,7 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
                 snapshotFound = true;
                 it->Apply(row, CommittedTransactions);
             }
-            result.Invisible += it->InvisibleRowSkips;
+            result.Invisible += it->InvisibleRowSkips; 
         }
     }
 
@@ -826,7 +826,7 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
                         lastEpoch = part->Epoch;
                         if (!snapshotFound) {
                             res = it.SkipToRowVersion(snapshot, CommittedTransactions);
-                            result.Invisible += std::exchange(it.InvisibleRowSkips, 0);
+                            result.Invisible += std::exchange(it.InvisibleRowSkips, 0); 
                             if (res == EReady::Data) {
                                 // N.B. stop looking for snapshot after the first hit
                                 snapshotFound = true;
@@ -850,8 +850,8 @@ TTable::TReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowSta
         }
     }
 
-    Y_VERIFY_DEBUG(result.Invisible == 0 || !snapshot.IsMax());
-
+    Y_VERIFY_DEBUG(result.Invisible == 0 || !snapshot.IsMax()); 
+ 
     if (!ready || row.Need()) {
         result.Ready = EReady::Page;
     } else if (row == ERowOp::Erase || row == ERowOp::Absent) {

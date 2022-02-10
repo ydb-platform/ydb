@@ -10,8 +10,8 @@ SRCS(
     config_helpers.h
     config_index.cpp
     config_index.h
-    configs_cache.cpp
-    configs_cache.h
+    configs_cache.cpp 
+    configs_cache.h 
     configs_config.cpp
     configs_config.h
     configs_dispatcher.cpp
@@ -22,8 +22,8 @@ SRCS(
     console_configs_manager.h
     console_configs_provider.cpp
     console_configs_provider.h
-    console_configs_subscriber.cpp
-    console_configs_subscriber.h
+    console_configs_subscriber.cpp 
+    console_configs_subscriber.h 
     console_impl.h
     console_tenants_manager.cpp
     console_tenants_manager.h

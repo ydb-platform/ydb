@@ -311,7 +311,7 @@ namespace NBus {
 
         return port;
     }
- 
+
     int TBusLocator::GetLocalAddresses(TBusService service, TVector<TNetAddr>& addrs) {
         TGuard<TMutex> G(Lock);
         TServiceId serviceId = GetServiceId(service);
@@ -322,19 +322,19 @@ namespace NBus {
             if (item.ServiceId != serviceId) {
                 break;
             }
- 
+
             if (IsLocal(item.Addr)) {
                 addrs.push_back(item.Addr);
             }
         }
- 
+
         if (addrs.size() == 0) {
             return -1;
-        } 
- 
+        }
+
         return (int)addrs.size();
-    } 
- 
+    }
+
     int TBusLocator::LocateHost(TBusService service, TBusKey key, TString* host, int* port, bool* isLocal) {
         int ret;
         TNetAddr addr;
@@ -342,7 +342,7 @@ namespace NBus {
         if (ret != 0) {
             return ret;
         }
- 
+
         {
             TGuard<TMutex> G(Lock);
             THostAddrMap::const_iterator it = HostAddrMap.find(addr);

@@ -48,13 +48,13 @@ namespace NJson2Yson {
     }
 
     void SerializeJsonValueAsYson(const NJson::TJsonValue& inputValue, NYson::TYsonWriter* ysonWriter) {
-        NYT::TYson2JsonCallbacksAdapter adapter(ysonWriter); 
-        WriteJsonValue(inputValue, &adapter); 
-    } 
- 
+        NYT::TYson2JsonCallbacksAdapter adapter(ysonWriter);
+        WriteJsonValue(inputValue, &adapter);
+    }
+
     void SerializeJsonValueAsYson(const NJson::TJsonValue& inputValue, IOutputStream* outputStream) {
         NYson::TYsonWriter ysonWriter(outputStream, NYson::EYsonFormat::Binary, ::NYson::EYsonType::Node, false);
-        SerializeJsonValueAsYson(inputValue, &ysonWriter); 
+        SerializeJsonValueAsYson(inputValue, &ysonWriter);
     }
 
     void SerializeJsonValueAsYson(const NJson::TJsonValue& inputValue, TString& result) {

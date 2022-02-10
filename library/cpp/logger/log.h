@@ -1,10 +1,10 @@
 #pragma once
 
-#include "backend.h" 
+#include "backend.h"
 #include "element.h"
 #include "priority.h"
-#include "record.h" 
-#include "thread.h" 
+#include "record.h"
+#include "thread.h"
 
 #include <util/generic/fwd.h>
 #include <util/generic/ptr.h>

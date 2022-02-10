@@ -81,8 +81,8 @@ protected:
 
     template <typename PropertyType>
     static ui64 GetDifference(PropertyType a, PropertyType b) {
-        return static_cast<ui64>(std::abs(static_cast<std::make_signed_t<PropertyType>>(b) - 
-                                          static_cast<std::make_signed_t<PropertyType>>(a))); 
+        return static_cast<ui64>(std::abs(static_cast<std::make_signed_t<PropertyType>>(b) -
+                                          static_cast<std::make_signed_t<PropertyType>>(a)));
     }
 
     static ui64 GetDifference(double a, double b) {

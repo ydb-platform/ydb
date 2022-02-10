@@ -289,12 +289,12 @@ struct make_n_tuple<1, T> {
 // make_array(tuple<>) - converts to std::array<>
 
 template <typename T, std::size_t... I>
-std::array<std::tuple_element_t<0, T>, std::tuple_size<T>::value> tuple_to_array(std::index_sequence<I...>, const T& a) { 
+std::array<std::tuple_element_t<0, T>, std::tuple_size<T>::value> tuple_to_array(std::index_sequence<I...>, const T& a) {
     return {{std::get<I>(a)...}};
 }
 
 template <typename T>
-std::array<std::tuple_element_t<0, T>, std::tuple_size<T>::value> tuple_to_array(const T& a) { 
+std::array<std::tuple_element_t<0, T>, std::tuple_size<T>::value> tuple_to_array(const T& a) {
     return tuple_to_array(std::make_index_sequence<std::tuple_size<T>::value>(), a);
 }
 

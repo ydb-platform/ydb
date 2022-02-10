@@ -322,7 +322,7 @@ template <typename TIntType>
 class TZigZagValueDecoder {
 public:
     using TType = TIntType;
-    using TUnsigned = std::make_unsigned_t<TType>; 
+    using TUnsigned = std::make_unsigned_t<TType>;
 
     inline TType Peek(const char* data, const char* end) const {
         i64 value;

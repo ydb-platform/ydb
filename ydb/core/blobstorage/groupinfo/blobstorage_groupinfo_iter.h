@@ -9,7 +9,7 @@ namespace NKikimr {
     class TBlobStorageGroupInfo::TIteratorBase
         : public TParentIter
     {
-        using TValue = std::remove_reference_t<decltype(*std::declval<TBaseIter>())>; 
+        using TValue = std::remove_reference_t<decltype(*std::declval<TBaseIter>())>;
 
         TBaseIter It; // iterator to current element
 

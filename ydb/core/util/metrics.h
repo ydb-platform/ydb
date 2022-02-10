@@ -27,15 +27,15 @@ public:
         : Value(value)
     {}
 
-    std::make_signed_t<ValueType> Set(ValueType value) { 
-        std::make_signed_t<ValueType> diff = 
-                static_cast<std::make_signed_t<ValueType>>(value) - 
-                static_cast<std::make_signed_t<ValueType>>(Value); 
+    std::make_signed_t<ValueType> Set(ValueType value) {
+        std::make_signed_t<ValueType> diff =
+                static_cast<std::make_signed_t<ValueType>>(value) -
+                static_cast<std::make_signed_t<ValueType>>(Value);
         Value = value;
         return diff;
     }
 
-    void Increment(std::make_signed_t<ValueType> value) { Value += value; } 
+    void Increment(std::make_signed_t<ValueType> value) { Value += value; }
     ValueType GetValue() const { return Value; }
     TGaugeValue operator +(const TGaugeValue& o) const { return TGaugeValue(Value + o.GetValue()); }
     TGaugeValue operator -(const TGaugeValue& o) const { return TGaugeValue(Value - o.GetValue()); }
@@ -127,7 +127,7 @@ public:
         return accumulator * multiplicator / divider;
     }
 
-    void Increment(std::make_signed_t<ValueType> value, TInstant to = TInstant::Now()) { 
+    void Increment(std::make_signed_t<ValueType> value, TInstant to = TInstant::Now()) {
         Store(value, to);
     }
 

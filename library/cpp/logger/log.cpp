@@ -1,7 +1,7 @@
 #include "log.h"
 #include "uninitialized_creator.h"
-#include "filter.h" 
-#include "null.h" 
+#include "filter.h"
+#include "null.h"
 #include "stream.h"
 #include "thread.h"
 
@@ -20,12 +20,12 @@ THolder<TLogBackend> CreateLogBackend(const TString& fname, ELogPriority priorit
 
 THolder<TLogBackend> CreateFilteredOwningThreadedLogBackend(const TString& fname, ELogPriority priority, size_t queueLen) {
     return MakeHolder<TFilteredLogBackend>(CreateOwningThreadedLogBackend(fname, queueLen), priority);
-} 
- 
+}
+
 THolder<TOwningThreadedLogBackend> CreateOwningThreadedLogBackend(const TString& fname, size_t queueLen) {
     return MakeHolder<TOwningThreadedLogBackend>(CreateLogBackend(fname, LOG_MAX_PRIORITY, false).Release(), queueLen);
-} 
- 
+}
+
 class TLog::TImpl: public TAtomicRefCount<TImpl> {
     class TPriorityLogStream final: public IOutputStream {
     public:

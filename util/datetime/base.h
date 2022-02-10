@@ -84,15 +84,15 @@ constexpr long TVdiff(timeval r1, timeval r2) {
 
 TString Strftime(const char* format, const struct tm* tm);
 
-// Use functions below instead of sprint_date (check IGNIETFERRO-892 for details) 
-void DateToString(char* buf, const struct tm& theTm); 
-void DateToString(char* buf, time_t when, long* sec = nullptr); 
-TString DateToString(const struct tm& theTm); 
-TString DateToString(time_t when, long* sec = nullptr); 
-// Year in format "YYYY", throws an exception if year not in range [0, 9999] 
-TString YearToString(const struct tm& theTm); 
-TString YearToString(time_t when); 
- 
+// Use functions below instead of sprint_date (check IGNIETFERRO-892 for details)
+void DateToString(char* buf, const struct tm& theTm);
+void DateToString(char* buf, time_t when, long* sec = nullptr);
+TString DateToString(const struct tm& theTm);
+TString DateToString(time_t when, long* sec = nullptr);
+// Year in format "YYYY", throws an exception if year not in range [0, 9999]
+TString YearToString(const struct tm& theTm);
+TString YearToString(time_t when);
+
 template <class S>
 class TTimeBase {
 public:

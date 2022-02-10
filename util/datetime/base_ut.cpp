@@ -46,108 +46,108 @@ namespace {
         }
     }
 }
- 
+
 Y_UNIT_TEST_SUITE(TestSprintDate) {
     Y_UNIT_TEST(Year9999) {
-        struct tm t; 
-        t.tm_year = 9999 - 1900; 
-        t.tm_mday = 1; 
-        t.tm_mon = 10; 
- 
-        char buf[DATE_BUF_LEN]; 
-        DateToString(buf, t); 
- 
-        TString expectedDate = "99991101"; 
- 
-        UNIT_ASSERT_VALUES_EQUAL(expectedDate, ToString(buf)); 
-    } 
+        struct tm t;
+        t.tm_year = 9999 - 1900;
+        t.tm_mday = 1;
+        t.tm_mon = 10;
+
+        char buf[DATE_BUF_LEN];
+        DateToString(buf, t);
+
+        TString expectedDate = "99991101";
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedDate, ToString(buf));
+    }
     Y_UNIT_TEST(YearAfter9999) {
-        struct tm t; 
-        t.tm_year = 123456 - 1900; 
-        t.tm_mday = 1; 
-        t.tm_mon = 10; 
- 
-        char buf[DATE_BUF_LEN]; 
-        UNIT_ASSERT_EXCEPTION(DateToString(buf, t), yexception); 
-    } 
+        struct tm t;
+        t.tm_year = 123456 - 1900;
+        t.tm_mday = 1;
+        t.tm_mon = 10;
+
+        char buf[DATE_BUF_LEN];
+        UNIT_ASSERT_EXCEPTION(DateToString(buf, t), yexception);
+    }
     Y_UNIT_TEST(SmallYear) {
-        struct tm t; 
-        t.tm_year = 0 - 1900; 
-        t.tm_mday = 1; 
-        t.tm_mon = 10; 
- 
-        char buf[DATE_BUF_LEN]; 
-        DateToString(buf, t); 
- 
-        const TString expectedDate = TString("00001101"); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(expectedDate, ToString(buf)); 
-    } 
+        struct tm t;
+        t.tm_year = 0 - 1900;
+        t.tm_mday = 1;
+        t.tm_mon = 10;
+
+        char buf[DATE_BUF_LEN];
+        DateToString(buf, t);
+
+        const TString expectedDate = TString("00001101");
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedDate, ToString(buf));
+    }
     Y_UNIT_TEST(SmallYearAndMonth) {
-        struct tm t; 
-        t.tm_year = 99 - 1900; 
-        t.tm_mday = 1; 
-        t.tm_mon = 0; 
- 
-        char buf[DATE_BUF_LEN]; 
-        DateToString(buf, t); 
- 
-        const TString expectedDate = TString("00990101"); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(expectedDate, ToString(buf)); 
-    } 
-    Y_UNIT_TEST(FromZeroTimestamp) { 
-        const time_t timestamp = 0; 
- 
-        char buf[DATE_BUF_LEN]; 
-        DateToString(buf, timestamp); 
- 
-        const TString expectedDate = TString("19700101"); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(expectedDate, ToString(buf)); 
-    } 
-    Y_UNIT_TEST(FromTimestamp) { 
-        const time_t timestamp = 1524817858; 
- 
-        char buf[DATE_BUF_LEN]; 
-        DateToString(buf, timestamp); 
- 
-        const TString expectedDate = TString("20180427"); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(expectedDate, ToString(buf)); 
-    } 
-    Y_UNIT_TEST(FromTimestampAsTString) { 
-        const time_t timestamp = 1524817858; 
- 
-        const TString expectedDate = TString("20180427"); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(expectedDate, DateToString(timestamp)); 
-    } 
-    Y_UNIT_TEST(YearToString) { 
-        struct tm t; 
-        t.tm_year = 99 - 1900; 
-        t.tm_mday = 1; 
-        t.tm_mon = 0; 
- 
-        TString expectedYear = TString("0099"); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(expectedYear, YearToString(t)); 
-    } 
-    Y_UNIT_TEST(YearToStringBigYear) { 
-        struct tm t; 
-        t.tm_year = 123456 - 1900; 
-        t.tm_mday = 1; 
-        t.tm_mon = 0; 
- 
-        UNIT_ASSERT_EXCEPTION(YearToString(t), yexception); 
-    } 
-    Y_UNIT_TEST(YearToStringAsTimestamp) { 
-        const time_t timestamp = 1524817858; 
- 
-        const TString expectedYear = TString("2018"); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(expectedYear, YearToString(timestamp)); 
-    } 
+        struct tm t;
+        t.tm_year = 99 - 1900;
+        t.tm_mday = 1;
+        t.tm_mon = 0;
+
+        char buf[DATE_BUF_LEN];
+        DateToString(buf, t);
+
+        const TString expectedDate = TString("00990101");
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedDate, ToString(buf));
+    }
+    Y_UNIT_TEST(FromZeroTimestamp) {
+        const time_t timestamp = 0;
+
+        char buf[DATE_BUF_LEN];
+        DateToString(buf, timestamp);
+
+        const TString expectedDate = TString("19700101");
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedDate, ToString(buf));
+    }
+    Y_UNIT_TEST(FromTimestamp) {
+        const time_t timestamp = 1524817858;
+
+        char buf[DATE_BUF_LEN];
+        DateToString(buf, timestamp);
+
+        const TString expectedDate = TString("20180427");
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedDate, ToString(buf));
+    }
+    Y_UNIT_TEST(FromTimestampAsTString) {
+        const time_t timestamp = 1524817858;
+
+        const TString expectedDate = TString("20180427");
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedDate, DateToString(timestamp));
+    }
+    Y_UNIT_TEST(YearToString) {
+        struct tm t;
+        t.tm_year = 99 - 1900;
+        t.tm_mday = 1;
+        t.tm_mon = 0;
+
+        TString expectedYear = TString("0099");
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedYear, YearToString(t));
+    }
+    Y_UNIT_TEST(YearToStringBigYear) {
+        struct tm t;
+        t.tm_year = 123456 - 1900;
+        t.tm_mday = 1;
+        t.tm_mon = 0;
+
+        UNIT_ASSERT_EXCEPTION(YearToString(t), yexception);
+    }
+    Y_UNIT_TEST(YearToStringAsTimestamp) {
+        const time_t timestamp = 1524817858;
+
+        const TString expectedYear = TString("2018");
+
+        UNIT_ASSERT_VALUES_EQUAL(expectedYear, YearToString(timestamp));
+    }
 }
 
 Y_UNIT_TEST_SUITE(TDateTimeTest) {

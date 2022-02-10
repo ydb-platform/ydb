@@ -533,12 +533,12 @@ namespace NKikimr {
 
 } // NKikimr
 
-template<typename TBase, std::enable_if_t<NKikimr::THasCapitalSwapMethod<TBase>::Value>* = nullptr> 
+template<typename TBase, std::enable_if_t<NKikimr::THasCapitalSwapMethod<TBase>::Value>* = nullptr>
 void DoSwap(NKikimr::TTrackable<TBase>& first, NKikimr::TTrackable<TBase>& second) {
     first.Swap(second);
 }
 
-template<typename TBase, std::enable_if_t<NKikimr::THasSmallSwapMethod<TBase>::Value>* = nullptr> 
+template<typename TBase, std::enable_if_t<NKikimr::THasSmallSwapMethod<TBase>::Value>* = nullptr>
 void DoSwap(NKikimr::TTrackable<TBase>& first, NKikimr::TTrackable<TBase>& second) {
     first.swap(second);
 }

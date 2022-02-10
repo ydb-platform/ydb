@@ -43,7 +43,7 @@ namespace NJson {
     bool ReadJson(IInputStream* in, bool allowComments, TJsonCallbacks* callbacks);
     bool ReadJson(IInputStream* in, bool allowComments, bool allowEscapedApostrophe, TJsonCallbacks* callbacks);
     bool ReadJson(IInputStream* in, const TJsonReaderConfig* config, TJsonCallbacks* callbacks);
-
+ 
     enum ReaderConfigFlags {
         COMMENTS = 0b100,
         VALIDATE = 0b010,

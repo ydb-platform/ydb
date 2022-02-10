@@ -34,7 +34,7 @@ RECURSE(
     cityhash/test
     clickhouse_client
     cmain
-    codecs
+    codecs 
     codecs/gen_corpus
     codecs/test
     compress
@@ -70,8 +70,8 @@ RECURSE(
     errorboosterclient
     filelock
     filelock/ut
-    filesys
-    filesys/ut
+    filesys 
+    filesys/ut 
     find_root
     flask
     flask_passport
@@ -84,8 +84,8 @@ RECURSE(
     fs
     geolocation
     geolocation/ut
-    geohash
-    geohash/ut
+    geohash 
+    geohash/ut 
     golovan_stats_aggregator
     granular_settings
     granular_settings/tests
@@ -123,10 +123,10 @@ RECURSE(
     monlib/examples
     monlib/so
     murmurhash
-    nirvana
-    nirvana_api
-    nirvana_api/test_lib
-    nirvana_test
+    nirvana 
+    nirvana_api 
+    nirvana_api/test_lib 
+    nirvana_test 
     nstools
     nyt
     oauth
@@ -137,10 +137,10 @@ RECURSE(
     par_apply/test
     path
     path/tests
-    protobuf
+    protobuf 
     pymain
     pyscopg2
-    pytest
+    pytest 
     pytest-mongodb
     pytest/allure
     pytest/empty
@@ -156,7 +156,7 @@ RECURSE(
     resource
     retry
     retry/tests
-    runtime
+    runtime 
     runtime/main
     runtime/test
     runtime_py3

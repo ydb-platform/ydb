@@ -15,8 +15,8 @@ RECURSE(
     lz/ut
     lzma
     lzma/ut
-    lzop
-    lzop/ut
+    lzop 
+    lzop/ut 
     special
     special/ut
     xz

@@ -175,12 +175,12 @@ namespace NProtobufJson {
     }
 
     /// @throw yexception
-    inline void Json2Proto(IInputStream& in, google::protobuf::Message& proto,
-                           const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
-        Json2Proto(TStringBuf(in.ReadAll()), proto, config);
-    }
-
-    /// @throw yexception
+    inline void Json2Proto(IInputStream& in, google::protobuf::Message& proto, 
+                           const TJson2ProtoConfig& config = TJson2ProtoConfig()) { 
+        Json2Proto(TStringBuf(in.ReadAll()), proto, config); 
+    } 
+ 
+    /// @throw yexception 
     template <typename T>
     T Json2Proto(IInputStream& in, const NJson::TJsonReaderConfig& readerConfig,
                  const TJson2ProtoConfig& config = TJson2ProtoConfig()) {

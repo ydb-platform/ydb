@@ -361,7 +361,7 @@ RECURSE(
     yajl
     yaml
     yaml-cpp
-    zeromq
+    zeromq 
     zlib
     zlib-ng-develop
     zookeeper

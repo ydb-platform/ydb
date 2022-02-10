@@ -9,8 +9,8 @@
 
 // XXX: uses system calls for trivial things. may be very slow therefore.
 
-time_t GetDateStart(time_t ts);
-
+time_t GetDateStart(time_t ts); 
+ 
 // Local date (without time zone)
 class TDate {
     // XXX: wrong: must store number of days since epoch

@@ -626,7 +626,7 @@ int TFileHandle::Flock(int op) noexcept {
 }
 
 bool TFileHandle::SetDirect() {
-#ifdef _linux_
+#ifdef _linux_ 
     const long flags = fcntl(Fd_, F_GETFL);
     const int r = fcntl(Fd_, F_SETFL, flags | O_DIRECT);
 
@@ -634,15 +634,15 @@ bool TFileHandle::SetDirect() {
 #endif
 
     return false;
-}
-
-void TFileHandle::ResetDirect() {
-#ifdef _linux_
-    long flags = fcntl(Fd_, F_GETFL);
-    fcntl(Fd_, F_SETFL, flags & ~O_DIRECT);
-#endif
-}
-
+} 
+ 
+void TFileHandle::ResetDirect() { 
+#ifdef _linux_ 
+    long flags = fcntl(Fd_, F_GETFL); 
+    fcntl(Fd_, F_SETFL, flags & ~O_DIRECT); 
+#endif 
+} 
+ 
 i64 TFileHandle::CountCache(i64 offset, i64 length) const noexcept {
 #ifdef _linux_
     const i64 pageSize = NSystemInfo::GetPageSize();
@@ -940,8 +940,8 @@ public:
     i32 RawRead(void* bufferIn, size_t numBytes) {
         const size_t toRead = Min(MaxReadPortion, numBytes);
         return Handle_.Read(bufferIn, toRead);
-    }
-
+    } 
+ 
     size_t ReadOrFail(void* buf, size_t numBytes) {
         const i32 reallyRead = RawRead(buf, numBytes);
 
@@ -1054,16 +1054,16 @@ public:
         }
     }
 
-    void SetDirect() {
+    void SetDirect() { 
         if (!Handle_.SetDirect()) {
             ythrow TFileError() << "can't set direct mode for " << FileName_.Quote();
         }
-    }
-
-    void ResetDirect() {
-        Handle_.ResetDirect();
-    }
-
+    } 
+ 
+    void ResetDirect() { 
+        Handle_.ResetDirect(); 
+    } 
+ 
     i64 CountCache(i64 offset, i64 length) const noexcept {
         return Handle_.CountCache(offset, length);
     }
@@ -1173,8 +1173,8 @@ size_t TFile::Read(void* buf, size_t len) {
 
 i32 TFile::RawRead(void* buf, size_t len) {
     return Impl_->RawRead(buf, len);
-}
-
+} 
+ 
 size_t TFile::ReadOrFail(void* buf, size_t len) {
     return Impl_->ReadOrFail(buf, len);
 }
@@ -1207,14 +1207,14 @@ void TFile::Flock(int op) {
     Impl_->Flock(op);
 }
 
-void TFile::SetDirect() {
-    Impl_->SetDirect();
-}
-
-void TFile::ResetDirect() {
-    Impl_->ResetDirect();
-}
-
+void TFile::SetDirect() { 
+    Impl_->SetDirect(); 
+} 
+ 
+void TFile::ResetDirect() { 
+    Impl_->ResetDirect(); 
+} 
+ 
 i64 TFile::CountCache(i64 offset, i64 length) const noexcept {
     return Impl_->CountCache(offset, length);
 }

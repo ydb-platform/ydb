@@ -130,8 +130,8 @@ void TSystemEvent::Reset() noexcept {
 
 void TSystemEvent::Signal() noexcept {
     EvImpl_->Signal();
-}
-
+} 
+ 
 bool TSystemEvent::WaitD(TInstant deadLine) noexcept {
     return EvImpl_->WaitD(deadLine);
 }

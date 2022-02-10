@@ -14,7 +14,7 @@ static inline int Flock(int fd, int op) {
 }
 
 #else // not _unix_
-
+ 
     #ifdef __cplusplus
 extern "C" {
     #endif

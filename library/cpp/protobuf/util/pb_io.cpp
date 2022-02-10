@@ -10,17 +10,17 @@
 #include <util/generic/string.h>
 #include <util/stream/file.h>
 #include <util/stream/str.h>
-#include <util/string/cast.h> 
+#include <util/string/cast.h>
 
 namespace NProtoBuf {
- 
-    class TEnumIdValuePrinter : public google::protobuf::TextFormat::FastFieldValuePrinter { 
-    public: 
-        void PrintEnum(int32 val, const TString& /*name*/, google::protobuf::TextFormat::BaseTextGenerator* generator) const override { 
-            generator->PrintString(ToString(val)); 
-        } 
-    }; 
- 
+
+    class TEnumIdValuePrinter : public google::protobuf::TextFormat::FastFieldValuePrinter {
+    public:
+        void PrintEnum(int32 val, const TString& /*name*/, google::protobuf::TextFormat::BaseTextGenerator* generator) const override {
+            generator->PrintString(ToString(val));
+        }
+    };
+
     void ParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven) {
         if (!m.ParseFromString(allowUneven ? Base64DecodeUneven(dataBase64) : Base64StrictDecode(dataBase64))) {
             ythrow yexception() << "can't parse " << m.GetTypeName() << " from base64-encoded string";
@@ -108,16 +108,16 @@ void SerializeToTextFormat(const NProtoBuf::Message& m, const TString& fileName)
     SerializeToTextFormat(m, stream);
 }
 
-void SerializeToTextFormatWithEnumId(const NProtoBuf::Message& m, IOutputStream& out) { 
-    google::protobuf::TextFormat::Printer printer; 
-    printer.SetDefaultFieldValuePrinter(new NProtoBuf::TEnumIdValuePrinter()); 
-    NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out); 
- 
-    if (!printer.Print(m, &adaptor)) { 
-         ythrow yexception() << "SerializeToTextFormatWithEnumId failed on Print"; 
-    } 
-} 
- 
+void SerializeToTextFormatWithEnumId(const NProtoBuf::Message& m, IOutputStream& out) {
+    google::protobuf::TextFormat::Printer printer;
+    printer.SetDefaultFieldValuePrinter(new NProtoBuf::TEnumIdValuePrinter());
+    NProtoBuf::io::TCopyingOutputStreamAdaptor adaptor(&out);
+
+    if (!printer.Print(m, &adaptor)) {
+         ythrow yexception() << "SerializeToTextFormatWithEnumId failed on Print";
+    }
+}
+
 void SerializeToTextFormatPretty(const NProtoBuf::Message& m, IOutputStream& out) {
     google::protobuf::TextFormat::Printer printer;
     printer.SetUseUtf8StringEscaping(true);

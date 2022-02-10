@@ -17,31 +17,31 @@ static NProtobufUtilUt::TTextTest GetCorrectMessage() {
     return m;
 }
 
-static NProtobufUtilUt::TTextEnumTest GetCorrectEnumMessage() { 
-    NProtobufUtilUt::TTextEnumTest m; 
-    m.SetSlot(NProtobufUtilUt::TTextEnumTest::EET_SLOT_1); 
-    return m; 
-} 
- 
+static NProtobufUtilUt::TTextEnumTest GetCorrectEnumMessage() {
+    NProtobufUtilUt::TTextEnumTest m;
+    m.SetSlot(NProtobufUtilUt::TTextEnumTest::EET_SLOT_1);
+    return m;
+}
+
 static const TString CORRECT_MESSAGE =
     R"(Foo: 42
 )";
-static const TString CORRECT_ENUM_NAME_MESSAGE = 
-    R"(Slot: EET_SLOT_1 
-)"; 
-static const TString CORRECT_ENUM_ID_MESSAGE = 
-    R"(Slot: 1 
-)"; 
+static const TString CORRECT_ENUM_NAME_MESSAGE =
+    R"(Slot: EET_SLOT_1
+)";
+static const TString CORRECT_ENUM_ID_MESSAGE =
+    R"(Slot: 1
+)";
 
 static const TString INCORRECT_MESSAGE =
     R"(Bar: 1
 )";
-static const TString INCORRECT_ENUM_NAME_MESSAGE = 
-    R"(Slot: EET_SLOT_3 
-)"; 
-static const TString INCORRECT_ENUM_ID_MESSAGE = 
-    R"(Slot: 3 
-)"; 
+static const TString INCORRECT_ENUM_NAME_MESSAGE =
+    R"(Slot: EET_SLOT_3
+)";
+static const TString INCORRECT_ENUM_ID_MESSAGE =
+    R"(Slot: 3
+)";
 
 static const TString CORRECT_BASE64_MESSAGE = "CCo,";
 
@@ -196,60 +196,60 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
         }
     }
 
-    Y_UNIT_TEST(TestSerializeToTextFormatWithEnumId) { 
-        TTempDir tempDir; 
-        const TFsPath correctNameFileName = TFsPath{tempDir()} / "correct_name.pb.txt"; 
-        const TFsPath incorrectNameFileName = TFsPath{tempDir()} / "incorrect_name.pb.txt"; 
-        const TFsPath correctIdFileName = TFsPath{tempDir()} / "correct_id.pb.txt"; 
-        const TFsPath incorrectIdFileName = TFsPath{tempDir()} / "incorrect_id.pb.txt"; 
- 
-        TFileOutput{correctNameFileName}.Write(CORRECT_ENUM_NAME_MESSAGE); 
-        TFileOutput{incorrectNameFileName}.Write(INCORRECT_ENUM_NAME_MESSAGE); 
-        TFileOutput{correctIdFileName}.Write(CORRECT_ENUM_ID_MESSAGE); 
-        TFileOutput{incorrectIdFileName}.Write(INCORRECT_ENUM_ID_MESSAGE); 
- 
-        { 
-            NProtobufUtilUt::TTextEnumTest message; 
-            for (auto correct_message: {CORRECT_ENUM_ID_MESSAGE, CORRECT_ENUM_NAME_MESSAGE}) { 
-                TStringInput in{correct_message}; 
-                UNIT_ASSERT_NO_EXCEPTION(ParseFromTextFormat(in, message)); 
-            } 
-        } 
-        { 
-            NProtobufUtilUt::TTextEnumTest message; 
-            for (auto incorrect_message: {INCORRECT_ENUM_ID_MESSAGE, INCORRECT_ENUM_NAME_MESSAGE}) { 
-                TStringInput in{incorrect_message}; 
-                UNIT_ASSERT_EXCEPTION(ParseFromTextFormat(in, message), yexception); 
-            } 
-        } 
-        { 
-            const auto f = [](NProtobufUtilUt::TTextEnumTest& mm, const TString fileName) { 
-                mm = ParseFromTextFormat<NProtobufUtilUt::TTextEnumTest>(fileName); 
-            }; 
-            for (auto fileName: {correctIdFileName, correctNameFileName}) { 
-                NProtobufUtilUt::TTextEnumTest m; 
-                UNIT_ASSERT_NO_EXCEPTION(f(m, fileName)); 
-                UNIT_ASSERT(NProtoBuf::IsEqual(GetCorrectEnumMessage(), m)); 
-            } 
-        } 
-        { 
-            UNIT_ASSERT_EXCEPTION(ParseFromTextFormat<NProtobufUtilUt::TTextEnumTest>(incorrectIdFileName), yexception); 
-            UNIT_ASSERT_EXCEPTION(ParseFromTextFormat<NProtobufUtilUt::TTextEnumTest>(incorrectNameFileName), yexception); 
-        } 
-        { 
-            const auto original = GetCorrectEnumMessage(); 
-            TStringStream out; 
-            UNIT_ASSERT_NO_EXCEPTION(SerializeToTextFormat(original, out)); 
-            UNIT_ASSERT_VALUES_EQUAL(out.Str(), CORRECT_ENUM_NAME_MESSAGE); 
-        } 
-        { 
-            const auto original = GetCorrectEnumMessage(); 
-            TStringStream out; 
-            UNIT_ASSERT_NO_EXCEPTION(SerializeToTextFormatWithEnumId(original, out)); 
-            UNIT_ASSERT_VALUES_EQUAL(out.Str(), CORRECT_ENUM_ID_MESSAGE); 
-        } 
-    } 
- 
+    Y_UNIT_TEST(TestSerializeToTextFormatWithEnumId) {
+        TTempDir tempDir;
+        const TFsPath correctNameFileName = TFsPath{tempDir()} / "correct_name.pb.txt";
+        const TFsPath incorrectNameFileName = TFsPath{tempDir()} / "incorrect_name.pb.txt";
+        const TFsPath correctIdFileName = TFsPath{tempDir()} / "correct_id.pb.txt";
+        const TFsPath incorrectIdFileName = TFsPath{tempDir()} / "incorrect_id.pb.txt";
+
+        TFileOutput{correctNameFileName}.Write(CORRECT_ENUM_NAME_MESSAGE);
+        TFileOutput{incorrectNameFileName}.Write(INCORRECT_ENUM_NAME_MESSAGE);
+        TFileOutput{correctIdFileName}.Write(CORRECT_ENUM_ID_MESSAGE);
+        TFileOutput{incorrectIdFileName}.Write(INCORRECT_ENUM_ID_MESSAGE);
+
+        {
+            NProtobufUtilUt::TTextEnumTest message;
+            for (auto correct_message: {CORRECT_ENUM_ID_MESSAGE, CORRECT_ENUM_NAME_MESSAGE}) {
+                TStringInput in{correct_message};
+                UNIT_ASSERT_NO_EXCEPTION(ParseFromTextFormat(in, message));
+            }
+        }
+        {
+            NProtobufUtilUt::TTextEnumTest message;
+            for (auto incorrect_message: {INCORRECT_ENUM_ID_MESSAGE, INCORRECT_ENUM_NAME_MESSAGE}) {
+                TStringInput in{incorrect_message};
+                UNIT_ASSERT_EXCEPTION(ParseFromTextFormat(in, message), yexception);
+            }
+        }
+        {
+            const auto f = [](NProtobufUtilUt::TTextEnumTest& mm, const TString fileName) {
+                mm = ParseFromTextFormat<NProtobufUtilUt::TTextEnumTest>(fileName);
+            };
+            for (auto fileName: {correctIdFileName, correctNameFileName}) {
+                NProtobufUtilUt::TTextEnumTest m;
+                UNIT_ASSERT_NO_EXCEPTION(f(m, fileName));
+                UNIT_ASSERT(NProtoBuf::IsEqual(GetCorrectEnumMessage(), m));
+            }
+        }
+        {
+            UNIT_ASSERT_EXCEPTION(ParseFromTextFormat<NProtobufUtilUt::TTextEnumTest>(incorrectIdFileName), yexception);
+            UNIT_ASSERT_EXCEPTION(ParseFromTextFormat<NProtobufUtilUt::TTextEnumTest>(incorrectNameFileName), yexception);
+        }
+        {
+            const auto original = GetCorrectEnumMessage();
+            TStringStream out;
+            UNIT_ASSERT_NO_EXCEPTION(SerializeToTextFormat(original, out));
+            UNIT_ASSERT_VALUES_EQUAL(out.Str(), CORRECT_ENUM_NAME_MESSAGE);
+        }
+        {
+            const auto original = GetCorrectEnumMessage();
+            TStringStream out;
+            UNIT_ASSERT_NO_EXCEPTION(SerializeToTextFormatWithEnumId(original, out));
+            UNIT_ASSERT_VALUES_EQUAL(out.Str(), CORRECT_ENUM_ID_MESSAGE);
+        }
+    }
+
     Y_UNIT_TEST(TestMergeFromTextFormat) {
         //
         // Tests cases below are identical to `Parse` tests

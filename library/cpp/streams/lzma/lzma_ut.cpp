@@ -13,7 +13,7 @@ public:
         , Pos(s.data())
     {
     }
- 
+
 private:
     size_t DoNext(const void** ptr, size_t len) override {
         if (Pos < Data.end()) {
@@ -23,13 +23,13 @@ private:
             return len;
         } else {
             return 0;
-        } 
+        }
     }
- 
+
     TString Data;
     const char* Pos;
-}; 
- 
+};
+
 class TLzmaTest: public TTestBase {
     UNIT_TEST_SUITE(TLzmaTest);
     UNIT_TEST(Test1)
@@ -99,27 +99,27 @@ private:
         }
 
         UNIT_ASSERT_EQUAL(data, data1);
- 
+
         data1.clear();
         {
             TMemoryInput mi(res.data(), res.size());
             TStringOutput so(data1);
             TLzmaDecompress d(&mi);
- 
+
             TransferData(&d, &so);
         }
- 
+
         UNIT_ASSERT_EQUAL(data, data1);
- 
+
         data1.clear();
         {
             TStrokaByOneByte mi(res);
             TStringOutput so(data1);
             TLzmaDecompress d(&mi);
- 
+
             TransferData(&d, &so);
         }
- 
+
         UNIT_ASSERT_EQUAL(data, data1);
     }
 };

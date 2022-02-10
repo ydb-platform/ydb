@@ -1,13 +1,13 @@
 #pragma once
-
+ 
 #include <util/draft/matrix.h>
-#include <util/generic/algorithm.h>
-#include <util/generic/vector.h>
+#include <util/generic/algorithm.h> 
+#include <util/generic/vector.h> 
 #include <util/system/yassert.h>
 
 #include <type_traits>
 #include <utility>
-
+ 
 namespace NLevenshtein {
     enum EEditMoveType {
         EMT_SPECIAL,
@@ -16,11 +16,11 @@ namespace NLevenshtein {
         EMT_DELETE,
         EMT_INSERT
     };
-
+ 
     inline bool IsImportantEditMove(EEditMoveType p) {
         return (p != EMT_SPECIAL && p != EMT_PRESERVE);
     }
-
+ 
     inline void MakeMove(EEditMoveType t, int& p1, int& p2) {
         switch (t) {
             case EMT_PRESERVE:
@@ -37,10 +37,10 @@ namespace NLevenshtein {
             default:
                 break;
         }
-    }
-
+    } 
+ 
     using TEditChain = TVector<EEditMoveType>;
-
+ 
     template <typename TArgType>
     struct TWeightOneUnaryGetter {
         int operator()(const TArgType&) const {
@@ -76,10 +76,10 @@ namespace NLevenshtein {
         ma[0][0] = std::make_pair(0, EMT_SPECIAL);                 // starting point
         for (int i = 1; i <= l1; i++) {
             ma[i][0] = std::make_pair(ma[i - 1][0].first + deleteWeigher(str1[i - 1]), EMT_DELETE);
-        }
+        } 
         for (int i = 1; i <= l2; i++) {
             ma[0][i] = std::make_pair(ma[0][i - 1].first + insertWeigher(str2[i - 1]), EMT_INSERT);
-        }
+        } 
         // Here goes basic Levestein's algorithm
         for (int i = 1; i <= l1; i++) {
             for (int j = 1; j <= l2; j++) {
@@ -137,8 +137,8 @@ namespace NLevenshtein {
         if (weight != nullptr) {
             *weight = ma[l1][l2].first;
         }
-    }
-
+    } 
+ 
     template <class TStringType>
     size_t Distance(const TStringType& str1, const TStringType& str2) {
         TEditChain editChain;
@@ -160,7 +160,7 @@ namespace NLevenshtein {
             , MisspelledOffset(0)
             , MisspelledLength(0)
         {
-        }
+        } 
         TReplacement(int correctOffset, int correctLength, int misspelledOffset, int misspelledLength)
             : CorrectOffset(correctOffset)
             , CorrectLength(correctLength)
@@ -188,5 +188,5 @@ namespace NLevenshtein {
             }
             MakeMove(*it, c1, c2);
         }
-    }
-}
+    } 
+} 

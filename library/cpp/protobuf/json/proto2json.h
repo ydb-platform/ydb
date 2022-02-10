@@ -9,7 +9,7 @@
 
 #include <util/generic/fwd.h>
 #include <util/generic/vector.h>
-#include <util/generic/yexception.h>
+#include <util/generic/yexception.h> 
 #include <util/stream/str.h>
 
 #include <functional>

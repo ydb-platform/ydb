@@ -356,30 +356,30 @@ Y_UNIT_TEST_SUITE(TCacheTest) {
         UNIT_ASSERT(s.Find(1) != s.End()); // Key 2 should have been deleted
     }
 }
-
+ 
 Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
     typedef TThreadSafeCache<ui32, TString, ui32> TCache;
-
-    const char* VALS[] = {"abcd", "defg", "hjkl"};
-
+ 
+    const char* VALS[] = {"abcd", "defg", "hjkl"}; 
+ 
     class TCallbacks: public TCache::ICallbacks {
-    public:
+    public: 
         TKey GetKey(ui32 i) const override {
-            return i;
-        }
+            return i; 
+        } 
         TValue* CreateObject(ui32 i) const override {
             Creations++;
             return new TString(VALS[i]);
-        }
+        } 
 
         mutable i32 Creations = 0;
-    };
-
+    }; 
+ 
     Y_UNIT_TEST(SimpleTest) {
         for (ui32 i = 0; i < Y_ARRAY_SIZE(VALS); ++i) {
             const TString data = *TCache::Get<TCallbacks>(i);
             UNIT_ASSERT(data == VALS[i]);
-        }
+        } 
     }
 
     Y_UNIT_TEST(InsertUpdateTest) {
@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
         UNIT_ASSERT(callbacks.Creations == 0);
         UNIT_ASSERT(*item == "hjk");
     }
-}
+} 
 
 Y_UNIT_TEST_SUITE(TThreadSafeCacheUnsafeTest) {
     typedef TThreadSafeCache<ui32, TString, ui32> TCache;

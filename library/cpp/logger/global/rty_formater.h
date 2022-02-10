@@ -1,7 +1,7 @@
-#pragma once
+#pragma once 
 
-#include "common.h"
-
+#include "common.h" 
+ 
 namespace NMemInfo {
     struct TMemInfo;
 }
@@ -15,7 +15,7 @@ public:
 
 ILoggerFormatter* CreateRtyLoggerFormatter();
 
-namespace NLoggingImpl {
+namespace NLoggingImpl { 
     class TLocalTimeS {
     public:
         TLocalTimeS(TInstant instant = TInstant::Now())
@@ -48,14 +48,14 @@ namespace NLoggingImpl {
             return CreateRtyLoggerFormatter();
         }
     };
-}
-
+} 
+ 
 class TLoggerFormatterOperator : public NLoggingImpl::TOperatorBase<ILoggerFormatter, NLoggingImpl::TLoggerFormatterTraits> {
 };
 
-struct TRTYMessageFormater {
+struct TRTYMessageFormater { 
     static bool CheckLoggingContext(TLog& logger, const TLogRecordContext& context);
-    static TSimpleSharedPtr<TLogElement> StartRecord(TLog& logger, const TLogRecordContext& context, TSimpleSharedPtr<TLogElement> earlier);
-};
-
-using TRTYLogPreprocessor = TLogRecordPreprocessor<TLogFilter, TRTYMessageFormater>;
+    static TSimpleSharedPtr<TLogElement> StartRecord(TLog& logger, const TLogRecordContext& context, TSimpleSharedPtr<TLogElement> earlier); 
+}; 
+ 
+using TRTYLogPreprocessor = TLogRecordPreprocessor<TLogFilter, TRTYMessageFormater>; 

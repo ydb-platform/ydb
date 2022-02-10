@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -1504,7 +1504,7 @@ extern "C" void GetPerTagAllocInfo(
 #endif // LFALLOC_DBG
 
 //////////////////////////////////////////////////////////////////////////
-static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
+static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) { 
 #if defined(LFALLOC_DBG)
     size_t size = _nSize;
     _nSize += sizeof(TAllocHeader);
@@ -1571,13 +1571,13 @@ static Y_FORCE_INLINE void* LFAllocImpl(size_t _nSize) {
     }
 }
 
-static Y_FORCE_INLINE void* LFAlloc(size_t _nSize) {
-    void* res = LFAllocImpl(_nSize);
+static Y_FORCE_INLINE void* LFAlloc(size_t _nSize) { 
+    void* res = LFAllocImpl(_nSize); 
 #ifdef DBG_FILL_MEMORY
     if (FillMemoryOnAllocation && res && (_nSize <= DBG_FILL_MAX_SIZE)) {
         memset(res, 0xcf, _nSize);
     }
-#endif
+#endif 
     return res;
 }
 
@@ -1868,7 +1868,7 @@ static const char* LFAlloc_GetParam(const char* param) {
     return nullptr;
 }
 
-static Y_FORCE_INLINE int LFPosixMemalign(void** memptr, size_t alignment, size_t size) {
+static Y_FORCE_INLINE int LFPosixMemalign(void** memptr, size_t alignment, size_t size) { 
     if (Y_UNLIKELY(alignment > 4096)) {
         const char* error = "Larger alignment are not guaranteed with this implementation\n";
 #ifdef _win_
@@ -1888,7 +1888,7 @@ static Y_FORCE_INLINE int LFPosixMemalign(void** memptr, size_t alignment, size_
     }
 #endif
 
-    *memptr = LFAlloc(bigsize);
+    *memptr = LFAlloc(bigsize); 
 
 #if defined(LFALLOC_DBG)
     if (alignment > sizeof(TAllocHeader)) {

@@ -24,7 +24,7 @@ namespace NBalloc {
             // ltls.Mode == Disabled
             const size_t extsize = size + sizeof(TAllocHeader);
             TAllocHeader* allocHeader = (TAllocHeader*)LibcMalloc(extsize);
-            allocHeader->Encode(allocHeader, size, DISABLED_SIGNATURE);
+            allocHeader->Encode(allocHeader, size, DISABLED_SIGNATURE); 
             return allocHeader + 1;
         }
     }

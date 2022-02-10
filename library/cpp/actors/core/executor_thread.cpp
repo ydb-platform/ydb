@@ -10,9 +10,9 @@
 #include <library/cpp/actors/util/datetime.h>
 #include <library/cpp/actors/util/thread.h>
 
-#ifdef BALLOC
+#ifdef BALLOC 
 #include <library/cpp/balloc/optional/operators.h>
-#endif
+#endif 
 
 #ifdef _linux_
 #include <sys/syscall.h>
@@ -293,9 +293,9 @@ namespace NActors {
         AtomicSet(ThreadId, (ui64)tid);
 #endif
 
-#ifdef BALLOC
-        ThreadDisableBalloc();
-#endif
+#ifdef BALLOC 
+        ThreadDisableBalloc(); 
+#endif 
 
         if (ThreadName) {
             ::SetCurrentThreadName(ThreadName);

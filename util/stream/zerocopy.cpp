@@ -31,30 +31,30 @@ size_t IZeroCopyInput::DoSkip(size_t len) {
 
     return DoNext(&ptr, len);
 }
-
+ 
 IZeroCopyInputFastReadTo::~IZeroCopyInputFastReadTo() = default;
-
+ 
 size_t IZeroCopyInputFastReadTo::DoReadTo(TString& st, char ch) {
-    const char* ptr;
-    size_t len = Next(&ptr);
-    if (!len) {
-        return 0;
-    }
-    size_t result = 0;
-    st.clear();
-    do {
-        if (const char* pos = (const char*)memchr(ptr, ch, len)) {
+    const char* ptr; 
+    size_t len = Next(&ptr); 
+    if (!len) { 
+        return 0; 
+    } 
+    size_t result = 0; 
+    st.clear(); 
+    do { 
+        if (const char* pos = (const char*)memchr(ptr, ch, len)) { 
             size_t bytesRead = (pos - ptr) + 1;
             if (bytesRead > 1) {
-                st.append(ptr, pos);
-            }
+                st.append(ptr, pos); 
+            } 
             Undo(len - bytesRead);
             result += bytesRead;
-            return result;
-        } else {
-            result += len;
-            st.append(ptr, len);
-        }
-    } while (len = Next(&ptr));
-    return result;
-}
+            return result; 
+        } else { 
+            result += len; 
+            st.append(ptr, len); 
+        } 
+    } while (len = Next(&ptr)); 
+    return result; 
+} 

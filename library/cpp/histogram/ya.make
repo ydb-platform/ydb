@@ -4,6 +4,6 @@ RECURSE(
     hdr/ut
     simple
     simple/ut
-    rt
-    rt/ut
+    rt 
+    rt/ut 
 )

@@ -3,44 +3,44 @@
 #include "string.h"
 
 #include <util/string/ascii.h>
-#include <util/string/builder.h>
+#include <util/string/builder.h> 
 #include <util/stream/format.h>
 #include <util/system/unaligned_mem.h>
 #include <util/random/easy.h>
 
-namespace {
-    inline void LowerCaseHex(TString& s) {
-        for (auto&& c : s) {
-            c = AsciiToLower(c);
-        }
-    }
-}
-
-TString TGUID::AsGuidString() const {
-    TStringBuilder s;
-    s.reserve(50);
-    s << Hex(dw[0], 0) << '-' << Hex(dw[1], 0) << '-' << Hex(dw[2], 0) << '-' << Hex(dw[3], 0);
-    LowerCaseHex(s);
-    return std::move(s);
-}
-
-TString TGUID::AsUuidString() const {
-    TStringBuilder s;
-    s.reserve(50);
-    s << Hex(dw[0], HF_FULL) << '-';
-    s << Hex(static_cast<ui16>(dw[1] >> 16), HF_FULL) << '-' << Hex(static_cast<ui16>(dw[1]), HF_FULL) << '-';
-    s << Hex(static_cast<ui16>(dw[2] >> 16), HF_FULL) << '-' << Hex(static_cast<ui16>(dw[2]), HF_FULL);
-    s << Hex(dw[3], HF_FULL);
-    LowerCaseHex(s);
-    return std::move(s);
-}
-
-TGUID TGUID::Create() {
-    TGUID result;
-    CreateGuid(&result);
-    return result;
-}
-
+namespace { 
+    inline void LowerCaseHex(TString& s) { 
+        for (auto&& c : s) { 
+            c = AsciiToLower(c); 
+        } 
+    } 
+} 
+ 
+TString TGUID::AsGuidString() const { 
+    TStringBuilder s; 
+    s.reserve(50); 
+    s << Hex(dw[0], 0) << '-' << Hex(dw[1], 0) << '-' << Hex(dw[2], 0) << '-' << Hex(dw[3], 0); 
+    LowerCaseHex(s); 
+    return std::move(s); 
+} 
+ 
+TString TGUID::AsUuidString() const { 
+    TStringBuilder s; 
+    s.reserve(50); 
+    s << Hex(dw[0], HF_FULL) << '-'; 
+    s << Hex(static_cast<ui16>(dw[1] >> 16), HF_FULL) << '-' << Hex(static_cast<ui16>(dw[1]), HF_FULL) << '-'; 
+    s << Hex(static_cast<ui16>(dw[2] >> 16), HF_FULL) << '-' << Hex(static_cast<ui16>(dw[2]), HF_FULL); 
+    s << Hex(dw[3], HF_FULL); 
+    LowerCaseHex(s); 
+    return std::move(s); 
+} 
+ 
+TGUID TGUID::Create() { 
+    TGUID result; 
+    CreateGuid(&result); 
+    return result; 
+} 
+ 
 void CreateGuid(TGUID* res) {
     ui64* dw = reinterpret_cast<ui64*>(res->dw);
 
@@ -66,11 +66,11 @@ TGUID TGUID::CreateTimebased() {
 }
 
 TString GetGuidAsString(const TGUID& g) {
-    return g.AsGuidString();
+    return g.AsGuidString(); 
 }
 
 TString CreateGuidAsString() {
-    return TGUID::Create().AsGuidString();
+    return TGUID::Create().AsGuidString(); 
 }
 
 static bool GetDigit(const char c, ui32& digit) {

@@ -25,7 +25,7 @@ PEERDIR(
     library/cpp/monlib/encode/json
     library/cpp/monlib/encode/text
     library/cpp/monlib/encode/spack
-    library/cpp/monlib/encode/prometheus
+    library/cpp/monlib/encode/prometheus 
 )
 
 END()

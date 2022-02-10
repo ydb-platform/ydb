@@ -429,7 +429,7 @@ public:
     inline void DecreaseConnections() noexcept {
         AtomicDecrement(ConnectionCount);
     }
-
+ 
     inline void IncreaseConnections() noexcept {
         AtomicIncrement(ConnectionCount);
     }
@@ -495,10 +495,10 @@ THttpServer::THttpServer(ICallBack* cb, TMtpQueueRef mainWorkers, TMtpQueueRef f
 THttpServer::~THttpServer() {
 }
 
-i64 THttpServer::GetClientCount() const {
-    return Impl_->GetClientCount();
-}
-
+i64 THttpServer::GetClientCount() const { 
+    return Impl_->GetClientCount(); 
+} 
+ 
 bool THttpServer::Start() {
     return Impl_->Start();
 }

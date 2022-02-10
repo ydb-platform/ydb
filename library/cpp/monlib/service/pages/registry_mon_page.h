@@ -5,7 +5,7 @@
 #include <library/cpp/monlib/metrics/metric_registry.h>
 
 namespace NMonitoring {
-    // For now this class can only enumerate all metrics without any grouping or serve JSON/Spack/Prometheus
+    // For now this class can only enumerate all metrics without any grouping or serve JSON/Spack/Prometheus 
     class TMetricRegistryPage: public TPreMonPage {
     public:
         TMetricRegistryPage(const TString& path, const TString& title, TAtomicSharedPtr<IMetricSupplier> registry)

@@ -113,8 +113,8 @@ size_t TBufferInput::DoNext(const void** ptr, size_t len) {
     Readed_ += len;
     return len;
 }
-
-void TBufferInput::DoUndo(size_t len) {
-    Y_VERIFY(len <= Readed_);
-    Readed_ -= len;
-}
+ 
+void TBufferInput::DoUndo(size_t len) { 
+    Y_VERIFY(len <= Readed_); 
+    Readed_ -= len; 
+} 

@@ -91,34 +91,34 @@ message TFlatRepeated {
     repeated string UserID = 20;
 };
 
-message TFlatDefault {
-    optional int32 I32 = 1 [default = 132];
-    optional int64 I64 = 2 [default = 164];
-    optional uint32 UI32 = 3 [default = 232];
-    optional uint64 UI64 = 4 [default = 264];
-    optional sint32 SI32 = 5 [default = 332];
-    optional sint64 SI64 = 6 [default = 364];
-    optional fixed32 FI32 = 7 [default = 432];
-    optional fixed64 FI64 = 8 [default = 464];
-    optional sfixed32 SFI32 = 9 [default = 532];
-    optional sfixed64 SFI64 = 10 [default = 564];
-
-    optional bool Bool = 11 [default = true];
-
-    optional string String = 12 [default = "string"];
-    optional bytes Bytes = 13 [default = "bytes"];
-
-    optional EEnum Enum = 14 [default = E_2];
-
-    optional float Float = 15 [default = 0.123];
-    optional double Double = 16 [default = 0.456];
+message TFlatDefault { 
+    optional int32 I32 = 1 [default = 132]; 
+    optional int64 I64 = 2 [default = 164]; 
+    optional uint32 UI32 = 3 [default = 232]; 
+    optional uint64 UI64 = 4 [default = 264]; 
+    optional sint32 SI32 = 5 [default = 332]; 
+    optional sint64 SI64 = 6 [default = 364]; 
+    optional fixed32 FI32 = 7 [default = 432]; 
+    optional fixed64 FI64 = 8 [default = 464]; 
+    optional sfixed32 SFI32 = 9 [default = 532]; 
+    optional sfixed64 SFI64 = 10 [default = 564]; 
+ 
+    optional bool Bool = 11 [default = true]; 
+ 
+    optional string String = 12 [default = "string"]; 
+    optional bytes Bytes = 13 [default = "bytes"]; 
+ 
+    optional EEnum Enum = 14 [default = E_2]; 
+ 
+    optional float Float = 15 [default = 0.123]; 
+    optional double Double = 16 [default = 0.456]; 
 
     optional string OneString = 17 [default = "string"];
     optional string OneTwoString = 18 [default = "string"];
     optional string ABC = 19 [default = "abc"];
     optional string UserID = 20 [default = "some_id"];
-};
-
+}; 
+ 
 message TCompositeOptional {
     optional TFlatOptional Part = 1;
 };

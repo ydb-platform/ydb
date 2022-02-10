@@ -1,7 +1,7 @@
 #pragma once
 
 #include <string.h>
-#include <util/system/compiler.h>
+#include <util/system/compiler.h> 
 
 namespace NMalloc {
     struct TMallocInfo {
@@ -20,13 +20,13 @@ namespace NMalloc {
 
     // this function should be implemented by malloc implementations
     TMallocInfo MallocInfo();
-
-    struct TAllocHeader {
-        void* Block;
-        size_t AllocSize;
-        void Y_FORCE_INLINE Encode(void* block, size_t size, size_t signature) {
-            Block = block;
-            AllocSize = size | signature;
-        }
-    };
+ 
+    struct TAllocHeader { 
+        void* Block; 
+        size_t AllocSize; 
+        void Y_FORCE_INLINE Encode(void* block, size_t size, size_t signature) { 
+            Block = block; 
+            AllocSize = size | signature; 
+        } 
+    }; 
 }

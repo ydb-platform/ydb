@@ -58,7 +58,7 @@ namespace {
 
 const char* LastSystemErrorText(int code) {
 #if defined(_win_)
-    TErrString& text(*Singleton<TErrString>());
+    TErrString& text(*Singleton<TErrString>()); 
     LastSystemErrorText(text.data, sizeof(text.data), code);
 
     return text.data;

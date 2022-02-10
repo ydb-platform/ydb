@@ -6,12 +6,12 @@
 #include <util/generic/ptr.h>
 
 class TFilteredLogBackend: public TLogBackend {
-    THolder<TLogBackend> Backend;
+    THolder<TLogBackend> Backend; 
     ELogPriority Level;
 
 public:
-    TFilteredLogBackend(THolder<TLogBackend>&& t, ELogPriority level = LOG_MAX_PRIORITY) noexcept
-        : Backend(std::move(t))
+    TFilteredLogBackend(THolder<TLogBackend>&& t, ELogPriority level = LOG_MAX_PRIORITY) noexcept 
+        : Backend(std::move(t)) 
         , Level(level)
     {
     }

@@ -62,7 +62,7 @@ namespace NUnitTest {
 
     class ITestSuiteProcessor;
 
-    struct TTestContext {
+    struct TTestContext { 
         TTestContext()
             : Processor(nullptr)
         {
@@ -74,11 +74,11 @@ namespace NUnitTest {
         }
 
         using TMetrics = THashMap<TString, double>;
-        TMetrics Metrics;
+        TMetrics Metrics; 
 
         ITestSuiteProcessor* Processor;
-    };
-
+    }; 
+ 
     class ITestSuiteProcessor {
     public:
         struct TUnit {
@@ -285,8 +285,8 @@ private:                                                   \
 #define CATCH_REACTION(FN, e, context) this->AddError(("(" + TypeName(e) + ") " + e.what()).data(), context)
 #define CATCH_REACTION_BT(FN, e, context) this->AddError(("(" + TypeName(e) + ") " + e.what()).data(), (e.BackTrace() ? e.BackTrace()->PrintToString() : TString()), context)
 #else
-#define CATCH_REACTION(FN, e, context) throw
-#define CATCH_REACTION_BT(FN, e, context) throw
+#define CATCH_REACTION(FN, e, context) throw 
+#define CATCH_REACTION_BT(FN, e, context) throw 
 #endif
 
 #define UNIT_TEST_CHECK_TEST_IS_DECLARED_ONLY_ONCE(F)                                       \
@@ -334,7 +334,7 @@ private:                                                   \
     if (this->GetForkTests() && !this->GetIsForked()) {                                                                \
         UNIT_TEST_IMPL(F, false);                                                                                      \
         /* forked process (or main without "--fork-tests") treats some exceptions as success - it's exception test! */ \
-    } else {                                                                                                           \
+    } else {                                                                                                           \ 
         NUnitTest::TTestContext context(this->TTestBase::Processor());                                                 \
         if (this->CheckAccessTest((#F))) {                                                                             \
             try {                                                                                                      \
@@ -350,9 +350,9 @@ private:                                                   \
             } catch (...) {                                                                                            \
                 this->AddError("non-std exception!", &context);                                                        \
             }                                                                                                          \
-            this->Finish((#F), &context);                                                                              \
-        }                                                                                                              \
-    }
+            this->Finish((#F), &context);                                                                              \ 
+        }                                                                                                              \ 
+    } 
 
 #define UNIT_TEST_SUITE_END() \
     this->AtEnd();            \
@@ -753,7 +753,7 @@ public:                       \
 #define UNIT_ASSERT_TEST_FAILS(A) UNIT_ASSERT_TEST_FAILS_C(A, "")
 
 #define UNIT_ADD_METRIC(name, value) ut_context.Metrics[name] = value
-
+ 
     class TTestFactory {
         friend class TTestBase;
         friend class ITestBaseFactory;
@@ -1010,7 +1010,7 @@ public:                       \
 #define Y_UNIT_TEST_IMPL(N, FF, F)      \
     Y_UNIT_TEST_IMPL_REGISTER(N, FF, F) \
     void TTestCase##N::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
-
+ 
 #define Y_UNIT_TEST(N) Y_UNIT_TEST_IMPL(N, false, TCurrentTestCase)
 #define Y_UNIT_TEST_F(N, F) Y_UNIT_TEST_IMPL(N, false, F)
 #define SIMPLE_UNIT_FORKED_TEST(N) Y_UNIT_TEST_IMPL(N, true, TCurrentTestCase)

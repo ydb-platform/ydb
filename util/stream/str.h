@@ -49,7 +49,7 @@ public:
 
 protected:
     size_t DoNext(const void** ptr, size_t len) override;
-    void DoUndo(size_t len) override;
+    void DoUndo(size_t len) override; 
 
 private:
     const TString* S_;

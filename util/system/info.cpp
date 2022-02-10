@@ -187,7 +187,7 @@ size_t NSystemInfo::GetPageSize() noexcept {
 #endif
 }
 
-size_t NSystemInfo::TotalMemorySize() {
+size_t NSystemInfo::TotalMemorySize() { 
 #if defined(_linux_) && defined(_64_)
     try {
         auto q = FromString<size_t>(StripString(TFileInput("/sys/fs/cgroup/memory/memory.limit_in_bytes").ReadAll()));
@@ -200,9 +200,9 @@ size_t NSystemInfo::TotalMemorySize() {
 #endif
 
 #if defined(_linux_) || defined(_cygwin_)
-    struct sysinfo info;
-    sysinfo(&info);
-    return info.totalram;
+    struct sysinfo info; 
+    sysinfo(&info); 
+    return info.totalram; 
 #elif defined(_darwin_)
     int mib[2];
     int64_t memSize;
@@ -223,10 +223,10 @@ size_t NSystemInfo::TotalMemorySize() {
         ythrow yexception() << "GlobalMemoryStatusEx failed: " << LastSystemErrorText();
     }
     return (size_t)memoryStatusEx.ullTotalPhys;
-#else
-    return 0;
-#endif
-}
+#else 
+    return 0; 
+#endif 
+} 
 
 size_t NSystemInfo::MaxOpenFiles() {
 #if defined(ANDROID) || defined(__ANDROID__)

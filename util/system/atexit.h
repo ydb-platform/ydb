@@ -10,8 +10,8 @@ void AtExit(TAtExitFunc func, void* ctx, size_t priority);
 
 void AtExit(TTraditionalAtExitFunc func);
 void AtExit(TTraditionalAtExitFunc func, size_t priority);
-
-bool ExitStarted();
+ 
+bool ExitStarted(); 
 
 /**
  * Generally it's a bad idea to call this method except for some rare cases,

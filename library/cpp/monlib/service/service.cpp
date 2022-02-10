@@ -47,10 +47,10 @@ namespace NMonitoring {
                 Handler(out, *this);
                 out.Finish();
             } catch (...) {
-                auto msg = CurrentExceptionMessage();
-                out << "HTTP/1.1 500 Internal server error\r\nConnection: Close\r\n\r\n" << msg;
-                out.Finish();
-                YSYSLOG(TLOG_ERR, "THttpClient: error while serving monitoring request: %s", msg.data());
+                auto msg = CurrentExceptionMessage(); 
+                out << "HTTP/1.1 500 Internal server error\r\nConnection: Close\r\n\r\n" << msg; 
+                out.Finish(); 
+                YSYSLOG(TLOG_ERR, "THttpClient: error while serving monitoring request: %s", msg.data()); 
             }
         }
 

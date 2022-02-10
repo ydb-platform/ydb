@@ -2,7 +2,7 @@
 
 #include "guard.h"
 #include "mutex.h"
-#include <util/generic/singleton.h> 
+#include <util/generic/singleton.h>
 #include <util/generic/yexception.h>
 
 #ifdef _win32_
@@ -66,7 +66,7 @@ public:
 
         return new TImpl(path, flags);
     }
- 
+
     inline ~TImpl() {
         if (Module && Unloadable) {
             DLLCLOSE(Module);
@@ -86,7 +86,7 @@ public:
 
         return symbol;
     }
- 
+
     inline void SetUnloadable(bool unloadable) {
         Unloadable = unloadable;
     }
@@ -132,7 +132,7 @@ void* TDynamicLibrary::Sym(const char* name) {
 bool TDynamicLibrary::IsLoaded() const noexcept {
     return (bool)Impl_.Get();
 }
- 
-void TDynamicLibrary::SetUnloadable(bool unloadable) { 
+
+void TDynamicLibrary::SetUnloadable(bool unloadable) {
     Impl_->SetUnloadable(unloadable);
-} 
+}

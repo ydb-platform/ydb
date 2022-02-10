@@ -323,7 +323,7 @@ namespace NSorted {
         using TBase::erase;
     };
 
-    // The simplified map (a.k.a TFlatMap, flat_map), which is implemented by the sorted-vector. 
+    // The simplified map (a.k.a TFlatMap, flat_map), which is implemented by the sorted-vector.
     // This structure has the side-effect: if you keep a reference to an existing element
     // and then inserts a new one, the existing reference can be broken (due to reallocation).
     // Please keep this in mind when using this structure.
@@ -397,7 +397,7 @@ namespace NSorted {
         }
     };
 
-    // The simplified set (a.k.a TFlatSet, flat_set), which is implemented by the sorted-vector. 
+    // The simplified set (a.k.a TFlatSet, flat_set), which is implemented by the sorted-vector.
     // This structure has the same side-effect as TSimpleMap.
     // The value type must have TValueType(TKeyType) constructor in order to use [] operator
     template <typename TValueType, typename TKeyType = TValueType, class TKeyExtractor = TIdentity,

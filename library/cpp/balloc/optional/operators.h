@@ -10,7 +10,7 @@ inline bool BallocEnabled() {
 inline void ThreadDisableBalloc() {
     ::NMalloc::MallocInfo().SetParam("disable", "true");
 }
- 
-inline void ThreadEnableBalloc() { 
-    ::NMalloc::MallocInfo().SetParam("disable", "false"); 
-} 
+
+inline void ThreadEnableBalloc() {
+    ::NMalloc::MallocInfo().SetParam("disable", "false");
+}

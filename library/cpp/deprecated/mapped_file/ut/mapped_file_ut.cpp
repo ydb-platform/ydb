@@ -1,8 +1,8 @@
 #include <library/cpp/deprecated/mapped_file/mapped_file.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/system/fs.h> 
- 
+#include <util/system/fs.h>
+
 Y_UNIT_TEST_SUITE(TMappedFileTest) {
     static const char* FileName_("./mappped_file");
     Y_UNIT_TEST(TestFileMapEmpty) {
@@ -13,6 +13,6 @@ Y_UNIT_TEST_SUITE(TMappedFileTest) {
         map.init(FileName_);
         map.getData(0);
 
-        NFs::Remove(FileName_); 
+        NFs::Remove(FileName_);
     }
 };

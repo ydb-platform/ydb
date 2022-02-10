@@ -49,7 +49,7 @@ private:
     size_t DoNext(void** ptr) override;
     void DoUndo(size_t len) override;
     void DoWrite(const void* buf, size_t len) override;
-    void DoWriteC(char c) override; 
+    void DoWriteC(char c) override;
 
 private:
     THolder<TImpl> Impl_;

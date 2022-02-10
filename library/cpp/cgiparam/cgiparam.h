@@ -88,13 +88,13 @@ public:
     void InsertEscaped(const TStringBuf name, const TStringBuf value);
 
 #if !defined(__GLIBCXX__)
-    template <typename TName, typename TValue> 
-    inline void InsertUnescaped(TName&& name, TValue&& value) { 
+    template <typename TName, typename TValue>
+    inline void InsertUnescaped(TName&& name, TValue&& value) {
         // TStringBuf use as TName or TValue is C++17 actually.
         // There is no pair constructor available in C++14 when required type
         // is not implicitly constructible from given type.
         // But libc++ pair allows this with C++14.
-        emplace(std::forward<TName>(name), std::forward<TValue>(value)); 
+        emplace(std::forward<TName>(name), std::forward<TValue>(value));
     }
 #else
     template <typename TName, typename TValue>
@@ -103,19 +103,19 @@ public:
     }
 #endif
 
-    // replace all values for a given key with new values 
-    template <typename TIter> 
-    void ReplaceUnescaped(const TStringBuf key, TIter valuesBegin, const TIter valuesEnd); 
+    // replace all values for a given key with new values
+    template <typename TIter>
+    void ReplaceUnescaped(const TStringBuf key, TIter valuesBegin, const TIter valuesEnd);
 
-    void ReplaceUnescaped(const TStringBuf key, std::initializer_list<TStringBuf> values) { 
-        ReplaceUnescaped(key, values.begin(), values.end()); 
-    } 
- 
-    void ReplaceUnescaped(const TStringBuf key, const TStringBuf value) { 
+    void ReplaceUnescaped(const TStringBuf key, std::initializer_list<TStringBuf> values) {
+        ReplaceUnescaped(key, values.begin(), values.end());
+    }
+
+    void ReplaceUnescaped(const TStringBuf key, const TStringBuf value) {
         ReplaceUnescaped(key, {value});
-    } 
- 
-    // join multiple values into a single one using a separator 
+    }
+
+    // join multiple values into a single one using a separator
     // if val is a [possibly empty] non-NULL string, append it as well
     void JoinUnescaped(const TStringBuf key, char sep, TStringBuf val = TStringBuf());
 
@@ -132,29 +132,29 @@ public:
         return it->second.data();
     }
 };
- 
-template <typename TIter> 
-void TCgiParameters::ReplaceUnescaped(const TStringBuf key, TIter valuesBegin, const TIter valuesEnd) { 
-    const auto oldRange = equal_range(key); 
-    auto current = oldRange.first; 
- 
-    // reuse as many existing nodes as possible (probably none) 
+
+template <typename TIter>
+void TCgiParameters::ReplaceUnescaped(const TStringBuf key, TIter valuesBegin, const TIter valuesEnd) {
+    const auto oldRange = equal_range(key);
+    auto current = oldRange.first;
+
+    // reuse as many existing nodes as possible (probably none)
     for (; valuesBegin != valuesEnd && current != oldRange.second; ++valuesBegin, ++current) {
-        current->second = *valuesBegin; 
-    } 
- 
-    // if there were more nodes than we need to insert then erase remaining ones 
+        current->second = *valuesBegin;
+    }
+
+    // if there were more nodes than we need to insert then erase remaining ones
     for (; current != oldRange.second; erase(current++)) {
-    } 
- 
-    // if there were less nodes than we need to insert then emplace the rest of the range 
+    }
+
+    // if there were less nodes than we need to insert then emplace the rest of the range
     if (valuesBegin != valuesEnd) {
         const TString keyStr = TString(key);
         for (; valuesBegin != valuesEnd; ++valuesBegin) {
             emplace_hint(oldRange.second, keyStr, TString(*valuesBegin));
         }
-    } 
-} 
+    }
+}
 
 /** TQuickCgiParam is a faster non-editable version of TCgiParameters.
  * Care should be taken when replacing:

@@ -4,8 +4,8 @@
 
 #include <util/generic/buffer.h>
 
-#include <cstring> 
- 
+#include <cstring>
+
 #include "str.h"
 
 Y_UNIT_TEST_SUITE(TBufferTest) {
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
         UNIT_ASSERT_VALUES_EQUAL(input.ReadTo(tmp, 'z'), 7);
         UNIT_ASSERT_VALUES_EQUAL(tmp, "4567890");
     }
- 
+
     Y_UNIT_TEST(WriteViaNextAndUndo) {
         TBuffer buffer;
         TBufferOutput output(buffer);
@@ -59,27 +59,27 @@ Y_UNIT_TEST_SUITE(TBufferTest) {
     }
 
     Y_UNIT_TEST(Write) {
-        TBuffer buffer; 
-        TBufferOutput output(buffer); 
+        TBuffer buffer;
+        TBufferOutput output(buffer);
         output << "1"
                << "22"
                << "333"
                << "4444"
                << "55555";
- 
+
         UNIT_ASSERT(0 == memcmp(buffer.data(), "1"
                                                "22"
                                                "333"
                                                "4444"
                                                "55555",
                                 buffer.size()));
-    } 
- 
+    }
+
     Y_UNIT_TEST(WriteChars) {
-        TBuffer buffer; 
-        TBufferOutput output(buffer); 
-        output << '1' << '2' << '3' << '4' << '5' << '6' << '7' << '8' << '9' << '0'; 
- 
+        TBuffer buffer;
+        TBufferOutput output(buffer);
+        output << '1' << '2' << '3' << '4' << '5' << '6' << '7' << '8' << '9' << '0';
+
         UNIT_ASSERT(0 == memcmp(buffer.data(), "1234567890", buffer.size()));
-    } 
+    }
 }

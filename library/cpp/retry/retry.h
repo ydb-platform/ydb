@@ -126,8 +126,8 @@ bool DoWithRetry(std::function<void()> func, TRetryOptions retryOptions, bool th
 
 void DoWithRetry(std::function<void()> func, TRetryOptions retryOptions);
 
-bool DoWithRetryOnRetCode(std::function<bool()> func, TRetryOptions retryOptions); 
- 
+bool DoWithRetryOnRetCode(std::function<bool()> func, TRetryOptions retryOptions);
+
 Y_DECLARE_PODTYPE(TRetryOptions);
 
 TRetryOptions MakeRetryOptions(const NRetry::TRetryOptionsPB& retryOptions);

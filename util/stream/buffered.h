@@ -114,7 +114,7 @@ protected:
     size_t DoNext(void** ptr) override;
     void DoUndo(size_t len) override;
     void DoWrite(const void* data, size_t len) override;
-    void DoWriteC(char c) override; 
+    void DoWriteC(char c) override;
     void DoFlush() override;
     void DoFinish() override;
 

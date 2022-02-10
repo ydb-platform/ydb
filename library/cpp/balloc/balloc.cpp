@@ -76,7 +76,7 @@ namespace NBalloc {
     static void Y_FORCE_INLINE Enable() {
         tls.Mode = ToBeEnabled;
     }
- 
+
     static bool Y_FORCE_INLINE IsDisabled() {
         return tls.Mode == Disabled;
     }
@@ -273,11 +273,11 @@ extern "C" void* realloc(void* oldPtr, size_t newSize) {
 }
 #endif
 
-// Only for testing purposes. Never use in production. 
+// Only for testing purposes. Never use in production.
 extern "C" bool IsOwnedByBalloc(void* ptr) {
-    return NBalloc::IsOwnedByBalloc(ptr); 
-} 
- 
+    return NBalloc::IsOwnedByBalloc(ptr);
+}
+
 extern "C" bool BallocDisabled() {
     return NBalloc::IsDisabled();
 }
@@ -286,10 +286,10 @@ extern "C" void DisableBalloc() {
     NBalloc::Disable();
 }
 
-extern "C" void EnableBalloc() { 
-    NBalloc::Enable(); 
-} 
- 
+extern "C" void EnableBalloc() {
+    NBalloc::Enable();
+}
+
 extern "C" void* memalign(size_t alignment, size_t size) {
     void* ptr;
     int res = posix_memalign(&ptr, alignment, size);

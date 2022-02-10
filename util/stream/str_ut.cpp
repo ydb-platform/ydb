@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
         UNIT_ASSERT_VALUES_EQUAL(in0.ReadTo(t, 'z'), 5);
         UNIT_ASSERT_VALUES_EQUAL(t, "89abc");
     }
- 
+
     Y_UNIT_TEST(WriteViaNextAndUndo) {
         TString str1;
         TStringOutput output(str1);
@@ -114,28 +114,28 @@ Y_UNIT_TEST_SUITE(TStringInputOutputTest) {
     }
 
     Y_UNIT_TEST(Write) {
-        TString str; 
-        TStringOutput output(str); 
+        TString str;
+        TStringOutput output(str);
         output << "1"
                << "22"
                << "333"
                << "4444"
                << "55555";
- 
+
         UNIT_ASSERT_STRINGS_EQUAL(str, "1"
                                        "22"
                                        "333"
                                        "4444"
                                        "55555");
-    } 
- 
+    }
+
     Y_UNIT_TEST(WriteChars) {
-        TString str; 
-        TStringOutput output(str); 
-        output << '1' << '2' << '3' << '4' << '5' << '6' << '7' << '8' << '9' << '0'; 
- 
-        UNIT_ASSERT_STRINGS_EQUAL(str, "1234567890"); 
-    } 
+        TString str;
+        TStringOutput output(str);
+        output << '1' << '2' << '3' << '4' << '5' << '6' << '7' << '8' << '9' << '0';
+
+        UNIT_ASSERT_STRINGS_EQUAL(str, "1234567890");
+    }
 
     Y_UNIT_TEST(MoveConstructor) {
         TString str;

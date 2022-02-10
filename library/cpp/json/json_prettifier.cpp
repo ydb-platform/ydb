@@ -150,7 +150,7 @@ namespace NJson {
 
         void AfterVal() {
             Out.Hold(',');
-        } 
+        }
 
         template <typename T>
         bool WriteVal(const T& t) {

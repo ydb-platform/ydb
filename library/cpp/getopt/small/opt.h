@@ -85,7 +85,7 @@ public:
     // Get() means next
     int Get();
     int Get(int* longOptionIndex);
-    int operator()() { 
+    int operator()() {
         return Get();
     }
 

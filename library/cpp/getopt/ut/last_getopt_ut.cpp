@@ -3,7 +3,7 @@
 #include <library/cpp/colorizer/colors.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/array_size.h> 
+#include <util/generic/array_size.h>
 #include <util/string/subst.h>
 #include <util/string/vector.h>
 #include <util/string/split.h>
@@ -12,23 +12,23 @@ using namespace NLastGetopt;
 
 namespace {
     struct TOptsNoDefault: public TOpts {
-        TOptsNoDefault(const TStringBuf& optstring = TStringBuf()) 
-            : TOpts(optstring) 
-        { 
-        } 
+        TOptsNoDefault(const TStringBuf& optstring = TStringBuf())
+            : TOpts(optstring)
+        {
+        }
     };
 
     class TOptsParseResultTestWrapper: public TOptsParseResultException {
         TVector<const char*> Argv_;
- 
-    public: 
+
+    public:
         TOptsParseResultTestWrapper(const TOpts* opts, TVector<const char*> argv)
-            : Argv_(argv) 
-        { 
+            : Argv_(argv)
+        {
             Init(opts, (int)Argv_.size(), Argv_.data());
-        } 
-    }; 
- 
+        }
+    };
+
     using V = TVector<const char*>;
 }
 
@@ -137,7 +137,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         TOptsNoDefault opts;
         opts.AddLongOption("from");
         opts.AddLongOption("to");
-        TOptsParseResultTestWrapper r(&opts, V({"copy", "--from=/", "--to=/etc"})); 
+        TOptsParseResultTestWrapper r(&opts, V({"copy", "--from=/", "--to=/etc"}));
 
         UNIT_ASSERT_VALUES_EQUAL("copy", r.GetProgramName());
         UNIT_ASSERT_VALUES_EQUAL("/", r.Get("from"));
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         opts.AddCharOption('R', NO_ARGUMENT);
         opts.AddCharOption('l', NO_ARGUMENT);
         opts.AddCharOption('h', NO_ARGUMENT);
-        TOptsParseResultTestWrapper r(&opts, V({"cp", "/etc", "-Rl", "/tmp/etc"})); 
+        TOptsParseResultTestWrapper r(&opts, V({"cp", "/etc", "-Rl", "/tmp/etc"}));
         UNIT_ASSERT(r.Has('R'));
         UNIT_ASSERT(r.Has('l'));
         UNIT_ASSERT(!r.Has('h'));
@@ -168,20 +168,20 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     Y_UNIT_TEST(TestFreeArgs) {
         TOptsNoDefault opts;
         opts.SetFreeArgsNum(1, 3);
-        TOptsParseResultTestWrapper r11(&opts, V({"cp", "/etc"})); 
-        TOptsParseResultTestWrapper r12(&opts, V({"cp", "/etc", "/tmp/etc"})); 
-        TOptsParseResultTestWrapper r13(&opts, V({"cp", "/etc", "/tmp/etc", "verbose"})); 
+        TOptsParseResultTestWrapper r11(&opts, V({"cp", "/etc"}));
+        TOptsParseResultTestWrapper r12(&opts, V({"cp", "/etc", "/tmp/etc"}));
+        TOptsParseResultTestWrapper r13(&opts, V({"cp", "/etc", "/tmp/etc", "verbose"}));
 
         UNIT_ASSERT_EXCEPTION(
-            TOptsParseResultTestWrapper(&opts, V({"cp", "/etc", "/tmp/etc", "verbose", "nosymlink"})), 
+            TOptsParseResultTestWrapper(&opts, V({"cp", "/etc", "/tmp/etc", "verbose", "nosymlink"})),
             yexception);
 
         UNIT_ASSERT_EXCEPTION(
-            TOptsParseResultTestWrapper(&opts, V({"cp"})), 
+            TOptsParseResultTestWrapper(&opts, V({"cp"})),
             yexception);
 
         opts.SetFreeArgsNum(2);
-        TOptsParseResultTestWrapper r22(&opts, V({"cp", "/etc", "/var/tmp"})); 
+        TOptsParseResultTestWrapper r22(&opts, V({"cp", "/etc", "/var/tmp"}));
     }
 
     Y_UNIT_TEST(TestCharOptionsRequiredOptional) {
@@ -191,7 +191,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         opts.AddCharOption('x', REQUIRED_ARGUMENT);
         opts.AddCharOption('y', REQUIRED_ARGUMENT);
         opts.AddCharOption('l', NO_ARGUMENT);
-        TOptsParseResultTestWrapper r(&opts, V({"cmd", "-ld11", "-e", "22", "-lllx33", "-y", "44"})); 
+        TOptsParseResultTestWrapper r(&opts, V({"cmd", "-ld11", "-e", "22", "-lllx33", "-y", "44"}));
         UNIT_ASSERT_VALUES_EQUAL("11", r.Get('d'));
         UNIT_ASSERT_VALUES_EQUAL("22", r.Get('e'));
         UNIT_ASSERT_VALUES_EQUAL("33", r.Get('x'));
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         opts.AddLongOption('b', "beta").NoArgument().StoreValue(&b, 24);
         opts.AddLongOption('e', "enum").NoArgument().StoreValue(&e, REQUIRED_ARGUMENT).StoreValue(&c, 12345);
 
-        TOptsParseResultTestWrapper r(&opts, V({"cmd", "-a", "-e"})); 
+        TOptsParseResultTestWrapper r(&opts, V({"cmd", "-a", "-e"}));
 
         UNIT_ASSERT_VALUES_EQUAL(42, a);
         UNIT_ASSERT_VALUES_EQUAL(0, b);
@@ -476,7 +476,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         opts.AddLongOption("path").DefaultValue("/etc");
         int value = 42;
         opts.AddLongOption("value").StoreResult(&value).DefaultValue(32);
-        TOptsParseResultTestWrapper r(&opts, V({"cmd", "dfdf"})); 
+        TOptsParseResultTestWrapper r(&opts, V({"cmd", "dfdf"}));
         UNIT_ASSERT_VALUES_EQUAL("/etc", r.Get("path"));
         UNIT_ASSERT_VALUES_EQUAL(32, value);
     }
@@ -485,7 +485,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         TOptsNoDefault opts;
         TVector<TString> vals;
         opts.AddLongOption('s', "split").SplitHandler(&vals, ',');
-        TOptsParseResultTestWrapper r(&opts, V({"prog", "--split=a,b,c"})); 
+        TOptsParseResultTestWrapper r(&opts, V({"prog", "--split=a,b,c"}));
         UNIT_ASSERT_EQUAL(vals.size(), 3);
         UNIT_ASSERT_EQUAL(vals[0], "a");
         UNIT_ASSERT_EQUAL(vals[1], "b");
@@ -496,7 +496,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         TOptsNoDefault opts;
         TVector<ui32> vals;
         opts.AddLongOption('s', "split").RangeSplitHandler(&vals, ',', '-');
-        TOptsParseResultTestWrapper r(&opts, V({"prog", "--split=1,8-10", "--split=12-14"})); 
+        TOptsParseResultTestWrapper r(&opts, V({"prog", "--split=1,8-10", "--split=12-14"}));
         UNIT_ASSERT_EQUAL(vals.size(), 7);
         UNIT_ASSERT_EQUAL(vals[0], 1);
         UNIT_ASSERT_EQUAL(vals[1], 8);
@@ -523,15 +523,15 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
 
         // test 'not required'
         // makes sure that the problem will only be in 'required'
-        TOptsParseResultTestWrapper r1(&opts, V({"cmd"})); 
+        TOptsParseResultTestWrapper r1(&opts, V({"cmd"}));
 
         // test 'required'
         opt_d.Required();
         UNIT_ASSERT_EXCEPTION(
-            TOptsParseResultTestWrapper(&opts, V({"cmd"})), 
+            TOptsParseResultTestWrapper(&opts, V({"cmd"})),
             TUsageException);
 
-        TOptsParseResultTestWrapper r3(&opts, V({"cmd", "-d11"})); 
+        TOptsParseResultTestWrapper r3(&opts, V({"cmd", "-d11"}));
         UNIT_ASSERT_VALUES_EQUAL("11", r3.Get('d'));
     }
 
@@ -541,8 +541,8 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     public:
         HandlerStoreTrue(bool* flag)
             : Flag(flag)
-        { 
-        } 
+        {
+        }
         void operator()() {
             *Flag = true;
         }
@@ -552,7 +552,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
             TOptsNoDefault opts;
             bool flag = false;
             opts.AddLongOption("flag").Handler0(HandlerStoreTrue(&flag)).NoArgument();
-            TOptsParseResultTestWrapper r(&opts, V({"cmd", "--flag"})); 
+            TOptsParseResultTestWrapper r(&opts, V({"cmd", "--flag"}));
             UNIT_ASSERT(flag);
         }
         {
@@ -564,11 +564,11 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
             opts.AddLongOption("flag3").RequiredArgument().StoreMappedResult(&fval, (double (*)(double))fabs);
             opts.AddLongOption("flag4").RequiredArgument().StoreMappedResult(&fval, (double (*)(double))sqrt);
             UNIT_ASSERT_EXCEPTION(
-                TOptsParseResultTestWrapper(&opts, V({"cmd", "--flag3", "-2.0", "--flag1", "-1"})), 
+                TOptsParseResultTestWrapper(&opts, V({"cmd", "--flag3", "-2.0", "--flag1", "-1"})),
                 yexception);
             UNIT_ASSERT_VALUES_EQUAL(uval, 5u);
             UNIT_ASSERT_VALUES_EQUAL(fval, 2.0);
-            TOptsParseResultTestWrapper r1(&opts, V({"cmd", "--flag4", "9.0", "--flag2", "-1"})); 
+            TOptsParseResultTestWrapper r1(&opts, V({"cmd", "--flag4", "9.0", "--flag2", "-1"}));
             UNIT_ASSERT_VALUES_EQUAL(uval, Max<unsigned>());
             UNIT_ASSERT_VALUES_EQUAL(fval, 3.0);
         }
@@ -706,7 +706,7 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
         TOptsNoDefault opts;
         opts.AddLongOption("size").AppendTo(&ints);
 
-        TOptsParseResultTestWrapper r(&opts, V({"cmd", "--size=17", "--size=19"})); 
+        TOptsParseResultTestWrapper r(&opts, V({"cmd", "--size=17", "--size=19"}));
 
         UNIT_ASSERT_VALUES_EQUAL(size_t(2), ints.size());
         UNIT_ASSERT_VALUES_EQUAL(17, ints.at(0));
@@ -727,16 +727,16 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
     }
 
     Y_UNIT_TEST(TestKVHandler) {
-        TStringBuilder keyvals; 
- 
-        TOptsNoDefault opts; 
+        TStringBuilder keyvals;
+
+        TOptsNoDefault opts;
         opts.AddLongOption("set").KVHandler([&keyvals](TString k, TString v) { keyvals << k << ":" << v << ","; });
- 
-        TOptsParseResultTestWrapper r(&opts, V({"cmd", "--set", "x=1", "--set", "y=2", "--set=z=3"})); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(keyvals, "x:1,y:2,z:3,"); 
-    } 
- 
+
+        TOptsParseResultTestWrapper r(&opts, V({"cmd", "--set", "x=1", "--set", "y=2", "--set=z=3"}));
+
+        UNIT_ASSERT_VALUES_EQUAL(keyvals, "x:1,y:2,z:3,");
+    }
+
     Y_UNIT_TEST(TestEasySetup) {
         TEasySetup opts;
         bool flag = false;
@@ -744,41 +744,41 @@ Y_UNIT_TEST_SUITE(TLastGetoptTests) {
 
         {
             gSimpleFlag = false;
-            TOptsParseResultTestWrapper r(&opts, V({"cmd", "--abstract"})); 
+            TOptsParseResultTestWrapper r(&opts, V({"cmd", "--abstract"}));
             UNIT_ASSERT(!flag);
             UNIT_ASSERT(!gSimpleFlag);
         }
 
         {
-            TOptsParseResultTestWrapper r(&opts, V({"cmd", "--abstract", "--global", "-t"})); 
+            TOptsParseResultTestWrapper r(&opts, V({"cmd", "--abstract", "--global", "-t"}));
             UNIT_ASSERT(flag);
             UNIT_ASSERT(gSimpleFlag);
         }
 
         {
             UNIT_ASSERT_EXCEPTION(
-                TOptsParseResultTestWrapper(&opts, V({"cmd", "--true"})), 
+                TOptsParseResultTestWrapper(&opts, V({"cmd", "--true"})),
                 TUsageException);
         }
 
         {
-            TOptsParseResultTestWrapper r(&opts, V({"cmd", "--abstract", "--buffer=512"})); 
+            TOptsParseResultTestWrapper r(&opts, V({"cmd", "--abstract", "--buffer=512"}));
             UNIT_ASSERT(r.Has('b'));
             UNIT_ASSERT_VALUES_EQUAL(r.Get('b', 0), "512");
         }
     }
 
     Y_UNIT_TEST(TestTOptsParseResultException) {
-        // verify that TOptsParseResultException actually throws a TUsageException instead of exit() 
-        // not using wrapper here because it can hide bugs (see review #243810 and r2737774) 
-        TOptsNoDefault opts; 
-        opts.AddLongOption("required-opt").Required(); 
-        const char* argv[] = {"cmd"}; 
-        // Should throw TUsageException. Other exception types, no exceptions at all and exit(1) are failures 
-        UNIT_ASSERT_EXCEPTION( 
-            TOptsParseResultException(&opts, Y_ARRAY_SIZE(argv), argv), 
+        // verify that TOptsParseResultException actually throws a TUsageException instead of exit()
+        // not using wrapper here because it can hide bugs (see review #243810 and r2737774)
+        TOptsNoDefault opts;
+        opts.AddLongOption("required-opt").Required();
+        const char* argv[] = {"cmd"};
+        // Should throw TUsageException. Other exception types, no exceptions at all and exit(1) are failures
+        UNIT_ASSERT_EXCEPTION(
+            TOptsParseResultException(&opts, Y_ARRAY_SIZE(argv), argv),
             TUsageException);
-    } 
+    }
 
     Y_UNIT_TEST(TestFreeArgsStoreResult) {
         TOptsNoDefault opts;

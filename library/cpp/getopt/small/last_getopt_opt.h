@@ -699,7 +699,7 @@ namespace NLastGetopt {
         TOpt& RangeSplitHandler(Container* target, const char elementsDelim, const char rangesDelim) {
             return Handler(new NLastGetopt::TOptRangeSplitHandler<Container>(target, elementsDelim, rangesDelim));
         }
- 
+
         template <class TpFunc>
         TOpt& KVHandler(TpFunc func, const char kvdelim = '=') {
             return Handler(new NLastGetopt::TOptKVHandler<TpFunc>(func, kvdelim));

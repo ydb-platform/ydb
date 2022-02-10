@@ -35,38 +35,38 @@ struct Opt2Param {
     TString HelpUsage;
     TVector<const char*> ActualValue;
     const char* LongOptName;
-    Opt2Param() 
-        : HasArg(false) 
-        , IsFound(0) 
-        , IsNumeric(0) 
-        , IsRequired(0) 
-        , MultipleUse(0) 
-        , DefValue(nullptr) 
-        , LongOptName(nullptr) 
-    { 
-    } 
+    Opt2Param()
+        : HasArg(false)
+        , IsFound(0)
+        , IsNumeric(0)
+        , IsRequired(0)
+        , MultipleUse(0)
+        , DefValue(nullptr)
+        , LongOptName(nullptr)
+    {
+    }
 };
 
 struct IntRange {
     int Left, Right;
-    IntRange() = delete; 
-    IntRange(int both) 
-        : Left(both) 
-        , Right(both) 
-    { 
-    } 
- 
-    IntRange(int left, int right) 
-        : Left(left) 
-        , Right(right) 
-    { 
-    } 
+    IntRange() = delete;
+    IntRange(int both)
+        : Left(both)
+        , Right(both)
+    {
+    }
+
+    IntRange(int left, int right)
+        : Left(left)
+        , Right(right)
+    {
+    }
 };
 
 class Opt2 {
 public:
-    Opt2() = default; 
- 
+    Opt2() = default;
+
     Opt2(int argc, char* const* argv, const char* optspec, IntRange free_args_num = -1, const char* long_alias = nullptr) {
         Init(argc, argv, optspec, free_args_num, long_alias);
     }

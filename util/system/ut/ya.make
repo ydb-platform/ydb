@@ -19,10 +19,10 @@ IF (OS_DARWIN)
     TIMEOUT(3600)
 ENDIF()
 
-PEERDIR( 
+PEERDIR(
     library/cpp/testing/benchmark
-) 
- 
+)
+
 SRCS(
     system/align_ut.cpp
     system/atexit_ut.cpp
@@ -53,7 +53,7 @@ SRCS(
     system/info_ut.cpp
     system/interrupt_signals_ut.cpp
     system/mem_info_ut.cpp
-    system/mincore_ut.cpp 
+    system/mincore_ut.cpp
     system/mutex_ut.cpp
     system/nice_ut.cpp
     system/pipe_ut.cpp

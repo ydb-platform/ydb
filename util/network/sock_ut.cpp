@@ -3,8 +3,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/threading/future/legacy_future.h>
 
-#include <util/system/fs.h> 
- 
+#include <util/system/fs.h>
+
 Y_UNIT_TEST_SUITE(TSocketTest) {
     Y_UNIT_TEST(InetDgramTest) {
         char buf[256];
@@ -68,8 +68,8 @@ Y_UNIT_TEST_SUITE(TSocketTest) {
         const char* localServerSockName = "./serv_sock";
         const char* localClientSockName = "./cli_sock";
         RunLocalDgramTest(localServerSockName, localClientSockName);
-        NFs::Remove(localServerSockName); 
-        NFs::Remove(localClientSockName); 
+        NFs::Remove(localServerSockName);
+        NFs::Remove(localClientSockName);
     }
 
     template <class A, class S>
@@ -162,7 +162,7 @@ Y_UNIT_TEST_SUITE(TSocketTest) {
     Y_UNIT_TEST(LocalStreamTest) {
         const char* localServerSockName = "./serv_sock2";
         RunLocalStreamTest(localServerSockName);
-        NFs::Remove(localServerSockName); 
+        NFs::Remove(localServerSockName);
     }
 
 }

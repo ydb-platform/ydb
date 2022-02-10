@@ -11,7 +11,7 @@ TMappedFile::TMappedFile(TFileMap* map, const char* dbgName) {
     if (Hi32(len) != 0 && sizeof(size_t) <= sizeof(ui32))
         ythrow yexception() << "File '" << dbgName << "' mapping error: " << len << " too large";
 
-    Map_->Map(0, static_cast<size_t>(len)); 
+    Map_->Map(0, static_cast<size_t>(len));
 }
 
 TMappedFile::TMappedFile(const TFile& file, TFileMap::EOpenMode om, const char* dbgName)

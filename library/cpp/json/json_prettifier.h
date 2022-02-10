@@ -2,8 +2,8 @@
 
 #include "json_reader.h"
 
-#include <util/generic/ylimits.h> 
- 
+#include <util/generic/ylimits.h>
+
 namespace NJson {
     struct TJsonPrettifier {
         bool Unquote = false;

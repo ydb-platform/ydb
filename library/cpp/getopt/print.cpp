@@ -31,7 +31,7 @@ namespace NLastGetoptPrivate {
     TString& ShortVersionString();
 
     struct TInit {
-        TInit() { 
+        TInit() {
             VersionString() = InitVersionString();
             ShortVersionString() = InitShortVersionString();
         }

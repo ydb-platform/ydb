@@ -30,10 +30,10 @@ public:
         Data_.Append((const char*)buf, len);
     }
 
-    inline void DoWriteC(char c) { 
-        Data_.Append(c); 
-    } 
- 
+    inline void DoWriteC(char c) {
+        Data_.Append(c);
+    }
+
     inline TBuffer& Buffer() const noexcept {
         return Data_;
     }
@@ -87,10 +87,10 @@ void TBufferOutput::DoWrite(const void* buf, size_t len) {
     Impl_->DoWrite(buf, len);
 }
 
-void TBufferOutput::DoWriteC(char c) { 
-    Impl_->DoWriteC(c); 
-} 
- 
+void TBufferOutput::DoWriteC(char c) {
+    Impl_->DoWriteC(c);
+}
+
 TBufferInput::TBufferInput(const TBuffer& buffer)
     : Buf_(buffer)
     , Readed_(0)

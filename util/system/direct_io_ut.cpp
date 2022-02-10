@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/yexception.h>
-#include <util/system/fs.h> 
+#include <util/system/fs.h>
 #include <util/system/tempfile.h>
 #include <util/random/random.h>
 
@@ -11,7 +11,7 @@ static const char* FileName_("./test.file");
 
 Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
     Y_UNIT_TEST(TestDirectFile) {
-        TDirectIOBufferedFile file(FileName_, RdWr | Direct | Seq | CreateAlways, 1 << 15); 
+        TDirectIOBufferedFile file(FileName_, RdWr | Direct | Seq | CreateAlways, 1 << 15);
         TVector<ui64> data((1 << 15) + 1);
         TVector<ui64> readResult(data.size());
         for (auto& i : data) {
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
             }
         }
         file.Finish();
-        TDirectIOBufferedFile fileNew(FileName_, RdOnly | Direct | Seq | OpenAlways, 1 << 15); 
+        TDirectIOBufferedFile fileNew(FileName_, RdOnly | Direct | Seq | OpenAlways, 1 << 15);
         for (int i = 0; i < 1000; ++i) {
             size_t readPos = RandomNumber(data.size());
             size_t readCount = RandomNumber(data.size() - readPos);
@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
         for (size_t i = 0; i < readCount; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(readResult[i], data[i]);
         }
-        NFs::Remove(FileName_); 
+        NFs::Remove(FileName_);
     }
 
     void TestHugeFile(size_t size) {

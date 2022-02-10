@@ -112,8 +112,8 @@ public:
 
         TMode()
             : Main(nullptr)
-        { 
-        } 
+        {
+        }
 
         TMode(const TString& name, TMainClass* main, const TString& descr, bool hidden, bool noCompletion);
 

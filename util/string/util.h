@@ -116,11 +116,11 @@ public:
     }
 
     char* brk(char* s) const {
-        return const_cast<char*>(brk((const char*)s));
+        return const_cast<char*>(brk((const char*)s)); 
     }
 
     char* cbrk(char* s) const {
-        return const_cast<char*>(cbrk((const char*)s));
+        return const_cast<char*>(cbrk((const char*)s)); 
     }
 
     /// See strsep [BUT argument is *&, not **]

@@ -95,14 +95,14 @@ private:
 
     UNIT_TEST(TestSearchIterChar);
     UNIT_TEST(TestSearchIterWchar);
-    UNIT_TEST(TestSearchIterWchar32) 
+    UNIT_TEST(TestSearchIterWchar32)
 
     UNIT_TEST(TestCopyAndAssignment);
 
     UNIT_TEST(TestFirstSymbolIterator8);
     UNIT_TEST(TestFirstSymbolIterator16);
     UNIT_TEST(TestFirstSymbolIterator32);
-    UNIT_TEST(TestFirstSymbolIteratorChar32); 
+    UNIT_TEST(TestFirstSymbolIteratorChar32);
 
     UNIT_TEST(TestArrayPacker);
 
@@ -232,14 +232,14 @@ public:
 
     void TestSearchIterChar();
     void TestSearchIterWchar();
-    void TestSearchIterWchar32(); 
+    void TestSearchIterWchar32();
 
     void TestCopyAndAssignment();
 
     void TestFirstSymbolIterator8();
     void TestFirstSymbolIterator16();
     void TestFirstSymbolIterator32();
-    void TestFirstSymbolIteratorChar32(); 
+    void TestFirstSymbolIteratorChar32();
 
     void TestArrayPacker();
 
@@ -1307,13 +1307,13 @@ struct TConvertKey<wchar16> {
     }
 };
 
-template <> 
-struct TConvertKey<wchar32> { 
-    static inline TUtf32String Convert(const TStringBuf& key) { 
-        return TUtf32String::FromUtf8(key); 
-    } 
-}; 
- 
+template <>
+struct TConvertKey<wchar32> {
+    static inline TUtf32String Convert(const TStringBuf& key) {
+        return TUtf32String::FromUtf8(key);
+    }
+};
+
 template <class TSearchIter, class TKeyBuf>
 static void MoveIter(TSearchIter& iter, const TKeyBuf& key) {
     for (size_t i = 0; i < key.length(); ++i) {
@@ -1371,10 +1371,10 @@ void TCompactTrieTest::TestSearchIterWchar() {
     TestSearchIterImpl<wchar16>();
 }
 
-void TCompactTrieTest::TestSearchIterWchar32() { 
-    TestSearchIterImpl<wchar32>(); 
-} 
- 
+void TCompactTrieTest::TestSearchIterWchar32() {
+    TestSearchIterImpl<wchar32>();
+}
+
 void TCompactTrieTest::TestCopyAndAssignment() {
     TBufferOutput bufout;
     typedef TCompactTrie<> TTrie;
@@ -1429,11 +1429,11 @@ void TCompactTrieTest::TestFirstSymbolIterator32() {
     TestFirstSymbolIterator<ui32>();
 }
 
-void TCompactTrieTest::TestFirstSymbolIteratorChar32() { 
-    TestFirstSymbolIterator<wchar32>(); 
-} 
+void TCompactTrieTest::TestFirstSymbolIteratorChar32() {
+    TestFirstSymbolIterator<wchar32>();
+}
 
- 
+
 void TCompactTrieTest::TestArrayPacker() {
     using TDataInt = std::array<int, 2>;
     const std::pair<TString, TDataInt> dataXxx{"xxx", {{15, 16}}};

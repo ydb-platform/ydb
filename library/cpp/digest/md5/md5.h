@@ -65,7 +65,7 @@ public:
 
     static bool IsMD5(TStringBuf data);
     static bool IsMD5(const TArrayRef<const ui8>& data);
- 
+
 private:
     void UpdatePart(TArrayRef<const ui8> data);
 

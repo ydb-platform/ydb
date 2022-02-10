@@ -240,15 +240,15 @@ static inline std::enable_if_t<!std::is_scalar<T>::value, IOutputStream&> operat
 }
 
 static inline IOutputStream& operator<<(IOutputStream& o, const wchar16* t) {
-    Out<const wchar16*>(o, t); 
-    return o; 
-} 
- 
+    Out<const wchar16*>(o, t);
+    return o;
+}
+
 static inline IOutputStream& operator<<(IOutputStream& o, wchar16* t) {
-    Out<const wchar16*>(o, t); 
-    return o; 
-} 
- 
+    Out<const wchar16*>(o, t);
+    return o;
+}
+
 static inline IOutputStream& operator<<(IOutputStream& o, const wchar32* t) {
     Out<const wchar32*>(o, t);
     return o;

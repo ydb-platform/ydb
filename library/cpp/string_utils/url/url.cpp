@@ -15,7 +15,7 @@
 
 #include <cstdlib>
 
-namespace { 
+namespace {
     struct TUncheckedSize {
         static bool Has(size_t) {
             return true;

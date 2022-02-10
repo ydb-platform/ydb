@@ -73,14 +73,14 @@ TString RealLocation(const TString& path); /// throws; last file name component 
 
 TString GetSystemTempDir();
 
-int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix); 
- 
-int ResolvePath(const char* rel, const char* abs, char res[/*FILENAME_MAX*/], bool isdir = false); 
+int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix);
+
+int ResolvePath(const char* rel, const char* abs, char res[/*FILENAME_MAX*/], bool isdir = false);
 TString ResolvePath(const char* rel, const char* abs, bool isdir = false);
 TString ResolvePath(const char* path, bool isDir = false);
- 
+
 TString ResolveDir(const char* path);
- 
+
 bool SafeResolveDir(const char* path, TString& result);
 
 TString GetDirName(const TString& path);

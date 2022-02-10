@@ -136,8 +136,8 @@ void Out<const wchar16*>(IOutputStream& o, const wchar16* w) {
     } else {
         o.Write("(null)");
     }
-} 
- 
+}
+
 template <>
 void Out<const wchar32*>(IOutputStream& o, const wchar32* w) {
     if (w) {

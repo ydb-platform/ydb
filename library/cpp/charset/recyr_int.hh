@@ -45,13 +45,13 @@ namespace NCodepagePrivate {
         out_writed = (unsigned char*)out - out_start;
         return res;
     }
- 
+
     inline RECODE_RESULT _recodeFromUTF8(ECharset to, const char* in, char* out, size_t in_size, size_t out_size, size_t& in_readed, size_t& out_writed) {
         if (to == CODES_UTF8)
             return _recodeCopy(in, out, in_size, out_size, in_readed, out_writed);
         Y_ASSERT(CODES_UNKNOWN < to && to < CODES_MAX);
         const Encoder* enc = &EncoderByCharset(to);
- 
+
         const unsigned char* in_start = (const unsigned char*)in;
         const unsigned char* in_end = in_start + in_size;
         const unsigned char* out_start = (unsigned char*)out;

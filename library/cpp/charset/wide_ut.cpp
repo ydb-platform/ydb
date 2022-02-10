@@ -7,20 +7,20 @@
 #include <util/charset/utf8.h>
 #include <util/digest/numeric.h>
 #include <util/generic/hash_set.h>
- 
+
 #include <algorithm>
 
-namespace { 
-    //! three UTF8 encoded russian letters (A, B, V) 
+namespace {
+    //! three UTF8 encoded russian letters (A, B, V)
     const char yandexCyrillicAlphabet[] =
         "\xC0\xC1\xC2\xC3\xC4\xC5\xC6\xC7\xC8\xC9\xCA\xCB\xCC\xCD\xCE\xCF"  // A - P
         "\xD0\xD1\xD2\xD3\xD4\xD5\xD6\xD7\xD8\xD9\xDA\xDB\xDC\xDD\xDE\xDF"  // R - YA
         "\xE0\xE1\xE2\xE3\xE4\xE5\xE6\xE7\xE8\xE9\xEA\xEB\xEC\xED\xEE\xEF"  // a - p
         "\xF0\xF1\xF2\xF3\xF4\xF5\xF6\xF7\xF8\xF9\xFA\xFB\xFC\xFD\xFE\xFF"; // r - ya
-    const wchar16 wideCyrillicAlphabet[] = { 
-        0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, 0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F, 
-        0x0420, 0x0421, 0x0422, 0x0423, 0x0424, 0x0425, 0x0426, 0x0427, 0x0428, 0x0429, 0x042A, 0x042B, 0x042C, 0x042D, 0x042E, 0x042F, 
-        0x0430, 0x0431, 0x0432, 0x0433, 0x0434, 0x0435, 0x0436, 0x0437, 0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E, 0x043F, 
+    const wchar16 wideCyrillicAlphabet[] = {
+        0x0410, 0x0411, 0x0412, 0x0413, 0x0414, 0x0415, 0x0416, 0x0417, 0x0418, 0x0419, 0x041A, 0x041B, 0x041C, 0x041D, 0x041E, 0x041F,
+        0x0420, 0x0421, 0x0422, 0x0423, 0x0424, 0x0425, 0x0426, 0x0427, 0x0428, 0x0429, 0x042A, 0x042B, 0x042C, 0x042D, 0x042E, 0x042F,
+        0x0430, 0x0431, 0x0432, 0x0433, 0x0434, 0x0435, 0x0436, 0x0437, 0x0438, 0x0439, 0x043A, 0x043B, 0x043C, 0x043D, 0x043E, 0x043F,
         0x0440, 0x0441, 0x0442, 0x0443, 0x0444, 0x0445, 0x0446, 0x0447, 0x0448, 0x0449, 0x044A, 0x044B, 0x044C, 0x044D, 0x044E, 0x044F, 0x00};
     const char utf8CyrillicAlphabet[] =
         "\xd0\x90\xd0\x91\xd0\x92\xd0\x93\xd0\x94\xd0\x95\xd0\x96\xd0\x97"
@@ -31,43 +31,43 @@ namespace {
         "\xd0\xb8\xd0\xb9\xd0\xba\xd0\xbb\xd0\xbc\xd0\xbd\xd0\xbe\xd0\xbf"
         "\xd1\x80\xd1\x81\xd1\x82\xd1\x83\xd1\x84\xd1\x85\xd1\x86\xd1\x87"
         "\xd1\x88\xd1\x89\xd1\x8a\xd1\x8b\xd1\x8c\xd1\x8d\xd1\x8e\xd1\x8f";
- 
+
     TString CreateYandexText() {
-        const int len = 256; 
+        const int len = 256;
         char text[len] = {0};
-        for (int i = 0; i < len; ++i) { 
-            text[i] = static_cast<char>(i); 
-        } 
+        for (int i = 0; i < len; ++i) {
+            text[i] = static_cast<char>(i);
+        }
         return TString(text, len);
-    } 
- 
+    }
+
     TUtf16String CreateUnicodeText() {
-        const int len = 256; 
-        wchar16 text[len] = { 
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x00 - 0x0F 
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x10 - 0x1F 
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x20 - 0x2F 
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x30 - 0x3F 
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x40 - 0x4F 
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x50 - 0x5F 
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x60 - 0x6F 
-            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x70 - 0x7F 
- 
-            0x0301, 0x00C4, 0x00D6, 0x00DC, 0x0104, 0x0106, 0x0118, 0x0141, 0x00E0, 0x00E2, 0x00E7, 0x00E8, 0x00E9, 0x00EA, 0x0490, 0x00AD, // 0x80 - 0x8F 
-            0x00DF, 0x00E4, 0x00F6, 0x00FC, 0x0105, 0x0107, 0x0119, 0x0142, 0x00EB, 0x00EE, 0x00EF, 0x00F4, 0x00F9, 0x00FB, 0x0491, 0x92CF, // 0x90 - 0x9F 
-            0x00A0, 0x0143, 0x00D3, 0x015A, 0x017B, 0x0179, 0x046C, 0x00A7, 0x0401, 0x0462, 0x0472, 0x0474, 0x040E, 0x0406, 0x0404, 0x0407, // 0xA0 - 0xAF 
-            0x00B0, 0x0144, 0x00F3, 0x015B, 0x017C, 0x017A, 0x046D, 0x2116, 0x0451, 0x0463, 0x0473, 0x0475, 0x045E, 0x0456, 0x0454, 0x0457  // 0xB0 - 0xBF 
-        }; 
-        for (int i = 0; i < len; ++i) { 
-            if (i <= 0x7F) { // ASCII characters without 0x7 and 0x1B 
-                text[i] = static_cast<wchar16>(i); 
+        const int len = 256;
+        wchar16 text[len] = {
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x00 - 0x0F
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x10 - 0x1F
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x20 - 0x2F
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x30 - 0x3F
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x40 - 0x4F
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x50 - 0x5F
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x60 - 0x6F
+            0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x70 - 0x7F
+
+            0x0301, 0x00C4, 0x00D6, 0x00DC, 0x0104, 0x0106, 0x0118, 0x0141, 0x00E0, 0x00E2, 0x00E7, 0x00E8, 0x00E9, 0x00EA, 0x0490, 0x00AD, // 0x80 - 0x8F
+            0x00DF, 0x00E4, 0x00F6, 0x00FC, 0x0105, 0x0107, 0x0119, 0x0142, 0x00EB, 0x00EE, 0x00EF, 0x00F4, 0x00F9, 0x00FB, 0x0491, 0x92CF, // 0x90 - 0x9F
+            0x00A0, 0x0143, 0x00D3, 0x015A, 0x017B, 0x0179, 0x046C, 0x00A7, 0x0401, 0x0462, 0x0472, 0x0474, 0x040E, 0x0406, 0x0404, 0x0407, // 0xA0 - 0xAF
+            0x00B0, 0x0144, 0x00F3, 0x015B, 0x017C, 0x017A, 0x046D, 0x2116, 0x0451, 0x0463, 0x0473, 0x0475, 0x045E, 0x0456, 0x0454, 0x0457  // 0xB0 - 0xBF
+        };
+        for (int i = 0; i < len; ++i) {
+            if (i <= 0x7F) { // ASCII characters without 0x7 and 0x1B
+                text[i] = static_cast<wchar16>(i);
             } else if (i >= 0xC0 && i <= 0xFF) {            // russian characters (without YO and yo)
-                text[i] = static_cast<wchar16>(i + 0x0350); // 0x0410 - 0x044F 
-            } 
-        } 
+                text[i] = static_cast<wchar16>(i + 0x0350); // 0x0410 - 0x044F
+            }
+        }
         return TUtf16String(text, len);
-    } 
- 
+    }
+
     TString CreateUTF8Text() {
         char text[] = {
             '\x00', '\x01', '\x02', '\x03', '\x04', '\x05', '\x06', '\x07', '\x08', '\x09', '\x0a', '\x0b', '\x0c', '\x0d', '\x0e', '\x0f',
@@ -96,9 +96,9 @@ namespace {
             '\xd1', '\x87', '\xd1', '\x88', '\xd1', '\x89', '\xd1', '\x8a', '\xd1', '\x8b', '\xd1', '\x8c', '\xd1', '\x8d', '\xd1', '\x8e',
             '\xd1', '\x8f'};
         return TString(text, Y_ARRAY_SIZE(text));
-    } 
- 
-    //! use this function to dump UTF8 text into a file in case of any changes 
+    }
+
+    //! use this function to dump UTF8 text into a file in case of any changes
     //    void DumpUTF8Text() {
     //        TString s = WideToUTF8(UnicodeText);
     //        std::ofstream f("utf8.txt");
@@ -109,20 +109,20 @@ namespace {
     //                f << std::endl;
     //        }
     //    }
- 
-} 
- 
-//! this unit tests ensure validity of Yandex-Unicode and UTF8-Unicode conversions 
-//! @note only those conversions are verified because they are used in index 
+
+}
+
+//! this unit tests ensure validity of Yandex-Unicode and UTF8-Unicode conversions
+//! @note only those conversions are verified because they are used in index
 class TConversionTest: public TTestBase {
-private: 
-    //! @note every of the text can have zeros in the middle 
+private:
+    //! @note every of the text can have zeros in the middle
     const TString YandexText;
     const TUtf16String UnicodeText;
     const TString UTF8Text;
- 
-private: 
-    UNIT_TEST_SUITE(TConversionTest); 
+
+private:
+    UNIT_TEST_SUITE(TConversionTest);
     UNIT_TEST(TestCharToWide);
     UNIT_TEST(TestWideToChar);
     UNIT_TEST(TestYandexEncoding);
@@ -130,27 +130,27 @@ private:
     UNIT_TEST(TestRecodeAppend);
     UNIT_TEST(TestRecode);
     UNIT_TEST(TestUnicodeLimit);
-    UNIT_TEST_SUITE_END(); 
- 
-public: 
-    TConversionTest() 
-        : YandexText(CreateYandexText()) 
-        , UnicodeText(CreateUnicodeText()) 
-        , UTF8Text(CreateUTF8Text()) 
-    { 
-    } 
- 
-    void TestCharToWide(); 
-    void TestWideToChar(); 
+    UNIT_TEST_SUITE_END();
+
+public:
+    TConversionTest()
+        : YandexText(CreateYandexText())
+        , UnicodeText(CreateUnicodeText())
+        , UTF8Text(CreateUTF8Text())
+    {
+    }
+
+    void TestCharToWide();
+    void TestWideToChar();
     void TestYandexEncoding();
     void TestRecodeIntoString();
     void TestRecodeAppend();
-    void TestRecode(); 
+    void TestRecode();
     void TestUnicodeLimit();
-}; 
- 
-UNIT_TEST_SUITE_REGISTRATION(TConversionTest); 
- 
+};
+
+UNIT_TEST_SUITE_REGISTRATION(TConversionTest);
+
 // test conversions (char -> wchar32), (wchar32 -> char) and (wchar32 -> wchar16)
 #define TEST_WCHAR32(sbuf, wbuf, enc)                                                                                                 \
     do {                                                                                                                              \
@@ -170,28 +170,28 @@ UNIT_TEST_SUITE_REGISTRATION(TConversionTest);
         UNIT_ASSERT_VALUES_EQUAL(wbuf, wstr2);                                                                                        \
     } while (false)
 
-void TConversionTest::TestCharToWide() { 
+void TConversionTest::TestCharToWide() {
     TUtf16String w = CharToWide(YandexText, CODES_YANDEX);
- 
-    UNIT_ASSERT(w.size() == 256); 
-    UNIT_ASSERT(w.size() == UnicodeText.size()); 
- 
-    for (int i = 0; i < 256; ++i) { 
-        UNIT_ASSERT_VALUES_EQUAL(w[i], UnicodeText[i]); 
-    } 
-} 
- 
-void TConversionTest::TestWideToChar() { 
+
+    UNIT_ASSERT(w.size() == 256);
+    UNIT_ASSERT(w.size() == UnicodeText.size());
+
+    for (int i = 0; i < 256; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(w[i], UnicodeText[i]);
+    }
+}
+
+void TConversionTest::TestWideToChar() {
     TString s = WideToChar(UnicodeText, CODES_YANDEX);
- 
-    UNIT_ASSERT(s.size() == 256); 
-    UNIT_ASSERT(s.size() == YandexText.size()); 
- 
-    for (int i = 0; i < 256; ++i) { 
-        UNIT_ASSERT_VALUES_EQUAL(s[i], YandexText[i]); 
-    } 
-} 
- 
+
+    UNIT_ASSERT(s.size() == 256);
+    UNIT_ASSERT(s.size() == YandexText.size());
+
+    for (int i = 0; i < 256; ++i) {
+        UNIT_ASSERT_VALUES_EQUAL(s[i], YandexText[i]);
+    }
+}
+
 static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize, ECharset enc) {
     TUtf16String w = UTF8ToWide(str);
 
@@ -205,9 +205,9 @@ static void TestSurrogates(const char* str, const wchar16* wide, size_t wideSize
 
 void TConversionTest::TestYandexEncoding() {
     TUtf16String w = UTF8ToWide(utf8CyrillicAlphabet, strlen(utf8CyrillicAlphabet), csYandex);
-    UNIT_ASSERT(w == wideCyrillicAlphabet); 
+    UNIT_ASSERT(w == wideCyrillicAlphabet);
     w = UTF8ToWide(yandexCyrillicAlphabet, strlen(yandexCyrillicAlphabet), csYandex);
-    UNIT_ASSERT(w == wideCyrillicAlphabet); 
+    UNIT_ASSERT(w == wideCyrillicAlphabet);
 
     const char* utf8NonBMP2 = "ab\xf4\x80\x89\x87n";
     wchar16 wNonBMPDummy2[] = {'a', 'b', 0xDBC0, 0xDE47, 'n'};
@@ -226,8 +226,8 @@ void TConversionTest::TestYandexEncoding() {
 
         UNIT_ASSERT(yandexNonBMP2 == temp);
     }
-} 
- 
+}
+
 void TConversionTest::TestRecodeIntoString() {
     TString sYandex(UnicodeText.size() * 4, 'x');
     const char* sdata = sYandex.data();
@@ -341,15 +341,15 @@ void Out<RECODE_RESULT>(IOutputStream& out, RECODE_RESULT val) {
     out << int(val);
 }
 
-void TConversionTest::TestRecode() { 
+void TConversionTest::TestRecode() {
     for (int c = 0; c != CODES_MAX; ++c) {
         ECharset enc = static_cast<ECharset>(c);
         if (!SingleByteCodepage(enc))
             continue;
- 
+
         using THash = THashSet<char>;
         THash hash;
- 
+
         for (int i = 0; i != 256; ++i) {
             char ch = static_cast<char>(i);
 
@@ -357,7 +357,7 @@ void TConversionTest::TestRecode() {
             size_t read = 0;
             size_t written = 0;
             RECODE_RESULT res = RECODE_ERROR;
- 
+
             res = RecodeToUnicode(enc, &ch, &wch, 1, 1, read, written);
             UNIT_ASSERT(res == RECODE_OK);
             if (wch == BROKEN_RUNE)
@@ -380,9 +380,9 @@ void TConversionTest::TestRecode() {
 
             UNIT_ASSERT(ch == rch);
         }
-    } 
-} 
- 
+    }
+}
+
 void TConversionTest::TestUnicodeLimit() {
     for (int i = 0; i != CODES_MAX; ++i) {
         ECharset code = static_cast<ECharset>(i);

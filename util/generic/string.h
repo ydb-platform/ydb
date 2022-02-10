@@ -8,7 +8,7 @@
 #include <string_view>
 
 #include <util/system/yassert.h>
-#include <util/system/atomic.h> 
+#include <util/system/atomic.h>
 
 #include "ptr.h"
 #include "utility.h"
@@ -61,11 +61,11 @@ public:
 };
 
 alignas(32) extern const char NULL_STRING_REPR[128];
- 
+
 struct TRefCountHolder {
     TAtomicCounter C = 1;
 };
- 
+
 template <class B>
 struct TStdString: public TRefCountHolder, public B {
     template <typename... Args>
@@ -73,7 +73,7 @@ struct TStdString: public TRefCountHolder, public B {
         : B(std::forward<Args>(args)...)
     {
     }
- 
+
     inline bool IsNull() const noexcept {
         return this == NullStr();
     }
@@ -97,12 +97,12 @@ private:
             delete this;
         }
     }
- 
+
     inline long RefCount() const noexcept {
         return C.Val();
     }
 };
- 
+
 template <class TStringType>
 class TBasicCharRef {
 public:
@@ -157,7 +157,7 @@ private:
 
 template <typename TCharType, typename TTraits>
 class TBasicString: public TStringBase<TBasicString<TCharType, TTraits>, TCharType, TTraits> {
-public: 
+public:
     // TODO: Move to private section
     using TBase = TStringBase<TBasicString, TCharType, TTraits>;
     using TStringType = std::basic_string<TCharType, TTraits>;
@@ -172,13 +172,13 @@ public:
     using char_type = TCharType; // TODO: DROP
     using value_type = TCharType;
     using traits_type = TTraits;
- 
+
     using iterator = TCharType*;
     using reverse_iterator = typename TBase::template TReverseIteratorBase<iterator>;
     using typename TBase::const_iterator;
     using typename TBase::const_reference;
     using typename TBase::const_reverse_iterator;
- 
+
     struct TUninitialized {
         explicit TUninitialized(size_t size)
             : Size(size)
@@ -194,12 +194,12 @@ public:
         return res;
     }
 
-protected: 
+protected:
 #ifdef TSTRING_IS_STD_STRING
     TStorage Storage_;
 #else
     TStorage S_;
- 
+
     template <typename... A>
     static TStorage Construct(A&&... a) {
         return {new TStdStr(std::forward<A>(a)...), typename TStorage::TNoIncrement()};
@@ -222,7 +222,7 @@ protected:
      *
      * @throw std::length_error
      */
-    void Clone() { 
+    void Clone() {
         Construct(StdStr()).Swap(S_);
     }
 
@@ -331,7 +331,7 @@ public:
     using TBase::end;     //!< const_iterator TStringBase::end() const
     using TBase::rbegin;  //!< const_reverse_iterator TStringBase::rbegin() const
     using TBase::rend;    //!< const_reverse_iterator TStringBase::rend() const
- 
+
     inline size_t capacity() const noexcept {
 #ifdef TSTRING_IS_STD_STRING
         return Storage_.capacity();
@@ -369,7 +369,7 @@ public:
         MutRef().resize(n, c);
 
         return *this;
-    } 
+    }
 
     // ~~~ Constructor ~~~ : FAMILY0(,TBasicString)
     TBasicString() noexcept
@@ -409,7 +409,7 @@ public:
 #endif
     }
 
-    template <typename T, typename A> 
+    template <typename T, typename A>
     explicit inline TBasicString(const std::basic_string<TCharType, T, A>& s)
         : TBasicString(s.data(), s.size())
     {
@@ -432,12 +432,12 @@ public:
         : S_(n ? Construct(s, pos, n) : Construct())
 #endif
     {
-    } 
+    }
 
     TBasicString(const TCharType* pc)
         : TBasicString(pc, TBase::StrLen(pc))
     {
-    } 
+    }
     // TODO thegeorg@: uncomment and fix clients
     // TBasicString(std::nullptr_t) = delete;
 
@@ -448,14 +448,14 @@ public:
         : S_(n ? Construct(pc, n) : Construct())
 #endif
     {
-    } 
+    }
     TBasicString(std::nullptr_t, size_t) = delete;
- 
+
     TBasicString(const TCharType* pc, size_t pos, size_t n)
         : TBasicString(pc + pos, n)
     {
-    } 
- 
+    }
+
 #ifdef TSTRING_IS_STD_STRING
     explicit TBasicString(TExplicitType<TCharType> c) {
         Storage_.push_back(c);
@@ -464,7 +464,7 @@ public:
     explicit TBasicString(TExplicitType<TCharType> c)
         : TBasicString(&c.Value(), 1)
     {
-    } 
+    }
     explicit TBasicString(const reference& c)
         : TBasicString(&c, 1)
     {
@@ -478,8 +478,8 @@ public:
         : S_(Construct(n, c))
 #endif
     {
-    } 
- 
+    }
+
     /**
      * Constructs an uninitialized string of size `uninitialized.Size`. The proper
      * way to use this ctor is via `TBasicString::Uninitialized` factory function.
@@ -491,13 +491,13 @@ public:
         S_ = Construct();
 #endif
         ReserveAndResize(uninitialized.Size);
-    } 
- 
+    }
+
     TBasicString(const TCharType* b, const TCharType* e)
         : TBasicString(b, e - b)
     {
-    } 
- 
+    }
+
     explicit TBasicString(const TBasicStringBuf<TCharType, TTraits> s)
         : TBasicString(s.data(), s.size())
     {
@@ -534,7 +534,7 @@ private:
     template <typename... R>
     static size_t SumLength(const TBasicStringBuf<TCharType, TTraits> s1, const R&... r) noexcept {
         return s1.size() + SumLength(r...);
-    } 
+    }
 
     template <typename... R>
     static size_t SumLength(const TCharType /*s1*/, const R&... r) noexcept {
@@ -543,8 +543,8 @@ private:
 
     static constexpr size_t SumLength() noexcept {
         return 0;
-    } 
- 
+    }
+
     template <typename... R>
     static void CopyAll(TCharType* p, const TBasicStringBuf<TCharType, TTraits> s, const R&... r) {
         TTraits::copy(p, s.data(), s.size());
@@ -800,7 +800,7 @@ public:
 
     TBasicString& AppendUtf16(const ::TWtringBuf& s);
 
-    inline void push_back(TCharType c) { 
+    inline void push_back(TCharType c) {
         // TODO
         append(c);
     }
@@ -1047,11 +1047,11 @@ public:
     TBasicString& remove(size_t pos = 0) Y_NOEXCEPT {
         if (pos < length()) {
             MutRef().erase(pos);
-        } 
+        }
 
         return *this;
-    } 
- 
+    }
+
     TBasicString& erase(size_t pos = 0, size_t n = TBase::npos) Y_NOEXCEPT {
         MutRef().erase(pos, n);
 
@@ -1109,8 +1109,8 @@ public:
         MutRef().replace(pos, n1, n2, c);
 
         return *this;
-    } 
- 
+    }
+
     TBasicString& replace(size_t pos, size_t n, const TBasicStringBuf<TCharType, TTraits> s, size_t spos = 0, size_t sn = TBase::npos) Y_NOEXCEPT {
         MutRef().replace(pos, n, s, spos, sn);
 
@@ -1123,8 +1123,8 @@ public:
 #else
         S_.Swap(s.S_);
 #endif
-    } 
- 
+    }
+
     /**
      * @returns                         String suitable for debug printing (like Python's `repr()`).
      *                                  Format of the string is unspecified and may be changed over time.
@@ -1189,8 +1189,8 @@ public:
 
         return changed;
     }
-}; 
- 
+};
+
 std::ostream& operator<<(std::ostream&, const TString&);
 std::istream& operator>>(std::istream&, TString&);
 

@@ -521,7 +521,7 @@ TString FromStringImpl<TString>(const char* data, size_t len) {
     return TString(data, len);
 }
 
-template <> 
+template <>
 TStringBuf FromStringImpl<TStringBuf>(const char* data, size_t len) {
     return TStringBuf(data, len);
 }
@@ -534,8 +534,8 @@ std::string FromStringImpl<std::string>(const char* data, size_t len) {
 template <>
 TUtf16String FromStringImpl<TUtf16String>(const wchar16* data, size_t len) {
     return TUtf16String(data, len);
-} 
- 
+}
+
 template <>
 TWtringBuf FromStringImpl<TWtringBuf>(const wchar16* data, size_t len) {
     return TWtringBuf(data, len);

@@ -9,7 +9,7 @@
 #include <util/generic/ymath.h>
 
 
-%%{ 
+%%{
 
 machine DateTimeParserCommon;
 
@@ -49,7 +49,7 @@ int12 = (digit digit?)
     >clear_int
     $update_int;
 
-int24 = ( digit digit ( digit digit )? ) 
+int24 = ( digit digit ( digit digit )? )
     >clear_int
     $update_int;
 
@@ -98,21 +98,21 @@ dow_spec = ( wkday ',' )?;
 
 day  = int12 %set_day;
 year = int24 %set_year;
- 
-# actually it must be from 0 to 23 
+
+# actually it must be from 0 to 23
 hour = int2 %set_hour;
- 
-# actually it must be from 0 to 59 
+
+# actually it must be from 0 to 59
 min  = int2 %set_minute;
- 
-# actually it must be from 0 to 59 
+
+# actually it must be from 0 to 59
 sec  = int2 %set_second;
 
-sec_spec  = ( ':' . sec )?; 
- 
+sec_spec  = ( ':' . sec )?;
+
 # so called "military zone offset". I hardly believe someone uses it now, but we MUST respect RFc822
 action set_mil_offset {
-    char c = (char)toupper(fc); 
+    char c = (char)toupper(fc);
     if (c == 'Z')
         DateTimeFields.ZoneOffsetMinutes = 0;
     else {
@@ -135,10 +135,10 @@ action set_digit_offset {
 
 mil_zone = /[A-IK-Za-ik-z]/ $set_mil_offset;
 
-# actions % were replaced with @ (when the script was migrated to ragel 5.24) 
-# because ragel 5.24 does not call to the % action if it  be called at the very end of string. 
-# it is a bug in ragel 5 because ragel 6.2 works correctly with % at the end of string. 
-# see http://www.complang.org/ragel/ChangeLog. 
+# actions % were replaced with @ (when the script was migrated to ragel 5.24)
+# because ragel 5.24 does not call to the % action if it  be called at the very end of string.
+# it is a bug in ragel 5 because ragel 6.2 works correctly with % at the end of string.
+# see http://www.complang.org/ragel/ChangeLog.
 
 zone = 'UT' @{ DateTimeFields.ZoneOffsetMinutes = 0; }
     | 'GMT' @{ DateTimeFields.ZoneOffsetMinutes = 0; }
@@ -150,23 +150,23 @@ zone = 'UT' @{ DateTimeFields.ZoneOffsetMinutes = 0; }
     | 'MDT' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(6).Minutes(); }
     | 'PST' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(8).Minutes();}
     | 'PDT' @{ DateTimeFields.ZoneOffsetMinutes = -(i32)TDuration::Hours(7).Minutes(); };
- 
+
 digit_offset = ('+' | '-') > { Sign = fc == '+' ? 1 : -1; } . int4 @set_digit_offset;
- 
-offset = ( zone | mil_zone | digit_offset ); 
- 
+
+offset = ( zone | mil_zone | digit_offset );
+
 rfc822datetime = ws0 . dow_spec . ws0 . day . ws1 . month3 . ws1 . year . ws1 . hour . ':' . min . sec_spec . ws1 . offset . ws0;
 
 main := rfc822datetime;
 
-write data noerror; 
+write data noerror;
 
-}%% 
- 
+}%%
+
 TRfc822DateTimeParserDeprecated::TRfc822DateTimeParserDeprecated() {
     %% write init;
 }
- 
+
 bool TRfc822DateTimeParserDeprecated::ParsePart(const char* input, size_t len) {
     const char* p = input;
     const char* pe = input + len;
@@ -174,7 +174,7 @@ bool TRfc822DateTimeParserDeprecated::ParsePart(const char* input, size_t len) {
     %% write exec;
     return cs != %%{ write error; }%%;
 }
- 
+
 TRfc822DateTimeParser::TRfc822DateTimeParser() {
     %% write init;
 }
@@ -224,17 +224,17 @@ write data noerror;
 }%%
 
 TIso8601DateTimeParserDeprecated::TIso8601DateTimeParserDeprecated() {
-    %% write init; 
+    %% write init;
 }
 
 bool TIso8601DateTimeParserDeprecated::ParsePart(const char* input, size_t len) {
     const char* p = input;
     const char* pe = input + len;
 
-    %% write exec; 
+    %% write exec;
     return cs != %%{ write error; }%%;
 }
- 
+
 TIso8601DateTimeParser::TIso8601DateTimeParser() {
     %% write init;
 }
@@ -687,7 +687,7 @@ bool ParseRFC822DateTime(const char* input, size_t inputLen, time_t& utcTime) {
 bool ParseISO8601DateTime(const char* input, size_t inputLen, time_t& utcTime) {
     try {
         utcTime = ParseUnsafe<TIso8601DateTimeParser, TInstant>(input, inputLen).TimeT();
-        return true; 
+        return true;
     } catch (const TDateTimeParseException&) {
         return false;
     }

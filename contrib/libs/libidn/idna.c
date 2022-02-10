@@ -234,8 +234,8 @@ step3:
 	  out[i] = src[i];
       }
     if (i < IDNA_LABEL_MAX_LENGTH + 1)
-      out[i] = '\0'; 
-    else 
+      out[i] = '\0';
+    else
       out[IDNA_LABEL_MAX_LENGTH] = 0;
     if (inasciirange)
       goto step8;

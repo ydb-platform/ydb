@@ -20,7 +20,7 @@ namespace NUri {
             buf = nullptr;
         return buf;
     }
- 
+
     TMallocPtr<char> TUri::IDNToAscii(const TStringBuf& host, ECharset enc) {
         TTempBuf buf(sizeof(wchar32) * (1 + host.length()));
         wchar32* wbuf = reinterpret_cast<wchar32*>(buf.Data());

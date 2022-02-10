@@ -55,23 +55,23 @@ char* ctime_r(const time_t* clock, char* buf) {
 #define YEARSIZE(year) (LEAPYEAR(year) ? 366 : 365)
 #define FOURCENTURIES (400 * 365 + 100 - 3)
 
-//! Inverse of gmtime: converts struct tm to time_t, assuming the data 
-//! in tm is UTC rather than local timezone. This implementation 
-//! returns the number of seconds since 1970-01-01, converted to time_t. 
-//! @note this code adopted from 
-//!       http://osdir.com/ml/web.wget.patches/2005-07/msg00010.html 
-//!       Subject: A more robust timegm - msg#00010 
+//! Inverse of gmtime: converts struct tm to time_t, assuming the data
+//! in tm is UTC rather than local timezone. This implementation
+//! returns the number of seconds since 1970-01-01, converted to time_t.
+//! @note this code adopted from
+//!       http://osdir.com/ml/web.wget.patches/2005-07/msg00010.html
+//!       Subject: A more robust timegm - msg#00010
 time_t TimeGM(const struct tm* t) {
-    static const unsigned short int month_to_days[][13] = { 
+    static const unsigned short int month_to_days[][13] = {
         {0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334},
         {0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335}};
- 
+
     // Only handles years after 1970
     if (t->tm_year < 70) {
         return (time_t)-1;
     }
- 
-    int days = 365 * (t->tm_year - 70); 
+
+    int days = 365 * (t->tm_year - 70);
     // Take into account the leap days between 1970 and YEAR-1
     days += (t->tm_year - 1 - 68) / 4 - ((t->tm_year - 1) / 100) + ((t->tm_year - 1 + 300) / 400);
 
@@ -79,8 +79,8 @@ time_t TimeGM(const struct tm* t) {
         return (time_t)-1;
     }
     days += month_to_days[LEAPYEAR(1900 + t->tm_year)][t->tm_mon];
-    days += t->tm_mday - 1; 
- 
+    days += t->tm_mday - 1;
+
     unsigned long secs = days * 86400ul + t->tm_hour * 3600 + t->tm_min * 60 + t->tm_sec;
     return (time_t)secs;
 }

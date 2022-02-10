@@ -291,17 +291,17 @@ extern const CodePage& csYandex;
 void DecodeUnknownPlane(wchar16* start, wchar16*& end, const ECharset enc4unk);
 void DecodeUnknownPlane(wchar32* start, wchar32*& end, const ECharset enc4unk);
 
-inline void ToLower(char* s, size_t n, const CodePage& cp = csYandex) { 
-    char* const e = s + n; 
-    for (; s != e; ++s) 
+inline void ToLower(char* s, size_t n, const CodePage& cp = csYandex) {
+    char* const e = s + n;
+    for (; s != e; ++s)
         *s = cp.ToLower(*s);
-} 
- 
-inline void ToUpper(char* s, size_t n, const CodePage& cp = csYandex) { 
-    char* const e = s + n; 
-    for (; s != e; ++s) 
+}
+
+inline void ToUpper(char* s, size_t n, const CodePage& cp = csYandex) {
+    char* const e = s + n;
+    for (; s != e; ++s)
         *s = cp.ToUpper(*s);
-} 
+}
 
 inline TString ToLower(TString s, const CodePage& cp, size_t pos = 0, size_t n = TString::npos) {
     s.Transform([&cp](size_t, char c) { return cp.ToLower(c); }, pos, n);

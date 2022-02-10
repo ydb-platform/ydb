@@ -423,32 +423,32 @@ TString RealLocation(const TString& path) {
     ythrow TFileError() << "RealLocation failed \"" << path << "\"";
 }
 
-int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix) { 
-    int ret; 
+int MakeTempDir(char path[/*FILENAME_MAX*/], const char* prefix) {
+    int ret;
 
     TString sysTmp;
 
-#ifdef _win32_ 
+#ifdef _win32_
     if (!prefix || *prefix == '/') {
-#else 
+#else
     if (!prefix) {
-#endif 
+#endif
         sysTmp = GetSystemTempDir();
         prefix = sysTmp.data();
     }
 
     if ((ret = ResolvePath(prefix, nullptr, path, 1)) != 0)
-        return ret; 
+        return ret;
     if (!TFileStat(path).IsDir())
         return ENOENT;
-    if ((strlcat(path, "tmpXXXXXX", FILENAME_MAX) > FILENAME_MAX - 100)) 
-        return EINVAL; 
-    if (!(mkdtemp(path))) 
-        return errno ? errno : EINVAL; 
-    strcat(path, LOCSLASH_S); 
-    return 0; 
-} 
- 
+    if ((strlcat(path, "tmpXXXXXX", FILENAME_MAX) > FILENAME_MAX - 100))
+        return EINVAL;
+    if (!(mkdtemp(path)))
+        return errno ? errno : EINVAL;
+    strcat(path, LOCSLASH_S);
+    return 0;
+}
+
 bool IsDir(const TString& path) {
     return TFileStat(path).IsDir();
 }
@@ -541,72 +541,72 @@ TString GetDirName(const TString& path) {
 
 #ifdef _win32_
 
-char* realpath(const char* pathname, char resolved_path[MAXPATHLEN]) { 
-    // partial implementation: no path existence check 
-    return _fullpath(resolved_path, pathname, MAXPATHLEN - 1); 
-} 
- 
-#endif 
- 
+char* realpath(const char* pathname, char resolved_path[MAXPATHLEN]) {
+    // partial implementation: no path existence check
+    return _fullpath(resolved_path, pathname, MAXPATHLEN - 1);
+}
+
+#endif
+
 TString GetBaseName(const TString& path) {
     return TFsPath(path).Basename();
-} 
- 
+}
+
 static bool IsAbsolutePath(const char* str) {
     return str && TPathSplitTraitsLocal::IsAbsolutePath(TStringBuf(str, NStringPrivate::GetStringLengthWithLimit(str, 3)));
 }
 
-int ResolvePath(const char* rel, const char* abs, char res[/*MAXPATHLEN*/], bool isdir) { 
+int ResolvePath(const char* rel, const char* abs, char res[/*MAXPATHLEN*/], bool isdir) {
     char t[MAXPATHLEN * 2 + 3];
-    size_t len; 
+    size_t len;
 
-    *res = 0; 
-    if (!rel || !*rel) 
-        return EINVAL; 
+    *res = 0;
+    if (!rel || !*rel)
+        return EINVAL;
     if (!IsAbsolutePath(rel) && IsAbsolutePath(abs)) {
-        len = strlcpy(t, abs, sizeof(t)); 
+        len = strlcpy(t, abs, sizeof(t));
         if (len >= sizeof(t) - 3)
-            return EINVAL; 
+            return EINVAL;
         if (t[len - 1] != LOCSLASH_C)
-            t[len++] = LOCSLASH_C; 
+            t[len++] = LOCSLASH_C;
         len += strlcpy(t + len, rel, sizeof(t) - len);
-    } else { 
-        len = strlcpy(t, rel, sizeof(t)); 
-    } 
+    } else {
+        len = strlcpy(t, rel, sizeof(t));
+    }
     if (len >= sizeof(t) - 3)
-        return EINVAL; 
+        return EINVAL;
     if (isdir && t[len - 1] != LOCSLASH_C) {
         t[len++] = LOCSLASH_C;
         t[len] = 0;
-    } 
-    if (!realpath(t, res)) { 
+    }
+    if (!realpath(t, res)) {
         if (!isdir && realpath(GetDirName(t).data(), res)) {
             len = strlen(res);
             if (res[len - 1] != LOCSLASH_C) {
                 res[len++] = LOCSLASH_C;
                 res[len] = 0;
-            } 
+            }
             strcpy(res + len, GetBaseName(t).data());
             return 0;
-        } 
-        return errno ? errno : ENOENT; 
-    } 
-    if (isdir) { 
-        len = strlen(res); 
+        }
+        return errno ? errno : ENOENT;
+    }
+    if (isdir) {
+        len = strlen(res);
         if (res[len - 1] != LOCSLASH_C) {
             res[len++] = LOCSLASH_C;
-            res[len] = 0; 
-        } 
-    } 
-    return 0; 
-} 
- 
+            res[len] = 0;
+        }
+    }
+    return 0;
+}
+
 TString ResolvePath(const char* rel, const char* abs, bool isdir) {
-    char buf[PATH_MAX]; 
+    char buf[PATH_MAX];
     if (ResolvePath(rel, abs, buf, isdir))
         ythrow yexception() << "cannot resolve path: \"" << rel << "\"";
-    return buf; 
-} 
+    return buf;
+}
 
 TString ResolvePath(const char* path, bool isDir) {
     return ResolvePath(path, nullptr, isDir);

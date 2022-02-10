@@ -137,16 +137,16 @@ struct TFromStringException: public TBadCastException {
  *  double
  *  long double
  */
-template <typename T, typename TChar> 
-T FromStringImpl(const TChar* data, size_t len); 
+template <typename T, typename TChar>
+T FromStringImpl(const TChar* data, size_t len);
 
-template <typename T, typename TChar> 
-inline T FromString(const TChar* data, size_t len) { 
+template <typename T, typename TChar>
+inline T FromString(const TChar* data, size_t len) {
     return ::FromStringImpl<T>(data, len);
 }
 
-template <typename T, typename TChar> 
-inline T FromString(const TChar* data) { 
+template <typename T, typename TChar>
+inline T FromString(const TChar* data) {
     return ::FromString<T>(data, std::char_traits<TChar>::length(data));
 }
 
@@ -170,7 +170,7 @@ inline TString FromString<TString>(const TString& s) {
     return s;
 }
 
-template <class T> 
+template <class T>
 inline T FromString(const TWtringBuf& s) {
     return ::FromString<T, typename TWtringBuf::char_type>(s.data(), s.size());
 }
@@ -178,8 +178,8 @@ inline T FromString(const TWtringBuf& s) {
 template <class T>
 inline T FromString(const TUtf16String& s) {
     return ::FromString<T, wchar16>(s.data(), s.size());
-} 
- 
+}
+
 namespace NPrivate {
     template <typename TChar>
     class TFromString {

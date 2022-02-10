@@ -4,12 +4,12 @@
 #include <util/system/sanitizers.h>
 #include <util/system/sys_alloc.h>
 #include <util/charset/wide.h>
- 
+
 #include <iostream>
 #include <cctype>
 
 alignas(32) const char NULL_STRING_REPR[128] = {0};
- 
+
 std::ostream& operator<<(std::ostream& os, const TString& s) {
     return os.write(s.data(), s.size());
 }

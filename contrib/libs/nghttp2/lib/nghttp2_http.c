@@ -113,7 +113,7 @@ static int check_path(nghttp2_stream *stream) {
 }
 
 static int http_request_on_header(nghttp2_stream *stream, nghttp2_hd_nv *nv,
-                                  int trailer, int connect_protocol) { 
+                                  int trailer, int connect_protocol) {
   if (nv->name->base[0] == ':') {
     if (trailer ||
         (stream->http_flags & NGHTTP2_HTTP_FLAG_PSEUDO_HEADER_DISALLOWED)) {
@@ -176,15 +176,15 @@ static int http_request_on_header(nghttp2_stream *stream, nghttp2_hd_nv *nv,
       stream->http_flags |= NGHTTP2_HTTP_FLAG_SCHEME_HTTP;
     }
     break;
-  case NGHTTP2_TOKEN__PROTOCOL: 
-    if (!connect_protocol) { 
-      return NGHTTP2_ERR_HTTP_HEADER; 
-    } 
- 
-    if (!check_pseudo_header(stream, nv, NGHTTP2_HTTP_FLAG__PROTOCOL)) { 
-      return NGHTTP2_ERR_HTTP_HEADER; 
-    } 
-    break; 
+  case NGHTTP2_TOKEN__PROTOCOL:
+    if (!connect_protocol) {
+      return NGHTTP2_ERR_HTTP_HEADER;
+    }
+
+    if (!check_pseudo_header(stream, nv, NGHTTP2_HTTP_FLAG__PROTOCOL)) {
+      return NGHTTP2_ERR_HTTP_HEADER;
+    }
+    break;
   case NGHTTP2_TOKEN_HOST:
     if (!check_pseudo_header(stream, nv, NGHTTP2_HTTP_FLAG_HOST)) {
       return NGHTTP2_ERR_HTTP_HEADER;
@@ -263,14 +263,14 @@ static int http_response_on_header(nghttp2_stream *stream, nghttp2_hd_nv *nv,
       stream->content_length = 0;
       return NGHTTP2_ERR_REMOVE_HTTP_HEADER;
     }
-    if (stream->status_code / 100 == 1) { 
+    if (stream->status_code / 100 == 1) {
       return NGHTTP2_ERR_HTTP_HEADER;
     }
-    /* https://tools.ietf.org/html/rfc7230#section-3.3.3 */ 
-    if (stream->status_code / 100 == 2 && 
-        (stream->http_flags & NGHTTP2_HTTP_FLAG_METH_CONNECT)) { 
-      return NGHTTP2_ERR_REMOVE_HTTP_HEADER; 
-    } 
+    /* https://tools.ietf.org/html/rfc7230#section-3.3.3 */
+    if (stream->status_code / 100 == 2 &&
+        (stream->http_flags & NGHTTP2_HTTP_FLAG_METH_CONNECT)) {
+      return NGHTTP2_ERR_REMOVE_HTTP_HEADER;
+    }
     if (stream->content_length != -1) {
       return NGHTTP2_ERR_HTTP_HEADER;
     }
@@ -369,7 +369,7 @@ int nghttp2_http_on_header(nghttp2_session *session, nghttp2_stream *stream,
     break;
   case NGHTTP2_TOKEN__AUTHORITY:
   case NGHTTP2_TOKEN_HOST:
-    rv = nghttp2_check_authority(nv->value->base, nv->value->len); 
+    rv = nghttp2_check_authority(nv->value->base, nv->value->len);
     break;
   case NGHTTP2_TOKEN__SCHEME:
     rv = check_scheme(nv->value->base, nv->value->len);
@@ -391,9 +391,9 @@ int nghttp2_http_on_header(nghttp2_session *session, nghttp2_stream *stream,
   }
 
   if (session->server || frame->hd.type == NGHTTP2_PUSH_PROMISE) {
-    return http_request_on_header(stream, nv, trailer, 
-                                  session->server && 
-                                      session->pending_enable_connect_protocol); 
+    return http_request_on_header(stream, nv, trailer,
+                                  session->server &&
+                                      session->pending_enable_connect_protocol);
   }
 
   return http_response_on_header(stream, nv, trailer);
@@ -401,11 +401,11 @@ int nghttp2_http_on_header(nghttp2_session *session, nghttp2_stream *stream,
 
 int nghttp2_http_on_request_headers(nghttp2_stream *stream,
                                     nghttp2_frame *frame) {
-  if (!(stream->http_flags & NGHTTP2_HTTP_FLAG__PROTOCOL) && 
-      (stream->http_flags & NGHTTP2_HTTP_FLAG_METH_CONNECT)) { 
-    if ((stream->http_flags & 
-         (NGHTTP2_HTTP_FLAG__SCHEME | NGHTTP2_HTTP_FLAG__PATH)) || 
-        (stream->http_flags & NGHTTP2_HTTP_FLAG__AUTHORITY) == 0) { 
+  if (!(stream->http_flags & NGHTTP2_HTTP_FLAG__PROTOCOL) &&
+      (stream->http_flags & NGHTTP2_HTTP_FLAG_METH_CONNECT)) {
+    if ((stream->http_flags &
+         (NGHTTP2_HTTP_FLAG__SCHEME | NGHTTP2_HTTP_FLAG__PATH)) ||
+        (stream->http_flags & NGHTTP2_HTTP_FLAG__AUTHORITY) == 0) {
       return -1;
     }
     stream->content_length = -1;
@@ -416,11 +416,11 @@ int nghttp2_http_on_request_headers(nghttp2_stream *stream,
          (NGHTTP2_HTTP_FLAG__AUTHORITY | NGHTTP2_HTTP_FLAG_HOST)) == 0) {
       return -1;
     }
-    if ((stream->http_flags & NGHTTP2_HTTP_FLAG__PROTOCOL) && 
-        ((stream->http_flags & NGHTTP2_HTTP_FLAG_METH_CONNECT) == 0 || 
-         (stream->http_flags & NGHTTP2_HTTP_FLAG__AUTHORITY) == 0)) { 
-      return -1; 
-    } 
+    if ((stream->http_flags & NGHTTP2_HTTP_FLAG__PROTOCOL) &&
+        ((stream->http_flags & NGHTTP2_HTTP_FLAG_METH_CONNECT) == 0 ||
+         (stream->http_flags & NGHTTP2_HTTP_FLAG__AUTHORITY) == 0)) {
+      return -1;
+    }
     if (!check_path(stream)) {
       return -1;
     }

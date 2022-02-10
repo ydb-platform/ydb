@@ -30,7 +30,7 @@
 #include "nghttp2_session.h"
 #include "nghttp2_helper.h"
 #include "nghttp2_debug.h"
-#include "nghttp2_frame.h" 
+#include "nghttp2_frame.h"
 
 /* Maximum distance between any two stream's cycle in the same
    prirority queue.  Imagine stream A's cycle is A, and stream B's
@@ -41,8 +41,8 @@
    words, B is really greater than or equal to A.  Otherwise, A is a
    result of overflow, and it is actually A > B if we consider that
    fact. */
-#define NGHTTP2_MAX_CYCLE_DISTANCE                                             \ 
-  ((uint64_t)NGHTTP2_MAX_FRAME_SIZE_MAX * 256 + 255) 
+#define NGHTTP2_MAX_CYCLE_DISTANCE                                             \
+  ((uint64_t)NGHTTP2_MAX_FRAME_SIZE_MAX * 256 + 255)
 
 static int stream_less(const void *lhsx, const void *rhsx) {
   const nghttp2_stream *lhs, *rhs;
@@ -54,7 +54,7 @@ static int stream_less(const void *lhsx, const void *rhsx) {
     return lhs->seq < rhs->seq;
   }
 
-  return rhs->cycle - lhs->cycle <= NGHTTP2_MAX_CYCLE_DISTANCE; 
+  return rhs->cycle - lhs->cycle <= NGHTTP2_MAX_CYCLE_DISTANCE;
 }
 
 void nghttp2_stream_init(nghttp2_stream *stream, int32_t stream_id,
@@ -132,14 +132,14 @@ static int stream_subtree_active(nghttp2_stream *stream) {
 /*
  * Returns next cycle for |stream|.
  */
-static void stream_next_cycle(nghttp2_stream *stream, uint64_t last_cycle) { 
-  uint64_t penalty; 
+static void stream_next_cycle(nghttp2_stream *stream, uint64_t last_cycle) {
+  uint64_t penalty;
 
-  penalty = (uint64_t)stream->last_writelen * NGHTTP2_MAX_WEIGHT + 
+  penalty = (uint64_t)stream->last_writelen * NGHTTP2_MAX_WEIGHT +
             stream->pending_penalty;
 
   stream->cycle = last_cycle + penalty / (uint32_t)stream->weight;
-  stream->pending_penalty = (uint32_t)(penalty % (uint32_t)stream->weight); 
+  stream->pending_penalty = (uint32_t)(penalty % (uint32_t)stream->weight);
 }
 
 static int stream_obq_push(nghttp2_stream *dep_stream, nghttp2_stream *stream) {
@@ -150,7 +150,7 @@ static int stream_obq_push(nghttp2_stream *dep_stream, nghttp2_stream *stream) {
     stream_next_cycle(stream, dep_stream->descendant_last_cycle);
     stream->seq = dep_stream->descendant_next_seq++;
 
-    DEBUGF("stream: stream=%d obq push cycle=%lu\n", stream->stream_id, 
+    DEBUGF("stream: stream=%d obq push cycle=%lu\n", stream->stream_id,
            stream->cycle);
 
     DEBUGF("stream: push stream %d to stream %d\n", stream->stream_id,
@@ -236,7 +236,7 @@ void nghttp2_stream_reschedule(nghttp2_stream *stream) {
 
     nghttp2_pq_push(&dep_stream->obq, &stream->pq_entry);
 
-    DEBUGF("stream: stream=%d obq resched cycle=%lu\n", stream->stream_id, 
+    DEBUGF("stream: stream=%d obq resched cycle=%lu\n", stream->stream_id,
            stream->cycle);
 
     dep_stream->last_writelen = stream->last_writelen;
@@ -245,9 +245,9 @@ void nghttp2_stream_reschedule(nghttp2_stream *stream) {
 
 void nghttp2_stream_change_weight(nghttp2_stream *stream, int32_t weight) {
   nghttp2_stream *dep_stream;
-  uint64_t last_cycle; 
+  uint64_t last_cycle;
   int32_t old_weight;
-  uint64_t wlen_penalty; 
+  uint64_t wlen_penalty;
 
   if (stream->weight == weight) {
     return;
@@ -270,7 +270,7 @@ void nghttp2_stream_change_weight(nghttp2_stream *stream, int32_t weight) {
 
   nghttp2_pq_remove(&dep_stream->obq, &stream->pq_entry);
 
-  wlen_penalty = (uint64_t)stream->last_writelen * NGHTTP2_MAX_WEIGHT; 
+  wlen_penalty = (uint64_t)stream->last_writelen * NGHTTP2_MAX_WEIGHT;
 
   /* Compute old stream->pending_penalty we used to calculate
      stream->cycle */
@@ -286,8 +286,8 @@ void nghttp2_stream_change_weight(nghttp2_stream *stream, int32_t weight) {
      place */
   stream_next_cycle(stream, last_cycle);
 
-  if (dep_stream->descendant_last_cycle - stream->cycle <= 
-      NGHTTP2_MAX_CYCLE_DISTANCE) { 
+  if (dep_stream->descendant_last_cycle - stream->cycle <=
+      NGHTTP2_MAX_CYCLE_DISTANCE) {
     stream->cycle = dep_stream->descendant_last_cycle;
   }
 
@@ -295,7 +295,7 @@ void nghttp2_stream_change_weight(nghttp2_stream *stream, int32_t weight) {
 
   nghttp2_pq_push(&dep_stream->obq, &stream->pq_entry);
 
-  DEBUGF("stream: stream=%d obq resched cycle=%lu\n", stream->stream_id, 
+  DEBUGF("stream: stream=%d obq resched cycle=%lu\n", stream->stream_id,
          stream->cycle);
 }
 

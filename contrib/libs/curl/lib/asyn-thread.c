@@ -84,60 +84,60 @@ struct resdata {
   struct curltime start;
 };
 
-/* Doubly linked list of orphaned thread handles. */ 
-struct thread_list { 
-  curl_thread_t handle; 
- 
-  /* 'exiting' is set true right before an orphaned thread exits. 
-     it should only be set by the orphaned thread from 
-     signal_orphan_is_exiting(). */ 
-  bool exiting; 
- 
-  struct thread_list *prev, *next; 
-}; 
- 
-/* Orphaned threads: A global list of resolver threads that could not be 
- * completed in time and so they were abandoned by their parent. The list is 
- * culled periodically by soon-to-be exiting orphans to wait on and destroy 
- * those that are in the process of or have since exited, which is fast. On 
- * global cleanup we wait on and destroy any remaining threads, which may be 
- * slow but at that point we cannot defer it any longer. 
- */ 
-struct orphaned_threads { 
-  /* Mutex to lock this. To avoid deadlock the thread-specific thread_sync_data 
-     mutex cannot be used as an inner lock when orphaned_threads is locked. */ 
-  curl_mutex_t mutex; 
- 
-  /* List of orphaned threads. */ 
-  struct thread_list *first, *last; 
- 
-  /* Count of threads in the list that are in the process of or have exited. 
-     (ie .exiting member of the thread_list item is set true) */ 
-  size_t exiting_count; 
-}; 
- 
-static struct orphaned_threads orphaned_threads; 
- 
-/* Flags for wait_and_destroy_orphaned_threads(). 
-   They're documented above the function definition. */ 
-#define WAIT_DESTROY_ALL                   (1<<0) 
-#define WAIT_DESTROY_EXITING_THREADS_ONLY  (1<<1) 
- 
-static void wait_and_destroy_orphaned_threads(int flags); 
-static void signal_orphan_is_exiting(struct thread_list *orphan); 
- 
- 
+/* Doubly linked list of orphaned thread handles. */
+struct thread_list {
+  curl_thread_t handle;
+
+  /* 'exiting' is set true right before an orphaned thread exits.
+     it should only be set by the orphaned thread from
+     signal_orphan_is_exiting(). */
+  bool exiting;
+
+  struct thread_list *prev, *next;
+};
+
+/* Orphaned threads: A global list of resolver threads that could not be
+ * completed in time and so they were abandoned by their parent. The list is
+ * culled periodically by soon-to-be exiting orphans to wait on and destroy
+ * those that are in the process of or have since exited, which is fast. On
+ * global cleanup we wait on and destroy any remaining threads, which may be
+ * slow but at that point we cannot defer it any longer.
+ */
+struct orphaned_threads {
+  /* Mutex to lock this. To avoid deadlock the thread-specific thread_sync_data
+     mutex cannot be used as an inner lock when orphaned_threads is locked. */
+  curl_mutex_t mutex;
+
+  /* List of orphaned threads. */
+  struct thread_list *first, *last;
+
+  /* Count of threads in the list that are in the process of or have exited.
+     (ie .exiting member of the thread_list item is set true) */
+  size_t exiting_count;
+};
+
+static struct orphaned_threads orphaned_threads;
+
+/* Flags for wait_and_destroy_orphaned_threads().
+   They're documented above the function definition. */
+#define WAIT_DESTROY_ALL                   (1<<0)
+#define WAIT_DESTROY_EXITING_THREADS_ONLY  (1<<1)
+
+static void wait_and_destroy_orphaned_threads(int flags);
+static void signal_orphan_is_exiting(struct thread_list *orphan);
+
+
 /*
  * Curl_resolver_global_init()
  * Called from curl_global_init() to initialize global resolver environment.
  */
 int Curl_resolver_global_init(void)
 {
-  memset(&orphaned_threads, 0, sizeof(orphaned_threads)); 
- 
-  if(Curl_mutex_init(&orphaned_threads.mutex)) 
-    return CURLE_FAILED_INIT; 
- 
+  memset(&orphaned_threads, 0, sizeof(orphaned_threads));
+
+  if(Curl_mutex_init(&orphaned_threads.mutex))
+    return CURLE_FAILED_INIT;
+
   return CURLE_OK;
 }
 
@@ -147,11 +147,11 @@ int Curl_resolver_global_init(void)
  */
 void Curl_resolver_global_cleanup(void)
 {
-  /* Take ownership of all orphaned resolver threads and wait for them to exit. 
-     This is necessary because the user may choose to unload the shared library 
-     that is/contains libcurl. */ 
-  wait_and_destroy_orphaned_threads(WAIT_DESTROY_ALL); 
-  Curl_mutex_destroy(&orphaned_threads.mutex); 
+  /* Take ownership of all orphaned resolver threads and wait for them to exit.
+     This is necessary because the user may choose to unload the shared library
+     that is/contains libcurl. */
+  wait_and_destroy_orphaned_threads(WAIT_DESTROY_ALL);
+  Curl_mutex_destroy(&orphaned_threads.mutex);
 }
 
 /*
@@ -232,8 +232,8 @@ struct thread_data {
   unsigned int poll_interval;
   timediff_t interval_end;
   struct thread_sync_data tsd;
-  /* 'reserved' memory must be available in case the thread is orphaned */ 
-  void *reserved; 
+  /* 'reserved' memory must be available in case the thread is orphaned */
+  void *reserved;
 };
 
 static struct thread_sync_data *conn_thread_sync_data(struct connectdata *conn)
@@ -295,11 +295,11 @@ int init_thread_sync_data(struct thread_data *td,
   if(tsd->mtx == NULL)
     goto err_exit;
 
-  if(Curl_mutex_init(tsd->mtx)) { 
-    free(tsd->mtx); 
-    tsd->mtx = NULL; 
-    goto err_exit; 
-  } 
+  if(Curl_mutex_init(tsd->mtx)) {
+    free(tsd->mtx);
+    tsd->mtx = NULL;
+    goto err_exit;
+  }
 
 #ifdef USE_SOCKETPAIR
   /* create socket pair, avoid AF_LOCAL since it doesn't build on Solaris */
@@ -353,7 +353,7 @@ static unsigned int CURL_STDCALL getaddrinfo_thread(void *arg)
 {
   struct thread_sync_data *tsd = (struct thread_sync_data *)arg;
   struct thread_data *td = tsd->td;
-  struct thread_list *orphan = NULL; 
+  struct thread_list *orphan = NULL;
   char service[12];
   int rc;
 #ifdef USE_SOCKETPAIR
@@ -378,7 +378,7 @@ static unsigned int CURL_STDCALL getaddrinfo_thread(void *arg)
     /* too late, gotta clean up the mess */
     Curl_mutex_release(tsd->mtx);
     destroy_thread_sync_data(tsd);
-    orphan = (struct thread_list *)td->reserved; 
+    orphan = (struct thread_list *)td->reserved;
     free(td);
   }
   else {
@@ -396,9 +396,9 @@ static unsigned int CURL_STDCALL getaddrinfo_thread(void *arg)
     Curl_mutex_release(tsd->mtx);
   }
 
-  if(orphan) 
-    signal_orphan_is_exiting(orphan); 
- 
+  if(orphan)
+    signal_orphan_is_exiting(orphan);
+
   return 0;
 }
 
@@ -411,7 +411,7 @@ static unsigned int CURL_STDCALL gethostbyname_thread(void *arg)
 {
   struct thread_sync_data *tsd = (struct thread_sync_data *)arg;
   struct thread_data *td = tsd->td;
-  struct thread_list *orphan = NULL; 
+  struct thread_list *orphan = NULL;
 
   tsd->res = Curl_ipv4_resolve_r(tsd->hostname, tsd->port);
 
@@ -426,7 +426,7 @@ static unsigned int CURL_STDCALL gethostbyname_thread(void *arg)
     /* too late, gotta clean up the mess */
     Curl_mutex_release(tsd->mtx);
     destroy_thread_sync_data(tsd);
-    orphan = (struct thread_list *)td->reserved; 
+    orphan = (struct thread_list *)td->reserved;
     free(td);
   }
   else {
@@ -434,9 +434,9 @@ static unsigned int CURL_STDCALL gethostbyname_thread(void *arg)
     Curl_mutex_release(tsd->mtx);
   }
 
-  if(orphan) 
-    signal_orphan_is_exiting(orphan); 
- 
+  if(orphan)
+    signal_orphan_is_exiting(orphan);
+
   return 0;
 }
 
@@ -455,60 +455,60 @@ static void destroy_async_data(struct Curl_async *async)
     struct connectdata *conn = td->tsd.conn;
 #endif
 
-    /* We can't wait any longer for the resolver thread so if it's not done 
-     * then it must be orphaned. 
-     * 
-     * 1) add thread to orphaned threads list 
-     * 2) set thread done (this signals to thread it has been orphaned) 
-     * 
-     * An orphaned thread does most of its own cleanup, and any remaining 
-     * cleanup is handled during global cleanup. 
+    /* We can't wait any longer for the resolver thread so if it's not done
+     * then it must be orphaned.
+     *
+     * 1) add thread to orphaned threads list
+     * 2) set thread done (this signals to thread it has been orphaned)
+     *
+     * An orphaned thread does most of its own cleanup, and any remaining
+     * cleanup is handled during global cleanup.
      */
- 
+
     Curl_mutex_acquire(td->tsd.mtx);
- 
-    if(!td->tsd.done && td->thread_hnd != curl_thread_t_null) { 
-      struct thread_list *orphan = (struct thread_list *)td->reserved; 
- 
-      Curl_mutex_acquire(&orphaned_threads.mutex); 
- 
-#ifdef DEBUGBUILD 
-      { 
-        struct thread_list empty; 
-        memset(&empty, 0, sizeof(empty)); 
-        DEBUGASSERT(!memcmp(&empty, orphan, sizeof(empty))); 
-      } 
-#endif 
- 
-      orphan->handle = td->thread_hnd; 
-      orphan->exiting = false; 
- 
-      if(orphaned_threads.last) { 
-        orphaned_threads.last->next = orphan; 
-        orphan->prev = orphaned_threads.last; 
-      } 
-      else { 
-        orphaned_threads.first = orphan; 
-        orphan->prev = NULL; 
-      } 
-      orphaned_threads.last = orphan; 
-      orphan->next = NULL; 
- 
-      Curl_mutex_release(&orphaned_threads.mutex); 
-    } 
- 
+
+    if(!td->tsd.done && td->thread_hnd != curl_thread_t_null) {
+      struct thread_list *orphan = (struct thread_list *)td->reserved;
+
+      Curl_mutex_acquire(&orphaned_threads.mutex);
+
+#ifdef DEBUGBUILD
+      {
+        struct thread_list empty;
+        memset(&empty, 0, sizeof(empty));
+        DEBUGASSERT(!memcmp(&empty, orphan, sizeof(empty)));
+      }
+#endif
+
+      orphan->handle = td->thread_hnd;
+      orphan->exiting = false;
+
+      if(orphaned_threads.last) {
+        orphaned_threads.last->next = orphan;
+        orphan->prev = orphaned_threads.last;
+      }
+      else {
+        orphaned_threads.first = orphan;
+        orphan->prev = NULL;
+      }
+      orphaned_threads.last = orphan;
+      orphan->next = NULL;
+
+      Curl_mutex_release(&orphaned_threads.mutex);
+    }
+
     done = td->tsd.done;
     td->tsd.done = 1;
- 
+
     Curl_mutex_release(td->tsd.mtx);
 
-    if(done) { 
+    if(done) {
       if(td->thread_hnd != curl_thread_t_null)
         Curl_thread_join(&td->thread_hnd);
 
       destroy_thread_sync_data(&td->tsd);
-      free(td->reserved); 
-      free(td); 
+      free(td->reserved);
+      free(td);
     }
 #ifdef USE_SOCKETPAIR
     /*
@@ -548,11 +548,11 @@ static bool init_resolve_thread(struct connectdata *conn,
   conn->async.status = 0;
   conn->async.dns = NULL;
   td->thread_hnd = curl_thread_t_null;
-  td->reserved = calloc(1, sizeof(struct thread_list)); 
+  td->reserved = calloc(1, sizeof(struct thread_list));
 
-  if(!td->reserved || !init_thread_sync_data(td, hostname, port, hints)) { 
+  if(!td->reserved || !init_thread_sync_data(td, hostname, port, hints)) {
     conn->async.tdata = NULL;
-    free(td->reserved); 
+    free(td->reserved);
     free(td);
     goto errno_exit;
   }
@@ -571,7 +571,7 @@ static bool init_resolve_thread(struct connectdata *conn,
   td->thread_hnd = Curl_thread_create(gethostbyname_thread, &td->tsd);
 #endif
 
-  if(td->thread_hnd == curl_thread_t_null) { 
+  if(td->thread_hnd == curl_thread_t_null) {
     /* The thread never started, so mark it as done here for proper cleanup. */
     td->tsd.done = 1;
     err = errno;
@@ -910,100 +910,100 @@ CURLcode Curl_set_dns_local_ip6(struct Curl_easy *data,
   return CURLE_NOT_BUILT_IN;
 }
 
-/* Helper function to wait and destroy some or all orphaned threads. 
- * 
- * WAIT_DESTROY_ALL: 
- * Wait and destroy all orphaned threads. This operation is not safe to specify 
- * in code that could run in any thread that may be orphaned (ie any resolver 
- * thread). Waiting on all orphaned threads may take some time. This operation 
- * must be specified in the call from global cleanup, and ideally nowhere else. 
- * 
- * WAIT_DESTROY_EXITING_THREADS_ONLY: 
- * Wait and destroy only orphaned threads that are in the process of or have 
- * since exited (ie those with .exiting set true). This is fast. 
- * 
- * When the calling thread owns orphaned_threads.mutex it must not call this 
- * function or deadlock my occur. 
- */ 
-static void wait_and_destroy_orphaned_threads(int flags) 
-{ 
-  struct thread_list *thread = NULL; 
- 
-  Curl_mutex_acquire(&orphaned_threads.mutex); 
- 
-  if((flags & WAIT_DESTROY_EXITING_THREADS_ONLY)) { 
-    struct thread_list *p, *next; 
-    struct thread_list *first = NULL, *last = NULL; 
- 
-    if(!orphaned_threads.exiting_count) { 
-      Curl_mutex_release(&orphaned_threads.mutex); 
-      return; 
-    } 
- 
-    for(p = orphaned_threads.first; p; p = next) { 
-      next = p->next; 
- 
-      if(!p->exiting) 
-        continue; 
- 
-      /* remove thread list item from orphaned_threads */ 
-      if(p->prev) 
-        p->prev->next = p->next; 
-      if(p->next) 
-        p->next->prev = p->prev; 
-      if(orphaned_threads.first == p) 
-        orphaned_threads.first = p->next; 
-      if(orphaned_threads.last == p) 
-        orphaned_threads.last = p->prev; 
- 
-      /* add thread list item to new thread list */ 
-      if(last) { 
-        last->next = p; 
-        p->prev = last; 
-      } 
-      else { 
-        first = p; 
-        p->prev = NULL; 
-      } 
-      last = p; 
-      p->next = NULL; 
-    } 
- 
-    thread = first; 
-    orphaned_threads.exiting_count = 0; 
-  } 
-  else if((flags & WAIT_DESTROY_ALL)) { 
-    thread = orphaned_threads.first; 
-    orphaned_threads.first = NULL; 
-    orphaned_threads.last = NULL; 
-    orphaned_threads.exiting_count = 0; 
-  } 
- 
-  Curl_mutex_release(&orphaned_threads.mutex); 
- 
-  /* Wait and free. Must be done unlocked or there could be deadlock. */ 
-  while(thread) { 
-    struct thread_list *next = thread->next; 
-    Curl_thread_join(&thread->handle); 
-    free(thread); 
-    thread = next; 
-  } 
-} 
- 
-/* Helper function that must be called from an orphaned thread right before it 
-   exits. */ 
-static void signal_orphan_is_exiting(struct thread_list *orphan) 
-{ 
-  DEBUGASSERT(orphan->handle && !orphan->exiting); 
- 
-  wait_and_destroy_orphaned_threads(WAIT_DESTROY_EXITING_THREADS_ONLY); 
- 
-  Curl_mutex_acquire(&orphaned_threads.mutex); 
- 
-  orphan->exiting = true; 
-  orphaned_threads.exiting_count++; 
- 
-  Curl_mutex_release(&orphaned_threads.mutex); 
-} 
- 
+/* Helper function to wait and destroy some or all orphaned threads.
+ *
+ * WAIT_DESTROY_ALL:
+ * Wait and destroy all orphaned threads. This operation is not safe to specify
+ * in code that could run in any thread that may be orphaned (ie any resolver
+ * thread). Waiting on all orphaned threads may take some time. This operation
+ * must be specified in the call from global cleanup, and ideally nowhere else.
+ *
+ * WAIT_DESTROY_EXITING_THREADS_ONLY:
+ * Wait and destroy only orphaned threads that are in the process of or have
+ * since exited (ie those with .exiting set true). This is fast.
+ *
+ * When the calling thread owns orphaned_threads.mutex it must not call this
+ * function or deadlock my occur.
+ */
+static void wait_and_destroy_orphaned_threads(int flags)
+{
+  struct thread_list *thread = NULL;
+
+  Curl_mutex_acquire(&orphaned_threads.mutex);
+
+  if((flags & WAIT_DESTROY_EXITING_THREADS_ONLY)) {
+    struct thread_list *p, *next;
+    struct thread_list *first = NULL, *last = NULL;
+
+    if(!orphaned_threads.exiting_count) {
+      Curl_mutex_release(&orphaned_threads.mutex);
+      return;
+    }
+
+    for(p = orphaned_threads.first; p; p = next) {
+      next = p->next;
+
+      if(!p->exiting)
+        continue;
+
+      /* remove thread list item from orphaned_threads */
+      if(p->prev)
+        p->prev->next = p->next;
+      if(p->next)
+        p->next->prev = p->prev;
+      if(orphaned_threads.first == p)
+        orphaned_threads.first = p->next;
+      if(orphaned_threads.last == p)
+        orphaned_threads.last = p->prev;
+
+      /* add thread list item to new thread list */
+      if(last) {
+        last->next = p;
+        p->prev = last;
+      }
+      else {
+        first = p;
+        p->prev = NULL;
+      }
+      last = p;
+      p->next = NULL;
+    }
+
+    thread = first;
+    orphaned_threads.exiting_count = 0;
+  }
+  else if((flags & WAIT_DESTROY_ALL)) {
+    thread = orphaned_threads.first;
+    orphaned_threads.first = NULL;
+    orphaned_threads.last = NULL;
+    orphaned_threads.exiting_count = 0;
+  }
+
+  Curl_mutex_release(&orphaned_threads.mutex);
+
+  /* Wait and free. Must be done unlocked or there could be deadlock. */
+  while(thread) {
+    struct thread_list *next = thread->next;
+    Curl_thread_join(&thread->handle);
+    free(thread);
+    thread = next;
+  }
+}
+
+/* Helper function that must be called from an orphaned thread right before it
+   exits. */
+static void signal_orphan_is_exiting(struct thread_list *orphan)
+{
+  DEBUGASSERT(orphan->handle && !orphan->exiting);
+
+  wait_and_destroy_orphaned_threads(WAIT_DESTROY_EXITING_THREADS_ONLY);
+
+  Curl_mutex_acquire(&orphaned_threads.mutex);
+
+  orphan->exiting = true;
+  orphaned_threads.exiting_count++;
+
+  Curl_mutex_release(&orphaned_threads.mutex);
+}
+
 #endif /* CURLRES_THREADED */

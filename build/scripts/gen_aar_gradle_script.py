@@ -6,16 +6,16 @@ FLAT_DIRS_REPO_TEMPLATE='flatDir {{ dirs {dirs} }}\n'
 MAVEN_REPO_TEMPLATE='maven {{ url "{repo}" }}\n'
 KEYSTORE_TEMLATE='signingConfigs {{ debug {{ storeFile file("{keystore}") }} }}\n'
 
-ENABLE_JAVADOC = 'tasks["bundle${suffix}Aar"].dependsOn packageJavadocTask' 
-DO_NOT_STRIP = '''\ 
-    packagingOptions { 
-        doNotStrip "*/arm64-v8a/*.so" 
-        doNotStrip "*/armeabi-v7a/*.so" 
-        doNotStrip "*/x86_64/*.so" 
-        doNotStrip "*/x86/*.so" 
-    } 
-''' 
- 
+ENABLE_JAVADOC = 'tasks["bundle${suffix}Aar"].dependsOn packageJavadocTask'
+DO_NOT_STRIP = '''\
+    packagingOptions {
+        doNotStrip "*/arm64-v8a/*.so"
+        doNotStrip "*/armeabi-v7a/*.so"
+        doNotStrip "*/x86_64/*.so"
+        doNotStrip "*/x86/*.so"
+    }
+'''
+
 AAR_TEMPLATE = """\
 ext.jniLibsDirs = [
     {jni_libs_dirs}
@@ -55,13 +55,13 @@ def targetVersion = 30
 def buildVersion = '30.0.3'
 
 import com.android.build.gradle.LibraryPlugin
-import java.nio.file.Files 
-import java.nio.file.Paths 
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.util.regex.Matcher
 import java.util.regex.Pattern
-import java.util.zip.ZipFile 
+import java.util.zip.ZipFile
 
- 
+
 apply plugin: 'com.github.dcendents.android-maven'
 
 buildDir = "$projectDir/build"
@@ -128,8 +128,8 @@ android {{
         androidTest.setRoot('bundle/tests')
     }}
 
-    {do_not_strip} 
- 
+    {do_not_strip}
+
     dependencies {{
         for (bundle in bundles)
             compile("$bundle") {{
@@ -181,90 +181,90 @@ android {{
         tasks["bundle${{suffix}}Aar"].dependsOn sourcesJarTask
         tasks["bundle${{suffix}}Aar"].dependsOn writePomTask
     }}
- 
-    android.libraryVariants.all {{ variant -> 
-        def capitalizedVariantName = variant.name.capitalize() 
-        def suffix = variant.buildType.name.capitalize() 
- 
-        def javadocTask = project.tasks.create(name: "generate${{capitalizedVariantName}}Javadoc", type: Javadoc) {{ 
-            group = "Javadoc" 
-            description "Generates Javadoc for $capitalizedVariantName" 
- 
-            title = "Yandex documentation" 
- 
-            source = android.sourceSets.main.java.srcDirs 
-            include "**/*/yandex/*/**" 
-            // TODO: remove this when we support internal doc exclusion in IDL 
-            // https://st.yandex-team.ru/MAPSMOBCORE-11364 
-            exclude "**/internal/**" 
- 
-            ext.androidJar = "${{android.sdkDirectory.path}}/platforms/${{android.compileSdkVersion}}/android.jar" 
-            classpath = 
-                files(android.getBootClasspath().join(File.pathSeparator)) + 
-                configurations.compile + 
-                files(ext.androidJar) + 
-                files(variant.javaCompile.outputs.files) 
- 
-            destinationDir = file("$buildDir/${{rootProject.name}}-javadoc/$capitalizedVariantName/") 
- 
-            options.doclet("ExcludeDoclet") 
-            options.docletpath( 
-                files(repositories.maven.url).getAsFileTree() 
-                    .matching{{include "**/exclude-doclet-1.0.0.jar"}} 
-                        .getSingleFile()) 
- 
-            options.charSet = "UTF-8" 
-            options.encoding = "UTF-8" 
- 
-            failOnError false 
- 
-            afterEvaluate {{ 
-                def dependencyTree = project.configurations.compile.getAsFileTree() 
-                def aar_set = dependencyTree.matching{{include "**/*.aar"}}.getFiles() 
-                def jar_tree = dependencyTree.matching{{include "**/*.jar"}} 
- 
-                aar_set.each{{ aar -> 
-                    def outputPath = "$buildDir/tmp/aarJar/${{aar.name.replace('.aar', '.jar')}}" 
-                    classpath += files(outputPath) 
- 
-                    dependsOn task(name: "extract_${{aar.getAbsolutePath().replace(File.separatorChar, '_' as char)}}-${{capitalizedVariantName}}").doLast {{ 
-                        extractClassesJar(aar, outputPath) 
-                    }} 
-                }} 
-            }} 
-        }} 
- 
-        def packageJavadocTask = project.tasks.create(name: "package${{capitalizedVariantName}}Javadoc", type: Tar) {{ 
-            description "Makes an archive from Javadoc output" 
-            from "${{buildDir}}/${{rootProject.name}}-javadoc/$capitalizedVariantName/" 
-            archiveFileName = "${{rootProject.name}}-javadoc.tar.gz" 
-            destinationDirectory = new File("${{buildDir}}") 
-            dependsOn javadocTask 
-        }} 
- 
-        {enable_javadoc} 
-    }} 
- 
+
+    android.libraryVariants.all {{ variant ->
+        def capitalizedVariantName = variant.name.capitalize()
+        def suffix = variant.buildType.name.capitalize()
+
+        def javadocTask = project.tasks.create(name: "generate${{capitalizedVariantName}}Javadoc", type: Javadoc) {{
+            group = "Javadoc"
+            description "Generates Javadoc for $capitalizedVariantName"
+
+            title = "Yandex documentation"
+
+            source = android.sourceSets.main.java.srcDirs
+            include "**/*/yandex/*/**"
+            // TODO: remove this when we support internal doc exclusion in IDL
+            // https://st.yandex-team.ru/MAPSMOBCORE-11364
+            exclude "**/internal/**"
+
+            ext.androidJar = "${{android.sdkDirectory.path}}/platforms/${{android.compileSdkVersion}}/android.jar"
+            classpath =
+                files(android.getBootClasspath().join(File.pathSeparator)) +
+                configurations.compile +
+                files(ext.androidJar) +
+                files(variant.javaCompile.outputs.files)
+
+            destinationDir = file("$buildDir/${{rootProject.name}}-javadoc/$capitalizedVariantName/")
+
+            options.doclet("ExcludeDoclet")
+            options.docletpath(
+                files(repositories.maven.url).getAsFileTree()
+                    .matching{{include "**/exclude-doclet-1.0.0.jar"}}
+                        .getSingleFile())
+
+            options.charSet = "UTF-8"
+            options.encoding = "UTF-8"
+
+            failOnError false
+
+            afterEvaluate {{
+                def dependencyTree = project.configurations.compile.getAsFileTree()
+                def aar_set = dependencyTree.matching{{include "**/*.aar"}}.getFiles()
+                def jar_tree = dependencyTree.matching{{include "**/*.jar"}}
+
+                aar_set.each{{ aar ->
+                    def outputPath = "$buildDir/tmp/aarJar/${{aar.name.replace('.aar', '.jar')}}"
+                    classpath += files(outputPath)
+
+                    dependsOn task(name: "extract_${{aar.getAbsolutePath().replace(File.separatorChar, '_' as char)}}-${{capitalizedVariantName}}").doLast {{
+                        extractClassesJar(aar, outputPath)
+                    }}
+                }}
+            }}
+        }}
+
+        def packageJavadocTask = project.tasks.create(name: "package${{capitalizedVariantName}}Javadoc", type: Tar) {{
+            description "Makes an archive from Javadoc output"
+            from "${{buildDir}}/${{rootProject.name}}-javadoc/$capitalizedVariantName/"
+            archiveFileName = "${{rootProject.name}}-javadoc.tar.gz"
+            destinationDirectory = new File("${{buildDir}}")
+            dependsOn javadocTask
+        }}
+
+        {enable_javadoc}
+    }}
+
 }}
- 
-private def extractClassesJar(aarPath, outputPath) {{ 
-    if (!aarPath.exists()) {{ 
-        throw new GradleException("AAR $aarPath not found") 
-    }} 
- 
-    def zip = new ZipFile(aarPath) 
-    zip.entries().each {{ 
-        if (it.name == "classes.jar") {{ 
-            def path = Paths.get(outputPath) 
-            if (!Files.exists(path)) {{ 
-                Files.createDirectories(path.getParent()) 
-                Files.copy(zip.getInputStream(it), path) 
-            }} 
-        }} 
-    }} 
-    zip.close() 
-}} 
- 
+
+private def extractClassesJar(aarPath, outputPath) {{
+    if (!aarPath.exists()) {{
+        throw new GradleException("AAR $aarPath not found")
+    }}
+
+    def zip = new ZipFile(aarPath)
+    zip.entries().each {{
+        if (it.name == "classes.jar") {{
+            def path = Paths.get(outputPath)
+            if (!Files.exists(path)) {{
+                Files.createDirectories(path.getParent())
+                Files.copy(zip.getInputStream(it), path)
+            }}
+        }}
+    }}
+    zip.close()
+}}
+
 """
 
 
@@ -295,53 +295,53 @@ def gen_build_script(args):
     else:
         keystore = ''
 
-    if args.generate_doc: 
-        enable_javadoc = ENABLE_JAVADOC 
-    else: 
-        enable_javadoc = '' 
- 
-    if args.do_not_strip: 
-        do_not_strip = DO_NOT_STRIP 
-    else: 
-        do_not_strip = '' 
- 
+    if args.generate_doc:
+        enable_javadoc = ENABLE_JAVADOC
+    else:
+        enable_javadoc = ''
+
+    if args.do_not_strip:
+        do_not_strip = DO_NOT_STRIP
+    else:
+        do_not_strip = ''
+
     return AAR_TEMPLATE.format(
-        aars=wrap(args.aars), 
+        aars=wrap(args.aars),
         compile_only_aars=wrap(args.compile_only_aars),
-        aidl_dirs=wrap(args.aidl_dirs), 
+        aidl_dirs=wrap(args.aidl_dirs),
         assets_dirs=wrap(args.assets_dirs),
-        bundles=wrap(bundles), 
-        do_not_strip=do_not_strip, 
-        enable_javadoc=enable_javadoc, 
-        flat_dirs_repo=flat_dirs_repo, 
+        bundles=wrap(bundles),
+        do_not_strip=do_not_strip,
+        enable_javadoc=enable_javadoc,
+        flat_dirs_repo=flat_dirs_repo,
         java_dirs=wrap(args.java_dirs),
-        jni_libs_dirs=wrap(args.jni_libs_dirs), 
-        keystore=keystore, 
+        jni_libs_dirs=wrap(args.jni_libs_dirs),
+        keystore=keystore,
         manifest=args.manifest,
         maven_repos=maven_repos,
-        proguard_rules=args.proguard_rules, 
-        res_dirs=wrap(args.res_dirs), 
+        proguard_rules=args.proguard_rules,
+        res_dirs=wrap(args.res_dirs),
     )
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--aars', nargs='*', default=[]) 
+    parser.add_argument('--aars', nargs='*', default=[])
     parser.add_argument('--compile-only-aars', nargs='*', default=[])
     parser.add_argument('--aidl-dirs', nargs='*', default=[])
     parser.add_argument('--assets-dirs', nargs='*', default=[])
-    parser.add_argument('--bundle-name', nargs='?', default='default-bundle-name') 
+    parser.add_argument('--bundle-name', nargs='?', default='default-bundle-name')
     parser.add_argument('--bundles', nargs='*', default=[])
-    parser.add_argument('--do-not-strip', action='store_true') 
-    parser.add_argument('--flat-repos', nargs='*', default=[]) 
-    parser.add_argument('--generate-doc', action='store_true') 
+    parser.add_argument('--do-not-strip', action='store_true')
+    parser.add_argument('--flat-repos', nargs='*', default=[])
+    parser.add_argument('--generate-doc', action='store_true')
     parser.add_argument('--java-dirs', nargs='*', default=[])
     parser.add_argument('--jni-libs-dirs', nargs='*', default=[])
-    parser.add_argument('--keystore', default=None) 
+    parser.add_argument('--keystore', default=None)
     parser.add_argument('--manifest', required=True)
     parser.add_argument('--maven-repos', nargs='*', default=[])
     parser.add_argument('--output-dir', required=True)
-    parser.add_argument('--peers', nargs='*', default=[]) 
+    parser.add_argument('--peers', nargs='*', default=[])
     parser.add_argument('--proguard-rules', nargs='?', default=None)
     parser.add_argument('--res-dirs', nargs='*', default=[])
     args = parser.parse_args()

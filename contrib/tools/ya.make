@@ -43,7 +43,7 @@ RECURSE(
     tre
     unbound
     unbound/build
-    vowpal_wabbit 
+    vowpal_wabbit
     wapiti
     word2vec
     xdelta3

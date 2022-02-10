@@ -762,7 +762,7 @@ RECURSE(
     preshed
     pretend
     prettytable
-    priority
+    priority 
     progressbar2
     prometheus-client
     prometheus-flask-exporter

@@ -160,7 +160,7 @@ namespace NJson {
                 Pop();
                 UpdateRule();
             }
-            Stack.push_back(TPathElem(TString{key})); 
+            Stack.push_back(TPathElem(TString{key}));
             if (CurrentFieldIdx >= 0)
                 HasFormatError = true;
             else

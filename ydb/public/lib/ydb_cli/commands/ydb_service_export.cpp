@@ -31,7 +31,7 @@ namespace {
         ThrowOnError(ret.Status);
 
         if (ret.Entries.size() == 1 && srcPath == ret.Entries[0].Name) {
-            return {{TString{srcPath}, TString{dstPath}}}; 
+            return {{TString{srcPath}, TString{dstPath}}};
         }
 
         TVector<std::pair<TString, TString>> result;

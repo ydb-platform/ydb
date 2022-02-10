@@ -47,17 +47,17 @@ namespace NRegExp {
             bool AndNotSupport = false;
         };
 
-        static inline NPire::TFsm Parse(const TStringBuf& regexp, 
+        static inline NPire::TFsm Parse(const TStringBuf& regexp,
                                         const TOptions& opts, const bool needDetermine = true) {
             NPire::TLexer lexer;
             if (opts.Charset == CODES_UNKNOWN) {
-                lexer.Assign(regexp.data(), regexp.data() + regexp.size()); 
+                lexer.Assign(regexp.data(), regexp.data() + regexp.size());
             } else {
-                TVector<wchar32> ucs4(regexp.size() + 1); 
+                TVector<wchar32> ucs4(regexp.size() + 1);
                 size_t inRead = 0;
                 size_t outWritten = 0;
-                int recodeRes = RecodeToUnicode(opts.Charset, regexp.data(), ucs4.data(), 
-                                                regexp.size(), regexp.size(), inRead, outWritten); 
+                int recodeRes = RecodeToUnicode(opts.Charset, regexp.data(), ucs4.data(),
+                                                regexp.size(), regexp.size(), inRead, outWritten);
                 Y_ASSERT(recodeRes == RECODE_OK);
                 Y_ASSERT(outWritten < ucs4.size());
                 ucs4[outWritten] = 0;
@@ -112,7 +112,7 @@ namespace NRegExp {
         typedef TScannerType TScanner;
 
     public:
-        inline explicit TFsmParser(const TStringBuf& regexp, 
+        inline explicit TFsmParser(const TStringBuf& regexp,
                                    const TOptions& opts = TOptions(), bool needDetermine = true)
             : Scanner(Parse(regexp, opts, needDetermine).template Compile<TScanner>())
         {
@@ -139,7 +139,7 @@ namespace NRegExp {
 
     class TFsm: public TFsmParser<NPire::TNonrelocScanner> {
     public:
-        inline explicit TFsm(const TStringBuf& regexp, 
+        inline explicit TFsm(const TStringBuf& regexp,
                              const TOptions& opts = TOptions())
             : TFsmParser<TScanner>(regexp, opts)
         {
@@ -165,7 +165,7 @@ namespace NRegExp {
     }
 
     struct TCapturingFsm : TFsmParser<NPire::TCapturingScanner> {
-        inline explicit TCapturingFsm(const TStringBuf& regexp, 
+        inline explicit TCapturingFsm(const TStringBuf& regexp,
                                       TOptions opts = TOptions())
             : TFsmParser<TScanner>(regexp,
                                    opts.SetSurround(true).CapturePos ? opts : opts.SetCapture(1)) {
@@ -178,7 +178,7 @@ namespace NRegExp {
     };
 
     struct TSlowCapturingFsm : TFsmParser<NPire::TSlowCapturingScanner> {
-        inline explicit TSlowCapturingFsm(const TStringBuf& regexp, 
+        inline explicit TSlowCapturingFsm(const TStringBuf& regexp,
                                           TOptions opts = TOptions())
                 : TFsmParser<TScanner>(regexp,
                                        opts.SetSurround(true).CapturePos ? opts : opts.SetCapture(1), false) {
@@ -241,8 +241,8 @@ namespace NRegExp {
             return *this;
         }
 
-        inline TMatcher& Match(const TStringBuf& s, bool addBegin = false, bool addEnd = false) noexcept { 
-            return Match(s.data(), s.size(), addBegin, addEnd); 
+        inline TMatcher& Match(const TStringBuf& s, bool addBegin = false, bool addEnd = false) noexcept {
+            return Match(s.data(), s.size(), addBegin, addEnd);
         }
 
         inline const char* Find(const char* b, const char* e) noexcept {
@@ -273,8 +273,8 @@ namespace NRegExp {
             return *this;
         }
 
-        inline TSearcher& Search(const TStringBuf& s) noexcept { 
-            return Search(s.data(), s.size()); 
+        inline TSearcher& Search(const TStringBuf& s) noexcept {
+            return Search(s.data(), s.size());
         }
 
         inline TStringBuf GetCaptured() const noexcept {
@@ -306,8 +306,8 @@ namespace NRegExp {
             return GetAns();
         }
 
-        inline TSlowSearcher& Search(const TStringBuf& s) noexcept { 
-            return Search(s.data(), s.size()); 
+        inline TSlowSearcher& Search(const TStringBuf& s) noexcept {
+            return Search(s.data(), s.size());
         }
 
         inline TStringBuf GetCaptured() const noexcept {

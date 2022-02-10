@@ -23,8 +23,8 @@ namespace std {
         bool operator()(const char* x, const char* y) const {
             return strcmp(x, y) == 0;
         }
-        bool operator()(const char* x, const TStringBuf y) const { 
-            return strlen(x) == y.size() && memcmp(x, y.data(), y.size()) == 0; 
+        bool operator()(const char* x, const TStringBuf y) const {
+            return strlen(x) == y.size() && memcmp(x, y.data(), y.size()) == 0;
         }
         using is_transparent = void;
     };

@@ -20,7 +20,7 @@ namespace {
         }
 
     public:
-        void Add(TStringBuf name, TStringBuf value) { 
+        void Add(TStringBuf name, TStringBuf value) {
             Impl.emplace(TString(name), TString(value));
         }
 
@@ -53,7 +53,7 @@ class THttpHeadersTest: public TTestBase {
     UNIT_TEST_SUITE_END();
 
 private:
-    typedef void (*TAddHeaderFunction)(THttpHeaders&, TStringBuf name, TStringBuf value); 
+    typedef void (*TAddHeaderFunction)(THttpHeaders&, TStringBuf name, TStringBuf value);
     typedef void (*TAddOrReplaceHeaderFunction)(THttpHeaders&, TStringBuf name, TStringBuf value);
 
 public:
@@ -65,11 +65,11 @@ public:
     void TestFindHeader();
 
 private:
-    static void AddHeaderImpl1Arg(THttpHeaders& headers, TStringBuf name, TStringBuf value) { 
+    static void AddHeaderImpl1Arg(THttpHeaders& headers, TStringBuf name, TStringBuf value) {
         headers.AddHeader(THttpInputHeader(TString(name), TString(value)));
     }
 
-    static void AddHeaderImpl2Args(THttpHeaders& headers, TStringBuf name, TStringBuf value) { 
+    static void AddHeaderImpl2Args(THttpHeaders& headers, TStringBuf name, TStringBuf value) {
         headers.AddHeader(TString(name), TString(value));
     }
 
@@ -156,7 +156,7 @@ void THttpHeadersTest::TestAddHeaderTemplateness() {
     h1.AddHeader("h1", "v1");
     h1.AddHeader("h2", TString("v2"));
     h1.AddHeader("h3", TStringBuf("v3"));
-    h1.AddHeader("h4", TStringBuf("v4")); 
+    h1.AddHeader("h4", TStringBuf("v4"));
 
     THeadersExistence h2;
     h2.Add("h1", "v1");

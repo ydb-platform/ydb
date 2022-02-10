@@ -2,8 +2,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-#define RESC_FIXED_STR(s) TStringBuf(s, sizeof(s) - 1) 
-static const TStringBuf CommonTestData[] = { 
+#define RESC_FIXED_STR(s) TStringBuf(s, sizeof(s) - 1)
+static const TStringBuf CommonTestData[] = {
     // Should be valid UTF-8.
     RESC_FIXED_STR("http://ya.ru/"), RESC_FIXED_STR("http://ya.ru/"),
     RESC_FIXED_STR("http://ya.ru/\\x17\\n"), RESC_FIXED_STR("http://ya.ru/\x17\n"),
@@ -29,8 +29,8 @@ Y_UNIT_TEST_SUITE(TRelaxedEscaperTest) {
     Y_UNIT_TEST(TestEscaper) {
         using namespace NEscJ;
         for (size_t i = 0; i < Y_ARRAY_SIZE(CommonTestData); i += 2) {
-            TString expected(CommonTestData[i].data(), CommonTestData[i].size()); 
-            TString source(CommonTestData[i + 1].data(), CommonTestData[i + 1].size()); 
+            TString expected(CommonTestData[i].data(), CommonTestData[i].size());
+            TString source(CommonTestData[i + 1].data(), CommonTestData[i + 1].size());
             TString actual(EscapeJ<false>(source));
             TString actual2(UnescapeC(expected));
 

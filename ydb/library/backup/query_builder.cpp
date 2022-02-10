@@ -57,7 +57,7 @@ TMaybe<TString> TryParse(const TStringBuf& buf) {
     }
 
     Y_ENSURE(buf.Size() >= 1 && buf.front() == '"' && buf.back() == '"',
-            "Source string neither surrounded by quotes nor equals to null, string# " << TString{buf}.Quote()); 
+            "Source string neither surrounded by quotes nor equals to null, string# " << TString{buf}.Quote());
     TString tmp;
     TMemoryInput stream(buf.Data() + 1, buf.Size() - 2);
     stream >> tmp;

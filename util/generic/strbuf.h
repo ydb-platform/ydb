@@ -1,7 +1,7 @@
 #pragma once
 
 #include "fwd.h"
-#include "strbase.h" 
+#include "strbase.h"
 #include "utility.h"
 #include "typetraits.h"
 
@@ -111,7 +111,7 @@ public:
     {
     }
 
-    constexpr inline TBasicStringBuf(const TCharType* beg, const TCharType* end) noexcept 
+    constexpr inline TBasicStringBuf(const TCharType* beg, const TCharType* end) noexcept
         : TStringView(beg, end - beg)
     {
     }
@@ -145,13 +145,13 @@ public:
          */
     }
 
-    inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos, size_t n) noexcept 
-        : TBasicStringBuf(src) 
+    inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos, size_t n) noexcept
+        : TBasicStringBuf(src)
     {
         Skip(pos).Trunc(n);
     }
 
-    inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos) noexcept 
+    inline TBasicStringBuf(const TBasicStringBuf& src, size_t pos) noexcept
         : TBasicStringBuf(src, pos, TBase::npos)
     {
     }
@@ -160,8 +160,8 @@ public:
         pos = Min(pos, size());
         n = Min(n, size() - pos);
         return TBasicStringBuf(data() + pos, n);
-    } 
- 
+    }
+
 public:
     void Clear() {
         *this = TdSelf();
@@ -320,7 +320,7 @@ public:
 public:
     inline bool AfterPrefix(const TdSelf& prefix, TdSelf& result) const noexcept {
         if (this->StartsWith(prefix)) {
-            result = Tail(prefix.size()); 
+            result = Tail(prefix.size());
             return true;
         }
         return false;

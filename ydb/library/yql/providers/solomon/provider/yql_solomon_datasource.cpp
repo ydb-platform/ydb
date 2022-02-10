@@ -19,7 +19,7 @@ public:
     TSolomonDataSource(TSolomonState::TPtr state)
         : State_(state)
         , ConfigurationTransformer_(NCommon::CreateProviderConfigurationTransformer(
-            State_->Configuration, *State_->Types, TString{SolomonProviderName})) 
+            State_->Configuration, *State_->Types, TString{SolomonProviderName}))
         , IODiscoveryTransformer_(CreateSolomonIODiscoveryTransformer(State_))
         , LoadMetaDataTransformer_(CreateSolomonLoadTableMetadataTransformer(State_))
         , TypeAnnotationTransformer_(CreateSolomonDataSourceTypeAnnotationTransformer(State_))

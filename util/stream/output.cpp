@@ -115,18 +115,18 @@ void Out<std::u32string_view>(IOutputStream& o, const std::u32string_view& p) {
 }
 
 template <>
-void Out<TStringBuf>(IOutputStream& o, const TStringBuf& p) { 
-    o.Write(p.data(), p.length()); 
+void Out<TStringBuf>(IOutputStream& o, const TStringBuf& p) {
+    o.Write(p.data(), p.length());
 }
 
 template <>
-void Out<TWtringBuf>(IOutputStream& o, const TWtringBuf& p) { 
-    WriteString(o, p.data(), p.length()); 
+void Out<TWtringBuf>(IOutputStream& o, const TWtringBuf& p) {
+    WriteString(o, p.data(), p.length());
 }
 
 template <>
-void Out<TUtf32StringBuf>(IOutputStream& o, const TUtf32StringBuf& p) { 
-    WriteString(o, p.data(), p.length()); 
+void Out<TUtf32StringBuf>(IOutputStream& o, const TUtf32StringBuf& p) {
+    WriteString(o, p.data(), p.length());
 }
 
 template <>

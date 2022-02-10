@@ -147,7 +147,7 @@ struct TMemoryTraits<TArrayRef<T>>: public TElementDependentMemoryTraits<T> {
 };
 
 template <typename TCharType, typename TCharTraits>
-struct TMemoryTraits<TBasicStringBuf<TCharType, TCharTraits>>: public TElementDependentMemoryTraits<TCharType> { 
+struct TMemoryTraits<TBasicStringBuf<TCharType, TCharTraits>>: public TElementDependentMemoryTraits<TCharType> {
     enum {
         OwnsMemory = false
     };

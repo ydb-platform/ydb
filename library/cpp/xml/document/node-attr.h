@@ -22,7 +22,7 @@ namespace NXml {
         try {
             res = FromString<T>(CAST2CHAR(value.Get()));
         } catch (TFromStringException&) {
-            THROW(XmlException, "Failed to convert string " << TString{TStringBuf(CAST2CHAR(value.Get())).substr(0, 50)}.Quote() << " from '" << errContext << "' to requested type"); 
+            THROW(XmlException, "Failed to convert string " << TString{TStringBuf(CAST2CHAR(value.Get())).substr(0, 50)}.Quote() << " from '" << errContext << "' to requested type");
         }
     }
 

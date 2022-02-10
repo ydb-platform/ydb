@@ -16,8 +16,8 @@
 #include "explicit_type.h"
 #include "reserve.h"
 #include "singleton.h"
-#include "strbase.h" 
-#include "strbuf.h" 
+#include "strbase.h"
+#include "strbuf.h"
 #include "string_hash.h"
 
 #if defined(address_sanitizer_enabled) || defined(thread_sanitizer_enabled)
@@ -192,8 +192,8 @@ public:
         static size_t res = TStringType().max_size();
 
         return res;
-    } 
- 
+    }
+
 protected:
 #ifdef TSTRING_IS_STD_STRING
     TStorage Storage_;
@@ -498,7 +498,7 @@ public:
     {
     }
 
-    explicit TBasicString(const TBasicStringBuf<TCharType, TTraits> s) 
+    explicit TBasicString(const TBasicStringBuf<TCharType, TTraits> s)
         : TBasicString(s.data(), s.size())
     {
     }
@@ -514,15 +514,15 @@ public:
      *    Certain invocations of this method will result in link-time error.
      *    You are free to implement corresponding methods in string.cpp if you need them.
      */
-    static TBasicString FromAscii(const ::TStringBuf& s) { 
+    static TBasicString FromAscii(const ::TStringBuf& s) {
         return TBasicString().AppendAscii(s);
     }
 
-    static TBasicString FromUtf8(const ::TStringBuf& s) { 
+    static TBasicString FromUtf8(const ::TStringBuf& s) {
         return TBasicString().AppendUtf8(s);
     }
 
-    static TBasicString FromUtf16(const ::TWtringBuf& s) { 
+    static TBasicString FromUtf16(const ::TWtringBuf& s) {
         return TBasicString().AppendUtf16(s);
     }
 
@@ -532,8 +532,8 @@ public:
 
 private:
     template <typename... R>
-    static size_t SumLength(const TBasicStringBuf<TCharType, TTraits> s1, const R&... r) noexcept { 
-        return s1.size() + SumLength(r...); 
+    static size_t SumLength(const TBasicStringBuf<TCharType, TTraits> s1, const R&... r) noexcept {
+        return s1.size() + SumLength(r...);
     }
 
     template <typename... R>
@@ -546,9 +546,9 @@ private:
     }
 
     template <typename... R>
-    static void CopyAll(TCharType* p, const TBasicStringBuf<TCharType, TTraits> s, const R&... r) { 
+    static void CopyAll(TCharType* p, const TBasicStringBuf<TCharType, TTraits> s, const R&... r) {
         TTraits::copy(p, s.data(), s.size());
-        CopyAll(p + s.size(), r...); 
+        CopyAll(p + s.size(), r...);
     }
 
     template <typename... R, class TNextCharType, typename = std::enable_if_t<std::is_same<TCharType, TNextCharType>::value>>
@@ -646,11 +646,11 @@ public:
         return AssignNoAlias(b, e - b);
     }
 
-    TBasicString& AssignNoAlias(const TBasicStringBuf<TCharType, TTraits> s) { 
-        return AssignNoAlias(s.data(), s.size()); 
+    TBasicString& AssignNoAlias(const TBasicStringBuf<TCharType, TTraits> s) {
+        return AssignNoAlias(s.data(), s.size());
     }
 
-    TBasicString& AssignNoAlias(const TBasicStringBuf<TCharType, TTraits> s, size_t spos, size_t sn = TBase::npos) { 
+    TBasicString& AssignNoAlias(const TBasicStringBuf<TCharType, TTraits> s, size_t spos, size_t sn = TBase::npos) {
         return AssignNoAlias(s.SubString(spos, sn));
     }
 
@@ -659,17 +659,17 @@ public:
      *    Certain invocations of this method will result in link-time error.
      *    You are free to implement corresponding methods in string.cpp if you need them.
      */
-    auto AssignAscii(const ::TStringBuf& s) { 
+    auto AssignAscii(const ::TStringBuf& s) {
         clear();
         return AppendAscii(s);
     }
 
-    auto AssignUtf8(const ::TStringBuf& s) { 
+    auto AssignUtf8(const ::TStringBuf& s) {
         clear();
         return AppendUtf8(s);
     }
 
-    auto AssignUtf16(const ::TWtringBuf& s) { 
+    auto AssignUtf16(const ::TWtringBuf& s) {
         clear();
         return AppendUtf16(s);
     }
@@ -690,7 +690,7 @@ public:
         return *this;
     }
 
-    TBasicString& operator=(const TBasicStringBuf<TCharType, TTraits> s) { 
+    TBasicString& operator=(const TBasicStringBuf<TCharType, TTraits> s) {
         return assign(s);
     }
 
@@ -769,19 +769,19 @@ public:
         return *this;
     }
 
-    TBasicString& AppendNoAlias(const TBasicStringBuf<TCharType, TTraits> s) { 
-        return AppendNoAlias(s.data(), s.size()); 
+    TBasicString& AppendNoAlias(const TBasicStringBuf<TCharType, TTraits> s) {
+        return AppendNoAlias(s.data(), s.size());
     }
 
-    TBasicString& AppendNoAlias(const TBasicStringBuf<TCharType, TTraits> s, size_t spos, size_t sn = TBase::npos) { 
+    TBasicString& AppendNoAlias(const TBasicStringBuf<TCharType, TTraits> s, size_t spos, size_t sn = TBase::npos) {
         return AppendNoAlias(s.SubString(spos, sn));
     }
 
-    TBasicString& append(const TBasicStringBuf<TCharType, TTraits> s) { 
-        return append(s.data(), s.size()); 
+    TBasicString& append(const TBasicStringBuf<TCharType, TTraits> s) {
+        return append(s.data(), s.size());
     }
 
-    TBasicString& append(const TBasicStringBuf<TCharType, TTraits> s, size_t spos, size_t sn = TBase::npos) { 
+    TBasicString& append(const TBasicStringBuf<TCharType, TTraits> s, size_t spos, size_t sn = TBase::npos) {
         return append(s.SubString(spos, sn));
     }
 
@@ -794,11 +794,11 @@ public:
      *    Certain invocations of this method will result in link-time error.
      *    You are free to implement corresponding methods in string.cpp if you need them.
      */
-    TBasicString& AppendAscii(const ::TStringBuf& s); 
+    TBasicString& AppendAscii(const ::TStringBuf& s);
 
-    TBasicString& AppendUtf8(const ::TStringBuf& s); 
+    TBasicString& AppendUtf8(const ::TStringBuf& s);
 
-    TBasicString& AppendUtf16(const ::TWtringBuf& s); 
+    TBasicString& AppendUtf16(const ::TWtringBuf& s);
 
     inline void push_back(TCharType c) {
         // TODO
@@ -884,7 +884,7 @@ public:
         return std::move(s1);
     }
 
-    friend TBasicString operator+(TBasicString&& s1, const TBasicStringBuf<TCharType, TTraits> s2) Y_WARN_UNUSED_RESULT { 
+    friend TBasicString operator+(TBasicString&& s1, const TBasicStringBuf<TCharType, TTraits> s2) Y_WARN_UNUSED_RESULT {
         s1 += s2;
         return std::move(s1);
     }
@@ -907,7 +907,7 @@ public:
         return Join(s1, s2);
     }
 
-    friend TBasicString operator+(const TBasicString& s1, const TBasicStringBuf<TCharType, TTraits> s2) Y_WARN_UNUSED_RESULT { 
+    friend TBasicString operator+(const TBasicString& s1, const TBasicStringBuf<TCharType, TTraits> s2) Y_WARN_UNUSED_RESULT {
         return Join(s1, s2);
     }
 
@@ -916,7 +916,7 @@ public:
     }
 
     friend TBasicString operator+(const TBasicString& s1, TCharType s2) Y_WARN_UNUSED_RESULT {
-        return Join(s1, TBasicStringBuf<TCharType, TTraits>(&s2, 1)); 
+        return Join(s1, TBasicStringBuf<TCharType, TTraits>(&s2, 1));
     }
 
     friend TBasicString operator+(const TCharType* s1, TBasicString&& s2) Y_WARN_UNUSED_RESULT {
@@ -924,12 +924,12 @@ public:
         return std::move(s2);
     }
 
-    friend TBasicString operator+(const TBasicStringBuf<TCharType, TTraits> s1, TBasicString&& s2) Y_WARN_UNUSED_RESULT { 
+    friend TBasicString operator+(const TBasicStringBuf<TCharType, TTraits> s1, TBasicString&& s2) Y_WARN_UNUSED_RESULT {
         s2.prepend(s1);
         return std::move(s2);
     }
 
-    friend TBasicString operator+(const TBasicStringBuf<TCharType, TTraits> s1, const TBasicString& s2) Y_WARN_UNUSED_RESULT { 
+    friend TBasicString operator+(const TBasicStringBuf<TCharType, TTraits> s1, const TBasicString& s2) Y_WARN_UNUSED_RESULT {
         return Join(s1, s2);
     }
 
@@ -976,7 +976,7 @@ public:
         return *this;
     }
 
-    TBasicString& prepend(const TBasicStringBuf<TCharType, TTraits> s, size_t spos = 0, size_t sn = TBase::npos) { 
+    TBasicString& prepend(const TBasicStringBuf<TCharType, TTraits> s, size_t spos = 0, size_t sn = TBase::npos) {
         return insert(0, s, spos, sn);
     }
 
@@ -1029,7 +1029,7 @@ public:
         return this->insert(pos, 1, ch);
     }
 
-    TBasicString& insert(size_t pos, const TBasicStringBuf<TCharType, TTraits> s, size_t spos = 0, size_t sn = TBase::npos) { 
+    TBasicString& insert(size_t pos, const TBasicStringBuf<TCharType, TTraits> s, size_t spos = 0, size_t sn = TBase::npos) {
         MutRef().insert(pos, s, spos, sn);
 
         return *this;

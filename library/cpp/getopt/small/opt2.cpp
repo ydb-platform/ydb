@@ -17,7 +17,7 @@ void Opt2::Clear() {
 
 void Opt2::Init(int argc, char* const* argv, const char* optspec, IntRange free_args_num, const char* long_alias) {
     Clear();
-    Argc = argc;
+    Argc = argc; 
     Argv = argv;
     HasErrors = false, BadPosCount = false, UnknownOption = 0, OptionMissingArg = 0;
     UnknownLongOption = nullptr;

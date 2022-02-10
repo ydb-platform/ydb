@@ -6,11 +6,11 @@
 #include <util/generic/singleton.h>
 
 TCgiParameters::TCgiParameters(std::initializer_list<std::pair<TString, TString>> il) {
-    for (const auto& item : il) { 
-        insert(item); 
-    } 
-} 
- 
+    for (const auto& item : il) {
+        insert(item);
+    }
+}
+
 const TString& TCgiParameters::Get(const TStringBuf name, size_t numOfValue) const noexcept {
     const auto it = Find(name, numOfValue);
 

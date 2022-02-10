@@ -7,7 +7,7 @@
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 
-#include <initializer_list> 
+#include <initializer_list>
 
 struct TStringLess {
     template <class T1, class T2>
@@ -25,7 +25,7 @@ public:
     }
 
     TCgiParameters(std::initializer_list<std::pair<TString, TString>> il);
- 
+
     void Flush() {
         erase(begin(), end());
     }

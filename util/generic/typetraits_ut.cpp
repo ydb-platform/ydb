@@ -72,10 +72,10 @@ namespace {
     };
 }
 
-#define ASSERT_SAME_TYPE(x, y)                     \ 
-    {                                              \ 
-        const bool x_ = std::is_same<x, y>::value; \ 
-        UNIT_ASSERT_C(x_, #x " != " #y);           \ 
+#define ASSERT_SAME_TYPE(x, y)                     \
+    {                                              \
+        const bool x_ = std::is_same<x, y>::value; \
+        UNIT_ASSERT_C(x_, #x " != " #y);           \
     }
 
 Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
@@ -132,9 +132,9 @@ Y_UNIT_TEST_SUITE(TTypeTraitsTest) {
 
         bool a;
 
-        a = std::is_same<typename TTypeTraits<T>::TFuncParam, T>::value; 
+        a = std::is_same<typename TTypeTraits<T>::TFuncParam, T>::value;
         UNIT_ASSERT(a);
-        a = std::is_same<typename TTypeTraits<const volatile T>::TFuncParam, const volatile T>::value; 
+        a = std::is_same<typename TTypeTraits<const volatile T>::TFuncParam, const volatile T>::value;
         UNIT_ASSERT(a);
     }
 

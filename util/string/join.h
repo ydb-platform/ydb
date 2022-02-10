@@ -173,7 +173,7 @@ inline TBasicString<TCharType> JoinSeq(std::basic_string_view<TCharType> delim, 
     using std::end;
     return JoinRange(delim, begin(data), end(data));
 }
- 
+
 template <typename TCharType, typename TContainer>
 inline TBasicString<TCharType> JoinSeq(const TCharType* delim, const TContainer& data) {
     TBasicStringBuf<TCharType> delimBuf = delim;
@@ -252,13 +252,13 @@ constexpr auto MakeRangeJoiner(TStringBuf delim, const std::initializer_list<TVa
  * If someone needs to join std::initializer_list<TString> -- it still works because of the TContainer template above.
 */
 
-template <typename T> 
+template <typename T>
 inline std::enable_if_t<
     !std::is_same<std::decay_t<T>, TString>::value && !std::is_same<std::decay_t<T>, const char*>::value,
     TString>
 JoinSeq(const TStringBuf delim, const std::initializer_list<T>& data) {
-    return JoinRange(delim, data.begin(), data.end()); 
-} 
+    return JoinRange(delim, data.begin(), data.end());
+}
 
 inline TString JoinSeq(const TStringBuf delim, const std::initializer_list<TStringBuf>& data) {
     return JoinRange(delim, data.begin(), data.end());

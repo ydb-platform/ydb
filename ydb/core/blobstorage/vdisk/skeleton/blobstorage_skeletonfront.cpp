@@ -24,11 +24,11 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
-#include <util/generic/set.h> 
+#include <util/generic/set.h>
 #include <util/generic/maybe.h>
 
 using namespace NKikimrServices;
- 
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////

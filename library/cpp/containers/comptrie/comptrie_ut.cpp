@@ -1039,7 +1039,7 @@ public:
     typedef T TData;
 
     static TData Data(const TString&) {
-        return RandomNumber<std::make_unsigned_t<T>>(); 
+        return RandomNumber<std::make_unsigned_t<T>>();
     }
 };
 

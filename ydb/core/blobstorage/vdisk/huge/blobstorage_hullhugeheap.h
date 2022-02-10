@@ -6,7 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_log.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_hugeblobctx.h>
 #include <ydb/core/util/bits.h>
-#include <util/generic/set.h> 
+#include <util/generic/set.h>
 #include <util/ysaveload.h>
 
 namespace NKikimr {

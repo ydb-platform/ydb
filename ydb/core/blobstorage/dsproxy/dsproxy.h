@@ -19,8 +19,8 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/group_stat.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <util/generic/hash_set.h> 
- 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr {
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);

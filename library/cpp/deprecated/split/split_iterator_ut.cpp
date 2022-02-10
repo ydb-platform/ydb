@@ -38,7 +38,7 @@ void TSplitIteratorTest::TestDelimitersSplit() {
         TDelimitersSplit split(s, delims);
         TSplitTokens tokens;
         Split(split, &tokens);
-        TSplitTokens pattern = {"1", "3", "45"}; 
+        TSplitTokens pattern = {"1", "3", "45"};
         UNIT_ASSERT(tokens == pattern);
     }
     {
@@ -47,7 +47,7 @@ void TSplitIteratorTest::TestDelimitersSplit() {
         TDelimitersSplit split(s, delims);
         TSplitTokens tokens;
         Split(split, &tokens);
-        TSplitTokens pattern = {}; 
+        TSplitTokens pattern = {};
         UNIT_ASSERT(tokens == pattern);
     }
 }
@@ -59,7 +59,7 @@ void TSplitIteratorTest::TestDelimitersStrictSplit() {
         TDelimitersStrictSplit split(s, delims);
         TSplitTokens tokens;
         Split(split, &tokens);
-        TSplitTokens pattern = {"grp", "2"}; 
+        TSplitTokens pattern = {"grp", "2"};
         UNIT_ASSERT(tokens == pattern);
     }
 
@@ -69,7 +69,7 @@ void TSplitIteratorTest::TestDelimitersStrictSplit() {
         TDelimitersStrictSplit split(s, delims);
         TSplitTokens tokens;
         Split(split, &tokens);
-        TSplitTokens pattern = {"", "grp", "2", ""}; 
+        TSplitTokens pattern = {"", "grp", "2", ""};
         UNIT_ASSERT(tokens == pattern);
     }
 }

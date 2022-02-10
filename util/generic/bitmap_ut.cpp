@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(TBitMapTest) {
     }
 
     Y_UNIT_TEST(TestHashMixed) {
-        static_assert((std::is_same<TDynBitMap::TChunk, ui64>::value), "expect (TSameType<TDynBitMap::TChunk, ui64>::Result)"); 
+        static_assert((std::is_same<TDynBitMap::TChunk, ui64>::value), "expect (TSameType<TDynBitMap::TChunk, ui64>::Result)");
 
         TBitMap<sizeof(ui64) * 16, ui64> bitmapFixed;
         TDynBitMap bitmapDynamic;

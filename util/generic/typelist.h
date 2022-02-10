@@ -4,8 +4,8 @@
 
 #include <util/generic/typetraits.h>
 
-#include <type_traits> 
- 
+#include <type_traits>
+
 template <class... R>
 struct TTypeList;
 

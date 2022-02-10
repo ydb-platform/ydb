@@ -27,7 +27,7 @@ namespace NRainCheck {
         TContinueFunc(TContinueFunc (TTask::*func)())
             : Func((TFunc)func)
         {
-            static_assert((std::is_base_of<ISimpleTask, TTask>::value), "expect (std::is_base_of<ISimpleTask, TTask>::value)"); 
+            static_assert((std::is_base_of<ISimpleTask, TTask>::value), "expect (std::is_base_of<ISimpleTask, TTask>::value)");
         }
 
         bool operator!() const {

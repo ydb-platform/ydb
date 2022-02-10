@@ -16,7 +16,7 @@
 class TMemoryInput: public IZeroCopyInputFastReadTo {
 public:
     TMemoryInput() noexcept;
-
+ 
     /**
      * Constructs a stream that reads from the provided memory block. It's up
      * to the user to make sure that the memory block doesn't get freed while

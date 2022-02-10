@@ -69,7 +69,7 @@ public:
     inline size_t ReadTo(TString& st, char ch) {
         return DoReadTo(st, ch);
     }
-
+ 
     /**
      * Reads the requested amount of data from the stream. Unlike `Read`, this
      * function stops only when the requested amount of data is read, or when
@@ -92,14 +92,14 @@ public:
      * @see Load
      */
     void LoadOrFail(void* buf, size_t len);
-
+ 
     /**
      * Reads all data from this stream and returns it as a string.
      *
      * @returns                         Contents of this stream as a string.
      */
     TString ReadAll();
-
+ 
     /**
      * Reads all data from this stream and writes it into a provided output
      * stream.
@@ -120,7 +120,7 @@ public:
      *                                  reached.
      */
     TString ReadLine();
-
+ 
     /**
      * Reads all characters from the stream until the given character is
      * encountered and returns them as a string. The character itself is read
@@ -133,7 +133,7 @@ public:
      *                                  reached.
      */
     TString ReadTo(char ch);
-
+ 
     /**
      * Reads all data from the stream until the first occurrence of '\n' and
      * stores it into provided string. Also handles Windows line breaks correctly.

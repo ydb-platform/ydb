@@ -39,7 +39,7 @@ public:
     TBufferOutput& operator=(TBufferOutput&&) noexcept;
 
     ~TBufferOutput() override;
-
+ 
     /**
      * @returns                         Buffer that this stream writes into.
      */

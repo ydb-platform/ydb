@@ -21,7 +21,7 @@ struct THttpParseException: public THttpException {
 struct THttpReadException: public THttpException {
 };
 
-/// Чтение ответа HTTP-сервера.
+/// Чтение ответа HTTP-сервера. 
 class THttpInput: public IInputStream {
 public:
     THttpInput(IInputStream* slave);
@@ -65,7 +65,7 @@ public:
     /// Проверяет, поддерживается ли данный тип кодирования содержимого
     /// ответа HTTP-сервера.
     bool AcceptEncoding(const TString& coding) const;
-
+ 
     /// Пытается определить наилучший тип кодирования ответа HTTP-сервера.
     /// @details Если ответ сервера говорит о том, что поддерживаются
     /// любые типы кодирования, выбирается gzip. В противном случае
@@ -95,7 +95,7 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/// Передача запроса HTTP-серверу.
+/// Передача запроса HTTP-серверу. 
 class THttpOutput: public IOutputStream {
 public:
     THttpOutput(IOutputStream* slave);
@@ -111,7 +111,7 @@ public:
     /// Устанавливает режим, при котором сервер выдает ответ в упакованном виде.
     void EnableCompression(bool enable);
     void EnableCompression(TArrayRef<const TStringBuf> schemas);
-
+ 
     /// Устанавливает режим, при котором соединение с сервером не завершается
     /// после окончания транзакции.
     void EnableKeepAlive(bool enable);
@@ -126,7 +126,7 @@ public:
 
     /// Проверяет, производится ли выдача ответов в упакованном виде.
     bool IsCompressionEnabled() const noexcept;
-
+ 
     /// Проверяет, не завершается ли соединение с сервером после окончания транзакции.
     bool IsKeepAliveEnabled() const noexcept;
 
@@ -167,12 +167,12 @@ private:
     THolder<TImpl> Impl_;
 };
 
-/// Возвращает код состояния из ответа сервера.
+/// Возвращает код состояния из ответа сервера. 
 unsigned ParseHttpRetCode(const TStringBuf& ret);
 
-/// Отправляет HTTP-серверу запрос с минимумом необходимых заголовков.
+/// Отправляет HTTP-серверу запрос с минимумом необходимых заголовков. 
 void SendMinimalHttpRequest(TSocket& s, const TStringBuf& host, const TStringBuf& request, const TStringBuf& agent = "YandexSomething/1.0", const TStringBuf& from = "webadmin@yandex.ru");
 
 TArrayRef<const TStringBuf> SupportedCodings();
 
-/// @}
+/// @} 

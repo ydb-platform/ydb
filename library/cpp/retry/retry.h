@@ -3,7 +3,7 @@
 #include "utils.h"
 
 #include <library/cpp/retry/protos/retry_options.pb.h>
-
+ 
 #include <util/datetime/base.h>
 #include <util/generic/maybe.h>
 #include <util/generic/typetraits.h>
@@ -129,5 +129,5 @@ void DoWithRetry(std::function<void()> func, TRetryOptions retryOptions);
 bool DoWithRetryOnRetCode(std::function<bool()> func, TRetryOptions retryOptions);
 
 Y_DECLARE_PODTYPE(TRetryOptions);
-
-TRetryOptions MakeRetryOptions(const NRetry::TRetryOptionsPB& retryOptions);
+ 
+TRetryOptions MakeRetryOptions(const NRetry::TRetryOptionsPB& retryOptions); 

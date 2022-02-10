@@ -1,14 +1,14 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/generic/yexception.h> 
+#include <util/generic/yexception.h>
 #include <util/system/fs.h>
 #include <util/system/tempfile.h>
 #include <util/random/random.h>
- 
+
 #include "direct_io.h"
 
-static const char* FileName_("./test.file"); 
- 
+static const char* FileName_("./test.file");
+
 Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
     Y_UNIT_TEST(TestDirectFile) {
         TDirectIOBufferedFile file(FileName_, RdWr | Direct | Seq | CreateAlways, 1 << 15);
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
         }
         NFs::Remove(FileName_);
     }
- 
+
     void TestHugeFile(size_t size) {
         TTempFile tmpFile("test.file");
 
@@ -87,29 +87,29 @@ Y_UNIT_TEST_SUITE(TDirectIoTestSuite) {
         }
     }
 }
- 
-Y_UNIT_TEST_SUITE(TDirectIoErrorHandling) { 
-    Y_UNIT_TEST(Constructor) { 
-        // A non-existent file should not be opened for reading 
+
+Y_UNIT_TEST_SUITE(TDirectIoErrorHandling) {
+    Y_UNIT_TEST(Constructor) {
+        // A non-existent file should not be opened for reading
         UNIT_ASSERT_EXCEPTION(TDirectIOBufferedFile(FileName_, RdOnly, 1 << 15), TFileError);
-    } 
- 
-    Y_UNIT_TEST(WritingReadOnlyFileBufferFlushed) { 
-        // Note the absence of Direct 
-        TDirectIOBufferedFile file(FileName_, RdOnly | OpenAlways, 1); 
-        TString buffer = "Hello"; 
-        UNIT_ASSERT_EXCEPTION(file.Write(buffer.data(), buffer.size()), TFileError); 
-        NFs::Remove(FileName_); 
-    } 
- 
-    Y_UNIT_TEST(WritingReadOnlyFileAllInBuffer) { 
-        TDirectIOBufferedFile file(FileName_, RdOnly | Direct | Seq | OpenAlways, 1 << 15); 
-        TString buffer = "Hello"; 
- 
-        // Doesn't throw because of buffering. 
-        file.Write(buffer.data(), buffer.size()); 
- 
-        UNIT_ASSERT_EXCEPTION(file.Finish(), TFileError); 
-        NFs::Remove(FileName_); 
-    } 
-} 
+    }
+
+    Y_UNIT_TEST(WritingReadOnlyFileBufferFlushed) {
+        // Note the absence of Direct
+        TDirectIOBufferedFile file(FileName_, RdOnly | OpenAlways, 1);
+        TString buffer = "Hello";
+        UNIT_ASSERT_EXCEPTION(file.Write(buffer.data(), buffer.size()), TFileError);
+        NFs::Remove(FileName_);
+    }
+
+    Y_UNIT_TEST(WritingReadOnlyFileAllInBuffer) {
+        TDirectIOBufferedFile file(FileName_, RdOnly | Direct | Seq | OpenAlways, 1 << 15);
+        TString buffer = "Hello";
+
+        // Doesn't throw because of buffering.
+        file.Write(buffer.data(), buffer.size());
+
+        UNIT_ASSERT_EXCEPTION(file.Finish(), TFileError);
+        NFs::Remove(FileName_);
+    }
+}

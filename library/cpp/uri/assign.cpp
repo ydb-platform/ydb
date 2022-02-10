@@ -320,7 +320,7 @@ namespace NUri {
             char* end = out.Buf();
             const EField fld = convertIDN ? FieldHost : FieldHostAscii;
             FldSetNoDirty(fld, TStringBuf(beg, end));
-            out << '\0'; 
+            out << '\0';
         }
 
         Buffer.Resize(out.Len());

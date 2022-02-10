@@ -53,7 +53,7 @@ RECURSE(
     zookeeper
     jdk
     jdk/test
-    xmllint
+    xmllint 
 )
 
 IF (NOT OS_WINDOWS)

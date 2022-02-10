@@ -103,48 +103,48 @@ protected:
             //Expected exception is length_error:
             UNIT_ASSERT(false);
         }
- 
-        // Non-shared behaviour - never shrink 
- 
-        s.reserve(256); 
+
+        // Non-shared behaviour - never shrink
+
+        s.reserve(256);
     #ifndef TSTRING_IS_STD_STRING
-        const auto* data = s.data(); 
- 
-        UNIT_ASSERT(s.capacity() >= 256); 
- 
-        s.reserve(128); 
- 
-        UNIT_ASSERT(s.capacity() >= 256 && s.data() == data); 
+        const auto* data = s.data();
+
+        UNIT_ASSERT(s.capacity() >= 256);
+
+        s.reserve(128);
+
+        UNIT_ASSERT(s.capacity() >= 256 && s.data() == data);
     #endif
- 
-        s.resize(64, 'x'); 
-        s.reserve(10); 
- 
+
+        s.resize(64, 'x');
+        s.reserve(10);
+
     #ifdef TSTRING_IS_STD_STRING
         UNIT_ASSERT(s.capacity() >= 64);
     #else
-        UNIT_ASSERT(s.capacity() >= 256 && s.data() == data); 
+        UNIT_ASSERT(s.capacity() >= 256 && s.data() == data);
     #endif
- 
+
     #ifndef TSTRING_IS_STD_STRING
-        // Shared behaviour - always reallocate, just as much as requisted 
- 
+        // Shared behaviour - always reallocate, just as much as requisted
+
         TStringType holder = s;
- 
-        UNIT_ASSERT(s.capacity() >= 256); 
- 
-        s.reserve(128); 
- 
-        UNIT_ASSERT(s.capacity() >= 128 && s.capacity() < 256 && s.data() != data); 
+
+        UNIT_ASSERT(s.capacity() >= 256);
+
+        s.reserve(128);
+
+        UNIT_ASSERT(s.capacity() >= 128 && s.capacity() < 256 && s.data() != data);
         UNIT_ASSERT(s.IsDetached());
- 
-        s.resize(64, 'x'); 
-        data = s.data(); 
-        holder = s; 
- 
-        s.reserve(10); 
- 
-        UNIT_ASSERT(s.capacity() >= 64 && s.capacity() < 128 && s.data() != data); 
+
+        s.resize(64, 'x');
+        data = s.data();
+        holder = s;
+
+        s.reserve(10);
+
+        UNIT_ASSERT(s.capacity() >= 64 && s.capacity() < 128 && s.data() != data);
         UNIT_ASSERT(s.IsDetached());
     #endif
 #endif

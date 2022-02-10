@@ -35,11 +35,11 @@ std::unique_ptr<TimeZoneIf> TimeZoneIf::Load(const std::string& name) {
 TimeZoneIf::~TimeZoneIf() {}
 
 time_point<seconds> UnixSecondsToTimePoint(std::int_fast64_t seconds) {
-  return FromUnixSeconds(seconds);
-}
-
+  return FromUnixSeconds(seconds); 
+} 
+ 
 std::int_fast64_t TimePointToUnixSeconds(const time_point<seconds>& tp) {
-  return ToUnixSeconds(tp);
-}
-
+  return ToUnixSeconds(tp); 
+} 
+ 
 }  // namespace cctz

@@ -9,6 +9,6 @@ RECURSE(
     pire/ut
     pire2hyperscan
     pire2hyperscan/ut
-    regexp_classifier
-    regexp_classifier/ut
+    regexp_classifier 
+    regexp_classifier/ut 
 )

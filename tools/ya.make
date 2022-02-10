@@ -111,7 +111,7 @@ RECURSE(
     prwordsfr
     pure_compiler
     pure_fingerprints
-    pycron
+    pycron 
     python-netconfig-static
     qlz
     query_marker_builder

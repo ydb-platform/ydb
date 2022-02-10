@@ -84,7 +84,7 @@ RECURSE(
     atpublic
     AttrDict
     attrs
-    Authlib 
+    Authlib
     autobahn
     Automat
     awscli

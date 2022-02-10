@@ -1824,18 +1824,18 @@ class LD(Linker):
             else:
                 self.ar = 'ar'
 
-        self.ar_type = 'GNU_AR'
-        self.llvm_ar_format = 'None'
-
-        if 'libtool' in self.ar:
-            self.ar_type = 'LIBTOOL'
-        elif 'llvm-ar' in self.ar:
-            self.ar_type = 'LLVM_AR'
-            if target.is_apple:
-                self.llvm_ar_format="darwin"
-            else:
-                self.llvm_ar_format="gnu"
-
+        self.ar_type = 'GNU_AR' 
+        self.llvm_ar_format = 'None' 
+ 
+        if 'libtool' in self.ar: 
+            self.ar_type = 'LIBTOOL' 
+        elif 'llvm-ar' in self.ar: 
+            self.ar_type = 'LLVM_AR' 
+            if target.is_apple: 
+                self.llvm_ar_format="darwin" 
+            else: 
+                self.llvm_ar_format="gnu" 
+ 
         self.ld_flags = []
 
         # Save linker's stdout to an additional .txt output file
@@ -1970,7 +1970,7 @@ class LD(Linker):
         super(LD, self).print_linker()
 
         emit('AR_TOOL', self.ar)
-        emit('AR_TYPE', self.ar_type)
+        emit('AR_TYPE', self.ar_type) 
 
         emit('STRIP_TOOL_VENDOR', self.strip)
         emit('OBJCOPY_TOOL_VENDOR', self.objcopy)

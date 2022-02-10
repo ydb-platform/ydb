@@ -9,11 +9,11 @@
 #include <util/generic/fwd.h>
 #include <util/generic/ptr.h>
 
-#include <functional> 
+#include <functional>
 #include <cstdarg>
 
 using TLogFormatter = std::function<TString(ELogPriority priority, TStringBuf)>;
- 
+
 // Logging facilities interface.
 //
 // ```cpp
@@ -109,7 +109,7 @@ private:
     TIntrusivePtr<TImpl> Impl_;
     TLogFormatter Formatter_;
 };
- 
+
 THolder<TLogBackend> CreateLogBackend(const TString& fname, ELogPriority priority = LOG_MAX_PRIORITY, bool threaded = false);
 THolder<TLogBackend> CreateFilteredOwningThreadedLogBackend(const TString& fname, ELogPriority priority = LOG_MAX_PRIORITY, size_t queueLen = 0);
 THolder<TOwningThreadedLogBackend> CreateOwningThreadedLogBackend(const TString& fname, size_t queueLen = 0);

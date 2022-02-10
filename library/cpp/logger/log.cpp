@@ -3,7 +3,7 @@
 #include "filter.h"
 #include "null.h"
 #include "stream.h"
-#include "thread.h" 
+#include "thread.h"
 
 #include <util/string/cast.h>
 #include <util/stream/printf.h>
@@ -16,8 +16,8 @@ THolder<TLogBackend> CreateLogBackend(const TString& fname, ELogPriority priorit
     TLogBackendCreatorUninitialized creator;
     creator.InitCustom(fname, priority, threaded);
     return creator.CreateLogBackend();
-} 
- 
+}
+
 THolder<TLogBackend> CreateFilteredOwningThreadedLogBackend(const TString& fname, ELogPriority priority, size_t queueLen) {
     return MakeHolder<TFilteredLogBackend>(CreateOwningThreadedLogBackend(fname, queueLen), priority);
 }
@@ -230,9 +230,9 @@ void TLog::Write(ELogPriority priority, const char* data, size_t len) const {
     if (Formatter_) {
         const auto formated = Formatter_(priority, TStringBuf{data, len});
         Impl_->WriteData(priority, formated.data(), formated.size());
-    } else { 
-        Impl_->WriteData(priority, data, len); 
-    } 
+    } else {
+        Impl_->WriteData(priority, data, len);
+    }
 }
 
 void TLog::Write(ELogPriority priority, const TStringBuf data) const {
@@ -240,12 +240,12 @@ void TLog::Write(ELogPriority priority, const TStringBuf data) const {
 }
 
 void TLog::Write(const char* data, size_t len) const {
-    Write(Impl_->DefaultPriority(), data, len); 
+    Write(Impl_->DefaultPriority(), data, len);
 }
- 
-void TLog::SetFormatter(TLogFormatter formatter) noexcept { 
+
+void TLog::SetFormatter(TLogFormatter formatter) noexcept {
     Formatter_ = std::move(formatter);
-} 
+}
 
 size_t TLog::BackEndQueueSize() const {
     return Impl_->BackEndQueueSize();

@@ -13,10 +13,10 @@
 
 #define JSON_TO_FIELD(EProtoCppType, name, json, JsonCheckType, ProtoSet, JsonGet)        \
     case FieldDescriptor::EProtoCppType: {                                          \
-        if (config.CastRobust) {                                                    \ 
-            reflection->ProtoSet(&proto, &field, json.JsonGet##Robust());           \ 
-            break;                                                                  \ 
-        }                                                                           \ 
+        if (config.CastRobust) {                                                    \
+            reflection->ProtoSet(&proto, &field, json.JsonGet##Robust());           \
+            break;                                                                  \
+        }                                                                           \
         if (!json.JsonCheckType()) {                                                \
             if (config.CastFromString && json.IsString()) {                         \
                 if (config.DoNotCastEmptyStrings && json.GetString().empty()) {     \
@@ -87,12 +87,12 @@ JsonString2Field(const NJson::TJsonValue& json,
     const Reflection* reflection = proto.GetReflection();
     Y_ASSERT(!!reflection);
 
-    if (!json.IsString() && !config.CastRobust) { 
+    if (!json.IsString() && !config.CastRobust) {
         ythrow yexception() << "Invalid type of JSON field '" << field.name() << "': "
                             << "IsString() failed while "
                             << "CPPTYPE_STRING is expected.";
     }
-    TString value = json.GetStringRobust(); 
+    TString value = json.GetStringRobust();
     for (size_t i = 0, endI = config.StringTransforms.size(); i < endI; ++i) {
         Y_ASSERT(!!config.StringTransforms[i]);
         if (!!config.StringTransforms[i]) {

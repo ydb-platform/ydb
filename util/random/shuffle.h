@@ -27,17 +27,17 @@ inline void Shuffle(TRandIter begin, TRandIterEnd end, TRandGen&& gen) {
         DoSwap(*(begin + i), *(begin + gen.Uniform(i + 1)));
     }
 }
- 
-template <typename TRange> 
-inline void ShuffleRange(TRange& range) { 
+
+template <typename TRange>
+inline void ShuffleRange(TRange& range) {
     auto b = range.begin();
 
     Shuffle(b, range.end());
-} 
- 
-template <typename TRange, typename TRandGen> 
-inline void ShuffleRange(TRange& range, TRandGen&& gen) { 
+}
+
+template <typename TRange, typename TRandGen>
+inline void ShuffleRange(TRange& range, TRandGen&& gen) {
     auto b = range.begin();
 
     Shuffle(b, range.end(), gen);
-} 
+}

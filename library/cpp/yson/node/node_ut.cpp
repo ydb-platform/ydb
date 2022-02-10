@@ -278,109 +278,109 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(node, nodeCopy);
     }
- 
+
     Y_UNIT_TEST(TestIntCast) {
-        TNode node = 1ull << 31; 
-        UNIT_ASSERT(node.IsUint64()); 
+        TNode node = 1ull << 31;
+        UNIT_ASSERT(node.IsUint64());
         UNIT_ASSERT_EXCEPTION(node.IntCast<i32>(), TNode::TTypeError);
         UNIT_ASSERT(node.IntCast<ui32>() == static_cast<ui32>(node.AsUint64()));
         UNIT_ASSERT(node.IntCast<i64>() == static_cast<i64>(node.AsUint64()));
-        UNIT_ASSERT(node.IntCast<ui64>() == node.AsUint64()); 
+        UNIT_ASSERT(node.IntCast<ui64>() == node.AsUint64());
 
-        node = 1ull << 63; 
-        UNIT_ASSERT(node.IsUint64()); 
-        UNIT_ASSERT_EXCEPTION(node.IntCast<i64>(), TNode::TTypeError); 
-        UNIT_ASSERT(node.IntCast<ui64>() == node.AsUint64()); 
- 
-        node = 12345; 
-        UNIT_ASSERT(node.IsInt64()); 
+        node = 1ull << 63;
+        UNIT_ASSERT(node.IsUint64());
+        UNIT_ASSERT_EXCEPTION(node.IntCast<i64>(), TNode::TTypeError);
+        UNIT_ASSERT(node.IntCast<ui64>() == node.AsUint64());
+
+        node = 12345;
+        UNIT_ASSERT(node.IsInt64());
         UNIT_ASSERT_EXCEPTION(node.IntCast<i8>(), TNode::TTypeError);
         UNIT_ASSERT_EXCEPTION(node.IntCast<ui8>(), TNode::TTypeError);
         UNIT_ASSERT(node.IntCast<i16>() == static_cast<i16>(node.AsInt64()));
         UNIT_ASSERT(node.IntCast<ui16>() == static_cast<ui16>(node.AsInt64()));
         UNIT_ASSERT(node.IntCast<i32>() == static_cast<i32>(node.AsInt64()));
         UNIT_ASSERT(node.IntCast<ui32>() == static_cast<ui32>(node.AsInt64()));
-        UNIT_ASSERT(node.IntCast<i64>() == node.AsInt64()); 
-        UNIT_ASSERT(node.IntCast<ui64>() == static_cast<ui64>(node.AsInt64())); 
+        UNIT_ASSERT(node.IntCast<i64>() == node.AsInt64());
+        UNIT_ASSERT(node.IntCast<ui64>() == static_cast<ui64>(node.AsInt64()));
 
-        node = -5; 
-        UNIT_ASSERT(node.IsInt64()); 
+        node = -5;
+        UNIT_ASSERT(node.IsInt64());
         UNIT_ASSERT(node.IntCast<i8>() == static_cast<i8>(node.AsInt64()));
         UNIT_ASSERT(node.IntCast<i16>() == static_cast<i16>(node.AsInt64()));
         UNIT_ASSERT(node.IntCast<i32>() == static_cast<i32>(node.AsInt64()));
-        UNIT_ASSERT(node.IntCast<i64>() == node.AsInt64()); 
+        UNIT_ASSERT(node.IntCast<i64>() == node.AsInt64());
         UNIT_ASSERT_EXCEPTION(node.IntCast<ui8>(), TNode::TTypeError);
         UNIT_ASSERT_EXCEPTION(node.IntCast<ui16>(), TNode::TTypeError);
         UNIT_ASSERT_EXCEPTION(node.IntCast<ui32>(), TNode::TTypeError);
-        UNIT_ASSERT_EXCEPTION(node.IntCast<ui64>(), TNode::TTypeError); 
-    } 
- 
+        UNIT_ASSERT_EXCEPTION(node.IntCast<ui64>(), TNode::TTypeError);
+    }
+
     Y_UNIT_TEST(TestConvertToString) {
-        UNIT_ASSERT_VALUES_EQUAL(TNode(5).ConvertTo<TString>(), "5"); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode(123432423).ConvertTo<TString>(), "123432423"); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode(123456789012345678ll).ConvertTo<TString>(), "123456789012345678"); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode(123456789012345678ull).ConvertTo<TString>(), "123456789012345678"); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode(-123456789012345678ll).ConvertTo<TString>(), "-123456789012345678"); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode(true).ConvertTo<TString>(), "1"); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode(false).ConvertTo<TString>(), "0"); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<TString>(), "5.3"); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(TNode(5).ConvertTo<TString>(), "5");
+        UNIT_ASSERT_VALUES_EQUAL(TNode(123432423).ConvertTo<TString>(), "123432423");
+        UNIT_ASSERT_VALUES_EQUAL(TNode(123456789012345678ll).ConvertTo<TString>(), "123456789012345678");
+        UNIT_ASSERT_VALUES_EQUAL(TNode(123456789012345678ull).ConvertTo<TString>(), "123456789012345678");
+        UNIT_ASSERT_VALUES_EQUAL(TNode(-123456789012345678ll).ConvertTo<TString>(), "-123456789012345678");
+        UNIT_ASSERT_VALUES_EQUAL(TNode(true).ConvertTo<TString>(), "1");
+        UNIT_ASSERT_VALUES_EQUAL(TNode(false).ConvertTo<TString>(), "0");
+        UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<TString>(), "5.3");
+    }
+
     Y_UNIT_TEST(TestConvertFromString) {
-        UNIT_ASSERT_VALUES_EQUAL(TNode("123456789012345678").ConvertTo<ui64>(), 123456789012345678ull); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode("123456789012345678").ConvertTo<i64>(), 123456789012345678); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode(ToString(1ull << 63)).ConvertTo<ui64>(), 1ull << 63); 
-        UNIT_ASSERT_EXCEPTION(TNode(ToString(1ull << 63)).ConvertTo<i64>(), TFromStringException); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode("5.34").ConvertTo<double>(), 5.34); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(TNode("123456789012345678").ConvertTo<ui64>(), 123456789012345678ull);
+        UNIT_ASSERT_VALUES_EQUAL(TNode("123456789012345678").ConvertTo<i64>(), 123456789012345678);
+        UNIT_ASSERT_VALUES_EQUAL(TNode(ToString(1ull << 63)).ConvertTo<ui64>(), 1ull << 63);
+        UNIT_ASSERT_EXCEPTION(TNode(ToString(1ull << 63)).ConvertTo<i64>(), TFromStringException);
+        UNIT_ASSERT_VALUES_EQUAL(TNode("5.34").ConvertTo<double>(), 5.34);
+    }
+
     Y_UNIT_TEST(TestConvertDoubleInt) {
         UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<i8>(), 5);
         UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<ui8>(), 5);
         UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<i64>(), 5);
-        UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<ui64>(), 5); 
+        UNIT_ASSERT_VALUES_EQUAL(TNode(5.3).ConvertTo<ui64>(), 5);
 
         UNIT_ASSERT_VALUES_EQUAL(TNode(-5.3).ConvertTo<i8>(), -5);
-        UNIT_ASSERT_VALUES_EQUAL(TNode(-5.3).ConvertTo<i64>(), -5); 
+        UNIT_ASSERT_VALUES_EQUAL(TNode(-5.3).ConvertTo<i64>(), -5);
         UNIT_ASSERT_EXCEPTION(TNode(-5.3).ConvertTo<ui8>(), TNode::TTypeError);
-        UNIT_ASSERT_EXCEPTION(TNode(-5.3).ConvertTo<ui64>(), TNode::TTypeError); 
+        UNIT_ASSERT_EXCEPTION(TNode(-5.3).ConvertTo<ui64>(), TNode::TTypeError);
 
         UNIT_ASSERT_VALUES_EQUAL(TNode(127.0).ConvertTo<i8>(), 127);
         UNIT_ASSERT_EXCEPTION(TNode(128.0).ConvertTo<i8>(), TNode::TTypeError);
         UNIT_ASSERT_VALUES_EQUAL(TNode(255.0).ConvertTo<ui8>(), 255);
         UNIT_ASSERT_EXCEPTION(TNode(256.0).ConvertTo<ui8>(), TNode::TTypeError);
-        UNIT_ASSERT_EXCEPTION(TNode(1e100).ConvertTo<i64>(), TNode::TTypeError); 
-        UNIT_ASSERT_EXCEPTION(TNode(1e100).ConvertTo<ui64>(), TNode::TTypeError); 
-        { 
+        UNIT_ASSERT_EXCEPTION(TNode(1e100).ConvertTo<i64>(), TNode::TTypeError);
+        UNIT_ASSERT_EXCEPTION(TNode(1e100).ConvertTo<ui64>(), TNode::TTypeError);
+        {
             double v = 1ull << 63;
-            TNode node = v; 
-            UNIT_ASSERT(node.IsDouble()); 
-            UNIT_ASSERT_EXCEPTION(node.ConvertTo<i64>(), TNode::TTypeError); 
-            UNIT_ASSERT_VALUES_EQUAL(node.ConvertTo<ui64>(), static_cast<ui64>(v)); 
-        } 
-        { 
-            double v = (double)(1ull << 63) + (1ull << 63); 
-            TNode node = v; 
-            UNIT_ASSERT(node.IsDouble()); 
-            UNIT_ASSERT_EXCEPTION(node.ConvertTo<i64>(), TNode::TTypeError); 
-            UNIT_ASSERT_EXCEPTION(node.ConvertTo<ui64>(), TNode::TTypeError); 
-        } 
-        UNIT_ASSERT_EXCEPTION(TNode(NAN).ConvertTo<ui64>(), TNode::TTypeError); 
-        UNIT_ASSERT_EXCEPTION(TNode(NAN).ConvertTo<i64>(), TNode::TTypeError); 
- 
-        UNIT_ASSERT_EXCEPTION(TNode(INFINITY).ConvertTo<ui64>(), TNode::TTypeError); 
-        UNIT_ASSERT_EXCEPTION(TNode(INFINITY).ConvertTo<i64>(), TNode::TTypeError); 
-    } 
- 
+            TNode node = v;
+            UNIT_ASSERT(node.IsDouble());
+            UNIT_ASSERT_EXCEPTION(node.ConvertTo<i64>(), TNode::TTypeError);
+            UNIT_ASSERT_VALUES_EQUAL(node.ConvertTo<ui64>(), static_cast<ui64>(v));
+        }
+        {
+            double v = (double)(1ull << 63) + (1ull << 63);
+            TNode node = v;
+            UNIT_ASSERT(node.IsDouble());
+            UNIT_ASSERT_EXCEPTION(node.ConvertTo<i64>(), TNode::TTypeError);
+            UNIT_ASSERT_EXCEPTION(node.ConvertTo<ui64>(), TNode::TTypeError);
+        }
+        UNIT_ASSERT_EXCEPTION(TNode(NAN).ConvertTo<ui64>(), TNode::TTypeError);
+        UNIT_ASSERT_EXCEPTION(TNode(NAN).ConvertTo<i64>(), TNode::TTypeError);
+
+        UNIT_ASSERT_EXCEPTION(TNode(INFINITY).ConvertTo<ui64>(), TNode::TTypeError);
+        UNIT_ASSERT_EXCEPTION(TNode(INFINITY).ConvertTo<i64>(), TNode::TTypeError);
+    }
+
     Y_UNIT_TEST(TestConvertToBool) {
-        UNIT_ASSERT_VALUES_EQUAL(TNode("true").ConvertTo<bool>(), true); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode("TRUE").ConvertTo<bool>(), true); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode("false").ConvertTo<bool>(), false); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode("FALSE").ConvertTo<bool>(), false); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode(1).ConvertTo<bool>(), true); 
-        UNIT_ASSERT_VALUES_EQUAL(TNode(0).ConvertTo<bool>(), false); 
-        UNIT_ASSERT_EXCEPTION(TNode("random").ConvertTo<bool>(), TFromStringException); 
-        UNIT_ASSERT_EXCEPTION(TNode("").ConvertTo<bool>(), TFromStringException); 
+        UNIT_ASSERT_VALUES_EQUAL(TNode("true").ConvertTo<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(TNode("TRUE").ConvertTo<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(TNode("false").ConvertTo<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(TNode("FALSE").ConvertTo<bool>(), false);
+        UNIT_ASSERT_VALUES_EQUAL(TNode(1).ConvertTo<bool>(), true);
+        UNIT_ASSERT_VALUES_EQUAL(TNode(0).ConvertTo<bool>(), false);
+        UNIT_ASSERT_EXCEPTION(TNode("random").ConvertTo<bool>(), TFromStringException);
+        UNIT_ASSERT_EXCEPTION(TNode("").ConvertTo<bool>(), TFromStringException);
     }
 
     Y_UNIT_TEST(TestCanonicalSerialization) {
@@ -395,7 +395,7 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
                 "{\"i\"=\"i\";\"ii\"=\"ii\";\"jj\"=\"jj\"};"
             "\"c\"=\"c\";\"ca\"=\"ca\"}");
     }
- 
+
     Y_UNIT_TEST(OperatorEqualSubnode) {
         TNode node;
         node["a"]["b"] = "c";
@@ -406,79 +406,79 @@ Y_UNIT_TEST_SUITE(YtNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(node.AsString(), "c");
     }
 
-    Y_UNIT_TEST(TestMapGetters) { 
-        auto node = TNode::CreateMap() 
-            ("string", "7") 
-            ("int64", 3) 
-            ("uint64", 5u) 
-            ("double", -3.5) 
-            ("list", TNode::CreateList().Add(5)) 
-            ("map", TNode::CreateMap()("key", "value")); 
+    Y_UNIT_TEST(TestMapGetters) {
+        auto node = TNode::CreateMap()
+            ("string", "7")
+            ("int64", 3)
+            ("uint64", 5u)
+            ("double", -3.5)
+            ("list", TNode::CreateList().Add(5))
+            ("map", TNode::CreateMap()("key", "value"));
 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>("string"), "7");
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsString("string"), "7"); 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<i64>("string"), 7); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsString("string"), "7");
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<i64>("string"), 7);
+
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<i64>("int64"), 3);
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsInt64("int64"), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<ui64>("int64"), 3u); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsInt64("int64"), 3);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<ui64>("int64"), 3u);
+
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<ui64>("uint64"), 5u);
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsUint64("uint64"), 5u); 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<i64>("uint64"), 5); 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>("uint64"), "5"); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsUint64("uint64"), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<i64>("uint64"), 5);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>("uint64"), "5");
+
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<double>("double"), -3.5);
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsDouble("double"), -3.5); 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>("double"), "-3.5"); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsDouble("double"), -3.5);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>("double"), "-3.5");
+
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TListType>("list")[0].AsInt64(), 5);
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsList("list")[0].AsInt64(), 5); 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsList("list")[0].AsInt64(), 5);
 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TMapType>("map")["key"].AsString(), "value");
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsMap("map")["key"].AsString(), "value"); 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsMap("map")["key"].AsString(), "value");
 
         // mutable accessor
         auto& childString = node.ChildAs<TString>("string");
         childString = "yaddayadda";
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>("string"), "yaddayadda");
-    } 
- 
-    Y_UNIT_TEST(TestListGetters) { 
-        auto node = TNode::CreateList() 
-            .Add("7") 
-            .Add(3) 
-            .Add(5u) 
-            .Add(-3.5) 
-            .Add(TNode::CreateList().Add(5)) 
-            .Add(TNode::CreateMap()("key", "value")); 
+    }
+
+    Y_UNIT_TEST(TestListGetters) {
+        auto node = TNode::CreateList()
+            .Add("7")
+            .Add(3)
+            .Add(5u)
+            .Add(-3.5)
+            .Add(TNode::CreateList().Add(5))
+            .Add(TNode::CreateMap()("key", "value"));
 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>(0), "7");
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsString(0), "7"); 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<i64>(0), 7); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsString(0), "7");
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<i64>(0), 7);
+
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<i64>(1), 3);
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsInt64(1), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<ui64>(1), 3u); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsInt64(1), 3);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<ui64>(1), 3u);
+
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<ui64>(2), 5u);
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsUint64(2), 5u); 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<i64>(2), 5); 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>(2), "5"); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsUint64(2), 5u);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildIntCast<i64>(2), 5);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>(2), "5");
+
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<double>(3), -3.5);
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsDouble(3), -3.5); 
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>(3), "-3.5"); 
- 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsDouble(3), -3.5);
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildConvertTo<TString>(3), "-3.5");
+
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TListType>(4)[0].AsInt64(), 5);
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsList(4)[0].AsInt64(), 5); 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsList(4)[0].AsInt64(), 5);
 
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TNode::TMapType>(5)["key"].AsString(), "value");
-        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsMap(5)["key"].AsString(), "value"); 
+        UNIT_ASSERT_VALUES_EQUAL(node.ChildAsMap(5)["key"].AsString(), "value");
 
         // mutable accessor
         auto& childString = node.ChildAs<TString>(0);
         childString = "yaddayadda";
         UNIT_ASSERT_VALUES_EQUAL(node.ChildAs<TString>(0), "yaddayadda");
-    } 
+    }
 }

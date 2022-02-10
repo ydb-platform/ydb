@@ -67,8 +67,8 @@ public:
 
     static void Rebalance(TBasePtr x, TBasePtr& root);
     static TBasePtr RebalanceForErase(TBasePtr z, TBasePtr& root, TBasePtr& leftmost, TBasePtr& rightmost);
-    static void DecrementChildrenUntilRoot(TBasePtr x, TBasePtr root); 
-    static void RecalcChildren(TBasePtr x); 
+    static void DecrementChildrenUntilRoot(TBasePtr x, TBasePtr root);
+    static void RecalcChildren(TBasePtr x);
 
     static TBasePtr IncrementNode(TBasePtr);
     static TBasePtr DecrementNode(TBasePtr);
@@ -610,21 +610,21 @@ void TRbGlobal<TDummy>::Rebalance(TRbTreeNodeBase* x, TRbTreeNodeBase*& root) {
 }
 
 template <class TDummy>
-void TRbGlobal<TDummy>::RecalcChildren(TRbTreeNodeBase* x) { 
-    x->Children_ = ((x->Left_) ? x->Left_->Children_ : 0) + ((x->Right_) ? x->Right_->Children_ : 0) + 1; 
-} 
- 
-template <class TDummy> 
-void TRbGlobal<TDummy>::DecrementChildrenUntilRoot(TRbTreeNodeBase* x, TRbTreeNodeBase* root) { 
-    auto* ptr = x; 
-    --ptr->Children_; 
-    while (ptr != root) { 
-        ptr = ptr->Parent_; 
-        --ptr->Children_; 
-    } 
-} 
- 
-template <class TDummy> 
+void TRbGlobal<TDummy>::RecalcChildren(TRbTreeNodeBase* x) {
+    x->Children_ = ((x->Left_) ? x->Left_->Children_ : 0) + ((x->Right_) ? x->Right_->Children_ : 0) + 1;
+}
+
+template <class TDummy>
+void TRbGlobal<TDummy>::DecrementChildrenUntilRoot(TRbTreeNodeBase* x, TRbTreeNodeBase* root) {
+    auto* ptr = x;
+    --ptr->Children_;
+    while (ptr != root) {
+        ptr = ptr->Parent_;
+        --ptr->Children_;
+    }
+}
+
+template <class TDummy>
 TRbTreeNodeBase* TRbGlobal<TDummy>::RebalanceForErase(TRbTreeNodeBase* z,
                                                       TRbTreeNodeBase*& root,
                                                       TRbTreeNodeBase*& leftmost,
@@ -665,14 +665,14 @@ TRbTreeNodeBase* TRbGlobal<TDummy>::RebalanceForErase(TRbTreeNodeBase* z,
             z->Parent_->Right_ = y;
         y->Parent_ = z->Parent_;
         DoSwap(y->Color_, z->Color_);
- 
-        RecalcChildren(y); 
-        if (x_parent != y) { 
-            --x_parent->Children_; 
-        } 
-        if (x_parent != root) { 
-            DecrementChildrenUntilRoot(x_parent->Parent_, root); 
-        } 
+
+        RecalcChildren(y);
+        if (x_parent != y) {
+            --x_parent->Children_;
+        }
+        if (x_parent != root) {
+            DecrementChildrenUntilRoot(x_parent->Parent_, root);
+        }
         y = z;
         // y now points to node to be actually deleted
     } else {

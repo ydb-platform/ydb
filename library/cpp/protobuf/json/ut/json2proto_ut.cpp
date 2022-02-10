@@ -659,11 +659,11 @@ Y_UNIT_TEST(TestCastRobust) {
     json["Double"] = 8;
     TFlatOptional proto;
     UNIT_ASSERT_EXCEPTION_CONTAINS(Json2Proto(json, proto), yexception, "Invalid type");
- 
+
     TJson2ProtoConfig config;
     config.SetCastRobust(true);
     Json2Proto(json, proto, config);
- 
+
     TFlatOptional expected;
     expected.SetI32(5);
     expected.SetBool(true);
@@ -671,7 +671,7 @@ Y_UNIT_TEST(TestCastRobust) {
     expected.SetDouble(8);
     UNIT_ASSERT_PROTOS_EQUAL(proto, expected);
 }
- 
+
 Y_UNIT_TEST(TestVectorizeScalars) {
     NJson::TJsonValue json;
 #define DEFINE_FIELD(name, value) \

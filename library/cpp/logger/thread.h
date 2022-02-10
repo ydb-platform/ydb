@@ -25,10 +25,10 @@ private:
     class TImpl;
     THolder<TImpl> Impl_;
 };
- 
+
 class TOwningThreadedLogBackend: private THolder<TLogBackend>, public TThreadedLogBackend {
-public: 
-    TOwningThreadedLogBackend(TLogBackend* slave); 
+public:
+    TOwningThreadedLogBackend(TLogBackend* slave);
     TOwningThreadedLogBackend(TLogBackend* slave, size_t queuelen, std::function<void()> queueOverflowCallback = {});
-    ~TOwningThreadedLogBackend() override; 
-}; 
+    ~TOwningThreadedLogBackend() override;
+};

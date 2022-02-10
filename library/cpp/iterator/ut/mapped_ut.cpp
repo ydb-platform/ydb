@@ -55,7 +55,7 @@ TEST(TIterator, TOwningMappedMethodTest) {
     for (int& y : range) {
         y += 7;
     }
- 
+
     EXPECT_EQ(*range.begin(), 10);
     EXPECT_EQ(*(range.begin() + 1), 10);
 }

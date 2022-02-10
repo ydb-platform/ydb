@@ -16,8 +16,8 @@ void DoInitGlobalLog(const TString& logType, const int logLevel, const bool rota
                 (ELogPriority)logLevel,
                 threaded)),
         std::move(formatter));
-} 
- 
+}
+
 void DoInitGlobalLog(THolder<TLogBackend> backend, THolder<ILoggerFormatter> formatter) {
     DoInitGlobalLog(THolder(new TGlobalLog(std::move(backend))), std::move(formatter));
 }

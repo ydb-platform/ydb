@@ -13,8 +13,8 @@
 #include <util/system/sysstat.h>
 #include <util/system/yassert.h>
 
-#include <utility> 
- 
+#include <utility>
+
 /**
  * Class behaviour is platform-dependent.
  * It uses platform-dependent separators for path-reconstructing operations.
@@ -212,20 +212,20 @@ private:
     mutable TSimpleIntrusivePtr<TSplit> Split_;
 };
 
-namespace NPrivate { 
-    inline void AppendToFsPath(TFsPath&) { 
-    } 
- 
-    template <class T, class... Ts> 
-    void AppendToFsPath(TFsPath& fsPath, const T& arg, Ts&&... args) { 
-        fsPath /= TFsPath(arg); 
-        AppendToFsPath(fsPath, std::forward<Ts>(args)...); 
-    } 
-} 
- 
-template <class... Ts> 
+namespace NPrivate {
+    inline void AppendToFsPath(TFsPath&) {
+    }
+
+    template <class T, class... Ts>
+    void AppendToFsPath(TFsPath& fsPath, const T& arg, Ts&&... args) {
+        fsPath /= TFsPath(arg);
+        AppendToFsPath(fsPath, std::forward<Ts>(args)...);
+    }
+}
+
+template <class... Ts>
 TString JoinFsPaths(Ts&&... args) {
-    TFsPath fsPath; 
-    ::NPrivate::AppendToFsPath(fsPath, std::forward<Ts>(args)...); 
-    return fsPath.GetPath(); 
-} 
+    TFsPath fsPath;
+    ::NPrivate::AppendToFsPath(fsPath, std::forward<Ts>(args)...);
+    return fsPath.GetPath();
+}

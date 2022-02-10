@@ -148,8 +148,8 @@ struct addrinfo;
 
 class TNetworkResolutionError: public yexception {
 public:
-    // @param error error code (EAI_XXX) returned by getaddrinfo or getnameinfo (not errno) 
-    TNetworkResolutionError(int error); 
+    // @param error error code (EAI_XXX) returned by getaddrinfo or getnameinfo (not errno)
+    TNetworkResolutionError(int error);
 };
 
 struct TUnixSocketPath {

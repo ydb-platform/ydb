@@ -43,7 +43,7 @@ using TPid = HANDLE;
 using TWaitResult = DWORD;
 using TExitStatus = DWORD;
     #define WAIT_PROCEED WAIT_TIMEOUT
- 
+
     #pragma warning(disable : 4296) // 'wait_result >= WAIT_OBJECT_0' : expression is always tru
 #else
     #error("unknown os, shell command is not implemented")
@@ -618,7 +618,7 @@ void TShellCommand::TImpl::StartProcess(TShellCommand::TImpl::TPipes& pipes) {
     if (!res) {
         AtomicSet(ExecutionStatus, SHELL_ERROR);
         /// @todo: write to error stream if set
-        TStringOutput out(CollectedError); 
+        TStringOutput out(CollectedError);
         out << "Process was not created: " << LastSystemErrorText() << " command text was: '" << GetAString(cmdcopy.Data()) << "'";
     }
     Pid = process_info.hProcess;
@@ -925,7 +925,7 @@ void TShellCommand::TImpl::Communicate(TProcessInfo* pi) {
         char* bufPos = nullptr;
 #endif
         TWaitResult waitPidResult;
-        TExitStatus status = 0; 
+        TExitStatus status = 0;
 
         while (true) {
             {

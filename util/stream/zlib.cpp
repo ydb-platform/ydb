@@ -171,7 +171,7 @@ namespace {
         }
 
         ~TDecompressStream() override = default;
- 
+
     private:
         size_t DoNext(const void** ptr, size_t len) override {
             void* buf = AdditionalData();
@@ -364,7 +364,7 @@ void TZLibCompress::DoWrite(const void* buf, size_t size) {
 }
 
 void TZLibCompress::DoFlush() {
-    if (Impl_) { 
+    if (Impl_) {
         Impl_->Flush();
     }
 }
@@ -372,7 +372,7 @@ void TZLibCompress::DoFlush() {
 void TZLibCompress::DoFinish() {
     THolder<TImpl> impl(Impl_.Release());
 
-    if (impl) { 
+    if (impl) {
         impl->Finish();
     }
 }

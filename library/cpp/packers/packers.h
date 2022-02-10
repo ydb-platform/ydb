@@ -42,7 +42,7 @@ public:
     }
     size_t MeasureLeaf(const T& data) const {
         Y_UNUSED(data);
-        return sizeof(T); 
+        return sizeof(T);
     }
     size_t SkipLeaf(const char*) const {
         return sizeof(T);

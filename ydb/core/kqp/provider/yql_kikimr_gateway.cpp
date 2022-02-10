@@ -142,7 +142,7 @@ bool IKikimrGateway::TrySplitTablePath(const TString& path, std::pair<TString, T
 
     result = std::make_pair(
         CombinePath(parts.begin(), parts.end() - 1),
-        parts.back()); 
+        parts.back());
 
     return true;
 }

@@ -283,7 +283,7 @@ namespace NPrivate {
  * End-of-line output manipulator, basically the same as `std::endl`.
  */
 static inline void Endl(IOutputStream& o) {
-    (o << '\n').Flush(); 
+    (o << '\n').Flush();
 }
 
 /**

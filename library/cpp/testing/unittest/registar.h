@@ -7,7 +7,7 @@
 #include <util/generic/intrlist.h>
 #include <util/generic/map.h>
 #include <util/generic/ptr.h>
-#include <util/generic/set.h> 
+#include <util/generic/set.h>
 #include <util/generic/typetraits.h>
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
@@ -86,19 +86,19 @@ namespace NUnitTest {
         };
 
         struct TTest {
-            const TUnit* unit; 
-            const char* name; 
+            const TUnit* unit;
+            const char* name;
         };
 
         struct TError {
-            const TTest* test; 
-            const char* msg; 
+            const TTest* test;
+            const char* msg;
             TString BackTrace;
             TTestContext* Context;
         };
 
         struct TFinish {
-            const TTest* test; 
+            const TTest* test;
             TTestContext* Context;
             bool Success;
         };
@@ -790,7 +790,7 @@ public:                       \
         }
 
         inline TString Name() const noexcept override {
-            return T::StaticName(); 
+            return T::StaticName();
         }
     };
 

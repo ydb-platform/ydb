@@ -73,7 +73,7 @@ namespace NJson {
     TJsonValue::TJsonValue(const EJsonValueType type) {
         SetType(type);
     }
- 
+
     TJsonValue::TJsonValue(TJsonValue&& vval) noexcept
         : Type(JSON_UNDEFINED)
     {

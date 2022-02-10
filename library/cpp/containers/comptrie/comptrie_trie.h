@@ -655,7 +655,7 @@ typename TCompactTrie<T, D, S>::TData TCompactTrie<T, D, S>::TConstIterator::Get
 template <class T, class D, class S>
 void TCompactTrie<T, D, S>::TConstIterator::GetValue(typename TCompactTrie<T, D, S>::TData& data) const {
     const char* ptr = GetValuePtr();
-    if (ptr) { 
+    if (ptr) {
         Packer.UnpackLeaf(ptr, data);
     } else {
         data = typename TCompactTrie<T, D, S>::TData();

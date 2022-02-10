@@ -335,7 +335,7 @@ bool TFsPath::Exists() const {
 
 void TFsPath::CheckExists() const {
     if (!Exists()) {
-        ythrow TIoException() << "path does not exist " << Path_; 
+        ythrow TIoException() << "path does not exist " << Path_;
     }
 }
 
@@ -452,7 +452,7 @@ void TFsPath::CopyTo(const TString& newPath, bool force) const {
 void TFsPath::ForceRenameTo(const TString& newPath) const {
     try {
         RenameTo(newPath);
-    } catch (const TIoSystemError& /* error */) { 
+    } catch (const TIoSystemError& /* error */) {
         CopyTo(newPath, true);
         ForceDelete();
     }

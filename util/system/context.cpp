@@ -217,7 +217,7 @@ void ContextTrampoLine(void* arg) {
 #endif
 
 #if defined(USE_FIBER_CONT)
-TContMachineContext::TContMachineContext() 
+TContMachineContext::TContMachineContext()
     : Fiber_(ConvertThreadToFiber(this))
     , MainFiber_(true)
 {

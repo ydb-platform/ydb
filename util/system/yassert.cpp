@@ -67,13 +67,13 @@ namespace NPrivate {
 
         TString r;
         TStringOutput o(r);
-        if (expr) { 
+        if (expr) {
             o << "VERIFY failed (" << now << "): " << errorMsg << Endl;
         } else {
             o << "FAIL (" << now << "): " << errorMsg << Endl;
         }
         o << "  " << file << ":" << line << Endl;
-        if (expr) { 
+        if (expr) {
             o << "  " << function << "(): requirement " << expr << " failed" << Endl;
         } else {
             o << "  " << function << "() failed" << Endl;

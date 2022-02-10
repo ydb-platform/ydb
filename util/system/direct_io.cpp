@@ -87,7 +87,7 @@ void TDirectIOBufferedFile::SetDirectIO(bool value) {
 
     DirectIO = value;
 #else
-    DirectIO = value; 
+    DirectIO = value;
 #endif
 }
 

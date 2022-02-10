@@ -4,7 +4,7 @@
 
 #include <cstring>
 #include <cstdarg>
-#include <algorithm> 
+#include <algorithm>
 
 #include <util/system/defaults.h>
 #include <util/generic/string.h>
@@ -13,7 +13,7 @@
 /// @addtogroup Strings_Miscellaneous
 /// @{
 int a2i(const TString& s);
- 
+
 /// Removes the last character if it is equal to c.
 template <class T>
 inline void RemoveIfLast(T& s, int c) {
@@ -170,7 +170,7 @@ public:
         *dst = 0;
     }
     void Do(char* s, size_t l) const {
-        for (size_t i = 0; i < l && s[i]; i++) 
+        for (size_t i = 0; i < l && s[i]; i++)
             s[i] = ConvertChar(s[i]);
     }
     void Do(TString& str) const;
@@ -180,16 +180,16 @@ private:
 
     size_t FindFirstChangePosition(const TString& str) const;
 };
- 
-// Removes all occurrences of given character from string 
+
+// Removes all occurrences of given character from string
 template <typename TStringType>
 void RemoveAll(TStringType& str, typename TStringType::char_type ch) {
     size_t pos = str.find(ch); // 'find' to avoid cloning of string in 'TString.begin()'
     if (pos == TStringType::npos)
-        return; 
- 
+        return;
+
     typename TStringType::iterator begin = str.begin();
     typename TStringType::iterator end = begin + str.length();
     typename TStringType::iterator it = std::remove(begin + pos, end, ch);
-    str.erase(it, end); 
-} 
+    str.erase(it, end);
+}

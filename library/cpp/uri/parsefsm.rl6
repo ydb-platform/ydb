@@ -1,9 +1,9 @@
 #include <library/cpp/uri/parse.h>
 
-#ifdef __clang__ 
-    #pragma clang diagnostic ignored "-Wunused-variable" 
-#endif 
- 
+#ifdef __clang__
+    #pragma clang diagnostic ignored "-Wunused-variable"
+#endif
+
 %%{
     machine TParser;
 

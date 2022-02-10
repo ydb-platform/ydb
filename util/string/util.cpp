@@ -69,4 +69,4 @@ void Tr::Do(TString& str) const {
     for (auto it = str.begin() + changePosition; it != str.end(); ++it) {
         *it = ConvertChar(*it);
     }
-} 
+}

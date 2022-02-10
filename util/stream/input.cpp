@@ -81,7 +81,7 @@ void IInputStream::LoadOrFail(void* buf, size_t len) {
 size_t IInputStream::ReadLine(TString& st) {
     const size_t ret = ReadTo(st, '\n');
 
-    if (ret && !st.empty() && st.back() == '\r') { 
+    if (ret && !st.empty() && st.back() == '\r') {
         st.pop_back();
     }
 
@@ -170,7 +170,7 @@ namespace {
             const size_t ret = fread(buf, 1, len, F_);
 
             if (ret < len && ferror(F_)) {
-                ythrow TSystemError() << "can not read from stdin"; 
+                ythrow TSystemError() << "can not read from stdin";
             }
 
             return ret;
@@ -192,7 +192,7 @@ namespace {
 
         size_t DoReadTo(TString& st, char ch) override {
             auto&& guard = Guard(M_);
- 
+
             (void)guard;
 
             const auto r = getdelim(&B_, &L_, ch, F_);
@@ -200,22 +200,22 @@ namespace {
             if (r < 0) {
                 if (ferror(F_)) {
                     ythrow TSystemError() << "can not read from stdin";
-                } 
+                }
 
                 st.clear();
 
                 return 0;
-            } 
+            }
 
             st.AssignNoAlias(B_, r);
 
             if (st && st.back() == ch) {
                 st.pop_back();
-            } 
+            }
 
             return r;
-        } 
- 
+        }
+
         TAdaptiveLock M_;
         char* B_ = nullptr;
         size_t L_ = 0;

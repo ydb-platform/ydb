@@ -1,7 +1,7 @@
 #include "regexp.h"
 
 #include <util/generic/string.h>
-#include <util/string/ascii.h> 
+#include <util/string/ascii.h>
 #include <util/system/defaults.h>
 
 #include <cstdlib>
@@ -154,7 +154,7 @@ public:
             const size_t ERRBUF_SIZE = 100;
             char errbuf[ERRBUF_SIZE];
             regerror(rc, &Preg, errbuf, ERRBUF_SIZE);
-            Error = "Error: regular expression " + re + " is wrong: " + errbuf; 
+            Error = "Error: regular expression " + re + " is wrong: " + errbuf;
             ythrow yexception() << "RegExp " << re << ": " << Error.data();
         }
     }
@@ -192,7 +192,7 @@ private:
 };
 
 bool TRegExBase::IsCompiled() const {
-    return Impl && Impl->IsCompiled(); 
+    return Impl && Impl->IsCompiled();
 }
 
 TRegExBase::TRegExBase(const char* re, int cflags) {
@@ -202,9 +202,9 @@ TRegExBase::TRegExBase(const char* re, int cflags) {
 }
 
 TRegExBase::TRegExBase(const TString& re, int cflags) {
-    Compile(re, cflags); 
-} 
- 
+    Compile(re, cflags);
+}
+
 TRegExBase::~TRegExBase() {
 }
 
@@ -236,10 +236,10 @@ TRegExMatch::TRegExMatch(const char* re, int cflags)
 }
 
 TRegExMatch::TRegExMatch(const TString& re, int cflags)
-    : TRegExBase(re, cflags) 
-{ 
-} 
- 
+    : TRegExBase(re, cflags)
+{
+}
+
 bool TRegExMatch::Match(const char* str) const {
     return Exec(str, nullptr, 0, 0) == 0;
 }
@@ -294,7 +294,7 @@ int TRegExSubst::ParseReplacement(const char* repl) {
         pos2 = pos1;
         if (pos1) {
             pos2 = pos1 + 1;
-            while (IsAsciiDigit(*pos2)) 
+            while (IsAsciiDigit(*pos2))
                 pos2++;
             if (pos2 > pos1 + 1) {
                 Brfs[i].Refer = atol(TString(Replacement, pos1 + 1 - Replacement, pos2 - (pos1 + 1)).data());

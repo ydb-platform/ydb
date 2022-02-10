@@ -165,11 +165,11 @@ inline T FromString(const std::string& s) {
     return ::FromString<T>(s.data(), s.size());
 }
 
-template <> 
+template <>
 inline TString FromString<TString>(const TString& s) {
-    return s; 
-} 
- 
+    return s;
+}
+
 template <class T>
 inline T FromString(const TWtringBuf& s) {
     return ::FromString<T, typename TWtringBuf::char_type>(s.data(), s.size());

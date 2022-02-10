@@ -6,11 +6,11 @@
 
 Y_UNIT_TEST_SUITE(TStringClassify) {
     Y_UNIT_TEST(TestIsSpace) {
-        UNIT_ASSERT_EQUAL(IsSpace(" "), true); 
-        UNIT_ASSERT_EQUAL(IsSpace("\t\r\n"), true); 
-        UNIT_ASSERT_EQUAL(IsSpace(""), false); 
-        UNIT_ASSERT_EQUAL(IsSpace("   a"), false); 
-    } 
+        UNIT_ASSERT_EQUAL(IsSpace(" "), true);
+        UNIT_ASSERT_EQUAL(IsSpace("\t\r\n"), true);
+        UNIT_ASSERT_EQUAL(IsSpace(""), false);
+        UNIT_ASSERT_EQUAL(IsSpace("   a"), false);
+    }
 
     Y_UNIT_TEST(TestIsTrue) {
         UNIT_ASSERT(IsTrue("1"));

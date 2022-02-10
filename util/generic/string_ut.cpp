@@ -740,11 +740,11 @@ public:
     UNIT_TEST(TestJoin);
     UNIT_TEST(TestCopy);
     UNIT_TEST(TestStrCpy);
-    UNIT_TEST(TestPrefixSuffix); 
+    UNIT_TEST(TestPrefixSuffix);
 #ifndef TSTRING_IS_STD_STRING
     UNIT_TEST(TestCharRef);
 #endif
-    UNIT_TEST(TestBack) 
+    UNIT_TEST(TestBack)
     UNIT_TEST(TestFront)
     UNIT_TEST(TestIterators);
     UNIT_TEST(TestReverseIterators);
@@ -794,7 +794,7 @@ public:
     UNIT_TEST(TestFind);
     UNIT_TEST(TestContains);
     UNIT_TEST(TestOperators);
-    UNIT_TEST(TestLetOperator) 
+    UNIT_TEST(TestLetOperator)
     UNIT_TEST(TestMulOperators);
     UNIT_TEST(TestFuncs);
     UNIT_TEST(TestUtils);
@@ -802,11 +802,11 @@ public:
     UNIT_TEST(TestJoin);
     UNIT_TEST(TestCopy);
     UNIT_TEST(TestStrCpy);
-    UNIT_TEST(TestPrefixSuffix); 
+    UNIT_TEST(TestPrefixSuffix);
 #ifndef TSTRING_IS_STD_STRING
     UNIT_TEST(TestCharRef);
 #endif
-    UNIT_TEST(TestBack); 
+    UNIT_TEST(TestBack);
     UNIT_TEST(TestFront)
     UNIT_TEST(TestDecodingMethods);
     UNIT_TEST(TestIterators);
@@ -881,20 +881,20 @@ private:
         s2.AppendUtf8(text);
         UNIT_ASSERT(testAppend == s2);
     }
- 
-    void TestLetOperator() { 
+
+    void TestLetOperator() {
         TUtf16String str;
- 
+
         str = wchar16('X');
         UNIT_ASSERT(str == TUtf16String::FromAscii("X"));
- 
+
         const TUtf16String hello = TUtf16String::FromAscii("hello");
         str = hello.data();
-        UNIT_ASSERT(str == hello); 
- 
-        str = hello; 
-        UNIT_ASSERT(str == hello); 
-    } 
+        UNIT_ASSERT(str == hello);
+
+        str = hello;
+        UNIT_ASSERT(str == hello);
+    }
 
     void TestStringLiterals() {
         TUtf16String s1 = u"hello";

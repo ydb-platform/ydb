@@ -76,7 +76,7 @@
     #define Y_DECLARE_UNUSED
 #endif
 
-#if defined(__GNUC__) 
+#if defined(__GNUC__)
     #define Y_LIKELY(Cond) __builtin_expect(!!(Cond), 1)
     #define Y_UNLIKELY(Cond) __builtin_expect(!!(Cond), 0)
     #define Y_PREFETCH_READ(Pointer, Priority) __builtin_prefetch((const void*)(Pointer), 0, Priority)
@@ -163,7 +163,7 @@
     #define Y_PACKED
 #endif
 
-#if defined(__GNUC__) 
+#if defined(__GNUC__)
     #define Y_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #endif
 

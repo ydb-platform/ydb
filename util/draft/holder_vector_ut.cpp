@@ -49,21 +49,21 @@ Y_UNIT_TEST_SUITE(THolderVectorTest) {
         UNIT_ASSERT_VALUES_EQUAL(*ints[0], 1);
         UNIT_ASSERT(!holder);
     }
- 
+
     Y_UNIT_TEST(TestSwap) {
-        THolderVector<int> v1; 
-        v1.PushBack(new int(1)); 
- 
-        THolderVector<int> v2; 
-        v1.Swap(v2); 
-        UNIT_ASSERT(v1.empty() && v2.size() == 1 && *v2.front() == 1); 
-    } 
- 
+        THolderVector<int> v1;
+        v1.PushBack(new int(1));
+
+        THolderVector<int> v2;
+        v1.Swap(v2);
+        UNIT_ASSERT(v1.empty() && v2.size() == 1 && *v2.front() == 1);
+    }
+
     Y_UNIT_TEST(TestUniquePtr) {
         THolderVector<TString> v;
         std::unique_ptr<TString> str(new TString("hello"));
-        v.PushBack(std::move(str)); 
-        UNIT_ASSERT(v.Size() == 1); 
-        UNIT_ASSERT(str.get() == nullptr); 
-    } 
+        v.PushBack(std::move(str));
+        UNIT_ASSERT(v.Size() == 1);
+        UNIT_ASSERT(str.get() == nullptr);
+    }
 }

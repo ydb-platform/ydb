@@ -62,14 +62,14 @@ struct hash: public NHashPrivate::THashHelper<T, std::is_scalar<T>::value && !st
 };
 
 template <typename T>
-struct hash<const T*> { 
+struct hash<const T*> {
     inline size_t operator()(const T* t) const noexcept {
         return NumericHash(t);
     }
 };
 
 template <class T>
-struct hash<T*>: public ::hash<const T*> { 
+struct hash<T*>: public ::hash<const T*> {
 };
 
 template <>

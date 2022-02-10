@@ -56,7 +56,7 @@
     #define _must_align2_
 #endif
 
-#if defined(__GNUC__) 
+#if defined(__GNUC__)
     #define alias_hack __attribute__((__may_alias__))
 #endif
 

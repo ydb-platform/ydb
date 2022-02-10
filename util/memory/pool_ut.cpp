@@ -80,7 +80,7 @@ class TMemPoolTest: public TTestBase {
     UNIT_TEST_SUITE(TMemPoolTest);
     UNIT_TEST(TestMemPool)
     UNIT_TEST(TestAlign)
-    UNIT_TEST(TestZeroArray) 
+    UNIT_TEST(TestZeroArray)
     UNIT_TEST(TestLargeStartingAlign)
     UNIT_TEST(TestMoveAlloc)
     UNIT_TEST(TestRoundUpToNextPowerOfTwoOption)
@@ -196,22 +196,22 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned256) & 255, 0);
         UNIT_ASSERT_VALUES_EQUAL(reinterpret_cast<uintptr_t>(aligned1024) & 1023, 0);
     }
- 
-    void TestZeroArray() { 
-        TMemoryPool pool(1); 
-        size_t size = 10; 
-        i32* intArray = pool.AllocateZeroArray<i32>(size); 
-        for (size_t i = 0; i < size; ++i) { 
-            UNIT_ASSERT(intArray[i] == 0); 
-        } 
- 
-        size_t align = 256;
-        ui8* byteArray = pool.AllocateZeroArray<ui8>(size, align); 
-        UNIT_ASSERT(size_t(byteArray) % align == 0); 
-        for (size_t i = 0; i < size; ++i) { 
-            UNIT_ASSERT(byteArray[i] == 0); 
+
+    void TestZeroArray() {
+        TMemoryPool pool(1);
+        size_t size = 10;
+        i32* intArray = pool.AllocateZeroArray<i32>(size);
+        for (size_t i = 0; i < size; ++i) {
+            UNIT_ASSERT(intArray[i] == 0);
         }
-    } 
+
+        size_t align = 256;
+        ui8* byteArray = pool.AllocateZeroArray<ui8>(size, align);
+        UNIT_ASSERT(size_t(byteArray) % align == 0);
+        for (size_t i = 0; i < size; ++i) {
+            UNIT_ASSERT(byteArray[i] == 0);
+        }
+    }
 
     void TestLargeStartingAlign() {
         TMemoryPool pool(1);

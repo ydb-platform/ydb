@@ -25,7 +25,7 @@ void Opt::Init(int argc, char* argv[], const char* optString, const Ion* longOpt
     Opts_.Reset(new TOptsNoDefault(optString));
     for (const Ion* o = longOptions; o != nullptr && o->name != nullptr; ++o) {
         TOpt* opt;
-        if ((unsigned)o->val < 0x80 && isalnum(o->val)) { 
+        if ((unsigned)o->val < 0x80 && isalnum(o->val)) {
             opt = &Opts_->CharOption(char(o->val));
             opt->AddLongName(o->name);
         } else {
@@ -73,7 +73,7 @@ int Opt::Get(int* longOptionIndex) {
                 return 1;
             } else {
                 const Ion* ion = (const Ion*)OptsParser_->CurOpt()->UserValue();
-                if (longOptionIndex) { 
+                if (longOptionIndex) {
                     *longOptionIndex = int(ion - Ions_);
                 }
                 char c = OptsParser_->CurOpt()->GetCharOr0();

@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TIntervalSetTest) {
             counters[i] = 0;
         }
 
-        while (counters.back() < sets.size()) { 
+        while (counters.back() < sets.size()) {
             ui64 added = 0;
             //Cerr << "set" << Endl;
             TIntervals b;

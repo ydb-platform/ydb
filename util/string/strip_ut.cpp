@@ -7,7 +7,7 @@
 Y_UNIT_TEST_SUITE(TStripStringTest) {
     Y_UNIT_TEST(TestStrip) {
         struct TTest {
-            const char* Str; 
+            const char* Str;
             const char* StripLeftRes;
             const char* StripRightRes;
             const char* StripRes;
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
             {"abc", "abc", "abc", "abc"},
             {"a c", "a c", "a c", "a c"},
         };
- 
+
         for (const auto& test : tests) {
             TString inputStr(test.Str);
 
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(TStripStringTest) {
             UNIT_ASSERT_EQUAL(StripString(inputStrBuf), test.StripRes);
             UNIT_ASSERT_EQUAL(StripStringLeft(inputStrBuf), test.StripLeftRes);
             UNIT_ASSERT_EQUAL(StripStringRight(inputStrBuf), test.StripRightRes);
-        }; 
+        };
     }
 
     Y_UNIT_TEST(TestCustomStrip) {

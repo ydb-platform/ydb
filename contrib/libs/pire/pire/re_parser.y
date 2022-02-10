@@ -28,7 +28,7 @@
 #pragma warning(disable: 4060) // switch contains no 'case' or 'default' statements
 #pragma warning(disable: 4065) // switch contains 'default' but no 'case' statements
 #pragma warning(disable: 4102) // unreferenced label 'yyerrlabl'
-#pragma warning(disable: 4702) // unreachable code 
+#pragma warning(disable: 4702) // unreachable code
 #endif
 
 #ifdef __GNUC__

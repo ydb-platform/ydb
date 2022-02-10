@@ -203,7 +203,7 @@ namespace NJson {
             TString String;
             TMapType* Map;
             TArray* Array;
- 
+
             TValueUnion() noexcept {
                 Zero(*this);
             }

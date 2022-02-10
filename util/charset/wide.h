@@ -673,11 +673,11 @@ inline bool IsSpace(const wchar16* s, size_t n) {
     return true;
 }
 
-//! returns @c true if string contains whitespace characters only 
+//! returns @c true if string contains whitespace characters only
 inline bool IsSpace(const TWtringBuf s) {
     return IsSpace(s.data(), s.length());
-} 
- 
+}
+
 //! replaces multiple sequential whitespace characters with a single space character
 void Collapse(TUtf16String& w);
 

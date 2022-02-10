@@ -88,4 +88,4 @@ TUtf16String JoinStrings(const TVector<TUtf16String>& v, size_t index, size_t co
     const size_t l = f + Min(count, v.size() - f);
 
     return JoinStrings(v.begin() + f, v.begin() + l, delim);
-} 
+}

@@ -4,9 +4,9 @@ OWNER(velavokr)
 
 SRCS(
     scheme.cpp
-    scheme_cast.h 
-    scimpl.h 
-    scimpl_defs.h 
+    scheme_cast.h
+    scimpl.h
+    scimpl_defs.h
     scimpl_private.cpp
     scimpl_protobuf.cpp
     scimpl_select.rl6

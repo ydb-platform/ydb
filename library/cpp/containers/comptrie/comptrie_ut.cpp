@@ -340,13 +340,13 @@ static bool LexicographicStep(TString& s) {
 template <class T>
 void TCompactTrieTest::CheckUpperBound(const char* data, size_t datalen) {
     TCompactTrie<T> trie(data, datalen);
-    typedef typename TCompactTrie<T>::TKey TKey; 
-    typedef typename TCompactTrie<T>::TData TData; 
+    typedef typename TCompactTrie<T>::TKey TKey;
+    typedef typename TCompactTrie<T>::TData TData;
 
     TString key;
     do {
         const TKey wideKey = MakeWideKey<T>(key);
-        typename TCompactTrie<T>::TConstIterator it = trie.UpperBound(wideKey); 
+        typename TCompactTrie<T>::TConstIterator it = trie.UpperBound(wideKey);
         UNIT_ASSERT_C(it == trie.End() || it.GetKey() >= wideKey, "key=" + key);
         TData data;
         const bool found = trie.Find(wideKey, &data);
@@ -454,7 +454,7 @@ void TCompactTrieTest::CheckIterator(const char* data, size_t datalen) {
     std::reverse(items.begin(), items.end());
     typename TCompactTrie<T>::TConstIterator revIt = trie.End();
     typename TCompactTrie<T>::TConstIterator const begin = trie.Begin();
-    typename TCompactTrie<T>::TConstIterator emptyIt; 
+    typename TCompactTrie<T>::TConstIterator emptyIt;
     size_t pos = 0;
     while (revIt != begin) {
         revIt--;
@@ -465,11 +465,11 @@ void TCompactTrieTest::CheckIterator(const char* data, size_t datalen) {
     revIt = begin;
     UNIT_ASSERT(revIt == trie.Begin());
     UNIT_ASSERT(!revIt.IsEmpty());
-    UNIT_ASSERT(revIt != emptyIt); 
+    UNIT_ASSERT(revIt != emptyIt);
     UNIT_ASSERT(revIt != trie.End());
     ++revIt; // Call a method that uses Skipper.
-    revIt = emptyIt; 
-    UNIT_ASSERT(revIt == emptyIt); 
+    revIt = emptyIt;
+    UNIT_ASSERT(revIt == emptyIt);
     UNIT_ASSERT(revIt.IsEmpty());
     UNIT_ASSERT(revIt != trie.End());
     // Checking the move assignment operator.

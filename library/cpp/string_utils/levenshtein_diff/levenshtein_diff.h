@@ -154,12 +154,12 @@ namespace NLevenshtein {
     /// Calculates substrings to be replaced for str1->str2 transformation
     struct TReplacement {
         int CorrectOffset, CorrectLength, MisspelledOffset, MisspelledLength;
-        TReplacement() 
-            : CorrectOffset(0) 
-            , CorrectLength(0) 
-            , MisspelledOffset(0) 
-            , MisspelledLength(0) 
-        { 
+        TReplacement()
+            : CorrectOffset(0)
+            , CorrectLength(0)
+            , MisspelledOffset(0)
+            , MisspelledLength(0)
+        {
         }
         TReplacement(int correctOffset, int correctLength, int misspelledOffset, int misspelledLength)
             : CorrectOffset(correctOffset)

@@ -615,16 +615,16 @@ int main(int argc, char** argv) {
 
     for (size_t i = 0; i < files.size(); ++i) {
         const auto& path = files[i];
-        size_t off = 0; 
-#ifdef _win_ 
-        if (path[0] > 0 && isalpha(path[0]) && path[1] == ':') 
-            off = 2; // skip drive letter ("d:") 
+        size_t off = 0;
+#ifdef _win_
+        if (path[0] > 0 && isalpha(path[0]) && path[1] == ':')
+            off = 2; // skip drive letter ("d:")
 #endif               // _win_
-        const size_t pos = path.find(':', off); 
+        const size_t pos = path.find(':', off);
         TRec cur;
-        cur.Path = path.substr(0, pos); 
+        cur.Path = path.substr(0, pos);
         if (pos != TString::npos)
-            cur.Prefix = path.substr(pos + 1); 
+            cur.Prefix = path.substr(pos + 1);
         if (keys.size())
             cur.Key = keys[i];
         cur.Recursive = recursive;

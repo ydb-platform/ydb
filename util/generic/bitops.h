@@ -57,7 +57,7 @@ namespace NBitOps {
             return (v >> 32ULL) | (v << 32ULL);
         }
 
-#if defined(__GNUC__) 
+#if defined(__GNUC__)
         inline unsigned GetValueBitCountImpl(unsigned int value) noexcept {
             Y_ASSERT(value); // because __builtin_clz* have undefined result for zero.
             return std::numeric_limits<unsigned int>::digits - __builtin_clz(value);
@@ -88,7 +88,7 @@ namespace NBitOps {
         }
 #endif
 
-#if defined(__GNUC__) 
+#if defined(__GNUC__)
         inline unsigned CountTrailingZeroBitsImpl(unsigned int value) noexcept {
             Y_ASSERT(value); // because __builtin_ctz* have undefined result for zero.
             return __builtin_ctz(value);

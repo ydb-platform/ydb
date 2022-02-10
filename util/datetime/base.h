@@ -24,11 +24,11 @@
 
 #include <time.h>
 
-#ifdef _MSC_VER 
+#ifdef _MSC_VER
     #pragma warning(push)
     #pragma warning(disable : 4244) // conversion from 'time_t' to 'long', possible loss of data
 #endif                              // _MSC_VER
- 
+
 // Microseconds since epoch
 class TInstant;
 
@@ -818,6 +818,6 @@ static inline TInstant Now() noexcept {
     return TInstant::Now();
 }
 
-#ifdef _MSC_VER 
+#ifdef _MSC_VER
     #pragma warning(pop)
-#endif // _MSC_VER 
+#endif // _MSC_VER

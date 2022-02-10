@@ -284,7 +284,7 @@ private:
 
     inline void BuildInputChain() {
         TParsedHeaders p;
- 
+
         size_t pos = FirstLine_.rfind(' ');
         // In HTTP/1.1 Keep-Alive is turned on by default
         if (pos != TString::npos && strcmp(FirstLine_.c_str() + pos + 1, "HTTP/1.1") == 0) {
@@ -321,7 +321,7 @@ private:
                         p.KeepAlive = true;
                     } else if (stricmp(header.Value().data(), "close") == 0) {
                         p.KeepAlive = false;
-                    } 
+                    }
                 }
                 [[fallthrough]];
                 HEADERCMP(header, "expect") {
@@ -536,7 +536,7 @@ public:
             if (*c == '\n') {
                 Line_.append(b, c);
 
-                if (!Line_.empty() && Line_.back() == '\r') { 
+                if (!Line_.empty() && Line_.back() == '\r') {
                     Line_.pop_back();
                 }
 
@@ -906,7 +906,7 @@ void THttpOutput::DoFinish() {
 }
 
 const THttpHeaders& THttpOutput::SentHeaders() const noexcept {
-    return Impl_->SentHeaders(); 
+    return Impl_->SentHeaders();
 }
 
 void THttpOutput::EnableCompression(bool enable) {

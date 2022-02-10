@@ -43,7 +43,7 @@ namespace {
 
     inline void SetThrName(const TParams& p) {
         try {
-            if (p.Name) { 
+            if (p.Name) {
                 TThread::SetCurrentThreadName(p.Name.data());
             }
         } catch (...) {
@@ -107,7 +107,7 @@ namespace {
         }
 
         static ui32 __stdcall Proxy(void* ptr) {
-            NTls::TCleaner cleaner; 
+            NTls::TCleaner cleaner;
 
             (void)cleaner;
 
@@ -313,7 +313,7 @@ void TThread::Detach() {
 }
 
 bool TThread::Running() const noexcept {
-    return Impl_ && Impl_->Running(); 
+    return Impl_ && Impl_->Running();
 }
 
 TThread::TId TThread::Id() const noexcept {

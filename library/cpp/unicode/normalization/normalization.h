@@ -84,9 +84,9 @@ namespace NUnicode {
         class TComposition {
         private:
             struct TRawData {
-                wchar32 Lead; 
-                wchar32 Tail; 
-                wchar32 Comp; 
+                wchar32 Lead;
+                wchar32 Tail;
+                wchar32 Comp;
             };
 
             static const TRawData RawData[];

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <cstdlib> 
- 
+#include <cstdlib>
+
 // http://support.microsoft.com/kb/208427
 #ifndef URL_MAXLEN
     #define URL_MAXLEN 2083

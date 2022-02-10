@@ -146,16 +146,16 @@ private:
         AddNameWithCheck(name, code);
 
         TString temp = name;
-        RemoveAll(temp, '-'); 
-        RemoveAll(temp, '_'); 
+        RemoveAll(temp, '-');
+        RemoveAll(temp, '_');
         AddNameWithCheck(temp, code);
 
         temp = name;
-        SubstGlobal(temp, '-', '_'); 
+        SubstGlobal(temp, '-', '_');
         AddNameWithCheck(temp, code);
 
         temp = name;
-        SubstGlobal(temp, '_', '-'); 
+        SubstGlobal(temp, '_', '-');
         AddNameWithCheck(temp, code);
     }
 

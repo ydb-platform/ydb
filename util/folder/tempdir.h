@@ -1,19 +1,19 @@
-#pragma once 
- 
+#pragma once
+
 #include "fwd.h"
 #include "path.h"
 #include <util/generic/string.h>
- 
-class TTempDir { 
-public: 
+
+class TTempDir {
+public:
     /// Create new directory in system tmp folder.
-    TTempDir(); 
+    TTempDir();
 
     /// Create new directory with this fixed name. If it already exists, clear it.
     TTempDir(const TString& tempDir);
 
-    ~TTempDir(); 
- 
+    ~TTempDir();
+
     /// Create new directory in given folder.
     static TTempDir NewTempDir(const TString& root);
 
@@ -26,12 +26,12 @@ public:
     }
 
     const TFsPath& Path() const {
-        return TempDir; 
-    } 
- 
+        return TempDir;
+    }
+
     void DoNotRemove();
 
-private: 
+private:
     struct TCreationToken {};
 
     // Prevent people from confusing this ctor with the public one
@@ -40,4 +40,4 @@ private:
 
     TFsPath TempDir;
     bool Remove;
-}; 
+};

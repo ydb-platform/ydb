@@ -5,10 +5,10 @@
 Y_UNIT_TEST_SUITE(TStringPrintf) {
     Y_UNIT_TEST(TestSprintf) {
         TString s;
-        int len = sprintf(s, "Hello %s", "world"); 
+        int len = sprintf(s, "Hello %s", "world");
         UNIT_ASSERT_EQUAL(s, TString("Hello world"));
         UNIT_ASSERT_EQUAL(len, 11);
-    } 
+    }
 
     Y_UNIT_TEST(TestFcat) {
         TString s;

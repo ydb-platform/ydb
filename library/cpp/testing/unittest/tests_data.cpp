@@ -1,8 +1,8 @@
-#include "tests_data.h" 
+#include "tests_data.h"
 #include "registar.h"
- 
+
 #include <library/cpp/testing/common/network.h>
- 
+
 #include <util/system/env.h>
 #include <util/system/mutex.h>
 

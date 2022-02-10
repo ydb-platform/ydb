@@ -396,7 +396,7 @@ void TBufferedOutputBase::DoFlush() {
 void TBufferedOutputBase::DoFinish() {
     THolder<TImpl> impl(Impl_.Release());
 
-    if (impl) { 
+    if (impl) {
         impl->Finish();
     }
 }

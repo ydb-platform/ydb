@@ -160,8 +160,8 @@ public:
                 return 0;
 
             size_t median = (from + to) / 2;
-            size_t leftsize = (size_t)MeasureRange(builder, from, median); 
-            size_t rightsize = (size_t)MeasureRange(builder, median + 1, to); 
+            size_t leftsize = (size_t)MeasureRange(builder, from, median);
+            size_t rightsize = (size_t)MeasureRange(builder, median + 1, to);
 
             return builder->ArcMeasure(&(*this)[median], leftsize, rightsize);
         }
@@ -825,7 +825,7 @@ void TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeLinkTo(TNode* th
 
 template <class T, class D, class S>
 size_t TCompactTrieBuilder<T, D, S>::TCompactTrieBuilderImpl::NodeMeasureSubtree(TNode* thiz) const {
-    return (size_t)thiz->Subtree()->Measure(this); 
+    return (size_t)thiz->Subtree()->Measure(this);
 }
 
 template <class T, class D, class S>

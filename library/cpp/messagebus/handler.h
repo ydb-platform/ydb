@@ -113,7 +113,7 @@ namespace NBus {
         }
 
         TNetAddr GetPeerAddrNetAddr() const;
- 
+
         bool IsConnectionAlive() const;
     };
 

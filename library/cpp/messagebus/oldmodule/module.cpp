@@ -209,7 +209,7 @@ namespace NBus {
             {
             }
         };
- 
+
         struct TJobRunner: public TAtomicRefCount<TJobRunner>,
                             public NActor::TActor<TJobRunner>,
                             public NActor::TQueueInActor<TJobRunner, TJobResponseMessage>,
@@ -759,8 +759,8 @@ TBusSession* TMyModule::CreateExtSession(TBusMessageQueue& queue) {
         return strReturn;
     }
 
-} 
- 
+}
+
 void TBusModuleImpl::AddJob(TJobRunner* jobRunner) {
     TWhatThreadDoesAcquireGuard<TMutex> G(Lock, "modules: acquiring lock for AddJob");
     Jobs.push_back(jobRunner);
@@ -875,7 +875,7 @@ void TModuleClientHandler::OnError(TAutoPtr<TBusMessage> msg, EMessageStatus sta
         job->UnRef();
     }
 }
- 
-void TModuleClientHandler::OnClientConnectionEvent(const TClientConnectionEvent& event) { 
-    Module->OnClientConnectionEvent(event); 
-} 
+
+void TModuleClientHandler::OnClientConnectionEvent(const TClientConnectionEvent& event) {
+    Module->OnClientConnectionEvent(event);
+}

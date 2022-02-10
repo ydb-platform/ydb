@@ -204,7 +204,7 @@ namespace NBus {
 
             struct TWriterData {
                 TAtomic Down;
- 
+
                 NEventLoop::TChannelPtr Channel;
                 ui32 SocketVersion;
 

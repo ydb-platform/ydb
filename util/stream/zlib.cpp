@@ -97,10 +97,10 @@ public:
         inflateEnd(Z());
     }
 
-    void SetAllowMultipleStreams(bool allowMultipleStreams) { 
-        AllowMultipleStreams_ = allowMultipleStreams; 
-    } 
- 
+    void SetAllowMultipleStreams(bool allowMultipleStreams) {
+        AllowMultipleStreams_ = allowMultipleStreams;
+    }
+
     inline size_t Read(void* buf, size_t size) {
         Z()->next_out = (unsigned char*)buf;
         Z()->avail_out = size;
@@ -119,12 +119,12 @@ public:
                 }
 
                 case Z_STREAM_END: {
-                    if (AllowMultipleStreams_) { 
-                        if (inflateReset(Z()) != Z_OK) { 
-                            ythrow TZLibDecompressorError() << "inflate reset error(" << GetErrMsg() << ")"; 
-                        } 
-                    } else { 
-                        return size - Z()->avail_out; 
+                    if (AllowMultipleStreams_) {
+                        if (inflateReset(Z()) != Z_OK) {
+                            ythrow TZLibDecompressorError() << "inflate reset error(" << GetErrMsg() << ")";
+                        }
+                    } else {
+                        return size - Z()->avail_out;
                     }
 
                     [[fallthrough]];
@@ -150,14 +150,14 @@ private:
     inline bool FillInputBuffer() {
         return Next(&Z()->next_in, &Z()->avail_in);
     }
- 
+
     void SetDict() {
         if (inflateSetDictionary(Z(), (const Bytef*)Dict.data(), Dict.size()) != Z_OK) {
             ythrow TZLibCompressorError() << "can not set inflate dictionary";
         }
     }
 
-    bool AllowMultipleStreams_ = true; 
+    bool AllowMultipleStreams_ = true;
     TStringBuf Dict;
 };
 
@@ -328,10 +328,10 @@ TZLibDecompress::TZLibDecompress(IInputStream* input, ZLib::StreamType type, siz
 {
 }
 
-void TZLibDecompress::SetAllowMultipleStreams(bool allowMultipleStreams) { 
-    Impl_->SetAllowMultipleStreams(allowMultipleStreams); 
-} 
- 
+void TZLibDecompress::SetAllowMultipleStreams(bool allowMultipleStreams) {
+    Impl_->SetAllowMultipleStreams(allowMultipleStreams);
+}
+
 TZLibDecompress::~TZLibDecompress() = default;
 
 size_t TZLibDecompress::DoRead(void* buf, size_t size) {

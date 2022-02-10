@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         TExampleProtocol Proto;
         TSystemEvent MessageReceivedEvent; // 1 wait for 1 message
         TBusServerSessionPtr Session;
-        TMutex Lock_; 
+        TMutex Lock_;
         TDeque<TAutoPtr<TOnMessageContext>> DelayedMessages;
 
         TDelayReplyServer()
@@ -328,52 +328,52 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         void OnMessage(TOnMessageContext& mess) override {
             Y_VERIFY(mess.IsConnectionAlive(), "connection should be alive here");
-            TAutoPtr<TOnMessageContext> delayedMsg(new TOnMessageContext); 
-            delayedMsg->Swap(mess); 
-            auto g(Guard(Lock_)); 
-            DelayedMessages.push_back(delayedMsg); 
+            TAutoPtr<TOnMessageContext> delayedMsg(new TOnMessageContext);
+            delayedMsg->Swap(mess);
+            auto g(Guard(Lock_));
+            DelayedMessages.push_back(delayedMsg);
             MessageReceivedEvent.Signal();
-        } 
+        }
 
-        bool CheckClientIsAlive() { 
-            auto g(Guard(Lock_)); 
+        bool CheckClientIsAlive() {
+            auto g(Guard(Lock_));
             for (auto& delayedMessage : DelayedMessages) {
                 if (!delayedMessage->IsConnectionAlive()) {
-                    return false; 
-                } 
-            } 
-            return true; 
-        } 
- 
-        bool CheckClientIsDead() const { 
-            auto g(Guard(Lock_)); 
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        bool CheckClientIsDead() const {
+            auto g(Guard(Lock_));
             for (const auto& delayedMessage : DelayedMessages) {
                 if (delayedMessage->IsConnectionAlive()) {
-                    return false; 
-                } 
-            } 
-            return true; 
-        } 
- 
-        void ReplyToDelayedMessages() { 
-            while (true) { 
-                TOnMessageContext msg; 
-                { 
-                    auto g(Guard(Lock_)); 
-                    if (DelayedMessages.empty()) { 
-                        break; 
-                    } 
-                    DelayedMessages.front()->Swap(msg); 
-                    DelayedMessages.pop_front(); 
-                } 
-                TAutoPtr<TBusMessage> reply(new TExampleResponse(&Proto.ResponseCount)); 
-                msg.SendReplyMove(reply); 
-            } 
-        } 
+                    return false;
+                }
+            }
+            return true;
+        }
 
-        size_t GetDelayedMessageCount() const { 
-            auto g(Guard(Lock_)); 
-            return DelayedMessages.size(); 
+        void ReplyToDelayedMessages() {
+            while (true) {
+                TOnMessageContext msg;
+                {
+                    auto g(Guard(Lock_));
+                    if (DelayedMessages.empty()) {
+                        break;
+                    }
+                    DelayedMessages.front()->Swap(msg);
+                    DelayedMessages.pop_front();
+                }
+                TAutoPtr<TBusMessage> reply(new TExampleResponse(&Proto.ResponseCount));
+                msg.SendReplyMove(reply);
+            }
+        }
+
+        size_t GetDelayedMessageCount() const {
+            auto g(Guard(Lock_));
+            return DelayedMessages.size();
         }
 
         void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
@@ -397,10 +397,10 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         client.Destroy();
 
-        UNIT_WAIT_FOR(server.CheckClientIsDead()); 
+        UNIT_WAIT_FOR(server.CheckClientIsDead());
 
-        server.ReplyToDelayedMessages(); 
- 
+        server.ReplyToDelayedMessages();
+
         // wait until all server message are delivered
         UNIT_WAIT_FOR(0 == server.Session->GetInFlight());
     }
@@ -654,23 +654,23 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         client.SendMessages(2, &addr);
 
-        for (size_t i = 0; i < 5; ++i) { 
-            // One MessageReceivedEvent indicates one message, we need to wait for two 
-            UNIT_ASSERT(server.MessageReceivedEvent.WaitT(TDuration::Seconds(5))); 
-            if (server.GetDelayedMessageCount() == 2) { 
-                break; 
-            } 
-        } 
+        for (size_t i = 0; i < 5; ++i) {
+            // One MessageReceivedEvent indicates one message, we need to wait for two
+            UNIT_ASSERT(server.MessageReceivedEvent.WaitT(TDuration::Seconds(5)));
+            if (server.GetDelayedMessageCount() == 2) {
+                break;
+            }
+        }
         UNIT_ASSERT_VALUES_EQUAL(server.GetDelayedMessageCount(), 2);
 
         size_t inFlight = client.Session->GetInFlight(addr);
         // 4 is for messagebus1 that adds inFlight counter twice for some reason
         UNIT_ASSERT(inFlight == 2 || inFlight == 4);
 
-        UNIT_ASSERT(server.CheckClientIsAlive()); 
+        UNIT_ASSERT(server.CheckClientIsAlive());
 
-        server.ReplyToDelayedMessages(); 
- 
+        server.ReplyToDelayedMessages();
+
         client.WaitReplies();
     }
 

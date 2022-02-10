@@ -2,7 +2,7 @@ service: passport_infra
 title: tvmauth (c++)
 
 ci:
-  release-title-source: flow
+  release-title-source: flow 
   autocheck:
     fast-targets:
       - library/c/tvmauth

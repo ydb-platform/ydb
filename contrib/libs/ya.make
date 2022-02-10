@@ -38,7 +38,7 @@ RECURSE(
     cnpy
     cookiemy
     coreml
-    coturn 
+    coturn
     courgette_bsdiff
     cppkafka
     crcutil

@@ -163,9 +163,9 @@ ALLOW .* -> vendor/go.etcd.io/etcd/pkg/types
 # logging to systemd
 ALLOW .* -> vendor/github.com/coreos/go-systemd/journal
 
-# CONTRIB-2336 logging to systemd v22
-ALLOW .* -> vendor/github.com/coreos/go-systemd/v22/journal
-
+# CONTRIB-2336 logging to systemd v22 
+ALLOW .* -> vendor/github.com/coreos/go-systemd/v22/journal 
+ 
 # systemd dbus
 ALLOW .* -> vendor/github.com/coreos/go-systemd/v22/dbus
 
@@ -719,10 +719,10 @@ ALLOW .* -> vendor/github.com/insomniacslk/dhcp
 ALLOW .* -> vendor/github.com/osrg/gobgp
 
 #
-# CONTRIB-2097 QUIC(HTTP/3) implementation library
-#
-ALLOW .* -> vendor/github.com/lucas-clemente/quic-go
-
+# CONTRIB-2097 QUIC(HTTP/3) implementation library 
+# 
+ALLOW .* -> vendor/github.com/lucas-clemente/quic-go 
+ 
 # CONTRIB-2111 distributed lock on redis
 ALLOW .* -> vendor/github.com/go-redsync/redsync/v4
 
@@ -860,7 +860,7 @@ ALLOW .* -> vendor/github.com/pkg/xattr
 # CONTRIB-2452
 ALLOW .* -> vendor/github.com/scim2/filter-parser/v2
 
-#
+# 
 # Tools
 #
 
@@ -1021,9 +1021,9 @@ ALLOW transfer_manager/go/pkg/source/eventhub -> vendor/github.com/Azure/azure-a
 ALLOW trust/psp/core/go -> vendor/github.com/gorilla/mux
 ALLOW trust/psp/core/handler -> vendor/github.com/gorilla/mux
 
-# CONTRIB-2337 Cloud GPU migration: validator for structs and fields
-ALLOW cloud/compute/go-common/pkg/validation -> vendor/github.com/go-playground/validator/v10
-
+# CONTRIB-2337 Cloud GPU migration: validator for structs and fields 
+ALLOW cloud/compute/go-common/pkg/validation -> vendor/github.com/go-playground/validator/v10 
+ 
 # CONTRIB-2412
 ALLOW infra/infractl/.* -> vendor/github.com/google/gnostic/openapiv3
 ALLOW infra/infractl/.* -> vendor/github.com/google/gnostic/compiler

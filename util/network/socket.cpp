@@ -5,7 +5,7 @@
 #include "iovec.h"
 
 #include <util/system/defaults.h>
-#include <util/system/byteorder.h>
+#include <util/system/byteorder.h> 
 
 #if defined(_unix_)
     #include <netdb.h>
@@ -957,13 +957,13 @@ namespace {
         }
 
         inline bool IsLocalName(const char* name) const noexcept {
-            struct sockaddr_in sa;
-            memset(&sa, 0, sizeof(sa));
-
+            struct sockaddr_in sa; 
+            memset(&sa, 0, sizeof(sa)); 
+ 
             if (inet_pton(AF_INET, name, &(sa.sin_addr)) == 1) {
-                return (InetToHost(sa.sin_addr.s_addr) >> 24) == 127;
-            }
-
+                return (InetToHost(sa.sin_addr.s_addr) >> 24) == 127; 
+            } 
+ 
             return contains(name);
         }
     };

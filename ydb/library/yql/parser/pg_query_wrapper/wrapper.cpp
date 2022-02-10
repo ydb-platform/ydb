@@ -1,6 +1,7 @@
 #include "wrapper.h"
 
 #include <util/generic/scope.h>
+#include <util/memory/segmented_string_pool.h>
 #include <fcntl.h>
 #include <stdint.h>
 
@@ -49,7 +50,6 @@ typedef struct {
 
 PgQueryInternalParsetreeAndError pg_query_raw_parse(const char* input) {
     PgQueryInternalParsetreeAndError result = { 0 };
-    MemoryContext parse_context = CurrentMemoryContext;
 
     char stderr_buffer[STDERR_BUFFER_LEN + 1] = { 0 };
 #ifndef DEBUG
@@ -93,7 +93,6 @@ PgQueryInternalParsetreeAndError pg_query_raw_parse(const char* input) {
         ErrorData* error_data;
         PgQueryError* error;
 
-        MemoryContextSwitchTo(parse_context);
         error_data = CopyErrorData();
 
         // Note: This is intentionally malloc so exiting the memory context doesn't free this
@@ -106,7 +105,6 @@ PgQueryInternalParsetreeAndError pg_query_raw_parse(const char* input) {
         error->cursorpos = error_data->cursorpos;
 
         result.error = error;
-        FlushErrorState();
     }
     PG_END_TRY();
 
@@ -132,84 +130,72 @@ void pg_query_free_error(PgQueryError *error) {
     free(error);
 }
 
-void pg_query_free_top_memory_context(MemoryContext context)
-{
-    AssertArg(MemoryContextIsValid(context));
+struct TAlloc {
+    segmented_string_pool Pool;
+};
 
-    /*
-     * After this, no memory contexts are valid anymore, so ensure that
-     * the current context is the top-level context.
-     */
-    Assert(TopMemoryContext == CurrentMemoryContext);
+__thread TAlloc* CurrentAlloc;
 
-    MemoryContextDeleteChildren(context);
-
-    /* Clean up the aset.c freelist, to leave no unused context behind */
-    AllocSetDeleteFreeList(context);
-
-    context->methods->delete_context(context);
-
-    VALGRIND_DESTROY_MEMPOOL(context);
-
-    /* Without this, Valgrind will complain */
-    free(context);
-
-    /* Reset pointers */
-    TopMemoryContext = NULL;
-    CurrentMemoryContext = NULL;
-    ErrorContext = NULL;
+void *MyAllocSetAlloc(MemoryContext context, Size size) {
+    auto fullSize = size + MAXIMUM_ALIGNOF - 1 + sizeof(void*);
+    auto ptr = CurrentAlloc->Pool.Allocate(fullSize);
+    auto aligned = (void*)MAXALIGN(ptr + sizeof(void*));
+    *(MemoryContext *)(((char *)aligned) - sizeof(void *)) = context;
+    return aligned;
 }
 
-__thread volatile sig_atomic_t pg_query_initialized = 0;
+void MyAllocSetFree(MemoryContext context, void* pointer) {
+}
 
-#ifndef WIN32
-static pthread_key_t pg_query_thread_exit_key;
-static void pg_query_thread_exit(void *key);
+void* MyAllocSetRealloc(MemoryContext context, void* pointer, Size size) {
+    if (!size) {
+        return;
+    }
+
+    void* ret = MyAllocSetAlloc(context, size);
+    if (pointer) {
+        memcpy(ret, pointer, size);
+    }
+
+    return ret;
+}
+
+void MyAllocSetReset(MemoryContext context) {
+    Y_FAIL("MyAllocSetReset");
+}
+
+void MyAllocSetDelete(MemoryContext context) {
+    Y_FAIL("MyAllocSetDelete");
+}
+
+Size MyAllocSetGetChunkSpace(MemoryContext context, void* pointer) {
+    return 0;
+}
+
+bool MyAllocSetIsEmpty(MemoryContext context) {
+    return false;
+}
+
+void MyAllocSetStats(MemoryContext context, MemoryStatsPrintFunc printfunc,
+    void* passthru, MemoryContextCounters *totals) {
+}
+
+void MyAllocSetCheck(MemoryContext context) {
+}
+
+const MemoryContextMethods MyMethods = {
+    MyAllocSetAlloc,
+    MyAllocSetFree,
+    MyAllocSetRealloc,
+    MyAllocSetReset,
+    MyAllocSetDelete,
+    MyAllocSetGetChunkSpace,
+    MyAllocSetIsEmpty,
+    MyAllocSetStats
+#ifdef MEMORY_CONTEXT_CHECKING
+    ,MyAllocSetCheck
 #endif
-
-#ifndef WIN32
-static void pg_query_thread_exit(void *key)
-{
-    MemoryContext context = (MemoryContext)key;
-    pg_query_free_top_memory_context(context);
-}
-#endif
-
-void pg_query_init(void)
-{
-    if (pg_query_initialized != 0) return;
-    pg_query_initialized = 1;
-
-    MemoryContextInit();
-    SetDatabaseEncoding(PG_UTF8);
-
-#ifndef WIN32
-    pthread_key_create(&pg_query_thread_exit_key, pg_query_thread_exit);
-    pthread_setspecific(pg_query_thread_exit_key, TopMemoryContext);
-#endif
-}
-
-MemoryContext pg_query_enter_memory_context() {
-    MemoryContext ctx = NULL;
-
-    pg_query_init();
-
-    Assert(CurrentMemoryContext == TopMemoryContext);
-    ctx = AllocSetContextCreate(TopMemoryContext,
-        "pg_query",
-        ALLOCSET_DEFAULT_SIZES);
-    MemoryContextSwitchTo(ctx);
-
-    return ctx;
-}
-
-void pg_query_exit_memory_context(MemoryContext ctx) {
-    // Return to previous PostgreSQL memory context
-    MemoryContextSwitchTo(TopMemoryContext);
-
-    MemoryContextDelete(ctx);
-    ctx = NULL;
-}
+};
 
 }
 
@@ -219,9 +205,26 @@ void PGParse(const TString& input, IPGParseEvents& events) {
     MemoryContext ctx = NULL;
     PgQueryInternalParsetreeAndError parsetree_and_error;
 
-    ctx = pg_query_enter_memory_context();
+    SetDatabaseEncoding(PG_UTF8);
+
+    CurrentMemoryContext = (MemoryContext)malloc(sizeof(MemoryContextData));
+    MemoryContextCreate(CurrentMemoryContext,
+        T_AllocSetContext,
+        &MyMethods,
+        nullptr,
+        "yql");
+    ErrorContext = CurrentMemoryContext;
+
     Y_DEFER {
-        pg_query_exit_memory_context(ctx);
+        free(CurrentMemoryContext);
+        CurrentMemoryContext = nullptr;
+        ErrorContext = nullptr;
+    };
+
+    TAlloc alloc;
+    CurrentAlloc = &alloc;
+    Y_DEFER {
+        CurrentAlloc = nullptr;
     };
 
     parsetree_and_error = pg_query_raw_parse(input.c_str());

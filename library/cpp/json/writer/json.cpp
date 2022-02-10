@@ -513,5 +513,5 @@ namespace NJsonWriter {
         NeedNewline = from.NeedNewline;
         Stack.swap(from.Stack);
     }
- 
-} 
+
+}

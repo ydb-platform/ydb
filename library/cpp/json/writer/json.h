@@ -13,7 +13,7 @@ namespace NJson {
 }
 
 namespace NJsonWriter {
-    enum EJsonEntity : ui8 { 
+    enum EJsonEntity : ui8 {
         JE_OUTER_SPACE = 1,
         JE_LIST,
         JE_OBJECT,
@@ -33,12 +33,12 @@ namespace NJsonWriter {
     class TPairContext;
     class TAfterColonContext;
 
-    struct TBufState { 
-        bool NeedComma; 
-        bool NeedNewline; 
+    struct TBufState {
+        bool NeedComma;
+        bool NeedNewline;
         TVector<EJsonEntity> Stack;
-    }; 
- 
+    };
+
     class TBuf : TNonCopyable {
     public:
         TBuf(EHtmlEscapeMode mode = HEM_DONT_ESCAPE_HTML, IOutputStream* stream = nullptr);
@@ -120,10 +120,10 @@ namespace NJsonWriter {
         void UnsafeWriteRawBytes(const TStringBuf& s);
         void UnsafeWriteRawBytes(const char* c, size_t len);
 
-        TBufState State() const; 
-        void Reset(const TBufState& from); 
-        void Reset(TBufState&& from); 
- 
+        TBufState State() const;
+        void Reset(const TBufState& from);
+        void Reset(TBufState&& from);
+
     private:
         void BeginValue();
         void EndValue();

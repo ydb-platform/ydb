@@ -561,7 +561,7 @@ class Build(object):
     @property
     def is_valgrind(self):
         return self.build_type == 'valgrind' or self.build_type == 'valgrind-release'
-
+ 
     @property
     def is_ide(self):
         return self.is_ide_build_type(self.build_type)

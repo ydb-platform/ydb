@@ -57,7 +57,7 @@ RECURSE(
     eccodes
     eccodes/python
     eccodes/tools
-    eigen
+    eigen 
     expat
     falconn
     farmhash
@@ -78,7 +78,7 @@ RECURSE(
     fontconfig
     fp16
     freetype
-    fuse
+    fuse 
     fxdiv
     gamma_function_apache_math_port
     gdal
@@ -218,7 +218,7 @@ RECURSE(
     lz4
     lz4/generated
     lzmasdk
-    lzo2
+    lzo2 
     matrixssl
     mecab
     metrohash
@@ -263,7 +263,7 @@ RECURSE(
     osrm
     pam
     pango
-    pcre
+    pcre 
     pcre2
     pdqsort
     pffft
@@ -377,7 +377,7 @@ IF (OS_FREEBSD OR OS_LINUX)
         mod_perl2
         libeatmydata
     )
-ENDIF()
+ENDIF() 
 
 IF (OS_DARWIN)
     RECURSE(
@@ -407,7 +407,7 @@ IF (OS_LINUX)
         uuid
         virtiofsd
     )
-ENDIF()
+ENDIF() 
 
 IF (OS_WINDOWS)
     RECURSE(
@@ -415,18 +415,18 @@ IF (OS_WINDOWS)
         dokany/dokan
         dokany/dokan_fuse
     )
-ELSE()
+ELSE() 
     RECURSE(
         lftp
         unixodbc
     )
-ENDIF()
+ENDIF() 
 
 IF (OS_LINUX OR OS_WINDOWS)
     RECURSE(
         lockless
     )
-ENDIF()
+ENDIF() 
 
 IF (OS_ANDROID)
     RECURSE(

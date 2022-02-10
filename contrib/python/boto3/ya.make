@@ -62,13 +62,13 @@ RESOURCE_FILES(
     #boto3/data/cloudformation/2010-05-15/resources-1.json
     #boto3/data/cloudwatch/2010-08-01/resources-1.json
     #boto3/data/dynamodb/2012-08-10/resources-1.json
-    boto3/data/ec2/2014-10-01/resources-1.json
-    boto3/data/ec2/2015-03-01/resources-1.json
-    boto3/data/ec2/2015-04-15/resources-1.json
-    boto3/data/ec2/2015-10-01/resources-1.json
-    boto3/data/ec2/2016-04-01/resources-1.json
-    boto3/data/ec2/2016-09-15/resources-1.json
-    boto3/data/ec2/2016-11-15/resources-1.json
+    boto3/data/ec2/2014-10-01/resources-1.json 
+    boto3/data/ec2/2015-03-01/resources-1.json 
+    boto3/data/ec2/2015-04-15/resources-1.json 
+    boto3/data/ec2/2015-10-01/resources-1.json 
+    boto3/data/ec2/2016-04-01/resources-1.json 
+    boto3/data/ec2/2016-09-15/resources-1.json 
+    boto3/data/ec2/2016-11-15/resources-1.json 
     #boto3/data/glacier/2012-06-01/resources-1.json
     #boto3/data/iam/2010-05-08/resources-1.json
     #boto3/data/opsworks/2013-02-18/resources-1.json

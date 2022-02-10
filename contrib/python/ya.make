@@ -577,7 +577,7 @@ RECURSE(
     korean-lunar-calendar
     kubernetes
     langcodes
-    lark-parser
+    lark-parser 
     lazy
     lazy-object-proxy
     lcov_cobertura

@@ -108,7 +108,7 @@ protected:
     void Handle(TEvDropRateLimiterResource::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvListRateLimiterResources::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeRateLimiterResource::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvAcquireRateLimiterResource::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvAcquireRateLimiterResource::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvKikhouseCreateSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKikhouseRefreshSnapshotRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvKikhouseDiscardSnapshotRequest::TPtr& ev, const TActorContext& ctx);

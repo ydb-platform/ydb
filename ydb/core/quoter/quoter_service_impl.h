@@ -86,7 +86,7 @@ enum class EResourceState {
 struct TResourceLeaf {
     TResource *Resource = nullptr;
     ui64 Amount = Max<ui64>();
-    bool IsUsedAmount = false;
+    bool IsUsedAmount = false; 
 
     ui32 RequestIdx = Max<ui32>();
 
@@ -113,7 +113,7 @@ private:
     TVector<ui32> Unused;
 public:
     TResourceLeaf& Get(ui32 idx);
-    ui32 Allocate(TResource *resource, ui64 amount, bool isUsedAmount, ui32 requestIdx);
+    ui32 Allocate(TResource *resource, ui64 amount, bool isUsedAmount, ui32 requestIdx); 
     void FreeChain(ui32 headIdx);
 };
 
@@ -275,7 +275,7 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     EInitLeafStatus InitSystemLeaf(const TEvQuota::TResourceLeaf &leaf, TRequest &request, ui32 reqIdx);
     EInitLeafStatus InitResourceLeaf(const TEvQuota::TResourceLeaf &leaf, TRequest &request, ui32 reqIdx);
     EInitLeafStatus TryCharge(TResource& quores, ui64 quoterId, ui64 resourceId, const TEvQuota::TResourceLeaf &leaf, TRequest &request, ui32 reqIdx);
-    EInitLeafStatus NotifyUsed(TResource& quores, ui64 quoterId, ui64 resourceId, const TEvQuota::TResourceLeaf &leaf, TRequest &request);
+    EInitLeafStatus NotifyUsed(TResource& quores, ui64 quoterId, ui64 resourceId, const TEvQuota::TResourceLeaf &leaf, TRequest &request); 
     void MarkScheduleAllocation(TResource& quores, TDuration delay, TInstant now);
 
     void InitialRequestProcessing(TEvQuota::TEvRequest::TPtr &ev, const ui32 reqIdx);

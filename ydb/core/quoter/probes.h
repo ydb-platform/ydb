@@ -24,9 +24,9 @@
     PROBE(StartCharging, GROUPS("QuoterService", "ClientRequest"),      \
           TYPES(TString, TString, ui64, ui64),                          \
           NAMES("quoter", "resource", "quoterId", "resourceId"))        \
-    PROBE(Charge, GROUPS("QuoterService", "ClientRequest"),             \
-          TYPES(TString, TString, ui64, ui64),                          \
-          NAMES("quoter", "resource", "quoterId", "resourceId"))        \
+    PROBE(Charge, GROUPS("QuoterService", "ClientRequest"),             \ 
+          TYPES(TString, TString, ui64, ui64),                          \ 
+          NAMES("quoter", "resource", "quoterId", "resourceId"))        \ 
                                                                         \
     PROBE(AllocateResource, GROUPS("QuoterService", "Resource"),        \
           TYPES(TString, TString, ui64, ui64, ui64, double, ui64, double, double, double), \

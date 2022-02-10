@@ -58,7 +58,7 @@ SRCS(
     rpc_modify_permissions.cpp
     rpc_monitoring.cpp
     rpc_prepare_data_query.cpp
-    rpc_rate_limiter_api.cpp
+    rpc_rate_limiter_api.cpp 
     rpc_read_columns.cpp
     rpc_read_table.cpp
     rpc_remove_directory.cpp

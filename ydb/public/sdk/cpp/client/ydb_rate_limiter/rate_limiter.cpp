@@ -169,23 +169,23 @@ public:
 
         return promise.GetFuture();
     }
-
-    TAsyncStatus AcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const TAcquireResourceSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::RateLimiter::AcquireResourceRequest>(settings);
-        request.set_coordination_node_path(coordinationNodePath);
-        request.set_resource_path(resourcePath);
-
-        if (settings.IsUsedAmount_) {
-            request.set_used(settings.Amount_.GetRef());
-        } else {
-            request.set_required(settings.Amount_.GetRef());
-        }
-
-        return RunSimple<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::AcquireResourceRequest, Ydb::RateLimiter::AcquireResourceResponse>(
-            std::move(request),
-            &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncAcquireResource,
-            TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
+ 
+    TAsyncStatus AcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const TAcquireResourceSettings& settings) { 
+        auto request = MakeOperationRequest<Ydb::RateLimiter::AcquireResourceRequest>(settings); 
+        request.set_coordination_node_path(coordinationNodePath); 
+        request.set_resource_path(resourcePath); 
+ 
+        if (settings.IsUsedAmount_) { 
+            request.set_used(settings.Amount_.GetRef()); 
+        } else { 
+            request.set_required(settings.Amount_.GetRef()); 
+        } 
+ 
+        return RunSimple<Ydb::RateLimiter::V1::RateLimiterService, Ydb::RateLimiter::AcquireResourceRequest, Ydb::RateLimiter::AcquireResourceResponse>( 
+            std::move(request), 
+            &Ydb::RateLimiter::V1::RateLimiterService::Stub::AsyncAcquireResource, 
+            TRpcRequestSettings::Make(settings), 
+            settings.ClientTimeout_); 
     }
 };
 
@@ -214,8 +214,8 @@ TAsyncDescribeResourceResult TRateLimiterClient::DescribeResource(const TString&
     return Impl_->DescribeResource(coordinationNodePath, resourcePath, settings);
 }
 
-TAsyncStatus TRateLimiterClient::AcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const TAcquireResourceSettings& settings) {
-    return Impl_->AcquireResource(coordinationNodePath, resourcePath, settings);
-}
-
+TAsyncStatus TRateLimiterClient::AcquireResource(const TString& coordinationNodePath, const TString& resourcePath, const TAcquireResourceSettings& settings) { 
+    return Impl_->AcquireResource(coordinationNodePath, resourcePath, settings); 
+} 
+ 
 } // namespace NYdb::NRateLimiter

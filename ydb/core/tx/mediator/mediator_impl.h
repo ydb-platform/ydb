@@ -72,7 +72,7 @@ namespace NTxMediator {
 
         TString ToString() const {
             TStringStream str;
-            str << "{TCoordinatorStep step# " << Step; 
+            str << "{TCoordinatorStep step# " << Step;
             str << " PrevStep# " << PrevStep;
             if (Transactions.size()) {
                 str << "Transactions: {";
@@ -189,7 +189,7 @@ struct TEvTxMediator {
 
         TString ToString() const {
             TStringStream str;
-            str << "{TEvCommitTabletStep step# " << Step; 
+            str << "{TEvCommitTabletStep step# " << Step;
             str << " TabletId# " << TabletId;
             str << " Transactions {";
             for (size_t i = 0; i < Transactions.size(); ++i) {
@@ -209,7 +209,7 @@ struct TEvTxMediator {
 
         TString ToString() const {
             TStringStream str;
-            str << "{TEvStepPlanComplete step# " << Step; 
+            str << "{TEvStepPlanComplete step# " << Step;
             str << "}";
             return str.Str();
         }
@@ -228,7 +228,7 @@ struct TEvTxMediator {
 
         TString ToString() const {
             TStringStream str;
-            str << "{TEvOoOTabletStep step# " << Step; 
+            str << "{TEvOoOTabletStep step# " << Step;
             str << " TabletId# " << TabletId;
             str << " Transactions {";
             for (size_t i = 0; i < Transactions.size(); ++i) {

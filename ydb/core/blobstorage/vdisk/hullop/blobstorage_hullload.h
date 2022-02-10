@@ -314,10 +314,10 @@ namespace NKikimr {
             , RestToReadIndex(0)
             , RestToReadOutbound(0)
             , Chunks()
-        { 
+        {
             const TDiskPart& entry = levelSegment->GetEntryPoint();
             Y_VERIFY_DEBUG(!entry.Empty());
-        } 
+        }
     };
 
 

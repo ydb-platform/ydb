@@ -9,9 +9,9 @@ service TableService {
 
     // Create new session. Implicit session creation is forbidden,
     // so user must create new session before execute any query,
-    // otherwise BAD_SESSION status will be returned. 
+    // otherwise BAD_SESSION status will be returned.
     // Simultaneous execution of requests are forbiden.
-    // Sessions are volatile, can be invalidated by server, for example in case 
+    // Sessions are volatile, can be invalidated by server, for example in case
     // of fatal errors. All requests with this session will fail with BAD_SESSION status.
     // So, client must be able to handle BAD_SESSION status.
     rpc CreateSession(Table.CreateSessionRequest) returns (Table.CreateSessionResponse);

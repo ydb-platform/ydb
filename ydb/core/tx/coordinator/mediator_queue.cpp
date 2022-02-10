@@ -70,7 +70,7 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
     void Handle(TEvTxCoordinator::TEvMediatorQueueStep::TPtr &ev, const TActorContext &ctx) {
         TEvTxCoordinator::TEvMediatorQueueStep *msg = ev->Get();
         LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " HANDLE EvMediatorQueueStep step# " << msg->Step->Step); 
+            << " HANDLE EvMediatorQueueStep step# " << msg->Step->Step);
 
         if (msg->GenCookie == GenCookie && PipeClient) {
             const NFlatTxCoordinator::TMediatorStep &step = *msg->Step;

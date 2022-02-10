@@ -79,9 +79,9 @@ public:
         , Info(info)
         , ChannelInfo(Info->ChannelInfo(0))
         , CurrentHistoryIndex(ChannelInfo->History.size())
-    { 
+    {
         Y_VERIFY(CurrentHistoryIndex > 0);
-    } 
+    }
 
     void Bootstrap() {
         Become(&TThis::StateInit);

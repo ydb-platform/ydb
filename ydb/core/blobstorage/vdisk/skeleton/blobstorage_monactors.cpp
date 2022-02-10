@@ -684,9 +684,9 @@ namespace NKikimr {
             , To()
             , IsRangeQuery(false)
             , ShowInternals(false)
-        { 
+        {
             Y_UNUSED(ShowInternals);
-        } 
+        }
     };
 
     ////////////////////////////////////////////////////////////////////////////

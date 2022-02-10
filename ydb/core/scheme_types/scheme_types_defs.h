@@ -1,8 +1,8 @@
-#pragma once
-
-#include "scheme_types.h"
+#pragma once 
+ 
+#include "scheme_types.h" 
 #include "scheme_raw_type_value.h"
-
+ 
 #include <util/charset/utf8.h>
 #include <util/generic/hash.h>
 #include <util/stream/output.h> // for IOutputStream
@@ -13,30 +13,30 @@
 
 namespace NKikimr {
 namespace NScheme {
-
+ 
 const ui32 MaxKeyValueSize = 4096;
 
-////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////// 
 template<typename T, typename TDerived, TTypeId TypeId_, const char* Name_>
 class TTypedType : public IType {
-public:
-    //
-    typedef T TValueType;
+public: 
+    // 
+    typedef T TValueType; 
     static constexpr TTypeId TypeId = TypeId_;
 
-    //
-    class TInstance {
-    public:
-        //
-        const T Value;
-
-        TInstance(const T& v) : Value(v) {}
-
-        operator TRawTypeValue() const {
-            return TDerived::ToRawTypeValue(Value);
-        }
-    };
-
+    // 
+    class TInstance { 
+    public: 
+        // 
+        const T Value; 
+ 
+        TInstance(const T& v) : Value(v) {} 
+ 
+        operator TRawTypeValue() const { 
+            return TDerived::ToRawTypeValue(Value); 
+        } 
+    }; 
+ 
     TTypedType() = default;
 
     // IType interface
@@ -48,27 +48,27 @@ public:
         return sizeof(T);
     }
     TTypeId GetTypeId() const override { return TypeId; }
-    static TRawTypeValue ToRawTypeValue(const T& value) {
+    static TRawTypeValue ToRawTypeValue(const T& value) { 
         return TRawTypeValue((void*)&value, sizeof(T), TypeId);
-    }
-
+    } 
+ 
     static const char* TypeName() {
         return Name_;
     }
-};
-
-////////////////////////////////////////////////////////
+}; 
+ 
+//////////////////////////////////////////////////////// 
 
 template<typename T, ui32 TypeId, const char* Name>
 class IIntegerTypeWithKeyString : public TTypedType<T, IIntegerTypeWithKeyString<T, TypeId, Name>, TypeId, Name> {
     static_assert(std::is_integral<T>::value, "expect std::is_integral<T>::value");
 public:
-};
-
-////////////////////////////////////////////////////////
-/// Integer types
-/// 0x01 - 0x20
-/// DO NOT FORGET TO REGISTER THE TYPES in Library::OpenLibrary() / file tablet_library.h
+}; 
+ 
+//////////////////////////////////////////////////////// 
+/// Integer types 
+/// 0x01 - 0x20 
+/// DO NOT FORGET TO REGISTER THE TYPES in Library::OpenLibrary() / file tablet_library.h 
 namespace NNames {
     extern const char Int32[6];
     extern const char Uint32[7];
@@ -112,31 +112,31 @@ public:
 class TDouble : public TRealBase<double, TDouble, NTypeIds::Double, NNames::Double> {};
 class TFloat : public TRealBase<float, TFloat, NTypeIds::Float, NNames::Float> {};
 
-////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////// 
 template<typename TFirst, typename TSecond, ui32 TypeId, const char* Name>
-class IIntegerPair : public TTypedType<
+class IIntegerPair : public TTypedType< 
     std::pair<TFirst, TSecond>,
     IIntegerPair<TFirst, TSecond, TypeId, Name>,
     TypeId, Name
-    >
-{
-};
-
-////////////////////////////////////////////////////////
-/// Integer pair types
-/// 0x101 - 0x200
-/// DO NOT FORGET TO REGISTER THE TYPES in Library::OpenLibrary() / file tablet_library.h
+    > 
+{ 
+}; 
+ 
+//////////////////////////////////////////////////////// 
+/// Integer pair types 
+/// 0x101 - 0x200 
+/// DO NOT FORGET TO REGISTER THE TYPES in Library::OpenLibrary() / file tablet_library.h 
 namespace NNames {
     extern const char PairUi64Ui64[13];
 }
-
+ 
 class TPairUi64Ui64 : public IIntegerPair<ui64, ui64, NTypeIds::PairUi64Ui64, NNames::PairUi64Ui64> {};
 
 
-////////////////////////////////////////////////////////
-/// Byte strings
-/// 0x1001 - 0x2000
-/// DO NOT FORGET TO REGISTER THE TYPES in Library::OpenLibrary() / file tablet_library.h
+//////////////////////////////////////////////////////// 
+/// Byte strings 
+/// 0x1001 - 0x2000 
+/// DO NOT FORGET TO REGISTER THE TYPES in Library::OpenLibrary() / file tablet_library.h 
 // TODO: this String implementation is not quite correct - think about it later - once we decide to use it - AL
 class TStringImpl {
 public:
@@ -144,8 +144,8 @@ public:
 
 template <typename TDerived, TTypeId TypeId, const char* Name>
 class TStringBase : public TTypedType<::TString, TDerived, TypeId, Name>
-{
-public:
+{ 
+public: 
     static constexpr ui32 GetFixedSize() {
         return 0;
     }
@@ -153,8 +153,8 @@ public:
     static TRawTypeValue ToRawTypeValue(const ::TString& value) {
         return TRawTypeValue((const void*)value.data(), value.size(), TypeId);
     }
-};
-
+}; 
+ 
 namespace NNames {
     extern const char String[7];
     extern const char Utf8[5];

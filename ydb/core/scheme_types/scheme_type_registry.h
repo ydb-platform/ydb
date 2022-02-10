@@ -1,33 +1,33 @@
-#pragma once
-
-#include "scheme_types.h"
+#pragma once 
+ 
+#include "scheme_types.h" 
 #include "scheme_type_metadata.h"
 
-#include <util/generic/map.h>
+#include <util/generic/map.h> 
 #include <util/generic/maybe.h>
 #include <util/generic/singleton.h>
 #include <util/generic/vector.h>
 #include <util/string/builder.h>
-
+ 
 
 namespace NKikimr {
 namespace NScheme {
 
-////////////////////////////////////////////////////////
-/// The TTypeRegistry class
-/// this class is _not_ threadsafe!!!!
-/// it's intentionally
-class TTypeRegistry : public TThrRefBase, TNonCopyable {
-public:
-    //
-    TTypeRegistry();
-
-    //
-    template <typename T>
+//////////////////////////////////////////////////////// 
+/// The TTypeRegistry class 
+/// this class is _not_ threadsafe!!!! 
+/// it's intentionally 
+class TTypeRegistry : public TThrRefBase, TNonCopyable { 
+public: 
+    // 
+    TTypeRegistry(); 
+ 
+    // 
+    template <typename T> 
     void RegisterType() {
         RegisterType(Singleton<T>());
-    }
-
+    } 
+ 
     void RegisterType(const IType *type) {
         const TTypeId typeId = type->GetTypeId();
         Y_VERIFY(typeId <= Max<TTypeId>());
@@ -38,7 +38,7 @@ public:
         TypeMetadataRegistry.Register(type);
     }
 
-    //
+    // 
     ITypeSP GetType(TTypeId typeId) const {
         if (typeId) {
             auto iter = TypeByIdMap.find(typeId);
@@ -46,10 +46,10 @@ public:
                 Y_VERIFY_DEBUG(iter->second);
                 return iter->second;
             }
-        }
+        } 
         return typeId;
-    }
-
+    } 
+ 
     ::TString GetTypeName(TTypeId typeId) const {
         if (!typeId) {
             return "Null";
@@ -102,17 +102,17 @@ public:
         return MetadataEtag;
     }
 
-private:
-    //
+private: 
+    // 
     typedef TMap<ui32, const IType *> TTypeByIdMap;
     typedef TMap<::TString, const IType *> TTypeByNameMap;
-
+ 
     TTypeByIdMap TypeByIdMap;
     TTypeByNameMap TypeByNameMap;
     TTypeMetadataRegistry TypeMetadataRegistry;
     ui64 MetadataEtag = 0;
-};
-
+}; 
+ 
 } // namespace NScheme
 } // namespace NKikimr
-
+ 

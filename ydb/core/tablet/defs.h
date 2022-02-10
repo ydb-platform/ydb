@@ -4,9 +4,9 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/logoblob.h>
 
-namespace NKikimr {
+namespace NKikimr { 
 
-class TFlatBlobDataOutputStream;
-
-}
-
+class TFlatBlobDataOutputStream; 
+ 
+} 
+ 

@@ -18,8 +18,8 @@ SRCS(
     resource_broker_impl.h
     tablet_counters.cpp
     tablet_counters.h
-    tablet_counters_aggregator.cpp
-    tablet_counters_aggregator.h
+    tablet_counters_aggregator.cpp 
+    tablet_counters_aggregator.h 
     tablet_counters_app.cpp
     tablet_counters_app.h
     tablet_counters_protobuf.h
@@ -31,8 +31,8 @@ SRCS(
     tablet_list_renderer.h
     tablet_metrics.h
     tablet_metrics.cpp
-    tablet_monitoring_proxy.cpp
-    tablet_monitoring_proxy.h
+    tablet_monitoring_proxy.cpp 
+    tablet_monitoring_proxy.h 
     tablet_pipecache.cpp
     tablet_pipe_client.cpp
     tablet_pipe_client_cache.cpp

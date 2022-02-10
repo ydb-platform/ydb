@@ -62,7 +62,7 @@ TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
 #endif
 
     Config.PlanAhead = 50;
-    Config.Resolution = 1250;
+    Config.Resolution = 1250; 
     Config.RapidSlotFlushSize = 1000; // todo: something meaningful
 
     MonCounters.CurrentTxInFly = 0;

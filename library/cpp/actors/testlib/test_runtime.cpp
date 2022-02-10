@@ -14,7 +14,7 @@
 #include <library/cpp/actors/interconnect/interconnect_proxy_wrapper.h>
 
 #include <util/generic/maybe.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/bt_exception.h> 
 #include <util/random/mersenne.h>
 #include <util/string/printf.h>
 #include <typeinfo>
@@ -1280,7 +1280,7 @@ namespace NActors {
                     Cerr << "Reach deadline at " << TInstant::MicroSeconds(CurrentTimestamp) << "\n";
                 }
 
-                ythrow TWithBackTrace<TEmptyEventQueueException>();
+                ythrow TWithBackTrace<TEmptyEventQueueException>(); 
             }
 
             if (!options.Quiet && dispatchTime >= inspectScheduledEventsAt) {

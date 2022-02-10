@@ -1,18 +1,18 @@
-#pragma once
-
-////////////////////////////////////////////
-#include "defs.h"
-
+#pragma once 
+ 
+//////////////////////////////////////////// 
+#include "defs.h" 
+ 
 #include <library/cpp/actors/core/defs.h>
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event.h>
-
+ 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet_pipe.h>
-
-////////////////////////////////////////////
-namespace NKikimr { namespace NTabletMonitoringProxy {
-
+ 
+//////////////////////////////////////////// 
+namespace NKikimr { namespace NTabletMonitoringProxy { 
+ 
 struct TTabletMonitoringProxyConfig {
     bool PreferLocal = true;
     NTabletPipe::TClientRetryPolicy RetryPolicy;
@@ -22,14 +22,14 @@ struct TTabletMonitoringProxyConfig {
     }
 };
 
-//
+// 
 inline TActorId MakeTabletMonitoringProxyID(ui32 node = 0) {
-    char x[12] = {'t','a','b','l','m','o','n','p','r','o','x','y'};
+    char x[12] = {'t','a','b','l','m','o','n','p','r','o','x','y'}; 
     return TActorId(node, TStringBuf(x, 12));
-}
-
-//
+} 
+ 
+// 
 IActor* CreateTabletMonitoringProxy(TTabletMonitoringProxyConfig config = TTabletMonitoringProxyConfig());
-
-} } // end of the NKikimr::NCompactionService namespace
-
+ 
+} } // end of the NKikimr::NCompactionService namespace 
+ 

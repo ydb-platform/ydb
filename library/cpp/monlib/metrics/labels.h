@@ -192,40 +192,40 @@ namespace NMonitoring {
     // TLabels
     ///////////////////////////////////////////////////////////////////////////
     template <typename TStringBackend>
-    class TLabelsImpl: public ILabels {
+    class TLabelsImpl: public ILabels { 
     public:
-        using value_type = TLabelImpl<TStringBackend>;
+        using value_type = TLabelImpl<TStringBackend>; 
 
-        TLabelsImpl() = default;
+        TLabelsImpl() = default; 
 
-        explicit TLabelsImpl(::NDetail::TReserveTag rt)
-            : Labels_(std::move(rt))
-        {}
+        explicit TLabelsImpl(::NDetail::TReserveTag rt) 
+            : Labels_(std::move(rt)) 
+        {} 
 
-        explicit TLabelsImpl(size_t count)
-            : Labels_(count)
-        {}
+        explicit TLabelsImpl(size_t count) 
+            : Labels_(count) 
+        {} 
 
-        explicit TLabelsImpl(size_t count, const value_type& label)
-            : Labels_(count, label)
-        {}
+        explicit TLabelsImpl(size_t count, const value_type& label) 
+            : Labels_(count, label) 
+        {} 
 
-        TLabelsImpl(std::initializer_list<value_type> il)
-            : Labels_(std::move(il))
-        {}
-
-        TLabelsImpl(const TLabelsImpl&) = default;
-        TLabelsImpl& operator=(const TLabelsImpl&) = default;
-
-        TLabelsImpl(TLabelsImpl&&) noexcept = default;
-        TLabelsImpl& operator=(TLabelsImpl&&) noexcept = default;
-
+        TLabelsImpl(std::initializer_list<value_type> il) 
+            : Labels_(std::move(il)) 
+        {} 
+ 
+        TLabelsImpl(const TLabelsImpl&) = default; 
+        TLabelsImpl& operator=(const TLabelsImpl&) = default; 
+ 
+        TLabelsImpl(TLabelsImpl&&) noexcept = default; 
+        TLabelsImpl& operator=(TLabelsImpl&&) noexcept = default; 
+ 
         inline bool operator==(const TLabelsImpl& rhs) const {
-            return Labels_ == rhs.Labels_;
+            return Labels_ == rhs.Labels_; 
         }
 
         inline bool operator!=(const TLabelsImpl& rhs) const {
-            return Labels_ != rhs.Labels_;
+            return Labels_ != rhs.Labels_; 
         }
 
         bool Add(TStringBuf name, TStringBuf value) noexcept override {
@@ -233,43 +233,43 @@ namespace NMonitoring {
                 return false;
             }
 
-            Labels_.emplace_back(name, value);
+            Labels_.emplace_back(name, value); 
             return true;
         }
 
         using ILabels::Add;
 
         bool Has(TStringBuf name) const noexcept override {
-            auto it = FindIf(Labels_, [name](const TLabelImpl<TStringBackend>& label) {
+            auto it = FindIf(Labels_, [name](const TLabelImpl<TStringBackend>& label) { 
                 return name == TStringBuf{label.Name()};
             });
-            return it != Labels_.end();
+            return it != Labels_.end(); 
         }
 
         bool Has(const TString& name) const noexcept {
-            auto it = FindIf(Labels_, [name](const TLabelImpl<TStringBackend>& label) {
+            auto it = FindIf(Labels_, [name](const TLabelImpl<TStringBackend>& label) { 
                 return name == TStringBuf{label.Name()};
             });
-            return it != Labels_.end();
+            return it != Labels_.end(); 
         }
 
         // XXX for backward compatibility
         TMaybe<TLabelImpl<TStringBackend>> Find(TStringBuf name) const {
-            auto it = FindIf(Labels_, [name](const TLabelImpl<TStringBackend>& label) {
+            auto it = FindIf(Labels_, [name](const TLabelImpl<TStringBackend>& label) { 
                 return name == TStringBuf{label.Name()};
             });
-            if (it == Labels_.end()) {
+            if (it == Labels_.end()) { 
                 return Nothing();
             }
             return *it;
         }
 
         std::optional<const ILabel*> Get(TStringBuf name) const override {
-            auto it = FindIf(Labels_, [name] (auto&& l) {
+            auto it = FindIf(Labels_, [name] (auto&& l) { 
                 return name == l.Name();
             });
 
-            if (it == Labels_.end()) {
+            if (it == Labels_.end()) { 
                 return {};
             }
 
@@ -281,116 +281,116 @@ namespace NMonitoring {
         }
 
         TMaybe<TLabelImpl<TStringBackend>> Extract(TStringBuf name) {
-            auto it = FindIf(Labels_, [name](const TLabelImpl<TStringBackend>& label) {
+            auto it = FindIf(Labels_, [name](const TLabelImpl<TStringBackend>& label) { 
                 return name == TStringBuf{label.Name()};
             });
-            if (it == Labels_.end()) {
+            if (it == Labels_.end()) { 
                 return Nothing();
             }
             TLabel tmp = *it;
-            Labels_.erase(it);
+            Labels_.erase(it); 
             return tmp;
         }
 
         void SortByName() {
-            std::sort(Labels_.begin(), Labels_.end(), [](const auto& lhs, const auto& rhs) {
+            std::sort(Labels_.begin(), Labels_.end(), [](const auto& lhs, const auto& rhs) { 
                 return lhs.Name() < rhs.Name();
             });
         }
 
         inline size_t Hash() const noexcept override {
-            return TSimpleRangeHash()(Labels_);
+            return TSimpleRangeHash()(Labels_); 
         }
 
         inline TLabel* Data() const noexcept {
-            return const_cast<TLabel*>(Labels_.data());
+            return const_cast<TLabel*>(Labels_.data()); 
         }
 
         inline size_t Size() const noexcept override {
-            return Labels_.size();
+            return Labels_.size(); 
         }
 
         inline bool Empty() const noexcept override {
-            return Labels_.empty();
+            return Labels_.empty(); 
         }
 
         inline void Clear() noexcept override {
-            Labels_.clear();
+            Labels_.clear(); 
         };
 
-        TLabelImpl<TStringBackend>& front() {
-            return Labels_.front();
-        }
-
-        const TLabelImpl<TStringBackend>& front() const {
-            return Labels_.front();
-        }
-
-        TLabelImpl<TStringBackend>& back() {
-            return Labels_.back();
-        }
-
-        const TLabelImpl<TStringBackend>& back() const {
-            return Labels_.back();
-        }
-
-        TLabelImpl<TStringBackend>& operator[](size_t index) {
-            return Labels_[index];
-        }
-
-        const TLabelImpl<TStringBackend>& operator[](size_t index) const {
-            return Labels_[index];
-        }
-
-        TLabelImpl<TStringBackend>& at(size_t index) {
-            return Labels_.at(index);
-        }
-
-        const TLabelImpl<TStringBackend>& at(size_t index) const {
-            return Labels_.at(index);
-        }
-
-        size_t capacity() const {
-            return Labels_.capacity();
-        }
-
-        TLabelImpl<TStringBackend>* data() {
-            return Labels_.data();
-        }
-
-        const TLabelImpl<TStringBackend>* data() const {
-            return Labels_.data();
-        }
-
-        size_t size() const {
-            return Labels_.size();
-        }
-
-        bool empty() const {
-            return Labels_.empty();
-        }
-
-        void clear() {
-            Labels_.clear();
-        }
-
-        using ILabels::begin;
-        using ILabels::end;
-
-        using iterator = ILabels::TIterator;
-        using const_iterator = iterator;
-
+        TLabelImpl<TStringBackend>& front() { 
+            return Labels_.front(); 
+        } 
+ 
+        const TLabelImpl<TStringBackend>& front() const { 
+            return Labels_.front(); 
+        } 
+ 
+        TLabelImpl<TStringBackend>& back() { 
+            return Labels_.back(); 
+        } 
+ 
+        const TLabelImpl<TStringBackend>& back() const { 
+            return Labels_.back(); 
+        } 
+ 
+        TLabelImpl<TStringBackend>& operator[](size_t index) { 
+            return Labels_[index]; 
+        } 
+ 
+        const TLabelImpl<TStringBackend>& operator[](size_t index) const { 
+            return Labels_[index]; 
+        } 
+ 
+        TLabelImpl<TStringBackend>& at(size_t index) { 
+            return Labels_.at(index); 
+        } 
+ 
+        const TLabelImpl<TStringBackend>& at(size_t index) const { 
+            return Labels_.at(index); 
+        } 
+ 
+        size_t capacity() const { 
+            return Labels_.capacity(); 
+        } 
+ 
+        TLabelImpl<TStringBackend>* data() { 
+            return Labels_.data(); 
+        } 
+ 
+        const TLabelImpl<TStringBackend>* data() const { 
+            return Labels_.data(); 
+        } 
+ 
+        size_t size() const { 
+            return Labels_.size(); 
+        } 
+ 
+        bool empty() const { 
+            return Labels_.empty(); 
+        } 
+ 
+        void clear() { 
+            Labels_.clear(); 
+        } 
+ 
+        using ILabels::begin; 
+        using ILabels::end; 
+ 
+        using iterator = ILabels::TIterator; 
+        using const_iterator = iterator; 
+ 
     protected:
-        TVector<TLabelImpl<TStringBackend>>& AsVector() {
-            return Labels_;
+        TVector<TLabelImpl<TStringBackend>>& AsVector() { 
+            return Labels_; 
         }
 
-        const TVector<TLabelImpl<TStringBackend>>& AsVector() const {
-            return Labels_;
+        const TVector<TLabelImpl<TStringBackend>>& AsVector() const { 
+            return Labels_; 
         }
-
-    private:
-        TVector<TLabelImpl<TStringBackend>> Labels_;
+ 
+    private: 
+        TVector<TLabelImpl<TStringBackend>> Labels_; 
     };
 
     using TLabels = TLabelsImpl<TString>;

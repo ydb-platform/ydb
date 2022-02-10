@@ -54,7 +54,7 @@ struct ITrampoLine {
 struct TContClosure {
     ITrampoLine* TrampoLine;
     TArrayRef<char> Stack;
-    const char* ContName = nullptr;
+    const char* ContName = nullptr; 
 };
 
 #if defined(USE_UCONTEXT_CONT)

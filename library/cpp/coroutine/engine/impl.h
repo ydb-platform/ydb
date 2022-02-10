@@ -113,9 +113,9 @@ private:
 
     // TODO(velavokr): allow name storage owning (for generated names backed by TString)
     const char* Name_ = nullptr;
-
-    NCoro::TTrampoline Trampoline_;
-
+ 
+    NCoro::TTrampoline Trampoline_; 
+ 
     TIntrusiveList<TJoinWait> Waiters_;
     bool Cancelled_ = false;
     bool Scheduled_ = false;

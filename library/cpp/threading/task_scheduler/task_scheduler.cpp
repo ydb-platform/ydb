@@ -1,4 +1,4 @@
-#include "task_scheduler.h"
+#include "task_scheduler.h" 
 
 #include <util/system/thread.h>
 #include <util/string/cast.h>
@@ -44,7 +44,7 @@ TTaskScheduler::~TTaskScheduler() {
     try {
         Stop();
     } catch (...) {
-        Cdbg << "task scheduled destruction error: " << CurrentExceptionMessage();
+        Cdbg << "task scheduled destruction error: " << CurrentExceptionMessage(); 
     }
 }
 
@@ -201,7 +201,7 @@ void TTaskScheduler::WorkerFunc(TWorkerThread* thread) {
             try {
                 repeat = toDo->Process();
             } catch (...) {
-               Cdbg << "task scheduler error: " << CurrentExceptionMessage();
+               Cdbg << "task scheduler error: " << CurrentExceptionMessage(); 
             }
         }
 

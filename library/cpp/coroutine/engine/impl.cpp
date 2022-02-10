@@ -24,7 +24,7 @@ TCont::TCont(NCoro::NStack::IAllocator& allocator,
              NCoro::TTrampoline::TFunc func,
              const char* name) noexcept
     : Executor_(executor)
-    , Name_(name)
+    , Name_(name) 
     , Trampoline_(
         allocator,
         stackSize,

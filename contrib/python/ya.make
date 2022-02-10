@@ -66,7 +66,7 @@ RECURSE(
     arq
     arrow
     asciitree
-    asgiref
+    asgiref 
     asn1crypto
     astroid
     asttokens
@@ -85,7 +85,7 @@ RECURSE(
     AttrDict
     attrs
     Authlib
-    autobahn
+    autobahn 
     Automat
     awscli
     Babel
@@ -140,10 +140,10 @@ RECURSE(
     certifi
     certipy
     cffi
-    channels
+    channels 
     chardet
     charset-normalizer
-    channels
+    channels 
     chart-studio
     CherryPy
     cherrypy-cors
@@ -191,9 +191,9 @@ RECURSE(
     cymem
     cytoolz
     czipfile
-    daphne
+    daphne 
     dask
-    daphne
+    daphne 
     databases
     dataclasses-json
     datadiff
@@ -224,17 +224,17 @@ RECURSE(
     django-bootstrap3
     django-braces
     django-bulk-update
-    django-cachalot
+    django-cachalot 
     django-cache-memoize
     django-celery-beat
     django-celery-email
     django-celery-results
     django-closuretree
     django-constance
-    django-cors-headers
+    django-cors-headers 
     django-cors-middleware
     django-crispy-forms
-    django-cron
+    django-cron 
     django-csp
     django-cte
     django-datetime-widget
@@ -706,7 +706,7 @@ RECURSE(
     pandas
     pandocfilters
     papermill
-    parameterized
+    parameterized 
     paramiko
     paramz
     parse
@@ -819,7 +819,7 @@ RECURSE(
     PyGithub
     Pygments
     pygrib
-    pygtrie
+    pygtrie 
     PyHamcrest
     pyjavaproperties
     PyJWT
@@ -1090,7 +1090,7 @@ RECURSE(
     Twiggy
     twiggy-goodies
     Twisted
-    txaio
+    txaio 
     txredisapi
     typecode
     typed-argument-parser

@@ -104,13 +104,13 @@ Y_UNIT_TEST_SUITE(TIsIn) {
         UNIT_ASSERT(IsIn(TVector<TStringBuf>({"a", "b", "c"}), b.data()));
         UNIT_ASSERT(IsIn(TVector<TStringBuf>({"a", "b", "c"}), "b"));
     }
-
-    Y_UNIT_TEST(IsInArrayTest) {
+ 
+    Y_UNIT_TEST(IsInArrayTest) { 
         const TString array[] = {"a", "b", "d"};
-
-        UNIT_ASSERT(IsIn(array, "a"));
-        UNIT_ASSERT(IsIn(array, TString("b")));
-        UNIT_ASSERT(!IsIn(array, "c"));
+ 
+        UNIT_ASSERT(IsIn(array, "a")); 
+        UNIT_ASSERT(IsIn(array, TString("b"))); 
+        UNIT_ASSERT(!IsIn(array, "c")); 
         UNIT_ASSERT(IsIn(array, TStringBuf("d")));
-    }
+    } 
 }

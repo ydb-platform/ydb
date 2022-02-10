@@ -144,12 +144,12 @@ void ParseFromTextFormat(IInputStream& in, NProtoBuf::Message& m,
     ConfigureParser(options, p);
 
     if (!p.Parse(&adaptor, &m)) {
-        // remove everything that may have been read 
-        m.Clear(); 
-        ythrow yexception() << "ParseFromTextFormat failed on Parse for " << m.GetTypeName(); 
-    } 
-} 
- 
+        // remove everything that may have been read
+        m.Clear();
+        ythrow yexception() << "ParseFromTextFormat failed on Parse for " << m.GetTypeName();
+    }
+}
+
 void ParseFromTextFormat(const TString& fileName, NProtoBuf::Message& m,
                          const EParseFromTextFormatOptions options) {
     /* TUnbufferedFileInput is unbuffered, but TCopyingInputStreamAdaptor adds

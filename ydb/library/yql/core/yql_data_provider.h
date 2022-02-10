@@ -177,7 +177,7 @@ struct TYqlOperationOptions;
 struct TOperationProgress;
 class TGatewaysConfig;
 
- 
+
 using TOperationProgressWriter = std::function<void(const TOperationProgress&)>;
 
 enum class ESourceSyntax {

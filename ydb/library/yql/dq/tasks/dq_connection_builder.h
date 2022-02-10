@@ -19,14 +19,14 @@ void CommonBuildTasks(TDqTasksGraph<TStageInfoMeta, TTaskMeta, TInputMeta, TOutp
 
         // Current assumptions:
         // 1. `Broadcast` can not be the 1st stage input unless it's a single input
-        // 2. All stage's inputs, except 1st one, must be a `Broadcast` or `UnionAll` !!! or `HashShuffle` !!! 
+        // 2. All stage's inputs, except 1st one, must be a `Broadcast` or `UnionAll` !!! or `HashShuffle` !!!
         if (inputIndex == 0) {
             YQL_ENSURE(stage.Inputs().Size() == 1 || !input.Maybe<NNodes::TDqCnBroadcast>());
         } else {
-            YQL_ENSURE( 
-                    input.Maybe<NNodes::TDqCnBroadcast>() || 
-                    input.Maybe<NNodes::TDqCnUnionAll>() || 
-                    input.Maybe<NNodes::TDqCnHashShuffle>(), "" << input.Ref().Content()); 
+            YQL_ENSURE(
+                    input.Maybe<NNodes::TDqCnBroadcast>() ||
+                    input.Maybe<NNodes::TDqCnUnionAll>() ||
+                    input.Maybe<NNodes::TDqCnHashShuffle>(), "" << input.Ref().Content());
         }
 
         if (auto maybeCnShuffle = input.Maybe<NNodes::TDqCnHashShuffle>()) {

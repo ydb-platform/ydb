@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.h>
- 
+
 #include <ydb/library/yql/providers/dq/api/grpc/api.grpc.pb.h>
 #include <ydb/library/yql/providers/dq/api/protos/service.pb.h>
 
@@ -24,8 +24,8 @@ namespace NYql::NDqs {
     class TDqsGrpcService: public NGrpc::TGrpcServiceBase<Yql::DqsProto::DqService> {
     public:
         TDqsGrpcService(NActors::TActorSystem& system,
-                        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, 
-                        const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories); 
+                        TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+                        const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories);
 
         void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
         void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
@@ -41,7 +41,7 @@ namespace NYql::NDqs {
         NGrpc::TGlobalLimiter* Limiter = nullptr;
 
         TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-        TDqTaskPreprocessorFactoryCollection DqTaskPreprocessorFactories; 
+        TDqTaskPreprocessorFactoryCollection DqTaskPreprocessorFactories;
         TMutex Mutex;
         NThreading::TPromise<void> Promise;
         std::atomic<ui64> RunningRequests;

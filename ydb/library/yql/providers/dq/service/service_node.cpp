@@ -109,7 +109,7 @@ namespace NYql {
         return ActorSystem.Get();
     }
 
-    void TServiceNode::StartService(const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories) { 
+    void TServiceNode::StartService(const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories) {
         class TCustomOption : public grpc::ServerBuilderOption {
         public:
             TCustomOption() { }
@@ -149,7 +149,7 @@ namespace NYql {
                            .SetLogger(CreateActorSystemLogger(*ActorSystem, 413)); // 413 - NKikimrServices::GRPC_SERVER
 
         Server = MakeHolder<TGRpcServer>(options);
-        Service = TIntrusivePtr<IGRpcService>(new TDqsGrpcService(*ActorSystem, MetricsRegistry->GetSensors(), dqTaskPreprocessorFactories)); 
+        Service = TIntrusivePtr<IGRpcService>(new TDqsGrpcService(*ActorSystem, MetricsRegistry->GetSensors(), dqTaskPreprocessorFactories));
         Server->AddService(Service);
         Server->Start();
     }

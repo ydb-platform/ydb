@@ -74,7 +74,7 @@ private:
 
     void OnChannelData(NDq::TEvDqCompute::TEvChannelData::TPtr& ev, const TActorContext&) {
         YQL_LOG_CTX_SCOPE(TraceId);
- 
+
         auto res = MakeHolder<NDq::TEvDqCompute::TEvChannelDataAck>();
 
         if (!Discard) {
@@ -166,9 +166,9 @@ private:
     TIssues Issues;
     ui64 Size = 0;
     ui64 Rows = 0;
-    // const Yql::DqsProto::TFullResultTable FullResultTable; 
+    // const Yql::DqsProto::TFullResultTable FullResultTable;
     const THashMap<TString, TString> SecureParams;
-    // THolder<IFullResultWriter> FullResultWriter; 
+    // THolder<IFullResultWriter> FullResultWriter;
     THolder<TProtoBuilder> ResultBuilder;
     bool Discard = false;
 };

@@ -45,12 +45,12 @@ namespace NYql::NDqs {
         DEFINE_SIMPLE_NONLOCAL_EVENT(TEvPullResult, "");
     };
 
-    struct TEvGraphExecutionEvent 
-            : NActors::TEventPB<TEvGraphExecutionEvent, NYql::NDqProto::TGraphExecutionEvent, TDqExecuterEvents::ES_GRAPH_EXECUTION_EVENT> { 
-        TEvGraphExecutionEvent() = default; 
-        explicit TEvGraphExecutionEvent(NDqProto::TGraphExecutionEvent& evt); 
-    }; 
- 
+    struct TEvGraphExecutionEvent
+            : NActors::TEventPB<TEvGraphExecutionEvent, NYql::NDqProto::TGraphExecutionEvent, TDqExecuterEvents::ES_GRAPH_EXECUTION_EVENT> {
+        TEvGraphExecutionEvent() = default;
+        explicit TEvGraphExecutionEvent(NDqProto::TGraphExecutionEvent& evt);
+    };
+
     using TDqDataEvents = NDq::TBaseDqDataEvents<NActors::TEvents::EEventSpace::ES_USERSPACE>;
 
     struct TEvPullDataRequest
@@ -75,19 +75,19 @@ namespace NYql::NDqs {
         TEvPingResponse() = default;
     };
 
-    struct TEvFullResultWriterStatusRequest 
-        : NActors::TEventPB<TEvFullResultWriterStatusRequest, NYql::NDqProto::TFullResultWriterStatusRequest, 
-        TDqDataEvents::ES_FULL_RESULT_WRITER_STATUS_REQUEST> { 
-        TEvFullResultWriterStatusRequest() = default; 
-    }; 
- 
-    struct TEvFullResultWriterStatusResponse 
-        : NActors::TEventPB<TEvFullResultWriterStatusResponse, NYql::NDqProto::TFullResultWriterStatusResponse, 
-        TDqDataEvents::ES_FULL_RESULT_WRITER_STATUS_RESPONSE> { 
-        TEvFullResultWriterStatusResponse() = default; 
-        explicit TEvFullResultWriterStatusResponse(NDqProto::TFullResultWriterStatusResponse& data); 
-    }; 
- 
+    struct TEvFullResultWriterStatusRequest
+        : NActors::TEventPB<TEvFullResultWriterStatusRequest, NYql::NDqProto::TFullResultWriterStatusRequest,
+        TDqDataEvents::ES_FULL_RESULT_WRITER_STATUS_REQUEST> {
+        TEvFullResultWriterStatusRequest() = default;
+    };
+
+    struct TEvFullResultWriterStatusResponse
+        : NActors::TEventPB<TEvFullResultWriterStatusResponse, NYql::NDqProto::TFullResultWriterStatusResponse,
+        TDqDataEvents::ES_FULL_RESULT_WRITER_STATUS_RESPONSE> {
+        TEvFullResultWriterStatusResponse() = default;
+        explicit TEvFullResultWriterStatusResponse(NDqProto::TFullResultWriterStatusResponse& data);
+    };
+
     struct TEvGraphFinished : NActors::TEventBase<TEvGraphFinished, TDqExecuterEvents::ES_GRAPH_FINISHED> {
         DEFINE_SIMPLE_NONLOCAL_EVENT(TEvGraphFinished, "");
     };

@@ -3,14 +3,14 @@ LIBRARY()
 OWNER(g:yql)
 
 SRCS(
-    compute_actor.cpp 
+    compute_actor.cpp
     events.cpp
     executer_actor.cpp
     execution_helpers.cpp
-    graph_execution_events_actor.cpp 
+    graph_execution_events_actor.cpp
     resource_allocator.cpp
-    task_controller.cpp 
-    worker_actor.cpp 
+    task_controller.cpp
+    worker_actor.cpp
     result_aggregator.cpp
     result_receiver.cpp
     full_result_writer.cpp

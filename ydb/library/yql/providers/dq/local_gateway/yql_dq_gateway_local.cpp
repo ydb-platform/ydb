@@ -86,8 +86,8 @@ public:
             TActorSetupCmd(resman, TMailboxType::Simple, 0));
 
         ServiceNode->StartActorSystem();
- 
-        ServiceNode->StartService(dqTaskPreprocessorFactories); 
+
+        ServiceNode->StartService(dqTaskPreprocessorFactories);
     }
 
     ~TLocalServiceHolder()
@@ -115,7 +115,7 @@ public:
         return Gateway->CloseSession(sessionId);
     }
 
-    NThreading::TFuture<TResult> 
+    NThreading::TFuture<TResult>
     ExecutePlan(const TString& sessionId, NDqs::IDqsExecutionPlanner& plan, const TVector<TString>& columns,
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,

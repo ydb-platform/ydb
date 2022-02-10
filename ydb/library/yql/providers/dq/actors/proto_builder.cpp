@@ -140,7 +140,7 @@ bool TProtoBuilder::WriteData(const TVector<NDqProto::TData>& rows, const std::f
     }
     return true;
 }
- 
+
 Ydb::ResultSet TProtoBuilder::BuildResultSet(const TVector<NYql::NDqProto::TData>& data) {
     Ydb::ResultSet resultSet;
     auto structType = AS_TYPE(TStructType, ResultType);
@@ -150,8 +150,8 @@ Ydb::ResultSet TProtoBuilder::BuildResultSet(const TVector<NYql::NDqProto::TData
         const ui32 memberIndex = ColumnOrder.empty() ? i : ColumnOrder[i];
         column.set_name(TString(structType->GetMemberName(memberIndex)));
         ExportTypeToProto(structType->GetMemberType(memberIndex), *column.mutable_type());
-    } 
- 
+    }
+
     WriteData(data, [&](const NYql::NUdf::TUnboxedValuePod& value) {
         ExportValueToProto(ResultType, value, *resultSet.add_rows(), &ColumnOrder);
         return true;

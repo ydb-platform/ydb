@@ -56,8 +56,8 @@ struct TBaseDqExecuterEvents {
         ES_RESULT_SET,
         ES_DQ_FAILURE,
         ES_GRAPH,
-        ES_GRAPH_FINISHED, 
-        ES_GRAPH_EXECUTION_EVENT, 
+        ES_GRAPH_FINISHED,
+        ES_GRAPH_EXECUTION_EVENT,
     };
 };
 
@@ -71,9 +71,9 @@ struct TBaseDqDataEvents {
         ES_PING_REQUEST,
         ES_PING_RESPONSE,
         ES_CONTINUE_RUN,
- 
-        ES_FULL_RESULT_WRITER_STATUS_REQUEST, 
-        ES_FULL_RESULT_WRITER_STATUS_RESPONSE, 
+
+        ES_FULL_RESULT_WRITER_STATUS_REQUEST,
+        ES_FULL_RESULT_WRITER_STATUS_RESPONSE,
     };
 };
 

@@ -26,7 +26,7 @@ namespace NYql {
 
         void AddLocalService(NActors::TActorId actorId, const NActors::TActorSetupCmd& service);
         NActors::TActorSystem* StartActorSystem(void* appData = nullptr);
-        void StartService(const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories); 
+        void StartService(const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories);
 
         void Stop(TDuration time = TDuration::Max());
 

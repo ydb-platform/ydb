@@ -12,7 +12,7 @@ THolder<NActors::IActor> MakeResultReceiver(
     const NActors::TActorId& executerId,
     const TString& traceId,
     const TDqConfiguration::TPtr& settings,
-//    const Yql::DqsProto::TFullResultTable& resultTable, 
+//    const Yql::DqsProto::TFullResultTable& resultTable,
     const THashMap<TString, TString>& secureParams,
     const TString& resultBuilder,
     bool discard

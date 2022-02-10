@@ -545,7 +545,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (JoinDict)"); 
+        auto join = FindPlanNodeByKv(plan, "Node Type", "FullJoin (JoinDict)");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());

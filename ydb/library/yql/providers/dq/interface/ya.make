@@ -4,7 +4,7 @@ OWNER(g:yql)
 
 SRCS(
     yql_dq_integration.cpp
-    yql_dq_task_preprocessor.cpp 
+    yql_dq_task_preprocessor.cpp
     yql_dq_task_transform.cpp
 )
 

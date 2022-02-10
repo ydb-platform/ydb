@@ -281,7 +281,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
                 .EndList().Build()
              .Build();
 
- 
+
         const TString query = Q_(R"(
             DECLARE $in AS List<Struct<k: Int32>>;
             SELECT * FROM AS_TABLE($in) AS t1
@@ -915,31 +915,31 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(FullOuterJoinSizeCheck) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
-        CreateSampleTables(session); 
- 
+    Y_UNIT_TEST_NEW_ENGINE(FullOuterJoinSizeCheck) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTables(session);
+
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT COUNT(*) 
-            FROM `/Root/Join1_1` as left 
-            FULL OUTER JOIN `/Root/Join1_2` as right 
-            ON left.Fk21 = right.Key1 
-            UNION ALL 
-            SELECT COUNT(*) 
-            FROM `/Root/Join1_2` as right 
-            FULL OUTER JOIN `/Root/Join1_1` as left 
-            ON left.Fk21 = right.Key1 
+            SELECT COUNT(*)
+            FROM `/Root/Join1_1` as left
+            FULL OUTER JOIN `/Root/Join1_2` as right
+            ON left.Fk21 = right.Key1
+            UNION ALL
+            SELECT COUNT(*)
+            FROM `/Root/Join1_2` as right
+            FULL OUTER JOIN `/Root/Join1_1` as left
+            ON left.Fk21 = right.Key1
         )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
- 
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
-        CompareYson( 
-                "[[12u];[12u]]", // numbers MUST be same 
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        CompareYson(
+                "[[12u];[12u]]", // numbers MUST be same
                 FormatResultSetYson(result.GetResultSet(0))
-        ); 
-    } 
- 
+        );
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(CrossJoinCount) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

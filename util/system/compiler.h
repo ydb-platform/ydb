@@ -197,83 +197,83 @@ constexpr Y_FORCE_INLINE int Y_UNUSED(Types&&...) {
 };
 #endif
 
-/**
- * @def Y_ASSUME
- *
- * Macro that tells the compiler that it can generate optimized code
- * as if the given expression will always evaluate true.
- * The behavior is undefined if it ever evaluates false.
- *
- * @code
- * // factored into a function so that it's testable
- * inline int Avg(int x, int y) {
- *     if (x >= 0 && y >= 0) {
- *         return (static_cast<unsigned>(x) + static_cast<unsigned>(y)) >> 1;
- *     } else {
- *         // a slower implementation
- *     }
- * }
- *
- * // we know that xs and ys are non-negative from domain knowledge,
- * // but we can't change the types of xs and ys because of API constrains
+/** 
+ * @def Y_ASSUME 
+ * 
+ * Macro that tells the compiler that it can generate optimized code 
+ * as if the given expression will always evaluate true. 
+ * The behavior is undefined if it ever evaluates false. 
+ * 
+ * @code 
+ * // factored into a function so that it's testable 
+ * inline int Avg(int x, int y) { 
+ *     if (x >= 0 && y >= 0) { 
+ *         return (static_cast<unsigned>(x) + static_cast<unsigned>(y)) >> 1; 
+ *     } else { 
+ *         // a slower implementation 
+ *     } 
+ * } 
+ * 
+ * // we know that xs and ys are non-negative from domain knowledge, 
+ * // but we can't change the types of xs and ys because of API constrains 
  * int Foo(const TVector<int>& xs, const TVector<int>& ys) {
  *     TVector<int> avgs;
- *     avgs.resize(xs.size());
- *     for (size_t i = 0; i < xs.size(); ++i) {
- *         auto x = xs[i];
- *         auto y = ys[i];
- *         Y_ASSUME(x >= 0);
- *         Y_ASSUME(y >= 0);
- *         xs[i] = Avg(x, y);
- *     }
- * }
- * @endcode
- */
-#if defined(__GNUC__)
+ *     avgs.resize(xs.size()); 
+ *     for (size_t i = 0; i < xs.size(); ++i) { 
+ *         auto x = xs[i]; 
+ *         auto y = ys[i]; 
+ *         Y_ASSUME(x >= 0); 
+ *         Y_ASSUME(y >= 0); 
+ *         xs[i] = Avg(x, y); 
+ *     } 
+ * } 
+ * @endcode 
+ */ 
+#if defined(__GNUC__) 
     #define Y_ASSUME(condition) ((condition) ? (void)0 : __builtin_unreachable())
-#elif defined(_MSC_VER)
+#elif defined(_MSC_VER) 
     #define Y_ASSUME(condition) __assume(condition)
-#else
+#else 
     #define Y_ASSUME(condition) Y_UNUSED(condition)
-#endif
-
+#endif 
+ 
 #ifdef __cplusplus
 [[noreturn]]
 #endif
 Y_HIDDEN void
 _YandexAbort();
-
-/**
- * @def Y_UNREACHABLE
- *
- * Macro that marks the rest of the code branch unreachable.
- * The behavior is undefined if it's ever reached.
- *
- * @code
- * switch (i % 3) {
- * case 0:
- *     return foo;
- * case 1:
- *     return bar;
- * case 2:
- *     return baz;
- * default:
- *     Y_UNREACHABLE();
- * }
- * @endcode
- */
+ 
+/** 
+ * @def Y_UNREACHABLE 
+ * 
+ * Macro that marks the rest of the code branch unreachable. 
+ * The behavior is undefined if it's ever reached. 
+ * 
+ * @code 
+ * switch (i % 3) { 
+ * case 0: 
+ *     return foo; 
+ * case 1: 
+ *     return bar; 
+ * case 2: 
+ *     return baz; 
+ * default: 
+ *     Y_UNREACHABLE(); 
+ * } 
+ * @endcode 
+ */ 
 #if defined(__GNUC__)
     #define Y_UNREACHABLE() __builtin_unreachable()
 #elif defined(_MSC_VER)
     #define Y_UNREACHABLE() __assume(false)
-#else
+#else 
     #define Y_UNREACHABLE() _YandexAbort()
-#endif
-
+#endif 
+ 
 #if defined(undefined_sanitizer_enabled)
     #define _ubsan_enabled_
 #endif
-
+ 
 #ifdef __clang__
 
     #if __has_feature(thread_sanitizer)

@@ -36,32 +36,32 @@ public:
     }
 
     inline size_t Skip(size_t len) {
-        size_t totalSkipped = 0;
-        while (len) {
-            const size_t skipped = DoSkip(len);
-            if (skipped == 0) {
-                break;
-            }
-
-            totalSkipped += skipped;
-            len -= skipped;
+        size_t totalSkipped = 0; 
+        while (len) { 
+            const size_t skipped = DoSkip(len); 
+            if (skipped == 0) { 
+                break; 
+            } 
+ 
+            totalSkipped += skipped; 
+            len -= skipped; 
         }
-
-        return totalSkipped;
+ 
+        return totalSkipped; 
     }
 
-    inline size_t DoSkip(size_t len) {
-        if (MemInput_.Exhausted()) {
-            if (len > BufLen() / 2) {
-                return Slave_->Skip(len);
-            }
-
-            MemInput_.Reset(Buf(), Slave_->Read(Buf(), BufLen()));
-        }
-
-        return MemInput_.Skip(len);
-    }
-
+    inline size_t DoSkip(size_t len) { 
+        if (MemInput_.Exhausted()) { 
+            if (len > BufLen() / 2) { 
+                return Slave_->Skip(len); 
+            } 
+ 
+            MemInput_.Reset(Buf(), Slave_->Read(Buf(), BufLen())); 
+        } 
+ 
+        return MemInput_.Skip(len); 
+    } 
+ 
     inline size_t ReadTo(TString& st, char to) {
         st.clear();
 
@@ -122,9 +122,9 @@ TBufferedInput::TBufferedInput(IInputStream* slave, size_t buflen)
 {
 }
 
-TBufferedInput::TBufferedInput(TBufferedInput&&) noexcept = default;
-TBufferedInput& TBufferedInput::operator=(TBufferedInput&&) noexcept = default;
-
+TBufferedInput::TBufferedInput(TBufferedInput&&) noexcept = default; 
+TBufferedInput& TBufferedInput::operator=(TBufferedInput&&) noexcept = default; 
+ 
 TBufferedInput::~TBufferedInput() = default;
 
 size_t TBufferedInput::DoRead(void* buf, size_t len) {
@@ -356,9 +356,9 @@ TBufferedOutputBase::TBufferedOutputBase(IOutputStream* slave, size_t buflen)
 {
 }
 
-TBufferedOutputBase::TBufferedOutputBase(TBufferedOutputBase&&) noexcept = default;
-TBufferedOutputBase& TBufferedOutputBase::operator=(TBufferedOutputBase&&) noexcept = default;
-
+TBufferedOutputBase::TBufferedOutputBase(TBufferedOutputBase&&) noexcept = default; 
+TBufferedOutputBase& TBufferedOutputBase::operator=(TBufferedOutputBase&&) noexcept = default; 
+ 
 TBufferedOutputBase::~TBufferedOutputBase() {
     try {
         Finish();

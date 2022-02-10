@@ -24,7 +24,7 @@
 #include <stdlib.h>
 
 #undef __stpcpy
-#if defined(_LIBC) || (defined(__MACH__) && defined(stpcpy)) 
+#if defined(_LIBC) || (defined(__MACH__) && defined(stpcpy))
 # undef stpcpy
 #endif
 

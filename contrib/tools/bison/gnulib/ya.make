@@ -34,8 +34,8 @@ IF (OS_DARWIN)
     CFLAGS(
         -D_XOPEN_SOURCE=600
     )
-ENDIF() 
- 
+ENDIF()
+
 IF (NOT OS_WINDOWS)
     CFLAGS(
         GLOBAL -Dregcomp=gnu_regcomp

@@ -132,11 +132,11 @@ android {{
 
     dependencies {{
         for (bundle in bundles)
-            compile("$bundle") {{ 
+            compile("$bundle") {{
                 transitive = true
             }}
         for (bundle in androidArs)
-            compile(bundle) {{ 
+            compile(bundle) {{
                 transitive = true
             }}
         for (bundle in compileOnlyAndroidArs)
@@ -150,20 +150,20 @@ android {{
             classifier = 'sources'
             from android.sourceSets.main.java.srcDirs
             include '**/*.java'
-            eachFile {{ fcd -> 
-                def segments = fcd.relativePath.segments 
-                if (segments[0] == 'impl') {{ 
-                    fcd.relativePath = new RelativePath(true, segments.drop(1)) 
-                }} 
-            }} 
-            includeEmptyDirs = false 
+            eachFile {{ fcd ->
+                def segments = fcd.relativePath.segments
+                if (segments[0] == 'impl') {{
+                    fcd.relativePath = new RelativePath(true, segments.drop(1))
+                }}
+            }}
+            includeEmptyDirs = false
         }}
 
         def manifestFile = android.sourceSets.main.manifest.srcFile
         def manifestXml = new XmlParser().parse(manifestFile)
 
         def packageName = manifestXml['@package']
-        def groupName = packageName.tokenize('.')[0..-2].join('.') 
+        def groupName = packageName.tokenize('.')[0..-2].join('.')
 
         def androidNs = new groovy.xml.Namespace("http://schemas.android.com/apk/res/android")
         def packageVersion = manifestXml.attributes()[androidNs.versionName]

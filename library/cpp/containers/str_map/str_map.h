@@ -34,7 +34,7 @@ pool_insert(Map* m, const char* key, const typename Map::mapped_type& data, TBuf
 #define HASH_SIZE_DEFAULT 100
 #define AVERAGEWORD_BUF 10
 
-template <class T, class HashFcn, class EqualTo, class Alloc>
+template <class T, class HashFcn, class EqualTo, class Alloc> 
 class string_hash: public THashMap<const char*, T, HashFcn, EqualTo, Alloc> {
 protected:
     TBuffer pool;

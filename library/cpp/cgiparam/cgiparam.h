@@ -31,11 +31,11 @@ public:
     }
 
     size_t EraseAll(const TStringBuf name);
-
+ 
     size_t NumOfValues(const TStringBuf name) const noexcept {
         return count(name);
     }
-
+ 
     TString operator()() const {
         return Print();
     }

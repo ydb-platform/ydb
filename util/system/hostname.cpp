@@ -3,11 +3,11 @@
 #include <util/generic/yexception.h>
 #include <util/network/ip.h>
 
-#if defined(_unix_)
+#if defined(_unix_) 
     #include <unistd.h>
     #include <ifaddrs.h>
     #include <netdb.h>
-#endif
+#endif 
 
 #if defined(_win_)
     #include <WinSock2.h>

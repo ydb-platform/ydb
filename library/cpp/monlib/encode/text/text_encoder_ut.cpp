@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(TTextText) {
     Y_UNIT_TEST(CommonPart) {
         auto result = EncodeToString(true, [](IMetricEncoder* e) {
             e->OnStreamBegin();
-            e->OnCommonTime(TInstant::ParseIso8601Deprecated("2017-01-02T03:04:05.006Z"));
+            e->OnCommonTime(TInstant::ParseIso8601Deprecated("2017-01-02T03:04:05.006Z")); 
             {
                 e->OnLabelsBegin();
                 e->OnLabel("project", "solomon");
@@ -73,7 +73,7 @@ Y_UNIT_TEST_SUITE(TTextText) {
                     e->OnLabel("dc", "man");
                     e->OnLabelsEnd();
                 }
-                e->OnDouble(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:00Z"), 1000);
+                e->OnDouble(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:00Z"), 1000); 
                 e->OnMetricEnd();
             }
             { // many values
@@ -85,9 +85,9 @@ Y_UNIT_TEST_SUITE(TTextText) {
                     e->OnLabel("dc", "sas");
                     e->OnLabelsEnd();
                 }
-                e->OnDouble(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:00Z"), 2);
-                e->OnDouble(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:05Z"), 4);
-                e->OnDouble(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:10Z"), 8);
+                e->OnDouble(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:00Z"), 2); 
+                e->OnDouble(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:05Z"), 4); 
+                e->OnDouble(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:10Z"), 8); 
                 e->OnMetricEnd();
             }
             e->OnStreamEnd();
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(TTextText) {
                     e->OnLabel("dc", "man");
                     e->OnLabelsEnd();
                 }
-                e->OnUint64(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:00Z"), 1000);
+                e->OnUint64(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:00Z"), 1000); 
                 e->OnMetricEnd();
             }
             { // many values
@@ -201,9 +201,9 @@ Y_UNIT_TEST_SUITE(TTextText) {
                     e->OnLabel("dc", "sas");
                     e->OnLabelsEnd();
                 }
-                e->OnUint64(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:00Z"), 2);
-                e->OnUint64(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:05Z"), 4);
-                e->OnUint64(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:10Z"), 8);
+                e->OnUint64(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:00Z"), 2); 
+                e->OnUint64(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:05Z"), 4); 
+                e->OnUint64(TInstant::ParseIso8601Deprecated("2017-12-02T12:00:10Z"), 8); 
                 e->OnMetricEnd();
             }
             e->OnStreamEnd();

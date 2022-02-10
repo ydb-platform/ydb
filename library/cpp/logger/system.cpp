@@ -54,7 +54,7 @@ TSysLogBackend::~TSysLogBackend() {
 
 void TSysLogBackend::WriteData(const TLogRecord& rec) {
 #if defined(_unix_)
-    syslog(ELogPriority2SyslogPriority(rec.Priority), "%.*s", (int)rec.Len, rec.Data);
+    syslog(ELogPriority2SyslogPriority(rec.Priority), "%.*s", (int)rec.Len, rec.Data); 
 #else
     Y_UNUSED(rec);
 #endif
@@ -63,7 +63,7 @@ void TSysLogBackend::WriteData(const TLogRecord& rec) {
 void TSysLogBackend::ReopenLog() {
 }
 
-int TSysLogBackend::ELogPriority2SyslogPriority(ELogPriority priority) {
+int TSysLogBackend::ELogPriority2SyslogPriority(ELogPriority priority) { 
 #if defined(_unix_)
      return Min(int(priority), (int)LOG_PRIMASK);
 #else

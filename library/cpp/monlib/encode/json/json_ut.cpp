@@ -133,7 +133,7 @@ namespace {
 
 
 Y_UNIT_TEST_SUITE(TJsonTest) {
-    const TInstant now = TInstant::ParseIso8601Deprecated("2017-11-05T01:02:03Z");
+    const TInstant now = TInstant::ParseIso8601Deprecated("2017-11-05T01:02:03Z"); 
 
     Y_UNIT_TEST(Encode) {
         auto check = [](bool cloud, bool buffered, TStringBuf expectedResourceKey) {
@@ -446,7 +446,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             TInstant::MilliSeconds(samples.GetCommonTime()),
-            TInstant::ParseIso8601Deprecated("2017-08-27T12:34:56Z"));
+            TInstant::ParseIso8601Deprecated("2017-08-27T12:34:56Z")); 
 
         UNIT_ASSERT_VALUES_EQUAL(samples.CommonLabelsSize(), 3);
         AssertLabelEqual(samples.GetCommonLabels(0), "project", "solomon");
@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             AssertLabelEqual(s.GetLabels(1), "metric", "QueueSize");
 
             UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 1);
-            auto ts = TInstant::ParseIso8601Deprecated("2017-11-05T12:34:56.000Z");
+            auto ts = TInstant::ParseIso8601Deprecated("2017-11-05T12:34:56.000Z"); 
             AssertPointEqual(s.GetPoints(0), ts, 3.14159);
         }
         {
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(TJsonTest) {
             AssertLabelEqual(s.GetLabels(0), "metric", "Writes");
 
             UNIT_ASSERT_VALUES_EQUAL(s.PointsSize(), 2);
-            auto ts1 = TInstant::ParseIso8601Deprecated("2017-08-28T12:32:11Z");
+            auto ts1 = TInstant::ParseIso8601Deprecated("2017-08-28T12:32:11Z"); 
             AssertPointEqual(s.GetPoints(0), ts1, -10.0);
             auto ts2 = TInstant::Seconds(1503923187);
             AssertPointEqual(s.GetPoints(1), ts2, 20.0);

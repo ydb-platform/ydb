@@ -1,6 +1,6 @@
 #pragma once
 
-enum ELogPriority {
+enum ELogPriority { 
     TLOG_EMERG = 0 /* "EMERG" */,
     TLOG_ALERT = 1 /* "ALERT" */,
     TLOG_CRIT = 2 /* "CRITICAL_INFO" */,

@@ -25,7 +25,7 @@ public:
 
     void WriteData(const TLogRecord& rec) override;
     void ReopenLog() override;
-    ELogPriority FiltrationLevel() const override;
+    ELogPriority FiltrationLevel() const override; 
 
 private:
     TAutoPtr<TLogBackend> DefaultBackend_;

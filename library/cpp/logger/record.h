@@ -7,9 +7,9 @@
 struct TLogRecord {
     const char* Data;
     size_t Len;
-    ELogPriority Priority;
+    ELogPriority Priority; 
 
-    inline TLogRecord(ELogPriority priority, const char* data, size_t len) noexcept
+    inline TLogRecord(ELogPriority priority, const char* data, size_t len) noexcept 
         : Data(data)
         , Len(len)
         , Priority(priority)

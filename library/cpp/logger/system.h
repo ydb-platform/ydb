@@ -52,7 +52,7 @@ public:
     }
 
 protected:
-    int ELogPriority2SyslogPriority(ELogPriority priority);
+    int ELogPriority2SyslogPriority(ELogPriority priority); 
 
     TString Ident;
     EFacility Facility;

@@ -24,11 +24,11 @@ struct ELevelHelpers {
         return ToInt(l1) <= ToInt(l2);
     }
 
-    static constexpr ELogPriority ToLogPriority(ELevel level) {
-        return static_cast<ELogPriority>(ToInt(level));
+    static constexpr ELogPriority ToLogPriority(ELevel level) { 
+        return static_cast<ELogPriority>(ToInt(level)); 
     }
 
-    static ELevel FromLogPriority(ELogPriority priority) {
+    static ELevel FromLogPriority(ELogPriority priority) { 
         return FromInt(static_cast<int>(priority));
     }
 

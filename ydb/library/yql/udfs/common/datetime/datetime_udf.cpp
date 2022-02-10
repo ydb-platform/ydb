@@ -138,10 +138,10 @@ namespace {
             TRY_STRPTIME((*iso8601withoutTzPattern).second);
         }
 
-        TRY_PARSE(HttpDeprecated)
-        TRY_PARSE(Iso8601Deprecated)
-        TRY_PARSE(Rfc822Deprecated)
-        TRY_PARSE(X509Deprecated)
+        TRY_PARSE(HttpDeprecated) 
+        TRY_PARSE(Iso8601Deprecated) 
+        TRY_PARSE(Rfc822Deprecated) 
+        TRY_PARSE(X509Deprecated) 
 
         TRY_STRPTIME("%d/%h/%Y:%H:%M:%S")
         TRY_STRPTIME("%a %h %d %H:%M:%S %Y")

@@ -177,7 +177,7 @@ void THttpHeaderParserTestSuite::TestProxyRequestHeader() {
     UNIT_ASSERT_EQUAL(strcmp(httpRequestHeader.x_yandex_fetchoptions, "d;c"), 0);
     UNIT_ASSERT_EQUAL(httpRequestHeader.max_age, 100);
     UNIT_ASSERT_VALUES_EQUAL(httpRequestHeader.if_modified_since,
-                             TInstant::ParseIso8601Deprecated("1994-10-29 19:43:31Z").TimeT());
+                             TInstant::ParseIso8601Deprecated("1994-10-29 19:43:31Z").TimeT()); 
     UNIT_ASSERT_EQUAL(httpRequestHeader.request_uri,
                       "http://www.google.ru:8080/search?q=hi");
     UNIT_ASSERT(httpRequestHeader.GetUrl() ==
@@ -213,7 +213,7 @@ void THttpHeaderParserTestSuite::TestLastModified() {
         "Last-Modified: Thu, 13 Aug 2009 14:27:08 GMT\r\n\r\n";
     UNIT_ASSERT(2 == httpHeaderParser->Execute(headers, strlen(headers)));
     UNIT_ASSERT_VALUES_EQUAL(
-        TInstant::ParseIso8601Deprecated("2009-08-13 14:27:08Z").TimeT(),
+        TInstant::ParseIso8601Deprecated("2009-08-13 14:27:08Z").TimeT(), 
         h.http_time);
     TestFinish();
 }

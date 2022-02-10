@@ -7,7 +7,7 @@
 
 class TFilteredLogBackend: public TLogBackend {
     THolder<TLogBackend> Backend;
-    ELogPriority Level;
+    ELogPriority Level; 
 
 public:
     TFilteredLogBackend(THolder<TLogBackend>&& t, ELogPriority level = LOG_MAX_PRIORITY) noexcept
@@ -16,7 +16,7 @@ public:
     {
     }
 
-    ELogPriority FiltrationLevel() const override {
+    ELogPriority FiltrationLevel() const override { 
         return Level;
     }
 
@@ -25,7 +25,7 @@ public:
     }
 
     void WriteData(const TLogRecord& rec) override {
-        if (rec.Priority <= (ELogPriority)Level) {
+        if (rec.Priority <= (ELogPriority)Level) { 
             Backend->WriteData(rec);
         }
     }

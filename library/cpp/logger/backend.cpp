@@ -46,7 +46,7 @@ public:
     static const size_t Priority = 50;
 };
 
-ELogPriority TLogBackend::FiltrationLevel() const {
+ELogPriority TLogBackend::FiltrationLevel() const { 
     return LOG_MAX_PRIORITY;
 }
 

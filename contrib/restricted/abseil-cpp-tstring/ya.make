@@ -10,7 +10,7 @@ OWNER(
 VERSION(20211102.0)
 
 LICENSE(Apache-2.0)
- 
+
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
@@ -90,7 +90,7 @@ PEERDIR(
     contrib/restricted/abseil-cpp-tstring/y_absl/utility
 )
 
-NO_RUNTIME() 
+NO_RUNTIME()
 
 END()
 

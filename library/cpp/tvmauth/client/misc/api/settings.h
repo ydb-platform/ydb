@@ -163,9 +163,9 @@ namespace NTvmAuth::NTvmApi {
         }
 
         // Deprecated: set attributes directly
-        void EnableServiceTicketsFetchOptions(const TStringBuf selfSecret, 
-                                              TDstMap&& dsts, 
-                                              const bool considerIncompleteTicketsSetAsError = true) { 
+        void EnableServiceTicketsFetchOptions(const TStringBuf selfSecret,
+                                              TDstMap&& dsts,
+                                              const bool considerIncompleteTicketsSetAsError = true) {
             IsIncompleteTicketsSetAnError = considerIncompleteTicketsSetAsError;
             Secret = selfSecret;
 
@@ -179,9 +179,9 @@ namespace NTvmAuth::NTvmApi {
         }
 
         // Deprecated: set attributes directly
-        void EnableServiceTicketsFetchOptions(const TStringBuf selfSecret, 
-                                              TDstVector&& dsts, 
-                                              const bool considerIncompleteTicketsSetAsError = true) { 
+        void EnableServiceTicketsFetchOptions(const TStringBuf selfSecret,
+                                              TDstVector&& dsts,
+                                              const bool considerIncompleteTicketsSetAsError = true) {
             IsIncompleteTicketsSetAnError = considerIncompleteTicketsSetAsError;
             Secret = selfSecret;
             FetchServiceTicketsForDsts = std::move(dsts);

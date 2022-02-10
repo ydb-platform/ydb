@@ -436,10 +436,10 @@ TString THttpInput::BestCompressionScheme(TArrayRef<const TStringBuf> codings) c
     );
 }
 
-TString THttpInput::BestCompressionScheme() const { 
+TString THttpInput::BestCompressionScheme() const {
     return BestCompressionScheme(TCompressionCodecFactory::Instance().GetBestCodecs());
-} 
- 
+}
+
 bool THttpInput::GetContentLength(ui64& value) const noexcept {
     return Impl_->GetContentLength(value);
 }

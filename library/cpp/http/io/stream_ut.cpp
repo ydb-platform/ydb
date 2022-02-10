@@ -441,52 +441,52 @@ Y_UNIT_TEST_SUITE(THttpStreamTest) {
         UNIT_ASSERT(!result.Contains("content-length"));
     }
 
-    Y_UNIT_TEST(CodecsPriority) { 
-        TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip, br\r\n\r\n"); 
+    Y_UNIT_TEST(CodecsPriority) {
+        TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip, br\r\n\r\n");
         TVector<TStringBuf> codecs = {"br", "gzip"};
- 
-        THttpInput i(&request); 
-        TString result; 
-        TStringOutput out(result); 
-        THttpOutput httpOut(&out, &i); 
- 
-        httpOut.EnableKeepAlive(true); 
+
+        THttpInput i(&request);
+        TString result;
+        TStringOutput out(result);
+        THttpOutput httpOut(&out, &i);
+
+        httpOut.EnableKeepAlive(true);
         httpOut.EnableCompression(codecs);
-        httpOut << "HTTP/1.1 200 OK\r\n"; 
-        char answer[] = "Mary had a little lamb."; 
-        httpOut << "Content-Length: " << strlen(answer) << "\r\n" 
-                                                           "\r\n"; 
-        httpOut << answer; 
-        httpOut.Finish(); 
- 
-        Cdbg << result; 
-        result.to_lower(); 
-        UNIT_ASSERT(result.Contains("content-encoding: br")); 
-    } 
- 
-    Y_UNIT_TEST(CodecsPriority2) { 
-        TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip, br\r\n\r\n"); 
+        httpOut << "HTTP/1.1 200 OK\r\n";
+        char answer[] = "Mary had a little lamb.";
+        httpOut << "Content-Length: " << strlen(answer) << "\r\n"
+                                                           "\r\n";
+        httpOut << answer;
+        httpOut.Finish();
+
+        Cdbg << result;
+        result.to_lower();
+        UNIT_ASSERT(result.Contains("content-encoding: br"));
+    }
+
+    Y_UNIT_TEST(CodecsPriority2) {
+        TMemoryInput request("GET / HTTP/1.1\r\nAccept-Encoding: gzip, br\r\n\r\n");
         TVector<TStringBuf> codecs = {"gzip", "br"};
- 
-        THttpInput i(&request); 
-        TString result; 
-        TStringOutput out(result); 
-        THttpOutput httpOut(&out, &i); 
- 
-        httpOut.EnableKeepAlive(true); 
+
+        THttpInput i(&request);
+        TString result;
+        TStringOutput out(result);
+        THttpOutput httpOut(&out, &i);
+
+        httpOut.EnableKeepAlive(true);
         httpOut.EnableCompression(codecs);
-        httpOut << "HTTP/1.1 200 OK\r\n"; 
-        char answer[] = "Mary had a little lamb."; 
-        httpOut << "Content-Length: " << strlen(answer) << "\r\n" 
-                                                           "\r\n"; 
-        httpOut << answer; 
-        httpOut.Finish(); 
- 
-        Cdbg << result; 
-        result.to_lower(); 
-        UNIT_ASSERT(result.Contains("content-encoding: gzip")); 
-    } 
- 
+        httpOut << "HTTP/1.1 200 OK\r\n";
+        char answer[] = "Mary had a little lamb.";
+        httpOut << "Content-Length: " << strlen(answer) << "\r\n"
+                                                           "\r\n";
+        httpOut << answer;
+        httpOut.Finish();
+
+        Cdbg << result;
+        result.to_lower();
+        UNIT_ASSERT(result.Contains("content-encoding: gzip"));
+    }
+
     Y_UNIT_TEST(HasTrailers) {
         TMemoryInput response(
             "HTTP/1.1 200 OK\r\n"

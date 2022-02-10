@@ -26,14 +26,14 @@ public:
         return &HO_;
     }
 
-    inline void Reset() { 
-        if (S_ != INVALID_SOCKET) { 
-            // send RST packet to client 
-            S_.SetLinger(true, 0); 
-            S_.Close(); 
-        } 
-    } 
- 
+    inline void Reset() {
+        if (S_ != INVALID_SOCKET) {
+            // send RST packet to client
+            S_.SetLinger(true, 0);
+            S_.Close();
+        }
+    }
+
 private:
     TSocket S_;
     TSocketInput SI_;
@@ -63,7 +63,7 @@ THttpInput* THttpServerConn::Input() noexcept {
 THttpOutput* THttpServerConn::Output() noexcept {
     return Impl_->Output();
 }
- 
-void THttpServerConn::Reset() { 
-    return Impl_->Reset(); 
-} 
+
+void THttpServerConn::Reset() {
+    return Impl_->Reset();
+}

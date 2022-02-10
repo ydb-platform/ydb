@@ -24,7 +24,7 @@ RECURSE(
     mapped_file/ut
     mbitmap
     omni
-    text_norm 
+    text_norm
     omni/print_omni
     omni/usage
     omni/ut

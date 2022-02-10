@@ -98,11 +98,11 @@ namespace NProtobufJson {
             return *this;
         }
 
-        TSelf& SetAllowUnknownFields(bool value) { 
-            AllowUnknownFields = value; 
-            return *this; 
-        } 
- 
+        TSelf& SetAllowUnknownFields(bool value) {
+            AllowUnknownFields = value;
+            return *this;
+        }
+
         FldNameMode FieldNameMode = FieldNameOriginalCase;
         bool AllowUnknownFields = true;
 

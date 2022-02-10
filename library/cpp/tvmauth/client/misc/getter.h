@@ -28,8 +28,8 @@ namespace NTvmAuth {
         }
 
     private:
-        template <class Key, class Cont, class UnfetchedCont> 
-        TString GetTicketImpl(const Key& dst, const Cont& tickets, const Cont& errors, const UnfetchedCont& unfetched) const { 
+        template <class Key, class Cont, class UnfetchedCont>
+        TString GetTicketImpl(const Key& dst, const Cont& tickets, const Cont& errors, const UnfetchedCont& unfetched) const {
             auto it = tickets.find(dst);
             if (it != tickets.end()) {
                 return it->second;
@@ -42,11 +42,11 @@ namespace NTvmAuth {
                     << it->second;
             }
 
-            if (unfetched.contains(dst)) { 
-                ythrow TMissingServiceTicket() 
-                    << "Failed to get ticket for '" << dst << "': this dst was not fetched yet."; 
-            } 
- 
+            if (unfetched.contains(dst)) {
+                ythrow TMissingServiceTicket()
+                    << "Failed to get ticket for '" << dst << "': this dst was not fetched yet.";
+            }
+
             ythrow TBrokenTvmClientSettings()
                 << "Destination '" << dst << "' was not specified in settings. "
                 << "Check your settings (if you use Qloud/YP/tvmtool - check it's settings)";

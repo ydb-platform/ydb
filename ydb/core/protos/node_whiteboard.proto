@@ -9,8 +9,8 @@ package NKikimrWhiteboard;
 option java_package = "ru.yandex.kikimr.proto";
 
 extend google.protobuf.FieldOptions {
-    optional uint64 InsignificantChangeAmount = 70553; 
-    optional uint32 InsignificantChangePercent = 70554; 
+    optional uint64 InsignificantChangeAmount = 70553;
+    optional uint32 InsignificantChangePercent = 70554;
 }
 
 enum EFlag {

@@ -196,7 +196,7 @@ RECURSE(
     daphne
     databases
     dataclasses-json
-    datadiff
+    datadiff 
     dateparser
     dateutil
     DAWG-Python
@@ -206,7 +206,7 @@ RECURSE(
     deepdiff
     deepmerge
     defusedxml
-    demjson
+    demjson 
     Deprecated
     dictpath
     diff-match-patch

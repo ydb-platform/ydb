@@ -6,7 +6,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString DecodeEnumValue(TStringBuf value)
+TString DecodeEnumValue(TStringBuf value) 
 {
     auto camelValue = UnderscoreCaseToCamelCase(value);
     auto underscoreValue = CamelCaseToUnderscoreCase(camelValue);
@@ -18,7 +18,7 @@ TString DecodeEnumValue(TStringBuf value)
     return camelValue;
 }
 
-TString EncodeEnumValue(TStringBuf value)
+TString EncodeEnumValue(TStringBuf value) 
 {
     return CamelCaseToUnderscoreCase(value);
 }

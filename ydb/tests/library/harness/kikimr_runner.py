@@ -48,7 +48,7 @@ def join(a, b):
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def __init__(self, node_idx, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None):
- 
+
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_idx
         self.__cwd = None
@@ -163,7 +163,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         logger.info('CFG_DIR_PATH="%s"', self.__config_path)
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
-        return command 
+        return command
 
     def stop(self):
         try:
@@ -222,7 +222,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._slot_index_allocator = itertools.count(1)
         self._node_index_allocator = itertools.count(1)
         self.default_channel_bindings = None
- 
+
     @property
     def config(self):
         return self.__configurator
@@ -262,11 +262,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def start(self): 
+    def start(self):
         """
-        Safely starts kikimr instance. 
-        Do not override this method. 
-        """ 
+        Safely starts kikimr instance.
+        Do not override this method.
+        """
         try:
             logger.debug("Working directory: " + self.__tmpdir)
             self.__run()
@@ -276,7 +276,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             logger.exception("KiKiMR start failed")
             self.stop()
             raise
- 
+
     def __run(self):
         self.__client = None
 
@@ -305,8 +305,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self.client.bind_storage_pools(self.domain_name, pools)
         default_pool_name = list(pools.keys())[0]
         self.default_channel_bindings = {idx: default_pool_name for idx in range(3)}
-        logger.info("Cluster started and initialized") 
- 
+        logger.info("Cluster started and initialized")
+
         self.client.add_config_item(
             resource.find(
                 "harness/resources/default_profile.txt"
@@ -314,26 +314,26 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
 
     def __run_node(self, node_id):
-        """ 
-        :returns started KiKiMRNode instance 
-        Can be overriden. 
-        """ 
+        """
+        :returns started KiKiMRNode instance
+        Can be overriden.
+        """
         self.__format_disks(node_id)
         self._nodes[node_id].start()
         return self._nodes[node_id]
- 
+
     def __register_node(self):
         node_index = next(self._node_index_allocator)
         self._nodes[node_index] = KiKiMRNode(
             node_index,
-            self.config_path, 
+            self.config_path,
             port_allocator=self.__port_allocator.get_node_port_allocator(node_index),
             cluster_name=self.__cluster_name,
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
-        ) 
+        )
         return self._nodes[node_index]
- 
+
     def register_slots(self, database, count=1, encryption_key=None):
         return [self.register_slot(database, encryption_key) for _ in range(count)]
 
@@ -379,7 +379,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
                 shutil.rmtree(self.__common_udfs_dir, ignore_errors=True)
         return ret
 
-    def stop(self): 
+    def stop(self):
         saved_exceptions = []
 
         for slot in self.slots.values():
@@ -515,7 +515,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         assert bs_controller_started
 
- 
+
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
     def __init__(
             self, node_id, host, port, mon_port, ic_port, mbus_port, configurator=None, slot_id=None):
@@ -569,7 +569,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
             ]
         )
 
-    def stop(self): 
+    def stop(self):
         if self.__slot_id is None:
             return self.ssh_command("sudo stop kikimr")
         return self.ssh_command(
@@ -584,7 +584,7 @@ class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeIn
                 "ic={}".format(self.__ic_port),
             ]
         )
- 
+
     @property
     def cwd(self):
         assert False, "not supported"

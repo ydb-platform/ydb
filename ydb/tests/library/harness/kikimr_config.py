@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 import sys
 import itertools
-import os 
+import os
 import tempfile
 import socket
 import six
- 
+
 from google.protobuf.text_format import Parse
 from ydb.core.protos import config_pb2
 import ydb.tests.library.common.yatest_common as yatest_common
- 
+
 from . import tls_tools
 from ydb.tests.library.common.types import Erasure
 from .kikimr_port_allocator import KikimrPortManagerPortAllocator
@@ -17,7 +17,7 @@ from .param_constants import kikimr_driver_path
 from .util import LogLevels
 import yaml
 from library.python import resource
- 
+
 
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
 if PDISK_SIZE_STR.endswith("GB"):
@@ -353,7 +353,7 @@ class KikimrConfigGenerator(object):
 
     def all_node_ids(self):
         return self.__node_ids
- 
+
     def _add_pdisk_to_static_group(self, pdisk_id, path, node_id, pdisk_category, ring):
         domain_id = len(self.yaml_config['blob_storage_config']["service_set"]["groups"][0]["rings"][ring]["fail_domains"])
         self.yaml_config['blob_storage_config']["service_set"]["pdisks"].append(
@@ -377,7 +377,7 @@ class KikimrConfigGenerator(object):
         self.yaml_config["blob_storage_config"]["service_set"]["vdisks"] = []
         self.yaml_config["blob_storage_config"]["service_set"]["groups"] = [{"group_id": 0, 'group_generation': 0, 'erasure_species': int(self.static_erasure)}]
         self.yaml_config["blob_storage_config"]["service_set"]["groups"][0]["rings"] = []
- 
+
         for dc in self._dcs:
             self.yaml_config["blob_storage_config"]["service_set"]["groups"][0]["rings"].append({"fail_domains": []})
 

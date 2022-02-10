@@ -1,24 +1,24 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
- 
+
 from hamcrest import has_property, all_of, has_length, has_items, anything
 from hamcrest.core.base_matcher import BaseMatcher
 from hamcrest.core.helpers.wrap_matcher import wrap_matcher
- 
+
 from ydb.tests.library.common.msgbus_types import EMessageStatus, MessageBusStatus
 
 
 def all_tablets_are_created(tablets_to_create):
-    return all_of( 
+    return all_of(
         has_property('Status', MessageBusStatus.MSTATUS_OK),
         has_property(
             'CreateTabletResult',
-            all_of( 
-                has_length(len(tablets_to_create)), 
+            all_of(
+                has_length(len(tablets_to_create)),
                 has_items(has_property('Status', EMessageStatus.MESSAGE_OK))
-            ) 
-        ) 
-    ) 
+            )
+        )
+    )
 
 
 def is_balanced_list(lst, exact_values):

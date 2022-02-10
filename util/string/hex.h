@@ -32,8 +32,8 @@ TString HexEncode(const void* in, size_t len);
 
 inline TString HexEncode(const TStringBuf h) {
     return HexEncode(h.data(), h.size());
-}
-
+} 
+ 
 //! Convert a hex string @c in of @c len chars (case-insensitive) to array of ints stored at @c ptr and return this array.
 /*! @note len must be even (len % 2 == 0), otherwise an exception will be thrown.
  *  @return @c ptr, which is an array of chars, where each char holds the numeric value
@@ -52,8 +52,8 @@ void* HexDecode(const void* in, size_t len, void* ptr);
  * @example HexDecode("beef", 4) => {190, 239}
  */
 TString HexDecode(const void* in, size_t len);
-
+ 
 //! Convert an ASCII hex-string (case-insensitive) to the binary form. Note that h.Size() must be even (+h % 2 == 0).
 inline TString HexDecode(const TStringBuf h) {
     return HexDecode(h.data(), h.size());
-}
+} 

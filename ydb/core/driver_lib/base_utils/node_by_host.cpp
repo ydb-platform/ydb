@@ -48,7 +48,7 @@ void TCmdNodeByHostConfig::Parse(int argc, char **argv) {
     using namespace NLastGetopt;
     TOpts opts = TOpts::Default();
 
-    opts.AddLongOption("naming-file", "static nameservice config file").RequiredArgument("PATH").Required()
+    opts.AddLongOption("naming-file", "static nameservice config file").RequiredArgument("PATH").Required() 
         .StoreResult(&NamingFile);
     opts.AddLongOption('n', "hostname", "Hostname to detect node id for").RequiredArgument("STR").Required()
         .StoreResult(&Hostname);

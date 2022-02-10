@@ -91,7 +91,7 @@ struct mem_traits {
 
 #define MY_14(x) ((ui16)(x) < PACK1LIM ? 1 : 2)
 #define MY_28(x) ((ui32)(x) < PACK2LIM ? MY_14(x) : ((ui32)(x) < PACK3LIM ? 3 : 4))
-
+ 
 #define MY_32(x) ((ui32)(x) < PACK4LIM ? MY_28(x) : 5)
 #define MY_64(x) ((ui64)(x) < PACK4LIM ? MY_28(x) : ((ui64)(x) < PACK6LIM ? ((ui64)(x) < PACK5LIM ? 5 : 6) : ((ui64)(x) < PACK7LIM ? 7 : ((ui64)(x) < PACK8LIM ? 8 : 9))))
 
@@ -141,7 +141,7 @@ struct mem_traits {
         (ret) = 5;                    \
     }                                 \
     MACRO_END
-
+ 
 #define PACK_64(x, buf, how, ret)                             \
     MACRO_BEGIN                                               \
     if ((ui64)(x) < PACK4LIM) {                               \
@@ -227,13 +227,13 @@ struct mem_traits {
         (ret) = 5;                                 \
     }                                              \
     MACRO_END
-
+ 
 #define UNPACK_32(x, buf, how, ret)            \
     MACRO_BEGIN                                \
     ui8 firstByte = how::get_8(buf);           \
     DO_UNPACK_32(firstByte, x, buf, how, ret); \
     MACRO_END
-
+ 
 #define DO_UNPACK_64(firstByte, x, buf, how, ret)         \
     MACRO_BEGIN                                           \
     if (firstByte < 0xF0) {                               \
@@ -292,13 +292,13 @@ inline int len_long(const i64& longVal) {
 
 inline int in_long(i32& longVal, const char* ptrBuf) {
     int ret;
-    UNPACK_32(longVal, ptrBuf, mem_traits, ret);
+    UNPACK_32(longVal, ptrBuf, mem_traits, ret); 
     return ret;
 }
 
 inline int out_long(const i32& longVal, char* ptrBuf) {
     int ret;
-    PACK_32(longVal, ptrBuf, mem_traits, ret);
+    PACK_32(longVal, ptrBuf, mem_traits, ret); 
     return ret;
 }
 
@@ -311,7 +311,7 @@ inline const C* Unpack32(T& x, const C* src) {
     int pkLen = 0;
     const char* c = reinterpret_cast<const char*>(src);
     Y_UNUSED(pkLen);
-    UNPACK_32(x, c, mem_traits, pkLen);
+    UNPACK_32(x, c, mem_traits, pkLen); 
     Y_ASSERT(pkLen);
     return reinterpret_cast<const C*>(c);
 }
@@ -331,7 +331,7 @@ inline C* Pack32(const T& x, C* dest) {
     int pkLen = 0;
     Y_UNUSED(pkLen);
     char* c = reinterpret_cast<char*>(dest);
-    PACK_32(x, c, mem_traits, pkLen);
+    PACK_32(x, c, mem_traits, pkLen); 
     Y_ASSERT(pkLen);
     return reinterpret_cast<C*>(c);
 }

@@ -143,8 +143,8 @@ TBusResponse* ProposeTransactionStatusToResponse(EResponseStatus status,
     if (result.HasSchemeShardReportedId())
         response->Record.SetSchemeTagId(result.GetSchemeShardReportedId());
 
-    if (result.HasTimings())
-        response->Record.MutableProxyTimings()->CopyFrom(result.GetTimings());
+    if (result.HasTimings()) 
+        response->Record.MutableProxyTimings()->CopyFrom(result.GetTimings()); 
 
     return response.Release();
 }

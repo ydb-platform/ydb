@@ -1,6 +1,6 @@
 #include "actorid.h"
 #include <util/string/builder.h>
-#include <util/string/cast.h>
+#include <util/string/cast.h> 
 
 namespace NActors {
     void TActorId::Out(IOutputStream& o) const {
@@ -26,9 +26,9 @@ namespace NActors {
         semicolons[1] = str.find(':', semicolons[0] + 1);
         if (semicolons[1] == TStringBuf::npos)
             return false;
-
+ 
         bool success = TryFromString(buf + 1, semicolons[0] - 1, Raw.N.NodeId) && TryFromString(buf + semicolons[0] + 1, semicolons[1] - semicolons[0] - 1, Raw.N.LocalId) && TryFromString(buf + semicolons[1] + 1, sz - semicolons[1] - 2, Raw.N.Hint);
-
+ 
         return success;
     }
 }

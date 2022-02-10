@@ -66,7 +66,7 @@ void TCmdFormatInfoConfig::Parse(int argc, char **argv) {
     using namespace NLastGetopt;
     TOpts opts = TOpts::Default();
 
-    opts.AddLongOption('p', "pdisk-path", "path to pdisk to read format info").RequiredArgument("PATH").Required()
+    opts.AddLongOption('p', "pdisk-path", "path to pdisk to read format info").RequiredArgument("PATH").Required() 
         .StoreResult(&Path);
     opts.AddLongOption('k', "main-key", "encryption main-key to use while reading").RequiredArgument("NUM")
         .Optional().StoreResult(&MainKey); // TODO: make required

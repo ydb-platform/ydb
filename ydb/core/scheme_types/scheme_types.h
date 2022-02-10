@@ -7,7 +7,7 @@
 
 #include <typeinfo>
 
-
+ 
 namespace NKikimr {
 namespace NScheme {
 
@@ -38,7 +38,7 @@ friend class TTypeRegistry;
 };
 
 ////////////////////////////////////////////////////////
-class ITypeSP {
+class ITypeSP { 
 public:
     //
     ITypeSP(const IType* t = nullptr)
@@ -52,13 +52,13 @@ public:
     {}
 
     //
-    const IType* operator->() const noexcept { return Type; }
-    explicit operator bool() const noexcept { return TypeId != 0; }
+    const IType* operator->() const noexcept { return Type; } 
+    explicit operator bool() const noexcept { return TypeId != 0; } 
 
-    bool IsKnownType() const noexcept { return Type != nullptr; }
+    bool IsKnownType() const noexcept { return Type != nullptr; } 
 
-    TTypeId GetTypeId() const noexcept { return TypeId; }
-    const IType* GetType() const noexcept { return Type; }
+    TTypeId GetTypeId() const noexcept { return TypeId; } 
+    const IType* GetType() const noexcept { return Type; } 
 
 private:
     const IType* Type;

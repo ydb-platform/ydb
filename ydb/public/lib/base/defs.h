@@ -8,35 +8,35 @@
 
 namespace NKikimr {
 
-enum class EDataReqStatusExcerpt {
-    Unknown, // must not happen
-    Complete, // request success
-    InProgress, // request success, but result is not ready yet
-    RejectedForNow, // request rejected for some reason, guarantied to have no meaningful side effects
-    LostInSpaceAndTime, // smth happened with request, we don't know what (i.e. timeout), side effects (successful execution inclusive) possible
-    Error, // error with request
-    InternalError, // smth weird, report to
-};
-
-inline const char* EDataReqStatusExcerptStr(EDataReqStatusExcerpt status) {
-    switch (status) {
-    case EDataReqStatusExcerpt::Complete:
-        return "Complete";
-    case EDataReqStatusExcerpt::InProgress:
-        return "In progress";
-    case EDataReqStatusExcerpt::RejectedForNow:
-        return "Rejected";
-    case EDataReqStatusExcerpt::LostInSpaceAndTime:
-        return "Lost in space and time";
-    case EDataReqStatusExcerpt::Error:
-        return "Request error";
-    case EDataReqStatusExcerpt::InternalError:
-        return "Internal error";
-    default:
-        return "Unknown error";
-    }
+enum class EDataReqStatusExcerpt { 
+    Unknown, // must not happen 
+    Complete, // request success 
+    InProgress, // request success, but result is not ready yet 
+    RejectedForNow, // request rejected for some reason, guarantied to have no meaningful side effects 
+    LostInSpaceAndTime, // smth happened with request, we don't know what (i.e. timeout), side effects (successful execution inclusive) possible 
+    Error, // error with request 
+    InternalError, // smth weird, report to 
+}; 
+ 
+inline const char* EDataReqStatusExcerptStr(EDataReqStatusExcerpt status) { 
+    switch (status) { 
+    case EDataReqStatusExcerpt::Complete: 
+        return "Complete"; 
+    case EDataReqStatusExcerpt::InProgress: 
+        return "In progress"; 
+    case EDataReqStatusExcerpt::RejectedForNow: 
+        return "Rejected"; 
+    case EDataReqStatusExcerpt::LostInSpaceAndTime: 
+        return "Lost in space and time"; 
+    case EDataReqStatusExcerpt::Error: 
+        return "Request error"; 
+    case EDataReqStatusExcerpt::InternalError: 
+        return "Internal error"; 
+    default: 
+        return "Unknown error"; 
+    } 
 }
-
+ 
 namespace NTxProxy {
 #define TXUSERPROXY_RESULT_STATUS_MAP(XX) \
     XX(Unknown, 0) \
@@ -124,7 +124,7 @@ namespace NTxProxy {
             }
         }
     };
-}
+} 
 
 }
 

@@ -52,10 +52,10 @@ struct TRuntimeNode {
         : Data(node, isImmediate)
     {}
 
-    explicit operator bool() const {
-        return Data.GetPtr();
-    }
-
+    explicit operator bool() const { 
+        return Data.GetPtr(); 
+    } 
+ 
     ~TRuntimeNode() {}
 
     TType* GetRuntimeType() const;

@@ -15,7 +15,7 @@ SRCS(
     packed.h
     packedfloat.cpp
     packedfloat.h
-    zigzag.h
+    zigzag.h 
 )
 
 END()

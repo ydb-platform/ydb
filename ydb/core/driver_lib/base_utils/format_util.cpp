@@ -46,7 +46,7 @@ void TCmdFormatUtilConfig::Parse(int argc, char **argv) {
     using namespace NLastGetopt;
     TOpts opts = TOpts::Default();
 
-    opts.AddLongOption("format-file", "Blob storage fromat config file").RequiredArgument("PATH").Required()
+    opts.AddLongOption("format-file", "Blob storage fromat config file").RequiredArgument("PATH").Required() 
         .StoreResult(&FormatFile);
     opts.AddLongOption('n', "node-id", "Node ID to get drive info for").RequiredArgument("NUM").Required()
         .StoreResult(&NodeId);

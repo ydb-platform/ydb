@@ -8,10 +8,10 @@
 
 namespace NKikimr {
     namespace NMiniKQL {
-        template <typename T>
+        template <typename T> 
         struct TListChunk {
         private:
-            using TSelf = TListChunk<T>;
+            using TSelf = TListChunk<T>; 
 
             static void PlacementNew(T* ptr, ui64 count) {
                 T* end = ptr + count;
@@ -27,8 +27,8 @@ namespace NKikimr {
             }
 
             static TSelf* AllocateChunk(ui64 length) {
-                const auto block = MKQLAllocWithSize(length * sizeof(T) + sizeof(TListChunk));
-                const auto ptr = new (block) TListChunk(length);
+                const auto block = MKQLAllocWithSize(length * sizeof(T) + sizeof(TListChunk)); 
+                const auto ptr = new (block) TListChunk(length); 
                 PlacementNew(reinterpret_cast<T*>(ptr + 1), length);
                 return ptr;
             }
@@ -45,7 +45,7 @@ namespace NKikimr {
                 for (auto it = DataBegin(); it != DataEnd(); it++) {
                     it->~T();
                 }
-                MKQLFreeWithSize(static_cast<void*>(this), sizeof(TListChunk) + sizeof(T) * (DataEnd() - DataBegin()));
+                MKQLFreeWithSize(static_cast<void*>(this), sizeof(TListChunk) + sizeof(T) * (DataEnd() - DataBegin())); 
             }
 
             inline T* DataBegin() {
@@ -83,11 +83,11 @@ namespace NKikimr {
 
         };
 
-        template <typename T, ui64 MinChunkSize = 48>
+        template <typename T, ui64 MinChunkSize = 48> 
         class TListRepresentation {
         public:
-            using TSelf = TListRepresentation<T, MinChunkSize>;
-            using TChunk = TListChunk<T>;
+            using TSelf = TListRepresentation<T, MinChunkSize>; 
+            using TChunk = TListChunk<T>; 
 
         private:
             enum Type {
@@ -289,24 +289,24 @@ namespace NKikimr {
                 other.Type_ = Type::Freezed;
             }
 
-            inline void FromSingleElement(T&& element) {
+            inline void FromSingleElement(T&& element) { 
                 Type_ = Type::Normal;
                 ui64 chunkLength = (MinChunkSize + sizeof(T) - 1) / sizeof(T);
                 Chunk_ = TChunk::AllocateChunk(chunkLength);
                 Begin_ = Chunk_->DataBegin() + (chunkLength >> 2);
                 End_ = Begin_ + 1;
-                *Begin_ = std::move(element);
+                *Begin_ = std::move(element); 
             }
 
-            TListRepresentation(T&& element)
+            TListRepresentation(T&& element) 
             {
-                FromSingleElement(std::move(element));
+                FromSingleElement(std::move(element)); 
             }
 
-            TListRepresentation(T&& element, const TSelf& that)
+            TListRepresentation(T&& element, const TSelf& that) 
             {
                 if (!that.Chunk_) {
-                    FromSingleElement(std::move(element));
+                    FromSingleElement(std::move(element)); 
                     return;
                 }
                 if ((that.Type_ == Type::Normal) && (that.Begin_ != that.Chunk_->DataBegin())) {
@@ -316,16 +316,16 @@ namespace NKikimr {
                     Chunk_->Ref();
                     Begin_ = that.Begin_;
                     End_ = that.End_;
-                    *(--Begin_) = std::move(element);
+                    *(--Begin_) = std::move(element); 
                 } else {
                     NewNormal(&element, &element + 1, that.Begin_, that.End_);
                 }
             }
 
-            TListRepresentation(const TSelf& that, T&& element)
+            TListRepresentation(const TSelf& that, T&& element) 
             {
                 if (!that.Chunk_) {
-                    FromSingleElement(std::move(element));
+                    FromSingleElement(std::move(element)); 
                     return;
                 }
                 if ((that.Type_ == Type::Normal) && (that.End_ != that.Chunk_->DataEnd())) {
@@ -335,7 +335,7 @@ namespace NKikimr {
                     Chunk_->Ref();
                     Begin_ = that.Begin_;
                     End_ = that.End_ + 1;
-                    *(that.End_) = std::move(element);
+                    *(that.End_) = std::move(element); 
                 } else {
                     NewNormal(that.Begin_, that.End_, &element, &element + 1);
                 }
@@ -353,12 +353,12 @@ namespace NKikimr {
                 return TReverseIterator(*this);
             }
 
-            TSelf Append(T&& right) const {
-                return TSelf(*this, std::move(right));
+            TSelf Append(T&& right) const { 
+                return TSelf(*this, std::move(right)); 
             }
 
-            TSelf Prepend(T&& left) const {
-                return TSelf(std::move(left), *this);
+            TSelf Prepend(T&& left) const { 
+                return TSelf(std::move(left), *this); 
             }
 
             TSelf MassPrepend(T* begin, T* end) const {
@@ -417,10 +417,10 @@ namespace NKikimr {
                 return Begin_[index];
             }
 
-            T* GetItems() const {
-                return Begin_;
-            }
-
+            T* GetItems() const { 
+                return Begin_; 
+            } 
+ 
         private:
             TChunk* Chunk_;
             T* Begin_;

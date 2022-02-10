@@ -14,13 +14,13 @@ namespace NYql {
 
 using namespace NNodes;
 
-TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx) {
-    return ctx.NewCallable(position, "Nothing", {
-        ctx.NewCallable(position, "OptionalType", {
-            ctx.NewCallable(position, "DataType", {
-                ctx.NewAtom(position, "Bool", TNodeFlags::Default) }) }) });
-}
-
+TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx) { 
+    return ctx.NewCallable(position, "Nothing", { 
+        ctx.NewCallable(position, "OptionalType", { 
+            ctx.NewCallable(position, "DataType", { 
+                ctx.NewAtom(position, "Bool", TNodeFlags::Default) }) }) }); 
+} 
+ 
 TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx) {
    return ctx.NewCallable(position, "Null", {});
 }
@@ -38,15 +38,15 @@ TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& in
        .Build();
 }
 
-template <bool Bool>
-TExprNode::TPtr MakeBool(TPositionHandle position, TExprContext& ctx) {
-    return ctx.NewCallable(position, "Bool", { ctx.NewAtom(position, Bool ? "true" : "false", TNodeFlags::Default) });
-}
-
-TExprNode::TPtr MakeBool(TPositionHandle position, bool value, TExprContext& ctx) {
-    return value ? MakeBool<true>(position, ctx) : MakeBool<false>(position, ctx);
-}
-
+template <bool Bool> 
+TExprNode::TPtr MakeBool(TPositionHandle position, TExprContext& ctx) { 
+    return ctx.NewCallable(position, "Bool", { ctx.NewAtom(position, Bool ? "true" : "false", TNodeFlags::Default) }); 
+} 
+ 
+TExprNode::TPtr MakeBool(TPositionHandle position, bool value, TExprContext& ctx) { 
+    return value ? MakeBool<true>(position, ctx) : MakeBool<false>(position, ctx); 
+} 
+ 
 TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprContext& ctx) {
     return ctx.NewCallable(position, "Just", { MakeBool(position, value, ctx)});
 }
@@ -61,16 +61,16 @@ TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx) 
 }
 
 bool IsJustOrSingleAsList(const TExprNode& node) {
-    return node.ChildrenSize() == 1U && node.IsCallable({"Just", "AsList"});
+    return node.ChildrenSize() == 1U && node.IsCallable({"Just", "AsList"}); 
 }
 
-bool IsTransparentIfPresent(const TExprNode& node) {
-    return (node.IsCallable("FlatMap") || (3U == node.ChildrenSize() && node.IsCallable("IfPresent") && node.Tail().IsCallable("Nothing")))
-        && node.Child(1U)->Tail().IsCallable("Just");
-}
-
+bool IsTransparentIfPresent(const TExprNode& node) { 
+    return (node.IsCallable("FlatMap") || (3U == node.ChildrenSize() && node.IsCallable("IfPresent") && node.Tail().IsCallable("Nothing"))) 
+        && node.Child(1U)->Tail().IsCallable("Just"); 
+} 
+ 
 bool IsPredicateFlatMap(const TExprNode& node) {
-    return node.IsCallable({"FlatListIf", "ListIf", "OptionalIf", "FlatOptionalIf"});
+    return node.IsCallable({"FlatListIf", "ListIf", "OptionalIf", "FlatOptionalIf"}); 
 }
 
 bool IsFilterFlatMap(const NNodes::TCoLambda& lambda) {
@@ -86,7 +86,7 @@ bool IsFilterFlatMap(const NNodes::TCoLambda& lambda) {
 }
 
 bool IsListReorder(const TExprNode& node) {
-    return node.IsCallable({"Sort", "Reverse"});
+    return node.IsCallable({"Sort", "Reverse"}); 
 }
 
 bool IsRenameFlatMap(const NNodes::TCoFlatMapBase& node, TExprNode::TPtr& structNode) {
@@ -205,8 +205,8 @@ TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& sr
         .Build();
 }
 
-template<class TFieldsSet>
-bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap, bool allowDependsOn) {
+template<class TFieldsSet> 
+bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap, bool allowDependsOn) { 
     if (arg.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Struct) {
         return false;
     }
@@ -215,7 +215,7 @@ bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TField
         return false;
     }
 
-    const auto inputStructType = arg.GetTypeAnn()->Cast<TStructExprType>();
+    const auto inputStructType = arg.GetTypeAnn()->Cast<TStructExprType>(); 
     if (!IsDepended(*start, arg)) {
         return inputStructType->GetSize() > 0;
     }
@@ -226,19 +226,19 @@ bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TField
         return true;
     });
 
-    const auto parents = parentsMap.find(&arg);
+    const auto parents = parentsMap.find(&arg); 
     YQL_ENSURE(parents != parentsMap.cend());
-    for (const auto& parent : parents->second) {
+    for (const auto& parent : parents->second) { 
         if (nodes.cend() == nodes.find(parent)) {
             continue;
         }
 
         if (parent->IsCallable("Member")) {
-            if constexpr (std::is_same_v<typename TFieldsSet::key_type, typename TFieldsSet::value_type>)
-                usedFields.emplace(parent->Tail().Content());
-            else
-                usedFields.emplace(parent->Tail().Content(), parent->TailPtr());
-        } else if (allowDependsOn && parent->IsCallable("DependsOn")) {
+            if constexpr (std::is_same_v<typename TFieldsSet::key_type, typename TFieldsSet::value_type>) 
+                usedFields.emplace(parent->Tail().Content()); 
+            else 
+                usedFields.emplace(parent->Tail().Content(), parent->TailPtr()); 
+        } else if (allowDependsOn && parent->IsCallable("DependsOn")) { 
             continue;
         } else {
             // unknown node
@@ -250,10 +250,10 @@ bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TField
     return usedFields.size() < inputStructType->GetSize();
 }
 
-template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TSet<TStringBuf>& usedFields, const TParentsMap& parentsMap, bool allowDependsOn);
+template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TSet<TStringBuf>& usedFields, const TParentsMap& parentsMap, bool allowDependsOn); 
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TSet<TString>& usedFields, const TParentsMap& parentsMap, bool allowDependsOn);
-template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, std::map<std::string_view, TExprNode::TPtr>& usedFields, const TParentsMap& parentsMap, bool allowDependsOn);
-
+template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, std::map<std::string_view, TExprNode::TPtr>& usedFields, const TParentsMap& parentsMap, bool allowDependsOn); 
+ 
 template<class TFieldsSet>
 TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TFieldsSet& subsetFields,
     TExprContext& ctx, bool singleValue) {
@@ -329,15 +329,15 @@ const TTypeAnnotationNode* RemoveAllOptionals(const TTypeAnnotationNode* type) {
     return type;
 }
 
-const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* type) {
-    switch (type->GetKind()) {
-        case ETypeAnnotationKind::List: return type->Cast<TListExprType>()->GetItemType();
-        case ETypeAnnotationKind::Flow: return type->Cast<TFlowExprType>()->GetItemType();
-        case ETypeAnnotationKind::Stream: return type->Cast<TStreamExprType>()->GetItemType();
-        case ETypeAnnotationKind::Optional: return type->Cast<TOptionalExprType>()->GetItemType();
-        default: break;
+const TTypeAnnotationNode* GetSeqItemType(const TTypeAnnotationNode* type) { 
+    switch (type->GetKind()) { 
+        case ETypeAnnotationKind::List: return type->Cast<TListExprType>()->GetItemType(); 
+        case ETypeAnnotationKind::Flow: return type->Cast<TFlowExprType>()->GetItemType(); 
+        case ETypeAnnotationKind::Stream: return type->Cast<TStreamExprType>()->GetItemType(); 
+        case ETypeAnnotationKind::Optional: return type->Cast<TOptionalExprType>()->GetItemType(); 
+        default: break; 
     }
-
+ 
     THROW yexception() << "Impossible to get item type from " << *type;
 }
 
@@ -512,7 +512,7 @@ TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TP
         .Build();
 }
 
-bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const TStringBuf& goal, TExprNode::TListType& members, MemberUpdaterFunc updaterFunc, const TTypeAnnotationNode* nodeType) {
+bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const TStringBuf& goal, TExprNode::TListType& members, MemberUpdaterFunc updaterFunc, const TTypeAnnotationNode* nodeType) { 
     if (!nodeType) {
         nodeType = node->GetTypeAnn();
         Y_VERIFY_DEBUG(nodeType || !"Unset node type for UpdateStructMembers");
@@ -1002,7 +1002,7 @@ void ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& k
     }
 }
 
-const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables) {
+const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables) { 
     const TExprNode* p = &node;
     while (p->IsCallable(skipCallables)) {
         p = &p->Head();
@@ -1100,199 +1100,199 @@ TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& row
     return ctx.NewLambda(pos, ctx.NewArguments(pos, {keyExtractorArg}), std::move(tuple));
 }
 
-template <bool Cannonize, bool EnableNewOptimizers>
-TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx) {
-    auto optionals = node->ChildrenList();
-    optionals.resize(optionals.size() - 2U);
-    const auto& lambda = *node->Child(optionals.size());
-    if (lambda.Tail().GetDependencyScope()->second != &lambda) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " where then branch isn't depended on optional";
-        if (1U == optionals.size()) {
-            return ctx.Builder(node->Pos())
-                .Callable("If")
-                    .Callable(0, "Exists")
-                        .Add(0, std::move(optionals.front()))
-                    .Seal()
-                    .Add(1, lambda.TailPtr())
-                    .Add(2, node->TailPtr())
-                .Seal().Build();
-        }
-
-        std::for_each(optionals.begin(), optionals.end(), [&ctx](TExprNode::TPtr& node) {
-            const auto p = node->Pos();
-            node = ctx.NewCallable(p, "Exists", {std::move(node)});
-        });
-        return ctx.Builder(node->Pos())
-            .Callable("If")
-                .Callable(0, "And")
-                    .Add(std::move(optionals))
-                .Seal()
-                .Add(1, lambda.TailPtr())
-                .Add(2, node->TailPtr())
-            .Seal().Build();
-    }
-
-    if (std::any_of(optionals.cbegin(), optionals.cend(), [](const TExprNode::TPtr& node) { return node->IsCallable("Nothing"); })) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over Nothing.";
-        return node->TailPtr();
-    }
-
-    if (std::any_of(optionals.cbegin(), optionals.cend(), [](const TExprNode::TPtr& node) { return node->IsCallable("Just"); })) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over Just.";
-        TExprNode::TListType args;
-        args.reserve(optionals.size());
-        std::for_each(optionals.begin(), optionals.end(), [&args](TExprNode::TPtr& arg) {
-            if (arg->IsCallable("Just"))
-                arg = arg->HeadPtr();
-            else
-                args.emplace_back(std::move(arg));
-        });
-
-        if (args.empty()) {
-            TNodeOnNodeOwnedMap replaces(optionals.size());
-            for (ui32 i = 0U; i < optionals.size(); ++i)
-                replaces.emplace(lambda.Head().Child(i), std::move(optionals[i]));
-            return ctx.ReplaceNodes(lambda.TailPtr(), replaces);
-        }
-
-        auto simplify = ctx.Builder(node->Pos())
-            .Lambda()
-                .Params("items", optionals.size() - args.size())
-                .Apply(lambda)
-                    .Do([&](TExprNodeReplaceBuilder& parent) -> TExprNodeReplaceBuilder& {
-                        for (auto i = 0U, j = 0U; i < optionals.size(); ++i) {
-                            if (auto opt = std::move(optionals[i]))
-                                parent.With(i, std::move(opt));
-                            else
-                                parent.With(i, "items", j++);
-                        }
-                        return parent;
-                    })
-                .Seal()
-            .Seal().Build();
-
-        args.emplace_back(std::move(simplify));
-        args.emplace_back(node->TailPtr());
-        return ctx.ChangeChildren(*node, std::move(args));
-    }
-
-    if (3U == node->ChildrenSize()) {
-        if (&lambda.Tail() == &lambda.Head().Head()) {
-            YQL_CLOG(DEBUG, Core) << "Simplify " << node->Content() << " as Coalesce";
-            return ctx.NewCallable(node->Pos(), "Coalesce", {node->HeadPtr(), node->TailPtr()});
-        }
-
-        if (const auto& input = node->Head(); IsTransparentIfPresent(input)) {
-            YQL_CLOG(DEBUG, Core) << node->Content() << " over transparent " << input.Content();
-            return ctx.Builder(node->Pos())
-                .Callable(node->Content())
-                    .Add(0, input.HeadPtr())
-                    .Lambda(1)
-                        .Param("item")
-                        .Apply(*node->Child(1))
-                            .With(0)
-                                .ApplyPartial(input.Child(1)->HeadPtr(), input.Child(1)->Tail().HeadPtr())
-                                    .With(0, "item")
-                                .Seal()
-                            .Done()
-                        .Seal()
-                    .Seal()
-                    .Add(2, node->TailPtr())
-                .Seal().Build();
-        }
-
-        if constexpr (Cannonize) {
-            if (node->Tail().IsCallable("Nothing")) {
-                YQL_CLOG(DEBUG, Core) << node->Content() << " with else " << node->Tail().Content();
-                return ctx.NewCallable(node->Pos(), "FlatMap", { node->HeadPtr(), node->ChildPtr(1) });
-            }
-        }
-    }
-
-    if constexpr (!Cannonize && EnableNewOptimizers) {
-        if (lambda.Tail().IsCallable("IfPresent") && &node->Tail() == &lambda.Tail().Tail() && lambda.Tail().Head().GetDependencyScope()->second != &lambda) {
-            auto innerOptionals = lambda.Tail().ChildrenList();
-            innerOptionals.resize(innerOptionals.size() - 2U);
-            const auto find = std::find_if(innerOptionals.cbegin(), innerOptionals.cend(), [l = &lambda] (const TExprNode::TPtr& child) {
-                return child->GetDependencyScope()->second == l;
-            });
-            const auto count = std::distance(innerOptionals.cbegin(), find);
-            YQL_CLOG(DEBUG, Core) << node->Content() << " pull " << count <<  " arg(s) from inner " << lambda.Tail().Content();
-
-            auto& innerLambda = *lambda.Tail().Child(innerOptionals.size());
-
-            auto args = lambda.Head().ChildrenList();
-            auto innerArgs = innerLambda.Head().ChildrenList();
-
-            const auto splitter = [count](TExprNode::TListType& src, TExprNode::TListType& dst) {
-                dst.reserve(dst.size() + count);
-                auto it = src.begin();
-                std::advance(it, count);
-                std::move(src.begin(), it, std::back_inserter(dst));
-                src.erase(src.cbegin(), it);
-            };
-
-            splitter(innerArgs, args);
-            splitter(innerOptionals, optionals);
-
-            auto body = innerLambda.TailPtr();
-            if (!(innerArgs.empty() || innerOptionals.empty())) {
-                innerOptionals.emplace_back(ctx.DeepCopyLambda(*ctx.NewLambda(innerLambda.Pos(), ctx.NewArguments(innerLambda.Head().Pos(), std::move(innerArgs)), std::move(body))));
-                innerOptionals.emplace_back(lambda.Tail().TailPtr());
-                body = ctx.ChangeChildren(lambda.Tail(), std::move(innerOptionals));
-            }
-
-            optionals.emplace_back(ctx.DeepCopyLambda(*ctx.NewLambda(lambda.Pos(), ctx.NewArguments(lambda.Head().Pos(), std::move(args)), std::move(body))));
-            optionals.emplace_back(node->TailPtr());
-            return ctx.ChangeChildren(*node, std::move(optionals));
-        }
-    }
-
-    return node;
+template <bool Cannonize, bool EnableNewOptimizers> 
+TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx) { 
+    auto optionals = node->ChildrenList(); 
+    optionals.resize(optionals.size() - 2U); 
+    const auto& lambda = *node->Child(optionals.size()); 
+    if (lambda.Tail().GetDependencyScope()->second != &lambda) { 
+        YQL_CLOG(DEBUG, Core) << node->Content() << " where then branch isn't depended on optional"; 
+        if (1U == optionals.size()) { 
+            return ctx.Builder(node->Pos()) 
+                .Callable("If") 
+                    .Callable(0, "Exists") 
+                        .Add(0, std::move(optionals.front())) 
+                    .Seal() 
+                    .Add(1, lambda.TailPtr()) 
+                    .Add(2, node->TailPtr()) 
+                .Seal().Build(); 
+        } 
+ 
+        std::for_each(optionals.begin(), optionals.end(), [&ctx](TExprNode::TPtr& node) { 
+            const auto p = node->Pos(); 
+            node = ctx.NewCallable(p, "Exists", {std::move(node)}); 
+        }); 
+        return ctx.Builder(node->Pos()) 
+            .Callable("If") 
+                .Callable(0, "And") 
+                    .Add(std::move(optionals)) 
+                .Seal() 
+                .Add(1, lambda.TailPtr()) 
+                .Add(2, node->TailPtr()) 
+            .Seal().Build(); 
+    } 
+ 
+    if (std::any_of(optionals.cbegin(), optionals.cend(), [](const TExprNode::TPtr& node) { return node->IsCallable("Nothing"); })) { 
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over Nothing."; 
+        return node->TailPtr(); 
+    } 
+ 
+    if (std::any_of(optionals.cbegin(), optionals.cend(), [](const TExprNode::TPtr& node) { return node->IsCallable("Just"); })) { 
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over Just."; 
+        TExprNode::TListType args; 
+        args.reserve(optionals.size()); 
+        std::for_each(optionals.begin(), optionals.end(), [&args](TExprNode::TPtr& arg) { 
+            if (arg->IsCallable("Just")) 
+                arg = arg->HeadPtr(); 
+            else 
+                args.emplace_back(std::move(arg)); 
+        }); 
+ 
+        if (args.empty()) { 
+            TNodeOnNodeOwnedMap replaces(optionals.size()); 
+            for (ui32 i = 0U; i < optionals.size(); ++i) 
+                replaces.emplace(lambda.Head().Child(i), std::move(optionals[i])); 
+            return ctx.ReplaceNodes(lambda.TailPtr(), replaces); 
+        } 
+ 
+        auto simplify = ctx.Builder(node->Pos()) 
+            .Lambda() 
+                .Params("items", optionals.size() - args.size()) 
+                .Apply(lambda) 
+                    .Do([&](TExprNodeReplaceBuilder& parent) -> TExprNodeReplaceBuilder& { 
+                        for (auto i = 0U, j = 0U; i < optionals.size(); ++i) { 
+                            if (auto opt = std::move(optionals[i])) 
+                                parent.With(i, std::move(opt)); 
+                            else 
+                                parent.With(i, "items", j++); 
+                        } 
+                        return parent; 
+                    }) 
+                .Seal() 
+            .Seal().Build(); 
+ 
+        args.emplace_back(std::move(simplify)); 
+        args.emplace_back(node->TailPtr()); 
+        return ctx.ChangeChildren(*node, std::move(args)); 
+    } 
+ 
+    if (3U == node->ChildrenSize()) { 
+        if (&lambda.Tail() == &lambda.Head().Head()) { 
+            YQL_CLOG(DEBUG, Core) << "Simplify " << node->Content() << " as Coalesce"; 
+            return ctx.NewCallable(node->Pos(), "Coalesce", {node->HeadPtr(), node->TailPtr()}); 
+        } 
+ 
+        if (const auto& input = node->Head(); IsTransparentIfPresent(input)) { 
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over transparent " << input.Content(); 
+            return ctx.Builder(node->Pos()) 
+                .Callable(node->Content()) 
+                    .Add(0, input.HeadPtr()) 
+                    .Lambda(1) 
+                        .Param("item") 
+                        .Apply(*node->Child(1)) 
+                            .With(0) 
+                                .ApplyPartial(input.Child(1)->HeadPtr(), input.Child(1)->Tail().HeadPtr()) 
+                                    .With(0, "item") 
+                                .Seal() 
+                            .Done() 
+                        .Seal() 
+                    .Seal() 
+                    .Add(2, node->TailPtr()) 
+                .Seal().Build(); 
+        } 
+ 
+        if constexpr (Cannonize) { 
+            if (node->Tail().IsCallable("Nothing")) { 
+                YQL_CLOG(DEBUG, Core) << node->Content() << " with else " << node->Tail().Content(); 
+                return ctx.NewCallable(node->Pos(), "FlatMap", { node->HeadPtr(), node->ChildPtr(1) }); 
+            } 
+        } 
+    } 
+ 
+    if constexpr (!Cannonize && EnableNewOptimizers) { 
+        if (lambda.Tail().IsCallable("IfPresent") && &node->Tail() == &lambda.Tail().Tail() && lambda.Tail().Head().GetDependencyScope()->second != &lambda) { 
+            auto innerOptionals = lambda.Tail().ChildrenList(); 
+            innerOptionals.resize(innerOptionals.size() - 2U); 
+            const auto find = std::find_if(innerOptionals.cbegin(), innerOptionals.cend(), [l = &lambda] (const TExprNode::TPtr& child) { 
+                return child->GetDependencyScope()->second == l; 
+            }); 
+            const auto count = std::distance(innerOptionals.cbegin(), find); 
+            YQL_CLOG(DEBUG, Core) << node->Content() << " pull " << count <<  " arg(s) from inner " << lambda.Tail().Content(); 
+ 
+            auto& innerLambda = *lambda.Tail().Child(innerOptionals.size()); 
+ 
+            auto args = lambda.Head().ChildrenList(); 
+            auto innerArgs = innerLambda.Head().ChildrenList(); 
+ 
+            const auto splitter = [count](TExprNode::TListType& src, TExprNode::TListType& dst) { 
+                dst.reserve(dst.size() + count); 
+                auto it = src.begin(); 
+                std::advance(it, count); 
+                std::move(src.begin(), it, std::back_inserter(dst)); 
+                src.erase(src.cbegin(), it); 
+            }; 
+ 
+            splitter(innerArgs, args); 
+            splitter(innerOptionals, optionals); 
+ 
+            auto body = innerLambda.TailPtr(); 
+            if (!(innerArgs.empty() || innerOptionals.empty())) { 
+                innerOptionals.emplace_back(ctx.DeepCopyLambda(*ctx.NewLambda(innerLambda.Pos(), ctx.NewArguments(innerLambda.Head().Pos(), std::move(innerArgs)), std::move(body)))); 
+                innerOptionals.emplace_back(lambda.Tail().TailPtr()); 
+                body = ctx.ChangeChildren(lambda.Tail(), std::move(innerOptionals)); 
+            } 
+ 
+            optionals.emplace_back(ctx.DeepCopyLambda(*ctx.NewLambda(lambda.Pos(), ctx.NewArguments(lambda.Head().Pos(), std::move(args)), std::move(body)))); 
+            optionals.emplace_back(node->TailPtr()); 
+            return ctx.ChangeChildren(*node, std::move(optionals)); 
+        } 
+    } 
+ 
+    return node; 
 }
-
-template TExprNode::TPtr OptimizeIfPresent<true, true>(const TExprNode::TPtr& node, TExprContext& ctx);
-template TExprNode::TPtr OptimizeIfPresent<false, true>(const TExprNode::TPtr& node, TExprContext& ctx);
-template TExprNode::TPtr OptimizeIfPresent<false, false>(const TExprNode::TPtr& node, TExprContext& ctx);
-
-TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx)  {
-    if (HasError(node->Head().GetTypeAnn(), ctx)) {
-        return TExprNode::TPtr();
-    }
-
-    if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Void) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<false>(node->Pos(), ctx);
-    }
-
-    if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<false>(node->Pos(), ctx);
-    }
-
-    if (node->Head().IsCallable("Just")) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<true>(node->Pos(), ctx);
-    }
-
-    if (node->Head().IsCallable("Nothing")) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        return MakeBool<false>(node->Pos(), ctx);
-    }
-
-    if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over non-optional";
-        return MakeBool<true>(node->Pos(), ctx);
-    }
-
-    if (const auto& input = node->Head(); IsTransparentIfPresent(input)) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over transparent " << input.Content();
-        return ctx.ChangeChildren(*node, {input.HeadPtr()});
-    }
-
-    return node;
+ 
+template TExprNode::TPtr OptimizeIfPresent<true, true>(const TExprNode::TPtr& node, TExprContext& ctx); 
+template TExprNode::TPtr OptimizeIfPresent<false, true>(const TExprNode::TPtr& node, TExprContext& ctx); 
+template TExprNode::TPtr OptimizeIfPresent<false, false>(const TExprNode::TPtr& node, TExprContext& ctx); 
+ 
+TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx)  { 
+    if (HasError(node->Head().GetTypeAnn(), ctx)) { 
+        return TExprNode::TPtr(); 
+    } 
+ 
+    if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Void) { 
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content(); 
+        return MakeBool<false>(node->Pos(), ctx); 
+    } 
+ 
+    if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) { 
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content(); 
+        return MakeBool<false>(node->Pos(), ctx); 
+    } 
+ 
+    if (node->Head().IsCallable("Just")) { 
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content(); 
+        return MakeBool<true>(node->Pos(), ctx); 
+    } 
+ 
+    if (node->Head().IsCallable("Nothing")) { 
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content(); 
+        return MakeBool<false>(node->Pos(), ctx); 
+    } 
+ 
+    if (node->Head().GetTypeAnn()->GetKind() != ETypeAnnotationKind::Optional) { 
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over non-optional"; 
+        return MakeBool<true>(node->Pos(), ctx); 
+    } 
+ 
+    if (const auto& input = node->Head(); IsTransparentIfPresent(input)) { 
+        YQL_CLOG(DEBUG, Core) << node->Content() << " over transparent " << input.Content(); 
+        return ctx.ChangeChildren(*node, {input.HeadPtr()}); 
+    } 
+ 
+    return node; 
 }
-
+ 
 bool WarnUnroderedSubquery(const TExprNode& unourderedSubquery, TExprContext& ctx) {
     YQL_ENSURE(unourderedSubquery.IsCallable("UnorderedSubquery"));
 
@@ -1304,7 +1304,7 @@ bool WarnUnroderedSubquery(const TExprNode& unourderedSubquery, TExprContext& ct
     issue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
 
     return ctx.AddWarning(issue);
-}
+} 
 
 TExprNode::TPtr DuplicateIndependentStreams(TExprNode::TPtr lambda, const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx) {
     TNodeOnNodeOwnedMap replaces;

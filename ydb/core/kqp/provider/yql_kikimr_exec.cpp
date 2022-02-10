@@ -174,11 +174,11 @@ public:
     std::pair<TStatus, TAsyncTransformCallbackFuture> CallbackTransform(const TExprNode::TPtr& input,
         TExprNode::TPtr& output, TExprContext& ctx)
     {
-        YQL_ENSURE(input->Type() == TExprNode::Callable);
-        output = input;
+        YQL_ENSURE(input->Type() == TExprNode::Callable); 
+        output = input; 
 
-        if (input->Content() == "Pull") {
-            auto pullInput = input->Child(0);
+        if (input->Content() == "Pull") { 
+            auto pullInput = input->Child(0); 
 
             if (auto maybeNth = TMaybeNode<TCoNth>(pullInput)) {
                 ui32 index = FromString<ui32>(maybeNth.Cast().Index().Value());
@@ -188,7 +188,7 @@ public:
                 }
             }
 
-            IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(*input);
+            IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(*input); 
 
             if (auto maybeTableList = TMaybeNode<TCoRight>(pullInput).Input().Maybe<TKiReadTableList>()) {
                 if (!EnsureNotPrepare("tablelist", pullInput->Pos(), SessionCtx->Query(), ctx)) {
@@ -196,7 +196,7 @@ public:
                 }
 
                 TKikimrKey key(ctx);
-                YQL_ENSURE(key.Extract(maybeTableList.Cast().TableKey().Ref()));
+                YQL_ENSURE(key.Extract(maybeTableList.Cast().TableKey().Ref())); 
                 auto future = Gateway->ListPath(TString(maybeTableList.Cast().DataSource().Cluster()),
                     key.GetFolderPath());
 
@@ -217,7 +217,7 @@ public:
 
                 TKikimrKey key(ctx);
                 auto cluster = maybeTableScheme.Cast().DataSource().Cluster();
-                YQL_ENSURE(key.Extract(maybeTableScheme.Cast().TableKey().Ref()));
+                YQL_ENSURE(key.Extract(maybeTableScheme.Cast().TableKey().Ref())); 
 
                 auto& tableDesc = SessionCtx->Tables().ExistingTable(TString(cluster), key.GetTablePath());
                 TKikimrTableDescription rawTableDesc;
@@ -244,7 +244,7 @@ public:
             }
         }
 
-        if (input->Content() == "Result") {
+        if (input->Content() == "Result") { 
             auto resultInput = TExprBase(input->ChildPtr(0));
             auto exec = resultInput.Maybe<TCoNth>().Tuple().Maybe<TCoRight>().Input();
             YQL_ENSURE(exec.Maybe<TKiExecDataQuery>());
@@ -278,7 +278,7 @@ public:
             return SyncOk();
         }
 
-        if (input->Content() == "ClustersList") {
+        if (input->Content() == "ClustersList") { 
             if (!EnsureNotPrepare("ClustersList", input->Pos(), SessionCtx->Query(), ctx)) {
                 return SyncError();
             }
@@ -304,13 +304,13 @@ public:
         }
 
         if (input->Content() == "KiReadTableList!" || input->Content() == "KiReadTableScheme!") {
-            auto requireStatus = RequireChild(*input, 0);
+            auto requireStatus = RequireChild(*input, 0); 
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
             }
 
             input->SetState(TExprNode::EState::ExecutionComplete);
-            input->SetResult(ctx.NewWorld(input->Pos()));
+            input->SetResult(ctx.NewWorld(input->Pos())); 
             return SyncOk();
         }
 
@@ -320,7 +320,7 @@ public:
     }
 
 private:
-    static TExprNode::TPtr GetResOrPullResult(const TExprNode& node, const IDataProvider::TFillSettings& fillSettings,
+    static TExprNode::TPtr GetResOrPullResult(const TExprNode& node, const IDataProvider::TFillSettings& fillSettings, 
         const TTypeAnnotationNode* resultType, const NKikimrMiniKQL::TResult& resultValue, TExprContext& ctx)
     {
         TVector<TString> columnHints(NCommon::GetResOrPullColumnHints(node));
@@ -335,7 +335,7 @@ private:
         // YQL_ENSURE(CheckKqpResultType(*protoValue, *resultType, ctx));
         Y_UNUSED(resultType);
 
-        TExprNode::TPtr resultNode;
+        TExprNode::TPtr resultNode; 
         if (fillSettings.Format == IDataProvider::EResultFormat::Yson) {
             NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings);
 
@@ -414,11 +414,11 @@ public:
     std::pair<TStatus, TAsyncTransformCallbackFuture> CallbackTransform(const TExprNode::TPtr& input,
         TExprNode::TPtr& output, TExprContext& ctx)
     {
-        YQL_ENSURE(input->Type() == TExprNode::Callable);
-        output = input;
+        YQL_ENSURE(input->Type() == TExprNode::Callable); 
+        output = input; 
 
         if (auto maybeCommit = TMaybeNode<TCoCommit>(input)) {
-            auto requireStatus = RequireChild(*input, 0);
+            auto requireStatus = RequireChild(*input, 0); 
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
             }
@@ -431,7 +431,7 @@ public:
             }
 
             input->SetState(TExprNode::EState::ExecutionComplete);
-            input->SetResult(ctx.NewWorld(input->Pos()));
+            input->SetResult(ctx.NewWorld(input->Pos())); 
             return SyncOk();
         }
 
@@ -446,16 +446,16 @@ public:
 
         if (TMaybeNode<TCoNth>(input)) {
             input->SetState(TExprNode::EState::ExecutionComplete);
-            input->SetResult(ctx.NewWorld(input->Pos()));
+            input->SetResult(ctx.NewWorld(input->Pos())); 
             return SyncOk();
         }
 
-        if (auto maybeCreate = TMaybeNode<TKiCreateTable>(input)) {
+        if (auto maybeCreate = TMaybeNode<TKiCreateTable>(input)) { 
             if (!EnsureNotPrepare("CREATE TABLE", input->Pos(), SessionCtx->Query(), ctx)) {
                 return SyncError();
             }
 
-            auto requireStatus = RequireChild(*input, 0);
+            auto requireStatus = RequireChild(*input, 0); 
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
             }
@@ -477,12 +477,12 @@ public:
                 }, "Executing CREATE TABLE");
         }
 
-        if (auto maybeDrop = TMaybeNode<TKiDropTable>(input)) {
+        if (auto maybeDrop = TMaybeNode<TKiDropTable>(input)) { 
             if (!EnsureNotPrepare("DROP TABLE", input->Pos(), SessionCtx->Query(), ctx)) {
                 return SyncError();
             }
 
-            auto requireStatus = RequireChild(*input, 0);
+            auto requireStatus = RequireChild(*input, 0); 
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
             }
@@ -504,7 +504,7 @@ public:
                 });
 
             input->SetState(TExprNode::EState::ExecutionComplete);
-            input->SetResult(ctx.NewWorld(input->Pos()));
+            input->SetResult(ctx.NewWorld(input->Pos())); 
             return SyncOk();
         }
 

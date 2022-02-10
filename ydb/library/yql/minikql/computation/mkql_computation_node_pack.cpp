@@ -12,13 +12,13 @@
 #include <ydb/library/yql/utils/fp_bits.h>
 
 #ifndef MKQL_DISABLE_CODEGEN
-#include <llvm/IR/Constants.h>
-#include <llvm/IR/DerivedTypes.h>
-#include <llvm/IR/Instructions.h>
-#include <llvm/IR/LLVMContext.h>
-#include <llvm/IR/Module.h>
+#include <llvm/IR/Constants.h> 
+#include <llvm/IR/DerivedTypes.h> 
+#include <llvm/IR/Instructions.h> 
+#include <llvm/IR/LLVMContext.h> 
+#include <llvm/IR/Module.h> 
 #endif
-
+ 
 #include <util/system/yassert.h>
 #include <util/system/sanitizers.h>
 
@@ -26,9 +26,9 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 #ifndef MKQL_DISABLE_CODEGEN
-using namespace llvm;
+using namespace llvm; 
 #endif
-
+ 
 namespace NDetails {
 
 void PackUInt64(ui64 val, TBuffer& buf) {
@@ -114,31 +114,31 @@ T GetRawData(TStringBuf& buf) {
 
 } // NDetails
 
-namespace {
+namespace { 
 #ifndef MKQL_DISABLE_CODEGEN
     TString MakeName(const TStringBuf& common, const TType* type) {
-        TStringStream out;
-        out << common << intptr_t(type);
-        return out.Str();
-    }
-
-    BasicBlock* CreatePackBlock(const TType* type, bool useTopLength, const Module &module, LLVMContext &context, Function* pack, BasicBlock* block, Value* value, Value* buffer, Value* mask) {
-        const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
-
-        switch (type->GetKind()) {
-            case TType::EKind::Data: {
-                const auto dataType = static_cast<const TDataType*>(type);
+        TStringStream out; 
+        out << common << intptr_t(type); 
+        return out.Str(); 
+    } 
+ 
+    BasicBlock* CreatePackBlock(const TType* type, bool useTopLength, const Module &module, LLVMContext &context, Function* pack, BasicBlock* block, Value* value, Value* buffer, Value* mask) { 
+        const auto valueType = Type::getInt128Ty(context); 
+        const auto ptrValueType = PointerType::getUnqual(valueType); 
+ 
+        switch (type->GetKind()) { 
+            case TType::EKind::Data: { 
+                const auto dataType = static_cast<const TDataType*>(type); 
                 switch (*dataType->GetDataSlot()) {
                     case NUdf::EDataSlot::Bool:
-                        CallInst::Create(module.getFunction("PackBool"), {value, buffer}, "", block);
-                        break;
+                        CallInst::Create(module.getFunction("PackBool"), {value, buffer}, "", block); 
+                        break; 
                     case NUdf::EDataSlot::Int8:
                         Y_FAIL("Not impl");
                         break;
                     case NUdf::EDataSlot::Uint8:
-                        CallInst::Create(module.getFunction("PackByte"), {value, buffer}, "", block);
-                        break;
+                        CallInst::Create(module.getFunction("PackByte"), {value, buffer}, "", block); 
+                        break; 
                     case NUdf::EDataSlot::Int16:
                         Y_FAIL("Not impl");
                         break;
@@ -146,231 +146,231 @@ namespace {
                         Y_FAIL("Not impl");
                         break;
                     case NUdf::EDataSlot::Int32:
-                        CallInst::Create(module.getFunction("PackInt32"), {value, buffer}, "", block);
-                        break;
+                        CallInst::Create(module.getFunction("PackInt32"), {value, buffer}, "", block); 
+                        break; 
                     case NUdf::EDataSlot::Uint32:
-                        CallInst::Create(module.getFunction("PackUInt32"), {value, buffer}, "", block);
-                        break;
+                        CallInst::Create(module.getFunction("PackUInt32"), {value, buffer}, "", block); 
+                        break; 
                     case NUdf::EDataSlot::Int64:
-                        CallInst::Create(module.getFunction("PackInt64"), {value, buffer}, "", block);
-                        break;
+                        CallInst::Create(module.getFunction("PackInt64"), {value, buffer}, "", block); 
+                        break; 
                     case NUdf::EDataSlot::Uint64:
-                        CallInst::Create(module.getFunction("PackUInt64"), {value, buffer}, "", block);
-                        break;
+                        CallInst::Create(module.getFunction("PackUInt64"), {value, buffer}, "", block); 
+                        break; 
                     case NUdf::EDataSlot::Float:
                         CallInst::Create(module.getFunction("PackFloat"), { value, buffer }, "", block);
                         break;
                     case NUdf::EDataSlot::Double:
                         CallInst::Create(module.getFunction("PackDouble"), { value, buffer }, "", block);
                         break;
-                    default:
-                        CallInst::Create(module.getFunction(useTopLength ? "PackStringData" : "PackString"), {value, buffer}, "", block);
-                        break;
-                }
-
-                return block;
-            }
-            case TType::EKind::Optional: {
-                const auto optType = static_cast<const TOptionalType*>(type);
-
+                    default: 
+                        CallInst::Create(module.getFunction(useTopLength ? "PackStringData" : "PackString"), {value, buffer}, "", block); 
+                        break; 
+                } 
+ 
+                return block; 
+            } 
+            case TType::EKind::Optional: { 
+                const auto optType = static_cast<const TOptionalType*>(type); 
+ 
                 const auto item = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "item", block);
-                const auto hasi = CallInst::Create(module.getFunction("GetOptionalValue"), {value, item, mask}, "has", block);
-
-                const auto done = BasicBlock::Create(context, "done", pack);
-                const auto fill = BasicBlock::Create(context, "fill", pack);
-
-                const auto zero = ConstantInt::getFalse(context);
-                const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, hasi, zero, "cond", block);
-
-                BranchInst::Create(done, fill, icmp, block);
-
-                const auto next = CreatePackBlock(optType->GetItemType(), useTopLength, module, context, pack, fill, item, buffer, mask);
-                BranchInst::Create(done, next);
-                return done;
-            }
-            case TType::EKind::Struct: {
-                const auto structType = static_cast<const TStructType*>(type);
-                const auto getter = module.getFunction("GetElement");
+                const auto hasi = CallInst::Create(module.getFunction("GetOptionalValue"), {value, item, mask}, "has", block); 
+ 
+                const auto done = BasicBlock::Create(context, "done", pack); 
+                const auto fill = BasicBlock::Create(context, "fill", pack); 
+ 
+                const auto zero = ConstantInt::getFalse(context); 
+                const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, hasi, zero, "cond", block); 
+ 
+                BranchInst::Create(done, fill, icmp, block); 
+ 
+                const auto next = CreatePackBlock(optType->GetItemType(), useTopLength, module, context, pack, fill, item, buffer, mask); 
+                BranchInst::Create(done, next); 
+                return done; 
+            } 
+            case TType::EKind::Struct: { 
+                const auto structType = static_cast<const TStructType*>(type); 
+                const auto getter = module.getFunction("GetElement"); 
                 const auto member = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "member", block);
-                auto curr = block;
-                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
-                    const auto index = ConstantInt::get(Type::getInt32Ty(context), i);
-                    CallInst::Create(getter, {value, index, member}, "", curr);
-                    curr = CreatePackBlock(structType->GetMemberType(i), useTopLength, module, context, pack, curr, member, buffer, mask);
-                }
-                return curr;
-            }
-
-            case TType::EKind::Tuple: {
-                const auto tupleType = static_cast<const TTupleType*>(type);
-                const auto getter = module.getFunction("GetElement");
+                auto curr = block; 
+                for (ui32 i = 0; i < structType->GetMembersCount(); ++i) { 
+                    const auto index = ConstantInt::get(Type::getInt32Ty(context), i); 
+                    CallInst::Create(getter, {value, index, member}, "", curr); 
+                    curr = CreatePackBlock(structType->GetMemberType(i), useTopLength, module, context, pack, curr, member, buffer, mask); 
+                } 
+                return curr; 
+            } 
+ 
+            case TType::EKind::Tuple: { 
+                const auto tupleType = static_cast<const TTupleType*>(type); 
+                const auto getter = module.getFunction("GetElement"); 
                 const auto element = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "item", block);
-                auto curr = block;
-                for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
-                    const auto index = ConstantInt::get(Type::getInt32Ty(context), i);
-                    CallInst::Create(getter, {value, index, element}, "", curr);
-                    curr = CreatePackBlock(tupleType->GetElementType(i), useTopLength, module, context, pack, curr, element, buffer, mask);
-                }
-                return curr;
-            }
-            case TType::EKind::Variant: {
-                const auto variantType = static_cast<const TVariantType*>(type);
-                const auto innerType = variantType->GetUnderlyingType();
-
-                std::function<const TType* (ui32)> typeGetter;
-                ui32 size = 0U;
-
-                if (innerType->IsStruct()) {
-                    const auto structType = static_cast<const TStructType*>(innerType);
-                    typeGetter = std::bind(&TStructType::GetMemberType, structType, std::placeholders::_1);
-                    size = structType->GetMembersCount();
-                } else if (innerType->IsTuple()) {
-                    const auto tupleType = static_cast<const TTupleType*>(innerType);
-                    typeGetter = std::bind(&TTupleType::GetElementType, tupleType, std::placeholders::_1);
-                    size = tupleType->GetElementsCount();
-                } else {
-                    THROW yexception() << "Unexpected underlying variant type: " << innerType->GetKindAsStr();
-                }
-
+                auto curr = block; 
+                for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) { 
+                    const auto index = ConstantInt::get(Type::getInt32Ty(context), i); 
+                    CallInst::Create(getter, {value, index, element}, "", curr); 
+                    curr = CreatePackBlock(tupleType->GetElementType(i), useTopLength, module, context, pack, curr, element, buffer, mask); 
+                } 
+                return curr; 
+            } 
+            case TType::EKind::Variant: { 
+                const auto variantType = static_cast<const TVariantType*>(type); 
+                const auto innerType = variantType->GetUnderlyingType(); 
+ 
+                std::function<const TType* (ui32)> typeGetter; 
+                ui32 size = 0U; 
+ 
+                if (innerType->IsStruct()) { 
+                    const auto structType = static_cast<const TStructType*>(innerType); 
+                    typeGetter = std::bind(&TStructType::GetMemberType, structType, std::placeholders::_1); 
+                    size = structType->GetMembersCount(); 
+                } else if (innerType->IsTuple()) { 
+                    const auto tupleType = static_cast<const TTupleType*>(innerType); 
+                    typeGetter = std::bind(&TTupleType::GetElementType, tupleType, std::placeholders::_1); 
+                    size = tupleType->GetElementsCount(); 
+                } else { 
+                    THROW yexception() << "Unexpected underlying variant type: " << innerType->GetKindAsStr(); 
+                } 
+ 
                 const auto variant = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "variant", block);
-                const auto index = CallInst::Create(module.getFunction("GetVariantItem"), {value, variant, buffer}, "index", block);
-
-                const auto exit = BasicBlock::Create(context, "exit", pack);
-                const auto choise = SwitchInst::Create(index, exit, size, block);
-
-                for (ui32 i = 0; i < size; ++i) {
+                const auto index = CallInst::Create(module.getFunction("GetVariantItem"), {value, variant, buffer}, "index", block); 
+ 
+                const auto exit = BasicBlock::Create(context, "exit", pack); 
+                const auto choise = SwitchInst::Create(index, exit, size, block); 
+ 
+                for (ui32 i = 0; i < size; ++i) { 
                     const auto var = BasicBlock::Create(context, (TString("case_") += ToString(i)).c_str(), pack);
-                    choise->addCase(ConstantInt::get(Type::getInt32Ty(context), i), var);
-                    const auto done = CreatePackBlock(typeGetter(i), useTopLength, module, context, pack, var, variant, buffer, mask);
-                    BranchInst::Create(exit, done);
-                }
-
-                return exit;
-            }
-
-            case TType::EKind::List: {
-                const auto listType = static_cast<const TListType*>(type);
-
-                const auto iterType = Type::getInt64PtrTy(context);
-                const auto zero = ConstantInt::getFalse(context);
+                    choise->addCase(ConstantInt::get(Type::getInt32Ty(context), i), var); 
+                    const auto done = CreatePackBlock(typeGetter(i), useTopLength, module, context, pack, var, variant, buffer, mask); 
+                    BranchInst::Create(exit, done); 
+                } 
+ 
+                return exit; 
+            } 
+ 
+            case TType::EKind::List: { 
+                const auto listType = static_cast<const TListType*>(type); 
+ 
+                const auto iterType = Type::getInt64PtrTy(context); 
+                const auto zero = ConstantInt::getFalse(context); 
                 const auto iter = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "iter", block);
-
-                const auto begin = CallInst::Create(module.getFunction("GetListIterator"), {value, iter, buffer}, "iterator", block);
+ 
+                const auto begin = CallInst::Create(module.getFunction("GetListIterator"), {value, iter, buffer}, "iterator", block); 
                 const auto item = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "item", block);
-
-                const auto loop = BasicBlock::Create(context, "loop", pack);
-                BranchInst::Create(loop, block);
-
-                const auto next = CallInst::Create(module.getFunction("NextListItem"), {iter, item}, "next", loop);
-
-                const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, next, zero, "cond", loop);
-                const auto exit = BasicBlock::Create(context, "exit", pack);
-                const auto good = BasicBlock::Create(context, "good", pack);
-
-                BranchInst::Create(exit, good, icmp, loop);
-
-                const auto done = CreatePackBlock(listType->GetItemType(), useTopLength, module, context, pack, good, item, buffer, mask);
-                BranchInst::Create(loop, done);
-                return exit;
-            }
-
-            case TType::EKind::Dict: {
-                const auto dictType = static_cast<const TDictType*>(type);
-
-                const auto iterType = Type::getInt64PtrTy(context);
-                const auto zero = ConstantInt::getFalse(context);
+ 
+                const auto loop = BasicBlock::Create(context, "loop", pack); 
+                BranchInst::Create(loop, block); 
+ 
+                const auto next = CallInst::Create(module.getFunction("NextListItem"), {iter, item}, "next", loop); 
+ 
+                const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, next, zero, "cond", loop); 
+                const auto exit = BasicBlock::Create(context, "exit", pack); 
+                const auto good = BasicBlock::Create(context, "good", pack); 
+ 
+                BranchInst::Create(exit, good, icmp, loop); 
+ 
+                const auto done = CreatePackBlock(listType->GetItemType(), useTopLength, module, context, pack, good, item, buffer, mask); 
+                BranchInst::Create(loop, done); 
+                return exit; 
+            } 
+ 
+            case TType::EKind::Dict: { 
+                const auto dictType = static_cast<const TDictType*>(type); 
+ 
+                const auto iterType = Type::getInt64PtrTy(context); 
+                const auto zero = ConstantInt::getFalse(context); 
                 const auto iter = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "iter", block);
-
-                const auto begin = CallInst::Create(module.getFunction("GetDictIterator"), {value, iter, buffer}, "iterator", block);
+ 
+                const auto begin = CallInst::Create(module.getFunction("GetDictIterator"), {value, iter, buffer}, "iterator", block); 
                 const auto first = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "first", block);
                 const auto second = new AllocaInst(valueType, 0U, nullptr, llvm::Align(16), "second", block);
-
-                const auto loop = BasicBlock::Create(context, "loop", pack);
-                BranchInst::Create(loop, block);
-
-                const auto next = CallInst::Create(module.getFunction("NextDictItem"), {iter, first, second}, "next", loop);
-
-                const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, next, zero, "cond", loop);
-                const auto exit = BasicBlock::Create(context, "exit", pack);
-                const auto good = BasicBlock::Create(context, "good", pack);
-
-                BranchInst::Create(exit, good, icmp, loop);
-
-                const auto one = CreatePackBlock(dictType->GetKeyType(), useTopLength, module, context, pack, good, first, buffer, mask);
-                const auto two = CreatePackBlock(dictType->GetPayloadType(), useTopLength, module, context, pack, one, second, buffer, mask);
-
-                BranchInst::Create(loop, two);
-                return exit;
-            }
-        }
+ 
+                const auto loop = BasicBlock::Create(context, "loop", pack); 
+                BranchInst::Create(loop, block); 
+ 
+                const auto next = CallInst::Create(module.getFunction("NextDictItem"), {iter, first, second}, "next", loop); 
+ 
+                const auto icmp = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, next, zero, "cond", loop); 
+                const auto exit = BasicBlock::Create(context, "exit", pack); 
+                const auto good = BasicBlock::Create(context, "good", pack); 
+ 
+                BranchInst::Create(exit, good, icmp, loop); 
+ 
+                const auto one = CreatePackBlock(dictType->GetKeyType(), useTopLength, module, context, pack, good, first, buffer, mask); 
+                const auto two = CreatePackBlock(dictType->GetPayloadType(), useTopLength, module, context, pack, one, second, buffer, mask); 
+ 
+                BranchInst::Create(loop, two); 
+                return exit; 
+            } 
+        } 
         Y_UNREACHABLE();
-    }
-
-    Function* CreatePackFunction(const TType* type, bool useTopLength, Module &module, LLVMContext &context) {
-        const auto& name = MakeName("Pack:", type);
-        if (const auto f = module.getFunction(name.c_str()))
-            return f;
-
-        const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto packFuncType = FunctionType::get(Type::getVoidTy(context), {ptrValueType, Type::getInt64PtrTy(context), Type::getInt64PtrTy(context)}, false);
+    } 
+ 
+    Function* CreatePackFunction(const TType* type, bool useTopLength, Module &module, LLVMContext &context) { 
+        const auto& name = MakeName("Pack:", type); 
+        if (const auto f = module.getFunction(name.c_str())) 
+            return f; 
+ 
+        const auto valueType = Type::getInt128Ty(context); 
+        const auto ptrValueType = PointerType::getUnqual(valueType); 
+        const auto packFuncType = FunctionType::get(Type::getVoidTy(context), {ptrValueType, Type::getInt64PtrTy(context), Type::getInt64PtrTy(context)}, false); 
         const auto pack = cast<Function>(module.getOrInsertFunction(name.c_str(), packFuncType).getCallee());
-
-        auto argsIt = pack->arg_begin();
-        const auto value = argsIt;
-        const auto buffer = ++argsIt;
-        const auto mask = ++argsIt;
-
-        value->setName("Value");
-        buffer->setName("Buffer");
-        mask->setName("Mask");
-
-        const auto main = BasicBlock::Create(context, "main", pack);
-        const auto last = CreatePackBlock(type, useTopLength, module, context, pack, main, &*value, &*buffer, &*mask);
-        ReturnInst::Create(context, last);
-
-//        pack->addFnAttr("target-cpu", "x86-64");
-//        pack->addFnAttr("target-features", "+sse,+sse2,+sse3");
-
-        return pack;
-    }
+ 
+        auto argsIt = pack->arg_begin(); 
+        const auto value = argsIt; 
+        const auto buffer = ++argsIt; 
+        const auto mask = ++argsIt; 
+ 
+        value->setName("Value"); 
+        buffer->setName("Buffer"); 
+        mask->setName("Mask"); 
+ 
+        const auto main = BasicBlock::Create(context, "main", pack); 
+        const auto last = CreatePackBlock(type, useTopLength, module, context, pack, main, &*value, &*buffer, &*mask); 
+        ReturnInst::Create(context, last); 
+ 
+//        pack->addFnAttr("target-cpu", "x86-64"); 
+//        pack->addFnAttr("target-features", "+sse,+sse2,+sse3"); 
+ 
+        return pack; 
+    } 
 #endif
-}
-
+} 
+ 
 TValuePacker::TValuePacker(bool stable, const TType* type, bool tryUseCodegen)
 #ifndef MKQL_DISABLE_CODEGEN
-#ifdef __llvm__
-    : Codegen(tryUseCodegen ? NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native) : NYql::NCodegen::ICodegen::TPtr())
-#else
-    : Codegen()
-#endif
+#ifdef __llvm__ 
+    : Codegen(tryUseCodegen ? NYql::NCodegen::ICodegen::Make(NYql::NCodegen::ETarget::Native) : NYql::NCodegen::ICodegen::TPtr()) 
+#else 
+    : Codegen() 
+#endif 
     , Stable(stable)
 #else
     : Stable(stable)
 #endif
     , Type(type)
-    , Properties(ScanTypeProperties(Type))
-    , OptionalMaskReserve(Properties.Test(EProps::UseOptionalMask) ? 1 : 0)
-    , PackFunc(MakePackFunction())
-{
+    , Properties(ScanTypeProperties(Type)) 
+    , OptionalMaskReserve(Properties.Test(EProps::UseOptionalMask) ? 1 : 0) 
+    , PackFunc(MakePackFunction()) 
+{ 
 #ifndef MKQL_DISABLE_CODEGEN
-    if (Codegen) {
-        Codegen->Verify();
-        Codegen->Compile();
-    }
+    if (Codegen) { 
+        Codegen->Verify(); 
+        Codegen->Compile(); 
+    } 
 #else
     Y_UNUSED(tryUseCodegen);
 #endif
-}
-
-TValuePacker::TValuePacker(const TValuePacker& other)
+} 
+ 
+TValuePacker::TValuePacker(const TValuePacker& other) 
     : Stable(other.Stable)
     , Type(other.Type)
-    , Properties(other.Properties)
-    , OptionalMaskReserve(other.OptionalMaskReserve)
-    , PackFunc(other.PackFunc)
-{}
-
+    , Properties(other.Properties) 
+    , OptionalMaskReserve(other.OptionalMaskReserve) 
+    , PackFunc(other.PackFunc) 
+{} 
+ 
 std::pair<ui32, bool> TValuePacker::SkipEmbeddedLength(TStringBuf& buf) {
     ui32 length = 0;
     bool emptySingleOptional = false;
@@ -397,16 +397,16 @@ NUdf::TUnboxedValue TValuePacker::Unpack(TStringBuf buf, const THolderFactory& h
     if (Properties.Test(EProps::UseOptionalMask)) {
         OptionalUsageMask.Reset(buf);
     }
-    NUdf::TUnboxedValue res;
+    NUdf::TUnboxedValue res; 
     if (Properties.Test(EProps::SingleOptional) && emptySingleOptional) {
-        res = NUdf::TUnboxedValuePod();
+        res = NUdf::TUnboxedValuePod(); 
     } else if (Type->IsStruct()) {
-        auto structType = static_cast<const TStructType*>(Type);
-        NUdf::TUnboxedValue * items = nullptr;
-        res = TopStruct.NewArray(holderFactory, structType->GetMembersCount(), items);
+        auto structType = static_cast<const TStructType*>(Type); 
+        NUdf::TUnboxedValue * items = nullptr; 
+        res = TopStruct.NewArray(holderFactory, structType->GetMembersCount(), items); 
         for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
             auto memberType = structType->GetMemberType(index);
-            *items++ = UnpackImpl(memberType, buf, length, holderFactory);
+            *items++ = UnpackImpl(memberType, buf, length, holderFactory); 
         }
     } else {
         res = UnpackImpl(Type, buf, length, holderFactory);
@@ -416,12 +416,12 @@ NUdf::TUnboxedValue TValuePacker::Unpack(TStringBuf buf, const THolderFactory& h
     return res;
 }
 
-NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf, ui32 topLength,
+NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf, ui32 topLength, 
     const THolderFactory& holderFactory) const
 {
     switch (type->GetKind()) {
     case TType::EKind::Void:
-        return NUdf::TUnboxedValuePod::Void();
+        return NUdf::TUnboxedValuePod::Void(); 
     case TType::EKind::Null:
         return NUdf::TUnboxedValuePod();
     case TType::EKind::EmptyList:
@@ -430,30 +430,30 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
         return holderFactory.GetEmptyContainer();
 
     case TType::EKind::Data: {
-        auto dataType = static_cast<const TDataType*>(type);
+        auto dataType = static_cast<const TDataType*>(type); 
         switch (*dataType->GetDataSlot()) {
         case NUdf::EDataSlot::Bool:
-            return NUdf::TUnboxedValuePod(NDetails::GetRawData<bool>(buf));
+            return NUdf::TUnboxedValuePod(NDetails::GetRawData<bool>(buf)); 
         case NUdf::EDataSlot::Int8:
             return NUdf::TUnboxedValuePod(NDetails::GetRawData<i8>(buf));
         case NUdf::EDataSlot::Uint8:
-            return NUdf::TUnboxedValuePod(NDetails::GetRawData<ui8>(buf));
+            return NUdf::TUnboxedValuePod(NDetails::GetRawData<ui8>(buf)); 
         case NUdf::EDataSlot::Int16:
             return NUdf::TUnboxedValuePod(NDetails::UnpackInt16(buf));
         case NUdf::EDataSlot::Uint16:
             return NUdf::TUnboxedValuePod(NDetails::UnpackUInt16(buf));
         case NUdf::EDataSlot::Int32:
-            return NUdf::TUnboxedValuePod(NDetails::UnpackInt32(buf));
+            return NUdf::TUnboxedValuePod(NDetails::UnpackInt32(buf)); 
         case NUdf::EDataSlot::Uint32:
-            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt32(buf));
+            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt32(buf)); 
         case NUdf::EDataSlot::Int64:
-            return NUdf::TUnboxedValuePod(NDetails::UnpackInt64(buf));
+            return NUdf::TUnboxedValuePod(NDetails::UnpackInt64(buf)); 
         case NUdf::EDataSlot::Uint64:
-            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt64(buf));
+            return NUdf::TUnboxedValuePod(NDetails::UnpackUInt64(buf)); 
         case NUdf::EDataSlot::Float:
-            return NUdf::TUnboxedValuePod(NDetails::GetRawData<float>(buf));
+            return NUdf::TUnboxedValuePod(NDetails::GetRawData<float>(buf)); 
         case NUdf::EDataSlot::Double:
-            return NUdf::TUnboxedValuePod(NDetails::GetRawData<double>(buf));
+            return NUdf::TUnboxedValuePod(NDetails::GetRawData<double>(buf)); 
         case NUdf::EDataSlot::Date:
             return NUdf::TUnboxedValuePod(NDetails::UnpackUInt16(buf));
         case NUdf::EDataSlot::Datetime:
@@ -491,9 +491,9 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
         }
         case NUdf::EDataSlot::Decimal: {
             const auto des = NYql::NDecimal::Deserialize(buf.data());
-            MKQL_ENSURE(!NYql::NDecimal::IsError(des.first), "Bad packed data: invalid decimal.");
-            buf.Skip(des.second);
-            return NUdf::TUnboxedValuePod(des.first);
+            MKQL_ENSURE(!NYql::NDecimal::IsError(des.first), "Bad packed data: invalid decimal."); 
+            buf.Skip(des.second); 
+            return NUdf::TUnboxedValuePod(des.first); 
         }
         default:
             ui32 size = 0;
@@ -505,57 +505,57 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
             MKQL_ENSURE(size <= buf.size(), "Bad packed data. Buffer too small");
             const char* ptr = buf.data();
             buf.Skip(size);
-            return MakeString(NUdf::TStringRef(ptr, size));
+            return MakeString(NUdf::TStringRef(ptr, size)); 
         }
         break;
     }
 
     case TType::EKind::Optional: {
-        auto optionalType = static_cast<const TOptionalType*>(type);
+        auto optionalType = static_cast<const TOptionalType*>(type); 
         if (!OptionalUsageMask.IsNextEmptyOptional()) {
-            return UnpackImpl(optionalType->GetItemType(), buf, topLength, holderFactory).Release().MakeOptional();
+            return UnpackImpl(optionalType->GetItemType(), buf, topLength, holderFactory).Release().MakeOptional(); 
         }
         else {
-            return NUdf::TUnboxedValuePod();
+            return NUdf::TUnboxedValuePod(); 
         }
     }
 
     case TType::EKind::List: {
-        auto listType = static_cast<const TListType*>(type);
+        auto listType = static_cast<const TListType*>(type); 
         auto itemType = listType->GetItemType();
-        const auto len = NDetails::UnpackUInt64(buf);
-        NUdf::TUnboxedValue *items = nullptr;
-        auto list = holderFactory.CreateDirectArrayHolder(len, items);
+        const auto len = NDetails::UnpackUInt64(buf); 
+        NUdf::TUnboxedValue *items = nullptr; 
+        auto list = holderFactory.CreateDirectArrayHolder(len, items); 
         for (ui64 i = 0; i < len; ++i) {
-            *items++ = UnpackImpl(itemType, buf, topLength, holderFactory);
+            *items++ = UnpackImpl(itemType, buf, topLength, holderFactory); 
         }
-        return std::move(list);
+        return std::move(list); 
     }
 
     case TType::EKind::Struct: {
-        auto structType = static_cast<const TStructType*>(type);
+        auto structType = static_cast<const TStructType*>(type); 
         NUdf::TUnboxedValue* itemsPtr = nullptr;
-        auto res = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), itemsPtr);
+        auto res = holderFactory.CreateDirectArrayHolder(structType->GetMembersCount(), itemsPtr); 
         for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
             auto memberType = structType->GetMemberType(index);
             itemsPtr[index] = UnpackImpl(memberType, buf, topLength, holderFactory);
         }
-        return std::move(res);
+        return std::move(res); 
     }
 
     case TType::EKind::Tuple: {
-        auto tupleType = static_cast<const TTupleType*>(type);
+        auto tupleType = static_cast<const TTupleType*>(type); 
         NUdf::TUnboxedValue* itemsPtr = nullptr;
-        auto res = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), itemsPtr);
+        auto res = holderFactory.CreateDirectArrayHolder(tupleType->GetElementsCount(), itemsPtr); 
         for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
             auto elementType = tupleType->GetElementType(index);
             itemsPtr[index] = UnpackImpl(elementType, buf, topLength, holderFactory);
         }
-        return std::move(res);
+        return std::move(res); 
     }
 
     case TType::EKind::Dict: {
-        auto dictType = static_cast<const TDictType*>(type);
+        auto dictType = static_cast<const TDictType*>(type); 
         auto keyType = dictType->GetKeyType();
         auto payloadType = dictType->GetPayloadType();
         auto dictBuilder = holderFactory.NewDict(dictType, NUdf::TDictFlags::EDictKind::Hashed);
@@ -564,13 +564,13 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
         for (ui64 i = 0; i < len; ++i) {
             auto key = UnpackImpl(keyType, buf, topLength, holderFactory);
             auto payload = UnpackImpl(payloadType, buf, topLength, holderFactory);
-            dictBuilder->Add(std::move(key), std::move(payload));
+            dictBuilder->Add(std::move(key), std::move(payload)); 
         }
         return dictBuilder->Build();
     }
 
     case TType::EKind::Variant: {
-        auto variantType = static_cast<const TVariantType*>(type);
+        auto variantType = static_cast<const TVariantType*>(type); 
         ui32 variantIndex = NDetails::UnpackUInt32(buf);
         TType* innerType = variantType->GetUnderlyingType();
         if (innerType->IsStruct()) {
@@ -579,7 +579,7 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
             MKQL_ENSURE(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
             innerType = static_cast<TTupleType*>(innerType)->GetElementType(variantIndex);
         }
-        return holderFactory.CreateVariantHolder(UnpackImpl(innerType, buf, topLength, holderFactory).Release(), variantIndex);
+        return holderFactory.CreateVariantHolder(UnpackImpl(innerType, buf, topLength, holderFactory).Release(), variantIndex); 
     }
 
     case TType::EKind::Tagged: {
@@ -594,20 +594,20 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
 
 TStringBuf TValuePacker::Pack(const NUdf::TUnboxedValuePod& value) const {
     OptionalUsageMask.Reset();
-    const size_t lengthReserve = sizeof(ui32);
+    const size_t lengthReserve = sizeof(ui32); 
     Buffer.Proceed(lengthReserve + OptionalMaskReserve);
 
-    if (PackFunc)
-        PackFunc(reinterpret_cast<const TRawUV*>(&value), reinterpret_cast<ui64*>(&Buffer), reinterpret_cast<ui64*>(&OptionalUsageMask));
-    else
-        PackImpl(Type, value);
-
+    if (PackFunc) 
+        PackFunc(reinterpret_cast<const TRawUV*>(&value), reinterpret_cast<ui64*>(&Buffer), reinterpret_cast<ui64*>(&OptionalUsageMask)); 
+    else 
+        PackImpl(Type, value); 
+ 
     size_t delta = 0;
     size_t len = Buffer.Size();
 
     if (Properties.Test(EProps::UseOptionalMask)) {
         // Prepend optional mask
-        const size_t actualOptionalMaskSize = OptionalUsageMask.CalcSerializedSize();
+        const size_t actualOptionalMaskSize = OptionalUsageMask.CalcSerializedSize(); 
 
         if (actualOptionalMaskSize > OptionalMaskReserve) {
             TBuffer buf(Buffer.Size() + actualOptionalMaskSize - OptionalMaskReserve);
@@ -625,7 +625,7 @@ TStringBuf TValuePacker::Pack(const NUdf::TUnboxedValuePod& value) const {
 
     // Prepend length
     if (len - delta - lengthReserve > 7) {
-        const ui32 length = len - delta - lengthReserve;
+        const ui32 length = len - delta - lengthReserve; 
         Buffer.Proceed(delta);
         Buffer.Append((const char*)&length, sizeof(length));
         // Long length always singnals non-empty optional. So, don't check EProps::SingleOptional here
@@ -655,7 +655,7 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
         break;
 
     case TType::EKind::Data: {
-        auto dataType = static_cast<const TDataType*>(type);
+        auto dataType = static_cast<const TDataType*>(type); 
         switch (*dataType->GetDataSlot()) {
         case NUdf::EDataSlot::Bool:
             NDetails::PutRawData(value.Get<bool>(), Buffer);
@@ -735,8 +735,8 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
             break;
         }
         case NUdf::EDataSlot::Decimal: {
-            char buff[0x10U];
-            Buffer.Append(buff, NYql::NDecimal::Serialize(value.GetInt128(), buff));
+            char buff[0x10U]; 
+            Buffer.Append(buff, NYql::NDecimal::Serialize(value.GetInt128(), buff)); 
             break;
         }
         default: {
@@ -751,35 +751,35 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
     }
 
     case TType::EKind::Optional: {
-        auto optionalType = static_cast<const TOptionalType*>(type);
-        OptionalUsageMask.SetNextEmptyOptional(!value);
-        if (value) {
+        auto optionalType = static_cast<const TOptionalType*>(type); 
+        OptionalUsageMask.SetNextEmptyOptional(!value); 
+        if (value) { 
             PackImpl(optionalType->GetItemType(), value.GetOptionalValue());
         }
         break;
     }
 
     case TType::EKind::List: {
-        auto listType = static_cast<const TListType*>(type);
+        auto listType = static_cast<const TListType*>(type); 
         auto itemType = listType->GetItemType();
         if (value.HasFastListLength()) {
-            auto len = value.GetListLength();
-            NDetails::PackUInt64(len, Buffer);
-            if (len) {
-                if (auto p = value.GetElements()) {
-                    value.GetListIterator();
-                    do PackImpl(itemType, *p++);
-                    while (--len);
-                } else if (const auto iter = value.GetListIterator()) {
-                    for (NUdf::TUnboxedValue item; iter.Next(item); PackImpl(itemType, item))
-                        continue;
-                }
+            auto len = value.GetListLength(); 
+            NDetails::PackUInt64(len, Buffer); 
+            if (len) { 
+                if (auto p = value.GetElements()) { 
+                    value.GetListIterator(); 
+                    do PackImpl(itemType, *p++); 
+                    while (--len); 
+                } else if (const auto iter = value.GetListIterator()) { 
+                    for (NUdf::TUnboxedValue item; iter.Next(item); PackImpl(itemType, item)) 
+                        continue; 
+                } 
             }
         } else {
-            TUnboxedValueVector items;
-            const auto iter = value.GetListIterator();
-            for (NUdf::TUnboxedValue item; iter.Next(item);) {
-                items.emplace_back(std::move(item));
+            TUnboxedValueVector items; 
+            const auto iter = value.GetListIterator(); 
+            for (NUdf::TUnboxedValue item; iter.Next(item);) { 
+                items.emplace_back(std::move(item)); 
             }
 
             NDetails::PackUInt64(items.size(), Buffer);
@@ -791,31 +791,31 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
     }
 
     case TType::EKind::Struct: {
-        auto structType = static_cast<const TStructType*>(type);
+        auto structType = static_cast<const TStructType*>(type); 
         for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
             auto memberType = structType->GetMemberType(index);
-            PackImpl(memberType, value.GetElement(index));
+            PackImpl(memberType, value.GetElement(index)); 
         }
         break;
     }
 
     case TType::EKind::Tuple: {
-        auto tupleType = static_cast<const TTupleType*>(type);
+        auto tupleType = static_cast<const TTupleType*>(type); 
         for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
             auto elementType = tupleType->GetElementType(index);
-            PackImpl(elementType, value.GetElement(index));
+            PackImpl(elementType, value.GetElement(index)); 
         }
         break;
     }
 
     case TType::EKind::Dict:  {
-        auto dictType = static_cast<const TDictType*>(type);
+        auto dictType = static_cast<const TDictType*>(type); 
         auto keyType = dictType->GetKeyType();
         auto payloadType = dictType->GetPayloadType();
 
         auto length = value.GetDictLength();
         NDetails::PackUInt64(length, Buffer);
-        const auto iter = value.GetDictIterator();
+        const auto iter = value.GetDictIterator(); 
         if (Stable && !value.IsSortedDict()) {
             // no key duplicates here
             TKeyTypes types;
@@ -876,7 +876,7 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
     }
 
     case TType::EKind::Variant: {
-        auto variantType = static_cast<const TVariantType*>(type);
+        auto variantType = static_cast<const TVariantType*>(type); 
         ui32 variantIndex = value.GetVariantIndex();
         TType* innerType = variantType->GetUnderlyingType();
         if (innerType->IsStruct()) {
@@ -895,15 +895,15 @@ void TValuePacker::PackImpl(const TType* type, const NUdf::TUnboxedValuePod& val
     }
 }
 
-
-
-TValuePacker::TProperties TValuePacker::ScanTypeProperties(const TType* type) {
+ 
+ 
+TValuePacker::TProperties TValuePacker::ScanTypeProperties(const TType* type) { 
     TProperties props;
     if (HasOptionalFields(type)) {
         props.Set(EProps::UseOptionalMask);
     }
     if (type->GetKind() == TType::EKind::Optional) {
-        type = static_cast<const TOptionalType*>(type)->GetItemType();
+        type = static_cast<const TOptionalType*>(type)->GetItemType(); 
         if (!HasOptionalFields(type)) {
             props.Set(EProps::SingleOptional);
             props.Reset(EProps::UseOptionalMask);
@@ -912,7 +912,7 @@ TValuePacker::TProperties TValuePacker::ScanTypeProperties(const TType* type) {
     // Here and after the type is unwrapped!!
 
     if (type->GetKind() == TType::EKind::Data) {
-        auto dataType = static_cast<const TDataType*>(type);
+        auto dataType = static_cast<const TDataType*>(type); 
         switch (*dataType->GetDataSlot()) {
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Json:
@@ -929,7 +929,7 @@ TValuePacker::TProperties TValuePacker::ScanTypeProperties(const TType* type) {
     return props;
 }
 
-bool TValuePacker::HasOptionalFields(const TType* type) {
+bool TValuePacker::HasOptionalFields(const TType* type) { 
     switch (type->GetKind()) {
     case TType::EKind::Void:
     case TType::EKind::Null:
@@ -942,10 +942,10 @@ bool TValuePacker::HasOptionalFields(const TType* type) {
         return true;
 
     case TType::EKind::List:
-        return HasOptionalFields(static_cast<const TListType*>(type)->GetItemType());
+        return HasOptionalFields(static_cast<const TListType*>(type)->GetItemType()); 
 
     case TType::EKind::Struct: {
-        auto structType = static_cast<const TStructType*>(type);
+        auto structType = static_cast<const TStructType*>(type); 
         for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
             if (HasOptionalFields(structType->GetMemberType(index))) {
                 return true;
@@ -955,7 +955,7 @@ bool TValuePacker::HasOptionalFields(const TType* type) {
     }
 
     case TType::EKind::Tuple: {
-        auto tupleType = static_cast<const TTupleType*>(type);
+        auto tupleType = static_cast<const TTupleType*>(type); 
         for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
             if (HasOptionalFields(tupleType->GetElementType(index))) {
                 return true;
@@ -965,12 +965,12 @@ bool TValuePacker::HasOptionalFields(const TType* type) {
     }
 
     case TType::EKind::Dict:  {
-        auto dictType = static_cast<const TDictType*>(type);
+        auto dictType = static_cast<const TDictType*>(type); 
         return HasOptionalFields(dictType->GetKeyType()) || HasOptionalFields(dictType->GetPayloadType());
     }
 
     case TType::EKind::Variant:  {
-        auto variantType = static_cast<const TVariantType*>(type);
+        auto variantType = static_cast<const TVariantType*>(type); 
         return HasOptionalFields(variantType->GetUnderlyingType());
     }
 
@@ -984,19 +984,19 @@ bool TValuePacker::HasOptionalFields(const TType* type) {
     }
 }
 
-TValuePacker::TPackFunction
-TValuePacker::MakePackFunction() {
+TValuePacker::TPackFunction 
+TValuePacker::MakePackFunction() { 
 #ifdef MKQL_DISABLE_CODEGEN
     return nullptr;
 #else
-    if (!Codegen)
-        return nullptr;
-
-    Codegen->LoadBitCode(NResource::Find("/llvm_bc/mkql_pack.bc"), "mkql_pack");
-    return reinterpret_cast<TPackFunction>(Codegen->GetPointerToFunction(CreatePackFunction(Type, Properties.Test(EProps::UseTopLength), Codegen->GetModule(), Codegen->GetContext())));
+    if (!Codegen) 
+        return nullptr; 
+ 
+    Codegen->LoadBitCode(NResource::Find("/llvm_bc/mkql_pack.bc"), "mkql_pack"); 
+    return reinterpret_cast<TPackFunction>(Codegen->GetPointerToFunction(CreatePackFunction(Type, Properties.Test(EProps::UseTopLength), Codegen->GetModule(), Codegen->GetContext()))); 
 #endif
-}
-
+} 
+ 
 TValuePackerBoxed::TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, const TType* type, bool tryUseCodegen)
     : TBase(memInfo)
     , TValuePacker(stable, type, tryUseCodegen)

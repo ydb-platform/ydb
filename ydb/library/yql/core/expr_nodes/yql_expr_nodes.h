@@ -15,7 +15,7 @@ class TCoAtom : public NGenerated::TCoAtomStub<TExprBase> {
 public:
     explicit TCoAtom(const TExprNode* node)
         : TCoAtomStub(node) {}
-
+ 
     explicit TCoAtom(const TExprNode::TPtr& node)
         : TCoAtomStub(node) {}
 
@@ -36,12 +36,12 @@ class TCoArguments : public NGenerated::TCoArgumentsStub<TExprBase> {
 public:
     explicit TCoArguments(const TExprNode* node)
         : TCoArgumentsStub(node) {}
-
+ 
     explicit TCoArguments(const TExprNode::TPtr& node)
         : TCoArgumentsStub(node) {}
 
     TCoArgument Arg(size_t index) const { return TCoArgument(Ref().ChildPtr(index)); }
-    size_t Size() const { return Ref().ChildrenSize(); }
+    size_t Size() const { return Ref().ChildrenSize(); } 
 
     TChildIterator<TCoArgument> begin() const { return TChildIterator<TCoArgument>(*this); }
     TChildIterator<TCoArgument> end() const { return TChildIterator<TCoArgument>(); }
@@ -148,7 +148,7 @@ public:
     TNodeBuilder<TParent, TCoLambda>& Args(const TCoArgument& node) {
         Y_VERIFY_DEBUG(!this->ArgsHolder.IsValid());
 
-        auto argsNode = this->Ctx.NewArguments(this->Pos, { node.Ptr() });
+        auto argsNode = this->Ctx.NewArguments(this->Pos, { node.Ptr() }); 
         this->ArgsHolder = TCoArguments(argsNode);
 
         return *this;
@@ -174,7 +174,7 @@ public:
             ArgsMap->emplace(argName, TExprBase(argNode));
         }
 
-        auto argsNode = this->Ctx.NewArguments(this->Pos, std::move(argNodes));
+        auto argsNode = this->Ctx.NewArguments(this->Pos, std::move(argNodes)); 
         this->ArgsHolder = TCoArguments(argsNode);
         return *this;
     }
@@ -203,7 +203,7 @@ public:
     }
 
     TCoLambda DoBuild() {
-        auto node = this->Ctx.NewLambda(this->Pos, this->ArgsHolder.Cast().Ptr(), this->BodyHolder.Cast().Ptr());
+        auto node = this->Ctx.NewLambda(this->Pos, this->ArgsHolder.Cast().Ptr(), this->BodyHolder.Cast().Ptr()); 
 
         return TCoLambda(node);
     }
@@ -218,7 +218,7 @@ class TExprApplier : public TExprBase {
     template<typename TParent, typename TNode>
     friend class TNodeBuilder;
 
-    TExprApplier(const TExprNode::TPtr& node)
+    TExprApplier(const TExprNode::TPtr& node) 
         : TExprBase(node) {}
 
     TExprApplier(const TExprBase node)
@@ -256,7 +256,7 @@ public:
 
     TParent& Build() {
         YQL_ENSURE(Body);
-        return BuildFunc(TExprApplier(Body.Cast().Ptr()));
+        return BuildFunc(TExprApplier(Body.Cast().Ptr())); 
     }
 
     typename TParent::ResultType Done() {
@@ -344,14 +344,14 @@ public:
 private:
     void DoApply(TExprBase applyFrom, TExprBase applyTo) {
         TExprNodeBuilder builder(this->Pos, this->Ctx, [this] (const TStringBuf& argName) {
-            return GetArgFunc(argName).Ptr();
+            return GetArgFunc(argName).Ptr(); 
         });
 
-        auto args = Args.IsValid() ? Args.Cast().Ptr() : nullptr;
+        auto args = Args.IsValid() ? Args.Cast().Ptr() : nullptr; 
 
         Body = builder
-            .ApplyPartial(std::move(args), Body.Cast().Ptr())
-            .WithNode(applyFrom.Ref(), applyTo.Ptr())
+            .ApplyPartial(std::move(args), Body.Cast().Ptr()) 
+            .WithNode(applyFrom.Ref(), applyTo.Ptr()) 
             .Seal().Build();
     }
 

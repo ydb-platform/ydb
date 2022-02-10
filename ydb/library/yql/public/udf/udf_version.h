@@ -3,7 +3,7 @@
 #include <util/generic/fwd.h>
 #include <util/system/types.h>
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
 #define CURRENT_UDF_ABI_VERSION_MAJOR 2
@@ -71,6 +71,6 @@ constexpr bool IsAbiCompatible(ui32 version)
 TString AbiVersionToStr(ui32 version);
 
 } // namspace NUdf
-} // namspace NYql
-
-namespace NKikimr { namespace NUdf = ::NYql::NUdf; }
+} // namspace NYql 
+ 
+namespace NKikimr { namespace NUdf = ::NYql::NUdf; } 

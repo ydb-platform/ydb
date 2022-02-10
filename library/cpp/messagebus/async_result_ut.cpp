@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TAsyncResult) {
 
         r.SetResult(17);
 
-        r.AndThen(std::bind(&SetValue, &var, std::placeholders::_1));
+        r.AndThen(std::bind(&SetValue, &var, std::placeholders::_1)); 
 
         UNIT_ASSERT_VALUES_EQUAL(17, var);
     }
@@ -28,7 +28,7 @@ Y_UNIT_TEST_SUITE(TAsyncResult) {
 
         int var = 1;
 
-        r.AndThen(std::bind(&SetValue, &var, std::placeholders::_1));
+        r.AndThen(std::bind(&SetValue, &var, std::placeholders::_1)); 
 
         r.SetResult(17);
 

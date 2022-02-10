@@ -1,13 +1,13 @@
 #pragma once
 
-#include <utility>
+#include <utility> 
 #include "ptr.h"
 
 template <class TBase, class TCounter>
 struct TWithRefCount: public TBase, public TRefCounted<TWithRefCount<TBase, TCounter>, TCounter> {
     template <typename... Args>
     inline TWithRefCount(Args&&... args)
-        : TBase(std::forward<Args>(args)...)
+        : TBase(std::forward<Args>(args)...) 
     {
     }
 };
@@ -34,7 +34,7 @@ template <class T>
 struct TEmbedPolicy {
     template <typename... Args>
     inline TEmbedPolicy(Args&&... args)
-        : T_(std::forward<Args>(args)...)
+        : T_(std::forward<Args>(args)...) 
     {
     }
 
@@ -55,7 +55,7 @@ struct TRefPolicy {
 
     template <typename... Args>
     inline TRefPolicy(Args&&... args)
-        : T_(new THelper(std::forward<Args>(args)...))
+        : T_(new THelper(std::forward<Args>(args)...)) 
     {
     }
 

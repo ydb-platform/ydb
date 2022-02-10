@@ -107,21 +107,21 @@ TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, const TP
         return node;
     }
 
-    auto handler = partition.ListHandlerLambda();
-
-    if (ETypeAnnotationKind::List == handler.Ref().GetTypeAnn()->GetKind()) {
-        handler = Build<TCoLambda>(ctx, handler.Pos())
-            .Args({"flow"})
-            .template Body<TCoToFlow>()
-                .template Input<TExprApplier>()
-                    .Apply(handler)
-                    .template With<TCoForwardList>(0)
-                        .Stream("flow")
-                    .Build()
-                .Build()
-            .Build().Done();
-    }
-
+    auto handler = partition.ListHandlerLambda(); 
+ 
+    if (ETypeAnnotationKind::List == handler.Ref().GetTypeAnn()->GetKind()) { 
+        handler = Build<TCoLambda>(ctx, handler.Pos()) 
+            .Args({"flow"}) 
+            .template Body<TCoToFlow>() 
+                .template Input<TExprApplier>() 
+                    .Apply(handler) 
+                    .template With<TCoForwardList>(0) 
+                        .Stream("flow") 
+                    .Build() 
+                .Build() 
+            .Build().Done(); 
+    } 
+ 
     auto partitionStage = Build<TDqStage>(ctx, node.Pos())
         .Inputs()
             .Add(newConnection)
@@ -138,8 +138,8 @@ TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, const TP
                 .ListHandlerLambda()
                     .Args({"list"})
                     .template Body<TExprApplier>()
-                        .Apply(handler)
-                            .With(handler.Args().Arg(0), "list")
+                        .Apply(handler) 
+                            .With(handler.Args().Arg(0), "list") 
                         .Build()
                     .Build()
                 .Build()
@@ -336,11 +336,11 @@ TExprBase DqPushExtractMembersToStage(TExprBase node, TExprContext& ctx, IOptimi
 TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) {
+    if (!node.Maybe<TCoFlatMapBase>().Input().Maybe<TDqCnUnionAll>()) { 
         return node;
     }
 
-    auto flatmap = node.Cast<TCoFlatMapBase>();
+    auto flatmap = node.Cast<TCoFlatMapBase>(); 
     auto dqUnion = flatmap.Input().Cast<TDqCnUnionAll>();
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
         return node;
@@ -350,14 +350,14 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
         return node;
     }
 
-    auto lambda = TCoLambda(ctx.Builder(flatmap.Lambda().Pos())
-        .Lambda()
-            .Param("stream")
-            .Callable(flatmap.Ref().Content())
-                .Arg(0, "stream")
+    auto lambda = TCoLambda(ctx.Builder(flatmap.Lambda().Pos()) 
+        .Lambda() 
+            .Param("stream") 
+            .Callable(flatmap.Ref().Content()) 
+                .Arg(0, "stream") 
                 .Add(1, ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
-            .Seal()
-        .Seal().Build());
+            .Seal() 
+        .Seal().Build()); 
 
     auto pushResult = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
     if (pushResult) {
@@ -385,39 +385,39 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
 template <typename BaseLMap>
 TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage = true)
-{
+{ 
     if (!node.Maybe<BaseLMap>().Input().template Maybe<TDqCnUnionAll>()) {
-        return node;
-    }
-
+        return node; 
+    } 
+ 
     auto lmap = node.Cast<BaseLMap>();
     auto dqUnion = lmap.Input().template Cast<TDqCnUnionAll>();
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
         return node;
     }
-
+ 
     if (!CanPushDqExpr(lmap.Lambda(), dqUnion)) {
-        return node;
-    }
-
-    auto lambda = Build<TCoLambda>(ctx, lmap.Lambda().Pos())
-        .Args({"stream"})
+        return node; 
+    } 
+ 
+    auto lambda = Build<TCoLambda>(ctx, lmap.Lambda().Pos()) 
+        .Args({"stream"}) 
         .template Body<TCoToStream>()
             .template Input<TExprApplier>()
                 .Apply(lmap.Lambda())
                 .With(lmap.Lambda().Args().Arg(0), "stream")
                 .Build()
-            .Build()
-        .Done();
-
+            .Build() 
+        .Done(); 
+ 
     auto result = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
-    if (!result) {
-        return node;
-    }
-
-    return result.Cast();
-}
-
+    if (!result) { 
+        return node; 
+    } 
+ 
+    return result.Cast(); 
+} 
+ 
 TExprBase DqPushOrderedLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
@@ -639,15 +639,15 @@ TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOpti
         return node;
     }
 
-    const auto asList = node.Cast<TCoAsList>();
-
+    const auto asList = node.Cast<TCoAsList>(); 
+ 
     TVector<TExprBase> resultConnections;
     for (const auto& listItem : asList) {
         if (!listItem.Maybe<TCoAsStruct>()) {
             return node;
         }
 
-        const auto asStruct = listItem.Cast<TCoAsStruct>();
+        const auto asStruct = listItem.Cast<TCoAsStruct>(); 
 
         TExprNode::TPtr connection;
         bool hasDirectConnection = false;
@@ -707,8 +707,8 @@ TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOpti
             return node;
         }
 
-        const auto pos = listItem.Pos();
-        auto newArg = ctx.NewArgument(pos, "result");
+        const auto pos = listItem.Pos(); 
+        auto newArg = ctx.NewArgument(pos, "result"); 
         auto lambda = ctx.NewLambda(pos,
             ctx.NewArguments(pos, {newArg}),
             ctx.ReplaceNode(asStruct.Ptr(), *connection, std::move(newArg))
@@ -743,20 +743,20 @@ TExprBase DqBuildAggregationResultStage(TExprBase node, TExprContext& ctx, IOpti
                 .Done().Ptr();
         }
 
-        auto resultConnection = Build<TDqCnUnionAll>(ctx, pos)
-            .Output()
-                .Stage<TDqStage>()
-                    .Inputs()
-                        .Add(std::move(connection))
-                        .Build()
-                    .Program()
+        auto resultConnection = Build<TDqCnUnionAll>(ctx, pos) 
+            .Output() 
+                .Stage<TDqStage>() 
+                    .Inputs() 
+                        .Add(std::move(connection)) 
+                        .Build() 
+                    .Program() 
                         .Args(programArg)
-                        .Body<TCoMap>()
+                        .Body<TCoMap>() 
                             .Input(mapInput)
-                            .Lambda(std::move(lambda))
+                            .Lambda(std::move(lambda)) 
                             .Build()
                         .Build()
-                    .Settings(TDqStageSettings().BuildNode(ctx, pos))
+                    .Settings(TDqStageSettings().BuildNode(ctx, pos)) 
                     .Build()
                 .Index().Build("0")
                 .Build()
@@ -958,11 +958,11 @@ TExprBase DqBuildTopSortStage(TExprBase node, TExprContext& ctx, IOptimizationCo
 TExprBase DqBuildSortStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    if (!node.Maybe<TCoSortBase>().Input().Maybe<TDqCnUnionAll>()) {
+    if (!node.Maybe<TCoSortBase>().Input().Maybe<TDqCnUnionAll>()) { 
         return node;
     }
 
-    auto sort = node.Cast<TCoSortBase>();
+    auto sort = node.Cast<TCoSortBase>(); 
     auto dqUnion = sort.Input().Cast<TDqCnUnionAll>();
 
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
@@ -1252,19 +1252,19 @@ TExprBase DqRewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptim
                 .Build()
             .InitHandlerLambda()
                 .Args({"key", "item"})
-                .Body<TCoUint64>()
-                    .Literal().Build("1")
-                    .Build()
+                .Body<TCoUint64>() 
+                    .Literal().Build("1") 
+                    .Build() 
                 .Build()
             .UpdateHandlerLambda()
                 .Args({"key", "item", "state"})
-                .Body<TCoInc>()
-                    .Value("state")
+                .Body<TCoInc>() 
+                    .Value("state") 
                     .Build()
                 .Build()
             .FinishHandlerLambda()
                 .Args({"key", "state"})
-                .Body<TCoJust>()
+                .Body<TCoJust>() 
                     .Input<TCoAsStruct>()
                         .Add<TCoNameValueTuple>()
                             .Name(field)

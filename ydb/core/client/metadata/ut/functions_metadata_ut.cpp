@@ -22,27 +22,27 @@ Y_UNIT_TEST_SUITE(TFunctionsMetadataTest)
             { 0, 0 }
         };
 
-        const auto functionRegistry = CreateBuiltinRegistry();
-        functionRegistry->Register("MyAdd", TFunctionDescriptor(AddUi32Metadata, nullptr));
+        const auto functionRegistry = CreateBuiltinRegistry(); 
+        functionRegistry->Register("MyAdd", TFunctionDescriptor(AddUi32Metadata, nullptr)); 
 
         TString metadata;
-        SerializeMetadata(*functionRegistry, &metadata);
-        DeserializeMetadata(metadata, *functionRegistry);
+        SerializeMetadata(*functionRegistry, &metadata); 
+        DeserializeMetadata(metadata, *functionRegistry); 
 
         std::pair<NScheme::TTypeId, bool> argTypes[] = {
             { Uint32Id, false},
-            { Uint32Id, false},
+            { Uint32Id, false}, 
             { Uint32Id, false}
         };
 
-        const auto op = functionRegistry->GetBuiltin("MyAdd", argTypes, Y_ARRAY_SIZE(argTypes));
-        UNIT_ASSERT_EQUAL(op.Function, nullptr);
-        UNIT_ASSERT_EQUAL(op.ResultAndArgs[0].SchemeType, Uint32Id);
-        UNIT_ASSERT_EQUAL(op.ResultAndArgs[0].Flags, 0);
-        UNIT_ASSERT_EQUAL(op.ResultAndArgs[1].SchemeType, Uint32Id);
-        UNIT_ASSERT_EQUAL(op.ResultAndArgs[1].Flags, 0);
-        UNIT_ASSERT_EQUAL(op.ResultAndArgs[2].SchemeType, Uint32Id);
-        UNIT_ASSERT_EQUAL(op.ResultAndArgs[2].Flags, 0);
-        UNIT_ASSERT_EQUAL(op.ResultAndArgs[3].SchemeType, 0);
+        const auto op = functionRegistry->GetBuiltin("MyAdd", argTypes, Y_ARRAY_SIZE(argTypes)); 
+        UNIT_ASSERT_EQUAL(op.Function, nullptr); 
+        UNIT_ASSERT_EQUAL(op.ResultAndArgs[0].SchemeType, Uint32Id); 
+        UNIT_ASSERT_EQUAL(op.ResultAndArgs[0].Flags, 0); 
+        UNIT_ASSERT_EQUAL(op.ResultAndArgs[1].SchemeType, Uint32Id); 
+        UNIT_ASSERT_EQUAL(op.ResultAndArgs[1].Flags, 0); 
+        UNIT_ASSERT_EQUAL(op.ResultAndArgs[2].SchemeType, Uint32Id); 
+        UNIT_ASSERT_EQUAL(op.ResultAndArgs[2].Flags, 0); 
+        UNIT_ASSERT_EQUAL(op.ResultAndArgs[3].SchemeType, 0); 
     }
 }

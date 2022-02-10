@@ -40,7 +40,7 @@ public:
     TProgramFactory(
         bool useRepeatableRandomAndTimeProviders,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        ui64 nextUniqueId,
+        ui64 nextUniqueId, 
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         const TString& runner);
 
@@ -48,7 +48,7 @@ public:
     void AddCredentialsTable(TCredentialTablePtr credentialTable);
     void SetUserCredentials(const TUserCredentials& userCredentials);
     void SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig);
-    void SetModules(IModuleResolver::TPtr modules);
+    void SetModules(IModuleResolver::TPtr modules); 
     void SetUdfResolver(IUdfResolver::TPtr udfResolver);
     void SetUdfIndex(TUdfIndex::TPtr udfIndex, TUdfIndexPackageSet::TPtr udfIndexPackageSet);
     void SetFileStorage(TFileStoragePtr fileStorage);
@@ -68,13 +68,13 @@ private:
     const bool UseRepeatableRandomAndTimeProviders_;
     bool UseUnrepeatableRandom = false;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
-    const ui64 NextUniqueId_;
+    const ui64 NextUniqueId_; 
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TUserDataTable UserDataTable_;
     TVector<TCredentialTablePtr> CredentialTables_;
     TUserCredentials UserCredentials_;
     const TGatewaysConfig* GatewaysConfig_;
-    IModuleResolver::TPtr Modules_;
+    IModuleResolver::TPtr Modules_; 
     IUdfResolver::TPtr UdfResolver_;
     TUdfIndex::TPtr UdfIndex_;
     TUdfIndexPackageSet::TPtr UdfIndexPackageSet_;
@@ -188,7 +188,7 @@ public:
         return AstRoot_;
     }
 
-    inline const TExprNode::TPtr& ExprRoot() const {
+    inline const TExprNode::TPtr& ExprRoot() const { 
         return ExprRoot_;
     }
 
@@ -297,12 +297,12 @@ private:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TIntrusivePtr<IRandomProvider> randomProvider,
         const TIntrusivePtr<ITimeProvider> timeProvider,
-        ui64 nextUniqueId,
+        ui64 nextUniqueId, 
         const TVector<TDataProviderInitializer>& dataProvidersInit,
         const TUserDataTable& userDataTable,
         const TVector<TCredentialTablePtr>& credentialTables,
         const TUserCredentials& userCredentials,
-        const IModuleResolver::TPtr& modules,
+        const IModuleResolver::TPtr& modules, 
         const IUdfResolver::TPtr& udfResolver,
         const TUdfIndex::TPtr& udfIndex,
         const TUdfIndexPackageSet::TPtr& udfIndexPackageSet,
@@ -338,7 +338,7 @@ private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
     const TIntrusivePtr<ITimeProvider> TimeProvider_;
-    const ui64 NextUniqueId_;
+    const ui64 NextUniqueId_; 
     TVector<TDataProviderInitializer> DataProvidersInit_;
     TVector<TDataProviderInfo> DataProviders_;
     TYqlOperationOptions OperationOptions_;
@@ -356,10 +356,10 @@ private:
     ui16 SyntaxVersion_;
 
     TAstNode* AstRoot_;
-    std::unique_ptr<TMemoryPool> AstPool_;
-    TAutoPtr<TExprContext> ExprCtx_;
-    const IModuleResolver::TPtr Modules_;
-    TExprNode::TPtr ExprRoot_;
+    std::unique_ptr<TMemoryPool> AstPool_; 
+    TAutoPtr<TExprContext> ExprCtx_; 
+    const IModuleResolver::TPtr Modules_; 
+    TExprNode::TPtr ExprRoot_; 
     TExprNode::TPtr SavedExprRoot_;
     mutable TAdaptiveLock SessionIdLock_;
     TString SessionId_;

@@ -34,19 +34,19 @@ namespace {
         }
 
         TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-            output = input;
-            YQL_ENSURE(input->Type() == TExprNode::Callable);
-            if (input->Content() == "Pull") {
-                auto requireStatus = RequireChild(*input, 0);
+            output = input; 
+            YQL_ENSURE(input->Type() == TExprNode::Callable); 
+            if (input->Content() == "Pull") { 
+                auto requireStatus = RequireChild(*input, 0); 
                 if (requireStatus.Level != TStatus::Ok) {
                     return requireStatus;
                 }
 
-                IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(*input);
+                IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(*input); 
                 YQL_ENSURE(fillSettings.Format == IDataProvider::EResultFormat::Yson);
                 NYson::EYsonFormat ysonFormat = NCommon::GetYsonFormat(fillSettings);
 
-                auto nodeToPull = input->Child(0)->Child(0);
+                auto nodeToPull = input->Child(0)->Child(0); 
                 if (nodeToPull->IsCallable(ConfReadName)) {
                     auto key = nodeToPull->Child(2);
                     auto tag = key->Child(0)->Child(0)->Content();
@@ -74,7 +74,7 @@ namespace {
                         writer.OnEndList();
                         writer.OnEndMap();
 
-                        input->SetResult(ctx.NewAtom(input->Pos(), out.Str()));
+                        input->SetResult(ctx.NewAtom(input->Pos(), out.Str())); 
                         input->SetState(TExprNode::EState::ExecutionComplete);
                         return TStatus::Ok;
                     } else {
@@ -88,25 +88,25 @@ namespace {
                 return TStatus::Error;
             }
 
-            if (input->Content() == ConfReadName) {
-                auto requireStatus = RequireChild(*input, 0);
+            if (input->Content() == ConfReadName) { 
+                auto requireStatus = RequireChild(*input, 0); 
                 if (requireStatus.Level != TStatus::Ok) {
                     return requireStatus;
                 }
 
                 input->SetState(TExprNode::EState::ExecutionComplete);
-                input->SetResult(ctx.NewWorld(input->Pos()));
+                input->SetResult(ctx.NewWorld(input->Pos())); 
                 return TStatus::Ok;
             }
 
-            if (input->Content() == ConfigureName) {
+            if (input->Content() == ConfigureName) { 
                 auto requireStatus = RequireChild(*input, 0);
                 if (requireStatus.Level != TStatus::Ok) {
                     return requireStatus;
                 }
 
                 input->SetState(TExprNode::EState::ExecutionComplete);
-                input->SetResult(ctx.NewWorld(input->Pos()));
+                input->SetResult(ctx.NewWorld(input->Pos())); 
                 return TStatus::Ok;
             }
 
@@ -183,8 +183,8 @@ namespace {
             }
 
             ConfigurationTransformer = CreateFunctorTransformer(
-                [this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
-                output = input;
+                [this](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus { 
+                output = input; 
                 if (ctx.Step.IsDone(TExprStep::Configure)) {
                     return IGraphTransformer::TStatus::Ok;
                 }
@@ -192,26 +192,26 @@ namespace {
                 bool hasPendingEvaluations = false;
                 TOptimizeExprSettings settings(nullptr);
                 settings.VisitChanges = true;
-                auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr { 
                     auto res = node;
                     if (!hasPendingEvaluations && node->Content() == ConfigureName) {
-                        if (!EnsureMinArgsCount(*node, 2, ctx)) {
+                        if (!EnsureMinArgsCount(*node, 2, ctx)) { 
                             return {};
                         }
 
-                        if (!node->Child(1)->IsCallable("DataSource")) {
-                            return node;
+                        if (!node->Child(1)->IsCallable("DataSource")) { 
+                            return node; 
                         }
 
-                        if (node->Child(1)->Child(0)->Content() != ConfigProviderName) {
-                            return node;
+                        if (node->Child(1)->Child(0)->Content() != ConfigProviderName) { 
+                            return node; 
                         }
 
-                        if (!EnsureMinArgsCount(*node, 3, ctx)) {
+                        if (!EnsureMinArgsCount(*node, 3, ctx)) { 
                             return {};
                         }
 
-                        if (!EnsureAtom(*node->Child(2), ctx)) {
+                        if (!EnsureAtom(*node->Child(2), ctx)) { 
                             return {};
                         }
 
@@ -252,18 +252,18 @@ namespace {
             Y_UNUSED(instantOnly);
             if (!TypeAnnotationTransformer) {
                 TypeAnnotationTransformer = CreateFunctorTransformer(
-                    [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus {
-                    output = input;
-                    if (input->Content() == ConfReadName) {
-                        if (!EnsureWorldType(*input->Child(0), ctx)) {
+                    [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> IGraphTransformer::TStatus { 
+                    output = input; 
+                    if (input->Content() == ConfReadName) { 
+                        if (!EnsureWorldType(*input->Child(0), ctx)) { 
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        if (!EnsureSpecificDataSource(*input->Child(1), ConfigProviderName, ctx)) {
+                        if (!EnsureSpecificDataSource(*input->Child(1), ConfigProviderName, ctx)) { 
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        auto key = input->Child(2);
+                        auto key = input->Child(2); 
                         if (!key->IsCallable("Key")) {
                             ctx.AddError(TIssue(ctx.GetPosition(key->Pos()), "Expected key"));
                             return IGraphTransformer::TStatus::Error;
@@ -285,7 +285,7 @@ namespace {
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        auto fields = input->Child(3);
+                        auto fields = input->Child(3); 
                         if (!EnsureTuple(*fields, ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -300,7 +300,7 @@ namespace {
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        auto settings = input->Child(4);
+                        auto settings = input->Child(4); 
                         if (!EnsureTuple(*settings, ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -325,8 +325,8 @@ namespace {
                         input->SetTypeAnn(tupleAnn);
                         return IGraphTransformer::TStatus::Ok;
                     }
-                    else if (input->Content() == ConfigureName) {
-                        if (!EnsureWorldType(*input->Child(0), ctx)) {
+                    else if (input->Content() == ConfigureName) { 
+                        if (!EnsureWorldType(*input->Child(0), ctx)) { 
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -342,8 +342,8 @@ namespace {
             return *TypeAnnotationTransformer;
         }
 
-        TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
-            auto read = node->Child(0);
+        TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override { 
+            auto read = node->Child(0); 
             TString newName;
             if (read->Content() == ReadName) {
                 newName = ConfReadName;
@@ -353,17 +353,17 @@ namespace {
             }
 
             YQL_CLOG(INFO, ProviderConfig) << "RewriteIO";
-            auto newRead = ctx.RenameNode(*read, newName);
+            auto newRead = ctx.RenameNode(*read, newName); 
             auto retChildren = node->ChildrenList();
             retChildren[0] = newRead;
-            return ctx.ChangeChildren(*node, std::move(retChildren));
+            return ctx.ChangeChildren(*node, std::move(retChildren)); 
         }
 
-        bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override {
+        bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override { 
             Y_UNUSED(syncList);
 
-            if (node.IsCallable(RightName)) {
-                if (node.Child(0)->IsCallable(ConfReadName)) {
+            if (node.IsCallable(RightName)) { 
+                if (node.Child(0)->IsCallable(ConfReadName)) { 
                     canRef = false;
                     return true;
                 }
@@ -393,17 +393,17 @@ namespace {
         bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
             Y_UNUSED(compact);
             if (CanExecute(node)) {
-                children.push_back(node.ChildPtr(0));
+                children.push_back(node.ChildPtr(0)); 
             }
 
             return false;
         }
 
         void WritePullDetails(const TExprNode& node, NYson::TYsonWriter& writer) override {
-            YQL_ENSURE(node.IsCallable(RightName));
+            YQL_ENSURE(node.IsCallable(RightName)); 
 
             writer.OnKeyedItem("PullOperation");
-            writer.OnStringScalar(node.Child(0)->Content());
+            writer.OnStringScalar(node.Child(0)->Content()); 
         }
 
         TString GetProviderPath(const TExprNode& node) override {

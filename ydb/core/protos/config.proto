@@ -350,14 +350,14 @@ message TBootstrap {
     optional TCompileServiceConfig CompileServiceConfig = 9; //may be need special file with resource limits?
     optional bool EnableIntrospection = 10;
 }
-
-message TInterconnectConfig {
-    message TChannel {
-        optional uint32 Index = 1;
+ 
+message TInterconnectConfig { 
+    message TChannel { 
+        optional uint32 Index = 1; 
         optional uint32 Quota = 2; // deprecated
         optional uint32 Weight = 3; // use this instead of field "Quota"
-    }
-
+    } 
+ 
     enum EMergeMode {
         AUTO = 0;
         PER_PEER = 1;
@@ -371,7 +371,7 @@ message TInterconnectConfig {
         REQUIRED = 2;
     };
 
-    repeated TChannel Channel = 1;
+    repeated TChannel Channel = 1; 
     optional bool FirstTryBeforePoll = 2; // DEPRECATED
     optional bool StartTcp = 3 [default = false];
     optional uint32 SelfKickDelay = 4; // DEPRECATED
@@ -414,7 +414,7 @@ message TInterconnectConfig {
     optional NKikimrConfigUnits.TDuration ForceConfirmPeriodDuration = 27;
     optional NKikimrConfigUnits.TDuration LostConnectionDuration = 28;
     optional NKikimrConfigUnits.TDuration BatchPeriodDuration = 29;
-}
+} 
 
 message TChannelProfileConfig {
     message TProfile {

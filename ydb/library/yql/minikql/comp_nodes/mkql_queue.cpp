@@ -9,14 +9,14 @@ namespace NKikimr {
 using namespace NUdf;
 namespace NMiniKQL {
 
-namespace {
-
+namespace { 
+ 
 class TQueueResource : public TComputationValue<TQueueResource> {
 public:
     TQueueResource(TMemoryUsageInfo* memInfo, const TStringBuf& tag, TMaybe<ui64> capacity, ui64 initSize)
         : TComputationValue(memInfo)
         , ResourceTag(tag)
-        , Buffer(capacity, TUnboxedValue(), initSize)
+        , Buffer(capacity, TUnboxedValue(), initSize) 
         , BufferBytes(CurrentMemUsage())
     {
         MKQL_MEM_TAKE(memInfo, &Buffer, BufferBytes);
@@ -34,11 +34,11 @@ public:
         MKQL_MEM_TAKE(GetMemInfo(), &Buffer, BufferBytes);
     }
 
-    TSafeCircularBuffer<TUnboxedValue>& GetBuffer() {
-        return Buffer;
-    }
-
-private:
+    TSafeCircularBuffer<TUnboxedValue>& GetBuffer() { 
+        return Buffer; 
+    } 
+ 
+private: 
     NUdf::TStringRef GetResourceTag() const override {
         return NUdf::TStringRef(ResourceTag);
     }
@@ -60,14 +60,14 @@ class TQueueResource;
 class TQueueResourceUser {
 public:
     TQueueResourceUser(TStringBuf&& tag, IComputationNode* resource);
-    TSafeCircularBuffer<NUdf::TUnboxedValue>& CheckAndGetBuffer(const NUdf::TUnboxedValuePod& resource) const;
+    TSafeCircularBuffer<NUdf::TUnboxedValue>& CheckAndGetBuffer(const NUdf::TUnboxedValuePod& resource) const; 
     void UpdateBufferStats(const NUdf::TUnboxedValuePod& resource) const;
 
 protected:
     const TStringBuf Tag;
     IComputationNode* const Resource;
 
-    TQueueResource& GetResource(const NUdf::TUnboxedValuePod& resource) const;
+    TQueueResource& GetResource(const NUdf::TUnboxedValuePod& resource) const; 
 };
 
 TQueueResourceUser::TQueueResourceUser(TStringBuf&& tag, IComputationNode* resource)
@@ -75,7 +75,7 @@ TQueueResourceUser::TQueueResourceUser(TStringBuf&& tag, IComputationNode* resou
     , Resource(resource)
 {}
 
-TSafeCircularBuffer<TUnboxedValue>& TQueueResourceUser::CheckAndGetBuffer(const TUnboxedValuePod& resource) const {
+TSafeCircularBuffer<TUnboxedValue>& TQueueResourceUser::CheckAndGetBuffer(const TUnboxedValuePod& resource) const { 
     return GetResource(resource).GetBuffer();
 }
 
@@ -83,33 +83,33 @@ void TQueueResourceUser::UpdateBufferStats(const TUnboxedValuePod& resource) con
     GetResource(resource).UpdateBufferStats();
 }
 
-TQueueResource& TQueueResourceUser::GetResource(const TUnboxedValuePod& resource) const {
+TQueueResource& TQueueResourceUser::GetResource(const TUnboxedValuePod& resource) const { 
     const TStringBuf tag = resource.GetResourceTag();
     Y_VERIFY_DEBUG(tag == Tag, "Expected correct Queue resource");
     return *static_cast<TQueueResource*>(resource.GetResource());
 }
 
-class TQueueCreateWrapper : public TMutableComputationNode<TQueueCreateWrapper> {
+class TQueueCreateWrapper : public TMutableComputationNode<TQueueCreateWrapper> { 
     typedef TMutableComputationNode<TQueueCreateWrapper> TBaseComputation;
 public:
     TQueueCreateWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes, const TString& name, TMaybe<ui64> capacity, ui64 initSize)
         : TBaseComputation(mutables)
         , DependentNodes(std::move(dependentNodes))
-        , Name(name)
+        , Name(name) 
         , Capacity(capacity)
         , InitSize(initSize)
     {}
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        return NUdf::TUnboxedValuePod(new TQueueResource(&ctx.HolderFactory.GetMemInfo(), Name, Capacity, InitSize));
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
+        return NUdf::TUnboxedValuePod(new TQueueResource(&ctx.HolderFactory.GetMemInfo(), Name, Capacity, InitSize)); 
     }
 
 private:
-    void RegisterDependencies() const final {
-        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TQueueCreateWrapper::DependsOn, this, std::placeholders::_1));
-    }
-
-    const TComputationNodePtrVector DependentNodes;
+    void RegisterDependencies() const final { 
+        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TQueueCreateWrapper::DependsOn, this, std::placeholders::_1)); 
+    } 
+ 
+    const TComputationNodePtrVector DependentNodes; 
     const TString Name;
     const TMaybe<ui64> Capacity;
     const ui64 InitSize;
@@ -131,13 +131,13 @@ public:
         if (buffer.IsUnbounded()) {
             UpdateBufferStats(resource);
         }
-        return resource.Release();
+        return resource.Release(); 
     }
 
-private:
-    void RegisterDependencies() const final {
-        DependsOn(Resource);
-        DependsOn(Value);
+private: 
+    void RegisterDependencies() const final { 
+        DependsOn(Resource); 
+        DependsOn(Value); 
     }
 
     IComputationNode* const Value;
@@ -154,40 +154,40 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto resource = Resource->GetValue(ctx);
         CheckAndGetBuffer(resource).PopFront();
-        return resource.Release();
+        return resource.Release(); 
     }
 
-private:
-    void RegisterDependencies() const final {
-        DependsOn(Resource);
+private: 
+    void RegisterDependencies() const final { 
+        DependsOn(Resource); 
     }
 };
 
-class TQueuePeekWrapper : public TMutableComputationNode<TQueuePeekWrapper>, public TQueueResourceUser {
+class TQueuePeekWrapper : public TMutableComputationNode<TQueuePeekWrapper>, public TQueueResourceUser { 
     typedef TMutableComputationNode<TQueuePeekWrapper> TBaseComputation;
 public:
     TQueuePeekWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes, const TResourceType* resourceType, IComputationNode* resource, IComputationNode* index)
         : TBaseComputation(mutables)
         , TQueueResourceUser(resourceType->GetTag(), resource)
-        , Index(index), DependentNodes(std::move(dependentNodes))
+        , Index(index), DependentNodes(std::move(dependentNodes)) 
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto resource = Resource->GetValue(ctx);
         auto index = Index->GetValue(ctx);
         const auto& valRef = CheckAndGetBuffer(resource).Get(index.Get<ui64>());
-        return !valRef ? NUdf::TUnboxedValuePod() : valRef.MakeOptional();
+        return !valRef ? NUdf::TUnboxedValuePod() : valRef.MakeOptional(); 
     }
 
-private:
-    void RegisterDependencies() const final {
-        DependsOn(Resource);
-        DependsOn(Index);
-        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TQueuePeekWrapper::DependsOn, this, std::placeholders::_1));
+private: 
+    void RegisterDependencies() const final { 
+        DependsOn(Resource); 
+        DependsOn(Index); 
+        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TQueuePeekWrapper::DependsOn, this, std::placeholders::_1)); 
     }
 
     IComputationNode* const Index;
-    const TComputationNodePtrVector DependentNodes;
+    const TComputationNodePtrVector DependentNodes; 
 };
 
 class TQueueRangeWrapper : public TMutableComputationNode<TQueueRangeWrapper>, public TQueueResourceUser {
@@ -317,7 +317,7 @@ public:
         , FrontIndex(Buffer.UsedSize())
     {}
 
-private:
+private: 
     NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& value) override {
         NUdf::TUnboxedValue item;
         if (State != EPreserveState::Feed) {
@@ -355,11 +355,11 @@ private:
         GoOn,
         Emit,
     };
-    const NUdf::TUnboxedValue Stream;
+    const NUdf::TUnboxedValue Stream; 
     const NUdf::TUnboxedValue Queue;
     const ui64 OutpaceGoal;
     TSafeCircularBuffer<TUnboxedValue>& Buffer;
-    const size_t FrontIndex;
+    const size_t FrontIndex; 
 
     EPreserveState State = EPreserveState::Feed;
     ui64 Outpace = 0;
@@ -375,31 +375,31 @@ public:
         , Outpace(outpace)
     {}
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
         return ctx.HolderFactory.Create<TPreserveStreamValue>(Stream->GetValue(ctx), Resource->GetValue(ctx), Tag, Resource, Outpace);
     }
 
-private:
-    void RegisterDependencies() const final {
-        DependsOn(Resource);
-        DependsOn(Stream);
+private: 
+    void RegisterDependencies() const final { 
+        DependsOn(Resource); 
+        DependsOn(Stream); 
     }
 
     IComputationNode* const Stream;
     const ui64 Outpace;
 };
 
-template<class T, class...Args>
-IComputationNode* MakeNodeWithDeps(TCallable& callable, const TComputationNodeFactoryContext& ctx, unsigned reqArgs, Args...args) {
-    TComputationNodePtrVector dependentNodes(callable.GetInputsCount() - reqArgs);
+template<class T, class...Args> 
+IComputationNode* MakeNodeWithDeps(TCallable& callable, const TComputationNodeFactoryContext& ctx, unsigned reqArgs, Args...args) { 
+    TComputationNodePtrVector dependentNodes(callable.GetInputsCount() - reqArgs); 
     for (ui32 i = reqArgs; i < callable.GetInputsCount(); ++i) {
         dependentNodes[i - reqArgs] = LocateNode(ctx.NodeLocator, callable, i);
     }
     return new T(ctx.Mutables, std::move(dependentNodes), std::forward<Args>(args)...);
 }
 
-}
-
+} 
+ 
 IComputationNode* WrapQueueCreate(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     const unsigned reqArgs = 3;
     MKQL_ENSURE(callable.GetInputsCount() >= reqArgs, "QueueCreate: Expected at least " << reqArgs << " arg");
@@ -410,9 +410,9 @@ IComputationNode* WrapQueueCreate(TCallable& callable, const TComputationNodeFac
         capacity = queueCapacityValue->AsValue().Get<ui64>();
     }
     auto queueInitSizeValue = AS_VALUE(TDataLiteral, callable.GetInput(2));
-    const TString name(queueNameValue->AsValue().AsStringRef());
-    const auto initSize = queueInitSizeValue->AsValue().Get<ui64>();
-    return MakeNodeWithDeps<TQueueCreateWrapper>(callable, ctx, reqArgs, name, capacity, initSize);
+    const TString name(queueNameValue->AsValue().AsStringRef()); 
+    const auto initSize = queueInitSizeValue->AsValue().Get<ui64>(); 
+    return MakeNodeWithDeps<TQueueCreateWrapper>(callable, ctx, reqArgs, name, capacity, initSize); 
 }
 
 IComputationNode* WrapQueuePush(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -438,7 +438,7 @@ IComputationNode* WrapQueuePeek(TCallable& callable, const TComputationNodeFacto
     MKQL_ENSURE(indexType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64 as queue index");
     auto resource = LocateNode(ctx.NodeLocator, callable, 0);
     auto index = LocateNode(ctx.NodeLocator, callable, 1);
-    return MakeNodeWithDeps<TQueuePeekWrapper>(callable, ctx, reqArgs, resourceType, resource, index);
+    return MakeNodeWithDeps<TQueuePeekWrapper>(callable, ctx, reqArgs, resourceType, resource, index); 
 }
 
 IComputationNode* WrapQueueRange(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

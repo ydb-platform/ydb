@@ -7,15 +7,15 @@
 namespace NKikimr {
 using namespace NMiniKQL;
 
-void SerializeMetadata(const IBuiltinFunctionRegistry& funcRegistry, TString* out)
+void SerializeMetadata(const IBuiltinFunctionRegistry& funcRegistry, TString* out) 
 {
     NKikimrSchemeTypeOperation::TMetadata metadata;
-    for (const auto& op : funcRegistry.GetFunctions()) {
+    for (const auto& op : funcRegistry.GetFunctions()) { 
         auto protoOp = metadata.AddOperation();
         protoOp->SetName(op.first);
         for (const auto& desc : op.second) {
             auto protoDesc = protoOp->AddDescription();
-            for (const auto* arg = desc.ResultAndArgs; arg->SchemeType; ++arg) {
+            for (const auto* arg = desc.ResultAndArgs; arg->SchemeType; ++arg) { 
                 auto protoArg = protoDesc->AddArg();
                 protoArg->SetSchemeType(arg->SchemeType);
                 protoArg->SetFlags(arg->Flags);
@@ -26,7 +26,7 @@ void SerializeMetadata(const IBuiltinFunctionRegistry& funcRegistry, TString* ou
     Y_PROTOBUF_SUPPRESS_NODISCARD metadata.SerializeToString(out);
 }
 
-void DeserializeMetadata(TStringBuf buffer, IBuiltinFunctionRegistry& funcRegistry)
+void DeserializeMetadata(TStringBuf buffer, IBuiltinFunctionRegistry& funcRegistry) 
 {
     NKikimrSchemeTypeOperation::TMetadata metadata;
     Y_VERIFY(metadata.ParseFromArray(buffer.data(), buffer.size()));
@@ -37,7 +37,7 @@ void DeserializeMetadata(TStringBuf buffer, IBuiltinFunctionRegistry& funcRegist
         }
     }
 
-    TFunctionParamMetadataList arguments;
+    TFunctionParamMetadataList arguments; 
     arguments.resize(totalArgsToAllocate);
 
     TFunctionsMap functions;
@@ -58,13 +58,13 @@ void DeserializeMetadata(TStringBuf buffer, IBuiltinFunctionRegistry& funcRegist
 
             ++argPosition; // terminating arg
 
-            desc.push_back(TFunctionDescriptor(&arguments[firstArg], nullptr));
+            desc.push_back(TFunctionDescriptor(&arguments[firstArg], nullptr)); 
         }
     }
 
     Y_VERIFY(argPosition == arguments.size());
 
-    funcRegistry.RegisterAll(std::move(functions), std::move(arguments));
+    funcRegistry.RegisterAll(std::move(functions), std::move(arguments)); 
 }
 
 } // namespace NKikimr

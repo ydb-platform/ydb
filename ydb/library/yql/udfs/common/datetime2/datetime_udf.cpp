@@ -51,7 +51,7 @@ namespace {
             ui32 year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
             if (!builder.FullSplitDate2(value, year, month, day, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) {
-                ythrow yexception() << "Error in FullSplitDate";
+                ythrow yexception() << "Error in FullSplitDate"; 
             }
 
             TimezoneId = timezoneId;
@@ -86,7 +86,7 @@ namespace {
             ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
 
             if (!builder.FullSplitDatetime2(value, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, timezoneId)) {
-                ythrow yexception() << "Error in FullSplitDatetime";
+                ythrow yexception() << "Error in FullSplitDatetime"; 
             }
 
             TimezoneId = timezoneId;
@@ -112,7 +112,7 @@ namespace {
         }
 
         inline void FromTimestamp(const IDateBuilder& builder, ui64 value, ui16 timezoneId = 0) {
-            const ui32 seconds = value / 1000000ull;
+            const ui32 seconds = value / 1000000ull; 
             FromDatetime(builder, seconds, timezoneId);
             Microsecond = value - seconds * 1000000ull;
         }
@@ -129,7 +129,7 @@ namespace {
 
             ui32 year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek;
             if (!builder.FullSplitDatetime2(datetime, year, month, day, hour, minute, second, dayOfYear, weekOfYear, weekOfYearIso8601, dayOfWeek, TimezoneId)) {
-                ythrow yexception() << "Error in FullSplitDatetime.";
+                ythrow yexception() << "Error in FullSplitDatetime."; 
             }
 
             DayOfYear = dayOfYear;
@@ -216,8 +216,8 @@ namespace {
     }
 
     inline bool ValidateTimezoneId(ui16 timezoneId) {
-        const auto& zones = NUdf::GetTimezones();
-        return timezoneId < zones.size() && !zones[timezoneId].empty();
+        const auto& zones = NUdf::GetTimezones(); 
+        return timezoneId < zones.size() && !zones[timezoneId].empty(); 
     }
 
     inline bool ValidateMonthShortName(const std::string_view& monthName, ui8& month) {
@@ -286,10 +286,10 @@ namespace {
         return timestamp < MAX_TIMESTAMP;
     }
 
-    inline bool ValidateInterval(i64 interval) {
-        return interval > -i64(MAX_TIMESTAMP) && interval < i64(MAX_TIMESTAMP);
-    }
-
+    inline bool ValidateInterval(i64 interval) { 
+        return interval > -i64(MAX_TIMESTAMP) && interval < i64(MAX_TIMESTAMP); 
+    } 
+ 
     // Split
 
     template <typename TUserDataType>
@@ -485,22 +485,22 @@ namespace {
     GET_METHOD(Month, ui8)
 
     SIMPLE_UDF(TGetMonthName, char*(TAutoMap<TResource<TMResourceName>>)) {
-        Y_UNUSED(valueBuilder);
-        static const std::array<TUnboxedValue, 12U> monthNames = {{
-            TUnboxedValuePod::Embedded(TStringRef::Of("January")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("February")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("March")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("April")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("May")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("June")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("July")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("August")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("September")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("October")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("November")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("December"))
-        }};
-        return monthNames.at(GetMonth(*args) - 1U);
+        Y_UNUSED(valueBuilder); 
+        static const std::array<TUnboxedValue, 12U> monthNames = {{ 
+            TUnboxedValuePod::Embedded(TStringRef::Of("January")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("February")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("March")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("April")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("May")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("June")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("July")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("August")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("September")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("October")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("November")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("December")) 
+        }}; 
+        return monthNames.at(GetMonth(*args) - 1U); 
     }
 
     GET_METHOD(WeekOfYear, ui8)
@@ -514,17 +514,17 @@ namespace {
     GET_METHOD(DayOfWeek, ui8)
 
     SIMPLE_UDF(TGetDayOfWeekName, char*(TAutoMap<TResource<TMResourceName>>)) {
-        Y_UNUSED(valueBuilder);
-        static const std::array<TUnboxedValue, 7U> dayNames = {{
-            TUnboxedValuePod::Embedded(TStringRef::Of("Monday")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("Tuesday")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("Wednesday")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("Thursday")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("Friday")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("Saturday")),
-            TUnboxedValuePod::Embedded(TStringRef::Of("Sunday"))
-        }};
-        return dayNames.at(GetDayOfWeek(*args) - 1U);
+        Y_UNUSED(valueBuilder); 
+        static const std::array<TUnboxedValue, 7U> dayNames = {{ 
+            TUnboxedValuePod::Embedded(TStringRef::Of("Monday")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("Tuesday")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("Wednesday")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("Thursday")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("Friday")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("Saturday")), 
+            TUnboxedValuePod::Embedded(TStringRef::Of("Sunday")) 
+        }}; 
+        return dayNames.at(GetDayOfWeek(*args) - 1U); 
     }
 
     GET_METHOD(Hour, ui8)
@@ -706,37 +706,37 @@ namespace {
     SIMPLE_UDF(TIntervalFromDays, TOptional<TInterval>(TAutoMap<i32>)) {
         Y_UNUSED(valueBuilder);
         const i64 res = i64(args[0].Get<i32>()) * 86400000000ll;
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
+        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod(); 
     }
 
-    SIMPLE_UDF(TIntervalFromHours, TOptional<TInterval>(TAutoMap<i32>)) {
+    SIMPLE_UDF(TIntervalFromHours, TOptional<TInterval>(TAutoMap<i32>)) { 
         Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * 3600000000ll;
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
+        const i64 res = i64(args[0].Get<i32>()) * 3600000000ll; 
+        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod(); 
     }
 
-    SIMPLE_UDF(TIntervalFromMinutes, TOptional<TInterval>(TAutoMap<i32>)) {
+    SIMPLE_UDF(TIntervalFromMinutes, TOptional<TInterval>(TAutoMap<i32>)) { 
         Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * 60000000ll;
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
+        const i64 res = i64(args[0].Get<i32>()) * 60000000ll; 
+        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod(); 
     }
 
-    SIMPLE_UDF(TIntervalFromSeconds, TOptional<TInterval>(TAutoMap<i32>)) {
+    SIMPLE_UDF(TIntervalFromSeconds, TOptional<TInterval>(TAutoMap<i32>)) { 
         Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i32>()) * 1000000ll;
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
+        const i64 res = i64(args[0].Get<i32>()) * 1000000ll; 
+        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod(); 
     }
 
-    SIMPLE_UDF(TIntervalFromMilliseconds, TOptional<TInterval>(TAutoMap<i64>)) {
+    SIMPLE_UDF(TIntervalFromMilliseconds, TOptional<TInterval>(TAutoMap<i64>)) { 
         Y_UNUSED(valueBuilder);
-        const i64 res = i64(args[0].Get<i64>()) * 1000ll;
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
+        const i64 res = i64(args[0].Get<i64>()) * 1000ll; 
+        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod(); 
     }
 
-    SIMPLE_UDF(TIntervalFromMicroseconds, TOptional<TInterval>(TAutoMap<i64>)) {
+    SIMPLE_UDF(TIntervalFromMicroseconds, TOptional<TInterval>(TAutoMap<i64>)) { 
         Y_UNUSED(valueBuilder);
-        const i64 res = args[0].Get<i64>();
-        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod();
+        const i64 res = args[0].Get<i64>(); 
+        return ValidateInterval(res) ? TUnboxedValuePod(res) : TUnboxedValuePod(); 
     }
 
     // To*
@@ -748,12 +748,12 @@ namespace {
 
     SIMPLE_UDF(TToHours, i32(TAutoMap<TInterval>)) {
         Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(i32(args[0].Get<i64>() / 3600000000ll));
+        return TUnboxedValuePod(i32(args[0].Get<i64>() / 3600000000ll)); 
     }
 
     SIMPLE_UDF(TToMinutes, i32(TAutoMap<TInterval>)) {
         Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(i32(args[0].Get<i64>() / 60000000ll));
+        return TUnboxedValuePod(i32(args[0].Get<i64>() / 60000000ll)); 
     }
 
 #define DECLARE_TO_VALUE(units, TSigned, TUnsigned)                          \
@@ -881,12 +881,12 @@ namespace {
         auto& storage = TTMStorage::Reference(result);
         auto& builder = valueBuilder->GetDateBuilder();
 
-        const auto date = storage.ToDatetime(builder);
-        const ui32 shift = 86400u * (storage.DayOfWeek - 1u);
+        const auto date = storage.ToDatetime(builder); 
+        const ui32 shift = 86400u * (storage.DayOfWeek - 1u); 
         if (shift > date) {
             return TUnboxedValuePod();
         }
-        storage.FromDatetime(builder, date - shift, storage.TimezoneId);
+        storage.FromDatetime(builder, date - shift, storage.TimezoneId); 
 
         storage.Hour = 0;
         storage.Minute = 0;
@@ -989,33 +989,33 @@ namespace {
         return DoAddMonths(args[0], args[1].Get<i32>(), valueBuilder->GetDateBuilder());
     }
 
-    template<size_t Digits, bool Exacly = true>
-    struct PrintNDigits;
-
-    template<bool Exacly>
-    struct PrintNDigits<0U, Exacly> {
-        static constexpr ui32 Miltiplier = 1U;
-
-        template <typename T>
-        static constexpr size_t Do(T, char*) { return 0U; }
-    };
-
-    template<size_t Digits, bool Exacly>
-    struct PrintNDigits {
-        using TNextPrint = PrintNDigits<Digits - 1U, Exacly>;
-        static constexpr ui32 Miltiplier = TNextPrint::Miltiplier * 10U;
-
-        template <typename T>
-        static constexpr size_t Do(T in, char* out) {
-            in %= Miltiplier;
-            if (Exacly || in) {
-                *out = "0123456789"[in / TNextPrint::Miltiplier];
-                return 1U + TNextPrint::Do(in, ++out);
-            }
-            return 0U;
-        }
-    };
-
+    template<size_t Digits, bool Exacly = true> 
+    struct PrintNDigits; 
+ 
+    template<bool Exacly> 
+    struct PrintNDigits<0U, Exacly> { 
+        static constexpr ui32 Miltiplier = 1U; 
+ 
+        template <typename T> 
+        static constexpr size_t Do(T, char*) { return 0U; } 
+    }; 
+ 
+    template<size_t Digits, bool Exacly> 
+    struct PrintNDigits { 
+        using TNextPrint = PrintNDigits<Digits - 1U, Exacly>; 
+        static constexpr ui32 Miltiplier = TNextPrint::Miltiplier * 10U; 
+ 
+        template <typename T> 
+        static constexpr size_t Do(T in, char* out) { 
+            in %= Miltiplier; 
+            if (Exacly || in) { 
+                *out = "0123456789"[in / TNextPrint::Miltiplier]; 
+                return 1U + TNextPrint::Do(in, ++out); 
+            } 
+            return 0U; 
+        } 
+    }; 
+ 
     // Format
 
     class TFormat : public TBoxedValue {
@@ -1027,10 +1027,10 @@ namespace {
             {}
 
         private:
-            TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
+            TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try { 
                 return TUnboxedValuePod(new TFormat(args[0], Pos_));
-            } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            } catch (const std::exception& e) { 
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
             }
             const TSourcePosition Pos_;
         };
@@ -1064,17 +1064,17 @@ namespace {
 
     private:
         const TSourcePosition Pos_;
-        const TUnboxedValue Format_;
-        std::vector<std::function<size_t(char*, const TUnboxedValuePod&, const IDateBuilder&)>> Printers_;
+        const TUnboxedValue Format_; 
+        std::vector<std::function<size_t(char*, const TUnboxedValuePod&, const IDateBuilder&)>> Printers_; 
 
         size_t ReservedSize_;
 
         struct TDataPrinter {
-            const std::string_view Data;
+            const std::string_view Data; 
 
             size_t operator()(char* out, const TUnboxedValuePod&, const IDateBuilder&) const {
-                std::memcpy(out, Data.data(), Data.size());
-                return Data.size();
+                std::memcpy(out, Data.data(), Data.size()); 
+                return Data.size(); 
             }
         };
 
@@ -1092,13 +1092,13 @@ namespace {
                 auto result = valueBuilder->NewStringNotFilled(ReservedSize_);
                 auto pos = result.AsStringRef().Data();
                 ui32 size = 0U;
-
+ 
                 for (const auto& printer : Printers_) {
                     if (const auto plus = printer(pos, value, builder)) {
                         size += plus;
                         pos += plus;
                     }
-                }
+                } 
 
                 if (size < ReservedSize_) {
                     result = valueBuilder->SubString(result.Release(), 0U, size);
@@ -1107,38 +1107,38 @@ namespace {
                 return result;
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
-            }
+            } 
         }
 
         TFormat(const TUnboxedValuePod& runConfig, TSourcePosition pos)
             : Pos_(pos)
             , Format_(runConfig)
         {
-            const std::string_view formatView(Format_.AsStringRef());
-            auto dataStart = formatView.begin();
-            size_t dataSize = 0U;
-            ReservedSize_ = 0U;
+            const std::string_view formatView(Format_.AsStringRef()); 
+            auto dataStart = formatView.begin(); 
+            size_t dataSize = 0U; 
+            ReservedSize_ = 0U; 
 
-            for (auto ptr = formatView.begin(); formatView.end() != ptr; ++ptr) {
+            for (auto ptr = formatView.begin(); formatView.end() != ptr; ++ptr) { 
                 if (*ptr != '%') {
-                    ++dataSize;
+                    ++dataSize; 
                     continue;
                 }
 
-                if (dataSize) {
-                    Printers_.emplace_back(TDataPrinter{std::string_view(&*dataStart, dataSize)});
-                    ReservedSize_ += dataSize;
-                    dataSize = 0U;
+                if (dataSize) { 
+                    Printers_.emplace_back(TDataPrinter{std::string_view(&*dataStart, dataSize)}); 
+                    ReservedSize_ += dataSize; 
+                    dataSize = 0U; 
                 }
 
-                if (formatView.end() == ++ptr) {
-                    ythrow yexception() << "format string ends with single %%";
+                if (formatView.end() == ++ptr) { 
+                    ythrow yexception() << "format string ends with single %%"; 
                 }
 
                 switch (*ptr) {
                 case '%': {
                     static constexpr size_t size = 1;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod&, const IDateBuilder&) {
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod&, const IDateBuilder&) { 
                         *out = '%';
                         return size;
                     });
@@ -1147,87 +1147,87 @@ namespace {
                 }
                 case 'Y': {
                     static constexpr size_t size = 4;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        return PrintNDigits<size>::Do(GetYear(value), out);
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) { 
+                        return PrintNDigits<size>::Do(GetYear(value), out); 
                     });
                     ReservedSize_ += size;
                     break;
                 }
                 case 'm': {
                     static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        return PrintNDigits<size>::Do(GetMonth(value), out);
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) { 
+                        return PrintNDigits<size>::Do(GetMonth(value), out); 
                     });
                     ReservedSize_ += size;
                     break;
                 }
                 case 'd': {
                     static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        return PrintNDigits<size>::Do(GetDay(value), out);
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) { 
+                        return PrintNDigits<size>::Do(GetDay(value), out); 
                     });
                     ReservedSize_ += size;
                     break;
                 }
                 case 'H': {
                     static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        return PrintNDigits<size>::Do(GetHour(value), out);
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) { 
+                        return PrintNDigits<size>::Do(GetHour(value), out); 
                     });
                     ReservedSize_ += size;
                     break;
                 }
                 case 'M': {
                     static constexpr size_t size = 2;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        return PrintNDigits<size>::Do(GetMinute(value), out);
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) { 
+                        return PrintNDigits<size>::Do(GetMinute(value), out); 
                     });
                     ReservedSize_ += size;
                     break;
                 }
                 case 'S':
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        constexpr size_t size = 2;
-                        if (const auto microsecond = GetMicrosecond(value)) {
-                            out += PrintNDigits<size>::Do(GetSecond(value), out);
-                            *out++ = '.';
-                            constexpr size_t msize = 6;
-                            return size + 1U + PrintNDigits<msize, false>::Do(microsecond, out);
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) { 
+                        constexpr size_t size = 2; 
+                        if (const auto microsecond = GetMicrosecond(value)) { 
+                            out += PrintNDigits<size>::Do(GetSecond(value), out); 
+                            *out++ = '.'; 
+                            constexpr size_t msize = 6; 
+                            return size + 1U + PrintNDigits<msize, false>::Do(microsecond, out); 
                         }
-                        return PrintNDigits<size>::Do(GetSecond(value), out);
+                        return PrintNDigits<size>::Do(GetSecond(value), out); 
                     });
                     ReservedSize_ += 9;
                     break;
 
                 case 'z': {
                     static constexpr size_t size = 5;
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder& builder) {
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder& builder) { 
                         auto timezoneId = GetTimezoneId(value);
                         if (TTMStorage::IsUniversal(timezoneId)) {
-                            std::memcpy(out, "+0000", size);
+                            std::memcpy(out, "+0000", size); 
                             return size;
                         }
                         i32 shift;
                         if (!builder.GetTimezoneShift(GetYear(value), GetMonth(value), GetDay(value),
                             GetHour(value), GetMinute(value), GetSecond(value), timezoneId, shift))
                         {
-                            std::memcpy(out, "+0000", size);
+                            std::memcpy(out, "+0000", size); 
                             return size;
                         }
-
-                        *out++ = shift > 0 ? '+' : '-';
-                        shift = std::abs(shift);
-                        out += PrintNDigits<2U>::Do(shift / 60U, out);
-                        out += PrintNDigits<2U>::Do(shift % 60U, out);
+ 
+                        *out++ = shift > 0 ? '+' : '-'; 
+                        shift = std::abs(shift); 
+                        out += PrintNDigits<2U>::Do(shift / 60U, out); 
+                        out += PrintNDigits<2U>::Do(shift % 60U, out); 
                         return size;
                     });
                     ReservedSize_ += size;
                     break;
                 }
                 case 'Z':
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
-                        const auto timezoneId = GetTimezoneId(value);
-                        const auto tzName = NUdf::GetTimezones()[timezoneId];
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) { 
+                        const auto timezoneId = GetTimezoneId(value); 
+                        const auto tzName = NUdf::GetTimezones()[timezoneId]; 
                         std::memcpy(out, tzName.data(), std::min(tzName.size(), MAX_TIMEZONE_NAME_LEN));
                         return tzName.size();
                     });
@@ -1287,41 +1287,41 @@ namespace {
                     ythrow yexception() << "invalid format character: " << *ptr;
                 }
 
-                dataStart = ptr + 1U;
+                dataStart = ptr + 1U; 
             }
 
-            if (dataSize) {
-                Printers_.emplace_back(TDataPrinter{std::string_view(dataStart, dataSize)});
-                ReservedSize_ += dataSize;
+            if (dataSize) { 
+                Printers_.emplace_back(TDataPrinter{std::string_view(dataStart, dataSize)}); 
+                ReservedSize_ += dataSize; 
             }
         }
     };
 
-    template<size_t Digits>
-    struct ParseExaclyNDigits;
-
-    template<>
-    struct ParseExaclyNDigits<0U> {
-        template <typename T>
-        static constexpr bool Do(std::string_view::const_iterator&, T&) {
-            return true;
-        }
-    };
-
-    template<size_t Digits>
-    struct ParseExaclyNDigits {
-        template <typename T>
-        static constexpr bool Do(std::string_view::const_iterator& it, T& out) {
-            const auto d = *it;
-            if (!std::isdigit(d)) {
-                return false;
-            }
-            out *= 10U;
-            out += d - '0';
-            return ParseExaclyNDigits<Digits - 1U>::Do(++it, out);
-        }
-    };
-
+    template<size_t Digits> 
+    struct ParseExaclyNDigits; 
+ 
+    template<> 
+    struct ParseExaclyNDigits<0U> { 
+        template <typename T> 
+        static constexpr bool Do(std::string_view::const_iterator&, T&) { 
+            return true; 
+        } 
+    }; 
+ 
+    template<size_t Digits> 
+    struct ParseExaclyNDigits { 
+        template <typename T> 
+        static constexpr bool Do(std::string_view::const_iterator& it, T& out) { 
+            const auto d = *it; 
+            if (!std::isdigit(d)) { 
+                return false; 
+            } 
+            out *= 10U; 
+            out += d - '0'; 
+            return ParseExaclyNDigits<Digits - 1U>::Do(++it, out); 
+        } 
+    }; 
+ 
     // Parse
 
     class TParse : public TBoxedValue {
@@ -1333,10 +1333,10 @@ namespace {
             {}
 
         private:
-            TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try {
+            TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const final try { 
                 return TUnboxedValuePod(new TParse(args[0], Pos_));
-            } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
+            } catch (const std::exception& e) { 
+                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data()); 
             }
 
             const TSourcePosition Pos_;
@@ -1375,19 +1375,19 @@ namespace {
 
     private:
         const TSourcePosition Pos_;
-        const TUnboxedValue Format_;
+        const TUnboxedValue Format_; 
 
-        std::vector<std::function<bool(std::string_view::const_iterator& it, size_t, TUnboxedValuePod&, const IDateBuilder&)>> Scanners_;
+        std::vector<std::function<bool(std::string_view::const_iterator& it, size_t, TUnboxedValuePod&, const IDateBuilder&)>> Scanners_; 
 
         struct TDataScanner {
-            const std::string_view Data_;
+            const std::string_view Data_; 
 
-            bool operator()(std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod&, const IDateBuilder&) const {
-                if (limit < Data_.size() || !std::equal(Data_.begin(), Data_.end(), it)) {
-                    return false;
+            bool operator()(std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod&, const IDateBuilder&) const { 
+                if (limit < Data_.size() || !std::equal(Data_.begin(), Data_.end(), it)) { 
+                    return false; 
                 }
-                std::advance(it, Data_.size());
-                return true;
+                std::advance(it, Data_.size()); 
+                return true; 
             }
         };
 
@@ -1426,145 +1426,145 @@ namespace {
             : Pos_(pos)
             , Format_(runConfig)
         {
-            const std::string_view formatView(Format_.AsStringRef());
-            auto dataStart = formatView.begin();
-            size_t dataSize = 0U;
+            const std::string_view formatView(Format_.AsStringRef()); 
+            auto dataStart = formatView.begin(); 
+            size_t dataSize = 0U; 
 
-            for (auto ptr = formatView.begin(); formatView.end() != ptr; ++ptr) {
+            for (auto ptr = formatView.begin(); formatView.end() != ptr; ++ptr) { 
                 if (*ptr != '%') {
-                    ++dataSize;
+                    ++dataSize; 
                     continue;
                 }
 
-                if (dataSize) {
-                    Scanners_.emplace_back(TDataScanner{std::string_view(&*dataStart, dataSize)});
-                    dataSize = 0;
+                if (dataSize) { 
+                    Scanners_.emplace_back(TDataScanner{std::string_view(&*dataStart, dataSize)}); 
+                    dataSize = 0; 
                 }
 
-                if (++ptr == formatView.end()) {
-                    ythrow yexception() << "format string ends with single %%";
+                if (++ptr == formatView.end()) { 
+                    ythrow yexception() << "format string ends with single %%"; 
                 }
 
                 switch (*ptr) {
                 case '%':
-                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod&, const IDateBuilder&) {
-                        return limit > 0U && *it++ == '%';
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod&, const IDateBuilder&) { 
+                        return limit > 0U && *it++ == '%'; 
                     });
                     break;
 
                 case 'Y': {
                     static constexpr size_t size = 4;
-                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
-                        ui32 year = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, year) || !ValidateYear(year)) {
-                            return false;
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) { 
+                        ui32 year = 0U; 
+                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, year) || !ValidateYear(year)) { 
+                            return false; 
                         }
                         SetYear(result, year);
-                        return true;
+                        return true; 
                     });
                     break;
                 }
                 case 'm': {
                     static constexpr size_t size = 2;
-                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
-                        ui32 month = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, month) || !ValidateMonth(month)) {
-                            return false;
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) { 
+                        ui32 month = 0U; 
+                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, month) || !ValidateMonth(month)) { 
+                            return false; 
                         }
                         SetMonth(result, month);
-                        return true;
+                        return true; 
                     });
                     break;
                 }
                 case 'd': {
                     static constexpr size_t size = 2;
-                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
-                        ui32 day = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, day) || !ValidateDay(day)) {
-                            return false;
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) { 
+                        ui32 day = 0U; 
+                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, day) || !ValidateDay(day)) { 
+                            return false; 
                         }
                         SetDay(result, day);
-                        return true;
+                        return true; 
                     });
                     break;
                 }
                 case 'H': {
                     static constexpr size_t size = 2;
-                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
-                        ui32 hour = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, hour) || !ValidateHour(hour)) {
-                            return false;
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) { 
+                        ui32 hour = 0U; 
+                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, hour) || !ValidateHour(hour)) { 
+                            return false; 
                         }
                         SetHour(result, hour);
-                        return true;
+                        return true; 
                     });
                     break;
                 }
                 case 'M': {
                     static constexpr size_t size = 2;
-                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
-                        ui32 minute = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, minute) || !ValidateMinute(minute)) {
-                            return false;
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) { 
+                        ui32 minute = 0U; 
+                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, minute) || !ValidateMinute(minute)) { 
+                            return false; 
                         }
                         SetMinute(result, minute);
-                        return true;
+                        return true; 
                     });
                     break;
                 }
                 case 'S': {
                     static constexpr size_t size = 2;
-                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
-                        ui32 second = 0U;
-                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, second) || !ValidateSecond(second)) {
-                            return false;
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) { 
+                        ui32 second = 0U; 
+                        if (limit < size || !ParseExaclyNDigits<size>::Do(it, second) || !ValidateSecond(second)) { 
+                            return false; 
                         }
                         SetSecond(result, second);
-                        limit -= size;
-
-                        if (!limit || *it != '.') {
-                            return true;
+                        limit -= size; 
+ 
+                        if (!limit || *it != '.') { 
+                            return true; 
                         }
 
-                        ++it;
-                        --limit;
-                        ui32 usec = 0U;
+                        ++it; 
+                        --limit; 
+                        ui32 usec = 0U; 
 
-                        size_t digits = 6U;
-                        for (; limit; --limit) {
-                            const auto c = *it;
-                            if (!digits || !std::isdigit(c)) {
+                        size_t digits = 6U; 
+                        for (; limit; --limit) { 
+                            const auto c = *it; 
+                            if (!digits || !std::isdigit(c)) { 
                                 break;
                             }
-                            usec *= 10U;
-                            usec += c - '0';
-                            ++it;
-                            --digits;
+                            usec *= 10U; 
+                            usec += c - '0'; 
+                            ++it; 
+                            --digits; 
                         }
-
-                        while (digits--) {
-                            usec *= 10U;
+ 
+                        while (digits--) { 
+                            usec *= 10U; 
                         }
                         SetMicrosecond(result, usec);
-                        return true;
+                        return true; 
                     });
                     break;
                 }
                 case 'Z':
-                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder& builder) {
-                        const auto start = it;
-                        while (limit > 0 && (std::isalnum(*it) || *it == '/' || *it == '_' || *it == '-' || *it == '+')) {
-                            ++it;
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder& builder) { 
+                        const auto start = it; 
+                        while (limit > 0 && (std::isalnum(*it) || *it == '/' || *it == '_' || *it == '-' || *it == '+')) { 
+                            ++it; 
                             --limit;
                         }
-                        const auto size = std::distance(start, it);
+                        const auto size = std::distance(start, it); 
 
                         ui32 timezoneId;
-                        if (!builder.FindTimezoneId(TStringRef(&*start, size), timezoneId)) {
-                            return false;
+                        if (!builder.FindTimezoneId(TStringRef(&*start, size), timezoneId)) { 
+                            return false; 
                         }
                         SetTimezoneId(result, timezoneId);
-                        return true;
+                        return true; 
                     });
                     break;
                 case 'b': {
@@ -1611,11 +1611,11 @@ namespace {
                     ythrow yexception() << "invalid format character: " << *ptr;
                 }
 
-                dataStart = ptr + 1U;
+                dataStart = ptr + 1U; 
             }
 
-            if (dataSize) {
-                Scanners_.emplace_back(TDataScanner{std::string_view(&*dataStart, dataSize)});
+            if (dataSize) { 
+                Scanners_.emplace_back(TDataScanner{std::string_view(&*dataStart, dataSize)}); 
             }
         }
     };

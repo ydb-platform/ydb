@@ -5,7 +5,7 @@ namespace NYql {
 ui64 TDqIntegrationBase::Partition(const TDqSettings& config, size_t maxPartitions, const TExprNode& node,
     TVector<TString>& partitions, TString* clusterName, TExprContext& ctx, bool canFallback) {
     Y_UNUSED(config);
-    Y_UNUSED(maxPartitions);
+    Y_UNUSED(maxPartitions); 
     Y_UNUSED(node);
     Y_UNUSED(partitions);
     Y_UNUSED(clusterName);
@@ -14,14 +14,14 @@ ui64 TDqIntegrationBase::Partition(const TDqSettings& config, size_t maxPartitio
     return 0;
 }
 
-TMaybe<ui64> TDqIntegrationBase::CanRead(const TDqSettings&, const TExprNode& read, TExprContext& ctx, bool skipIssues) {
+TMaybe<ui64> TDqIntegrationBase::CanRead(const TDqSettings&, const TExprNode& read, TExprContext& ctx, bool skipIssues) { 
     Y_UNUSED(read);
     Y_UNUSED(ctx);
     Y_UNUSED(skipIssues);
     return Nothing();
 }
 
-TExprNode::TPtr TDqIntegrationBase::WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) {
+TExprNode::TPtr TDqIntegrationBase::WrapRead(const TDqSettings&, const TExprNode::TPtr& read, TExprContext& ctx) { 
     Y_UNUSED(read);
     Y_UNUSED(ctx);
 

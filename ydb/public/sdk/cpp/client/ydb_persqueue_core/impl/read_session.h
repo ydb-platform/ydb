@@ -852,11 +852,11 @@ private:
     i64 GetCompressedDataSizeLimit() const {
         const double overallLimit = static_cast<double>(Settings.MaxMemoryUsageBytes_);
         // CompressedDataSize + CompressedDataSize * AverageCompressionRatio <= Settings.MaxMemoryUsageBytes_
-        return Max<i64>(1l, static_cast<i64>(overallLimit / (1.0 + AverageCompressionRatio)));
+        return Max<i64>(1l, static_cast<i64>(overallLimit / (1.0 + AverageCompressionRatio))); 
     }
 
     i64 GetDecompressedDataSizeLimit() const {
-        return Max<i64>(1l, static_cast<i64>(Settings.MaxMemoryUsageBytes_) - GetCompressedDataSizeLimit());
+        return Max<i64>(1l, static_cast<i64>(Settings.MaxMemoryUsageBytes_) - GetCompressedDataSizeLimit()); 
     }
 
     void CallCloseCallbackImpl();

@@ -8,12 +8,12 @@
 #include <ydb/library/yql/public/udf/udf_validate.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
-
+ 
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/enumbitset/enumbitset.h>
-
+ 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/set.h>
@@ -192,10 +192,10 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TYqlOperationOptions OperationOptions;
     TVector<TCredentialTablePtr> Credentials;
     TUserCredentials UserCredentials;
-    IModuleResolver::TPtr Modules;
+    IModuleResolver::TPtr Modules; 
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport = false;
-    TMaybe<TString> OptLLVM;
+    TMaybe<TString> OptLLVM; 
     bool IsReadOnly = false;
     TAutoPtr<IGraphTransformer> CustomInstantTypeTransformer;
     bool Diagnostics = false;
@@ -209,7 +209,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     ui32 EvaluateForLimit = 500;
     ui32 EvaluateOrderByColumnLimit = 100;
     bool PullUpFlatMapOverJoin = true;
-    bool DeprecatedSQL = false;
+    bool DeprecatedSQL = false; 
     THashMap<std::tuple<TString, TString, const TTypeAnnotationNode*>,
         std::tuple<const TTypeAnnotationNode*, const TTypeAnnotationNode*, const TTypeAnnotationNode*>>
         UdfTypeCache; // (name,typecfg,type)->(type,run config type,new user type)
@@ -230,30 +230,30 @@ struct TTypeAnnotationContext: public TThrRefBase {
     IGraphTransformer::TStatus SetColumnOrder(const TExprNode& node, const TColumnOrder& columnOrder, TExprContext& ctx);
 
     // cached constants
-    std::optional<ui64> CachedNow;
-    std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom;
+    std::optional<ui64> CachedNow; 
+    std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom; 
 
-    std::optional<bool> InitializeResult;
+    std::optional<bool> InitializeResult; 
 
-    template <typename T>
-    T GetRandom() const noexcept;
-
-    template <typename T>
-    T GetCachedRandom() noexcept {
-        auto& cached = std::get<std::optional<T>>(CachedRandom);
-        if (!cached) {
-            cached = GetRandom<T>();
-        }
-        return *cached;
-    }
-
-    ui64 GetCachedNow() noexcept {
-        if (!CachedNow) {
-            CachedNow = TimeProvider->Now().GetValue();
-        }
-        return *CachedNow;
-    }
-
+    template <typename T> 
+    T GetRandom() const noexcept; 
+ 
+    template <typename T> 
+    T GetCachedRandom() noexcept { 
+        auto& cached = std::get<std::optional<T>>(CachedRandom); 
+        if (!cached) { 
+            cached = GetRandom<T>(); 
+        } 
+        return *cached; 
+    } 
+ 
+    ui64 GetCachedNow() noexcept { 
+        if (!CachedNow) { 
+            CachedNow = TimeProvider->Now().GetValue(); 
+        } 
+        return *CachedNow; 
+    } 
+ 
     void AddDataSource(TStringBuf name, TIntrusivePtr<IDataProvider> provider) {
         DataSourceMap[name] = provider;
         DataSources.push_back(std::move(provider));
@@ -300,21 +300,21 @@ struct TTypeAnnotationContext: public TThrRefBase {
     }
 };
 
-template <> inline
-double TTypeAnnotationContext::GetRandom<double>() const noexcept {
-    return RandomProvider->GenRandReal2();
-}
-
-template <> inline
-ui64 TTypeAnnotationContext::GetRandom<ui64>() const noexcept {
-    return RandomProvider->GenRand64();
-}
-
-template <> inline
-TGUID TTypeAnnotationContext::GetRandom<TGUID>() const noexcept {
-    return RandomProvider->GenUuid4();
-}
-
+template <> inline 
+double TTypeAnnotationContext::GetRandom<double>() const noexcept { 
+    return RandomProvider->GenRandReal2(); 
+} 
+ 
+template <> inline 
+ui64 TTypeAnnotationContext::GetRandom<ui64>() const noexcept { 
+    return RandomProvider->GenRand64(); 
+} 
+ 
+template <> inline 
+TGUID TTypeAnnotationContext::GetRandom<TGUID>() const noexcept { 
+    return RandomProvider->GenUuid4(); 
+} 
+ 
 using TTypeAnnotationContextPtr = TIntrusivePtr<TTypeAnnotationContext>;
 
 } // namespace NYql

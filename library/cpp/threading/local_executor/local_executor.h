@@ -9,7 +9,7 @@
 #include <util/generic/singleton.h>
 #include <util/generic/ymath.h>
 
-#include <functional>
+#include <functional> 
 
 namespace NPar {
     struct ILocallyExecutable : virtual public TThrRefBase {

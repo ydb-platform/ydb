@@ -8,8 +8,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace {
-
+namespace { 
+ 
 template <bool Stable>
 class TPickleWrapper : public TMutableComputationNode<TPickleWrapper<Stable>> {
     typedef TMutableComputationNode<TPickleWrapper<Stable>> TBaseComputation;
@@ -26,14 +26,14 @@ public:
         return MakeString(ValuePacker.RefMutableObject(ctx, Stable, Type).Pack(Data->GetValue(ctx)));
     }
 
-private:
-    void RegisterDependencies() const final {
+private: 
+    void RegisterDependencies() const final { 
         this->DependsOn(Data);
     }
 
     TType* Type;
     TMutableObjectOverBoxedValue<TValuePackerBoxed> ValuePacker;
-    IComputationNode *const Data;
+    IComputationNode *const Data; 
 };
 
 class TUnpickleWrapper : public TMutableComputationNode<TUnpickleWrapper> {
@@ -47,20 +47,20 @@ public:
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
         auto data = Data->GetValue(ctx);
         auto buffer = data.AsStringRef();
         return ValuePacker.RefMutableObject(ctx, false, Type).Unpack(buffer, ctx.HolderFactory).Release();
     }
 
-private:
-    void RegisterDependencies() const final {
-        DependsOn(Data);
+private: 
+    void RegisterDependencies() const final { 
+        DependsOn(Data); 
     }
 
     TType* const Type;
     TMutableObjectOverBoxedValue<TValuePackerBoxed> ValuePacker;
-    IComputationNode *const Data;
+    IComputationNode *const Data; 
 };
 
 
@@ -99,8 +99,8 @@ private:
     IComputationNode *const Data;
 };
 
-}
-
+} 
+ 
 IComputationNode* WrapPickle(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
     return new TPickleWrapper<false>(ctx.Mutables, callable.GetInput(0).GetStaticType(), LocateNode(ctx.NodeLocator, callable, 0));

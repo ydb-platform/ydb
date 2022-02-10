@@ -20,7 +20,7 @@ namespace NYq {
 struct TRunActorParams { // TODO2 : Change name
     TRunActorParams(
         NYdb::TDriver driver,
-        NYql::IHTTPGateway::TPtr s3Gateway,
+        NYql::IHTTPGateway::TPtr s3Gateway, 
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TIntrusivePtr<IRandomProvider> randomProvider,
         NYql::IModuleResolver::TPtr& moduleResolver,
@@ -65,7 +65,7 @@ struct TRunActorParams { // TODO2 : Change name
     TRunActorParams(TRunActorParams&& params) = default;
 
     NYdb::TDriver Driver;
-    NYql::IHTTPGateway::TPtr S3Gateway;
+    NYql::IHTTPGateway::TPtr S3Gateway; 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     NYql::IModuleResolver::TPtr ModuleResolver;

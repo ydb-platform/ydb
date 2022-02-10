@@ -6,7 +6,7 @@ using namespace NActors;
 
 TRunActorParams::TRunActorParams(
     NYdb::TDriver driver,
-    NYql::IHTTPGateway::TPtr s3Gateway,
+    NYql::IHTTPGateway::TPtr s3Gateway, 
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<IRandomProvider> randomProvider,
     NYql::IModuleResolver::TPtr& moduleResolver,
@@ -47,7 +47,7 @@ TRunActorParams::TRunActorParams(
     const NMonitoring::TDynamicCounterPtr& clientCounters
     )
     : Driver(driver)
-    , S3Gateway(s3Gateway)
+    , S3Gateway(s3Gateway) 
     , FunctionRegistry(functionRegistry)
     , RandomProvider(randomProvider)
     , ModuleResolver(moduleResolver)

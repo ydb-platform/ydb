@@ -17,7 +17,7 @@ using namespace NDetail;
 
 TTypeEnvironment::TTypeEnvironment(TScopedAlloc& alloc)
     : Alloc(alloc)
-    , Arena(&Alloc.Ref())
+    , Arena(&Alloc.Ref()) 
     , EmptyStruct(nullptr)
     , EmptyTuple(nullptr)
 {
@@ -203,8 +203,8 @@ TStringBuf TType::GetKindAsStr() const {
     xx(Any, TAnyType) \
     xx(Tuple, TTupleType) \
     xx(Resource, TResourceType) \
-    xx(Variant, TVariantType) \
-    xx(Flow, TFlowType) \
+    xx(Variant, TVariantType) \ 
+    xx(Flow, TFlowType) \ 
     xx(Null, TNullType) \
     xx(EmptyList, TEmptyListType) \
     xx(EmptyDict, TEmptyDictType) \
@@ -354,17 +354,17 @@ TDataType::TDataType(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env)
 }
 
 TDataType* TDataType::Create(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env) {
-    MKQL_ENSURE(schemeType, "Null type isn't allowed.");
-    MKQL_ENSURE(schemeType != NUdf::TDataType<NUdf::TDecimal>::Id, "Can't' create Decimal.");
+    MKQL_ENSURE(schemeType, "Null type isn't allowed."); 
+    MKQL_ENSURE(schemeType != NUdf::TDataType<NUdf::TDecimal>::Id, "Can't' create Decimal."); 
     return ::new(env.Allocate<TDataType>()) TDataType(schemeType, env);
 }
 
 bool TDataType::IsSameType(const TDataType& typeToCompare) const {
-    if (SchemeType != typeToCompare.SchemeType)
-        return false;
-    if (SchemeType != NUdf::TDataType<NUdf::TDecimal>::Id)
-        return true;
-    return static_cast<const TDataDecimalType&>(*this).IsSameType(static_cast<const TDataDecimalType&>(typeToCompare));
+    if (SchemeType != typeToCompare.SchemeType) 
+        return false; 
+    if (SchemeType != NUdf::TDataType<NUdf::TDecimal>::Id) 
+        return true; 
+    return static_cast<const TDataDecimalType&>(*this).IsSameType(static_cast<const TDataDecimalType&>(typeToCompare)); 
 }
 
 bool TDataType::IsConvertableTo(const TDataType& typeToCompare, bool ignoreTagged) const {
@@ -385,38 +385,38 @@ void TDataType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
-TDataDecimalType::TDataDecimalType(ui8 precision, ui8 scale, const TTypeEnvironment& env)
-    : TDataType(NUdf::TDataType<NUdf::TDecimal>::Id, env), Precision(precision), Scale(scale)
-{
-    MKQL_ENSURE(Precision > 0, "Precision must be positive.");
-    MKQL_ENSURE(Scale <= Precision, "Scale too large.");
-}
-
-TDataDecimalType* TDataDecimalType::Create(ui8 precision, ui8 scale, const TTypeEnvironment& env) {
-    return ::new(env.Allocate<TDataDecimalType>()) TDataDecimalType(precision, scale, env);
-}
-
-bool TDataDecimalType::IsSameType(const TDataDecimalType& typeToCompare) const {
-    return Precision == typeToCompare.Precision && Scale == typeToCompare.Scale;
-}
-
+TDataDecimalType::TDataDecimalType(ui8 precision, ui8 scale, const TTypeEnvironment& env) 
+    : TDataType(NUdf::TDataType<NUdf::TDecimal>::Id, env), Precision(precision), Scale(scale) 
+{ 
+    MKQL_ENSURE(Precision > 0, "Precision must be positive."); 
+    MKQL_ENSURE(Scale <= Precision, "Scale too large."); 
+} 
+ 
+TDataDecimalType* TDataDecimalType::Create(ui8 precision, ui8 scale, const TTypeEnvironment& env) { 
+    return ::new(env.Allocate<TDataDecimalType>()) TDataDecimalType(precision, scale, env); 
+} 
+ 
+bool TDataDecimalType::IsSameType(const TDataDecimalType& typeToCompare) const { 
+    return Precision == typeToCompare.Precision && Scale == typeToCompare.Scale; 
+} 
+ 
 bool TDataDecimalType::IsConvertableTo(const TDataDecimalType& typeToCompare, bool ignoreTagged) const {
     Y_UNUSED(ignoreTagged);
-    return Precision == typeToCompare.Precision && Scale == typeToCompare.Scale;
-}
+    return Precision == typeToCompare.Precision && Scale == typeToCompare.Scale; 
+} 
+ 
+std::pair<ui8, ui8> TDataDecimalType::GetParams() const { 
+    return std::make_pair(Precision, Scale); 
+} 
+ 
+TDataLiteral::TDataLiteral(const TUnboxedValuePod& value, TDataType* type) 
+    : TNode(type), TUnboxedValuePod(value) 
+{} 
 
-std::pair<ui8, ui8> TDataDecimalType::GetParams() const {
-    return std::make_pair(Precision, Scale);
-}
-
-TDataLiteral::TDataLiteral(const TUnboxedValuePod& value, TDataType* type)
-    : TNode(type), TUnboxedValuePod(value)
-{}
-
-TDataLiteral* TDataLiteral::Create(const NUdf::TUnboxedValuePod& value, TDataType* type, const TTypeEnvironment& env) {
-    return ::new(env.Allocate<TDataLiteral>()) TDataLiteral(value, type);
-}
-
+TDataLiteral* TDataLiteral::Create(const NUdf::TUnboxedValuePod& value, TDataType* type, const TTypeEnvironment& env) { 
+    return ::new(env.Allocate<TDataLiteral>()) TDataLiteral(value, type); 
+} 
+ 
 void TDataLiteral::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     auto typeIt = links.find(Type);
     if (typeIt != links.end()) {
@@ -436,30 +436,30 @@ void TDataLiteral::DoFreeze(const TTypeEnvironment& env) {
 }
 
 bool TDataLiteral::Equals(const TDataLiteral& nodeToCompare) const {
-    const auto& self = AsValue();
-    const auto& that = nodeToCompare.AsValue();
-    switch (GetType()->GetSchemeType()) {
-        case NUdf::TDataType<bool>::Id:   return self.Get<bool>() == that.Get<bool>();
-        case NUdf::TDataType<ui8>::Id:    return self.Get<ui8>() == that.Get<ui8>();
+    const auto& self = AsValue(); 
+    const auto& that = nodeToCompare.AsValue(); 
+    switch (GetType()->GetSchemeType()) { 
+        case NUdf::TDataType<bool>::Id:   return self.Get<bool>() == that.Get<bool>(); 
+        case NUdf::TDataType<ui8>::Id:    return self.Get<ui8>() == that.Get<ui8>(); 
         case NUdf::TDataType<i8>::Id:     return self.Get<i8>() == that.Get<i8>();
         case NUdf::TDataType<NUdf::TDate>::Id:
         case NUdf::TDataType<ui16>::Id:   return self.Get<ui16>() == that.Get<ui16>();
         case NUdf::TDataType<i16>::Id:    return self.Get<i16>() == that.Get<i16>();
-        case NUdf::TDataType<i32>::Id:    return self.Get<i32>() == that.Get<i32>();
+        case NUdf::TDataType<i32>::Id:    return self.Get<i32>() == that.Get<i32>(); 
         case NUdf::TDataType<NUdf::TDatetime>::Id:
-        case NUdf::TDataType<ui32>::Id:   return self.Get<ui32>() == that.Get<ui32>();
+        case NUdf::TDataType<ui32>::Id:   return self.Get<ui32>() == that.Get<ui32>(); 
         case NUdf::TDataType<NUdf::TInterval>::Id:
-        case NUdf::TDataType<i64>::Id:    return self.Get<i64>() == that.Get<i64>();
+        case NUdf::TDataType<i64>::Id:    return self.Get<i64>() == that.Get<i64>(); 
         case NUdf::TDataType<NUdf::TTimestamp>::Id:
-        case NUdf::TDataType<ui64>::Id:   return self.Get<ui64>() == that.Get<ui64>();
-        case NUdf::TDataType<float>::Id:  return self.Get<float>() == that.Get<float>();
-        case NUdf::TDataType<double>::Id: return self.Get<double>() == that.Get<double>();
+        case NUdf::TDataType<ui64>::Id:   return self.Get<ui64>() == that.Get<ui64>(); 
+        case NUdf::TDataType<float>::Id:  return self.Get<float>() == that.Get<float>(); 
+        case NUdf::TDataType<double>::Id: return self.Get<double>() == that.Get<double>(); 
         case NUdf::TDataType<NUdf::TTzDate>::Id: return self.Get<ui16>() == that.Get<ui16>() && self.GetTimezoneId() == that.GetTimezoneId();
         case NUdf::TDataType<NUdf::TTzDatetime>::Id: return self.Get<ui32>() == that.Get<ui32>() && self.GetTimezoneId() == that.GetTimezoneId();
         case NUdf::TDataType<NUdf::TTzTimestamp>::Id: return self.Get<ui64>() == that.Get<ui64>() && self.GetTimezoneId() == that.GetTimezoneId();
-        case NUdf::TDataType<NUdf::TDecimal>::Id: return self.GetInt128() == that.GetInt128();
-        default: return self.AsStringRef() == that.AsStringRef();
-    }
+        case NUdf::TDataType<NUdf::TDecimal>::Id: return self.GetInt128() == that.GetInt128(); 
+        default: return self.AsStringRef() == that.AsStringRef(); 
+    } 
 }
 
 TStructType::TStructType(ui32 membersCount, std::pair<TInternName, TType*>* members, const TTypeEnvironment& env,
@@ -853,7 +853,7 @@ TNode* TListLiteral::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
         newTypeNode ? static_cast<TListType*>(newTypeNode) : GetType(), env, false);
 }
 
-void TListLiteral::DoFreeze(const TTypeEnvironment&) {
+void TListLiteral::DoFreeze(const TTypeEnvironment&) { 
     ui32 voidCount = 0;
     for (ui32 i = 0; i < Count; ++i) {
         auto& node = Items[i];
@@ -899,7 +899,7 @@ TStreamType::TStreamType(TType* itemType, const TTypeEnvironment& env, bool vali
 }
 
 TStreamType* TStreamType::Create(TType* itemType, const TTypeEnvironment& env) {
-    return ::new(env.Allocate<TStreamType>()) TStreamType(itemType, env);
+    return ::new(env.Allocate<TStreamType>()) TStreamType(itemType, env); 
 }
 
 bool TStreamType::IsSameType(const TStreamType& typeToCompare) const {
@@ -931,46 +931,46 @@ void TStreamType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
-TFlowType::TFlowType(TType* itemType, const TTypeEnvironment& env, bool validate)
-    : TType(EKind::Flow, env.GetTypeOfType())
-    , Data(itemType)
-{
-    Y_UNUSED(validate);
-}
-
-TFlowType* TFlowType::Create(TType* itemType, const TTypeEnvironment& env) {
-    return ::new(env.Allocate<TFlowType>()) TFlowType(itemType, env);
-}
-
-bool TFlowType::IsSameType(const TFlowType& typeToCompare) const {
-    return GetItemType()->IsSameType(*typeToCompare.GetItemType());
-}
-
+TFlowType::TFlowType(TType* itemType, const TTypeEnvironment& env, bool validate) 
+    : TType(EKind::Flow, env.GetTypeOfType()) 
+    , Data(itemType) 
+{ 
+    Y_UNUSED(validate); 
+} 
+ 
+TFlowType* TFlowType::Create(TType* itemType, const TTypeEnvironment& env) { 
+    return ::new(env.Allocate<TFlowType>()) TFlowType(itemType, env); 
+} 
+ 
+bool TFlowType::IsSameType(const TFlowType& typeToCompare) const { 
+    return GetItemType()->IsSameType(*typeToCompare.GetItemType()); 
+} 
+ 
 bool TFlowType::IsConvertableTo(const TFlowType& typeToCompare, bool ignoreTagged) const {
     return GetItemType()->IsConvertableTo(*typeToCompare.GetItemType(), ignoreTagged);
-}
-
-void TFlowType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
-    auto itemTypeIt = links.find(GetItemType());
-    if (itemTypeIt != links.end()) {
-        TNode* newNode = itemTypeIt->second;
-        Y_VERIFY_DEBUG(GetItemType()->Equals(*newNode));
-        Data = static_cast<TType*>(newNode);
-    }
-}
-
-TNode* TFlowType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
-    auto newTypeNode = (TNode*)GetItemType()->GetCookie();
-    if (!newTypeNode)
-        return const_cast<TFlowType*>(this);
-
-    return ::new(env.Allocate<TFlowType>()) TFlowType(static_cast<TType*>(newTypeNode), env, false);
-}
-
-void TFlowType::DoFreeze(const TTypeEnvironment& env) {
-    Y_UNUSED(env);
-}
-
+} 
+ 
+void TFlowType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) { 
+    auto itemTypeIt = links.find(GetItemType()); 
+    if (itemTypeIt != links.end()) { 
+        TNode* newNode = itemTypeIt->second; 
+        Y_VERIFY_DEBUG(GetItemType()->Equals(*newNode)); 
+        Data = static_cast<TType*>(newNode); 
+    } 
+} 
+ 
+TNode* TFlowType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const { 
+    auto newTypeNode = (TNode*)GetItemType()->GetCookie(); 
+    if (!newTypeNode) 
+        return const_cast<TFlowType*>(this); 
+ 
+    return ::new(env.Allocate<TFlowType>()) TFlowType(static_cast<TType*>(newTypeNode), env, false); 
+} 
+ 
+void TFlowType::DoFreeze(const TTypeEnvironment& env) { 
+    Y_UNUSED(env); 
+} 
+ 
 TOptionalType::TOptionalType(TType* itemType, const TTypeEnvironment& env, bool validate)
     : TType(EKind::Optional, env.GetTypeOfType())
     , Data(itemType)
@@ -2205,54 +2205,54 @@ bool IsIntervalType(NUdf::TDataTypeId typeId) {
     return slot && NUdf::GetDataTypeInfo(*slot).Features & NUdf::TimeIntervalType;
 }
 
-EValueRepresentation GetValueRepresentation(NUdf::TDataTypeId type) {
-    switch (type) {
-#define CASE_FOR(type, layout) \
-        case NUdf::TDataType<type>::Id:
-KNOWN_FIXED_VALUE_TYPES(CASE_FOR)
-#undef CASE_FOR
-        case NUdf::TDataType<NUdf::TDecimal>::Id:
-        case NUdf::TDataType<NUdf::TTzDate>::Id:
-        case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-        case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
-            return EValueRepresentation::Embedded;
-        default:
-            return EValueRepresentation::String;
-    }
+EValueRepresentation GetValueRepresentation(NUdf::TDataTypeId type) { 
+    switch (type) { 
+#define CASE_FOR(type, layout) \ 
+        case NUdf::TDataType<type>::Id: 
+KNOWN_FIXED_VALUE_TYPES(CASE_FOR) 
+#undef CASE_FOR 
+        case NUdf::TDataType<NUdf::TDecimal>::Id: 
+        case NUdf::TDataType<NUdf::TTzDate>::Id: 
+        case NUdf::TDataType<NUdf::TTzDatetime>::Id: 
+        case NUdf::TDataType<NUdf::TTzTimestamp>::Id: 
+            return EValueRepresentation::Embedded; 
+        default: 
+            return EValueRepresentation::String; 
+    } 
 }
-
-EValueRepresentation GetValueRepresentation(const TType* type) {
-    switch (type->GetKind()) {
-        case TType::EKind::Data:
-            return GetValueRepresentation(static_cast<const TDataType*>(type)->GetSchemeType());
-        case TType::EKind::Optional:
-            return GetValueRepresentation(static_cast<const TOptionalType*>(type)->GetItemType());
-        case TType::EKind::Flow:
-            return GetValueRepresentation(static_cast<const TFlowType*>(type)->GetItemType());
-
-        case TType::EKind::Stream:
-        case TType::EKind::Struct:
-        case TType::EKind::Tuple:
-        case TType::EKind::Dict:
-        case TType::EKind::List:
-        case TType::EKind::Resource:
+ 
+EValueRepresentation GetValueRepresentation(const TType* type) { 
+    switch (type->GetKind()) { 
+        case TType::EKind::Data: 
+            return GetValueRepresentation(static_cast<const TDataType*>(type)->GetSchemeType()); 
+        case TType::EKind::Optional: 
+            return GetValueRepresentation(static_cast<const TOptionalType*>(type)->GetItemType()); 
+        case TType::EKind::Flow: 
+            return GetValueRepresentation(static_cast<const TFlowType*>(type)->GetItemType()); 
+ 
+        case TType::EKind::Stream: 
+        case TType::EKind::Struct: 
+        case TType::EKind::Tuple: 
+        case TType::EKind::Dict: 
+        case TType::EKind::List: 
+        case TType::EKind::Resource: 
         case TType::EKind::Block:
-        case TType::EKind::Callable:
+        case TType::EKind::Callable: 
         case TType::EKind::EmptyList:
         case TType::EKind::EmptyDict:
-            return EValueRepresentation::Boxed;
-
-        case TType::EKind::Variant:
-        case TType::EKind::Void:
-            return EValueRepresentation::Any;
-
+            return EValueRepresentation::Boxed; 
+ 
+        case TType::EKind::Variant: 
+        case TType::EKind::Void: 
+            return EValueRepresentation::Any; 
+ 
         case TType::EKind::Null:
             return EValueRepresentation::Embedded;
 
-        default:
-            Y_FAIL("Unsupported type.");
-    }
+        default: 
+            Y_FAIL("Unsupported type."); 
+    } 
 }
-
-}
-}
+ 
+} 
+} 

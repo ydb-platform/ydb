@@ -67,7 +67,7 @@ public:
 #else
         Y_UNUSED(DoCheckArguments);
         Y_UNUSED(CheckArgumentsCount);
-#endif
+#endif 
         status = HandleStatus(status);
         return status;
     }
@@ -228,7 +228,7 @@ TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer(
     return new TChoiceGraphTransformer(condition, left, right);
 }
 
-IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx) {
+IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx) { 
     try {
         for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) {
             TExprNode::TPtr newRoot;
@@ -279,7 +279,7 @@ IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNo
     return IGraphTransformer::TStatus::Error;
 }
 
-IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool breakOnRestart) {
+IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool breakOnRestart) { 
     try {
         for (; ctx.RepeatTransformCounter < ctx.RepeatTransformLimit; ++ctx.RepeatTransformCounter) {
             TExprNode::TPtr newRoot;
@@ -313,7 +313,7 @@ IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExp
     return IGraphTransformer::TStatus::Error;
 }
 
-NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx,
+NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, 
                                                                 bool applyAsyncChanges) {
     try {
         if (applyAsyncChanges) {
@@ -376,7 +376,7 @@ NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer
 
 }
 
-void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool applyAsyncChanges,
+void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool applyAsyncChanges, 
                     std::function<void(const IGraphTransformer::TStatus&)> asyncCallback) {
     NThreading::TFuture<IGraphTransformer::TStatus> status = AsyncTransform(transformer, root, ctx, applyAsyncChanges);
     status.Subscribe(

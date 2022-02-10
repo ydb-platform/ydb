@@ -123,12 +123,12 @@ public:
     virtual void FillModifyCallables(THashSet<TStringBuf>& callables) = 0;
 
     //-- optimizations
-    virtual TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) = 0;
+    virtual TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) = 0; 
     virtual IGraphTransformer& GetRecaptureOptProposalTransformer() = 0;
     virtual IGraphTransformer& GetLogicalOptProposalTransformer() = 0;
     virtual IGraphTransformer& GetPhysicalOptProposalTransformer() = 0;
     virtual IGraphTransformer& GetPhysicalFinalizingTransformer() = 0;
-    virtual void PostRewriteIO() = 0;
+    virtual void PostRewriteIO() = 0; 
     virtual void Reset() = 0;
 
     //-- metadata loading
@@ -138,13 +138,13 @@ public:
     virtual bool IsPersistent(const TExprNode& node) = 0;
 
     // Right! or worlds are written to syncList
-    virtual bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) = 0;
-    virtual bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) = 0;
+    virtual bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) = 0; 
+    virtual bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) = 0; 
     virtual bool GetExecWorld(const TExprNode& node, TExprNode::TPtr& root) = 0;
     virtual bool CanEvaluate(const TExprNode& node) = 0;
     virtual void UndoEvaluationChanges() = 0;
-    virtual TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) = 0;
-    virtual TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
+    virtual TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) = 0; 
+    virtual TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx, 
         IOptimizationContext& optCtx) = 0;
 
     //-- execution

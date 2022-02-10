@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/stream/str.h>
-#include <utility>
+#include <utility> 
 #include <util/generic/string.h>
 
 namespace NPrivateStringBuilder {
@@ -32,7 +32,7 @@ namespace NPrivateStringBuilder {
     static inline TStringBuilder&& operator<<(TStringBuilder&& builder, const T& t) {
         builder.Out << t;
 
-        return std::move(builder);
+        return std::move(builder); 
     }
 }
 

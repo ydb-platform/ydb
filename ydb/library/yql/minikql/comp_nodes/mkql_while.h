@@ -6,8 +6,8 @@ namespace NMiniKQL {
 
 IComputationNode* WrapTakeWhile(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapSkipWhile(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-IComputationNode* WrapTakeWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-IComputationNode* WrapSkipWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapTakeWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
+IComputationNode* WrapSkipWhileInclusive(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
 
 }
 }

@@ -95,7 +95,7 @@ namespace NNames {
     extern const char Bool[5];
 }
 
-class TBool : public TTypedType<bool, TBool, NTypeIds::Bool, NNames::Bool> {
+class TBool : public TTypedType<bool, TBool, NTypeIds::Bool, NNames::Bool> { 
 public:
 };
 

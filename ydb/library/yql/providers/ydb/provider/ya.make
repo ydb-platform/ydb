@@ -1,26 +1,26 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 OWNER(g:yql)
-
-SRCS(
-    yql_ydb_datasink.cpp
-    yql_ydb_datasink_execution.cpp
-    yql_ydb_datasink_type_ann.cpp
-    yql_ydb_datasource.cpp
-    yql_ydb_datasource_type_ann.cpp
-    yql_ydb_dq_integration.cpp
-    yql_ydb_exec.cpp
+ 
+SRCS( 
+    yql_ydb_datasink.cpp 
+    yql_ydb_datasink_execution.cpp 
+    yql_ydb_datasink_type_ann.cpp 
+    yql_ydb_datasource.cpp 
+    yql_ydb_datasource_type_ann.cpp 
+    yql_ydb_dq_integration.cpp 
+    yql_ydb_exec.cpp 
     yql_ydb_io_discovery.cpp
-    yql_ydb_load_meta.cpp
-    yql_ydb_logical_opt.cpp
-    yql_ydb_physical_opt.cpp
-    yql_ydb_mkql_compiler.cpp
-    yql_ydb_provider.cpp
-    yql_ydb_provider_impl.cpp
-    yql_ydb_settings.cpp
-)
-
-PEERDIR(
+    yql_ydb_load_meta.cpp 
+    yql_ydb_logical_opt.cpp 
+    yql_ydb_physical_opt.cpp 
+    yql_ydb_mkql_compiler.cpp 
+    yql_ydb_provider.cpp 
+    yql_ydb_provider_impl.cpp 
+    yql_ydb_settings.cpp 
+) 
+ 
+PEERDIR( 
     library/cpp/random_provider
     library/cpp/time_provider
     library/cpp/yson/node
@@ -51,8 +51,8 @@ PEERDIR(
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/providers/ydb/expr_nodes
     ydb/library/yql/providers/ydb/proto
-)
+) 
+ 
+YQL_LAST_ABI_VERSION() 
 
-YQL_LAST_ABI_VERSION()
-
-END()
+END() 

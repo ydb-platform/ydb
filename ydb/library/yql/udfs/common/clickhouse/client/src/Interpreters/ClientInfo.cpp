@@ -174,7 +174,7 @@ void ClientInfo::setInitialQuery()
 {
     query_kind = QueryKind::INITIAL_QUERY;
     fillOSUserHostNameAndVersionInfo();
-    client_name = "ClickHouse " + client_name;
+    client_name = "ClickHouse " + client_name; 
 }
 
 

@@ -9,7 +9,7 @@
 
 #include <util/random/random.h>
 #include <util/datetime/cputimer.h>
-#include <util/string/builder.h>
+#include <util/string/builder.h> 
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -32,7 +32,7 @@ struct TPresortOps : public NPresort::TResultOps {
     TPresortOps(
         const TVector<TSettings>& settings,
         NUdf::TUnboxedValue* items)
-        : Settings(settings)
+        : Settings(settings) 
         , Items(items)
     {}
 
@@ -150,21 +150,21 @@ struct TPresortOps : public NPresort::TResultOps {
     }
 
     void SetString(const TString& value) {
-        Items[Settings[Current++].Index] = MakeString(NUdf::TStringRef(value.data(), value.size()));
+        Items[Settings[Current++].Index] = MakeString(NUdf::TStringRef(value.data(), value.size())); 
     }
 
     void SetOptional(bool) {}
 };
 
 template <typename T>
-NUdf::TUnboxedValue RandomValue() {
+NUdf::TUnboxedValue RandomValue() { 
     return NUdf::TUnboxedValuePod(RandomNumber<T>());
 }
 
 template <>
-NUdf::TUnboxedValue RandomValue<char*>() {
+NUdf::TUnboxedValue RandomValue<char*>() { 
     auto length = RandomNumber<ui64>(64);
-    return MakeStringNotFilled(length);
+    return MakeStringNotFilled(length); 
 }
 
 template <typename T, NUdf::EDataSlot Slot, bool Desc>
@@ -179,7 +179,7 @@ std::pair<ui64, ui64> MeasureOld() {
     TVector<TSettings> settings;
 
     for (ui32 i = 0; i < count; ++i) {
-        values.push_back(RandomValue<T>());
+        values.push_back(RandomValue<T>()); 
         settings.push_back({i, false, NUdf::TDataType<T>::Slot});
     }
 
@@ -188,7 +188,7 @@ std::pair<ui64, ui64> MeasureOld() {
     TStringStream stream;
     for (size_t n = 0; n < rowCount; ++n) {
         stream.clear();
-        TPresortOps<Desc> ops{settings, values.begin()};
+        TPresortOps<Desc> ops{settings, values.begin()}; 
         ops.Encode(stream);
     }
     auto encodeTime = timer.Get().MicroSeconds();
@@ -200,7 +200,7 @@ std::pair<ui64, ui64> MeasureOld() {
 
     timer.Reset();
     for (size_t n = 0; n < rowCount; ++n) {
-        TPresortOps<Desc> ops{settings, values.begin()};
+        TPresortOps<Desc> ops{settings, values.begin()}; 
         auto str = stream.Str();
         NPresort::Decode(ops, TStringBuf(str.data(), str.size()));
     }
@@ -223,10 +223,10 @@ std::pair<ui64, ui64> MeasureNew() {
 
     TVector<NUdf::TUnboxedValuePod> values;
     TPresortEncoder encoder;
-    TPresortDecoder decoder;
+    TPresortDecoder decoder; 
 
     for (size_t i = 0; i < count; ++i) {
-        values.push_back(RandomValue<T>());
+        values.push_back(RandomValue<T>()); 
         encoder.AddType(Slot, false, Desc);
         decoder.AddType(Slot, false, Desc);
     }

@@ -2,7 +2,7 @@
 #include "udf_types.h"
 #include <util/system/atomic.h>
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
 class TCounter {
@@ -109,4 +109,4 @@ public:
 UDF_ASSERT_TYPE_SIZE(ICountersProvider, 8);
 
 } // namspace NUdf
-} // namspace NYql
+} // namspace NYql 

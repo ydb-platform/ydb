@@ -63,7 +63,7 @@ namespace NYql::NDqs {
         bool HasReadWraps(const TExprNode::TPtr& node) {
             bool result = false;
             VisitExpr(node, [&result](const TExprNode::TPtr& exprNode) {
-                result |= TMaybeNode<TDqReadWrapBase>(exprNode).IsValid();
+                result |= TMaybeNode<TDqReadWrapBase>(exprNode).IsValid(); 
                 return !result;
             });
 
@@ -429,23 +429,23 @@ namespace NYql::NDqs {
             }
             YQL_ENSURE(dqSourceInputIndex < stageInfo.InputsCount);
         } else {
-            if (const auto& wrap = FindNode(stage.Program().Ptr(), [](const TExprNode::TPtr& exprNode) {
-                if (const auto wrap = TMaybeNode<TDqReadWrapBase>(exprNode)) {
-                    if (const auto flags = wrap.Cast().Flags())
-                        for (const auto& flag : flags.Cast())
-                            if (flag.Value() == "Solid")
-                                return false;
-
-                    return true;
+            if (const auto& wrap = FindNode(stage.Program().Ptr(), [](const TExprNode::TPtr& exprNode) { 
+                if (const auto wrap = TMaybeNode<TDqReadWrapBase>(exprNode)) { 
+                    if (const auto flags = wrap.Cast().Flags()) 
+                        for (const auto& flag : flags.Cast()) 
+                            if (flag.Value() == "Solid") 
+                                return false; 
+ 
+                    return true; 
                 }
-                return false;
+                return false; 
             })) {
-                read = wrap->Child(TDqReadWrapBase::idx_Input);
+                read = wrap->Child(TDqReadWrapBase::idx_Input); 
             } else {
-                return false;
+                return false; 
             }
         }
-
+ 
         const ui32 dataSourceChildIndex = dqSource ? 0 : 1;
         YQL_ENSURE(read->ChildrenSize() > 1);
         YQL_ENSURE(read->Child(dataSourceChildIndex)->IsCallable("DataSource"));
@@ -453,7 +453,7 @@ namespace NYql::NDqs {
         auto dataSourceName = read->Child(dataSourceChildIndex)->Child(0)->Content();
         auto datasource = TypeContext->DataSourceMap.FindPtr(dataSourceName);
         YQL_ENSURE(datasource);
-        const auto stageSettings = TDqStageSettings::Parse(stage);
+        const auto stageSettings = TDqStageSettings::Parse(stage); 
         auto tasksPerStage = settings->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
         if (stageSettings.IsExternalFunction) {
             tasksPerStage = Min(tasksPerStage, stageSettings.MaxTransformConcurrency());

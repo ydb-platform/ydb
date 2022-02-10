@@ -75,7 +75,7 @@ SRCS(
     extenddftf2.c
     extendsftf2.c
     fixdfti.c
-    fixsfti.c
+    fixsfti.c 
     fixtfdi.c
     fixtfsi.c
     fixunsdfti.c
@@ -91,7 +91,7 @@ SRCS(
     floatunditf.c
     floatunsitf.c
     floatuntidf.c
-    floatuntisf.c
+    floatuntisf.c 
     gcc_personality_v0.c
     int_util.c
     lshrti3.c

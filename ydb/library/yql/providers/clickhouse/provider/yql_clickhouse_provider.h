@@ -21,7 +21,7 @@ struct TClickHouseState : public TThrRefBase
     };
 
     THashMap<std::pair<TString, TString>, TTableMeta> Tables;
-    std::unordered_map<std::string_view, std::string_view> Timezones;
+    std::unordered_map<std::string_view, std::string_view> Timezones; 
 
     TTypeAnnotationContext* Types = nullptr;
     TClickHouseConfiguration::TPtr Configuration = MakeIntrusive<TClickHouseConfiguration>();
@@ -31,11 +31,11 @@ struct TClickHouseState : public TThrRefBase
 };
 
 TDataProviderInitializer GetClickHouseDataProviderInitializer(
-    IHTTPGateway::TPtr gateway,
+    IHTTPGateway::TPtr gateway, 
     std::shared_ptr<NYq::TDatabaseAsyncResolverWithMeta> dbResolverWithMeta = nullptr
 );
 
-TIntrusivePtr<IDataProvider> CreateClickHouseDataSource(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway);
+TIntrusivePtr<IDataProvider> CreateClickHouseDataSource(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway); 
 TIntrusivePtr<IDataProvider> CreateClickHouseDataSink(TClickHouseState::TPtr state);
 
 } // namespace NYql

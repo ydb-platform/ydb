@@ -30,12 +30,12 @@ public:
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
 
-        if (input->IsList()) {
-            if (const auto maybeStatus = static_cast<TDerived*>(this)->ProcessList(input, output, ctx)) {
-                return *maybeStatus;
-            }
-        }
-
+        if (input->IsList()) { 
+            if (const auto maybeStatus = static_cast<TDerived*>(this)->ProcessList(input, output, ctx)) { 
+                return *maybeStatus; 
+            } 
+        } 
+ 
         auto name = input->Content();
         TIssueScopeGuard issueScope(ctx.IssueManager, [&]() {
             return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()), TStringBuilder() << "At function: " << name);

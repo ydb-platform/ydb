@@ -73,7 +73,7 @@ NUdf::TUnboxedValue ImportValueFromProto(TType* type, const Ydb::Value& value, c
         return NUdf::TUnboxedValue();
 
     case TType::EKind::Data:
-        return HandleKindDataImport(type, value);
+        return HandleKindDataImport(type, value); 
 
     case TType::EKind::Optional: {
         auto optionalType = static_cast<TOptionalType*>(type);
@@ -264,10 +264,10 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
                 type val = v.Get##protoField(); \
                 c = TCell((const char*)&val, sizeof(val)); \
             } else if (allowCastFromString && v.HasText()) { \
-                const auto slot = NUdf::GetDataSlot(types[i]); \
-                const auto out = NMiniKQL::ValueFromString(slot, v.GetText()); \
+                const auto slot = NUdf::GetDataSlot(types[i]); \ 
+                const auto out = NMiniKQL::ValueFromString(slot, v.GetText()); \ 
                 CHECK_OR_RETURN_ERROR(out, Sprintf("Cannot parse value of type " #name " from text '%s' in tuple at position %" PRIu32, v.GetText().data(), i)); \
-                const auto val = out.Get<type>(); \
+                const auto val = out.Get<type>(); \ 
                 c = TCell((const char*)&val, sizeof(val)); \
             } else { \
                 CHECK_OR_RETURN_ERROR(false, Sprintf("Value of type " #name " expected in tuple at position %" PRIu32, i)); \

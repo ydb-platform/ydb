@@ -21,7 +21,7 @@ private:
     TStatus HandleKiRead(TKiReadBase node, TExprContext& ctx) override {
         auto cluster = node.DataSource().Cluster();
         TKikimrKey key(ctx);
-        if (!key.Extract(node.TableKey().Ref())) {
+        if (!key.Extract(node.TableKey().Ref())) { 
             return TStatus::Error;
         }
 
@@ -29,9 +29,9 @@ private:
     }
 
     TStatus HandleRead(TExprBase node, TExprContext& ctx) override {
-        auto cluster = node.Ref().Child(1)->Child(1)->Content();
+        auto cluster = node.Ref().Child(1)->Child(1)->Content(); 
         TKikimrKey key(ctx);
-        if (!key.Extract(*node.Ref().Child(2))) {
+        if (!key.Extract(*node.Ref().Child(2))) { 
             return TStatus::Error;
         }
 
@@ -87,7 +87,7 @@ public:
         , SessionCtx(sessionCtx) {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        output = input;
+        output = input; 
 
         if (ctx.Step.IsDone(TExprStep::LoadTablesMetadata)) {
             return TStatus::Ok;
@@ -153,7 +153,7 @@ public:
     }
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-        output = input;
+        output = input; 
         YQL_ENSURE(AsyncFuture.HasValue());
 
         for (auto& it : LoadResults) {
@@ -363,8 +363,8 @@ public:
 
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (node.IsCallable(TCoDataSource::CallableName())) {
-            if (node.Child(0)->Content() == KikimrProviderName) {
-                if (node.Child(1)->Content().empty()) {
+            if (node.Child(0)->Content() == KikimrProviderName) { 
+                if (node.Child(1)->Content().empty()) { 
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name"));
                     return false;
                 }
@@ -383,8 +383,8 @@ public:
             return node.Child(1)->Child(0)->Content() == KikimrProviderName;
         }
 
-        if (node.IsCallable(TKiReadTable::CallableName()) || node.IsCallable(TKiReadTableScheme::CallableName()) || node.IsCallable(TKiReadTableList::CallableName())) {
-            return TKiDataSource(node.ChildPtr(1)).Category() == KikimrProviderName;
+        if (node.IsCallable(TKiReadTable::CallableName()) || node.IsCallable(TKiReadTableScheme::CallableName()) || node.IsCallable(TKiReadTableList::CallableName())) { 
+            return TKiDataSource(node.ChildPtr(1)).Category() == KikimrProviderName; 
         }
 
         YQL_ENSURE(!KikimrDataSourceFunctions().contains(node.Content()));
@@ -403,19 +403,19 @@ public:
         return false;
     }
 
-    bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override {
+    bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override { 
         Y_UNUSED(syncList);
         canRef = false;
 
         if (node.IsCallable(TCoRight::CallableName())) {
-            const auto input = node.Child(0);
-            if (input->IsCallable(TKiReadTableList::CallableName())) {
-                return true;
-            }
+            const auto input = node.Child(0); 
+            if (input->IsCallable(TKiReadTableList::CallableName())) { 
+                return true; 
+            } 
 
-            if (input->IsCallable(TKiReadTableScheme::CallableName())) {
-                return true;
-            }
+            if (input->IsCallable(TKiReadTableScheme::CallableName())) { 
+                return true; 
+            } 
         }
 
         if (auto maybeRight = TMaybeNode<TCoNth>(&node).Tuple().Maybe<TCoRight>()) {
@@ -441,8 +441,8 @@ public:
         return false;
     }
 
-    TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
-        auto read = node->Child(0);
+    TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override { 
+        auto read = node->Child(0); 
         if (!read->IsCallable(ReadName)) {
             ythrow yexception() << "Expected Read!";
         }
@@ -467,7 +467,7 @@ public:
                 YQL_ENSURE(false, "Unsupported Kikimr KeyType.");
         }
 
-        auto newRead = ctx.RenameNode(*read, newName);
+        auto newRead = ctx.RenameNode(*read, newName); 
 
         if (auto maybeRead = TMaybeNode<TKiReadTable>(newRead)) {
             auto read = maybeRead.Cast();
@@ -491,11 +491,11 @@ public:
 
         auto retChildren = node->ChildrenList();
         retChildren[0] = newRead;
-        auto ret = ctx.ChangeChildren(*node, std::move(retChildren));
+        auto ret = ctx.ChangeChildren(*node, std::move(retChildren)); 
         return ret;
     }
 
-    TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx,
+    TExprNode::TPtr OptimizePull(const TExprNode::TPtr& source, const TFillSettings& fillSettings, TExprContext& ctx, 
         IOptimizationContext& optCtx) override
     {
         auto queryType = SessionCtx->Query().Type;
@@ -564,13 +564,13 @@ public:
             optCtx.RemapNode(exec.Ref(), newExec.Ptr());
         }
 
-        return source;
+        return source; 
     }
 
     bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
         Y_UNUSED(compact);
         if (CanExecute(node)) {
-            children.push_back(node.ChildPtr(0));
+            children.push_back(node.ChildPtr(0)); 
             return true;
         }
 
@@ -599,21 +599,21 @@ private:
 } // namespace
 
 IGraphTransformer::TStatus TKiSourceVisitorTransformer::DoTransform(TExprNode::TPtr input,
-    TExprNode::TPtr& output, TExprContext& ctx)
+    TExprNode::TPtr& output, TExprContext& ctx) 
 {
-    YQL_ENSURE(input->Type() == TExprNode::Callable);
-    output = input;
+    YQL_ENSURE(input->Type() == TExprNode::Callable); 
+    output = input; 
 
-    if (auto node = TMaybeNode<TKiReadBase>(input)) {
+    if (auto node = TMaybeNode<TKiReadBase>(input)) { 
         return HandleKiRead(node.Cast(), ctx);
     }
 
-    if (input->IsCallable(ReadName)) {
-        return HandleRead(TExprBase(input), ctx);
+    if (input->IsCallable(ReadName)) { 
+        return HandleRead(TExprBase(input), ctx); 
     }
 
-    if (input->IsCallable(ConfigureName)) {
-        return HandleConfigure(TExprBase(input), ctx);
+    if (input->IsCallable(ConfigureName)) { 
+        return HandleConfigure(TExprBase(input), ctx); 
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSource) Unsupported function: " << input->Content()));

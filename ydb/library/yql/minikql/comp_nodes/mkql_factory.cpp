@@ -7,26 +7,26 @@
 #include "mkql_block_add.h"
 #include "mkql_blocks.h"
 #include "mkql_callable.h"
-#include "mkql_chain_map.h"
-#include "mkql_chain1_map.h"
-#include "mkql_chopper.h"
+#include "mkql_chain_map.h" 
+#include "mkql_chain1_map.h" 
+#include "mkql_chopper.h" 
 #include "mkql_coalesce.h"
 #include "mkql_collect.h"
 #include "mkql_combine.h"
 #include "mkql_contains.h"
-#include "mkql_decimal_div.h"
-#include "mkql_decimal_mod.h"
-#include "mkql_decimal_mul.h"
+#include "mkql_decimal_div.h" 
+#include "mkql_decimal_mod.h" 
+#include "mkql_decimal_mul.h" 
 #include "mkql_dictitems.h"
 #include "mkql_discard.h"
-#include "mkql_element.h"
+#include "mkql_element.h" 
 #include "mkql_ensure.h"
 #include "mkql_enumerate.h"
 #include "mkql_exists.h"
 #include "mkql_extend.h"
 #include "mkql_filter.h"
 #include "mkql_flatmap.h"
-#include "mkql_flow.h"
+#include "mkql_flow.h" 
 #include "mkql_fold.h"
 #include "mkql_fold1.h"
 #include "mkql_frombytes.h"
@@ -34,7 +34,7 @@
 #include "mkql_fromyson.h"
 #include "mkql_guess.h"
 #include "mkql_group.h"
-#include "mkql_heap.h"
+#include "mkql_heap.h" 
 #include "mkql_hasitems.h"
 #include "mkql_hopping.h"
 #include "mkql_if.h"
@@ -43,16 +43,16 @@
 #include "mkql_iterable.h"
 #include "mkql_iterator.h"
 #include "mkql_join.h"
-#include "mkql_join_dict.h"
-#include "mkql_lazy_list.h"
+#include "mkql_join_dict.h" 
+#include "mkql_lazy_list.h" 
 #include "mkql_length.h"
 #include "mkql_listfromrange.h"
 #include "mkql_logical.h"
 #include "mkql_lookup.h"
 #include "mkql_map.h"
-#include "mkql_map_join.h"
+#include "mkql_map_join.h" 
 #include "mkql_multihopping.h"
-#include "mkql_multimap.h"
+#include "mkql_multimap.h" 
 #include "mkql_next_value.h"
 #include "mkql_now.h"
 #include "mkql_null.h"
@@ -70,10 +70,10 @@
 #include "mkql_size.h"
 #include "mkql_skip.h"
 #include "mkql_sort.h"
-#include "mkql_condense.h"
-#include "mkql_condense1.h"
-#include "mkql_source.h"
-#include "mkql_squeeze_to_list.h"
+#include "mkql_condense.h" 
+#include "mkql_condense1.h" 
+#include "mkql_source.h" 
+#include "mkql_squeeze_to_list.h" 
 #include "mkql_switch.h"
 #include "mkql_take.h"
 #include "mkql_timezone.h"
@@ -88,48 +88,48 @@
 #include "mkql_visitall.h"
 #include "mkql_way.h"
 #include "mkql_weakmember.h"
-#include "mkql_while.h"
-#include "mkql_wide_chain_map.h"
-#include "mkql_wide_chopper.h"
-#include "mkql_wide_combine.h"
-#include "mkql_wide_condense.h"
-#include "mkql_wide_filter.h"
-#include "mkql_wide_map.h"
+#include "mkql_while.h" 
+#include "mkql_wide_chain_map.h" 
+#include "mkql_wide_chopper.h" 
+#include "mkql_wide_combine.h" 
+#include "mkql_wide_condense.h" 
+#include "mkql_wide_filter.h" 
+#include "mkql_wide_map.h" 
 #include "mkql_zip.h"
 
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_codegen.h>
-
-#include <string_view>
-#include <unordered_map>
-
+ 
+#include <string_view> 
+#include <unordered_map> 
+ 
 namespace NKikimr {
 namespace NMiniKQL {
 
 IComputationNode* WrapArg(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected 0 args");
     MKQL_ENSURE(callable.GetType()->IsMergeDisabled(), "Merge mode is not disabled");
-    return new TExternalCodegeneratorNode(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()));
+    return new TExternalCodegeneratorNode(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType())); 
 }
 
-IComputationNode* WrapWideFlowArg(TCallable& callable, const TComputationNodeFactoryContext&) {
-    MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected 0 args");
-    MKQL_ENSURE(callable.GetType()->IsMergeDisabled(), "Merge mode is not disabled");
-    return new TWideFlowProxyCodegeneratorNode;
-}
-
-using TCallableComputationNodeBuilderPtr = IComputationNode* (*const)(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-using TCallableComputationNodeBuilderMap = std::unordered_map<std::string_view, TCallableComputationNodeBuilderPtr>;
+IComputationNode* WrapWideFlowArg(TCallable& callable, const TComputationNodeFactoryContext&) { 
+    MKQL_ENSURE(callable.GetInputsCount() == 0, "Expected 0 args"); 
+    MKQL_ENSURE(callable.GetType()->IsMergeDisabled(), "Merge mode is not disabled"); 
+    return new TWideFlowProxyCodegeneratorNode; 
+} 
+ 
+using TCallableComputationNodeBuilderPtr = IComputationNode* (*const)(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
+using TCallableComputationNodeBuilderMap = std::unordered_map<std::string_view, TCallableComputationNodeBuilderPtr>; 
 
 namespace {
 
 struct TCallableComputationNodeBuilderFuncMapFiller {
-    const TCallableComputationNodeBuilderMap Map;
+    const TCallableComputationNodeBuilderMap Map; 
 
     TCallableComputationNodeBuilderFuncMapFiller()
-        : Map(InitList)
-    {}
+        : Map(InitList) 
+    {} 
 
-    static constexpr std::initializer_list<TCallableComputationNodeBuilderMap::value_type> InitList = {
+    static constexpr std::initializer_list<TCallableComputationNodeBuilderMap::value_type> InitList = { 
         {"Append", &WrapAppend},
         {"Prepend", &WrapPrepend},
         {"Extend", &WrapExtend},
@@ -144,11 +144,11 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"Fold1", &WrapFold1},
         {"Map", &WrapMap},
         {"OrderedMap", &WrapMap},
-        {"MultiMap", &WrapMultiMap},
+        {"MultiMap", &WrapMultiMap}, 
         {"FlatMap", &WrapFlatMap},
         {"OrderedFlatMap", &WrapFlatMap},
-        {"ChainMap", &WrapChainMap},
-        {"Chain1Map", &WrapChain1Map},
+        {"ChainMap", &WrapChainMap}, 
+        {"Chain1Map", &WrapChain1Map}, 
         {"Filter", &WrapFilter},
         {"OrderedFilter", &WrapFilter},
         {"TakeWhile", &WrapTakeWhile},
@@ -163,15 +163,15 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"Lookup", &WrapLookup},
         {"ToSortedDict", &WrapToSortedDict},
         {"ToHashedDict", &WrapToHashedDict},
-        {"SqueezeToList", &WrapSqueezeToList},
+        {"SqueezeToList", &WrapSqueezeToList}, 
         {"SqueezeToSortedDict", &WrapSqueezeToSortedDict},
         {"SqueezeToHashedDict", &WrapSqueezeToHashedDict},
-        {"NarrowSqueezeToSortedDict", &WrapSqueezeToSortedDict},
-        {"NarrowSqueezeToHashedDict", &WrapSqueezeToHashedDict},
+        {"NarrowSqueezeToSortedDict", &WrapSqueezeToSortedDict}, 
+        {"NarrowSqueezeToHashedDict", &WrapSqueezeToHashedDict}, 
         {"Coalesce", &WrapCoalesce},
         {"ToOptional", &WrapHead},
         {"Head", &WrapHead},
-        {"Last", &WrapLast},
+        {"Last", &WrapLast}, 
         {"Unwrap", &WrapUnwrap},
         {"Ensure", &WrapEnsure},
         {"If", &WrapIf},
@@ -210,8 +210,8 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"Sort", &WrapSort},
         {"UnstableSort", &WrapUnstableSort},
         {"DictItems", &WrapDictItems},
-        {"DictKeys", &WrapDictKeys},
-        {"DictPayloads", &WrapDictPayloads},
+        {"DictKeys", &WrapDictKeys}, 
+        {"DictPayloads", &WrapDictPayloads}, 
         {"Nth", &WrapNth},
         {"ToIndexDict", &WrapToIndexDict},
         {"JoinDict", &WrapJoinDict},
@@ -271,27 +271,27 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"PartialSort", &WrapPartialSort},
         {"KeepTop", &WrapKeepTop},
         {"Top", &WrapTop},
-        {"TopSort", &WrapTopSort},
+        {"TopSort", &WrapTopSort}, 
         {"SourceOf", &WrapSourceOf},
-        {"LazyList", &WrapLazyList},
-        {"Chopper", &WrapChopper},
-        {"ExpandMap", &WrapExpandMap},
-        {"WideMap", &WrapWideMap},
-        {"WideChain1Map", &WrapWideChain1Map},
-        {"NarrowMap", &WrapNarrowMap},
-        {"NarrowFlatMap", &WrapNarrowFlatMap},
-        {"NarrowMultiMap", &WrapNarrowMultiMap},
-        {"WideFilter", &WrapWideFilter},
-        {"WideTakeWhile", &WrapWideTakeWhile},
-        {"WideSkipWhile", &WrapWideSkipWhile},
-        {"WideTakeWhileInclusive", &WrapWideTakeWhileInclusive},
-        {"WideSkipWhileInclusive", &WrapWideSkipWhileInclusive},
-        {"WideCombiner", &WrapWideCombiner},
-        {"WideLastCombiner", &WrapWideLastCombiner},
-        {"WideCondense1", &WrapWideCondense1},
-        {"WideChopper", &WrapWideChopper},
-        {"WideFlowArg", &WrapWideFlowArg},
-        {"Source", &WrapSource},
+        {"LazyList", &WrapLazyList}, 
+        {"Chopper", &WrapChopper}, 
+        {"ExpandMap", &WrapExpandMap}, 
+        {"WideMap", &WrapWideMap}, 
+        {"WideChain1Map", &WrapWideChain1Map}, 
+        {"NarrowMap", &WrapNarrowMap}, 
+        {"NarrowFlatMap", &WrapNarrowFlatMap}, 
+        {"NarrowMultiMap", &WrapNarrowMultiMap}, 
+        {"WideFilter", &WrapWideFilter}, 
+        {"WideTakeWhile", &WrapWideTakeWhile}, 
+        {"WideSkipWhile", &WrapWideSkipWhile}, 
+        {"WideTakeWhileInclusive", &WrapWideTakeWhileInclusive}, 
+        {"WideSkipWhileInclusive", &WrapWideSkipWhileInclusive}, 
+        {"WideCombiner", &WrapWideCombiner}, 
+        {"WideLastCombiner", &WrapWideLastCombiner}, 
+        {"WideCondense1", &WrapWideCondense1}, 
+        {"WideChopper", &WrapWideChopper}, 
+        {"WideFlowArg", &WrapWideFlowArg}, 
+        {"Source", &WrapSource}, 
         {"RangeCreate", &WrapRangeCreate},
         {"RangeUnion", &WrapRangeUnion},
         {"RangeIntersect", &WrapRangeIntersect},
@@ -308,7 +308,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
 TComputationNodeFactory GetBuiltinFactory() {
     return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         const auto& map = Singleton<TCallableComputationNodeBuilderFuncMapFiller>()->Map;
-        const auto it = map.find(callable.GetType()->GetName());
+        const auto it = map.find(callable.GetType()->GetName()); 
         if (it == map.end())
             return nullptr;
 

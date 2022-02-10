@@ -16,7 +16,7 @@ PEERDIR(
 )
 
 SRCS(
-    crc32c.cpp
+    crc32c.cpp 
 )
 
 END()

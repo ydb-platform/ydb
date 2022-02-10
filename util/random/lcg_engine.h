@@ -1,6 +1,6 @@
 #pragma once
 
-#include <utility>
+#include <utility> 
 #include <util/generic/typetraits.h>
 
 // common engine for lcg-based RNG's
@@ -49,7 +49,7 @@ struct TLcgRngBase: public TIterator, public TMixer {
 
     template <typename... Args>
     inline TLcgRngBase(TStateType seed, Args&&... args)
-        : TIterator(std::forward<Args>(args)...)
+        : TIterator(std::forward<Args>(args)...) 
         , X(seed)
     {
     }

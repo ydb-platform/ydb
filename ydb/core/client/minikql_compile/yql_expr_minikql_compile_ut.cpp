@@ -22,17 +22,17 @@ namespace {
         TVector<THolder<TKeyDesc>> DescList;
 
         TServices()
-            : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
+            : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry())) 
             , TypeEnv(Alloc)
         {
-            Alloc.Release();
+            Alloc.Release(); 
         }
 
-        ~TServices()
-        {
-            Alloc.Acquire();
-        }
-
+        ~TServices() 
+        { 
+            Alloc.Acquire(); 
+        } 
+ 
         void ExtractKeys(TRuntimeNode pgm) {
             TExploringNodeVisitor explorer;
             explorer.Walk(pgm.GetNode(), TypeEnv);

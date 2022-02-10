@@ -206,7 +206,7 @@ public:
             bestSolver->Solve(coefficients[bestSolver - SLRSolvers.begin()], intercept, regularizationParameter);
         }
 
-        TLinearModel model(std::move(coefficients), intercept);
+        TLinearModel model(std::move(coefficients), intercept); 
         return model;
     }
 

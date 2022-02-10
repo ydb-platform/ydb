@@ -11,7 +11,7 @@ std::vector<std::string> getMultipleKeysFromConfig(const Poco::Util::AbstractCon
     config.keys(root, config_keys);
     for (const auto & key : config_keys)
     {
-        if (key != name && !(key.starts_with(name + "[") && key.ends_with("]")))
+        if (key != name && !(key.starts_with(name + "[") && key.ends_with("]"))) 
             continue;
         values.emplace_back(key);
     }

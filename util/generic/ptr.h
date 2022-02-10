@@ -7,7 +7,7 @@
 #include "typetraits.h"
 #include "singleton.h"
 
-#include <utility>
+#include <utility> 
 
 #include <util/system/yassert.h>
 #include <util/system/defaults.h>
@@ -780,7 +780,7 @@ typename TSimpleIntrusiveOps<T, Ops>::TFunc TSimpleIntrusiveOps<T, Ops>::UnRef_ 
 
 template <typename T, class Ops = TDefaultIntrusivePtrOps<T>, typename... Args>
 [[nodiscard]] TIntrusivePtr<T, Ops> MakeIntrusive(Args&&... args) {
-    return new T{std::forward<Args>(args)...};
+    return new T{std::forward<Args>(args)...}; 
 }
 
 template <typename T, class Ops = TDefaultIntrusivePtrOps<T>, typename... Args>
@@ -949,17 +949,17 @@ using TSimpleSharedPtr = TSharedPtr<T, TSimpleCounter, D>;
 
 template <typename T, typename C, typename... Args>
 [[nodiscard]] TSharedPtr<T, C> MakeShared(Args&&... args) {
-    return new T{std::forward<Args>(args)...};
+    return new T{std::forward<Args>(args)...}; 
 }
 
 template <typename T, typename... Args>
 [[nodiscard]] inline TAtomicSharedPtr<T> MakeAtomicShared(Args&&... args) {
-    return MakeShared<T, TAtomicCounter>(std::forward<Args>(args)...);
+    return MakeShared<T, TAtomicCounter>(std::forward<Args>(args)...); 
 }
 
 template <typename T, typename... Args>
 [[nodiscard]] inline TSimpleSharedPtr<T> MakeSimpleShared(Args&&... args) {
-    return MakeShared<T, TSimpleCounter>(std::forward<Args>(args)...);
+    return MakeShared<T, TSimpleCounter>(std::forward<Args>(args)...); 
 }
 
 class TCopyClone {

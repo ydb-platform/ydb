@@ -70,7 +70,7 @@
 
 #define SMALL() TAG(TSMALL)
 #define STRONG() TAG(TSTRONG)
-
+ 
 #define LI() TAG(TLIST)
 #define LI_CLASS(cls) TAG_CLASS(TLIST, cls)
 #define UL() TAG(TULIST)
@@ -259,9 +259,9 @@ namespace NMonitoring {
     typedef TTag<H6Tag> TH6;
     typedef TTag<SmallTag> TSMALL;
     typedef TTag<StrongTag> TSTRONG;
-    typedef TTag<ListTag> TLIST;
-    typedef TTag<UListTag> TULIST;
-    typedef TTag<OListTag> TOLIST;
+    typedef TTag<ListTag> TLIST; 
+    typedef TTag<UListTag> TULIST; 
+    typedef TTag<OListTag> TOLIST; 
     typedef TTag<DListTag> DLIST;
     typedef TTag<DTermTag> DTERM;
     typedef TTag<DDescTag> DDESC;

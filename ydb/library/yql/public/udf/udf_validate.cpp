@@ -2,7 +2,7 @@
 #include <util/string/join.h>
 #include <util/generic/yexception.h>
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
 #define SWITCH_ENUM_TYPE_TO_STR(name, val) \
@@ -53,4 +53,4 @@ EValidatePolicy ValidatePolicyByStr(const TString& validatePolicyStr) {
 }
 
 } // namspace NUdf
-} // namspace NYql
+} // namspace NYql 

@@ -13,8 +13,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace {
-
+namespace { 
+ 
 using NYql::SwapBytes;
 
 template <bool IsOptional>
@@ -53,7 +53,7 @@ public:
                 return ret;
             }
 
-            return NUdf::TUnboxedValuePod();
+            return NUdf::TUnboxedValuePod(); 
         }
 
         case NUdf::EDataSlot::TzDatetime: {
@@ -114,28 +114,28 @@ public:
         }
     }
 
-private:
-    void RegisterDependencies() const final {
-        this->DependsOn(Data);
+private: 
+    void RegisterDependencies() const final { 
+        this->DependsOn(Data); 
     }
 
     IComputationNode* const Data;
     const NUdf::EDataSlot SchemeType;
 };
 
-}
-
+} 
+ 
 IComputationNode* WrapFromBytes(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
 
     bool isOptional;
-    const auto dataType = UnpackOptionalData(callable.GetInput(0), isOptional);
-    MKQL_ENSURE(dataType->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected String");
+    const auto dataType = UnpackOptionalData(callable.GetInput(0), isOptional); 
+    MKQL_ENSURE(dataType->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected String"); 
 
-    const auto schemeTypeData = AS_VALUE(TDataLiteral, callable.GetInput(1));
-    const auto schemeType = schemeTypeData->AsValue().Get<ui32>();
+    const auto schemeTypeData = AS_VALUE(TDataLiteral, callable.GetInput(1)); 
+    const auto schemeType = schemeTypeData->AsValue().Get<ui32>(); 
 
-    const auto data = LocateNode(ctx.NodeLocator, callable, 0);
+    const auto data = LocateNode(ctx.NodeLocator, callable, 0); 
     if (isOptional) {
         return new TFromBytesWrapper<true>(ctx.Mutables, data, static_cast<NUdf::TDataTypeId>(schemeType));
     } else {

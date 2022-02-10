@@ -16,7 +16,7 @@ namespace ErrorCodes
 class Block;
 
 /// Scalar results of subqueries
-using Scalars = std::map<std::string, Block>;
+using Scalars = std::map<std::string, Block>; 
 
 class Context;
 

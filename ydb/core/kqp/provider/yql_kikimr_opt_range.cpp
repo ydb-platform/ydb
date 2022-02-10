@@ -214,7 +214,7 @@ TMaybeNode<TExprBase> KiTableLookupGetValue(TExprBase node, const TTypeAnnotatio
         if (dataTypeName == "Utf8") {
             auto atom = maybeString.Cast().Literal();
             auto value = atom.Value();
-            if (!IsUtf8(value)) {
+            if (!IsUtf8(value)) { 
                 return {};
             }
 

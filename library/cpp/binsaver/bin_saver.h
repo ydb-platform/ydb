@@ -147,7 +147,7 @@ private:
             TVector<typename AM::key_type, typename std::allocator_traits<typename AM::allocator_type>::template rebind_alloc<typename AM::key_type>> indices;
             indices.resize(nSize);
             TStoredSize i = 1;
-            for (auto pos = data.begin(); pos != data.end(); ++pos, ++i)
+            for (auto pos = data.begin(); pos != data.end(); ++pos, ++i) 
                 indices[nSize - i] = pos->first;
             for (TStoredSize j = 0; j < nSize; ++j)
                 Add(1, &indices[j]);
@@ -155,7 +155,7 @@ private:
                 Add(2, &data[indices[j]]);
         }
     }
-
+ 
     // hash_multimap
     template <class AMM>
     void DoAnyMultiMap(AMM& data) {
@@ -168,7 +168,7 @@ private:
             for (TStoredSize i = 0; i < nSize; ++i)
                 Add(1, &indices[i]);
             for (TStoredSize i = 0; i < nSize; ++i) {
-                std::pair<typename AMM::key_type, typename AMM::mapped_type> valToInsert;
+                std::pair<typename AMM::key_type, typename AMM::mapped_type> valToInsert; 
                 valToInsert.first = indices[i];
                 Add(2, &valToInsert.second);
                 data.insert(valToInsert);
@@ -177,9 +177,9 @@ private:
             TStoredSize nSize = data.size();
             CheckOverflow(nSize, data.size());
             Add(3, &nSize);
-            for (auto pos = data.begin(); pos != data.end(); ++pos)
+            for (auto pos = data.begin(); pos != data.end(); ++pos) 
                 Add(1, (typename AMM::key_type*)(&pos->first));
-            for (auto pos = data.begin(); pos != data.end(); ++pos)
+            for (auto pos = data.begin(); pos != data.end(); ++pos) 
                 Add(2, &pos->second);
         }
     }
@@ -345,27 +345,27 @@ public:
 
     template <class T1, class T2, class T3, class T4>
     int Add(const chunk_id, TMap<T1, T2, T3, T4>* pMap) {
-        DoAnyMap(*pMap);
+        DoAnyMap(*pMap); 
         return 0;
     }
     template <class T1, class T2, class T3, class T4, class T5>
     int Add(const chunk_id, THashMap<T1, T2, T3, T4, T5>* pHash) {
-        DoAnyMap(*pHash);
+        DoAnyMap(*pHash); 
         return 0;
     }
     template <class T1, class T2, class T3, class T4, class T5>
     int Add(const chunk_id, THashMultiMap<T1, T2, T3, T4, T5>* pHash) {
-        DoAnyMultiMap(*pHash);
+        DoAnyMultiMap(*pHash); 
         return 0;
     }
     template <class K, class L, class A>
     int Add(const chunk_id, TSet<K, L, A>* pSet) {
-        DoAnySet(*pSet);
+        DoAnySet(*pSet); 
         return 0;
     }
     template <class T1, class T2, class T3, class T4>
     int Add(const chunk_id, THashSet<T1, T2, T3, T4>* pHash) {
-        DoAnySet(*pHash);
+        DoAnySet(*pHash); 
         return 0;
     }
 

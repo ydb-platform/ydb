@@ -62,7 +62,7 @@ namespace {
         }
 
     private:
-        std::function<void()> Func;
+        std::function<void()> Func; 
     };
 }
 

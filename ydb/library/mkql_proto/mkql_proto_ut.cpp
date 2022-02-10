@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
 
     Y_UNIT_TEST(TestExportStructType) {
         TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
-            std::vector<std::pair<std::string_view, TRuntimeNode>> items;
+            std::vector<std::pair<std::string_view, TRuntimeNode>> items; 
             items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) });
             items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") });
             auto pgmReturn = pgmBuilder.NewStruct(items);
@@ -288,9 +288,9 @@ Variant {
 )___";
 
         TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
-            std::vector<std::pair<std::string_view, TType*>> structElemenTypes;
-            structElemenTypes.push_back({"a", pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)});
-            structElemenTypes.push_back({"b", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)});
+            std::vector<std::pair<std::string_view, TType*>> structElemenTypes; 
+            structElemenTypes.push_back({"a", pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)}); 
+            structElemenTypes.push_back({"b", pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id)}); 
             TType* structType = pgmBuilder.NewStructType(structElemenTypes);
             auto pgmReturn = pgmBuilder.NewVariant(
                 pgmBuilder.NewDataLiteral<ui32>(66),
@@ -476,7 +476,7 @@ Variant {
 
     Y_UNIT_TEST(TestExportTuple) {
         TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) {
-            TRuntimeNode::TList items;
+            TRuntimeNode::TList items; 
             items.push_back(pgmBuilder.NewDataLiteral<i32>(42));
             items.push_back(pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc"));
             auto pgmReturn = pgmBuilder.NewTuple(items);
@@ -492,7 +492,7 @@ Variant {
 
     Y_UNIT_TEST(TestExportStruct) {
         TestExportValue<NKikimrMiniKQL::TValue>([](TProgramBuilder& pgmBuilder) {
-            std::vector<std::pair<std::string_view, TRuntimeNode>> items;
+            std::vector<std::pair<std::string_view, TRuntimeNode>> items; 
             items.push_back({ "x", pgmBuilder.NewDataLiteral<i32>(42) });
             items.push_back({ "y", pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>("abc") });
             auto pgmReturn = pgmBuilder.NewStruct(items);

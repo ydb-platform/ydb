@@ -194,23 +194,23 @@ namespace {
 
     class TResultCallableExecutionTransformer : public TGraphTransformerBase {
     public:
-        TResultCallableExecutionTransformer(const TIntrusivePtr<TResultProviderConfig>& config)
+        TResultCallableExecutionTransformer(const TIntrusivePtr<TResultProviderConfig>& config) 
             : Config(config)
         {
             YQL_ENSURE(!Config->Types.AvailablePureResultDataSources.empty());
         }
 
         TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-            output = input;
+            output = input; 
 
             TString uniqId = TStringBuilder() << '#' << input->UniqueId();
             YQL_LOG_CTX_SCOPE(uniqId);
 
-            YQL_ENSURE(input->Type() == TExprNode::Callable);
+            YQL_ENSURE(input->Type() == TExprNode::Callable); 
             TExprBase node(input);
             if (node.Maybe<TResFill>() || node.Maybe<TResPull>() || node.Maybe<TResIf>() || node.Maybe<TResFor>()) {
                 auto provider = Config->Types.DataSourceMap.FindPtr(input->Child(5)->Content());
-                Y_ENSURE(provider, "DataSource not exist: " << input->Child(5)->Content());
+                Y_ENSURE(provider, "DataSource not exist: " << input->Child(5)->Content()); 
                 if (node.Maybe<TResPull>()) {
                     return HandleFillOrPull<TPull>(node, output, ctx, *(*provider));
                 } else {
@@ -218,7 +218,7 @@ namespace {
                 }
             }
 
-            if (input->Content() == CommitName) {
+            if (input->Content() == CommitName) { 
                 if (ResultWriter) {
                     TExprBase commitChild(input->ChildPtr(0));
 
@@ -235,7 +235,7 @@ namespace {
                 }
 
                 input->SetState(TExprNode::EState::ExecutionComplete);
-                input->SetResult(ctx.NewWorld (input->Pos()));
+                input->SetResult(ctx.NewWorld (input->Pos())); 
                 return TStatus::Ok;
             }
 
@@ -256,9 +256,9 @@ namespace {
         }
 
         TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
-            output = input;
+            output = input; 
             auto status = DelegatedProvider->GetCallableExecutionTransformer()
-                .ApplyAsyncChanges(DelegatedNode, DelegatedNodeOutput, ctx);
+                .ApplyAsyncChanges(DelegatedNode, DelegatedNodeOutput, ctx); 
             if (status == TStatus::Repeat && input != DelegatedNodeOutput->TailPtr()) {
                 output = DelegatedNodeOutput->TailPtr();
             } else {
@@ -313,11 +313,11 @@ namespace {
                     auto total = FromString<ui32>(forNode.Total().Value());
                     auto current = FromString<ui32>(forNode.Current().Value());
                     if ((current > total) || (total && current >= total)) {
-                        auto zero = ctx.NewAtom(TPositionHandle(), "0", TNodeFlags::Default);
+                        auto zero = ctx.NewAtom(TPositionHandle(), "0", TNodeFlags::Default); 
                         zero->SetTypeAnn(ctx.MakeType<TUnitExprType>());
                         zero->SetState(TExprNode::EState::ConstrComplete);
-                        zero->SetDependencyScope(nullptr, nullptr); // HOTFIX for CSEE
-                        input.Ptr()->ChildRef(TResFor::idx_Current) = std::move(zero); //FIXME: Don't use ChilfRef
+                        zero->SetDependencyScope(nullptr, nullptr); // HOTFIX for CSEE 
+                        input.Ptr()->ChildRef(TResFor::idx_Current) = std::move(zero); //FIXME: Don't use ChilfRef 
                         input.Ptr()->SetResult(ctx.NewWorld(input.Pos()));
                         input.Ptr()->SetState(TExprNode::EState::ExecutionComplete);
                         return TStatus::Ok;
@@ -330,7 +330,7 @@ namespace {
                         if (total == 0) {
                             // use else block
                             const auto& elseLambda = forNode.Else();
-                            active = ctx.ReplaceNode(elseLambda.Body().Ptr(), elseLambda.Args().Arg(0).Ref(), forNode.World().Ptr());
+                            active = ctx.ReplaceNode(elseLambda.Body().Ptr(), elseLambda.Args().Arg(0).Ref(), forNode.World().Ptr()); 
                         } else {
                             // use some list item
                             auto listNode = items.Raw();
@@ -345,9 +345,9 @@ namespace {
 
                             auto listElem = listNode->Child(index);
                             const auto& iterLambda = forNode.Iter();
-                            active = ctx.ReplaceNodes(iterLambda.Body().Ptr(), { {
+                            active = ctx.ReplaceNodes(iterLambda.Body().Ptr(), { { 
                                 iterLambda.Args().Arg(0).Raw(), forNode.World().Ptr()
-                                }, { iterLambda.Args().Arg(1).Raw(), listElem } });
+                                }, { iterLambda.Args().Arg(1).Raw(), listElem } }); 
                         }
 
                         output = Build<TResFor>(ctx, forNode.Pos())
@@ -552,7 +552,7 @@ namespace {
                 DelegatedNode->Child(idx)->SetState(TExprNode::EState::ConstrComplete);
             }
 
-            DelegatedNode->SetTypeAnn(input.Ref().GetTypeAnn());
+            DelegatedNode->SetTypeAnn(input.Ref().GetTypeAnn()); 
             DelegatedNode->SetState(TExprNode::EState::ConstrComplete);
             input.Ptr()->SetState(TExprNode::EState::ExecutionInProgress);
             auto status = DelegatedProvider->GetCallableExecutionTransformer().Transform(DelegatedNode, DelegatedNodeOutput, ctx);
@@ -565,7 +565,7 @@ namespace {
 
         void FinishNode(TExprNode& input, TExprContext& ctx, IGraphTransformer::TStatus status) {
             if (status.Level == TStatus::Ok) {
-                auto data = DelegatedNode->GetResult().Content();
+                auto data = DelegatedNode->GetResult().Content(); 
                 const bool needWriter = input.Content() != TResIf::CallableName()
                     && input.Content() != TResFor::CallableName();
                 if (needWriter) {
@@ -577,11 +577,11 @@ namespace {
                     input.SetResult(ctx.NewAtom(input.Pos(), data));
                     input.SetState(TExprNode::EState::ExecutionRequired);
                 }
-            } else if (status.Level == TStatus::Error) {
-                if (const auto issies = ctx.AssociativeIssues.extract(DelegatedNode.Get())) {
-                    ctx.IssueManager.RaiseIssues(issies.mapped());
-                }
-            } else {
+            } else if (status.Level == TStatus::Error) { 
+                if (const auto issies = ctx.AssociativeIssues.extract(DelegatedNode.Get())) { 
+                    ctx.IssueManager.RaiseIssues(issies.mapped()); 
+                } 
+            } else { 
                 input.SetState(TExprNode::EState::ExecutionRequired);
             }
 
@@ -593,8 +593,8 @@ namespace {
     private:
         const TIntrusivePtr<TResultProviderConfig> Config;
         IDataProvider* DelegatedProvider = nullptr;
-        TExprNode::TPtr DelegatedNode;
-        TExprNode::TPtr DelegatedNodeOutput;
+        TExprNode::TPtr DelegatedNode; 
+        TExprNode::TPtr DelegatedNodeOutput; 
 
         ui64 CommittedPullSize = 0;
         bool PullOverflow = false;
@@ -873,7 +873,7 @@ namespace {
             }
         };
 
-        TResultProvider(const TIntrusivePtr<TResultProviderConfig>& config)
+        TResultProvider(const TIntrusivePtr<TResultProviderConfig>& config) 
             : Config(config)
             , TrackableNodeProcessor(config)
         {}
@@ -904,7 +904,7 @@ namespace {
             if (!TypeAnnotationTransformer) {
                 TypeAnnotationTransformer = CreateFunctorTransformer(
                     [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx)->IGraphTransformer::TStatus {
-                    output = input;
+                    output = input; 
 
                     if (auto maybeRes = TMaybeNode<TResWriteBase>(input)) {
                         auto res = maybeRes.Cast();
@@ -1086,7 +1086,7 @@ namespace {
                         return IGraphTransformer::TStatus::Ok;
                     }
                     else if (auto maybeIf = TMaybeNode<TResIf>(input)) {
-                        if (!EnsureArgsCount(*input, 7, ctx)) {
+                        if (!EnsureArgsCount(*input, 7, ctx)) { 
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -1316,9 +1316,9 @@ namespace {
             return *TypeAnnotationTransformer;
         }
 
-        TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override {
+        TExprNode::TPtr RewriteIO(const TExprNode::TPtr& node, TExprContext& ctx) override { 
             auto ret = node;
-            if (node->Content() == WriteName) {
+            if (node->Content() == WriteName) { 
                 ret = ctx.RenameNode(*ret, TResWrite::CallableName());
                 ret = ctx.ChangeChild(*ret, TResWrite::idx_Data,
                     ctx.Builder(node->Pos())
@@ -1373,7 +1373,7 @@ namespace {
 
         IGraphTransformer& GetCallableExecutionTransformer() override {
             if (!CallableExecutionTransformer) {
-                CallableExecutionTransformer = new TResultCallableExecutionTransformer(Config);
+                CallableExecutionTransformer = new TResultCallableExecutionTransformer(Config); 
             }
 
             return *CallableExecutionTransformer;
@@ -1389,7 +1389,7 @@ namespace {
 
         bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool compact) override {
             if (CanExecute(node)) {
-                children.push_back(node.ChildPtr(0));
+                children.push_back(node.ChildPtr(0)); 
                 if (auto resPull = TMaybeNode<TResPull>(&node)) {
                     children.push_back(resPull.Cast().Data().Ptr());
                 } else if (auto resIf = TMaybeNode<TResIf>(&node)) {
@@ -1465,8 +1465,8 @@ TIntrusivePtr<IResultWriter> CreateYsonResultWriter(NYson::EYsonFormat format) {
     return MakeIntrusive<TYsonResultWriter>(format);
 }
 
-TIntrusivePtr<IDataProvider> CreateResultProvider(const TIntrusivePtr<TResultProviderConfig>& config) {
-    return new TResultProvider(config);
+TIntrusivePtr<IDataProvider> CreateResultProvider(const TIntrusivePtr<TResultProviderConfig>& config) { 
+    return new TResultProvider(config); 
 }
 
 const THashSet<TStringBuf>& ResultProviderFunctions() {

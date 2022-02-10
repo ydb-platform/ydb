@@ -198,7 +198,7 @@ public:
     TKqpWideReadTableWrapperBase(TKqpDatashardComputeContext& computeCtx, const TTypeEnvironment& typeEnv,
         const TSmallVec<TTag>& systemColumnTags, const TSmallVec<bool>& skipNullKeys)
         : TStatelessWideFlowCodegeneratorNode<TKqpWideReadTableWrapperBase<IsReverse>>(this)
-        , ComputeCtx(computeCtx)
+        , ComputeCtx(computeCtx) 
         , TypeEnv(typeEnv)
         , SystemColumnTags(systemColumnTags)
         , SkipNullKeys(skipNullKeys)

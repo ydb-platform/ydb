@@ -3,7 +3,7 @@
 #include <util/generic/singleton.h>
 #include <util/generic/vector.h>
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
 TUdfModuleWrapperList* StaticUdfModuleWrapperList() {

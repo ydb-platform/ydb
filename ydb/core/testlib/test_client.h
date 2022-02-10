@@ -27,7 +27,7 @@
 
 #include <google/protobuf/text_format.h>
 
-#include <functional>
+#include <functional> 
 #include <algorithm>
 
 namespace NKikimr {

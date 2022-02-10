@@ -37,7 +37,7 @@ public:
     }
 
 private:
-    TStatus AnnotateDqWrite(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    TStatus AnnotateDqWrite(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) { 
         if (!EnsureMinArgsCount(*input, 2, ctx)) {
             return TStatus::Error;
         }
@@ -46,7 +46,7 @@ private:
             return TStatus::Error;
         }
 
-        if (!EnsureNewSeqType<false, false, true>(input->Head(), ctx)){
+        if (!EnsureNewSeqType<false, false, true>(input->Head(), ctx)){ 
             return TStatus::Error;
         }
 
@@ -54,16 +54,16 @@ private:
             return TStatus::Error;
         }
 
-        auto providerName = TString(input->Child(1)->Content());
+        auto providerName = TString(input->Child(1)->Content()); 
 
-        if (!TypeCtx->DataSinkMap.FindPtr(providerName)) {
+        if (!TypeCtx->DataSinkMap.FindPtr(providerName)) { 
             ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "No datasink defined for provider name " << providerName));
             return TStatus::Error;
         }
 
-        providerName.front() = std::toupper(providerName.front());
-        output = ctx.NewCallable(input->Pos(), providerName += TDqWrite::CallableName(), {input->HeadPtr(), input->TailPtr()});
-        return TStatus::Repeat;
+        providerName.front() = std::toupper(providerName.front()); 
+        output = ctx.NewCallable(input->Pos(), providerName += TDqWrite::CallableName(), {input->HeadPtr(), input->TailPtr()}); 
+        return TStatus::Repeat; 
     }
 
     TTypeAnnotationContext* TypeCtx;

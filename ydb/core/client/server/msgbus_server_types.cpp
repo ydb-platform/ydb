@@ -26,7 +26,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         const auto* typeRegistry = AppData(ctx)->TypeRegistry;
-        const auto& functionRegistry = AppData(ctx)->FunctionRegistry->GetBuiltins();
+        const auto& functionRegistry = AppData(ctx)->FunctionRegistry->GetBuiltins(); 
         ui64 typeEtag = typeRegistry->GetMetadataEtag();
         ui64 functionEtag = functionRegistry->GetMetadataEtag();
 

@@ -7,8 +7,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace {
-
+namespace { 
+ 
 class TReplicateWrapper : public TMutableComputationNode<TReplicateWrapper> {
     typedef TMutableComputationNode<TReplicateWrapper> TBaseComputation;
 public:
@@ -29,10 +29,10 @@ public:
                 if (Current < End) {
                     switch (Mode) {
                     case EDictItems::Payloads:
-                        this->ThrowNotSupported(__func__);
+                        this->ThrowNotSupported(__func__); 
                         break;
                     case EDictItems::Keys:
-                        this->ThrowNotSupported(__func__);
+                        this->ThrowNotSupported(__func__); 
                         break;
                     case EDictItems::Both:
                         key = NUdf::TUnboxedValuePod(ui64(Current));
@@ -57,7 +57,7 @@ public:
                         value = NUdf::TUnboxedValuePod(ui64(Current));
                         break;
                     case EDictItems::Both:
-                        this->ThrowNotSupported(__func__);
+                        this->ThrowNotSupported(__func__); 
                         break;
                     }
 
@@ -68,15 +68,15 @@ public:
                 return false;
             }
 
-            bool Skip() override {
-                if (Current < End) {
-                    ++Current;
-                    return true;
-                }
-
-                return false;
-            }
-
+            bool Skip() override { 
+                if (Current < End) { 
+                    ++Current; 
+                    return true; 
+                } 
+ 
+                return false; 
+            } 
+ 
             const NUdf::TUnboxedValue Item;
             ui64 Current;
             const ui64 End;
@@ -92,7 +92,7 @@ public:
 
     private:
         NUdf::TUnboxedValue GetListIterator() const override {
-            return Ctx.HolderFactory.Create<TIterator<EDictItems::Payloads>>(Item, Count);
+            return Ctx.HolderFactory.Create<TIterator<EDictItems::Payloads>>(Item, Count); 
         }
 
         bool HasFastListLength() const override {
@@ -168,11 +168,11 @@ public:
         }
 
         NUdf::TUnboxedValue GetDictIterator() const override {
-            return Ctx.HolderFactory.Create<TIterator<EDictItems::Both>>(Item, Count);
+            return Ctx.HolderFactory.Create<TIterator<EDictItems::Both>>(Item, Count); 
         }
 
         NUdf::TUnboxedValue GetKeysIterator() const override {
-            return Ctx.HolderFactory.Create<TIterator<EDictItems::Keys>>(Item, Count);
+            return Ctx.HolderFactory.Create<TIterator<EDictItems::Keys>>(Item, Count); 
         }
 
         NUdf::TUnboxedValue GetPayloadsIterator() const override {
@@ -197,7 +197,7 @@ public:
     {
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
         const auto count = Count->GetValue(ctx).Get<ui64>();
         const ui64 MAX_VALUE = 1ull << 32;
         if (count >= MAX_VALUE) {
@@ -213,10 +213,10 @@ public:
         return ctx.HolderFactory.Create<TValue>(ctx, Item->GetValue(ctx), count);
     }
 
-private:
-    void RegisterDependencies() const final {
-        DependsOn(Item);
-        DependsOn(Count);
+private: 
+    void RegisterDependencies() const final { 
+        DependsOn(Item); 
+        DependsOn(Count); 
     }
 
     IComputationNode* const Item;
@@ -224,16 +224,16 @@ private:
     const NUdf::TSourcePosition Pos;
 };
 
-}
-
+} 
+ 
 IComputationNode* WrapReplicate(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2 || callable.GetInputsCount() == 5, "Expected 2 or 5 args");
 
-    const auto countType = AS_TYPE(TDataType, callable.GetInput(1));
-    MKQL_ENSURE(countType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
+    const auto countType = AS_TYPE(TDataType, callable.GetInput(1)); 
+    MKQL_ENSURE(countType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64"); 
 
-    const auto list = LocateNode(ctx.NodeLocator, callable, 0);
-    const auto count = LocateNode(ctx.NodeLocator, callable, 1);
+    const auto list = LocateNode(ctx.NodeLocator, callable, 0); 
+    const auto count = LocateNode(ctx.NodeLocator, callable, 1); 
     NUdf::TSourcePosition pos;
     if (callable.GetInputsCount() == 5) {
         const TStringBuf file = AS_VALUE(TDataLiteral, callable.GetInput(2))->AsValue().AsStringRef();

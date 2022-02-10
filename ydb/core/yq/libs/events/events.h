@@ -20,9 +20,9 @@ using NYdb::NYq::TScope;
 
 enum class DatabaseType {
     Ydb,
-    ClickHouse,
+    ClickHouse, 
     DataStreams,
-    ObjectStorage
+    ObjectStorage 
 };
 
 struct TQueryResult {

@@ -463,7 +463,7 @@ public:
     using hasher = HashFcn;
     using key_equal = EqualKey;
     using key_extract = ExtractKey;
-    using allocator_type = Alloc;
+    using allocator_type = Alloc; 
     using node_allocator_type = typename traits_type::node_allocator_type;
 
     using size_type = size_t;
@@ -482,7 +482,7 @@ public:
     key_equal key_eq() const {
         return this->_get_key_eq();
     }
-    hasher hash_function() const {
+    hasher hash_function() const { 
         return this->_get_hash_fun();
     }
 
@@ -659,7 +659,7 @@ public:
         return buckets.size();
     } /*y*/
 
-    size_type bucket_size(size_type bucket) const {
+    size_type bucket_size(size_type bucket) const { 
         size_type result = 0;
         if (const node* cur = buckets[bucket])
             for (; !((uintptr_t)cur & 1); cur = cur->next)
@@ -669,19 +669,19 @@ public:
 
     template <class OtherValue>
     std::pair<iterator, bool> insert_unique(const OtherValue& obj) {
-        reserve(num_elements + 1);
+        reserve(num_elements + 1); 
         return insert_unique_noresize(obj);
     }
 
     template <class OtherValue>
     iterator insert_equal(const OtherValue& obj) {
-        reserve(num_elements + 1);
+        reserve(num_elements + 1); 
         return emplace_equal_noresize(obj);
     }
 
     template <typename... Args>
     iterator emplace_equal(Args&&... args) {
-        reserve(num_elements + 1);
+        reserve(num_elements + 1); 
         return emplace_equal_noresize(std::forward<Args>(args)...);
     }
 
@@ -692,7 +692,7 @@ public:
 
     template <typename... Args>
     iterator emplace_direct(insert_ctx ins, Args&&... args) {
-        bool resized = reserve(num_elements + 1);
+        bool resized = reserve(num_elements + 1); 
         node* tmp = new_node(std::forward<Args>(args)...);
         if (resized) {
             find_i(get_key(tmp->val), ins);
@@ -705,7 +705,7 @@ public:
 
     template <typename... Args>
     std::pair<iterator, bool> emplace_unique(Args&&... args) {
-        reserve(num_elements + 1);
+        reserve(num_elements + 1); 
         return emplace_unique_noresize(std::forward<Args>(args)...);
     }
 
@@ -744,7 +744,7 @@ public:
     void insert_unique(ForwardIterator f, ForwardIterator l, std::forward_iterator_tag) {
         difference_type n = std::distance(f, l);
 
-        reserve(num_elements + n);
+        reserve(num_elements + n); 
         for (; n > 0; --n, ++f)
             insert_unique_noresize(*f);
     }
@@ -753,7 +753,7 @@ public:
     void insert_equal(ForwardIterator f, ForwardIterator l, std::forward_iterator_tag) {
         difference_type n = std::distance(f, l);
 
-        reserve(num_elements + n);
+        reserve(num_elements + n); 
         for (; n > 0; --n, ++f)
             emplace_equal_noresize(*f);
     }
@@ -819,7 +819,7 @@ public:
     void erase(const const_iterator& it);
     void erase(const_iterator first, const_iterator last);
 
-    bool reserve(size_type num_elements_hint);
+    bool reserve(size_type num_elements_hint); 
     void basic_clear();
 
     /**
@@ -1065,7 +1065,7 @@ __yhashtable_iterator<V> THashTable<V, K, HF, Ex, Eq, A>::emplace_equal_noresize
 template <class V, class K, class HF, class Ex, class Eq, class A>
 template <class OtherValue>
 typename THashTable<V, K, HF, Ex, Eq, A>::reference THashTable<V, K, HF, Ex, Eq, A>::find_or_insert(const OtherValue& v) {
-    reserve(num_elements + 1);
+    reserve(num_elements + 1); 
 
     size_type n = bkt_num_key(get_key(v));
     node* first = buckets[n];
@@ -1432,7 +1432,7 @@ public:
     using value_type = typename ht::value_type;
     using hasher = typename ht::hasher;
     using key_equal = typename ht::key_equal;
-    using allocator_type = typename ht::allocator_type;
+    using allocator_type = typename ht::allocator_type; 
     using node_allocator_type = typename ht::node_allocator_type;
     using mapped_type = T;
 
@@ -1447,8 +1447,8 @@ public:
     using const_iterator = typename ht::const_iterator;
     using insert_ctx = typename ht::insert_ctx;
 
-    hasher hash_function() const {
-        return rep.hash_function();
+    hasher hash_function() const { 
+        return rep.hash_function(); 
     }
     key_equal key_eq() const {
         return rep.key_eq();
@@ -1717,14 +1717,14 @@ public:
     }
 
 public:
-    void reserve(size_type hint) {
-        rep.reserve(hint);
+    void reserve(size_type hint) { 
+        rep.reserve(hint); 
     }
     size_type bucket_count() const {
         return rep.bucket_count();
     }
-    size_type bucket_size(size_type n) const {
-        return rep.bucket_size(n);
+    size_type bucket_size(size_type n) const { 
+        return rep.bucket_size(n); 
     }
     node_allocator_type& GetNodeAllocator() {
         return rep.GetNodeAllocator();
@@ -1765,7 +1765,7 @@ public:
     using hasher = typename ht::hasher;
     using key_equal = typename ht::key_equal;
     using mapped_type = T;
-    using allocator_type = typename ht::allocator_type;
+    using allocator_type = typename ht::allocator_type; 
 
     using size_type = typename ht::size_type;
     using difference_type = typename ht::difference_type;
@@ -1778,8 +1778,8 @@ public:
     using const_iterator = typename ht::const_iterator;
     using insert_ctx = typename ht::insert_ctx;
 
-    hasher hash_function() const {
-        return rep.hash_function();
+    hasher hash_function() const { 
+        return rep.hash_function(); 
     }
     key_equal key_eq() const {
         return rep.key_eq();
@@ -1983,14 +1983,14 @@ public:
     }
 
 public:
-    void reserve(size_type hint) {
-        rep.reserve(hint);
+    void reserve(size_type hint) { 
+        rep.reserve(hint); 
     }
     size_type bucket_count() const {
         return rep.bucket_count();
     }
-    size_type bucket_size(size_type n) const {
-        return rep.bucket_size(n);
+    size_type bucket_size(size_type n) const { 
+        return rep.bucket_size(n); 
     }
 };
 

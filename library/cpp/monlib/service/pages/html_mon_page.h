@@ -16,7 +16,7 @@ namespace NMonitoring {
 
         void NotFound(NMonitoring::IMonHttpRequest& request) const;
         void NoContent(NMonitoring::IMonHttpRequest& request) const;
-
+ 
         virtual void OutputContent(NMonitoring::IMonHttpRequest& request) = 0;
 
         bool OutputTableSorterJsCss;

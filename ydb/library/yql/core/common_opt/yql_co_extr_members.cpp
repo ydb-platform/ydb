@@ -13,7 +13,7 @@ using namespace NNodes;
 
 TExprNode::TPtr ApplyExtractMembersToTake(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoTake take(node);
-    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
+    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix; 
     return Build<TCoTake>(ctx, node->Pos())
         .Input<TCoExtractMembers>()
             .Input(take.Input())
@@ -25,7 +25,7 @@ TExprNode::TPtr ApplyExtractMembersToTake(const TExprNode::TPtr& node, const TEx
 
 TExprNode::TPtr ApplyExtractMembersToSkip(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoSkip skip(node);
-    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
+    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix; 
     return Build<TCoSkip>(ctx, node->Pos())
         .Input<TCoExtractMembers>()
             .Input(skip.Input())
@@ -52,12 +52,12 @@ TExprNode::TPtr ApplyExtractMembersToExtend(const TExprNode::TPtr& node, const T
 
 TExprNode::TPtr ApplyExtractMembersToSkipNullMembers(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoSkipNullMembers skipNullMembers(node);
-    const auto& filtered = skipNullMembers.Members();
-    if (!filtered) {
-        return {};
-    }
+    const auto& filtered = skipNullMembers.Members(); 
+    if (!filtered) { 
+        return {}; 
+    } 
     TExprNode::TListType filteredMembers;
-    for (const auto& x : filtered.Cast()) {
+    for (const auto& x : filtered.Cast()) { 
         auto member = x.Value();
         bool hasMember = false;
         for (const auto& y : members->ChildrenList()) {
@@ -72,7 +72,7 @@ TExprNode::TPtr ApplyExtractMembersToSkipNullMembers(const TExprNode::TPtr& node
         }
     }
 
-    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
+    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix; 
     return Build<TCoSkipNullMembers>(ctx, skipNullMembers.Pos())
         .Input<TCoExtractMembers>()
             .Input(skipNullMembers.Input())
@@ -208,7 +208,7 @@ TExprNode::TPtr ApplyExtractMembersToSort(const TExprNode::TPtr& node, const TEx
             .Build();
     }
     else if (fieldSubset) {
-        const auto structType = GetSeqItemType(sort.Ref().GetTypeAnn())->Cast<TStructExprType>();
+        const auto structType = GetSeqItemType(sort.Ref().GetTypeAnn())->Cast<TStructExprType>(); 
         if (structType->GetSize() <= extractFields.size()) {
             return {};
         }
@@ -291,7 +291,7 @@ TExprNode::TPtr ApplyExtractMembersToTop(const TExprNode::TPtr& node, const TExp
         return ctx.ChangeChildren(*node, std::move(children));
     }
     else if (fieldSubset) {
-        const auto structType = GetSeqItemType(top.Ref().GetTypeAnn())->Cast<TStructExprType>();
+        const auto structType = GetSeqItemType(top.Ref().GetTypeAnn())->Cast<TStructExprType>(); 
         if (structType->GetSize() <= extractFields.size()) {
             return {};
         }
@@ -319,12 +319,12 @@ TExprNode::TPtr ApplyExtractMembersToTop(const TExprNode::TPtr& node, const TExp
 
 TExprNode::TPtr ApplyExtractMembersToEquiJoin(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoEquiJoin join(node);
-    const auto structType = GetSeqItemType(join.Ref().GetTypeAnn())->Cast<TStructExprType>();
+    const auto structType = GetSeqItemType(join.Ref().GetTypeAnn())->Cast<TStructExprType>(); 
     if (structType->GetSize() == 0) {
         return {};
     }
 
-    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix;
+    YQL_CLOG(DEBUG, Core) << "Move ExtractMembers over " << node->Content() << logSuffix; 
     auto joinSettings = join.Arg(join.ArgCount() - 1).Ptr();
     auto renameMap = LoadJoinRenameMap(*joinSettings);
     joinSettings = RemoveSetting(*joinSettings, "rename", ctx);
@@ -414,7 +414,7 @@ TExprNode::TPtr ApplyExtractMembersToFlatMap(const TExprNode::TPtr& node, const 
 
 TExprNode::TPtr ApplyExtractMembersToPartitionByKey(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     TCoPartitionByKey part(node);
-    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix; 
     auto newBody = Build<TCoExtractMembers>(ctx, part.Pos())
         .Input(part.ListHandlerLambda().Body())
         .Members(members)
@@ -436,82 +436,82 @@ TExprNode::TPtr ApplyExtractMembersToPartitionByKey(const TExprNode::TPtr& node,
         .Ptr();
 }
 
-TExprNode::TPtr ApplyExtractMembersToChopper(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
-    const TCoChopper chopper(node);
-    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
-    auto newBody = Build<TCoExtractMembers>(ctx, chopper.Handler().Pos())
-        .Input(chopper.Handler().Body())
-        .Members(members)
-        .Done();
-
-    return Build<TCoChopper>(ctx, chopper.Pos())
-        .Input(chopper.Input())
-        .KeyExtractor(chopper.KeyExtractor())
-        .GroupSwitch(chopper.GroupSwitch())
-        .Handler()
-            .Args({"key", "group"})
-            .Body<TExprApplier>()
-                .Apply(newBody)
-                .With(chopper.Handler().Args().Arg(0), "key")
-                .With(chopper.Handler().Args().Arg(1), "group")
-            .Build()
-        .Build()
-        .Done()
-        .Ptr();
-}
-
-TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
-    const TCoMapJoinCore mapJoin(node);
-    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
-    TNodeSet used(members->ChildrenSize());
-    members->ForEachChild([&used](const TExprNode& member) { used.emplace(&member); });
-
-    auto right = mapJoin.RightRenames().Ref().ChildrenList();
-    for (auto it = right.cbegin(); it < right.cend();) {
-        if (used.contains((++it)->Get()))
-            ++it;
-        else {
-            auto to = it;
-            it = right.erase(--it, ++to);
-        }
-    }
-
-    auto left = mapJoin.LeftRenames().Ref().ChildrenList();
-    auto input = mapJoin.LeftKeysColumns().Ref().ChildrenList();
-    const auto leftColumsEstimate = input.size() + (left.size() >> 1U);
-    input.reserve(leftColumsEstimate);
-    TNodeSet set(leftColumsEstimate);
-    for (auto it = input.cbegin(); input.cend() != it;) {
-        if (set.emplace(it->Get()).second)
-            ++it;
-        else
-            it = input.erase(it);
-    }
-
-    for (auto it = left.cbegin(); it < left.cend();) {
-        if (set.emplace(it->Get()).second)
-            input.emplace_back(*it);
-        if (used.contains((++it)->Get()))
-            ++it;
-        else {
-            auto to = it;
-            it = left.erase(--it, ++to);
-        }
-    }
-
-    return Build<TCoMapJoinCore>(ctx, mapJoin.Pos())
-        .LeftInput<TCoExtractMembers>()
-            .Input(mapJoin.LeftInput())
-            .Members(ctx.NewList(mapJoin.Pos(), std::move(input)))
-            .Build()
-        .RightDict(mapJoin.RightDict())
-        .JoinKind(mapJoin.JoinKind())
-        .LeftKeysColumns(mapJoin.LeftKeysColumns())
-        .LeftRenames(ctx.NewList(mapJoin.LeftInput().Pos(), std::move(left)))
-        .RightRenames(ctx.NewList(mapJoin.RightRenames().Pos(), std::move(right)))
-        .Done().Ptr();
-}
-
+TExprNode::TPtr ApplyExtractMembersToChopper(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) { 
+    const TCoChopper chopper(node); 
+    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix; 
+    auto newBody = Build<TCoExtractMembers>(ctx, chopper.Handler().Pos()) 
+        .Input(chopper.Handler().Body()) 
+        .Members(members) 
+        .Done(); 
+ 
+    return Build<TCoChopper>(ctx, chopper.Pos()) 
+        .Input(chopper.Input()) 
+        .KeyExtractor(chopper.KeyExtractor()) 
+        .GroupSwitch(chopper.GroupSwitch()) 
+        .Handler() 
+            .Args({"key", "group"}) 
+            .Body<TExprApplier>() 
+                .Apply(newBody) 
+                .With(chopper.Handler().Args().Arg(0), "key") 
+                .With(chopper.Handler().Args().Arg(1), "group") 
+            .Build() 
+        .Build() 
+        .Done() 
+        .Ptr(); 
+} 
+ 
+TExprNode::TPtr ApplyExtractMembersToMapJoinCore(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) { 
+    const TCoMapJoinCore mapJoin(node); 
+    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix; 
+    TNodeSet used(members->ChildrenSize()); 
+    members->ForEachChild([&used](const TExprNode& member) { used.emplace(&member); }); 
+ 
+    auto right = mapJoin.RightRenames().Ref().ChildrenList(); 
+    for (auto it = right.cbegin(); it < right.cend();) { 
+        if (used.contains((++it)->Get())) 
+            ++it; 
+        else { 
+            auto to = it; 
+            it = right.erase(--it, ++to); 
+        } 
+    } 
+ 
+    auto left = mapJoin.LeftRenames().Ref().ChildrenList(); 
+    auto input = mapJoin.LeftKeysColumns().Ref().ChildrenList(); 
+    const auto leftColumsEstimate = input.size() + (left.size() >> 1U); 
+    input.reserve(leftColumsEstimate); 
+    TNodeSet set(leftColumsEstimate); 
+    for (auto it = input.cbegin(); input.cend() != it;) { 
+        if (set.emplace(it->Get()).second) 
+            ++it; 
+        else 
+            it = input.erase(it); 
+    } 
+ 
+    for (auto it = left.cbegin(); it < left.cend();) { 
+        if (set.emplace(it->Get()).second) 
+            input.emplace_back(*it); 
+        if (used.contains((++it)->Get())) 
+            ++it; 
+        else { 
+            auto to = it; 
+            it = left.erase(--it, ++to); 
+        } 
+    } 
+ 
+    return Build<TCoMapJoinCore>(ctx, mapJoin.Pos()) 
+        .LeftInput<TCoExtractMembers>() 
+            .Input(mapJoin.LeftInput()) 
+            .Members(ctx.NewList(mapJoin.Pos(), std::move(input))) 
+            .Build() 
+        .RightDict(mapJoin.RightDict()) 
+        .JoinKind(mapJoin.JoinKind()) 
+        .LeftKeysColumns(mapJoin.LeftKeysColumns()) 
+        .LeftRenames(ctx.NewList(mapJoin.LeftInput().Pos(), std::move(left))) 
+        .RightRenames(ctx.NewList(mapJoin.RightRenames().Pos(), std::move(right))) 
+        .Done().Ptr(); 
+} 
+ 
 TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node, const TExprNode::TPtr& members, TExprContext& ctx, TStringBuf logSuffix) {
     YQL_ENSURE(node->IsCallable({"CalcOverWindow", "CalcOverSessionWindow", "CalcOverWindowGroup"}));
 
@@ -661,7 +661,7 @@ TExprNode::TPtr ApplyExtractMembersToCalcOverWindow(const TExprNode::TPtr& node,
         .Calcs(ctx.NewList(node->Pos(), std::move(newCalcs)))
         .Done().Ptr();
 
-    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix; 
     return Build<TCoExtractMembers>(ctx, node->Pos())
         .Input(calcOverWindow)
         .Members(members)
@@ -770,7 +770,7 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         .Done()
         .Ptr();
 
-    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix;
+    YQL_CLOG(DEBUG, Core) << "Apply ExtractMembers to " << node->Content() << logSuffix; 
     return Build<TCoExtractMembers>(ctx, aggr.Pos())
         .Input<TCoAggregate>()
             .Input(newInput)

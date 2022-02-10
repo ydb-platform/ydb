@@ -119,7 +119,7 @@ namespace {
         std::function<void(ui64, const TString&)> ShardReplyInspector;
 
         TDriver()
-            : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
+            : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry())) 
             , RandomProvider(CreateDeterministicRandomProvider(1))
             , TimeProvider(CreateDeterministicTimeProvider(1))
             , Env(Alloc)
@@ -145,7 +145,7 @@ namespace {
             TEngineFlatSettings settings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(), *RandomProvider, *TimeProvider);
             SettingsConfigurer(settings);
 
-            const auto unguard = Unguard(Alloc);
+            const auto unguard = Unguard(Alloc); 
             auto proxyEngine = CreateEngineFlat(settings);
             if (proxyEngine->SetProgram(pgmStr) != IEngineFlat::EResult::Ok) {
                 Cerr << proxyEngine->GetErrors() << Endl;
@@ -300,7 +300,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)TKey;
-        TRuntimeNode::TList row(1);
+        TRuntimeNode::TList row(1); 
         row[0] = key ? key : pgmBuilder.NewNull();
         auto update = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId;
@@ -324,7 +324,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)TKey;
-        TRuntimeNode::TList row(1);
+        TRuntimeNode::TList row(1); 
         row[0] = pgmBuilder.NewNull();
 
         TVector<TSelectColumn> columns;
@@ -356,7 +356,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatTest) {
     Y_UNIT_TEST(TestPureProgram) {
         TDriver driver;
         auto& pgmBuilder = driver.PgmBuilder;
-        auto value = pgmBuilder.TProgramBuilder::TProgramBuilder::NewDataLiteral<ui32>(42);
+        auto value = pgmBuilder.TProgramBuilder::TProgramBuilder::NewDataLiteral<ui32>(42); 
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
 
         NKikimrMiniKQL::TResult res;
@@ -413,8 +413,8 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
-        row[0] = pgmBuilder.TProgramBuilder::TProgramBuilder::NewDataLiteral<ui32>(42);
+        TRuntimeNode::TList row(1); 
+        row[0] = pgmBuilder.TProgramBuilder::TProgramBuilder::NewDataLiteral<ui32>(42); 
         TVector<TSelectColumn> columns;
         auto value = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
@@ -470,8 +470,8 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
-        row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
+        TRuntimeNode::TList row(1); 
+        row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42); 
         TVector<TSelectColumn> columns;
         auto value = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
@@ -529,8 +529,8 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
-        row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
+        TRuntimeNode::TList row(1); 
+        row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42); 
         TVector<TSelectColumn> columns;
         columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
         auto value = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row);
@@ -677,10 +677,10 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
+        TRuntimeNode::TList row(1); 
         row[0] = pgmBuilder.Add(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2));
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40), 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2)); 
 
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.EraseRow(TTableId(OwnerId, Table1Id), keyTypes, row)));
 
@@ -719,7 +719,7 @@ Value {
 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
+        TRuntimeNode::TList row(1); 
         row[0] = pgmBuilder.NewNull();
 
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.EraseRow(TTableId(OwnerId, Table1Id), keyTypes, row)));
@@ -792,10 +792,10 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
+        TRuntimeNode::TList row(1); 
         row[0] = pgmBuilder.Add(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2));
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40), 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2)); 
 
         auto update = pgmBuilder.GetUpdateRowBuilder();
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.UpdateRow(TTableId(OwnerId, Table1Id),
@@ -830,10 +830,10 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
+        TRuntimeNode::TList row(1); 
         row[0] = pgmBuilder.Add(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2));
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40), 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2)); 
 
         auto update = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId;
@@ -902,10 +902,10 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
+        TRuntimeNode::TList row(1); 
         row[0] = pgmBuilder.Add(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2));
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40), 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2)); 
 
         auto update = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId;
@@ -952,10 +952,10 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
+        TRuntimeNode::TList row(1); 
         row[0] = pgmBuilder.Add(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2));
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40), 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2)); 
 
         auto update = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId;
@@ -1005,10 +1005,10 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
+        TRuntimeNode::TList row(1); 
         row[0] = pgmBuilder.Add(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2));
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40), 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2)); 
 
         auto update = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId;
@@ -1046,10 +1046,10 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
 
@@ -1117,7 +1117,7 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewNull();
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -1205,11 +1205,11 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
 
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
 
@@ -1322,11 +1322,11 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1); 
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
 
@@ -1432,7 +1432,7 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewNull();
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -1546,10 +1546,10 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         options.BytesLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(32);
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
@@ -1666,11 +1666,11 @@ Value {
 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
-        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43);
+        TRuntimeNode::TList rowFrom(1); 
+        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43); 
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         options.FromColumns = rowFrom;
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
@@ -1787,13 +1787,13 @@ Value {
 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
-        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43);
+        TRuntimeNode::TList rowFrom(1); 
+        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43); 
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>( 
             TReadRangeOptions::TFlags::ExcludeInitValue |
-            TReadRangeOptions::TFlags::ExcludeTermValue);
+            TReadRangeOptions::TFlags::ExcludeTermValue); 
         options.FromColumns = rowFrom;
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
@@ -1903,13 +1903,13 @@ Value {
 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
-        TRuntimeNode::TList rowTo(1);
+        TRuntimeNode::TList rowFrom(1); 
+        TRuntimeNode::TList rowTo(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43);
+        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43); 
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::IncludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::IncludeTermValue); 
         options.FromColumns = rowFrom;
         options.ToColumns = rowTo;
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
@@ -2027,8 +2027,8 @@ Value {
 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
-        TRuntimeNode::TList rowTo(1);
+        TRuntimeNode::TList rowFrom(1); 
+        TRuntimeNode::TList rowTo(1); 
         rowFrom[0] = pgmBuilder.NewNull();
         rowTo[0] = pgmBuilder.NewNull();
 
@@ -2137,13 +2137,13 @@ Value {
 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
-        TRuntimeNode::TList rowTo(1);
+        TRuntimeNode::TList rowFrom(1); 
+        TRuntimeNode::TList rowTo(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
-        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43);
+        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43); 
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         options.FromColumns = rowFrom;
         options.ToColumns = rowTo;
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
@@ -2257,15 +2257,15 @@ Value {
 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
-        TRuntimeNode::TList rowTo(1);
-        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
-        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43);
+        TRuntimeNode::TList rowFrom(1); 
+        TRuntimeNode::TList rowTo(1); 
+        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42); 
+        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43); 
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>( 
             TReadRangeOptions::TFlags::IncludeInitValue |
-            TReadRangeOptions::TFlags::IncludeTermValue);
+            TReadRangeOptions::TFlags::IncludeTermValue); 
         options.FromColumns = rowFrom;
         options.ToColumns = rowTo;
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
@@ -2386,15 +2386,15 @@ Value {
 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
-        TRuntimeNode::TList rowTo(1);
-        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
-        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43);
+        TRuntimeNode::TList rowFrom(1); 
+        TRuntimeNode::TList rowTo(1); 
+        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42); 
+        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43); 
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>( 
             TReadRangeOptions::TFlags::ExcludeInitValue |
-            TReadRangeOptions::TFlags::IncludeTermValue);
+            TReadRangeOptions::TFlags::IncludeTermValue); 
         options.FromColumns = rowFrom;
         options.ToColumns = rowTo;
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
@@ -2508,15 +2508,15 @@ Value {
 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
-        TRuntimeNode::TList rowTo(1);
-        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
-        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43);
+        TRuntimeNode::TList rowFrom(1); 
+        TRuntimeNode::TList rowTo(1); 
+        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42); 
+        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43); 
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>( 
             TReadRangeOptions::TFlags::IncludeInitValue |
-            TReadRangeOptions::TFlags::ExcludeTermValue);
+            TReadRangeOptions::TFlags::ExcludeTermValue); 
         options.FromColumns = rowFrom;
         options.ToColumns = rowTo;
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
@@ -2630,15 +2630,15 @@ Value {
 
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
-        TRuntimeNode::TList rowTo(1);
-        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
-        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43);
+        TRuntimeNode::TList rowFrom(1); 
+        TRuntimeNode::TList rowTo(1); 
+        rowFrom[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42); 
+        rowTo[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(43); 
 
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>( 
             TReadRangeOptions::TFlags::ExcludeInitValue |
-            TReadRangeOptions::TFlags::ExcludeTermValue);
+            TReadRangeOptions::TFlags::ExcludeTermValue); 
         options.FromColumns = rowFrom;
         options.ToColumns = rowTo;
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
@@ -2745,22 +2745,22 @@ Value {
 
         TVector<ui32> keyTypes1(1);
         keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row1(1);
+        TRuntimeNode::TList row1(1); 
         TVector<TSelectColumn> columns1;
         columns1.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
 
-        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
+        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42); 
         auto value1 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes1, columns1, row1);
 
         TVector<ui32> keyTypes2(1);
         keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
-        TRuntimeNode::TList row2(1);
-        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11);
+        TRuntimeNode::TList row2(1); 
+        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11); 
         TVector<TSelectColumn> columns2;
         columns2.emplace_back("4", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType);
 
         auto value2 = pgmBuilder.SelectRow(TTableId(OwnerId, Table2Id), keyTypes2, columns2, row2);
-        TRuntimeNode::TList resList;
+        TRuntimeNode::TList resList; 
         resList.push_back(pgmBuilder.SetResult("myRes1", value1));
         resList.push_back(pgmBuilder.SetResult("myRes2", value2));
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(resList));
@@ -2894,17 +2894,17 @@ Value {
 
         TVector<ui32> keyTypes1(1);
         keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row1(1);
-        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
+        TRuntimeNode::TList row1(1); 
+        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42); 
         auto value1 = pgmBuilder.EraseRow(TTableId(OwnerId, Table1Id), keyTypes1, row1);
 
         TVector<ui32> keyTypes2(1);
         keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
-        TRuntimeNode::TList row2(1);
-        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11);
+        TRuntimeNode::TList row2(1); 
+        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11); 
 
         auto value2 = pgmBuilder.EraseRow(TTableId(OwnerId, Table2Id), keyTypes2, row2);
-        TRuntimeNode::TList resList;
+        TRuntimeNode::TList resList; 
         resList.push_back(value1);
         resList.push_back(value2);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(resList));
@@ -2950,8 +2950,8 @@ Value {
 
         TVector<ui32> keyTypes1(1);
         keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row1(1);
-        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
+        TRuntimeNode::TList row1(1); 
+        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42); 
         auto update1 = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId1 = (ui32)Schema1::Table1::Value::ColumnId;
         update1.SetColumn(columnId1,
@@ -2962,17 +2962,17 @@ Value {
 
         TVector<ui32> keyTypes2(1);
         keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
-        TRuntimeNode::TList row2(1);
-        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11);
+        TRuntimeNode::TList row2(1); 
+        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11); 
 
         auto update2 = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId2 = (ui32)Schema2::Table2::Value::ColumnId;
         update2.SetColumn(columnId2,
             NUdf::TDataType<ui32>::Id,
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(21));
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(21)); 
 
         auto value2 = pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), keyTypes2, row2, update2);
-        TRuntimeNode::TList resList;
+        TRuntimeNode::TList resList; 
         resList.push_back(value1);
         resList.push_back(value2);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(resList));
@@ -3042,8 +3042,8 @@ Value {
 
         TVector<ui32> keyTypes1(1);
         keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row1(1);
-        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
+        TRuntimeNode::TList row1(1); 
+        row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42); 
         auto update1 = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId1 = (ui32)Schema1::Table1::Value::ColumnId;
         update1.SetColumn(columnId1,
@@ -3058,21 +3058,21 @@ Value {
 
         TVector<ui32> keyTypes2(1);
         keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
-        TRuntimeNode::TList row2(1);
-        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11);
+        TRuntimeNode::TList row2(1); 
+        row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(11); 
 
         auto update2 = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId2 = (ui32)Schema2::Table2::Value::ColumnId;
         update2.SetColumn(columnId2,
             NUdf::TDataType<ui32>::Id,
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(32));
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(32)); 
 
         TVector<TSelectColumn> columns2;
         columns2.emplace_back("4", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType);
 
         auto oldRow2 = pgmBuilder.SelectRow(TTableId(OwnerId, Table2Id), keyTypes2, columns2, row2);
         auto value2 = pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), keyTypes2, row2, update2);
-        TRuntimeNode::TList resList;
+        TRuntimeNode::TList resList; 
         resList.push_back(value1);
         resList.push_back(value2);
         auto prevValue1 = pgmBuilder.FlatMap(oldRow1, [&](TRuntimeNode item) {
@@ -3083,12 +3083,12 @@ Value {
             return pgmBuilder.Member(item, "4");
         });
 
-        const TString str(simulateFail1 ? "XXX" : "qwe");
-        auto predicate = pgmBuilder.And({
-            pgmBuilder.Exists(prevValue1), pgmBuilder.AggrEquals(pgmBuilder.Unwrap(prevValue1, pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
-                pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(str)),
-            pgmBuilder.Exists(prevValue2), pgmBuilder.AggrEquals(pgmBuilder.Unwrap(prevValue2, pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
-                pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(simulateFail2 ? 999 : 67))});
+        const TString str(simulateFail1 ? "XXX" : "qwe"); 
+        auto predicate = pgmBuilder.And({ 
+            pgmBuilder.Exists(prevValue1), pgmBuilder.AggrEquals(pgmBuilder.Unwrap(prevValue1, pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0), 
+                pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(str)), 
+            pgmBuilder.Exists(prevValue2), pgmBuilder.AggrEquals(pgmBuilder.Unwrap(prevValue2, pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0), 
+                pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(simulateFail2 ? 999 : 67))}); 
 
         auto pgm = pgmBuilder.Build(pgmBuilder.If(predicate, pgmBuilder.AsList(resList), pgmBuilder.AsList(pgmBuilder.Abort())));
 
@@ -3164,8 +3164,8 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
-        row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42);
+        TRuntimeNode::TList row(1); 
+        row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(42); 
         TVector<TSelectColumn> columns;
         columns.emplace_back("2", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType);
         auto value = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row);
@@ -3245,10 +3245,10 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
 
@@ -3331,10 +3331,10 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
+        TRuntimeNode::TList row(1); 
         row[0] = pgmBuilder.Add(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2));
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40), 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2)); 
 
         auto update = pgmBuilder.GetUpdateRowBuilder();
         ui32 columnId = (ui32)Schema1::Table1::Value::ColumnId;
@@ -3382,10 +3382,10 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList row(1);
+        TRuntimeNode::TList row(1); 
         row[0] = pgmBuilder.Add(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40),
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2));
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(40), 
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(2)); 
 
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.EraseRow(TTableId(OwnerId, Table1Id), keyTypes, row)));
 
@@ -3442,10 +3442,10 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
 
@@ -3567,11 +3567,11 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
+        options.ItemsLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(1); 
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
 
@@ -3696,12 +3696,12 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         const ui64 RowOverheadBytes = 8;
-        options.BytesLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(4 + RowOverheadBytes);
+        options.BytesLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(4 + RowOverheadBytes); 
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
 
@@ -3829,7 +3829,7 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -3975,7 +3975,7 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -4101,7 +4101,7 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -4234,7 +4234,7 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -4339,8 +4339,8 @@ Value {
     Y_UNIT_TEST(TestBug998) {
         TDriver driver;
         auto& pgmBuilder = driver.PgmBuilder;
-        auto value1 = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(4294967172);
-        auto value2 = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(123);
+        auto value1 = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(4294967172); 
+        auto value2 = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(123); 
         auto value = pgmBuilder.Add(value1, value2);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
 
@@ -4383,7 +4383,7 @@ Value {
         auto& pgmBuilder = driver.PgmBuilder;
 
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.AcquireLocks(
-            pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(0))));
+            pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(0)))); 
 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(driver.Run(pgm, res, &SingleShardResolver), IEngineFlat::EStatus::Complete);
@@ -4737,22 +4737,22 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
         TVector<TStringBuf> filterNullColumns {"Value"};
         auto filterNull = pgmBuilder.FilterNullMembers(list, filterNullColumns);
         auto filtered = pgmBuilder.Filter(filterNull, [&pgmBuilder, &okValue](TRuntimeNode item) {
-            return pgmBuilder.AggrEquals(
+            return pgmBuilder.AggrEquals( 
                 pgmBuilder.Member(item, "Value"),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(okValue));
         });
         auto mapped = pgmBuilder.Map(filtered, [&pgmBuilder](TRuntimeNode item) {
             return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add(
-                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)));
+                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10))); 
         });
         auto flatmapped = pgmBuilder.FlatMap(mapped, [&pgmBuilder](TRuntimeNode item) {
             TString prefix = "mapped_";
@@ -4760,7 +4760,7 @@ Value {
 
             return pgmBuilder.AsList(pgmBuilder.AddMember(item, "RemappedId", pgmBuilder.Concat(
                 prefixNode, pgmBuilder.ToString(pgmBuilder.Coalesce(pgmBuilder.Member(item, "MappedID"),
-                    pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(0))))));
+                    pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(0)))))); 
         });
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", flatmapped)));
 
@@ -4813,18 +4813,18 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
         auto mapped = pgmBuilder.Map(list, [&pgmBuilder](TRuntimeNode item) {
             return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add(
-                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)));
+                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10))); 
         });
 
-        TRuntimeNode::TList results;
+        TRuntimeNode::TList results; 
         results.push_back(pgmBuilder.SetResult("Result1", mapped));
         results.push_back(pgmBuilder.SetResult("Result2", list));
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(results));
@@ -4881,15 +4881,15 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
         auto mapped = pgmBuilder.Map(list, [&pgmBuilder, keyTypes, columns](TRuntimeNode item) {
-            TRuntimeNode::TList row(1);
-            row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(3);
+            TRuntimeNode::TList row(1); 
+            row[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(3); 
 
             return pgmBuilder.AddMember(item, "Fetch",
                 pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row));
@@ -4943,14 +4943,14 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
         auto filtered = pgmBuilder.OrderedFilter(list, [&pgmBuilder, &okValue](TRuntimeNode item) {
-            return pgmBuilder.AggrEquals(
+            return pgmBuilder.AggrEquals( 
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(okValue));
         });
@@ -5029,23 +5029,23 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
         auto mapped = pgmBuilder.Map(list, [&pgmBuilder](TRuntimeNode item) {
             return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add(
-                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)));
+                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10))); 
         });
 
         auto write = pgmBuilder.Map(mapped, [&pgmBuilder](TRuntimeNode item) {
             TVector<ui32> keyTypes(1);
             keyTypes[0] = (ui32)NUdf::TDataType<ui64>::Id;
 
-            TRuntimeNode::TList row(1);
-            row[0] = pgmBuilder.Convert(pgmBuilder.Member(item, "ID"), pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id)));
+            TRuntimeNode::TList row(1); 
+            row[0] = pgmBuilder.Convert(pgmBuilder.Member(item, "ID"), pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id))); 
 
             auto update = pgmBuilder.GetUpdateRowBuilder();
             ui32 columnId = (ui32)Schema2::Table2::Value::ColumnId;
@@ -5072,10 +5072,10 @@ Value {
             auto options = pgmBuilder.GetDefaultTableRangeOptions();
             TVector<ui32> keyTypes(1);
             keyTypes[0] = (ui32)NUdf::TDataType<ui64>::Id;
-            TRuntimeNode::TList rowFrom(1);
+            TRuntimeNode::TList rowFrom(1); 
             rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
             options.FromColumns = rowFrom;
-            options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+            options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
             auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table2Id), keyTypes, columns, options);
             auto checkpgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", range)));
 
@@ -5133,7 +5133,7 @@ Value {
         auto options1 = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes1(1);
         keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom1(1);
+        TRuntimeNode::TList rowFrom1(1); 
         rowFrom1[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options1.FromColumns = rowFrom1;
         options1.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -5146,7 +5146,7 @@ Value {
         auto options2 = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes2(1);
         keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
-        TRuntimeNode::TList rowFrom2(1);
+        TRuntimeNode::TList rowFrom2(1); 
         rowFrom2[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
         options2.FromColumns = rowFrom2;
         options2.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -5223,7 +5223,7 @@ Value {
         auto options1 = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes1(1);
         keyTypes1[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom1(1);
+        TRuntimeNode::TList rowFrom1(1); 
         rowFrom1[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options1.FromColumns = rowFrom1;
         options1.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -5236,7 +5236,7 @@ Value {
         auto options2 = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes2(1);
         keyTypes2[0] = (ui32)NUdf::TDataType<ui64>::Id;
-        TRuntimeNode::TList rowFrom2(1);
+        TRuntimeNode::TList rowFrom2(1); 
         rowFrom2[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id);
         options2.FromColumns = rowFrom2;
         options2.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -5327,10 +5327,10 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
 
@@ -5344,19 +5344,19 @@ Value {
             return item;
         });
 
-        auto values = pgmBuilder.DictItems(dict);
+        auto values = pgmBuilder.DictItems(dict); 
 
         auto agg = pgmBuilder.FlatMap(values, [&](TRuntimeNode item) {
             auto key = pgmBuilder.Nth(item, 0);
             auto payloadList = pgmBuilder.Nth(item, 1);
             auto fold1 = pgmBuilder.Fold1(payloadList, [&](TRuntimeNode item2) {
-                std::vector<std::pair<std::string_view, TRuntimeNode>> fields {
+                std::vector<std::pair<std::string_view, TRuntimeNode>> fields { 
                     {"Key", key},
                     {"Sum", pgmBuilder.Member(item2, "ID")}
                 };
                 return pgmBuilder.NewOptional(pgmBuilder.NewStruct(fields));
             }, [&](TRuntimeNode item2, TRuntimeNode state) {
-                std::vector<std::pair<std::string_view, TRuntimeNode>> fields {
+                std::vector<std::pair<std::string_view, TRuntimeNode>> fields { 
                     {"Key", pgmBuilder.Member(state, "Key")},
                     {"Sum", pgmBuilder.AggrAdd(pgmBuilder.Member(state, "Sum"), pgmBuilder.Member(item2, "ID"))}
                 };
@@ -5441,10 +5441,10 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
 
@@ -5454,19 +5454,19 @@ Value {
             return item;
         });
 
-        auto values = pgmBuilder.DictItems(dict);
+        auto values = pgmBuilder.DictItems(dict); 
 
         auto agg = pgmBuilder.FlatMap(values, [&](TRuntimeNode item) {
             auto key = pgmBuilder.Nth(item, 0);
             auto payloadList = pgmBuilder.Nth(item, 1);
             auto fold1 = pgmBuilder.Fold1(payloadList, [&](TRuntimeNode item2) {
-                std::vector<std::pair<std::string_view, TRuntimeNode>> fields {
+                std::vector<std::pair<std::string_view, TRuntimeNode>> fields { 
                     {"Key", key},
                     {"Sum", pgmBuilder.Member(item2, "ID")}
                 };
                 return pgmBuilder.NewOptional(pgmBuilder.NewStruct(fields));
             }, [&](TRuntimeNode item2, TRuntimeNode state) {
-                std::vector<std::pair<std::string_view, TRuntimeNode>> fields {
+                std::vector<std::pair<std::string_view, TRuntimeNode>> fields { 
                     {"Key", pgmBuilder.Member(state, "Key")},
                     {"Sum", pgmBuilder.AggrAdd(pgmBuilder.Member(state, "Sum"), pgmBuilder.Member(item2, "ID"))}
                 };
@@ -5550,21 +5550,21 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
 
         const TString filterValue = "Value1";
         auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) {
-            return pgmBuilder.AggrNotEquals(
+            return pgmBuilder.AggrNotEquals( 
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
         });
 
-        auto take = pgmBuilder.Take(filtered, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
+        auto take = pgmBuilder.Take(filtered, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2)); 
 
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take)));
 
@@ -5632,14 +5632,14 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
 
-        auto take = pgmBuilder.Take(list, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(4));
+        auto take = pgmBuilder.Take(list, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(4)); 
 
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("Result", take)));
 
@@ -5708,16 +5708,16 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
 
         const TString filterValue = "Value2";
         auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) {
-            return pgmBuilder.AggrNotEquals(
+            return pgmBuilder.AggrNotEquals( 
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
         });
@@ -5787,23 +5787,23 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto list = pgmBuilder.Member(range, "List");
 
         auto mapped = pgmBuilder.Map(list, [&pgmBuilder](TRuntimeNode item) {
             return pgmBuilder.AddMember(item, "MappedID", pgmBuilder.Add(
-                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10)));
+                pgmBuilder.Member(item, "ID"), pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10))); 
         });
 
-        auto take = pgmBuilder.Take(mapped, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2));
+        auto take = pgmBuilder.Take(mapped, pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(2)); 
 
         const TString filterValue = "Value2";
         auto filtered = pgmBuilder.Filter(take, [&pgmBuilder, &filterValue](TRuntimeNode item) {
-            return pgmBuilder.AggrNotEquals(
+            return pgmBuilder.AggrNotEquals( 
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
         });
@@ -5874,7 +5874,7 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -5883,7 +5883,7 @@ Value {
 
         const TString filterValue = "Value1";
         auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) {
-            return pgmBuilder.AggrNotEquals(
+            return pgmBuilder.AggrNotEquals( 
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
         });
@@ -5959,7 +5959,7 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -5968,7 +5968,7 @@ Value {
 
         const TString filterValue = "Value6";
         auto filtered = pgmBuilder.Filter(list, [&pgmBuilder, &filterValue](TRuntimeNode item) {
-            return pgmBuilder.AggrNotEquals(
+            return pgmBuilder.AggrNotEquals( 
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"), pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
         });
@@ -6048,7 +6048,7 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -6141,7 +6141,7 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -6210,10 +6210,10 @@ Value {
         auto options = pgmBuilder.GetDefaultTableRangeOptions();
         TVector<ui32> keyTypes(1);
         keyTypes[0] = (ui32)NUdf::TDataType<ui32>::Id;
-        TRuntimeNode::TList rowFrom(1);
+        TRuntimeNode::TList rowFrom(1); 
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
-        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
+        options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue); 
         auto range = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, {}, options);
         auto list = pgmBuilder.Member(range, "List");
         auto length = pgmBuilder.Length(list);
@@ -6288,7 +6288,7 @@ Value {
             {"Value", (ui32)Schema1::Table1::Value::ColumnId, (ui32)Schema1::Table1::Value::ColumnType}
         };
 
-        TRuntimeNode::TList fromColumns1{pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id)};
+        TRuntimeNode::TList fromColumns1{pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id)}; 
         auto options1 = pgmBuilder.GetDefaultTableRangeOptions();
         options1.FromColumns = fromColumns1;
         options1.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -6298,7 +6298,7 @@ Value {
 
         const TString filterValue = "Value6";
         auto filtered1 = pgmBuilder.Filter(list1, [&pgmBuilder, &filterValue](TRuntimeNode item) {
-            return pgmBuilder.AggrNotEquals(
+            return pgmBuilder.AggrNotEquals( 
                 pgmBuilder.Unwrap(pgmBuilder.Member(item, "Value"),
                 pgmBuilder.NewDataLiteral<NUdf::EDataSlot::String>(""), "", 0, 0),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<NUdf::EDataSlot::Utf8>(filterValue));
@@ -6311,7 +6311,7 @@ Value {
             {"Value", (ui32)Schema2::Table2::Value::ColumnId, (ui32)Schema2::Table2::Value::ColumnType}
         };
 
-        TRuntimeNode::TList fromColumns2{pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id)};
+        TRuntimeNode::TList fromColumns2{pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id)}; 
         auto options2 = pgmBuilder.GetDefaultTableRangeOptions();
         options2.FromColumns = fromColumns2;
         options2.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
@@ -6364,15 +6364,15 @@ Value {
         TVector<TSelectColumn> columns;
         columns.emplace_back("ID", (ui32)Schema1::Table1::ID::ColumnId, (ui32)Schema1::Table1::ID::ColumnType);
 
-        TRuntimeNode::TList row1(1);
+        TRuntimeNode::TList row1(1); 
         row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(1);
         auto value1 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row1);
 
-        TRuntimeNode::TList row2(1);
+        TRuntimeNode::TList row2(1); 
         row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(3);
         auto value2 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row2);
 
-        TRuntimeNode::TList row3(1);
+        TRuntimeNode::TList row3(1); 
         row3[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(5);
         auto value3 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row3);
 
@@ -6381,7 +6381,7 @@ Value {
         auto mapped = pgmBuilder.Map(list, [&pgmBuilder, &keyTypes](TRuntimeNode item) {
             auto update = pgmBuilder.GetUpdateRowBuilder();
 
-            TRuntimeNode::TList row(1);
+            TRuntimeNode::TList row(1); 
             row[0] = pgmBuilder.Add(
                 pgmBuilder.Member(item, "ID"),
                 pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10));
@@ -6415,15 +6415,15 @@ Value {
         TVector<ui32> key2Types(1);
         key2Types[0] = (ui32)NUdf::TDataType<ui64>::Id;
 
-        TRuntimeNode::TList row1(1);
+        TRuntimeNode::TList row1(1); 
         row1[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(1);
         auto value1 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row1);
 
-        TRuntimeNode::TList row2(1);
+        TRuntimeNode::TList row2(1); 
         row2[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(3);
         auto value2 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row2);
 
-        TRuntimeNode::TList row3(1);
+        TRuntimeNode::TList row3(1); 
         row3[0] = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(5);
         auto value3 = pgmBuilder.SelectRow(TTableId(OwnerId, Table1Id), keyTypes, columns, row3);
 
@@ -6432,9 +6432,9 @@ Value {
         auto mapped = pgmBuilder.Map(list, [&pgmBuilder, &key2Types](TRuntimeNode item) {
             auto update = pgmBuilder.GetUpdateRowBuilder();
 
-            TRuntimeNode::TList row(1);
+            TRuntimeNode::TList row(1); 
             row[0] = pgmBuilder.Add(
-                pgmBuilder.Convert(pgmBuilder.Member(item, "ID"), pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id))),
+                pgmBuilder.Convert(pgmBuilder.Member(item, "ID"), pgmBuilder.NewOptionalType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id))), 
                 pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(10));
 
             return pgmBuilder.UpdateRow(TTableId(OwnerId, Table2Id), key2Types, row, update);

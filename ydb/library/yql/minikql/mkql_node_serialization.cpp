@@ -146,11 +146,11 @@ namespace {
 
                 Owner.Write(TypeMarker | (char)TType::EKind::Data);
                 Owner.WriteVar32(node.GetSchemeType());
-                if (NUdf::TDataType<NUdf::TDecimal>::Id == node.GetSchemeType()) {
-                    const auto& params = static_cast<TDataDecimalType&>(node).GetParams();
-                    Owner.Write(params.first);
-                    Owner.Write(params.second);
-                }
+                if (NUdf::TDataType<NUdf::TDecimal>::Id == node.GetSchemeType()) { 
+                    const auto& params = static_cast<TDataDecimalType&>(node).GetParams(); 
+                    Owner.Write(params.first); 
+                    Owner.Write(params.second); 
+                } 
                 IsProcessed0 = false;
             }
 
@@ -198,18 +198,18 @@ namespace {
             }
 
             void Visit(TFlowType& node) override {
-                if (node.GetCookie() != 0) {
-                    Owner.WriteReference(node);
-                    IsProcessed0 = true;
-                    return;
-                }
-
-                Owner.Write(TypeMarker | (char)TType::EKind::Flow);
-                auto itemType = node.GetItemType();
-                Owner.AddChildNode(*itemType);
-                IsProcessed0 = false;
-            }
-
+                if (node.GetCookie() != 0) { 
+                    Owner.WriteReference(node); 
+                    IsProcessed0 = true; 
+                    return; 
+                } 
+ 
+                Owner.Write(TypeMarker | (char)TType::EKind::Flow); 
+                auto itemType = node.GetItemType(); 
+                Owner.AddChildNode(*itemType); 
+                IsProcessed0 = false; 
+            } 
+ 
             void Visit(TBlockType& node) override {
                 if (node.GetCookie() != 0) {
                     Owner.WriteReference(node);
@@ -592,10 +592,10 @@ namespace {
                 Owner.RegisterReference(node);
             }
 
-            void Visit(TFlowType& node) override {
-                Owner.RegisterReference(node);
-            }
-
+            void Visit(TFlowType& node) override { 
+                Owner.RegisterReference(node); 
+            } 
+ 
             void Visit(TBlockType& node) override {
                 Owner.Write(static_cast<ui8>(node.GetShape()));
                 Owner.RegisterReference(node);
@@ -655,15 +655,15 @@ namespace {
             }
 
             void Visit(TDataLiteral& node) override {
-                const auto type = node.GetType();
+                const auto type = node.GetType(); 
                 if (type->GetSchemeType() != 0) {
-                    const auto& value = node.AsValue();
+                    const auto& value = node.AsValue(); 
                     switch (type->GetSchemeType()) {
                     case NUdf::TDataType<bool>::Id:
-                        Owner.Write(value.Get<bool>());
-                        break;
+                        Owner.Write(value.Get<bool>()); 
+                        break; 
                     case NUdf::TDataType<ui8>::Id:
-                        Owner.Write(value.Get<ui8>());
+                        Owner.Write(value.Get<ui8>()); 
                         break;
                     case NUdf::TDataType<i8>::Id:
                         Owner.Write((ui8)value.Get<i8>());
@@ -675,36 +675,36 @@ namespace {
                         Owner.WriteVar32(value.Get<ui16>());
                         break;
                     case NUdf::TDataType<i32>::Id:
-                        Owner.WriteVar32(ZigZagEncode(value.Get<i32>()));
+                        Owner.WriteVar32(ZigZagEncode(value.Get<i32>())); 
                         break;
                     case NUdf::TDataType<ui32>::Id:
-                        Owner.WriteVar32(value.Get<ui32>());
+                        Owner.WriteVar32(value.Get<ui32>()); 
                         break;
-                    case NUdf::TDataType<float>::Id: {
-                            const auto v = value.Get<float>();
-                            Owner.WriteMany(&v, sizeof(v));
-                            break;
-                        }
+                    case NUdf::TDataType<float>::Id: { 
+                            const auto v = value.Get<float>(); 
+                            Owner.WriteMany(&v, sizeof(v)); 
+                            break; 
+                        } 
                     case NUdf::TDataType<i64>::Id:
-                        Owner.WriteVar64(ZigZagEncode(value.Get<i64>()));
+                        Owner.WriteVar64(ZigZagEncode(value.Get<i64>())); 
                         break;
                     case NUdf::TDataType<ui64>::Id:
-                        Owner.WriteVar64(value.Get<ui64>());
+                        Owner.WriteVar64(value.Get<ui64>()); 
                         break;
-                    case NUdf::TDataType<double>::Id: {
-                            const auto v = value.Get<double>();
-                            Owner.WriteMany(&v, sizeof(v));
-                            break;
-                        }
-                    case NUdf::TDataType<NUdf::TDate>::Id:
-                        Owner.WriteVar32(value.Get<NUdf::TDataType<NUdf::TDate>::TLayout>());
-                        break;
-                    case NUdf::TDataType<NUdf::TDatetime>::Id:
-                        Owner.WriteVar32(value.Get<NUdf::TDataType<NUdf::TDatetime>::TLayout>());
-                        break;
-                    case NUdf::TDataType<NUdf::TTimestamp>::Id:
-                        Owner.WriteVar64(value.Get<NUdf::TDataType<NUdf::TTimestamp>::TLayout>());
-                        break;
+                    case NUdf::TDataType<double>::Id: { 
+                            const auto v = value.Get<double>(); 
+                            Owner.WriteMany(&v, sizeof(v)); 
+                            break; 
+                        } 
+                    case NUdf::TDataType<NUdf::TDate>::Id: 
+                        Owner.WriteVar32(value.Get<NUdf::TDataType<NUdf::TDate>::TLayout>()); 
+                        break; 
+                    case NUdf::TDataType<NUdf::TDatetime>::Id: 
+                        Owner.WriteVar32(value.Get<NUdf::TDataType<NUdf::TDatetime>::TLayout>()); 
+                        break; 
+                    case NUdf::TDataType<NUdf::TTimestamp>::Id: 
+                        Owner.WriteVar64(value.Get<NUdf::TDataType<NUdf::TTimestamp>::TLayout>()); 
+                        break; 
                     case NUdf::TDataType<NUdf::TTzDate>::Id: {
                         Owner.WriteVar32(value.Get<NUdf::TDataType<NUdf::TTzDate>::TLayout>());
                         Owner.WriteVar32(value.GetTimezoneId());
@@ -720,22 +720,22 @@ namespace {
                         Owner.WriteVar32(value.GetTimezoneId());
                         break;
                     }
-                    case NUdf::TDataType<NUdf::TInterval>::Id:
-                        Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TInterval>::TLayout>()));
-                        break;
+                    case NUdf::TDataType<NUdf::TInterval>::Id: 
+                        Owner.WriteVar64(ZigZagEncode(value.Get<NUdf::TDataType<NUdf::TInterval>::TLayout>())); 
+                        break; 
                     case NUdf::TDataType<NUdf::TUuid>::Id: {
                         const auto v = value.AsStringRef();
                         Owner.WriteMany(v.Data(), v.Size());
                         break;
                     }
-                    case NUdf::TDataType<NUdf::TDecimal>::Id:
-                        Owner.WriteMany(static_cast<const char*>(value.GetRawPtr()), sizeof(NYql::NDecimal::TInt128) - 1U);
-                        break;
-                    default: {
-                            const auto& buffer = value.AsStringRef();
-                            Owner.WriteVar32(buffer.Size());
-                            Owner.WriteMany(buffer.Data(), buffer.Size());
-                        }
+                    case NUdf::TDataType<NUdf::TDecimal>::Id: 
+                        Owner.WriteMany(static_cast<const char*>(value.GetRawPtr()), sizeof(NYql::NDecimal::TInt128) - 1U); 
+                        break; 
+                    default: { 
+                            const auto& buffer = value.AsStringRef(); 
+                            Owner.WriteVar32(buffer.Size()); 
+                            Owner.WriteMany(buffer.Data(), buffer.Size()); 
+                        } 
                     }
                 }
 
@@ -1158,8 +1158,8 @@ namespace {
                 return 0;
             case TType::EKind::Variant:
                 return 1;
-            case TType::EKind::Flow:
-                return 1;
+            case TType::EKind::Flow: 
+                return 1; 
             case TType::EKind::Null:
                 return 0;
             default:
@@ -1195,7 +1195,7 @@ namespace {
                 return ReadResourceType();
             case TType::EKind::Variant:
                 return ReadVariantType();
-            case TType::EKind::Flow:
+            case TType::EKind::Flow: 
                 return ReadFlowOrBlockType(code);
             case TType::EKind::Null:
                 return ReadNullType();
@@ -1226,14 +1226,14 @@ namespace {
 
         TNode* ReadDataType() {
             const auto schemeType = ReadVar32();
-            if (NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) {
-                const ui8 precision = Read();
-                const ui8 scale = Read();
-                Nodes.emplace_back(TDataDecimalType::Create(precision, scale, Env));
-            } else {
-                Nodes.emplace_back(TDataType::Create(static_cast<NUdf::TDataTypeId>(schemeType), Env));
-            }
-            return Nodes.back();
+            if (NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) { 
+                const ui8 precision = Read(); 
+                const ui8 scale = Read(); 
+                Nodes.emplace_back(TDataDecimalType::Create(precision, scale, Env)); 
+            } else { 
+                Nodes.emplace_back(TDataType::Create(static_cast<NUdf::TDataTypeId>(schemeType), Env)); 
+            } 
+            return Nodes.back(); 
         }
 
         ui32 TryReadKeyType(char code) {
@@ -1322,17 +1322,17 @@ namespace {
             }
         }
 
-        TNode* ReadFlowType() {
-            auto itemTypeNode = PopNode();
-            if (itemTypeNode->GetType()->GetKind() != TType::EKind::Type)
-                ThrowCorrupted();
-
-            auto itemType = static_cast<TType*>(itemTypeNode);
-            auto node = TFlowType::Create(itemType, Env);
-            Nodes.push_back(node);
-            return node;
-        }
-
+        TNode* ReadFlowType() { 
+            auto itemTypeNode = PopNode(); 
+            if (itemTypeNode->GetType()->GetKind() != TType::EKind::Type) 
+                ThrowCorrupted(); 
+ 
+            auto itemType = static_cast<TType*>(itemTypeNode); 
+            auto node = TFlowType::Create(itemType, Env); 
+            Nodes.push_back(node); 
+            return node; 
+        } 
+ 
         TNode* ReadBlockType() {
             auto itemTypeNode = PopNode();
             if (itemTypeNode->GetType()->GetKind() != TType::EKind::Type) {
@@ -1554,12 +1554,12 @@ namespace {
                 ThrowCorrupted();
 
             auto dataType = static_cast<TDataType*>(type);
-            NUdf::TUnboxedValuePod value;
+            NUdf::TUnboxedValuePod value; 
             switch (dataType->GetSchemeType()) {
             case 0:
                 break;
             case NUdf::TDataType<bool>::Id:
-                value = NUdf::TUnboxedValuePod((bool)Read());
+                value = NUdf::TUnboxedValuePod((bool)Read()); 
                 break;
             case NUdf::TDataType<i8>::Id:
             {
@@ -1568,7 +1568,7 @@ namespace {
             }
             case NUdf::TDataType<ui8>::Id:
             {
-                value = NUdf::TUnboxedValuePod((ui8)Read());
+                value = NUdf::TUnboxedValuePod((ui8)Read()); 
                 break;
             }
             case NUdf::TDataType<i16>::Id:
@@ -1583,12 +1583,12 @@ namespace {
             }
             case NUdf::TDataType<i32>::Id:
             {
-                value = NUdf::TUnboxedValuePod((i32)ZigZagDecode(ReadVar32()));
+                value = NUdf::TUnboxedValuePod((i32)ZigZagDecode(ReadVar32())); 
                 break;
             }
             case NUdf::TDataType<ui32>::Id:
             {
-                value = NUdf::TUnboxedValuePod((ui32)ReadVar32());
+                value = NUdf::TUnboxedValuePod((ui32)ReadVar32()); 
                 break;
             }
             case NUdf::TDataType<float>::Id:
@@ -1598,12 +1598,12 @@ namespace {
             }
             case NUdf::TDataType<i64>::Id:
             {
-                value = NUdf::TUnboxedValuePod((i64)ZigZagDecode(ReadVar64()));
+                value = NUdf::TUnboxedValuePod((i64)ZigZagDecode(ReadVar64())); 
                 break;
             }
             case NUdf::TDataType<ui64>::Id:
             {
-                value = NUdf::TUnboxedValuePod((ui64)ReadVar64());
+                value = NUdf::TUnboxedValuePod((ui64)ReadVar64()); 
                 break;
             }
             case NUdf::TDataType<double>::Id:
@@ -1611,26 +1611,26 @@ namespace {
                 value = NUdf::TUnboxedValuePod(ReadUnaligned<double>(reinterpret_cast<const double*>(ReadMany(sizeof(double)))));
                 break;
             }
-            case NUdf::TDataType<NUdf::TDate>::Id:
-            {
-                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TDate>::TLayout>(ReadVar32()));
-                break;
-            }
-            case NUdf::TDataType<NUdf::TDatetime>::Id:
-            {
-                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TDatetime>::TLayout>(ReadVar32()));
-                break;
-            }
-            case NUdf::TDataType<NUdf::TTimestamp>::Id:
-            {
-                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(ReadVar64()));
-                break;
-            }
-            case NUdf::TDataType<NUdf::TInterval>::Id:
-            {
-                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TInterval>::TLayout>(ZigZagDecode(ReadVar64())));
-                break;
-            }
+            case NUdf::TDataType<NUdf::TDate>::Id: 
+            { 
+                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TDate>::TLayout>(ReadVar32())); 
+                break; 
+            } 
+            case NUdf::TDataType<NUdf::TDatetime>::Id: 
+            { 
+                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TDatetime>::TLayout>(ReadVar32())); 
+                break; 
+            } 
+            case NUdf::TDataType<NUdf::TTimestamp>::Id: 
+            { 
+                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTimestamp>::TLayout>(ReadVar64())); 
+                break; 
+            } 
+            case NUdf::TDataType<NUdf::TInterval>::Id: 
+            { 
+                value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TInterval>::TLayout>(ZigZagDecode(ReadVar64()))); 
+                break; 
+            } 
             case NUdf::TDataType<NUdf::TTzDate>::Id:
             {
                 value = NUdf::TUnboxedValuePod(static_cast<NUdf::TDataType<NUdf::TTzDate>::TLayout>(ReadVar32()));
@@ -1661,22 +1661,22 @@ namespace {
                 value = Env.NewStringValue(NUdf::TStringRef(buffer, 16));
                 break;
             }
-            case NUdf::TDataType<NUdf::TDecimal>::Id:
-            {
-                value = NUdf::TUnboxedValuePod::Zero();
-                const char* buffer = ReadMany(sizeof(NYql::NDecimal::TInt128) - 1U);
-                std::memcpy(static_cast<char*>(value.GetRawPtr()), buffer, sizeof(NYql::NDecimal::TInt128) - 1U);
-                break;
-            }
+            case NUdf::TDataType<NUdf::TDecimal>::Id: 
+            { 
+                value = NUdf::TUnboxedValuePod::Zero(); 
+                const char* buffer = ReadMany(sizeof(NYql::NDecimal::TInt128) - 1U); 
+                std::memcpy(static_cast<char*>(value.GetRawPtr()), buffer, sizeof(NYql::NDecimal::TInt128) - 1U); 
+                break; 
+            } 
             default:
-                const ui32 size = ReadVar32();
-                const char* buffer = ReadMany(size);
-                value = Env.NewStringValue(NUdf::TStringRef(buffer, size));
-                break;
+                const ui32 size = ReadVar32(); 
+                const char* buffer = ReadMany(size); 
+                value = Env.NewStringValue(NUdf::TStringRef(buffer, size)); 
+                break; 
             }
 
-            const auto node = TDataLiteral::Create(value, dataType, Env);
-            Nodes.emplace_back(node);
+            const auto node = TDataLiteral::Create(value, dataType, Env); 
+            Nodes.emplace_back(node); 
             return node;
         }
 

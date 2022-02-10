@@ -18,8 +18,8 @@ public:
 
     virtual void Push(NKikimr::NMiniKQL::TUnboxedValueVector&& batch, i64 space) = 0;
 
-    virtual void Finish() = 0;
-
+    virtual void Finish() = 0; 
+ 
     virtual const TDqSourceStats* GetStats() const = 0;
 };
 

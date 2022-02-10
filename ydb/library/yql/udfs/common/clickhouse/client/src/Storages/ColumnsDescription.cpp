@@ -178,7 +178,7 @@ static auto getNameRange(const ColumnsDescription::ColumnsContainer & columns, c
         if (begin->name == name_without_dot)
             return std::make_pair(begin, std::next(begin));
 
-        if (begin->name.starts_with(name_with_dot))
+        if (begin->name.starts_with(name_with_dot)) 
             break;
     }
 
@@ -188,7 +188,7 @@ static auto getNameRange(const ColumnsDescription::ColumnsContainer & columns, c
     auto end = std::next(begin);
     for (; end != columns.end(); ++end)
     {
-        if (!end->name.starts_with(name_with_dot))
+        if (!end->name.starts_with(name_with_dot)) 
             break;
     }
 

@@ -35,16 +35,16 @@
                 {"Index": 3, "Name": "Columns", "Type": "TExprBase"},
                 {"Index": 4, "Name": "Timezone", "Type": "TCoAtom"}
             ]
-        },
-        {
-            "Name": "TClSourceSettings",
-            "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "ClSourceSettings"},
-            "Children": [
-                {"Index": 0, "Name": "Table", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam"},
-                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"}
-            ]
+        }, 
+        { 
+            "Name": "TClSourceSettings", 
+            "Base": "TCallable", 
+            "Match": {"Type": "Callable", "Name": "ClSourceSettings"}, 
+            "Children": [ 
+                {"Index": 0, "Name": "Table", "Type": "TCoAtom"}, 
+                {"Index": 1, "Name": "Token", "Type": "TCoSecureParam"}, 
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"} 
+            ] 
         }
     ]
 }

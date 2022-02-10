@@ -1144,13 +1144,13 @@ private:
         }
 
         {
-            dataProvidersInit.push_back(GetClickHouseDataProviderInitializer(Params.S3Gateway, dbResolver));
+            dataProvidersInit.push_back(GetClickHouseDataProviderInitializer(Params.S3Gateway, dbResolver)); 
         }
 
-        {
-            dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory));
-        }
-
+        { 
+            dataProvidersInit.push_back(GetS3DataProviderInitializer(Params.S3Gateway, Params.CredentialsFactory)); 
+        } 
+ 
         {
             NYql::TPqGatewayServices pqServices(
                 Params.Driver,

@@ -127,7 +127,7 @@ namespace NSQLTranslationV0 {
     public:
         THashMap<TString, TNodePtr> Variables;
         NSQLTranslation::TTranslationSettings Settings;
-        std::unique_ptr<TMemoryPool> Pool;
+        std::unique_ptr<TMemoryPool> Pool; 
         NYql::TIssues& Issues;
         TMap<TString, TStack<TNodePtr>> NamedNodes;
         TMap<TString, TNodePtr> UniversalAliases;

@@ -116,18 +116,18 @@ namespace NActors {
 
         static const size_t ChannelBits = 12;
         static const size_t ChannelShift = (sizeof(ui32) << 3) - ChannelBits;
-
+ 
 #ifdef USE_ACTOR_CALLSTACK
         TCallstack Callstack;
 #endif
         ui16 GetChannel() const noexcept {
             return Flags >> ChannelShift;
         }
-
+ 
         ui64 GetSubChannel() const noexcept {
             return Flags & FlagUseSubChannel ? Sender.LocalId() : 0ULL;
         }
-
+ 
         static ui32 MakeFlags(ui32 channel, ui32 flags) {
             Y_VERIFY(channel < (1 << ChannelBits));
             Y_VERIFY(flags < (1 << ChannelShift));
@@ -249,7 +249,7 @@ namespace NActors {
                 return 0;
             }
         }
-
+ 
         bool HasBuffer() const {
             return bool(Buffer);
         }

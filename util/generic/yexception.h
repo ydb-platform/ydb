@@ -5,7 +5,7 @@
 #include "string.h"
 #include "utility.h"
 #include "va_args.h"
-#include <utility>
+#include <utility> 
 
 #include <util/stream/tempbuf.h>
 #include <util/system/compat.h>
@@ -70,7 +70,7 @@ namespace NPrivateException {
     operator<<(E&& e, const T& t) {
         e.Append(t);
 
-        return std::forward<E>(e);
+        return std::forward<E>(e); 
     }
 
     template <class T>

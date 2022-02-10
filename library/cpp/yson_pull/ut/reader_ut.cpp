@@ -348,8 +348,8 @@ Y_UNIT_TEST_SUITE(Reader) {
 
         REJECT("<a=b>");
         REJECT("<>");
-
-        REJECT("@");
+ 
+        REJECT("@"); 
     }
 
     Y_UNIT_TEST(ReadPastEnd) {

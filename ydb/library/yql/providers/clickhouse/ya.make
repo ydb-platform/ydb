@@ -1,6 +1,6 @@
 RECURSE(
-    actors
+    actors 
     expr_nodes
     provider
-    proto
+    proto 
 )

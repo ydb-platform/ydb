@@ -8,11 +8,11 @@ namespace NYql::NCommonAttrs {
 namespace NYql::NDqs {
     TEvAllocateWorkersRequest::TEvAllocateWorkersRequest(
         ui32 count,
-        const TString& user,
+        const TString& user, 
         const TMaybe<ui64>& globalResourceId)
     {
         Record.SetCount(count);
-        Record.SetUser(user);
+        Record.SetUser(user); 
         if (globalResourceId) {
             Record.SetResourceId(*globalResourceId);
         }

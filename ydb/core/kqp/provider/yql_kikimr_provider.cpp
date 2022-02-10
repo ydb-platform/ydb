@@ -314,7 +314,7 @@ void TKikimrTableDescription::ToYson(NYson::TYsonWriter& writer) const {
     writer.OnEndMap();
 }
 
-bool TKikimrKey::Extract(const TExprNode& key) {
+bool TKikimrKey::Extract(const TExprNode& key) { 
     if (key.IsCallable("MrTableConcat")) {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Pos()), "CONCAT is not supported on Kikimr clusters."));
         return false;

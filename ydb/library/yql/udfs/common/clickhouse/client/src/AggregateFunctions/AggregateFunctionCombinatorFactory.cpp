@@ -28,7 +28,7 @@ AggregateFunctionCombinatorPtr AggregateFunctionCombinatorFactory::tryFindSuffix
 {
     /// O(N) is ok for just a few combinators.
     for (const auto & suffix_value : dict)
-        if (name.ends_with(suffix_value.name))
+        if (name.ends_with(suffix_value.name)) 
             return suffix_value.combinator_ptr;
     return {};
 }

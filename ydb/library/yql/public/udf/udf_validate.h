@@ -3,7 +3,7 @@
 #include <util/generic/strbuf.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
 #define UDF_VALIDATE_MODE(XX) \
@@ -32,4 +32,4 @@ TStringBuf ValidatePolicyAsStr(EValidatePolicy verifyPolicy);
 EValidatePolicy ValidatePolicyByStr(const TString& verifyPolicy);
 
 } // namspace NUdf
-} // namspace NYql
+} // namspace NYql 

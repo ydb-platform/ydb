@@ -222,11 +222,11 @@ bool INode::DoInit(TContext& ctx, ISource* src) {
     return true;
 }
 
-TNodePtr INode::AstNode() const {
+TNodePtr INode::AstNode() const { 
     return new TAstListNodeImpl(Pos);
 }
 
-TNodePtr INode::AstNode(TNodePtr node) const {
+TNodePtr INode::AstNode(TNodePtr node) const { 
     return node;
 }
 
@@ -234,7 +234,7 @@ TNodePtr INode::AstNode(const TString& str) const {
     return new TAstAtomNodeImpl(Pos, str, TNodeFlags::Default);
 }
 
-TNodePtr INode::AstNode(TAstNode* node) const {
+TNodePtr INode::AstNode(TAstNode* node) const { 
     return new TAstDirectNode(node);
 }
 
@@ -612,8 +612,8 @@ bool TCallNode::DoInit(TContext& ctx, ISource* src) {
         return false;
     }
 
-    Nodes.push_back(BuildAtom(Pos, OpName,
-         OpName.cend() == std::find_if_not(OpName.cbegin(), OpName.cend(), [](char c) { return bool(std::isalnum(c)); }) ? TNodeFlags::Default : TNodeFlags::ArbitraryContent));
+    Nodes.push_back(BuildAtom(Pos, OpName, 
+         OpName.cend() == std::find_if_not(OpName.cbegin(), OpName.cend(), [](char c) { return bool(std::isalnum(c)); }) ? TNodeFlags::Default : TNodeFlags::ArbitraryContent)); 
     Nodes.insert(Nodes.end(), Args.begin(), Args.end());
     return true;
 }
@@ -1198,8 +1198,8 @@ TAstNode* ITableKeys::Translate(TContext& ctx) const {
     return nullptr;
 }
 
-bool IAggregation::IsDistinct() const {
-    return !DistinctKey.empty();
+bool IAggregation::IsDistinct() const { 
+    return !DistinctKey.empty(); 
 }
 
 void IAggregation::DoUpdateState() const {
@@ -1211,10 +1211,10 @@ const TString* IAggregation::GetGenericKey() const {
     return nullptr;
 }
 
-void IAggregation::Join(IAggregation*) {
-    Y_VERIFY(false);
-}
-
+void IAggregation::Join(IAggregation*) { 
+    Y_VERIFY(false); 
+} 
+ 
 const TString& IAggregation::GetName() const {
     return Name;
 }
@@ -1229,7 +1229,7 @@ void IAggregation::MarkKeyColumnAsGenerated() {
 
 IAggregation::IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode)
     : INode(pos), Name(name), Func(func), AggMode(aggMode)
-{}
+{} 
 
 TAstNode* IAggregation::Translate(TContext& ctx) const {
     Y_VERIFY_DEBUG(false);
@@ -1241,8 +1241,8 @@ TNodePtr IAggregation::AggregationTraits(const TNodePtr& type) const {
     const bool distinct = AggMode == EAggregateMode::Distinct;
     const auto listType = distinct ? Y("ListType", Y("StructMemberType", Y("ListItemType", type), BuildQuotedAtom(Pos, DistinctKey))) : type;
     return distinct ? Q(Y(Q(Name), GetApply(listType), BuildQuotedAtom(Pos, DistinctKey))): Q(Y(Q(Name), GetApply(listType)));
-}
-
+} 
+ 
 void IAggregation::AddFactoryArguments(TNodePtr& apply) const {
     Y_UNUSED(apply);
 }
@@ -1749,23 +1749,23 @@ TNodePtr ISource::BuildAggregation(const TString& label) {
     }
 
     std::map<std::pair<bool, TString>, std::vector<IAggregation*>> genericAggrs;
-    for (const auto& aggr: Aggregations) {
-        if (const auto key = aggr->GetGenericKey()) {
-            genericAggrs[{aggr->IsDistinct(), *key}].emplace_back(aggr.Get());
+    for (const auto& aggr: Aggregations) { 
+        if (const auto key = aggr->GetGenericKey()) { 
+            genericAggrs[{aggr->IsDistinct(), *key}].emplace_back(aggr.Get()); 
         }
     }
 
-    for (const auto& aggr : genericAggrs) {
-        for (size_t i = 1U; i < aggr.second.size(); ++i) {
-            aggr.second.front()->Join(aggr.second[i]);
+    for (const auto& aggr : genericAggrs) { 
+        for (size_t i = 1U; i < aggr.second.size(); ++i) { 
+            aggr.second.front()->Join(aggr.second[i]); 
         }
-    }
+    } 
 
-    const auto listType = Y("TypeOf", label);
-    auto aggrArgs = Y();
-    for (const auto& aggr: Aggregations) {
+    const auto listType = Y("TypeOf", label); 
+    auto aggrArgs = Y(); 
+    for (const auto& aggr: Aggregations) { 
         if (const auto traits = aggr->AggregationTraits(listType))
-            aggrArgs = L(aggrArgs, traits);
+            aggrArgs = L(aggrArgs, traits); 
     }
 
     auto options = Y();
@@ -2828,7 +2828,7 @@ public:
                 continue;
             }
 
-            if (ctx.PragmaYsonAutoConvert || ctx.PragmaYsonStrict || ctx.PragmaYsonFast) {
+            if (ctx.PragmaYsonAutoConvert || ctx.PragmaYsonStrict || ctx.PragmaYsonFast) { 
                 auto ysonOptions = Y();
                 if (ctx.PragmaYsonAutoConvert) {
                     ysonOptions->Add(BuildQuotedAtom(Pos, "yson_auto_convert"));
@@ -2836,9 +2836,9 @@ public:
                 if (ctx.PragmaYsonStrict) {
                     ysonOptions->Add(BuildQuotedAtom(Pos, "yson_strict"));
                 }
-                if (ctx.PragmaYsonFast) {
-                    ysonOptions->Add(BuildQuotedAtom(Pos, "yson_fast"));
-                }
+                if (ctx.PragmaYsonFast) { 
+                    ysonOptions->Add(BuildQuotedAtom(Pos, "yson_fast")); 
+                } 
                 expr->Add(Q(ysonOptions));
             }
         }
@@ -3047,23 +3047,23 @@ bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& node
     return true;
 }
 
-class TBindNode: public TAstListNode {
-public:
+class TBindNode: public TAstListNode { 
+public: 
     TBindNode(TPosition pos, const TString& module, const TString& alias)
-        : TAstListNode(pos)
-    {
-        Add("bind", AstNode(module), BuildQuotedAtom(pos, alias));
-    }
+        : TAstListNode(pos) 
+    { 
+        Add("bind", AstNode(module), BuildQuotedAtom(pos, alias)); 
+    } 
 
     TPtr DoClone() const final {
         return {};
     }
-};
-
+}; 
+ 
 TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias) {
-    return new TBindNode(pos, module, alias);
-}
-
+    return new TBindNode(pos, module, alias); 
+} 
+ 
 class TLambdaNode: public TAstListNode {
 public:
     TLambdaNode(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName)
@@ -3089,8 +3089,8 @@ TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TStrin
     return new TLambdaNode(pos, params, body, resName);
 }
 
-TNodePtr BuildDataType(TPosition pos, const TString& typeName) {
-    return new TCallNodeImpl(pos, "DataType", {BuildQuotedAtom(pos, typeName, TNodeFlags::Default)});
+TNodePtr BuildDataType(TPosition pos, const TString& typeName) { 
+    return new TCallNodeImpl(pos, "DataType", {BuildQuotedAtom(pos, typeName, TNodeFlags::Default)}); 
 }
 
 TNodePtr BuildSimpleType(TContext& ctx, TPosition pos, const TString& typeName, bool dataOnly) {
@@ -3220,7 +3220,7 @@ TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr 
     return new TCalcOverWindow(pos, windowName, call);
 }
 
-template<bool Fast>
+template<bool Fast> 
 class TYsonOptionsNode final: public INode {
 public:
     TYsonOptionsNode(TPosition pos, bool autoConvert, bool strict)
@@ -3228,7 +3228,7 @@ public:
         , AutoConvert(autoConvert)
         , Strict(strict)
     {
-        auto udf = Y("Udf", Q(Fast ? "Yson2.Options" : "Yson.Options"));
+        auto udf = Y("Udf", Q(Fast ? "Yson2.Options" : "Yson.Options")); 
         auto autoConvertNode = BuildLiteralBool(pos, autoConvert);
         autoConvertNode->SetLabel("AutoConvert");
         auto strictNode = BuildLiteralBool(pos, strict);
@@ -3261,11 +3261,11 @@ protected:
     const bool Strict;
 };
 
-TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson) {
-    if (fastYson)
-        return new TYsonOptionsNode<true>(pos, autoConvert, strict);
-    else
-        return new TYsonOptionsNode<false>(pos, autoConvert, strict);
+TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson) { 
+    if (fastYson) 
+        return new TYsonOptionsNode<true>(pos, autoConvert, strict); 
+    else 
+        return new TYsonOptionsNode<false>(pos, autoConvert, strict); 
 }
 
 class TDoCall final : public INode {

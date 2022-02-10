@@ -10,7 +10,7 @@ namespace NCommon {
 constexpr TStringBuf TYsonResultWriter::VoidString;
 
 void TYsonResultWriter::OnStringScalar(TStringBuf value) {
-    if (!IsUtf8(value)) {
+    if (!IsUtf8(value)) { 
         TString encoded = Base64Encode(value);
         Writer.OnBeginList();
         Writer.OnListItem();

@@ -30,9 +30,9 @@ template <EDataSlot Slot, bool IsTop>
 struct TDataPairCompare {
     bool operator()(const TUnboxedValuePair& left, const TUnboxedValuePair& right) const {
         if (IsTop) {
-            return CompareValues<Slot>(left.first, right.first) > 0;
+            return CompareValues<Slot>(left.first, right.first) > 0; 
         } else {
-            return CompareValues<Slot>(left.first, right.first) < 0;
+            return CompareValues<Slot>(left.first, right.first) < 0; 
         }
     }
 };
@@ -56,9 +56,9 @@ struct TGenericPairCompare {
 
     bool operator()(const TUnboxedValuePair& left, const TUnboxedValuePair& right) const {
         if (IsTop) {
-            return Compare->Less(right.first, left.first);
+            return Compare->Less(right.first, left.first); 
         } else {
-            return Compare->Less(left.first, right.first);
+            return Compare->Less(left.first, right.first); 
         }
     }
 };

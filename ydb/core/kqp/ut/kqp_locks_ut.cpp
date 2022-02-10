@@ -16,9 +16,9 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
 
         auto result = session1.ExecuteDataQuery(Q_(R"(
             UPSERT INTO `/Root/Test`
-            SELECT Group + 10U AS Group, Name, Amount, Comment ?? "" || "Updated" AS Comment
+            SELECT Group + 10U AS Group, Name, Amount, Comment ?? "" || "Updated" AS Comment 
             FROM `/Root/Test`
-            WHERE Group == 1U AND Name == "Paul";
+            WHERE Group == 1U AND Name == "Paul"; 
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -27,13 +27,13 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
 
         result = session2.ExecuteDataQuery(Q_(R"(
             UPSERT INTO `/Root/Test` (Group, Name, Comment)
-            VALUES (1U, "Paul", "Changed");
+            VALUES (1U, "Paul", "Changed"); 
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session1.ExecuteDataQuery(Q_(R"(
             UPSERT INTO `/Root/Test` (Group, Name, Comment)
-            VALUES (11U, "Sergey", "BadRow");
+            VALUES (11U, "Sergey", "BadRow"); 
         )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
         result.GetIssues().PrintTo(Cerr);
@@ -105,7 +105,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
 
         result = session2.ExecuteDataQuery(Q_(R"(
             UPSERT INTO `/Root/Test` (Group, Name, Comment)
-            VALUES (2U, "Paul", "Changed");
+            VALUES (2U, "Paul", "Changed"); 
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 

@@ -23,8 +23,8 @@ message TAllocateWorkersRequest {
     string TraceId = 6;
 
     // repeated Yql.DqsProto.DatabaseDescription Databases = 7; // unused
-
-    string User = 8;
+ 
+    string User = 8; 
 
     repeated Yql.DqsProto.TWorkerFilter WorkerFilterPerTask = 9;
 

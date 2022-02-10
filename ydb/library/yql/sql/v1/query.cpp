@@ -68,8 +68,8 @@ public:
         if (mode == ITableKeys::EBuildKeysMode::INPUT &&
             IsQueryMode(ctx.Settings.Mode) &&
             Service != KikimrProviderName &&
-            Service != RtmrProviderName &&
-            Service != YdbProviderName) {
+            Service != RtmrProviderName && 
+            Service != YdbProviderName) { 
 
             key = Y("MrTableConcat", key);
         }
@@ -310,14 +310,14 @@ public:
                 }
 
                 if (func.StartsWith("regexp")) {
-                    if (!ctx.PragmaRegexUseRe2) {
-                        ctx.Warning(Pos, TIssuesIds::CORE_LEGACY_REGEX_ENGINE) << "Legacy regex engine works incorrectly with unicode. Use PRAGMA RegexUseRe2='true';";
-                    }
-
+                    if (!ctx.PragmaRegexUseRe2) { 
+                        ctx.Warning(Pos, TIssuesIds::CORE_LEGACY_REGEX_ENGINE) << "Legacy regex engine works incorrectly with unicode. Use PRAGMA RegexUseRe2='true';"; 
+                    } 
+ 
                     auto pattern = Args[1].Id;
-                    auto udf = ctx.PragmaRegexUseRe2 ?
-                        Y("Udf", Q("Re2.Grep"), Q(Y(Y("String", pattern.Build()), Y("Null")))):
-                        Y("Udf", Q("Pcre.BacktrackingGrep"), Y("String", pattern.Build()));
+                    auto udf = ctx.PragmaRegexUseRe2 ? 
+                        Y("Udf", Q("Re2.Grep"), Q(Y(Y("String", pattern.Build()), Y("Null")))): 
+                        Y("Udf", Q("Pcre.BacktrackingGrep"), Y("String", pattern.Build())); 
                     predicate = BuildLambda(Pos, Y("item"), Y("Apply", udf, "item"));
                 } else if (func.StartsWith("like")) {
                     auto pattern = Args[1].Id;
@@ -1427,7 +1427,7 @@ public:
         }
 
         auto getModesMap = [] (const TString& serviceName) -> const TMap<EWriteColumnMode, TString>& {
-            if (serviceName == KikimrProviderName || serviceName == YdbProviderName) {
+            if (serviceName == KikimrProviderName || serviceName == YdbProviderName) { 
                 return columnModeToStrMapKikimr;
             } else if (serviceName == StatProviderName) {
                 return columnModeToStrMapStat;

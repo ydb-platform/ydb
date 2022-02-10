@@ -78,7 +78,7 @@ TCoNameValueTupleList TCommitSettings::BuildNode(TExprContext& ctx) const {
     return ret;
 }
 
-const TStructExprType* BuildCommonTableListType(TExprContext& ctx) {
+const TStructExprType* BuildCommonTableListType(TExprContext& ctx) { 
     TVector<const TItemExprType*> items;
     auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
     auto listOfString = ctx.MakeType<TListExprType>(stringType);
@@ -98,7 +98,7 @@ bool HasResOrPullOption(const TExprNode& node, const TStringBuf& option) {
     if (node.Content() == "Result" || node.Content() == "Pull") {
         auto options = node.Child(4);
         for (auto setting : options->Children()) {
-            if (setting->Head().Content() == option) {
+            if (setting->Head().Content() == option) { 
                 return true;
             }
         }
@@ -110,7 +110,7 @@ TVector<TString> GetResOrPullColumnHints(const TExprNode& node) {
     TVector<TString> columns;
     auto setting = GetSetting(*node.Child(4), "columns");
     if (setting) {
-        auto type = node.Head().GetTypeAnn();
+        auto type = node.Head().GetTypeAnn(); 
         if (type->GetKind() != ETypeAnnotationKind::EmptyList) {
             auto structType = type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             for (ui32 i = 0; i < structType->GetSize(); ++i) {
@@ -423,7 +423,7 @@ bool FillUsedFilesImpl(
     TUserDataTable& files,
     const TTypeAnnotationContext& types,
     TExprContext& ctx,
-    const TUserDataTable& crutches,
+    const TUserDataTable& crutches, 
     TNodeSet& visited)
 {
     if (!visited.insert(&node).second) {
@@ -431,7 +431,7 @@ bool FillUsedFilesImpl(
     }
 
     if (node.IsCallable("FilePath") || node.IsCallable("FileContent")) {
-        const auto& name = node.Head().Content();
+        const auto& name = node.Head().Content(); 
         const auto block = types.UserDataStorage->FindUserDataBlock(name);
         if (!block) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "File not found: " << name));
@@ -444,7 +444,7 @@ bool FillUsedFilesImpl(
     }
 
     if (node.IsCallable("FolderPath")) {
-        const auto& name = node.Head().Content();
+        const auto& name = node.Head().Content(); 
         auto blocks = types.UserDataStorage->FindUserDataFolder(name);
         if (!blocks) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Folder not found: " << name));
@@ -458,10 +458,10 @@ bool FillUsedFilesImpl(
     }
 
     if (node.IsCallable("Udf") || node.IsCallable("ScriptUdf")) {
-        TStringBuf moduleName = node.Head().Content();
+        TStringBuf moduleName = node.Head().Content(); 
         if (node.IsCallable("Udf")) {
             TStringBuf funcName;
-            YQL_ENSURE(SplitUdfName(node.Head().Content(), moduleName, funcName));
+            YQL_ENSURE(SplitUdfName(node.Head().Content(), moduleName, funcName)); 
         }
 
         auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName);
@@ -489,9 +489,9 @@ bool FillUsedFilesImpl(
                 return false;
             } else {
                 files.emplace(TUserDataStorage::ComposeUserDataKey(fileAlias), *block).first->second.Usage.Set(EUserDataBlockUsage::Udf);
-            }
+            } 
         }
-
+ 
         if (moduleName == TStringBuf("Geo")) {
             const auto geobase = TUserDataKey::File(TStringBuf("/home/geodata6.bin"));
             if (const auto block = types.UserDataStorage->FindUserDataBlock(geobase)) {
@@ -539,7 +539,7 @@ bool FillUsedFilesImpl(
 
     bool childrenOk = true;
     for (auto& child : node.Children()) {
-        childrenOk = FillUsedFilesImpl(*child, files, types, ctx, crutches, visited) && childrenOk;
+        childrenOk = FillUsedFilesImpl(*child, files, types, ctx, crutches, visited) && childrenOk; 
     }
 
     return childrenOk;
@@ -618,14 +618,14 @@ bool FillUsedFiles(
     const TExprNode& node,
     TUserDataTable& files,
     const TTypeAnnotationContext& types,
-    TExprContext& ctx,
-    const TUserDataTable& crutches) {
+    TExprContext& ctx, 
+    const TUserDataTable& crutches) { 
     TNodeSet visited;
-    return FillUsedFilesImpl(node, files, types, ctx, crutches, visited);
+    return FillUsedFilesImpl(node, files, types, ctx, crutches, visited); 
 }
 
-std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter, const TUserDataTable& crutches) {
-    if (!FillUsedFiles(node, files, types, ctx, crutches)) {
+std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> FreezeUsedFiles(const TExprNode& node, TUserDataTable& files, const TTypeAnnotationContext& types, TExprContext& ctx, const std::function<bool(const TString&)>& urlDownloadFilter, const TUserDataTable& crutches) { 
+    if (!FillUsedFiles(node, files, types, ctx, crutches)) { 
         return SyncError();
     }
 
@@ -771,28 +771,28 @@ void WriteStream(NYson::TYsonWriter& writer, const TExprNode* node, const TExprN
         writer.OnBeginList();
         writer.OnListItem();
         writer.OnBeginList();
-        WriteStream(writer, node->Child(1)->Child(1), node->Child(1)->Head().Child(0));
+        WriteStream(writer, node->Child(1)->Child(1), node->Child(1)->Head().Child(0)); 
         writer.OnEndList();
         writer.OnEndList();
     }
 
-    if (TCoChopper::Match(node) || node->IsCallable("WideChopper")) {
-        writer.OnKeyedItem("Children");
-        writer.OnBeginList();
-        writer.OnListItem();
-        writer.OnBeginList();
-        WriteStream(writer, &node->Tail().Tail(), &node->Tail().Head().Head());
-        writer.OnEndList();
-        writer.OnEndList();
-    }
-
+    if (TCoChopper::Match(node) || node->IsCallable("WideChopper")) { 
+        writer.OnKeyedItem("Children"); 
+        writer.OnBeginList(); 
+        writer.OnListItem(); 
+        writer.OnBeginList(); 
+        WriteStream(writer, &node->Tail().Tail(), &node->Tail().Head().Head()); 
+        writer.OnEndList(); 
+        writer.OnEndList(); 
+    } 
+ 
     if (TCoSwitch::Match(node)) {
         writer.OnKeyedItem("Children");
         writer.OnBeginList();
         for (size_t i = 3; i < node->ChildrenSize(); i += 2) {
             writer.OnListItem();
             writer.OnBeginList();
-            WriteStream(writer, node->Child(i)->Child(1), node->Child(i)->Head().Child(0));
+            WriteStream(writer, node->Child(i)->Child(1), node->Child(i)->Head().Child(0)); 
             writer.OnEndList();
         }
 
@@ -874,28 +874,28 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
     }
 
     if (TCoFlatMapBase::Match(node)) {
-        // TODO: check MapJoinCore input unique using constraints
-        if (const auto& lambda = node->Tail(); node->Head().IsCallable("SqueezeToDict") && lambda.Tail().IsCallable("MapJoinCore") && lambda.Tail().Child(1U) == &lambda.Head().Head()) {
-            TMaybe<bool> isMany;
-            TMaybe<bool> isHashed;
-            bool isCompact = false;
-            TMaybe<ui64> itemsCount;
-            ParseToDictSettings(node->Head(), ctx, isMany, isHashed, itemsCount, isCompact);
-            if (isMany.GetOrElse(true)) {
-                factor *= 5.0;
-            }
-        } else {
-            switch (lambda.GetTypeAnn()->GetKind()) {
-            case ETypeAnnotationKind::Stream:
-            case ETypeAnnotationKind::Flow:
-                factor = GetDataReplicationFactor(factor, &lambda.Tail(), &lambda.Head().Head(), ctx);
-                break;
-            case ETypeAnnotationKind::List:
-                factor *= 2.0;
-                break;
-            default:
-                break;
-            }
+        // TODO: check MapJoinCore input unique using constraints 
+        if (const auto& lambda = node->Tail(); node->Head().IsCallable("SqueezeToDict") && lambda.Tail().IsCallable("MapJoinCore") && lambda.Tail().Child(1U) == &lambda.Head().Head()) { 
+            TMaybe<bool> isMany; 
+            TMaybe<bool> isHashed; 
+            bool isCompact = false; 
+            TMaybe<ui64> itemsCount; 
+            ParseToDictSettings(node->Head(), ctx, isMany, isHashed, itemsCount, isCompact); 
+            if (isMany.GetOrElse(true)) { 
+                factor *= 5.0; 
+            } 
+        } else { 
+            switch (lambda.GetTypeAnn()->GetKind()) { 
+            case ETypeAnnotationKind::Stream: 
+            case ETypeAnnotationKind::Flow: 
+                factor = GetDataReplicationFactor(factor, &lambda.Tail(), &lambda.Head().Head(), ctx); 
+                break; 
+            case ETypeAnnotationKind::List: 
+                factor *= 2.0; 
+                break; 
+            default: 
+                break; 
+            } 
         }
     }
     else if (node->IsCallable("CommonJoinCore")) {
@@ -917,7 +917,7 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
     else if (TCoSwitch::Match(node)) {
         double switchFactor = 0.0;
         for (size_t i = 3; i < node->ChildrenSize(); i += 2) {
-            switchFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(1), node->Child(i)->Head().Child(0), ctx);
+            switchFactor += GetDataReplicationFactor(factor, node->Child(i)->Child(1), node->Child(i)->Head().Child(0), ctx); 
         }
         factor = Max(1.0, switchFactor);
     }
@@ -928,7 +928,7 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
         }
         factor = Max(1.0, extendFactor);
     }
-    else if (TCoChopper::Match(node) || node->IsCallable("WideChopper")) {
+    else if (TCoChopper::Match(node) || node->IsCallable("WideChopper")) { 
         factor = GetDataReplicationFactor(factor, &node->Child(TCoChopper::idx_Handler)->Tail(), &node->Child(TCoChopper::idx_Handler)->Head().Tail(), ctx);
     }
 
@@ -936,7 +936,7 @@ double GetDataReplicationFactor(double factor, const TExprNode* node, const TExp
 }
 
 double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx) {
-    return GetDataReplicationFactor(1.0, lambda.Child(1), lambda.Head().ChildrenSize() > 0 ? lambda.Head().Child(0) : nullptr, ctx);
+    return GetDataReplicationFactor(1.0, lambda.Child(1), lambda.Head().ChildrenSize() > 0 ? lambda.Head().Child(0) : nullptr, ctx); 
 }
 
 void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics) {

@@ -55,7 +55,7 @@ namespace NMonitoring {
         bool ForDerivative() const {
             return Derivative;
         }
-
+ 
         operator TValueBase() const {
             return AtomicGet(Value);
         }

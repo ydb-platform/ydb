@@ -11,8 +11,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace {
-
+namespace { 
+ 
 template <bool WithHandler>
 class TGroupingCoreWrapper: public TMutableComputationNode<TGroupingCoreWrapper<WithHandler>> {
     using TSelf = TGroupingCoreWrapper;
@@ -151,10 +151,10 @@ public:
 
     TGroupingCoreWrapper(TComputationMutables& mutables,
         IComputationNode* stream,
-        IComputationExternalNode* keyExtractorItem,
+        IComputationExternalNode* keyExtractorItem, 
         IComputationNode* keyExtractorResult,
-        IComputationExternalNode* groupSwitchKey,
-        IComputationExternalNode* groupSwitchItem,
+        IComputationExternalNode* groupSwitchKey, 
+        IComputationExternalNode* groupSwitchItem, 
         IComputationNode* groupSwitchResult,
         IComputationExternalNode* handlerItem,
         IComputationNode* handlerResult)
@@ -189,28 +189,28 @@ private:
 private:
     IComputationNode* const Stream;
 
-    IComputationExternalNode* const KeyExtractorItemNode;
+    IComputationExternalNode* const KeyExtractorItemNode; 
     IComputationNode* const KeyExtractorResultNode;
 
-    IComputationExternalNode* const GroupSwitchKeyNode;
-    IComputationExternalNode* const GroupSwitchItemNode;
+    IComputationExternalNode* const GroupSwitchKeyNode; 
+    IComputationExternalNode* const GroupSwitchItemNode; 
     IComputationNode* const GroupSwitchResultNode;
 
     IComputationExternalNode* const HandlerItemNode;
     IComputationNode* const HandlerResultNode;
 };
 
-}
-
+} 
+ 
 IComputationNode* WrapGroupingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 6 || callable.GetInputsCount() == 8, "Expected 6 or 8 args");
 
-    const auto stream = LocateNode(ctx.NodeLocator, callable, 0);
-    const auto keyExtractorResult = LocateNode(ctx.NodeLocator, callable, 1);
-    const auto groupSwitchResult = LocateNode(ctx.NodeLocator, callable, 2);
-    const auto keyExtractorItem = LocateExternalNode(ctx.NodeLocator, callable, 3);
-    const auto groupSwitchKey = LocateExternalNode(ctx.NodeLocator, callable, 4);
-    const auto groupSwitchItem = LocateExternalNode(ctx.NodeLocator, callable, 5);
+    const auto stream = LocateNode(ctx.NodeLocator, callable, 0); 
+    const auto keyExtractorResult = LocateNode(ctx.NodeLocator, callable, 1); 
+    const auto groupSwitchResult = LocateNode(ctx.NodeLocator, callable, 2); 
+    const auto keyExtractorItem = LocateExternalNode(ctx.NodeLocator, callable, 3); 
+    const auto groupSwitchKey = LocateExternalNode(ctx.NodeLocator, callable, 4); 
+    const auto groupSwitchItem = LocateExternalNode(ctx.NodeLocator, callable, 5); 
 
     if (callable.GetInputsCount() == 8) {
         auto handlerResult = LocateNode(ctx.NodeLocator, callable, 6);

@@ -97,9 +97,9 @@ public:
 
     virtual ~IGraphTransformer() {}
 
-    virtual TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
-    virtual NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) = 0;
-    virtual TStatus ApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
+    virtual TStatus Transform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0; 
+    virtual NThreading::TFuture<void> GetAsyncFuture(const TExprNode& input) = 0; 
+    virtual TStatus ApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0; 
     virtual void Rewind() {}
 
     virtual TStatistics GetStatistics() const { return TStatistics::NotPresent(); }
@@ -225,12 +225,12 @@ TAutoPtr<IGraphTransformer> CreateChoiceGraphTransformer(
     const TTransformStage& left,
     const TTransformStage& right);
 
-IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx);
-IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool breakOnRestart = false);
+IGraphTransformer::TStatus SyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx); 
+IGraphTransformer::TStatus InstantTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool breakOnRestart = false); 
 
-NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool applyAsyncChanges);
+NThreading::TFuture<IGraphTransformer::TStatus> AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool applyAsyncChanges); 
 
-void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool applyAsyncChanges,
+void AsyncTransform(IGraphTransformer& transformer, TExprNode::TPtr& root, TExprContext& ctx, bool applyAsyncChanges, 
                     std::function<void(const IGraphTransformer::TStatus&)> asyncCallback);
 
 class TSyncTransformerBase : public TGraphTransformerBase {
@@ -276,11 +276,11 @@ private:
 };
 
 template <typename TFunctor>
-THolder<IGraphTransformer> CreateFunctorTransformer(TFunctor functor) {
+THolder<IGraphTransformer> CreateFunctorTransformer(TFunctor functor) { 
     return MakeHolder<TFunctorTransformer<TFunctor>>(std::move(functor));
 }
 
-typedef std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)> TAsyncTransformCallback;
+typedef std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)> TAsyncTransformCallback; 
 typedef NThreading::TFuture<TAsyncTransformCallback> TAsyncTransformCallbackFuture;
 
 template <typename TDerived>
@@ -356,7 +356,7 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture>
 WrapFuture(const TFuture& future, const TResultExtractor& extractor, const TString& message = "") {
     return WrapFutureCallback(future, [extractor](const NThreading::TFutureType<TFuture>& res, const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
         input->SetState(TExprNode::EState::ExecutionComplete);
-        input->SetResult(extractor(res, input, ctx));
+        input->SetResult(extractor(res, input, ctx)); 
         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Ok);
     }, message);
 }
@@ -391,7 +391,7 @@ inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Sync
     return SyncStatus(IGraphTransformer::TStatus::Repeat);
 }
 
-typedef std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash> TSyncMap;
+typedef std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash> TSyncMap; 
 }
 
 template<>

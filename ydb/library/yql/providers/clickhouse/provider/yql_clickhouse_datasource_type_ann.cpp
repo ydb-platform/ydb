@@ -21,27 +21,27 @@ public:
     {
         using TSelf = TClickHouseDataSourceTypeAnnotationTransformer;
         AddHandler({TClReadTable::CallableName()}, Hndl(&TSelf::HandleReadTable));
-        AddHandler({TClSourceSettings::CallableName()}, Hndl(&TSelf::HandleSourceSettings));
+        AddHandler({TClSourceSettings::CallableName()}, Hndl(&TSelf::HandleSourceSettings)); 
     }
 
-    TStatus HandleSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 3U, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureAtom(*input->Child(TClSourceSettings::idx_Table), ctx)) {
-            return TStatus::Error;
-        }
-
-        if (input->ChildrenSize() > TClSourceSettings::idx_Token && !TCoSecureParam::Match(input->Child(TClSourceSettings::idx_Token))) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TClSourceSettings::idx_Token)->Pos()), TStringBuilder() << "Expected " << TCoSecureParam::CallableName()));
-            return TStatus::Error;
-        }
-
-        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));
-        return TStatus::Ok;
-    }
-
+    TStatus HandleSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) { 
+        if (!EnsureArgsCount(*input, 3U, ctx)) { 
+            return TStatus::Error; 
+        } 
+ 
+        if (!EnsureAtom(*input->Child(TClSourceSettings::idx_Table), ctx)) { 
+            return TStatus::Error; 
+        } 
+ 
+        if (input->ChildrenSize() > TClSourceSettings::idx_Token && !TCoSecureParam::Match(input->Child(TClSourceSettings::idx_Token))) { 
+            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TClSourceSettings::idx_Token)->Pos()), TStringBuilder() << "Expected " << TCoSecureParam::CallableName())); 
+            return TStatus::Error; 
+        } 
+ 
+        input->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String))); 
+        return TStatus::Ok; 
+    } 
+ 
     TStatus HandleReadTable(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 5, ctx)) {

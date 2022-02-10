@@ -21,20 +21,20 @@ namespace {
             if (!args[0]) {
                 return valueBuilder->NewEmptyList();
             }
-
+ 
             const TString json(args[0].AsStringRef());
             const TString field(args[1].AsStringRef());
-
+ 
             if (field.empty()) {
                 return valueBuilder->NewEmptyList();
             }
 
             NJson::TJsonParser parser;
             parser.AddField(field, false);
-
+ 
             TVector<TString> result;
             parser.Parse(json, &result);
-
+ 
             TUnboxedValue* items = nullptr;
             const auto list = valueBuilder->NewArray(result.size(), items);
             for (const TString& item : result) {

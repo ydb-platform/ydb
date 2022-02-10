@@ -156,11 +156,11 @@ void TThrowingNodeVisitor::Visit(TStreamType& node) {
     ThrowUnexpectedNodeType();
 }
 
-void TThrowingNodeVisitor::Visit(TFlowType& node) {
-    Y_UNUSED(node);
-    ThrowUnexpectedNodeType();
-}
-
+void TThrowingNodeVisitor::Visit(TFlowType& node) { 
+    Y_UNUSED(node); 
+    ThrowUnexpectedNodeType(); 
+} 
+ 
 void TThrowingNodeVisitor::Visit(TTaggedType& node) {
     Y_UNUSED(node);
     ThrowUnexpectedNodeType();
@@ -291,10 +291,10 @@ void TEmptyNodeVisitor::Visit(TStreamType& node) {
     Y_UNUSED(node);
 }
 
-void TEmptyNodeVisitor::Visit(TFlowType& node) {
-    Y_UNUSED(node);
-}
-
+void TEmptyNodeVisitor::Visit(TFlowType& node) { 
+    Y_UNUSED(node); 
+} 
+ 
 void TEmptyNodeVisitor::Visit(TTaggedType& node) {
     Y_UNUSED(node);
 }
@@ -466,11 +466,11 @@ void TExploringNodeVisitor::Visit(TStreamType& node) {
     AddChildNode(&node, *node.GetItemType());
 }
 
-void TExploringNodeVisitor::Visit(TFlowType& node) {
-    AddChildNode(&node, *node.GetType());
-    AddChildNode(&node, *node.GetItemType());
-}
-
+void TExploringNodeVisitor::Visit(TFlowType& node) { 
+    AddChildNode(&node, *node.GetType()); 
+    AddChildNode(&node, *node.GetItemType()); 
+} 
+ 
 void TExploringNodeVisitor::Visit(TTaggedType& node) {
     AddChildNode(&node, *node.GetType());
     AddChildNode(&node, *node.GetBaseType());
@@ -499,7 +499,7 @@ void TExploringNodeVisitor::Clear() {
     ConsumersMap.clear();
 }
 
-void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes,
+void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes, 
     bool buildConsumersMap, size_t nodesCountHint)
 {
     BuildConsumersMap = buildConsumersMap;
@@ -542,15 +542,15 @@ void TExploringNodeVisitor::Walk(TNode* root, const TTypeEnvironment& env, const
     Stack = nullptr;
 }
 
-const std::vector<TNode*>& TExploringNodeVisitor::GetNodes() {
+const std::vector<TNode*>& TExploringNodeVisitor::GetNodes() { 
     return NodeList;
 }
 
 const TExploringNodeVisitor::TNodesVec& TExploringNodeVisitor::GetConsumerNodes(TNode& node) {
     Y_VERIFY(BuildConsumersMap);
-    const auto consumers = ConsumersMap.find(&node);
-    Y_VERIFY(consumers != ConsumersMap.cend());
-    return consumers->second;
+    const auto consumers = ConsumersMap.find(&node); 
+    Y_VERIFY(consumers != ConsumersMap.cend()); 
+    return consumers->second; 
 }
 
 template <bool InPlace>

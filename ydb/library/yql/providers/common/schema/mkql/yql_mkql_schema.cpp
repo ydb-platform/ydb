@@ -99,12 +99,12 @@ public:
                 }
 
                 auto dataType = NUdf::GetDataTypeInfo(*slot).Name;
-                if (NKikimr::NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) {
-                    const auto params = static_cast<const TDataDecimalType*>(type)->GetParams();
+                if (NKikimr::NUdf::TDataType<NUdf::TDecimal>::Id == schemeType) { 
+                    const auto params = static_cast<const TDataDecimalType*>(type)->GetParams(); 
                     TBase::SaveDataTypeParams(dataType, ToString(params.first), ToString(params.second));
-                } else {
-                    TBase::SaveDataType(dataType);
-                }
+                } else { 
+                    TBase::SaveDataType(dataType); 
+                } 
                 break;
             }
             case TType::EKind::Struct:
@@ -206,21 +206,21 @@ struct TRuntimeTypeLoader {
             return Nothing();
         }
 
-        if (NKikimr::NUdf::EDataSlot::Decimal == slot) {
+        if (NKikimr::NUdf::EDataSlot::Decimal == slot) { 
             Err << "Decimal type without parameters.";
             return Nothing();
         }
-
+ 
         return Builder.NewDataType(NUdf::GetDataTypeInfo(*slot).TypeId);
     }
-
+ 
     TMaybe<TType> LoadDataTypeParams(const TString& dataType, const TString& paramOne, const TString& paramTwo, ui32 /*level*/) {
         const auto slot = NUdf::FindDataSlot(dataType);
         if (!slot) {
             Err << "Unsupported data type: " << dataType;
             return Nothing();
-        }
-
+        } 
+ 
         if (NKikimr::NUdf::EDataSlot::Decimal != slot) {
             Err << "Unexpected parameters for type: " << dataType;
             return Nothing();

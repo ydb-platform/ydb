@@ -6,8 +6,8 @@ namespace NMiniKQL {
 
 IComputationNode* WrapFlatMap(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-IComputationNode* WrapNarrowFlatMap(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-
-
+IComputationNode* WrapNarrowFlatMap(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
+ 
+ 
 }
 }

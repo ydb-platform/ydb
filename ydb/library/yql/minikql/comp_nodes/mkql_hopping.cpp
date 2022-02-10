@@ -11,8 +11,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace {
-
+namespace { 
+ 
 const TStatKey Hop_NewHopsCount("Hop_NewHopsCount", true);
 const TStatKey Hop_ThrownEventsCount("Hop_ThrownEventsCount", true);
 
@@ -28,18 +28,18 @@ public:
         TStreamValue(
             TMemoryUsageInfo* memInfo,
             NUdf::TUnboxedValue&& stream,
-            const TSelf* self,
-            ui64 hopTime,
-            ui64 intervalHopCount,
+            const TSelf* self, 
+            ui64 hopTime, 
+            ui64 intervalHopCount, 
             ui64 delayHopCount,
             TComputationContext& ctx)
             : TBase(memInfo)
             , Stream(std::move(stream))
             , Self(self)
-            , HopTime(hopTime)
-            , IntervalHopCount(intervalHopCount)
-            , DelayHopCount(delayHopCount)
-            , Buckets(IntervalHopCount + DelayHopCount)
+            , HopTime(hopTime) 
+            , IntervalHopCount(intervalHopCount) 
+            , DelayHopCount(delayHopCount) 
+            , Buckets(IntervalHopCount + DelayHopCount) 
             , Ctx(ctx)
         {}
 
@@ -73,7 +73,7 @@ public:
             WriteBool(out, Finished);
 
             auto strRef = NUdf::TStringRef(out.data(), out.size());
-            return MakeString(strRef);
+            return MakeString(strRef); 
         }
 
         void Load(const NUdf::TStringRef& state) override {
@@ -97,12 +97,12 @@ public:
         }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
-            if (!Ready.empty()) {
-                result = std::move(Ready.front());
-                Ready.pop_front();
+            if (!Ready.empty()) { 
+                result = std::move(Ready.front()); 
+                Ready.pop_front(); 
                 return NUdf::EFetchStatus::Ok;
             }
-            if (Finished) {
+            if (Finished) { 
                 return NUdf::EFetchStatus::Finish;
             }
 
@@ -127,7 +127,7 @@ public:
                 const auto status = Stream.Fetch(item);
                 if (status != NUdf::EFetchStatus::Ok) {
                     if (status == NUdf::EFetchStatus::Finish) {
-                        Finished = true;
+                        Finished = true; 
                     }
                     return status;
                 }
@@ -140,13 +140,13 @@ public:
 
                 auto hopIndex = time.Get<ui64>() / HopTime;
 
-                if (!Started) {
-                    HopIndex = hopIndex + 1;
-                    Started = true;
+                if (!Started) { 
+                    HopIndex = hopIndex + 1; 
+                    Started = true; 
                 }
 
-                while (hopIndex >= HopIndex) {
-                    auto firstBucketIndex = HopIndex % Buckets.size();
+                while (hopIndex >= HopIndex) { 
+                    auto firstBucketIndex = HopIndex % Buckets.size(); 
 
                     auto bucketIndex = firstBucketIndex;
                     TMaybe<NUdf::TUnboxedValue> aggregated;
@@ -164,12 +164,12 @@ public:
                                 aggregated = Self->OutMerge->GetValue(Ctx);
                             }
                         }
-                        if (++bucketIndex == Buckets.size()) {
+                        if (++bucketIndex == Buckets.size()) { 
                             bucketIndex = 0;
                         }
                     }
 
-                    auto& clearBucket = Buckets[firstBucketIndex];
+                    auto& clearBucket = Buckets[firstBucketIndex]; 
                     clearBucket.Value = NUdf::TUnboxedValue();
                     clearBucket.HasValue = false;
 
@@ -180,11 +180,11 @@ public:
                     }
 
                     ++newHops;
-                    ++HopIndex;
+                    ++HopIndex; 
                 }
 
                 if (hopIndex + DelayHopCount + 1 >= HopIndex) {
-                    auto& bucket = Buckets[hopIndex % Buckets.size()];
+                    auto& bucket = Buckets[hopIndex % Buckets.size()]; 
                     if (!bucket.HasValue) {
                         bucket.Value = Self->OutInit->GetValue(Ctx);
                         bucket.HasValue = true;
@@ -198,24 +198,24 @@ public:
             }
         }
 
-
-        const NUdf::TUnboxedValue Stream;
-        const TSelf *const Self;
-
+ 
+        const NUdf::TUnboxedValue Stream; 
+        const TSelf *const Self; 
+ 
         const ui64 HopTime;
         const ui64 IntervalHopCount;
         const ui64 DelayHopCount;
 
-        struct TBucket {
-            NUdf::TUnboxedValue Value;
-            bool HasValue = false;
-        };
-
-        std::vector<TBucket> Buckets; // circular buffer
-        std::deque<NUdf::TUnboxedValue> Ready; // buffer for fetching results
+        struct TBucket { 
+            NUdf::TUnboxedValue Value; 
+            bool HasValue = false; 
+        }; 
+ 
+        std::vector<TBucket> Buckets; // circular buffer 
+        std::deque<NUdf::TUnboxedValue> Ready; // buffer for fetching results 
         ui64 HopIndex = 0;
-        bool Started = false;
-        bool Finished = false;
+        bool Started = false; 
+        bool Finished = false; 
 
         TComputationContext& Ctx;
     };
@@ -223,12 +223,12 @@ public:
     THoppingCoreWrapper(
         TComputationMutables& mutables,
         IComputationNode* stream,
-        IComputationExternalNode* item,
-        IComputationExternalNode* state,
-        IComputationExternalNode* state2,
-        IComputationExternalNode* time,
-        IComputationExternalNode* inSave,
-        IComputationExternalNode* inLoad,
+        IComputationExternalNode* item, 
+        IComputationExternalNode* state, 
+        IComputationExternalNode* state2, 
+        IComputationExternalNode* time, 
+        IComputationExternalNode* inSave, 
+        IComputationExternalNode* inLoad, 
         IComputationNode* outTime,
         IComputationNode* outInit,
         IComputationNode* outUpdate,
@@ -264,28 +264,28 @@ public:
         Stateless = false;
     }
 
-    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const { 
         const auto hopTime = Hop->GetValue(ctx).Get<i64>();
         const auto interval = Interval->GetValue(ctx).Get<i64>();
         const auto delay = Delay->GetValue(ctx).Get<i64>();
 
         // TODO: move checks from here
         MKQL_ENSURE(hopTime > 0, "hop must be positive");
-        MKQL_ENSURE(interval >= hopTime, "interval should be greater or equal to hop");
-        MKQL_ENSURE(delay >= hopTime, "delay should be greater or equal to hop");
+        MKQL_ENSURE(interval >= hopTime, "interval should be greater or equal to hop"); 
+        MKQL_ENSURE(delay >= hopTime, "delay should be greater or equal to hop"); 
 
-        const auto intervalHopCount = interval / hopTime;
-        const auto delayHopCount = delay / hopTime;
+        const auto intervalHopCount = interval / hopTime; 
+        const auto delayHopCount = delay / hopTime; 
 
-        MKQL_ENSURE(intervalHopCount <= 100000, "too many hops in interval");
-        MKQL_ENSURE(delayHopCount <= 100000, "too many hops in delay");
+        MKQL_ENSURE(intervalHopCount <= 100000, "too many hops in interval"); 
+        MKQL_ENSURE(delayHopCount <= 100000, "too many hops in delay"); 
 
         return ctx.HolderFactory.Create<TStreamValue>(Stream->GetValue(ctx), this, (ui64)hopTime, (ui64)intervalHopCount, (ui64)delayHopCount, ctx);
     }
 
-private:
-    void RegisterDependencies() const final {
-        DependsOn(Stream);
+private: 
+    void RegisterDependencies() const final { 
+        DependsOn(Stream); 
         Own(Item);
         Own(State);
         Own(State2);
@@ -299,19 +299,19 @@ private:
         DependsOn(OutLoad);
         DependsOn(OutMerge);
         DependsOn(OutFinish);
-        DependsOn(Hop);
-        DependsOn(Interval);
-        DependsOn(Delay);
+        DependsOn(Hop); 
+        DependsOn(Interval); 
+        DependsOn(Delay); 
     }
 
     IComputationNode* const Stream;
 
-    IComputationExternalNode* const Item;
-    IComputationExternalNode* const State;
-    IComputationExternalNode* const State2;
-    IComputationExternalNode* const Time;
-    IComputationExternalNode* const InSave;
-    IComputationExternalNode* const InLoad;
+    IComputationExternalNode* const Item; 
+    IComputationExternalNode* const State; 
+    IComputationExternalNode* const State2; 
+    IComputationExternalNode* const Time; 
+    IComputationExternalNode* const InSave; 
+    IComputationExternalNode* const InLoad; 
 
     IComputationNode* const OutTime;
     IComputationNode* const OutInit;
@@ -329,16 +329,16 @@ private:
     TMutableObjectOverBoxedValue<TValuePackerBoxed> Packer;
 };
 
-}
-
+} 
+ 
 IComputationNode* WrapHoppingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 17, "Expected 17 args");
 
     auto hasSaveLoad = !callable.GetInput(10).GetStaticType()->IsVoid();
 
-    IComputationExternalNode* inSave = nullptr;
+    IComputationExternalNode* inSave = nullptr; 
     IComputationNode* outSave = nullptr;
-    IComputationExternalNode* inLoad = nullptr;
+    IComputationExternalNode* inLoad = nullptr; 
     IComputationNode* outLoad = nullptr;
 
     auto streamType = callable.GetInput(0).GetStaticType();
@@ -360,13 +360,13 @@ IComputationNode* WrapHoppingCore(TCallable& callable, const TComputationNodeFac
     auto interval = LocateNode(ctx.NodeLocator, callable, 15);
     auto delay = LocateNode(ctx.NodeLocator, callable, 16);
 
-    auto item = LocateExternalNode(ctx.NodeLocator, callable, 1);
-    auto state = LocateExternalNode(ctx.NodeLocator, callable, 2);
-    auto state2 = LocateExternalNode(ctx.NodeLocator, callable, 3);
-    auto time = LocateExternalNode(ctx.NodeLocator, callable, 4);
+    auto item = LocateExternalNode(ctx.NodeLocator, callable, 1); 
+    auto state = LocateExternalNode(ctx.NodeLocator, callable, 2); 
+    auto state2 = LocateExternalNode(ctx.NodeLocator, callable, 3); 
+    auto time = LocateExternalNode(ctx.NodeLocator, callable, 4); 
     if (hasSaveLoad) {
-        inSave = LocateExternalNode(ctx.NodeLocator, callable, 5);
-        inLoad = LocateExternalNode(ctx.NodeLocator, callable, 6);
+        inSave = LocateExternalNode(ctx.NodeLocator, callable, 5); 
+        inLoad = LocateExternalNode(ctx.NodeLocator, callable, 6); 
     }
 
     auto stateType = hasSaveLoad ? callable.GetInput(10).GetStaticType() : nullptr;

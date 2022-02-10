@@ -203,7 +203,7 @@ namespace NSQLTranslationV1 {
     public:
         THashMap<TString, TNodePtr> Variables;
         NSQLTranslation::TTranslationSettings Settings;
-        std::unique_ptr<TMemoryPool> Pool;
+        std::unique_ptr<TMemoryPool> Pool; 
         NYql::TIssues& Issues;
         TMap<TString, TNodePtr> UniversalAliases;
         THashSet<TString> Exports;
@@ -226,10 +226,10 @@ namespace NSQLTranslationV1 {
         bool SimpleColumns = true;
         bool CoalesceJoinKeysOnQualifiedAll = false;
         bool PragmaDirectRead = false;
-        bool PragmaYsonFast = true;
+        bool PragmaYsonFast = true; 
         bool PragmaYsonAutoConvert = false;
         bool PragmaYsonStrict = true;
-        bool PragmaRegexUseRe2 = true;
+        bool PragmaRegexUseRe2 = true; 
         bool PragmaPullUpFlatMapOverJoin = true;
         bool WarnUnnamedColumns = false;
         bool DiscoveryMode = false;

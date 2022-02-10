@@ -28,12 +28,12 @@ namespace NSQLTranslation {
 
     using TIncrementMonCounterFunction = std::function<void(const TString&, const TString&)>;
 
-    enum class EV0Behavior {
-        Silent = 0,
-        Report,
-        Disable
-    };
-
+    enum class EV0Behavior { 
+        Silent = 0, 
+        Report, 
+        Disable 
+    }; 
+ 
     class ISqlFeaturePolicy : public TThrRefBase {
     public:
         virtual ~ISqlFeaturePolicy() = default;
@@ -76,7 +76,7 @@ namespace NSQLTranslation {
         bool AnsiLexer;
         bool PgParser;
         bool InferSyntaxVersion;
-        EV0Behavior V0Behavior;
+        EV0Behavior V0Behavior; 
         bool V0ForceDisable;
         bool WarnOnV0;
         ISqlFeaturePolicy::TPtr V0WarnAsError;

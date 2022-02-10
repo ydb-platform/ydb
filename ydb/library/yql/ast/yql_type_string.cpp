@@ -62,7 +62,7 @@ enum EToken
     TOKEN_DATETIME = -30,
     TOKEN_TIMESTAMP = -31,
     TOKEN_INTERVAL = -32,
-    TOKEN_DECIMAL = -33,
+    TOKEN_DECIMAL = -33, 
     TOKEN_INT8 = -34,
     TOKEN_UINT8 = -35,
     TOKEN_INT16 = -36,
@@ -215,10 +215,10 @@ private:
             GetNextToken();
             break;
 
-        case TOKEN_DECIMAL:
-            type = ParseDecimalType();
-            break;
-
+        case TOKEN_DECIMAL: 
+            type = ParseDecimalType(); 
+            break; 
+ 
         case TOKEN_LIST:
             type = ParseListType();
             break;
@@ -344,7 +344,7 @@ private:
         Identifier = {};
 
         char lastChar = Get();
-        if (lastChar == '_' || isalnum(lastChar)) { // identifier
+        if (lastChar == '_' || isalnum(lastChar)) { // identifier 
             size_t start = Index;
             while (!AtEnd()) {
                 lastChar = Get();
@@ -621,23 +621,23 @@ private:
         return MakeFlowType(itemType);
     }
 
-    TAstNode* ParseDecimalType() {
-        GetNextToken(); // eat keyword
-        EXPECT_AND_SKIP_TOKEN('(', nullptr);
-
-        const auto precision = Identifier;
-        GetNextToken(); // eat keyword
-
-        EXPECT_AND_SKIP_TOKEN(',', nullptr);
-
-        const auto scale = Identifier;
-        GetNextToken(); // eat keyword
-
-        EXPECT_AND_SKIP_TOKEN(')', nullptr);
-
-        return MakeDecimalType(precision, scale);
-    }
-
+    TAstNode* ParseDecimalType() { 
+        GetNextToken(); // eat keyword 
+        EXPECT_AND_SKIP_TOKEN('(', nullptr); 
+ 
+        const auto precision = Identifier; 
+        GetNextToken(); // eat keyword 
+ 
+        EXPECT_AND_SKIP_TOKEN(',', nullptr); 
+ 
+        const auto scale = Identifier; 
+        GetNextToken(); // eat keyword 
+ 
+        EXPECT_AND_SKIP_TOKEN(')', nullptr); 
+ 
+        return MakeDecimalType(precision, scale); 
+    } 
+ 
     TAstNode* ParseOptionalType() {
         GetNextToken(); // eat keyword
         EXPECT_AND_SKIP_TOKEN('<', nullptr);
@@ -1012,16 +1012,16 @@ private:
         return MakeList(items, Y_ARRAY_SIZE(items));
     }
 
-    TAstNode* MakeDecimalType(TStringBuf precision, TStringBuf scale) {
-        TAstNode* items[] = {
+    TAstNode* MakeDecimalType(TStringBuf precision, TStringBuf scale) { 
+        TAstNode* items[] = { 
             MakeLiteralAtom(TStringBuf("DataType")),
             MakeQuotedAtom(TStringBuf("Decimal")),
-            MakeQuotedAtom(precision),
-            MakeQuotedAtom(scale),
-        };
-        return MakeList(items, Y_ARRAY_SIZE(items));
-    }
-
+            MakeQuotedAtom(precision), 
+            MakeQuotedAtom(scale), 
+        }; 
+        return MakeList(items, Y_ARRAY_SIZE(items)); 
+    } 
+ 
     TAstNode* MakeOptionalType(TAstNode* type) {
         TAstNode* items[] = {
             MakeLiteralAtom(TStringBuf("OptionalType")),
@@ -1113,16 +1113,16 @@ private:
 
     void Visit(const TMultiExprType& type) final {
         Out_ << TStringBuf("Multi<");
-        const auto& items = type.GetItems();
-        for (ui32 i = 0; i < items.size(); ++i) {
-            if (i) {
-                Out_ << ',';
-            }
-            items[i]->Accept(*this);
-        }
-        Out_ << '>';
-    }
-
+        const auto& items = type.GetItems(); 
+        for (ui32 i = 0; i < items.size(); ++i) { 
+            if (i) { 
+                Out_ << ','; 
+            } 
+            items[i]->Accept(*this); 
+        } 
+        Out_ << '>'; 
+    } 
+ 
     void Visit(const TTupleExprType& type) final {
         Out_ << TStringBuf("Tuple<");
         const auto& items = type.GetItems();
@@ -1167,15 +1167,15 @@ private:
 
     void Visit(const TFlowExprType& type) final {
         Out_ << TStringBuf("Flow<");
-        type.GetItemType()->Accept(*this);
-        Out_ << '>';
-    }
-
+        type.GetItemType()->Accept(*this); 
+        Out_ << '>'; 
+    } 
+ 
     void Visit(const TDataExprType& type) final {
         Out_ << type.GetName();
-        if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(&type)) {
-            Out_ << '(' << dataExprParamsType->GetParamOne() << ',' << dataExprParamsType->GetParamTwo() << ')';
-        }
+        if (const auto dataExprParamsType = dynamic_cast<const TDataExprParamsType*>(&type)) { 
+            Out_ << '(' << dataExprParamsType->GetParamOne() << ',' << dataExprParamsType->GetParamTwo() << ')'; 
+        } 
     }
 
     void Visit(const TWorldExprType& type) final {

@@ -18,16 +18,16 @@
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 
-#include <map>
-#include <unordered_set>
-#include <unordered_map>
-#include <vector>
+#include <map> 
+#include <unordered_set> 
+#include <unordered_map> 
+#include <vector> 
 
 namespace NKikimr {
 namespace NMiniKQL {
 
-inline const TDefaultListRepresentation* GetDefaultListRepresentation(const NUdf::TUnboxedValuePod& value) {
-    return reinterpret_cast<const TDefaultListRepresentation*>(NUdf::TBoxedValueAccessor::GetListRepresentation(*value.AsBoxed()));
+inline const TDefaultListRepresentation* GetDefaultListRepresentation(const NUdf::TUnboxedValuePod& value) { 
+    return reinterpret_cast<const TDefaultListRepresentation*>(NUdf::TBoxedValueAccessor::GetListRepresentation(*value.AsBoxed())); 
 }
 
 enum class EGraphPerProcess {
@@ -39,8 +39,8 @@ struct TComputationOpts {
     TComputationOpts(IStatsRegistry* stats)
         : Stats(stats)
     {}
-
-    IStatsRegistry *const Stats;
+ 
+    IStatsRegistry *const Stats; 
 };
 
 struct TComputationOptsFull: public TComputationOpts {
@@ -61,27 +61,27 @@ struct TComputationOptsFull: public TComputationOpts {
 };
 
 struct TComputationMutables {
-    ui32 CurValueIndex = 0U;
+    ui32 CurValueIndex = 0U; 
     std::vector<ui32> SerializableValues; // Indices of values that need to be saved in IComputationGraph::SaveGraphState() and restored in IComputationGraph::LoadGraphState().
 };
 
-class THolderFactory;
-
-// Do not reorder: used in LLVM!
-struct TComputationContextLLVM {
+class THolderFactory; 
+ 
+// Do not reorder: used in LLVM! 
+struct TComputationContextLLVM { 
     const THolderFactory& HolderFactory;
-    IStatsRegistry *const Stats;
-    const std::unique_ptr<NUdf::TUnboxedValue[]> MutableValues;
-    const NUdf::IValueBuilder *const Builder;
-    float UsageAdjustor = 1.f;
-    ui32 RssCounter = 0U;
-    const NUdf::TSourcePosition* CalleePosition = nullptr;
-};
-
-struct TComputationContext : public TComputationContextLLVM {
+    IStatsRegistry *const Stats; 
+    const std::unique_ptr<NUdf::TUnboxedValue[]> MutableValues; 
+    const NUdf::IValueBuilder *const Builder; 
+    float UsageAdjustor = 1.f; 
+    ui32 RssCounter = 0U; 
+    const NUdf::TSourcePosition* CalleePosition = nullptr; 
+}; 
+ 
+struct TComputationContext : public TComputationContextLLVM { 
     IRandomProvider& RandomProvider;
     ITimeProvider& TimeProvider;
-    bool ExecuteLLVM = true;
+    bool ExecuteLLVM = true; 
     arrow::MemoryPool& ArrowMemoryPool;
 
     TComputationContext(const THolderFactory& holderFactory,
@@ -94,12 +94,12 @@ struct TComputationContext : public TComputationContextLLVM {
     // Returns true if current usage delta exceeds the memory limit
     // The function automatically adjusts memory limit taking into account RSS delta between calls
     template<bool TrackRss>
-    inline bool CheckAdjustedMemLimit(ui64 memLimit, ui64 initMemUsage);
+    inline bool CheckAdjustedMemLimit(ui64 memLimit, ui64 initMemUsage); 
 
-    void UpdateUsageAdjustor(ui64 memLimit);
+    void UpdateUsageAdjustor(ui64 memLimit); 
 private:
-    ui64 InitRss = 0ULL;
-    ui64 LastRss = 0ULL;
+    ui64 InitRss = 0ULL; 
+    ui64 LastRss = 0ULL; 
 #ifndef NDEBUG
     TInstant LastPrintUsage;
 #endif
@@ -107,33 +107,33 @@ private:
 
 class IComputationNode {
 public:
-    typedef TIntrusivePtr<IComputationNode> TPtr;
-    typedef std::map<ui32, EValueRepresentation> TIndexesMap;
-
+    typedef TIntrusivePtr<IComputationNode> TPtr; 
+    typedef std::map<ui32, EValueRepresentation> TIndexesMap; 
+ 
     virtual ~IComputationNode() {}
 
     virtual void InitNode(TComputationContext&) const = 0;
 
     virtual NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const = 0;
-
-    virtual IComputationNode* AddDependence(const IComputationNode* node) = 0;
-
-    virtual const IComputationNode* GetSource() const = 0;
-
-    virtual void RegisterDependencies() const = 0;
-
-    virtual ui32 GetIndex() const = 0;
-    virtual void CollectDependentIndexes(const IComputationNode* owner, TIndexesMap& dependencies) const = 0;
-    virtual ui32 GetDependencyWeight() const = 0;
-    virtual ui32 GetDependencesCount() const = 0;
-
-    virtual bool IsTemporaryValue() const = 0;
-
-    virtual EValueRepresentation GetRepresentation() const = 0;
-
-    virtual void PrepareStageOne() = 0;
-    virtual void PrepareStageTwo() = 0;
-
+ 
+    virtual IComputationNode* AddDependence(const IComputationNode* node) = 0; 
+ 
+    virtual const IComputationNode* GetSource() const = 0; 
+ 
+    virtual void RegisterDependencies() const = 0; 
+ 
+    virtual ui32 GetIndex() const = 0; 
+    virtual void CollectDependentIndexes(const IComputationNode* owner, TIndexesMap& dependencies) const = 0; 
+    virtual ui32 GetDependencyWeight() const = 0; 
+    virtual ui32 GetDependencesCount() const = 0; 
+ 
+    virtual bool IsTemporaryValue() const = 0; 
+ 
+    virtual EValueRepresentation GetRepresentation() const = 0; 
+ 
+    virtual void PrepareStageOne() = 0; 
+    virtual void PrepareStageTwo() = 0; 
+ 
     virtual TString DebugString() const = 0;
 
     virtual void Ref() = 0;
@@ -141,63 +141,63 @@ public:
     virtual ui32 RefCount() const = 0;
 };
 
-class IComputationExternalNode : public IComputationNode {
-public:
-    virtual NUdf::TUnboxedValue& RefValue(TComputationContext& compCtx) const = 0;
-    virtual void SetValue(TComputationContext& compCtx, NUdf::TUnboxedValue&& newValue) const = 0;
-    virtual void SetOwner(const IComputationNode* node) = 0;
-
-    using TGetter = std::function<NUdf::TUnboxedValue(TComputationContext&)>;
-    virtual void SetGetter(TGetter&& getter) = 0;
-    virtual void InvalidateValue(TComputationContext& compCtx) const = 0;
-};
-
-enum class EFetchResult : i32 {
-    Finish = -1,
-    Yield = 0,
-    One = 1
-};
-
-class IComputationWideFlowNode : public IComputationNode {
-public:
-    virtual EFetchResult FetchValues(TComputationContext& compCtx, NUdf::TUnboxedValue*const* values) const = 0;
-};
-
-class IComputationWideFlowProxyNode : public IComputationWideFlowNode {
-public:
-    using TFetcher = std::function<EFetchResult(TComputationContext&, NUdf::TUnboxedValue*const*)>;
-    virtual void SetFetcher(TFetcher&& fetcher) = 0;
-    virtual void SetOwner(const IComputationNode* node) = 0;
-    virtual void InvalidateValue(TComputationContext& compCtx) const = 0;
-};
-
-using TComputationNodePtrVector = std::vector<IComputationNode*, TMKQLAllocator<IComputationNode*>>;
-using TComputationWideFlowNodePtrVector = std::vector<IComputationWideFlowNode*, TMKQLAllocator<IComputationWideFlowNode*>>;
-using TComputationExternalNodePtrVector = std::vector<IComputationExternalNode*, TMKQLAllocator<IComputationExternalNode*>>;
-using TConstComputationNodePtrVector = std::vector<const IComputationNode*, TMKQLAllocator<const IComputationNode*>>;
-using TComputationNodePtrDeque = std::deque<IComputationNode::TPtr, TMKQLAllocator<IComputationNode::TPtr>>;
-using TComputationNodeOnNodeMap = std::unordered_map<const IComputationNode*, IComputationNode*, std::hash<const IComputationNode*>, std::equal_to<const IComputationNode*>, TMKQLAllocator<std::pair<const IComputationNode *const, IComputationNode*>>>;
-
+class IComputationExternalNode : public IComputationNode { 
+public: 
+    virtual NUdf::TUnboxedValue& RefValue(TComputationContext& compCtx) const = 0; 
+    virtual void SetValue(TComputationContext& compCtx, NUdf::TUnboxedValue&& newValue) const = 0; 
+    virtual void SetOwner(const IComputationNode* node) = 0; 
+ 
+    using TGetter = std::function<NUdf::TUnboxedValue(TComputationContext&)>; 
+    virtual void SetGetter(TGetter&& getter) = 0; 
+    virtual void InvalidateValue(TComputationContext& compCtx) const = 0; 
+}; 
+ 
+enum class EFetchResult : i32 { 
+    Finish = -1, 
+    Yield = 0, 
+    One = 1 
+}; 
+ 
+class IComputationWideFlowNode : public IComputationNode { 
+public: 
+    virtual EFetchResult FetchValues(TComputationContext& compCtx, NUdf::TUnboxedValue*const* values) const = 0; 
+}; 
+ 
+class IComputationWideFlowProxyNode : public IComputationWideFlowNode { 
+public: 
+    using TFetcher = std::function<EFetchResult(TComputationContext&, NUdf::TUnboxedValue*const*)>; 
+    virtual void SetFetcher(TFetcher&& fetcher) = 0; 
+    virtual void SetOwner(const IComputationNode* node) = 0; 
+    virtual void InvalidateValue(TComputationContext& compCtx) const = 0; 
+}; 
+ 
+using TComputationNodePtrVector = std::vector<IComputationNode*, TMKQLAllocator<IComputationNode*>>; 
+using TComputationWideFlowNodePtrVector = std::vector<IComputationWideFlowNode*, TMKQLAllocator<IComputationWideFlowNode*>>; 
+using TComputationExternalNodePtrVector = std::vector<IComputationExternalNode*, TMKQLAllocator<IComputationExternalNode*>>; 
+using TConstComputationNodePtrVector = std::vector<const IComputationNode*, TMKQLAllocator<const IComputationNode*>>; 
+using TComputationNodePtrDeque = std::deque<IComputationNode::TPtr, TMKQLAllocator<IComputationNode::TPtr>>; 
+using TComputationNodeOnNodeMap = std::unordered_map<const IComputationNode*, IComputationNode*, std::hash<const IComputationNode*>, std::equal_to<const IComputationNode*>, TMKQLAllocator<std::pair<const IComputationNode *const, IComputationNode*>>>; 
+ 
 class IComputationGraph {
 public:
     virtual ~IComputationGraph() {}
     virtual void Prepare() = 0;
-    virtual NUdf::TUnboxedValue GetValue() = 0;
+    virtual NUdf::TUnboxedValue GetValue() = 0; 
     virtual TComputationContext& GetContext() = 0;
-    virtual IComputationExternalNode* GetEntryPoint(size_t index, bool require) = 0;
-    virtual const TComputationNodePtrDeque& GetNodes() const = 0;
+    virtual IComputationExternalNode* GetEntryPoint(size_t index, bool require) = 0; 
+    virtual const TComputationNodePtrDeque& GetNodes() const = 0; 
     virtual void Invalidate() = 0;
     virtual TMemoryUsageInfo& GetMemInfo() const = 0;
     virtual const THolderFactory& GetHolderFactory() const = 0;
-    virtual ITerminator* GetTerminator() const = 0;
-    virtual bool SetExecuteLLVM(bool value) = 0;
+    virtual ITerminator* GetTerminator() const = 0; 
+    virtual bool SetExecuteLLVM(bool value) = 0; 
     virtual TString SaveGraphState() = 0;
     virtual void LoadGraphState(TStringBuf state) = 0;
 };
 
 class TNodeFactory;
-typedef std::function<IComputationNode* (TNode* node, bool pop)> TNodeLocator;
-typedef std::function<void (IComputationNode*)> TNodePushBack;
+typedef std::function<IComputationNode* (TNode* node, bool pop)> TNodeLocator; 
+typedef std::function<void (IComputationNode*)> TNodePushBack; 
 
 struct TComputationNodeFactoryContext {
     TNodeLocator NodeLocator;
@@ -208,13 +208,13 @@ struct TComputationNodeFactoryContext {
     const NUdf::ISecureParamsProvider* SecureParamsProvider;
     const TNodeFactory& NodeFactory;
     const THolderFactory& HolderFactory;
-    const NUdf::IValueBuilder *const Builder;
+    const NUdf::IValueBuilder *const Builder; 
     NUdf::EValidateMode ValidateMode;
     NUdf::EValidatePolicy ValidatePolicy;
     EGraphPerProcess GraphPerProcess;
     TComputationMutables& Mutables;
-    TComputationNodeOnNodeMap& ElementsCache;
-    const TNodePushBack NodePushBack;
+    TComputationNodeOnNodeMap& ElementsCache; 
+    const TNodePushBack NodePushBack; 
 
     TComputationNodeFactoryContext(
             const TNodeLocator& nodeLocator,
@@ -225,13 +225,13 @@ struct TComputationNodeFactoryContext {
             const NUdf::ISecureParamsProvider* secureParamsProvider,
             const TNodeFactory& nodeFactory,
             const THolderFactory& holderFactory,
-            const NUdf::IValueBuilder* builder,
+            const NUdf::IValueBuilder* builder, 
             NUdf::EValidateMode validateMode,
             NUdf::EValidatePolicy validatePolicy,
             EGraphPerProcess graphPerProcess,
-            TComputationMutables& mutables,
-            TComputationNodeOnNodeMap& elementsCache,
-            TNodePushBack&& nodePushBack
+            TComputationMutables& mutables, 
+            TComputationNodeOnNodeMap& elementsCache, 
+            TNodePushBack&& nodePushBack 
             )
         : NodeLocator(nodeLocator)
         , FunctionRegistry(functionRegistry)
@@ -241,18 +241,18 @@ struct TComputationNodeFactoryContext {
         , SecureParamsProvider(secureParamsProvider)
         , NodeFactory(nodeFactory)
         , HolderFactory(holderFactory)
-        , Builder(builder)
+        , Builder(builder) 
         , ValidateMode(validateMode)
         , ValidatePolicy(validatePolicy)
         , GraphPerProcess(graphPerProcess)
         , Mutables(mutables)
-        , ElementsCache(elementsCache)
-        , NodePushBack(std::move(nodePushBack))
+        , ElementsCache(elementsCache) 
+        , NodePushBack(std::move(nodePushBack)) 
     {}
 };
 
 using TComputationNodeFactory = std::function<IComputationNode* (TCallable&, const TComputationNodeFactoryContext&)>;
-using TStreamEmitter = std::function<void(NUdf::TUnboxedValue&&)>;
+using TStreamEmitter = std::function<void(NUdf::TUnboxedValue&&)>; 
 
 struct TComputationPatternOpts {
     TComputationPatternOpts(const std::shared_ptr<TInjectedAlloc>& cacheAlloc, const std::shared_ptr<TTypeEnvironment>& cacheEnv)
@@ -274,7 +274,7 @@ struct TComputationPatternOpts {
         const IFunctionRegistry* functionRegistry,
         NUdf::EValidateMode validateMode,
         NUdf::EValidatePolicy validatePolicy,
-        const TString& optLLVM,
+        const TString& optLLVM, 
         EGraphPerProcess graphPerProcess,
         IStatsRegistry* stats = nullptr,
         NUdf::ICountersProvider* countersProvider = nullptr)
@@ -284,7 +284,7 @@ struct TComputationPatternOpts {
         , FunctionRegistry(functionRegistry)
         , ValidateMode(validateMode)
         , ValidatePolicy(validatePolicy)
-        , OptLLVM(optLLVM)
+        , OptLLVM(optLLVM) 
         , GraphPerProcess(graphPerProcess)
         , Stats(stats)
         , CountersProvider(countersProvider)
@@ -298,7 +298,7 @@ struct TComputationPatternOpts {
         FunctionRegistry = functionRegistry;
         ValidateMode = validateMode;
         ValidatePolicy = validatePolicy;
-        OptLLVM = optLLVM;
+        OptLLVM = optLLVM; 
         GraphPerProcess = graphPerProcess;
         Stats = stats;
         CountersProvider = counters;
@@ -314,7 +314,7 @@ struct TComputationPatternOpts {
     const IFunctionRegistry* FunctionRegistry = nullptr;
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     NUdf::EValidatePolicy ValidatePolicy = NUdf::EValidatePolicy::Fail;
-    TString OptLLVM;
+    TString OptLLVM; 
     EGraphPerProcess GraphPerProcess = EGraphPerProcess::Multi;
     IStatsRegistry* Stats = nullptr;
     NUdf::ICountersProvider* CountersProvider = nullptr;
@@ -339,7 +339,7 @@ IComputationPattern::TPtr MakeComputationPattern(
         TExploringNodeVisitor& explorer,
         const TRuntimeNode& root,
         const std::vector<TNode*>& entryPoints,
-        const TComputationPatternOpts& opts);
+        const TComputationPatternOpts& opts); 
 
 class IComputationPatternCache {
 public:

@@ -112,10 +112,10 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: CORE_LEGACY_REGEX_ENGINE
-  severity: S_WARNING
-}
-ids {
+  code: CORE_LEGACY_REGEX_ENGINE 
+  severity: S_WARNING 
+} 
+ids { 
   code: CORE_ALIAS_SHADOWS_COLUMN
   severity: S_WARNING
 }
@@ -329,10 +329,10 @@ ids {
   severity: S_WARNING
 }
 ids {
-  code: YQL_DEPRECATED_INTERVAL_CONSTANT
-  severity: S_WARNING
-}
-ids {
+  code: YQL_DEPRECATED_INTERVAL_CONSTANT 
+  severity: S_WARNING 
+} 
+ids { 
   code: YQL_DEPRECATED_PRAGMA
   severity: S_WARNING
 }
@@ -416,10 +416,10 @@ ids {
   code: STAT_ACCESS_DENIED
   severity: S_ERROR
 }
-ids {
-  code: YQL_DEPRECATED_FUNCTION_OR_SIGNATURE
-  severity: S_WARNING
-}
+ids { 
+  code: YQL_DEPRECATED_FUNCTION_OR_SIGNATURE 
+  severity: S_WARNING 
+} 
 ids {
   code: YQL_DEPRECATED_INLINE_ACTION_TERMINATOR
   severity: S_WARNING
@@ -555,11 +555,11 @@ ids {
 ids {
   code: YQL_DISCARD_INTO_RESULT_BY_WITH_UNION
   severity: S_WARNING
-}
-ids {
-  code: YQL_DEPRECATED_UDF_FUNCTION
-  severity: S_WARNING
-}
+} 
+ids { 
+  code: YQL_DEPRECATED_UDF_FUNCTION 
+  severity: S_WARNING 
+} 
 ids {
   code: YQL_EMPTY_TABLENAME_RESULT
   severity: S_WARNING

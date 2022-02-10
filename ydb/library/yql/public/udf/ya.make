@@ -7,7 +7,7 @@ OWNER(
 
 SRCS(
     udf_allocator.cpp
-    udf_allocator.h
+    udf_allocator.h 
     udf_counter.cpp
     udf_counter.h
     udf_data_type.cpp
@@ -25,8 +25,8 @@ SRCS(
     udf_type_inspection.cpp
     udf_type_inspection.h
     udf_type_ops.h
-    udf_type_printer.cpp
-    udf_type_printer.h
+    udf_type_printer.cpp 
+    udf_type_printer.h 
     udf_types.cpp
     udf_types.h
     udf_ut_helpers.h

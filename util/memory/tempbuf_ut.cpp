@@ -1,6 +1,6 @@
 #include "tempbuf.h"
 
-#include <utility>
+#include <utility> 
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -71,7 +71,7 @@ void TTempBufTest::TestMoveCtor() {
 
     src.Proceed(10);
 
-    TTempBuf dst(std::move(src));
+    TTempBuf dst(std::move(src)); 
 
     UNIT_ASSERT(src.IsNull());
     UNIT_ASSERT(!dst.IsNull());

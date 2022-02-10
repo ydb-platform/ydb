@@ -106,8 +106,8 @@ public:
         TIntrusivePtr<IRandomProvider> randomProvider,
         NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
         const ::NYq::NCommon::TServiceCounters& serviceCounters,
-        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-        IHTTPGateway::TPtr s3Gateway,
+        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, 
+        IHTTPGateway::TPtr s3Gateway, 
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
         const NMonitoring::TDynamicCounterPtr& clientCounters
         )
@@ -123,7 +123,7 @@ public:
         , DqCompFactory(dqCompFactory)
         , ServiceCounters(serviceCounters, "pending_fetcher")
         , CredentialsFactory(credentialsFactory)
-        , S3Gateway(s3Gateway)
+        , S3Gateway(s3Gateway) 
         , PqCmConnections(std::move(pqCmConnections))
         , Guid(CreateGuidAsString())
         , ClientCounters(clientCounters)
@@ -235,7 +235,7 @@ private:
 
         TRunActorParams params(
             YqSharedResources->YdbDriver, S3Gateway,
-            FunctionRegistry, RandomProvider,
+            FunctionRegistry, RandomProvider, 
             ModuleResolver, ModuleResolver->GetNextUniqueId(),
             DqCompFactory, PqCmConnections,
             CommonConfig, CheckpointCoordinatorConfig,
@@ -297,7 +297,7 @@ private:
     TActorId DatabaseResolver;
 
     ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
-    const IHTTPGateway::TPtr S3Gateway;
+    const IHTTPGateway::TPtr S3Gateway; 
     const ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
 
     const TString Guid; //OwnerId
@@ -320,8 +320,8 @@ NActors::IActor* CreatePendingFetcher(
     TIntrusivePtr<IRandomProvider> randomProvider,
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
     const ::NYq::NCommon::TServiceCounters& serviceCounters,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    IHTTPGateway::TPtr s3Gateway,
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, 
+    IHTTPGateway::TPtr s3Gateway, 
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const NMonitoring::TDynamicCounterPtr& clientCounters)
 {
@@ -337,7 +337,7 @@ NActors::IActor* CreatePendingFetcher(
         randomProvider,
         dqCompFactory,
         serviceCounters,
-        credentialsFactory,
+        credentialsFactory, 
         s3Gateway,
         std::move(pqCmConnections),
         clientCounters);

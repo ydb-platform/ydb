@@ -10,7 +10,7 @@
 #include <util/generic/ylimits.h> // Max
 
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
 //////////////////////////////////////////////////////////////////////////////
@@ -37,13 +37,13 @@ private:
     void OnStream(const TType* itemType) override;
 };
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13) 
 class TStubTypeVisitor2: public TStubTypeVisitor1
 {
 public:
-    void OnDecimal(ui8 precision, ui8 scale) override;
+    void OnDecimal(ui8 precision, ui8 scale) override; 
 };
-#endif
+#endif 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
 class TStubTypeVisitor3: public TStubTypeVisitor2
 {
@@ -87,48 +87,48 @@ private:
     void OnDataType(TDataTypeId typeId) override {
         TypeId_ = typeId;
     }
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
-    void OnDecimal(ui8, ui8) override {}
-#endif
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13) 
+    void OnDecimal(ui8, ui8) override {} 
+#endif 
     TDataTypeId TypeId_ = 0;
 };
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
-//////////////////////////////////////////////////////////////////////////////
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13) 
+////////////////////////////////////////////////////////////////////////////// 
 // TDataAndDecimalTypeInspector
-//////////////////////////////////////////////////////////////////////////////
-class TDataAndDecimalTypeInspector: public TStubTypeVisitor
-{
-public:
-    TDataAndDecimalTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
-        if (typeHelper.GetTypeKind(type) == ETypeKind::Data) {
-            typeHelper.VisitType(type, this);
-        }
-    }
+////////////////////////////////////////////////////////////////////////////// 
+class TDataAndDecimalTypeInspector: public TStubTypeVisitor 
+{ 
+public: 
+    TDataAndDecimalTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) { 
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Data) { 
+            typeHelper.VisitType(type, this); 
+        } 
+    } 
 
-    explicit operator bool() const { return TypeId_ != 0; }
-    TDataTypeId GetTypeId() const { return TypeId_; }
+    explicit operator bool() const { return TypeId_ != 0; } 
+    TDataTypeId GetTypeId() const { return TypeId_; } 
     ui8 GetPrecision() const {
         return Precision_;
     }
-
+ 
     ui8 GetScale() const {
         return Scale_;
     }
 
-private:
-    void OnDataType(TDataTypeId typeId) override {
-        TypeId_ = typeId;
-    }
-
-    void OnDecimal(ui8 precision, ui8 scale) override {
+private: 
+    void OnDataType(TDataTypeId typeId) override { 
+        TypeId_ = typeId; 
+    } 
+ 
+    void OnDecimal(ui8 precision, ui8 scale) override { 
         Precision_ = precision;
         Scale_ = scale;
-    }
-
-    TDataTypeId TypeId_ = 0;
+    } 
+ 
+    TDataTypeId TypeId_ = 0; 
     ui8 Precision_ = 0, Scale_ = 0;
-};
-#endif
+}; 
+#endif 
 //////////////////////////////////////////////////////////////////////////////
 // TStructTypeInspector
 //////////////////////////////////////////////////////////////////////////////
@@ -522,4 +522,4 @@ inline void TStubTypeVisitor4::OnTagged(const TType*, TStringRef) {
 #endif
 
 } // namspace NUdf
-} // namspace NYql
+} // namspace NYql 

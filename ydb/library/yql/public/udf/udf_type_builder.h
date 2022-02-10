@@ -3,12 +3,12 @@
 #include "udf_counter.h"
 #include "udf_types.h"
 #include "udf_ptr.h"
-#include "udf_string_ref.h"
+#include "udf_string_ref.h" 
 #include "udf_value.h"
 
-#include <type_traits>
+#include <type_traits> 
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
 class TStringRef;
@@ -48,11 +48,11 @@ struct TTuple;
 template <const char* Tag>
 struct TResource {};
 
-template <typename... TArgs>
-struct TVariant;
+template <typename... TArgs> 
+struct TVariant; 
 
-template <typename T>
-struct TStream { using ItemType = T; };
+template <typename T> 
+struct TStream { using ItemType = T; }; 
 
 template <typename T, const char* Tag>
 struct TTagged { using BaseType = T; };
@@ -525,13 +525,13 @@ public:
     virtual ICompare::TPtr MakeCompare(const TType* type) = 0;
 };
 #endif
-
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
+ 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13) 
 class IFunctionTypeInfoBuilder6: public IFunctionTypeInfoBuilder5 {
 public:
-    virtual TType* Decimal(ui8 precision, ui8 scale) const = 0;
+    virtual TType* Decimal(ui8 precision, ui8 scale) const = 0; 
 };
-#endif
+#endif 
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 16)
 class IFunctionTypeInfoBuilder7: public IFunctionTypeInfoBuilder6 {
@@ -746,19 +746,19 @@ struct TTypeBuilderHelper<void> {
     }
 };
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
-template <ui8 Precision, ui8 Scale>
-struct TTypeBuilderHelper<TDecimalDataType<Precision, Scale>> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
-        return builder.Decimal(Precision, Scale);
-    }
-};
-#endif
-
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13) 
+template <ui8 Precision, ui8 Scale> 
+struct TTypeBuilderHelper<TDecimalDataType<Precision, Scale>> { 
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) { 
+        return builder.Decimal(Precision, Scale); 
+    } 
+}; 
+#endif 
+ 
 template <const char* Tag>
 struct TTypeBuilderHelper<TResource<Tag>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
-        return builder.Resource(TStringRef(Tag, std::strlen(Tag)));
+        return builder.Resource(TStringRef(Tag, std::strlen(Tag))); 
     }
 };
 
@@ -790,14 +790,14 @@ struct TTypeBuilderHelper<TDict<TKey, TValue>> {
     }
 };
 
-template <typename T>
-struct TTypeBuilderHelper<TStream<T>> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
-        return builder.Stream()->
-                Item(TTypeBuilderHelper<T>::Build(builder))
-                .Build();
-    }
-};
+template <typename T> 
+struct TTypeBuilderHelper<TStream<T>> { 
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) { 
+        return builder.Stream()-> 
+                Item(TTypeBuilderHelper<T>::Build(builder)) 
+                .Build(); 
+    } 
+}; 
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 template <typename T, const char* Tag>
@@ -870,14 +870,14 @@ struct TTypeBuilderHelper<TTuple<TArgs...>> {
     }
 };
 
-template <typename... TArgs>
+template <typename... TArgs> 
 struct TTypeBuilderHelper<NUdf::TVariant<TArgs...>> {
-    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
-        auto tupleBuilder = builder.Tuple(sizeof...(TArgs));
-        TTupleHelper<TArgs...>::Add(*tupleBuilder, builder);
-        return builder.Variant()->Over(*tupleBuilder).Build();
-    }
-};
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) { 
+        auto tupleBuilder = builder.Tuple(sizeof...(TArgs)); 
+        TTupleHelper<TArgs...>::Add(*tupleBuilder, builder); 
+        return builder.Variant()->Over(*tupleBuilder).Build(); 
+    } 
+}; 
 
 template <>
 struct TArgsHelper<> {
@@ -910,7 +910,7 @@ struct TArgsHelper<TArg, TArgs...> {
     static void Add(IFunctionArgTypesBuilder& builder, const char* name = nullptr, ui64 flags = 0) {
         builder.Add(TTypeBuilderHelper<TArg>::Build(builder.Parent())).Flags(flags);
         if (name) {
-            builder.Name(TStringRef(name, std::strlen(name)));
+            builder.Name(TStringRef(name, std::strlen(name))); 
         }
         TArgsHelper<TArgs...>::Add(builder);
     }
@@ -934,4 +934,4 @@ inline IFunctionArgTypesBuilder& IFunctionArgTypesBuilder::Add()
 }
 
 } // namespace NUdf
-} // namespace NYql
+} // namespace NYql 

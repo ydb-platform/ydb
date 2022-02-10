@@ -178,14 +178,14 @@ Y_UNIT_TEST(TestSpeed) {
     UNIT_ASSERT(t1 < t2);
 }
 #endif
-
+ 
     Y_UNIT_TEST(TestFillAndChop) {
         TBuffer buf;
         buf.Append("Some ", 5);
         buf.Fill('!', 5);
         buf.Append(" text.", 6);
         UNIT_ASSERT_VALUES_EQUAL(TString(buf.data(), buf.size()), "Some !!!!! text.");
-
+ 
         buf.Chop(5, 6);
         UNIT_ASSERT_VALUES_EQUAL(TString(buf.data(), buf.size()), "Some text.");
     }

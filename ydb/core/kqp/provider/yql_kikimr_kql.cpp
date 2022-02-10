@@ -388,7 +388,7 @@ TExprNode::TPtr KiInsertTableToKql(const TKiWriteTable& node, TExprContext& ctx,
         .Done();
 
     auto predicate = Build<TCoOr>(ctx, node.Pos())
-        .Add({duplicatesPredicate, fetchPredicate})
+        .Add({duplicatesPredicate, fetchPredicate}) 
         .Done();
 
     TExprNode::TPtr insertEffect;

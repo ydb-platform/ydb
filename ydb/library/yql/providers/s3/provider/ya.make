@@ -1,27 +1,27 @@
-LIBRARY()
-
-OWNER(
+LIBRARY() 
+ 
+OWNER( 
     g:yq
-    g:yql
-)
-
-SRCS(
-    yql_s3_datasink.cpp
-    yql_s3_datasink_execution.cpp
-    yql_s3_datasink_type_ann.cpp
-    yql_s3_datasource.cpp
-    yql_s3_datasource_type_ann.cpp
-    yql_s3_dq_integration.cpp
-    yql_s3_exec.cpp
-    yql_s3_io_discovery.cpp
-    yql_s3_logical_opt.cpp
-    yql_s3_mkql_compiler.cpp
-    yql_s3_provider.cpp
-    yql_s3_provider_impl.cpp
-    yql_s3_settings.cpp
-)
-
-PEERDIR(
+    g:yql 
+) 
+ 
+SRCS( 
+    yql_s3_datasink.cpp 
+    yql_s3_datasink_execution.cpp 
+    yql_s3_datasink_type_ann.cpp 
+    yql_s3_datasource.cpp 
+    yql_s3_datasource_type_ann.cpp 
+    yql_s3_dq_integration.cpp 
+    yql_s3_exec.cpp 
+    yql_s3_io_discovery.cpp 
+    yql_s3_logical_opt.cpp 
+    yql_s3_mkql_compiler.cpp 
+    yql_s3_provider.cpp 
+    yql_s3_provider_impl.cpp 
+    yql_s3_settings.cpp 
+) 
+ 
+PEERDIR( 
     contrib/libs/re2
     library/cpp/json
     library/cpp/random_provider
@@ -51,8 +51,8 @@ PEERDIR(
     ydb/library/yql/providers/result/expr_nodes
     ydb/library/yql/providers/s3/expr_nodes
     ydb/library/yql/providers/s3/proto
-)
-
-YQL_LAST_ABI_VERSION()
-
-END()
+) 
+ 
+YQL_LAST_ABI_VERSION() 
+ 
+END() 

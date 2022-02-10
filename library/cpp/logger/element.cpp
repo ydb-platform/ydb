@@ -1,7 +1,7 @@
 #include "log.h"
 #include "element.h"
 
-#include <utility>
+#include <utility> 
 
 TLogElement::TLogElement(const TLog* parent)
     : Parent_(parent)

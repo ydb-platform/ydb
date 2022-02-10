@@ -13,7 +13,7 @@ SRCS(
     yql_clickhouse_load_meta.cpp
     yql_clickhouse_logical_opt.cpp
     yql_clickhouse_mkql_compiler.cpp
-    yql_clickhouse_physical_opt.cpp
+    yql_clickhouse_physical_opt.cpp 
     yql_clickhouse_provider.cpp
     yql_clickhouse_provider.h
     yql_clickhouse_provider_impl.h

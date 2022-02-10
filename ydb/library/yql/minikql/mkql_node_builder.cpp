@@ -48,13 +48,13 @@ namespace {
 }
 
 TDataLiteral* BuildDataLiteral(const NUdf::TUnboxedValuePod& value, NUdf::TDataTypeId type, const TTypeEnvironment& env) {
-    return TDataLiteral::Create(value, TDataType::Create(type, env), env);
-}
-
+    return TDataLiteral::Create(value, TDataType::Create(type, env), env); 
+} 
+ 
 TDataLiteral* BuildDataLiteral(const NUdf::TStringRef& data, NUdf::TDataTypeId type, const TTypeEnvironment& env) {
-    return BuildDataLiteral(env.NewStringValue(data), type, env);
-}
-
+    return BuildDataLiteral(env.NewStringValue(data), type, env); 
+} 
+ 
 TOptionalLiteral* BuildOptionalLiteral(TRuntimeNode value, const TTypeEnvironment& env) {
     auto type = TOptionalType::Create(value.GetStaticType(), env);
     return TOptionalLiteral::Create(value, type, env);

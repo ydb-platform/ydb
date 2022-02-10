@@ -10,13 +10,13 @@
 #include <util/string/cast.h>
 #include <util/string/join.h>
 
-#include <util/digest/fnv.h>
-#include <util/digest/murmur.h>
-#include <util/digest/city.h>
-#include <util/digest/numeric.h>
-
-#include <map>
-
+#include <util/digest/fnv.h> 
+#include <util/digest/murmur.h> 
+#include <util/digest/city.h> 
+#include <util/digest/numeric.h> 
+ 
+#include <map> 
+ 
 namespace NYql {
 
 const TStringBuf ZeroString = "";
@@ -26,20 +26,20 @@ void ReportError(TExprContext& ctx, const TIssue& issue) {
 }
 
 namespace {
-    template <typename T>
-    const T* FindType(const T& sample, TExprContext& ctx) {
-        const auto it = ctx.TypeSet.find(&sample);
-        return ctx.TypeSet.cend() != it ? static_cast<const T*>(*it) : nullptr;
-    }
-
-    template <typename T, typename... Args>
-    const T* AddType(TExprContext& ctx, Args&&... args) {
+    template <typename T> 
+    const T* FindType(const T& sample, TExprContext& ctx) { 
+        const auto it = ctx.TypeSet.find(&sample); 
+        return ctx.TypeSet.cend() != it ? static_cast<const T*>(*it) : nullptr; 
+    } 
+ 
+    template <typename T, typename... Args> 
+    const T* AddType(TExprContext& ctx, Args&&... args) { 
         Y_VERIFY_DEBUG(!ctx.Frozen);
-        ctx.TypeNodes.emplace(new T(std::forward<Args>(args)...));
-        const auto ins = ctx.TypeSet.emplace(ctx.TypeNodes.top().get());
-        return static_cast<const T*>(*ins.first);
-    }
-
+        ctx.TypeNodes.emplace(new T(std::forward<Args>(args)...)); 
+        const auto ins = ctx.TypeSet.emplace(ctx.TypeNodes.top().get()); 
+        return static_cast<const T*>(*ins.first); 
+    } 
+ 
     void DumpNode(const TExprNode& node, IOutputStream& out, ui32 level, TNodeSet& visited) {
         for (ui32 i = 0; i < level; ++i) {
             out.Write(' ');
@@ -54,24 +54,24 @@ namespace {
             out << ", type: " << *node.GetTypeAnn();
         }
 
-        if (const auto scope = node.GetDependencyScope()) {
-            out << ", outer lambda ";
-            if (const auto outer = scope->first) {
-                out << '#' << outer->UniqueId();
+        if (const auto scope = node.GetDependencyScope()) { 
+            out << ", outer lambda "; 
+            if (const auto outer = scope->first) { 
+                out << '#' << outer->UniqueId(); 
             } else {
-                out << "null";
+                out << "null"; 
             }
-
-            out << ", inner lambda ";
-            if (const auto inner = scope->second) {
-                out << '#' << inner->UniqueId();
-            } else {
-                out << "null";
-            }
+ 
+            out << ", inner lambda "; 
+            if (const auto inner = scope->second) { 
+                out << '#' << inner->UniqueId(); 
+            } else { 
+                out << "null"; 
+            } 
         }
 
         bool showChildren = true;
-        if (!visited.emplace(&node).second) {
+        if (!visited.emplace(&node).second) { 
             if (node.Type() == TExprNode::Callable || node.Type() == TExprNode::List
                 || node.Type() == TExprNode::Lambda || node.Type() == TExprNode::Arguments) {
                 out << " ...";
@@ -89,17 +89,17 @@ namespace {
 
     struct TContext {
         struct TFrame {
-            THashMap<TString, TExprNode::TListType> Bindings;
+            THashMap<TString, TExprNode::TListType> Bindings; 
             THashMap<TString, TString> Imports;
-            TExprNode::TListType Return;
+            TExprNode::TListType Return; 
         };
 
         TExprContext& Expr;
         TVector<TFrame> Frames;
-        TLibraryCohesion Cohesion;
-
-        TNodeOnNodeOwnedMap DeepClones;
-
+        TLibraryCohesion Cohesion; 
+ 
+        TNodeOnNodeOwnedMap DeepClones; 
+ 
         const TAnnotationNodeMap* Annotations = nullptr;
         IModuleResolver* ModuleResolver = nullptr;
         ui32 TypeAnnotationIndex = Max<ui32>();
@@ -115,12 +115,12 @@ namespace {
             Expr.AddError(TIssue(node.GetPosition(), message));
         }
 
-        TExprNode::TPtr&& ProcessNode(const TAstNode& node, TExprNode::TPtr&& exprNode) {
+        TExprNode::TPtr&& ProcessNode(const TAstNode& node, TExprNode::TPtr&& exprNode) { 
             if (TypeAnnotationIndex != Max<ui32>()) {
                 exprNode->SetTypeAnn(CompileTypeAnnotation(node));
             }
 
-            return std::move(exprNode);
+            return std::move(exprNode); 
         }
 
         void PushFrame() {
@@ -131,26 +131,26 @@ namespace {
             Frames.pop_back();
         }
 
-        TExprNode::TListType FindBinding(const TStringBuf& name) const {
-            for (auto it = Frames.crbegin(); it != Frames.crend(); ++it) {
-                const auto r = it->Bindings.find(name);
-                if (it->Bindings.cend() != r)
-                    return r->second;
+        TExprNode::TListType FindBinding(const TStringBuf& name) const { 
+            for (auto it = Frames.crbegin(); it != Frames.crend(); ++it) { 
+                const auto r = it->Bindings.find(name); 
+                if (it->Bindings.cend() != r) 
+                    return r->second; 
             }
 
-            return {};
+            return {}; 
         }
 
         TString FindImport(const TStringBuf& name) const {
-            for (auto it = Frames.crbegin(); it != Frames.crend(); ++it) {
-                const auto r = it->Imports.find(name);
-                if (it->Imports.cend() != r)
-                    return r->second;
-            }
-
+            for (auto it = Frames.crbegin(); it != Frames.crend(); ++it) { 
+                const auto r = it->Imports.find(name); 
+                if (it->Imports.cend() != r) 
+                    return r->second; 
+            } 
+ 
             return TString();
-        }
-
+        } 
+ 
         const TTypeAnnotationNode* CompileTypeAnnotation(const TAstNode& node) {
             auto ptr = Annotations->FindPtr(&node);
             if (!ptr || TypeAnnotationIndex >= ptr->size()) {
@@ -167,19 +167,19 @@ namespace {
                     return nullptr;
                 }
                 else if (node.GetContent() == TStringBuf("Unit")) {
-                    return Expr.MakeType<TUnitExprType>();
+                    return Expr.MakeType<TUnitExprType>(); 
                 }
                 else if (node.GetContent() == TStringBuf("World")) {
-                    return Expr.MakeType<TWorldExprType>();
+                    return Expr.MakeType<TWorldExprType>(); 
                 }
                 else if (node.GetContent() == TStringBuf("Void")) {
-                    return Expr.MakeType<TVoidExprType>();
+                    return Expr.MakeType<TVoidExprType>(); 
                 }
                 else if (node.GetContent() == TStringBuf("Null")) {
                     return Expr.MakeType<TNullExprType>();
                 }
                 else if (node.GetContent() == TStringBuf("Generic")) {
-                    return Expr.MakeType<TGenericExprType>();
+                    return Expr.MakeType<TGenericExprType>(); 
                 }
                 else if (node.GetContent() == TStringBuf("EmptyList")) {
                     return Expr.MakeType<TEmptyListExprType>();
@@ -204,8 +204,8 @@ namespace {
 
                 auto content = node.GetChild(0)->GetContent();
                 if (content == TStringBuf("Data")) {
-                    const auto count = node.GetChildrenCount();
-                    if (!(count == 2 || count == 4) || !node.GetChild(1)->IsAtom()) {
+                    const auto count = node.GetChildrenCount(); 
+                    if (!(count == 2 || count == 4) || !node.GetChild(1)->IsAtom()) { 
                         AddError(node, "Bad data type annotation");
                         return nullptr;
                     }
@@ -216,20 +216,20 @@ namespace {
                         return nullptr;
                     }
 
-                    if (count == 2) {
+                    if (count == 2) { 
                         return Expr.MakeType<TDataExprType>(*slot);
-                    } else {
-                        if (!(node.GetChild(2)->IsAtom() && node.GetChild(3)->IsAtom())) {
-                            AddError(node, "Bad data type annotation");
-                            return nullptr;
-                        }
+                    } else { 
+                        if (!(node.GetChild(2)->IsAtom() && node.GetChild(3)->IsAtom())) { 
+                            AddError(node, "Bad data type annotation"); 
+                            return nullptr; 
+                        } 
                         auto ann = Expr.MakeType<TDataExprParamsType>(*slot, node.GetChild(2)->GetContent(), node.GetChild(3)->GetContent());
                         if (!ann->Validate(node.GetPosition(), Expr)) {
                             return nullptr;
                         }
 
                         return ann;
-                    }
+                    } 
                 } else if (content == TStringBuf("List")) {
                     if (node.GetChildrenCount() != 2) {
                         AddError(node, "Bad list type annotation");
@@ -274,21 +274,21 @@ namespace {
 
                     return ann;
                 } else if (content == TStringBuf("Multi")) {
-                    TTypeAnnotationNode::TListType children;
-                    for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
-                        auto r = CompileTypeAnnotationNode(*node.GetChild(index));
-                        if (!r)
-                            return nullptr;
-
-                        children.push_back(r);
-                    }
-
-                    auto ann = Expr.MakeType<TMultiExprType>(children);
-                    if (!ann->Validate(node.GetPosition(), Expr)) {
-                        return nullptr;
-                    }
-
-                    return ann;
+                    TTypeAnnotationNode::TListType children; 
+                    for (size_t index = 1; index < node.GetChildrenCount(); ++index) { 
+                        auto r = CompileTypeAnnotationNode(*node.GetChild(index)); 
+                        if (!r) 
+                            return nullptr; 
+ 
+                        children.push_back(r); 
+                    } 
+ 
+                    auto ann = Expr.MakeType<TMultiExprType>(children); 
+                    if (!ann->Validate(node.GetPosition(), Expr)) { 
+                        return nullptr; 
+                    } 
+ 
+                    return ann; 
                 } else if (content == TStringBuf("Tuple")) {
                     TTypeAnnotationNode::TListType children;
                     for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
@@ -521,15 +521,15 @@ namespace {
 
                     return ann;
                 } else if (content == TStringBuf("Stream")) {
-                    if (node.GetChildrenCount() != 2) {
+                    if (node.GetChildrenCount() != 2) { 
                         AddError(node, "Bad stream type annotation");
-                        return nullptr;
-                    }
-
-                    auto r = CompileTypeAnnotationNode(*node.GetChild(1));
-                    if (!r)
-                        return nullptr;
-
+                        return nullptr; 
+                    } 
+ 
+                    auto r = CompileTypeAnnotationNode(*node.GetChild(1)); 
+                    if (!r) 
+                        return nullptr; 
+ 
                     return Expr.MakeType<TStreamExprType>(r);
                 } else if (content == TStringBuf("Flow")) {
                     if (node.GetChildrenCount() != 2) {
@@ -762,18 +762,18 @@ namespace {
             return TAstNode::NewList(TPosition(), pool, self, itemType);
         }
 
-        case ETypeAnnotationKind::Multi:
-        {
+        case ETypeAnnotationKind::Multi: 
+        { 
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Multi"), pool);
-            TSmallVec<TAstNode*> children;
-            children.push_back(self);
-            for (auto& child : annotation.Cast<TMultiExprType>()->GetItems()) {
-                children.push_back(ConvertTypeAnnotationToAst(*child, pool, refAtoms));
-            }
-
-            return TAstNode::NewList(TPosition(), children.data(), children.size(), pool);
-        }
-
+            TSmallVec<TAstNode*> children; 
+            children.push_back(self); 
+            for (auto& child : annotation.Cast<TMultiExprType>()->GetItems()) { 
+                children.push_back(ConvertTypeAnnotationToAst(*child, pool, refAtoms)); 
+            } 
+ 
+            return TAstNode::NewList(TPosition(), children.data(), children.size(), pool); 
+        } 
+ 
         case ETypeAnnotationKind::EmptyList:
         {
             return TAstNode::NewLiteralAtom(TPosition(), TStringBuf("EmptyList"), pool);
@@ -813,44 +813,44 @@ namespace {
         return TAstNode::NewList(node->GetPosition(), children.data(), children.size(), pool);
     }
 
-    TExprNode::TListType Compile(const TAstNode& node, TContext& ctx);
+    TExprNode::TListType Compile(const TAstNode& node, TContext& ctx); 
 
-    TExprNode::TPtr CompileQuote(const TAstNode& node, TContext& ctx) {
+    TExprNode::TPtr CompileQuote(const TAstNode& node, TContext& ctx) { 
         if (node.IsAtom()) {
             return ctx.ProcessNode(node, ctx.Expr.NewAtom(node.GetPosition(), TString(node.GetContent()), node.GetFlags()));
         } else {
             TExprNode::TListType children;
-            children.reserve(node.GetChildrenCount());
+            children.reserve(node.GetChildrenCount()); 
             for (ui32 index = 0; index < node.GetChildrenCount(); ++index) {
                 auto r = Compile(*node.GetChild(index), ctx);
-                if (r.empty())
-                    return {};
+                if (r.empty()) 
+                    return {}; 
 
-                std::move(r.begin(), r.end(), std::back_inserter(children));
+                std::move(r.begin(), r.end(), std::back_inserter(children)); 
             }
 
-            return ctx.ProcessNode(node, ctx.Expr.NewList(node.GetPosition(), std::move(children)));
+            return ctx.ProcessNode(node, ctx.Expr.NewList(node.GetPosition(), std::move(children))); 
         }
     }
 
-    TExprNode::TListType CompileLambda(const TAstNode& node, TContext& ctx) {
-        if (node.GetChildrenCount() < 2) {
-            ctx.AddError(node, "Expected size of list at least 3.");
-            return {};
+    TExprNode::TListType CompileLambda(const TAstNode& node, TContext& ctx) { 
+        if (node.GetChildrenCount() < 2) { 
+            ctx.AddError(node, "Expected size of list at least 3."); 
+            return {}; 
         }
 
-        const auto args = node.GetChild(1);
+        const auto args = node.GetChild(1); 
         if (!args->IsList() || args->GetChildrenCount() != 2 || !args->GetChild(0)->IsAtom() ||
             args->GetChild(0)->GetContent() != TStringBuf("quote") || !args->GetChild(1)->IsList()) {
             ctx.AddError(node, "Lambda arguments must be a quoted list of atoms");
-            return {};
+            return {}; 
         }
 
-        const auto params = args->GetChild(1);
+        const auto params = args->GetChild(1); 
         for (ui32 index = 0; index < params->GetChildrenCount(); ++index) {
             if (!params->GetChild(index)->IsAtom()) {
                 ctx.AddError(node, "Lambda arguments must be a quoted list of atoms");
-                return {};
+                return {}; 
             }
         }
 
@@ -861,28 +861,28 @@ namespace {
             auto lambdaArg = ctx.ProcessNode(*arg, ctx.Expr.NewArgument(arg->GetPosition(), TString(arg->GetContent())));
             argNodes.push_back(lambdaArg);
             auto& binding = ctx.Frames.back().Bindings[arg->GetContent()];
-            if (!binding.empty()) {
+            if (!binding.empty()) { 
                 ctx.PopFrame();
                 ctx.AddError(*arg, TStringBuilder() << "Duplicated name of lambda parameter: " << arg->GetContent());
-                return {};
+                return {}; 
             }
 
-            binding = {lambdaArg};
+            binding = {lambdaArg}; 
         }
 
-        TExprNode::TListType body;
-        body.reserve(node.GetChildrenCount() - 2U);
-        for (auto i = 2U; i < node.GetChildrenCount(); ++i) {
-            auto r = Compile(*node.GetChild(i), ctx);
-            if (r.empty())
-                return {};
-            std::move(r.begin(), r.end(), std::back_inserter(body));
-        }
-        ctx.PopFrame();
+        TExprNode::TListType body; 
+        body.reserve(node.GetChildrenCount() - 2U); 
+        for (auto i = 2U; i < node.GetChildrenCount(); ++i) { 
+            auto r = Compile(*node.GetChild(i), ctx); 
+            if (r.empty()) 
+                return {}; 
+            std::move(r.begin(), r.end(), std::back_inserter(body)); 
+        } 
+        ctx.PopFrame(); 
 
-        auto arguments = ctx.ProcessNode(*args, ctx.Expr.NewArguments(args->GetPosition(), std::move(argNodes)));
-        auto lambda = ctx.ProcessNode(node, ctx.Expr.NewLambda(node.GetPosition(), std::move(arguments), std::move(body)));
-        return {lambda};
+        auto arguments = ctx.ProcessNode(*args, ctx.Expr.NewArguments(args->GetPosition(), std::move(argNodes))); 
+        auto lambda = ctx.ProcessNode(node, ctx.Expr.NewLambda(node.GetPosition(), std::move(arguments), std::move(body))); 
+        return {lambda}; 
     }
 
     bool CompileSetPackageVersion(const TAstNode& node, TContext& ctx) {
@@ -918,128 +918,128 @@ namespace {
         return true;
     }
 
-    TExprNode::TPtr CompileBind(const TAstNode& node, TContext& ctx) {
-        if (node.GetChildrenCount() != 3) {
-            ctx.AddError(node, "Expected list of size 3");
-            return nullptr;
-        }
-
-        const auto name = node.GetChild(1);
-        if (!name->IsAtom()) {
-            ctx.AddError(*name, "Expected atom");
-            return nullptr;
-        }
-
-        const auto alias = node.GetChild(2);
+    TExprNode::TPtr CompileBind(const TAstNode& node, TContext& ctx) { 
+        if (node.GetChildrenCount() != 3) { 
+            ctx.AddError(node, "Expected list of size 3"); 
+            return nullptr; 
+        } 
+ 
+        const auto name = node.GetChild(1); 
+        if (!name->IsAtom()) { 
+            ctx.AddError(*name, "Expected atom"); 
+            return nullptr; 
+        } 
+ 
+        const auto alias = node.GetChild(2); 
         if (alias->IsAtom() || alias->GetChildrenCount() != 2 || !alias->GetChild(0)->IsAtom() || !alias->GetChild(1)->IsAtom() ||
             alias->GetChild(0)->GetContent() != TStringBuf("quote")) {
-            ctx.AddError(*alias, "Expected quoted pair");
-            return nullptr;
-        }
-
-        const auto& aliasValue = alias->GetChild(1)->GetContent();
+            ctx.AddError(*alias, "Expected quoted pair"); 
+            return nullptr; 
+        } 
+ 
+        const auto& aliasValue = alias->GetChild(1)->GetContent(); 
         const auto& moduleName = name->GetContent();
         TStringBuilder baseMsg;
         baseMsg << "Module  '" << name->GetContent() << "'";
-
+ 
         const auto& import = ctx.FindImport(moduleName);
-        if (import.empty()) {
+        if (import.empty()) { 
             ctx.AddError(*name, baseMsg << " does not exist");
-            return nullptr;
-        }
-
-        if (ctx.ModuleResolver) {
+            return nullptr; 
+        } 
+ 
+        if (ctx.ModuleResolver) { 
             auto exportsPtr = ctx.ModuleResolver->GetModule(import);
             if (!exportsPtr) {
                 ctx.AddError(*name, baseMsg << "'" << import << "' does not exist");
-                return nullptr;
-            }
-
+                return nullptr; 
+            } 
+ 
             const auto& exports = exportsPtr->Symbols();
 
-            const auto ex = exports.find(aliasValue);
-            if (exports.cend() == ex) {
+            const auto ex = exports.find(aliasValue); 
+            if (exports.cend() == ex) { 
                 ctx.AddError(*alias, baseMsg << " export '" << aliasValue << "' does not exist");
-                return nullptr;
-            }
-
+                return nullptr; 
+            } 
+ 
             return ctx.Expr.DeepCopy(*ex->second, exportsPtr->ExprCtx(), ctx.DeepClones, true, false);
-        } else {
-            const auto stub = ctx.Expr.NewAtom(node.GetPosition(), "stub");
-            ctx.Frames.back().Bindings[name->GetContent()] = {stub};
+        } else { 
+            const auto stub = ctx.Expr.NewAtom(node.GetPosition(), "stub"); 
+            ctx.Frames.back().Bindings[name->GetContent()] = {stub}; 
             ctx.Cohesion.Imports[stub.Get()] = std::make_pair(import, TString(aliasValue));
-            return stub;
-        }
-    }
-
-    bool CompileLet(const TAstNode& node, TContext& ctx) {
-        if (node.GetChildrenCount() < 3) {
-            ctx.AddError(node, "Expected size of list at least 3.");
-            return false;
-        }
-
-        const auto name = node.GetChild(1);
-        if (!name->IsAtom()) {
-            ctx.AddError(*name, "Expected atom");
-            return false;
-        }
-
-        TExprNode::TListType bind;
-        bind.reserve(node.GetChildrenCount() - 2U);
-        for (auto i = 2U; i < node.GetChildrenCount(); ++i) {
-            auto r = Compile(*node.GetChild(i), ctx);
-            if (r.empty())
-                return false;
-            std::move(r.begin(), r.end(), std::back_inserter(bind));
-        }
-
-        ctx.Frames.back().Bindings[name->GetContent()] = std::move(bind);
-        return true;
-    }
-
-    bool CompileImport(const TAstNode& node, TContext& ctx) {
-        if (node.GetChildrenCount() != 3) {
-            ctx.AddError(node, "Expected list of size 3");
-            return false;
-        }
-
-        const auto name = node.GetChild(1);
-        if (!name->IsAtom()) {
-            ctx.AddError(*name, "Expected atom");
-            return false;
-        }
-
-        const auto alias = node.GetChild(2);
+            return stub; 
+        } 
+    } 
+ 
+    bool CompileLet(const TAstNode& node, TContext& ctx) { 
+        if (node.GetChildrenCount() < 3) { 
+            ctx.AddError(node, "Expected size of list at least 3."); 
+            return false; 
+        } 
+ 
+        const auto name = node.GetChild(1); 
+        if (!name->IsAtom()) { 
+            ctx.AddError(*name, "Expected atom"); 
+            return false; 
+        } 
+ 
+        TExprNode::TListType bind; 
+        bind.reserve(node.GetChildrenCount() - 2U); 
+        for (auto i = 2U; i < node.GetChildrenCount(); ++i) { 
+            auto r = Compile(*node.GetChild(i), ctx); 
+            if (r.empty()) 
+                return false; 
+            std::move(r.begin(), r.end(), std::back_inserter(bind)); 
+        } 
+ 
+        ctx.Frames.back().Bindings[name->GetContent()] = std::move(bind); 
+        return true; 
+    } 
+ 
+    bool CompileImport(const TAstNode& node, TContext& ctx) { 
+        if (node.GetChildrenCount() != 3) { 
+            ctx.AddError(node, "Expected list of size 3"); 
+            return false; 
+        } 
+ 
+        const auto name = node.GetChild(1); 
+        if (!name->IsAtom()) { 
+            ctx.AddError(*name, "Expected atom"); 
+            return false; 
+        } 
+ 
+        const auto alias = node.GetChild(2); 
         if (!alias->IsListOfSize(2) || !alias->GetChild(0)->IsAtom() || !alias->GetChild(1)->IsAtom() ||
             alias->GetChild(0)->GetContent() != TStringBuf("quote")) {
-            ctx.AddError(node, "Expected quoted pair");
-            return false;
-        }
-
-        ctx.Frames.back().Imports[name->GetContent()] = alias->GetChild(1)->GetContent();
-        return true;
-    }
-
-    bool CompileExport(const TAstNode& node, TContext& ctx) {
-        if (node.GetChildrenCount() != 2) {
-            ctx.AddError(node, "Expected list of size 2");
-            return false;
-        }
-
-        const auto name = node.GetChild(1);
-        if (!name->IsAtom()) {
-            ctx.AddError(*name, "Expected atom");
-            return false;
-        }
-
-        auto r = Compile(*node.GetChild(1), ctx);
-        if (r.size() != 1U)
-            return false;
-
-        ctx.Cohesion.Exports.Symbols(ctx.Expr)[name->GetContent()] = std::move(r.front());
-        return true;
-    }
-
+            ctx.AddError(node, "Expected quoted pair"); 
+            return false; 
+        } 
+ 
+        ctx.Frames.back().Imports[name->GetContent()] = alias->GetChild(1)->GetContent(); 
+        return true; 
+    } 
+ 
+    bool CompileExport(const TAstNode& node, TContext& ctx) { 
+        if (node.GetChildrenCount() != 2) { 
+            ctx.AddError(node, "Expected list of size 2"); 
+            return false; 
+        } 
+ 
+        const auto name = node.GetChild(1); 
+        if (!name->IsAtom()) { 
+            ctx.AddError(*name, "Expected atom"); 
+            return false; 
+        } 
+ 
+        auto r = Compile(*node.GetChild(1), ctx); 
+        if (r.size() != 1U) 
+            return false; 
+ 
+        ctx.Cohesion.Exports.Symbols(ctx.Expr)[name->GetContent()] = std::move(r.front()); 
+        return true; 
+    } 
+ 
     bool CompileDeclare(const TAstNode& node, TContext& ctx) {
         if (node.GetChildrenCount() != 3) {
             ctx.AddError(node, "Expected list of size 3");
@@ -1063,17 +1063,17 @@ namespace {
             return false;
         }
 
-        auto typeExpr = Compile(*node.GetChild(2), ctx);
-        if (typeExpr.size() != 1U)
+        auto typeExpr = Compile(*node.GetChild(2), ctx); 
+        if (typeExpr.size() != 1U) 
             return false;
 
         auto parameterExpr = ctx.ProcessNode(node,
             ctx.Expr.NewCallable(node.GetPosition(), "Parameter", {
                 ctx.Expr.NewAtom(node.GetPosition(), nameStr),
-                std::move(typeExpr.front())
+                std::move(typeExpr.front()) 
             }));
 
-        if (!ctx.Frames.back().Bindings.emplace(nameStr, TExprNode::TListType{std::move(parameterExpr)}).second) {
+        if (!ctx.Frames.back().Bindings.emplace(nameStr, TExprNode::TListType{std::move(parameterExpr)}).second) { 
             ctx.AddError(node, TStringBuilder() << "Declare statement hides previously defined name: "
                 << nameStr);
             return false;
@@ -1123,68 +1123,68 @@ namespace {
         return true;
     }
 
-    bool CompileReturn(const TAstNode& node, TContext& ctx) {
-        if (node.GetChildrenCount() < 2U) {
-            ctx.AddError(node, "Expected non empty list.");
-            return false;
-        }
-
-        TExprNode::TListType returns;
-        returns.reserve(node.GetChildrenCount() - 1U);
-        for (auto i = 1U; i < node.GetChildrenCount(); ++i) {
-            auto r = Compile(*node.GetChild(i), ctx);
-            if (r.empty())
-                return false;
-            std::move(r.begin(), r.end(), std::back_inserter(returns));
-        }
-
-        ctx.Frames.back().Return = std::move(returns);
-        return true;
-    }
-
-    TExprNode::TListType CompileFunction(const TAstNode& root, TContext& ctx, bool topLevel = false) {
+    bool CompileReturn(const TAstNode& node, TContext& ctx) { 
+        if (node.GetChildrenCount() < 2U) { 
+            ctx.AddError(node, "Expected non empty list."); 
+            return false; 
+        } 
+ 
+        TExprNode::TListType returns; 
+        returns.reserve(node.GetChildrenCount() - 1U); 
+        for (auto i = 1U; i < node.GetChildrenCount(); ++i) { 
+            auto r = Compile(*node.GetChild(i), ctx); 
+            if (r.empty()) 
+                return false; 
+            std::move(r.begin(), r.end(), std::back_inserter(returns)); 
+        } 
+ 
+        ctx.Frames.back().Return = std::move(returns); 
+        return true; 
+    } 
+ 
+    TExprNode::TListType CompileFunction(const TAstNode& root, TContext& ctx, bool topLevel = false) { 
         if (!root.IsList()) {
             ctx.AddError(root, "Expected list");
-            return {};
+            return {}; 
         }
 
-        if (ctx.Frames.size() > 1000U) {
-            ctx.AddError(root, "Too deep graph!");
-            return {};
-        }
-
+        if (ctx.Frames.size() > 1000U) { 
+            ctx.AddError(root, "Too deep graph!"); 
+            return {}; 
+        } 
+ 
         ctx.PushFrame();
         if (topLevel) {
             for (ui32 index = 0; index < root.GetChildrenCount(); ++index) {
                 const auto node = root.GetChild(index);
                 if (!node->IsList()) {
                     ctx.AddError(*node, "Expected list");
-                    return {};
+                    return {}; 
                 }
 
                 if (node->GetChildrenCount() == 0) {
                     ctx.AddError(*node, "Expected not empty list");
-                    return {};
+                    return {}; 
                 }
 
-                const auto firstChild = node->GetChild(0);
+                const auto firstChild = node->GetChild(0); 
                 if (!firstChild->IsAtom()) {
                     ctx.AddError(*firstChild, "Expected atom");
-                    return {};
+                    return {}; 
                 }
 
                 if (firstChild->GetContent() == TStringBuf("library")) {
                     if (!CompileLibraryDef(*node, ctx))
-                        return {};
+                        return {}; 
                 } else if (firstChild->GetContent() == TStringBuf("set_package_version")) {
                     if (!CompileSetPackageVersion(*node, ctx))
-                        return {};
+                        return {}; 
                 }
             }
 
             if (ctx.ModuleResolver) {
                 if (!ctx.ModuleResolver->Link(ctx.Expr)) {
-                    return {};
+                    return {}; 
                 }
 
                 ctx.ModuleResolver->UpdateNextUniqueId(ctx.Expr);
@@ -1192,126 +1192,126 @@ namespace {
         }
 
         for (ui32 index = 0; index < root.GetChildrenCount(); ++index) {
-            const auto node = root.GetChild(index);
-            if (!ctx.Frames.back().Return.empty()) {
-                ctx.Frames.back().Return.clear();
+            const auto node = root.GetChild(index); 
+            if (!ctx.Frames.back().Return.empty()) { 
+                ctx.Frames.back().Return.clear(); 
                 ctx.AddError(*node, "Return is already exist");
-                return {};
+                return {}; 
             }
 
             if (!node->IsList()) {
                 ctx.AddError(*node, "Expected list");
-                return {};
+                return {}; 
             }
 
             if (node->GetChildrenCount() == 0) {
                 ctx.AddError(*node, "Expected not empty list");
-                return {};
+                return {}; 
             }
 
             auto firstChild = node->GetChild(0);
             if (!firstChild->IsAtom()) {
                 ctx.AddError(*firstChild, "Expected atom");
-                return {};
+                return {}; 
             }
 
             if (firstChild->GetContent() == TStringBuf("let")) {
-                if (!CompileLet(*node, ctx))
-                    return {};
+                if (!CompileLet(*node, ctx)) 
+                    return {}; 
             } else if (firstChild->GetContent() == TStringBuf("return")) {
-                if (!CompileReturn(*node, ctx))
-                    return {};
+                if (!CompileReturn(*node, ctx)) 
+                    return {}; 
             } else if (firstChild->GetContent() == TStringBuf("import")) {
-                if (!CompileImport(*node, ctx))
-                    return {};
+                if (!CompileImport(*node, ctx)) 
+                    return {}; 
             } else if (firstChild->GetContent() == TStringBuf("declare")) {
                 if (!topLevel) {
                     ctx.AddError(*firstChild, "Declare statements are only allowed on top level block");
-                    return {};
+                    return {}; 
                 }
 
                 if (!CompileDeclare(*node, ctx))
-                    return {};
+                    return {}; 
             } else if (firstChild->GetContent() == TStringBuf("library")) {
                 if (!topLevel) {
                     ctx.AddError(*firstChild, "Library statements are only allowed on top level block");
-                    return {};
+                    return {}; 
                 }
 
                 continue;
             } else if (firstChild->GetContent() == TStringBuf("set_package_version")) {
                 if (!topLevel) {
                     ctx.AddError(*firstChild, "set_package_version statements are only allowed on top level block");
-                    return {};
+                    return {}; 
                 }
 
                 continue;
             } else {
                 ctx.AddError(*firstChild, ToString("expected either let, return or import, but have ") + firstChild->GetContent());
-                return {};
+                return {}; 
             }
         }
 
-        auto ret = std::move(ctx.Frames.back().Return);
+        auto ret = std::move(ctx.Frames.back().Return); 
         ctx.PopFrame();
-        if (ret.empty()) {
+        if (ret.empty()) { 
             ctx.AddError(root, "No return found");
         }
 
         return ret;
     }
 
-    bool CompileLibrary(const TAstNode& root, TContext& ctx) {
-        if (!root.IsList()) {
-            ctx.AddError(root, "Expected list");
-            return false;
-        }
-
-        ctx.PushFrame();
-        for (ui32 index = 0; index < root.GetChildrenCount(); ++index) {
-            const auto node = root.GetChild(index);
-
-            if (!node->IsList()) {
-                ctx.AddError(*node, "Expected list");
+    bool CompileLibrary(const TAstNode& root, TContext& ctx) { 
+        if (!root.IsList()) { 
+            ctx.AddError(root, "Expected list"); 
+            return false; 
+        } 
+ 
+        ctx.PushFrame(); 
+        for (ui32 index = 0; index < root.GetChildrenCount(); ++index) { 
+            const auto node = root.GetChild(index); 
+ 
+            if (!node->IsList()) { 
+                ctx.AddError(*node, "Expected list"); 
+                return false; 
+            } 
+ 
+            if (node->GetChildrenCount() == 0) { 
+                ctx.AddError(*node, "Expected not empty list"); 
                 return false;
-            }
-
-            if (node->GetChildrenCount() == 0) {
-                ctx.AddError(*node, "Expected not empty list");
-                return false;
-            }
-
-            auto firstChild = node->GetChild(0);
-            if (!firstChild->IsAtom()) {
-                ctx.AddError(*firstChild, "Expected atom");
-                return false;
-            }
-
+            } 
+ 
+            auto firstChild = node->GetChild(0); 
+            if (!firstChild->IsAtom()) { 
+                ctx.AddError(*firstChild, "Expected atom"); 
+                return false; 
+            } 
+ 
             if (firstChild->GetContent() == TStringBuf("let")) {
-                if (!CompileLet(*node, ctx))
-                    return false;
+                if (!CompileLet(*node, ctx)) 
+                    return false; 
             } else if (firstChild->GetContent() == TStringBuf("import")) {
-                if (!CompileImport(*node, ctx))
-                    return false;
+                if (!CompileImport(*node, ctx)) 
+                    return false; 
             } else if (firstChild->GetContent() == TStringBuf("export")) {
-                if (!CompileExport(*node, ctx))
-                    return false;
-            } else {
-                ctx.AddError(*firstChild, "expected either let, export or import");
-                return false;
-            }
-        }
-
-        ctx.PopFrame();
-        return true;
-    }
-
-    TExprNode::TListType Compile(const TAstNode& node, TContext& ctx) {
+                if (!CompileExport(*node, ctx)) 
+                    return false; 
+            } else { 
+                ctx.AddError(*firstChild, "expected either let, export or import"); 
+                return false; 
+            } 
+        } 
+ 
+        ctx.PopFrame(); 
+        return true; 
+    } 
+ 
+    TExprNode::TListType Compile(const TAstNode& node, TContext& ctx) { 
         if (node.IsAtom()) {
-            const auto foundNode = ctx.FindBinding(node.GetContent());
-            if (foundNode.empty()) {
+            const auto foundNode = ctx.FindBinding(node.GetContent()); 
+            if (foundNode.empty()) { 
                 ctx.AddError(node, TStringBuilder() << "Name not found: " << node.GetContent());
-                return {};
+                return {}; 
             }
 
             return foundNode;
@@ -1319,30 +1319,30 @@ namespace {
 
         if (node.GetChildrenCount() == 0) {
             ctx.AddError(node, "Empty list, did you forget quote?");
-            return {};
+            return {}; 
         }
 
         if (!node.GetChild(0)->IsAtom()) {
             ctx.AddError(node, "First item in list is not an atom, did you forget quote?");
-            return {};
+            return {}; 
         }
 
         auto function = node.GetChild(0)->GetContent();
         if (function == TStringBuf("quote")) {
             if (node.GetChildrenCount() != 2) {
                 ctx.AddError(node, "Quote should have one argument");
-                return {};
+                return {}; 
             }
 
-            if (auto quote = CompileQuote(*node.GetChild(1), ctx))
-                return {std::move(quote)};
-
-            return {};
+            if (auto quote = CompileQuote(*node.GetChild(1), ctx)) 
+                return {std::move(quote)}; 
+ 
+            return {}; 
         }
 
         if (function == TStringBuf("let") || function == TStringBuf("return")) {
             ctx.AddError(node, "Let and return should be used only at first level or inside def");
-            return {};
+            return {}; 
         }
 
         if (function == TStringBuf("lambda")) {
@@ -1350,45 +1350,45 @@ namespace {
         }
 
         if (function == TStringBuf("bind")) {
-            if (auto bind = CompileBind(node, ctx))
-                return {std::move(bind)};
-            return {};
-        }
-
+            if (auto bind = CompileBind(node, ctx)) 
+                return {std::move(bind)}; 
+            return {}; 
+        } 
+ 
         if (function == TStringBuf("block")) {
             if (node.GetChildrenCount() != 2) {
                 ctx.AddError(node, "Block should have one argument");
-                return {};
+                return {}; 
             }
 
-            const auto quotedList = node.GetChild(1);
+            const auto quotedList = node.GetChild(1); 
             if (quotedList->GetChildrenCount() != 2 || !quotedList->GetChild(0)->IsAtom() ||
                 quotedList->GetChild(0)->GetContent() != TStringBuf("quote")) {
                 ctx.AddError(node, "Expected quoted list");
-                return {};
+                return {}; 
             }
 
             return CompileFunction(*quotedList->GetChild(1), ctx);
         }
 
         TExprNode::TListType children;
-        children.reserve(node.GetChildrenCount() - 1U);
-        for (auto index = 1U; index < node.GetChildrenCount(); ++index) {
+        children.reserve(node.GetChildrenCount() - 1U); 
+        for (auto index = 1U; index < node.GetChildrenCount(); ++index) { 
             auto r = Compile(*node.GetChild(index), ctx);
-            if (r.empty())
-                return {};
+            if (r.empty()) 
+                return {}; 
 
-            std::move(r.begin(), r.end(), std::back_inserter(children));
+            std::move(r.begin(), r.end(), std::back_inserter(children)); 
         }
 
-        return {ctx.ProcessNode(node, ctx.Expr.NewCallable(node.GetPosition(), TString(function), std::move(children)))};
+        return {ctx.ProcessNode(node, ctx.Expr.NewCallable(node.GetPosition(), TString(function), std::move(children)))}; 
     }
 
     struct TFrameContext {
         size_t Index = 0;
         size_t Parent = 0;
-        std::map<size_t, const TExprNode*> Nodes;
-        std::vector<const TExprNode*> TopoSortedNodes;
+        std::map<size_t, const TExprNode*> Nodes; 
+        std::vector<const TExprNode*> TopoSortedNodes; 
         TNodeMap<TString> Bindings;
     };
 
@@ -1398,158 +1398,158 @@ namespace {
         {}
 
         TExprContext& Expr;
-        size_t Order = 0ULL;
+        size_t Order = 0ULL; 
         bool RefAtoms = false;
-        std::unique_ptr<TMemoryPool> Pool;
-        std::vector<TFrameContext> Frames;
+        std::unique_ptr<TMemoryPool> Pool; 
+        std::vector<TFrameContext> Frames; 
         TFrameContext* CurrentFrame = nullptr;
-        TNodeMap<size_t> LambdaFrames;
+        TNodeMap<size_t> LambdaFrames; 
         std::map<TStringBuf, std::pair<const TExprNode*, TAstNode*>> Parameters;
-
-        struct TCounters {
-            size_t References = 0ULL, Neighbors = 0ULL, Order = 0ULL, Frame = 0ULL;
-        };
-
-        TNodeMap<TCounters> References;
-
+ 
+        struct TCounters { 
+            size_t References = 0ULL, Neighbors = 0ULL, Order = 0ULL, Frame = 0ULL; 
+        }; 
+ 
+        TNodeMap<TCounters> References; 
+ 
         const TString& FindBinding(const TExprNode* node) const {
-            for (const auto* frame = CurrentFrame; frame; frame = frame->Index > 0 ? &Frames[frame->Parent] : nullptr) {
-                const auto it = frame->Bindings.find(node);
-                if (frame->Bindings.cend() != it)
-                    return it->second;
-            }
-
+            for (const auto* frame = CurrentFrame; frame; frame = frame->Index > 0 ? &Frames[frame->Parent] : nullptr) { 
+                const auto it = frame->Bindings.find(node); 
+                if (frame->Bindings.cend() != it) 
+                    return it->second; 
+            } 
+ 
             static const TString stub;
-            return stub;
-        }
-
-        size_t FindCommonAncestor(size_t one, size_t two) const {
-            while (one && two) {
-                if (one == two)
-                    return one;
-                if (one > two)
-                    one = Frames[one].Parent;
-                else
-                    two = Frames[two].Parent;
-            }
-
-            return 0ULL;
-        }
+            return stub; 
+        } 
+ 
+        size_t FindCommonAncestor(size_t one, size_t two) const { 
+            while (one && two) { 
+                if (one == two) 
+                    return one; 
+                if (one > two) 
+                    one = Frames[one].Parent; 
+                else 
+                    two = Frames[two].Parent; 
+            } 
+ 
+            return 0ULL; 
+        } 
     };
 
-    void VisitArguments(const TExprNode& node, TVisitNodeContext& ctx) {
-        YQL_ENSURE(node.Type() == TExprNode::Arguments);
-        for (const auto& arg : node.Children()) {
-            auto& counts = ctx.References[arg.Get()];
-            ++counts.References;
-            YQL_ENSURE(ctx.CurrentFrame->Nodes.emplace(counts.Order = ++ctx.Order, arg.Get()).second);
+    void VisitArguments(const TExprNode& node, TVisitNodeContext& ctx) { 
+        YQL_ENSURE(node.Type() == TExprNode::Arguments); 
+        for (const auto& arg : node.Children()) { 
+            auto& counts = ctx.References[arg.Get()]; 
+            ++counts.References; 
+            YQL_ENSURE(ctx.CurrentFrame->Nodes.emplace(counts.Order = ++ctx.Order, arg.Get()).second); 
+        } 
+    } 
+ 
+    void RevisitNode(const TExprNode& node, TVisitNodeContext& ctx); 
+ 
+    void RevisitNode(TVisitNodeContext::TCounters& counts, const TExprNode& node, TVisitNodeContext& ctx) { 
+        const auto nf = ctx.FindCommonAncestor(ctx.CurrentFrame->Index, counts.Frame); 
+        if (counts.Frame != nf) { 
+            auto& frame = ctx.Frames[counts.Frame = nf]; 
+            frame.Nodes.emplace(counts.Order, &node); 
+            if (TExprNode::Lambda == node.Type()) { 
+                ctx.Frames[ctx.LambdaFrames[&node]].Parent = counts.Frame; 
+            } else { 
+                node.ForEachChild([&ctx](const TExprNode& child) { 
+                    RevisitNode(child, ctx); 
+                }); 
+            } 
+        } 
+    } 
+ 
+    void RevisitNode(const TExprNode& node, TVisitNodeContext& ctx) { 
+        if (TExprNode::Argument != node.Type()) { 
+            RevisitNode(ctx.References[&node], node, ctx); 
+        } 
+    } 
+ 
+    void VisitNode(const TExprNode& node, size_t neighbors, TVisitNodeContext& ctx) { 
+         if (TExprNode::Argument == node.Type()) 
+             return; 
+
+        auto& counts = ctx.References[&node]; 
+        counts.Neighbors += neighbors; 
+        if (counts.References++) { 
+            RevisitNode(counts, node, ctx); 
+        } else { 
+            counts.Frame = ctx.CurrentFrame->Index; 
+ 
+            if (node.Type() == TExprNode::Lambda) { 
+                YQL_ENSURE(node.ChildrenSize() > 0U); 
+                const auto index = ctx.Frames.size(); 
+                if (ctx.LambdaFrames.emplace(&node, index).second) { 
+                    const auto prevFrameIndex = ctx.CurrentFrame - &ctx.Frames.front(); 
+                    const auto parentIndex = ctx.CurrentFrame->Index; 
+                    ctx.Frames.emplace_back(); 
+                    ctx.CurrentFrame = &ctx.Frames.back(); 
+                    ctx.CurrentFrame->Index = index; 
+                    ctx.CurrentFrame->Parent = parentIndex; 
+                    VisitArguments(node.Head(), ctx); 
+                    for(ui32 i = 1U; i < node.ChildrenSize(); ++i) { 
+                        VisitNode(*node.Child(i), node.ChildrenSize() - 1U, ctx); 
+                    } 
+                    ctx.CurrentFrame = &ctx.Frames.front() + prevFrameIndex; 
+                } 
+            } else { 
+                node.ForEachChild([&](const TExprNode& child) { 
+                    VisitNode(child, node.ChildrenSize(), ctx); 
+                }); 
+            } 
+ 
+            if (!counts.Order) 
+                counts.Order = ++ctx.Order; 
+ 
+            ctx.CurrentFrame->Nodes.emplace(counts.Order, &node); 
         }
     }
 
-    void RevisitNode(const TExprNode& node, TVisitNodeContext& ctx);
+    using TRoots = TSmallVec<const TExprNode*>; 
 
-    void RevisitNode(TVisitNodeContext::TCounters& counts, const TExprNode& node, TVisitNodeContext& ctx) {
-        const auto nf = ctx.FindCommonAncestor(ctx.CurrentFrame->Index, counts.Frame);
-        if (counts.Frame != nf) {
-            auto& frame = ctx.Frames[counts.Frame = nf];
-            frame.Nodes.emplace(counts.Order, &node);
-            if (TExprNode::Lambda == node.Type()) {
-                ctx.Frames[ctx.LambdaFrames[&node]].Parent = counts.Frame;
-            } else {
-                node.ForEachChild([&ctx](const TExprNode& child) {
-                    RevisitNode(child, ctx);
-                });
-            }
-        }
-    }
-
-    void RevisitNode(const TExprNode& node, TVisitNodeContext& ctx) {
-        if (TExprNode::Argument != node.Type()) {
-            RevisitNode(ctx.References[&node], node, ctx);
-        }
-    }
-
-    void VisitNode(const TExprNode& node, size_t neighbors, TVisitNodeContext& ctx) {
-         if (TExprNode::Argument == node.Type())
-             return;
-
-        auto& counts = ctx.References[&node];
-        counts.Neighbors += neighbors;
-        if (counts.References++) {
-            RevisitNode(counts, node, ctx);
-        } else {
-            counts.Frame = ctx.CurrentFrame->Index;
-
-            if (node.Type() == TExprNode::Lambda) {
-                YQL_ENSURE(node.ChildrenSize() > 0U);
-                const auto index = ctx.Frames.size();
-                if (ctx.LambdaFrames.emplace(&node, index).second) {
-                    const auto prevFrameIndex = ctx.CurrentFrame - &ctx.Frames.front();
-                    const auto parentIndex = ctx.CurrentFrame->Index;
-                    ctx.Frames.emplace_back();
-                    ctx.CurrentFrame = &ctx.Frames.back();
-                    ctx.CurrentFrame->Index = index;
-                    ctx.CurrentFrame->Parent = parentIndex;
-                    VisitArguments(node.Head(), ctx);
-                    for(ui32 i = 1U; i < node.ChildrenSize(); ++i) {
-                        VisitNode(*node.Child(i), node.ChildrenSize() - 1U, ctx);
-                    }
-                    ctx.CurrentFrame = &ctx.Frames.front() + prevFrameIndex;
-                }
-            } else {
-                node.ForEachChild([&](const TExprNode& child) {
-                    VisitNode(child, node.ChildrenSize(), ctx);
-                });
-            }
-
-            if (!counts.Order)
-                counts.Order = ++ctx.Order;
-
-            ctx.CurrentFrame->Nodes.emplace(counts.Order, &node);
-        }
-    }
-
-    using TRoots = TSmallVec<const TExprNode*>;
-
-    TAstNode* ConvertFunction(TPositionHandle position, const TRoots& roots, TVisitNodeContext& ctx, ui32 annotationFlags, TMemoryPool& pool);
-
+    TAstNode* ConvertFunction(TPositionHandle position, const TRoots& roots, TVisitNodeContext& ctx, ui32 annotationFlags, TMemoryPool& pool); 
+ 
     TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TString& topLevelName, ui32 annotationFlags, TMemoryPool& pool, bool useBindings) {
         TAstNode* res = nullptr;
-        const auto& name = ctx.FindBinding(&node);
+        const auto& name = ctx.FindBinding(&node); 
         if (!name.empty() && name != topLevelName && useBindings) {
             res = TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), name, pool);
-        } else {
-            switch (node.Type()) {
-            case TExprNode::Atom:
-                {
-                    auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms);
-                    auto content = AnnotateAstNode(
-                        ctx.RefAtoms ?
+        } else { 
+            switch (node.Type()) { 
+            case TExprNode::Atom: 
+                { 
+                    auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms); 
+                    auto content = AnnotateAstNode( 
+                        ctx.RefAtoms ? 
                             TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, node.Flags()) :
                             TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool, node.Flags()),
-                        &node, annotationFlags, pool, ctx.RefAtoms);
+                        &node, annotationFlags, pool, ctx.RefAtoms); 
 
                     res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool, quote, content);
-                    break;
+                    break; 
                 }
 
-            case TExprNode::List:
-                {
-                    TSmallVec<TAstNode*> values;
-                    for (const auto& child : node.Children()) {
+            case TExprNode::List: 
+                { 
+                    TSmallVec<TAstNode*> values; 
+                    for (const auto& child : node.Children()) { 
                         values.push_back(BuildValueNode(*child, ctx, topLevelName, annotationFlags, pool, useBindings));
-                    }
+                    } 
 
-                    auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms);
-                    auto list = AnnotateAstNode(TAstNode::NewList(
+                    auto quote = AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms); 
+                    auto list = AnnotateAstNode(TAstNode::NewList( 
                         ctx.Expr.GetPosition(node.Pos()), values.data(), values.size(), pool), &node, annotationFlags, pool, ctx.RefAtoms);
 
                     res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool, quote, list);
-                    break;
+                    break; 
                 }
 
-            case TExprNode::Callable:
-                {
+            case TExprNode::Callable: 
+                { 
                     if (node.Content() == "Parameter") {
                         const auto& nameNode = *node.Child(0);
                         const auto& typeNode = *node.Child(1);
@@ -1579,94 +1579,94 @@ namespace {
                         break;
                     }
 
-                    TSmallVec<TAstNode*> children;
-                    children.push_back(AnnotateAstNode(
-                        ctx.RefAtoms ?
+                    TSmallVec<TAstNode*> children; 
+                    children.push_back(AnnotateAstNode( 
+                        ctx.RefAtoms ? 
                             TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool) :
                             TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool),
-                            nullptr, annotationFlags, pool, ctx.RefAtoms));
-                    for (const auto& child : node.Children()) {
+                            nullptr, annotationFlags, pool, ctx.RefAtoms)); 
+                    for (const auto& child : node.Children()) { 
                         children.push_back(BuildValueNode(*child, ctx, topLevelName, annotationFlags, pool, useBindings));
-                    }
+                    } 
 
                     res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), children.data(), children.size(), pool);
-                    break;
+                    break; 
                 }
 
-            case TExprNode::Lambda:
-                {
-                    const auto prevFrame = ctx.CurrentFrame;
-                    ctx.CurrentFrame = &ctx.Frames[ctx.LambdaFrames.find(&node)->second];
-                    YQL_ENSURE(node.ChildrenSize() > 0U);
-                    const auto& args = node.Head();
-                    TSmallVec<TAstNode*> argsChildren;
-                    for (const auto& arg : args.Children()) {
-                        const auto& name = ctx.FindBinding(arg.Get());
+            case TExprNode::Lambda: 
+                { 
+                    const auto prevFrame = ctx.CurrentFrame; 
+                    ctx.CurrentFrame = &ctx.Frames[ctx.LambdaFrames.find(&node)->second]; 
+                    YQL_ENSURE(node.ChildrenSize() > 0U); 
+                    const auto& args = node.Head(); 
+                    TSmallVec<TAstNode*> argsChildren; 
+                    for (const auto& arg : args.Children()) { 
+                        const auto& name = ctx.FindBinding(arg.Get()); 
                         const auto atom = TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), name, pool);
-                        argsChildren.emplace_back(AnnotateAstNode(atom, arg.Get(), annotationFlags, pool, ctx.RefAtoms));
-                    }
+                        argsChildren.emplace_back(AnnotateAstNode(atom, arg.Get(), annotationFlags, pool, ctx.RefAtoms)); 
+                    } 
 
-                    auto argsNode = TAstNode::NewList(ctx.Expr.GetPosition(args.Pos()), argsChildren.data(), argsChildren.size(), pool);
-                    auto argsContainer = TAstNode::NewList(ctx.Expr.GetPosition(args.Pos()), pool,
-                        AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms),
-                        AnnotateAstNode(argsNode, nullptr, annotationFlags, pool, ctx.RefAtoms));
+                    auto argsNode = TAstNode::NewList(ctx.Expr.GetPosition(args.Pos()), argsChildren.data(), argsChildren.size(), pool); 
+                    auto argsContainer = TAstNode::NewList(ctx.Expr.GetPosition(args.Pos()), pool, 
+                        AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms), 
+                        AnnotateAstNode(argsNode, nullptr, annotationFlags, pool, ctx.RefAtoms)); 
 
-                    const bool block = ctx.CurrentFrame->Bindings.cend() != std::find_if(ctx.CurrentFrame->Bindings.cbegin(), ctx.CurrentFrame->Bindings.cend(),
-                        [](const auto& bind) { return bind.first->Type() != TExprNode::Argument; }
-                    );
+                    const bool block = ctx.CurrentFrame->Bindings.cend() != std::find_if(ctx.CurrentFrame->Bindings.cbegin(), ctx.CurrentFrame->Bindings.cend(), 
+                        [](const auto& bind) { return bind.first->Type() != TExprNode::Argument; } 
+                    ); 
 
-                    if (block) {
-                        TSmallVec<const TExprNode*> body(node.ChildrenSize() - 1U);
-                        for (ui32 i = 0U; i < body.size(); ++i)
-                            body[i] = node.Child(i + 1U);
+                    if (block) { 
+                        TSmallVec<const TExprNode*> body(node.ChildrenSize() - 1U); 
+                        for (ui32 i = 0U; i < body.size(); ++i) 
+                            body[i] = node.Child(i + 1U); 
                         const auto blockNode = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("block"), pool);
-                        const auto quotedListNode = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool,
-                            AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms),
-                            ConvertFunction(node.Pos(), body, ctx, annotationFlags, pool));
-
-                        const auto blockBody = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool,
-                            AnnotateAstNode(blockNode, nullptr, annotationFlags, pool, ctx.RefAtoms),
-                            AnnotateAstNode(quotedListNode, nullptr, annotationFlags, pool, ctx.RefAtoms));
-                        res = AnnotateAstNode(blockBody, nullptr, annotationFlags, pool, ctx.RefAtoms);
-
-                        ctx.CurrentFrame = prevFrame;
-                        res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool,
-                            AnnotateAstNode(TAstNode::NewLiteralAtom(
+                        const auto quotedListNode = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool, 
+                            AnnotateAstNode(&TAstNode::QuoteAtom, nullptr, annotationFlags, pool, ctx.RefAtoms), 
+                            ConvertFunction(node.Pos(), body, ctx, annotationFlags, pool)); 
+ 
+                        const auto blockBody = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool, 
+                            AnnotateAstNode(blockNode, nullptr, annotationFlags, pool, ctx.RefAtoms), 
+                            AnnotateAstNode(quotedListNode, nullptr, annotationFlags, pool, ctx.RefAtoms)); 
+                        res = AnnotateAstNode(blockBody, nullptr, annotationFlags, pool, ctx.RefAtoms); 
+ 
+                        ctx.CurrentFrame = prevFrame; 
+                        res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), pool, 
+                            AnnotateAstNode(TAstNode::NewLiteralAtom( 
                                 ctx.Expr.GetPosition(node.Pos()), TStringBuf("lambda"), pool), nullptr, annotationFlags, pool, ctx.RefAtoms),
-                            AnnotateAstNode(argsContainer, &args, annotationFlags, pool, ctx.RefAtoms),
-                            res);
-                    } else {
-                        TSmallVec<TAstNode*> children(node.ChildrenSize() + 1U);
-                        for (ui32 i = 1U; i < node.ChildrenSize(); ++i) {
-                            children[i + 1U] = BuildValueNode(*node.Child(i), ctx, topLevelName, annotationFlags, pool, useBindings);
-                        }
-
-                        ctx.CurrentFrame = prevFrame;
-                        children[0] = AnnotateAstNode(TAstNode::NewLiteralAtom(
+                            AnnotateAstNode(argsContainer, &args, annotationFlags, pool, ctx.RefAtoms), 
+                            res); 
+                    } else { 
+                        TSmallVec<TAstNode*> children(node.ChildrenSize() + 1U); 
+                        for (ui32 i = 1U; i < node.ChildrenSize(); ++i) { 
+                            children[i + 1U] = BuildValueNode(*node.Child(i), ctx, topLevelName, annotationFlags, pool, useBindings); 
+                        } 
+ 
+                        ctx.CurrentFrame = prevFrame; 
+                        children[0] = AnnotateAstNode(TAstNode::NewLiteralAtom( 
                                 ctx.Expr.GetPosition(node.Pos()), TStringBuf("lambda"), pool), nullptr, annotationFlags, pool, ctx.RefAtoms);
-                        children[1] = AnnotateAstNode(argsContainer, &args, annotationFlags, pool, ctx.RefAtoms);
-                        res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), children.data(), children.size(), pool);
-                    }
-                    break;
-                }
-
-            case TExprNode::World:
+                        children[1] = AnnotateAstNode(argsContainer, &args, annotationFlags, pool, ctx.RefAtoms); 
+                        res = TAstNode::NewList(ctx.Expr.GetPosition(node.Pos()), children.data(), children.size(), pool); 
+                    } 
+                    break; 
+                } 
+ 
+            case TExprNode::World: 
                 res = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), TStringBuf("world"), pool);
-                break;
-            default:
+                break; 
+            default: 
                 YQL_ENSURE(false, "Unknown type: " << static_cast<ui32>(node.Type()));
             }
         }
 
-        return AnnotateAstNode(res, &node, annotationFlags, pool, ctx.RefAtoms);
+        return AnnotateAstNode(res, &node, annotationFlags, pool, ctx.RefAtoms); 
     }
 
-    TAstNode* ConvertFunction(TPositionHandle position, const TRoots& roots, TVisitNodeContext& ctx, ui32 annotationFlags, TMemoryPool& pool) {
-        YQL_ENSURE(!roots.empty(), "Missed roots.");
+    TAstNode* ConvertFunction(TPositionHandle position, const TRoots& roots, TVisitNodeContext& ctx, ui32 annotationFlags, TMemoryPool& pool) { 
+        YQL_ENSURE(!roots.empty(), "Missed roots."); 
         TSmallVec<TAstNode*> children;
-        for (const auto& node : ctx.CurrentFrame->TopoSortedNodes) {
-            const auto& name = ctx.FindBinding(node);
-            if (name.empty() || node->Type() == TExprNode::Arguments || node->Type() == TExprNode::Argument) {
+        for (const auto& node : ctx.CurrentFrame->TopoSortedNodes) { 
+            const auto& name = ctx.FindBinding(node); 
+            if (name.empty() || node->Type() == TExprNode::Arguments || node->Type() == TExprNode::Argument) { 
                 continue;
             }
 
@@ -1682,14 +1682,14 @@ namespace {
         }
 
         const auto returnAtom = TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(position), TStringBuf("return"), pool);
-        TSmallVec<TAstNode*> returnChildren;
-        returnChildren.reserve(roots.size() + 1U);
-        returnChildren.emplace_back(AnnotateAstNode(returnAtom, nullptr, annotationFlags, pool, ctx.RefAtoms));
-        for (const auto root : roots) {
-            returnChildren.emplace_back(BuildValueNode(*root, ctx, TString(), annotationFlags, pool, true));
-        }
-        const auto returnList = TAstNode::NewList(ctx.Expr.GetPosition(position), returnChildren.data(), returnChildren.size(), pool);
-        children.emplace_back(AnnotateAstNode(returnList, 1U == roots.size() ? roots.front() : nullptr, annotationFlags, pool, ctx.RefAtoms));
+        TSmallVec<TAstNode*> returnChildren; 
+        returnChildren.reserve(roots.size() + 1U); 
+        returnChildren.emplace_back(AnnotateAstNode(returnAtom, nullptr, annotationFlags, pool, ctx.RefAtoms)); 
+        for (const auto root : roots) { 
+            returnChildren.emplace_back(BuildValueNode(*root, ctx, TString(), annotationFlags, pool, true)); 
+        } 
+        const auto returnList = TAstNode::NewList(ctx.Expr.GetPosition(position), returnChildren.data(), returnChildren.size(), pool); 
+        children.emplace_back(AnnotateAstNode(returnList, 1U == roots.size() ? roots.front() : nullptr, annotationFlags, pool, ctx.RefAtoms)); 
 
         if (!ctx.CurrentFrame->Index && !ctx.Parameters.empty()) {
             TSmallVec<TAstNode*> parameterNodes;
@@ -1705,7 +1705,7 @@ namespace {
         const auto res = TAstNode::NewList(ctx.Expr.GetPosition(position), children.data(), children.size(), pool);
         return AnnotateAstNode(res, nullptr, annotationFlags, pool, ctx.RefAtoms);
     }
-
+ 
     bool InlineNode(const TExprNode& node, size_t references, size_t neighbors, const TConvertToAstSettings& settings) {
         if (settings.NoInlineFunc) {
             if (settings.NoInlineFunc(node)) {
@@ -1713,95 +1713,95 @@ namespace {
             }
         }
 
-        switch (node.Type()) {
-        case TExprNode::Argument:
-            return false;
-        case TExprNode::Atom:
-            if (const auto flags = node.Flags()) {
-                if ((TNodeFlags::BinaryContent | TNodeFlags::MultilineContent) & flags)
-                    return false;
-                else {
-                    if (TNodeFlags::ArbitraryContent & flags)
-                        return node.Content().length() <= (references == 1U ? 0x40U : 0x10U);
-                    else
-                        return true;
-                }
-            } else
-                return true;
-        default:
-            if (neighbors < 2U)
-                return true;
-            if (const auto children = node.ChildrenSize())
-                return references == 1U && children < 3U;
-            else
-                return true;
-        }
-    }
-
-    typedef std::pair<const TExprNode*, const TExprNode*> TPairOfNodePotinters;
-    typedef std::unordered_set<TPairOfNodePotinters, THash<TPairOfNodePotinters>> TNodesPairSet;
-    typedef TNodeMap<std::pair<ui32, ui32>> TArgumentsMap;
-
+        switch (node.Type()) { 
+        case TExprNode::Argument: 
+            return false; 
+        case TExprNode::Atom: 
+            if (const auto flags = node.Flags()) { 
+                if ((TNodeFlags::BinaryContent | TNodeFlags::MultilineContent) & flags) 
+                    return false; 
+                else { 
+                    if (TNodeFlags::ArbitraryContent & flags) 
+                        return node.Content().length() <= (references == 1U ? 0x40U : 0x10U); 
+                    else 
+                        return true; 
+                } 
+            } else 
+                return true; 
+        default: 
+            if (neighbors < 2U) 
+                return true; 
+            if (const auto children = node.ChildrenSize()) 
+                return references == 1U && children < 3U; 
+            else 
+                return true; 
+        } 
+    } 
+ 
+    typedef std::pair<const TExprNode*, const TExprNode*> TPairOfNodePotinters; 
+    typedef std::unordered_set<TPairOfNodePotinters, THash<TPairOfNodePotinters>> TNodesPairSet; 
+    typedef TNodeMap<std::pair<ui32, ui32>> TArgumentsMap; 
+ 
     bool CompareExpressions(const TExprNode*& one, const TExprNode*& two, TArgumentsMap& argumentsMap, ui32 level, TNodesPairSet& visited) {
-        const auto ins = visited.emplace(one, two);
-        if (!ins.second) {
-            return true;
-        }
-
-        if (one->Type() != two->Type())
-            return false;
-
-        if (one->ChildrenSize() != two->ChildrenSize())
-            return false;
-
-        switch (two->Type()) {
-        case TExprNode::Arguments: {
-            ui32 i1 = 0U, i2 = 0U;
-            one->ForEachChild([&](const TExprNode& arg){ argumentsMap.emplace(&arg, std::make_pair(level, ++i1)); });
-            two->ForEachChild([&](const TExprNode& arg){ argumentsMap.emplace(&arg, std::make_pair(level, ++i2)); });
-            return true;
-        }
-        case TExprNode::Argument:
-            if (const auto oneArg = argumentsMap.find(one), twoArg = argumentsMap.find(two); oneArg == twoArg)
-                return argumentsMap.cend() != oneArg || one == two;
-            else if (argumentsMap.cend() != oneArg && argumentsMap.cend() != twoArg) {
-                return oneArg->second == twoArg->second;
-            }
-            return false;
-        case TExprNode::Atom:
-            if (one->GetFlagsToCompare() != two->GetFlagsToCompare())
-                return false;
+        const auto ins = visited.emplace(one, two); 
+        if (!ins.second) { 
+            return true; 
+        } 
+ 
+        if (one->Type() != two->Type()) 
+            return false; 
+ 
+        if (one->ChildrenSize() != two->ChildrenSize()) 
+            return false; 
+ 
+        switch (two->Type()) { 
+        case TExprNode::Arguments: { 
+            ui32 i1 = 0U, i2 = 0U; 
+            one->ForEachChild([&](const TExprNode& arg){ argumentsMap.emplace(&arg, std::make_pair(level, ++i1)); }); 
+            two->ForEachChild([&](const TExprNode& arg){ argumentsMap.emplace(&arg, std::make_pair(level, ++i2)); }); 
+            return true; 
+        } 
+        case TExprNode::Argument: 
+            if (const auto oneArg = argumentsMap.find(one), twoArg = argumentsMap.find(two); oneArg == twoArg) 
+                return argumentsMap.cend() != oneArg || one == two; 
+            else if (argumentsMap.cend() != oneArg && argumentsMap.cend() != twoArg) { 
+                return oneArg->second == twoArg->second; 
+            } 
+            return false; 
+        case TExprNode::Atom: 
+            if (one->GetFlagsToCompare() != two->GetFlagsToCompare()) 
+                return false; 
             [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
-        case TExprNode::Callable:
-            if (one->Content() != two->Content())
-                return false;
+        case TExprNode::Callable: 
+            if (one->Content() != two->Content()) 
+                return false; 
             [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
-        default:
-            break;
-        case TExprNode::Lambda:
-            ++level;
-        }
-
-        if (const auto childs = one->ChildrenSize()) {
-            const auto& l = one->Children();
-            const auto& r = two->Children();
-            for (ui32 i = 0U; i < childs; ++i) {
+        default: 
+            break; 
+        case TExprNode::Lambda: 
+            ++level; 
+        } 
+ 
+        if (const auto childs = one->ChildrenSize()) { 
+            const auto& l = one->Children(); 
+            const auto& r = two->Children(); 
+            for (ui32 i = 0U; i < childs; ++i) { 
                 if (!CompareExpressions(one = l[i].Get(), two = r[i].Get(), argumentsMap, level, visited)) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
+                    return false; 
+                } 
+            } 
+        } 
+ 
+        return true; 
+    } 
+ 
     using TNodeSetPtr = std::shared_ptr<TNodeSet>;
 
     TNodeSetPtr ExcludeFromUnresolved(const TExprNode& args, const TNodeSetPtr& unresolved) {
         if (!unresolved || unresolved->empty() || args.ChildrenSize() == 0) {
             return unresolved;
-        }
-
+        } 
+ 
         size_t excluded = 0;
         auto newUnresolved = std::make_shared<TNodeSet>(*unresolved);
         for (auto& toExclude : args.Children()) {
@@ -1829,9 +1829,9 @@ namespace {
         for (auto& item : *smaller) {
             if (result->insert(item).second) {
                 inserted = true;
-            }
-        }
-
+            } 
+        } 
+ 
         return inserted ? result : bigger;
     }
 
@@ -1848,11 +1848,11 @@ namespace {
                 break;
             case TExprNode::Lambda:
             {
-                if (!root.ChildrenSize()) {
+                if (!root.ChildrenSize()) { 
                     ythrow yexception() << "lambda #" << root.UniqueId() << " has " << root.ChildrenSize() << " children";
-                }
+                } 
 
-                const auto& arguments = root.Head();
+                const auto& arguments = root.Head(); 
                 if (arguments.Type() != TExprNode::Arguments) {
                     ythrow yexception() << "unexpected type of arguments node in lambda #" << root.UniqueId();
                 }
@@ -1866,10 +1866,10 @@ namespace {
                     }
                 });
 
-                for (ui32 i = 1U; i < root.ChildrenSize(); ++i) {
-                    const auto bodyUnresolvedArgs = CollectUnresolvedArgs(*root.Child(i), unresolvedArgs, allArgs);
-                    result = ExcludeFromUnresolved(arguments, bodyUnresolvedArgs);
-                }
+                for (ui32 i = 1U; i < root.ChildrenSize(); ++i) { 
+                    const auto bodyUnresolvedArgs = CollectUnresolvedArgs(*root.Child(i), unresolvedArgs, allArgs); 
+                    result = ExcludeFromUnresolved(arguments, bodyUnresolvedArgs); 
+                } 
                 break;
             }
             case TExprNode::Callable:
@@ -1886,75 +1886,75 @@ namespace {
             case TExprNode::Arguments:
                 ythrow yexception() << "unexpected free arguments node #[" << root.UniqueId() << "]";
                 break;
-        }
-
+        } 
+ 
         unresolvedArgs[&root] = result;
         return result;
-    }
-
-    typedef TNodeMap<long> TRefCountsMap;
-
-
-    void CalculateReferences(const TExprNode& node, TRefCountsMap& refCounts) {
-        if (!refCounts[&node]++)
-            for (const auto& child : node.Children())
-                CalculateReferences(*child, refCounts);
-    }
-
-    void CheckReferences(const TExprNode& node, TRefCountsMap& refCounts, TNodeSet& visited) {
-        if (visited.emplace(&node).second) {
-            for (const auto& child : node.Children()) {
-                YQL_ENSURE(child->UseCount() == refCounts[child.Get()]);
-                CheckReferences(*child, refCounts, visited);
-            }
-        }
-    }
-
+    } 
+ 
+    typedef TNodeMap<long> TRefCountsMap; 
+ 
+ 
+    void CalculateReferences(const TExprNode& node, TRefCountsMap& refCounts) { 
+        if (!refCounts[&node]++) 
+            for (const auto& child : node.Children()) 
+                CalculateReferences(*child, refCounts); 
+    } 
+ 
+    void CheckReferences(const TExprNode& node, TRefCountsMap& refCounts, TNodeSet& visited) { 
+        if (visited.emplace(&node).second) { 
+            for (const auto& child : node.Children()) { 
+                YQL_ENSURE(child->UseCount() == refCounts[child.Get()]); 
+                CheckReferences(*child, refCounts, visited); 
+            } 
+        } 
+    } 
+ 
     template <class TPMap>
     bool GatherParentsImpl(const TExprNode& node, TPMap& parentsMap, TNodeSet& visited, bool withLeaves) {
-        if (node.Type() == TExprNode::Arguments) {
-            return false;
-        }
-
-        if (!withLeaves) {
-            if (node.Type() == TExprNode::Atom || node.Type() == TExprNode::World) {
-                return false;
-            }
-        }
-
-        if (!visited.emplace(&node).second) {
-            return true;
-        }
-
-        node.ForEachChild([&](const TExprNode& child) {
+        if (node.Type() == TExprNode::Arguments) { 
+            return false; 
+        } 
+ 
+        if (!withLeaves) { 
+            if (node.Type() == TExprNode::Atom || node.Type() == TExprNode::World) { 
+                return false; 
+            } 
+        } 
+ 
+        if (!visited.emplace(&node).second) { 
+            return true; 
+        } 
+ 
+        node.ForEachChild([&](const TExprNode& child) { 
             if (GatherParentsImpl<TPMap>(child, parentsMap, visited, withLeaves)) {
-                parentsMap[&child].emplace(&node);
-            }
-        });
-
-        return true;
-    }
-
+                parentsMap[&child].emplace(&node); 
+            } 
+        }); 
+ 
+        return true; 
+    } 
+ 
 } // namespace
 
 bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
     IModuleResolver* resolver, bool hasAnnotations, ui32 typeAnnotationIndex, ui16 syntaxVersion) {
-    exprRoot.Reset();
+    exprRoot.Reset(); 
     TAstNode* cleanRoot = nullptr;
     TAnnotationNodeMap annotations;
-    const TAnnotationNodeMap* currentAnnotations = nullptr;
+    const TAnnotationNodeMap* currentAnnotations = nullptr; 
     TAstParseResult cleanupRes;
     if (!hasAnnotations) {
         typeAnnotationIndex = Max<ui32>();
         cleanRoot = &astRoot;
         currentAnnotations = nullptr;
     } else if (typeAnnotationIndex != Max<ui32>()) {
-        cleanupRes.Pool = std::make_unique<TMemoryPool>(4096);
+        cleanupRes.Pool = std::make_unique<TMemoryPool>(4096); 
         cleanRoot = ExtractAnnotations(astRoot, annotations, *cleanupRes.Pool);
         cleanupRes.Root = cleanRoot;
         currentAnnotations = &annotations;
     } else {
-        cleanupRes.Pool = std::make_unique<TMemoryPool>(4096);
+        cleanupRes.Pool = std::make_unique<TMemoryPool>(4096); 
         cleanRoot = RemoveAnnotations(astRoot, *cleanupRes.Pool);
         cleanupRes.Root = cleanRoot;
         currentAnnotations = nullptr;
@@ -1968,7 +1968,7 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
     compileCtx.SyntaxVersion = syntaxVersion;
     compileCtx.Annotations = currentAnnotations;
     compileCtx.TypeAnnotationIndex = typeAnnotationIndex;
-    compileCtx.ModuleResolver = resolver;
+    compileCtx.ModuleResolver = resolver; 
     compileCtx.PushFrame();
     auto world = compileCtx.Expr.NewWorld(astRoot.GetPosition());
     if (typeAnnotationIndex != Max<ui32>()) {
@@ -1977,11 +1977,11 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
 
     compileCtx.Frames.back().Bindings[TStringBuf("world")] = {std::move(world)};
     auto ret = CompileFunction(*cleanRoot, compileCtx, true);
-    if (1U != ret.size())
-        return false;
-    exprRoot = std::move(ret.front());
+    if (1U != ret.size()) 
+        return false; 
+    exprRoot = std::move(ret.front()); 
     compileCtx.PopFrame();
-    return bool(exprRoot);
+    return bool(exprRoot); 
 }
 
 bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx,
@@ -1998,58 +1998,58 @@ bool CompileExpr(TAstNode& astRoot, TExprNode::TPtr& exprRoot, TExprContext& ctx
 }
 
 bool CompileExpr(TAstNode& astRoot, TLibraryCohesion& library, TExprContext& ctx, ui16 syntaxVersion) {
-    const TAstNode* cleanRoot = &astRoot;
-    TContext compileCtx(ctx);
-    compileCtx.Annotations = nullptr;
-    compileCtx.TypeAnnotationIndex = Max<ui32>();
+    const TAstNode* cleanRoot = &astRoot; 
+    TContext compileCtx(ctx); 
+    compileCtx.Annotations = nullptr; 
+    compileCtx.TypeAnnotationIndex = Max<ui32>(); 
     compileCtx.SyntaxVersion = syntaxVersion;
-    const bool ok = CompileLibrary(*cleanRoot, compileCtx);
-    library = compileCtx.Cohesion;
-    return ok;
-}
-
+    const bool ok = CompileLibrary(*cleanRoot, compileCtx); 
+    library = compileCtx.Cohesion; 
+    return ok; 
+} 
+ 
 const TTypeAnnotationNode* CompileTypeAnnotation(const TAstNode& node, TExprContext& ctx) {
     TContext compileCtx(ctx);
     return compileCtx.CompileTypeAnnotationNode(node);
 }
 
-template<class Set>
+template<class Set> 
 bool IsDependedImpl(const TExprNode& node, const Set& dependences, TNodeSet& visited) {
-    if (!visited.emplace(&node).second)
-        return false;
-
-    if (dependences.cend() != dependences.find(&node))
-        return true;
-
-    for (const auto& child : node.Children()) {
+    if (!visited.emplace(&node).second) 
+        return false; 
+ 
+    if (dependences.cend() != dependences.find(&node)) 
+        return true; 
+ 
+    for (const auto& child : node.Children()) { 
         if (IsDependedImpl(*child, dependences, visited))
-            return true;
+            return true; 
     }
 
-    return false;
-}
-
-namespace {
-
+    return false; 
+} 
+ 
+namespace { 
+ 
 enum EChangeState : ui8 {
     Unknown = 0,
     Changed = 1,
-    Unchanged = 2
+    Unchanged = 2 
 };
 
-ui64 CalcBloom(const ui64 id) {
-    return 1ULL |
-        (2ULL << (std::hash<ui64>()(id) % 63ULL)) |
-        (2ULL << (IntHash<ui64>(id) % 63ULL)) |
-        (2ULL << (FnvHash<ui64>(&id, sizeof(id)) % 63ULL)) |
-        (2ULL << (MurmurHash<ui64>(&id, sizeof(id)) % 63ULL)) |
-        (2ULL << (CityHash64(reinterpret_cast<const char*>(&id), sizeof(id)) % 63ULL));
-}
-
-inline bool InBloom(const ui64 set, const ui64 bloom) {
+ui64 CalcBloom(const ui64 id) { 
+    return 1ULL | 
+        (2ULL << (std::hash<ui64>()(id) % 63ULL)) | 
+        (2ULL << (IntHash<ui64>(id) % 63ULL)) | 
+        (2ULL << (FnvHash<ui64>(&id, sizeof(id)) % 63ULL)) | 
+        (2ULL << (MurmurHash<ui64>(&id, sizeof(id)) % 63ULL)) | 
+        (2ULL << (CityHash64(reinterpret_cast<const char*>(&id), sizeof(id)) % 63ULL)); 
+} 
+ 
+inline bool InBloom(const ui64 set, const ui64 bloom) { 
     return (bloom >> 1) == ((bloom & set) >> 1);
-}
-
+} 
+ 
 EChangeState GetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces,
     TNodeMap<EChangeState>& changes, TNodeMap<bool>& updatedLambdas);
 
@@ -2088,8 +2088,8 @@ EChangeState DoGetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces,
         start->SetBloom(start->GetBloom() | child.GetBloom());
         incompleteBloom = incompleteBloom || (child.Type() != TExprNode::Arguments && !child.GetBloom());
     });
-    if (incompleteBloom) {
-        start->SetBloom(0ULL);
+    if (incompleteBloom) { 
+        start->SetBloom(0ULL); 
     }
 
     return (EChangeState)combinedState;
@@ -2103,15 +2103,15 @@ EChangeState GetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, c
 
     if (!start->GetBloom() && TExprNode::Argument == start->Type()) {
         start->SetBloom(CalcBloom(start->UniqueId()));
-    }
-
-    auto& state = changes[start];
+    } 
+ 
+    auto& state = changes[start]; 
     if (state != EChangeState::Unknown) {
         return state;
     }
 
-    if (const auto it = replaces.find(start); it != replaces.cend()) {
-        return state = it->second ? EChangeState::Changed : EChangeState::Unchanged;
+    if (const auto it = replaces.find(start); it != replaces.cend()) { 
+        return state = it->second ? EChangeState::Changed : EChangeState::Unchanged; 
     }
 
     if (start->ChildrenSize() == 0) {
@@ -2120,21 +2120,21 @@ EChangeState GetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, c
 
     if (start->Type() == TExprNode::Lambda) {
         TNodeOnNodeOwnedMap newReplaces = replaces;
-
-        start->Head().ForEachChild([&](const TExprNode& arg){ newReplaces[&arg] = {}; });
-
-        const auto locIt = localReplaces.find(start);
+ 
+        start->Head().ForEachChild([&](const TExprNode& arg){ newReplaces[&arg] = {}; }); 
+ 
+        const auto locIt = localReplaces.find(start); 
         if (locIt != localReplaces.end()) {
             for (auto& r: locIt->second) {
                 newReplaces[r.first] = r.second;
-            }
-        }
-
+            } 
+        } 
+ 
         state = DoGetChanges(start, newReplaces, localReplaces, changes, updatedLambdas);
 
         if ((state & EChangeState::Changed) != 0) {
             updatedLambdas.emplace(start, false);
-        }
+        } 
 
         return state;
     }
@@ -2142,20 +2142,20 @@ EChangeState GetChanges(TExprNode* start, const TNodeOnNodeOwnedMap& replaces, c
     return state = DoGetChanges(start, replaces, localReplaces, changes, updatedLambdas);
 }
 
-template<bool KeepTypeAnns>
+template<bool KeepTypeAnns> 
 TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMap& replaces, const TNodeMap<TNodeOnNodeOwnedMap>& localReplaces,
-    TNodeMap<EChangeState>& changes, TNodeOnNodeOwnedMap& processed, TExprContext& ctx) {
-
-    auto& target = processed[start.Get()];
+    TNodeMap<EChangeState>& changes, TNodeOnNodeOwnedMap& processed, TExprContext& ctx) { 
+ 
+    auto& target = processed[start.Get()]; 
     if (target) {
         return target;
     }
 
-    const auto it = replaces.find(start.Get());
+    const auto it = replaces.find(start.Get()); 
     if (it != replaces.end()) {
         return target = it->second ? it->second : start;
-    }
-
+    } 
+ 
     if (start->ChildrenSize() != 0) {
         auto changeIt = changes.find(start.Get());
         YQL_ENSURE(changeIt != changes.end(), "Missing change");
@@ -2163,51 +2163,51 @@ TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMa
         if (isChanged) {
             if (start->Type() == TExprNode::Lambda) {
                 TNodeOnNodeOwnedMap newReplaces = replaces;
-                const auto locIt = localReplaces.find(start.Get());
+                const auto locIt = localReplaces.find(start.Get()); 
                 YQL_ENSURE(locIt != localReplaces.end(), "Missing local changes");
                 for (auto& r: locIt->second) {
                     newReplaces[r.first] = r.second;
                 }
 
-                const auto& args = start->Head();
+                const auto& args = start->Head(); 
                 TExprNode::TListType newArgsList;
-                newArgsList.reserve(args.ChildrenSize());
-                args.ForEachChild([&](const TExprNode& arg) {
-                    const auto argIt = newReplaces.find(&arg);
+                newArgsList.reserve(args.ChildrenSize()); 
+                args.ForEachChild([&](const TExprNode& arg) { 
+                    const auto argIt = newReplaces.find(&arg); 
                     YQL_ENSURE(argIt != newReplaces.end(), "Missing argument");
-                    processed.emplace(&arg, argIt->second);
+                    processed.emplace(&arg, argIt->second); 
                     newArgsList.emplace_back(argIt->second);
-                });
+                }); 
 
-                auto newBody = GetLambdaBody(*start);
-                std::for_each(newBody.begin(), newBody.end(), [&](TExprNode::TPtr& node) {
-                    node = DoReplace<KeepTypeAnns>(node, newReplaces, localReplaces, changes, processed, ctx);
-                });
+                auto newBody = GetLambdaBody(*start); 
+                std::for_each(newBody.begin(), newBody.end(), [&](TExprNode::TPtr& node) { 
+                    node = DoReplace<KeepTypeAnns>(node, newReplaces, localReplaces, changes, processed, ctx); 
+                }); 
                 auto newArgs = ctx.NewArguments(start->Pos(), std::move(newArgsList));
-                if constexpr (KeepTypeAnns)
-                    newArgs->SetTypeAnn(ctx.MakeType<TUnitExprType>());
-                target = ctx.NewLambda(start->Pos(), std::move(newArgs), std::move(newBody));
-                if constexpr (KeepTypeAnns)
-                    target->SetTypeAnn(start->GetTypeAnn());
-                return target;
+                if constexpr (KeepTypeAnns) 
+                    newArgs->SetTypeAnn(ctx.MakeType<TUnitExprType>()); 
+                target = ctx.NewLambda(start->Pos(), std::move(newArgs), std::move(newBody)); 
+                if constexpr (KeepTypeAnns) 
+                    target->SetTypeAnn(start->GetTypeAnn()); 
+                return target; 
             } else {
                 bool replaced = false;
                 TExprNode::TListType newChildren;
                 newChildren.reserve(start->ChildrenSize());
                 for (const auto& child : start->Children()) {
-                    auto newChild = DoReplace<KeepTypeAnns>(child, replaces, localReplaces, changes, processed, ctx);
+                    auto newChild = DoReplace<KeepTypeAnns>(child, replaces, localReplaces, changes, processed, ctx); 
                     if (newChild != child)
                         replaced = true;
 
                     newChildren.emplace_back(std::move(newChild));
                 }
 
-                if (replaced) {
-                     target = ctx.ChangeChildren(*start, std::move(newChildren));
-                     if constexpr (KeepTypeAnns)
-                        target->SetTypeAnn(start->GetTypeAnn());
-                     return target;
-                }
+                if (replaced) { 
+                     target = ctx.ChangeChildren(*start, std::move(newChildren)); 
+                     if constexpr (KeepTypeAnns) 
+                        target->SetTypeAnn(start->GetTypeAnn()); 
+                     return target; 
+                } 
             }
         }
     }
@@ -2215,29 +2215,29 @@ TExprNode::TPtr DoReplace(const TExprNode::TPtr& start, const TNodeOnNodeOwnedMa
     return target = start;
 }
 
-void EnsureNoBadReplaces(const TExprNode& start, const TNodeOnNodeOwnedMap& replaces, TNodeSet&& visited = TNodeSet()) {
-    if (!visited.insert(&start).second) {
+void EnsureNoBadReplaces(const TExprNode& start, const TNodeOnNodeOwnedMap& replaces, TNodeSet&& visited = TNodeSet()) { 
+    if (!visited.insert(&start).second) { 
         return;
     }
 
-    const auto it = replaces.find(&start);
+    const auto it = replaces.find(&start); 
     if (it != replaces.end() && it->second) {
-        ythrow yexception() << "Bad replace for node: " << start.UniqueId() << "\n";
+        ythrow yexception() << "Bad replace for node: " << start.UniqueId() << "\n"; 
     }
 
-    if (start.Type() == TExprNode::Lambda) {
+    if (start.Type() == TExprNode::Lambda) { 
         TNodeOnNodeOwnedMap newReplaces = replaces;
-        start.Head().ForEachChild([&](const TExprNode& arg){ newReplaces[&arg] = {}; });
-        start.ForEachChild([&](const TExprNode& child){ EnsureNoBadReplaces(child, newReplaces, std::move(visited)); });
+        start.Head().ForEachChild([&](const TExprNode& arg){ newReplaces[&arg] = {}; }); 
+        start.ForEachChild([&](const TExprNode& child){ EnsureNoBadReplaces(child, newReplaces, std::move(visited)); }); 
     } else {
-        start.ForEachChild([&](const TExprNode& child){ EnsureNoBadReplaces(child, replaces, std::move(visited)); });
+        start.ForEachChild([&](const TExprNode& child){ EnsureNoBadReplaces(child, replaces, std::move(visited)); }); 
     }
 }
 
 const bool InternalDebug = false;
 
-template<bool KeepTypeAnns>
-TExprNode::TPtr ReplaceNodesImpl(TExprNode::TPtr&& start, const TNodeOnNodeOwnedMap& replaces, TNodeOnNodeOwnedMap& processed, TExprContext& ctx) {
+template<bool KeepTypeAnns> 
+TExprNode::TPtr ReplaceNodesImpl(TExprNode::TPtr&& start, const TNodeOnNodeOwnedMap& replaces, TNodeOnNodeOwnedMap& processed, TExprContext& ctx) { 
     if (InternalDebug) {
         Cerr << "Before\n" << start->Dump() << "\n";
         Cerr << "Replaces\n";
@@ -2253,21 +2253,21 @@ TExprNode::TPtr ReplaceNodesImpl(TExprNode::TPtr&& start, const TNodeOnNodeOwned
     TNodeMap<bool> updatedLambdas;
     TNodeMap<TNodeOnNodeOwnedMap> localReplaces;
     if ((GetChanges(start.Get(), replaces, localReplaces, changes, updatedLambdas) & EChangeState::Changed) == 0) {
-        return std::move(start);
-    }
-
+        return std::move(start); 
+    } 
+ 
     if (!updatedLambdas.empty()) {
         for (;;) {
             changes.clear();
             for (auto& x : updatedLambdas) {
                 if (!x.second) {
                     TNodeOnNodeOwnedMap& lambdaReplaces = localReplaces[x.first];
-                    const auto& args = x.first->Head();
-                    args.ForEachChild([&](const TExprNode& arg) {
-                        const auto newArg = lambdaReplaces.emplace(&arg, ctx.ShallowCopy(arg)).first->second;
-                        if constexpr (KeepTypeAnns)
-                            newArg->SetTypeAnn(arg.GetTypeAnn());
-                    });
+                    const auto& args = x.first->Head(); 
+                    args.ForEachChild([&](const TExprNode& arg) { 
+                        const auto newArg = lambdaReplaces.emplace(&arg, ctx.ShallowCopy(arg)).first->second; 
+                        if constexpr (KeepTypeAnns) 
+                            newArg->SetTypeAnn(arg.GetTypeAnn()); 
+                    }); 
                     x.second = true;
                 }
             }
@@ -2280,78 +2280,78 @@ TExprNode::TPtr ReplaceNodesImpl(TExprNode::TPtr&& start, const TNodeOnNodeOwned
         }
     }
 
-    auto ret = DoReplace<KeepTypeAnns>(start, replaces, localReplaces, changes, processed, ctx);
+    auto ret = DoReplace<KeepTypeAnns>(start, replaces, localReplaces, changes, processed, ctx); 
     if (InternalDebug) {
         Cerr << "After\n" << ret->Dump() << "\n";
-        EnsureNoBadReplaces(*ret, replaces);
+        EnsureNoBadReplaces(*ret, replaces); 
     }
 
     return ret;
-}
-
-}
-
-TExprNode::TPtr TExprContext::ReplaceNode(TExprNode::TPtr&& start, const TExprNode& src, TExprNode::TPtr dst) {
-    if (start->Type() == TExprNode::Lambda) {
-        const auto& args = start->Head();
-        auto body = GetLambdaBody(*start);
-        std::optional<ui32> argIndex;
-        for (ui32 index = 0U; index < args.ChildrenSize(); ++index) {
-            const auto arg = args.Child(index);
-            if (arg == &src) {
-                if (argIndex) {
+} 
+ 
+} 
+ 
+TExprNode::TPtr TExprContext::ReplaceNode(TExprNode::TPtr&& start, const TExprNode& src, TExprNode::TPtr dst) { 
+    if (start->Type() == TExprNode::Lambda) { 
+        const auto& args = start->Head(); 
+        auto body = GetLambdaBody(*start); 
+        std::optional<ui32> argIndex; 
+        for (ui32 index = 0U; index < args.ChildrenSize(); ++index) { 
+            const auto arg = args.Child(index); 
+            if (arg == &src) { 
+                if (argIndex) { 
                     ythrow yexception() << "argument is duplicated, #[" << arg->UniqueId() << "]";
-                }
-
-                argIndex = index;
-            }
+                } 
+ 
+                argIndex = index; 
+            } 
         }
 
-        if (argIndex) {
+        if (argIndex) { 
             TExprNode::TListType newArgNodes;
-            newArgNodes.reserve(args.ChildrenSize());
-            TNodeOnNodeOwnedMap replaces(args.ChildrenSize());
-
-            for (ui32 i = 0U; i < args.ChildrenSize(); ++i) {
-                const auto arg = args.Child(i);
+            newArgNodes.reserve(args.ChildrenSize()); 
+            TNodeOnNodeOwnedMap replaces(args.ChildrenSize()); 
+ 
+            for (ui32 i = 0U; i < args.ChildrenSize(); ++i) { 
+                const auto arg = args.Child(i); 
                 auto newArg = (i == *argIndex) ? dst : ShallowCopy(*arg);
-                YQL_ENSURE(replaces.emplace(arg, newArg).second);
-                newArgNodes.emplace_back(std::move(newArg));
-            }
-
-            return NewLambda(start->Pos(), NewArguments(args.Pos(), std::move(newArgNodes)), ReplaceNodes<false>(std::move(body), replaces));
-        }
-    } else if (&src == start) {
-        return dst;
+                YQL_ENSURE(replaces.emplace(arg, newArg).second); 
+                newArgNodes.emplace_back(std::move(newArg)); 
+            } 
+ 
+            return NewLambda(start->Pos(), NewArguments(args.Pos(), std::move(newArgNodes)), ReplaceNodes<false>(std::move(body), replaces)); 
+        } 
+    } else if (&src == start) { 
+        return dst; 
     }
-
-    return ReplaceNodes(std::move(start), {{&src, std::move(dst)}});
+ 
+    return ReplaceNodes(std::move(start), {{&src, std::move(dst)}}); 
 }
 
-TExprNode::TPtr TExprContext::ReplaceNodes(TExprNode::TPtr&& start, const TNodeOnNodeOwnedMap& replaces) {
-    TNodeOnNodeOwnedMap processed;
-    return replaces.empty() ? std::move(start) : ReplaceNodesImpl<false>(std::move(start), replaces, processed, *this);
-}
-
-template<bool KeepTypeAnns>
-TExprNode::TListType TExprContext::ReplaceNodes(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces) {
-    if (!replaces.empty()) {
-        TNodeOnNodeOwnedMap processed;
-        for (auto& node : starts) {
-            node = ReplaceNodesImpl<KeepTypeAnns>(std::move(node), replaces, processed, *this);
-        }
-    }
-    return std::move(starts);
-}
-
-template TExprNode::TListType TExprContext::ReplaceNodes<true>(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces);
-template TExprNode::TListType TExprContext::ReplaceNodes<false>(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces);
-
-bool IsDepended(const TExprNode& node, const TNodeSet& dependences) {
+TExprNode::TPtr TExprContext::ReplaceNodes(TExprNode::TPtr&& start, const TNodeOnNodeOwnedMap& replaces) { 
+    TNodeOnNodeOwnedMap processed; 
+    return replaces.empty() ? std::move(start) : ReplaceNodesImpl<false>(std::move(start), replaces, processed, *this); 
+} 
+ 
+template<bool KeepTypeAnns> 
+TExprNode::TListType TExprContext::ReplaceNodes(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces) { 
+    if (!replaces.empty()) { 
+        TNodeOnNodeOwnedMap processed; 
+        for (auto& node : starts) { 
+            node = ReplaceNodesImpl<KeepTypeAnns>(std::move(node), replaces, processed, *this); 
+        } 
+    } 
+    return std::move(starts); 
+} 
+ 
+template TExprNode::TListType TExprContext::ReplaceNodes<true>(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces); 
+template TExprNode::TListType TExprContext::ReplaceNodes<false>(TExprNode::TListType&& starts, const TNodeOnNodeOwnedMap& replaces); 
+ 
+bool IsDepended(const TExprNode& node, const TNodeSet& dependences) { 
     TNodeSet visited;
     return !dependences.empty() && IsDependedImpl(node, dependences, visited);
-}
-
+} 
+ 
 void CheckArguments(const TExprNode& root) {
     try {
         TNodeMap<TNodeSetPtr> unresolvedArgsMap;
@@ -2376,19 +2376,19 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
 #endif
     TVisitNodeContext ctx(exprContext);
     ctx.RefAtoms = settings.RefAtoms;
-    ctx.Pool = std::make_unique<TMemoryPool>(4096);
+    ctx.Pool = std::make_unique<TMemoryPool>(4096); 
     ctx.Frames.push_back(TFrameContext());
     ctx.CurrentFrame = &ctx.Frames.front();
-    VisitNode(root, 0ULL, ctx);
+    VisitNode(root, 0ULL, ctx); 
     ui32 uniqueNum = 0;
-
+ 
     for (auto& frame : ctx.Frames) {
-        ctx.CurrentFrame = &frame;
-        frame.TopoSortedNodes.reserve(frame.Nodes.size());
-        for (const auto& node : frame.Nodes) {
-            const auto name = ctx.FindBinding(node.second);
-            if (name.empty()) {
-                const auto& ref = ctx.References[node.second];
+        ctx.CurrentFrame = &frame; 
+        frame.TopoSortedNodes.reserve(frame.Nodes.size()); 
+        for (const auto& node : frame.Nodes) { 
+            const auto name = ctx.FindBinding(node.second); 
+            if (name.empty()) { 
+                const auto& ref = ctx.References[node.second]; 
                 if (!InlineNode(*node.second, ref.References, ref.Neighbors, settings)) {
                     if (settings.PrintArguments && node.second->IsArgument()) {
                         auto buffer = TStringBuilder() << "$" << ++uniqueNum
@@ -2400,7 +2400,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
                         sprintf(buffer, "$%" PRIu32, ++uniqueNum);
                         YQL_ENSURE(frame.Bindings.emplace(node.second, buffer).second);
                     }
-                    frame.TopoSortedNodes.emplace_back(node.second);
+                    frame.TopoSortedNodes.emplace_back(node.second); 
                 }
             }
         }
@@ -2408,8 +2408,8 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
 
     ctx.CurrentFrame = &ctx.Frames.front();
     TAstParseResult result;
-    result.Root = ConvertFunction(exprContext.AppendPosition(TPosition(1, 1)), {&root}, ctx, settings.AnnotationFlags, *ctx.Pool);
-    result.Pool = std::move(ctx.Pool);
+    result.Root = ConvertFunction(exprContext.AppendPosition(TPosition(1, 1)), {&root}, ctx, settings.AnnotationFlags, *ctx.Pool); 
+    result.Pool = std::move(ctx.Pool); 
     return result;
 }
 
@@ -2421,7 +2421,7 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, u
 }
 
 TString TExprNode::Dump() const {
-    TNodeSet visited;
+    TNodeSet visited; 
     TStringStream out;
     DumpNode(*this, out, 0, visited);
     return out.Str();
@@ -2431,140 +2431,140 @@ TPosition TExprNode::Pos(const TExprContext& ctx) const {
     return ctx.GetPosition(Pos());
 }
 
-TExprNode::TPtr TExprContext::RenameNode(const TExprNode& node, const TStringBuf& name) {
-    const auto newNode = node.ChangeContent(AllocateNextUniqueId(), AppendString(name));
-    ExprNodes.emplace_back(newNode.Get());
-    return newNode;
-}
-
-TExprNode::TPtr TExprContext::ShallowCopy(const TExprNode& node) {
-    YQL_ENSURE(node.Type() != TExprNode::Lambda);
-    const auto newNode = node.Clone(AllocateNextUniqueId());
-    ExprNodes.emplace_back(newNode.Get());
-    return newNode;
+TExprNode::TPtr TExprContext::RenameNode(const TExprNode& node, const TStringBuf& name) { 
+    const auto newNode = node.ChangeContent(AllocateNextUniqueId(), AppendString(name)); 
+    ExprNodes.emplace_back(newNode.Get()); 
+    return newNode; 
+} 
+ 
+TExprNode::TPtr TExprContext::ShallowCopy(const TExprNode& node) { 
+    YQL_ENSURE(node.Type() != TExprNode::Lambda); 
+    const auto newNode = node.Clone(AllocateNextUniqueId()); 
+    ExprNodes.emplace_back(newNode.Get()); 
+    return newNode; 
 }
 
 TExprNode::TPtr TExprContext::ChangeChildren(const TExprNode& node, TExprNode::TListType&& children) {
-    const auto newNode = node.ChangeChildren(AllocateNextUniqueId(), std::move(children));
-    ExprNodes.emplace_back(newNode.Get());
-    return newNode;
+    const auto newNode = node.ChangeChildren(AllocateNextUniqueId(), std::move(children)); 
+    ExprNodes.emplace_back(newNode.Get()); 
+    return newNode; 
 }
 
-TExprNode::TPtr TExprContext::ChangeChild(const TExprNode& node, ui32 index, TExprNode::TPtr&& child) {
-    const auto newNode = node.ChangeChild(AllocateNextUniqueId(), index, std::move(child));
-    ExprNodes.emplace_back(newNode.Get());
-    return newNode;
+TExprNode::TPtr TExprContext::ChangeChild(const TExprNode& node, ui32 index, TExprNode::TPtr&& child) { 
+    const auto newNode = node.ChangeChild(AllocateNextUniqueId(), index, std::move(child)); 
+    ExprNodes.emplace_back(newNode.Get()); 
+    return newNode; 
 }
 
 TExprNode::TPtr TExprContext::ExactChangeChildren(const TExprNode& node, TExprNode::TListType&& children) {
-    const auto newNode = node.ChangeChildren(AllocateNextUniqueId(), std::move(children));
+    const auto newNode = node.ChangeChildren(AllocateNextUniqueId(), std::move(children)); 
     newNode->SetTypeAnn(node.GetTypeAnn());
     newNode->CopyConstraints(node);
     newNode->SetState(node.GetState());
     newNode->Result = node.Result;
-    ExprNodes.emplace_back(newNode.Get());
-    return newNode;
+    ExprNodes.emplace_back(newNode.Get()); 
+    return newNode; 
 }
 
-TExprNode::TPtr TExprContext::ExactShallowCopy(const TExprNode& node) {
+TExprNode::TPtr TExprContext::ExactShallowCopy(const TExprNode& node) { 
     YQL_ENSURE(node.Type() != TExprNode::Lambda);
-    const auto newNode = node.Clone(AllocateNextUniqueId());
+    const auto newNode = node.Clone(AllocateNextUniqueId()); 
     newNode->SetTypeAnn(node.GetTypeAnn());
     newNode->CopyConstraints(node);
     newNode->SetState(node.GetState());
     newNode->Result = node.Result;
-    ExprNodes.emplace_back(newNode.Get());
-    return newNode;
+    ExprNodes.emplace_back(newNode.Get()); 
+    return newNode; 
 }
 
-TExprNode::TListType GetLambdaBody(const TExprNode& node) {
-    switch (node.ChildrenSize()) {
-        case 1U: return {};
-        case 2U: return {node.TailPtr()};
-        default: break;
-    }
-
-    auto body = node.ChildrenList();
-    body.erase(body.cbegin());
-    return body;
-}
-
-TExprNode::TPtr TExprContext::DeepCopyLambda(const TExprNode& node, TExprNode::TListType&& body) {
-    YQL_ENSURE(node.IsLambda());
-    const auto& prevArgs = node.Head();
-
-    TNodeOnNodeOwnedMap replaces(prevArgs.ChildrenSize());
-
+TExprNode::TListType GetLambdaBody(const TExprNode& node) { 
+    switch (node.ChildrenSize()) { 
+        case 1U: return {}; 
+        case 2U: return {node.TailPtr()}; 
+        default: break; 
+    } 
+ 
+    auto body = node.ChildrenList(); 
+    body.erase(body.cbegin()); 
+    return body; 
+} 
+ 
+TExprNode::TPtr TExprContext::DeepCopyLambda(const TExprNode& node, TExprNode::TListType&& body) { 
+    YQL_ENSURE(node.IsLambda()); 
+    const auto& prevArgs = node.Head(); 
+ 
+    TNodeOnNodeOwnedMap replaces(prevArgs.ChildrenSize()); 
+ 
+    TExprNode::TListType newArgNodes; 
+    newArgNodes.reserve(prevArgs.ChildrenSize()); 
+    prevArgs.ForEachChild([&](const TExprNode& arg) { 
+        auto newArg = ShallowCopy(arg); 
+        YQL_ENSURE(replaces.emplace(&arg, newArg).second); 
+        newArgNodes.emplace_back(std::move(newArg)); 
+    }); 
+ 
+    auto newBody = ReplaceNodes(std::move(body), replaces); 
+    return NewLambda(node.Pos(), NewArguments(prevArgs.Pos(), std::move(newArgNodes)), std::move(newBody)); 
+} 
+ 
+TExprNode::TPtr TExprContext::DeepCopyLambda(const TExprNode& node, TExprNode::TPtr&& body) { 
+    YQL_ENSURE(node.IsLambda()); 
+    const auto& prevArgs = node.Head(); 
+ 
+    TNodeOnNodeOwnedMap replaces(prevArgs.ChildrenSize()); 
+ 
     TExprNode::TListType newArgNodes;
-    newArgNodes.reserve(prevArgs.ChildrenSize());
-    prevArgs.ForEachChild([&](const TExprNode& arg) {
-        auto newArg = ShallowCopy(arg);
-        YQL_ENSURE(replaces.emplace(&arg, newArg).second);
-        newArgNodes.emplace_back(std::move(newArg));
-    });
+    newArgNodes.reserve(prevArgs.ChildrenSize()); 
+    prevArgs.ForEachChild([&](const TExprNode& arg) { 
+        auto newArg = ShallowCopy(arg); 
+        YQL_ENSURE(replaces.emplace(&arg, newArg).second); 
+        newArgNodes.emplace_back(std::move(newArg)); 
+    }); 
 
-    auto newBody = ReplaceNodes(std::move(body), replaces);
-    return NewLambda(node.Pos(), NewArguments(prevArgs.Pos(), std::move(newArgNodes)), std::move(newBody));
+    auto newBody = ReplaceNodes(body ? TExprNode::TListType{std::move(body)} : GetLambdaBody(node), replaces); 
+    return NewLambda(node.Pos(), NewArguments(prevArgs.Pos(), std::move(newArgNodes)), std::move(newBody)); 
 }
 
-TExprNode::TPtr TExprContext::DeepCopyLambda(const TExprNode& node, TExprNode::TPtr&& body) {
-    YQL_ENSURE(node.IsLambda());
-    const auto& prevArgs = node.Head();
-
-    TNodeOnNodeOwnedMap replaces(prevArgs.ChildrenSize());
-
-    TExprNode::TListType newArgNodes;
-    newArgNodes.reserve(prevArgs.ChildrenSize());
-    prevArgs.ForEachChild([&](const TExprNode& arg) {
-        auto newArg = ShallowCopy(arg);
-        YQL_ENSURE(replaces.emplace(&arg, newArg).second);
-        newArgNodes.emplace_back(std::move(newArg));
-    });
-
-    auto newBody = ReplaceNodes(body ? TExprNode::TListType{std::move(body)} : GetLambdaBody(node), replaces);
-    return NewLambda(node.Pos(), NewArguments(prevArgs.Pos(), std::move(newArgNodes)), std::move(newBody));
-}
-
-TExprNode::TPtr TExprContext::FuseLambdas(const TExprNode& outer, const TExprNode& inner) {
-    YQL_ENSURE(outer.IsLambda() && inner.IsLambda());
-    const auto& outerArgs = outer.Head();
-    const auto& innerArgs = inner.Head();
-
-    TNodeOnNodeOwnedMap innerReplaces(innerArgs.ChildrenSize());
-
-    TExprNode::TListType newArgNodes;
-    newArgNodes.reserve(innerArgs.ChildrenSize());
-
-    innerArgs.ForEachChild([&](const TExprNode& arg) {
-        auto newArg = ShallowCopy(arg);
-        YQL_ENSURE(innerReplaces.emplace(&arg, newArg).second);
-        newArgNodes.emplace_back(std::move(newArg));
-    });
-
-    auto body = ReplaceNodes(GetLambdaBody(inner), innerReplaces);
-
-    TExprNode::TListType newBody;
-    if (outerArgs.ChildrenSize() + 1U == inner.ChildrenSize()) {
-        auto i = 0U;
-        TNodeOnNodeOwnedMap outerReplaces(outerArgs.ChildrenSize());
-        outerArgs.ForEachChild([&](const TExprNode& arg) {
-            YQL_ENSURE(outerReplaces.emplace(&arg, std::move(body[i++])).second);
-        });
-        newBody = ReplaceNodes(GetLambdaBody(outer), outerReplaces);
-    } else if (1U == outerArgs.ChildrenSize()) {
-        const auto& outerBody = GetLambdaBody(outer);
-        newBody.reserve(newBody.size() * body.size());
-        for (auto item : body) {
-            for (auto root : outerBody) {
-                newBody.emplace_back(ReplaceNode(TExprNode::TPtr(root), outerArgs.Head(), TExprNode::TPtr(item)));
-            }
-        }
-    }
-
-    YQL_ENSURE(!newBody.empty(), "Incompatible lambdas for fuse.");
-    return NewLambda(outer.Pos(), NewArguments(inner.Head().Pos(), std::move(newArgNodes)), std::move(newBody));
-}
-
+TExprNode::TPtr TExprContext::FuseLambdas(const TExprNode& outer, const TExprNode& inner) { 
+    YQL_ENSURE(outer.IsLambda() && inner.IsLambda()); 
+    const auto& outerArgs = outer.Head(); 
+    const auto& innerArgs = inner.Head(); 
+ 
+    TNodeOnNodeOwnedMap innerReplaces(innerArgs.ChildrenSize()); 
+ 
+    TExprNode::TListType newArgNodes; 
+    newArgNodes.reserve(innerArgs.ChildrenSize()); 
+ 
+    innerArgs.ForEachChild([&](const TExprNode& arg) { 
+        auto newArg = ShallowCopy(arg); 
+        YQL_ENSURE(innerReplaces.emplace(&arg, newArg).second); 
+        newArgNodes.emplace_back(std::move(newArg)); 
+    }); 
+ 
+    auto body = ReplaceNodes(GetLambdaBody(inner), innerReplaces); 
+ 
+    TExprNode::TListType newBody; 
+    if (outerArgs.ChildrenSize() + 1U == inner.ChildrenSize()) { 
+        auto i = 0U; 
+        TNodeOnNodeOwnedMap outerReplaces(outerArgs.ChildrenSize()); 
+        outerArgs.ForEachChild([&](const TExprNode& arg) { 
+            YQL_ENSURE(outerReplaces.emplace(&arg, std::move(body[i++])).second); 
+        }); 
+        newBody = ReplaceNodes(GetLambdaBody(outer), outerReplaces); 
+    } else if (1U == outerArgs.ChildrenSize()) { 
+        const auto& outerBody = GetLambdaBody(outer); 
+        newBody.reserve(newBody.size() * body.size()); 
+        for (auto item : body) { 
+            for (auto root : outerBody) { 
+                newBody.emplace_back(ReplaceNode(TExprNode::TPtr(root), outerArgs.Head(), TExprNode::TPtr(item))); 
+            } 
+        } 
+    } 
+ 
+    YQL_ENSURE(!newBody.empty(), "Incompatible lambdas for fuse."); 
+    return NewLambda(outer.Pos(), NewArguments(inner.Head().Pos(), std::move(newArgNodes)), std::move(newBody)); 
+} 
+ 
 TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& nodeCtx, TNodeOnNodeOwnedMap& deepClones,
     bool internStrings, bool copyTypes, bool copyResult, TCustomDeepCopier customCopier)
 {
@@ -2599,18 +2599,18 @@ TExprNode::TPtr TExprContext::DeepCopy(const TExprNode& node, TExprContext& node
     return ins.first->second;
 }
 
-TExprNode::TPtr TExprContext::WrapByCallableIf(bool condition, const TStringBuf& callable, TExprNode::TPtr&& node) {
-    if (!condition) {
-        return node;
-    }
-    const auto pos = node->Pos();
-    return NewCallable(pos, callable, {std::move(node)});
-}
-
-TExprNode::TPtr TExprContext::SwapWithHead(const TExprNode& node) {
-    return ChangeChild(node.Head(), 0U, ChangeChild(node, 0U, node.Head().HeadPtr()));
-}
-
+TExprNode::TPtr TExprContext::WrapByCallableIf(bool condition, const TStringBuf& callable, TExprNode::TPtr&& node) { 
+    if (!condition) { 
+        return node; 
+    } 
+    const auto pos = node->Pos(); 
+    return NewCallable(pos, callable, {std::move(node)}); 
+} 
+ 
+TExprNode::TPtr TExprContext::SwapWithHead(const TExprNode& node) { 
+    return ChangeChild(node.Head(), 0U, ChangeChild(node, 0U, node.Head().HeadPtr())); 
+} 
+ 
 TNodeException::TNodeException()
     : Pos_()
 {
@@ -2638,7 +2638,7 @@ bool ValidateName(TPosition position, TStringBuf name, TStringBuf descr, TExprCo
         return false;
     }
 
-    if (!IsUtf8(name)) {
+    if (!IsUtf8(name)) { 
         ctx.AddError(TIssue(position, TStringBuilder() <<
             TString(descr).to_title() << " name must be a valid utf-8 byte sequence: " << TString{name}.Quote()));
         return false;
@@ -2657,29 +2657,29 @@ bool ValidateName(TPositionHandle position, TStringBuf name, TStringBuf descr, T
     return ValidateName(ctx.GetPosition(position), name, descr, ctx);
 }
 
-bool TDataExprParamsType::Validate(TPosition position, TExprContext& ctx) const {
+bool TDataExprParamsType::Validate(TPosition position, TExprContext& ctx) const { 
     if (GetSlot() != EDataSlot::Decimal) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Only Decimal may contain parameters, but got: " << GetName()));
-        return false;
-    }
-
-    const auto precision = FromString<ui8>(GetParamOne());
-
-    if (!precision || precision > 35) {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal precision: " << GetParamOne()));
-        return false;
-    }
-
-    const auto scale = FromString<ui8>(GetParamTwo());
-
-    if (scale > precision) {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal parameters: (" << GetParamOne() << "," << GetParamTwo() << ")."));
-        return false;
-    }
-
-    return true;
-}
-
+        return false; 
+    } 
+ 
+    const auto precision = FromString<ui8>(GetParamOne()); 
+ 
+    if (!precision || precision > 35) { 
+        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal precision: " << GetParamOne())); 
+        return false; 
+    } 
+ 
+    const auto scale = FromString<ui8>(GetParamTwo()); 
+ 
+    if (scale > precision) { 
+        ctx.AddError(TIssue(position, TStringBuilder() << "Invalid decimal parameters: (" << GetParamOne() << "," << GetParamTwo() << ").")); 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
 bool TDataExprParamsType::Validate(TPositionHandle position, TExprContext& ctx) const {
     return Validate(ctx.GetPosition(position), ctx);
 }
@@ -2692,19 +2692,19 @@ bool TItemExprType::Validate(TPositionHandle position, TExprContext& ctx) const 
     return Validate(ctx.GetPosition(position), ctx);
 }
 
-bool TMultiExprType::Validate(TPosition position, TExprContext& ctx) const {
-    if (Items.size() > Max<ui16>()) {
-        ctx.AddError(TIssue(position, TStringBuilder() << "Too many elements: " << Items.size()));
-        return false;
-    }
+bool TMultiExprType::Validate(TPosition position, TExprContext& ctx) const { 
+    if (Items.size() > Max<ui16>()) { 
+        ctx.AddError(TIssue(position, TStringBuilder() << "Too many elements: " << Items.size())); 
+        return false; 
+    } 
 
-    return true;
-}
-
-bool TMultiExprType::Validate(TPositionHandle position, TExprContext& ctx) const {
-    return Validate(ctx.GetPosition(position), ctx);
-}
-
+    return true; 
+} 
+ 
+bool TMultiExprType::Validate(TPositionHandle position, TExprContext& ctx) const { 
+    return Validate(ctx.GetPosition(position), ctx); 
+} 
+ 
 bool TTupleExprType::Validate(TPosition position, TExprContext& ctx) const {
     if (Items.size() > Max<ui16>()) {
         ctx.AddError(TIssue(position, TStringBuilder() << "Too many tuple elements: " << Items.size()));
@@ -2771,27 +2771,27 @@ bool TVariantExprType::Validate(TPositionHandle position, TExprContext& ctx) con
 }
 
 ui32 TVariantExprType::MakeFlags(const TTypeAnnotationNode* underlyingType) {
-    switch (underlyingType->GetKind()) {
-        case ETypeAnnotationKind::Tuple: {
-            const auto tupleType = underlyingType->Cast<TTupleExprType>();
-            auto ret = CombineFlags(tupleType->GetItems());
-            if (tupleType->GetSize() > 1) {
-                ret |= TypeHasManyValues;
-            }
-            return ret;
+    switch (underlyingType->GetKind()) { 
+        case ETypeAnnotationKind::Tuple: { 
+            const auto tupleType = underlyingType->Cast<TTupleExprType>(); 
+            auto ret = CombineFlags(tupleType->GetItems()); 
+            if (tupleType->GetSize() > 1) { 
+                ret |= TypeHasManyValues; 
+            } 
+            return ret; 
         }
-        case ETypeAnnotationKind::Struct: {
-            const auto structType = underlyingType->Cast<TStructExprType>();
-            auto ret = CombineFlags(structType->GetItems());
-            if (structType->GetSize() > 1) {
-                ret |= TypeHasManyValues;
-            }
-            return ret;
+        case ETypeAnnotationKind::Struct: { 
+            const auto structType = underlyingType->Cast<TStructExprType>(); 
+            auto ret = CombineFlags(structType->GetItems()); 
+            if (structType->GetSize() > 1) { 
+                ret |= TypeHasManyValues; 
+            } 
+            return ret; 
         }
-        default: break;
+        default: break; 
     }
 
-    ythrow yexception() << "unexpected underlying type" << *underlyingType;
+    ythrow yexception() << "unexpected underlying type" << *underlyingType; 
 }
 
 
@@ -2825,7 +2825,7 @@ bool TCallableExprType::Validate(TPosition position, TExprContext& ctx) const {
     }
 
     bool startedNames = false;
-    std::unordered_set<std::string_view> usedNames(Arguments.size());
+    std::unordered_set<std::string_view> usedNames(Arguments.size()); 
     for (ui32 index = 0; index < Arguments.size(); ++index) {
         bool hasName = !Arguments[index].Name.empty();
         if (startedNames) {
@@ -2861,9 +2861,9 @@ bool TTaggedExprType::Validate(TPositionHandle position, TExprContext& ctx) cons
     return Validate(ctx.GetPosition(position), ctx);
 }
 
-TExprContext::TExprContext(ui64 nextUniqueId)
+TExprContext::TExprContext(ui64 nextUniqueId) 
     : StringPool(4096)
-    , NextUniqueId(nextUniqueId)
+    , NextUniqueId(nextUniqueId) 
     , Frozen(false)
     , PositionSet(
         16,
@@ -2945,18 +2945,18 @@ size_t TExprContext::GetHash(TPositionHandle p) const {
     return CombineHashes(h, NumericHash(pos.Column));
 }
 
-template<class T, typename... Args>
-const T* MakeSinglethonType(TExprContext& ctx, Args&&... args) {
-    auto& singleton = std::get<const T*>(ctx.SingletonTypeCache);
-    if (!singleton)
-        singleton = AddType<T>(ctx, T::MakeHash(args...), std::forward<Args>(args)...);
-    return singleton;
-}
-
-const TVoidExprType* TMakeTypeImpl<TVoidExprType>::Make(TExprContext& ctx) {
-    return MakeSinglethonType<TVoidExprType>(ctx);
-}
-
+template<class T, typename... Args> 
+const T* MakeSinglethonType(TExprContext& ctx, Args&&... args) { 
+    auto& singleton = std::get<const T*>(ctx.SingletonTypeCache); 
+    if (!singleton) 
+        singleton = AddType<T>(ctx, T::MakeHash(args...), std::forward<Args>(args)...); 
+    return singleton; 
+} 
+ 
+const TVoidExprType* TMakeTypeImpl<TVoidExprType>::Make(TExprContext& ctx) { 
+    return MakeSinglethonType<TVoidExprType>(ctx); 
+} 
+ 
 const TNullExprType* TMakeTypeImpl<TNullExprType>::Make(TExprContext& ctx) {
     return MakeSinglethonType<TNullExprType>(ctx);
 }
@@ -2969,233 +2969,233 @@ const TEmptyDictExprType* TMakeTypeImpl<TEmptyDictExprType>::Make(TExprContext& 
     return MakeSinglethonType<TEmptyDictExprType>(ctx);
 }
 
-const TUnitExprType* TMakeTypeImpl<TUnitExprType>::Make(TExprContext& ctx) {
-    return MakeSinglethonType<TUnitExprType>(ctx);
-}
-
-const TWorldExprType* TMakeTypeImpl<TWorldExprType>::Make(TExprContext& ctx) {
-    return MakeSinglethonType<TWorldExprType>(ctx);
-}
-
-const TGenericExprType* TMakeTypeImpl<TGenericExprType>::Make(TExprContext& ctx) {
-    return MakeSinglethonType<TGenericExprType>(ctx);
-}
-
-const TItemExprType* TMakeTypeImpl<TItemExprType>::Make(TExprContext& ctx, const TStringBuf& name, const TTypeAnnotationNode* itemType) {
-    const auto hash = TItemExprType::MakeHash(name, itemType);
-    TItemExprType sample(hash, name, itemType);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    auto nameStr = ctx.AppendString(name);
-    return AddType<TItemExprType>(ctx, hash, nameStr, itemType);
-}
-
-const TListExprType* TMakeTypeImpl<TListExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) {
-    const auto hash = TListExprType::MakeHash(itemType);
-    TListExprType sample(hash, itemType);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-    return AddType<TListExprType>(ctx, hash, itemType);
-}
-
-const TOptionalExprType* TMakeTypeImpl<TOptionalExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) {
-    const auto hash = TOptionalExprType::MakeHash(itemType);
-    TOptionalExprType sample(hash, itemType);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TOptionalExprType>(ctx, hash, itemType);
-}
-
-const TVariantExprType* TMakeTypeImpl<TVariantExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* underlyingType) {
-    const auto hash = TVariantExprType::MakeHash(underlyingType);
-    TVariantExprType sample(hash, underlyingType);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TVariantExprType>(ctx, hash, underlyingType);
-}
-
+const TUnitExprType* TMakeTypeImpl<TUnitExprType>::Make(TExprContext& ctx) { 
+    return MakeSinglethonType<TUnitExprType>(ctx); 
+} 
+ 
+const TWorldExprType* TMakeTypeImpl<TWorldExprType>::Make(TExprContext& ctx) { 
+    return MakeSinglethonType<TWorldExprType>(ctx); 
+} 
+ 
+const TGenericExprType* TMakeTypeImpl<TGenericExprType>::Make(TExprContext& ctx) { 
+    return MakeSinglethonType<TGenericExprType>(ctx); 
+} 
+ 
+const TItemExprType* TMakeTypeImpl<TItemExprType>::Make(TExprContext& ctx, const TStringBuf& name, const TTypeAnnotationNode* itemType) { 
+    const auto hash = TItemExprType::MakeHash(name, itemType); 
+    TItemExprType sample(hash, name, itemType); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    auto nameStr = ctx.AppendString(name); 
+    return AddType<TItemExprType>(ctx, hash, nameStr, itemType); 
+} 
+ 
+const TListExprType* TMakeTypeImpl<TListExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) { 
+    const auto hash = TListExprType::MakeHash(itemType); 
+    TListExprType sample(hash, itemType); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+    return AddType<TListExprType>(ctx, hash, itemType); 
+} 
+ 
+const TOptionalExprType* TMakeTypeImpl<TOptionalExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) { 
+    const auto hash = TOptionalExprType::MakeHash(itemType); 
+    TOptionalExprType sample(hash, itemType); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TOptionalExprType>(ctx, hash, itemType); 
+} 
+ 
+const TVariantExprType* TMakeTypeImpl<TVariantExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* underlyingType) { 
+    const auto hash = TVariantExprType::MakeHash(underlyingType); 
+    TVariantExprType sample(hash, underlyingType); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TVariantExprType>(ctx, hash, underlyingType); 
+} 
+ 
 const TErrorExprType* TMakeTypeImpl<TErrorExprType>::Make(TExprContext& ctx, const TIssue& error) {
-    const auto hash = TErrorExprType::MakeHash(error);
-    TErrorExprType sample(hash, error);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TErrorExprType>(ctx, hash, error);
-}
-
-const TDictExprType* TMakeTypeImpl<TDictExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* keyType,
-    const TTypeAnnotationNode* payloadType) {
-    const auto hash = TDictExprType::MakeHash(keyType, payloadType);
-    TDictExprType sample(hash, keyType, payloadType);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TDictExprType>(ctx, hash, keyType, payloadType);
-}
-
-const TTypeExprType* TMakeTypeImpl<TTypeExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* baseType) {
-    const auto hash = TTypeExprType::MakeHash(baseType);
-    TTypeExprType sample(hash, baseType);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TTypeExprType>(ctx, hash, baseType);
-}
-
+    const auto hash = TErrorExprType::MakeHash(error); 
+    TErrorExprType sample(hash, error); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TErrorExprType>(ctx, hash, error); 
+} 
+ 
+const TDictExprType* TMakeTypeImpl<TDictExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* keyType, 
+    const TTypeAnnotationNode* payloadType) { 
+    const auto hash = TDictExprType::MakeHash(keyType, payloadType); 
+    TDictExprType sample(hash, keyType, payloadType); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TDictExprType>(ctx, hash, keyType, payloadType); 
+} 
+ 
+const TTypeExprType* TMakeTypeImpl<TTypeExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* baseType) { 
+    const auto hash = TTypeExprType::MakeHash(baseType); 
+    TTypeExprType sample(hash, baseType); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TTypeExprType>(ctx, hash, baseType); 
+} 
+ 
 const TDataExprType* TMakeTypeImpl<TDataExprType>::Make(TExprContext& ctx, EDataSlot slot) {
     const auto hash = TDataExprType::MakeHash(slot);
     TDataExprType sample(hash, slot);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
     return AddType<TDataExprType>(ctx, hash, slot);
-}
-
+} 
+ 
 const TDataExprParamsType* TMakeTypeImpl<TDataExprParamsType>::Make(TExprContext& ctx, EDataSlot slot, const TStringBuf& one, const TStringBuf& two) {
     const auto hash = TDataExprParamsType::MakeHash(slot, one, two);
     TDataExprParamsType sample(hash, slot, one, two);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
     return AddType<TDataExprParamsType>(ctx, hash, slot, ctx.AppendString(one), ctx.AppendString(two));
-}
-
-const TCallableExprType* TMakeTypeImpl<TCallableExprType>::Make(
+} 
+ 
+const TCallableExprType* TMakeTypeImpl<TCallableExprType>::Make( 
     TExprContext& ctx, const TTypeAnnotationNode* returnType, const TVector<TCallableExprType::TArgumentInfo>& arguments,
-    size_t optionalArgumentsCount, const TStringBuf& payload) {
-    const auto hash = TCallableExprType::MakeHash(returnType, arguments, optionalArgumentsCount, payload);
-    TCallableExprType sample(hash, returnType, arguments, optionalArgumentsCount, payload);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
+    size_t optionalArgumentsCount, const TStringBuf& payload) { 
+    const auto hash = TCallableExprType::MakeHash(returnType, arguments, optionalArgumentsCount, payload); 
+    TCallableExprType sample(hash, returnType, arguments, optionalArgumentsCount, payload); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
     TVector<TCallableExprType::TArgumentInfo> newArgs;
-    newArgs.reserve(arguments.size());
-    for (const auto& x : arguments) {
-        TCallableExprType::TArgumentInfo arg;
-        arg.Type = x.Type;
-        arg.Name = ctx.AppendString(x.Name);
-        arg.Flags = x.Flags;
-        newArgs.emplace_back(arg);
-    }
-
-    return AddType<TCallableExprType>(ctx, hash, returnType, newArgs, optionalArgumentsCount, ctx.AppendString(payload));
-}
-
-const TResourceExprType* TMakeTypeImpl<TResourceExprType>::Make(TExprContext& ctx, const TStringBuf& tag) {
-    const auto hash = TResourceExprType::MakeHash(tag);
-    TResourceExprType sample(hash, tag);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TResourceExprType>(ctx, hash, ctx.AppendString(tag));
-}
-
-const TTaggedExprType* TMakeTypeImpl<TTaggedExprType>::Make(
-    TExprContext& ctx, const TTypeAnnotationNode* baseType, const TStringBuf& tag) {
-    const auto hash = TTaggedExprType::MakeHash(baseType, tag);
-    TTaggedExprType sample(hash, baseType, tag);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TTaggedExprType>(ctx, hash, baseType, ctx.AppendString(tag));
-}
-
-const TStructExprType* TMakeTypeImpl<TStructExprType>::Make(
+    newArgs.reserve(arguments.size()); 
+    for (const auto& x : arguments) { 
+        TCallableExprType::TArgumentInfo arg; 
+        arg.Type = x.Type; 
+        arg.Name = ctx.AppendString(x.Name); 
+        arg.Flags = x.Flags; 
+        newArgs.emplace_back(arg); 
+    } 
+ 
+    return AddType<TCallableExprType>(ctx, hash, returnType, newArgs, optionalArgumentsCount, ctx.AppendString(payload)); 
+} 
+ 
+const TResourceExprType* TMakeTypeImpl<TResourceExprType>::Make(TExprContext& ctx, const TStringBuf& tag) { 
+    const auto hash = TResourceExprType::MakeHash(tag); 
+    TResourceExprType sample(hash, tag); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TResourceExprType>(ctx, hash, ctx.AppendString(tag)); 
+} 
+ 
+const TTaggedExprType* TMakeTypeImpl<TTaggedExprType>::Make( 
+    TExprContext& ctx, const TTypeAnnotationNode* baseType, const TStringBuf& tag) { 
+    const auto hash = TTaggedExprType::MakeHash(baseType, tag); 
+    TTaggedExprType sample(hash, baseType, tag); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TTaggedExprType>(ctx, hash, baseType, ctx.AppendString(tag)); 
+} 
+ 
+const TStructExprType* TMakeTypeImpl<TStructExprType>::Make( 
     TExprContext& ctx, const TVector<const TItemExprType*>& items) {
-    if (items.empty())
-        return MakeSinglethonType<TStructExprType>(ctx, items);
-
-    auto sortedItems = items;
-    Sort(sortedItems, TStructExprType::TItemLess());
-    const auto hash = TStructExprType::MakeHash(sortedItems);
-    TStructExprType sample(hash, sortedItems);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TStructExprType>(ctx, hash, sortedItems);
-}
-
-const TMultiExprType* TMakeTypeImpl<TMultiExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode::TListType& items) {
-    if (items.empty())
-        return MakeSinglethonType<TMultiExprType>(ctx, items);
-
-    const auto hash = TMultiExprType::MakeHash(items);
-    TMultiExprType sample(hash, items);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TMultiExprType>(ctx, hash, items);
-}
-
+    if (items.empty()) 
+        return MakeSinglethonType<TStructExprType>(ctx, items); 
+ 
+    auto sortedItems = items; 
+    Sort(sortedItems, TStructExprType::TItemLess()); 
+    const auto hash = TStructExprType::MakeHash(sortedItems); 
+    TStructExprType sample(hash, sortedItems); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TStructExprType>(ctx, hash, sortedItems); 
+} 
+ 
+const TMultiExprType* TMakeTypeImpl<TMultiExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode::TListType& items) { 
+    if (items.empty()) 
+        return MakeSinglethonType<TMultiExprType>(ctx, items); 
+ 
+    const auto hash = TMultiExprType::MakeHash(items); 
+    TMultiExprType sample(hash, items); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TMultiExprType>(ctx, hash, items); 
+} 
+ 
 const TTupleExprType* TMakeTypeImpl<TTupleExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode::TListType& items) {
-    if (items.empty())
-        return MakeSinglethonType<TTupleExprType>(ctx, items);
-
-    const auto hash = TTupleExprType::MakeHash(items);
-    TTupleExprType sample(hash, items);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TTupleExprType>(ctx, hash, items);
-}
-
-const TStreamExprType* TMakeTypeImpl<TStreamExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) {
-    const auto hash = TStreamExprType::MakeHash(itemType);
-    TStreamExprType sample(hash, itemType);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TStreamExprType>(ctx, hash, itemType);
-}
-
-const TFlowExprType* TMakeTypeImpl<TFlowExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) {
-    const auto hash = TFlowExprType::MakeHash(itemType);
-    TFlowExprType sample(hash, itemType);
-    if (const auto found = FindType(sample, ctx))
-        return found;
-
-    return AddType<TFlowExprType>(ctx, hash, itemType);
-}
-
-bool CompareExprTrees(const TExprNode*& one, const TExprNode*& two) {
+    if (items.empty()) 
+        return MakeSinglethonType<TTupleExprType>(ctx, items); 
+ 
+    const auto hash = TTupleExprType::MakeHash(items); 
+    TTupleExprType sample(hash, items); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TTupleExprType>(ctx, hash, items); 
+} 
+ 
+const TStreamExprType* TMakeTypeImpl<TStreamExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) { 
+    const auto hash = TStreamExprType::MakeHash(itemType); 
+    TStreamExprType sample(hash, itemType); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TStreamExprType>(ctx, hash, itemType); 
+} 
+ 
+const TFlowExprType* TMakeTypeImpl<TFlowExprType>::Make(TExprContext& ctx, const TTypeAnnotationNode* itemType) { 
+    const auto hash = TFlowExprType::MakeHash(itemType); 
+    TFlowExprType sample(hash, itemType); 
+    if (const auto found = FindType(sample, ctx)) 
+        return found; 
+ 
+    return AddType<TFlowExprType>(ctx, hash, itemType); 
+} 
+ 
+bool CompareExprTrees(const TExprNode*& one, const TExprNode*& two) { 
     TArgumentsMap map;
     ui32 level = 0;
     TNodesPairSet visited;
     return CompareExpressions(one, two, map, level, visited);
-}
-
-bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNodeMap<ui32>& argsMap) {
-    TArgumentsMap map;
+} 
+ 
+bool CompareExprTreeParts(const TExprNode& one, const TExprNode& two, const TNodeMap<ui32>& argsMap) { 
+    TArgumentsMap map; 
     ui32 level = 0;
     TNodesPairSet visited;
-    map.reserve(argsMap.size());
-    std::for_each(argsMap.cbegin(), argsMap.cend(), [&](const TNodeMap<ui32>::value_type& v){ map.emplace(v.first, std::make_pair(0U, v.second)); });
-    auto l = &one, r = &two;
+    map.reserve(argsMap.size()); 
+    std::for_each(argsMap.cbegin(), argsMap.cend(), [&](const TNodeMap<ui32>::value_type& v){ map.emplace(v.first, std::make_pair(0U, v.second)); }); 
+    auto l = &one, r = &two; 
     return CompareExpressions(l, r, map, level, visited);
-}
-
-void GatherParents(const TExprNode& node, TParentsMap& parentsMap, bool withLeaves) {
-    parentsMap.clear();
-    TNodeSet visisted;
+} 
+ 
+void GatherParents(const TExprNode& node, TParentsMap& parentsMap, bool withLeaves) { 
+    parentsMap.clear(); 
+    TNodeSet visisted; 
     GatherParentsImpl<TParentsMap>(node, parentsMap, visisted, withLeaves);
-}
-
+} 
+ 
 void GatherParentsMulti(const TExprNode& node, TParentsMultiMap& parentsMap, bool withLeaves) {
     parentsMap.clear();
     TNodeSet visisted;
     GatherParentsImpl<TParentsMultiMap>(node, parentsMap, visisted, withLeaves);
 }
 
-void CheckCounts(const TExprNode& root) {
-    TRefCountsMap refCounts;
-    CalculateReferences(root, refCounts);
-    TNodeSet visited;
-    CheckReferences(root, refCounts, visited);
-}
-
+void CheckCounts(const TExprNode& root) { 
+    TRefCountsMap refCounts; 
+    CalculateReferences(root, refCounts); 
+    TNodeSet visited; 
+    CheckReferences(root, refCounts, visited); 
+} 
+ 
 } // namespace NYql
 
 template<>

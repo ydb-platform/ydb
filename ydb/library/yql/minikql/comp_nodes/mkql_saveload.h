@@ -11,10 +11,10 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-Y_FORCE_INLINE void WriteByte(TString& out, ui8 value) {
-    out.append((char)value);
-}
-
+Y_FORCE_INLINE void WriteByte(TString& out, ui8 value) { 
+    out.append((char)value); 
+} 
+ 
 Y_FORCE_INLINE void WriteBool(TString& out, bool value) {
     out.append((char)value);
 }
@@ -36,13 +36,13 @@ Y_FORCE_INLINE bool ReadBool(TStringBuf& in) {
     return result;
 }
 
-Y_FORCE_INLINE ui8 ReadByte(TStringBuf& in) {
+Y_FORCE_INLINE ui8 ReadByte(TStringBuf& in) { 
     MKQL_ENSURE(in.size(), "Serialized state is corrupted");
     ui8 result = *in.data();
-    in.Skip(1);
-    return result;
-}
-
+    in.Skip(1); 
+    return result; 
+} 
+ 
 Y_FORCE_INLINE ui32 ReadUi32(TStringBuf& in) {
     ui32 result;
     auto count = Unpack32(in.data(), in.size(), result);

@@ -43,7 +43,7 @@ struct TResultProviderConfig : TThrRefBase {
     bool SupportsResultPosition = false;
 };
 
-TIntrusivePtr<IDataProvider> CreateResultProvider(const TIntrusivePtr<TResultProviderConfig>& config);
+TIntrusivePtr<IDataProvider> CreateResultProvider(const TIntrusivePtr<TResultProviderConfig>& config); 
 const THashSet<TStringBuf>& ResultProviderFunctions();
 
 }

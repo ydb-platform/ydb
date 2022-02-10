@@ -18,11 +18,11 @@ OWNER(
 
 SRCS(
     mkql_computation_node_pack_ut.cpp
-    mkql_computation_node_list_ut.cpp
+    mkql_computation_node_list_ut.cpp 
     mkql_computation_node_dict_ut.cpp
     mkql_computation_node_graph_saveload_ut.cpp
     mkql_validate_ut.cpp
-    mkql_value_builder_ut.cpp
+    mkql_value_builder_ut.cpp 
     presort_ut.cpp
 )
 

@@ -6,7 +6,7 @@ namespace NKikimr {
 
 TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui32 pDiskId,
         TPDiskConfig *cfg)
-    : Counters(counters)
+    : Counters(counters) 
     , PDiskId(pDiskId)
     , ChunksGroup(Counters->GetSubgroup("subsystem", "chunks"))
     , StateGroup(Counters->GetSubgroup("subsystem", "state"))

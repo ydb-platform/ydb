@@ -162,7 +162,7 @@ namespace NActors {
             }
             const ui32 NodeId;
         };
-
+ 
         struct TEvNodeDisconnected: public TEventLocal<TEvNodeDisconnected, EvNodeDisconnected> {
             DEFINE_SIMPLE_LOCAL_EVENT(TEvNodeDisconnected, "TEvInterconnect::TEvNodeDisconnected")
             TEvNodeDisconnected(ui32 node) noexcept
@@ -171,10 +171,10 @@ namespace NActors {
             }
             const ui32 NodeId;
         };
-
+ 
         struct TEvRegisterNode;
         struct TEvRegisterNodeResult;
-
+ 
         struct TEvListNodes: public TEventLocal<TEvListNodes, EvListNodes> {
         };
 

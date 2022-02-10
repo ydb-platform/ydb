@@ -5,15 +5,15 @@
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/string/split.h>
-#include <util/system/tls.h>
+#include <util/system/tls.h> 
 
 using namespace NMonitoring;
 
 namespace {
     Y_POD_STATIC_THREAD(TDynamicCounters*)
     currentCounters(nullptr);
-}
-
+} 
+ 
 TMaybe<EFormat> ParseFormat(TStringBuf str) {
     if (str == TStringBuf("json")) {
         return EFormat::JSON;
@@ -40,38 +40,38 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
         .Split('/')
         .SkipEmpty()
         .Collect(&parts);
-
+ 
     TMaybe<EFormat> format = !parts.empty() ? ParseFormat(parts.back()) : Nothing();
     if (format) {
-        parts.pop_back();
+        parts.pop_back(); 
     }
-
+ 
     if (!parts.empty() && parts.back() == TStringBuf("private")) {
         visibility = TCountableBase::EVisibility::Private;
         parts.pop_back();
     }
 
-    auto counters = Counters;
-
+    auto counters = Counters; 
+ 
     for (const auto& escaped : parts) {
         const auto part = CGIUnescapeRet(escaped);
 
         TVector<TString> labels;
         StringSplitter(part).Split('=').SkipEmpty().Collect(&labels);
-
-        if (labels.size() != 2U)
-            return NotFound(request);
-
+ 
+        if (labels.size() != 2U) 
+            return NotFound(request); 
+ 
         if (const auto child = counters->FindSubgroup(
                 labels.front(),
                 labels.back())) {
 
-            counters = child;
+            counters = child; 
         } else {
             return HandleAbsentSubgroup(request);
         }
-    }
-
+    } 
+ 
     if (!format) {
         currentCounters = counters.Get();
         THtmlMonPage::Output(request);
@@ -94,7 +94,7 @@ void TDynamicCountersPage::Output(NMonitoring::IMonHttpRequest& request) {
     counters->Accept(TString(), TString(), *encoder);
     out.Flush();
 }
-
+ 
 void TDynamicCountersPage::HandleAbsentSubgroup(IMonHttpRequest& request) {
     if (UnknownGroupPolicy == EUnknownGroupPolicy::Error) {
         NotFound(request);
@@ -112,7 +112,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
             out << "<a href='" << request.GetPath() << "/json'>Counters as JSON</a>";
             out << " for <a href='https://wiki.yandex-team.ru/solomon/'>Solomon</a>";
         }
-
+ 
         H5() {
             out << "Counters subgroups";
         }
@@ -125,15 +125,15 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
                 }
             });
         }
-
+ 
         H4() {
             out << "Counters as text";
         }
     }
-}
+} 
 
 void TDynamicCountersPage::OutputText(IOutputStream& out, IMonHttpRequest&) {
-    currentCounters->OutputPlainText(out);
+    currentCounters->OutputPlainText(out); 
 }
 
 void TDynamicCountersPage::SetUnknownGroupPolicy(EUnknownGroupPolicy value) {

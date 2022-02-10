@@ -27,7 +27,7 @@ struct TTxCoordinator::TTxRestoreTransactions : public TTransactionBase<TTxCoord
                 TTransaction& transaction = transactions[txId];
                 transaction.PlanOnStep = rowset.GetValue<Schema::Transaction::Plan>();
                 TVector<TTabletId> affectedSet = rowset.GetValue<Schema::Transaction::AffectedSet>();
-                transaction.AffectedSet.reserve(affectedSet.size());
+                transaction.AffectedSet.reserve(affectedSet.size()); 
                 for (TTabletId id : affectedSet)
                     transaction.AffectedSet.insert(id);
                 if (!rowset.Next())

@@ -13,7 +13,7 @@ namespace NYql {
 struct TTypeAnnotationContext;
 
 bool IsJustOrSingleAsList(const TExprNode& node);
-bool IsTransparentIfPresent(const TExprNode& node);
+bool IsTransparentIfPresent(const TExprNode& node); 
 bool IsPredicateFlatMap(const TExprNode& node);
 bool IsFilterFlatMap(const NNodes::TCoLambda& lambda);
 bool IsListReorder(const TExprNode& node);
@@ -25,9 +25,9 @@ bool IsTablePropsDependent(const TExprNode& node);
 TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx);
 
 // returns true if usedFields contains subset of fields
-template<class TFieldsSet>
-bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap, bool allowDependsOn = true);
-
+template<class TFieldsSet> 
+bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap, bool allowDependsOn = true); 
+ 
 template<class TFieldsSet>
 TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TFieldsSet& subsetFields,
     TExprContext& ctx, bool singleValue);
@@ -51,10 +51,10 @@ TExprNode::TPtr ReplaceSetting(const TExprNode& settings, TPositionHandle pos, c
 
 TMaybe<TIssue> ParseToDictSettings(const TExprNode& node, TExprContext& ctx, TMaybe<bool>& isMany, TMaybe<bool>& isHashed, TMaybe<ui64>& itemsCount, bool& isCompact);
 
-using MemberUpdaterFunc = std::function<bool (TString& memberName, const TTypeAnnotationNode* TypeAnnotation)>;
-bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const TStringBuf& goal, TExprNode::TListType& members,
-    MemberUpdaterFunc updaterFunc = MemberUpdaterFunc(), const TTypeAnnotationNode* nodeType = nullptr);
-
+using MemberUpdaterFunc = std::function<bool (TString& memberName, const TTypeAnnotationNode* TypeAnnotation)>; 
+bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const TStringBuf& goal, TExprNode::TListType& members, 
+    MemberUpdaterFunc updaterFunc = MemberUpdaterFunc(), const TTypeAnnotationNode* nodeType = nullptr); 
+ 
 TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TPtr reduced, TExprContext& ctx);
 TExprNode::TPtr ExpandRemoveMember(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandRemovePrefixMembers(const TExprNode::TPtr& node, TExprContext& ctx);
@@ -74,27 +74,27 @@ void ExtractSimpleSortTraits(const TExprNode& sortDirections, const TExprNode& k
 
 TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& input, const TExprNode::TPtr& value, TExprContext& ctx);
-TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx);
-TExprNode::TPtr MakeBool(TPositionHandle position, bool value, TExprContext& ctx);
+TExprNode::TPtr MakeBoolNothing(TPositionHandle position, TExprContext& ctx); 
+TExprNode::TPtr MakeBool(TPositionHandle position, bool value, TExprContext& ctx); 
 TExprNode::TPtr MakeOptionalBool(TPositionHandle position, bool value, TExprContext& ctx);
-template <bool Bool>
-TExprNode::TPtr MakeBool(TPositionHandle position, TExprContext& ctx);
+template <bool Bool> 
+TExprNode::TPtr MakeBool(TPositionHandle position, TExprContext& ctx); 
 TExprNode::TPtr MakeIdentityLambda(TPositionHandle position, TExprContext& ctx);
-
+ 
 constexpr std::initializer_list<std::string_view> SkippableCallables = {"Unordered", "AssumeSorted", "AssumeUnique", "AssumeColumnOrder", "AssumeAllMembersNullableAtOnce"};
 
-const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables);
-
+const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables); 
+ 
 void ExtractSortKeyAndOrder(TPositionHandle pos, const TExprNode::TPtr& sortTraitsNode, TExprNode::TPtr& sortKey, TExprNode::TPtr& sortOrder, TExprContext& ctx);
 void ExtractSessionWindowParams(TPositionHandle pos, const TExprNode::TPtr& sessionTraits, TExprNode::TPtr& sessionKey,
     const TTypeAnnotationNode*& sessionKeyType, const TTypeAnnotationNode*& sessionParamsType, TExprNode::TPtr& sessionSortTraits, TExprNode::TPtr& sessionInit,
     TExprNode::TPtr& sessionUpdate, TExprContext& ctx);
 
 TExprNode::TPtr BuildKeySelector(TPositionHandle pos, const TStructExprType& rowType, const TExprNode::TPtr& keyColumns, TExprContext& ctx);
-
-template <bool Cannonize, bool EnableNewOptimizers = true>
-TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx);
-TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx);
+ 
+template <bool Cannonize, bool EnableNewOptimizers = true> 
+TExprNode::TPtr OptimizeIfPresent(const TExprNode::TPtr& node, TExprContext& ctx); 
+TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx); 
 
 bool WarnUnroderedSubquery(const TExprNode& unourderedSubquery, TExprContext& ctx);
 TExprNode::TPtr DuplicateIndependentStreams(TExprNode::TPtr lambda, const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx);

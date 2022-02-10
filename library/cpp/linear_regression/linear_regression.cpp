@@ -9,7 +9,7 @@
 #endif
 
 #include <algorithm>
-#include <functional>
+#include <functional> 
 
 namespace {
     inline void AddFeaturesProduct(const double weight, const TVector<double>& features, TVector<double>& linearizedOLSTriangleMatrix);
@@ -122,7 +122,7 @@ TLinearModel TFastLinearRegressionSolver::Solve() const {
         coefficients.pop_back();
     }
 
-    return TLinearModel(std::move(coefficients), intercept);
+    return TLinearModel(std::move(coefficients), intercept); 
 }
 
 TLinearModel TLinearRegressionSolver::Solve() const {
@@ -134,7 +134,7 @@ TLinearModel TLinearRegressionSolver::Solve() const {
         intercept -= FeatureMeans[featureNumber] * coefficients[featureNumber];
     }
 
-    return TLinearModel(std::move(coefficients), intercept);
+    return TLinearModel(std::move(coefficients), intercept); 
 }
 
 double TFastLinearRegressionSolver::SumSquaredErrors() const {

@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace NYql::NUdf;
+using namespace NYql::NUdf; 
 
 Y_UNIT_TEST_SUITE(TUdfTz) {
     Y_UNIT_TEST(Count) {

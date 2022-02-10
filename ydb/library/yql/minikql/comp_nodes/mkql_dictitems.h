@@ -5,8 +5,8 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 IComputationNode* WrapDictItems(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-IComputationNode* WrapDictKeys(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-IComputationNode* WrapDictPayloads(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+IComputationNode* WrapDictKeys(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
+IComputationNode* WrapDictPayloads(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
 
 }
 }

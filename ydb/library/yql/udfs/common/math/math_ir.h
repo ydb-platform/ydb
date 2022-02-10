@@ -8,7 +8,7 @@
 
 #include <math.h>
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
 #define CONST_FUNCS(XX)                 \
@@ -126,4 +126,4 @@ void RemIR(const IBoxedValue* /*pThis*/, TUnboxedValuePod* result, const IValueB
 }
 
 } // NUdf
-} // NYql
+} // NYql 

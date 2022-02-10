@@ -240,7 +240,7 @@ auto DataTypeTuple::getSubcolumnEntity(const String & subcolumn_name,
     using ReturnType = decltype(on_success(0));
     for (size_t i = 0; i < names.size(); ++i)
     {
-        if (subcolumn_name.starts_with(names[i]))
+        if (subcolumn_name.starts_with(names[i])) 
         {
             size_t name_length = names[i].size();
 

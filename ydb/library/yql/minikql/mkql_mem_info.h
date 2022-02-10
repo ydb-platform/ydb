@@ -2,7 +2,7 @@
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>
-#include <unordered_map>
+#include <unordered_map> 
 
 #ifndef NDEBUG
 #   define MKQL_MEM_TAKE3(MemInfo, Mem, Size) \
@@ -64,7 +64,7 @@ public:
     }
 
 #ifndef NDEBUG
-    inline void Take(const void* mem, ui64 size, TString location) {
+    inline void Take(const void* mem, ui64 size, TString location) { 
         Allocated_ += size;
         Peak_ = Max(Peak_, Allocated_ - Freed_);
         if (size == 0) {
@@ -84,7 +84,7 @@ public:
 #endif
 
 #ifndef NDEBUG
-    inline void Return(const void* mem, ui64 size) {
+    inline void Return(const void* mem, ui64 size) { 
         Freed_ += size;
         if (size == 0) {
             return;
@@ -113,7 +113,7 @@ public:
 #endif
 
 #ifndef NDEBUG
-    inline void Return(const void* mem) {
+    inline void Return(const void* mem) { 
         //Clog << Title_ << " free: " << size << " -> " << mem << " " << AllocationsMap_.size() << Endl;
         auto it = AllocationsMap_.find(mem);
         if (AllowMissing_ && it == AllocationsMap_.end()) {
@@ -153,24 +153,24 @@ public:
 
     inline void VerifyDebug() const {
 #ifndef NDEBUG
-        size_t leakCount = 0;
-        for (const auto& it: AllocationsMap_) {
-            if (it.second.IsDeleted) {
-                continue;
+        size_t leakCount = 0; 
+        for (const auto& it: AllocationsMap_) { 
+            if (it.second.IsDeleted) { 
+                continue; 
             }
-            ++leakCount;
+            ++leakCount; 
             Cerr << TStringBuf("Not freed ")
                 << it.first << TStringBuf(" size: ") << it.second.Size
                 << TStringBuf(", location: ") << it.second.Location
-                << Endl;
-        }
+                << Endl; 
+        } 
 
-        if (!AllowMissing_) {
-            Y_VERIFY_DEBUG(GetUsage() == 0,
-                    "Allocated: %ld, Freed: %ld, Peak: %ld",
-                    GetAllocated(), GetFreed(), GetPeak());
+        if (!AllowMissing_) { 
+            Y_VERIFY_DEBUG(GetUsage() == 0, 
+                    "Allocated: %ld, Freed: %ld, Peak: %ld", 
+                    GetAllocated(), GetFreed(), GetPeak()); 
         }
-        Y_VERIFY_DEBUG(!leakCount, "Has no freed memory");
+        Y_VERIFY_DEBUG(!leakCount, "Has no freed memory"); 
 #endif
     }
 
@@ -183,37 +183,37 @@ private:
     bool CheckOnExit_;
 
 #ifndef NDEBUG
-    std::unordered_map<const void*, TAllocationInfo> AllocationsMap_;
+    std::unordered_map<const void*, TAllocationInfo> AllocationsMap_; 
 #endif
 };
 
 #ifndef NDEBUG
-inline void Take(TMemoryUsageInfo& memInfo, const void* mem, ui64 size, TString location)
+inline void Take(TMemoryUsageInfo& memInfo, const void* mem, ui64 size, TString location) 
 {
     memInfo.Take(mem, size, std::move(location));
 }
 
-inline void Take(TMemoryUsageInfo* memInfo, const void* mem, ui64 size, TString location)
+inline void Take(TMemoryUsageInfo* memInfo, const void* mem, ui64 size, TString location) 
 {
     memInfo->Take(mem, size, std::move(location));
 }
 
-inline void Return(TMemoryUsageInfo& memInfo, const void* mem, ui64 size)
+inline void Return(TMemoryUsageInfo& memInfo, const void* mem, ui64 size) 
 {
     memInfo.Return(mem, size);
 }
 
-inline void Return(TMemoryUsageInfo* memInfo, const void* mem, ui64 size)
+inline void Return(TMemoryUsageInfo* memInfo, const void* mem, ui64 size) 
 {
     memInfo->Return(mem, size);
 }
 
-inline void Return(TMemoryUsageInfo& memInfo, const void* mem)
+inline void Return(TMemoryUsageInfo& memInfo, const void* mem) 
 {
     memInfo.Return(mem);
 }
 
-inline void Return(TMemoryUsageInfo* memInfo, const void* mem)
+inline void Return(TMemoryUsageInfo* memInfo, const void* mem) 
 {
     memInfo->Return(mem);
 }

@@ -2,7 +2,7 @@
 
 #include <util/stream/output.h>
 
-#include <utility>
+#include <utility> 
 #include <util/generic/strbuf.h>
 
 template <class T>
@@ -23,7 +23,7 @@ namespace NDumpPrivate {
     inline T&& operator<<(T&& t, V&& v) {
         Dump(t, v);
 
-        return std::forward<T>(t);
+        return std::forward<T>(t); 
     }
 
     struct TADLBase {

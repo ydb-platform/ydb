@@ -54,7 +54,7 @@ ColumnArray::ColumnArray(MutableColumnPtr && nested_column, MutableColumnPtr && 
     if (!offsets_concrete)
         throw Exception("offsets_column must be a ColumnUInt64", ErrorCodes::LOGICAL_ERROR);
 
-    if (!offsets_concrete->empty() && data)
+    if (!offsets_concrete->empty() && data) 
     {
         Offset last_offset = offsets_concrete->getData().back();
 

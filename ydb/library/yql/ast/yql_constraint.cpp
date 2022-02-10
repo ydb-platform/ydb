@@ -4,14 +4,14 @@
 #include <util/digest/murmur.h>
 #include <util/generic/utility.h>
 #include <util/generic/algorithm.h>
-#include <util/string/join.h>
+#include <util/string/join.h> 
 
 #include <algorithm>
 #include <iterator>
 
 namespace NYql {
 
-TConstraintNode::TConstraintNode(TExprContext& ctx, std::string_view name)
+TConstraintNode::TConstraintNode(TExprContext& ctx, std::string_view name) 
     : Hash_(MurmurHash<ui64>(name.data(), name.size()))
     , Name_(ctx.AppendString(name))
 {
@@ -31,8 +31,8 @@ void TConstraintNode::Out(IOutputStream& out) const {
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const TConstraintNode* TConstraintSet::GetConstraint(std::string_view name) const {
-    const auto it = std::lower_bound(Constraints_.cbegin(), Constraints_.cend(), name, TConstraintNode::TCompare());
+const TConstraintNode* TConstraintSet::GetConstraint(std::string_view name) const { 
+    const auto it = std::lower_bound(Constraints_.cbegin(), Constraints_.cend(), name, TConstraintNode::TCompare()); 
     if (it != Constraints_.cend() && (*it)->GetName() == name) {
         return *it;
     }
@@ -43,7 +43,7 @@ void TConstraintSet::AddConstraint(const TConstraintNode* node) {
     if (!node) {
         return;
     }
-    const auto it = std::lower_bound(Constraints_.begin(), Constraints_.end(), node, TConstraintNode::TCompare());
+    const auto it = std::lower_bound(Constraints_.begin(), Constraints_.end(), node, TConstraintNode::TCompare()); 
     if (it == Constraints_.end() || (*it)->GetName() != node->GetName()) {
         Constraints_.insert(it, node);
     } else {
@@ -51,9 +51,9 @@ void TConstraintSet::AddConstraint(const TConstraintNode* node) {
     }
 }
 
-const TConstraintNode* TConstraintSet::RemoveConstraint(std::string_view name) {
+const TConstraintNode* TConstraintSet::RemoveConstraint(std::string_view name) { 
     const TConstraintNode* res = nullptr;
-    const auto it = std::lower_bound(Constraints_.begin(), Constraints_.end(), name, TConstraintNode::TCompare());
+    const auto it = std::lower_bound(Constraints_.begin(), Constraints_.end(), name, TConstraintNode::TCompare()); 
     if (it != Constraints_.end() && (*it)->GetName() == name) {
         res = *it;
         Constraints_.erase(it);
@@ -61,13 +61,13 @@ const TConstraintNode* TConstraintSet::RemoveConstraint(std::string_view name) {
     return res;
 }
 
-void TConstraintSet::ToJson(NJson::TJsonWriter& writer) const {
-    writer.OpenMap();
-    for (const auto& node : Constraints_) {
-        writer.WriteKey(node->GetName());
-        node->ToJson(writer);
+void TConstraintSet::ToJson(NJson::TJsonWriter& writer) const { 
+    writer.OpenMap(); 
+    for (const auto& node : Constraints_) { 
+        writer.WriteKey(node->GetName()); 
+        node->ToJson(writer); 
     }
-    writer.CloseMap();
+    writer.CloseMap(); 
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -161,44 +161,44 @@ void TColumnSetConstraintNodeBase::Out(IOutputStream& out) const {
     out.Write(')');
 }
 
-void TColumnSetConstraintNodeBase::ToJson(NJson::TJsonWriter& out) const {
-    out.OpenArray();
-    for (const auto& column : Columns_) {
-        out.Write(column);
+void TColumnSetConstraintNodeBase::ToJson(NJson::TJsonWriter& out) const { 
+    out.OpenArray(); 
+    for (const auto& column : Columns_) { 
+        out.Write(column); 
     }
-    out.CloseArray();
+    out.CloseArray(); 
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&& content)
-    : TConstraintNode(ctx, Name()), Content_(std::move(content))
+TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, TContainerType&& content) 
+    : TConstraintNode(ctx, Name()), Content_(std::move(content)) 
 {
-    YQL_ENSURE(!Content_.empty());
-    for (const auto& c : Content_) {
-        Hash_ = std::accumulate(c.first.cbegin(), c.first.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-    }
+    YQL_ENSURE(!Content_.empty()); 
+    for (const auto& c : Content_) { 
+        Hash_ = std::accumulate(c.first.cbegin(), c.first.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); }); 
+    } 
 }
 
 TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, const TSortedConstraintNode& constr, size_t prefixLength)
-    : TConstraintNode(ctx, Name()), Content_(constr.Content_)
+    : TConstraintNode(ctx, Name()), Content_(constr.Content_) 
 {
-    YQL_ENSURE(prefixLength > 0U);
-    Content_.resize(prefixLength);
-    for (const auto& c : Content_) {
-        Hash_ = std::accumulate(c.first.cbegin(), c.first.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-    }
+    YQL_ENSURE(prefixLength > 0U); 
+    Content_.resize(prefixLength); 
+    for (const auto& c : Content_) { 
+        Hash_ = std::accumulate(c.first.cbegin(), c.first.cend(), c.second ? Hash_ : ~Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); }); 
+    } 
 }
 
-TSortedConstraintNode::TSortedConstraintNode(TSortedConstraintNode&&) = default;
+TSortedConstraintNode::TSortedConstraintNode(TSortedConstraintNode&&) = default; 
 
 bool TSortedConstraintNode::Equals(const TConstraintNode& node) const {
     if (this == &node) {
         return true;
     }
-
-    if (const auto c = dynamic_cast<const TSortedConstraintNode*>(&node)) {
-        return GetContent() == c->GetContent();
+ 
+    if (const auto c = dynamic_cast<const TSortedConstraintNode*>(&node)) { 
+        return GetContent() == c->GetContent(); 
     }
     return false;
 }
@@ -207,56 +207,56 @@ bool TSortedConstraintNode::Includes(const TConstraintNode& node) const {
     if (this == &node) {
         return true;
     }
-    if (GetName() != node.GetName()) {
-        return false;
+    if (GetName() != node.GetName()) { 
+        return false; 
     }
-
-    const auto& content = static_cast<const TSortedConstraintNode&>(node).GetContent();
-    if (content.size() > Content_.size())
-        return false;
-    for (TContainerType::size_type i = 0U; i < content.size(); ++i) {
-        if (Content_[i].second != content[i].second ||
-            !(std::includes(Content_[i].first.cbegin(), Content_[i].first.cend(), content[i].first.cbegin(), content[i].first.cend())  || std::includes(content[i].first.cbegin(), content[i].first.cend(), Content_[i].first.cbegin(), Content_[i].first.cend())))
-            return false;
-    }
-
-    return true;
+ 
+    const auto& content = static_cast<const TSortedConstraintNode&>(node).GetContent(); 
+    if (content.size() > Content_.size()) 
+        return false; 
+    for (TContainerType::size_type i = 0U; i < content.size(); ++i) { 
+        if (Content_[i].second != content[i].second || 
+            !(std::includes(Content_[i].first.cbegin(), Content_[i].first.cend(), content[i].first.cbegin(), content[i].first.cend())  || std::includes(content[i].first.cbegin(), content[i].first.cend(), Content_[i].first.cbegin(), Content_[i].first.cend()))) 
+            return false; 
+    } 
+ 
+    return true; 
 }
 
 void TSortedConstraintNode::Out(IOutputStream& out) const {
     TConstraintNode::Out(out);
     out.Write('(');
-    for (size_t i = 0; i < Content_.size(); ++i) {
+    for (size_t i = 0; i < Content_.size(); ++i) { 
         if (i > 0) {
-            out.Write(';');
+            out.Write(';'); 
         }
-        out.Write(JoinSeq(',', Content_[i].first));
+        out.Write(JoinSeq(',', Content_[i].first)); 
         out.Write('[');
-        out.Write(Content_[i].second ? "asc" : "desc");
+        out.Write(Content_[i].second ? "asc" : "desc"); 
         out.Write(']');
     }
     out.Write(')');
 }
 
-void TSortedConstraintNode::ToJson(NJson::TJsonWriter& out) const {
-    out.OpenArray();
-    for (size_t i = 0; i < Content_.size(); ++i) {
-        out.OpenArray();
-        out.Write(JoinSeq(';', Content_[i].first));
-        out.Write(Content_[i].second);
-        out.CloseArray();
+void TSortedConstraintNode::ToJson(NJson::TJsonWriter& out) const { 
+    out.OpenArray(); 
+    for (size_t i = 0; i < Content_.size(); ++i) { 
+        out.OpenArray(); 
+        out.Write(JoinSeq(';', Content_[i].first)); 
+        out.Write(Content_[i].second); 
+        out.CloseArray(); 
     }
-    out.CloseArray();
+    out.CloseArray(); 
 }
 
 bool TSortedConstraintNode::IsPrefixOf(const TSortedConstraintNode& node) const {
-    return node.Includes(*this);
+    return node.Includes(*this); 
 }
 
 size_t TSortedConstraintNode::GetCommonPrefixLength(const TSortedConstraintNode& node) const {
-    const size_t minSize = std::min(Content_.size(), node.Content_.size());
-    for (size_t i = 0U; i < minSize; ++i) {
-        if (Content_[i] != node.Content_[i]) {
+    const size_t minSize = std::min(Content_.size(), node.Content_.size()); 
+    for (size_t i = 0U; i < minSize; ++i) { 
+        if (Content_[i] != node.Content_[i]) { 
             return i;
         }
     }
@@ -268,15 +268,15 @@ const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const TVector<con
         return nullptr;
     }
 
-    const auto sort = constraints.front()->GetConstraint<TSortedConstraintNode>();
+    const auto sort = constraints.front()->GetConstraint<TSortedConstraintNode>(); 
     if (constraints.size() == 1 || !sort) {
         return sort;
     }
 
-    auto commonPrefixLength = sort->GetContent().size();
+    auto commonPrefixLength = sort->GetContent().size(); 
     for (size_t i = 1; i < constraints.size() && commonPrefixLength > 0; ++i) {
-        if (const auto nextSort = constraints[i]->GetConstraint<TSortedConstraintNode>()) {
-            commonPrefixLength = std::min(commonPrefixLength, nextSort->GetCommonPrefixLength(*sort));
+        if (const auto nextSort = constraints[i]->GetConstraint<TSortedConstraintNode>()) { 
+            commonPrefixLength = std::min(commonPrefixLength, nextSort->GetCommonPrefixLength(*sort)); 
         } else if (!constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
             commonPrefixLength = 0;
         }
@@ -288,44 +288,44 @@ const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const TVector<con
     return nullptr;
 }
 
-const TSortedConstraintNode* TSortedConstraintNode::FilterByType(const TSortedConstraintNode* sorted, const TStructExprType* outItemType, TExprContext& ctx) {
-    if (sorted) {
-        auto content = sorted->GetContent();
-        for (size_t i = 0; i < content.size(); ++i) {
-            for (auto it = content[i].first.cbegin(); content[i].first.cend() != it;) {
-                if (outItemType->FindItem(*it))
-                    ++it;
-                else
-                    it = content[i].first.erase(it);
-            }
-
-            if (content[i].first.empty()) {
-                content.resize(i);
-                break;
-            }
-        }
-
-        if (!content.empty()) {
-            return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
-        }
-    }
-    return nullptr;
-}
-
-const TSortedConstraintNode* TSortedConstraintNode::CutPrefix(size_t newPrefixLength, TExprContext& ctx) const {
-    if (!newPrefixLength)
-        return nullptr;
-
-    if (newPrefixLength >= Content_.size())
-        return this;
-
-    auto content = Content_;
-    content.resize(newPrefixLength);
-    return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content));
-}
-
-//////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+const TSortedConstraintNode* TSortedConstraintNode::FilterByType(const TSortedConstraintNode* sorted, const TStructExprType* outItemType, TExprContext& ctx) { 
+    if (sorted) { 
+        auto content = sorted->GetContent(); 
+        for (size_t i = 0; i < content.size(); ++i) { 
+            for (auto it = content[i].first.cbegin(); content[i].first.cend() != it;) { 
+                if (outItemType->FindItem(*it)) 
+                    ++it; 
+                else 
+                    it = content[i].first.erase(it); 
+            } 
+ 
+            if (content[i].first.empty()) { 
+                content.resize(i); 
+                break; 
+            } 
+        } 
+ 
+        if (!content.empty()) { 
+            return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content)); 
+        } 
+    } 
+    return nullptr; 
+} 
+ 
+const TSortedConstraintNode* TSortedConstraintNode::CutPrefix(size_t newPrefixLength, TExprContext& ctx) const { 
+    if (!newPrefixLength) 
+        return nullptr; 
+ 
+    if (newPrefixLength >= Content_.size()) 
+        return this; 
+ 
+    auto content = Content_; 
+    content.resize(newPrefixLength); 
+    return ctx.MakeConstraint<TSortedConstraintNode>(std::move(content)); 
+} 
+ 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////// 
+ 
 TGroupByConstraintNode::TGroupByConstraintNode(TExprContext& ctx, const TVector<TStringBuf>& columns)
     : TColumnSetConstraintNodeBase(ctx, Name(), columns)
 {
@@ -471,71 +471,71 @@ const TUniqueConstraintNode* TUniqueConstraintNode::MakeCommon(const TVector<con
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TPassthroughConstraintNode::TPassthroughConstraintNode(TExprContext& ctx, TMapType&& mapping)
-    : TConstraintNode(ctx, Name()), Mapping_(std::move(mapping))
+TPassthroughConstraintNode::TPassthroughConstraintNode(TExprContext& ctx, TMapType&& mapping) 
+    : TConstraintNode(ctx, Name()), Mapping_(std::move(mapping)) 
 {
-    YQL_ENSURE(!Mapping_.empty());
-    if (const auto original = Mapping_.cbegin()->first;
-        original && 1U == Mapping_.size() && 1U == original->Mapping_.size() && Mapping_.cbegin()->second == original->Mapping_.cbegin()->second) {
-        // Comeback original constraint.
-        Hash_ = original->Hash_;
-        Mapping_ = original->Mapping_;
-    } else {
-        for (const auto& part : Mapping_) {
-            YQL_ENSURE(!part.second.empty());
-            if (part.first)
-                Hash_ = MurmurHash<ui64>(&part.first->Hash_, sizeof(part.first->Hash_), Hash_);
-            for (const auto& item: part.second) {
-                Hash_ = std::accumulate(item.first.cbegin(), item.first.cend(), Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); });
-                Hash_ = MurmurHash<ui64>(item.second.data(), item.second.size(), Hash_);
-            }
-        }
+    YQL_ENSURE(!Mapping_.empty()); 
+    if (const auto original = Mapping_.cbegin()->first; 
+        original && 1U == Mapping_.size() && 1U == original->Mapping_.size() && Mapping_.cbegin()->second == original->Mapping_.cbegin()->second) { 
+        // Comeback original constraint. 
+        Hash_ = original->Hash_; 
+        Mapping_ = original->Mapping_; 
+    } else { 
+        for (const auto& part : Mapping_) { 
+            YQL_ENSURE(!part.second.empty()); 
+            if (part.first) 
+                Hash_ = MurmurHash<ui64>(&part.first->Hash_, sizeof(part.first->Hash_), Hash_); 
+            for (const auto& item: part.second) { 
+                Hash_ = std::accumulate(item.first.cbegin(), item.first.cend(), Hash_, [](ui64 hash, const std::string_view& field) { return MurmurHash<ui64>(field.data(), field.size(), hash); }); 
+                Hash_ = MurmurHash<ui64>(item.second.data(), item.second.size(), Hash_); 
+            } 
+        } 
     }
 }
 
 TPassthroughConstraintNode::TPassthroughConstraintNode(TExprContext& ctx, const TStructExprType& itemType)
     : TConstraintNode(ctx, Name())
 {
-    auto& mapping = Mapping_[nullptr];
+    auto& mapping = Mapping_[nullptr]; 
     for (auto& item: itemType.GetItems()) {
-        const auto name = ctx.AppendString(item->GetName());
+        const auto name = ctx.AppendString(item->GetName()); 
         Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as name
         Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as value
-        mapping.push_back(std::make_pair(TKeyType(1U, name), name)); // Struct items are sorted
+        mapping.push_back(std::make_pair(TKeyType(1U, name), name)); // Struct items are sorted 
     }
 
-    YQL_ENSURE(!mapping.empty());
+    YQL_ENSURE(!mapping.empty()); 
 }
 
-TPassthroughConstraintNode::TPassthroughConstraintNode(TExprContext& ctx, const TTupleExprType& itemType)
-    : TConstraintNode(ctx, Name())
-{
-    auto& mapping = Mapping_[nullptr];
-    for (ui32 i = 0U; i < itemType.GetSize(); ++i) {
-        const auto name = ctx.AppendString(ToString(i));
-        Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as name
-        Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as value
-        mapping.push_back(std::make_pair(TKeyType(1U, name), name)); // Struct items are sorted
-    }
-
-    YQL_ENSURE(!mapping.empty());
-}
-
-TPassthroughConstraintNode::TPassthroughConstraintNode(TExprContext& ctx, const TMultiExprType& itemType)
-    : TConstraintNode(ctx, Name())
-{
-    auto& mapping = Mapping_[nullptr];
-    for (ui32 i = 0U; i < itemType.GetSize(); ++i) {
-        const auto name = ctx.AppendString(ToString(i));
-        Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as name
-        Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as value
-        mapping.push_back(std::make_pair(TKeyType(1U, name), name)); // Struct items are sorted
-    }
-
-    YQL_ENSURE(!mapping.empty());
-}
-
-TPassthroughConstraintNode::TPassthroughConstraintNode(TPassthroughConstraintNode&& constr) = default;
+TPassthroughConstraintNode::TPassthroughConstraintNode(TExprContext& ctx, const TTupleExprType& itemType) 
+    : TConstraintNode(ctx, Name()) 
+{ 
+    auto& mapping = Mapping_[nullptr]; 
+    for (ui32 i = 0U; i < itemType.GetSize(); ++i) { 
+        const auto name = ctx.AppendString(ToString(i)); 
+        Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as name 
+        Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as value 
+        mapping.push_back(std::make_pair(TKeyType(1U, name), name)); // Struct items are sorted 
+    } 
+ 
+    YQL_ENSURE(!mapping.empty()); 
+} 
+ 
+TPassthroughConstraintNode::TPassthroughConstraintNode(TExprContext& ctx, const TMultiExprType& itemType) 
+    : TConstraintNode(ctx, Name()) 
+{ 
+    auto& mapping = Mapping_[nullptr]; 
+    for (ui32 i = 0U; i < itemType.GetSize(); ++i) { 
+        const auto name = ctx.AppendString(ToString(i)); 
+        Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as name 
+        Hash_ = MurmurHash<ui64>(name.data(), name.size(), Hash_); // hash as value 
+        mapping.push_back(std::make_pair(TKeyType(1U, name), name)); // Struct items are sorted 
+    } 
+ 
+    YQL_ENSURE(!mapping.empty()); 
+} 
+ 
+TPassthroughConstraintNode::TPassthroughConstraintNode(TPassthroughConstraintNode&& constr) = default; 
 
 bool TPassthroughConstraintNode::Equals(const TConstraintNode& node) const {
     if (this == &node) {
@@ -544,8 +544,8 @@ bool TPassthroughConstraintNode::Equals(const TConstraintNode& node) const {
     if (GetHash() != node.GetHash()) {
         return false;
     }
-    if (const auto c = dynamic_cast<const TPassthroughConstraintNode*>(&node)) {
-        return Mapping_ == c->Mapping_;
+    if (const auto c = dynamic_cast<const TPassthroughConstraintNode*>(&node)) { 
+        return Mapping_ == c->Mapping_; 
     }
     return false;
 }
@@ -554,15 +554,15 @@ bool TPassthroughConstraintNode::Includes(const TConstraintNode& node) const {
     if (this == &node) {
         return true;
     }
-    if (const auto c = dynamic_cast<const TPassthroughConstraintNode*>(&node)) {
-        for (const auto& part : c->Mapping_) {
-            if (const auto it = Mapping_.find(part.first == this ? nullptr : part.first); Mapping_.cend() != it) {
-                for (const auto& pair : part.second) {
-                    if (const auto p = it->second.find(pair.first); it->second.cend() == p || p->second != pair.second) {
-                        return false;
-                    }
+    if (const auto c = dynamic_cast<const TPassthroughConstraintNode*>(&node)) { 
+        for (const auto& part : c->Mapping_) { 
+            if (const auto it = Mapping_.find(part.first == this ? nullptr : part.first); Mapping_.cend() != it) { 
+                for (const auto& pair : part.second) { 
+                    if (const auto p = it->second.find(pair.first); it->second.cend() == p || p->second != pair.second) { 
+                        return false; 
+                    } 
                 }
-            } else
+            } else 
                 return false;
         }
         return true;
@@ -575,127 +575,127 @@ void TPassthroughConstraintNode::Out(IOutputStream& out) const {
     out.Write('(');
 
     bool first = true;
-    for (const auto& part : Mapping_) {
-        for (const auto& item : part.second) {
-            if (!first) {
-                out.Write(',');
-            }
-            if (!item.first.empty()) {
-                auto it = item.first.cbegin();
-                out.Write(*it);
-                while (item.first.cend() > ++it) {
-                    out.Write('#');
-                    out.Write(*it);
-                }
-            }
-            out.Write(':');
-            out.Write(item.second);
-
-            first = false;
+    for (const auto& part : Mapping_) { 
+        for (const auto& item : part.second) { 
+            if (!first) { 
+                out.Write(','); 
+            } 
+            if (!item.first.empty()) { 
+                auto it = item.first.cbegin(); 
+                out.Write(*it); 
+                while (item.first.cend() > ++it) { 
+                    out.Write('#'); 
+                    out.Write(*it); 
+                } 
+            } 
+            out.Write(':'); 
+            out.Write(item.second); 
+ 
+            first = false; 
         }
     }
     out.Write(')');
 }
 
-void TPassthroughConstraintNode::ToJson(NJson::TJsonWriter& out) const {
-    out.OpenMap();
-    for (const auto& part : Mapping_) {
-        for (const auto& [resultColumn, originalColumn] : part.second) {
-            out.Write(JoinSeq(';', resultColumn), originalColumn);
-        }
+void TPassthroughConstraintNode::ToJson(NJson::TJsonWriter& out) const { 
+    out.OpenMap(); 
+    for (const auto& part : Mapping_) { 
+        for (const auto& [resultColumn, originalColumn] : part.second) { 
+            out.Write(JoinSeq(';', resultColumn), originalColumn); 
+        } 
     }
-    out.CloseMap();
+    out.CloseMap(); 
 }
 
-const TPassthroughConstraintNode* TPassthroughConstraintNode::ExtractField(TExprContext& ctx, const std::string_view& field) const {
-    TMapType passtrought;
-    for (const auto& part : Mapping_) {
-        auto it = part.second.lower_bound(TKeyType(1U, field));
-        if (part.second.cend() == it || it->first.front() != field)
-            continue;
-
-        if (1U == it->first.size()) {
-            return ctx.MakeConstraint<TPassthroughConstraintNode>(TMapType{{part.first ? part.first : this , TPartType{{TKeyType(), it->second}}}});
-        }
-
-        TPartType mapping;
-        mapping.reserve(part.second.size());
-        while (it < part.second.cend() && it->first.size() > 1U && field == it->first.front()) {
-            auto item = *it++;
-            item.first.pop_front();
-            mapping.emplace_back(std::move(item));
-        }
-
-        if (!mapping.empty()) {
-            passtrought.emplace(part.first ? part.first : this, std::move(mapping));
-        }
-    }
-    return passtrought.empty() ? nullptr : ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(passtrought));
-}
-
+const TPassthroughConstraintNode* TPassthroughConstraintNode::ExtractField(TExprContext& ctx, const std::string_view& field) const { 
+    TMapType passtrought; 
+    for (const auto& part : Mapping_) { 
+        auto it = part.second.lower_bound(TKeyType(1U, field)); 
+        if (part.second.cend() == it || it->first.front() != field) 
+            continue; 
+ 
+        if (1U == it->first.size()) { 
+            return ctx.MakeConstraint<TPassthroughConstraintNode>(TMapType{{part.first ? part.first : this , TPartType{{TKeyType(), it->second}}}}); 
+        } 
+ 
+        TPartType mapping; 
+        mapping.reserve(part.second.size()); 
+        while (it < part.second.cend() && it->first.size() > 1U && field == it->first.front()) { 
+            auto item = *it++; 
+            item.first.pop_front(); 
+            mapping.emplace_back(std::move(item)); 
+        } 
+ 
+        if (!mapping.empty()) { 
+            passtrought.emplace(part.first ? part.first : this, std::move(mapping)); 
+        } 
+    } 
+    return passtrought.empty() ? nullptr : ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(passtrought)); 
+} 
+ 
 const TPassthroughConstraintNode* TPassthroughConstraintNode::MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& ctx) {
     if (constraints.empty()) {
         return nullptr;
     }
 
-    auto part = constraints.front()->GetConstraint<TPassthroughConstraintNode>();
-    if (constraints.size() == 1 || !part) {
-        return part;
+    auto part = constraints.front()->GetConstraint<TPassthroughConstraintNode>(); 
+    if (constraints.size() == 1 || !part) { 
+        return part; 
     }
 
-    auto mapping = part->GetColumnMapping();
-    if (const auto self = mapping.find(nullptr); mapping.cend() != self)
-        mapping.emplace(part, std::move(mapping.extract(self).mapped()));
-
+    auto mapping = part->GetColumnMapping(); 
+    if (const auto self = mapping.find(nullptr); mapping.cend() != self) 
+        mapping.emplace(part, std::move(mapping.extract(self).mapped())); 
+ 
     for (size_t i = 1; i < constraints.size() && !mapping.empty(); ++i) {
-        part = constraints[i]->GetConstraint<TPassthroughConstraintNode>();
-        if (!part) {
+        part = constraints[i]->GetConstraint<TPassthroughConstraintNode>(); 
+        if (!part) { 
             if (constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
                 continue;
             }
             return nullptr;
         }
-
-        for (const auto& nextMapping : part->GetColumnMapping()) {
-            if (const auto it = mapping.find(nextMapping.first ? nextMapping.first : part); mapping.cend() != it) {
-                TPassthroughConstraintNode::TPartType result;
-                std::set_intersection(
-                    it->second.cbegin(), it->second.cend(),
-                    nextMapping.second.cbegin(), nextMapping.second.cend(),
-                    std::back_inserter(result),
-                    [] (const TPassthroughConstraintNode::TPartType::value_type& c1, const TPassthroughConstraintNode::TPartType::value_type& c2) {
-                        return c1 < c2;
-                    }
-                );
-                if (result.empty())
-                    mapping.erase(it);
-                else
-                    it->second = std::move(result);
+ 
+        for (const auto& nextMapping : part->GetColumnMapping()) { 
+            if (const auto it = mapping.find(nextMapping.first ? nextMapping.first : part); mapping.cend() != it) { 
+                TPassthroughConstraintNode::TPartType result; 
+                std::set_intersection( 
+                    it->second.cbegin(), it->second.cend(), 
+                    nextMapping.second.cbegin(), nextMapping.second.cend(), 
+                    std::back_inserter(result), 
+                    [] (const TPassthroughConstraintNode::TPartType::value_type& c1, const TPassthroughConstraintNode::TPartType::value_type& c2) { 
+                        return c1 < c2; 
+                    } 
+                ); 
+                if (result.empty()) 
+                    mapping.erase(it); 
+                else 
+                    it->second = std::move(result); 
             }
-        }
+        } 
     }
-
-    return mapping.empty() ? nullptr : ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping));
-}
-
-const TPassthroughConstraintNode::TMapType& TPassthroughConstraintNode::GetColumnMapping() const {
-    return Mapping_;
-}
-
-TPassthroughConstraintNode::TReverseMapType TPassthroughConstraintNode::GetReverseMapping() const {
-    if (1U == Mapping_.size() && 1U == Mapping_.cbegin()->second.size() && Mapping_.cbegin()->second.cbegin()->first.empty())
-        return {{Mapping_.cbegin()->second.cbegin()->second, Mapping_.cbegin()->second.cbegin()->second}};
-
-    TReverseMapType reverseMapping;
-    for (const auto& part : Mapping_) {
-        for (const auto& item : part.second) {
-            if (1U == item.first.size()) {
-                reverseMapping.emplace_back(item.second, item.first.front());
-            }
-        }
+ 
+    return mapping.empty() ? nullptr : ctx.MakeConstraint<TPassthroughConstraintNode>(std::move(mapping)); 
+} 
+ 
+const TPassthroughConstraintNode::TMapType& TPassthroughConstraintNode::GetColumnMapping() const { 
+    return Mapping_; 
+} 
+ 
+TPassthroughConstraintNode::TReverseMapType TPassthroughConstraintNode::GetReverseMapping() const { 
+    if (1U == Mapping_.size() && 1U == Mapping_.cbegin()->second.size() && Mapping_.cbegin()->second.cbegin()->first.empty()) 
+        return {{Mapping_.cbegin()->second.cbegin()->second, Mapping_.cbegin()->second.cbegin()->second}}; 
+ 
+    TReverseMapType reverseMapping; 
+    for (const auto& part : Mapping_) { 
+        for (const auto& item : part.second) { 
+            if (1U == item.first.size()) { 
+                reverseMapping.emplace_back(item.second, item.first.front()); 
+            } 
+        } 
     }
-    ::Sort(reverseMapping);
-    return reverseMapping;
+    ::Sort(reverseMapping); 
+    return reverseMapping; 
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -720,8 +720,8 @@ bool TEmptyConstraintNode::Equals(const TConstraintNode& node) const {
     return GetName() == node.GetName();
 }
 
-void TEmptyConstraintNode::ToJson(NJson::TJsonWriter& out) const {
-    out.Write(true);
+void TEmptyConstraintNode::ToJson(NJson::TJsonWriter& out) const { 
+    out.Write(true); 
 }
 
 const TEmptyConstraintNode* TEmptyConstraintNode::MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& /*ctx*/) {
@@ -831,15 +831,15 @@ void TVarIndexConstraintNode::Out(IOutputStream& out) const {
     out.Write(')');
 }
 
-void TVarIndexConstraintNode::ToJson(NJson::TJsonWriter& out) const {
-    out.OpenArray();
-    for (const auto& [resultIndex, originalIndex]: Mapping_) {
-        out.OpenArray();
-        out.Write(resultIndex);
-        out.Write(originalIndex);
-        out.CloseArray();
+void TVarIndexConstraintNode::ToJson(NJson::TJsonWriter& out) const { 
+    out.OpenArray(); 
+    for (const auto& [resultIndex, originalIndex]: Mapping_) { 
+        out.OpenArray(); 
+        out.Write(resultIndex); 
+        out.Write(originalIndex); 
+        out.CloseArray(); 
     }
-    out.CloseArray();
+    out.CloseArray(); 
 }
 
 const TVarIndexConstraintNode* TVarIndexConstraintNode::MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& ctx) {
@@ -940,41 +940,41 @@ bool TMultiConstraintNode::Includes(const TConstraintNode& node) const {
     return false;
 }
 
-bool TMultiConstraintNode::FilteredIncludes(const TConstraintNode& node, const THashSet<TString>& blacklist) const {
-    if (this == &node) {
-        return true;
-    }
-    if (GetName() != node.GetName()) {
-        return false;
-    }
-
-    if (auto m = dynamic_cast<const TMultiConstraintNode*>(&node)) {
-        for (auto& item: Items_) {
-            const auto it = m->Items_.find(item.first);
-            if (it == m->Items_.end()) {
-                if (!item.second.GetConstraint<TEmptyConstraintNode>()) {
-                    return false;
-                }
-                continue;
-            }
-
-            for (auto c: it->second.GetAllConstraints()) {
-                if (!blacklist.contains(c->GetName())) {
-                    const auto cit = item.second.GetConstraint(c->GetName());
-                    if (!cit) {
-                        return false;
-                    }
-                    if (!cit->Includes(*c)) {
-                        return false;
-                    }
-                }
-            }
-        }
-        return true;
-    }
-    return false;
-}
-
+bool TMultiConstraintNode::FilteredIncludes(const TConstraintNode& node, const THashSet<TString>& blacklist) const { 
+    if (this == &node) { 
+        return true; 
+    } 
+    if (GetName() != node.GetName()) { 
+        return false; 
+    } 
+ 
+    if (auto m = dynamic_cast<const TMultiConstraintNode*>(&node)) { 
+        for (auto& item: Items_) { 
+            const auto it = m->Items_.find(item.first); 
+            if (it == m->Items_.end()) { 
+                if (!item.second.GetConstraint<TEmptyConstraintNode>()) { 
+                    return false; 
+                } 
+                continue; 
+            } 
+ 
+            for (auto c: it->second.GetAllConstraints()) { 
+                if (!blacklist.contains(c->GetName())) { 
+                    const auto cit = item.second.GetConstraint(c->GetName()); 
+                    if (!cit) { 
+                        return false; 
+                    } 
+                    if (!cit->Includes(*c)) { 
+                        return false; 
+                    } 
+                } 
+            } 
+        } 
+        return true; 
+    } 
+    return false; 
+} 
+ 
 void TMultiConstraintNode::Out(IOutputStream& out) const {
     TConstraintNode::Out(out);
     out.Write('(');
@@ -998,13 +998,13 @@ void TMultiConstraintNode::Out(IOutputStream& out) const {
     out.Write(')');
 }
 
-void TMultiConstraintNode::ToJson(NJson::TJsonWriter& out) const {
-    out.OpenMap();
-    for (const auto& [index, constraintSet] : Items_) {
-        out.WriteKey(ToString(index));
-        constraintSet.ToJson(out);
+void TMultiConstraintNode::ToJson(NJson::TJsonWriter& out) const { 
+    out.OpenMap(); 
+    for (const auto& [index, constraintSet] : Items_) { 
+        out.WriteKey(ToString(index)); 
+        constraintSet.ToJson(out); 
     }
-    out.CloseMap();
+    out.CloseMap(); 
 }
 
 const TMultiConstraintNode* TMultiConstraintNode::MakeCommon(const TVector<const TConstraintSet*>& constraints, TExprContext& ctx) {

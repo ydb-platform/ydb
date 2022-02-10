@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-IBuiltinFunctionRegistry::TPtr CreateBuiltinRegistry();
+IBuiltinFunctionRegistry::TPtr CreateBuiltinRegistry(); 
 
 } // namspace NMiniKQL
 } // namspace NKikimr

@@ -5,7 +5,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/singleton.h>
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
 struct TLoadedResources {

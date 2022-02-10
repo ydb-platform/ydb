@@ -18,8 +18,8 @@ const THashSet<TStringBuf> SafeCallables {
     TCoJust::CallableName(),
     TCoCoalesce::CallableName(),
     TCoToOptional::CallableName(),
-    TCoHead::CallableName(),
-    TCoLast::CallableName(),
+    TCoHead::CallableName(), 
+    TCoLast::CallableName(), 
     TCoToList::CallableName(),
 
     TCoMember::CallableName(),
@@ -47,14 +47,14 @@ bool IsSafePayloadCallable(const TCallable& callable) {
         return true;
     }
 
-    if (callable.Maybe<TCoAnd>()) {
+    if (callable.Maybe<TCoAnd>()) { 
         return true;
     }
 
-    if (callable.Maybe<TCoOr>()) {
-        return true;
-    }
-
+    if (callable.Maybe<TCoOr>()) { 
+        return true; 
+    } 
+ 
     if (callable.Maybe<TCoBinaryArithmetic>()) {
         return true;
     }
@@ -527,7 +527,7 @@ public:
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         Y_UNUSED(ctx);
-        output = input;
+        output = input; 
 
         auto commitSafety = TransformCtx->CommitSafety();
         if (!TransformCtx->Config->HasAllowKqpUnsafeCommit()) {

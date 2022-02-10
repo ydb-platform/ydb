@@ -3,7 +3,7 @@
 #include "zerocopy.h"
 #include "zerocopy_output.h"
 
-#include <utility>
+#include <utility> 
 #include <util/generic/ptr.h>
 #include <util/generic/typetraits.h>
 #include <util/generic/store_policy.h>
@@ -188,7 +188,7 @@ class TBuffered: private TEmbedPolicy<TSlave>, public ::NPrivate::TBufferedStrea
 public:
     template <typename... Args>
     inline TBuffered(size_t b, Args&&... args)
-        : TSlaveBase(std::forward<Args>(args)...)
+        : TSlaveBase(std::forward<Args>(args)...) 
         , TBufferedBase(TSlaveBase::Ptr(), b)
     {
     }
@@ -221,7 +221,7 @@ class TAdaptivelyBuffered: private TEmbedPolicy<TSlave>, public TAdaptiveBuffere
 public:
     template <typename... Args>
     inline TAdaptivelyBuffered(Args&&... args)
-        : TSlaveBase(std::forward<Args>(args)...)
+        : TSlaveBase(std::forward<Args>(args)...) 
         , TAdaptiveBufferedOutput(TSlaveBase::Ptr())
     {
     }

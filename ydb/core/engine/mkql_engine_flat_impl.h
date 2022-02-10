@@ -119,16 +119,16 @@ namespace NMiniKQL {
     TComputationNodeFactory GetFlatShardExecutionFactory(TShardExecData& execData, bool validateOnly);
     TComputationNodeFactory GetFlatProxyExecutionFactory(TProxyExecData& execData);
 
-    NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& engineHost,
+    NUdf::TUnboxedValue PerformLocalSelectRow(TCallable& callable, IEngineFlatHost& engineHost, 
         const THolderFactory& holderFactory, const TTypeEnvironment& env);
-    NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost& engineHost,
+    NUdf::TUnboxedValue PerformLocalSelectRange(TCallable& callable, IEngineFlatHost& engineHost, 
         const THolderFactory& holderFactory, const TTypeEnvironment& env);
 
-    struct TEngineFlatApplyContext : public NUdf::IApplyContext {
+    struct TEngineFlatApplyContext : public NUdf::IApplyContext { 
         bool IsAborted = false;
         IEngineFlatHost* Host = nullptr;
         THashMap<TString, NUdf::TUnboxedValue>* ResultValues = nullptr;
-        const TTypeEnvironment* Env = nullptr;
+        const TTypeEnvironment* Env = nullptr; 
     };
 
     TStructType* GetTxLockType(const TTypeEnvironment& env, bool v2);

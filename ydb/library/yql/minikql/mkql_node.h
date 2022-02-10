@@ -10,7 +10,7 @@
 #include <util/generic/maybe.h>
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
 
-#include <stack>
+#include <stack> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -42,8 +42,8 @@ private:
 };
 
 struct TRuntimeNode {
-    using TList = TSmallVec<TRuntimeNode>;
-
+    using TList = TSmallVec<TRuntimeNode>; 
+ 
     TRuntimeNode()
         : Data(nullptr, true)
     {}
@@ -82,8 +82,8 @@ struct TRuntimeNode {
     TTaggedPointer<TNode> Data;
 };
 
-using TRuntimeNodePair = std::array<TRuntimeNode, 2U>;
-
+using TRuntimeNodePair = std::array<TRuntimeNode, 2U>; 
+ 
 class TTypeEnvironment;
 
 class TNode : private TNonCopyable {
@@ -142,7 +142,7 @@ class TTypeEnvironment;
     XX(Any, 10)             \
     XX(Tuple, 11)           \
     XX(Resource, 12)        \
-    XX(Flow, 13)            \
+    XX(Flow, 13)            \ 
     XX(Null, 14)            \
     XX(ReservedKind, 15)    \
     XX(EmptyList, 16 + 2)   \
@@ -442,39 +442,39 @@ public:
     }
 
 
-    std::vector<TNode*>& GetNodeStack() const {
+    std::vector<TNode*>& GetNodeStack() const { 
         return Stack;
     }
 
     void ClearCookies() const;
 
-    NUdf::TUnboxedValuePod NewStringValue(const NUdf::TStringRef& data) const {
-        if (data.Size() > NUdf::TUnboxedValue::InternalBufferSize) {
-            auto value = NewString(data.Size());
-            std::memcpy(value.Data(), data.Data(), data.Size());
-            return NUdf::TUnboxedValuePod(std::move(value));
-        } else {
-            return NUdf::TUnboxedValuePod::Embedded(data);
-        }
-    }
-
-    TGuard<TScopedAlloc> BindAllocator() const {
-        return Guard(Alloc);
-    }
-
+    NUdf::TUnboxedValuePod NewStringValue(const NUdf::TStringRef& data) const { 
+        if (data.Size() > NUdf::TUnboxedValue::InternalBufferSize) { 
+            auto value = NewString(data.Size()); 
+            std::memcpy(value.Data(), data.Data(), data.Size()); 
+            return NUdf::TUnboxedValuePod(std::move(value)); 
+        } else { 
+            return NUdf::TUnboxedValuePod::Embedded(data); 
+        } 
+    } 
+ 
+    TGuard<TScopedAlloc> BindAllocator() const { 
+        return Guard(Alloc); 
+    } 
+ 
     TScopedAlloc& GetAllocator() const { return Alloc; }
 
-    const NUdf::TStringValue& NewString(ui32 size) const {
-        Strings.emplace(size);
-        return Strings.top();
-    }
-
-private:
-    TScopedAlloc& Alloc;
+    const NUdf::TStringValue& NewString(ui32 size) const { 
+        Strings.emplace(size); 
+        return Strings.top(); 
+    } 
+ 
+private: 
+    TScopedAlloc& Alloc; 
     mutable TPagedArena Arena;
-    mutable std::stack<NUdf::TStringValue> Strings;
+    mutable std::stack<NUdf::TStringValue> Strings; 
     mutable THashSet<TStringBuf> NamesPool;
-    mutable std::vector<TNode*> Stack;
+    mutable std::vector<TNode*> Stack; 
 
     TTypeType* TypeOfType;
     TVoidType* TypeOfVoid;
@@ -532,7 +532,7 @@ public:
         return DataSlot;
     }
 
-protected:
+protected: 
     TDataType(NUdf::TDataTypeId schemeType, const TTypeEnvironment& env);
 
     void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
@@ -544,38 +544,38 @@ private:
     const TMaybe<NUdf::EDataSlot> DataSlot;
 };
 
-class TDataDecimalType : public TDataType {
-friend class TType;
-public:
-    static TDataDecimalType* Create(ui8 precision, ui8 scale, const TTypeEnvironment& env);
-
-    bool IsSameType(const TDataDecimalType& typeToCompare) const;
-
+class TDataDecimalType : public TDataType { 
+friend class TType; 
+public: 
+    static TDataDecimalType* Create(ui8 precision, ui8 scale, const TTypeEnvironment& env); 
+ 
+    bool IsSameType(const TDataDecimalType& typeToCompare) const; 
+ 
     bool IsConvertableTo(const TDataDecimalType& typeToCompare, bool ignoreTagged = false) const;
-
-    std::pair<ui8, ui8> GetParams() const;
-private:
-    TDataDecimalType(ui8 precision, ui8 scale, const TTypeEnvironment& env);
-
-    const ui8 Precision;
-    const ui8 Scale;
-};
-
-class TDataLiteral : public TNode, private NUdf::TUnboxedValuePod {
+ 
+    std::pair<ui8, ui8> GetParams() const; 
+private: 
+    TDataDecimalType(ui8 precision, ui8 scale, const TTypeEnvironment& env); 
+ 
+    const ui8 Precision; 
+    const ui8 Scale; 
+}; 
+ 
+class TDataLiteral : public TNode, private NUdf::TUnboxedValuePod { 
 friend class TNode;
 public:
-    static TDataLiteral* Create(const NUdf::TUnboxedValuePod& value, TDataType* type, const TTypeEnvironment& env);
+    static TDataLiteral* Create(const NUdf::TUnboxedValuePod& value, TDataType* type, const TTypeEnvironment& env); 
 
     TDataType* GetType() const {
         return static_cast<TDataType*>(GetGenericType());
     }
 
-    const NUdf::TUnboxedValuePod& AsValue() const {
-        return *this;
+    const NUdf::TUnboxedValuePod& AsValue() const { 
+        return *this; 
     }
 
 private:
-    TDataLiteral(const NUdf::TUnboxedValuePod& value, TDataType* type);
+    TDataLiteral(const NUdf::TUnboxedValuePod& value, TDataType* type); 
     using TNode::Equals;
     bool Equals(const TDataLiteral& nodeToCompare) const;
 
@@ -771,32 +771,32 @@ private:
     TType* Data;
 };
 
-class TFlowType : public TType {
-    friend class TType;
-public:
-    static TFlowType* Create(TType* itemType, const TTypeEnvironment& env);
-
-    using TType::IsSameType;
-    bool IsSameType(const TFlowType& typeToCompare) const;
-
-    using TType::IsConvertableTo;
+class TFlowType : public TType { 
+    friend class TType; 
+public: 
+    static TFlowType* Create(TType* itemType, const TTypeEnvironment& env); 
+ 
+    using TType::IsSameType; 
+    bool IsSameType(const TFlowType& typeToCompare) const; 
+ 
+    using TType::IsConvertableTo; 
     bool IsConvertableTo(const TFlowType& typeToCompare, bool ignoreTagged = false) const;
-
-    TType* GetItemType() const {
-        return Data;
-    }
-
-private:
-    TFlowType(TType* itemType, const TTypeEnvironment& env, bool validate = true);
-
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
-    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
-    void DoFreeze(const TTypeEnvironment& env);
-
-private:
-    TType* Data;
-};
-
+ 
+    TType* GetItemType() const { 
+        return Data; 
+    } 
+ 
+private: 
+    TFlowType(TType* itemType, const TTypeEnvironment& env, bool validate = true); 
+ 
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
+    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const; 
+    void DoFreeze(const TTypeEnvironment& env); 
+ 
+private: 
+    TType* Data; 
+}; 
+ 
 class TOptionalType : public TType {
 friend class TType;
 public:
@@ -1373,16 +1373,16 @@ bool IsDateType(NUdf::TDataTypeId typeId);
 bool IsTzDateType(NUdf::TDataTypeId typeId);
 bool IsIntervalType(NUdf::TDataTypeId typeId);
 
-enum class EValueRepresentation {
-    Embedded = 0,
-    String = 1,
-    Boxed = 2,
-    Any = String | Boxed
-};
+enum class EValueRepresentation { 
+    Embedded = 0, 
+    String = 1, 
+    Boxed = 2, 
+    Any = String | Boxed 
+}; 
 
-EValueRepresentation GetValueRepresentation(const TType* type);
-EValueRepresentation GetValueRepresentation(NUdf::TDataTypeId typeId);
-
+EValueRepresentation GetValueRepresentation(const TType* type); 
+EValueRepresentation GetValueRepresentation(NUdf::TDataTypeId typeId); 
+ 
 template <TType::EKind SingularKind>
 TSingularType<SingularKind>* TSingularType<SingularKind>::Create(TTypeType* type, const TTypeEnvironment& env) {
     return ::new(env.Allocate<TSingularType<SingularKind>>()) TSingularType<SingularKind>(type);

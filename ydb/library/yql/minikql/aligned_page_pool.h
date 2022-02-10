@@ -8,10 +8,10 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <type_traits>
-#include <stack>
-#include <vector>
-#include <unordered_set>
-#include <unordered_map>
+#include <stack> 
+#include <vector> 
+#include <unordered_set> 
+#include <unordered_map> 
 
 namespace NKikimr {
 
@@ -56,29 +56,29 @@ public:
 
     ~TAlignedPagePool();
 
-    inline size_t GetAllocated() const noexcept {
+    inline size_t GetAllocated() const noexcept { 
         return TotalAllocated;
     }
 
-    inline size_t GetUsed() const noexcept {
+    inline size_t GetUsed() const noexcept { 
         return TotalAllocated - GetFreePageCount() * POOL_PAGE_SIZE;
     }
 
-    inline size_t GetFreePageCount() const noexcept {
+    inline size_t GetFreePageCount() const noexcept { 
         return FreePages.size();
     }
 
-    static inline const void* GetPageStart(const void* addr) noexcept {
+    static inline const void* GetPageStart(const void* addr) noexcept { 
         return reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(addr) & PAGE_ADDR_MASK);
     }
 
-    static inline void* GetPageStart(void* addr) noexcept {
+    static inline void* GetPageStart(void* addr) noexcept { 
         return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(addr) & PAGE_ADDR_MASK);
     }
 
     void* GetPage();
 
-    void ReturnPage(void* addr) noexcept;
+    void ReturnPage(void* addr) noexcept; 
 
     void Swap(TAlignedPagePool& other) {
         DoSwap(FreePages, other.FreePages);
@@ -104,62 +104,62 @@ public:
 
     void PrintStat(size_t usedPages, IOutputStream& out) const;
 
-    void* GetBlock(size_t size);
+    void* GetBlock(size_t size); 
 
-    void ReturnBlock(void* ptr, size_t size) noexcept;
+    void ReturnBlock(void* ptr, size_t size) noexcept; 
 
-    size_t GetPeakAllocated() const noexcept {
+    size_t GetPeakAllocated() const noexcept { 
         return PeakAllocated;
     }
 
-    size_t GetPeakUsed() const noexcept {
+    size_t GetPeakUsed() const noexcept { 
         return PeakUsed;
     }
 
-    ui64 GetAllocCount() const noexcept {
+    ui64 GetAllocCount() const noexcept { 
         return AllocCount;
     }
 
-    ui64 GetPageAllocCount() const noexcept {
+    ui64 GetPageAllocCount() const noexcept { 
         return PageAllocCount;
     }
 
-    ui64 GetPageHitCount() const noexcept {
+    ui64 GetPageHitCount() const noexcept { 
         return PageHitCount;
     }
 
-    ui64 GetPageGlobalHitCount() const noexcept {
+    ui64 GetPageGlobalHitCount() const noexcept { 
         return PageGlobalHitCount;
     }
 
-    ui64 GetPageMissCount() const noexcept {
+    ui64 GetPageMissCount() const noexcept { 
         return PageMissCount;
     }
 
-    ui64 GetOffloadedAllocCount() const noexcept {
+    ui64 GetOffloadedAllocCount() const noexcept { 
         return OffloadedAllocCount;
     }
 
-    ui64 GetOffloadedBytes() const noexcept {
+    ui64 GetOffloadedBytes() const noexcept { 
         return OffloadedBytes;
     }
 
     void OffloadAlloc(ui64 size);
-    void OffloadFree(ui64 size) noexcept;
+    void OffloadFree(ui64 size) noexcept; 
 
     static ui64 GetGlobalPagePoolSize();
 
-    ui64 GetLimit() const noexcept {
+    ui64 GetLimit() const noexcept { 
         return Limit;
     }
 
-    void SetLimit(size_t limit) noexcept {
+    void SetLimit(size_t limit) noexcept { 
         Limit = limit;
     }
 
     void ReleaseFreePages();
 
-    void DisableStrictAllocationCheck() noexcept {
+    void DisableStrictAllocationCheck() noexcept { 
         CheckLostMem = false;
     }
 
@@ -178,7 +178,7 @@ public:
 
 protected:
     void* Alloc(size_t size);
-    void Free(void* ptr, size_t size) noexcept;
+    void Free(void* ptr, size_t size) noexcept; 
 
     void UpdatePeaks() {
         PeakAllocated = Max(PeakAllocated, GetAllocated());
@@ -189,8 +189,8 @@ protected:
 
 protected:
     std::stack<void*, std::vector<void*>> FreePages;
-    std::unordered_set<void*> AllPages;
-    std::unordered_map<void*, size_t> ActiveBlocks;
+    std::unordered_set<void*> AllPages; 
+    std::unordered_map<void*, size_t> ActiveBlocks; 
     size_t TotalAllocated = 0;
     size_t PeakAllocated = 0;
     size_t PeakUsed = 0;

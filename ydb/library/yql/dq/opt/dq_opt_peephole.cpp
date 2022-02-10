@@ -135,104 +135,104 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
     if (!node.Maybe<TDqPhyMapJoin>()) {
         return node;
     }
-    const auto mapJoin = node.Cast<TDqPhyMapJoin>();
-    const auto pos = mapJoin.Pos();
+    const auto mapJoin = node.Cast<TDqPhyMapJoin>(); 
+    const auto pos = mapJoin.Pos(); 
 
-    const auto leftTableLabel = GetTableLabel(mapJoin.LeftLabel());
-    const auto rightTableLabel = GetTableLabel(mapJoin.RightLabel());
+    const auto leftTableLabel = GetTableLabel(mapJoin.LeftLabel()); 
+    const auto rightTableLabel = GetTableLabel(mapJoin.RightLabel()); 
 
     auto [leftKeyColumnNodes, rightKeyColumnNodes] = JoinKeysToAtoms(ctx, mapJoin, leftTableLabel, rightTableLabel);
-    const auto keyWidth = leftKeyColumnNodes.size();
+    const auto keyWidth = leftKeyColumnNodes.size(); 
 
-    const auto makeRenames = [&ctx, pos](TStringBuf label, const TStructExprType& type) {
+    const auto makeRenames = [&ctx, pos](TStringBuf label, const TStructExprType& type) { 
         TExprNode::TListType renames;
-        for (const auto& member : type.GetItems()) {
-            renames.emplace_back(ctx.NewAtom(pos, member->GetName()));
-            renames.emplace_back(ctx.NewAtom(pos, GetColumnName(label, member)));
+        for (const auto& member : type.GetItems()) { 
+            renames.emplace_back(ctx.NewAtom(pos, member->GetName())); 
+            renames.emplace_back(ctx.NewAtom(pos, GetColumnName(label, member))); 
         }
         return renames;
     };
 
-    const auto itemTypeLeft = GetSeqItemType(mapJoin.LeftInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
-    const auto itemTypeRight = GetSeqItemType(mapJoin.RightInput().Ref().GetTypeAnn())->Cast<TStructExprType>();
-
-    TExprNode::TListType leftRenames = makeRenames(leftTableLabel, *itemTypeLeft);
-    TExprNode::TListType rightRenames, rightPayloads;
-    const bool withRightSide = mapJoin.JoinType().Value() != "LeftOnly" && mapJoin.JoinType().Value() != "LeftSemi";
-    if (withRightSide) {
-        rightRenames = makeRenames(rightTableLabel, *itemTypeRight);
-        rightPayloads.reserve(rightRenames.size() >> 1U);
-        for (auto it = rightRenames.cbegin(); rightRenames.cend() != it; ++++it)
-            rightPayloads.emplace_back(*it);
+    const auto itemTypeLeft = GetSeqItemType(mapJoin.LeftInput().Ref().GetTypeAnn())->Cast<TStructExprType>(); 
+    const auto itemTypeRight = GetSeqItemType(mapJoin.RightInput().Ref().GetTypeAnn())->Cast<TStructExprType>(); 
+ 
+    TExprNode::TListType leftRenames = makeRenames(leftTableLabel, *itemTypeLeft); 
+    TExprNode::TListType rightRenames, rightPayloads; 
+    const bool withRightSide = mapJoin.JoinType().Value() != "LeftOnly" && mapJoin.JoinType().Value() != "LeftSemi"; 
+    if (withRightSide) { 
+        rightRenames = makeRenames(rightTableLabel, *itemTypeRight); 
+        rightPayloads.reserve(rightRenames.size() >> 1U); 
+        for (auto it = rightRenames.cbegin(); rightRenames.cend() != it; ++++it) 
+            rightPayloads.emplace_back(*it); 
     }
 
-    TTypeAnnotationNode::TListType keyTypes(keyWidth);
-    for (auto i = 0U; i < keyTypes.size(); ++i) {
-        const auto keyTypeLeft = itemTypeLeft->FindItemType(leftKeyColumnNodes[i]->Content());
-        const auto keyTypeRight = itemTypeRight->FindItemType(rightKeyColumnNodes[i]->Content());
-        bool optKey = false;
-        keyTypes[i] = JoinDryKeyType(keyTypeLeft, keyTypeRight, optKey, ctx);
-        if (!keyTypes[i])
-            keyTypes.clear();
-    }
+    TTypeAnnotationNode::TListType keyTypes(keyWidth); 
+    for (auto i = 0U; i < keyTypes.size(); ++i) { 
+        const auto keyTypeLeft = itemTypeLeft->FindItemType(leftKeyColumnNodes[i]->Content()); 
+        const auto keyTypeRight = itemTypeRight->FindItemType(rightKeyColumnNodes[i]->Content()); 
+        bool optKey = false; 
+        keyTypes[i] = JoinDryKeyType(keyTypeLeft, keyTypeRight, optKey, ctx); 
+        if (!keyTypes[i]) 
+            keyTypes.clear(); 
+    } 
 
-    auto leftInput = ctx.NewCallable(mapJoin.LeftInput().Pos(), "ToFlow", {mapJoin.LeftInput().Ptr()});
-    auto rightInput = ctx.NewCallable(mapJoin.RightInput().Pos(), "ToFlow", {mapJoin.RightInput().Ptr()});
+    auto leftInput = ctx.NewCallable(mapJoin.LeftInput().Pos(), "ToFlow", {mapJoin.LeftInput().Ptr()}); 
+    auto rightInput = ctx.NewCallable(mapJoin.RightInput().Pos(), "ToFlow", {mapJoin.RightInput().Ptr()}); 
 
-    if (keyTypes.empty()) {
-        const auto type = mapJoin.Ref().GetTypeAnn();
-        if (mapJoin.JoinType().Value() == "Inner" || mapJoin.JoinType().Value() == "LeftSemi")
-            return TExprBase(ctx.NewCallable(pos, "EmptyIterator", {ExpandType(pos, *type, ctx)}));
-
-        const auto structType = GetSeqItemType(type)->Cast<TStructExprType>();
-        return TExprBase(ctx.Builder(pos)
-            .Callable("Map")
-                .Add(0, std::move(leftInput))
-                .Lambda(0)
-                    .Param("row")
-                    .Callable("AsStruct")
-                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                            ui32 idx = 0U;
-                            for (auto i = 0U; i < leftRenames.size(); ++++i) {
-                                parent.List(idx++)
-                                    .Add(0, std::move(leftRenames[i + 1U]))
-                                    .Callable(1, "Member")
-                                        .Arg(0, "row")
-                                        .Add(1, std::move(leftRenames[i]))
-                                    .Seal()
-                                .Seal();
-                            }
-                            for (auto i = 0U; i < rightRenames.size(); ++i) {
-                                const auto memberType = structType->FindItemType(rightRenames[++i]->Content());
-                                parent.List(idx++)
-                                    .Add(0, std::move(rightRenames[i]))
-                                    .Callable(1, "Nothing")
-                                        .Add(0, ExpandType(pos, *memberType, ctx))
-                                    .Seal()
-                                .Seal();
-                            }
-                            return parent;
-                        })
-                    .Seal()
-                .Seal()
-            .Seal().Build()
-        );
-    }
-
-    const bool payloads = !rightPayloads.empty();
-    rightInput = MakeDictForJoin<true>(PrepareListForJoin(std::move(rightInput), keyTypes, rightKeyColumnNodes, rightPayloads, payloads, false, true, ctx), payloads, withRightSide, ctx);
-
-    return Build<TCoFlatMap>(ctx, pos)
-        .Input(std::move(rightInput))
-        .Lambda()
-            .Args({"dict"})
-            .Body<TCoMapJoinCore>()
-                .LeftInput(std::move(leftInput))
-                .RightDict("dict")
-                .JoinKind(mapJoin.JoinType())
-                .LeftKeysColumns(ctx.NewList(pos, std::move(leftKeyColumnNodes)))
-                .LeftRenames(ctx.NewList(pos, std::move(leftRenames)))
-                .RightRenames(ctx.NewList(pos, std::move(rightRenames)))
+    if (keyTypes.empty()) { 
+        const auto type = mapJoin.Ref().GetTypeAnn(); 
+        if (mapJoin.JoinType().Value() == "Inner" || mapJoin.JoinType().Value() == "LeftSemi") 
+            return TExprBase(ctx.NewCallable(pos, "EmptyIterator", {ExpandType(pos, *type, ctx)})); 
+ 
+        const auto structType = GetSeqItemType(type)->Cast<TStructExprType>(); 
+        return TExprBase(ctx.Builder(pos) 
+            .Callable("Map") 
+                .Add(0, std::move(leftInput)) 
+                .Lambda(0) 
+                    .Param("row") 
+                    .Callable("AsStruct") 
+                        .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
+                            ui32 idx = 0U; 
+                            for (auto i = 0U; i < leftRenames.size(); ++++i) { 
+                                parent.List(idx++) 
+                                    .Add(0, std::move(leftRenames[i + 1U])) 
+                                    .Callable(1, "Member") 
+                                        .Arg(0, "row") 
+                                        .Add(1, std::move(leftRenames[i])) 
+                                    .Seal() 
+                                .Seal(); 
+                            } 
+                            for (auto i = 0U; i < rightRenames.size(); ++i) { 
+                                const auto memberType = structType->FindItemType(rightRenames[++i]->Content()); 
+                                parent.List(idx++) 
+                                    .Add(0, std::move(rightRenames[i])) 
+                                    .Callable(1, "Nothing") 
+                                        .Add(0, ExpandType(pos, *memberType, ctx)) 
+                                    .Seal() 
+                                .Seal(); 
+                            } 
+                            return parent; 
+                        }) 
+                    .Seal() 
+                .Seal() 
+            .Seal().Build() 
+        ); 
+    } 
+ 
+    const bool payloads = !rightPayloads.empty(); 
+    rightInput = MakeDictForJoin<true>(PrepareListForJoin(std::move(rightInput), keyTypes, rightKeyColumnNodes, rightPayloads, payloads, false, true, ctx), payloads, withRightSide, ctx); 
+ 
+    return Build<TCoFlatMap>(ctx, pos) 
+        .Input(std::move(rightInput)) 
+        .Lambda() 
+            .Args({"dict"}) 
+            .Body<TCoMapJoinCore>() 
+                .LeftInput(std::move(leftInput)) 
+                .RightDict("dict") 
+                .JoinKind(mapJoin.JoinType()) 
+                .LeftKeysColumns(ctx.NewList(pos, std::move(leftKeyColumnNodes))) 
+                .LeftRenames(ctx.NewList(pos, std::move(leftRenames))) 
+                .RightRenames(ctx.NewList(pos, std::move(rightRenames))) 
                 .Build()
             .Build()
         .Done();
@@ -396,7 +396,7 @@ NNodes::TExprBase DqPeepholeRewriteJoinDict(const NNodes::TExprBase& node, TExpr
     for (auto i = 0U; i < leftKeys.size(); ++i) {
         auto leftKeyType = leftRowType->FindItemType(leftKeys[i]->Content());
         auto rightKeyType = rightRowType->FindItemType(rightKeys[i]->Content());
-        keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(leftKeyType, optKeyLeft, ctx), DryType(rightKeyType, optKeyRight, ctx), ctx));
+        keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(leftKeyType, optKeyLeft, ctx), DryType(rightKeyType, optKeyRight, ctx), ctx)); 
         badKey = !keyTypeItems.back();
         if (badKey) {
             YQL_CLOG(DEBUG, CoreDq) << "Not comparable keys in join: " << leftKeys[i]->Content()

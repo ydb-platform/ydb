@@ -18,8 +18,8 @@ SRCS(
     type_ann_list.h
     type_ann_types.cpp
     type_ann_types.h
-    type_ann_wide.cpp
-    type_ann_wide.h
+    type_ann_wide.cpp 
+    type_ann_wide.h 
 )
 
 PEERDIR(

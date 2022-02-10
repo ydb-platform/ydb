@@ -85,7 +85,7 @@ public:
         return true;
     }
 
-    void Finish() override {
+    void Finish() override { 
         Finished = true;
     }
 

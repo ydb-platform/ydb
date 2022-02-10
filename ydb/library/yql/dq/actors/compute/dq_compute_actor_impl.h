@@ -1225,8 +1225,8 @@ protected:
             if (freeSpace > 0) {
                 NKikimr::NMiniKQL::TUnboxedValueVector batch;
                 Y_VERIFY(source.SourceActor);
-                bool finished = false;
-                const i64 space = source.SourceActor->GetSourceData(batch, finished, freeSpace);
+                bool finished = false; 
+                const i64 space = source.SourceActor->GetSourceData(batch, finished, freeSpace); 
                 const ui64 index = inputIndex;
                 CA_LOG_D("Poll source " << index
                     << ". Buffer free space: " << freeSpace
@@ -1251,7 +1251,7 @@ protected:
         TString desc = issues.ToString();
         CA_LOG_E("Source[" << inputIndex << "] fatal error: " << desc);
         InternalError(TIssuesIds::DEFAULT_ERROR, desc);
-    }
+    } 
 
     void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
         if (!isFatal) {

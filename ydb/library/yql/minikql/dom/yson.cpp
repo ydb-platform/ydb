@@ -1,14 +1,14 @@
-#include "node.h"
+#include "node.h" 
 #include "yson.h"
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-
+ 
 #include <library/cpp/yson_pull/exceptions.h>
 #include <library/cpp/yson_pull/reader.h>
 #include <library/cpp/yson_pull/writer.h>
 
-#include <util/string/builder.h>
-
+#include <util/string/builder.h> 
+ 
 namespace NYql::NDom {
 
 using namespace NUdf;
@@ -17,28 +17,28 @@ using namespace NYsonPull;
 namespace {
 
 [[noreturn]] Y_NO_INLINE void UnexpectedEvent(EEventType ev) {
-    UdfTerminate((::TStringBuilder() << "Unexpected event: " << ev).c_str());
+    UdfTerminate((::TStringBuilder() << "Unexpected event: " << ev).c_str()); 
 }
 
-TUnboxedValuePod ParseScalar(const TScalar& scalar, const IValueBuilder* valueBuilder) {
+TUnboxedValuePod ParseScalar(const TScalar& scalar, const IValueBuilder* valueBuilder) { 
     switch (scalar.Type()) {
         case EScalarType::Entity:
-            return MakeEntity();
+            return MakeEntity(); 
 
         case EScalarType::Boolean:
-            return MakeBool(scalar.AsBoolean());
+            return MakeBool(scalar.AsBoolean()); 
 
         case EScalarType::Int64:
-            return MakeInt64(scalar.AsInt64());
+            return MakeInt64(scalar.AsInt64()); 
 
         case EScalarType::UInt64:
-            return MakeUint64(scalar.AsUInt64());
+            return MakeUint64(scalar.AsUInt64()); 
 
         case EScalarType::Float64:
-            return MakeDouble(scalar.AsFloat64());
+            return MakeDouble(scalar.AsFloat64()); 
 
         case EScalarType::String:
-            return MakeString(scalar.AsString(), valueBuilder);
+            return MakeString(scalar.AsString(), valueBuilder); 
     }
 }
 
@@ -64,8 +64,8 @@ TUnboxedValue ParseList(TReader& reader, const IValueBuilder* valueBuilder) {
             case EEventType::Scalar:
                 items.emplace_back(ParseScalar(ev.AsScalar(), valueBuilder));
                 break;
-            default:
-                UnexpectedEvent(ev.Type());
+            default: 
+                UnexpectedEvent(ev.Type()); 
         }
     }
 }
@@ -94,8 +94,8 @@ TUnboxedValue ParseDict(TReader& reader, const IValueBuilder* valueBuilder) {
             case EEventType::Scalar:
                 items.emplace_back(std::make_pair(std::move(key), ParseScalar(ev.AsScalar(), valueBuilder)));
                 break;
-            default:
-                UnexpectedEvent(ev.Type());
+            default: 
+                UnexpectedEvent(ev.Type()); 
         }
     }
 }
@@ -126,8 +126,8 @@ TUnboxedValue ParseAttributes(TReader& reader, const IValueBuilder* valueBuilder
             case EEventType::Scalar:
                 items.emplace_back(std::make_pair(std::move(key), ParseScalar(ev.AsScalar(), valueBuilder)));
                 break;
-            default:
-                UnexpectedEvent(ev.Type());
+            default: 
+                UnexpectedEvent(ev.Type()); 
         }
     }
 
@@ -143,165 +143,165 @@ TUnboxedValue ParseValue(TReader& reader, const IValueBuilder* valueBuilder) {
             return ParseDict(reader, valueBuilder);
         case EEventType::BeginAttributes:
             return ParseAttributes(reader, valueBuilder);
-        case EEventType::Scalar:
-            return ParseScalar(ev.AsScalar(), valueBuilder);
-        default:
+        case EEventType::Scalar: 
+            return ParseScalar(ev.AsScalar(), valueBuilder); 
+        default: 
             UnexpectedEvent(ev.Type());
-    }
-}
-
-/////////////////////////////////////
-
-bool CheckValue(TReader& reader);
-
-bool CheckDict(TReader& reader) {
-    for (;;) {
-        const auto& evKey = reader.NextEvent();
-        if (evKey.Type() == EEventType::EndMap)
-            return true;
-
-        if (evKey.Type() != EEventType::Key)
-            return false;
-
-        if (CheckValue(reader))
-            continue;
-        else
-            return false;
-    }
-}
-
-bool CheckAttributes(TReader& reader) {
-    for (;;) {
-        const auto& evKey = reader.NextEvent();
-        if (evKey.Type() == EEventType::EndAttributes)
+    } 
+} 
+ 
+///////////////////////////////////// 
+ 
+bool CheckValue(TReader& reader); 
+ 
+bool CheckDict(TReader& reader) { 
+    for (;;) { 
+        const auto& evKey = reader.NextEvent(); 
+        if (evKey.Type() == EEventType::EndMap) 
+            return true; 
+ 
+        if (evKey.Type() != EEventType::Key) 
+            return false; 
+ 
+        if (CheckValue(reader)) 
+            continue; 
+        else 
+            return false; 
+    } 
+} 
+ 
+bool CheckAttributes(TReader& reader) { 
+    for (;;) { 
+        const auto& evKey = reader.NextEvent(); 
+        if (evKey.Type() == EEventType::EndAttributes) 
             break;
-
-        if (evKey.Type() != EEventType::Key)
-            return false;
-
-        if (CheckValue(reader))
-            continue;
-        else
-            return false;
-    }
-
-    return CheckValue(reader);
-}
-
-bool CheckList(TReader& reader) {
-    for (;;) {
-        const auto& ev = reader.NextEvent();
-        switch (ev.Type()) {
-            case EEventType::BeginList:
-                if (CheckList(reader))
-                    break;
-                else
-                    return false;
-            case EEventType::BeginMap:
-                if (CheckDict(reader))
-                    break;
-                else
-                    return false;
-            case EEventType::BeginAttributes:
-                if (CheckAttributes(reader))
-                    break;
-                else
-                    return false;
-            case EEventType::Scalar:
-                break;
-            case EEventType::EndList:
-                return true;
-            default:
-                return false;
-        }
-    }
-}
-
-bool CheckValue(TReader& reader) {
-    const auto& ev = reader.NextEvent();
-    switch (ev.Type()) {
-        case EEventType::BeginList:
-            if (CheckList(reader))
-                break;
-            else
-                return false;
-        case EEventType::BeginMap:
-            if (CheckDict(reader))
-                break;
-            else
-                return false;
-        case EEventType::BeginAttributes:
-            if (CheckAttributes(reader))
-                break;
-            else
-                return false;
-        case EEventType::Scalar:
+ 
+        if (evKey.Type() != EEventType::Key) 
+            return false; 
+ 
+        if (CheckValue(reader)) 
+            continue; 
+        else 
+            return false; 
+    } 
+ 
+    return CheckValue(reader); 
+} 
+ 
+bool CheckList(TReader& reader) { 
+    for (;;) { 
+        const auto& ev = reader.NextEvent(); 
+        switch (ev.Type()) { 
+            case EEventType::BeginList: 
+                if (CheckList(reader)) 
+                    break; 
+                else 
+                    return false; 
+            case EEventType::BeginMap: 
+                if (CheckDict(reader)) 
+                    break; 
+                else 
+                    return false; 
+            case EEventType::BeginAttributes: 
+                if (CheckAttributes(reader)) 
+                    break; 
+                else 
+                    return false; 
+            case EEventType::Scalar: 
+                break; 
+            case EEventType::EndList: 
+                return true; 
+            default: 
+                return false; 
+        } 
+    } 
+} 
+ 
+bool CheckValue(TReader& reader) { 
+    const auto& ev = reader.NextEvent(); 
+    switch (ev.Type()) { 
+        case EEventType::BeginList: 
+            if (CheckList(reader)) 
+                break; 
+            else 
+                return false; 
+        case EEventType::BeginMap: 
+            if (CheckDict(reader)) 
+                break; 
+            else 
+                return false; 
+        case EEventType::BeginAttributes: 
+            if (CheckAttributes(reader)) 
+                break; 
+            else 
+                return false; 
+        case EEventType::Scalar: 
             break;
-        default:
-            return false;
+        default: 
+            return false; 
     }
-    return true;
+    return true; 
 }
 
 void WriteValue(TWriter& writer, const TUnboxedValue& x) {
-    switch (GetNodeType(x)) {
-        case ENodeType::String:
-            writer.String(x.AsStringRef());
-            break;
-        case ENodeType::Bool:
-            writer.Boolean(x.Get<bool>());
-            break;
-        case ENodeType::Int64:
-            writer.Int64(x.Get<i64>());
-            break;
-        case ENodeType::Uint64:
-            writer.UInt64(x.Get<ui64>());
-            break;
-        case ENodeType::Double:
-            writer.Float64(x.Get<double>());
-            break;
-        case ENodeType::Entity:
-            writer.Entity();
-            break;
-        case ENodeType::List:
+    switch (GetNodeType(x)) { 
+        case ENodeType::String: 
+            writer.String(x.AsStringRef()); 
+            break; 
+        case ENodeType::Bool: 
+            writer.Boolean(x.Get<bool>()); 
+            break; 
+        case ENodeType::Int64: 
+            writer.Int64(x.Get<i64>()); 
+            break; 
+        case ENodeType::Uint64: 
+            writer.UInt64(x.Get<ui64>()); 
+            break; 
+        case ENodeType::Double: 
+            writer.Float64(x.Get<double>()); 
+            break; 
+        case ENodeType::Entity: 
+            writer.Entity(); 
+            break; 
+        case ENodeType::List: 
             writer.BeginList();
-            if (x.IsBoxed()) {
-                if (const auto elements = x.GetElements()) {
-                    const auto size = x.GetListLength();
-                    for (ui64 i = 0; i < size; ++i) {
-                        WriteValue(writer, elements[i]);
-                    }
-                } else {
-                    const auto it = x.GetListIterator();
-                    for (TUnboxedValue v; it.Next(v); WriteValue(writer, v))
-                        continue;
-                }
+            if (x.IsBoxed()) { 
+                if (const auto elements = x.GetElements()) { 
+                    const auto size = x.GetListLength(); 
+                    for (ui64 i = 0; i < size; ++i) { 
+                        WriteValue(writer, elements[i]); 
+                    } 
+                } else { 
+                    const auto it = x.GetListIterator(); 
+                    for (TUnboxedValue v; it.Next(v); WriteValue(writer, v)) 
+                        continue; 
+                } 
             }
             writer.EndList();
             break;
-        case ENodeType::Dict:
+        case ENodeType::Dict: 
             writer.BeginMap();
-            if (x.IsBoxed()) {
-                TUnboxedValue key, payload;
-                for (const auto it = x.GetDictIterator(); it.NextPair(key, payload);) {
-                    writer.Key(key.AsStringRef());
-                    WriteValue(writer, payload);
-                }
+            if (x.IsBoxed()) { 
+                TUnboxedValue key, payload; 
+                for (const auto it = x.GetDictIterator(); it.NextPair(key, payload);) { 
+                    writer.Key(key.AsStringRef()); 
+                    WriteValue(writer, payload); 
+                } 
             }
             writer.EndMap();
             break;
-        case ENodeType::Attr: {
+        case ENodeType::Attr: { 
             writer.BeginAttributes();
             TUnboxedValue key, payload;
-            for (const auto it = x.GetDictIterator(); it.NextPair(key, payload);) {
+            for (const auto it = x.GetDictIterator(); it.NextPair(key, payload);) { 
                 writer.Key(key.AsStringRef());
                 WriteValue(writer, payload);
             }
 
             writer.EndAttributes();
             WriteValue(writer, x.GetVariantItem());
-        }
-        break;
+        } 
+        break; 
     }
 }
 
@@ -323,19 +323,19 @@ NUdf::TUnboxedValue TryParseYsonDom(const TStringBuf yson, const NUdf::IValueBui
     return value;
 }
 
-bool IsValidYson(const TStringBuf yson) try {
-    auto reader = TReader(NInput::FromMemory(yson), EStreamType::Node);
-    const auto& begin = reader.NextEvent();
-    if (begin.Type() != EEventType::BeginStream)
-        return false;
-    if (!CheckValue(reader))
-        return false;
-    const auto& end = reader.NextEvent();
-    return end.Type() == EEventType::EndStream;
-} catch (const NException::TBadStream&) {
-    return false;
-}
-
+bool IsValidYson(const TStringBuf yson) try { 
+    auto reader = TReader(NInput::FromMemory(yson), EStreamType::Node); 
+    const auto& begin = reader.NextEvent(); 
+    if (begin.Type() != EEventType::BeginStream) 
+        return false; 
+    if (!CheckValue(reader)) 
+        return false; 
+    const auto& end = reader.NextEvent(); 
+    return end.Type() == EEventType::EndStream; 
+} catch (const NException::TBadStream&) { 
+    return false; 
+} 
+ 
 TString SerializeYsonDomToBinary(const NUdf::TUnboxedValue& dom) {
     TString result;
     TWriter writer = MakeBinaryWriter(NOutput::FromString(&result), EStreamType::Node);

@@ -3,7 +3,7 @@
 #include <util/string/builder.h>
 
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
 TString AbiVersionToStr(ui32 version)
@@ -17,4 +17,4 @@ TString AbiVersionToStr(ui32 version)
 }
 
 } // namespace NUdf
-} // namespace NYql
+} // namespace NYql 

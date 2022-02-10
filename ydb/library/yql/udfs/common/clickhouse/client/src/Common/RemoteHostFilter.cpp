@@ -37,9 +37,9 @@ void RemoteHostFilter::setValuesFromConfig(const Poco::Util::AbstractConfigurati
         config.keys("remote_url_allow_hosts", keys);
         for (const auto & key : keys)
         {
-            if (key.starts_with("host_regexp"))
+            if (key.starts_with("host_regexp")) 
                 regexp_hosts.push_back(config.getString("remote_url_allow_hosts." + key));
-            else if (key.starts_with("host"))
+            else if (key.starts_with("host")) 
                 primary_hosts.insert(config.getString("remote_url_allow_hosts." + key));
         }
         is_allow_by_default = false;

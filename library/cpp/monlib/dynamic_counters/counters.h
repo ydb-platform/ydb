@@ -12,7 +12,7 @@
 #include <util/string/cast.h>
 #include <util/system/rwlock.h>
 
-#include <functional>
+#include <functional> 
 
 namespace NMonitoring {
     struct TCounterForPtr;
@@ -333,7 +333,7 @@ namespace NMonitoring {
         TIntrusivePtr<TDynamicCounters> FindSubgroup(const TString& name, const TString& value) const;
         void RemoveSubgroup(const TString& name, const TString& value);
         void ReplaceSubgroup(const TString& name, const TString& value, TIntrusivePtr<TDynamicCounters> subgroup);
-
+ 
         // Move all counters from specified subgroup and remove the subgroup.
         void MergeWithSubgroup(const TString& name, const TString& value);
         // Recursively reset all/deriv counters to 0.

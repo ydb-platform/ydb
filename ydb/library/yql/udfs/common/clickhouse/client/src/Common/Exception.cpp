@@ -115,7 +115,7 @@ std::string getExceptionStackTraceString(std::exception_ptr e)
 
 std::string Exception::getStackTraceString() const
 {
-    return "";
+    return ""; 
 }
 
 Exception::FramePointers Exception::getStackFramePointers() const

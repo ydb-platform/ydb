@@ -154,9 +154,9 @@ namespace NSQLTranslationV0 {
         virtual bool UsedSubquery() const;
         virtual bool IsSelect() const;
 
-        TPtr AstNode() const;
-        TPtr AstNode(TAstNode* node) const;
-        TPtr AstNode(TPtr node) const;
+        TPtr AstNode() const; 
+        TPtr AstNode(TAstNode* node) const; 
+        TPtr AstNode(TPtr node) const; 
         TPtr AstNode(const TString& str) const;
 
         template <typename TVal, typename... TVals>
@@ -165,27 +165,27 @@ namespace NSQLTranslationV0 {
             Add(vals...);
         }
 
-        void Add() {}
+        void Add() {} 
 
         // Y() Q() L()
-        TPtr Y() const {
+        TPtr Y() const { 
             return AstNode();
         }
 
         template <typename... TVals>
-        TPtr Y(TVals... vals) const {
+        TPtr Y(TVals... vals) const { 
             TPtr node(AstNode());
             node->Add(vals...);
             return node;
         }
 
         template <typename T>
-        TPtr Q(T a) const {
+        TPtr Q(T a) const { 
             return Y("quote", a);
         }
 
         template <typename... TVals>
-        TPtr L(TPtr list, TVals... vals) const {
+        TPtr L(TPtr list, TVals... vals) const { 
             Y_VERIFY_DEBUG(list);
             auto copy = list->ShallowCopy();
             copy->Add(vals...);
@@ -642,16 +642,16 @@ namespace NSQLTranslationV0 {
 
     class IAggregation: public INode {
     public:
-        bool IsDistinct() const;
-
+        bool IsDistinct() const; 
+ 
         void DoUpdateState() const override;
 
         virtual const TString* GetGenericKey() const;
-
+ 
         virtual bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) = 0;
 
         virtual TNodePtr AggregationTraits(const TNodePtr& type) const;
-
+ 
         virtual TNodePtr AggregationTraitsFactory() const = 0;
 
         virtual std::vector<ui32> GetFactoryColumnIndices() const;
@@ -662,11 +662,11 @@ namespace NSQLTranslationV0 {
 
         const TString& GetName() const;
 
-        virtual void Join(IAggregation* aggr);
-
-    private:
-        virtual TNodePtr GetApply(const TNodePtr& type) const = 0;
-
+        virtual void Join(IAggregation* aggr); 
+ 
+    private: 
+        virtual TNodePtr GetApply(const TNodePtr& type) const = 0; 
+ 
     protected:
         IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode mode);
         TAstNode* Translate(TContext& ctx) const override;
@@ -891,8 +891,8 @@ namespace NSQLTranslationV0 {
     TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
     TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
-    TNodePtr BuildCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne = TString(), const TString& paramTwo = TString());
-    TNodePtr BuildBitCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne = TString(), const TString& paramTwo = TString());
+    TNodePtr BuildCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne = TString(), const TString& paramTwo = TString()); 
+    TNodePtr BuildBitCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne = TString(), const TString& paramTwo = TString()); 
     TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a);
     TNodePtr BuildUnaryOp(TPosition pos, const TString& opName, TNodePtr a);
     TNodePtr BuildBinaryOp(TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);

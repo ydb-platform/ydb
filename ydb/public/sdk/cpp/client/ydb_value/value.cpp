@@ -872,7 +872,7 @@ TDecimalValue::TDecimalValue(const Ydb::Value& valueProto, const TDecimalType& d
 TDecimalValue::TDecimalValue(const TString& decimalString, ui8 precision, ui8 scale)
     : DecimalType_(precision, scale)
 {
-    NYql::NDecimal::TInt128 val = NYql::NDecimal::FromString(decimalString, precision, scale);
+    NYql::NDecimal::TInt128 val = NYql::NDecimal::FromString(decimalString, precision, scale); 
     static_assert(sizeof(val) == 16, "wrong TInt128 size");
     char* buf = reinterpret_cast<char*>(&val);
     Low_ = *(ui64*)buf;
@@ -880,8 +880,8 @@ TDecimalValue::TDecimalValue(const TString& decimalString, ui8 precision, ui8 sc
 }
 
 TString TDecimalValue::ToString() const {
-    NYql::NDecimal::TInt128 val = NYql::NDecimal::FromHalfs(Low_, Hi_);
-    return NYql::NDecimal::ToString(val, DecimalType_.Precision, DecimalType_.Scale);
+    NYql::NDecimal::TInt128 val = NYql::NDecimal::FromHalfs(Low_, Hi_); 
+    return NYql::NDecimal::ToString(val, DecimalType_.Precision, DecimalType_.Scale); 
 }
 
 ////////////////////////////////////////////////////////////////////////////////

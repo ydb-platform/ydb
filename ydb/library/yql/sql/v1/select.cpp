@@ -1042,7 +1042,7 @@ public:
             keysTuple = Q(keysTuple);
         }
         auto extractKey = Y("SqlExtractKey", "row", BuildLambda(Pos, Y("row"), keysTuple));
-        auto extractKeyLambda = BuildLambda(Pos, Y("row"), extractKey);
+        auto extractKeyLambda = BuildLambda(Pos, Y("row"), extractKey); 
 
         TNodePtr processPartitions;
         if (ListCall) {

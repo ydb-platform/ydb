@@ -1450,9 +1450,9 @@ void TKikimrRunner::KikimrStop(bool graceful) {
     }
 
     if (PollerThreads) {
-        PollerThreads->Stop();
-    }
-
+        PollerThreads->Stop(); 
+    } 
+ 
     if (SqsHttp) {
         SqsHttp.Destroy();
     }

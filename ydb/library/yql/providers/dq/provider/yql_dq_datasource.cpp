@@ -73,25 +73,25 @@ public:
             return {};
         }
 
-        TExprNode::TListType worlds;
-        VisitExpr(node, [&worlds] (const TExprNode::TPtr& item) {
-            if (ETypeAnnotationKind::World == item->GetTypeAnn()->GetKind()) {
-                worlds.emplace_back(item);
-                return false;
-            }
-            return true;
-        });
-
-        const auto newWorld = ctx.NewWorld(node->Pos());
-        TNodeOnNodeOwnedMap replaces(worlds.size());
-        for (const auto& w : worlds)
-            replaces.emplace(w.Get(), newWorld);
-
+        TExprNode::TListType worlds; 
+        VisitExpr(node, [&worlds] (const TExprNode::TPtr& item) { 
+            if (ETypeAnnotationKind::World == item->GetTypeAnn()->GetKind()) { 
+                worlds.emplace_back(item); 
+                return false; 
+            } 
+            return true; 
+        }); 
+ 
+        const auto newWorld = ctx.NewWorld(node->Pos()); 
+        TNodeOnNodeOwnedMap replaces(worlds.size()); 
+        for (const auto& w : worlds) 
+            replaces.emplace(w.Get(), newWorld); 
+ 
         return Build<TDqCnResult>(ctx, node->Pos())
             .Output()
                 .Stage<TDqStage>()
                     .Inputs()
-                        .Add(ctx.ReplaceNodes(TExprNode::TPtr(node), std::move(replaces)))
+                        .Add(ctx.ReplaceNodes(TExprNode::TPtr(node), std::move(replaces))) 
                     .Build()
                     .Program()
                         .Args({"row"})
@@ -108,9 +108,9 @@ public:
 
     bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override {
         if (!TDqCnUnionAll::Match(&node)) {
-            return false;
+            return false; 
         }
-
+ 
         if (auto type = GetItemType(*node.GetTypeAnn()); !type || type->GetKind() != ETypeAnnotationKind::Struct) {
             return false;
         }
@@ -124,15 +124,15 @@ public:
             }
         }
 
-        for (const auto& child : node.ChildrenList())
-            VisitExpr(child, [&syncList] (const TExprNode::TPtr& item) {
-                if (ETypeAnnotationKind::World == item->GetTypeAnn()->GetKind()) {
-                    syncList.emplace(item, syncList.size());
-                    return false;
-                }
-                return true;
-            });
-        return true;
+        for (const auto& child : node.ChildrenList()) 
+            VisitExpr(child, [&syncList] (const TExprNode::TPtr& item) { 
+                if (ETypeAnnotationKind::World == item->GetTypeAnn()->GetKind()) { 
+                    syncList.emplace(item, syncList.size()); 
+                    return false; 
+                } 
+                return true; 
+            }); 
+        return true; 
     }
 
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {

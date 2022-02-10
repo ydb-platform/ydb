@@ -9,8 +9,8 @@ using namespace NYdb::NYq;
 
 void UpdateConnections(
     TClient& client,
-    const TString& folderId,
-    const TString& connectionsStr) {
+    const TString& folderId, 
+    const TString& connectionsStr) { 
     NJson::TJsonValue value;
     TStringStream in(connectionsStr);
     NJson::ReadJsonTree(&in, &value);

@@ -5,8 +5,8 @@
 
 namespace NYql::NDom {
 
-bool IsValidYson(const TStringBuf yson);
-
+bool IsValidYson(const TStringBuf yson); 
+ 
 NUdf::TUnboxedValue TryParseYsonDom(const TStringBuf yson, const NUdf::IValueBuilder* valueBuilder);
 
 TString SerializeYsonDomToBinary(const NUdf::TUnboxedValue& dom);

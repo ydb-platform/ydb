@@ -10,19 +10,19 @@ namespace NYql {
 
 struct TExprContext;
 class TExprNode;
-typedef TIntrusivePtr<TExprNode> TExprNodePtr;
-typedef std::vector<TExprNodePtr> TExprNodeList;
+typedef TIntrusivePtr<TExprNode> TExprNodePtr; 
+typedef std::vector<TExprNodePtr> TExprNodeList; 
 
 class TExprNodeReplaceBuilder;
 
 class TExprNodeBuilder {
 friend class TExprNodeReplaceBuilder;
 public:
-    typedef std::function<TExprNodePtr(const TStringBuf&)> ExtArgsFuncType;
+    typedef std::function<TExprNodePtr(const TStringBuf&)> ExtArgsFuncType; 
 public:
     TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx);
     TExprNodeBuilder(TPositionHandle pos, TExprContext& ctx, ExtArgsFuncType extArgsFunc);
-    TExprNodePtr Build();
+    TExprNodePtr Build(); 
     TExprNodeBuilder& Seal();
     TExprNodeReplaceBuilder& Done();
 
@@ -38,12 +38,12 @@ public:
     TExprNodeBuilder List(ui32 index);
     TExprNodeBuilder List();
 
-    TExprNodeBuilder& Add(ui32 index, TExprNodePtr&& child);
-    TExprNodeBuilder& Add(ui32 index, const TExprNodePtr& child);
-    TExprNodeBuilder& Add(TExprNodeList&& children);
+    TExprNodeBuilder& Add(ui32 index, TExprNodePtr&& child); 
+    TExprNodeBuilder& Add(ui32 index, const TExprNodePtr& child); 
+    TExprNodeBuilder& Add(TExprNodeList&& children); 
     // only for lambda bodies
-    TExprNodeBuilder& Set(TExprNodePtr&& body);
-    TExprNodeBuilder& Set(const TExprNodePtr& body);
+    TExprNodeBuilder& Set(TExprNodePtr&& body); 
+    TExprNodeBuilder& Set(const TExprNodePtr& body); 
 
     TExprNodeBuilder Callable(ui32 index, TPositionHandle pos, const TStringBuf& content);
     TExprNodeBuilder Callable(TPositionHandle pos, const TStringBuf& content);
@@ -62,25 +62,25 @@ public:
 
     TExprNodeBuilder& Param(TPositionHandle pos, const TStringBuf& name);
     TExprNodeBuilder& Param(const TStringBuf& name);
-    TExprNodeBuilder& Params(const TStringBuf& name, ui32 width);
+    TExprNodeBuilder& Params(const TStringBuf& name, ui32 width); 
 
     TExprNodeBuilder& Arg(ui32 index, const TStringBuf& name);
     TExprNodeBuilder& Arg(const TStringBuf& name);
-    TExprNodeBuilder& Arg(ui32 index, const TStringBuf& name, ui32 toIndex);
-    TExprNodeBuilder& Arg(const TStringBuf& name, ui32 toIndex);
+    TExprNodeBuilder& Arg(ui32 index, const TStringBuf& name, ui32 toIndex); 
+    TExprNodeBuilder& Arg(const TStringBuf& name, ui32 toIndex); 
     TExprNodeBuilder& Arg(const TExprNodePtr& arg);
 
-    TExprNodeBuilder& Args(ui32 index, const TStringBuf& name, ui32 toIndex);
-    TExprNodeBuilder& Args(const TStringBuf& name, ui32 toIndex);
-
-    TExprNodeReplaceBuilder Apply(ui32 index, const TExprNode& lambda);
-    TExprNodeReplaceBuilder Apply(ui32 index, const TExprNodePtr& lambda);
-    TExprNodeReplaceBuilder Apply(const TExprNode& lambda);
-    TExprNodeReplaceBuilder Apply(const TExprNodePtr& lambda);
-    TExprNodeReplaceBuilder ApplyPartial(ui32 index, TExprNodePtr args, TExprNodePtr body);
-    TExprNodeReplaceBuilder ApplyPartial(ui32 index, TExprNodePtr args, TExprNodeList body);
-    TExprNodeReplaceBuilder ApplyPartial(TExprNodePtr args, TExprNodePtr body);
-    TExprNodeReplaceBuilder ApplyPartial(TExprNodePtr args, TExprNodeList body);
+    TExprNodeBuilder& Args(ui32 index, const TStringBuf& name, ui32 toIndex); 
+    TExprNodeBuilder& Args(const TStringBuf& name, ui32 toIndex); 
+ 
+    TExprNodeReplaceBuilder Apply(ui32 index, const TExprNode& lambda); 
+    TExprNodeReplaceBuilder Apply(ui32 index, const TExprNodePtr& lambda); 
+    TExprNodeReplaceBuilder Apply(const TExprNode& lambda); 
+    TExprNodeReplaceBuilder Apply(const TExprNodePtr& lambda); 
+    TExprNodeReplaceBuilder ApplyPartial(ui32 index, TExprNodePtr args, TExprNodePtr body); 
+    TExprNodeReplaceBuilder ApplyPartial(ui32 index, TExprNodePtr args, TExprNodeList body); 
+    TExprNodeReplaceBuilder ApplyPartial(TExprNodePtr args, TExprNodePtr body); 
+    TExprNodeReplaceBuilder ApplyPartial(TExprNodePtr args, TExprNodeList body); 
 
     template <typename TFunc>
     TExprNodeBuilder& Do(const TFunc& func) {
@@ -90,15 +90,15 @@ public:
 private:
     TExprNodeBuilder(TPositionHandle pos, TExprNodeBuilder* parent, const TExprNodePtr& container);
     TExprNodeBuilder(TPositionHandle pos, TExprNodeReplaceBuilder* parentReplacer);
-    TExprNodePtr FindArgument(const TStringBuf& name);
+    TExprNodePtr FindArgument(const TStringBuf& name); 
 
 private:
     TExprContext& Ctx;
     TExprNodeBuilder* Parent;
     TExprNodeReplaceBuilder* ParentReplacer;
-    TExprNodePtr Container;
+    TExprNodePtr Container; 
     TPositionHandle Pos;
-    TExprNodePtr CurrentNode;
+    TExprNodePtr CurrentNode; 
     ExtArgsFuncType ExtArgsFunc;
 };
 
@@ -124,18 +124,18 @@ private:
     };
 
 public:
-    TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNodePtr container, const TExprNode& lambda);
-    TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNodePtr container, TExprNodePtr&& args, TExprNodePtr&& body);
-    TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNodePtr container, TExprNodePtr&& args, TExprNodeList&& body);
+    TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNodePtr container, const TExprNode& lambda); 
+    TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNodePtr container, TExprNodePtr&& args, TExprNodePtr&& body); 
+    TExprNodeReplaceBuilder(TExprNodeBuilder* owner, TExprNodePtr container, TExprNodePtr&& args, TExprNodeList&& body); 
     TExprNodeReplaceBuilder& With(ui32 argIndex, const TStringBuf& toName);
-    TExprNodeReplaceBuilder& With(ui32 argIndex, const TStringBuf& toName, ui32 toIndex);
-    TExprNodeReplaceBuilder& With(ui32 argIndex, TExprNodePtr toNode);
-    TExprNodeReplaceBuilder& With(const TStringBuf& toName);
-    TExprNodeReplaceBuilder& With(const TStringBuf& toName, ui32 toIndex);
-    TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, TExprNodePtr&& toNode);
-    TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, const TStringBuf& toName);
+    TExprNodeReplaceBuilder& With(ui32 argIndex, const TStringBuf& toName, ui32 toIndex); 
+    TExprNodeReplaceBuilder& With(ui32 argIndex, TExprNodePtr toNode); 
+    TExprNodeReplaceBuilder& With(const TStringBuf& toName); 
+    TExprNodeReplaceBuilder& With(const TStringBuf& toName, ui32 toIndex); 
+    TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, TExprNodePtr&& toNode); 
+    TExprNodeReplaceBuilder& WithNode(const TExprNode& fromNode, const TStringBuf& toName); 
     TExprNodeBuilder With(ui32 argIndex);
-    TExprNodeBuilder WithNode(TExprNodePtr&& fromNode);
+    TExprNodeBuilder WithNode(TExprNodePtr&& fromNode); 
 
     template<typename TNode>
     NNodes::TNodeBuilder<TBuildAdapter, TNode> With(ui32 argIndex) {
@@ -162,11 +162,11 @@ public:
 
 private:
     TExprNodeBuilder* Owner;
-    TExprNodePtr Container;
-    TExprNodePtr Args;
-    TExprNodeList Body;
+    TExprNodePtr Container; 
+    TExprNodePtr Args; 
+    TExprNodeList Body; 
     ui32 CurrentIndex;
-    TExprNodePtr CurrentNode;
+    TExprNodePtr CurrentNode; 
 };
 
 } // namespace NYql

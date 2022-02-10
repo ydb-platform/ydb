@@ -77,8 +77,8 @@ message TYtGatewayConfig {
     optional string MrJobBin = 6; // Path to mrjob executable. If not set then main executable will be used
     optional string MrJobBinMd5 = 13; // MD5 checksum of mrjob executable. Should not be specified directly
     optional string MrJobUdfsDir = 7; // Path to linux udfs. If not set then loaded into main executable will be used
-    optional bool ExecuteUdfLocallyIfPossible = 8; // Turns on local execution mode for calc job with UDF.
-    optional bool LocalChainTest = 9 [default = false]; // Chain local execution jobs for test purpose.
+    optional bool ExecuteUdfLocallyIfPossible = 8; // Turns on local execution mode for calc job with UDF. 
+    optional bool LocalChainTest = 9 [default = false]; // Chain local execution jobs for test purpose. 
     optional string YtDebugLogFile = 10; // File for full YT debug log
     optional uint64 YtDebugLogSize = 11 [default = 0]; // Max YT debug log size
     optional bool YtDebugLogAlwaysWrite = 12 [default = false]; // Write YT debug log always or on error only
@@ -139,30 +139,30 @@ message TKikimrMvpGatewayConfig {
     repeated TKikimrMvpProxyConfig ProxyMapping = 1;
 }
 
-///////////////////////////// Ydb /////////////////////////////
-
-message TYdbClusterConfig {
-    optional string Name = 1;
-    optional string Endpoint = 2;
-    optional string Token = 3;
-    optional TKikimrGrpcData Grpc = 4;
-    optional uint32 TvmId = 5 [default = 0];
+///////////////////////////// Ydb ///////////////////////////// 
+ 
+message TYdbClusterConfig { 
+    optional string Name = 1; 
+    optional string Endpoint = 2; 
+    optional string Token = 3; 
+    optional TKikimrGrpcData Grpc = 4; 
+    optional uint32 TvmId = 5 [default = 0]; 
     optional string Database = 6;
     optional string Id = 7;
     optional bool Secure = 8;
     optional string ServiceAccountId = 9;
     optional string ServiceAccountIdSignature = 10;
     optional bool AddBearerToToken = 11; // whether to use prefix "Bearer " in token
-    repeated TAttr Settings = 100;
-}
-
-message TYdbGatewayConfig {
-    repeated TYdbClusterConfig ClusterMapping = 1;
-    optional string DefaultEndpoint = 2;
-    optional string DefaultToken = 3;
-    repeated TAttr DefaultSettings = 4;
-}
-
+    repeated TAttr Settings = 100; 
+} 
+ 
+message TYdbGatewayConfig { 
+    repeated TYdbClusterConfig ClusterMapping = 1; 
+    optional string DefaultEndpoint = 2; 
+    optional string DefaultToken = 3; 
+    repeated TAttr DefaultSettings = 4; 
+} 
+ 
 ///////////////////////////// ClickHouse /////////////////////////////
 
 message TClickHouseClusterConfig {
@@ -310,27 +310,27 @@ message TChytGatewayConfig {
     repeated TChytClusterConfig ClusterMapping = 1;
 }
 
-///////////////////////////// S3 /////////////////////////////
-
-message TS3ClusterConfig {
-    optional string Name = 1; // Short cluster name
-    optional string Url = 2;
-    optional string Token = 3;
+///////////////////////////// S3 ///////////////////////////// 
+ 
+message TS3ClusterConfig { 
+    optional string Name = 1; // Short cluster name 
+    optional string Url = 2; 
+    optional string Token = 3; 
     optional string ServiceAccountId = 4;
     optional string ServiceAccountIdSignature = 5;
-    repeated TAttr Settings = 100;
-}
-
-message TS3GatewayConfig {
-    repeated TS3ClusterConfig ClusterMapping = 1;
-
-    optional uint64 FileSizeLimit = 2;
-    optional uint32 MaxFilesPerQuery = 3;
-    optional uint64 MaxReadSizePerQuery = 4;
-
-    repeated TAttr DefaultSettings = 100;
-}
-
+    repeated TAttr Settings = 100; 
+} 
+ 
+message TS3GatewayConfig { 
+    repeated TS3ClusterConfig ClusterMapping = 1; 
+ 
+    optional uint64 FileSizeLimit = 2; 
+    optional uint32 MaxFilesPerQuery = 3; 
+    optional uint64 MaxReadSizePerQuery = 4; 
+ 
+    repeated TAttr DefaultSettings = 100; 
+} 
+ 
 ///////////////////////////// Solomon /////////////////////////////
 
 message TSolomonClusterConfig {
@@ -450,8 +450,8 @@ message TGatewaysConfig {
     optional TSqlCoreConfig SqlCore = 12;
     optional TDqGatewayConfig Dq = 13;
     optional TMysqlGatewayConfig Mysql = 14;
-    optional TYdbGatewayConfig Ydb = 15;
+    optional TYdbGatewayConfig Ydb = 15; 
     optional TPqGatewayConfig Pq = 16;
-    optional TS3GatewayConfig S3 = 17;
+    optional TS3GatewayConfig S3 = 17; 
     optional THttpGatewayConfig HttpGateway = 18;
 }

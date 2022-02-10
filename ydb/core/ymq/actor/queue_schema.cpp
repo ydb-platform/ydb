@@ -785,8 +785,8 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let existingQueuesWithSameNameAndFolderId
-            (If (Equal (Utf8String '"") customName)
-                (List (TypeOf queues))
+            (If (Equal (Utf8String '"") customName) 
+                (List (TypeOf queues)) 
                 (Filter queues (lambda '(item) (block '(
                     (return (Coalesce
                         (And

@@ -13,17 +13,17 @@ namespace NYql {
 
 using namespace NNodes;
 
-namespace {
-
+namespace { 
+ 
 class TClickHouseDataSource : public TDataProviderBase {
 public:
-    TClickHouseDataSource(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway)
+    TClickHouseDataSource(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway) 
         : State_(state)
         , IODiscoveryTransformer_(CreateClickHouseIODiscoveryTransformer(State_))
-        , LoadMetaDataTransformer_(CreateClickHouseLoadTableMetadataTransformer(State_, std::move(gateway)))
+        , LoadMetaDataTransformer_(CreateClickHouseLoadTableMetadataTransformer(State_, std::move(gateway))) 
         , TypeAnnotationTransformer_(CreateClickHouseDataSourceTypeAnnotationTransformer(State_))
-        , DqIntegration_(CreateClickHouseDqIntegration(State_))
-    {}
+        , DqIntegration_(CreateClickHouseDqIntegration(State_)) 
+    {} 
 
     TStringBuf GetName() const override {
         return ClickHouseProviderName;
@@ -109,17 +109,17 @@ public:
 
 
 private:
-    const TClickHouseState::TPtr State_;
-    const THolder<IGraphTransformer> IODiscoveryTransformer_;
-    const THolder<IGraphTransformer> LoadMetaDataTransformer_;
-    const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
-    const THolder<IDqIntegration> DqIntegration_;
+    const TClickHouseState::TPtr State_; 
+    const THolder<IGraphTransformer> IODiscoveryTransformer_; 
+    const THolder<IGraphTransformer> LoadMetaDataTransformer_; 
+    const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_; 
+    const THolder<IDqIntegration> DqIntegration_; 
 };
 
 }
 
-TIntrusivePtr<IDataProvider> CreateClickHouseDataSource(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway) {
-    return new TClickHouseDataSource(std::move(state), std::move(gateway));
-}
-
+TIntrusivePtr<IDataProvider> CreateClickHouseDataSource(TClickHouseState::TPtr state, IHTTPGateway::TPtr gateway) { 
+    return new TClickHouseDataSource(std::move(state), std::move(gateway)); 
+} 
+ 
 } // namespace NYql

@@ -6,7 +6,7 @@ IF (OS_LINUX AND CLANG)
 
     YQL_ABI_VERSION(
         2
-        23
+        23 
         0
     )
 

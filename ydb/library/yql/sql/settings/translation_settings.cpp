@@ -38,7 +38,7 @@ namespace NSQLTranslation {
         , AnsiLexer(false)
         , PgParser(false)
         , InferSyntaxVersion(false)
-        , V0Behavior(EV0Behavior::Silent)
+        , V0Behavior(EV0Behavior::Silent) 
         , V0ForceDisable(InTestEnvironment())
         , WarnOnV0(true)
         , V0WarnAsError(ISqlFeaturePolicy::MakeAlwaysDisallow())

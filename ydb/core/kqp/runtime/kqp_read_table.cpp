@@ -235,8 +235,8 @@ class TKqpScanWideReadTableWrapperBase : public TStatelessWideFlowCodegeneratorN
     using TBase = TStatelessWideFlowCodegeneratorNode<TKqpScanWideReadTableWrapperBase>;
 public:
     TKqpScanWideReadTableWrapperBase(TKqpScanComputeContext& computeCtx, std::vector<EValueRepresentation>&& representations)
-        : TBase(this)
-        , ComputeCtx(computeCtx)
+        : TBase(this) 
+        , ComputeCtx(computeCtx) 
         , Representations(std::move(representations))
     {}
 
@@ -340,8 +340,8 @@ private:
     }
 
     void RegisterDependencies() const {
-        FlowDependsOn(FromNode);
-        FlowDependsOn(ToNode);
+        FlowDependsOn(FromNode); 
+        FlowDependsOn(ToNode); 
     }
 
 private:

@@ -119,7 +119,7 @@ public:
                     inplace[i] = NUdf::TUnboxedValuePod(new TYqlCodeResource(exprCtxPtr, arg));
                 }
 
-                dynamic_cast<IComputationExternalNode*>(Args_[1])->SetValue(ctx, std::move(array));
+                dynamic_cast<IComputationExternalNode*>(Args_[1])->SetValue(ctx, std::move(array)); 
             }
 
             // get body of lambda

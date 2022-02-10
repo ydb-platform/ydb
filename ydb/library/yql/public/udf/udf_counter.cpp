@@ -1,9 +1,9 @@
 #include "udf_counter.h"
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
 TScopedProbe::TNullHost TScopedProbe::NullHost_;
 
 } // namespace NUdf
-} // namespace NYql
+} // namespace NYql 

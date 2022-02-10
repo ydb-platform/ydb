@@ -35,7 +35,7 @@ Y_UNIT_TEST_SUITE(TestFunctionSignature) {
     }
 
     Y_UNIT_TEST(TestFunction) {
-        std::function<int(double)> f(FF);
+        std::function<int(double)> f(FF); 
 
         UNIT_ASSERT_TYPES_EQUAL(TFunctionSignature<decltype(f)>, decltype(FF));
     }

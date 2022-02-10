@@ -100,29 +100,29 @@ TRuntimeNode BuildParseCall(
         MKQL_ENSURE(1U == structType->GetMembersCount(), "Expected single column.");
         bool isOptional;
         const auto schemeType = UnpackOptionalData(structType->GetMemberType(0U), isOptional)->GetSchemeType();
-        return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input),
-            [&](TRuntimeNode item)->TRuntimeNode::TList {
-                return { NUdf::TDataType<const char*>::Id == schemeType ?
-                    isOptional ? ctx.ProgramBuilder.NewOptional(item) : item :
-                    (ctx.ProgramBuilder.*(isOptional ? &TProgramBuilder::FromString : &TProgramBuilder::StrictFromString))
-                        (item, ctx.ProgramBuilder.NewDataType(schemeType, isOptional))
-                };
-            }
-        );
-    } else if (format == "json_list") {
-        input = ctx.ProgramBuilder.FlatMap(ctx.ProgramBuilder.ToFlow(input),
-            [&](TRuntimeNode blob) {
-                const auto json = ctx.ProgramBuilder.StrictFromString(blob, ctx.ProgramBuilder.NewDataType(NUdf::TDataType<NUdf::TJson>::Id));
-                const auto dom = ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.ParseJson"), {json});
-                const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({dom.GetStaticType()}), ctx.ProgramBuilder.NewStructType({}), ctx.ProgramBuilder.NewListType(outputItemType)});
-                return ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.ConvertTo", {}, userType), {dom});
-            });
-    } else {
-        const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({inputItemType}), ctx.ProgramBuilder.NewStructType({}), outputItemType});
-        input = ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format), {input}));
+        return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input), 
+            [&](TRuntimeNode item)->TRuntimeNode::TList { 
+                return { NUdf::TDataType<const char*>::Id == schemeType ? 
+                    isOptional ? ctx.ProgramBuilder.NewOptional(item) : item : 
+                    (ctx.ProgramBuilder.*(isOptional ? &TProgramBuilder::FromString : &TProgramBuilder::StrictFromString)) 
+                        (item, ctx.ProgramBuilder.NewDataType(schemeType, isOptional)) 
+                }; 
+            } 
+        ); 
+    } else if (format == "json_list") { 
+        input = ctx.ProgramBuilder.FlatMap(ctx.ProgramBuilder.ToFlow(input), 
+            [&](TRuntimeNode blob) { 
+                const auto json = ctx.ProgramBuilder.StrictFromString(blob, ctx.ProgramBuilder.NewDataType(NUdf::TDataType<NUdf::TJson>::Id)); 
+                const auto dom = ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.ParseJson"), {json}); 
+                const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({dom.GetStaticType()}), ctx.ProgramBuilder.NewStructType({}), ctx.ProgramBuilder.NewListType(outputItemType)}); 
+                return ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.ConvertTo", {}, userType), {dom}); 
+            }); 
+    } else { 
+        const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({inputItemType}), ctx.ProgramBuilder.NewStructType({}), outputItemType}); 
+        input = ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format), {input})); 
     }
 
-    return ctx.ProgramBuilder.ExpandMap(input,
+    return ctx.ProgramBuilder.ExpandMap(input, 
         [&](TRuntimeNode item) {
             TRuntimeNode::TList fields;
             fields.reserve(structType->GetMembersCount());

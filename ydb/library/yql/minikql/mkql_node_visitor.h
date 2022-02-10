@@ -6,7 +6,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <functional>
+#include <functional> 
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -43,7 +43,7 @@ public:
     virtual void Visit(TTupleLiteral& node) = 0;
     virtual void Visit(TVariantLiteral& node) = 0;
     virtual void Visit(TStreamType& node) = 0;
-    virtual void Visit(TFlowType& node) = 0;
+    virtual void Visit(TFlowType& node) = 0; 
     virtual void Visit(TTaggedType& node) = 0;
     virtual void Visit(TBlockType& node) = 0;
 };
@@ -79,7 +79,7 @@ public:
     void Visit(TTupleLiteral& node) override;
     void Visit(TVariantLiteral& node) override;
     void Visit(TStreamType& node) override;
-    void Visit(TFlowType& node) override;
+    void Visit(TFlowType& node) override; 
     void Visit(TTaggedType& node) override;
     void Visit(TBlockType& node) override;
 
@@ -118,7 +118,7 @@ public:
     void Visit(TTupleLiteral& node) override;
     void Visit(TVariantLiteral& node) override;
     void Visit(TStreamType& node) override;
-    void Visit(TFlowType& node) override;
+    void Visit(TFlowType& node) override; 
     void Visit(TTaggedType& node) override;
     void Visit(TBlockType& node) override;
 };
@@ -156,13 +156,13 @@ public:
     void Visit(TTupleLiteral& node) override;
     void Visit(TVariantLiteral& node) override;
     void Visit(TStreamType& node) override;
-    void Visit(TFlowType& node) override;
+    void Visit(TFlowType& node) override; 
     void Visit(TTaggedType& node) override;
     void Visit(TBlockType& node) override;
 
-    void Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes = std::vector<TNode*>(),
+    void Walk(TNode* root, const TTypeEnvironment& env, const std::vector<TNode*>& terminalNodes = std::vector<TNode*>(), 
         bool buildConsumersMap = false, size_t nodesCountHint = 0);
-    const std::vector<TNode*>& GetNodes();
+    const std::vector<TNode*>& GetNodes(); 
     const TNodesVec& GetConsumerNodes(TNode& node);
     void Clear();
 
@@ -170,14 +170,14 @@ private:
     void AddChildNode(TNode* parent, TNode& child);
 
 private:
-    std::vector<TNode*> NodeList;
-    std::vector<TNode*>* Stack = nullptr;
+    std::vector<TNode*> NodeList; 
+    std::vector<TNode*>* Stack = nullptr; 
     bool BuildConsumersMap = false;
-    std::unordered_map<TNode*, TNodesVec> ConsumersMap;
+    std::unordered_map<TNode*, TNodesVec> ConsumersMap; 
 };
 
 class TTypeEnvironment;
-typedef std::function<TRuntimeNode (TCallable& callable, const TTypeEnvironment& env)> TCallableVisitFunc;
+typedef std::function<TRuntimeNode (TCallable& callable, const TTypeEnvironment& env)> TCallableVisitFunc; 
 typedef std::function<TCallableVisitFunc (const TInternName& name)> TCallableVisitFuncProvider;
 
 TRuntimeNode SinglePassVisitCallables(TRuntimeNode root, TExploringNodeVisitor& explorer,

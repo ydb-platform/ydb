@@ -259,7 +259,7 @@ void TEngineHost::PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaul
         throw TNotReadyTabletException();
 }
 
-NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
+NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row, 
     TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
     const THolderFactory& holderFactory)
 {
@@ -309,14 +309,14 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     }
 
     if (NTable::EReady::Gone == ready) {
-        return NUdf::TUnboxedValue();
+        return NUdf::TUnboxedValue(); 
     }
 
-    NUdf::TUnboxedValue* rowItems = nullptr;
-    auto rowResult = holderFactory.CreateDirectArrayHolder(tags.size(), rowItems);
+    NUdf::TUnboxedValue* rowItems = nullptr; 
+    auto rowResult = holderFactory.CreateDirectArrayHolder(tags.size(), rowItems); 
 
     ui64 rowBytes = 0;
-    for (ui32 i = 0; i < tags.size(); ++i) {
+    for (ui32 i = 0; i < tags.size(); ++i) { 
         rowItems[i] = GetCellValue(dbRow.Get(i), cellTypes[i]);
         rowBytes += dbRow.Get(i).IsNull() ? 1 : dbRow.Get(i).Size();
     }
@@ -334,22 +334,22 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
     Counters.SelectRowBytes += rowBytes;
     Counters.SelectRowRows++;
 
-    return std::move(rowResult);
+    return std::move(rowResult); 
 }
 
 template<class TTableIt>
 class TSelectRangeLazyRow : public TComputationValue<TSelectRangeLazyRow<TTableIt>>{
-    NUdf::TUnboxedValue GetElement(ui32 index) const override {
-        BuildValue(index);
-        return GetPtr()[index];
-    }
-
-public:
-    ~TSelectRangeLazyRow() {
-        for (ui32 i = 0; i < Size(); ++i) {
-            (GetPtr() + i)->~TUnboxedValue();
-        }
-    }
+    NUdf::TUnboxedValue GetElement(ui32 index) const override { 
+        BuildValue(index); 
+        return GetPtr()[index]; 
+    } 
+ 
+public: 
+    ~TSelectRangeLazyRow() { 
+        for (ui32 i = 0; i < Size(); ++i) { 
+            (GetPtr() + i)->~TUnboxedValue(); 
+        } 
+    } 
 
     void* operator new(size_t sz) = delete;
     void* operator new[](size_t sz) = delete;
@@ -372,12 +372,12 @@ public:
 
         return NUdf::TUnboxedValuePod(::new(buffer) TSelectRangeLazyRow(dbData, holderFactory, maskSize, systemColumnTags, shardId));
     }
-
-    void InvalidateDb() {
-        for (ui32 i = 0; i < Size(); ++i) {
-            BuildValue(i);
-        }
-    }
+ 
+    void InvalidateDb() { 
+        for (ui32 i = 0; i < Size(); ++i) { 
+            BuildValue(i); 
+        } 
+    } 
 
     void OwnDb(THolder<TTableIt>&& iter) {
         Iter = std::move(iter);
@@ -401,17 +401,17 @@ private:
     {
         ClearMask();
         for (ui32 i = 0; i < Size(); ++i) {
-            ::new(GetPtr() + i) NUdf::TUnboxedValue();
+            ::new(GetPtr() + i) NUdf::TUnboxedValue(); 
         }
     }
 
 private:
-    inline NUdf::TUnboxedValue* GetPtr() const {
+    inline NUdf::TUnboxedValue* GetPtr() const { 
         return const_cast<NUdf::TUnboxedValue*>(reinterpret_cast<const NUdf::TUnboxedValue*>(this + 1));
     }
 
     inline ui64* GetMaskPtr() const {
-        return reinterpret_cast<ui64*>(GetPtr() + Size());
+        return reinterpret_cast<ui64*>(GetPtr() + Size()); 
     }
 
     inline ui32 Size() const {
@@ -479,7 +479,7 @@ public:
         TIterator(TMemoryUsageInfo* memInfo, const TSelectRangeLazyRowsList& list, TAutoPtr<TTableIt>&& iter,
             const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId)
             : TBase(memInfo)
-            , List(list)
+            , List(list) 
             , Iter(iter.Release())
             , HasCurrent(false)
             , Iterations(0)
@@ -488,14 +488,14 @@ public:
             , SystemColumnTags(systemColumnTags)
             , ShardId(shardId) {}
 
-        bool Next(NUdf::TUnboxedValue& value) override {
-            bool truncated = false;
-
+        bool Next(NUdf::TUnboxedValue& value) override { 
+            bool truncated = false; 
+ 
             Clear();
-
+ 
             while (Iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
                 TDbTupleRef tuple = Iter->GetKey();
-
+ 
                 ++Iterations;
                 if (Iterations % PeriodicCallbackIterations == 0) {
                     List.EngineHost.ExecPeriodicCallback();
@@ -518,56 +518,56 @@ public:
                 }
                 if (skipRow) {
                     Clear();
-                    continue;
-                }
-
-                if ((List.ItemsLimit && Items >= List.ItemsLimit) || (List.BytesLimit && Bytes >= List.BytesLimit)) {
-                    truncated = true;
-                    break;
-                }
-
-                if (Items == 0) {
-                    TArrayRef<TCell> array(const_cast<TCell*>(tuple.Columns), tuple.ColumnCount);
-                    auto cells = TSerializedCellVec::Serialize(array);
+                    continue; 
+                } 
+ 
+                if ((List.ItemsLimit && Items >= List.ItemsLimit) || (List.BytesLimit && Bytes >= List.BytesLimit)) { 
+                    truncated = true; 
+                    break; 
+                } 
+ 
+                if (Items == 0) { 
+                    TArrayRef<TCell> array(const_cast<TCell*>(tuple.Columns), tuple.ColumnCount); 
+                    auto cells = TSerializedCellVec::Serialize(array); 
                     ui32 totalSize = sizeof(ui32) + tuple.ColumnCount * sizeof(NScheme::TTypeId) + cells.size();
-                    TString firstKey;
-                    firstKey.reserve(totalSize);
-                    firstKey.AppendNoAlias((const char*)&tuple.ColumnCount, sizeof(ui32));
-                    firstKey.AppendNoAlias((const char*)tuple.Types, tuple.ColumnCount * sizeof(NScheme::TTypeId));
-                    firstKey.AppendNoAlias(cells);
-
-                    if (List.FirstKey) {
-                        Y_VERIFY_DEBUG(*List.FirstKey == firstKey);
-                    } else {
-                        List.FirstKey = firstKey;
-                    }
-                }
-
+                    TString firstKey; 
+                    firstKey.reserve(totalSize); 
+                    firstKey.AppendNoAlias((const char*)&tuple.ColumnCount, sizeof(ui32)); 
+                    firstKey.AppendNoAlias((const char*)tuple.Types, tuple.ColumnCount * sizeof(NScheme::TTypeId)); 
+                    firstKey.AppendNoAlias(cells); 
+ 
+                    if (List.FirstKey) { 
+                        Y_VERIFY_DEBUG(*List.FirstKey == firstKey); 
+                    } else { 
+                        List.FirstKey = firstKey; 
+                    } 
+                } 
+ 
                 TDbTupleRef rowValues = Iter->GetValues();
-                ui64 rowSize = 0;
-                for (ui32 i = 0; i < rowValues.ColumnCount; ++i) {
+                ui64 rowSize = 0; 
+                for (ui32 i = 0; i < rowValues.ColumnCount; ++i) { 
                     rowSize += rowValues.Columns[i].IsNull() ? 1 : rowValues.Columns[i].Size();
-                }
-                // Some per-row overhead to deal with the case when no columns were requested
-                rowSize = std::max(rowSize, (ui64)8);
-
-                Items++;
-                Bytes += rowSize;
+                } 
+                // Some per-row overhead to deal with the case when no columns were requested 
+                rowSize = std::max(rowSize, (ui64)8); 
+ 
+                Items++; 
+                Bytes += rowSize; 
                 List.EngineHost.GetCounters().SelectRangeRows++;
                 List.EngineHost.GetCounters().SelectRangeBytes += rowSize;
                 List.KeyAccessSampler->AddSample(List.TableId, tuple.Cells());
-
-                if (HasCurrent && CurrentRowValue.UniqueBoxed()) {
-                    CurrentRow()->Reuse(rowValues);
-                } else {
+ 
+                if (HasCurrent && CurrentRowValue.UniqueBoxed()) { 
+                    CurrentRow()->Reuse(rowValues); 
+                } else { 
                     CurrentRowValue = TSelectRangeLazyRow<TTableIt>::Create(rowValues, List.HolderFactory, SystemColumnTags, ShardId);
-                }
-
-                value = CurrentRowValue;
-                HasCurrent = true;
-                return true;
-            }
-
+                } 
+ 
+                value = CurrentRowValue; 
+                HasCurrent = true; 
+                return true; 
+            } 
+ 
             List.EngineHost.GetCounters().SelectRangeDeletedRowSkips += std::exchange(Iter->Stats.DeletedRowSkips, 0);
             List.EngineHost.GetCounters().InvisibleRowSkips += std::exchange(Iter->Stats.InvisibleRowSkips, 0);
 
@@ -578,26 +578,26 @@ public:
                 throw TNotReadyTabletException();
             }
 
-            if (List.Truncated || List.SizeBytes) {
-                Y_VERIFY_DEBUG(List.Truncated && *List.Truncated == truncated);
-                Y_VERIFY_DEBUG(List.SizeBytes && *List.SizeBytes == Bytes);
-            } else {
-                List.Truncated = truncated;
-                List.SizeBytes = Bytes;
-            }
-
-            CurrentRowValue = NUdf::TUnboxedValue();
-            HasCurrent = false;
-            return false;
-        }
-
-        ~TIterator() {
-            if (HasCurrent) {
-                if (!CurrentRowValue.UniqueBoxed()) {
+            if (List.Truncated || List.SizeBytes) { 
+                Y_VERIFY_DEBUG(List.Truncated && *List.Truncated == truncated); 
+                Y_VERIFY_DEBUG(List.SizeBytes && *List.SizeBytes == Bytes); 
+            } else { 
+                List.Truncated = truncated; 
+                List.SizeBytes = Bytes; 
+            } 
+ 
+            CurrentRowValue = NUdf::TUnboxedValue(); 
+            HasCurrent = false; 
+            return false; 
+        } 
+ 
+        ~TIterator() { 
+            if (HasCurrent) { 
+                if (!CurrentRowValue.UniqueBoxed()) { 
                     CurrentRow()->OwnDb(std::move(Iter));
-                }
-            }
-        }
+                } 
+            } 
+        } 
     private:
         void Clear() {
             if (HasCurrent) {
@@ -645,16 +645,16 @@ public:
         , EngineHost(engineHost)
         , KeyAccessSampler(keyAccessSampler)
     {}
-
-    NUdf::TUnboxedValue GetListIterator() const override {
-        const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(LocalTid);
+ 
+    NUdf::TUnboxedValue GetListIterator() const override { 
+        const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(LocalTid); 
         auto tableRange = RangeHolder.ToTableRange();
 
-        TSmallVec<TRawTypeValue> keyFrom;
+        TSmallVec<TRawTypeValue> keyFrom; 
         TSmallVec<TRawTypeValue> keyTo;
         ConvertTableKeys(Scheme, tableInfo, tableRange.From, keyFrom, nullptr);
         ConvertTableKeys(Scheme, tableInfo, tableRange.To, keyTo, nullptr);
-
+ 
         NTable::TKeyRange keyRange;
         keyRange.MinKey = keyFrom;
         keyRange.MaxKey = keyTo;
@@ -675,33 +675,33 @@ public:
         }
     }
 
-    NUdf::TUnboxedValue GetTruncated() const {
+    NUdf::TUnboxedValue GetTruncated() const { 
         if (!Truncated) {
-            for (const auto it = GetListIterator(); it.Skip();)
-                continue;
+            for (const auto it = GetListIterator(); it.Skip();) 
+                continue; 
         }
 
         Y_VERIFY_DEBUG(Truncated);
-        return NUdf::TUnboxedValuePod(*Truncated);
+        return NUdf::TUnboxedValuePod(*Truncated); 
     }
 
-    NUdf::TUnboxedValue GetFirstKey() const {
+    NUdf::TUnboxedValue GetFirstKey() const { 
         if (!FirstKey) {
-            GetListIterator().Skip();
+            GetListIterator().Skip(); 
         }
 
         TString key = FirstKey ? *FirstKey : TString();
-        return MakeString(key);
+        return MakeString(key); 
     }
 
-    NUdf::TUnboxedValue GetSizeBytes() const {
+    NUdf::TUnboxedValue GetSizeBytes() const { 
         if (!SizeBytes) {
-            for (const auto it = GetListIterator(); it.Skip();)
-                continue;
+            for (const auto it = GetListIterator(); it.Skip();) 
+                continue; 
         }
 
         Y_VERIFY_DEBUG(SizeBytes);
-        return NUdf::TUnboxedValuePod(*SizeBytes);
+        return NUdf::TUnboxedValuePod(*SizeBytes); 
     }
 
 private:
@@ -732,23 +732,23 @@ public:
         const TSmallVec<NTable::TTag>& tags, const TSmallVec<bool>& skipNullKeys, const TTableRange& range,
         ui64 itemsLimit, ui64 bytesLimit, bool reverse, TEngineHost& engineHost,
         const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId, IKeyAccessSampler::TPtr keyAccessSampler)
-        : TComputationValue(&holderFactory.GetMemInfo())
+        : TComputationValue(&holderFactory.GetMemInfo()) 
         , List(NUdf::TUnboxedValuePod(new TSelectRangeLazyRowsList(db, scheme, holderFactory, tableId, localTid, tags,
             skipNullKeys, range, itemsLimit, bytesLimit, reverse, engineHost, systemColumnTags, shardId, keyAccessSampler))) {}
-
-private:
-    NUdf::TUnboxedValue GetElement(ui32 index) const override {
-        TSelectRangeLazyRowsList* list = static_cast<TSelectRangeLazyRowsList*>(List.AsBoxed().Get());
-        switch (index) {
-            case 0: return List;
-            case 1: return list->GetTruncated();
-            case 2: return list->GetFirstKey();
-            case 3: return list->GetSizeBytes();
-        }
-
-        Y_FAIL("TSelectRangeResult: Index out of range.");
-    }
-
+ 
+private: 
+    NUdf::TUnboxedValue GetElement(ui32 index) const override { 
+        TSelectRangeLazyRowsList* list = static_cast<TSelectRangeLazyRowsList*>(List.AsBoxed().Get()); 
+        switch (index) { 
+            case 0: return List; 
+            case 1: return list->GetTruncated(); 
+            case 2: return list->GetFirstKey(); 
+            case 3: return list->GetSizeBytes(); 
+        } 
+ 
+        Y_FAIL("TSelectRangeResult: Index out of range."); 
+    } 
+ 
     NUdf::TUnboxedValue List;
 };
 
@@ -783,7 +783,7 @@ static TSmallVec<bool> CreateBoolVec(const TListLiteral* list) {
     return res;
 }
 
-NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTableRange& range,
+NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTableRange& range, 
     TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType, const TReadTarget& readTarget,
     ui64 itemsLimit, ui64 bytesLimit, bool reverse, std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs,
     const THolderFactory& holderFactory)
@@ -961,7 +961,7 @@ void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TS
 
 NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type) {
     if (cell.IsNull()) {
-        return NUdf::TUnboxedValue();
+        return NUdf::TUnboxedValue(); 
     }
 
     switch (type) {

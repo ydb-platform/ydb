@@ -107,14 +107,14 @@ FunctionOverloadResolverPtr FunctionFactory::tryGetImpl(
 
     if (!res)
         return nullptr;
-/*
+/* 
     if (CurrentThread::isInitialized())
     {
         auto query_context = CurrentThread::get().getQueryContext();
         if (query_context && query_context->getSettingsRef().log_queries)
             query_context->addQueryFactoriesInfo(Context::QueryLogFactories::Function, name);
     }
-*/
+*/ 
     return res;
 }
 

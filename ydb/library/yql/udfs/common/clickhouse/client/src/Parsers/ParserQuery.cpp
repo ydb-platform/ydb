@@ -27,7 +27,7 @@ bool ParserQuery::parseImpl(Pos & pos, ASTPtr & node, Expected & expected)
     ParserExternalDDLQuery external_ddl_p;
     ParserBackupQuery backup_p;
 
-    bool res = insert_p.parse(pos, node, expected)
+    bool res = insert_p.parse(pos, node, expected) 
         || use_p.parse(pos, node, expected)
         || set_role_p.parse(pos, node, expected)
         || set_p.parse(pos, node, expected)

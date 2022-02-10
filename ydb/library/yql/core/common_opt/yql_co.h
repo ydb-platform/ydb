@@ -11,33 +11,33 @@ struct TOptimizeContext {
     TTypeAnnotationContext* Types = nullptr;
     TParentsMap* ParentsMap = nullptr;
 
-    const TExprNode* GetParentIfSingle(const TExprNode& node) const {
+    const TExprNode* GetParentIfSingle(const TExprNode& node) const { 
         YQL_ENSURE(ParentsMap);
 
-        const auto it = ParentsMap->find(&node);
+        const auto it = ParentsMap->find(&node); 
         YQL_ENSURE(it != ParentsMap->cend());
 
         auto& parents = it->second;
         YQL_ENSURE(!parents.empty());
         if (parents.size() > 1) {
-            return nullptr;
+            return nullptr; 
         }
 
         size_t usageCount = 0;
-        for (const auto& child : (*parents.cbegin())->ChildrenList()) {
+        for (const auto& child : (*parents.cbegin())->ChildrenList()) { 
             if (child.Get() == &node && ++usageCount > 1) {
-                return nullptr;
+                return nullptr; 
             }
         }
 
         YQL_ENSURE(usageCount == 1);
-        return *parents.cbegin();
+        return *parents.cbegin(); 
     }
 
-    bool IsSingleUsage(const TExprNode& node) const {
-        return bool(GetParentIfSingle(node));
-    }
-
+    bool IsSingleUsage(const TExprNode& node) const { 
+        return bool(GetParentIfSingle(node)); 
+    } 
+ 
     bool IsSingleUsage(const NNodes::TExprBase& node) const {
         return IsSingleUsage(node.Ref());
     }
@@ -71,9 +71,9 @@ struct TOptimizeContext {
 };
 
 using TCallableOptimizerExt = std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&, TOptimizeContext&)>;
-using TCallableOptimizerMap = std::unordered_map<std::string_view, TCallableOptimizerExt>;
+using TCallableOptimizerMap = std::unordered_map<std::string_view, TCallableOptimizerExt>; 
 using TFinalizingOptimizerExt = std::function<void (const TExprNode::TPtr&, TNodeOnNodeOwnedMap&, TExprContext&, TOptimizeContext&)>;
-using TFinalizingOptimizerMap = std::unordered_map<std::string_view, TFinalizingOptimizerExt>;
+using TFinalizingOptimizerMap = std::unordered_map<std::string_view, TFinalizingOptimizerExt>; 
 
 struct TCoCallableRules {
     enum {

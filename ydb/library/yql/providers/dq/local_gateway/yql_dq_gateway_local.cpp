@@ -26,12 +26,12 @@ using NDqs::MakeWorkerManagerActorID;
 
 namespace {
     // TODO: Use the only driver for both sources.
-    NDq::IDqSourceActorFactory::TPtr CreateSourceActorFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) {
+    NDq::IDqSourceActorFactory::TPtr CreateSourceActorFactory(const NYdb::TDriver& driver, IHTTPGateway::TPtr httpGateway) { 
         auto factory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
         RegisterDqPqReadActorFactory(*factory, driver, nullptr);
         RegisterYdbReadActorFactory(*factory, driver, nullptr);
-        RegisterS3ReadActorFactory(*factory, nullptr, httpGateway);
-        RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway);
+        RegisterS3ReadActorFactory(*factory, nullptr, httpGateway); 
+        RegisterClickHouseReadActorFactory(*factory, nullptr, httpGateway); 
         return factory;
     }
 
@@ -44,7 +44,7 @@ namespace {
 
 class TLocalServiceHolder {
 public:
-    TLocalServiceHolder(NYdb::TDriver driver, IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
+    TLocalServiceHolder(NYdb::TDriver driver, IHTTPGateway::TPtr httpGateway, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NKikimr::NMiniKQL::TComputationNodeFactory compFactory, 
         TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories, NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort)
     {
         ui32 nodeId = 1;
@@ -107,8 +107,8 @@ public:
         , Gateway(gateway)
     { }
 
-    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override {
-        return Gateway->OpenSession(sessionId, username);
+    NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override { 
+        return Gateway->OpenSession(sessionId, username); 
     }
 
     void CloseSession(const TString& sessionId) override {
@@ -130,18 +130,18 @@ private:
     IDqGateway::TPtr Gateway;
 };
 
-THolder<TLocalServiceHolder> CreateLocalServiceHolder(NYdb::TDriver driver, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+THolder<TLocalServiceHolder> CreateLocalServiceHolder(NYdb::TDriver driver, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
-    TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories, IHTTPGateway::TPtr gateway,
+    TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories, IHTTPGateway::TPtr gateway, 
     NBus::TBindResult interconnectPort, NBus::TBindResult grpcPort)
 {
     return MakeHolder<TLocalServiceHolder>(driver, std::move(gateway), functionRegistry, compFactory, taskTransformFactory, dqTaskPreprocessorFactories, interconnectPort, grpcPort);
 }
 
-TIntrusivePtr<IDqGateway> CreateLocalDqGateway(NYdb::TDriver driver, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
+TIntrusivePtr<IDqGateway> CreateLocalDqGateway(NYdb::TDriver driver, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, 
     NKikimr::NMiniKQL::TComputationNodeFactory compFactory,
     TTaskTransformFactory taskTransformFactory, const TDqTaskPreprocessorFactoryCollection& dqTaskPreprocessorFactories,
-    IHTTPGateway::TPtr gateway)
+    IHTTPGateway::TPtr gateway) 
 {
     int startPort = 31337;
     TRangeWalker<int> portWalker(startPort, startPort+100);

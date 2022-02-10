@@ -4,7 +4,7 @@
 #include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include "tdigest.h"
 
-using namespace NYql;
+using namespace NYql; 
 using namespace NUdf;
 
 namespace {

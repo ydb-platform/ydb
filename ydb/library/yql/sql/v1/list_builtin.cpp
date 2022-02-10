@@ -15,7 +15,7 @@ TNodePtr TListBuiltin::GetIdentityLambda() {
 
 bool TListSortBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() < 1 || Args.size() > 2) {
-        ctx.Error(Pos) << OpName << " requires one or two parameters.";
+        ctx.Error(Pos) << OpName << " requires one or two parameters."; 
         return false;
     }
     if (!Args[0]->Init(ctx, src)) {
@@ -34,7 +34,7 @@ bool TListSortBuiltin::DoInit(TContext& ctx, ISource* src) {
 
 bool TListExtractBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() != 2) {
-        ctx.Error(Pos) << OpName << " requires exactly two parameters.";
+        ctx.Error(Pos) << OpName << " requires exactly two parameters."; 
         return false;
     }
 
@@ -77,7 +77,7 @@ bool TListFilterBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (!CheckArgs(ctx, src)) {
         return false;
     };
-    Node = Y(OpName, Args[0], GetFilterLambda());
+    Node = Y(OpName, Args[0], GetFilterLambda()); 
     return true;
 }
 
@@ -93,7 +93,7 @@ bool TListUniqBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (!Args[0]->Init(ctx, src)) {
         return false;
     }
-    Node = Y("DictKeys", Y("ToDict", Args[0], GetIdentityLambda(), BuildLambda(Pos, Y("item"), Y("Void")), Q(Y(Q("Hashed"), Q("One")))));
+    Node = Y("DictKeys", Y("ToDict", Args[0], GetIdentityLambda(), BuildLambda(Pos, Y("item"), Y("Void")), Q(Y(Q("Hashed"), Q("One"))))); 
     return true;
 }
 

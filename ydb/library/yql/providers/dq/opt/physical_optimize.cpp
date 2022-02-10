@@ -21,7 +21,7 @@ public:
         : TOptimizeTransformerBase(typeCtx, NLog::EComponent::ProviderDq, {})
     {
 #define HNDL(name) "DqsPhy-"#name, Hndl(&TDqsPhysicalOptProposalTransformer::name)
-        AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
+        AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap)); 
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
@@ -69,122 +69,122 @@ public:
     }
 
 protected:
-    TMaybeNode<TExprBase> BuildStageWithSourceWrap(TExprBase node, TExprContext& ctx) {
-        const auto wrap = node.Cast<TDqSourceWrap>();
-        const auto& items = GetSeqItemType(wrap.Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems();
-        auto narrow = wrap.Settings() ?
-            ctx.Builder(node.Pos())
-            .Lambda()
-                .Param("source")
-                .Callable("NarrowMap")
-                    .Callable(0, TDqSourceWideWrap::CallableName())
-                        .Arg(0, "source")
-                        .Add(1, wrap.DataSource().Ptr())
-                        .Add(2, wrap.RowType().Ptr())
-                        .Add(3, wrap.Settings().Cast().Ptr())
-                    .Seal()
-                    .Lambda(1)
-                        .Params("fields", items.size())
-                        .Callable(TCoAsStruct::CallableName())
-                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                ui32 i = 0U;
-                                for (const auto& item : items) {
-                                    parent.List(i)
-                                        .Atom(0, item->GetName())
-                                        .Arg(1, "fields", i)
-                                    .Seal();
-                                    ++i;
-                                }
-                                return parent;
-                            })
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal().Build():
-            ctx.Builder(node.Pos())
-            .Lambda()
-                .Param("source")
-                .Callable("NarrowMap")
-                    .Callable(0, TDqSourceWideWrap::CallableName())
-                        .Arg(0, "source")
-                        .Add(1, wrap.DataSource().Ptr())
-                        .Add(2, wrap.RowType().Ptr())
-                    .Seal()
-                    .Lambda(1)
-                        .Params("fields", items.size())
-                        .Callable(TCoAsStruct::CallableName())
-                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                ui32 i = 0U;
-                                for (const auto& item : items) {
-                                    parent.List(i)
-                                        .Atom(0, item->GetName())
-                                        .Arg(1, "fields", i)
-                                    .Seal();
-                                    ++i;
-                                }
-                                return parent;
-                            })
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal().Build();
-
-        return Build<TDqCnUnionAll>(ctx, node.Pos())
-            .Output()
-                .Stage<TDqStage>()
-                .Inputs()
-                    .Add<TDqSource>()
-                        .DataSource(wrap.DataSource())
-                        .Settings(wrap.Input())
-                        .Build()
-                    .Build()
-                .Program(narrow)
-                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-                .Build()
-                .Index().Build("0")
-            .Build().Done();
-    }
-
+    TMaybeNode<TExprBase> BuildStageWithSourceWrap(TExprBase node, TExprContext& ctx) { 
+        const auto wrap = node.Cast<TDqSourceWrap>(); 
+        const auto& items = GetSeqItemType(wrap.Ref().GetTypeAnn())->Cast<TStructExprType>()->GetItems(); 
+        auto narrow = wrap.Settings() ? 
+            ctx.Builder(node.Pos()) 
+            .Lambda() 
+                .Param("source") 
+                .Callable("NarrowMap") 
+                    .Callable(0, TDqSourceWideWrap::CallableName()) 
+                        .Arg(0, "source") 
+                        .Add(1, wrap.DataSource().Ptr()) 
+                        .Add(2, wrap.RowType().Ptr()) 
+                        .Add(3, wrap.Settings().Cast().Ptr()) 
+                    .Seal() 
+                    .Lambda(1) 
+                        .Params("fields", items.size()) 
+                        .Callable(TCoAsStruct::CallableName()) 
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
+                                ui32 i = 0U; 
+                                for (const auto& item : items) { 
+                                    parent.List(i) 
+                                        .Atom(0, item->GetName()) 
+                                        .Arg(1, "fields", i) 
+                                    .Seal(); 
+                                    ++i; 
+                                } 
+                                return parent; 
+                            }) 
+                        .Seal() 
+                    .Seal() 
+                .Seal() 
+            .Seal().Build(): 
+            ctx.Builder(node.Pos()) 
+            .Lambda() 
+                .Param("source") 
+                .Callable("NarrowMap") 
+                    .Callable(0, TDqSourceWideWrap::CallableName()) 
+                        .Arg(0, "source") 
+                        .Add(1, wrap.DataSource().Ptr()) 
+                        .Add(2, wrap.RowType().Ptr()) 
+                    .Seal() 
+                    .Lambda(1) 
+                        .Params("fields", items.size()) 
+                        .Callable(TCoAsStruct::CallableName()) 
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
+                                ui32 i = 0U; 
+                                for (const auto& item : items) { 
+                                    parent.List(i) 
+                                        .Atom(0, item->GetName()) 
+                                        .Arg(1, "fields", i) 
+                                    .Seal(); 
+                                    ++i; 
+                                } 
+                                return parent; 
+                            }) 
+                        .Seal() 
+                    .Seal() 
+                .Seal() 
+            .Seal().Build(); 
+ 
+        return Build<TDqCnUnionAll>(ctx, node.Pos()) 
+            .Output() 
+                .Stage<TDqStage>() 
+                .Inputs() 
+                    .Add<TDqSource>() 
+                        .DataSource(wrap.DataSource()) 
+                        .Settings(wrap.Input()) 
+                        .Build() 
+                    .Build() 
+                .Program(narrow) 
+                    .Settings(TDqStageSettings().BuildNode(ctx, node.Pos())) 
+                .Build() 
+                .Index().Build("0") 
+            .Build().Done(); 
+    } 
+ 
     TMaybeNode<TExprBase> BuildStageWithReadWrap(TExprBase node, TExprContext& ctx) {
-        const auto wrap = node.Cast<TDqReadWrap>();
-        const auto read = Build<TDqReadWideWrap>(ctx, node.Pos())
-                .Input(wrap.Input())
-                .Token(wrap.Token())
-            .Done();
+        const auto wrap = node.Cast<TDqReadWrap>(); 
+        const auto read = Build<TDqReadWideWrap>(ctx, node.Pos()) 
+                .Input(wrap.Input()) 
+                .Token(wrap.Token()) 
+            .Done(); 
 
-        const auto structType = GetSeqItemType(wrap.Ref().GetTypeAnn())->Cast<TStructExprType>();
-        auto narrow = ctx.Builder(node.Pos())
-            .Lambda()
-                .Callable("NarrowMap")
-                    .Add(0, read.Ptr())
-                    .Lambda(1)
-                        .Params("fields", structType->GetSize())
-                        .Callable("AsStruct")
-                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                                ui32 i = 0U;
-                                for (const auto& item : structType->GetItems()) {
-                                    parent.List(i)
-                                        .Atom(0, item->GetName())
-                                        .Arg(1, "fields", i)
-                                    .Seal();
-                                    ++i;
-                                }
-                                return parent;
-                            })
-                        .Seal()
-                    .Seal()
-                .Seal()
-            .Seal().Build();
-
+        const auto structType = GetSeqItemType(wrap.Ref().GetTypeAnn())->Cast<TStructExprType>(); 
+        auto narrow = ctx.Builder(node.Pos()) 
+            .Lambda() 
+                .Callable("NarrowMap") 
+                    .Add(0, read.Ptr()) 
+                    .Lambda(1) 
+                        .Params("fields", structType->GetSize()) 
+                        .Callable("AsStruct") 
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& { 
+                                ui32 i = 0U; 
+                                for (const auto& item : structType->GetItems()) { 
+                                    parent.List(i) 
+                                        .Atom(0, item->GetName()) 
+                                        .Arg(1, "fields", i) 
+                                    .Seal(); 
+                                    ++i; 
+                                } 
+                                return parent; 
+                            }) 
+                        .Seal() 
+                    .Seal() 
+                .Seal() 
+            .Seal().Build(); 
+ 
         return Build<TDqCnUnionAll>(ctx, node.Pos())
             .Output()
-                .Stage<TDqStage>()
-                    .Inputs().Build()
-                    .Program(narrow)
+                .Stage<TDqStage>() 
+                    .Inputs().Build() 
+                    .Program(narrow) 
                     .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
-                .Build()
+                .Build() 
                 .Index().Build("0")
-            .Build() .Done();
+            .Build() .Done(); 
     }
 
     template <bool IsGlobal>
@@ -203,10 +203,10 @@ protected:
     }
 
     template <bool IsGlobal>
-    TMaybeNode<TExprBase> PushOrderedLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
+    TMaybeNode<TExprBase> PushOrderedLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) { 
         return DqPushOrderedLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal);
-    }
-
+    } 
+ 
     template <bool IsGlobal>
     TMaybeNode<TExprBase> PushLMapToStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqPushLMapToStage(node, ctx, optCtx, *getParents(), IsGlobal);

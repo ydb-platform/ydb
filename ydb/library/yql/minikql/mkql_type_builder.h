@@ -99,7 +99,7 @@ public:
     NUdf::IEquate::TPtr MakeEquate(const NUdf::TType* type) override;
     NUdf::ICompare::TPtr MakeCompare(const NUdf::TType* type) override;
 
-    NUdf::TType* Decimal(ui8 precision, ui8 scale) const override;
+    NUdf::TType* Decimal(ui8 precision, ui8 scale) const override; 
 
     NUdf::IFunctionTypeInfoBuilder7& IRImplementationImpl(
         const NUdf::TStringRef& moduleIR,

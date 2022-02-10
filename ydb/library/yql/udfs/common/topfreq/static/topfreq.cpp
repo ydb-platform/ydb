@@ -42,24 +42,24 @@ void TTopFreqBase<THash, TEquals>::Deserialize(const TUnboxedValuePod& serialize
     Indices_.reserve(MaxSize_ + 1);
 
     const auto listIter = serialized.GetElement(2).GetListIterator();
-    for (TUnboxedValue current; listIter.Next(current);) {
-        Update(current.GetElement(1), current.GetElement(0).Get<ui64>());
+    for (TUnboxedValue current; listIter.Next(current);) { 
+        Update(current.GetElement(1), current.GetElement(0).Get<ui64>()); 
     }
 }
 
 template <typename THash, typename TEquals>
 TUnboxedValue TTopFreqBase<THash, TEquals>::Convert(const IValueBuilder* valueBuilder) const {
     TUnboxedValue* values = nullptr;
-    const auto list = valueBuilder->NewArray(Freqs_.size(), values);
-    for (const auto& item : Freqs_) {
-        TUnboxedValue* items = nullptr;
-        *values++ = valueBuilder->NewArray(2U, items);
-        items[0] = TUnboxedValuePod(item.second);
-        items[1] = item.first;
-    }
-    return list;
-}
-
+    const auto list = valueBuilder->NewArray(Freqs_.size(), values); 
+    for (const auto& item : Freqs_) { 
+        TUnboxedValue* items = nullptr; 
+        *values++ = valueBuilder->NewArray(2U, items); 
+        items[0] = TUnboxedValuePod(item.second); 
+        items[1] = item.first; 
+    } 
+    return list; 
+} 
+ 
 template <typename THash, typename TEquals>
 void TTopFreqBase<THash, TEquals>::Add(const TTopFreqBase& otherModeCalc) {
     for (auto& it : otherModeCalc.Freqs_) {
@@ -73,7 +73,7 @@ template <typename THash, typename TEquals>
 TUnboxedValue TTopFreqBase<THash, TEquals>::Get(const IValueBuilder* builder, ui32 resultSize) {
     resultSize = std::min(resultSize, ui32(Freqs_.size()));
     Compress(resultSize, true);
-    return Convert(builder);
+    return Convert(builder); 
 }
 
 template <typename THash, typename TEquals>
@@ -127,14 +127,14 @@ TUnboxedValue TTopFreqBase<THash, TEquals>::Serialize(const IValueBuilder* build
         Compress(MinSize_);
     }
 
-    TUnboxedValue* items = nullptr;
-    auto tuple = builder->NewArray(3U, items);
-    items[0] = TUnboxedValuePod(MinSize_);
-    items[1] = TUnboxedValuePod(MaxSize_);
-    items[2] = Convert(builder);
-    return tuple;
+    TUnboxedValue* items = nullptr; 
+    auto tuple = builder->NewArray(3U, items); 
+    items[0] = TUnboxedValuePod(MinSize_); 
+    items[1] = TUnboxedValuePod(MaxSize_); 
+    items[2] = Convert(builder); 
+    return tuple; 
 }
-
+ 
 template <EDataSlot Slot>
 TTopFreqData<Slot>::TTopFreqData(const TUnboxedValuePod& value, const ui32 minSize, const ui32 maxSize)
     : TBase(TUnboxedValueHash<Slot>(), TUnboxedValueEquals<Slot>())
@@ -173,10 +173,10 @@ void TTopFreqData<Slot>::AddValue(const TUnboxedValuePod& value) {
 
 #define INSTANCE_FOR(slot, ...) \
     template class TTopFreqData<EDataSlot::slot>;
-
+ 
 UDF_TYPE_ID_MAP(INSTANCE_FOR)
 
-#undef INSTANCE_FOR
+#undef INSTANCE_FOR 
 
 TTopFreqGeneric::TTopFreqGeneric(const TUnboxedValuePod& value, const ui32 minSize, const ui32 maxSize,
     IHash::TPtr hash, IEquate::TPtr equate)

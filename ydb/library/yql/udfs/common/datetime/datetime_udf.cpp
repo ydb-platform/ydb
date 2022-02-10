@@ -49,7 +49,7 @@ namespace {
         TTimeZone gmt_tz = GetTimeZone("GMT+0");
         TSimpleTM ct = ToCivilTime(instant, tz);
         ui64 result = ToAbsoluteTime(ct, gmt_tz).MicroSeconds() + instant.MicroSecondsOfSecond();
-        return TUnboxedValuePod(result);
+        return TUnboxedValuePod(result); 
     }
 
     SIMPLE_UDF(TFromTimeZone, ui64(TAutoMap<ui64>, char*)) {
@@ -61,7 +61,7 @@ namespace {
         TSimpleTM tm = TSimpleTM::New(static_cast<time_t>(instant.Seconds()));
         TInstant at = ToAbsoluteTime(tm, tz);
         ui64 result = at.MicroSeconds() + instant.MicroSecondsOfSecond();
-        return TUnboxedValuePod(result);
+        return TUnboxedValuePod(result); 
     }
 
     SIMPLE_UDF(TTimestampFromTimeZone, TTimestamp(TAutoMap<ui64>, char*)) {
@@ -81,7 +81,7 @@ namespace {
         const auto input = args[0].Get<ui64>();
         TInstant instant = TInstant::MicroSeconds(input);
         TSimpleTM tm = TSimpleTM::New(static_cast<time_t>(instant.Seconds()));
-        return TUnboxedValuePod(tm.WDay == 0 || tm.WDay == 6);
+        return TUnboxedValuePod(tm.WDay == 0 || tm.WDay == 6); 
     }
 
     bool TryStrptime(const TString& input, const TString& format, TInstant& result) {
@@ -161,12 +161,12 @@ namespace {
 
     TUnboxedValue FromStringFormatImpl(const TUnboxedValuePod* args) {
         EMPTY_RESULT_ON_EMPTY_ARG(0);
-        const TString input(args[0].AsStringRef());
+        const TString input(args[0].AsStringRef()); 
         const TString format(args[1].AsStringRef());
         TInstant result;
         bool success = TryStrptime(input, format, result);
 
-        return success ? TUnboxedValuePod(result.MicroSeconds()) : TUnboxedValuePod();
+        return success ? TUnboxedValuePod(result.MicroSeconds()) : TUnboxedValuePod(); 
     }
 
     SIMPLE_UDF(TFromStringFormat, TOptional<ui64>(TOptional<char*>, char*)) {

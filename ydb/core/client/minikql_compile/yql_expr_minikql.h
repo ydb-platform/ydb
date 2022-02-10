@@ -28,7 +28,7 @@ struct TExprContainer : public TAtomicRefCount<TExprContainer> {
     using TPtr = TIntrusivePtr<TExprContainer>;
 
     TExprContext Context;
-    TExprNode::TPtr Root;
+    TExprNode::TPtr Root; 
 };
 
 NThreading::TFuture<TConvertResult>

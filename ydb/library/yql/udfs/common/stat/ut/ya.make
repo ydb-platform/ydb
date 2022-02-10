@@ -1,5 +1,5 @@
 UNITTEST_FOR(ydb/library/yql/udfs/common/stat/static)
-
+ 
 OWNER(xenoxeno)
 
 SRCS(

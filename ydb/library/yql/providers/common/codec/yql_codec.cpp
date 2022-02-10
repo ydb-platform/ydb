@@ -96,13 +96,13 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
                 writer.OnStringScalar(value.AsStringRef());
                 return;
 
-            case NUdf::TDataType<NUdf::TDecimal>::Id: {
-                const auto params = static_cast<TDataDecimalType*>(type)->GetParams();
-                const auto str = NDecimal::ToString(value.GetInt128(), params.first, params.second);
-                const auto size = str ? std::strlen(str) : 0;
+            case NUdf::TDataType<NUdf::TDecimal>::Id: { 
+                const auto params = static_cast<TDataDecimalType*>(type)->GetParams(); 
+                const auto str = NDecimal::ToString(value.GetInt128(), params.first, params.second); 
+                const auto size = str ? std::strlen(str) : 0; 
                 writer.OnUtf8StringScalar(TStringBuf(str, size));
                 return;
-            }
+            } 
             case NUdf::TDataType<NUdf::TYson>::Id:
                 EncodeRestrictedYson(writer, value.AsStringRef());
                 return;
@@ -118,12 +118,12 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
             case NUdf::TDataType<NUdf::TInterval>::Id:
                 writer.OnInt64Scalar(value.Get<i64>());
                 return;
-            case NUdf::TDataType<NUdf::TTzDate>::Id:
-            case NUdf::TDataType<NUdf::TTzDatetime>::Id:
+            case NUdf::TDataType<NUdf::TTzDate>::Id: 
+            case NUdf::TDataType<NUdf::TTzDatetime>::Id: 
             case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
             case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
                 const NUdf::TUnboxedValue out(ValueToString(*dataType->GetDataSlot(), value));
-                writer.OnUtf8StringScalar(out.AsStringRef());
+                writer.OnUtf8StringScalar(out.AsStringRef()); 
                 return;
             }
 
@@ -154,9 +154,9 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
         {
             writer.OnBeginList();
             auto listType = AS_TYPE(TListType, type);
-            const auto it = value.GetListIterator();
-            for (NUdf::TUnboxedValue item; it.Next(item);) {
-                writer.OnListItem();
+            const auto it = value.GetListIterator(); 
+            for (NUdf::TUnboxedValue item; it.Next(item);) { 
+                writer.OnListItem(); 
                 WriteYsonValueImpl(writer, item, listType->GetItemType(), nullptr);
             }
 
@@ -165,7 +165,7 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
         }
     case TType::EKind::Optional:
         {
-            if (!value) {
+            if (!value) { 
                 writer.OnEntity();
             } else {
                 writer.OnBeginList();
@@ -180,14 +180,14 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
         {
             writer.OnBeginList();
             auto dictType = AS_TYPE(TDictType, type);
-            const auto it = value.GetDictIterator();
-            for (NUdf::TUnboxedValue key, payload; it.NextPair(key, payload);) {
-                writer.OnListItem();
-                writer.OnBeginList();
+            const auto it = value.GetDictIterator(); 
+            for (NUdf::TUnboxedValue key, payload; it.NextPair(key, payload);) { 
+                writer.OnListItem(); 
+                writer.OnBeginList(); 
                 {
-                    writer.OnListItem();
+                    writer.OnListItem(); 
                     WriteYsonValueImpl(writer, key, dictType->GetKeyType(), nullptr);
-                    writer.OnListItem();
+                    writer.OnListItem(); 
                     WriteYsonValueImpl(writer, payload, dictType->GetPayloadType(), nullptr);
                 }
                 writer.OnEndList();
@@ -291,7 +291,7 @@ TMaybe<TVector<ui32>> CreateStructPositions(TType* inputType, const TVector<TStr
 }
 
 namespace {
-NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type) {
+NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type) { 
     YQL_ENSURE(type->GetKind() == TType::EKind::Data);
 
     auto dataType = AS_TYPE(TDataType, type);
@@ -437,13 +437,13 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
         case NUdf::EDataSlot::Json:
         case NUdf::EDataSlot::Uuid:
         case NUdf::EDataSlot::Yson:
-        case NUdf::EDataSlot::DyNumber:
+        case NUdf::EDataSlot::DyNumber: 
             return ToString((TStringBuf)value.AsStringRef());
         case NUdf::EDataSlot::Decimal:
             {
                 const auto params = dynamic_cast<const TDataExprParamsType*>(type);
                 return NDecimal::ToString(value.GetInt128(), FromString<ui8>(params->GetParamOne()), FromString<ui8>(params->GetParamTwo()));
-            }
+            } 
         case NUdf::EDataSlot::TzDate: {
             TStringStream out;
             out << value.Get<ui16>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
@@ -773,7 +773,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         }
 
         CHECK_EXPECTED(cmd, EndListSymbol);
-        return holderFactory.CreateVariantHolder(value.Release(), index);
+        return holderFactory.CreateVariantHolder(value.Release(), index); 
     }
 
     case TType::EKind::Data: {
@@ -858,19 +858,19 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
             return ReadYsonStringInResultFormat(cmd, buf);
         }
 
-        case NUdf::TDataType<NUdf::TDecimal>::Id: {
+        case NUdf::TDataType<NUdf::TDecimal>::Id: { 
             auto nextString = ReadNextString(cmd, buf);
-            if (isTableFormat) {
+            if (isTableFormat) { 
                 const auto& des = NDecimal::Deserialize(nextString.data());
-                YQL_ENSURE(nextString.size() == des.second);
-                YQL_ENSURE(!NDecimal::IsError(des.first));
-                return NUdf::TUnboxedValuePod(des.first);
-            } else {
-                const auto params = static_cast<TDataDecimalType*>(type)->GetParams();
-                const auto val = NDecimal::FromString(nextString, params.first, params.second);
-                YQL_ENSURE(!NDecimal::IsError(val));
-                return NUdf::TUnboxedValuePod(val);
-            }
+                YQL_ENSURE(nextString.size() == des.second); 
+                YQL_ENSURE(!NDecimal::IsError(des.first)); 
+                return NUdf::TUnboxedValuePod(des.first); 
+            } else { 
+                const auto params = static_cast<TDataDecimalType*>(type)->GetParams(); 
+                const auto val = NDecimal::FromString(nextString, params.first, params.second); 
+                YQL_ENSURE(!NDecimal::IsError(val)); 
+                return NUdf::TUnboxedValuePod(val); 
+            } 
         }
 
         case NUdf::TDataType<NUdf::TYson>::Id: {
@@ -919,13 +919,13 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
             NUdf::TUnboxedValuePod data;
             if (isTableFormat) {
                 ui16 value;
-                ui16 tzId = 0;
+                ui16 tzId = 0; 
                 YQL_ENSURE(DeserializeTzDate(nextString, value, tzId));
                 data = NUdf::TUnboxedValuePod(value);
-                data.SetTimezoneId(tzId);
+                data.SetTimezoneId(tzId); 
             } else {
                 data = ValueFromString(NUdf::EDataSlot::TzDate, nextString);
-                YQL_ENSURE(data, "incorrect tz date format for value " << nextString);
+                YQL_ENSURE(data, "incorrect tz date format for value " << nextString); 
             }
 
             return data;
@@ -936,13 +936,13 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
             NUdf::TUnboxedValuePod data;
             if (isTableFormat) {
                 ui32 value;
-                ui16 tzId = 0;
+                ui16 tzId = 0; 
                 YQL_ENSURE(DeserializeTzDatetime(nextString, value, tzId));
                 data = NUdf::TUnboxedValuePod(value);
-                data.SetTimezoneId(tzId);
+                data.SetTimezoneId(tzId); 
             } else {
-                data = ValueFromString(NUdf::EDataSlot::TzDatetime, nextString);
-                YQL_ENSURE(data, "incorrect tz datetime format for value " << nextString);
+                data = ValueFromString(NUdf::EDataSlot::TzDatetime, nextString); 
+                YQL_ENSURE(data, "incorrect tz datetime format for value " << nextString); 
             }
 
             return data;
@@ -953,13 +953,13 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
             NUdf::TUnboxedValuePod data;
             if (isTableFormat) {
                 ui64 value;
-                ui16 tzId = 0;
+                ui16 tzId = 0; 
                 YQL_ENSURE(DeserializeTzTimestamp(nextString, value, tzId));
                 data = NUdf::TUnboxedValuePod(value);
-                data.SetTimezoneId(tzId);
+                data.SetTimezoneId(tzId); 
             } else {
-                data = ValueFromString(NUdf::EDataSlot::TzTimestamp, nextString);
-                YQL_ENSURE(data, "incorrect tz timestamp format for value " << nextString);
+                data = ValueFromString(NUdf::EDataSlot::TzTimestamp, nextString); 
+                YQL_ENSURE(data, "incorrect tz timestamp format for value " << nextString); 
             }
 
             return data;
@@ -1071,7 +1071,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         auto itemType = static_cast<TOptionalType*>(type)->GetItemType();
         if (cmd != BeginListSymbol) {
             auto value = ReadYsonValue(itemType, holderFactory, cmd, buf, isTableFormat);
-            return value.Release().MakeOptional();
+            return value.Release().MakeOptional(); 
         }
 
         cmd = buf.Read();
@@ -1086,7 +1086,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         }
 
         CHECK_EXPECTED(cmd, EndListSymbol);
-        return value.Release().MakeOptional();
+        return value.Release().MakeOptional(); 
     }
 
     case TType::EKind::Dict: {
@@ -1308,7 +1308,7 @@ extern "C" void ReadYsonContainerValue(TType* type, const NKikimr::NMiniKQL::THo
         value = std::move(tmp);
     }
     else {
-        value = tmp.Release().MakeOptional();
+        value = tmp.Release().MakeOptional(); 
     }
 }
 
@@ -1789,14 +1789,14 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, const NUdf::TUnbo
             break;
         }
 
-        case NUdf::TDataType<NUdf::TDecimal>::Id: {
-            char data[sizeof(NDecimal::TInt128)];
-            const ui32 size = NDecimal::Serialize(value.GetInt128(), data);
-            buf.Write(StringMarker);
-            buf.WriteVarI32(size);
-            buf.WriteMany(data, size);
+        case NUdf::TDataType<NUdf::TDecimal>::Id: { 
+            char data[sizeof(NDecimal::TInt128)]; 
+            const ui32 size = NDecimal::Serialize(value.GetInt128(), data); 
+            buf.Write(StringMarker); 
+            buf.WriteVarI32(size); 
+            buf.WriteMany(data, size); 
             break;
-        }
+        } 
 
         case NUdf::TDataType<NUdf::TYson>::Id: {
             // embed content

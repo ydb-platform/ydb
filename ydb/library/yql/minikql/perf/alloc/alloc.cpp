@@ -8,7 +8,7 @@ using namespace NKikimr::NUdf;
 
 namespace {
     inline void MyFree(const void* p, size_t) { return free(const_cast<void*>(p)); }
-
+ 
     template <void*(*Alloc)(ui64), void (*Free)(const void*,ui64)>
     void Test(const TString& name) {
         TSimpleTimer timer;
@@ -31,10 +31,10 @@ namespace {
 }
 
 int main(int, char**) {
-    Test<&malloc, &MyFree>("malloc");
-    {
-        TScopedAlloc sopedAlloc;
+    Test<&malloc, &MyFree>("malloc"); 
+    { 
+        TScopedAlloc sopedAlloc; 
         Test<&UdfAllocateWithSize, &UdfFreeWithSize>("mkql");
-    }
+    } 
     return 0;
 }

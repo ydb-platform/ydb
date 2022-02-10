@@ -242,7 +242,7 @@ namespace NMonitoring {
     TMonService::TMonService(TContExecutor& executor, TIpPort internalPort, TIpPort externalPort,
                              THandler coHandler, THandler mtHandler)
         : CoServer(executor, "127.0.0.1", internalPort, std::move(coHandler))
-        , MtServer(THttpServerOptions(externalPort), std::bind(&TMonService::DispatchRequest, this, std::placeholders::_1, std::placeholders::_2))
+        , MtServer(THttpServerOptions(externalPort), std::bind(&TMonService::DispatchRequest, this, std::placeholders::_1, std::placeholders::_2)) 
         , MtHandler(std::move(mtHandler))
     {
     }

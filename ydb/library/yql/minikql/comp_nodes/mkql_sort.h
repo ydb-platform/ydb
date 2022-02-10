@@ -8,11 +8,11 @@ IComputationNode* WrapUnstableSort(TCallable& callable, const TComputationNodeFa
 
 IComputationNode* WrapSort(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-IComputationNode* WrapTop(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-
-IComputationNode* WrapTopSort(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-
-IComputationNode* WrapKeepTop(TCallable& callable, const TComputationNodeFactoryContext& ctx);
-
+IComputationNode* WrapTop(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
+ 
+IComputationNode* WrapTopSort(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
+ 
+IComputationNode* WrapKeepTop(TCallable& callable, const TComputationNodeFactoryContext& ctx); 
+ 
 }
 }

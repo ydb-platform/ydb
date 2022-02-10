@@ -176,9 +176,9 @@ namespace NSQLTranslationV1 {
         void VisitTree(const TVisitFunc& func) const;
         void VisitTree(const TVisitFunc& func, TVisitNodeSet& visited) const;
 
-        TPtr AstNode() const;
-        TPtr AstNode(TAstNode* node) const;
-        TPtr AstNode(TPtr node) const;
+        TPtr AstNode() const; 
+        TPtr AstNode(TAstNode* node) const; 
+        TPtr AstNode(TPtr node) const; 
         TPtr AstNode(const TString& str) const;
 
         template <typename TVal, typename... TVals>
@@ -187,27 +187,27 @@ namespace NSQLTranslationV1 {
             Add(vals...);
         }
 
-        void Add() {}
+        void Add() {} 
 
         // Y() Q() L()
-        TPtr Y() const {
+        TPtr Y() const { 
             return AstNode();
         }
 
         template <typename... TVals>
-        TPtr Y(TVals... vals) const {
+        TPtr Y(TVals... vals) const { 
             TPtr node(AstNode());
             node->Add(vals...);
             return node;
         }
 
         template <typename T>
-        TPtr Q(T a) const {
+        TPtr Q(T a) const { 
             return Y("quote", a);
         }
 
         template <typename... TVals>
-        TPtr L(TPtr list, TVals... vals) const {
+        TPtr L(TPtr list, TVals... vals) const { 
             Y_VERIFY_DEBUG(list);
             auto copy = list->ShallowCopy();
             copy->Add(vals...);
@@ -744,16 +744,16 @@ namespace NSQLTranslationV1 {
 
     class IAggregation: public INode {
     public:
-        bool IsDistinct() const;
-
+        bool IsDistinct() const; 
+ 
         void DoUpdateState() const override;
 
         virtual const TString* GetGenericKey() const;
-
+ 
         virtual bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) = 0;
 
         virtual TNodePtr AggregationTraits(const TNodePtr& type) const;
-
+ 
         virtual TNodePtr AggregationTraitsFactory() const = 0;
 
         virtual std::vector<ui32> GetFactoryColumnIndices() const;
@@ -767,11 +767,11 @@ namespace NSQLTranslationV1 {
         EAggregateMode GetAggregationMode() const;
         void MarkKeyColumnAsGenerated();
 
-        virtual void Join(IAggregation* aggr);
-
-    private:
-        virtual TNodePtr GetApply(const TNodePtr& type) const = 0;
-
+        virtual void Join(IAggregation* aggr); 
+ 
+    private: 
+        virtual TNodePtr GetApply(const TNodePtr& type) const = 0; 
+ 
     protected:
         IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode mode);
         TAstNode* Translate(TContext& ctx) const override;
@@ -1209,13 +1209,13 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildAccess(TPosition pos, const TVector<INode::TIdPart>& ids, bool isLookup);
     TNodePtr BuildBind(TPosition pos, const TString& module, const TString& alias);
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
-    TNodePtr BuildDataType(TPosition pos, const TString& typeName);
+    TNodePtr BuildDataType(TPosition pos, const TString& typeName); 
     TNodePtr BuildSimpleType(TContext& ctx, TPosition pos, const TString& typeName, bool dataOnly);
     TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a);
     TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
 
     TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call);
-    TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson);
+    TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson); 
 
     TNodePtr BuildDoCall(TPosition pos, const TNodePtr& node);
     TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize);

@@ -118,7 +118,7 @@ atom_expr:
   | case_expr
   | an_id_or_type NAMESPACE (id_or_type | STRING_VALUE)
   | value_constructor
-  | bitcast_expr
+  | bitcast_expr 
   | list_literal
   | dict_literal
   | struct_literal
@@ -135,7 +135,7 @@ in_atom_expr:
 // TODO: resolve ANTLR error: rule in_atom_expr has non-LL(*) decision due to recursive rule invocations reachable from alts 3,8
 //  | LPAREN values_stmt RPAREN
   | value_constructor
-  | bitcast_expr
+  | bitcast_expr 
   | list_literal
   | dict_literal
   | struct_literal
@@ -143,8 +143,8 @@ in_atom_expr:
 
 cast_expr: CAST LPAREN expr AS type_name_or_bind RPAREN;
 
-bitcast_expr: BITCAST LPAREN expr AS type_name_simple RPAREN;
-
+bitcast_expr: BITCAST LPAREN expr AS type_name_simple RPAREN; 
+ 
 exists_expr: EXISTS LPAREN (select_stmt | values_stmt) RPAREN;
 
 case_expr: CASE expr? when_expr+ (ELSE expr)? END;
@@ -784,7 +784,7 @@ keyword:
 keyword_expr_uncompat:
     BETWEEN
   | BITCAST
-  | CASE
+  | CASE 
   | CAST
   | CUBE
   | CURRENT_DATE
@@ -1133,7 +1133,7 @@ BEFORE: B E F O R E;
 BEGIN: B E G I N;
 BERNOULLI: B E R N O U L L I;
 BETWEEN: B E T W E E N;
-BITCAST: B I T C A S T;
+BITCAST: B I T C A S T; 
 BY: B Y;
 CALLABLE: C A L L A B L E;
 CASCADE: C A S C A D E;

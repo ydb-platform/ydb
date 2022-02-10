@@ -310,46 +310,46 @@ namespace {
         return TUnboxedValuePod(x);
     }
 
-    SIMPLE_UDF(TXXH3, ui64(TAutoMap<char*>)) {
-        Y_UNUSED(valueBuilder);
-        const auto& inputRef = args[0].AsStringRef();
-        const ui64 hash = XXH3_64bits(inputRef.Data(), inputRef.Size());
-        return TUnboxedValuePod(hash);
-    }
+    SIMPLE_UDF(TXXH3, ui64(TAutoMap<char*>)) { 
+        Y_UNUSED(valueBuilder); 
+        const auto& inputRef = args[0].AsStringRef(); 
+        const ui64 hash = XXH3_64bits(inputRef.Data(), inputRef.Size()); 
+        return TUnboxedValuePod(hash); 
+    } 
 
-    class TXXH3_128: public TBoxedValue {
-    public:
-        static TStringRef Name() {
-            static auto name = TStringRef::Of("XXH3_128");
-            return name;
-        }
-
-        static bool DeclareSignature(const TStringRef& name, TType*, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
-            if (Name() == name) {
-                const auto type = builder.Tuple(2)->Add<ui64>().Add<ui64>().Build();
+    class TXXH3_128: public TBoxedValue { 
+    public: 
+        static TStringRef Name() { 
+            static auto name = TStringRef::Of("XXH3_128"); 
+            return name; 
+        } 
+ 
+        static bool DeclareSignature(const TStringRef& name, TType*, IFunctionTypeInfoBuilder& builder, bool typesOnly) { 
+            if (Name() == name) { 
+                const auto type = builder.Tuple(2)->Add<ui64>().Add<ui64>().Build(); 
                 builder.Args(1)->Add<TAutoMap<char*>>();
-                builder.Returns(type);
-                if (!typesOnly) {
-                    builder.Implementation(new TXXH3_128);
-                }
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-    private:
-        TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
-            TUnboxedValue* items = nullptr;
-            auto val = valueBuilder->NewArray(2U, items);
-            const auto& inputRef = args[0].AsStringRef();
-            const auto hash = XXH3_128bits(inputRef.Data(), inputRef.Size());
-            items[0] = TUnboxedValuePod(ui64(hash.low64));
-            items[1] = TUnboxedValuePod(ui64(hash.high64));
-            return val;
-        }
-    };
-
+                builder.Returns(type); 
+                if (!typesOnly) { 
+                    builder.Implementation(new TXXH3_128); 
+                } 
+                return true; 
+            } else { 
+                return false; 
+            } 
+        } 
+ 
+    private: 
+        TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final { 
+            TUnboxedValue* items = nullptr; 
+            auto val = valueBuilder->NewArray(2U, items); 
+            const auto& inputRef = args[0].AsStringRef(); 
+            const auto hash = XXH3_128bits(inputRef.Data(), inputRef.Size()); 
+            items[0] = TUnboxedValuePod(ui64(hash.low64)); 
+            items[1] = TUnboxedValuePod(ui64(hash.high64)); 
+            return val; 
+        } 
+    }; 
+ 
     SIMPLE_MODULE(TDigestModule,
                   TCrc32c,
                   TCrc64,
@@ -375,9 +375,9 @@ namespace {
                   TSuperFastHash,
                   TSha1,
                   TSha256,
-                  TIntHash64,
-                  TXXH3,
-                  TXXH3_128
+                  TIntHash64, 
+                  TXXH3, 
+                  TXXH3_128 
     )
 
 }

@@ -13,26 +13,26 @@ namespace NMiniKQL {
 //TODO remove
 TStringBuf AdaptLegacyYqlType(const TStringBuf& type);
 
-bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value);
-
+bool IsValidValue(NUdf::EDataSlot type, const NUdf::TUnboxedValuePod& value); 
+ 
 bool IsLeapYear(ui32 year);
 
 ui32 GetMonthLength(ui32 month, bool isLeap);
 
 void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out);
 
-bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf);
-
+bool IsValidStringValue(NUdf::EDataSlot type, NUdf::TStringRef buf); 
+ 
 NUdf::TUnboxedValuePod ValueFromString(NUdf::EDataSlot type, NUdf::TStringRef buf);
-NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRef buf);
-
+NUdf::TUnboxedValuePod SimpleValueFromYson(NUdf::EDataSlot type, NUdf::TStringRef buf); 
+ 
 NUdf::TUnboxedValuePod ValueToString(NUdf::EDataSlot type, NUdf::TUnboxedValuePod value);
-
+ 
 NUdf::TUnboxedValuePod ParseUuid(NUdf::TStringRef buf, bool shortForm=false);
 bool ParseUuid(NUdf::TStringRef buf, void* output, bool shortForm=false);
-
-bool IsValidDecimal(NUdf::TStringRef buf);
-
+ 
+bool IsValidDecimal(NUdf::TStringRef buf); 
+ 
 bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value);
 bool MakeTime(ui32 hour, ui32 minute, ui32 second, ui32& value);
 bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day);
@@ -42,7 +42,7 @@ bool SplitInterval(i64 value, bool& sign, ui32& day, ui32& hour, ui32& min, ui32
 
 bool SplitTzDate(ui16 value, ui32& year, ui32& month, ui32& day, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
 bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 tzId);
-
+ 
 bool MakeTzDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec, ui32& value, ui16 tzId);
 bool SplitTzDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec, ui16 tzId);
 bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek);
@@ -54,7 +54,7 @@ TMaybe<ui16> FindTimezoneId(TStringBuf ianaName);
 ui16 GetTimezoneId(TStringBuf ianaName);
 TMaybe<TStringBuf> FindTimezoneIANAName(ui16 id);
 TStringBuf GetTimezoneIANAName(ui16 id);
-std::vector<ui16> GetTzBlackList();
+std::vector<ui16> GetTzBlackList(); 
 
 void ToLocalTime(ui32 utcSeconds, ui16 tzId, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& min, ui32& sec);
 ui32 FromLocalTime(ui16 tzId, ui32 year, ui32 month, ui32 day, ui32 hour, ui32 min, ui32 sec);

@@ -6,14 +6,14 @@
 #include <util/generic/hash.h>
 #include <util/digest/numeric.h>
 
-namespace NYql {
+namespace NYql { 
 namespace NUdf {
 
-using THashType = ui64;
-
+using THashType = ui64; 
+ 
 template <EDataSlot Type>
-inline THashType GetValueHash(const TUnboxedValuePod& value);
-inline THashType GetValueHash(EDataSlot type, const TUnboxedValuePod& value);
+inline THashType GetValueHash(const TUnboxedValuePod& value); 
+inline THashType GetValueHash(EDataSlot type, const TUnboxedValuePod& value); 
 
 template <EDataSlot Type>
 inline int CompareValues(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs);
@@ -40,102 +40,102 @@ struct TUnboxedValueEquals {
 // hash
 
 template <typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-inline THashType GetIntegerHash(const TUnboxedValuePod& value) {
+inline THashType GetIntegerHash(const TUnboxedValuePod& value) { 
     return std::hash<T>()(value.Get<T>());
 }
 
 template <typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
-inline THashType GetFloatHash(const TUnboxedValuePod& value) {
+inline THashType GetFloatHash(const TUnboxedValuePod& value) { 
     const auto x = value.Get<T>();
-    return std::isunordered(x, x) ? ~0ULL : std::hash<T>()(x);
+    return std::isunordered(x, x) ? ~0ULL : std::hash<T>()(x); 
 }
 
-inline THashType GetStringHash(const TUnboxedValuePod& value) {
+inline THashType GetStringHash(const TUnboxedValuePod& value) { 
     return THash<TStringBuf>{}(value.AsStringRef());
 }
 
 template <typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-inline THashType GetTzIntegerHash(const TUnboxedValuePod& value) {
-    return CombineHashes(std::hash<T>()(value.Get<T>()), std::hash<ui16>()(value.GetTimezoneId()));
+inline THashType GetTzIntegerHash(const TUnboxedValuePod& value) { 
+    return CombineHashes(std::hash<T>()(value.Get<T>()), std::hash<ui16>()(value.GetTimezoneId())); 
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Bool>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Bool>(const TUnboxedValuePod& value) { 
     return std::hash<bool>()(value.Get<bool>());
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Int8>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Int8>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<i8>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Uint8>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Uint8>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<ui8>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Int16>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Int16>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<i16>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Uint16>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Uint16>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<ui16>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Int32>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Int32>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<i32>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Uint32>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Uint32>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<ui32>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Int64>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Int64>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<i64>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Uint64>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Uint64>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<ui64>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Float>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Float>(const TUnboxedValuePod& value) { 
     return GetFloatHash<float>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Double>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Double>(const TUnboxedValuePod& value) { 
     return GetFloatHash<double>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::String>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::String>(const TUnboxedValuePod& value) { 
     return GetStringHash(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Utf8>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Utf8>(const TUnboxedValuePod& value) { 
     return GetStringHash(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Uuid>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Uuid>(const TUnboxedValuePod& value) { 
     return GetStringHash(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Yson>(const TUnboxedValuePod&) {
+inline THashType GetValueHash<EDataSlot::Yson>(const TUnboxedValuePod&) { 
     Y_FAIL("Yson isn't hashable.");
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Json>(const TUnboxedValuePod&) {
+inline THashType GetValueHash<EDataSlot::Json>(const TUnboxedValuePod&) { 
     Y_FAIL("Json isn't hashable.");
 }
 
@@ -145,52 +145,52 @@ inline THashType GetValueHash<EDataSlot::JsonDocument>(const TUnboxedValuePod&) 
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Date>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Date>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<ui16>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Datetime>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Datetime>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<ui32>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Timestamp>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Timestamp>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<ui64>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Interval>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::Interval>(const TUnboxedValuePod& value) { 
     return GetIntegerHash<i64>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::TzDate>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::TzDate>(const TUnboxedValuePod& value) { 
     return GetTzIntegerHash<ui16>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::TzDatetime>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::TzDatetime>(const TUnboxedValuePod& value) { 
     return GetTzIntegerHash<ui32>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::TzTimestamp>(const TUnboxedValuePod& value) {
+inline THashType GetValueHash<EDataSlot::TzTimestamp>(const TUnboxedValuePod& value) { 
     return GetTzIntegerHash<ui64>(value);
 }
 
 template <>
-inline THashType GetValueHash<EDataSlot::Decimal>(const TUnboxedValuePod& value) {
-    const auto pair = NYql::NDecimal::MakePair(value.GetInt128());
-    return CombineHashes(pair.first, pair.second);
+inline THashType GetValueHash<EDataSlot::Decimal>(const TUnboxedValuePod& value) { 
+    const auto pair = NYql::NDecimal::MakePair(value.GetInt128()); 
+    return CombineHashes(pair.first, pair.second); 
 }
 
-template <>
-inline THashType GetValueHash<EDataSlot::DyNumber>(const TUnboxedValuePod& value) {
-    return GetStringHash(value);
-}
-
-inline THashType GetValueHash(EDataSlot type, const TUnboxedValuePod& value) {
+template <> 
+inline THashType GetValueHash<EDataSlot::DyNumber>(const TUnboxedValuePod& value) { 
+    return GetStringHash(value); 
+} 
+ 
+inline THashType GetValueHash(EDataSlot type, const TUnboxedValuePod& value) { 
 #define HASH_TYPE(slot, ...) \
     case EDataSlot::slot:    \
         return GetValueHash<EDataSlot::slot>(value);
@@ -377,11 +377,11 @@ inline int CompareValues<EDataSlot::Decimal>(const TUnboxedValuePod& lhs, const 
     return x == y ? 0 : (x < y ? -1 : 1);
 }
 
-template <>
-inline int CompareValues<EDataSlot::DyNumber>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
-    return CompareStrings(lhs, rhs);
-}
-
+template <> 
+inline int CompareValues<EDataSlot::DyNumber>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
+    return CompareStrings(lhs, rhs); 
+} 
+ 
 inline int CompareValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
 #define COMPARE_TYPE(slot, ...) \
     case EDataSlot::slot:       \
@@ -545,11 +545,11 @@ inline bool EquateValues<EDataSlot::Decimal>(const TUnboxedValuePod& lhs, const 
     return lhs.GetInt128() == rhs.GetInt128();
 }
 
-template <>
-inline bool EquateValues<EDataSlot::DyNumber>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
-    return EquateStrings(lhs, rhs);
-}
-
+template <> 
+inline bool EquateValues<EDataSlot::DyNumber>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) { 
+    return EquateStrings(lhs, rhs); 
+} 
+ 
 inline bool EquateValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
 #define EQUATE_TYPE(slot, ...) \
     case EDataSlot::slot:      \
@@ -564,4 +564,4 @@ inline bool EquateValues(EDataSlot type, const TUnboxedValuePod& lhs, const TUnb
 }
 
 } // namespace NUdf
-} // namespace NYql
+} // namespace NYql 

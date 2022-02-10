@@ -1,15 +1,15 @@
-syntax = "proto3";
-option cc_enable_arenas = true;
-
-package NYql.NS3;
-
-message TPath {
-    string Path = 1;
-    uint64 Size = 2;
-}
-
-message TSource {
-    string Url = 1;
-    string Token = 2;
-    repeated TPath Path = 3;
-}
+syntax = "proto3"; 
+option cc_enable_arenas = true; 
+ 
+package NYql.NS3; 
+ 
+message TPath { 
+    string Path = 1; 
+    uint64 Size = 2; 
+} 
+ 
+message TSource { 
+    string Url = 1; 
+    string Token = 2; 
+    repeated TPath Path = 3; 
+} 

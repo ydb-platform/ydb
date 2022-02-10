@@ -20,7 +20,7 @@ public:
         , Finish(finish)
     {}
 
-private:
+private: 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         HasRepeats = false;
         if (Source == ESource::DataSource || Source == ESource::All) {
@@ -60,7 +60,7 @@ private:
             return TStatus::Ok;
         }
 
-        ChooseRoot(std::move(input), output);
+        ChooseRoot(std::move(input), output); 
         return TStatus(TStatus::Repeat, true);
     }
 
@@ -79,12 +79,12 @@ private:
     }
 
     TStatus HandleProvider(IDataProvider* provider, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        TExprNode::TPtr newRoot;
+        TExprNode::TPtr newRoot; 
         TStatus status = GetTransformer(provider).Transform(input, newRoot, ctx);
 
-
+ 
         if (status.Level == TStatus::Ok || status.Level == TStatus::Repeat) {
-            if (newRoot && newRoot != input) {
+            if (newRoot && newRoot != input) { 
                 NewRoots.push_back(newRoot);
             }
         } else if (status.Level == TStatus::Async) {
@@ -108,10 +108,10 @@ private:
 
     TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         for (auto& x : PendingProviders) {
-            TExprNode::TPtr newRoot;
+            TExprNode::TPtr newRoot; 
             TStatus status = GetTransformer(x).ApplyAsyncChanges(input, newRoot, ctx);
             if (status.Level == TStatus::Ok || status.Level == TStatus::Repeat) {
-                if (newRoot && newRoot != input) {
+                if (newRoot && newRoot != input) { 
                     NewRoots.push_back(newRoot);
                 }
                 HasRepeats = HasRepeats || status == TStatus::Repeat;
@@ -129,14 +129,14 @@ private:
                 : TStatus::Ok;
         }
 
-        ChooseRoot(std::move(input), output);
+        ChooseRoot(std::move(input), output); 
         return TStatus(TStatus::Repeat, true);
     }
 
-    void ChooseRoot(TExprNode::TPtr&& input, TExprNode::TPtr& output) {
+    void ChooseRoot(TExprNode::TPtr&& input, TExprNode::TPtr& output) { 
         // just get first
-        output = std::move(NewRoots.empty() ? input : NewRoots.front());
-        NewRoots.clear();
+        output = std::move(NewRoots.empty() ? input : NewRoots.front()); 
+        NewRoots.clear(); 
     }
 
     const TTypeAnnotationContext& Types;

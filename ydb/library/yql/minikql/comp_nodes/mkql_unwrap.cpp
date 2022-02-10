@@ -8,47 +8,47 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace {
-
-class TUnwrapWrapper : public TDecoratorCodegeneratorNode<TUnwrapWrapper> {
-    typedef TDecoratorCodegeneratorNode<TUnwrapWrapper> TBaseComputation;
+namespace { 
+ 
+class TUnwrapWrapper : public TDecoratorCodegeneratorNode<TUnwrapWrapper> { 
+    typedef TDecoratorCodegeneratorNode<TUnwrapWrapper> TBaseComputation; 
 public:
     TUnwrapWrapper(IComputationNode* optional, IComputationNode* message, const NUdf::TSourcePosition& pos)
-        : TBaseComputation(optional)
+        : TBaseComputation(optional) 
         , Message(message)
         , Pos(pos)
     {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx, const NUdf::TUnboxedValuePod& value) const {
-        if (value) {
-            return value.GetOptionalValue();
+        if (value) { 
+            return value.GetOptionalValue(); 
         }
 
         Throw(this, &compCtx);
-    }
-#ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
-        auto& context = ctx.Codegen->GetContext();
-        const auto valueType = Type::getInt128Ty(context);
-
-        const auto kill = BasicBlock::Create(context, "kill", ctx.Func);
-        const auto good = BasicBlock::Create(context, "good", ctx.Func);
-
-        BranchInst::Create(kill, good, IsEmpty(value, block), block);
-
-        block = kill;
-        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TUnwrapWrapper::Throw));
+    } 
+#ifndef MKQL_DISABLE_CODEGEN 
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const { 
+        auto& context = ctx.Codegen->GetContext(); 
+        const auto valueType = Type::getInt128Ty(context); 
+ 
+        const auto kill = BasicBlock::Create(context, "kill", ctx.Func); 
+        const auto good = BasicBlock::Create(context, "good", ctx.Func); 
+ 
+        BranchInst::Create(kill, good, IsEmpty(value, block), block); 
+ 
+        block = kill; 
+        const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TUnwrapWrapper::Throw)); 
         const auto doFuncArg = ConstantInt::get(Type::getInt64Ty(context), (ui64)this);
-        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(FunctionType::get(Type::getVoidTy(context), { Type::getInt64Ty(context), ctx.Ctx->getType() }, false)), "thrower", block);
+        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(FunctionType::get(Type::getVoidTy(context), { Type::getInt64Ty(context), ctx.Ctx->getType() }, false)), "thrower", block); 
         CallInst::Create(doFuncPtr, { doFuncArg, ctx.Ctx }, "", block)->setTailCall();
-        new UnreachableInst(context, block);
-
-        block = good;
-        return GetOptionalValue(context, value, block);
-    }
-#endif
-private:
+        new UnreachableInst(context, block); 
+ 
+        block = good; 
+        return GetOptionalValue(context, value, block); 
+    } 
+#endif 
+private: 
     [[noreturn]] static void Throw(TUnwrapWrapper const* thisPtr, TComputationContext* ctxPtr) {
         auto message = thisPtr->Message->GetValue(*ctxPtr);
         auto messageStr = message.AsStringRef();
@@ -65,8 +65,8 @@ private:
     const NUdf::TSourcePosition Pos;
 };
 
-}
-
+} 
+ 
 IComputationNode* WrapUnwrap(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
 

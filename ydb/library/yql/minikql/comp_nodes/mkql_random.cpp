@@ -8,8 +8,8 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-namespace {
-
+namespace { 
+ 
 class TRandomMTResource : public TComputationValue<TRandomMTResource> {
 public:
     TRandomMTResource(TMemoryUsageInfo* memInfo, ui64 seed)
@@ -18,7 +18,7 @@ public:
     {
     }
 
-private:
+private: 
     NUdf::TStringRef GetResourceTag() const override {
         return NUdf::TStringRef(RandomMTResource);
     }
@@ -41,12 +41,12 @@ public:
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         const ui64 seedValue = Seed->GetValue(compCtx).Get<ui64>();
-        return compCtx.HolderFactory.Create<TRandomMTResource>(seedValue);
+        return compCtx.HolderFactory.Create<TRandomMTResource>(seedValue); 
     }
 
-private:
-    void RegisterDependencies() const final {
-        DependsOn(Seed);
+private: 
+    void RegisterDependencies() const final { 
+        DependsOn(Seed); 
     }
 
     IComputationNode* const Seed;
@@ -62,23 +62,23 @@ public:
     {
     }
 
-    NUdf::TUnboxedValue DoCalculate(TComputationContext& compCtx) const {
+    NUdf::TUnboxedValue DoCalculate(TComputationContext& compCtx) const { 
         auto rand = Rand->GetValue(compCtx);
         Y_VERIFY_DEBUG(rand.GetResourceTag() == NUdf::TStringRef(RandomMTResource));
-        NUdf::TUnboxedValue *items = nullptr;
-        const auto tuple = ResPair.NewArray(compCtx, 2, items);
-        items[0] = NUdf::TUnboxedValuePod(static_cast<TMersenne<ui64>*>(rand.GetResource())->GenRand());
-        items[1] = std::move(rand);
-        return tuple;
+        NUdf::TUnboxedValue *items = nullptr; 
+        const auto tuple = ResPair.NewArray(compCtx, 2, items); 
+        items[0] = NUdf::TUnboxedValuePod(static_cast<TMersenne<ui64>*>(rand.GetResource())->GenRand()); 
+        items[1] = std::move(rand); 
+        return tuple; 
     }
 
-private:
-    void RegisterDependencies() const final {
-        DependsOn(Rand);
+private: 
+    void RegisterDependencies() const final { 
+        DependsOn(Rand); 
     }
 
     IComputationNode* const Rand;
-    const TContainerCacheOnContext ResPair;
+    const TContainerCacheOnContext ResPair; 
 };
 
 template <ERandom Rnd>
@@ -106,16 +106,16 @@ public:
         Y_FAIL("Unexpected");
     }
 
-private:
-    void RegisterDependencies() const final {
-        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TRandomWrapper::DependsOn, this, std::placeholders::_1));
+private: 
+    void RegisterDependencies() const final { 
+        std::for_each(DependentNodes.cbegin(), DependentNodes.cend(), std::bind(&TRandomWrapper::DependsOn, this, std::placeholders::_1)); 
     }
 
-    const TComputationNodePtrVector DependentNodes;
+    const TComputationNodePtrVector DependentNodes; 
 };
 
-}
-
+} 
+ 
 IComputationNode* WrapNewMTRand(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
 

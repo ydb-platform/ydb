@@ -129,7 +129,7 @@ namespace {
 
     using THyperLogLogResource = TBoxedResource<THybridHyperLogLog, HyperLogLogResourceName>;
 
-    class THyperLogLog_Create: public TBoxedValue {
+    class THyperLogLog_Create: public TBoxedValue { 
     public:
         THyperLogLog_Create(TSourcePosition pos)
             : Pos_(pos)
@@ -140,20 +140,20 @@ namespace {
             return nameRef;
         }
 
-    private:
+    private: 
         TUnboxedValue Run(
-            const IValueBuilder*,
-            const TUnboxedValuePod* args) const override {
+            const IValueBuilder*, 
+            const TUnboxedValuePod* args) const override { 
             try {
                 THolder<THyperLogLogResource> hll(new THyperLogLogResource(THybridHyperLogLog::Create(args[1].Get<ui32>())));
                 hll->Get()->Update(args[0].Get<ui64>());
-                return TUnboxedValuePod(hll.Release());
+                return TUnboxedValuePod(hll.Release()); 
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
-    public:
+    public: 
         static bool DeclareSignature(
             const TStringRef& name,
             TType* userType,
@@ -175,7 +175,7 @@ namespace {
         TSourcePosition Pos_;
     };
 
-    class THyperLogLog_AddValue: public TBoxedValue {
+    class THyperLogLog_AddValue: public TBoxedValue { 
     public:
         THyperLogLog_AddValue(TSourcePosition pos)
             : Pos_(pos)
@@ -186,21 +186,21 @@ namespace {
             return nameRef;
         }
 
-    private:
+    private: 
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override {
+            const TUnboxedValuePod* args) const override { 
             try {
                 Y_UNUSED(valueBuilder);
                 THyperLogLogResource* resource = static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get());
                 resource->Get()->Update(args[1].Get<ui64>());
-                return TUnboxedValuePod(args[0]);
+                return TUnboxedValuePod(args[0]); 
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
-    public:
+    public: 
         static bool DeclareSignature(
             const TStringRef& name,
             TType* userType,
@@ -222,7 +222,7 @@ namespace {
         TSourcePosition Pos_;
     };
 
-    class THyperLogLog_Serialize: public TBoxedValue {
+    class THyperLogLog_Serialize: public TBoxedValue { 
     public:
         THyperLogLog_Serialize(TSourcePosition pos)
             : Pos_(pos)
@@ -234,10 +234,10 @@ namespace {
             return nameRef;
         }
 
-    private:
+    private: 
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override {
+            const TUnboxedValuePod* args) const override { 
             try {
                 TStringStream result;
                 static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get())->Get()->Save(result);
@@ -247,7 +247,7 @@ namespace {
             }
         }
 
-    public:
+    public: 
         static bool DeclareSignature(
             const TStringRef& name,
             TType* userType,
@@ -269,7 +269,7 @@ namespace {
         TSourcePosition Pos_;
     };
 
-    class THyperLogLog_Deserialize: public TBoxedValue {
+    class THyperLogLog_Deserialize: public TBoxedValue { 
     public:
         THyperLogLog_Deserialize(TSourcePosition pos)
             : Pos_(pos)
@@ -280,22 +280,22 @@ namespace {
             return nameRef;
         }
 
-    private:
+    private: 
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override {
+            const TUnboxedValuePod* args) const override { 
             try {
                 Y_UNUSED(valueBuilder);
                 const TString arg(args[0].AsStringRef());
                 TStringInput input(arg);
                 THolder<THyperLogLogResource> hll(new THyperLogLogResource(THybridHyperLogLog::Load(input)));
-                return TUnboxedValuePod(hll.Release());
+                return TUnboxedValuePod(hll.Release()); 
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
-    public:
+    public: 
         static bool DeclareSignature(
             const TStringRef& name,
             TType* userType,
@@ -317,7 +317,7 @@ namespace {
         TSourcePosition Pos_;
     };
 
-    class THyperLogLog_Merge: public TBoxedValue {
+    class THyperLogLog_Merge: public TBoxedValue { 
     public:
         THyperLogLog_Merge(TSourcePosition pos)
             : Pos_(pos)
@@ -328,21 +328,21 @@ namespace {
             return nameRef;
         }
 
-    private:
+    private: 
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override {
+            const TUnboxedValuePod* args) const override { 
             try {
                 Y_UNUSED(valueBuilder);
                 auto left = static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get())->Get();
                 static_cast<THyperLogLogResource*>(args[1].AsBoxed().Get())->Get()->Merge(*left);
-                return TUnboxedValuePod(args[1]);
+                return TUnboxedValuePod(args[1]); 
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).data());
             }
         }
 
-    public:
+    public: 
         static bool DeclareSignature(
             const TStringRef& name,
             TType* userType,
@@ -364,7 +364,7 @@ namespace {
         TSourcePosition Pos_;
     };
 
-    class THyperLogLog_GetResult: public TBoxedValue {
+    class THyperLogLog_GetResult: public TBoxedValue { 
     public:
         THyperLogLog_GetResult(TSourcePosition pos)
             : Pos_(pos)
@@ -375,16 +375,16 @@ namespace {
             return nameRef;
         }
 
-    private:
+    private: 
         TUnboxedValue Run(
             const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override {
+            const TUnboxedValuePod* args) const override { 
             Y_UNUSED(valueBuilder);
             auto hll = static_cast<THyperLogLogResource*>(args[0].AsBoxed().Get())->Get();
             return TUnboxedValuePod(hll->Estimate());
         }
 
-    public:
+    public: 
         static bool DeclareSignature(
             const TStringRef& name,
             TType* userType,

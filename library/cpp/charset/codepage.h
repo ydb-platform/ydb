@@ -207,7 +207,7 @@ struct Encoder {
         Y_ASSERT(code != 0 || ch == 0);
         return code;
     }
- 
+
     inline unsigned char operator[](wchar32 ch) const {
         return Tr(ch);
     }

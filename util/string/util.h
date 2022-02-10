@@ -15,11 +15,11 @@
 int a2i(const TString& s);
 
 /// Removes the last character if it is equal to c.
-template <class T> 
-inline void RemoveIfLast(T& s, int c) { 
-    const size_t length = s.length(); 
-    if (length && s[length - 1] == c) 
-        s.remove(length - 1); 
+template <class T>
+inline void RemoveIfLast(T& s, int c) {
+    const size_t length = s.length();
+    if (length && s[length - 1] == c)
+        s.remove(length - 1);
 }
 
 /// Adds lastCh symbol to the the of the string if it is not already there.

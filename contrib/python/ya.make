@@ -635,7 +635,7 @@ RECURSE(
     more-itertools
     moto
     moto/standalone
-    motor 
+    motor
     mpegdash
     mpi4py
     mpmath

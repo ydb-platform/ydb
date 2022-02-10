@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT(1 == AnyOf(TStringBuf("01"), isOne));
         UNIT_ASSERT(1 == AnyOf(TStringBuf("10"), isOne));
         UNIT_ASSERT(1 == AnyOf(TStringBuf("11"), isOne));
-        UNIT_ASSERT(0 == AnyOf(TStringBuf(), isOne));
+        UNIT_ASSERT(0 == AnyOf(TStringBuf(), isOne)); 
 
         const char array00[]{'0', '0'};
         UNIT_ASSERT(0 == AnyOf(array00, isOne));
@@ -25,7 +25,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT(0 == AllOf(TStringBuf("01"), isOne));
         UNIT_ASSERT(0 == AllOf(TStringBuf("10"), isOne));
         UNIT_ASSERT(1 == AllOf(TStringBuf("11"), isOne));
-        UNIT_ASSERT(1 == AllOf(TStringBuf(), isOne));
+        UNIT_ASSERT(1 == AllOf(TStringBuf(), isOne)); 
 
         const char array01[]{'0', '1'};
         UNIT_ASSERT(0 == AllOf(array01, isOne));
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TAlgorithm) {
         UNIT_ASSERT(3 == CountIf(TStringBuf("____1________1____1_______"), isOne));
         UNIT_ASSERT(5 == CountIf(TStringBuf("1____1________1____1_______1"), isOne));
         UNIT_ASSERT(0 == CountIf(TStringBuf("___________"), isOne));
-        UNIT_ASSERT(0 == CountIf(TStringBuf(), isOne));
+        UNIT_ASSERT(0 == CountIf(TStringBuf(), isOne)); 
         UNIT_ASSERT(1 == CountIf(TStringBuf("1"), isOne));
 
         const char array[] = "____1________1____1_______";

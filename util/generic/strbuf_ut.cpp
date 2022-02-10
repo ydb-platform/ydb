@@ -319,19 +319,19 @@ Y_UNIT_TEST_SUITE(TStrBufTest) {
         s.SplitAt(pos, l, r);
         UNIT_ASSERT(l == "abcabc" && r == ""); // modified
     }
-
-    template <class T>
-    void PassByConstReference(const T& val) {
-        // In https://st.yandex-team.ru/IGNIETFERRO-294 was assumed that `const char[]` types are compile time strings
+ 
+    template <class T> 
+    void PassByConstReference(const T& val) { 
+        // In https://st.yandex-team.ru/IGNIETFERRO-294 was assumed that `const char[]` types are compile time strings 
         // and that CharTraits::Length may not be called for them. Unfortunately that is not true, `char[]` types
-        // are easily converted to `const char[]` if they are passed to a function accepting `const T&`.
-        UNIT_ASSERT(TStringBuf(val).size() == 5);
-    }
-
+        // are easily converted to `const char[]` if they are passed to a function accepting `const T&`. 
+        UNIT_ASSERT(TStringBuf(val).size() == 5); 
+    } 
+ 
     Y_UNIT_TEST(TestPassingArraysByConstReference) {
-        char data[] = "Hello\0word";
-        PassByConstReference(data);
-    }
+        char data[] = "Hello\0word"; 
+        PassByConstReference(data); 
+    } 
 
     Y_UNIT_TEST(TestTruncate) {
         TStringBuf s = "123";

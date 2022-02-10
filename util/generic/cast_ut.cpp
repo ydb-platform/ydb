@@ -6,7 +6,7 @@ class TGenericCastsTest: public TTestBase {
     UNIT_TEST_SUITE(TGenericCastsTest);
     UNIT_TEST(TestVerifyDynamicCast)
     UNIT_TEST(TestIntegralCast)
-    UNIT_TEST(TestEnumCast)
+    UNIT_TEST(TestEnumCast) 
     UNIT_TEST(TestToUnderlying)
     UNIT_TEST(TestBitCast)
     UNIT_TEST_SUITE_END();
@@ -29,32 +29,32 @@ private:
         UNIT_ASSERT_EXCEPTION(SafeIntegerCast<ui16>(static_cast<i32>(Max<ui16>() + 10)), TBadCastException);
         UNIT_ASSERT_EXCEPTION(SafeIntegerCast<ui16>(static_cast<ui32>(Max<ui16>() + 10)), TBadCastException);
     }
-
-    inline void TestEnumCast() {
-        enum A {
-            AM1 = -1
-        };
-
+ 
+    inline void TestEnumCast() { 
+        enum A { 
+            AM1 = -1 
+        }; 
+ 
         enum B: int {
-            BM1 = -1
-        };
-
+            BM1 = -1 
+        }; 
+ 
         enum class C: unsigned short {
-            CM1 = 1
-        };
-
-        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<unsigned int>(AM1), TBadCastException);
-        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<unsigned int>(BM1), TBadCastException);
-        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<C>(AM1), TBadCastException);
-        UNIT_ASSERT_EXCEPTION(static_cast<int>(SafeIntegerCast<C>(BM1)), TBadCastException);
-        UNIT_ASSERT(SafeIntegerCast<A>(BM1) == AM1);
-        UNIT_ASSERT(SafeIntegerCast<B>(AM1) == BM1);
-        UNIT_ASSERT(SafeIntegerCast<A>(C::CM1) == 1);
-        UNIT_ASSERT(SafeIntegerCast<B>(C::CM1) == 1);
-        UNIT_ASSERT(SafeIntegerCast<A>(-1) == AM1);
-        UNIT_ASSERT(SafeIntegerCast<B>(-1) == BM1);
-        UNIT_ASSERT(SafeIntegerCast<C>(1) == C::CM1);
-    }
+            CM1 = 1 
+        }; 
+ 
+        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<unsigned int>(AM1), TBadCastException); 
+        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<unsigned int>(BM1), TBadCastException); 
+        UNIT_ASSERT_EXCEPTION(SafeIntegerCast<C>(AM1), TBadCastException); 
+        UNIT_ASSERT_EXCEPTION(static_cast<int>(SafeIntegerCast<C>(BM1)), TBadCastException); 
+        UNIT_ASSERT(SafeIntegerCast<A>(BM1) == AM1); 
+        UNIT_ASSERT(SafeIntegerCast<B>(AM1) == BM1); 
+        UNIT_ASSERT(SafeIntegerCast<A>(C::CM1) == 1); 
+        UNIT_ASSERT(SafeIntegerCast<B>(C::CM1) == 1); 
+        UNIT_ASSERT(SafeIntegerCast<A>(-1) == AM1); 
+        UNIT_ASSERT(SafeIntegerCast<B>(-1) == BM1); 
+        UNIT_ASSERT(SafeIntegerCast<C>(1) == C::CM1); 
+    } 
 
     void TestToUnderlying() {
         enum A {

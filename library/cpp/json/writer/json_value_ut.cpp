@@ -608,21 +608,21 @@ Y_UNIT_TEST_SUITE(TJsonValueTest) {
     }
 
     Y_UNIT_TEST(MoveSubpartToSelf) {
-        TJsonValue json;
-        json[0] = "testing 0";
-        json[1] = "testing 1";
-        json[2] = "testing 2";
-        json = std::move(json[1]);
-        UNIT_ASSERT_VALUES_EQUAL(json.GetString(), "testing 1");
-
-        const char* longTestString =
-            "Testing TJsonValue& operator=(TJsonValue&&) subpart self moving "
+        TJsonValue json; 
+        json[0] = "testing 0"; 
+        json[1] = "testing 1"; 
+        json[2] = "testing 2"; 
+        json = std::move(json[1]); 
+        UNIT_ASSERT_VALUES_EQUAL(json.GetString(), "testing 1"); 
+ 
+        const char* longTestString = 
+            "Testing TJsonValue& operator=(TJsonValue&&) subpart self moving " 
             "after TJsonValue was constrcuted from TString&&.";
-
+ 
         json["hello"] = TString{longTestString};
-        json = std::move(json["hello"]);
-        UNIT_ASSERT_VALUES_EQUAL(json.GetString(), longTestString);
-    }
+        json = std::move(json["hello"]); 
+        UNIT_ASSERT_VALUES_EQUAL(json.GetString(), longTestString); 
+    } 
 
     Y_UNIT_TEST(TJsonArrayMapConstructor) {
         TJsonMap emptyMap;

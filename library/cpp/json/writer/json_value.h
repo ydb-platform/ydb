@@ -152,7 +152,7 @@ namespace NJson {
         bool GetValuePointer(size_t index, const TJsonValue** value) const noexcept;
         bool GetValuePointer(TStringBuf key, const TJsonValue** value) const noexcept;
         bool GetValuePointer(TStringBuf key, TJsonValue** value) noexcept;
-
+ 
         // Checking for defined non-null value
         bool IsDefined() const noexcept {
             return Type != JSON_UNDEFINED && Type != JSON_NULL;
@@ -223,26 +223,26 @@ namespace NJson {
     inline bool GetBoolean(const TJsonValue& jv, size_t index, bool* value) noexcept {
         return jv[index].GetBoolean(value);
     }
-
+ 
     inline bool GetInteger(const TJsonValue& jv, size_t index, long long* value) noexcept {
         return jv[index].GetInteger(value);
     }
-
+ 
     inline bool GetUInteger(const TJsonValue& jv, size_t index, unsigned long long* value) noexcept {
         return jv[index].GetUInteger(value);
     }
-
+ 
     inline bool GetDouble(const TJsonValue& jv, size_t index, double* value) noexcept {
         return jv[index].GetDouble(value);
     }
-
+ 
     inline bool GetString(const TJsonValue& jv, size_t index, TString* value) {
         return jv[index].GetString(value);
     }
-
+ 
     bool GetMapPointer(const TJsonValue& jv, size_t index, const TJsonValue::TMapType** value);
     bool GetArrayPointer(const TJsonValue& jv, size_t index, const TJsonValue::TArray** value);
-
+ 
     inline bool GetBoolean(const TJsonValue& jv, TStringBuf key, bool* value) noexcept {
         return jv[key].GetBoolean(value);
     }
@@ -254,15 +254,15 @@ namespace NJson {
     inline bool GetUInteger(const TJsonValue& jv, TStringBuf key, unsigned long long* value) noexcept {
         return jv[key].GetUInteger(value);
     }
-
+ 
     inline bool GetDouble(const TJsonValue& jv, TStringBuf key, double* value) noexcept {
         return jv[key].GetDouble(value);
     }
-
+ 
     inline bool GetString(const TJsonValue& jv, TStringBuf key, TString* value) {
         return jv[key].GetString(value);
     }
-
+ 
     bool GetMapPointer(const TJsonValue& jv, const TStringBuf key, const TJsonValue::TMapType** value);
     bool GetArrayPointer(const TJsonValue& jv, const TStringBuf key, const TJsonValue::TArray** value);
 
@@ -291,4 +291,4 @@ namespace NJson {
             GetArraySafe() = TJsonValue::TArray(list);
         }
     };
-}
+} 

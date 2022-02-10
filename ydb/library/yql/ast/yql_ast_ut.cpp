@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(TParseYqlAst) {
     }
 
     Y_UNIT_TEST(GoodArbitraryAtom) {
-        TestGoodArbitraryAtom("(\"\")", TStringBuf());
+        TestGoodArbitraryAtom("(\"\")", TStringBuf()); 
         TestGoodArbitraryAtom("(\" 1 a 3 b \")", TStringBuf(" 1 a 3 b "));
 
         ui8 expectedHex[] = { 0xab, 'c', 'd', 0x00 };

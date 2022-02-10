@@ -114,10 +114,10 @@ namespace NEscJ {
             return EscapeJ<false>(c, next, r, safe, unsafe);
         }
     };
- 
+
     inline size_t SuggestBuffer(size_t len) {
         return len * TEscapeUtil::ESCAPE_C_BUFFER_SIZE;
-    } 
+    }
 
     template <bool tounicode>
     inline size_t EscapeJ(const char* str, size_t len, char* out, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) {
@@ -195,14 +195,14 @@ namespace NEscJ {
     inline void EscapeJ(TStringBuf in, IOutputStream& out, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) {
         EscapeJ<quote, false>(in, out, safe, unsafe);
     }
- 
+
     template <bool quote>
     inline void EscapeJ(TStringBuf in, TString& out, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) {
         EscapeJ<quote, false>(in, out, safe, unsafe);
     }
- 
+
     template <bool quote>
     inline TString EscapeJ(TStringBuf in, TStringBuf safe = TStringBuf(), TStringBuf unsafe = TStringBuf()) {
         return EscapeJ<quote, false>(in, safe, unsafe);
     }
-} 
+}

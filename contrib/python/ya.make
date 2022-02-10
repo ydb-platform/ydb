@@ -163,7 +163,7 @@ RECURSE(
     colorama
     coloredlogs
     colorhash
-    colorlog 
+    colorlog
     commoncode
     commonmark
     ConfigArgParse
@@ -475,7 +475,7 @@ RECURSE(
     hammock
     hexdump
     hijri-converter
-    hiredis 
+    hiredis
     hjson
     holidays
     horovod
@@ -934,7 +934,7 @@ RECURSE(
     razdel
     rdflib
     readabilipy
-    redis 
+    redis
     redis-cache-lock
     regex
     reportlab

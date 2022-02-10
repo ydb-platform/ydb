@@ -102,7 +102,7 @@ RECURSE(
     hdf5
     hdr_histogram
     highwayhash
-    hiredis 
+    hiredis
     httpd24
     hwloc
     hyperscan

@@ -404,7 +404,7 @@ RECURSE(
     Flask-PyMongo
     Flask-RESTful
     flask-restplus
-    flask-restx
+    flask-restx 
     Flask-Script
     flask-shell-ipython
     Flask-Shelve

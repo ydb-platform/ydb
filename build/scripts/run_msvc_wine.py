@@ -53,7 +53,7 @@ def subst_path(l):
 
 
 def call_wine_cmd_once(wine, cmd, env, mode):
-    p = run_subprocess(wine + cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, close_fds=True, shell=False) 
+    p = run_subprocess(wine + cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=env, close_fds=True, shell=False)
 
     output = find_cmd_out(cmd)
     error = None
@@ -71,20 +71,20 @@ def call_wine_cmd_once(wine, cmd, env, mode):
 
     # print >>sys.stderr, cmd, env, wine
 
-    stdout_and_stderr, _ = p.communicate() 
+    stdout_and_stderr, _ = p.communicate()
 
-    return_code = p.returncode 
-    if not stdout_and_stderr: 
-        if return_code != 0: 
+    return_code = p.returncode
+    if not stdout_and_stderr:
+        if return_code != 0:
             raise Exception('wine did something strange')
 
-        return return_code 
-    elif ' : fatal error ' in stdout_and_stderr: 
-        return_code = 1 
-    elif ' : error ' in stdout_and_stderr: 
-        return_code = 2 
+        return return_code
+    elif ' : fatal error ' in stdout_and_stderr:
+        return_code = 1
+    elif ' : error ' in stdout_and_stderr:
+        return_code = 2
 
-    lines = [x.strip() for x in stdout_and_stderr.split('\n')] 
+    lines = [x.strip() for x in stdout_and_stderr.split('\n')]
 
     prefixes = [
         'Microsoft (R)',
@@ -135,12 +135,12 @@ def call_wine_cmd_once(wine, cmd, env, mode):
             if good_line(l):
                 yield subst_path(l.strip())
 
-    stdout_and_stderr = '\n'.join(filter_lines()).strip() 
+    stdout_and_stderr = '\n'.join(filter_lines()).strip()
 
-    if stdout_and_stderr: 
-        print >>sys.stderr, stdout_and_stderr 
+    if stdout_and_stderr:
+        print >>sys.stderr, stdout_and_stderr
 
-    return return_code 
+    return return_code
 
 
 def prepare_vc(fr, to):
@@ -471,7 +471,7 @@ def run_main():
         }
 
         slave_cmd = [sys.executable, sys.argv[0], wine, 'slave', json.dumps(args)]
-        p = run_subprocess(slave_cmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE, shell=False) 
+        p = run_subprocess(slave_cmd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE, shell=False)
         out, _ = p.communicate()
         return p.wait(), out
 

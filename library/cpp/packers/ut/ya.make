@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/packers)
 
-OWNER(velavokr) 
+OWNER(velavokr)
 
 SRCS(
     packers_ut.cpp

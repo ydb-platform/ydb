@@ -11,9 +11,9 @@ OWNER(
     g:cpp-contrib
 )
 
-NO_UTIL() 
+NO_UTIL()
 
-NO_COMPILER_WARNINGS() 
+NO_COMPILER_WARNINGS()
 
 SRCS(
     fastlz.c

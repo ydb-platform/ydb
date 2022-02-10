@@ -37,10 +37,10 @@ def onregister_yql_python_udf(unit, *args):
     else:
         flavor = 'System'
 
-    output_includes = [ 
-        'yql/udfs/common/python/python_udf/python_udf.h', 
+    output_includes = [
+        'yql/udfs/common/python/python_udf/python_udf.h',
         'ydb/library/yql/public/udf/udf_registrator.h',
-    ] 
+    ]
     if add_libra_modules:
         output_includes.append('yql/udfs/quality/libra/module/module.h')
 
@@ -50,6 +50,6 @@ def onregister_yql_python_udf(unit, *args):
         'build/scripts/gen_yql_python_udf.py',
         flavor, name, resource_name, path, libra_flag,
         'OUT', path,
-        'OUTPUT_INCLUDES', 
-    ] + output_includes 
-    ) 
+        'OUTPUT_INCLUDES',
+    ] + output_includes
+    )

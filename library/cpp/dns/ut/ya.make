@@ -1,4 +1,4 @@
-UNITTEST() 
+UNITTEST()
 
 OWNER(
     and42

@@ -22,7 +22,7 @@ SRCS(
     sync.cpp
     replication.cpp
 )
- 
+
 IF (BUILD_TYPE == "RELEASE")
     SRCS(
         big_cluster.cpp

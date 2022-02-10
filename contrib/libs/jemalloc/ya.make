@@ -23,7 +23,7 @@ ADDINCL(
     contrib/libs/libunwind/include
 )
 
-IF (OS_WINDOWS) 
+IF (OS_WINDOWS)
     ADDINCL(
         contrib/libs/jemalloc/include/msvc_compat
     )

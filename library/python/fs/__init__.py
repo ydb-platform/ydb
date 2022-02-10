@@ -1,5 +1,5 @@
-# coding: utf-8 
- 
+# coding: utf-8
+
 import codecs
 import errno
 import logging
@@ -162,10 +162,10 @@ def remove_tree_safe(path):
             os.remove(path)
         elif stat.S_ISDIR(st.st_mode):
             shutil.rmtree(fix_path_encoding(path), ignore_errors=True)
-    # XXX 
-    except UnicodeDecodeError as e: 
-        logging.exception(u'remove_tree_safe with argument %s raise exception: %s', path, e) 
-        raise 
+    # XXX
+    except UnicodeDecodeError as e:
+        logging.exception(u'remove_tree_safe with argument %s raise exception: %s', path, e)
+        raise
     except OSError:
         pass
 

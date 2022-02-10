@@ -20,7 +20,7 @@ ADDINCL(
     GLOBAL contrib/tools/bison/gnulib/src
 )
 
-IF (OS_WINDOWS) 
+IF (OS_WINDOWS)
     ADDINCL(
         GLOBAL contrib/tools/bison/gnulib/platform/win64
     )
@@ -30,13 +30,13 @@ ELSE()
     )
 ENDIF()
 
-IF (OS_DARWIN) 
+IF (OS_DARWIN)
     CFLAGS(
         -D_XOPEN_SOURCE=600
     )
 ENDIF()
 
-IF (NOT OS_WINDOWS) 
+IF (NOT OS_WINDOWS)
     CFLAGS(
         GLOBAL -Dregcomp=gnu_regcomp
         GLOBAL -Dregerror=gnu_regerror
@@ -176,20 +176,20 @@ IF (NOT MUSL)
     )
 ENDIF()
 
-IF (NOT OS_LINUX) 
+IF (NOT OS_LINUX)
     SRCS(
         src/pipe2.c
         src/strverscmp.c
     )
 ENDIF()
 
-IF (NOT OS_WINDOWS) 
+IF (NOT OS_WINDOWS)
     SRCS(
         src/stdio-write.c
     )
 ENDIF()
 
-IF (OS_WINDOWS) 
+IF (OS_WINDOWS)
     SRCS(
         src/frexp.c
         src/wcrtomb.c
@@ -228,14 +228,14 @@ IF (OS_WINDOWS)
     )
 ENDIF()
 
-IF (NOT OS_LINUX OR MUSL) 
+IF (NOT OS_LINUX OR MUSL)
     SRCS(
         src/obstack.c
         src/obstack_printf.c
     )
 ENDIF()
 
-IF (OS_CYGWIN OR OS_LINUX) 
+IF (OS_CYGWIN OR OS_LINUX)
     #not need it
 ELSE()
     SRCS(

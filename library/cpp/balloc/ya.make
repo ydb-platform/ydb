@@ -5,7 +5,7 @@ OWNER(
     g:base
 )
 
-NO_UTIL() 
+NO_UTIL()
 NO_COMPILER_WARNINGS()
 
 IF (OS_WINDOWS)

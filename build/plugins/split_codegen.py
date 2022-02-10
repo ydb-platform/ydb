@@ -4,7 +4,7 @@ from _common import sort_by_keywords
 _DEFAULT_CPP_PARTS = 20
 # See TCodegenParams::MethodStream usage in factor codegen
 _ADDITIONAL_STREAM_COUNT = 5
- 
+
 
 def onsplit_codegen(unit, *args):
     '''

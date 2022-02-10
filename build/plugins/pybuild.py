@@ -48,10 +48,10 @@ def proto_arg(path, mod, unit):
 
 def pb_cc_arg(suf, path, unit):
     return '{}{suf}'.format(stripext(to_build_root(path, unit)), suf=suf)
- 
-def ev_cc_arg(path, unit): 
-    return '{}.ev.pb.cc'.format(stripext(to_build_root(path, unit))) 
- 
+
+def ev_cc_arg(path, unit):
+    return '{}.ev.pb.cc'.format(stripext(to_build_root(path, unit)))
+
 def ev_arg(path, mod, unit):
     return '{}__int___ev_pb2.py={}_ev_pb2'.format(stripext(to_build_root(path, unit)), mod)
 
@@ -301,9 +301,9 @@ def onpy_srcs(unit, *args):
                 else:
                     if arg.startswith('../'):
                         ymake.report_configure_error('PY_SRCS item starts with "../": {!r}'.format(arg))
-                    if arg.startswith('/'): 
-                        ymake.report_configure_error('PY_SRCS item starts with "/": {!r}'.format(arg)) 
-                        continue 
+                    if arg.startswith('/'):
+                        ymake.report_configure_error('PY_SRCS item starts with "/": {!r}'.format(arg))
+                        continue
                     mod_name = stripext(arg).replace('/', '.')
                     if py3 and path.endswith('.py') and is_extended_source_search_enabled(path, unit):
                         # Dig out real path from the file path. Unit.path is not enough because of SRCDIR and ADDINCL
@@ -499,7 +499,7 @@ def onpy_srcs(unit, *args):
 
         unit.onpeerdir(unit.get("PY_PROTO_DEPS").split())
 
-        proto_paths = [path for path, mod in protos] 
+        proto_paths = [path for path, mod in protos]
         unit.on_generate_py_protos_internal(proto_paths)
         unit.onpy_srcs([
             pb2_arg(py_suf, path, mod, unit)

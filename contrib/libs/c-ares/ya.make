@@ -36,12 +36,12 @@ CFLAGS(
     -DHAVE_CONFIG_H
 )
 
-IF (NOT DLL_FOR) 
+IF (NOT DLL_FOR)
     CFLAGS(
         -DCARES_STATICLIB
     )
-ENDIF() 
- 
+ENDIF()
+
 IF (ARCH_ARM7)
     CFLAGS(
         GLOBAL -D__SIZEOF_LONG__=4

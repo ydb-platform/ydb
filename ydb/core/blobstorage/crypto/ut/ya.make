@@ -2,7 +2,7 @@ UNITTEST_FOR(ydb/core/blobstorage/crypto)
 
 OWNER(g:kikimr)
 
-IF (NOT OS_WINDOWS) 
+IF (NOT OS_WINDOWS)
     SRCS(
         chacha_ut.cpp
         chacha_vec_ut.cpp

@@ -1,7 +1,7 @@
 UNITTEST_FOR(util)
 
-REQUIREMENTS(network:full) 
- 
+REQUIREMENTS(network:full)
+
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
 

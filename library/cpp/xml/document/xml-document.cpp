@@ -1,7 +1,7 @@
 #include "xml-document.h"
 
-#include <libxml/xinclude.h> 
-#include <libxml/xpathInternals.h> 
+#include <libxml/xinclude.h>
+#include <libxml/xpathInternals.h>
 
 #include <library/cpp/xml/init/init.h>
 

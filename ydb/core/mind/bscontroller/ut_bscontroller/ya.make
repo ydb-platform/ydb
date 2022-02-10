@@ -2,10 +2,10 @@ UNITTEST()
 
 FORK_SUBTESTS()
 
-OWNER( 
-    alexvru 
-    g:kikimr 
-) 
+OWNER(
+    alexvru
+    g:kikimr
+)
 
 REQUIREMENTS(
     cpu:4
@@ -21,11 +21,11 @@ ELSE()
     TIMEOUT(600)
 ENDIF()
 
-SRCS( 
-    main.cpp 
-) 
+SRCS(
+    main.cpp
+)
 
-PEERDIR( 
+PEERDIR(
     ydb/core/base
     ydb/core/blobstorage
     ydb/core/blobstorage/base
@@ -34,10 +34,10 @@ PEERDIR(
     ydb/core/protos
     ydb/core/testlib
     ydb/core/testlib/basics
-) 
+)
 
 YQL_LAST_ABI_VERSION()
 
-REQUIREMENTS(network:full) 
- 
+REQUIREMENTS(network:full)
+
 END()

@@ -3442,14 +3442,14 @@
                 }
             ]
         },
-        "cling": { 
-            "tools": { 
+        "cling": {
+            "tools": {
                 "cling": {
                     "bottle": "cling",
                     "executable": "cling"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3462,8 +3462,8 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
+            ]
+        },
         "ninja": {
             "tools": {
                 "ninja": {
@@ -3666,14 +3666,14 @@
                 }
             ]
         },
-        "vim": { 
-            "tools": { 
+        "vim": {
+            "tools": {
                 "vim": {
                     "bottle": "vim",
                     "executable": "vim"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3686,16 +3686,16 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "nvim": { 
-            "tools": { 
+            ]
+        },
+        "nvim": {
+            "tools": {
                 "nvim": {
                     "bottle": "nvim",
                     "executable": "nvim"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3708,16 +3708,16 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "emacs": { 
-            "tools": { 
+            ]
+        },
+        "emacs": {
+            "tools": {
                 "emacs": {
                     "bottle": "emacs",
                     "executable": "emacs"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -3730,8 +3730,8 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
+            ]
+        },
         "tmux": {
             "tools": {
                 "tmux": {
@@ -3739,11 +3739,11 @@
                     "executable": "tmux"
                 }
             },
-            "env": { 
-                "TERMINFO": [ 
+            "env": {
+                "TERMINFO": [
                     "$(ROOT)/share/terminfo"
-                ] 
-            }, 
+                ]
+            },
             "platforms": [
                 {
                     "host": {
@@ -4306,15 +4306,15 @@
                     "default": true
                 }
             ]
-        }, 
-        "ctags": { 
-            "tools": { 
+        },
+        "ctags": {
+            "tools": {
                 "ctags": {
                     "bottle": "ctags",
                     "executable": "ctags"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4327,15 +4327,15 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
-        "you_complete_me": { 
-            "tools": { 
+            ]
+        },
+        "you_complete_me": {
+            "tools": {
                 "you_complete_me": {
                     "bottle": "you_complete_me"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4348,15 +4348,15 @@
                     },
                     "default": true
                 }
-            ] 
+            ]
         },
-        "rtags": { 
-            "tools": { 
+        "rtags": {
+            "tools": {
                 "rtags": {
                     "bottle": "rtags"
                 }
-            }, 
-            "platforms": [ 
+            },
+            "platforms": [
                 {
                     "host": {
                         "os": "LINUX"
@@ -4369,8 +4369,8 @@
                     },
                     "default": true
                 }
-            ] 
-        }, 
+            ]
+        },
         "afl-fuzz": {
             "tools": {
                 "afl-fuzz": {
@@ -6876,39 +6876,39 @@
                 ]
             }
         },
-        "vim": { 
-            "formula": { 
-                "sandbox_id": 82345405, 
-                "match": "vim" 
-            }, 
-            "executable": { 
+        "vim": {
+            "formula": {
+                "sandbox_id": 82345405,
+                "match": "vim"
+            },
+            "executable": {
                 "vim": [
                     "vim"
                 ]
-            } 
-        }, 
-        "nvim": { 
-            "formula": { 
-                "sandbox_id": 123061100, 
-                "match": "nvim" 
-            }, 
-            "executable": { 
+            }
+        },
+        "nvim": {
+            "formula": {
+                "sandbox_id": 123061100,
+                "match": "nvim"
+            },
+            "executable": {
                 "nvim": [
                     "nvim"
                 ]
-            } 
-        }, 
-        "emacs": { 
-            "formula": { 
-                "sandbox_id": 84328012, 
-                "match": "emacs" 
-            }, 
-            "executable": { 
+            }
+        },
+        "emacs": {
+            "formula": {
+                "sandbox_id": 84328012,
+                "match": "emacs"
+            },
+            "executable": {
                 "emacs": [
                     "emacs"
                 ]
-            } 
-        }, 
+            }
+        },
         "tmux": {
             "formula": {
                 "sandbox_id": [
@@ -7006,17 +7006,17 @@
                 ]
             }
         },
-        "cling": { 
-            "formula": { 
-                "sandbox_id": 87671454, 
-                "match": "cling" 
-            }, 
-            "executable": { 
+        "cling": {
+            "formula": {
+                "sandbox_id": 87671454,
+                "match": "cling"
+            },
+            "executable": {
                 "cling": [
                     "cling"
                 ]
-            } 
-        }, 
+            }
+        },
         "ninja": {
             "formula": {
                 "sandbox_id": 19094385,
@@ -7147,31 +7147,31 @@
                     "allure"
                 ]
             }
-        }, 
+        },
         "ctags": {
-            "formula": { 
-                "sandbox_id": 55229519, 
-                "match": "ctags" 
-            }, 
-            "executable": { 
+            "formula": {
+                "sandbox_id": 55229519,
+                "match": "ctags"
+            },
+            "executable": {
                 "ctags": [
                     "bin",
                     "ctags"
                 ]
-            } 
-        }, 
+            }
+        },
         "you_complete_me": {
-            "formula": { 
+            "formula": {
                 "sandbox_id": 121751471,
-                "match": "YouCompleteMe" 
-            } 
+                "match": "YouCompleteMe"
+            }
         },
         "rtags": {
-            "formula": { 
-                "sandbox_id": 84460170, 
-                "match": "rtags" 
-            } 
-        }, 
+            "formula": {
+                "sandbox_id": 84460170,
+                "match": "rtags"
+            }
+        },
         "afl-fuzz": {
             "formula": {
                 "sandbox_id": 80600007,

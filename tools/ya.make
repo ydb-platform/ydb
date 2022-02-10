@@ -1,44 +1,44 @@
 RECURSE(
     acceleo
-    arcdocidstrip 
-    archiver 
+    arcdocidstrip
+    archiver
     archiver/alignment_test
     archiver/tests
     base64
     bigram_compiler
-    blender 
-    bmdump 
+    blender
+    bmdump
     bstr
     c++filt
     calendar_extractor
     check_formula_md5
     check_json
     check_yaml
-    checktrigrams 
+    checktrigrams
     clustermaster
-    coldiff 
+    coldiff
     compress
     convert2html
-    cproxy 
+    cproxy
     crc32
     crx_creator
     curl_to_ab
-    diaprintkeys 
-    directindexer 
+    diaprintkeys
+    directindexer
     doc_handle_decode
     doc_handle_decode/ut
     doc_url_index_print
-    dolbilo 
+    dolbilo
     domschemec
     domschemec/ut
     drawrichtree
-    dsindexer 
+    dsindexer
     easyparser
     enforce_fsync
     enum_parser
-    event2cpp 
+    event2cpp
     fast_diff
-    fastcksum 
+    fastcksum
     filter_nonucs2
     fix_elf
     fml_sweeper_api
@@ -54,7 +54,7 @@ RECURSE(
     host_canonizer
     hostdump
     hostpire
-    html2cpp 
+    html2cpp
     html2text
     idl
     idx_relemmatizer
@@ -62,14 +62,14 @@ RECURSE(
     is_holiday
     jsv8
     json_to_jsonlines
-    langdiscr-test 
+    langdiscr-test
     lemmas_merger_builder
-    lemmer-test 
+    lemmer-test
     lemmer-test/tests
     lenval_debug
-    lua 
-    memcheck 
-    mirrorsWrapper 
+    lua
+    memcheck
+    mirrorsWrapper
     misc_index_print
     mkdocs_builder
     mkdocs_builder/arcadium_helper_plugin
@@ -79,84 +79,84 @@ RECURSE(
     mtime0
     mx_bin2info
     nehc
-    nlp_test 
-    nodeiter_test 
+    nlp_test
+    nodeiter_test
     nodeiter_test/tests
-    normalize_requests 
+    normalize_requests
     nots
     oauth_token
     pgmigrate
     pire
     print_ranking_features
     printcorpus
-    printdocstat 
+    printdocstat
     printdom
-    printkeys 
-    printlinks 
+    printkeys
+    printlinks
     printphones
-    printreqs 
+    printreqs
     printreqs/tests
-    printrichnode 
+    printrichnode
     printrichnode/tests
     printtrie
-    printurls 
-    printwzrd 
+    printurls
+    printwzrd
     printwzrd/scripts
     printwzrd/tests
-    printxmap 
-    printxref 
+    printxmap
+    printxref
     prngrp_index_print
     prog_rule
     protobin2mr
-    prwordsfr 
-    pure_compiler 
+    prwordsfr
+    pure_compiler
     pure_fingerprints
     pycron
     python-netconfig-static
     qlz
-    query_marker_builder 
+    query_marker_builder
     queryrectest
     queryrectest/tests
     queryrectest/tests/data
     rcgtest
-    re_check 
-    recode 
+    re_check
+    recode
     refaww_index_print
     refdmap_index_print
     reflerf_index_print
     releaser
-    relev_fml_codegen 
-    relev_fml_unused 
+    relev_fml_codegen
+    relev_fml_unused
     remorphc
     remorphparser
-    rescompiler 
+    rescompiler
     rescompressor
     rorescompiler
     sandboxctl
-    sanitizer 
+    sanitizer
     segutils
     seinfo
     sent_index_print
-    showmime 
+    showmime
     shutter_jing_plugin
     snipmake
-    spamfilt 
+    spamfilt
     stdin
-    struct2fieldcalc 
+    struct2fieldcalc
     syntaxer
-    tarccreate 
-    tarcview 
+    tarccreate
+    tarcview
     templater
     test_norm
-    test_relev 
-    testlangmodel 
-    thresher 
+    test_relev
+    testlangmodel
+    thresher
     titleseq_index_print
     tokenize
     tokenize/tests
     tomaparsertest
-    trans_str 
-    triecompiler 
+    trans_str
+    triecompiler
     triecompiler/build_tool
     triecompiler/lib
     trie_ops
@@ -164,8 +164,8 @@ RECURSE(
     trie_ops/tests
     trigram_index_print
     uc
-    unpackrichtree 
-    unpackrrr 
+    unpackrichtree
+    unpackrrr
     unpack_staff_cert
     untranslit_test
     untranslit_test/tests
@@ -173,7 +173,7 @@ RECURSE(
     urlmenuindexer
     urlseq_print
     voice
-    webxmltest 
+    webxmltest
     wizard_yt
     ygetparam
     ylzocat
@@ -181,9 +181,9 @@ RECURSE(
     zk_client
     idx_print
 )
- 
-IF (NOT OS_WINDOWS) 
-    RECURSE( 
-        netgdb 
-    ) 
+
+IF (NOT OS_WINDOWS)
+    RECURSE(
+        netgdb
+    )
 ENDIF()

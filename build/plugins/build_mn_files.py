@@ -1,6 +1,6 @@
 from os.path import basename, splitext
 
- 
+
 def on_build_mns_files(unit, *args):
     files = []
     name = ''

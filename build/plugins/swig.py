@@ -49,7 +49,7 @@ class Swig(iw.CustomCommand):
             self._library_dir
         ]
         self._incl_dirs = ['$S', '$B'] + [posixpath.join('$S', d) for d in incl_dirs]
- 
+
         modname = unit.get('REALPRJNAME')
         self._flags.extend(['-module', modname])
 

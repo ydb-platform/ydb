@@ -15,10 +15,10 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-ADDINCL( 
+ADDINCL(
     GLOBAL contrib/libs/re2/include
     contrib/libs/re2
-) 
+)
 
 NO_COMPILER_WARNINGS()
 

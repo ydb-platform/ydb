@@ -5,12 +5,12 @@ OWNER(
     g:juggler
 )
 
-TEST_SRCS(test_fetch.py) 
+TEST_SRCS(test_fetch.py)
 
 TAG(ya:external)
 
-REQUIREMENTS(network:full) 
- 
+REQUIREMENTS(network:full)
+
 PEERDIR(
     library/python/resource
     certs

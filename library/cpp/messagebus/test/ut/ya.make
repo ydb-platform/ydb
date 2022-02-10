@@ -5,7 +5,7 @@ UNITTEST_FOR(library/cpp/messagebus)
 TIMEOUT(1200)
 
 SIZE(LARGE)
- 
+
 TAG(
     ya:not_autocheck
     ya:fat

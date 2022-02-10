@@ -1,5 +1,5 @@
 # coding: utf-8
-import re 
+import re
 import sys
 
 
@@ -24,25 +24,25 @@ REPORT_SNIPPET_LIMIT = 10000
 SANITIZER_ERROR_RC = 100
 TEST_SUBTEST_SEPARATOR = '::'
 TESTING_OUT_DIR_NAME = "testing_out_stuff"
-TESTING_OUT_TAR_NAME = TESTING_OUT_DIR_NAME + ".tar" 
+TESTING_OUT_TAR_NAME = TESTING_OUT_DIR_NAME + ".tar"
 TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M:%S.%f"
 TRACE_FILE_NAME = "ytest.report.trace"
 TRUNCATING_IGNORE_FILE_LIST = {TRACE_FILE_NAME, "run_test.log"}
 
-# kvm 
-DEFAULT_RAM_REQUIREMENTS_FOR_KVM = 4 
-MAX_RAM_REQUIREMENTS_FOR_KVM = 16 
- 
-# distbuild 
-TEST_NODE_FINISHING_TIME = 5 * 60 
-DEFAULT_TEST_NODE_TIMEOUT = 15 * 60 
- 
+# kvm
+DEFAULT_RAM_REQUIREMENTS_FOR_KVM = 4
+MAX_RAM_REQUIREMENTS_FOR_KVM = 16
+
+# distbuild
+TEST_NODE_FINISHING_TIME = 5 * 60
+DEFAULT_TEST_NODE_TIMEOUT = 15 * 60
+
 # coverage
-COVERAGE_TESTS_TIMEOUT_FACTOR = 1.5 
-COVERAGE_RESOLVED_FILE_NAME_PATTERN = "coverage_resolved.{}.json" 
-CPP_COVERAGE_RESOLVED_FILE_NAME = COVERAGE_RESOLVED_FILE_NAME_PATTERN.format("cpp") 
-JAVA_COVERAGE_RESOLVED_FILE_NAME = COVERAGE_RESOLVED_FILE_NAME_PATTERN.format("java") 
-PYTHON_COVERAGE_RESOLVED_FILE_NAME = COVERAGE_RESOLVED_FILE_NAME_PATTERN.format("python") 
+COVERAGE_TESTS_TIMEOUT_FACTOR = 1.5
+COVERAGE_RESOLVED_FILE_NAME_PATTERN = "coverage_resolved.{}.json"
+CPP_COVERAGE_RESOLVED_FILE_NAME = COVERAGE_RESOLVED_FILE_NAME_PATTERN.format("cpp")
+JAVA_COVERAGE_RESOLVED_FILE_NAME = COVERAGE_RESOLVED_FILE_NAME_PATTERN.format("java")
+PYTHON_COVERAGE_RESOLVED_FILE_NAME = COVERAGE_RESOLVED_FILE_NAME_PATTERN.format("python")
 CLANG_COVERAGE_TEST_TYPES = ("unittest", "coverage_extractor", "pytest", "py3test", "gtest", "boost_test", "exectest")
 COVERAGE_TABLE_CHUNKS = 20
 COVERAGE_YT_PROXY = "hahn.yt.yandex.net"
@@ -55,26 +55,26 @@ CORPUS_DATA_ROOT_DIR = 'fuzzing'
 CORPUS_DIR_NAME = 'corpus'
 FUZZING_COMPRESSION_COEF = 1.1
 FUZZING_DEFAULT_TIMEOUT = 3600
-FUZZING_FINISHING_TIME = 600 
+FUZZING_FINISHING_TIME = 600
 FUZZING_TIMEOUT_RE = re.compile(r'(^|\s)-max_total_time=(?P<max_time>\d+)')
 GENERATED_CORPUS_DIR_NAME = 'mined_corpus'
 MAX_CORPUS_RESOURCES_ALLOWED = 5
 
-TEST_TOOL_HOST = 'TEST_TOOL_HOST_RESOURCE_GLOBAL' 
-TEST_TOOL_TARGET = 'TEST_TOOL_TARGET_RESOURCE_GLOBAL' 
-TEST_TOOL_HOST_LOCAL = 'TEST_TOOL_HOST_LOCAL' 
-TEST_TOOL_TARGET_LOCAL = 'TEST_TOOL_TARGET_LOCAL' 
-XCODE_TOOLS_RESOURCE = 'XCODE_TOOLS_ROOT_RESOURCE_GLOBAL' 
-GO_TOOLS_RESOURCE = 'GO_TOOLS_RESOURCE_GLOBAL' 
-LLVM_COV9_RESOURCE = 'LLVM_COV9_RESOURCE_GLOBAL' 
-PEP8_PY2_RESOURCE = 'PEP8_PY2_RESOURCE_GLOBAL' 
-PEP8_PY3_RESOURCE = 'PEP8_PY3_RESOURCE_GLOBAL' 
-FLAKES_PY2_RESOURCE = 'FLAKES_PY2_RESOURCE_GLOBAL' 
-FLAKES_PY3_RESOURCE = 'FLAKES_PY3_RESOURCE_GLOBAL' 
+TEST_TOOL_HOST = 'TEST_TOOL_HOST_RESOURCE_GLOBAL'
+TEST_TOOL_TARGET = 'TEST_TOOL_TARGET_RESOURCE_GLOBAL'
+TEST_TOOL_HOST_LOCAL = 'TEST_TOOL_HOST_LOCAL'
+TEST_TOOL_TARGET_LOCAL = 'TEST_TOOL_TARGET_LOCAL'
+XCODE_TOOLS_RESOURCE = 'XCODE_TOOLS_ROOT_RESOURCE_GLOBAL'
+GO_TOOLS_RESOURCE = 'GO_TOOLS_RESOURCE_GLOBAL'
+LLVM_COV9_RESOURCE = 'LLVM_COV9_RESOURCE_GLOBAL'
+PEP8_PY2_RESOURCE = 'PEP8_PY2_RESOURCE_GLOBAL'
+PEP8_PY3_RESOURCE = 'PEP8_PY3_RESOURCE_GLOBAL'
+FLAKES_PY2_RESOURCE = 'FLAKES_PY2_RESOURCE_GLOBAL'
+FLAKES_PY3_RESOURCE = 'FLAKES_PY3_RESOURCE_GLOBAL'
 FLAKE8_PY2_RESOURCE = 'FLAKE8_PY2_RESOURCE_GLOBAL'
 FLAKE8_PY3_RESOURCE = 'FLAKE8_PY3_RESOURCE_GLOBAL'
 
- 
+
 class Enum(object):
 
     @classmethod
@@ -82,134 +82,134 @@ class Enum(object):
         return [v for k, v in cls.__dict__.items() if not k.startswith("_")]
 
 
-class TestRequirements(Enum): 
-    Container = 'container' 
-    Cpu = 'cpu' 
-    DiskUsage = 'disk_usage' 
-    Ram = 'ram' 
-    RamDisk = 'ram_disk' 
-    SbVault = 'sb_vault' 
-    Network = 'network' 
-    Dns = 'dns' 
-    Kvm = 'kvm' 
- 
- 
-class TestRequirementsConstants(Enum): 
-    All = 'all' 
-    AllCpuValue = 50 
-    AllRamDiskValue = 50 
-    MinCpu = 1 
-    MinRam = 1 
-    MinRamDisk = 0 
- 
-    @classmethod 
-    def is_all_cpu(cls, value): 
-        return value == cls.All 
- 
-    @classmethod 
-    def get_cpu_value(cls, value): 
-        return cls.AllCpuValue if cls.is_all_cpu(value) else value 
- 
-    @classmethod 
-    def is_all_ram_disk(cls, value): 
-        return value == cls.All 
- 
-    @classmethod 
-    def get_ram_disk_value(cls, value): 
-        return cls.AllRamDiskValue if cls.is_all_ram_disk(value) else value 
- 
- 
+class TestRequirements(Enum):
+    Container = 'container'
+    Cpu = 'cpu'
+    DiskUsage = 'disk_usage'
+    Ram = 'ram'
+    RamDisk = 'ram_disk'
+    SbVault = 'sb_vault'
+    Network = 'network'
+    Dns = 'dns'
+    Kvm = 'kvm'
+
+
+class TestRequirementsConstants(Enum):
+    All = 'all'
+    AllCpuValue = 50
+    AllRamDiskValue = 50
+    MinCpu = 1
+    MinRam = 1
+    MinRamDisk = 0
+
+    @classmethod
+    def is_all_cpu(cls, value):
+        return value == cls.All
+
+    @classmethod
+    def get_cpu_value(cls, value):
+        return cls.AllCpuValue if cls.is_all_cpu(value) else value
+
+    @classmethod
+    def is_all_ram_disk(cls, value):
+        return value == cls.All
+
+    @classmethod
+    def get_ram_disk_value(cls, value):
+        return cls.AllRamDiskValue if cls.is_all_ram_disk(value) else value
+
+
 class TestSize(Enum):
     Small = 'small'
     Medium = 'medium'
     Large = 'large'
 
-    DefaultTimeouts = { 
+    DefaultTimeouts = {
         Small: 60,
         Medium: 600,
         Large: 3600,
     }
 
-    DefaultPriorities = { 
-        Small: -1, 
-        Medium: -2, 
-        Large: -3, 
-    } 
- 
-    DefaultRequirements = { 
-        Small: { 
-            TestRequirements.Cpu: 1, 
-            TestRequirements.Ram: 32, 
-            # TestRequirements.Ram: 2, 
-            TestRequirements.RamDisk: 0, 
-        }, 
-        Medium: { 
-            TestRequirements.Cpu: 1, 
-            TestRequirements.Ram: 32, 
-            # TestRequirements.Ram: 4, 
-            TestRequirements.RamDisk: 0, 
-        }, 
-        Large: { 
-            TestRequirements.Cpu: 1, 
-            TestRequirements.Ram: 32, 
-            # TestRequirements.Ram: 8, 
-            TestRequirements.RamDisk: 0, 
-        }, 
-    } 
- 
-    MaxRequirements = { 
-        Small: { 
-            TestRequirements.Cpu: 4, 
-            TestRequirements.Ram: 32, 
-            # TestRequirements.Ram: 4, 
-            TestRequirements.RamDisk: 4, 
-        }, 
-        Medium: { 
-            TestRequirements.Cpu: 4, 
-            # TestRequirements.Cpu: 8, 
-            TestRequirements.Ram: 32, 
-            # TestRequirements.Ram: 16, 
-            TestRequirements.RamDisk: 4, 
-        }, 
-        Large: { 
+    DefaultPriorities = {
+        Small: -1,
+        Medium: -2,
+        Large: -3,
+    }
+
+    DefaultRequirements = {
+        Small: {
+            TestRequirements.Cpu: 1,
+            TestRequirements.Ram: 32,
+            # TestRequirements.Ram: 2,
+            TestRequirements.RamDisk: 0,
+        },
+        Medium: {
+            TestRequirements.Cpu: 1,
+            TestRequirements.Ram: 32,
+            # TestRequirements.Ram: 4,
+            TestRequirements.RamDisk: 0,
+        },
+        Large: {
+            TestRequirements.Cpu: 1,
+            TestRequirements.Ram: 32,
+            # TestRequirements.Ram: 8,
+            TestRequirements.RamDisk: 0,
+        },
+    }
+
+    MaxRequirements = {
+        Small: {
             TestRequirements.Cpu: 4,
-            TestRequirements.Ram: 32, 
-            TestRequirements.RamDisk: 4, 
-        }, 
-    } 
- 
+            TestRequirements.Ram: 32,
+            # TestRequirements.Ram: 4,
+            TestRequirements.RamDisk: 4,
+        },
+        Medium: {
+            TestRequirements.Cpu: 4,
+            # TestRequirements.Cpu: 8,
+            TestRequirements.Ram: 32,
+            # TestRequirements.Ram: 16,
+            TestRequirements.RamDisk: 4,
+        },
+        Large: {
+            TestRequirements.Cpu: 4,
+            TestRequirements.Ram: 32,
+            TestRequirements.RamDisk: 4,
+        },
+    }
+
     @classmethod
     def sizes(cls):
-        return cls.DefaultTimeouts.keys() 
+        return cls.DefaultTimeouts.keys()
 
     @classmethod
     def get_default_timeout(cls, size):
-        if size in cls.DefaultTimeouts: 
-            return cls.DefaultTimeouts[size] 
+        if size in cls.DefaultTimeouts:
+            return cls.DefaultTimeouts[size]
         raise Exception("Unknown test size '{}'".format(size))
 
-    @classmethod 
-    def get_default_priorities(cls, size): 
-        if size in cls.DefaultPriorities: 
-            return cls.DefaultPriorities[size] 
-        raise Exception("Unknown test size '{}'".format(size)) 
+    @classmethod
+    def get_default_priorities(cls, size):
+        if size in cls.DefaultPriorities:
+            return cls.DefaultPriorities[size]
+        raise Exception("Unknown test size '{}'".format(size))
 
-    @classmethod 
-    def get_default_requirements(cls, size): 
-        if size in cls.DefaultRequirements: 
-            return cls.DefaultRequirements[size] 
-        raise Exception("Unknown test size '{}'".format(size)) 
- 
-    @classmethod 
-    def get_max_requirements(cls, size): 
-        if size in cls.MaxRequirements: 
-            return cls.MaxRequirements[size] 
-        raise Exception("Unknown test size '{}'".format(size)) 
- 
- 
+    @classmethod
+    def get_default_requirements(cls, size):
+        if size in cls.DefaultRequirements:
+            return cls.DefaultRequirements[size]
+        raise Exception("Unknown test size '{}'".format(size))
+
+    @classmethod
+    def get_max_requirements(cls, size):
+        if size in cls.MaxRequirements:
+            return cls.MaxRequirements[size]
+        raise Exception("Unknown test size '{}'".format(size))
+
+
 class TestRunExitCode(Enum):
     Skipped = 2
-    Failed = 3 
+    Failed = 3
     TimeOut = 10
     InfrastructureError = 12
 
@@ -223,8 +223,8 @@ class YaTestTags(Enum):
     Fat = "ya:fat"
     RunWithAsserts = "ya:relwithdebinfo"
     Privileged = "ya:privileged"
-    ExoticPlatform = "ya:exotic_platform" 
-    NotAutocheck = "ya:not_autocheck" 
+    ExoticPlatform = "ya:exotic_platform"
+    NotAutocheck = "ya:not_autocheck"
 
 
 class Status(object):
@@ -256,7 +256,7 @@ class _Colors(object):
         "white",
         "yellow",
     ]
-    _PREFIXES = ["", "light", "dark"] 
+    _PREFIXES = ["", "light", "dark"]
 
     def __init__(self):
         self._table = {}

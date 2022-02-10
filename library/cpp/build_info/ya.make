@@ -1,10 +1,10 @@
 LIBRARY()
 
-OWNER( 
-    mvel 
-    snowball 
+OWNER(
+    mvel
+    snowball
     heretic
-) 
+)
 
 DEFAULT(SANDBOX_TASK_ID 0)
 DEFAULT(KOSHER_SVN_VERSION "")
@@ -17,7 +17,7 @@ PEERDIR(
 
 SRCS(
     sandbox.cpp.in
-    build_info.cpp.in 
+    build_info.cpp.in
     build_info_static.cpp
 )
 

@@ -15,7 +15,7 @@
     #endif
     #define _S_IFLNK 0x80000000
 
-ui32 GetFileMode(DWORD fileAttributes) { 
+ui32 GetFileMode(DWORD fileAttributes) {
     ui32 mode = 0;
     if (fileAttributes == 0xFFFFFFFF)
         return mode;
@@ -23,14 +23,14 @@ ui32 GetFileMode(DWORD fileAttributes) {
         mode |= _S_IFCHR;
     if (fileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
         mode |= _S_IFLNK; // todo: was undefined by the moment of writing this code
-    if (fileAttributes & FILE_ATTRIBUTE_DIRECTORY) 
+    if (fileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         mode |= _S_IFDIR;
     if (fileAttributes & (FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_ARCHIVE))
         mode |= _S_IFREG;
     if ((fileAttributes & FILE_ATTRIBUTE_READONLY) == 0)
         mode |= _S_IWRITE;
     return mode;
-} 
+}
 
     #define S_ISDIR(st_mode) (st_mode & _S_IFDIR)
     #define S_ISREG(st_mode) (st_mode & _S_IFREG)
@@ -42,8 +42,8 @@ using TSystemFStat = BY_HANDLE_FILE_INFORMATION;
 
 using TSystemFStat = struct stat;
 
-#endif 
- 
+#endif
+
 static void MakeStat(TFileStat& st, const TSystemFStat& fs) {
 #ifdef _unix_
     st.Mode = fs.st_mode;

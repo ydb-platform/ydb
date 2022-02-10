@@ -1,4 +1,4 @@
-PROGRAM(library-messagebus-rain_check-test-ut) 
+PROGRAM(library-messagebus-rain_check-test-ut)
 
 OWNER(g:messagebus)
 

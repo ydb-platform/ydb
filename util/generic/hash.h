@@ -48,10 +48,10 @@ template <class Value, class Key, class HashFcn,
           class ExtractKey, class EqualKey, class Alloc>
 class THashTable;
 
-template <class Key, class T, class HashFcn, 
-          class EqualKey, typename size_type_f> 
-class sthash; 
- 
+template <class Key, class T, class HashFcn,
+          class EqualKey, typename size_type_f>
+class sthash;
+
 template <class Value>
 struct __yhashtable_iterator;
 

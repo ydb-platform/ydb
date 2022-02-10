@@ -1,6 +1,6 @@
 # this test in not linked into build tree with ReCURSE and is built by unittest/library
 
-UNITTEST() 
+UNITTEST()
 
 OWNER(
     g:util
@@ -40,5 +40,5 @@ SIZE(MEDIUM)
 TIMEOUT(600)
 
 PIRE_INLINE(inline_ut.cpp)
- 
+
 END()

@@ -25,7 +25,7 @@ ADDINCL(
     contrib/libs/pcre
 )
 
-NO_COMPILER_WARNINGS() 
+NO_COMPILER_WARNINGS()
 
 NO_RUNTIME()
 

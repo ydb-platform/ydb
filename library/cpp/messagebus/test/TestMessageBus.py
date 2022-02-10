@@ -5,4 +5,4 @@ from devtools.fleur.ytest.integration import UnitTestGroup
 @constraint('library.messagebus')
 class TestMessageBus(UnitTestGroup):
     def __init__(self, context):
-        UnitTestGroup.__init__(self, context, 'MessageBus', 'library-messagebus-test-ut') 
+        UnitTestGroup.__init__(self, context, 'MessageBus', 'library-messagebus-test-ut')

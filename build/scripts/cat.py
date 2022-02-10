@@ -1,8 +1,8 @@
-#!/usr/bin/env python 
-import sys 
-from shutil import copyfileobj as copy 
+#!/usr/bin/env python
+import sys
+from shutil import copyfileobj as copy
 import os.path
- 
+
 if __name__ == '__main__':
     for filename in sys.argv[1:] or ["-"]:
         if filename == "-":

@@ -1,4 +1,4 @@
-OWNER(g:yatool) 
+OWNER(g:yatool)
 
 RESOURCES_LIBRARY()
 

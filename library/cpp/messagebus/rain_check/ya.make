@@ -1,5 +1,5 @@
 OWNER(g:messagebus)
- 
+
 RECURSE(
     core
     http

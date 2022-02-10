@@ -1,6 +1,6 @@
 UNITTEST_FOR(library/cpp/testing/unittest)
 
-OWNER(snowball) 
+OWNER(snowball)
 
 SRCS(
     main.cpp

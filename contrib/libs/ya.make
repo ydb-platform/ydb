@@ -11,7 +11,7 @@ RECURSE(
     apr-util
     asio
     asmlib
-    authparser 
+    authparser
     avs-device-sdk
     aws-sdk-cpp
     backtrace
@@ -159,13 +159,13 @@ RECURSE(
     libidn2
     libjpeg-turbo
     libjwt
-    liblinear 
+    liblinear
     libm
     libmagic
     libmemcached
     libmp3lame
     libmysql_r
-    libogg 
+    libogg
     libopendkim
     libopendmarc
     libosmium
@@ -179,7 +179,7 @@ RECURSE(
     librosa-cpp
     librsvg
     libsamplerate
-    libsavi 
+    libsavi
     libsodium
     libspf2
     libsrtp
@@ -231,7 +231,7 @@ RECURSE(
     mongo-cxx-driver
     msgpack
     muparser
-    muparser/tests 
+    muparser/tests
     musl
     nanosvg
     nanosvg/ut
@@ -342,11 +342,11 @@ RECURSE(
     trace_viewer
     tralics
     tree_sitter
-    uatraits 
+    uatraits
     usrsctp
     utf8proc
     util-linux
-    valgrind 
+    valgrind
     vlfeat
     vmaf
     wapiti
@@ -369,27 +369,27 @@ RECURSE(
     zstd06
     zzip
 )
- 
-IF (OS_FREEBSD OR OS_LINUX) 
-    RECURSE( 
+
+IF (OS_FREEBSD OR OS_LINUX)
+    RECURSE(
         asmglibc
         httpd
         mod_perl2
         libeatmydata
-    ) 
+    )
 ENDIF()
- 
-IF (OS_DARWIN) 
-    RECURSE( 
+
+IF (OS_DARWIN)
+    RECURSE(
         gperftools
         osxfuse
         macfuse-headers
         uuid
-    ) 
-ENDIF() 
- 
-IF (OS_LINUX) 
-    RECURSE( 
+    )
+ENDIF()
+
+IF (OS_LINUX)
+    RECURSE(
         ibdrv
         ibdrv/ut
         proc
@@ -406,23 +406,23 @@ IF (OS_LINUX)
         systemd
         uuid
         virtiofsd
-    ) 
-ENDIF()
- 
-IF (OS_WINDOWS) 
-    RECURSE( 
-        pthreads_win32 
-        dokany/dokan
-        dokany/dokan_fuse
-    ) 
-ELSE()
-    RECURSE( 
-        lftp
-        unixodbc
-    ) 
+    )
 ENDIF()
 
-IF (OS_LINUX OR OS_WINDOWS) 
+IF (OS_WINDOWS)
+    RECURSE(
+        pthreads_win32
+        dokany/dokan
+        dokany/dokan_fuse
+    )
+ELSE()
+    RECURSE(
+        lftp
+        unixodbc
+    )
+ENDIF()
+
+IF (OS_LINUX OR OS_WINDOWS)
     RECURSE(
         lockless
     )

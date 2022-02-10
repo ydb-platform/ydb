@@ -20,7 +20,7 @@ SRCS(
     lib.c
 )
 
-IF (OS_LINUX OR OS_DARWIN) 
+IF (OS_LINUX OR OS_DARWIN)
     CONLYFLAGS(-std=c11)
 ENDIF()
 

@@ -1,6 +1,6 @@
 OWNER(g:contrib g:python-contrib)
- 
-RECURSE( 
+
+RECURSE(
     absl-py
     adblockparser
     aenum
@@ -203,7 +203,7 @@ RECURSE(
     dbf_light
     debian-inspector
     decorator
-    deepdiff 
+    deepdiff
     deepmerge
     defusedxml
     demjson
@@ -333,10 +333,10 @@ RECURSE(
     editdistance
     elasticsearch
     elasticsearch-dsl
-    email-validator 
+    email-validator
     emoji
     entrypoints
-    enum34 
+    enum34
     environ-config
     environs
     envoy
@@ -370,7 +370,7 @@ RECURSE(
     feedparser
     ffmpeg-python
     fido2
-    filelock 
+    filelock
     fingerprints
     fire
     flake8
@@ -506,7 +506,7 @@ RECURSE(
     idna
     idna-ssl
     ijson
-    imagesize 
+    imagesize
     IMAPClient
     imgkit
     implicit
@@ -592,7 +592,7 @@ RECURSE(
     lockfile
     logging-tree
     loguru
-    logutils 
+    logutils
     luigi
     LunarCalendar
     lunardate
@@ -820,7 +820,7 @@ RECURSE(
     Pygments
     pygrib
     pygtrie
-    PyHamcrest 
+    PyHamcrest
     pyjavaproperties
     PyJWT
     pykdtree
@@ -1005,13 +1005,13 @@ RECURSE(
     slackclient
     smart-open
     smmap
-    snappy 
+    snappy
     sniffio
     snowballstemmer
     sobol-seq
     sockjs
     soft-webauthn
-    sortedcontainers 
+    sortedcontainers
     soupsieve
     spacy
     spacy-legacy
@@ -1050,13 +1050,13 @@ RECURSE(
     tableauserverclient
     tablib
     tabulate
-    tblib 
+    tblib
     Telethon
     tenacity
     tensorflow-estimator
     termcolor
     terminado
-    terminaltables 
+    terminaltables
     testpath
     text-unidecode
     textdata
@@ -1124,7 +1124,7 @@ RECURSE(
     uwsgi/examples
     uwsgiconf
     validators
-    validr 
+    validr
     vcrpy
     viberbot
     vine
@@ -1185,7 +1185,7 @@ RECURSE(
     zope.interface
     zope.schema
     zstandard
-) 
+)
 
 IF (OS_WINDOWS)
     RECURSE(

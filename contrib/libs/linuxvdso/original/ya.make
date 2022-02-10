@@ -9,11 +9,11 @@ OWNER(
     g:cpp-contrib
 )
 
-NO_UTIL() 
+NO_UTIL()
 
-NO_RUNTIME() 
+NO_RUNTIME()
 
-NO_COMPILER_WARNINGS() 
+NO_COMPILER_WARNINGS()
 
 SRCS(
     vdso_support.cc

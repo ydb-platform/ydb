@@ -300,18 +300,18 @@ namespace NYsonPull {
                 }
             }
 
-            //! Present a value from %-literal variant
-            void yield(const percent_scalar& value) {
-                switch (value.type) {
-                    case percent_scalar_type::boolean:
-                        yield(value.value.as_boolean);
-                        break;
-                    case percent_scalar_type::float64:
-                        yield(value.value.as_float64);
-                        break;
-                }
-            }
-
+            //! Present a value from %-literal variant 
+            void yield(const percent_scalar& value) { 
+                switch (value.type) { 
+                    case percent_scalar_type::boolean: 
+                        yield(value.value.as_boolean); 
+                        break; 
+                    case percent_scalar_type::float64: 
+                        yield(value.value.as_float64); 
+                        break; 
+                } 
+            } 
+ 
             //! Present a value-less event
             void yield(EEventType type) {
                 event_ = TEvent{type};
@@ -654,7 +654,7 @@ namespace NYsonPull {
 
                     case char_class::percent:
                         lexer_.advance(1);
-                        yield(lexer_.read_percent_scalar());
+                        yield(lexer_.read_percent_scalar()); 
                         break;
 
                     case char_class::none:

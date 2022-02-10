@@ -21,20 +21,20 @@ namespace {
     template <>
     void expect_scalar(const NYsonPull::TScalar& scalar, double value) {
         UNIT_ASSERT_VALUES_EQUAL(NYsonPull::EScalarType::Float64, scalar.Type());
-
-        auto scalarValue = scalar.AsFloat64();
-        auto message = TStringBuilder() << "expected " << value << ", got " << scalarValue;
-
-        if (std::isfinite(value)) {
-            UNIT_ASSERT_C(std::isfinite(scalarValue), message);
-            UNIT_ASSERT_DOUBLES_EQUAL(value, scalarValue, 1e-5);
-        } else if (std::isnan(value)) {
-            UNIT_ASSERT_C(std::isnan(scalarValue), message);
-        } else if (value > 0) {
-            UNIT_ASSERT_C(std::isinf(scalarValue) && (scalarValue > 0), message);
-        } else {
-            UNIT_ASSERT_C(std::isinf(scalarValue) && (scalarValue < 0), message);
-        }
+ 
+        auto scalarValue = scalar.AsFloat64(); 
+        auto message = TStringBuilder() << "expected " << value << ", got " << scalarValue; 
+ 
+        if (std::isfinite(value)) { 
+            UNIT_ASSERT_C(std::isfinite(scalarValue), message); 
+            UNIT_ASSERT_DOUBLES_EQUAL(value, scalarValue, 1e-5); 
+        } else if (std::isnan(value)) { 
+            UNIT_ASSERT_C(std::isnan(scalarValue), message); 
+        } else if (value > 0) { 
+            UNIT_ASSERT_C(std::isinf(scalarValue) && (scalarValue > 0), message); 
+        } else { 
+            UNIT_ASSERT_C(std::isinf(scalarValue) && (scalarValue < 0), message); 
+        } 
     }
 
     template <typename T>
@@ -153,23 +153,23 @@ Y_UNIT_TEST_SUITE(Reader) {
 
         test_scalar(
             TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf8\x7f"sv),
-            double{std::numeric_limits<double>::quiet_NaN()});
-        test_scalar(
+            double{std::numeric_limits<double>::quiet_NaN()}); 
+        test_scalar( 
             TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\x7f"sv),
             double{std::numeric_limits<double>::infinity()});
         test_scalar(
             TStringBuf("\x03\x00\x00\x00\x00\x00\x00\xf0\xff"sv),
             double{-std::numeric_limits<double>::infinity()});
 
-        test_scalar(
+        test_scalar( 
             TStringBuf("%nan"),
-            double{std::numeric_limits<double>::quiet_NaN()});
-        test_scalar(
+            double{std::numeric_limits<double>::quiet_NaN()}); 
+        test_scalar( 
             TStringBuf("%inf"),
-            double{std::numeric_limits<double>::infinity()});
-        test_scalar(
+            double{std::numeric_limits<double>::infinity()}); 
+        test_scalar( 
             TStringBuf("%-inf"),
-            double{-std::numeric_limits<double>::infinity()});
+            double{-std::numeric_limits<double>::infinity()}); 
 
         REJECT("++0.0");
         REJECT("++1.0");
@@ -184,13 +184,13 @@ Y_UNIT_TEST_SUITE(Reader) {
         // XXX: Rejected on Mac OS, accepted on Linux (?!)
         //REJECT(".0");
         //REJECT(".5");
-
-        REJECT("%NaN");
-        REJECT("%+inf");
-        REJECT("%infinity");
-        REJECT("%na");
-        REJECT("%in");
-        REJECT("%-in");
+ 
+        REJECT("%NaN"); 
+        REJECT("%+inf"); 
+        REJECT("%infinity"); 
+        REJECT("%na"); 
+        REJECT("%in"); 
+        REJECT("%-in"); 
     }
 
     Y_UNIT_TEST(ScalarString) {

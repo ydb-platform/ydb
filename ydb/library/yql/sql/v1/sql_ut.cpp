@@ -4018,76 +4018,76 @@ Y_UNIT_TEST_SUITE(SessionWindowNegative) {
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:13: Error: SessionWindow is unsupported for streaming sources\n");
     }
 }
-
-Y_UNIT_TEST_SUITE(LibraSqlSugar) {
-    auto makeResult = [](TStringBuf settings) {
-        return SqlToYql(
-            TStringBuilder()
-                << settings
-                << "\n$udf1 = MyLibra::MakeLibraPreprocessor($settings);"
-                << "\n$udf2 = CustomLibra::MakeLibraPreprocessor($settings);"
-                << "\nPROCESS plato.Input USING $udf1(TableRow())"
-                << "\nUNION ALL"
-                << "\nPROCESS plato.Input USING $udf2(TableRow());"
-        );
-    };
-
-    Y_UNIT_TEST(EmptySettings) {
-        auto res = makeResult(R"(
-            $settings = AsStruct();
-        )");
-        UNIT_ASSERT(res.IsOk());
-    }
-
-    Y_UNIT_TEST(OnlyEntities) {
-        auto res = makeResult(R"(
-            $settings = AsStruct(
-                AsList("A", "B", "C") AS Entities
-            );
-        )");
-        UNIT_ASSERT(res.IsOk());
-    }
-
-    Y_UNIT_TEST(EntitiesWithStrategy) {
-        auto res = makeResult(R"(
-            $settings = AsStruct(
-                AsList("A", "B", "C") AS Entities,
-                "blacklist" AS EntitiesStrategy
-            );
-        )");
-        UNIT_ASSERT(res.IsOk());
-    }
-
-    Y_UNIT_TEST(AllSettings) {
-        auto res = makeResult(R"(
-            $settings = AsStruct(
-                AsList("A", "B", "C") AS Entities,
-                "whitelist" AS EntitiesStrategy,
-                "path" AS BlockstatDict,
-                false AS ParseWithFat,
-                "map" AS Mode
-            );
-        )");
-        UNIT_ASSERT(res.IsOk());
-    }
-
-    Y_UNIT_TEST(BadStrategy) {
-        auto res = makeResult(R"(
-            $settings = AsStruct("bad" AS EntitiesStrategy);
-        )");
-        UNIT_ASSERT_STRING_CONTAINS(
-            Err2Str(res),
-            "Error: MakeLibraPreprocessor got invalid entities strategy: expected 'whitelist' or 'blacklist'"
-        );
-    }
-
-    Y_UNIT_TEST(BadEntities) {
-        auto res = makeResult(R"(
-            $settings = AsStruct(AsList("A", 1) AS Entities);
-        )");
-        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Error: MakeLibraPreprocessor entity must be string literal");
-    }
-}
+ 
+Y_UNIT_TEST_SUITE(LibraSqlSugar) { 
+    auto makeResult = [](TStringBuf settings) { 
+        return SqlToYql( 
+            TStringBuilder() 
+                << settings 
+                << "\n$udf1 = MyLibra::MakeLibraPreprocessor($settings);" 
+                << "\n$udf2 = CustomLibra::MakeLibraPreprocessor($settings);" 
+                << "\nPROCESS plato.Input USING $udf1(TableRow())" 
+                << "\nUNION ALL" 
+                << "\nPROCESS plato.Input USING $udf2(TableRow());" 
+        ); 
+    }; 
+ 
+    Y_UNIT_TEST(EmptySettings) { 
+        auto res = makeResult(R"( 
+            $settings = AsStruct(); 
+        )"); 
+        UNIT_ASSERT(res.IsOk()); 
+    } 
+ 
+    Y_UNIT_TEST(OnlyEntities) { 
+        auto res = makeResult(R"( 
+            $settings = AsStruct( 
+                AsList("A", "B", "C") AS Entities 
+            ); 
+        )"); 
+        UNIT_ASSERT(res.IsOk()); 
+    } 
+ 
+    Y_UNIT_TEST(EntitiesWithStrategy) { 
+        auto res = makeResult(R"( 
+            $settings = AsStruct( 
+                AsList("A", "B", "C") AS Entities, 
+                "blacklist" AS EntitiesStrategy 
+            ); 
+        )"); 
+        UNIT_ASSERT(res.IsOk()); 
+    } 
+ 
+    Y_UNIT_TEST(AllSettings) { 
+        auto res = makeResult(R"( 
+            $settings = AsStruct( 
+                AsList("A", "B", "C") AS Entities, 
+                "whitelist" AS EntitiesStrategy, 
+                "path" AS BlockstatDict, 
+                false AS ParseWithFat, 
+                "map" AS Mode 
+            ); 
+        )"); 
+        UNIT_ASSERT(res.IsOk()); 
+    } 
+ 
+    Y_UNIT_TEST(BadStrategy) { 
+        auto res = makeResult(R"( 
+            $settings = AsStruct("bad" AS EntitiesStrategy); 
+        )"); 
+        UNIT_ASSERT_STRING_CONTAINS( 
+            Err2Str(res), 
+            "Error: MakeLibraPreprocessor got invalid entities strategy: expected 'whitelist' or 'blacklist'" 
+        ); 
+    } 
+ 
+    Y_UNIT_TEST(BadEntities) { 
+        auto res = makeResult(R"( 
+            $settings = AsStruct(AsList("A", 1) AS Entities); 
+        )"); 
+        UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "Error: MakeLibraPreprocessor entity must be string literal"); 
+    } 
+} 
 
 Y_UNIT_TEST_SUITE(TrailingQuestionsNegative) {
     Y_UNIT_TEST(Basic) {

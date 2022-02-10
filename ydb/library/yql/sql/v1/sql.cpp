@@ -1599,23 +1599,23 @@ bool TSqlTranslation::TableRefImpl(const TRule_table_ref& node, TTableRef& resul
 
             auto& alt = block.GetAlt2();
             const TString func(Id(alt.GetRule_an_id_expr1(), *this));
-            TVector<TTableArg> args;
-            if (alt.HasBlock3()) {
-                auto& argsBlock = alt.GetBlock3();
-                auto arg = TableArgImpl(argsBlock.GetRule_table_arg1());
+            TVector<TTableArg> args; 
+            if (alt.HasBlock3()) { 
+                auto& argsBlock = alt.GetBlock3(); 
+                auto arg = TableArgImpl(argsBlock.GetRule_table_arg1()); 
                 if (!arg) {
                     return false;
                 }
 
-                args.push_back(std::move(*arg));
-                for (auto& b : argsBlock.GetBlock2()) {
-                    arg = TableArgImpl(b.GetRule_table_arg2());
-                    if (!arg) {
-                        return false;
-                    }
-
-                    args.push_back(std::move(*arg));
-                }
+                args.push_back(std::move(*arg)); 
+                for (auto& b : argsBlock.GetBlock2()) { 
+                    arg = TableArgImpl(b.GetRule_table_arg2()); 
+                    if (!arg) { 
+                        return false; 
+                    } 
+ 
+                    args.push_back(std::move(*arg)); 
+                } 
             }
             tableHints = GetTableFuncHints(func);
             tr.Keys = BuildTableKeys(pos, service, cluster, func, args);
@@ -1762,7 +1762,7 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
                 return TMaybe<TSourcePtr>(nullptr);
             }
 
-            if (!alt.HasBlock3() || !alt.GetBlock3().GetBlock2().empty()) {
+            if (!alt.HasBlock3() || !alt.GetBlock3().GetBlock2().empty()) { 
                 Ctx.Error() << "Expected single argument for AS_TABLE source";
                 return TMaybe<TSourcePtr>(nullptr);
             }
@@ -1772,7 +1772,7 @@ TMaybe<TSourcePtr> TSqlTranslation::AsTableImpl(const TRule_table_ref& node) {
                 return TMaybe<TSourcePtr>(nullptr);
             }
 
-            auto arg = TableArgImpl(alt.GetBlock3().GetRule_table_arg1());
+            auto arg = TableArgImpl(alt.GetBlock3().GetRule_table_arg1()); 
             if (!arg) {
                 return TMaybe<TSourcePtr>(nullptr);
             }

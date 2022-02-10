@@ -2,7 +2,7 @@
 
 #include "byte_writer.h"
 #include "cescape.h"
-#include "percent_scalar.h"
+#include "percent_scalar.h" 
 #include "stream_counter.h"
 #include "symbols.h"
 #include "varint.h"
@@ -385,7 +385,7 @@ namespace NYsonPull {
             }
 
             void OnScalarFloat64(double value) override {
-                update_state(EEventType::Scalar);
+                update_state(EEventType::Scalar); 
 
                 begin_node();
                 write(NSymbol::double_marker);
@@ -425,7 +425,7 @@ namespace NYsonPull {
                 update_state(EEventType::Scalar);
 
                 begin_node();
-                write(value ? percent_scalar::true_literal : percent_scalar::false_literal);
+                write(value ? percent_scalar::true_literal : percent_scalar::false_literal); 
                 end_node();
             }
 
@@ -455,20 +455,20 @@ namespace NYsonPull {
             void OnScalarFloat64(double value) override {
                 update_state(EEventType::Scalar);
 
-                begin_node();
+                begin_node(); 
 
-                if (std::isfinite(value)) {
-                    char buf[32];
-                    auto len = ::snprintf(buf, sizeof(buf), "%#.17lg", value);
-                    write_raw(buf, len);
-                } else if (std::isnan(value)) {
-                    write(percent_scalar::nan_literal);
-                } else if (value > 0) {
-                    write(percent_scalar::positive_inf_literal);
-                } else {
-                    write(percent_scalar::negative_inf_literal);
+                if (std::isfinite(value)) { 
+                    char buf[32]; 
+                    auto len = ::snprintf(buf, sizeof(buf), "%#.17lg", value); 
+                    write_raw(buf, len); 
+                } else if (std::isnan(value)) { 
+                    write(percent_scalar::nan_literal); 
+                } else if (value > 0) { 
+                    write(percent_scalar::positive_inf_literal); 
+                } else { 
+                    write(percent_scalar::negative_inf_literal); 
                 }
-
+ 
                 end_node();
             }
 

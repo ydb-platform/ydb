@@ -398,14 +398,14 @@ public:
             folder = L(folder, Args.size() > 1 ? Args[1].Id.Build() : BuildQuotedAtom(Pos, ""));
             return folder;
         }
-        else if (func == "tables") {
-            if (!Args.empty()) {
-                ctx.Error(Pos) << Func << " doesn't accept arguments";
-                return nullptr;
-            }
+        else if (func == "tables") { 
+            if (!Args.empty()) { 
+                ctx.Error(Pos) << Func << " doesn't accept arguments"; 
+                return nullptr; 
+            } 
 
-            return L(Y("DataTables"));
-        }
+            return L(Y("DataTables")); 
+        } 
         else if (func == "object") {
             const size_t positionalArgs = 2;
             auto result = Y("MrObject");

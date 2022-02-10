@@ -1706,11 +1706,11 @@
             "Match": {"Type": "Callable", "Name": "TablePath"}
         },
         {
-            "Name": "TCoTableName",
-            "Base": "TCoTablePropBase",
-            "Match": {"Type": "Callable", "Name": "TableName"}
-        },
-        {
+            "Name": "TCoTableName", 
+            "Base": "TCoTablePropBase", 
+            "Match": {"Type": "Callable", "Name": "TableName"} 
+        }, 
+        { 
             "Name": "TCoTableRecord",
             "Base": "TCoTablePropBase",
             "Match": {"Type": "Callable", "Name": "TableRecord"}

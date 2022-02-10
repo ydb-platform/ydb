@@ -156,7 +156,7 @@ namespace NRainCheck {
         bool IsRunningInThisThread() const;
         void AssertInThisThread() const;
         static TTaskRunnerBase* CurrentTask();
-        static ITaskBase* CurrentTaskImpl();
+        static ITaskBase* CurrentTaskImpl(); 
 
         TString GetStatusSingleLine();
 

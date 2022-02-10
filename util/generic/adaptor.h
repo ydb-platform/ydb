@@ -1,9 +1,9 @@
-#pragma once 
- 
+#pragma once
+
 #include "store_policy.h"
-#include "typetraits.h" 
- 
-namespace NPrivate { 
+#include "typetraits.h"
+
+namespace NPrivate {
     template <class Range>
     class TReverseRangeStorage {
     public:
@@ -11,7 +11,7 @@ namespace NPrivate {
             : Base_(std::forward<Range>(range))
         {
         }
- 
+
         decltype(auto) Base() const {
             return *Base_.Ptr();
         }
@@ -44,8 +44,8 @@ namespace NPrivate {
 
         auto begin() const {
             return Base().rbegin();
-        } 
- 
+        }
+
         auto end() const {
             return Base().rend();
         }
@@ -70,23 +70,23 @@ namespace NPrivate {
         auto begin() const {
             using std::end;
             return std::make_reverse_iterator(end(Base()));
-        } 
- 
+        }
+
         auto end() const {
             using std::begin;
             return std::make_reverse_iterator(begin(Base()));
-        } 
- 
+        }
+
         auto begin() {
             using std::end;
             return std::make_reverse_iterator(end(Base()));
-        } 
- 
+        }
+
         auto end() {
             using std::begin;
             return std::make_reverse_iterator(begin(Base()));
-        } 
-    }; 
+        }
+    };
 
     template <class Range>
     class TReverseRange: public TReverseRangeBase<Range> {
@@ -119,8 +119,8 @@ namespace NPrivate {
             return end(Base());
         }
     };
-} 
- 
+}
+
 /**
  * Provides a reverse view into the provided container.
  *
@@ -137,4 +137,4 @@ namespace NPrivate {
 template <class Range>
 constexpr ::NPrivate::TReverseRange<Range> Reversed(Range&& range) {
     return ::NPrivate::TReverseRange<Range>(std::forward<Range>(range));
-} 
+}

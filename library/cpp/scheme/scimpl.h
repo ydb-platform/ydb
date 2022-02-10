@@ -517,7 +517,7 @@ namespace NSc {
         return SetString(t);
     }
 
-    TValue& TValue::operator=(TValue& v) & { 
+    TValue& TValue::operator=(TValue& v) & {
         if (!Same(*this, v)) {
             //Extend TheCore lifetime not to trigger possible v deletion via parent-child chain
             auto tmpCore = TheCore;
@@ -527,7 +527,7 @@ namespace NSc {
         return *this;
     }
 
-    TValue& TValue::operator=(const TValue& v) & { 
+    TValue& TValue::operator=(const TValue& v) & {
         if (!Same(*this, v)) {
             //Extend TheCore lifetime not to trigger possible v deletion via parent-child chain
             auto tmpCore = TheCore;
@@ -537,7 +537,7 @@ namespace NSc {
         return *this;
     }
 
-    TValue& TValue::operator=(TValue&& v) & noexcept { 
+    TValue& TValue::operator=(TValue&& v) & noexcept {
         if (!Same(*this, v)) {
             //Extend TheCore lifetime not to trigger possible v deletion via parent-child chain
             auto tmpCore = TheCore;

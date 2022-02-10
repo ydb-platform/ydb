@@ -1,1 +1,1 @@
-#include "adaptor.h" 
+#include "adaptor.h"

@@ -91,14 +91,14 @@ namespace NSc {
         inline TValue& operator=(TStringBuf t);
         inline TValue& operator=(const char* t);
 
-        inline TValue& operator=(TValue& v) &; 
-        inline TValue& operator=(const TValue& v) &; 
-        inline TValue& operator=(TValue&& v) & noexcept; 
+        inline TValue& operator=(TValue& v) &;
+        inline TValue& operator=(const TValue& v) &;
+        inline TValue& operator=(TValue&& v) & noexcept;
 
-        inline TValue& operator=(TValue& v) && = delete; 
-        inline TValue& operator=(const TValue& v) && = delete; 
-        inline TValue& operator=(TValue&& v) && = delete; 
- 
+        inline TValue& operator=(TValue& v) && = delete;
+        inline TValue& operator=(const TValue& v) && = delete;
+        inline TValue& operator=(TValue&& v) && = delete;
+
     public:
         template <class T> // ui16 or TStringBuf
         inline TValue& operator[](const T& idx) {
@@ -531,7 +531,7 @@ namespace NSc {
 }
 
 #include "scimpl.h"
-#include "scheme_cast.h" 
+#include "scheme_cast.h"
 
 #ifdef _MSC_VER
 #pragma warning(default : 4521 4522)

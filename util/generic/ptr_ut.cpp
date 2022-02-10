@@ -104,7 +104,7 @@ public:
     {
         ++cnt;
     }
-
+ 
     inline ~A() {
         --cnt;
     }
@@ -248,7 +248,7 @@ void TPointerTest::TestTrulePtr() {
 
     UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
 }
-
+ 
 void TPointerTest::TestAutoToHolder() {
     {
         TAutoPtr<A> a1(MakeA());
@@ -280,19 +280,19 @@ void TPointerTest::TestAutoToHolder() {
 
 void TPointerTest::TestCopyPtr() {
     TCopyPtr<A> a1(MakeA());
-    {
+    { 
         TCopyPtr<A> a2(MakeA());
-        TCopyPtr<A> a3 = a2;
+        TCopyPtr<A> a3 = a2; 
         UNIT_ASSERT_VALUES_EQUAL(cnt, 3);
-
-        a1 = a2;
-        a2 = a3;
-    }
+ 
+        a1 = a2; 
+        a2 = a3; 
+    } 
     UNIT_ASSERT_VALUES_EQUAL(cnt, 1);
-    a1.Destroy();
-
+    a1.Destroy(); 
+ 
     UNIT_ASSERT_VALUES_EQUAL(cnt, 0);
-}
+} 
 
 class TOp: public TSimpleRefCount<TOp>, public TNonCopyable {
 public:

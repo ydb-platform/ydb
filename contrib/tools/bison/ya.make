@@ -1,6 +1,6 @@
 VERSION(3.0)
 
-RECURSE(
+RECURSE( 
     bison
     gnulib
     m4

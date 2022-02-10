@@ -1,3 +1,3 @@
-/* DO NOT EDIT! GENERATED AUTOMATICALLY! */
-
-#define LIBDIR "/usr/local/lib"
+/* DO NOT EDIT! GENERATED AUTOMATICALLY! */ 
+ 
+#define LIBDIR "/usr/local/lib" 

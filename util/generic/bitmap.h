@@ -1000,14 +1000,14 @@ public:
 
         return hash;
     }
-
-    inline const TChunk* GetChunks() const {
-        return Mask.Data;
-    }
-
+ 
+    inline const TChunk* GetChunks() const { 
+        return Mask.Data; 
+    } 
+ 
     constexpr size_t GetChunkCount() const noexcept {
-        return Mask.GetChunkCapacity();
-    }
+        return Mask.GetChunkCapacity(); 
+    } 
 };
 
 template <class X, class Y>

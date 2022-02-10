@@ -147,7 +147,7 @@ RECURSE(
     tarccreate
     tarcview
     templater
-    test_norm
+    test_norm 
     test_relev
     testlangmodel
     thresher

@@ -251,49 +251,49 @@ public:
 
     inline int compare(size_t p, size_t n, const TStringView t, size_t n1) const noexcept {
         return compare(LegacySubString(*this, p, n), LegacySubString(t, 0, n1));
-    }
-
+    } 
+ 
     inline int compare(const TCharType* p, size_t len) const noexcept {
         return compare(*this, TStringView(p, len));
     }
 
     static bool equal(const TSelf& s1, const TSelf& s2) noexcept {
         return s1.AsStringView() == s2.AsStringView();
-    }
-
+    } 
+ 
     static bool equal(const TSelf& s1, const TCharType* p) noexcept {
         if (p == nullptr) {
             return s1.Len() == 0;
         }
 
         return s1.AsStringView() == p;
-    }
-
+    } 
+ 
     static bool equal(const TCharType* p, const TSelf& s2) noexcept {
         return equal(s2, p);
-    }
-
+    } 
+ 
     static bool equal(const TStringView s1, const TStringView s2) noexcept {
         return TStringViewWithTraits{s1.data(), s1.size()} == TStringViewWithTraits{s2.data(), s2.size()};
-    }
-
+    } 
+ 
     template <class T>
     inline bool equal(const T& t) const noexcept {
-        return equal(*this, t);
+        return equal(*this, t); 
     }
 
     inline bool equal(size_t p, size_t n, const TStringView t) const noexcept {
         return equal(LegacySubString(*this, p, n), t);
-    }
-
+    } 
+ 
     inline bool equal(size_t p, size_t n, const TStringView t, size_t p1, size_t n1) const noexcept {
         return equal(LegacySubString(*this, p, n), LegacySubString(t, p1, n1));
-    }
-
+    } 
+ 
     inline bool equal(size_t p, size_t n, const TStringView t, size_t n1) const noexcept {
         return equal(LegacySubString(*this, p, n), LegacySubString(t, 0, n1));
-    }
-
+    } 
+ 
     static inline bool StartsWith(const TCharType* what, size_t whatLen, const TCharType* with, size_t withLen) noexcept {
         return withLen <= whatLen && TStringViewWithTraits(what, withLen) == TStringViewWithTraits(with, withLen);
     }
@@ -341,12 +341,12 @@ public:
 
 #ifndef __cpp_impl_three_way_comparison
     friend bool operator==(const TCharType* pc, const TSelf& s) noexcept {
-        return equal(pc, s);
+        return equal(pc, s); 
     }
 
     template <typename TDerived2, typename TTraits2>
     friend bool operator!=(const TSelf& s1, const TStringBase<TDerived2, TChar, TTraits2>& s2) noexcept {
-        return !(s1 == s2);
+        return !(s1 == s2); 
     }
 
     friend bool operator!=(const TSelf& s1, TStringView s2) noexcept {
@@ -354,11 +354,11 @@ public:
     }
 
     friend bool operator!=(const TSelf& s, const TCharType* pc) noexcept {
-        return !(s == pc);
+        return !(s == pc); 
     }
 
     friend bool operator!=(const TCharType* pc, const TSelf& s) noexcept {
-        return !(pc == s);
+        return !(pc == s); 
     }
 #endif
 

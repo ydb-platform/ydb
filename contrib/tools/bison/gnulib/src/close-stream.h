@@ -1,2 +1,2 @@
-#include <stdio.h>
-int close_stream (FILE *stream);
+#include <stdio.h> 
+int close_stream (FILE *stream); 

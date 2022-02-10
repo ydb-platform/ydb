@@ -71,7 +71,7 @@ SplitString(I b, const TDelim& d, TConsumer&& c) {
     } while (c.Consume(l, i, b) && (b != i));
 }
 
-template <class I1, class I2>
+template <class I1, class I2> 
 static inline I1* FastStrChr(I1* str, I2 f) noexcept {
     I1* ret = NStringSplitPrivate::Find(str, f);
 
@@ -114,8 +114,8 @@ struct TStringDelimiter {
         : Delim(delim)
         , Len(len)
     {
-    }
-
+    } 
+ 
     inline Char* Find(Char*& b, Char* e) const noexcept {
         const auto ret = std::basic_string_view<Char>(b, e - b).find(Delim, 0, Len);
 

@@ -65,10 +65,10 @@ public:
         return &Cont_->Node(Idx_);
     }
 
-    const pointer operator->() const {
-        return &Cont_->Node(Idx_);
-    }
-
+    const pointer operator->() const { 
+        return &Cont_->Node(Idx_); 
+    } 
+ 
     bool operator==(const TIterator& rhs) const noexcept {
         Y_ASSERT(Cont_ == rhs.Cont_);
         return Idx_ == rhs.Idx_;

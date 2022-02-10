@@ -1060,20 +1060,20 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(constStr.back(), (ui8)'o');
         UNIT_ASSERT_VALUES_EQUAL(str.back(), (ui8)'r');
     }
-
-    void TestFront() {
-        const char_type chars[] = {'f', 'o', 'o', 0};
-
-        TStringType str = chars;
-        const TStringType constStr = str;
-
+ 
+    void TestFront() { 
+        const char_type chars[] = {'f', 'o', 'o', 0}; 
+ 
+        TStringType str = chars; 
+        const TStringType constStr = str; 
+ 
         UNIT_ASSERT_VALUES_EQUAL(constStr.front(), (ui8)'f');
         UNIT_ASSERT_VALUES_EQUAL(str.front(), (ui8)'f');
-
-        str.front() = 'r';
+ 
+        str.front() = 'r'; 
         UNIT_ASSERT_VALUES_EQUAL(constStr.front(), (ui8)'f');
         UNIT_ASSERT_VALUES_EQUAL(str.front(), (ui8)'r');
-    }
+    } 
 
     void TestIterators() {
         const char_type chars[] = {'f', 'o', 0};

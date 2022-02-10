@@ -173,10 +173,10 @@ public:
     }
 
     inline TCharType front() const noexcept {
-        Y_ASSERT(!empty());
-        return Ptr()[0];
-    }
-
+        Y_ASSERT(!empty()); 
+        return Ptr()[0]; 
+    } 
+ 
     constexpr const TCharType* data() const noexcept {
         return Ptr();
     }

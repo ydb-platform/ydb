@@ -11,7 +11,7 @@ extern "C" bool BallocDisabled();
 namespace {
     bool SetAllocParam(const char* name, const char* value) {
         if (strcmp(name, "disable") == 0) {
-            if (value == nullptr || strcmp(value, "false") != 0) {
+            if (value == nullptr || strcmp(value, "false") != 0) { 
                 // all values other than "false" are considred to be "true" for compatibility
                 DisableBalloc();
             } else {

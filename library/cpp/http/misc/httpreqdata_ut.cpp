@@ -6,42 +6,42 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
     Y_UNIT_TEST(Headers) {
         TServerRequestData sd;
 
-        sd.AddHeader("x-xx", "y-yy");
-        sd.AddHeader("x-Xx", "y-yy");
+        sd.AddHeader("x-xx", "y-yy"); 
+        sd.AddHeader("x-Xx", "y-yy"); 
 
         UNIT_ASSERT_VALUES_EQUAL(sd.HeadersCount(), 1);
 
-        sd.AddHeader("x-XxX", "y-yyy");
+        sd.AddHeader("x-XxX", "y-yyy"); 
         UNIT_ASSERT_VALUES_EQUAL(sd.HeadersCount(), 2);
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(sd.HeaderIn("X-XX")), TStringBuf("y-yy"));
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(sd.HeaderIn("X-XXX")), TStringBuf("y-yyy"));
     }
 
     Y_UNIT_TEST(ComplexHeaders) {
-        TServerRequestData sd;
-        sd.SetHost("zzz", 1);
-
-        sd.AddHeader("x-Xx", "y-yy");
-        UNIT_ASSERT_VALUES_EQUAL(sd.HeadersCount(), 1);
+        TServerRequestData sd; 
+        sd.SetHost("zzz", 1); 
+ 
+        sd.AddHeader("x-Xx", "y-yy"); 
+        UNIT_ASSERT_VALUES_EQUAL(sd.HeadersCount(), 1); 
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(sd.HeaderIn("X-XX")), TStringBuf("y-yy"));
-
-        sd.AddHeader("x-Xz", "y-yy");
-        UNIT_ASSERT_VALUES_EQUAL(sd.HeadersCount(), 2);
+ 
+        sd.AddHeader("x-Xz", "y-yy"); 
+        UNIT_ASSERT_VALUES_EQUAL(sd.HeadersCount(), 2); 
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(sd.HeaderIn("X-Xz")), TStringBuf("y-yy"));
-
-        UNIT_ASSERT_VALUES_EQUAL(sd.ServerName(), "zzz");
-        UNIT_ASSERT_VALUES_EQUAL(sd.ServerPort(), "1");
-        sd.AddHeader("Host", "1234");
-        UNIT_ASSERT_VALUES_EQUAL(sd.HeadersCount(), 3);
+ 
+        UNIT_ASSERT_VALUES_EQUAL(sd.ServerName(), "zzz"); 
+        UNIT_ASSERT_VALUES_EQUAL(sd.ServerPort(), "1"); 
+        sd.AddHeader("Host", "1234"); 
+        UNIT_ASSERT_VALUES_EQUAL(sd.HeadersCount(), 3); 
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(sd.HeaderIn("Host")), TStringBuf("1234"));
-        UNIT_ASSERT_VALUES_EQUAL(sd.ServerName(), "1234");
-        sd.AddHeader("Host", "12345:678");
-        UNIT_ASSERT_VALUES_EQUAL(sd.HeadersCount(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sd.ServerName(), "1234"); 
+        sd.AddHeader("Host", "12345:678"); 
+        UNIT_ASSERT_VALUES_EQUAL(sd.HeadersCount(), 3); 
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(sd.HeaderIn("Host")), TStringBuf("12345:678"));
-        UNIT_ASSERT_VALUES_EQUAL(sd.ServerName(), "12345");
-        UNIT_ASSERT_VALUES_EQUAL(sd.ServerPort(), "678");
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL(sd.ServerName(), "12345"); 
+        UNIT_ASSERT_VALUES_EQUAL(sd.ServerPort(), "678"); 
+    } 
+ 
     Y_UNIT_TEST(ParseScan) {
         TServerRequestData rd;
 
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(TRequestServerDataTest) {
         UNIT_ASSERT(rd.CgiParam.Has("gta", "true"));
         UNIT_ASSERT(rd.CgiParam.Has("gta", "new"));
     }
-
+ 
     Y_UNIT_TEST(SetRemoteAddrSimple) {
         static const TString TEST = "abacaba.search.yandex.net";
 

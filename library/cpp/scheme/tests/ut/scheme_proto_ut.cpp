@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(TSchemeProtoTest) {
         if (mapAsDict) {
             v[key] = value;
         } else {
-            auto& newElement = v.Push();
+            auto& newElement = v.Push(); 
             newElement["key"] = key;
             newElement["value"] = value;
         }

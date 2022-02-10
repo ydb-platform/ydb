@@ -317,43 +317,43 @@ Y_UNIT_TEST_SUITE(TFileMapTest) {
         }
         NFs::Remove(FileName_);
     }
-
+ 
     Y_UNIT_TEST(TestMemoryMapIsWritable) {
-        TFile file(FileName_, CreateAlways | WrOnly);
-        file.Close();
-
-        {
-            TMemoryMap mappedMem(FileName_, TMemoryMap::oRdOnly);
-            UNIT_ASSERT(!mappedMem.IsWritable());
-        }
-        {
-            TMemoryMap mappedMem(FileName_, TMemoryMap::oRdWr);
-            UNIT_ASSERT(mappedMem.IsWritable());
-        }
+        TFile file(FileName_, CreateAlways | WrOnly); 
+        file.Close(); 
+ 
+        { 
+            TMemoryMap mappedMem(FileName_, TMemoryMap::oRdOnly); 
+            UNIT_ASSERT(!mappedMem.IsWritable()); 
+        } 
+        { 
+            TMemoryMap mappedMem(FileName_, TMemoryMap::oRdWr); 
+            UNIT_ASSERT(mappedMem.IsWritable()); 
+        } 
         NFs::Remove(FileName_);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(TestFileMapIsWritable) {
-        TFile file(FileName_, CreateAlways | WrOnly);
-        file.Close();
-        {
-            TMemoryMap mappedMem(FileName_, TMemoryMap::oRdOnly);
-            TFileMap fileMap(mappedMem);
-            UNIT_ASSERT(!fileMap.IsWritable());
-        }
-        {
-            TMemoryMap mappedMem(FileName_, TMemoryMap::oRdWr);
-            TFileMap fileMap(mappedMem);
-            UNIT_ASSERT(fileMap.IsWritable());
-        }
-        {
-            TFileMap fileMap(FileName_, TFileMap::oRdOnly);
-            UNIT_ASSERT(!fileMap.IsWritable());
-        }
-        {
-            TFileMap fileMap(FileName_, TFileMap::oRdWr);
-            UNIT_ASSERT(fileMap.IsWritable());
-        }
+        TFile file(FileName_, CreateAlways | WrOnly); 
+        file.Close(); 
+        { 
+            TMemoryMap mappedMem(FileName_, TMemoryMap::oRdOnly); 
+            TFileMap fileMap(mappedMem); 
+            UNIT_ASSERT(!fileMap.IsWritable()); 
+        } 
+        { 
+            TMemoryMap mappedMem(FileName_, TMemoryMap::oRdWr); 
+            TFileMap fileMap(mappedMem); 
+            UNIT_ASSERT(fileMap.IsWritable()); 
+        } 
+        { 
+            TFileMap fileMap(FileName_, TFileMap::oRdOnly); 
+            UNIT_ASSERT(!fileMap.IsWritable()); 
+        } 
+        { 
+            TFileMap fileMap(FileName_, TFileMap::oRdWr); 
+            UNIT_ASSERT(fileMap.IsWritable()); 
+        } 
         NFs::Remove(FileName_);
-    }
+    } 
 };

@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
         UNIT_ASSERT(!v.PathExists(path));
         UNIT_ASSERT(NSc::TValue::PathValid(path));
         UNIT_ASSERT(NSc::TValue::Same(v.TrySelect(path), NSc::Null()));
-        *v.TrySelectOrAdd(path) = 1;
+        *v.TrySelectOrAdd(path) = 1; 
         NSc::NUt::AssertSchemeJson(expected, v);
         UNIT_ASSERT(v.PathExists(path));
         UNIT_ASSERT(1 == v.TrySelectOrAdd(path)->GetNumber());
@@ -33,19 +33,19 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
         UNIT_ASSERT(v.PathExists(""));
         UNIT_ASSERT(v.PathExists("//"));
 
-        UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//")));
+        UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//"))); 
         NSc::NUt::AssertSchemeJson("null", v);
         UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null()));
         NSc::NUt::AssertSchemeJson("null", v);
 
         v.SetDict();
-        UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//")));
+        UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//"))); 
         NSc::NUt::AssertSchemeJson("{}", v);
         UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null()));
         NSc::NUt::AssertSchemeJson("{}", v);
 
         v.SetArray();
-        UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//")));
+        UNIT_ASSERT(NSc::TValue::Same(v, *v.TrySelectOrAdd("//"))); 
         NSc::NUt::AssertSchemeJson("[]", v);
         UNIT_ASSERT(NSc::TValue::Same(v.TrySelectAndDelete("//"), NSc::Null()));
         NSc::NUt::AssertSchemeJson("[]", v);
@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
 
     Y_UNIT_TEST(TestSelectAndMerge) {
         NSc::TValue v;
-        v.TrySelectOrAdd("blender/enabled")->MergeUpdateJson("1");
+        v.TrySelectOrAdd("blender/enabled")->MergeUpdateJson("1"); 
         UNIT_ASSERT_VALUES_EQUAL(NSc::TValue::FromJson("1").ToJson(), "1");
         UNIT_ASSERT_VALUES_EQUAL(v.ToJson(), "{\"blender\":{\"enabled\":1}}");
     }
@@ -97,61 +97,61 @@ Y_UNIT_TEST_SUITE(TSchemePathTest) {
 
         {
             NSc::TValue val;
-            *val.TrySelectOrAdd("") = 100;
+            *val.TrySelectOrAdd("") = 100; 
             const TString res = R"=(100)=";
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
-            *val.TrySelectOrAdd("a") = 100;
+            *val.TrySelectOrAdd("a") = 100; 
             const TString res = R"=({"a":100})=";
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
-            *val.TrySelectOrAdd(R"=(////)=") = 100;
+            *val.TrySelectOrAdd(R"=(////)=") = 100; 
             const TString res = R"=(100)=";
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
-            *val.TrySelectOrAdd(R"=()=") = 100;
+            *val.TrySelectOrAdd(R"=()=") = 100; 
             const TString res = R"=(100)=";
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
-            *val.TrySelectOrAdd(R"=("")=") = 100;
+            *val.TrySelectOrAdd(R"=("")=") = 100; 
             const TString res = R"=({"":100})=";
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
-            *val.TrySelectOrAdd(R"=("[1]")=") = 100;
+            *val.TrySelectOrAdd(R"=("[1]")=") = 100; 
             const TString res = R"=({"[1]":100})=";
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
-            *val.TrySelectOrAdd(R"=("\"\"")=") = 100;
+            *val.TrySelectOrAdd(R"=("\"\"")=") = 100; 
             const TString res = R"=({"\"\"":100})=";
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
-            *val.TrySelectOrAdd(R"=("/10/")=") = 100;
+            *val.TrySelectOrAdd(R"=("/10/")=") = 100; 
             const TString res = R"=({"/10/":100})=";
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
-            *val.TrySelectOrAdd(R"=(/"[10]"//""/"\"/10/\""///)=") = 100;
+            *val.TrySelectOrAdd(R"=(/"[10]"//""/"\"/10/\""///)=") = 100; 
             const TString res = R"=({"[10]":{"":{"\"/10/\"":100}}})=";
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }
         {
             NSc::TValue val;
-            *val.TrySelectOrAdd(R"=(/"[10]"//""/"\"/10/\""///)=") = 100;
+            *val.TrySelectOrAdd(R"=(/"[10]"//""/"\"/10/\""///)=") = 100; 
             const TString res = R"=({"[10]":{"":{"\"/10/\"":100}}})=";
             UNIT_ASSERT_VALUES_EQUAL(val.ToJson(), res);
         }

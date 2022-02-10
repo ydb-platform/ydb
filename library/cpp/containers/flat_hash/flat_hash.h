@@ -42,7 +42,7 @@ using TDenseHashSetImpl =
 
 namespace NFH {
 
-/* flat_map: Fast and highly customizable hash map.
+/* flat_map: Fast and highly customizable hash map. 
  *
  * Most features would be available soon.
  * Until that time we strongly insist on using only class aliases listed below.

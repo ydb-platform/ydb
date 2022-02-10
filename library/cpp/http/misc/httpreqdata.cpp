@@ -184,9 +184,9 @@ void TBaseServerRequestData::AddHeader(const TString& name, const TString& value
 
     if (stricmp(name.data(), "Host") == 0) {
         size_t hostLen = strcspn(value.data(), ":");
-        if (value[hostLen] == ':')
-            Port = value.substr(hostLen + 1);
-        Host = value.substr(0, hostLen);
+        if (value[hostLen] == ':') 
+            Port = value.substr(hostLen + 1); 
+        Host = value.substr(0, hostLen); 
     }
 }
 

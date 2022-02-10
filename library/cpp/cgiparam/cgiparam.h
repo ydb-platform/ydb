@@ -148,11 +148,11 @@ void TCgiParameters::ReplaceUnescaped(const TStringBuf key, TIter valuesBegin, c
     }
 
     // if there were less nodes than we need to insert then emplace the rest of the range
-    if (valuesBegin != valuesEnd) {
-        const TString keyStr = TString(key);
+    if (valuesBegin != valuesEnd) { 
+        const TString keyStr = TString(key); 
         for (; valuesBegin != valuesEnd; ++valuesBegin) {
-            emplace_hint(oldRange.second, keyStr, TString(*valuesBegin));
-        }
+            emplace_hint(oldRange.second, keyStr, TString(*valuesBegin)); 
+        } 
     }
 }
 

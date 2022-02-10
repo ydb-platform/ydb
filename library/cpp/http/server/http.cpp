@@ -695,13 +695,13 @@ void TClientRequest::Process(void* ThreadSpecificResource) {
             HttpConn_->Output()->EnableCompression(HttpServ()->Options().CompressionEnabled);
         }
 
-        if (ParsedHeaders.empty()) {
-            RequestString = Input().FirstLine();
+        if (ParsedHeaders.empty()) { 
+            RequestString = Input().FirstLine(); 
 
             const THttpHeaders& h = Input().Headers();
-            ParsedHeaders.reserve(h.Count());
+            ParsedHeaders.reserve(h.Count()); 
             for (THttpHeaders::TConstIterator it = h.Begin(); it != h.End(); ++it) {
-                ParsedHeaders.emplace_back(it->Name(), it->Value());
+                ParsedHeaders.emplace_back(it->Name(), it->Value()); 
             }
         }
 
@@ -750,7 +750,7 @@ void TClientRequest::ProcessFailRequest(int failstate) {
                 ++idx;
             }
 
-            url = RequestString.substr(start, idx - start);
+            url = RequestString.substr(start, idx - start); 
         }
     }
 

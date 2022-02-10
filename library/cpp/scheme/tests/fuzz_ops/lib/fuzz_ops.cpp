@@ -29,9 +29,9 @@ namespace NSc::NUt {
             if (!ApplyNextAction(st, *act)) {
                 break;
             }
-            if (!NSc::TValue::DefaultValue().IsNull()) {
-                std::terminate();
-            }
+            if (!NSc::TValue::DefaultValue().IsNull()) { 
+                std::terminate(); 
+            } 
         }
     }
 }

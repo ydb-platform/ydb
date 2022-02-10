@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(TSchemeMergeTest) {
         v["a"] = NSc::TValue::FromJson("[0.125,0.12,0.1,0.08,0.06]");
         UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[0.125,0.12,0.1,0.08,0.06]}");
 
-        NSc::TValue a = v.TrySelectOrAdd("a")->MergeUpdateJson("[1,2,3]");
+        NSc::TValue a = v.TrySelectOrAdd("a")->MergeUpdateJson("[1,2,3]"); 
 
         UNIT_ASSERT_JSON_EQ_JSON(a, "[1,2,3]");
         UNIT_ASSERT_JSON_EQ_JSON(v, "{a:[1,2,3]}");

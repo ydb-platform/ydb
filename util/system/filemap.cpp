@@ -214,10 +214,10 @@ public:
             ;
     }
 
-    inline bool IsWritable() const noexcept {
+    inline bool IsWritable() const noexcept { 
         return (Mode_ & oRdWr || Mode_ & oCopyOnWr);
-    }
-
+    } 
+ 
     inline TMapResult Map(i64 offset, size_t size) {
         assert(File_.IsOpen());
 
@@ -427,10 +427,10 @@ bool TMemoryMap::IsOpen() const noexcept {
     return Impl_->IsOpen();
 }
 
-bool TMemoryMap::IsWritable() const noexcept {
-    return Impl_->IsWritable();
-}
-
+bool TMemoryMap::IsWritable() const noexcept { 
+    return Impl_->IsWritable(); 
+} 
+ 
 TMemoryMap::EOpenMode TMemoryMap::GetMode() const noexcept {
     return Impl_->GetMode();
 }

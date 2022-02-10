@@ -282,18 +282,18 @@ public:
 #endif
     }
 
-    using TBase::front;
-
+    using TBase::front; 
+ 
     inline reference front() noexcept {
-        Y_ASSERT(!this->empty());
+        Y_ASSERT(!this->empty()); 
 
 #ifdef TSTRING_IS_STD_STRING
         return Storage_.front();
 #else
         return reference(*this, 0);
 #endif
-    }
-
+    } 
+ 
     inline size_t length() const noexcept {
         return ConstRef().length();
     }
@@ -536,11 +536,11 @@ private:
         return s1.size() + SumLength(r...);
     }
 
-    template <typename... R>
-    static size_t SumLength(const TCharType /*s1*/, const R&... r) noexcept {
-        return 1 + SumLength(r...);
-    }
-
+    template <typename... R> 
+    static size_t SumLength(const TCharType /*s1*/, const R&... r) noexcept { 
+        return 1 + SumLength(r...); 
+    } 
+ 
     static constexpr size_t SumLength() noexcept {
         return 0;
     }
@@ -553,10 +553,10 @@ private:
 
     template <typename... R, class TNextCharType, typename = std::enable_if_t<std::is_same<TCharType, TNextCharType>::value>>
     static void CopyAll(TCharType* p, const TNextCharType s, const R&... r) {
-        p[0] = s;
-        CopyAll(p + 1, r...);
-    }
-
+        p[0] = s; 
+        CopyAll(p + 1, r...); 
+    } 
+ 
     static void CopyAll(TCharType*) noexcept {
     }
 

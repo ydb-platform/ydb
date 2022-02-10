@@ -178,8 +178,8 @@ void TLog::AddLogVAList(const char* format, va_list lst) {
 
 void TLog::ReopenLog() {
     if (const auto copy = Impl_) {
-        copy->ReopenLog();
-    }
+        copy->ReopenLog(); 
+    } 
 }
 
 void TLog::ReopenLogNoFlush() {

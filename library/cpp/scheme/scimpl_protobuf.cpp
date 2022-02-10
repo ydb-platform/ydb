@@ -23,7 +23,7 @@ namespace NSc {
             try {
                 if (field->is_repeated()) {
                     if (field->is_map() && mapAsDict) {
-                        auto& elem = v[field->name()];
+                        auto& elem = v[field->name()]; 
                         for (int i2 = 0; i2 < r->FieldSize(msg, field); ++i2) {
                             auto val = FromRepeatedField(msg, field, i2);
                             if (val.IsDict()) {

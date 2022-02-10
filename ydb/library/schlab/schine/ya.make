@@ -8,7 +8,7 @@ OWNER(
 PEERDIR(
     library/cpp/containers/stack_vector
     library/cpp/lwtrace
-    library/cpp/lwtrace/mon
+    library/cpp/lwtrace/mon 
     ydb/library/schlab/probes
 )
 

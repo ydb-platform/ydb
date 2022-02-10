@@ -98,7 +98,7 @@ PEERDIR(
     library/cpp/digest/crc32c
     library/cpp/html/pcdata
     library/cpp/lwtrace
-    library/cpp/lwtrace/mon
+    library/cpp/lwtrace/mon 
     ydb/core/base
     ydb/core/control
     ydb/core/protos

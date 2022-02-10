@@ -35,12 +35,12 @@ inline TTable Histogram(const TTable& in, TSkip skip,
         double y = y_in(row);
         ysum += y;
         if (i >= 0 && i < buckets) {
-            out[i][yn_sum] = y + out[i].GetOrDefault(yn_sum, 0.0);
+            out[i][yn_sum] = y + out[i].GetOrDefault(yn_sum, 0.0); 
         }
     }
     for (TRow& row : out) {
         if (ysum != 0.0) {
-            row[yn_share] = row.GetOrDefault(yn_sum, 0.0) / ysum;
+            row[yn_share] = row.GetOrDefault(yn_sum, 0.0) / ysum; 
         }
     }
     return out;
@@ -90,21 +90,21 @@ inline TTable HistogramAll(const TTable& in, const TString& xn, double x1, doubl
             if (yn == xn) {
                 continue;
             }
-            double y;
-            if (!row_in.Get(yn, y)) {
-                continue;
-            }
+            double y; 
+            if (!row_in.Get(yn, y)) { 
+                continue; 
+            } 
             colSum[yn] += y;
             if (i >= 0 && i < buckets) {
-                out[i][yn + "_cnt"] = out[i].GetOrDefault(yn + "_cnt") + 1;
-                out[i][yn + "_sum"] = out[i].GetOrDefault(yn + "_sum") + y;
+                out[i][yn + "_cnt"] = out[i].GetOrDefault(yn + "_cnt") + 1; 
+                out[i][yn + "_sum"] = out[i].GetOrDefault(yn + "_sum") + y; 
                 if (out[i].contains(yn + "_min")) {
-                    out[i][yn + "_min"] = Min(y, out[i].GetOrDefault(yn + "_min"));
+                    out[i][yn + "_min"] = Min(y, out[i].GetOrDefault(yn + "_min")); 
                 } else {
                     out[i][yn + "_min"] = y;
                 }
                 if (out[i].contains(yn + "_max")) {
-                    out[i][yn + "_max"] = Max(y, out[i].GetOrDefault(yn + "_max"));
+                    out[i][yn + "_max"] = Max(y, out[i].GetOrDefault(yn + "_max")); 
                 } else {
                     out[i][yn + "_max"] = y;
                 }
@@ -112,19 +112,19 @@ inline TTable HistogramAll(const TTable& in, const TString& xn, double x1, doubl
         }
         colSum["_count"]++;
         if (i >= 0 && i < buckets) {
-            out[i]["_count_sum"] = out[i].GetOrDefault("_count_sum") + 1;
+            out[i]["_count_sum"] = out[i].GetOrDefault("_count_sum") + 1; 
         }
     }
     for (TRow& row : out) {
         for (const TString& col : cols) {
             double ysum = colSum[col];
             if (col != "_count") {
-                if (row.GetOrDefault(col + "_cnt") != 0.0) {
-                    row[col + "_avg"] = row.GetOrDefault(col + "_sum") / row.GetOrDefault(col + "_cnt");
+                if (row.GetOrDefault(col + "_cnt") != 0.0) { 
+                    row[col + "_avg"] = row.GetOrDefault(col + "_sum") / row.GetOrDefault(col + "_cnt"); 
                 }
             }
             if (ysum != 0.0) {
-                row[col + "_share"] = row.GetOrDefault(col + "_sum") / ysum;
+                row[col + "_share"] = row.GetOrDefault(col + "_sum") / ysum; 
             }
         }
     }
@@ -158,10 +158,10 @@ inline TMatrix CovarianceMatrix(const TTable& in)
     for (const TRow& row : in) {
         for (const auto& kv : row) {
             const TString& xn = kv.first;
-            double x;
-            if (!row.Get(xn, x)) {
-                continue;
-            }
+            double x; 
+            if (!row.Get(xn, x)) { 
+                continue; 
+            } 
             TAggregate& aggr = colAggr[xn];
             aggr.Sum += x;
             aggr.Count++;
@@ -177,16 +177,16 @@ inline TMatrix CovarianceMatrix(const TTable& in)
     TMatrix cov(cols.size(), cols.size());
     for (const TRow& row : in) {
         for (const auto& kv1 : row) {
-            double x;
-            if (!row.Get(kv1.first, x)) {
-                continue;
-            }
+            double x; 
+            if (!row.Get(kv1.first, x)) { 
+                continue; 
+            } 
             TAggregate& xaggr = colAggr[kv1.first];
             for (const auto& kv2 : row) {
-                double y;
-                if (!row.Get(kv2.first, y)) {
-                    continue;
-                }                
+                double y; 
+                if (!row.Get(kv2.first, y)) { 
+                    continue; 
+                }                 
                 TAggregate& yaggr = colAggr[kv2.first];
                 covCount.Cell(xaggr.Idx, yaggr.Idx)++;
                 cov.Cell(xaggr.Idx, yaggr.Idx) += (x - xaggr.Mean) * (y - yaggr.Mean);

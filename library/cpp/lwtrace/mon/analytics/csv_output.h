@@ -41,8 +41,8 @@ inline TString ToCsv(const TTable& in, TString sep = TString("\t"), bool head = 
         for (const TString& c : cols) {
             ss << (first? TString(): sep);
             first = false;
-            TString value;
-            ss << (row.GetAsString(c, value) ? value : TString("-"));
+            TString value; 
+            ss << (row.GetAsString(c, value) ? value : TString("-")); 
         }
         ss << Endl;
     }

@@ -8,20 +8,20 @@
 
 namespace NLwTraceMonPage {
 
-class TDashboardRegistry {
+class TDashboardRegistry { 
     THashMap<TString, NLWTrace::TDashboard> Dashboards;
-    TMutex Mutex;
-public:
+    TMutex Mutex; 
+public: 
     void Register(const NLWTrace::TDashboard& dashboard);
     void Register(const TVector<NLWTrace::TDashboard>& dashboards);
-    void Register(const TString& dashText);
+    void Register(const TString& dashText); 
     bool Get(const TString& name, NLWTrace::TDashboard& dash);
-    void Output(TStringStream& ss);
-};
-
+    void Output(TStringStream& ss); 
+}; 
+ 
 void RegisterPages(NMonitoring::TMonService2* mon, bool allowUnsafe = false);
 NLWTrace::TProbeRegistry& ProbeRegistry(); // This is not safe to use this function before main()
 NLWTrace::TManager& TraceManager(bool allowUnsafe = false);
-TDashboardRegistry& DashboardRegistry();
+TDashboardRegistry& DashboardRegistry(); 
 
 } // namespace NLwTraceMonPage

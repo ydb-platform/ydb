@@ -36,7 +36,7 @@ LWTRACE_USING(LWTRACE_UT_PROVIDER)
 using namespace NLWTrace;
 
 Y_UNIT_TEST_SUITE(LWTraceTrace) {
-#ifndef LWTRACE_DISABLE
+#ifndef LWTRACE_DISABLE 
     Y_UNIT_TEST(Smoke) {
         TManager mngr(*Singleton<TProbeRegistry>(), true);
         TQuery q;
@@ -65,487 +65,487 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         LWPROBE(EnumParams, ValueA, EEnumClass::ValueC);
         LWPROBE(InstantParam, TInstant::Seconds(42));
         LWPROBE(DurationParam, TDuration::MilliSeconds(146));
-        LWPROBE(ProtoEnum, OT_EQ);
+        LWPROBE(ProtoEnum, OT_EQ); 
     }
 
-    Y_UNIT_TEST(Predicate) {
-        TManager mngr(*Singleton<TProbeRegistry>(), true);
-        TQuery q;
-        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
-            Blocks {
+    Y_UNIT_TEST(Predicate) { 
+        TManager mngr(*Singleton<TProbeRegistry>(), true); 
+        TQuery q; 
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END( 
+            Blocks { 
                 ProbeDesc {
-                    Name: "IntParam"
-                    Provider: "LWTRACE_UT_PROVIDER"
-                }
-                Predicate {
-                    Operators {
-                        Type: OT_NE
-                        Argument { Param: "value" }
-                        Argument { Value: "1" }
-                    }
-                }
-                Action {
+                    Name: "IntParam" 
+                    Provider: "LWTRACE_UT_PROVIDER" 
+                } 
+                Predicate { 
+                    Operators { 
+                        Type: OT_NE 
+                        Argument { Param: "value" } 
+                        Argument { Value: "1" } 
+                    } 
+                } 
+                Action { 
                     LogAction { }
-                }
-            }
-        )END", &q);
-        UNIT_ASSERT(parsed);
-        mngr.New("QueryName", q);
-        LWPROBE(IntParam, 3);
-        LWPROBE(IntParam, 1);
-        LWPROBE(IntParam, 4);
-        LWPROBE(IntParam, 1);
-        LWPROBE(IntParam, 1);
-        LWPROBE(IntParam, 5);
-        struct {
-            ui32 expected = 3;
-            ui32 logsCount = 0;
-            void Push(TThread::TId, const TLogItem& item) {
-                UNIT_ASSERT(TString(item.Probe->Event.Name) == "IntParam");
-                ui32 value = item.GetParam("value").GetParam().Get<ui32>();
-                UNIT_ASSERT(value == expected);
-                expected++;
-                logsCount++;
-            }
-        } reader;
-        mngr.ReadLog("QueryName", reader);
-        UNIT_ASSERT(reader.logsCount == 3);
-    }
-
-    Y_UNIT_TEST(StatementAction) {
-        TManager mngr(*Singleton<TProbeRegistry>(), true);
-        TQuery q;
-        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
-            Blocks {
+                } 
+            } 
+        )END", &q); 
+        UNIT_ASSERT(parsed); 
+        mngr.New("QueryName", q); 
+        LWPROBE(IntParam, 3); 
+        LWPROBE(IntParam, 1); 
+        LWPROBE(IntParam, 4); 
+        LWPROBE(IntParam, 1); 
+        LWPROBE(IntParam, 1); 
+        LWPROBE(IntParam, 5); 
+        struct { 
+            ui32 expected = 3; 
+            ui32 logsCount = 0; 
+            void Push(TThread::TId, const TLogItem& item) { 
+                UNIT_ASSERT(TString(item.Probe->Event.Name) == "IntParam"); 
+                ui32 value = item.GetParam("value").GetParam().Get<ui32>(); 
+                UNIT_ASSERT(value == expected); 
+                expected++; 
+                logsCount++; 
+            } 
+        } reader; 
+        mngr.ReadLog("QueryName", reader); 
+        UNIT_ASSERT(reader.logsCount == 3); 
+    } 
+ 
+    Y_UNIT_TEST(StatementAction) { 
+        TManager mngr(*Singleton<TProbeRegistry>(), true); 
+        TQuery q; 
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END( 
+            Blocks { 
                 ProbeDesc {
-                    Name: "IntParam"
-                    Provider: "LWTRACE_UT_PROVIDER"
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_INC
-                        Argument { Variable: "varInc" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_DEC
-                        Argument { Variable: "varDec" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_MOV
-                        Argument { Variable: "varMov" }
-                        Argument { Value: "3" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_ADD_EQ
-                        Argument { Variable: "varAddEq" }
-                        Argument { Value: "2" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_ADD_EQ
-                        Argument { Variable: "varAddEq" }
-                        Argument { Value: "3" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_SUB_EQ
-                        Argument { Variable: "varSubEq" }
-                        Argument { Value: "5" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_ADD
-                        Argument { Variable: "varAdd" }
-                        Argument { Value: "3" }
-                        Argument { Value: "2" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_SUB
-                        Argument { Variable: "varSub" }
-                        Argument { Value: "3" }
-                        Argument { Value: "2" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_MUL
-                        Argument { Variable: "varMul" }
-                        Argument { Value: "6" }
-                        Argument { Value: "2" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_DIV
-                        Argument { Variable: "varDiv" }
-                        Argument { Value: "6" }
-                        Argument { Value: "2" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_MOD
-                        Argument { Variable: "varMod" }
-                        Argument { Value: "17" }
-                        Argument { Value: "5" }
-                    }
-                }
-            }
-            Blocks {
+                    Name: "IntParam" 
+                    Provider: "LWTRACE_UT_PROVIDER" 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_INC 
+                        Argument { Variable: "varInc" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_DEC 
+                        Argument { Variable: "varDec" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_MOV 
+                        Argument { Variable: "varMov" } 
+                        Argument { Value: "3" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_ADD_EQ 
+                        Argument { Variable: "varAddEq" } 
+                        Argument { Value: "2" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_ADD_EQ 
+                        Argument { Variable: "varAddEq" } 
+                        Argument { Value: "3" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_SUB_EQ 
+                        Argument { Variable: "varSubEq" } 
+                        Argument { Value: "5" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_ADD 
+                        Argument { Variable: "varAdd" } 
+                        Argument { Value: "3" } 
+                        Argument { Value: "2" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_SUB 
+                        Argument { Variable: "varSub" } 
+                        Argument { Value: "3" } 
+                        Argument { Value: "2" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_MUL 
+                        Argument { Variable: "varMul" } 
+                        Argument { Value: "6" } 
+                        Argument { Value: "2" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_DIV 
+                        Argument { Variable: "varDiv" } 
+                        Argument { Value: "6" } 
+                        Argument { Value: "2" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_MOD 
+                        Argument { Variable: "varMod" } 
+                        Argument { Value: "17" } 
+                        Argument { Value: "5" } 
+                    } 
+                } 
+            } 
+            Blocks { 
                 ProbeDesc {
-                    Name: "IntParam"
-                    Provider: "LWTRACE_UT_PROVIDER"
-                }
-                Predicate {
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varInc" }
-                        Argument { Value: "1" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varDec" }
+                    Name: "IntParam" 
+                    Provider: "LWTRACE_UT_PROVIDER" 
+                } 
+                Predicate { 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varInc" } 
+                        Argument { Value: "1" } 
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varDec" } 
                         Argument { Value: "-1" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varMov" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varMov" } 
                         Argument { Value: "3" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varAddEq" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varAddEq" } 
                         Argument { Value: "5" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varSubEq" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varSubEq" } 
                         Argument { Value: "-5" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varAdd" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varAdd" } 
                         Argument { Value: "5" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varSub" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varSub" } 
                         Argument { Value: "1" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varMul" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varMul" } 
                         Argument { Value: "12" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varDiv" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varDiv" } 
                         Argument { Value: "3" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varMod" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varMod" } 
                         Argument { Value: "2" }
-                    }
-                }
-                Action {
-                    LogAction { }
-                }
+                    } 
+                } 
+                Action { 
+                    LogAction { } 
+                } 
             }
-        )END", &q);
-        UNIT_ASSERT(parsed);
-        mngr.New("QueryName", q);
-        LWPROBE(IntParam, 1);
-        LWPROBE(IntParam, 2);
-        struct {
-            int logsCount = 0;
-            void Push(TThread::TId, const TLogItem& item) {
-                UNIT_ASSERT(TString(item.Probe->Event.Name) == "IntParam");
-                ui32 value = item.GetParam("value").GetParam().Get<ui32>();
-                UNIT_ASSERT(value == 1);
-                logsCount++;
-            }
-        } reader;
-        mngr.ReadLog("QueryName", reader);
-        UNIT_ASSERT(reader.logsCount == 1);
-    }
-
-    Y_UNIT_TEST(StatementActionWithParams) {
-        TManager mngr(*Singleton<TProbeRegistry>(), true);
-        TQuery q;
-        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
-            Blocks {
+        )END", &q); 
+        UNIT_ASSERT(parsed); 
+        mngr.New("QueryName", q); 
+        LWPROBE(IntParam, 1); 
+        LWPROBE(IntParam, 2); 
+        struct { 
+            int logsCount = 0; 
+            void Push(TThread::TId, const TLogItem& item) { 
+                UNIT_ASSERT(TString(item.Probe->Event.Name) == "IntParam"); 
+                ui32 value = item.GetParam("value").GetParam().Get<ui32>(); 
+                UNIT_ASSERT(value == 1); 
+                logsCount++; 
+            } 
+        } reader; 
+        mngr.ReadLog("QueryName", reader); 
+        UNIT_ASSERT(reader.logsCount == 1); 
+    } 
+ 
+    Y_UNIT_TEST(StatementActionWithParams) { 
+        TManager mngr(*Singleton<TProbeRegistry>(), true); 
+        TQuery q; 
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END( 
+            Blocks { 
                 ProbeDesc {
-                    Name: "IntIntParams"
-                    Provider: "LWTRACE_UT_PROVIDER"
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_MOV
-                        Argument { Variable: "varMov" }
-                        Argument { Param: "value1" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_ADD_EQ
-                        Argument { Variable: "varAddEq" }
-                        Argument { Param: "value1" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_SUB_EQ
-                        Argument { Variable: "varSubEq" }
-                        Argument { Param: "value1" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_ADD
-                        Argument { Variable: "varAdd" }
-                        Argument { Param: "value1" }
-                        Argument { Param: "value2" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_SUB
-                        Argument { Variable: "varSub" }
-                        Argument { Param: "value1" }
-                        Argument { Param: "value2" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_MUL
-                        Argument { Variable: "varMul" }
-                        Argument { Param: "value1" }
-                        Argument { Param: "value2" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_DIV
-                        Argument { Variable: "varDiv" }
-                        Argument { Param: "value1" }
-                        Argument { Param: "value2" }
-                    }
-                }
-                Action {
-                    StatementAction {
-                        Type: ST_MOD
-                        Argument { Variable: "varMod" }
-                        Argument { Param: "value1" }
-                        Argument { Param: "value2" }
-                    }
-                }
-            }
-            Blocks {
+                    Name: "IntIntParams" 
+                    Provider: "LWTRACE_UT_PROVIDER" 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_MOV 
+                        Argument { Variable: "varMov" } 
+                        Argument { Param: "value1" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_ADD_EQ 
+                        Argument { Variable: "varAddEq" } 
+                        Argument { Param: "value1" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_SUB_EQ 
+                        Argument { Variable: "varSubEq" } 
+                        Argument { Param: "value1" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_ADD 
+                        Argument { Variable: "varAdd" } 
+                        Argument { Param: "value1" } 
+                        Argument { Param: "value2" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_SUB 
+                        Argument { Variable: "varSub" } 
+                        Argument { Param: "value1" } 
+                        Argument { Param: "value2" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_MUL 
+                        Argument { Variable: "varMul" } 
+                        Argument { Param: "value1" } 
+                        Argument { Param: "value2" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_DIV 
+                        Argument { Variable: "varDiv" } 
+                        Argument { Param: "value1" } 
+                        Argument { Param: "value2" } 
+                    } 
+                } 
+                Action { 
+                    StatementAction { 
+                        Type: ST_MOD 
+                        Argument { Variable: "varMod" } 
+                        Argument { Param: "value1" } 
+                        Argument { Param: "value2" } 
+                    } 
+                } 
+            } 
+            Blocks { 
                 ProbeDesc {
-                    Name: "IntIntParams"
-                    Provider: "LWTRACE_UT_PROVIDER"
-                }
-                Predicate {
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varMov" }
+                    Name: "IntIntParams" 
+                    Provider: "LWTRACE_UT_PROVIDER" 
+                } 
+                Predicate { 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varMov" } 
                         Argument { Param: "value1" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varAddEq" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varAddEq" } 
                         Argument { Param: "value1" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varSubEq" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varSubEq" } 
                         Argument { Value: "-22" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varAdd" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varAdd" } 
                         Argument { Value: "25" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varSub" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varSub" } 
                         Argument { Value: "19" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varMul" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varMul" } 
                         Argument { Value: "66" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varDiv" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varDiv" } 
                         Argument { Value: "7" }
-                    }
-                    Operators {
-                        Type: OT_EQ
-                        Argument { Variable: "varMod" }
+                    } 
+                    Operators { 
+                        Type: OT_EQ 
+                        Argument { Variable: "varMod" } 
                         Argument { Value: "1" }
-                    }
-                }
-                Action {
-                    LogAction { }
-                }
+                    } 
+                } 
+                Action { 
+                    LogAction { } 
+                } 
             }
-        )END", &q);
-        UNIT_ASSERT(parsed);
-        mngr.New("QueryName", q);
-        LWPROBE(IntIntParams, 22, 3);
-        struct {
-            int logsCount = 0;
-            void Push(TThread::TId, const TLogItem& item) {
-                UNIT_ASSERT(TString(item.Probe->Event.Name) == "IntIntParams");
-                logsCount++;
-            }
-        } reader;
-        mngr.ReadLog("QueryName", reader);
-        UNIT_ASSERT(reader.logsCount == 1);
-    }
-
-    Y_UNIT_TEST(PerThreadLogSize) {
-        TManager mngr(*Singleton<TProbeRegistry>(), true);
-        TQuery q;
-        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
-            PerThreadLogSize: 3
-            Blocks {
+        )END", &q); 
+        UNIT_ASSERT(parsed); 
+        mngr.New("QueryName", q); 
+        LWPROBE(IntIntParams, 22, 3); 
+        struct { 
+            int logsCount = 0; 
+            void Push(TThread::TId, const TLogItem& item) { 
+                UNIT_ASSERT(TString(item.Probe->Event.Name) == "IntIntParams"); 
+                logsCount++; 
+            } 
+        } reader; 
+        mngr.ReadLog("QueryName", reader); 
+        UNIT_ASSERT(reader.logsCount == 1); 
+    } 
+ 
+    Y_UNIT_TEST(PerThreadLogSize) { 
+        TManager mngr(*Singleton<TProbeRegistry>(), true); 
+        TQuery q; 
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END( 
+            PerThreadLogSize: 3 
+            Blocks { 
                 ProbeDesc {
-                    Name: "IntParam"
-                    Provider: "LWTRACE_UT_PROVIDER"
-                }
-                Action {
+                    Name: "IntParam" 
+                    Provider: "LWTRACE_UT_PROVIDER" 
+                } 
+                Action { 
                     LogAction { }
-                }
-            }
-        )END", &q);
-        UNIT_ASSERT(parsed);
-        mngr.New("QueryRandom", q);
-        LWPROBE(IntParam, 1);
-        LWPROBE(IntParam, 2);
-        LWPROBE(IntParam, 3);
-        LWPROBE(IntParam, 4);
-        struct {
-            ui32 logsCount = 0;
-            ui32 expected = 2;
-            void Push(TThread::TId, const TLogItem& item) {
-                UNIT_ASSERT(TString(item.Probe->Event.Name) == "IntParam");
-                ui32 value = item.GetParam("value").GetParam().Get<ui32>();
-                UNIT_ASSERT(value == expected);
-                logsCount++;
-                expected++;
-            }
-        } reader;
-        mngr.ReadLog("QueryRandom", reader);
-        UNIT_ASSERT(reader.logsCount == 3);
-    }
-
-    Y_UNIT_TEST(CustomAction) {
-        static ui32 nCustomActionsCalls = 0;
-        class TMyActionExecutor: public TCustomActionExecutor {
-        public:
-            TMyActionExecutor(TProbe* probe, const TCustomAction&, TSession*)
-                : TCustomActionExecutor(probe, false /* not destructive */)
-            {}
-        private:
+                } 
+            } 
+        )END", &q); 
+        UNIT_ASSERT(parsed); 
+        mngr.New("QueryRandom", q); 
+        LWPROBE(IntParam, 1); 
+        LWPROBE(IntParam, 2); 
+        LWPROBE(IntParam, 3); 
+        LWPROBE(IntParam, 4); 
+        struct { 
+            ui32 logsCount = 0; 
+            ui32 expected = 2; 
+            void Push(TThread::TId, const TLogItem& item) { 
+                UNIT_ASSERT(TString(item.Probe->Event.Name) == "IntParam"); 
+                ui32 value = item.GetParam("value").GetParam().Get<ui32>(); 
+                UNIT_ASSERT(value == expected); 
+                logsCount++; 
+                expected++; 
+            } 
+        } reader; 
+        mngr.ReadLog("QueryRandom", reader); 
+        UNIT_ASSERT(reader.logsCount == 3); 
+    } 
+ 
+    Y_UNIT_TEST(CustomAction) { 
+        static ui32 nCustomActionsCalls = 0; 
+        class TMyActionExecutor: public TCustomActionExecutor { 
+        public: 
+            TMyActionExecutor(TProbe* probe, const TCustomAction&, TSession*) 
+                : TCustomActionExecutor(probe, false /* not destructive */) 
+            {} 
+        private: 
             bool DoExecute(TOrbit&, const TParams& params) override {
-                (void)params;
-                nCustomActionsCalls++;
-                return true;
-            }
-        };
-
-        TManager mngr(*Singleton<TProbeRegistry>(), true);
-        mngr.RegisterCustomAction("MyCustomAction", [](TProbe* probe,
-                                                       const TCustomAction& action,
-                                                       TSession* session) {
-                return new TMyActionExecutor(probe, action, session);
-            }
-        );
-        TQuery q;
-        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
-            Blocks {
+                (void)params; 
+                nCustomActionsCalls++; 
+                return true; 
+            } 
+        }; 
+ 
+        TManager mngr(*Singleton<TProbeRegistry>(), true); 
+        mngr.RegisterCustomAction("MyCustomAction", [](TProbe* probe, 
+                                                       const TCustomAction& action, 
+                                                       TSession* session) { 
+                return new TMyActionExecutor(probe, action, session); 
+            } 
+        ); 
+        TQuery q; 
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END( 
+            Blocks { 
+                ProbeDesc { 
+                    Name: "NoParam" 
+                    Provider: "LWTRACE_UT_PROVIDER" 
+                } 
+                Action { 
+                    CustomAction { 
+                        Name: "MyCustomAction" 
+                    } 
+                } 
+            } 
+        )END", &q); 
+        UNIT_ASSERT(parsed); 
+        mngr.New("Query1", q); 
+        LWPROBE(NoParam); 
+        UNIT_ASSERT(nCustomActionsCalls == 1); 
+    } 
+ 
+    Y_UNIT_TEST(SafeModeSleepException) { 
+        TManager mngr(*Singleton<TProbeRegistry>(), false); 
+        TQuery q; 
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END( 
+            Blocks { 
                 ProbeDesc {
-                    Name: "NoParam"
-                    Provider: "LWTRACE_UT_PROVIDER"
-                }
-                Action {
-                    CustomAction {
-                        Name: "MyCustomAction"
-                    }
-                }
-            }
-        )END", &q);
-        UNIT_ASSERT(parsed);
-        mngr.New("Query1", q);
-        LWPROBE(NoParam);
-        UNIT_ASSERT(nCustomActionsCalls == 1);
-    }
-
-    Y_UNIT_TEST(SafeModeSleepException) {
-        TManager mngr(*Singleton<TProbeRegistry>(), false);
-        TQuery q;
-        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
-            Blocks {
+                    Name: "NoParam" 
+                    Provider: "LWTRACE_UT_PROVIDER" 
+                } 
+                Action { 
+                    SleepAction { 
+                        NanoSeconds: 1000000000 
+                    } 
+                } 
+            } 
+        )END", &q); 
+        UNIT_ASSERT(parsed); 
+        UNIT_ASSERT_EXCEPTION(mngr.New("QueryName", q), yexception); 
+    } 
+ 
+    Y_UNIT_TEST(Sleep) { 
+        TManager mngr(*Singleton<TProbeRegistry>(), true); 
+        TQuery q; 
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END( 
+            Blocks { 
                 ProbeDesc {
-                    Name: "NoParam"
-                    Provider: "LWTRACE_UT_PROVIDER"
-                }
-                Action {
-                    SleepAction {
-                        NanoSeconds: 1000000000
-                    }
-                }
-            }
-        )END", &q);
-        UNIT_ASSERT(parsed);
-        UNIT_ASSERT_EXCEPTION(mngr.New("QueryName", q), yexception);
-    }
-
-    Y_UNIT_TEST(Sleep) {
-        TManager mngr(*Singleton<TProbeRegistry>(), true);
-        TQuery q;
-        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
-            Blocks {
-                ProbeDesc {
-                    Name: "NoParam"
-                    Provider: "LWTRACE_UT_PROVIDER"
-                }
-                Action {
-                    SleepAction {
-                        NanoSeconds: 1000
-                    }
-                }
-            }
-        )END", &q);
-        UNIT_ASSERT(parsed);
-        mngr.New("QueryName", q);
-        const ui64 sleepTimeNs = 1000;  // 1 us
-
-        TInstant t0 = Now();
-        LWPROBE(NoParam);
-        TInstant t1 = Now();
+                    Name: "NoParam" 
+                    Provider: "LWTRACE_UT_PROVIDER" 
+                } 
+                Action { 
+                    SleepAction { 
+                        NanoSeconds: 1000 
+                    } 
+                } 
+            } 
+        )END", &q); 
+        UNIT_ASSERT(parsed); 
+        mngr.New("QueryName", q); 
+        const ui64 sleepTimeNs = 1000;  // 1 us 
+ 
+        TInstant t0 = Now(); 
+        LWPROBE(NoParam); 
+        TInstant t1 = Now(); 
         UNIT_ASSERT(t1.NanoSeconds() - t0.NanoSeconds() >= sleepTimeNs);
-    }
-
+    } 
+ 
     Y_UNIT_TEST(ProtoEnumTraits) {
-        using TPbEnumTraits = TParamTraits<EOperatorType>;
+        using TPbEnumTraits = TParamTraits<EOperatorType>; 
         TString str;
-        TPbEnumTraits::ToString(TPbEnumTraits::ToStoreType(OT_EQ), &str);
+        TPbEnumTraits::ToString(TPbEnumTraits::ToStoreType(OT_EQ), &str); 
         UNIT_ASSERT_STRINGS_EQUAL(str, "OT_EQ (0)");
     }
 
@@ -562,7 +562,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
                     RunLogShuttleAction { }
                 }
             }
-        )END", &q);
+        )END", &q); 
         UNIT_ASSERT(parsed);
         mngr.New("Query1", q);
 
@@ -597,7 +597,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         LWTRACK(EnumParams, orbit, ValueA, EEnumClass::ValueC);
         LWTRACK(InstantParam, orbit, TInstant::Seconds(42));
         LWTRACK(DurationParam, orbit, TDuration::MilliSeconds(146));
-        LWTRACK(ProtoEnum, orbit, OT_EQ);
+        LWTRACK(ProtoEnum, orbit, OT_EQ); 
         LWTRACK(IntIntParams, orbit, 1, 2);
 
         TTraceResponse resp;
@@ -640,7 +640,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         const auto& p6 = r.GetEvents(6);
         UNIT_ASSERT_VALUES_EQUAL("ProtoEnum", p6.GetName());
         UNIT_ASSERT_VALUES_EQUAL("LWTRACE_UT_PROVIDER", p6.GetProvider());
-        UNIT_ASSERT_VALUES_EQUAL((int)OT_EQ, p6.GetParams(0).GetIntValue());
+        UNIT_ASSERT_VALUES_EQUAL((int)OT_EQ, p6.GetParams(0).GetIntValue()); 
 
         const auto& p7 = r.GetEvents(7);
         UNIT_ASSERT_VALUES_EQUAL("IntIntParams", p7.GetName());
@@ -696,7 +696,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         p6.SetName("ProtoEnum");
         p6.SetProvider("LWTRACE_UT_PROVIDER");
         auto& p6param = *p6.MutableParams()->Add();
-        p6param.SetIntValue((i64)OT_EQ);
+        p6param.SetIntValue((i64)OT_EQ); 
 
         auto& p7 = *r.Add();
         p7.SetName("IntIntParams");
@@ -727,7 +727,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         LWTRACK(EnumParams, orbit, ValueA, EEnumClass::ValueC);
         LWTRACK(InstantParam, orbit, TInstant::Seconds(42));
         LWTRACK(DurationParam, orbit, TDuration::MilliSeconds(146));
-        LWTRACK(ProtoEnum, orbit, OT_EQ);
+        LWTRACK(ProtoEnum, orbit, OT_EQ); 
         LWTRACK(IntIntParams, orbit, 1, 2);
 
         TTraceResponse resp;
@@ -753,7 +753,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
                     RunLogShuttleAction { }
                 }
             }
-        )END", &q);
+        )END", &q); 
 
         UNIT_ASSERT(parsed);
         mngr.New("Query1", q);
@@ -834,7 +834,7 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
                     }
                 }
             }
-        )END", &q);
+        )END", &q); 
 
         UNIT_ASSERT(parsed);
         mngr.New("Query1", q);
@@ -876,5 +876,5 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         } reader;
         mngr.ReadDepot("Query1", reader);
     }
-#endif // LWTRACE_DISABLE
+#endif // LWTRACE_DISABLE 
 }

@@ -116,9 +116,9 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
         }
         {
             NProtobufUtilUt::TTextTest message;
-            UNIT_ASSERT_EXCEPTION(ParseFromTextFormat("this_file_doesnt_exists", message), TFileError);
-        }
-        {
+            UNIT_ASSERT_EXCEPTION(ParseFromTextFormat("this_file_doesnt_exists", message), TFileError); 
+        } 
+        { 
             NProtobufUtilUt::TTextTest message;
             UNIT_ASSERT_NO_EXCEPTION(ParseFromTextFormat(correctFileName, message));
         }

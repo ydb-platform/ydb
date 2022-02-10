@@ -100,7 +100,7 @@ RECURSE(
     infected_masks/ut
     init_log
     init_log/example
-    intrasearch_fetcher
+    intrasearch_fetcher 
     json
     json/compare
     json/perf

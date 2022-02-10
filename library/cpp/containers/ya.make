@@ -1,4 +1,4 @@
-RECURSE(
+RECURSE( 
     2d_array
     absl_flat_hash
     absl_tstring_flat_hash
@@ -12,7 +12,7 @@ RECURSE(
     comptrie/loader/ut
     comptrie/ut
     comptrie/benchmark
-    concurrent_hash
+    concurrent_hash 
     concurrent_hash_set
     concurrent_hash_set/ut
     dense_hash
@@ -68,4 +68,4 @@ RECURSE(
     two_level_hash/ut
     vp_tree
     vp_tree/ut
-)
+) 

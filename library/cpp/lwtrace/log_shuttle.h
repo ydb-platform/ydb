@@ -46,19 +46,19 @@ namespace NLWTrace {
     template <class TDepot>
     class TLogShuttle: public IShuttle {
     private:
-        using TExecutor = TRunLogShuttleActionExecutor<TDepot>; 
+        using TExecutor = TRunLogShuttleActionExecutor<TDepot>;
         TTrackLog TrackLog;
-        TExecutor* Executor; 
+        TExecutor* Executor;
         bool Ignore = false;
         size_t MaxTrackLength;
         TAdaptiveLock Lock;
-        TAtomic ForkFailed = 0; 
+        TAtomic ForkFailed = 0;
 
     public:
-        explicit TLogShuttle(TExecutor* executor) 
-            : IShuttle(executor->GetTraceIdx(), executor->NewSpanId()) 
-            , Executor(executor) 
-            , MaxTrackLength(Executor->GetAction().GetMaxTrackLength() ? Executor->GetAction().GetMaxTrackLength() : 100) 
+        explicit TLogShuttle(TExecutor* executor)
+            : IShuttle(executor->GetTraceIdx(), executor->NewSpanId())
+            , Executor(executor)
+            , MaxTrackLength(Executor->GetAction().GetMaxTrackLength() ? Executor->GetAction().GetMaxTrackLength() : 100)
         {
         }
 
@@ -67,7 +67,7 @@ namespace NLWTrace {
         void DoDrop() override;
         void DoSerialize(TShuttleTrace& msg) override;
         bool DoFork(TShuttlePtr& child) override;
-        bool DoJoin(const TShuttlePtr& child) override; 
+        bool DoJoin(const TShuttlePtr& child) override;
 
         void SetIgnore(bool ignore);
         void Clear();
@@ -110,19 +110,19 @@ namespace NLWTrace {
 
         TAtomic MissedTracks = 0;
         TAtomic* LastTrackId;
-        TAtomic* LastSpanId; 
+        TAtomic* LastSpanId;
 
         static constexpr int MaxShuttles = 100000;
 
     public:
-        TRunLogShuttleActionExecutor(ui64 traceIdx, const TRunLogShuttleAction& action, TDepot* depot, TAtomic* lastTrackId, TAtomic* lastSpanId); 
+        TRunLogShuttleActionExecutor(ui64 traceIdx, const TRunLogShuttleAction& action, TDepot* depot, TAtomic* lastTrackId, TAtomic* lastSpanId);
         ~TRunLogShuttleActionExecutor();
         bool DoExecute(TOrbit& orbit, const TParams& params) override;
         void RecordShuttle(TLogShuttle<TDepot>* shuttle);
         void ParkShuttle(TLogShuttle<TDepot>* shuttle);
-        void DiscardShuttle(); 
-        TShuttlePtr RentShuttle(); 
-        ui64 NewSpanId(); 
+        void DiscardShuttle();
+        TShuttlePtr RentShuttle();
+        ui64 NewSpanId();
         const TRunLogShuttleAction& GetAction() const {
             return Action;
         }
@@ -178,19 +178,19 @@ namespace NLWTrace {
     void TLogShuttle<TDepot>::DoEndOfTrack() {
         // Record track log if not ignored
         if (!Ignore) {
-            if (AtomicGet(ForkFailed)) { 
-                Executor->DiscardShuttle(); 
-            } else { 
-                Executor->RecordShuttle(this); 
-            } 
+            if (AtomicGet(ForkFailed)) {
+                Executor->DiscardShuttle();
+            } else {
+                Executor->RecordShuttle(this);
+            }
         }
-        Executor->ParkShuttle(this); 
+        Executor->ParkShuttle(this);
     }
 
     template <class TDepot>
     void TLogShuttle<TDepot>::DoDrop() {
         // Do not track log results of dropped shuttles
-        Executor->ParkShuttle(this); 
+        Executor->ParkShuttle(this);
     }
 
     template <class TDepot>
@@ -239,13 +239,13 @@ namespace NLWTrace {
         ui64 traceIdx,
         const TRunLogShuttleAction& action,
         TDepot* depot,
-        TAtomic* lastTrackId, 
-        TAtomic* lastSpanId) 
+        TAtomic* lastTrackId,
+        TAtomic* lastSpanId)
         : TLogShuttleActionBase<TDepot>(traceIdx)
         , Action(action)
         , Depot(depot)
         , LastTrackId(lastTrackId)
-        , LastSpanId(lastSpanId) 
+        , LastSpanId(lastSpanId)
     {
         ui64 size = Min<ui64>(Action.GetShuttlesCount() ? Action.GetShuttlesCount() : 1000, MaxShuttles); // Do not allow to allocate too much memory
         AllShuttles.reserve(size);
@@ -277,11 +277,11 @@ namespace NLWTrace {
     }
 
     template <class TDepot>
-    void TRunLogShuttleActionExecutor<TDepot>::DiscardShuttle() { 
-        AtomicIncrement(MissedTracks); 
-    } 
- 
-    template <class TDepot> 
+    void TRunLogShuttleActionExecutor<TDepot>::DiscardShuttle() {
+        AtomicIncrement(MissedTracks);
+    }
+
+    template <class TDepot>
     void TRunLogShuttleActionExecutor<TDepot>::RecordShuttle(TLogShuttle<TDepot>* shuttle) {
         if (Depot == nullptr) {
             return;
@@ -312,12 +312,12 @@ namespace NLWTrace {
         Parking.emplace_back(shuttle);
     }
 
-    template <class TDepot> 
-    ui64 TRunLogShuttleActionExecutor<TDepot>::NewSpanId() 
-    { 
-        return LastSpanId ? AtomicIncrement(*LastSpanId) : 0; 
-    } 
- 
+    template <class TDepot>
+    ui64 TRunLogShuttleActionExecutor<TDepot>::NewSpanId()
+    {
+        return LastSpanId ? AtomicIncrement(*LastSpanId) : 0;
+    }
+
     ////////////////////////////////////////////////////////////////////////////////
 
     template <class TDepot>

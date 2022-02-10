@@ -8,7 +8,7 @@
  */
 
 #include <openssl/crypto.h>
-#include "modes_local.h" 
+#include "modes_local.h"
 #include <string.h>
 
 #if defined(__GNUC__) && !defined(STRICT_ALIGNMENT)

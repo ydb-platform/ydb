@@ -10,9 +10,9 @@
  */
 
 #include <stdio.h>
-#include "../ssl_local.h" 
-#include "statem_local.h" 
-#include "internal/constant_time.h" 
+#include "../ssl_local.h"
+#include "statem_local.h"
+#include "internal/constant_time.h"
 #include "internal/cryptlib.h"
 #include <openssl/buffer.h>
 #include <openssl/rand.h>
@@ -23,24 +23,24 @@
 #include <openssl/dh.h>
 #include <openssl/bn.h>
 #include <openssl/md5.h>
-#include <openssl/asn1t.h> 
+#include <openssl/asn1t.h>
 
 #define TICKET_NONCE_SIZE       8
 
-typedef struct { 
-  ASN1_TYPE *kxBlob; 
-  ASN1_TYPE *opaqueBlob; 
-} GOST_KX_MESSAGE; 
- 
-DECLARE_ASN1_FUNCTIONS(GOST_KX_MESSAGE) 
- 
-ASN1_SEQUENCE(GOST_KX_MESSAGE) = { 
-  ASN1_SIMPLE(GOST_KX_MESSAGE,  kxBlob, ASN1_ANY), 
-  ASN1_OPT(GOST_KX_MESSAGE, opaqueBlob, ASN1_ANY), 
-} ASN1_SEQUENCE_END(GOST_KX_MESSAGE) 
- 
-IMPLEMENT_ASN1_FUNCTIONS(GOST_KX_MESSAGE) 
- 
+typedef struct {
+  ASN1_TYPE *kxBlob;
+  ASN1_TYPE *opaqueBlob;
+} GOST_KX_MESSAGE;
+
+DECLARE_ASN1_FUNCTIONS(GOST_KX_MESSAGE)
+
+ASN1_SEQUENCE(GOST_KX_MESSAGE) = {
+  ASN1_SIMPLE(GOST_KX_MESSAGE,  kxBlob, ASN1_ANY),
+  ASN1_OPT(GOST_KX_MESSAGE, opaqueBlob, ASN1_ANY),
+} ASN1_SEQUENCE_END(GOST_KX_MESSAGE)
+
+IMPLEMENT_ASN1_FUNCTIONS(GOST_KX_MESSAGE)
+
 static int tls_construct_encrypted_extensions(SSL *s, WPACKET *pkt);
 
 /*
@@ -743,15 +743,15 @@ WORK_STATE ossl_statem_server_pre_work(SSL *s, WORK_STATE wst)
     case TLS_ST_SW_CHANGE:
         if (SSL_IS_TLS13(s))
             break;
-        /* Writes to s->session are only safe for initial handshakes */ 
-        if (s->session->cipher == NULL) { 
-            s->session->cipher = s->s3->tmp.new_cipher; 
-        } else if (s->session->cipher != s->s3->tmp.new_cipher) { 
-            SSLfatal(s, SSL_AD_INTERNAL_ERROR, 
-                     SSL_F_OSSL_STATEM_SERVER_PRE_WORK, 
-                     ERR_R_INTERNAL_ERROR); 
-            return WORK_ERROR; 
-        } 
+        /* Writes to s->session are only safe for initial handshakes */
+        if (s->session->cipher == NULL) {
+            s->session->cipher = s->s3->tmp.new_cipher;
+        } else if (s->session->cipher != s->s3->tmp.new_cipher) {
+            SSLfatal(s, SSL_AD_INTERNAL_ERROR,
+                     SSL_F_OSSL_STATEM_SERVER_PRE_WORK,
+                     ERR_R_INTERNAL_ERROR);
+            return WORK_ERROR;
+        }
         if (!s->method->ssl3_enc->setup_key_block(s)) {
             /* SSLfatal() already called */
             return WORK_ERROR;
@@ -955,11 +955,11 @@ WORK_STATE ossl_statem_server_post_work(SSL *s, WORK_STATE wst)
         }
 #endif
         if (SSL_IS_TLS13(s)) {
-            /* TLS 1.3 gets the secret size from the handshake md */ 
-            size_t dummy; 
+            /* TLS 1.3 gets the secret size from the handshake md */
+            size_t dummy;
             if (!s->method->ssl3_enc->generate_master_secret(s,
                         s->master_secret, s->handshake_secret, 0,
-                        &dummy) 
+                        &dummy)
                 || !s->method->ssl3_enc->change_cipher_state(s,
                         SSL3_CC_APPLICATION | SSL3_CHANGE_CIPHER_SERVER_WRITE))
             /* SSLfatal() already called */
@@ -3354,8 +3354,8 @@ static int tls_process_cke_gost(SSL *s, PACKET *pkt)
     const unsigned char *start;
     size_t outlen = 32, inlen;
     unsigned long alg_a;
-    GOST_KX_MESSAGE *pKX = NULL; 
-    const unsigned char *ptr; 
+    GOST_KX_MESSAGE *pKX = NULL;
+    const unsigned char *ptr;
     int ret = 0;
 
     /* Get our certificate private key */
@@ -3397,34 +3397,34 @@ static int tls_process_cke_gost(SSL *s, PACKET *pkt)
         if (EVP_PKEY_derive_set_peer(pkey_ctx, client_pub_pkey) <= 0)
             ERR_clear_error();
     }
- 
-    ptr = PACKET_data(pkt); 
-    /* Some implementations provide extra data in the opaqueBlob 
-     * We have nothing to do with this blob so we just skip it */ 
-    pKX = d2i_GOST_KX_MESSAGE(NULL, &ptr, PACKET_remaining(pkt)); 
-    if (pKX == NULL 
-       || pKX->kxBlob == NULL 
-       || ASN1_TYPE_get(pKX->kxBlob) != V_ASN1_SEQUENCE) { 
-         SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_F_TLS_PROCESS_CKE_GOST, 
-                  SSL_R_DECRYPTION_FAILED); 
-         goto err; 
-    } 
- 
-    if (!PACKET_forward(pkt, ptr - PACKET_data(pkt))) { 
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_PROCESS_CKE_GOST, 
+
+    ptr = PACKET_data(pkt);
+    /* Some implementations provide extra data in the opaqueBlob
+     * We have nothing to do with this blob so we just skip it */
+    pKX = d2i_GOST_KX_MESSAGE(NULL, &ptr, PACKET_remaining(pkt));
+    if (pKX == NULL
+       || pKX->kxBlob == NULL
+       || ASN1_TYPE_get(pKX->kxBlob) != V_ASN1_SEQUENCE) {
+         SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_F_TLS_PROCESS_CKE_GOST,
+                  SSL_R_DECRYPTION_FAILED);
+         goto err;
+    }
+
+    if (!PACKET_forward(pkt, ptr - PACKET_data(pkt))) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_PROCESS_CKE_GOST,
                  SSL_R_DECRYPTION_FAILED);
         goto err;
     }
 
-    if (PACKET_remaining(pkt) != 0) { 
-        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_PROCESS_CKE_GOST, 
+    if (PACKET_remaining(pkt) != 0) {
+        SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_PROCESS_CKE_GOST,
                  SSL_R_DECRYPTION_FAILED);
         goto err;
     }
 
-    inlen = pKX->kxBlob->value.sequence->length; 
-    start = pKX->kxBlob->value.sequence->data; 
- 
+    inlen = pKX->kxBlob->value.sequence->length;
+    start = pKX->kxBlob->value.sequence->data;
+
     if (EVP_PKEY_decrypt(pkey_ctx, premaster_secret, &outlen, start,
                          inlen) <= 0) {
         SSLfatal(s, SSL_AD_DECODE_ERROR, SSL_F_TLS_PROCESS_CKE_GOST,
@@ -3445,7 +3445,7 @@ static int tls_process_cke_gost(SSL *s, PACKET *pkt)
     ret = 1;
  err:
     EVP_PKEY_CTX_free(pkey_ctx);
-    GOST_KX_MESSAGE_free(pKX); 
+    GOST_KX_MESSAGE_free(pKX);
     return ret;
 #else
     /* Should never happen */

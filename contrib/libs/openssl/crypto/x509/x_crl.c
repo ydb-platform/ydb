@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2020 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 1995-2020 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -11,13 +11,13 @@
 #include "internal/cryptlib.h"
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
-#include "crypto/x509.h" 
+#include "crypto/x509.h"
 #include <openssl/x509v3.h>
-#include "x509_local.h" 
+#include "x509_local.h"
 
 static int X509_REVOKED_cmp(const X509_REVOKED *const *a,
                             const X509_REVOKED *const *b);
-static int setup_idp(X509_CRL *crl, ISSUING_DIST_POINT *idp); 
+static int setup_idp(X509_CRL *crl, ISSUING_DIST_POINT *idp);
 
 ASN1_SEQUENCE(X509_REVOKED) = {
         ASN1_EMBED(X509_REVOKED,serialNumber, ASN1_INTEGER),
@@ -155,7 +155,7 @@ static int crl_cb(int operation, ASN1_VALUE **pval, const ASN1_ITEM *it,
     X509_CRL *crl = (X509_CRL *)*pval;
     STACK_OF(X509_EXTENSION) *exts;
     X509_EXTENSION *ext;
-    int idx, i; 
+    int idx, i;
 
     switch (operation) {
     case ASN1_OP_D2I_PRE:
@@ -184,35 +184,35 @@ static int crl_cb(int operation, ASN1_VALUE **pval, const ASN1_ITEM *it,
         break;
 
     case ASN1_OP_D2I_POST:
-        if (!X509_CRL_digest(crl, EVP_sha1(), crl->sha1_hash, NULL)) 
-            crl->flags |= EXFLAG_INVALID; 
+        if (!X509_CRL_digest(crl, EVP_sha1(), crl->sha1_hash, NULL))
+            crl->flags |= EXFLAG_INVALID;
         crl->idp = X509_CRL_get_ext_d2i(crl,
-                                        NID_issuing_distribution_point, &i, 
+                                        NID_issuing_distribution_point, &i,
                                         NULL);
-        if (crl->idp != NULL) { 
-            if (!setup_idp(crl, crl->idp)) 
-                crl->flags |= EXFLAG_INVALID; 
-        } 
-        else if (i != -1) { 
-            crl->flags |= EXFLAG_INVALID; 
-        } 
+        if (crl->idp != NULL) {
+            if (!setup_idp(crl, crl->idp))
+                crl->flags |= EXFLAG_INVALID;
+        }
+        else if (i != -1) {
+            crl->flags |= EXFLAG_INVALID;
+        }
 
         crl->akid = X509_CRL_get_ext_d2i(crl,
-                                         NID_authority_key_identifier, &i, 
+                                         NID_authority_key_identifier, &i,
                                          NULL);
-        if (crl->akid == NULL && i != -1) 
-            crl->flags |= EXFLAG_INVALID; 
+        if (crl->akid == NULL && i != -1)
+            crl->flags |= EXFLAG_INVALID;
 
         crl->crl_number = X509_CRL_get_ext_d2i(crl,
-                                               NID_crl_number, &i, NULL); 
-        if (crl->crl_number == NULL && i != -1) 
-            crl->flags |= EXFLAG_INVALID; 
+                                               NID_crl_number, &i, NULL);
+        if (crl->crl_number == NULL && i != -1)
+            crl->flags |= EXFLAG_INVALID;
 
         crl->base_crl_number = X509_CRL_get_ext_d2i(crl,
-                                                    NID_delta_crl, &i, 
+                                                    NID_delta_crl, &i,
                                                     NULL);
-        if (crl->base_crl_number == NULL && i != -1) 
-            crl->flags |= EXFLAG_INVALID; 
+        if (crl->base_crl_number == NULL && i != -1)
+            crl->flags |= EXFLAG_INVALID;
         /* Delta CRLs must have CRL number */
         if (crl->base_crl_number && !crl->crl_number)
             crl->flags |= EXFLAG_INVALID;
@@ -271,10 +271,10 @@ static int crl_cb(int operation, ASN1_VALUE **pval, const ASN1_ITEM *it,
 
 /* Convert IDP into a more convenient form */
 
-static int setup_idp(X509_CRL *crl, ISSUING_DIST_POINT *idp) 
+static int setup_idp(X509_CRL *crl, ISSUING_DIST_POINT *idp)
 {
     int idp_only = 0;
- 
+
     /* Set various flags according to IDP */
     crl->idp_flags |= IDP_PRESENT;
     if (idp->onlyuser > 0) {
@@ -305,7 +305,7 @@ static int setup_idp(X509_CRL *crl, ISSUING_DIST_POINT *idp)
         crl->idp_reasons &= CRLDP_ALL_REASONS;
     }
 
-    return DIST_POINT_set_dpname(idp->distpoint, X509_CRL_get_issuer(crl)); 
+    return DIST_POINT_set_dpname(idp->distpoint, X509_CRL_get_issuer(crl));
 }
 
 ASN1_SEQUENCE_ref(X509_CRL, crl_cb) = {

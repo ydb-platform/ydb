@@ -123,7 +123,7 @@ namespace NLWTrace {
         TCyclicDepot CyclicDepot;
         TDurationDepot DurationDepot;
         TAtomic LastTrackId;
-        TAtomic LastSpanId; 
+        TAtomic LastSpanId;
         typedef TVector<std::pair<TProbe*, IExecutor*>> TProbes;
         TProbes Probes;
         bool Attached;

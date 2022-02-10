@@ -36,7 +36,7 @@
  *
  */
 
-#include "wp_local.h" 
+#include "wp_local.h"
 #include <string.h>
 
 typedef unsigned char u8;

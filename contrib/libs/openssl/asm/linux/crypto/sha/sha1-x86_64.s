@@ -1421,7 +1421,7 @@ _shaext_shortcut:
 	pshufd	$27,%xmm1,%xmm1
 	movdqu	%xmm0,(%rdi)
 	movd	%xmm1,16(%rdi)
-	.byte	0xf3,0xc3 
+	.byte	0xf3,0xc3
 .cfi_endproc	
 .size	sha1_block_data_order_shaext,.-sha1_block_data_order_shaext
 .type	sha1_block_data_order_ssse3,@function

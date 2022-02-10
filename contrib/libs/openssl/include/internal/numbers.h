@@ -7,8 +7,8 @@
  * https://www.openssl.org/source/license.html
  */
 
-#ifndef OSSL_INTERNAL_NUMBERS_H 
-# define OSSL_INTERNAL_NUMBERS_H 
+#ifndef OSSL_INTERNAL_NUMBERS_H
+# define OSSL_INTERNAL_NUMBERS_H
 
 # include <limits.h>
 

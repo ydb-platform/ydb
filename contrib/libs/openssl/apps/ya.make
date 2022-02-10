@@ -14,7 +14,7 @@ LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
 PEERDIR(
     contrib/libs/openssl
-    contrib/libs/openssl/crypto 
+    contrib/libs/openssl/crypto
 )
 
 ADDINCL(
@@ -23,23 +23,23 @@ ADDINCL(
     contrib/libs/openssl/include
 )
 
-NO_COMPILER_WARNINGS() 
- 
-NO_RUNTIME() 
- 
+NO_COMPILER_WARNINGS()
+
+NO_RUNTIME()
+
 CFLAGS(
-    -DAESNI_ASM 
+    -DAESNI_ASM
     -DECP_NISTZ256_ASM
     -DKECCAK1600_ASM
     -DOPENSSL_BN_ASM_MONT
     -DOPENSSL_CPUID_OBJ
-    -DOPENSSL_PIC 
+    -DOPENSSL_PIC
     -DPOLY1305_ASM
     -DSHA1_ASM
     -DSHA256_ASM
     -DSHA512_ASM
     -DVPAES_ASM
-    -DZLIB 
+    -DZLIB
 )
 
 IF (OS_DARWIN AND ARCH_X86_64 OR OS_LINUX AND ARCH_AARCH64 OR OS_LINUX AND ARCH_X86_64)

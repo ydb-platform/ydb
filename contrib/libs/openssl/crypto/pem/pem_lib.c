@@ -8,7 +8,7 @@
  */
 
 #include <stdio.h>
-#include "crypto/ctype.h" 
+#include "crypto/ctype.h"
 #include <string.h>
 #include "internal/cryptlib.h"
 #include <openssl/buffer.h>
@@ -18,7 +18,7 @@
 #include <openssl/x509.h>
 #include <openssl/pem.h>
 #include <openssl/pkcs12.h>
-#include "crypto/asn1.h" 
+#include "crypto/asn1.h"
 #include <openssl/des.h>
 #include <openssl/engine.h>
 

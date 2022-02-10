@@ -7,8 +7,8 @@
  * https://www.openssl.org/source/license.html
  */
 
-#ifndef OSSL_CRYPTO_S390X_ARCH_H 
-# define OSSL_CRYPTO_S390X_ARCH_H 
+#ifndef OSSL_CRYPTO_S390X_ARCH_H
+# define OSSL_CRYPTO_S390X_ARCH_H
 
 # ifndef __ASSEMBLER__
 

@@ -8,7 +8,7 @@
  */
 
 #include "internal/cryptlib.h"
-#include "bn_local.h" 
+#include "bn_local.h"
 
 /* r must not be a */
 /*

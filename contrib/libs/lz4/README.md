@@ -57,8 +57,8 @@ The following build macro can be selected to adjust source code behavior at comp
 - `LZ4_DISTANCE_MAX` : control the maximum offset that the compressor will allow.
   Set to 65535 by default, which is the maximum value supported by lz4 format.
   Reducing maximum distance will reduce opportunities for LZ4 to find matches,
-  hence will produce a worse compression ratio. 
-  However, a smaller max distance can allow compatibility with specific decoders using limited memory budget. 
+  hence will produce a worse compression ratio.
+  However, a smaller max distance can allow compatibility with specific decoders using limited memory budget.
   This build macro only influences the compressed output of the compressor.
 
 - `LZ4_DISABLE_DEPRECATE_WARNINGS` : invoking a deprecated function will make the compiler generate a warning.
@@ -91,7 +91,7 @@ The following build macro can be selected to adjust source code behavior at comp
 lz4 source code can be amalgamated into a single file.
 One can combine all source code into `lz4_all.c` by using following command:
 ```
-cat lz4.c lz4hc.c lz4frame.c > lz4_all.c 
+cat lz4.c lz4hc.c lz4frame.c > lz4_all.c
 ```
 (`cat` file order is important) then compile `lz4_all.c`.
 All `*.h` files present in `/lib` remain necessary to compile `lz4_all.c`.

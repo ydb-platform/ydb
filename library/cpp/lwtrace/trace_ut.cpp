@@ -739,142 +739,142 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
             manager.HandleTraceResponse(resp, manager.GetProbesMap(), orbit1).IsSuccess,
             true);
     }
- 
-    Y_UNIT_TEST(TrackForkJoin) { 
-        TManager mngr(*Singleton<TProbeRegistry>(), true); 
-        TQuery q; 
-        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END( 
-            Blocks { 
-                ProbeDesc { 
-                    Name: "NoParam" 
-                    Provider: "LWTRACE_UT_PROVIDER" 
-                } 
-                Action { 
-                    RunLogShuttleAction { } 
-                } 
-            } 
+
+    Y_UNIT_TEST(TrackForkJoin) {
+        TManager mngr(*Singleton<TProbeRegistry>(), true);
+        TQuery q;
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
+            Blocks {
+                ProbeDesc {
+                    Name: "NoParam"
+                    Provider: "LWTRACE_UT_PROVIDER"
+                }
+                Action {
+                    RunLogShuttleAction { }
+                }
+            }
         )END", &q);
- 
-        UNIT_ASSERT(parsed); 
-        mngr.New("Query1", q); 
- 
-        { 
-            TOrbit a, b, c, d; 
- 
-            // Graph: 
-            //         c 
-            //        / \ 
-            //     b-f-b-j-b 
-            //    /         \ 
-            // a-f-a-f-a-j-a-j-a 
-            //        \ / 
-            //         d 
-            // 
-            // Merged track: 
-            //   a-f(b)-a-f(d)-a-j(d,1)-d-a-j(b,6)-b-f(c)-b-j(c,1)-c-b-a 
- 
-            LWTRACK(NoParam, a); 
-            a.Fork(b); 
-            LWTRACK(IntParam, a, 1); 
-            a.Fork(d); 
-            LWTRACK(IntParam, a, 2); 
- 
-            LWTRACK(IntParam, b, 3); 
-            b.Fork(c); 
-            LWTRACK(IntParam, b, 4); 
- 
-            LWTRACK(IntParam, c, 5); 
-            b.Join(c); 
-            LWTRACK(IntParam, b, 6); 
- 
-            LWTRACK(IntParam, d, 7); 
-            a.Join(d); 
-            LWTRACK(IntParam, a, 8); 
- 
-            a.Join(b); 
-            LWTRACK(IntParam, a, 9); 
-        } 
- 
-        struct { 
-            void Push(TThread::TId, const TTrackLog& tl) { 
-                UNIT_ASSERT(tl.Items.size() == 16); 
-                UNIT_ASSERT(TString(tl.Items[0].Probe->Event.Name) == "NoParam"); 
-                UNIT_ASSERT(TString(tl.Items[1].Probe->Event.Name) == "Fork"); 
-                UNIT_ASSERT(tl.Items[2].Params.Param[0].Get<ui64>() == 1); 
-                UNIT_ASSERT(TString(tl.Items[3].Probe->Event.Name) == "Fork"); 
-                UNIT_ASSERT(tl.Items[4].Params.Param[0].Get<ui64>() == 2); 
-                UNIT_ASSERT(TString(tl.Items[5].Probe->Event.Name) == "Join"); 
-                UNIT_ASSERT(tl.Items[6].Params.Param[0].Get<ui64>() == 7); 
-                UNIT_ASSERT(tl.Items[7].Params.Param[0].Get<ui64>() == 8); 
-                UNIT_ASSERT(TString(tl.Items[8].Probe->Event.Name) == "Join"); 
-                UNIT_ASSERT(tl.Items[9].Params.Param[0].Get<ui64>() == 3); 
-                UNIT_ASSERT(TString(tl.Items[10].Probe->Event.Name) == "Fork"); 
-                UNIT_ASSERT(tl.Items[11].Params.Param[0].Get<ui64>() == 4); 
-                UNIT_ASSERT(TString(tl.Items[12].Probe->Event.Name) == "Join"); 
-                UNIT_ASSERT(tl.Items[13].Params.Param[0].Get<ui64>() == 5); 
-                UNIT_ASSERT(tl.Items[14].Params.Param[0].Get<ui64>() == 6); 
-                UNIT_ASSERT(tl.Items[15].Params.Param[0].Get<ui64>() == 9); 
-            } 
-        } reader; 
-        mngr.ReadDepot("Query1", reader); 
-    } 
- 
-    Y_UNIT_TEST(TrackForkError) { 
-        TManager mngr(*Singleton<TProbeRegistry>(), true); 
-        TQuery q; 
-        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END( 
-            Blocks { 
-                ProbeDesc { 
-                    Name: "NoParam" 
-                    Provider: "LWTRACE_UT_PROVIDER" 
-                } 
-                Action { 
-                    RunLogShuttleAction { 
-                        MaxTrackLength: 100 
-                    } 
-                } 
-            } 
+
+        UNIT_ASSERT(parsed);
+        mngr.New("Query1", q);
+
+        {
+            TOrbit a, b, c, d;
+
+            // Graph:
+            //         c
+            //        / \
+            //     b-f-b-j-b
+            //    /         \
+            // a-f-a-f-a-j-a-j-a
+            //        \ /
+            //         d
+            //
+            // Merged track:
+            //   a-f(b)-a-f(d)-a-j(d,1)-d-a-j(b,6)-b-f(c)-b-j(c,1)-c-b-a
+
+            LWTRACK(NoParam, a);
+            a.Fork(b);
+            LWTRACK(IntParam, a, 1);
+            a.Fork(d);
+            LWTRACK(IntParam, a, 2);
+
+            LWTRACK(IntParam, b, 3);
+            b.Fork(c);
+            LWTRACK(IntParam, b, 4);
+
+            LWTRACK(IntParam, c, 5);
+            b.Join(c);
+            LWTRACK(IntParam, b, 6);
+
+            LWTRACK(IntParam, d, 7);
+            a.Join(d);
+            LWTRACK(IntParam, a, 8);
+
+            a.Join(b);
+            LWTRACK(IntParam, a, 9);
+        }
+
+        struct {
+            void Push(TThread::TId, const TTrackLog& tl) {
+                UNIT_ASSERT(tl.Items.size() == 16);
+                UNIT_ASSERT(TString(tl.Items[0].Probe->Event.Name) == "NoParam");
+                UNIT_ASSERT(TString(tl.Items[1].Probe->Event.Name) == "Fork");
+                UNIT_ASSERT(tl.Items[2].Params.Param[0].Get<ui64>() == 1);
+                UNIT_ASSERT(TString(tl.Items[3].Probe->Event.Name) == "Fork");
+                UNIT_ASSERT(tl.Items[4].Params.Param[0].Get<ui64>() == 2);
+                UNIT_ASSERT(TString(tl.Items[5].Probe->Event.Name) == "Join");
+                UNIT_ASSERT(tl.Items[6].Params.Param[0].Get<ui64>() == 7);
+                UNIT_ASSERT(tl.Items[7].Params.Param[0].Get<ui64>() == 8);
+                UNIT_ASSERT(TString(tl.Items[8].Probe->Event.Name) == "Join");
+                UNIT_ASSERT(tl.Items[9].Params.Param[0].Get<ui64>() == 3);
+                UNIT_ASSERT(TString(tl.Items[10].Probe->Event.Name) == "Fork");
+                UNIT_ASSERT(tl.Items[11].Params.Param[0].Get<ui64>() == 4);
+                UNIT_ASSERT(TString(tl.Items[12].Probe->Event.Name) == "Join");
+                UNIT_ASSERT(tl.Items[13].Params.Param[0].Get<ui64>() == 5);
+                UNIT_ASSERT(tl.Items[14].Params.Param[0].Get<ui64>() == 6);
+                UNIT_ASSERT(tl.Items[15].Params.Param[0].Get<ui64>() == 9);
+            }
+        } reader;
+        mngr.ReadDepot("Query1", reader);
+    }
+
+    Y_UNIT_TEST(TrackForkError) {
+        TManager mngr(*Singleton<TProbeRegistry>(), true);
+        TQuery q;
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
+            Blocks {
+                ProbeDesc {
+                    Name: "NoParam"
+                    Provider: "LWTRACE_UT_PROVIDER"
+                }
+                Action {
+                    RunLogShuttleAction {
+                        MaxTrackLength: 100
+                    }
+                }
+            }
         )END", &q);
- 
-        UNIT_ASSERT(parsed); 
-        mngr.New("Query1", q); 
- 
-        constexpr size_t n = (100 + 2) / 3 + 1; 
- 
-        { 
-            TVector<TVector<TOrbit>> span; 
- 
-            while (1) { 
-                TVector<TOrbit> orbit(n); 
- 
-                LWTRACK(NoParam, orbit[0]); 
-                if (!orbit[0].HasShuttles()) { 
-                    break; 
-                } 
-                for (size_t i = 1; i < n; i++) { 
-                    if (!orbit[i - 1].Fork(orbit[i])) { 
-                        break; 
-                    } 
-                    LWTRACK(IntParam, orbit[i], i); 
-                } 
- 
-                span.emplace_back(std::move(orbit)); 
-            } 
- 
-            for (auto& orbit: span) { 
-                for (auto it = orbit.rbegin(); it + 1 != orbit.rend(); it++) { 
-                    (it + 1)->Join(*it); 
-                } 
-            } 
-        } 
- 
-        struct { 
-            void Push(TThread::TId, const TTrackLog& tl) { 
-                UNIT_ASSERT(tl.Items.size() == 100); 
-                UNIT_ASSERT(tl.Truncated); 
-            } 
-        } reader; 
-        mngr.ReadDepot("Query1", reader); 
-    } 
+
+        UNIT_ASSERT(parsed);
+        mngr.New("Query1", q);
+
+        constexpr size_t n = (100 + 2) / 3 + 1;
+
+        {
+            TVector<TVector<TOrbit>> span;
+
+            while (1) {
+                TVector<TOrbit> orbit(n);
+
+                LWTRACK(NoParam, orbit[0]);
+                if (!orbit[0].HasShuttles()) {
+                    break;
+                }
+                for (size_t i = 1; i < n; i++) {
+                    if (!orbit[i - 1].Fork(orbit[i])) {
+                        break;
+                    }
+                    LWTRACK(IntParam, orbit[i], i);
+                }
+
+                span.emplace_back(std::move(orbit));
+            }
+
+            for (auto& orbit: span) {
+                for (auto it = orbit.rbegin(); it + 1 != orbit.rend(); it++) {
+                    (it + 1)->Join(*it);
+                }
+            }
+        }
+
+        struct {
+            void Push(TThread::TId, const TTrackLog& tl) {
+                UNIT_ASSERT(tl.Items.size() == 100);
+                UNIT_ASSERT(tl.Truncated);
+            }
+        } reader;
+        mngr.ReadDepot("Query1", reader);
+    }
 #endif // LWTRACE_DISABLE
 }

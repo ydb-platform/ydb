@@ -16,7 +16,7 @@
 # include <openssl/objects.h>
 # include <openssl/rc4.h>
 
-# include "crypto/evp.h" 
+# include "crypto/evp.h"
 
 typedef struct {
     RC4_KEY ks;                 /* working key */

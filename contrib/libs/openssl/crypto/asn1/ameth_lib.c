@@ -13,8 +13,8 @@
 #include <openssl/asn1t.h>
 #include <openssl/x509.h>
 #include <openssl/engine.h>
-#include "crypto/asn1.h" 
-#include "crypto/evp.h" 
+#include "crypto/asn1.h"
+#include "crypto/evp.h"
 
 #include "standard_methods.h"
 

@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <openssl/objects.h>
 #include "internal/nelem.h"
-#include "ssl_local.h" 
+#include "ssl_local.h"
 #include <openssl/md5.h>
 #include <openssl/dh.h>
 #include <openssl/rand.h>
@@ -4631,7 +4631,7 @@ int ssl_generate_master_secret(SSL *s, unsigned char *pms, size_t pmslen,
         s->s3->tmp.psk = NULL;
         s->s3->tmp.psklen = 0;
         if (!s->method->ssl3_enc->generate_master_secret(s,
-                    s->session->master_key, pskpms, pskpmslen, 
+                    s->session->master_key, pskpms, pskpmslen,
                     &s->session->master_key_length)) {
             OPENSSL_clear_free(pskpms, pskpmslen);
             /* SSLfatal() already called */

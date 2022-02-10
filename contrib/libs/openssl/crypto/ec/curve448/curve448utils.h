@@ -10,8 +10,8 @@
  * Originally written by Mike Hamburg
  */
 
-#ifndef OSSL_CRYPTO_EC_CURVE448UTILS_H 
-# define OSSL_CRYPTO_EC_CURVE448UTILS_H 
+#ifndef OSSL_CRYPTO_EC_CURVE448UTILS_H
+# define OSSL_CRYPTO_EC_CURVE448UTILS_H
 
 # include <openssl/e_os2.h>
 

@@ -14,10 +14,10 @@
 #include <string.h>
 #include <assert.h>
 #include <openssl/aes.h>
-#include "crypto/evp.h" 
-#include "modes_local.h" 
+#include "crypto/evp.h"
+#include "modes_local.h"
 #include <openssl/rand.h>
-#include "evp_local.h" 
+#include "evp_local.h"
 #include "sanitizers.h"
 
 typedef struct {
@@ -177,7 +177,7 @@ static void ctr64_inc(unsigned char *counter)
 # define HWAES_xts_decrypt aes_p8_xts_decrypt
 #endif
 
-#if     defined(OPENSSL_CPUID_OBJ) &&                   (  \ 
+#if     defined(OPENSSL_CPUID_OBJ) &&                   (  \
         ((defined(__i386)       || defined(__i386__)    || \
           defined(_M_IX86)) && defined(OPENSSL_IA32_SSE2))|| \
         defined(__x86_64)       || defined(__x86_64__)  || \
@@ -1130,7 +1130,7 @@ typedef struct {
                 } icv;
                 unsigned char k[32];
             } kmac_param;
-            /* KMAC-AES parameter block - end */ 
+            /* KMAC-AES parameter block - end */
 
             union {
                 unsigned long long g[2];
@@ -1433,7 +1433,7 @@ static int s390x_aes_ctr_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out,
                                     (OPENSSL_s390xcap_P.kma[0] &	\
                                      S390X_CAPBIT(S390X_AES_256)))
 
-/* iv + padding length for iv lengths != 12 */ 
+/* iv + padding length for iv lengths != 12 */
 # define S390X_gcm_ivpadlen(i)	((((i) + 15) >> 4 << 4) + 16)
 
 /*-

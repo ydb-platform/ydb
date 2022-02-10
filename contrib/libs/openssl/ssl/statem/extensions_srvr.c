@@ -8,8 +8,8 @@
  */
 
 #include <openssl/ocsp.h>
-#include "../ssl_local.h" 
-#include "statem_local.h" 
+#include "../ssl_local.h"
+#include "statem_local.h"
 #include "internal/cryptlib.h"
 
 #define COOKIE_STATE_FORMAT_VERSION     0
@@ -127,10 +127,10 @@ int tls_parse_ctos_server_name(SSL *s, PACKET *pkt, unsigned int context,
         return 0;
     }
 
-    /* 
-     * In TLSv1.2 and below the SNI is associated with the session. In TLSv1.3 
-     * we always use the SNI value from the handshake. 
-     */ 
+    /*
+     * In TLSv1.2 and below the SNI is associated with the session. In TLSv1.3
+     * we always use the SNI value from the handshake.
+     */
     if (!s->hit || SSL_IS_TLS13(s)) {
         if (PACKET_remaining(&hostname) > TLSEXT_MAXLEN_host_name) {
             SSLfatal(s, SSL_AD_UNRECOGNIZED_NAME,
@@ -159,13 +159,13 @@ int tls_parse_ctos_server_name(SSL *s, PACKET *pkt, unsigned int context,
         }
 
         s->servername_done = 1;
-    } else { 
+    } else {
         /*
-         * In TLSv1.2 and below we should check if the SNI is consistent between 
-         * the initial handshake and the resumption. In TLSv1.3 SNI is not 
-         * associated with the session. 
-         */ 
-        /* 
+         * In TLSv1.2 and below we should check if the SNI is consistent between
+         * the initial handshake and the resumption. In TLSv1.3 SNI is not
+         * associated with the session.
+         */
+        /*
          * TODO(openssl-team): if the SNI doesn't match, we MUST
          * fall back to a full handshake.
          */
@@ -1335,16 +1335,16 @@ EXT_RETURN tls_construct_stoc_server_name(SSL *s, WPACKET *pkt,
                                           unsigned int context, X509 *x,
                                           size_t chainidx)
 {
-    if (s->servername_done != 1) 
+    if (s->servername_done != 1)
         return EXT_RETURN_NOT_SENT;
 
-    /* 
-     * Prior to TLSv1.3 we ignore any SNI in the current handshake if resuming. 
-     * We just use the servername from the initial handshake. 
-     */ 
-    if (s->hit && !SSL_IS_TLS13(s)) 
-        return EXT_RETURN_NOT_SENT; 
- 
+    /*
+     * Prior to TLSv1.3 we ignore any SNI in the current handshake if resuming.
+     * We just use the servername from the initial handshake.
+     */
+    if (s->hit && !SSL_IS_TLS13(s))
+        return EXT_RETURN_NOT_SENT;
+
     if (!WPACKET_put_bytes_u16(pkt, TLSEXT_TYPE_server_name)
             || !WPACKET_put_bytes_u16(pkt, 0)) {
         SSLfatal(s, SSL_AD_INTERNAL_ERROR, SSL_F_TLS_CONSTRUCT_STOC_SERVER_NAME,

@@ -1,5 +1,5 @@
 /*
- * Copyright 1995-2020 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 1995-2020 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -13,16 +13,16 @@
 #include "internal/cryptlib.h"
 #include <openssl/hmac.h>
 #include <openssl/opensslconf.h>
-#include "hmac_local.h" 
+#include "hmac_local.h"
 
 int HMAC_Init_ex(HMAC_CTX *ctx, const void *key, int len,
                  const EVP_MD *md, ENGINE *impl)
 {
-    int rv = 0, reset = 0; 
-    int i, j; 
+    int rv = 0, reset = 0;
+    int i, j;
     unsigned char pad[HMAC_MAX_MD_CBLOCK_SIZE];
-    unsigned int keytmp_length; 
-    unsigned char keytmp[HMAC_MAX_MD_CBLOCK_SIZE]; 
+    unsigned int keytmp_length;
+    unsigned char keytmp[HMAC_MAX_MD_CBLOCK_SIZE];
 
     /* If we are changing MD then we must have a key */
     if (md != NULL && md != ctx->md && (key == NULL || len < 0))
@@ -45,34 +45,34 @@ int HMAC_Init_ex(HMAC_CTX *ctx, const void *key, int len,
 
     if (key != NULL) {
         reset = 1;
- 
+
         j = EVP_MD_block_size(md);
-        if (!ossl_assert(j <= (int)sizeof(keytmp))) 
+        if (!ossl_assert(j <= (int)sizeof(keytmp)))
             return 0;
         if (j < len) {
             if (!EVP_DigestInit_ex(ctx->md_ctx, md, impl)
                     || !EVP_DigestUpdate(ctx->md_ctx, key, len)
-                    || !EVP_DigestFinal_ex(ctx->md_ctx, keytmp, 
-                                           &keytmp_length)) 
+                    || !EVP_DigestFinal_ex(ctx->md_ctx, keytmp,
+                                           &keytmp_length))
                 return 0;
         } else {
-            if (len < 0 || len > (int)sizeof(keytmp)) 
+            if (len < 0 || len > (int)sizeof(keytmp))
                 return 0;
-            memcpy(keytmp, key, len); 
-            keytmp_length = len; 
+            memcpy(keytmp, key, len);
+            keytmp_length = len;
         }
-        if (keytmp_length != HMAC_MAX_MD_CBLOCK_SIZE) 
-            memset(&keytmp[keytmp_length], 0, 
-                   HMAC_MAX_MD_CBLOCK_SIZE - keytmp_length); 
+        if (keytmp_length != HMAC_MAX_MD_CBLOCK_SIZE)
+            memset(&keytmp[keytmp_length], 0,
+                   HMAC_MAX_MD_CBLOCK_SIZE - keytmp_length);
 
         for (i = 0; i < HMAC_MAX_MD_CBLOCK_SIZE; i++)
-            pad[i] = 0x36 ^ keytmp[i]; 
+            pad[i] = 0x36 ^ keytmp[i];
         if (!EVP_DigestInit_ex(ctx->i_ctx, md, impl)
                 || !EVP_DigestUpdate(ctx->i_ctx, pad, EVP_MD_block_size(md)))
             goto err;
 
         for (i = 0; i < HMAC_MAX_MD_CBLOCK_SIZE; i++)
-            pad[i] = 0x5c ^ keytmp[i]; 
+            pad[i] = 0x5c ^ keytmp[i];
         if (!EVP_DigestInit_ex(ctx->o_ctx, md, impl)
                 || !EVP_DigestUpdate(ctx->o_ctx, pad, EVP_MD_block_size(md)))
             goto err;
@@ -81,10 +81,10 @@ int HMAC_Init_ex(HMAC_CTX *ctx, const void *key, int len,
         goto err;
     rv = 1;
  err:
-    if (reset) { 
-        OPENSSL_cleanse(keytmp, sizeof(keytmp)); 
+    if (reset) {
+        OPENSSL_cleanse(keytmp, sizeof(keytmp));
         OPENSSL_cleanse(pad, sizeof(pad));
-    } 
+    }
     return rv;
 }
 

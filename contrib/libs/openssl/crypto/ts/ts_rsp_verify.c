@@ -12,7 +12,7 @@
 #include <openssl/objects.h>
 #include <openssl/ts.h>
 #include <openssl/pkcs7.h>
-#include "ts_local.h" 
+#include "ts_local.h"
 
 static int ts_verify_cert(X509_STORE *store, STACK_OF(X509) *untrusted,
                           X509 *signer, STACK_OF(X509) **chain);
@@ -292,9 +292,9 @@ static int ts_find_cert(STACK_OF(ESS_CERT_ID) *cert_ids, X509 *cert)
     /* Recompute SHA1 hash of certificate if necessary (side effect). */
     X509_check_purpose(cert, -1, 0);
 
-    if (!X509_digest(cert, EVP_sha1(), cert_sha1, NULL)) 
-        return -1; 
- 
+    if (!X509_digest(cert, EVP_sha1(), cert_sha1, NULL))
+        return -1;
+
     /* Look for cert in the cert_ids vector. */
     for (i = 0; i < sk_ESS_CERT_ID_num(cert_ids); ++i) {
         ESS_CERT_ID *cid = sk_ESS_CERT_ID_value(cert_ids, i);
@@ -327,8 +327,8 @@ static int ts_find_cert_v2(STACK_OF(ESS_CERT_ID_V2) *cert_ids, X509 *cert)
         else
             md = EVP_sha256();
 
-        if (!X509_digest(cert, md, cert_digest, &len)) 
-            return -1; 
+        if (!X509_digest(cert, md, cert_digest, &len))
+            return -1;
         if (cid->hash->length != (int)len)
             return -1;
 

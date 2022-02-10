@@ -20,16 +20,16 @@ namespace NLWTrace {
     class alignas(8) IShuttle: public TThrRefBase {
     private:
         ui64 TraceIdx;
-        ui64 SpanId; 
-        ui64 ParentSpanId = 0; 
+        ui64 SpanId;
+        ui64 ParentSpanId = 0;
         TAtomic Status = 0;
         static constexpr ui64 DeadFlag = 0x1ull;
         TShuttlePtr Next;
 
     public:
-        explicit IShuttle(ui64 traceIdx, ui64 spanId) 
+        explicit IShuttle(ui64 traceIdx, ui64 spanId)
             : TraceIdx(traceIdx)
-            , SpanId(spanId) 
+            , SpanId(spanId)
         {
         }
 
@@ -40,18 +40,18 @@ namespace NLWTrace {
             return TraceIdx;
         }
 
-        ui64 GetSpanId() const { 
-            return SpanId; 
-        } 
- 
-        ui64 GetParentSpanId() const { 
-            return ParentSpanId; 
-        } 
- 
-        void SetParentSpanId(ui64 parentSpanId) { 
-            ParentSpanId = parentSpanId; 
-        } 
- 
+        ui64 GetSpanId() const {
+            return SpanId;
+        }
+
+        ui64 GetParentSpanId() const {
+            return ParentSpanId;
+        }
+
+        void SetParentSpanId(ui64 parentSpanId) {
+            ParentSpanId = parentSpanId;
+        }
+
         template <class F, class R>
         R UnlessDead(F func, R dead) {
             while (true) {
@@ -113,12 +113,12 @@ namespace NLWTrace {
             UnlessDead([&] {
                 DoDrop();
             });
-            return Detach(); // Detached from orbit on Drop 
-        } 
- 
-        TShuttlePtr Detach() { 
+            return Detach(); // Detached from orbit on Drop
+        }
+
+        TShuttlePtr Detach() {
             TShuttlePtr result;
-            result.Swap(Next); 
+            result.Swap(Next);
             return result;
         }
 
@@ -148,25 +148,25 @@ namespace NLWTrace {
             return UnlessDead([&] {
                 return DoFork(child);
             }, true);
-        } 
- 
-        bool Join(TShuttlePtr& child) { 
+        }
+
+        bool Join(TShuttlePtr& child) {
             return UnlessDead([&] {
                 return DoJoin(child);
             }, false);
-        } 
- 
-        bool IsDead() { 
-            return AtomicGet(Status) & DeadFlag; 
-        } 
- 
+        }
+
+        bool IsDead() {
+            return AtomicGet(Status) & DeadFlag;
+        }
+
     protected:
         virtual bool DoAddProbe(TProbe* probe, const TParams& params, ui64 timestamp) = 0;
         virtual void DoEndOfTrack() = 0;
         virtual void DoDrop() = 0;
         virtual void DoSerialize(TShuttleTrace& msg) = 0;
         virtual bool DoFork(TShuttlePtr& child) = 0;
-        virtual bool DoJoin(const TShuttlePtr& child) = 0; 
+        virtual bool DoJoin(const TShuttlePtr& child) = 0;
     };
 
     // Not thread-safe orbit
@@ -274,8 +274,8 @@ namespace NLWTrace {
                 return false;
             });
         }
- 
-        bool Fork(TOrbit& child) { 
+
+        bool Fork(TOrbit& child) {
             return NotConcurrent([&] (TShuttlePtr& head) {
                 return child.NotConcurrent([&] (TShuttlePtr& cHead) {
                     bool result = true;
@@ -291,9 +291,9 @@ namespace NLWTrace {
                     return result;
                 });
             });
-        } 
- 
-        void Join(TOrbit& child) { 
+        }
+
+        void Join(TOrbit& child) {
             NotConcurrent([&] (TShuttlePtr& head) {
                 child.NotConcurrent([&] (TShuttlePtr& cHead) {
                     TShuttlePtr* ref = &head;
@@ -307,21 +307,21 @@ namespace NLWTrace {
                     }
                 });
             });
-        } 
- 
+        }
+
     private:
         static void Join(TShuttlePtr& head, IShuttle* parent) {
             TShuttlePtr* ref = &head;
-            while (IShuttle* child = ref->Get()) { 
-                if (parent->GetTraceIdx() == child->GetTraceIdx() && parent->GetSpanId() == child->GetParentSpanId()) { 
-                    TShuttlePtr next = child->Detach(); 
-                    parent->Join(*ref); 
-                    *ref = next; 
-                } else { 
-                    ref = &child->GetNext(); 
-                } 
-            } 
-        } 
+            while (IShuttle* child = ref->Get()) {
+                if (parent->GetTraceIdx() == child->GetTraceIdx() && parent->GetSpanId() == child->GetParentSpanId()) {
+                    TShuttlePtr next = child->Detach();
+                    parent->Join(*ref);
+                    *ref = next;
+                } else {
+                    ref = &child->GetNext();
+                }
+            }
+        }
 
         template <class TFunc>
         typename std::invoke_result<TFunc, TShuttlePtr&>::type NotConcurrent(TFunc func) {

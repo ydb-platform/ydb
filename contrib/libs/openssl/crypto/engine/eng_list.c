@@ -8,7 +8,7 @@
  * https://www.openssl.org/source/license.html
  */
 
-#include "eng_local.h" 
+#include "eng_local.h"
 
 /*
  * The linked-list of pointers to engine types. engine_list_head incorporates

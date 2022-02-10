@@ -13,7 +13,7 @@
 #include <openssl/asn1.h>
 #include <openssl/evp.h>
 #include <openssl/x509.h>
-#include "crypto/x509.h" 
+#include "crypto/x509.h"
 #include <openssl/ocsp.h>
 #include <openssl/rsa.h>
 #include <openssl/dsa.h>
@@ -362,7 +362,7 @@ int X509_pubkey_digest(const X509 *data, const EVP_MD *type,
 int X509_digest(const X509 *data, const EVP_MD *type, unsigned char *md,
                 unsigned int *len)
 {
-    if (type == EVP_sha1() && (data->ex_flags & EXFLAG_SET) != 0 
+    if (type == EVP_sha1() && (data->ex_flags & EXFLAG_SET) != 0
             && (data->ex_flags & EXFLAG_NO_FINGERPRINT) == 0) {
         /* Asking for SHA1 and we already computed it. */
         if (len != NULL)
@@ -377,8 +377,8 @@ int X509_digest(const X509 *data, const EVP_MD *type, unsigned char *md,
 int X509_CRL_digest(const X509_CRL *data, const EVP_MD *type,
                     unsigned char *md, unsigned int *len)
 {
-    if (type == EVP_sha1() && (data->flags & EXFLAG_SET) != 0 
-            && (data->flags & EXFLAG_INVALID) == 0) { 
+    if (type == EVP_sha1() && (data->flags & EXFLAG_SET) != 0
+            && (data->flags & EXFLAG_INVALID) == 0) {
         /* Asking for SHA1; always computed in CRL d2i. */
         if (len != NULL)
             *len = sizeof(data->sha1_hash);

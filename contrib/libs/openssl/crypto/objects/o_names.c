@@ -17,8 +17,8 @@
 #include <openssl/safestack.h>
 #include <openssl/e_os2.h>
 #include "internal/thread_once.h"
-#include "crypto/lhash.h" 
-#include "obj_local.h" 
+#include "crypto/lhash.h"
+#include "obj_local.h"
 #include "e_os.h"
 
 /*

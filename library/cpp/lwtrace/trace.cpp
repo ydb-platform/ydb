@@ -631,9 +631,9 @@ namespace NLWTrace {
                 }
             } else if (action.HasRunLogShuttleAction()) {
                 if (Query.GetLogDurationUs()) {
-                    actExec.Reset(new TRunLogShuttleActionExecutor<TDurationDepot>(TraceIdx, action.GetRunLogShuttleAction(), &DurationDepot, &LastTrackId, &LastSpanId)); 
+                    actExec.Reset(new TRunLogShuttleActionExecutor<TDurationDepot>(TraceIdx, action.GetRunLogShuttleAction(), &DurationDepot, &LastTrackId, &LastSpanId));
                 } else {
-                    actExec.Reset(new TRunLogShuttleActionExecutor<TCyclicDepot>(TraceIdx, action.GetRunLogShuttleAction(), &CyclicDepot, &LastTrackId, &LastSpanId)); 
+                    actExec.Reset(new TRunLogShuttleActionExecutor<TCyclicDepot>(TraceIdx, action.GetRunLogShuttleAction(), &CyclicDepot, &LastTrackId, &LastSpanId));
                 }
             } else if (action.HasEditLogShuttleAction()) {
                 if (Query.GetLogDurationUs()) {
@@ -863,7 +863,7 @@ namespace NLWTrace {
         , CyclicDepot(query.GetPerThreadLogSize() ? query.GetPerThreadLogSize() : 1000)
         , DurationDepot(StoreDuration)
         , LastTrackId(0)
-        , LastSpanId(0) 
+        , LastSpanId(0)
         , Attached(true)
         , Query(query)
     {
@@ -993,7 +993,7 @@ namespace NLWTrace {
     TManager::TManager(TProbeRegistry& registry, bool allowDestructiveActions)
         : Registry(registry)
         , DestructiveActionsAllowed(allowDestructiveActions)
-        , SerializingExecutor(new TRunLogShuttleActionExecutor<TCyclicDepot>(0, {}, nullptr, nullptr, nullptr)) 
+        , SerializingExecutor(new TRunLogShuttleActionExecutor<TCyclicDepot>(0, {}, nullptr, nullptr, nullptr))
     {
     }
 

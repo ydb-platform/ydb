@@ -8,8 +8,8 @@
  */
 
 #include <stdio.h>
-#include "ssl_local.h" 
-#include "packet_local.h" 
+#include "ssl_local.h"
+#include "packet_local.h"
 #include <openssl/bio.h>
 #include <openssl/objects.h>
 #include <openssl/evp.h>

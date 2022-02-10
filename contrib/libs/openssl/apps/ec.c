@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 The OpenSSL Project Authors. All Rights Reserved. 
+ * Copyright 2002-2020 The OpenSSL Project Authors. All Rights Reserved.
  *
  * Licensed under the OpenSSL license (the "License").  You may not use
  * this file except in compliance with the License.  You can obtain a copy
@@ -8,15 +8,15 @@
  */
 
 #include <openssl/opensslconf.h>
-#include <stdio.h> 
-#include <stdlib.h> 
-#include <string.h> 
-#include "apps.h" 
-#include "progs.h" 
-#include <openssl/bio.h> 
-#include <openssl/err.h> 
-#include <openssl/evp.h> 
-#include <openssl/pem.h> 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "apps.h"
+#include "progs.h"
+#include <openssl/bio.h>
+#include <openssl/err.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
 
 static OPT_PAIR conv_forms[] = {
     {"compressed", POINT_CONVERSION_COMPRESSED},
@@ -58,9 +58,9 @@ const OPTIONS ec_options[] = {
      "Specifies the way the ec parameters are encoded"},
     {"conv_form", OPT_CONV_FORM, 's', "Specifies the point conversion form "},
     {"", OPT_CIPHER, '-', "Any supported cipher"},
-#ifndef OPENSSL_NO_ENGINE 
+#ifndef OPENSSL_NO_ENGINE
     {"engine", OPT_ENGINE, 's', "Use engine, possibly a hardware device"},
-#endif 
+#endif
     {NULL}
 };
 

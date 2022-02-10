@@ -39,16 +39,16 @@ namespace NTabletFlatExecutor {
             TSeat * const Seat = nullptr;
         };
 
-        TMemory( 
-                NUtil::ILogger *logger, 
-                IOps *ops, 
+        TMemory(
+                NUtil::ILogger *logger,
+                IOps *ops,
                 TIntrusivePtr<TIdEmitter> emitter,
-                TString taskNameSuffix = { }) 
+                TString taskNameSuffix = { })
             : Logger(logger)
             , Ops(ops)
-            , Emitter(emitter) 
+            , Emitter(emitter)
             , Profiles(new TResourceProfiles)
-            , TaskNameSuffix(std::move(taskNameSuffix)) 
+            , TaskNameSuffix(std::move(taskNameSuffix))
         {
 
         }
@@ -77,7 +77,7 @@ namespace NTabletFlatExecutor {
 
             const auto type = GetTaskType(seat.CurrentMemoryLimit);
 
-            ui64 taskId = seat.TaskId ? seat.TaskId : Emitter->Do(); 
+            ui64 taskId = seat.TaskId ? seat.TaskId : Emitter->Do();
 
             if (auto logl = Logger->Log(ELnLev::Debug)) {
                 logl
@@ -95,7 +95,7 @@ namespace NTabletFlatExecutor {
             } else {
                 Send(new TEvs::TEvSubmitTask(
                          taskId,
-                         NFmt::Ln(seat) + TaskNameSuffix, 
+                         NFmt::Ln(seat) + TaskNameSuffix,
                          {{ 0, seat.CurrentMemoryLimit }},
                          type, MyPrio, new TCookie(&seat)));
             }
@@ -421,8 +421,8 @@ namespace NTabletFlatExecutor {
         TUsed Used;
         THashSet<TIntrusivePtr<TMemoryGCToken>, TPtrHash> Tokens;
         TIntrusivePtr<TResourceProfiles> Profiles;
-        TString TaskNameSuffix; 
- 
+        TString TaskNameSuffix;
+
     public:
         TResourceProfiles::TPtr Profile;
     };

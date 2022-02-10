@@ -17,9 +17,9 @@ void DeclareShards(TTxState& txState, TTxId txId, TPathId pathId,
 {
     txState.Shards.reserve(count);
     for (ui64 i = 0; i < count; ++i) {
-        auto shardId = ss->RegisterShardInfo( 
-            TShardInfo(txId, pathId, type) 
-                .WithBindedChannels(channelsBindings)); 
+        auto shardId = ss->RegisterShardInfo(
+            TShardInfo(txId, pathId, type)
+                .WithBindedChannels(channelsBindings));
         txState.Shards.emplace_back(shardId, type, TTxState::CreateParts);
     }
 }
@@ -261,9 +261,9 @@ public:
 
         TString errStr;
 
-        if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateSubDomain, userAttrsDetails, errStr) || 
-            !userAttrs->CheckLimits(errStr)) 
-        { 
+        if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateSubDomain, userAttrsDetails, errStr) ||
+            !userAttrs->CheckLimits(errStr))
+        {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
@@ -320,14 +320,14 @@ public:
             alter->AddPrivateShard(shard.Idx);
         }
 
-        if (settings.HasDeclaredSchemeQuotas()) { 
-            alter->SetDeclaredSchemeQuotas(settings.GetDeclaredSchemeQuotas()); 
-        } 
- 
-        if (settings.HasDatabaseQuotas()) { 
-            alter->SetDatabaseQuotas(settings.GetDatabaseQuotas()); 
-        } 
- 
+        if (settings.HasDeclaredSchemeQuotas()) {
+            alter->SetDeclaredSchemeQuotas(settings.GetDeclaredSchemeQuotas());
+        }
+
+        if (settings.HasDatabaseQuotas()) {
+            alter->SetDatabaseQuotas(settings.GetDatabaseQuotas());
+        }
+
         Y_VERIFY(!context.SS->SubDomains.contains(newNode->PathId));
         auto& subDomainInfo = context.SS->SubDomains[newNode->PathId];
         subDomainInfo = new TSubDomainInfo();
@@ -337,7 +337,7 @@ public:
         context.SS->PersistUpdateNextShardIdx(db);
         context.SS->PersistSubDomain(db, newNode->PathId, *subDomainInfo);
         context.SS->PersistSubDomainAlter(db, newNode->PathId, *alter);
-        context.SS->IncrementPathDbRefCount(newNode->PathId); 
+        context.SS->IncrementPathDbRefCount(newNode->PathId);
 
         if (parentPath.Base()->HasActiveChanges()) {
             TTxId parentTxId = parentPath.Base()->PlannedToCreate() ? parentPath.Base()->CreateTxId : parentPath.Base()->LastTxId;

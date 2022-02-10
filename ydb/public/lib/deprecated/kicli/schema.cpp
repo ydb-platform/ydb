@@ -95,15 +95,15 @@ void TSchemaObject::Drop() {
     case EPathType::PersQueueGroup:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropPersQueueGroup);
         break;
-    case EPathType::BlockStoreVolume: 
+    case EPathType::BlockStoreVolume:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropBlockStoreVolume);
-        break; 
+        break;
     case EPathType::FileStore:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropFileStore);
         break;
-    case EPathType::Kesus: 
+    case EPathType::Kesus:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropKesus);
-        break; 
+        break;
     case EPathType::SolomonVolume:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSolomonVolume);
         break;
@@ -113,9 +113,9 @@ void TSchemaObject::Drop() {
     case EPathType::OlapTable:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable);
         break;
-    case EPathType::Sequence: 
+    case EPathType::Sequence:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropSequence);
-        break; 
+        break;
     case EPathType::Replication:
         drop.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication);
         break;
@@ -187,11 +187,11 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
     case NKikimrSchemeOp::EPathTypeRtmrVolume:
         return TSchemaObject::EPathType::RtmrVolume;
     case NKikimrSchemeOp::EPathTypeBlockStoreVolume:
-        return TSchemaObject::EPathType::BlockStoreVolume; 
+        return TSchemaObject::EPathType::BlockStoreVolume;
     case NKikimrSchemeOp::EPathTypeFileStore:
         return TSchemaObject::EPathType::FileStore;
     case NKikimrSchemeOp::EPathTypeKesus:
-        return TSchemaObject::EPathType::Kesus; 
+        return TSchemaObject::EPathType::Kesus;
     case NKikimrSchemeOp::EPathTypeSolomonVolume:
         return TSchemaObject::EPathType::SolomonVolume;
     case NKikimrSchemeOp::EPathTypeColumnStore:
@@ -199,7 +199,7 @@ static TSchemaObject::EPathType GetType(const NKikimrSchemeOp::TDirEntry& entry)
     case NKikimrSchemeOp::EPathTypeColumnTable:
         return TSchemaObject::EPathType::OlapTable;
     case NKikimrSchemeOp::EPathTypeSequence:
-        return TSchemaObject::EPathType::Sequence; 
+        return TSchemaObject::EPathType::Sequence;
     case NKikimrSchemeOp::EPathTypeReplication:
         return TSchemaObject::EPathType::Replication;
     case NKikimrSchemeOp::EPathTypeTableIndex:

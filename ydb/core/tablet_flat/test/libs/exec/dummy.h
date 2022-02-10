@@ -10,11 +10,11 @@ namespace NKikimr {
 namespace NFake {
     using TExecuted = NTabletFlatExecutor::TTabletExecutedFlat;
 
-    class TDummySnapshotContext : public NTabletFlatExecutor::TTableSnapshotContext { 
-    public: 
-        virtual NFake::TEvExecute* OnFinished() = 0; 
-    }; 
- 
+    class TDummySnapshotContext : public NTabletFlatExecutor::TTableSnapshotContext {
+    public:
+        virtual NFake::TEvExecute* OnFinished() = 0;
+    };
+
     class TDummy : public ::NActors::IActor, public TExecuted {
         enum EState {
             Boot    = 1,
@@ -47,22 +47,22 @@ namespace NFake {
             if (auto *ev = eh->CastAsLocal<NFake::TEvExecute>()) {
                 Y_VERIFY(State == EState::Work, "Cannot handle TX now");
 
-                for (auto& f : ev->Funcs) { 
-                    Execute(f.Release(), ctx); 
-                } 
-            } else if (auto *ev = eh->CastAsLocal<NFake::TEvCompact>()) { 
-                Y_VERIFY(State == EState::Work, "Cannot handle compaction now"); 
- 
-                if (ev->MemOnly) { 
-                    Executor()->CompactMemTable(ev->Table); 
-                } else { 
-                    Executor()->CompactTable(ev->Table); 
-                } 
-                Send(Owner, new TEvents::TEvWakeup); 
+                for (auto& f : ev->Funcs) {
+                    Execute(f.Release(), ctx);
+                }
+            } else if (auto *ev = eh->CastAsLocal<NFake::TEvCompact>()) {
+                Y_VERIFY(State == EState::Work, "Cannot handle compaction now");
+
+                if (ev->MemOnly) {
+                    Executor()->CompactMemTable(ev->Table);
+                } else {
+                    Executor()->CompactTable(ev->Table);
+                }
+                Send(Owner, new TEvents::TEvWakeup);
             } else if (eh->CastAsLocal<NFake::TEvReturn>()) {
                 Send(Owner, new TEvents::TEvWakeup);
-            } else if (auto *ev = eh->CastAsLocal<NFake::TEvCall>()) { 
-                ev->Callback(Executor(), ctx); 
+            } else if (auto *ev = eh->CastAsLocal<NFake::TEvCall>()) {
+                ev->Callback(Executor(), ctx);
             } else if (eh->CastAsLocal<TEvents::TEvPoison>()) {
                 if (std::exchange(State, EState::Stop) != EState::Stop) {
                     /* This hack stops TExecutor before TOwner death. TOwner
@@ -116,17 +116,17 @@ namespace NFake {
                 Send(Owner, new NFake::TEvCompacted(table));
         }
 
-        void SnapshotComplete( 
-                TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> rawSnapContext, 
-                const TActorContext&) override 
-        { 
-            if (auto* snapContext = dynamic_cast<TDummySnapshotContext*>(rawSnapContext.Get())) { 
-                Send(SelfId(), snapContext->OnFinished()); 
-            } else { 
-                Y_FAIL("Unsupported snapshot context"); 
-            } 
-        } 
- 
+        void SnapshotComplete(
+                TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> rawSnapContext,
+                const TActorContext&) override
+        {
+            if (auto* snapContext = dynamic_cast<TDummySnapshotContext*>(rawSnapContext.Get())) {
+                Send(SelfId(), snapContext->OnFinished());
+            } else {
+                Y_FAIL("Unsupported snapshot context");
+            }
+        }
+
     private:
         TActorId Owner;
         const ui32 Flags = 0;

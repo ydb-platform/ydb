@@ -59,11 +59,11 @@ namespace NBoot {
                 ++Skip, Queue.pop_front();
             }
 
-            Y_VERIFY(Queue || !Pending, "TGCLog boot actor has lost entries"); 
+            Y_VERIFY(Queue || !Pending, "TGCLog boot actor has lost entries");
 
-            if (!Queue) { 
-                Env->Finish(this); 
-            } 
+            if (!Queue) {
+                Env->Finish(this);
+            }
         }
 
         void Apply(ui32 gen, ui32 step, TArrayRef<const char> body) noexcept

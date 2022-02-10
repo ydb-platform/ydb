@@ -5,7 +5,7 @@
 #include "flat_update_op.h"
 #include "flat_part_scheme.h"
 #include "flat_row_nulls.h"
-#include "util_deref.h" 
+#include "util_deref.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -54,16 +54,16 @@ public:
         return Offset;
     }
 
-    TRecIdx End() const noexcept 
-    { 
-        return Upper; 
-    } 
- 
-    const TRecord* GetRecord() const noexcept 
-    { 
-        return Record; 
-    } 
- 
+    TRecIdx End() const noexcept
+    {
+        return Upper;
+    }
+
+    const TRecord* GetRecord() const noexcept
+    {
+        return Record;
+    }
+
     bool operator==(const TIterator& o) const {
         return Offset == o.Offset;
     }
@@ -72,22 +72,22 @@ public:
         return Offset != o.Offset;
     }
 
-    bool operator<(const TIterator& rhs) const { 
-        return Offset < rhs.Offset; 
-    } 
- 
-    bool operator<=(const TIterator& rhs) const { 
-        return Offset <= rhs.Offset; 
-    } 
- 
-    bool operator>=(const TIterator& rhs) const { 
-        return Offset >= rhs.Offset; 
-    } 
- 
-    bool operator>(const TIterator& rhs) const { 
-        return Offset > rhs.Offset; 
-    } 
- 
+    bool operator<(const TIterator& rhs) const {
+        return Offset < rhs.Offset;
+    }
+
+    bool operator<=(const TIterator& rhs) const {
+        return Offset <= rhs.Offset;
+    }
+
+    bool operator>=(const TIterator& rhs) const {
+        return Offset >= rhs.Offset;
+    }
+
+    bool operator>(const TIterator& rhs) const {
+        return Offset > rhs.Offset;
+    }
+
     reference operator*() const {
         return *Record;
     }
@@ -104,18 +104,18 @@ public:
         return *this -= 1;
     }
 
-    TIterator operator++(int) { 
-        TIterator copy(*this); 
-        *this += 1; 
-        return copy; 
-    } 
- 
-    TIterator operator--(int) { 
-        TIterator copy(*this); 
-        *this -= 1; 
-        return copy; 
-    } 
- 
+    TIterator operator++(int) {
+        TIterator copy(*this);
+        *this += 1;
+        return copy;
+    }
+
+    TIterator operator--(int) {
+        TIterator copy(*this);
+        *this -= 1;
+        return copy;
+    }
+
     TIterator& operator+=(size_t n) {
         Offset += Min(TRecIdx(n), Upper - Offset);
         Sync();
@@ -169,8 +169,8 @@ struct TRecordsHeader {
     TRecIdx Records;
 } Y_PACKED;
 
-struct TRecordsEntry { 
-    TPgSize Offset; 
+struct TRecordsEntry {
+    TPgSize Offset;
 } Y_PACKED;
 
 template <class TRecord, class TItem>
@@ -184,19 +184,19 @@ struct TDataPageRecord {
     }
 
     TItem* GetItem(const TPartScheme::TColumn& info) {
-        return TDeref<TItem>::At(Base(), info.Offset); 
+        return TDeref<TItem>::At(Base(), info.Offset);
     }
 
     const TItem* GetItem(const TPartScheme::TColumn& info) const {
-        return TDeref<TItem>::At(Base(), info.Offset); 
+        return TDeref<TItem>::At(Base(), info.Offset);
     }
 
     template <class T>
-    const T* GetTail(const TPartScheme::TGroupInfo& group) const { 
-        return TDeref<T>::At(Base(), group.FixedSize); 
-    } 
- 
-    template <class T> 
+    const T* GetTail(const TPartScheme::TGroupInfo& group) const {
+        return TDeref<T>::At(Base(), group.FixedSize);
+    }
+
+    template <class T>
     T* GetFixed(TItem* item) const {
         return reinterpret_cast<T*>(NextPtr(item));
     }
@@ -223,7 +223,7 @@ struct TDataPageRecord {
         } else if (op == ELargeObj::Inline) {
             auto *ref = GetFixed<TDataRef>(item);
 
-            return { TDeref<const char>::At(Base(), ref->Offset), ref->Size }; 
+            return { TDeref<const char>::At(Base(), ref->Offset), ref->Size };
         } else { /* ELargeObj::Extern or other link to attached blob */
             return { GetFixed<const char>(item), sizeof(ui64) };
 
@@ -234,42 +234,42 @@ struct TDataPageRecord {
 
 #pragma pack(pop)
 
-static_assert(sizeof(TDataRef) == 8, "Invalid TDataRef size"); 
-static_assert(sizeof(TRecordsHeader) == 4, "Invalid TRecordsHeader size"); 
-static_assert(sizeof(TRecordsEntry) == 4, "Invalid TRecordsEntry size"); 
- 
-template <typename TRecord> 
-struct TBlockWithRecords { 
-    using TSelf = TBlockWithRecords<TRecord>; 
-    using TIterator = TPageIterator<TSelf, TRecord>; 
- 
-    const TRecord* Record(TRecIdx idx) const noexcept 
-    { 
-        return TDeref<TRecord>::At(Base, Array[idx].Offset); 
-    } 
- 
-    TIterator Begin() const noexcept 
-    { 
-        return TIterator(this, 0, Records); 
-    } 
- 
-    TIterator End() const noexcept 
-    { 
-        return TIterator(this, Records, Records); 
-    } 
- 
-    const void *Base  = nullptr; 
-    const TRecordsEntry *Array = nullptr; 
-    ui32 Records = 0; 
-}; 
- 
+static_assert(sizeof(TDataRef) == 8, "Invalid TDataRef size");
+static_assert(sizeof(TRecordsHeader) == 4, "Invalid TRecordsHeader size");
+static_assert(sizeof(TRecordsEntry) == 4, "Invalid TRecordsEntry size");
+
+template <typename TRecord>
+struct TBlockWithRecords {
+    using TSelf = TBlockWithRecords<TRecord>;
+    using TIterator = TPageIterator<TSelf, TRecord>;
+
+    const TRecord* Record(TRecIdx idx) const noexcept
+    {
+        return TDeref<TRecord>::At(Base, Array[idx].Offset);
+    }
+
+    TIterator Begin() const noexcept
+    {
+        return TIterator(this, 0, Records);
+    }
+
+    TIterator End() const noexcept
+    {
+        return TIterator(this, Records, Records);
+    }
+
+    const void *Base  = nullptr;
+    const TRecordsEntry *Array = nullptr;
+    ui32 Records = 0;
+};
+
 using TCells = TArrayRef<const TCell>;
 
 template <typename TRecord>
 struct TCompare {
     using TColumns = TArrayRef<const TPartScheme::TColumn>;
 
-    TCompare(TColumns keys, const TKeyNulls &nulls) 
+    TCompare(TColumns keys, const TKeyNulls &nulls)
         : Info(keys)
         , Nulls(nulls)
     {
@@ -300,7 +300,7 @@ struct TCompare {
 
 private:
     const TColumns Info;
-    const TKeyNulls &Nulls; 
+    const TKeyNulls &Nulls;
 };
 
 

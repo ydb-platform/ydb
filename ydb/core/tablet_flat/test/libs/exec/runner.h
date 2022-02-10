@@ -54,7 +54,7 @@ namespace NFake {
 
             NFake::TConf conf;
 
-            conf.Shared = 8 * (1 << 20); 
+            conf.Shared = 8 * (1 << 20);
             conf.ScanQueue = 256 * 1024;
             conf.AsyncQueue = 256 * 1024;
 
@@ -74,10 +74,10 @@ namespace NFake {
         }
 
         void FireFollower(TActorId user, ui32 tablet, TStarter::TMake make, ui32 followerId)
-        { 
+        {
             FireTablet(user, tablet, make, followerId);
-        } 
- 
+        }
+
         void AddService(TActorId service, IActor *actor, EMail box)
         {
             Env.AddLocalService(service, TActorSetupCmd(actor, box, 0), 0);

@@ -66,7 +66,7 @@ namespace NTest {
             TTestEnv env;
             TPartSimpleIt first(&partStore, { }, Scheme.Keys, &env);
             TPartSimpleIt last(&partStore, { }, Scheme.Keys, &env);
-            TVector<TSlice> slices; 
+            TVector<TSlice> slices;
 
             TRowId lastEnd = 0;
 
@@ -85,23 +85,23 @@ namespace NTest {
                         lastKey = last.GetRawKey();
                     }
 
-                    auto cut = TSlices::Cut( 
+                    auto cut = TSlices::Cut(
                         partStore.Slices,
                         first.GetRowId(),
                         last.GetRowId(),
                         firstKey,
                         lastKey);
 
-                    for (const auto& slice : *cut) { 
-                        slices.emplace_back(slice); 
+                    for (const auto& slice : *cut) {
+                        slices.emplace_back(slice);
                     }
                 }
                 lastEnd = hole.End;
             }
 
             TIntrusiveConstPtr<TSlices> result = new TSlices(std::move(slices));
-            result->Validate(); 
-            return result; 
+            result->Validate();
+            return result;
         }
 
         const TRowScheme Scheme;

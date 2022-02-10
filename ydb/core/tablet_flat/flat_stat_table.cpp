@@ -7,15 +7,15 @@ namespace NKikimr {
 namespace NTable {
 
 void BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, ui64 dataSizeResolution, const IPages* env) {
-    Y_UNUSED(env); 
- 
+    Y_UNUSED(env);
+
     stats.Clear();
 
     TStatsIterator stIter(subset.Scheme->Keys);
 
     // Make index iterators for all parts
     for (auto& pi : subset.Flatten) {
-        TAutoPtr<TScreenedPartIndexIterator> iter = new TScreenedPartIndexIterator(pi, subset.Scheme->Keys, pi->Small); 
+        TAutoPtr<TScreenedPartIndexIterator> iter = new TScreenedPartIndexIterator(pi, subset.Scheme->Keys, pi->Small);
         if (iter->IsValid()) {
             stIter.Add(iter);
         }
@@ -46,21 +46,21 @@ void BuildStats(const TSubset& subset, TStats& stats, ui64 rowCountResolution, u
             prevSize = stats.DataSize;
         }
     }
- 
-    stats.RowCount = stIter.GetCurrentRowCount(); 
-    stats.DataSize = stIter.GetCurrentDataSize(); 
+
+    stats.RowCount = stIter.GetCurrentRowCount();
+    stats.DataSize = stIter.GetCurrentDataSize();
 }
 
 void GetPartOwners(const TSubset& subset, THashSet<ui64>& partOwners) {
     for (auto& pi : subset.Flatten) {
         partOwners.insert(pi->Label.TabletID());
     }
-    for (auto& pi : subset.ColdParts) { 
-        partOwners.insert(pi->Label.TabletID()); 
-    } 
-    for (auto& pi : subset.TxStatus) { 
-        partOwners.insert(pi->Label.TabletID()); 
-    } 
+    for (auto& pi : subset.ColdParts) {
+        partOwners.insert(pi->Label.TabletID());
+    }
+    for (auto& pi : subset.TxStatus) {
+        partOwners.insert(pi->Label.TabletID());
+    }
 }
 
 }}

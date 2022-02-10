@@ -276,13 +276,13 @@ private:
         NTable::TAlter delta;
 
         delta.AddTable("table", Table);
-        delta.SetFamily(Table, AltFamily, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain); 
+        delta.SetFamily(Table, AltFamily, NTable::NPage::ECache::None, NTable::NPage::ECodec::Plain);
         delta.AddColumn(Table, "Id", 1, NScheme::TUint32::TypeId, false);
         delta.AddColumn(Table, "value", 2, NScheme::TUint64::TypeId, false);
         delta.AddColumn(Table, "large", 3, NScheme::TString::TypeId, false);
         delta.AddColumnToKey(Table, 1);
-        delta.AddColumnToFamily(Table, 2, AltFamily); 
-        delta.AddColumnToFamily(Table, 3, AltFamily); 
+        delta.AddColumnToFamily(Table, 2, AltFamily);
+        delta.AddColumnToFamily(Table, 3, AltFamily);
 
         {
             const auto comp_g0 = NLocalDb::LegacyQueueIdToTaskName(0);
@@ -330,12 +330,12 @@ private:
 
             TAutoPtr<NTable::ITestIterator> it = db->Iterate(Table, { }, tags, ELookup::GreaterOrEqualThan);
 
-            while (it->Next(NTable::ENext::All) == NTable::EReady::Data) { 
-                LastKey = it->GetValues().Columns[0].AsValue<ui32>(); 
+            while (it->Next(NTable::ENext::All) == NTable::EReady::Data) {
+                LastKey = it->GetValues().Columns[0].AsValue<ui32>();
             }
 
-            Y_VERIFY(LastKey + 1 == RowCount /* incomplete read */); 
-            Y_VERIFY(Restarts == 1 /* exactly one precharge */); 
+            Y_VERIFY(LastKey + 1 == RowCount /* incomplete read */);
+            Y_VERIFY(Restarts == 1 /* exactly one precharge */);
 
             return true;
         } catch (NTable::TIteratorNotReady&) {
@@ -348,7 +348,7 @@ private:
 private:
     const ui64 Rows = 0;
     const ui32 Table = 1;
-    const ui32 AltFamily = 1; 
+    const ui32 AltFamily = 1;
 
     ui32 Restarts = 0;
     ui64 RowCount = 0;

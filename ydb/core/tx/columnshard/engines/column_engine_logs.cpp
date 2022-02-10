@@ -452,13 +452,13 @@ void TColumnEngineForLogs::UpdatePortionStats(TColumnEngineStats& engineStats, c
 }
 
 void TColumnEngineForLogs::UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) {
-    // TODO(chertus): use step/txId for keeping older schema versions for older snapshots 
+    // TODO(chertus): use step/txId for keeping older schema versions for older snapshots
     Y_UNUSED(snapshot);
-    IndexInfo = std::move(info); 
-    // copied from constructor above 
-    IndexInfo.SetAllKeys(IndexInfo.GetPK(), {0}); 
-} 
- 
+    IndexInfo = std::move(info);
+    // copied from constructor above
+    IndexInfo.SetAllKeys(IndexInfo.GetPK(), {0});
+}
+
 bool TColumnEngineForLogs::Load(IDbWrapper& db, const THashSet<ui64>& pathsToDrop) {
     ClearIndex();
 

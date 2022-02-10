@@ -124,7 +124,7 @@ public:
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasGetOperationRequest()) {
             auto request = MakeHolder<TEvConsole::TEvGetOperationRequest>();
-            request->Record.MutableRequest()->CopyFrom(Request.GetGetOperationRequest()); 
+            request->Record.MutableRequest()->CopyFrom(Request.GetGetOperationRequest());
             NTabletPipe::SendData(ctx, ConsolePipe, request.Release());
         } else if (Request.HasCheckConfigUpdatesRequest()) {
             auto request = MakeHolder<TEvConsole::TEvCheckConfigUpdatesRequest>();
@@ -204,7 +204,7 @@ public:
         Response.MutableStatus()->SetCode(resp.operation().status());
         if (resp.operation().issues_size())
             Response.MutableStatus()->SetReason(resp.operation().issues(0).message());
-        Response.MutableGetOperationResponse()->CopyFrom(resp); 
+        Response.MutableGetOperationResponse()->CopyFrom(resp);
         SendReplyAndDie(ctx);
     }
 

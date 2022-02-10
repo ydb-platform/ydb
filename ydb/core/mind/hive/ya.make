@@ -53,7 +53,7 @@ SRCS(
     tx__init_scheme.cpp
     tx__kill_node.cpp
     tx__load_everything.cpp
-    tx__lock_tablet.cpp 
+    tx__lock_tablet.cpp
     tx__process_boot_queue.cpp
     tx__process_pending_operations.cpp
     tx__reassign_groups.cpp
@@ -71,7 +71,7 @@ SRCS(
     tx__stop_tablet.cpp
     tx__switch_drain.cpp
     tx__sync_tablets.cpp
-    tx__unlock_tablet.cpp 
+    tx__unlock_tablet.cpp
     tx__update_domain.cpp
     tx__update_tablet_groups.cpp
     tx__update_tablet_metrics.cpp

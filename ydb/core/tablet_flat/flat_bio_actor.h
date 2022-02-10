@@ -42,21 +42,21 @@ namespace NBlockIO {
 
         /*_ request operational state   */
 
-        struct TLoadState { 
-            size_t Offset = 0; 
-            TSharedData Data; 
- 
-            explicit TLoadState(size_t size) 
-                : Data(TSharedData::Uninitialized(size)) 
-            { } 
-        }; 
- 
-        TVector<TLoadState> BlockStates; 
+        struct TLoadState {
+            size_t Offset = 0;
+            TSharedData Data;
+
+            explicit TLoadState(size_t size)
+                : Data(TSharedData::Uninitialized(size))
+            { }
+        };
+
+        TVector<TLoadState> BlockStates;
         TAutoPtr<TPagesToBlobsConverter> PagesToBlobsConverter;
         ui64 Pending = 0;
-        ui64 TotalOps = 0; 
-        NMetrics::TTabletThroughputRawValue GroupBytes; 
-        NMetrics::TTabletIopsRawValue GroupOps; 
+        ui64 TotalOps = 0;
+        NMetrics::TTabletThroughputRawValue GroupBytes;
+        NMetrics::TTabletIopsRawValue GroupOps;
     };
 
     template<typename ... TArgs>

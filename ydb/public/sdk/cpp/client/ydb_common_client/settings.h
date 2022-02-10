@@ -33,26 +33,26 @@ struct TCommonClientSettings {
     FLUENT_SETTING_OPTIONAL(bool, EnableSsl);
 };
 
-template<class TDerived> 
-struct TCommonClientSettingsBase : public TCommonClientSettings { 
- 
-#define COMMON_CLIENT_SETTINGS_TO_DERIVED(type, name) \ 
-    TDerived& name(const type& value) { \ 
-        TCommonClientSettings::name(value); \ 
-        return static_cast<TDerived&>(*this); \ 
-    } 
- 
+template<class TDerived>
+struct TCommonClientSettingsBase : public TCommonClientSettings {
+
+#define COMMON_CLIENT_SETTINGS_TO_DERIVED(type, name) \
+    TDerived& name(const type& value) { \
+        TCommonClientSettings::name(value); \
+        return static_cast<TDerived&>(*this); \
+    }
+
     COMMON_CLIENT_SETTINGS_TO_DERIVED(TStringType, Database);
     COMMON_CLIENT_SETTINGS_TO_DERIVED(TStringType, DiscoveryEndpoint);
     COMMON_CLIENT_SETTINGS_TO_DERIVED(TMaybe<TStringType>, AuthToken);
-    COMMON_CLIENT_SETTINGS_TO_DERIVED(std::shared_ptr<ICredentialsProviderFactory>, CredentialsProviderFactory); 
-    COMMON_CLIENT_SETTINGS_TO_DERIVED(EDiscoveryMode, DiscoveryMode); 
+    COMMON_CLIENT_SETTINGS_TO_DERIVED(std::shared_ptr<ICredentialsProviderFactory>, CredentialsProviderFactory);
+    COMMON_CLIENT_SETTINGS_TO_DERIVED(EDiscoveryMode, DiscoveryMode);
     COMMON_CLIENT_SETTINGS_TO_DERIVED(bool, EnableSsl);
- 
-#undef COMMON_CLIENT_SETTINGS_TO_DERIVED 
- 
-}; 
- 
+
+#undef COMMON_CLIENT_SETTINGS_TO_DERIVED
+
+};
+
 TCommonClientSettings GetClientSettingsFromConnectionString(const TStringType& connectionString);
 
 } // namespace NYdb

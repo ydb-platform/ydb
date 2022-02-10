@@ -3259,90 +3259,90 @@ public:
     {}
 };
 
-class TTestBlobStorageProxyVPutVCollectVGetRace : public TTestBlobStorageProxy { 
-    void TestFSM(const TActorContext &ctx) { 
-        VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__); 
-        TString testData("xxx"); 
-        TVDiskID vDiskId(0, 1, 0, 0, 0); 
+class TTestBlobStorageProxyVPutVCollectVGetRace : public TTestBlobStorageProxy {
+    void TestFSM(const TActorContext &ctx) {
+        VERBOSE_COUT("Test step " << TestStep << " Line " << __LINE__);
+        TString testData("xxx");
+        TVDiskID vDiskId(0, 1, 0, 0, 0);
 
-        switch (TestStep) { 
-            case 0: 
-            { 
-                VERBOSE_COUT(" Sending TEvVPut"); 
-                TBlobStorageGroupType type(ErasureSpecies); 
-                NKikimr::TDataPartSet partSet; 
-                TLogoBlobID logoblobid(1, 1, 1, 0, testData.size(), 3, 1); 
-                type.SplitData((TErasureType::ECrcMode)logoblobid.CrcMode(), testData, partSet); 
- 
-                TAutoPtr<TEvBlobStorage::TEvVPut> x( 
-                    new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[0].OwnedString, vDiskId, false, 
-                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob)); 
-                auto& msgId = *x->Record.MutableMsgQoS()->MutableMsgId(); 
-                msgId.SetMsgId(0); 
-                msgId.SetSequenceId(1); 
- 
+        switch (TestStep) {
+            case 0:
+            {
+                VERBOSE_COUT(" Sending TEvVPut");
+                TBlobStorageGroupType type(ErasureSpecies);
+                NKikimr::TDataPartSet partSet;
+                TLogoBlobID logoblobid(1, 1, 1, 0, testData.size(), 3, 1);
+                type.SplitData((TErasureType::ECrcMode)logoblobid.CrcMode(), testData, partSet);
+
+                TAutoPtr<TEvBlobStorage::TEvVPut> x(
+                    new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[0].OwnedString, vDiskId, false,
+                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob));
+                auto& msgId = *x->Record.MutableMsgQoS()->MutableMsgId();
+                msgId.SetMsgId(0);
+                msgId.SetSequenceId(1);
+
                 ctx.Send(Env->VDisks[0], x.Release());
-                break; 
-            } 
-            case 10: 
-            { 
-                TEST_RESPONSE(MessageVPutResult, OK, 0, ""); 
-                VERBOSE_COUT(" Sending TEvVGet"); 
- 
-                TLogoBlobID id(1, 1, 1, 0, testData.size(), 3); 
- 
+                break;
+            }
+            case 10:
+            {
+                TEST_RESPONSE(MessageVPutResult, OK, 0, "");
+                VERBOSE_COUT(" Sending TEvVGet");
+
+                TLogoBlobID id(1, 1, 1, 0, testData.size(), 3);
+
                 auto keep = std::make_unique<TVector<TLogoBlobID>>();
-                keep->push_back(id); 
- 
+                keep->push_back(id);
+
                 auto collect = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(
-                    1, 1, 1, 
-                    /* channel */ 0, 
-                    /* collect */ true, 
-                    /* collect gen */ 1, 
-                    /* collect step */ 1, 
-                    /* hard */ false, 
+                    1, 1, 1,
+                    /* channel */ 0,
+                    /* collect */ true,
+                    /* collect gen */ 1,
+                    /* collect step */ 1,
+                    /* hard */ false,
                     /* keep */ keep.get(),
-                    /* donotkeep */ nullptr, 
-                    vDiskId, 
-                    TInstant::Max()); 
-                collect->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(0); 
-                collect->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(1); 
+                    /* donotkeep */ nullptr,
+                    vDiskId,
+                    TInstant::Max());
+                collect->Record.MutableMsgQoS()->MutableMsgId()->SetMsgId(0);
+                collect->Record.MutableMsgQoS()->MutableMsgId()->SetSequenceId(1);
                 ctx.Send(Env->VDisks[0], collect.release());
- 
-                auto x = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vDiskId, 
-                                                                         TInstant::Max(), 
-                                                                         NKikimrBlobStorage::EGetHandleClass::AsyncRead, 
-                                                                         TEvBlobStorage::TEvVGet::EFlags::None, 
-                                                                         {}, 
-                                                                         {id}); 
- 
-                auto& msgId = *x->Record.MutableMsgQoS()->MutableMsgId(); 
-                msgId.SetMsgId(0); 
-                msgId.SetSequenceId(2); 
- 
+
+                auto x = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(vDiskId,
+                                                                         TInstant::Max(),
+                                                                         NKikimrBlobStorage::EGetHandleClass::AsyncRead,
+                                                                         TEvBlobStorage::TEvVGet::EFlags::None,
+                                                                         {},
+                                                                         {id});
+
+                auto& msgId = *x->Record.MutableMsgQoS()->MutableMsgId();
+                msgId.SetMsgId(0);
+                msgId.SetSequenceId(2);
+
                 ctx.Send(Env->VDisks[0], x.release());
-                break; 
-            } 
-            case 20: 
-            { 
-                TEST_RESPONSE(MessageVGetResult, OK, 1, testData); 
-                VERBOSE_COUT("Done"); 
+                break;
+            }
+            case 20:
+            {
+                TEST_RESPONSE(MessageVGetResult, OK, 1, testData);
+                VERBOSE_COUT("Done");
                 Env->DoneEvent.Signal();
-                break; 
-            } 
-            default: 
-                ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl; 
-                break; 
-        } 
-        TestStep += 10; 
-    } 
-public: 
+                break;
+            }
+            default:
+                ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+                break;
+        }
+        TestStep += 10;
+    }
+public:
     TTestBlobStorageProxyVPutVCollectVGetRace(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxy(proxy, bsInfo, env, parametrs)
-    {} 
-}; 
- 
+    {}
+};
+
 TMaybe<TGroupStat::EKind> PutHandleClassToGroupStatKind(NKikimrBlobStorage::EPutHandleClass handleClass) {
     switch (handleClass) {
     case NKikimrBlobStorage::TabletLog:
@@ -3492,8 +3492,8 @@ class TBlobStorageProxyTest: public TTestBase {
         PROXY_UNIT_TEST(TestPutGetStatusErasure3Plus2Stripe);
         PROXY_UNIT_TEST(TestPutGetStatusErasureMirror3Plus2);
 
-        PROXY_UNIT_TEST(TestVPutVCollectVGetRace); 
- 
+        PROXY_UNIT_TEST(TestVPutVCollectVGetRace);
+
         PROXY_UNIT_TEST(TestVPutVGet);
         PROXY_UNIT_TEST(TestVPutVGetLimit);
         PROXY_UNIT_TEST(TestVPutVGetPersistence);
@@ -4039,9 +4039,9 @@ public:
         SectorMapByPath.clear();
     }
 
-    void TestVPutVCollectVGetRace() { 
-        TestBlobStorage<TTestBlobStorageProxyVPutVCollectVGetRace>(0, TBlobStorageGroupType::ErasureNone, nullptr); 
-        SectorMapByPath.clear(); 
+    void TestVPutVCollectVGetRace() {
+        TestBlobStorage<TTestBlobStorageProxyVPutVCollectVGetRace>(0, TBlobStorageGroupType::ErasureNone, nullptr);
+        SectorMapByPath.clear();
     }
 
     void TestBatchedPutRequestDoesNotContainAHugeBlob() {
@@ -4049,7 +4049,7 @@ public:
         args.DeviceType = TPDiskCategory::DEVICE_TYPE_NVME;
         TestBlobStorage<TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob>(nullptr, args);
         SectorMapByPath.clear();
-    } 
+    }
 
     THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId, NMonitoring::TDynamicCounters &counters,
             TIntrusivePtr<TTableNameserverSetup> &nameserverTable, TInterconnectMock &interconnectMock) {

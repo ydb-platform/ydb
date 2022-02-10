@@ -1,7 +1,7 @@
 #pragma once
 
 #include "flat_util_misc.h"
-#include "util_basics.h" 
+#include "util_basics.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -11,9 +11,9 @@ namespace NKikimr {
 namespace NTable {
 
     class TNulls: public TAtomicRefCount<TNulls, NUtil::TDtorDel<TNulls>> {
-    protected: 
+    protected:
         using TType = NScheme::TTypeId;
-        using TOrder = NScheme::TTypeIdOrder; 
+        using TOrder = NScheme::TTypeIdOrder;
 
         TNulls(TArrayRef<const TType> types, TArrayRef<const TCell> defs)
             : Types(types)
@@ -23,18 +23,18 @@ namespace NTable {
         }
 
     public:
-        virtual ~TNulls() = default; 
+        virtual ~TNulls() = default;
 
-    protected: 
-        template<class TSelf> 
+    protected:
+        template<class TSelf>
         static TIntrusiveConstPtr<TSelf> Make(
-                TArrayRef<const TType> types, 
-                TArrayRef<const TOrder> order, 
-                TArrayRef<const TCell> defs) noexcept 
+                TArrayRef<const TType> types,
+                TArrayRef<const TOrder> order,
+                TArrayRef<const TCell> defs) noexcept
         {
-            size_t offT = AlignUp(sizeof(TSelf)); 
-            size_t offO = offT + AlignUp(sizeof(TType) * types.size()); 
-            size_t offC = offO + AlignUp(sizeof(TOrder) * order.size()); 
+            size_t offT = AlignUp(sizeof(TSelf));
+            size_t offO = offT + AlignUp(sizeof(TType) * types.size());
+            size_t offC = offO + AlignUp(sizeof(TOrder) * order.size());
             size_t offD = offC + AlignUp(sizeof(TCell) * defs.size());
 
             size_t tail = std::accumulate(defs.begin(), defs.end(), size_t(0),
@@ -49,10 +49,10 @@ namespace NTable {
             TType *ptrT = reinterpret_cast<TType*>(raw + offT);
             std::copy(types.begin(), types.end(), ptrT);
 
-            TOrder *ptrO = reinterpret_cast<TOrder*>(raw + offO); 
-            std::copy(order.begin(), order.end(), ptrO); 
- 
-            TCell *ptrC = reinterpret_cast<TCell*>(raw + offC); 
+            TOrder *ptrO = reinterpret_cast<TOrder*>(raw + offO);
+            std::copy(order.begin(), order.end(), ptrO);
+
+            TCell *ptrC = reinterpret_cast<TCell*>(raw + offC);
             char *data = raw + offD;
 
             for (size_t it = 0; it < defs.size(); it++) {
@@ -69,13 +69,13 @@ namespace NTable {
 
             Y_VERIFY(data == raw + offD + tail);
 
-            return ::new(raw) TSelf( 
-                    { ptrT, types.size() }, 
-                    { ptrO, order.size() }, 
-                    { ptrC, defs.size() }); 
+            return ::new(raw) TSelf(
+                    { ptrT, types.size() },
+                    { ptrO, order.size() },
+                    { ptrC, defs.size() });
         }
 
-    public: 
+    public:
         size_t Size() const noexcept
         {
             return Defs.size();
@@ -100,69 +100,69 @@ namespace NTable {
         const TArrayRef<const TType> Types;
         const TArrayRef<const TCell> Defs;
     };
- 
-    /** 
-     * Types and defaults for the complete row 
-     */ 
-    class TRowNulls : public TNulls { 
-        friend TNulls; 
- 
-        TRowNulls( 
-                TArrayRef<const TType> types, 
-                TArrayRef<const TOrder> order, 
-                TArrayRef<const TCell> defs) 
-            : TNulls(types, defs) 
-        { 
-            Y_VERIFY(order.size() == 0); 
-        } 
- 
-    public: 
+
+    /**
+     * Types and defaults for the complete row
+     */
+    class TRowNulls : public TNulls {
+        friend TNulls;
+
+        TRowNulls(
+                TArrayRef<const TType> types,
+                TArrayRef<const TOrder> order,
+                TArrayRef<const TCell> defs)
+            : TNulls(types, defs)
+        {
+            Y_VERIFY(order.size() == 0);
+        }
+
+    public:
         static TIntrusiveConstPtr<TRowNulls> Make(
-                TArrayRef<const TType> types, 
-                TArrayRef<const TCell> defs) noexcept 
-        { 
-            return TNulls::Make<TRowNulls>(types, { }, defs); 
-        } 
-    }; 
- 
-    /** 
-     * Types and defaults for key columns with per-column ordering 
-     */ 
-    class TKeyNulls : public TNulls { 
-        friend TNulls; 
- 
-        TKeyNulls( 
-                TArrayRef<const TType> types, 
-                TArrayRef<const TOrder> order, 
-                TArrayRef<const TCell> defs) 
-            : TNulls(types, defs) 
-            , Types(order) 
-        { 
-            Y_VERIFY(Types.size() == TNulls::Types.size()); 
-        } 
- 
-    public: 
+                TArrayRef<const TType> types,
+                TArrayRef<const TCell> defs) noexcept
+        {
+            return TNulls::Make<TRowNulls>(types, { }, defs);
+        }
+    };
+
+    /**
+     * Types and defaults for key columns with per-column ordering
+     */
+    class TKeyNulls : public TNulls {
+        friend TNulls;
+
+        TKeyNulls(
+                TArrayRef<const TType> types,
+                TArrayRef<const TOrder> order,
+                TArrayRef<const TCell> defs)
+            : TNulls(types, defs)
+            , Types(order)
+        {
+            Y_VERIFY(Types.size() == TNulls::Types.size());
+        }
+
+    public:
         static TIntrusiveConstPtr<TKeyNulls> Make(
-                TArrayRef<const TOrder> order, 
-                TArrayRef<const TCell> defs) noexcept 
-        { 
-            TStackVec<TType> types; 
-            types.reserve(order.size()); 
-            for (TOrder typeOrder : order) { 
-                types.push_back(typeOrder.GetTypeId()); 
-            } 
-            return TNulls::Make<TKeyNulls>(types, order, defs); 
-        } 
- 
-        TArrayRef<const TType> BasicTypes() const noexcept 
-        { 
-            return TNulls::Types; 
-        } 
- 
-    public: 
-        // Shadow base types forcing most code to use order information 
-        const TArrayRef<const TOrder> Types; 
-    }; 
- 
+                TArrayRef<const TOrder> order,
+                TArrayRef<const TCell> defs) noexcept
+        {
+            TStackVec<TType> types;
+            types.reserve(order.size());
+            for (TOrder typeOrder : order) {
+                types.push_back(typeOrder.GetTypeId());
+            }
+            return TNulls::Make<TKeyNulls>(types, order, defs);
+        }
+
+        TArrayRef<const TType> BasicTypes() const noexcept
+        {
+            return TNulls::Types;
+        }
+
+    public:
+        // Shadow base types forcing most code to use order information
+        const TArrayRef<const TOrder> Types;
+    };
+
 }
 }

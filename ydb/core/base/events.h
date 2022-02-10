@@ -91,9 +91,9 @@ struct TKikimrEvents : TEvents {
         ES_PQ_CLUSTERS_UPDATER,
         ES_TENANT_SLOT_BROKER,
         ES_GRPC_CALLS,
-        ES_CONSOLE, 
-        ES_KESUS_PROXY, 
-        ES_KESUS, 
+        ES_CONSOLE,
+        ES_KESUS_PROXY,
+        ES_KESUS,
         ES_CONFIGS_DISPATCHER,
         ES_IAM_SERVICE,
         ES_FOLDER_SERVICE,
@@ -103,7 +103,7 @@ struct TKikimrEvents : TEvents {
         ES_ACCESS_SERVICE,
         ES_USER_ACCOUNT_SERVICE,
         ES_PQ_PROXY_NEW,
-        ES_GRPC_STREAMING, 
+        ES_GRPC_STREAMING,
         ES_SCHEME_BOARD,
         ES_FLAT_TX_SCHEMESHARD_PROTECTED,
         ES_GRPC_REQUEST_PROXY,
@@ -137,8 +137,8 @@ struct TKikimrEvents : TEvents {
         ES_YQ, // 4213
         ES_CHANGE_EXCHANGE,
         ES_DATABASE_SERVICE, //4215
-        ES_SEQUENCESHARD, // 4216 
-        ES_SEQUENCEPROXY, // 4217 
+        ES_SEQUENCESHARD, // 4216
+        ES_SEQUENCEPROXY, // 4217
         ES_CLOUD_STORAGE,
         ES_CLOUD_STORAGE_PRIVATE,
         ES_FOLDER_SERVICE_ADAPTER,

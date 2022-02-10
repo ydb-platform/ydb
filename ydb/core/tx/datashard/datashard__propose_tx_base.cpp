@@ -8,16 +8,16 @@ namespace NKikimr {
 namespace NDataShard {
 
 TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *self,
-                                                                        TEvDataShard::TEvProposeTransaction::TPtr &&ev, 
-                                                                        TInstant receivedAt, ui64 tieBreakerIndex, 
-                                                                        bool delayed) 
+                                                                        TEvDataShard::TEvProposeTransaction::TPtr &&ev,
+                                                                        TInstant receivedAt, ui64 tieBreakerIndex,
+                                                                        bool delayed)
     : TBase(self)
     , Ev(std::move(ev))
-    , ReceivedAt(receivedAt) 
-    , TieBreakerIndex(tieBreakerIndex) 
+    , ReceivedAt(receivedAt)
+    , TieBreakerIndex(tieBreakerIndex)
     , Kind(static_cast<EOperationKind>(Ev->Get()->GetTxKind()))
     , TxId(Ev->Get()->GetTxId())
-    , Acked(!delayed) 
+    , Acked(!delayed)
 {
 }
 
@@ -27,12 +27,12 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProposeTransactionBase::Execute at " << Self->TabletID());
 
-    if (!Acked) { 
-        // Ack event on the first execute (this will schedule the next event if any) 
-        Self->ProposeQueue.Ack(ctx); 
-        Acked = true; 
-    } 
- 
+    if (!Acked) {
+        // Ack event on the first execute (this will schedule the next event if any)
+        Self->ProposeQueue.Ack(ctx);
+        Acked = true;
+    }
+
     try {
         TOutputOpData::TResultPtr result = nullptr;
         // If tablet is in follower mode then we should sync scheme
@@ -73,13 +73,13 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
         if (Ev) {
             Y_VERIFY(!Op);
- 
-            if (Self->CheckDataTxRejectAndReply(Ev->Get(), ctx)) { 
-                Ev = nullptr; 
-                return true; 
-            } 
- 
-            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx); 
+
+            if (Self->CheckDataTxRejectAndReply(Ev->Get(), ctx)) {
+                Ev = nullptr;
+                return true;
+            }
+
+            TOperation::TPtr op = Self->Pipeline.BuildOperation(Ev, ReceivedAt, TieBreakerIndex, txc, ctx);
 
             // Unsuccessful operation parse.
             if (op->IsAborted()) {
@@ -94,49 +94,49 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
             Op = op;
             Ev = nullptr;
-            Op->IncrementInProgress(); 
+            Op->IncrementInProgress();
         }
 
-        Y_VERIFY(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty()); 
+        Y_VERIFY(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
- 
-        switch (status) { 
-            case EExecutionStatus::Restart: 
-                // Restart even if current CompleteList is not empty 
-                // It will be extended in subsequent iterations 
-                return false; 
- 
-            case EExecutionStatus::Reschedule: 
-                // Reschedule transaction as soon as possible 
-                if (!Op->IsExecutionPlanFinished()) { 
-                    Op->IncrementInProgress(); 
-                    Self->ExecuteProgressTx(Op, ctx); 
-                    Rescheduled = true; 
-                } 
-                break; 
- 
-            case EExecutionStatus::Executed: 
-            case EExecutionStatus::Continue: 
-            case EExecutionStatus::WaitComplete: 
-                // No special handling 
-                break; 
- 
-            default: 
-                Y_FAIL_S("unexpected execution status " << status << " for operation " 
-                        << *Op << " " << Op->GetKind() << " at " << Self->TabletID()); 
-        } 
- 
-        if (!CompleteList.empty()) {
-            // Keep operation active until we run the complete list 
-            CommitStart = AppData()->TimeProvider->Now();
-        } else { 
-            // Release operation as it's no longer needed 
-            Op->DecrementInProgress(); 
-            Op = nullptr; 
+
+        switch (status) {
+            case EExecutionStatus::Restart:
+                // Restart even if current CompleteList is not empty
+                // It will be extended in subsequent iterations
+                return false;
+
+            case EExecutionStatus::Reschedule:
+                // Reschedule transaction as soon as possible
+                if (!Op->IsExecutionPlanFinished()) {
+                    Op->IncrementInProgress();
+                    Self->ExecuteProgressTx(Op, ctx);
+                    Rescheduled = true;
+                }
+                break;
+
+            case EExecutionStatus::Executed:
+            case EExecutionStatus::Continue:
+            case EExecutionStatus::WaitComplete:
+                // No special handling
+                break;
+
+            default:
+                Y_FAIL_S("unexpected execution status " << status << " for operation "
+                        << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
         }
 
-        // Commit all side effects 
+        if (!CompleteList.empty()) {
+            // Keep operation active until we run the complete list
+            CommitStart = AppData()->TimeProvider->Now();
+        } else {
+            // Release operation as it's no longer needed
+            Op->DecrementInProgress();
+            Op = nullptr;
+        }
+
+        // Commit all side effects
         return true;
     } catch (const TNotReadyTabletException &) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -158,28 +158,28 @@ void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProposeTransactionBase::Complete at " << Self->TabletID());
 
-    if (Op) { 
-        Y_VERIFY(!Op->GetExecutionPlan().empty()); 
-        if (!CompleteList.empty()) { 
-            auto commitTime = AppData()->TimeProvider->Now() - CommitStart; 
-            Op->SetCommitTime(CompleteList.front(), commitTime); 
+    if (Op) {
+        Y_VERIFY(!Op->GetExecutionPlan().empty());
+        if (!CompleteList.empty()) {
+            auto commitTime = AppData()->TimeProvider->Now() - CommitStart;
+            Op->SetCommitTime(CompleteList.front(), commitTime);
 
-            if (!Op->IsExecutionPlanFinished() 
-                && (Op->GetCurrentUnit() != CompleteList.front())) 
-                Op->SetDelayedCommitTime(commitTime); 
+            if (!Op->IsExecutionPlanFinished()
+                && (Op->GetCurrentUnit() != CompleteList.front()))
+                Op->SetDelayedCommitTime(commitTime);
 
-            Self->Pipeline.RunCompleteList(Op, CompleteList, ctx); 
+            Self->Pipeline.RunCompleteList(Op, CompleteList, ctx);
         }
-        Op->DecrementInProgress(); 
+        Op->DecrementInProgress();
 
-        if (!Op->IsInProgress() && !Op->IsExecutionPlanFinished()) 
-            Self->Pipeline.AddCandidateOp(Op); 
- 
-        if (Self->Pipeline.CanRunAnotherOp()) 
-            Self->PlanQueue.Progress(ctx); 
+        if (!Op->IsInProgress() && !Op->IsExecutionPlanFinished())
+            Self->Pipeline.AddCandidateOp(Op);
+
+        if (Self->Pipeline.CanRunAnotherOp())
+            Self->PlanQueue.Progress(ctx);
     }
 
-    Self->CheckSplitCanStart(ctx); 
+    Self->CheckSplitCanStart(ctx);
     Self->CheckMvccStateChangeCanStart(ctx);
 }
 

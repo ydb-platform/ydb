@@ -7,21 +7,21 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 namespace NBoot {
 
-    class TSpawned { 
-    public: 
-        explicit TSpawned(bool spawned) 
-            : Spawned(spawned) 
-        { } 
- 
-        explicit operator bool() const noexcept 
-        { 
-            return Spawned; 
-        } 
- 
-    private: 
-        const bool Spawned; 
-    }; 
- 
+    class TSpawned {
+    public:
+        explicit TSpawned(bool spawned)
+            : Spawned(spawned)
+        { }
+
+        explicit operator bool() const noexcept
+        {
+            return Spawned;
+        }
+
+    private:
+        const bool Spawned;
+    };
+
     class TLeft {
     public:
         TLeft() = default;
@@ -36,15 +36,15 @@ namespace NBoot {
             return Value;
         }
 
-        TLeft& operator +=(const TSpawned& spawned) noexcept 
-        { 
-            if (spawned) { 
-                *this += size_t(1); 
-            } 
- 
-            return *this; 
-        } 
- 
+        TLeft& operator +=(const TSpawned& spawned) noexcept
+        {
+            if (spawned) {
+                *this += size_t(1);
+            }
+
+            return *this;
+        }
+
         TLeft& operator +=(size_t inc) noexcept
         {
             if (Value > Max<decltype(Value)>() - inc) {

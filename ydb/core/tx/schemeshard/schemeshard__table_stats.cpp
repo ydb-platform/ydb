@@ -13,14 +13,14 @@ static ui64 GetThroughput(const T& c) {
     return acc;
 }
 
-template <typename T> 
-static ui64 GetIops(const T& c) { 
-    ui64 acc = 0; 
-    for (const auto& v : c) 
-        acc += v.GetIops(); 
-    return acc; 
-} 
- 
+template <typename T>
+static ui64 GetIops(const T& c) {
+    ui64 acc = 0;
+    for (const auto& v : c)
+        acc += v.GetIops();
+    return acc;
+}
+
 void TSchemeShard::Handle(NSysView::TEvSysView::TEvGetPartitionStats::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(ev->Forward(SysPartitionStatsCollector));
 }
@@ -65,7 +65,7 @@ class TTxStorePartitionStats: public NTabletFlatExecutor::TTransactionBase<TSche
 
     THolder<NSysView::TEvSysView::TEvSendPartitionStats> StatsCollectorEv;
     THolder<TEvDataShard::TEvGetTableStats> GetStatsEv;
-    THolder<TEvDataShard::TEvCompactBorrowed> CompactEv; 
+    THolder<TEvDataShard::TEvCompactBorrowed> CompactEv;
 
     TSideEffects MergeOpSideEffects;
 
@@ -171,16 +171,16 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     newStats.Storage = tabletMetrics.GetStorage();
     newStats.ReadThroughput = GetThroughput(tabletMetrics.GetGroupReadThroughput());
     newStats.WriteThroughput = GetThroughput(tabletMetrics.GetGroupWriteThroughput());
-    newStats.ReadIops = GetIops(tabletMetrics.GetGroupReadIops()); 
-    newStats.WriteIops = GetIops(tabletMetrics.GetGroupWriteIops()); 
+    newStats.ReadIops = GetIops(tabletMetrics.GetGroupReadIops());
+    newStats.WriteIops = GetIops(tabletMetrics.GetGroupWriteIops());
     newStats.PartCount = tableStats.GetPartCount();
     newStats.SearchHeight = tableStats.GetSearchHeight();
     newStats.StartTime = TInstant::MilliSeconds(rec.GetStartTime());
     for (ui64 tabletId : rec.GetUserTablePartOwners()) {
         newStats.PartOwners.insert(TTabletId(tabletId));
-        if (tabletId != rec.GetDatashardId()) { 
-            newStats.HasBorrowed = true; 
-        } 
+        if (tabletId != rec.GetDatashardId()) {
+            newStats.HasBorrowed = true;
+        }
     }
     for (ui64 tabletId : rec.GetSysTablesPartOwners()) {
         newStats.PartOwners.insert(TTabletId(tabletId));
@@ -200,21 +200,21 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         }
     }
 
-    NIceDb::TNiceDb db(txc.DB); 
- 
+    NIceDb::TNiceDb db(txc.DB);
+
     if (!table->IsBackup && !table->IsShardsStatsDetached()) {
         auto newAggrStats = table->GetStats().Aggregated;
         auto subDomainId = Self->ResolveDomainId(tableId);
         auto subDomainInfo = Self->ResolveDomainInfo(tableId);
-        subDomainInfo->AggrDiskSpaceUsage(Self, newAggrStats, oldAggrStats); 
-        if (subDomainInfo->CheckDiskSpaceQuotas(Self)) { 
+        subDomainInfo->AggrDiskSpaceUsage(Self, newAggrStats, oldAggrStats);
+        if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
             Self->PersistSubDomainState(db, subDomainId, *subDomainInfo);
             // Publish is done in a separate transaction, so we may call this directly
             TDeque<TPathId> toPublish;
             toPublish.push_back(subDomainId);
             Self->PublishToSchemeBoard(TTxId(), std::move(toPublish), ctx);
         }
-    } 
+    }
 
     Self->PersistTablePartitionStats(db, tableId, shardIdx, table);
 
@@ -331,13 +331,13 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         }
     }
 
-    if (newStats.HasBorrowed) { 
-        // We don't want to split shards that have borrow parts 
-        // We must ask them to compact first 
-        CompactEv.Reset(new TEvDataShard::TEvCompactBorrowed(tableId)); 
-        return true; 
-    } 
- 
+    if (newStats.HasBorrowed) {
+        // We don't want to split shards that have borrow parts
+        // We must ask them to compact first
+        CompactEv.Reset(new TEvDataShard::TEvCompactBorrowed(tableId));
+        return true;
+    }
+
     // Request histograms from the datashard
     GetStatsEv.Reset(new TEvDataShard::TEvGetTableStats(tableId.LocalPathId, dataSizeResolution, rowCountResolution, collectKeySample));
 
@@ -351,12 +351,12 @@ void TTxStorePartitionStats::Complete(const TActorContext& ctx) {
         ctx.Send(Self->SysPartitionStatsCollector, StatsCollectorEv.Release());
     }
 
-    if (CompactEv) { 
-        LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                "Requesting borrowed compaction from datasbard %" PRIu64, Ev->Get()->Record.GetDatashardId()); 
-        ctx.Send(Ev->Sender, CompactEv.Release()); 
-    } 
- 
+    if (CompactEv) {
+        LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Requesting borrowed compaction from datasbard %" PRIu64, Ev->Get()->Record.GetDatashardId());
+        ctx.Send(Ev->Sender, CompactEv.Release());
+    }
+
     if (GetStatsEv) {
         LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "Requesting full stats from datashard %" PRIu64, Ev->Get()->Record.GetDatashardId());

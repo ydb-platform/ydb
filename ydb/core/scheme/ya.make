@@ -7,7 +7,7 @@ OWNER(
 )
 
 SRCS(
-    scheme_borders.cpp 
+    scheme_borders.cpp
     scheme_tablecell.cpp
     scheme_tabledefs.cpp
     scheme_types_defs.cpp

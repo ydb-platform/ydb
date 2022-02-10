@@ -28,8 +28,8 @@ private:
     bool CheckBackup(TActiveTransaction *activeTx);
     bool CheckRestore(TActiveTransaction *activeTx);
     bool CheckCopy(TActiveTransaction *activeTx);
-    bool CheckCreatePersistentSnapshot(TActiveTransaction *activeTx); 
-    bool CheckDropPersistentSnapshot(TActiveTransaction *activeTx); 
+    bool CheckCreatePersistentSnapshot(TActiveTransaction *activeTx);
+    bool CheckDropPersistentSnapshot(TActiveTransaction *activeTx);
     bool CheckInitiateBuildIndex(TActiveTransaction *activeTx);
     bool CheckFinalizeBuildIndex(TActiveTransaction *activeTx);
     bool CheckDropIndexNotice(TActiveTransaction *activeTx);
@@ -72,8 +72,8 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     Y_VERIFY(op->IsSchemeTx());
     Y_VERIFY(!op->IsAborted());
 
-    Pipeline.RemoveWaitingSchemeOp(op); 
- 
+    Pipeline.RemoveWaitingSchemeOp(op);
+
     TActiveTransaction *activeTx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(activeTx, "cannot cast operation of kind " << op->GetKind());
     const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
@@ -106,17 +106,17 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
 
     // Check if scheme tx is outdated.
     if (lastSeqNo > seqNo) {
-        TString error = TStringBuilder() 
-                << "Ignoring outdated schema Tx proposal at tablet " 
-                << DataShard.TabletID() << " txId " << op->GetTxId() 
-                << " ssId " << activeTx->GetSchemeShardId() 
-                << " seqNo " << seqNo.Generation << ":" << seqNo.Round 
-                << " lastSeqNo " << lastSeqNo.Generation << ":" 
-                << lastSeqNo.Round; 
+        TString error = TStringBuilder()
+                << "Ignoring outdated schema Tx proposal at tablet "
+                << DataShard.TabletID() << " txId " << op->GetTxId()
+                << " ssId " << activeTx->GetSchemeShardId()
+                << " seqNo " << seqNo.Generation << ":" << seqNo.Round
+                << " lastSeqNo " << lastSeqNo.Generation << ":"
+                << lastSeqNo.Round;
 
-        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, error); 
- 
-        BuildResult(op)->SetProcessError(NKikimrTxDataShard::TError::SCHEME_CHANGED, error); 
+        LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, error);
+
+        BuildResult(op)->SetProcessError(NKikimrTxDataShard::TError::SCHEME_CHANGED, error);
         op->Abort(EExecutionUnitKind::FinishPropose);
 
         return EExecutionStatus::Executed;
@@ -130,72 +130,72 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
     // Preserve new seqno to correctly filter out tx duplicates.
     DataShard.UpdateLastSchemeOpSeqNo(seqNo, txc);
 
-    if (seqNo > lastSeqNo) { 
-        // Activate older scheme ops, they are expected to fail seqno check 
-        Pipeline.ActivateWaitingSchemeOps(ctx); 
-    } 
- 
-    // Check if existing transaction matches the proposal 
-    auto existingOp = Pipeline.FindOp(activeTx->GetTxId()); 
-    if (existingOp && existingOp->IsSchemeTx()) { 
-        // Check if we have propose for the same transaction type 
-        auto *schemaOp = Pipeline.FindSchemaTx(activeTx->GetTxId()); 
-        Y_VERIFY_S(schemaOp, "Unexpected failure to find schema tx " << activeTx->GetTxId()); 
- 
-        // N.B. cannot use existingOp as it may not be loaded yet 
-        if (activeTx->GetSchemeTxType() != schemaOp->Type) { 
-            BuildResult(op)->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT, 
-                TStringBuilder() 
-                    << "Existing transaction " 
-                    << activeTx->GetTxId() 
-                    << " has a mismatching schema transaction type " 
-                    << ui32(schemaOp->Type) 
-                    << " expected " 
-                    << ui32(activeTx->GetSchemeTxType())); 
-            op->Abort(EExecutionUnitKind::FinishPropose); 
-            return EExecutionStatus::ExecutedNoMoreRestarts; 
-        } 
- 
-        // Store the most recent tx body 
-        if (Y_LIKELY(!existingOp->GetStep())) { 
-            // 1. If transaction has not yet been planned, then tx details are 
-            //    currently cleared and would be loaded as soon as transaction 
-            //    is planned and ready to execute. We need to store the updated 
-            //    SeqNo, since schemeshard may restart multiple times before 
-            //    planning the transaction. We want to protect against the most 
-            //    recent echo that is possible. 
-            // 2. If transaction has already been planned, then we expect all 
-            //    duplicates with matching SeqNo to be perfect duplicates, as 
-            //    retries from earlier schemeshard generations are already 
-            //    rejected by SeqNo above. We don't want to update tx body 
-            //    in that case, assuming that race is not harmful. 
-            Pipeline.UpdateSchemeTxBody(activeTx->GetTxId(), activeTx->GetTxBody(), txc); 
-        } 
- 
-        // Correctly fill matching MinStep and MaxStep (KIKIMR-9616) 
-        op->SetMinStep(schemaOp->MinStep); 
-        op->SetMaxStep(schemaOp->MaxStep); 
-        BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt()); 
- 
-        op->Abort(EExecutionUnitKind::FinishPropose); 
-        return EExecutionStatus::ExecutedNoMoreRestarts; 
-    } 
- 
+    if (seqNo > lastSeqNo) {
+        // Activate older scheme ops, they are expected to fail seqno check
+        Pipeline.ActivateWaitingSchemeOps(ctx);
+    }
+
+    // Check if existing transaction matches the proposal
+    auto existingOp = Pipeline.FindOp(activeTx->GetTxId());
+    if (existingOp && existingOp->IsSchemeTx()) {
+        // Check if we have propose for the same transaction type
+        auto *schemaOp = Pipeline.FindSchemaTx(activeTx->GetTxId());
+        Y_VERIFY_S(schemaOp, "Unexpected failure to find schema tx " << activeTx->GetTxId());
+
+        // N.B. cannot use existingOp as it may not be loaded yet
+        if (activeTx->GetSchemeTxType() != schemaOp->Type) {
+            BuildResult(op)->SetProcessError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
+                TStringBuilder()
+                    << "Existing transaction "
+                    << activeTx->GetTxId()
+                    << " has a mismatching schema transaction type "
+                    << ui32(schemaOp->Type)
+                    << " expected "
+                    << ui32(activeTx->GetSchemeTxType()));
+            op->Abort(EExecutionUnitKind::FinishPropose);
+            return EExecutionStatus::ExecutedNoMoreRestarts;
+        }
+
+        // Store the most recent tx body
+        if (Y_LIKELY(!existingOp->GetStep())) {
+            // 1. If transaction has not yet been planned, then tx details are
+            //    currently cleared and would be loaded as soon as transaction
+            //    is planned and ready to execute. We need to store the updated
+            //    SeqNo, since schemeshard may restart multiple times before
+            //    planning the transaction. We want to protect against the most
+            //    recent echo that is possible.
+            // 2. If transaction has already been planned, then we expect all
+            //    duplicates with matching SeqNo to be perfect duplicates, as
+            //    retries from earlier schemeshard generations are already
+            //    rejected by SeqNo above. We don't want to update tx body
+            //    in that case, assuming that race is not harmful.
+            Pipeline.UpdateSchemeTxBody(activeTx->GetTxId(), activeTx->GetTxBody(), txc);
+        }
+
+        // Correctly fill matching MinStep and MaxStep (KIKIMR-9616)
+        op->SetMinStep(schemaOp->MinStep);
+        op->SetMaxStep(schemaOp->MaxStep);
+        BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
+
+        op->Abort(EExecutionUnitKind::FinishPropose);
+        return EExecutionStatus::ExecutedNoMoreRestarts;
+    }
+
     // Check scheme tx content.
     if (!CheckSchemeTx(activeTx)) {
         Y_VERIFY(op->Result());
         op->Abort(EExecutionUnitKind::FinishPropose);
 
-        return EExecutionStatus::ExecutedNoMoreRestarts; 
+        return EExecutionStatus::ExecutedNoMoreRestarts;
     }
 
-    if (!op->IsReadOnly() && DataShard.TxPlanWaiting() > 0) { 
-        // We must wait until there are no transactions waiting for plan 
-        Pipeline.AddWaitingSchemeOp(op); 
-        return EExecutionStatus::Continue; 
-    } 
- 
-    op->SetMinStep(Pipeline.AllowedSchemaStep()); 
+    if (!op->IsReadOnly() && DataShard.TxPlanWaiting() > 0) {
+        // We must wait until there are no transactions waiting for plan
+        Pipeline.AddWaitingSchemeOp(op);
+        return EExecutionStatus::Continue;
+    }
+
+    op->SetMinStep(Pipeline.AllowedSchemaStep());
     op->SetMaxStep(Max<ui64>());
 
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
@@ -204,7 +204,7 @@ EExecutionStatus TCheckSchemeTxUnit::Execute(TOperation::TPtr op,
 
     BuildResult(op)->SetPrepared(op->GetMinStep(), op->GetMaxStep(), op->GetReceivedAt());
 
-    return EExecutionStatus::ExecutedNoMoreRestarts; 
+    return EExecutionStatus::ExecutedNoMoreRestarts;
 }
 
 bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx,
@@ -337,11 +337,11 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
         res = CheckCopy(activeTx);
         break;
     case TSchemaOperation::ETypeCreatePersistentSnapshot:
-        res = CheckCreatePersistentSnapshot(activeTx); 
-        break; 
+        res = CheckCreatePersistentSnapshot(activeTx);
+        break;
     case TSchemaOperation::ETypeDropPersistentSnapshot:
-        res = CheckDropPersistentSnapshot(activeTx); 
-        break; 
+        res = CheckDropPersistentSnapshot(activeTx);
+        break;
     case TSchemaOperation::ETypeInitiateBuildIndex:
         res = CheckInitiateBuildIndex(activeTx);
         break;
@@ -581,30 +581,30 @@ bool TCheckSchemeTxUnit::CheckCopy(TActiveTransaction *activeTx) {
     return true;
 }
 
-bool TCheckSchemeTxUnit::CheckCreatePersistentSnapshot(TActiveTransaction *activeTx) { 
-    const auto& tx = activeTx->GetSchemeTx(); 
- 
+bool TCheckSchemeTxUnit::CheckCreatePersistentSnapshot(TActiveTransaction *activeTx) {
+    const auto& tx = activeTx->GetSchemeTx();
+
     if (HasDuplicate(activeTx, "CreatePersistentSnapshot", &TPipeline::HasCreatePersistentSnapshot)) {
-        return false; 
-    } 
- 
-    Y_UNUSED(tx); 
- 
-    return true; 
-} 
- 
-bool TCheckSchemeTxUnit::CheckDropPersistentSnapshot(TActiveTransaction *activeTx) { 
-    const auto& tx = activeTx->GetSchemeTx(); 
- 
+        return false;
+    }
+
+    Y_UNUSED(tx);
+
+    return true;
+}
+
+bool TCheckSchemeTxUnit::CheckDropPersistentSnapshot(TActiveTransaction *activeTx) {
+    const auto& tx = activeTx->GetSchemeTx();
+
     if (HasDuplicate(activeTx, "DropPersistentSnapshot", &TPipeline::HasDropPersistentSnapshot)) {
-        return false; 
-    } 
- 
-    Y_UNUSED(tx); 
- 
-    return true; 
-} 
- 
+        return false;
+    }
+
+    Y_UNUSED(tx);
+
+    return true;
+}
+
 bool TCheckSchemeTxUnit::CheckInitiateBuildIndex(TActiveTransaction *activeTx) {
     if (HasDuplicate(activeTx, "InitiateBuildIndex", &TPipeline::HasInitiateBuilIndex)) {
         return false;

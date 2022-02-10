@@ -212,7 +212,7 @@ protected:
     void DoAddData(const char* data, size_t size) override {
         Y_VERIFY(size == sizeof(TType));
         Mask.AddNonNull();
-        DataSize += ValueCoder.Save(Output, ReadUnaligned<TType>(data)); 
+        DataSize += ValueCoder.Save(Output, ReadUnaligned<TType>(data));
     }
 
     void DoAddNull() override {

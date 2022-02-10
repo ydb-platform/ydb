@@ -80,7 +80,7 @@ public:
             }
         }
 
-        if (hasBorrowed && !record.GetCompactBorrowed()) { 
+        if (hasBorrowed && !record.GetCompactBorrowed()) {
             // normally we should not receive requests to compact in this case
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "Background compaction of tablet# " << Self->TabletID()
@@ -98,24 +98,24 @@ public:
             return true;
         }
 
-        if (stats.PartCount <= 1 && stats.MemDataSize == 0 && !hasBorrowed) { 
-            // nothing to compact 
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, 
-                "Background compaction of tablet# " << Self->TabletID() 
-                << " of path# " << pathId 
-                << ", requested from# " << Ev->Sender 
-                << " is not needed"); 
- 
-            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_NOT_NEEDED); 
- 
-            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>( 
-                Self->TabletID(), 
-                pathId, 
-                NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED); 
-            ctx.Send(Ev->Sender, std::move(response)); 
-            return true; 
-        } 
- 
+        if (stats.PartCount <= 1 && stats.MemDataSize == 0 && !hasBorrowed) {
+            // nothing to compact
+            LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                "Background compaction of tablet# " << Self->TabletID()
+                << " of path# " << pathId
+                << ", requested from# " << Ev->Sender
+                << " is not needed");
+
+            Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION_NOT_NEEDED);
+
+            auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
+                Self->TabletID(),
+                pathId,
+                NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+            ctx.Send(Ev->Sender, std::move(response));
+            return true;
+        }
+
         auto compactionId = Self->Executor()->CompactTable(tableInfo.LocalTid);
         if (compactionId) {
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,

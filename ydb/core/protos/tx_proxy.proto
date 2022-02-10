@@ -68,56 +68,56 @@ message TReadTableTransaction {
     optional TKeyRange KeyRange = 5;
     optional uint64 RowLimit = 6 [default = 0]; // All rows by default.
     optional uint32 ApiVersion = 7;
-    optional uint64 SnapshotStep = 8; 
-    optional uint64 SnapshotTxId = 9; 
+    optional uint64 SnapshotStep = 8;
+    optional uint64 SnapshotTxId = 9;
 };
 
-message TCreateVolatileSnapshotTx { 
-    message TTable { 
-        optional string TablePath = 1; 
-        optional TKeyRange KeyRange = 2; 
-    } 
- 
-    repeated TTable Tables = 1; 
-    optional string Name = 2; 
-    optional uint64 TimeoutMs = 3; 
-    optional bool IgnoreSystemViews = 4; 
-} 
- 
-message TRefreshVolatileSnapshotTx { 
-    message TTable { 
-        optional string TablePath = 1; 
-        optional TKeyRange KeyRange = 2; 
-    } 
- 
-    repeated TTable Tables = 1; 
-    optional uint64 SnapshotStep = 2; 
-    optional uint64 SnapshotTxId = 3; 
-    optional bool IgnoreSystemViews = 4; 
-} 
- 
-message TDiscardVolatileSnapshotTx { 
-    message TTable { 
-        optional string TablePath = 1; 
-        optional TKeyRange KeyRange = 2; 
-    } 
- 
-    repeated TTable Tables = 1; 
-    optional uint64 SnapshotStep = 2; 
-    optional uint64 SnapshotTxId = 3; 
-    optional bool IgnoreSystemViews = 4; 
-} 
- 
-message TCommitWritesTx { 
-    message TTable { 
-        optional string TablePath = 1; 
-        optional TKeyRange KeyRange = 2; 
-    } 
- 
-    repeated TTable Tables = 1; 
-    optional uint64 WriteTxId = 2; 
-} 
- 
+message TCreateVolatileSnapshotTx {
+    message TTable {
+        optional string TablePath = 1;
+        optional TKeyRange KeyRange = 2;
+    }
+
+    repeated TTable Tables = 1;
+    optional string Name = 2;
+    optional uint64 TimeoutMs = 3;
+    optional bool IgnoreSystemViews = 4;
+}
+
+message TRefreshVolatileSnapshotTx {
+    message TTable {
+        optional string TablePath = 1;
+        optional TKeyRange KeyRange = 2;
+    }
+
+    repeated TTable Tables = 1;
+    optional uint64 SnapshotStep = 2;
+    optional uint64 SnapshotTxId = 3;
+    optional bool IgnoreSystemViews = 4;
+}
+
+message TDiscardVolatileSnapshotTx {
+    message TTable {
+        optional string TablePath = 1;
+        optional TKeyRange KeyRange = 2;
+    }
+
+    repeated TTable Tables = 1;
+    optional uint64 SnapshotStep = 2;
+    optional uint64 SnapshotTxId = 3;
+    optional bool IgnoreSystemViews = 4;
+}
+
+message TCommitWritesTx {
+    message TTable {
+        optional string TablePath = 1;
+        optional TKeyRange KeyRange = 2;
+    }
+
+    repeated TTable Tables = 1;
+    optional uint64 WriteTxId = 2;
+}
+
 message TMiniKQLTransaction {
     message TMiniKQLProgram {
         // Server will use Text, if not set -- Bin.
@@ -177,12 +177,12 @@ message TTransaction {
     repeated NKikimrSchemeOp.TModifyScheme TransactionalModification = 11;
 
     optional TReadTableTransaction ReadTableTransaction = 20;
- 
-    optional TCreateVolatileSnapshotTx CreateVolatileSnapshot = 30; 
-    optional TRefreshVolatileSnapshotTx RefreshVolatileSnapshot = 31; 
-    optional TDiscardVolatileSnapshotTx DiscardVolatileSnapshot = 32; 
- 
-    optional TCommitWritesTx CommitWrites = 40; 
+
+    optional TCreateVolatileSnapshotTx CreateVolatileSnapshot = 30;
+    optional TRefreshVolatileSnapshotTx RefreshVolatileSnapshot = 31;
+    optional TDiscardVolatileSnapshotTx DiscardVolatileSnapshot = 32;
+
+    optional TCommitWritesTx CommitWrites = 40;
 }
 
 message TEvProposeTransaction {
@@ -237,7 +237,7 @@ message TEvProposeTransactionStatus {
     optional fixed64 SchemeShardTabletId = 33;
     optional uint64 PathId = 34;
     optional uint64 PathCreateTxId = 35;
-    optional uint64 PathDropTxId = 36; 
+    optional uint64 PathDropTxId = 36;
 
     optional fixed64 DataShardTabletId = 40;
 
@@ -246,10 +246,10 @@ message TEvProposeTransactionStatus {
 }
 
 message TEvNavigate {
-    reserved 1; // optional bytes Path = 1; 
-    reserved 2; // optional uint32 ReadMaterializedFamily = 2; 
-    reserved 3; // optional bytes TextPath = 3; 
-    reserved 4; // optional uint64 SchemeShardHint = 4; 
+    reserved 1; // optional bytes Path = 1;
+    reserved 2; // optional uint32 ReadMaterializedFamily = 2;
+    reserved 3; // optional bytes TextPath = 3;
+    reserved 4; // optional uint64 SchemeShardHint = 4;
 
     optional NKikimrSchemeOp.TDescribePath DescribePath = 5;
 
@@ -257,8 +257,8 @@ message TEvNavigate {
     optional string DatabaseName = 7;
 }
 
-// This message is no longer used 
-message TEvNavigateStatus_Deprecated { 
+// This message is no longer used
+message TEvNavigateStatus_Deprecated {
     optional uint32 Status = 1;
 
     optional bytes SchemePrefix = 10;

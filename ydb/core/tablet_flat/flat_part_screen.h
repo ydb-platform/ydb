@@ -1,13 +1,13 @@
 #pragma once
 
 #include "flat_row_eggs.h"
-#include "util_basics.h" 
+#include "util_basics.h"
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>
 
-#include <numeric> 
- 
+#include <numeric>
+
 namespace NKikimr {
 namespace NTable {
 
@@ -162,14 +162,14 @@ namespace NTable {
         }
 
         void Validate() const noexcept
-        { 
+        {
             TRowId last = 0;
-            for (const auto &hole : Holes) { 
+            for (const auto &hole : Holes) {
                 Y_VERIFY(std::exchange(last, hole.End) <= hole.Begin,
                     "Screen not sorted or has intersections");
-            } 
-        } 
- 
+            }
+        }
+
         static TIntrusiveConstPtr<TScreen> Cut(TIntrusiveConstPtr<TScreen> scr, THole hole) noexcept
         {
             if (hole == THole(true)) {

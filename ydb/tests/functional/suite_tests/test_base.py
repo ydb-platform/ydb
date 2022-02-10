@@ -265,9 +265,9 @@ class BaseSuiteRunner(object):
         cls.cluster.start()
         cls.table_path_prefix = None
         cls.table_path_prefix_ne = None
-        cls.driver = ydb.Driver(ydb.DriverConfig( 
-            database="/Root", 
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))) 
+        cls.driver = ydb.Driver(ydb.DriverConfig(
+            database="/Root",
+            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)))
         cls.pool = ydb.SessionPool(cls.driver)
         cls.driver.wait()
         cls.query_id = itertools.count(start=1)

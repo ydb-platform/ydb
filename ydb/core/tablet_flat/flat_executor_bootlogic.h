@@ -2,13 +2,13 @@
 #include "defs.h"
 #include "flat_executor.h"
 #include "flat_boot_cookie.h"
-#include "flat_boot_util.h" 
-#include "flat_load_blob_queue.h" 
+#include "flat_boot_util.h"
+#include "flat_load_blob_queue.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-class TCommitManager; 
+class TCommitManager;
 
 namespace NBoot {
     class IStep;
@@ -34,15 +34,15 @@ namespace NBoot {
         TAutoPtr<TLogicAlter> Alter;
         TAutoPtr<TCompactionLogicState> Comp;
         TAutoPtr<TExecutorBorrowLogic> Loans;
-        THashMap<ui32, NTable::TRowVersionRanges> RemovedRowVersions; 
+        THashMap<ui32, NTable::TRowVersionRanges> RemovedRowVersions;
 
-        TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches; 
+        TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
     };
 }
 
-class TExecutorBootLogic 
-    : private ILoadBlob 
-{ 
+class TExecutorBootLogic
+    : private ILoadBlob
+{
     friend class NBoot::TBundleLoadStep;
     friend class NBoot::TRedo;
     friend class NBoot::TStages;
@@ -79,7 +79,7 @@ private:
 
     const TIntrusiveConstPtr<TTabletStorageInfo> Info;
 
-    TLoadBlobQueue LoadBlobQueue; 
+    TLoadBlobQueue LoadBlobQueue;
 
     THashMap<TLogoBlobID, TIntrusivePtr<NBoot::TLoadBlobs>> EntriesToLoad;
     THashMap<const NPageCollection::IPageCollection*, TIntrusivePtr<NBoot::IStep>> Loads;
@@ -90,14 +90,14 @@ private:
 
     EOpResult CheckCompletion();
 
-    void PrepareEnv(bool follower, ui32 generation, TExecutorCaches caches) noexcept; 
+    void PrepareEnv(bool follower, ui32 generation, TExecutorCaches caches) noexcept;
     ui32 GetBSGroupFor(const TLogoBlobID &logo) const;
     ui32 GetBSGroupID(ui32 channel, ui32 generation);
     void LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs>);
     NBoot::TSpawned LoadPages(NBoot::IStep*, TAutoPtr<NPageCollection::TFetch> req);
 
-    void OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) override; 
- 
+    void OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) override;
+
     inline NBoot::TResult& Result() const noexcept { return *Result_; }
     inline NBoot::TBack& State() const noexcept { return *State_; }
 
@@ -106,8 +106,8 @@ public:
     ~TExecutorBootLogic();
 
     void Describe(IOutputStream&) const noexcept;
-    EOpResult ReceiveBoot(TEvTablet::TEvBoot::TPtr &ev, TExecutorCaches &&caches); 
-    EOpResult ReceiveFollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, TExecutorCaches &&caches); 
+    EOpResult ReceiveBoot(TEvTablet::TEvBoot::TPtr &ev, TExecutorCaches &&caches);
+    EOpResult ReceiveFollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, TExecutorCaches &&caches);
     EOpResult ReceiveRestored(TEvTablet::TEvRestored::TPtr &ev);
     EOpResult Receive(::NActors::IEventHandle&);
 
@@ -116,7 +116,7 @@ public:
 
     TAutoPtr<NBoot::TResult> ExtractState() noexcept;
 
-    TExecutorCaches DetachCaches(); 
+    TExecutorCaches DetachCaches();
 };
 
 }}

@@ -47,8 +47,8 @@ void SetupLogging(TTestActorRuntime& runtime)
 THashMap<ui32, TIntrusivePtr<TNodeWardenConfig>> NodeWardenConfigs;
 
 void SetupServices(TTestActorRuntime &runtime,
-                   ui32 maxDynNodes, 
-                   bool singleDomainMode) 
+                   ui32 maxDynNodes,
+                   bool singleDomainMode)
 {
     const ui32 domainsNum = 1;
     const ui32 disksInDomain = 1;
@@ -146,8 +146,8 @@ void SetupServices(TTestActorRuntime &runtime,
     runtime.GetAppData().DynamicNameserviceConfig = new TDynamicNameserviceConfig;
     auto dnConfig = runtime.GetAppData().DynamicNameserviceConfig;
     dnConfig->MaxStaticNodeId = 1023;
-    dnConfig->MaxDynamicNodeId = 1024 + (singleDomainMode ? (maxDynNodes - 1) : 32 * (maxDynNodes - 1)); 
-    runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerSingleDomainMode(singleDomainMode); 
+    dnConfig->MaxDynamicNodeId = 1024 + (singleDomainMode ? (maxDynNodes - 1) : 32 * (maxDynNodes - 1));
+    runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerSingleDomainMode(singleDomainMode);
 
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
@@ -196,8 +196,8 @@ void SetBannedIds(TTestActorRuntime& runtime,
 }
 
 void Setup(TTestActorRuntime& runtime,
-           ui32 maxDynNodes = 3, 
-           bool singleDomainMode = false) 
+           ui32 maxDynNodes = 3,
+           bool singleDomainMode = false)
 {
     using namespace NMalloc;
     TMallocInfo mallocInfo = MallocInfo();
@@ -212,7 +212,7 @@ void Setup(TTestActorRuntime& runtime,
     runtime.SetScheduledEventFilter(scheduledFilter);
 
     SetupLogging(runtime);
-    SetupServices(runtime, maxDynNodes, singleDomainMode); 
+    SetupServices(runtime, maxDynNodes, singleDomainMode);
 }
 
 bool IsTabletActiveEvent(IEventHandle& ev)
@@ -646,7 +646,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
     Y_UNIT_TEST(BasicFunctionality)
     {
         TTestBasicRuntime runtime(8, false);
-        Setup(runtime, 4); 
+        Setup(runtime, 4);
         TActorId sender = runtime.AllocateEdgeActor();
 
         // There should be no dynamic nodes initially.
@@ -691,9 +691,9 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         // Registration of existing node with different location.
         CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
                           1, 2, 3, 5, TStatus::WRONG_REQUEST, 1024);
-        // Registration of existing node with different address, expect new node id. 
+        // Registration of existing node with different address, expect new node id.
         CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.14",
-                          1, 2, 3, 4, TStatus::OK, 1120, epoch.GetNextEnd()); 
+                          1, 2, 3, 4, TStatus::OK, 1120, epoch.GetNextEnd());
         // There should be no more free IDs.
         CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7",
                           1, 2, 3, 7, TStatus::ERROR_TEMP);
@@ -704,7 +704,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckLeaseExtension(runtime, sender, 1025, TStatus::WRONG_REQUEST);
 
         epoch = WaitForEpochUpdate(runtime, sender);
-        CheckNodesList(runtime, sender, {1024, 1088, 1120}, {}, 4); 
+        CheckNodesList(runtime, sender, {1024, 1088, 1120}, {}, 4);
 
         // Register node and re-use 1056 node ID.
         CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7",
@@ -713,7 +713,7 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckLeaseExtension(runtime, sender, 1024, TStatus::OK, epoch);
 
         WaitForEpochUpdate(runtime, sender);
-        CheckNodesList(runtime, sender, {1024, 1056}, {1088, 1120}, 5); 
+        CheckNodesList(runtime, sender, {1024, 1056}, {1088, 1120}, 5);
 
         WaitForEpochUpdate(runtime, sender);
         CheckNodesList(runtime, sender, {}, {1024, 1056}, 6);
@@ -1017,63 +1017,63 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7",
                           1, 2, 3, 7, TStatus::ERROR_TEMP);
     }
- 
-    Y_UNIT_TEST(SingleDomainModeBannedIds) { 
-        TTestBasicRuntime runtime(1, false); 
-        Setup(runtime, 10, /* single domain */ true); 
-        TActorId sender = runtime.AllocateEdgeActor(); 
- 
-        SetBannedIds(runtime, sender, {{1025, 1032}}); 
- 
-        // There should be no dynamic nodes initially. 
-        auto epoch = GetEpoch(runtime, sender); 
- 
-        // Register node 1024. 
-        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4", 
-                          1, 2, 3, 4, TStatus::OK, 1024, epoch.GetNextEnd()); 
-        // Register node 1033. 
-        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5", 
-                          1, 2, 3, 5, TStatus::OK, 1033, epoch.GetNextEnd()); 
-        // No more free IDs. 
-        CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.6", 
-                          1, 2, 3, 6, TStatus::ERROR_TEMP); 
- 
-        SetBannedIds(runtime, sender, {{1025, 1029}, {1031, 1032}}); 
-        // Register node 1030. 
-        CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.6", 
-                          1, 2, 3, 6, TStatus::OK, 1030, epoch.GetNextEnd()); 
-        // No more free IDs. 
-        CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7", 
-                          1, 2, 3, 7, TStatus::ERROR_TEMP); 
- 
-        epoch = GetEpoch(runtime, sender); 
- 
-        // Now ban registered node and check lease extension. 
-        SetBannedIds(runtime, sender, {{1024, 1029}, {1031, 1032}}); 
-        CheckLeaseExtension(runtime, sender, 1024, TStatus::WRONG_REQUEST); 
-        CheckLeaseExtension(runtime, sender, 1030, TStatus::OK, epoch); 
-        CheckLeaseExtension(runtime, sender, 1033, TStatus::OK, epoch); 
- 
-        CheckNodeInfo(runtime, sender, 1024, "host1", 1001, "host1.yandex.net", "1.2.3.4", 
-                      1, 2, 3, 4, epoch.GetNextEnd()); 
- 
-        // Wait until node 1024 expires. 
-        WaitForEpochUpdate(runtime, sender); 
-        epoch = GetEpoch(runtime, sender); 
-        CheckLeaseExtension(runtime, sender, 1030, TStatus::OK, epoch); 
-        CheckLeaseExtension(runtime, sender, 1033, TStatus::OK, epoch); 
-        WaitForEpochUpdate(runtime, sender); 
- 
-        CheckNodeInfo(runtime, sender, 1024, TStatus::WRONG_REQUEST); 
-        // No more free IDs still. 
-        CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7", 
-                          1, 2, 3, 7, TStatus::ERROR_TEMP); 
- 
-        RestartNodeBroker(runtime); 
- 
-        CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7", 
-                          1, 2, 3, 7, TStatus::ERROR_TEMP); 
-    } 
+
+    Y_UNIT_TEST(SingleDomainModeBannedIds) {
+        TTestBasicRuntime runtime(1, false);
+        Setup(runtime, 10, /* single domain */ true);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        SetBannedIds(runtime, sender, {{1025, 1032}});
+
+        // There should be no dynamic nodes initially.
+        auto epoch = GetEpoch(runtime, sender);
+
+        // Register node 1024.
+        CheckRegistration(runtime, sender, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                          1, 2, 3, 4, TStatus::OK, 1024, epoch.GetNextEnd());
+        // Register node 1033.
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
+                          1, 2, 3, 5, TStatus::OK, 1033, epoch.GetNextEnd());
+        // No more free IDs.
+        CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.6",
+                          1, 2, 3, 6, TStatus::ERROR_TEMP);
+
+        SetBannedIds(runtime, sender, {{1025, 1029}, {1031, 1032}});
+        // Register node 1030.
+        CheckRegistration(runtime, sender, "host3", 1001, "host3.yandex.net", "1.2.3.6",
+                          1, 2, 3, 6, TStatus::OK, 1030, epoch.GetNextEnd());
+        // No more free IDs.
+        CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7",
+                          1, 2, 3, 7, TStatus::ERROR_TEMP);
+
+        epoch = GetEpoch(runtime, sender);
+
+        // Now ban registered node and check lease extension.
+        SetBannedIds(runtime, sender, {{1024, 1029}, {1031, 1032}});
+        CheckLeaseExtension(runtime, sender, 1024, TStatus::WRONG_REQUEST);
+        CheckLeaseExtension(runtime, sender, 1030, TStatus::OK, epoch);
+        CheckLeaseExtension(runtime, sender, 1033, TStatus::OK, epoch);
+
+        CheckNodeInfo(runtime, sender, 1024, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+
+        // Wait until node 1024 expires.
+        WaitForEpochUpdate(runtime, sender);
+        epoch = GetEpoch(runtime, sender);
+        CheckLeaseExtension(runtime, sender, 1030, TStatus::OK, epoch);
+        CheckLeaseExtension(runtime, sender, 1033, TStatus::OK, epoch);
+        WaitForEpochUpdate(runtime, sender);
+
+        CheckNodeInfo(runtime, sender, 1024, TStatus::WRONG_REQUEST);
+        // No more free IDs still.
+        CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7",
+                          1, 2, 3, 7, TStatus::ERROR_TEMP);
+
+        RestartNodeBroker(runtime);
+
+        CheckRegistration(runtime, sender, "host4", 1001, "host4.yandex.net", "1.2.3.7",
+                          1, 2, 3, 7, TStatus::ERROR_TEMP);
+    }
 }
 
 Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {

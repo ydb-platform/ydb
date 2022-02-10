@@ -6,7 +6,7 @@
 #include <ydb/core/protos/tx_mediator_timecast.pb.h>
 
 #include <util/stream/str.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 
 namespace NKikimr {
 
@@ -26,10 +26,10 @@ struct TEvMediatorTimecast {
         // local part
         EvRegisterTablet = EventSpaceBegin(TKikimrEvents::ES_TX_MEDIATORTIMECAST),
         EvUnregisterTablet,
-        EvWaitPlanStep, 
+        EvWaitPlanStep,
 
         EvRegisterTabletResult = EvRegisterTablet + 1 * 512,
-        EvNotifyPlanStep, 
+        EvNotifyPlanStep,
 
         // mediator part
         EvWatch = EvRegisterTablet + 2 * 512,
@@ -102,42 +102,42 @@ struct TEvMediatorTimecast {
         }
     };
 
-    struct TEvWaitPlanStep : public TEventLocal<TEvWaitPlanStep, EvWaitPlanStep> { 
-        const ui64 TabletId; 
-        const ui64 PlanStep; 
- 
-        TEvWaitPlanStep(ui64 tabletId, ui64 planStep) 
-            : TabletId(tabletId) 
-            , PlanStep(planStep) 
-        { } 
- 
-        TString ToString() const { 
-            return TStringBuilder() 
-                << "{TEvWaitPlanStep" 
-                << " TabletId# " << TabletId 
-                << " PlanStep# " << PlanStep 
-                << "}"; 
-        } 
-    }; 
- 
-    struct TEvNotifyPlanStep : public TEventLocal<TEvNotifyPlanStep, EvNotifyPlanStep> { 
-        const ui64 TabletId; 
-        const ui64 PlanStep; 
- 
-        TEvNotifyPlanStep(ui64 tabletId, ui64 planStep) 
-            : TabletId(tabletId) 
-            , PlanStep(planStep) 
-        { } 
- 
-        TString ToString() const { 
-            return TStringBuilder() 
-                << "{TEvNotifyPlanStep" 
-                << " TabletId# " << TabletId 
-                << " PlanStep# " << PlanStep 
-                << "}"; 
-        } 
-    }; 
- 
+    struct TEvWaitPlanStep : public TEventLocal<TEvWaitPlanStep, EvWaitPlanStep> {
+        const ui64 TabletId;
+        const ui64 PlanStep;
+
+        TEvWaitPlanStep(ui64 tabletId, ui64 planStep)
+            : TabletId(tabletId)
+            , PlanStep(planStep)
+        { }
+
+        TString ToString() const {
+            return TStringBuilder()
+                << "{TEvWaitPlanStep"
+                << " TabletId# " << TabletId
+                << " PlanStep# " << PlanStep
+                << "}";
+        }
+    };
+
+    struct TEvNotifyPlanStep : public TEventLocal<TEvNotifyPlanStep, EvNotifyPlanStep> {
+        const ui64 TabletId;
+        const ui64 PlanStep;
+
+        TEvNotifyPlanStep(ui64 tabletId, ui64 planStep)
+            : TabletId(tabletId)
+            , PlanStep(planStep)
+        { }
+
+        TString ToString() const {
+            return TStringBuilder()
+                << "{TEvNotifyPlanStep"
+                << " TabletId# " << TabletId
+                << " PlanStep# " << PlanStep
+                << "}";
+        }
+    };
+
     struct TEvWatch : public TEventPB<TEvWatch, NKikimrTxMediatorTimecast::TEvWatch, EvWatch> {
         TEvWatch()
         {}

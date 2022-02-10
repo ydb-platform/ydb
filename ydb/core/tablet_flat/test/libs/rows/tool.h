@@ -46,7 +46,7 @@ namespace NTest {
 
         TVector<TCell> KeyCells(const TRow &tagged) const
         {
-            TCelled celled(LookupKey(tagged), *Scheme.Keys, false); 
+            TCelled celled(LookupKey(tagged), *Scheme.Keys, false);
 
             return { celled.Cells, celled.Cells + celled.Size };
         }

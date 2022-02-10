@@ -2,7 +2,7 @@
 
 #include "flat_row_eggs.h"
 #include "flat_page_label.h"
-#include "util_deref.h" 
+#include "util_deref.h"
 #include <algorithm>
 
 namespace NKikimr {
@@ -68,7 +68,7 @@ namespace NPage {
         static_assert(sizeof(TEntry) == 16, "Invalid TFrames record unit");
         static_assert(sizeof(THeader) == 24, "Invalid TFrames header unit");
 
-        TFrames(TSharedData raw) 
+        TFrames(TSharedData raw)
             : Raw(std::move(raw))
             , End({ Max<TRowId>(), Max<ui16>(), 0, 0 })
         {
@@ -80,20 +80,20 @@ namespace NPage {
             Y_VERIFY(got.Page.size() > sizeof(THeader), "Damaged page");
 
             auto * const ptr = got.Page.data();
-            auto hdr = TDeref<THeader>::At(ptr, 0); 
+            auto hdr = TDeref<THeader>::At(ptr, 0);
 
             if (hdr->Skip > got.Page.size())
                 Y_FAIL("NPage::TFrame header is out of its blob");
 
             Stats_.Rows = hdr->Rows;
             Stats_.Size = hdr->Size;
-            Stats_.Tags = { TDeref<const ui32>::At(ptr, 24), hdr->Tags  }; 
+            Stats_.Tags = { TDeref<const ui32>::At(ptr, 24), hdr->Tags  };
             Stats_.Items = (got.Page.size() - hdr->Skip) / sizeof(TEntry);
 
             if (hdr->Skip < sizeof(THeader) + Stats_.Tags.size() * sizeof(ui32))
                 Y_FAIL("Invalid NPage::TFrame meta info blob header");
 
-            Records = { TDeref<TEntry>::At(ptr, hdr->Skip) , Stats_.Items }; 
+            Records = { TDeref<TEntry>::At(ptr, hdr->Skip) , Stats_.Items };
         }
 
         const TStats& Stats() const noexcept
@@ -129,7 +129,7 @@ namespace NPage {
         }
 
     public:
-        const TSharedData Raw; 
+        const TSharedData Raw;
 
     private:
         const TEntry End;

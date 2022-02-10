@@ -14,7 +14,7 @@ SRCS(
     local_rate_limiter.cpp
     operation_helpers.cpp
     resolve_local_db_table.cpp
-    rpc_alter_coordination_node.cpp 
+    rpc_alter_coordination_node.cpp
     rpc_alter_table.cpp
     rpc_begin_transaction.cpp
     rpc_calls.cpp
@@ -24,15 +24,15 @@ SRCS(
     rpc_copy_table.cpp
     rpc_copy_tables.cpp
     rpc_export.cpp
-    rpc_create_coordination_node.cpp 
+    rpc_create_coordination_node.cpp
     rpc_create_session.cpp
     rpc_create_table.cpp
     rpc_delete_session.cpp
-    rpc_describe_coordination_node.cpp 
+    rpc_describe_coordination_node.cpp
     rpc_describe_path.cpp
     rpc_describe_table.cpp
     rpc_describe_table_options.cpp
-    rpc_drop_coordination_node.cpp 
+    rpc_drop_coordination_node.cpp
     rpc_drop_table.cpp
     rpc_discovery.cpp
     rpc_execute_data_query.cpp
@@ -47,7 +47,7 @@ SRCS(
     rpc_import_data.cpp
     rpc_keep_alive.cpp
     rpc_kh_describe.cpp
-    rpc_kh_snapshots.cpp 
+    rpc_kh_snapshots.cpp
     rpc_kqp_base.cpp
     rpc_list_operations.cpp
     rpc_login.cpp

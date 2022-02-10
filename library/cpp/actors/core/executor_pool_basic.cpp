@@ -87,17 +87,17 @@ namespace NActors {
         if (x < 0) {
 #if defined ACTORSLIB_COLLECT_EXEC_STATS
             if (AtomicGetAndIncrement(ThreadUtilization) == 0) {
-                // Initially counter contains -t0, the pool start timestamp 
-                // When the first thread goes to sleep we add t1, so the counter 
-                // becomes t1-t0 >= 0, or the duration of max utilization so far. 
-                // If the counter was negative and becomes positive, that means 
-                // counter just turned into a duration and we should store that 
-                // duration. Otherwise another thread raced with us and 
-                // subtracted some other timestamp t2. 
+                // Initially counter contains -t0, the pool start timestamp
+                // When the first thread goes to sleep we add t1, so the counter
+                // becomes t1-t0 >= 0, or the duration of max utilization so far.
+                // If the counter was negative and becomes positive, that means
+                // counter just turned into a duration and we should store that
+                // duration. Otherwise another thread raced with us and
+                // subtracted some other timestamp t2.
                 const i64 t = GetCycleCountFast();
-                const i64 x = AtomicGetAndAdd(MaxUtilizationCounter, t); 
-                if (x < 0 && x + t > 0) 
-                    AtomicStore(&MaxUtilizationAccumulator, x + t); 
+                const i64 x = AtomicGetAndAdd(MaxUtilizationCounter, t);
+                if (x < 0 && x + t > 0)
+                    AtomicStore(&MaxUtilizationAccumulator, x + t);
             }
 #endif
 
@@ -126,7 +126,7 @@ namespace NActors {
                     if (!doSpin) {
                         break;
                     }
-                    if (RelaxedLoad(&StopFlag)) { 
+                    if (RelaxedLoad(&StopFlag)) {
                         break;
                     }
                 }
@@ -159,20 +159,20 @@ namespace NActors {
 
 #if defined ACTORSLIB_COLLECT_EXEC_STATS
             if (AtomicDecrement(ThreadUtilization) == 0) {
-                // When we started sleeping counter contained t1-t0, or the 
-                // last duration of max utilization. Now we subtract t2 >= t1, 
-                // which turns counter negative again, and the next sleep cycle 
-                // at timestamp t3 would be adding some new duration t3-t2. 
-                // If the counter was positive and becomes negative that means 
-                // there are no current races with other threads and we should 
-                // store the last positive duration we observed. Multiple 
-                // threads may be adding and subtracting values in potentially 
-                // arbitrary order, which would cause counter to oscillate 
-                // around zero. When it crosses zero is a good indication of a 
-                // correct value. 
+                // When we started sleeping counter contained t1-t0, or the
+                // last duration of max utilization. Now we subtract t2 >= t1,
+                // which turns counter negative again, and the next sleep cycle
+                // at timestamp t3 would be adding some new duration t3-t2.
+                // If the counter was positive and becomes negative that means
+                // there are no current races with other threads and we should
+                // store the last positive duration we observed. Multiple
+                // threads may be adding and subtracting values in potentially
+                // arbitrary order, which would cause counter to oscillate
+                // around zero. When it crosses zero is a good indication of a
+                // correct value.
                 const i64 t = GetCycleCountFast();
-                const i64 x = AtomicGetAndAdd(MaxUtilizationCounter, -t); 
-                if (x > 0 && x - t < 0) 
+                const i64 x = AtomicGetAndAdd(MaxUtilizationCounter, -t);
+                if (x > 0 && x - t < 0)
                     AtomicStore(&MaxUtilizationAccumulator, x);
             }
 #endif
@@ -305,18 +305,18 @@ namespace NActors {
 
     void TBasicExecutorPool::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
         Y_VERIFY_DEBUG(workerId < PoolThreads);
- 
-        const auto current = ActorSystem->Monotonic(); 
-        if (deadline < current) 
-            deadline = current; 
- 
+
+        const auto current = ActorSystem->Monotonic();
+        if (deadline < current)
+            deadline = current;
+
         ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
-    } 
- 
+    }
+
     void TBasicExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
         Y_VERIFY_DEBUG(workerId < PoolThreads);
 
-        const auto deadline = ActorSystem->Monotonic() + delta; 
+        const auto deadline = ActorSystem->Monotonic() + delta;
         ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
     }
 

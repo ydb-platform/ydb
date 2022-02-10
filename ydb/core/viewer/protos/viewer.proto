@@ -26,13 +26,13 @@ enum EObjectType {
     RtmrTasks = 12; // flat list of tasks
     RtmrTask = 13; // task is the group of operations, associated tables and some metadata
     RtmrVolume = 14;
-    BlockStoreVolume = 15; 
-    Kesus = 16; 
+    BlockStoreVolume = 15;
+    Kesus = 16;
     SolomonVolume = 17;
     SubDomain = 18;
     FileStore = 19;
     CdcStream = 20;
-    Sequence = 21; 
+    Sequence = 21;
     Replication = 22;
 }
 

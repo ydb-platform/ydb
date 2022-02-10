@@ -24,7 +24,7 @@ SRCS(
     blobstorage_vdisk_config.proto
     blobstorage_vdisk_internal.proto
     blobstorage_config.proto
-    blockstore_config.proto 
+    blockstore_config.proto
     filestore_config.proto
     bootstrapper.proto
     change_exchange.proto
@@ -42,13 +42,13 @@ SRCS(
     counters_columnshard.proto
     counters_datashard.proto
     counters_hive.proto
-    counters_kesus.proto 
+    counters_kesus.proto
     counters_keyvalue.proto
     counters_olapshard.proto
     counters_pq.proto
     counters_replication.proto
     counters_schemeshard.proto
-    counters_sequenceshard.proto 
+    counters_sequenceshard.proto
     counters_sysview_processor.proto
     counters_testshard.proto
     counters_tx_proxy.proto
@@ -65,13 +65,13 @@ SRCS(
     import.proto
     index_builder.proto
     issue_id.proto
-    kesus.proto 
+    kesus.proto
     kqp_query_settings.proto
     kqp_physical.proto
     kqp_stats.proto
     kqp.proto
     local.proto
-    long_tx_service.proto 
+    long_tx_service.proto
     metrics.proto
     minikql_engine.proto
     msgbus.proto
@@ -90,7 +90,7 @@ SRCS(
     scheme_type_operation.proto
     serverless_proxy_config.proto
     services.proto
-    shared_cache.proto 
+    shared_cache.proto
     sqs.proto
     follower_group.proto
     ssa.proto
@@ -116,7 +116,7 @@ SRCS(
     tx_mediator_timecast.proto
     tx_proxy.proto
     tx_scheme.proto
-    tx_sequenceshard.proto 
+    tx_sequenceshard.proto
     pdiskfit.proto
     pqconfig.proto
     auth.proto

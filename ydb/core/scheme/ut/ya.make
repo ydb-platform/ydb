@@ -11,7 +11,7 @@ PEERDIR(
 )
 
 SRCS(
-    scheme_borders_ut.cpp 
+    scheme_borders_ut.cpp
     scheme_tablecell_ut.cpp
 )
 

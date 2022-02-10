@@ -69,7 +69,7 @@ namespace NLs {
 
     TCheckFunc PathIdEqual(TPathId pathId);
     TCheckFunc PathIdEqual(ui64 pathId);
-    TCheckFunc PathStringEqual(const TString& path); 
+    TCheckFunc PathStringEqual(const TString& path);
     void NoChildren(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc ChildrenCount(ui32 count);
     void PathNotExist(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -100,14 +100,14 @@ namespace NLs {
     TCheckFunc HasTtlDisabled();
     TCheckFunc IsBackupTable(bool value);
 
-    TCheckFunc HasOlapTableSchemaPreset(const TString& presetName); 
-    TCheckFunc HasOlapTableSchemaVersion(ui64 schemaVersion); 
-    TCheckFunc HasOlapTableTtlSettingsVersion(ui64 ttlSettingsVersion); 
-    TCheckFunc HasOlapTableTtlSettingsEnabled(const TString& columnName, const TDuration& expireAfter); 
-    TCheckFunc HasOlapTableTtlSettingsDisabled(); 
+    TCheckFunc HasOlapTableSchemaPreset(const TString& presetName);
+    TCheckFunc HasOlapTableSchemaVersion(ui64 schemaVersion);
+    TCheckFunc HasOlapTableTtlSettingsVersion(ui64 ttlSettingsVersion);
+    TCheckFunc HasOlapTableTtlSettingsEnabled(const TString& columnName, const TDuration& expireAfter);
+    TCheckFunc HasOlapTableTtlSettingsDisabled();
     TCheckFunc HasOlapTableTtlSettingsTiering(ui32 tierNo, const TString& tierName, const TString& columnName,
                                               const TDuration& evictAfter);
- 
+
     TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui32 tabletCount, ui32 groupCount,
                               NKikimrSchemeOp::EPathState pathState = NKikimrSchemeOp::EPathState::EPathStateNoChanges);
     TCheckFunc IndexesCount(ui32 count);
@@ -127,23 +127,23 @@ namespace NLs {
     TCheckFunc KesusConfigIs(ui64 self_check_period_millis, ui64 session_grace_period_millis);
     TCheckFunc DatabaseQuotas(ui64 dataStreamShards);
 
-    template<class TCheck> 
+    template<class TCheck>
     void PerformAllChecks(const NKikimrScheme::TEvDescribeSchemeResult& result, TCheck&& check) {
-        check(result); 
-    } 
- 
-    template<class TCheck, class... TArgs> 
+        check(result);
+    }
+
+    template<class TCheck, class... TArgs>
     void PerformAllChecks(const NKikimrScheme::TEvDescribeSchemeResult& result, TCheck&& check, TArgs&&... args) {
-        check(result); 
-        PerformAllChecks(result, args...); 
-    } 
- 
-    template<class... TArgs> 
-    TCheckFunc All(TArgs&&... args) { 
+        check(result);
+        PerformAllChecks(result, args...);
+    }
+
+    template<class... TArgs>
+    TCheckFunc All(TArgs&&... args) {
         return [=] (const NKikimrScheme::TEvDescribeSchemeResult& result) {
-            return PerformAllChecks(result, args...); 
-        }; 
-    } 
- 
+            return PerformAllChecks(result, args...);
+        };
+    }
+
 }
 }

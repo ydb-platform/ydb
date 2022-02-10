@@ -8,7 +8,7 @@
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <util/stream/null.h>
-#include <util/system/event.h> 
+#include <util/system/event.h>
 
 #include "proto_ready_actor.h"
 #include "name_service_client_protocol.h"
@@ -372,81 +372,81 @@ Y_UNIT_TEST_SUITE(TestProtocols) {
         runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
     }
 
- 
-    /** 
-     * Server that replies to a single request very very slowly 
-     */ 
-    static void VerySlowServer(ui16 port, TManualEvent& listening) { 
-        TSockAddrInet6 listenAddr("::", port); 
- 
-        TInet6StreamSocket listener; 
-        listener.CheckSock(); 
-        SetReuseAddressAndPort(listener); 
-        TBaseSocket::Check(listener.Bind(&listenAddr), "bind"); 
-        TBaseSocket::Check(listener.Listen(5), "listen"); 
-        listening.Signal(); 
-        Ctest << "Listening on port " << port << Endl; 
- 
-        TStreamSocket client; 
-        TBaseSocket::Check(listener.Accept(&client), "accept"); 
-        Ctest << "Accepted connection" << Endl; 
- 
-        SetNoDelay(client, true); 
- 
-        // Pretend to read the request 
-        TStreamSocketInput input(&client); 
-        for (;;) { 
-            auto line = input.ReadLine(); 
-            Ctest << "Received: " << line << Endl; 
-            if (line.empty()) { 
-                break; 
-            } 
-        } 
- 
-        // It would take ~2 seconds to send the reply 
-        TString reply("HTTP/1.1 200 Ok\r\nContent-Length: 0\r\nX-Header: aaa"); 
-        reply.resize(2048 + 1024 * 3 - 4, 'a'); 
-        reply.append("\r\n\r\n"); 
-        client.Send(reply.data(), 17); // 1 byte less than MINIMUM_HTTP_REPLY_SIZE 
-        Sleep(TDuration::MilliSeconds(500)); 
-        client.Send(reply.data() + 17, 2048 - 17); // fill the initial buffer 
-        Sleep(TDuration::MilliSeconds(500)); 
-        client.Send(reply.data() + 2048, 1024); // fill half the buffer (not enough to grow) 
-        Sleep(TDuration::MilliSeconds(500)); 
-        client.Send(reply.data() + 3072, 1024); // fill the rest of the buffer 
-        Sleep(TDuration::MilliSeconds(500)); 
-        client.Send(reply.data() + 4096, 1024); // fill the rest of the buffer 
-    } 
- 
- 
-    /** 
-     * Regression test for KIKIMR-7944 
-     */ 
-    Y_UNIT_TEST(TestHTTPCollectedVerySlow) { 
-        TPortManager portManager; 
-        const ui16 port = portManager.GetPort(); 
- 
-        TManualEvent listening; 
-        auto serverThread = SystemThreadFactory()->Run([port, &listening](){ 
-            VerySlowServer(port, listening); 
-        }); 
-        listening.WaitI(); 
- 
-        TTestBasicRuntime runtime(2); 
-        runtime.Initialize(NKikimr::TAppPrepare().Unwrap()); 
- 
-        auto tester = new THTTPTester; 
-        tester->Edge = runtime.AllocateEdgeActor(0); 
-        tester->Port = port; 
-        runtime.Register(tester, 0); 
- 
-        TAutoPtr<IEventHandle> handle; 
-        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(tester->Error, ""); 
-    } 
- 
- 
+
+    /**
+     * Server that replies to a single request very very slowly
+     */
+    static void VerySlowServer(ui16 port, TManualEvent& listening) {
+        TSockAddrInet6 listenAddr("::", port);
+
+        TInet6StreamSocket listener;
+        listener.CheckSock();
+        SetReuseAddressAndPort(listener);
+        TBaseSocket::Check(listener.Bind(&listenAddr), "bind");
+        TBaseSocket::Check(listener.Listen(5), "listen");
+        listening.Signal();
+        Ctest << "Listening on port " << port << Endl;
+
+        TStreamSocket client;
+        TBaseSocket::Check(listener.Accept(&client), "accept");
+        Ctest << "Accepted connection" << Endl;
+
+        SetNoDelay(client, true);
+
+        // Pretend to read the request
+        TStreamSocketInput input(&client);
+        for (;;) {
+            auto line = input.ReadLine();
+            Ctest << "Received: " << line << Endl;
+            if (line.empty()) {
+                break;
+            }
+        }
+
+        // It would take ~2 seconds to send the reply
+        TString reply("HTTP/1.1 200 Ok\r\nContent-Length: 0\r\nX-Header: aaa");
+        reply.resize(2048 + 1024 * 3 - 4, 'a');
+        reply.append("\r\n\r\n");
+        client.Send(reply.data(), 17); // 1 byte less than MINIMUM_HTTP_REPLY_SIZE
+        Sleep(TDuration::MilliSeconds(500));
+        client.Send(reply.data() + 17, 2048 - 17); // fill the initial buffer
+        Sleep(TDuration::MilliSeconds(500));
+        client.Send(reply.data() + 2048, 1024); // fill half the buffer (not enough to grow)
+        Sleep(TDuration::MilliSeconds(500));
+        client.Send(reply.data() + 3072, 1024); // fill the rest of the buffer
+        Sleep(TDuration::MilliSeconds(500));
+        client.Send(reply.data() + 4096, 1024); // fill the rest of the buffer
+    }
+
+
+    /**
+     * Regression test for KIKIMR-7944
+     */
+    Y_UNIT_TEST(TestHTTPCollectedVerySlow) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TManualEvent listening;
+        auto serverThread = SystemThreadFactory()->Run([port, &listening](){
+            VerySlowServer(port, listening);
+        });
+        listening.WaitI();
+
+        TTestBasicRuntime runtime(2);
+        runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+
+        auto tester = new THTTPTester;
+        tester->Edge = runtime.AllocateEdgeActor(0);
+        tester->Port = port;
+        runtime.Register(tester, 0);
+
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
+
+        UNIT_ASSERT_VALUES_EQUAL(tester->Error, "");
+    }
+
+
     class THTTPRequestTester
         : public TProtoReadyActor<TActorBootstrapped, THTTPRequestTester>
         , public THTTPRequestProtocol<THTTPRequestTester>

@@ -99,10 +99,10 @@ public:
                 }
                 tablet->BecomeRunning(Local.NodeId());
                 if (tablet->GetLeader().IsLockedToActor()) {
-                    // Tablet is locked and shouldn't be running, but we just found out it's running on this node 
-                    // Ask it to stop using InitiateStop (which uses data saved by BecomeRunning call above) 
+                    // Tablet is locked and shouldn't be running, but we just found out it's running on this node
+                    // Ask it to stop using InitiateStop (which uses data saved by BecomeRunning call above)
                     tablet->InitiateStop();
-                } 
+                }
                 tablet->BootState = Self->BootStateRunning;
                 tablet->Statistics.SetLastAliveTimestamp(now.MilliSeconds());
                 if (tablet->IsLeader()) {

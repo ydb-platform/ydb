@@ -42,22 +42,22 @@ public:
         return true;
     }
 
-    bool Pending(const TTenant::TPtr& tenant) { 
-        Ydb::TOperationId id = Self->MakeOperationId(tenant, TTenant::CREATE); 
-        auto &operation = *Response->Record.MutableResponse()->mutable_operation(); 
-        operation.set_ready(false); 
-        operation.set_id(ProtoToString(id)); 
-        return true; 
-    } 
- 
-    bool Pending(const TString &path, ui64 txId) { 
-        Ydb::TOperationId id = Self->MakeOperationId(path, txId, TTenant::CREATE); 
-        auto &operation = *Response->Record.MutableResponse()->mutable_operation(); 
-        operation.set_ready(false); 
-        operation.set_id(ProtoToString(id)); 
-        return true; 
-    } 
- 
+    bool Pending(const TTenant::TPtr& tenant) {
+        Ydb::TOperationId id = Self->MakeOperationId(tenant, TTenant::CREATE);
+        auto &operation = *Response->Record.MutableResponse()->mutable_operation();
+        operation.set_ready(false);
+        operation.set_id(ProtoToString(id));
+        return true;
+    }
+
+    bool Pending(const TString &path, ui64 txId) {
+        Ydb::TOperationId id = Self->MakeOperationId(path, txId, TTenant::CREATE);
+        auto &operation = *Response->Record.MutableResponse()->mutable_operation();
+        operation.set_ready(false);
+        operation.set_id(ProtoToString(id));
+        return true;
+    }
+
     bool Execute(TTransactionContext &txc, const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
@@ -80,9 +80,9 @@ public:
         path = CanonizePath(path);
 
         if (auto tenant = Self->GetTenant(path)) {
-            if (rec.idempotency_key() && tenant->CreateIdempotencyKey == rec.idempotency_key()) { 
-                return Pending(tenant); 
-            } else if (tenant->IsRemoving()) { 
+            if (rec.idempotency_key() && tenant->CreateIdempotencyKey == rec.idempotency_key()) {
+                return Pending(tenant);
+            } else if (tenant->IsRemoving()) {
                 return Error(Ydb::StatusIds::PRECONDITION_FAILED,
                              Sprintf("Database '%s' is removing", path.data()), ctx);
             } else {
@@ -91,22 +91,22 @@ public:
             }
         }
 
-        if (auto it = Self->RemovedTenants.find(path); it != Self->RemovedTenants.end()) { 
-            if (rec.idempotency_key() && it->second.CreateIdempotencyKey == rec.idempotency_key()) { 
-                return Pending(path, it->second.TxId); 
-            } 
-        } 
- 
-        if (Self->Config.TenantsQuota 
-            && Self->Tenants.size() >= Self->Config.TenantsQuota) { 
-            LOG_NOTICE_S(ctx, NKikimrServices::CMS_TENANTS, 
-                         "Tenants quota is exceeded (" << Self->Tenants.size() 
-                         << "/" << Self->Config.TenantsQuota << ")"); 
-            Self->Counters.Inc(COUNTER_TENANTS_QUOTA_EXCEEDED); 
-            return Error(Ydb::StatusIds::UNAVAILABLE, 
-                         "Tenants quota is exceeded", ctx); 
-        } 
- 
+        if (auto it = Self->RemovedTenants.find(path); it != Self->RemovedTenants.end()) {
+            if (rec.idempotency_key() && it->second.CreateIdempotencyKey == rec.idempotency_key()) {
+                return Pending(path, it->second.TxId);
+            }
+        }
+
+        if (Self->Config.TenantsQuota
+            && Self->Tenants.size() >= Self->Config.TenantsQuota) {
+            LOG_NOTICE_S(ctx, NKikimrServices::CMS_TENANTS,
+                         "Tenants quota is exceeded (" << Self->Tenants.size()
+                         << "/" << Self->Config.TenantsQuota << ")");
+            Self->Counters.Inc(COUNTER_TENANTS_QUOTA_EXCEEDED);
+            return Error(Ydb::StatusIds::UNAVAILABLE,
+                         "Tenants quota is exceeded", ctx);
+        }
+
         // Check attributes.
         THashSet<TString> attrNames;
         for (const auto& [key, value] : rec.attributes()) {
@@ -132,10 +132,10 @@ public:
             Tenant->IsExternalSubdomain = false;
         }
 
-        if (rec.options().plan_resolution()) { 
-            Tenant->PlanResolution = rec.options().plan_resolution(); 
-        } 
- 
+        if (rec.options().plan_resolution()) {
+            Tenant->PlanResolution = rec.options().plan_resolution();
+        }
+
         if (rec.options().disable_tx_service()) {
             Tenant->Coordinators = 0;
             Tenant->Mediators = 0;
@@ -257,24 +257,24 @@ public:
             return Error(Ydb::StatusIds::BAD_REQUEST, "Unknown resources kind", ctx);
         }
 
-        if (rec.has_schema_operation_quotas()) { 
-            Tenant->SchemaOperationQuotas.ConstructInPlace(rec.schema_operation_quotas()); 
-        } 
- 
-        if (rec.has_database_quotas()) { 
-            const auto& quotas = rec.database_quotas(); 
-            auto hardQuota = quotas.data_size_hard_quota(); 
-            auto softQuota = quotas.data_size_soft_quota(); 
-            if (hardQuota && softQuota && hardQuota < softQuota) { 
-                return Error(Ydb::StatusIds::BAD_REQUEST, "Data size soft quota cannot be larger than hard quota", ctx); 
-            } 
-            Tenant->DatabaseQuotas.ConstructInPlace(quotas); 
-        } 
- 
-        if (rec.idempotency_key()) { 
-            Tenant->CreateIdempotencyKey = rec.idempotency_key(); 
-        } 
- 
+        if (rec.has_schema_operation_quotas()) {
+            Tenant->SchemaOperationQuotas.ConstructInPlace(rec.schema_operation_quotas());
+        }
+
+        if (rec.has_database_quotas()) {
+            const auto& quotas = rec.database_quotas();
+            auto hardQuota = quotas.data_size_hard_quota();
+            auto softQuota = quotas.data_size_soft_quota();
+            if (hardQuota && softQuota && hardQuota < softQuota) {
+                return Error(Ydb::StatusIds::BAD_REQUEST, "Data size soft quota cannot be larger than hard quota", ctx);
+            }
+            Tenant->DatabaseQuotas.ConstructInPlace(quotas);
+        }
+
+        if (rec.idempotency_key()) {
+            Tenant->CreateIdempotencyKey = rec.idempotency_key();
+        }
+
         Tenant->TxId = ctx.Now().GetValue();
         Tenant->Generation = 1;
 
@@ -283,7 +283,7 @@ public:
 
         Self->DbAddTenant(Tenant, txc, ctx);
 
-        return Pending(Tenant); 
+        return Pending(Tenant);
     }
 
     void Complete(const TActorContext &executorCtx) override

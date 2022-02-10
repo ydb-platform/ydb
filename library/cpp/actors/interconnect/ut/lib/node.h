@@ -4,7 +4,7 @@
 #include <library/cpp/actors/core/executor_pool_basic.h>
 #include <library/cpp/actors/core/scheduler_basic.h>
 #include <library/cpp/actors/core/mailbox.h>
-#include <library/cpp/actors/dnsresolver/dnsresolver.h> 
+#include <library/cpp/actors/dnsresolver/dnsresolver.h>
 
 #include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
@@ -91,7 +91,7 @@ public:
         for (ui32 i = 1; i <= numNodes; ++i) {
             names->StaticNodeTable[i] = TTableNameserverSetup::TNodeInfo(address, address, nodeToPort.at(i));
         }
-        setup.LocalServices.emplace_back( 
+        setup.LocalServices.emplace_back(
             NDnsResolver::MakeDnsResolverActorId(),
             TActorSetupCmd(
                 NDnsResolver::CreateOnDemandDnsResolver(),
@@ -111,7 +111,7 @@ public:
     }
 
     ~TNode() {
-        ActorSystem->Stop(); 
+        ActorSystem->Stop();
     }
 
     bool Send(const TActorId& recipient, IEventBase* ev) {

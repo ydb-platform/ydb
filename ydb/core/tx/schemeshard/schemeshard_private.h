@@ -1,8 +1,8 @@
 #pragma once
 #include "defs.h"
 
-#include "schemeshard_identificators.h" 
- 
+#include "schemeshard_identificators.h"
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -16,10 +16,10 @@ struct TEvPrivate {
         EvIndexBuildBilling,
         EvImportSchemeReady,
         EvServerlessStorageBilling,
-        EvCleanDroppedPaths, 
-        EvCleanDroppedSubDomains, 
-        EvSubscribeToShardDeletion, 
-        EvNotifyShardDeleted, 
+        EvCleanDroppedPaths,
+        EvCleanDroppedSubDomains,
+        EvSubscribeToShardDeletion,
+        EvNotifyShardDeleted,
         EvRunBackgroundCompaction,
         EvCompletePublication,
         EvCompleteBarrier,
@@ -92,30 +92,30 @@ struct TEvPrivate {
         {}
     };
 
-    struct TEvCleanDroppedPaths : public TEventLocal<TEvCleanDroppedPaths, EvCleanDroppedPaths> { 
-        TEvCleanDroppedPaths() = default; 
-    }; 
- 
-    struct TEvCleanDroppedSubDomains : public TEventLocal<TEvCleanDroppedSubDomains, EvCleanDroppedSubDomains> { 
-        TEvCleanDroppedSubDomains() = default; 
-    }; 
- 
-    struct TEvSubscribeToShardDeletion : public TEventLocal<TEvSubscribeToShardDeletion, EvSubscribeToShardDeletion> { 
-        TShardIdx ShardIdx; 
- 
-        explicit TEvSubscribeToShardDeletion(const TShardIdx& shardIdx) 
-            : ShardIdx(shardIdx) 
-        { } 
-    }; 
- 
-    struct TEvNotifyShardDeleted : public TEventLocal<TEvNotifyShardDeleted, EvNotifyShardDeleted> { 
-        TShardIdx ShardIdx; 
- 
-        explicit TEvNotifyShardDeleted(const TShardIdx& shardIdx) 
-            : ShardIdx(shardIdx) 
-        { } 
-    }; 
- 
+    struct TEvCleanDroppedPaths : public TEventLocal<TEvCleanDroppedPaths, EvCleanDroppedPaths> {
+        TEvCleanDroppedPaths() = default;
+    };
+
+    struct TEvCleanDroppedSubDomains : public TEventLocal<TEvCleanDroppedSubDomains, EvCleanDroppedSubDomains> {
+        TEvCleanDroppedSubDomains() = default;
+    };
+
+    struct TEvSubscribeToShardDeletion : public TEventLocal<TEvSubscribeToShardDeletion, EvSubscribeToShardDeletion> {
+        TShardIdx ShardIdx;
+
+        explicit TEvSubscribeToShardDeletion(const TShardIdx& shardIdx)
+            : ShardIdx(shardIdx)
+        { }
+    };
+
+    struct TEvNotifyShardDeleted : public TEventLocal<TEvNotifyShardDeleted, EvNotifyShardDeleted> {
+        TShardIdx ShardIdx;
+
+        explicit TEvNotifyShardDeleted(const TShardIdx& shardIdx)
+            : ShardIdx(shardIdx)
+        { }
+    };
+
     struct TEvCompletePublication: public TEventLocal<TEvCompletePublication, EvCompletePublication> {
         const TOperationId OpId;
         const TPathId PathId;

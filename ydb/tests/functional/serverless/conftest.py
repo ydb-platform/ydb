@@ -171,8 +171,8 @@ def ydb_hostel_db(ydb_cluster, ydb_root):
 
 
 @contextlib.contextmanager
-def ydb_serverless_db_ctx(ydb_cluster, database, hostel_db, timeout_seconds=100, schema_quotas=None, disk_quotas=None): 
-    logger.info("setup ydb_serverless_db %s over hostel %s with schema_quotas=%r, disk_quotas=%r", database, hostel_db, schema_quotas, disk_quotas) 
+def ydb_serverless_db_ctx(ydb_cluster, database, hostel_db, timeout_seconds=100, schema_quotas=None, disk_quotas=None):
+    logger.info("setup ydb_serverless_db %s over hostel %s with schema_quotas=%r, disk_quotas=%r", database, hostel_db, schema_quotas, disk_quotas)
 
     ydb_cluster.remove_database(
         database,
@@ -182,9 +182,9 @@ def ydb_serverless_db_ctx(ydb_cluster, database, hostel_db, timeout_seconds=100,
     ydb_cluster.create_serverless_database(
         database,
         hostel_db=hostel_db,
-        timeout_seconds=timeout_seconds, 
-        schema_quotas=schema_quotas, 
-        disk_quotas=disk_quotas, 
+        timeout_seconds=timeout_seconds,
+        schema_quotas=schema_quotas,
+        disk_quotas=disk_quotas,
         attributes={
             "cloud_id": "CLOUD_ID_VAL",
             "folder_id": "FOLDER_ID_VAL",
@@ -208,21 +208,21 @@ def ydb_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, extended_test_name):
 
     with ydb_serverless_db_ctx(ydb_cluster, database_name, ydb_hostel_db):
         yield database_name
- 
- 
-@pytest.fixture(scope='function') 
-def ydb_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, extended_test_name): 
-    database_name = os.path.join(ydb_root, "quoted_serverless", extended_test_name.replace("[", "_").replace("]", "_")) 
-    schema_quotas = ((2, 60), (4, 600)) 
- 
-    with ydb_serverless_db_ctx(ydb_cluster, database_name, ydb_hostel_db, schema_quotas=schema_quotas): 
-        yield database_name 
- 
- 
-@pytest.fixture(scope='function') 
-def ydb_disk_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, extended_test_name): 
-    database_name = os.path.join(ydb_root, "quoted_serverless", extended_test_name.replace("[", "_").replace("]", "_")) 
-    disk_quotas = {'hard': 64 * 1024 * 1024, 'soft': 32 * 1024 * 1024} 
- 
-    with ydb_serverless_db_ctx(ydb_cluster, database_name, ydb_hostel_db, disk_quotas=disk_quotas): 
-        yield database_name 
+
+
+@pytest.fixture(scope='function')
+def ydb_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, extended_test_name):
+    database_name = os.path.join(ydb_root, "quoted_serverless", extended_test_name.replace("[", "_").replace("]", "_"))
+    schema_quotas = ((2, 60), (4, 600))
+
+    with ydb_serverless_db_ctx(ydb_cluster, database_name, ydb_hostel_db, schema_quotas=schema_quotas):
+        yield database_name
+
+
+@pytest.fixture(scope='function')
+def ydb_disk_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, extended_test_name):
+    database_name = os.path.join(ydb_root, "quoted_serverless", extended_test_name.replace("[", "_").replace("]", "_"))
+    disk_quotas = {'hard': 64 * 1024 * 1024, 'soft': 32 * 1024 * 1024}
+
+    with ydb_serverless_db_ctx(ydb_cluster, database_name, ydb_hostel_db, disk_quotas=disk_quotas):
+        yield database_name

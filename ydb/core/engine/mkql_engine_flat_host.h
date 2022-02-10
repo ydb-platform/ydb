@@ -39,7 +39,7 @@ public:
     virtual ui64 CalculateResultSize(const TKeyDesc& key) const = 0;
 
     // At Tx execution make sure that all pages are loaded
-    virtual void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount = 0) = 0; 
+    virtual void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount = 0) = 0;
 
     // Returns empty optional with type 'returnType' or the filled one.
     virtual NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
@@ -49,7 +49,7 @@ public:
     // Returns struct with type 'returnType' - that should have fields 'List' and 'Truncated'.
     virtual NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
         TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType,
-        const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse, 
+        const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) = 0;
 
     // Updates the single row. Column in commands must be unique.

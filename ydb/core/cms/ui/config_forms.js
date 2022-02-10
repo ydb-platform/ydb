@@ -1517,75 +1517,75 @@ class NodeBrokerConfigEditForm extends CommonEditForm {
     }
 }
 
-class SharedCacheConfigEditForm extends CommonEditForm { 
-    constructor(kind, item) { 
-        super(kind, item); 
-        var form = $(this._form); 
- 
-        var memoryLimit; 
-        var scanQueueLimit; 
-        var asyncQueueLimit; 
- 
-        if (item && item.getConfig() && item.getConfig().SharedCacheConfig) { 
-            var cfg = item.getConfig().SharedCacheConfig; 
-            if (cfg.MemoryLimit) { 
-                memoryLimit = cfg.MemoryLimit / 1048576; 
-            } 
-            if (cfg.ScanQueueInFlyLimit) { 
-                scanQueueLimit = cfg.ScanQueueInFlyLimit / 1048576; 
-            } 
-            if (cfg.AsyncQueueInFlyLimit) { 
-                asyncQueueLimit = cfg.AsyncQueueInFlyLimit / 1048576; 
-            } 
-        } 
- 
-        var configFormHTML = ` 
-        <div style="padding-left: 10px;"> 
-            <div class="form-group"> 
-                <div class="row"> 
-                    ${this._makeNumericInput("Memory limit (MB)", "memory-limit", 
-                                             "Default is 512MB", memoryLimit)} 
-                    <div class="w-100 vs-4px"></div> 
-                    ${this._makeNumericInput("Scan queue in-fly (MB)", "scan-queue-infly", 
-                                             "Default is 512MB", scanQueueLimit)} 
-                    <div class="w-100 vs-4px"></div> 
-                    ${this._makeNumericInput("Async queue in-fly (MB)", "async-queue-infly", 
-                                             "Default is 512MB", asyncQueueLimit)} 
-                </div> 
-            </div> 
-        </div> 
-        `; 
- 
-        $(configFormHTML).insertBefore(form.children("div.row:last-child")); 
-        form.find('[data-toggle="tooltip"]').tooltip(); 
-    } 
- 
-    _prepareData() { 
-        var data = super._prepareData(); 
-        var cfg = {}; 
- 
-        var form = $(this._form); 
-        var memoryLimit = this._parseInt(form.find('.memory-limit').val()); 
-        var scanQueueLimit = this._parseInt(form.find('.scan-queue-infly').val()); 
-        var asyncQueueLimit = this._parseInt(form.find('.async-queue-infly').val()); 
- 
-        var cfg = {}; 
-        if (memoryLimit) { 
-            cfg.MemoryLimit = memoryLimit * 1048576; 
-        } 
-        if (scanQueueLimit) { 
-            cfg.ScanQueueInFlyLimit = scanQueueLimit * 1048576; 
-        } 
-        if (asyncQueueLimit) { 
-            cfg.AsyncQueueInFlyLimit = asyncQueueLimit * 1048576; 
-        } 
- 
-        data.Config = { SharedCacheConfig: cfg }; 
- 
-        return data; 
-    } 
+class SharedCacheConfigEditForm extends CommonEditForm {
+    constructor(kind, item) {
+        super(kind, item);
+        var form = $(this._form);
+
+        var memoryLimit;
+        var scanQueueLimit;
+        var asyncQueueLimit;
+
+        if (item && item.getConfig() && item.getConfig().SharedCacheConfig) {
+            var cfg = item.getConfig().SharedCacheConfig;
+            if (cfg.MemoryLimit) {
+                memoryLimit = cfg.MemoryLimit / 1048576;
+            }
+            if (cfg.ScanQueueInFlyLimit) {
+                scanQueueLimit = cfg.ScanQueueInFlyLimit / 1048576;
+            }
+            if (cfg.AsyncQueueInFlyLimit) {
+                asyncQueueLimit = cfg.AsyncQueueInFlyLimit / 1048576;
+            }
+        }
+
+        var configFormHTML = `
+        <div style="padding-left: 10px;">
+            <div class="form-group">
+                <div class="row">
+                    ${this._makeNumericInput("Memory limit (MB)", "memory-limit",
+                                             "Default is 512MB", memoryLimit)}
+                    <div class="w-100 vs-4px"></div>
+                    ${this._makeNumericInput("Scan queue in-fly (MB)", "scan-queue-infly",
+                                             "Default is 512MB", scanQueueLimit)}
+                    <div class="w-100 vs-4px"></div>
+                    ${this._makeNumericInput("Async queue in-fly (MB)", "async-queue-infly",
+                                             "Default is 512MB", asyncQueueLimit)}
+                </div>
+            </div>
+        </div>
+        `;
+
+        $(configFormHTML).insertBefore(form.children("div.row:last-child"));
+        form.find('[data-toggle="tooltip"]').tooltip();
+    }
+
+    _prepareData() {
+        var data = super._prepareData();
+        var cfg = {};
+
+        var form = $(this._form);
+        var memoryLimit = this._parseInt(form.find('.memory-limit').val());
+        var scanQueueLimit = this._parseInt(form.find('.scan-queue-infly').val());
+        var asyncQueueLimit = this._parseInt(form.find('.async-queue-infly').val());
+
+        var cfg = {};
+        if (memoryLimit) {
+            cfg.MemoryLimit = memoryLimit * 1048576;
+        }
+        if (scanQueueLimit) {
+            cfg.ScanQueueInFlyLimit = scanQueueLimit * 1048576;
+        }
+        if (asyncQueueLimit) {
+            cfg.AsyncQueueInFlyLimit = asyncQueueLimit * 1048576;
+        }
+
+        data.Config = { SharedCacheConfig: cfg };
+
+        return data;
+    }
 }
- 
+
 class ImmediateControlsConfigEditForm extends CommonEditForm {
     constructor(kind, item) {
         super(kind, item);
@@ -1605,7 +1605,7 @@ class ImmediateControlsConfigEditForm extends CommonEditForm {
 
         $(configFormHTML).insertBefore(form.children("div.row:last-child"));
         form.find('[data-toggle="tooltip"]').tooltip({html: true});
-    } 
+    }
 
     _makeControlInputs(item) {
         var desc = cmsProtoTypes.get('.NKikimrConfig.TImmediateControlsConfig');
@@ -1675,8 +1675,8 @@ class ImmediateControlsConfigEditForm extends CommonEditForm {
             }
         }
     }
-} 
- 
+}
+
 function getConfigEditFormCreator(kindName) {
     if (kindName === 'LogConfigItem') {
         return function (kind, item) {
@@ -1690,10 +1690,10 @@ function getConfigEditFormCreator(kindName) {
         return function (kind, item) {
             return new NodeBrokerConfigEditForm(kind, item);
         }
-    } else if (kindName == 'SharedCacheConfigItem') { 
-        return function (kind, item) { 
-            return new SharedCacheConfigEditForm(kind, item); 
-        } 
+    } else if (kindName == 'SharedCacheConfigItem') {
+        return function (kind, item) {
+            return new SharedCacheConfigEditForm(kind, item);
+        }
     } else if (kindName == 'ImmediateControlsConfigItem') {
         return function (kind, item) {
             return new ImmediateControlsConfigEditForm(kind, item);

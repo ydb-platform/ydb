@@ -38,7 +38,7 @@ namespace NPerf {
                     << " pages in " << NFmt::TLarge(st.Bytes) << "b"
                     << " avg "
                         << NFmt::TAverage(st.Pages(), st.Bytes, false) << "b"
-                    << ", " << NFmt::TLarge(part.IndexesRawSize) << "b index"; 
+                    << ", " << NFmt::TLarge(part.IndexesRawSize) << "b index";
             }
         }
 
@@ -47,8 +47,8 @@ namespace NPerf {
             NPage::TConf conf;
 
             if (compress) {
-                conf.Group(0).PageSize = 32 * 1024; 
-                conf.Group(0).Codec = NPage::ECodec::LZ4; 
+                conf.Group(0).PageSize = 32 * 1024;
+                conf.Group(0).Codec = NPage::ECodec::LZ4;
             }
 
             return conf;

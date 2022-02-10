@@ -22,12 +22,12 @@ namespace {
 
         TTouchEnv(bool fail) : Fail(fail) { }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override 
+        const TSharedData* TryGetPage(const TPart *part, TPageId id, TGroupId groupId) override
         {
-            Y_VERIFY(groupId.IsMain(), "TODO: support column groups"); 
+            Y_VERIFY(groupId.IsMain(), "TODO: support column groups");
             Touched.insert(id);
 
-            return Fail ? nullptr : NTest::TTestEnv::TryGetPage(part, id, groupId); 
+            return Fail ? nullptr : NTest::TTestEnv::TryGetPage(part, id, groupId);
         }
 
         bool Is(const TArr &arr, ui32 flags) const noexcept
@@ -54,7 +54,7 @@ namespace {
     struct TCooker {
         TCooker(const TRowScheme &scheme)
             : Tool(scheme)
-            , Writer(new TPartScheme(scheme.Cols), { }, NPage::TGroupId(0)) 
+            , Writer(new TPartScheme(scheme.Cols), { }, NPage::TGroupId(0))
         {
 
         }
@@ -66,7 +66,7 @@ namespace {
             return Writer.Add(key, offset, page), *this;
         }
 
-        TSharedData Flush() 
+        TSharedData Flush()
         {
             return Writer.Flush();
         }
@@ -91,7 +91,7 @@ namespace {
         {
             NPage::TConf conf{ true, 8192 };
 
-            conf.Group(0).PageRows = 3; /* each page has 3 physical rows, but... */ 
+            conf.Group(0).PageRows = 3; /* each page has 3 physical rows, but... */
 
             NTest::TPartCook cook(Mass.Model->Scheme, conf);
 
@@ -117,18 +117,18 @@ namespace {
 
             TTouchEnv env(true);
 
-            const auto &nulls = *Tool.Scheme.Keys; 
+            const auto &nulls = *Tool.Scheme.Keys;
             const auto from = Tool.KeyCells(Mass.Saved[lower]);
             const auto to = Tool.KeyCells(Mass.Saved[upper]);
 
-            TRun run(nulls); 
-            auto part = Eggs.Lone(); 
-            for (auto& slice : *part->Slices) { 
-                run.Insert(part, slice); 
-            } 
+            TRun run(nulls);
+            auto part = Eggs.Lone();
+            for (auto& slice : *part->Slices) {
+                run.Insert(part, slice);
+            }
 
-            TCharge::Range(&env, from, to, run, nulls, TTagsRef{ }, items, Max<ui64>()); 
- 
+            TCharge::Range(&env, from, to, run, nulls, TTagsRef{ }, items, Max<ui64>());
+
             if (!env.Is(arr, 0x00 /* require all pages */)) {
                 Log()
                     << "Charge over keys [" << lower << ", " << upper << "]"
@@ -148,16 +148,16 @@ namespace {
 
             wrap.To(CurrentStep()).Seek(Mass.Saved[lower], ESeek::Lower);
 
-            for (ui32 key = lower + 1; items-- > 1 && key <= upper; key++) { 
-                if (key % 4 == 0) { 
-                    ++key; 
+            for (ui32 key = lower + 1; items-- > 1 && key <= upper; key++) {
+                if (key % 4 == 0) {
+                    ++key;
                 }
 
-                auto last = (key == Mass.Saved.Size() - 1); 
+                auto last = (key == Mass.Saved.Size() - 1);
 
-                wrap.Next().Is(last ? EReady::Gone : EReady::Data); 
-            } 
- 
+                wrap.Next().Is(last ? EReady::Gone : EReady::Data);
+            }
+
             auto env = wrap.Displace<TTouchEnv>(nullptr);
 
             if (!env->Is(arr, 0x02 /* last page may be unused */)) {
@@ -191,14 +191,14 @@ Y_UNIT_TEST_SUITE(Charge) {
 
         const auto foo = *TNatural(*lay).Col(555_u32, "foo");
         const auto bar = *TNatural(*lay).Col(777_u32, "bar");
-        const auto baz = *TNatural(*lay).Col(999_u32, "baz"); 
+        const auto baz = *TNatural(*lay).Col(999_u32, "baz");
 
-        NPage::TIndex me( 
-            TCooker(*lay) 
-                .Add(foo, 0, 1) 
-                .Add(bar, 10, 2) 
-                .Add(baz, 19, 2) 
-                .Flush()); 
+        NPage::TIndex me(
+            TCooker(*lay)
+                .Add(foo, 0, 1)
+                .Add(bar, 10, 2)
+                .Add(baz, 19, 2)
+                .Flush());
 
         /* TODO: Special row keys such as { } or incomplete keys with +inf
             cells are not used in this UT set. It is ok since precharge
@@ -221,8 +221,8 @@ Y_UNIT_TEST_SUITE(Charge) {
             me.To(104).Check(4, 8, 0, { 0, 1, 2 });
             me.To(105).Check(4, 12, 0, { 0, 1, 2, 3 });
             me.To(106).Check(8, 12, 0, { 1, 2, 3 });
-            me.To(107).Check(8, 13, 0, { 1, 2, 3, 4 }); 
-            me.To(108).Check(8, 14, 0, { 1, 2, 3, 4 }); 
+            me.To(107).Check(8, 13, 0, { 1, 2, 3, 4 });
+            me.To(108).Check(8, 14, 0, { 1, 2, 3, 4 });
             me.To(110).Check(0, 35, 0, { 0, 1, 2, 3, 4, 5, 6, 7, 8 });
         }
 
@@ -255,27 +255,27 @@ Y_UNIT_TEST_SUITE(Charge) {
 
     Y_UNIT_TEST(Limits)
     {
-        /* XXX: Precharger is conservative about row limits, because it 
-            cannot know how many rows will really be consumed on the 
-            first page. Precharge will also add one extra row because 
-            datashard uses it to check for truncation, thus the limit 
-            of 8 (3 rows per page) rows really assumes 4 pages. 
+        /* XXX: Precharger is conservative about row limits, because it
+            cannot know how many rows will really be consumed on the
+            first page. Precharge will also add one extra row because
+            datashard uses it to check for truncation, thus the limit
+            of 8 (3 rows per page) rows really assumes 4 pages.
          */
 
         TModel me;
 
         /*_ 1xx: custom spanned loads scenarios */
 
-        me.To(101).Index(0, 35, 8 /* rows */, { 0, 1, 2, 3 }); 
-        me.To(102).Index(0, 35, 11 /* rows */, { 0, 1, 2, 3, 4 }); 
-        me.To(103).Index(0, 35, 14 /* rows */, { 0, 1, 2, 3, 4, 5 }); 
-        me.To(104).Index(3, 35, 5 /* rows */, { 0, 1, 2 }); 
-        me.To(105).Index(3, 35, 6 /* rows */, { 0, 1, 2, 3 }); 
-        me.To(106).Index(4, 35, 6 /* rows */, { 0, 1, 2, 3 }); 
-        me.To(107).Index(5, 35, 5 /* rows */, { 1, 2, 3 }); 
-        me.To(112).Index(9, 35, 11 /* rows */, { 2, 3, 4, 5, 6 }); 
-        me.To(113).Index(9, 35, 14 /* rows */, { 2, 3, 4, 5, 6, 7 }); 
-        me.To(120).Index(25, 35, 8 /* rows */, { 6, 7, 8 }); 
+        me.To(101).Index(0, 35, 8 /* rows */, { 0, 1, 2, 3 });
+        me.To(102).Index(0, 35, 11 /* rows */, { 0, 1, 2, 3, 4 });
+        me.To(103).Index(0, 35, 14 /* rows */, { 0, 1, 2, 3, 4, 5 });
+        me.To(104).Index(3, 35, 5 /* rows */, { 0, 1, 2 });
+        me.To(105).Index(3, 35, 6 /* rows */, { 0, 1, 2, 3 });
+        me.To(106).Index(4, 35, 6 /* rows */, { 0, 1, 2, 3 });
+        me.To(107).Index(5, 35, 5 /* rows */, { 1, 2, 3 });
+        me.To(112).Index(9, 35, 11 /* rows */, { 2, 3, 4, 5, 6 });
+        me.To(113).Index(9, 35, 14 /* rows */, { 2, 3, 4, 5, 6, 7 });
+        me.To(120).Index(25, 35, 8 /* rows */, { 6, 7, 8 });
 
         /*_ 2xx: one row charge limit on two page */
 

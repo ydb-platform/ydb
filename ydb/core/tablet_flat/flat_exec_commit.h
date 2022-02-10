@@ -7,8 +7,8 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-    struct TSeat; 
- 
+    struct TSeat;
+
     enum class ECommit {
         Redo = 1,   /* Tables data redo log     */
         Snap = 2,   /* Executor states snapshot */
@@ -42,9 +42,9 @@ namespace NTabletFlatExecutor {
                     << " -" << GcDelta.Deleted.size() << ")}";
         }
 
-        void PushTx(TSeat *seat) noexcept; 
-        TSeat* PopTx() noexcept; 
- 
+        void PushTx(TSeat *seat) noexcept;
+        TSeat* PopTx() noexcept;
+
         const ui32 Step = Max<ui32>();
         const ECommit Type = ECommit::Misc;
         const bool Sync = false;
@@ -53,8 +53,8 @@ namespace NTabletFlatExecutor {
         TString FollowerAux;
         TVector<TLogoBlob> Refs;
         TGCBlobDelta GcDelta;
-        TSeat *FirstTx = nullptr; 
-        TSeat *LastTx = nullptr; 
+        TSeat *FirstTx = nullptr;
+        TSeat *LastTx = nullptr;
     };
 
 }

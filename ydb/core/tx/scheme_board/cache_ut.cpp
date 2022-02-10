@@ -56,7 +56,7 @@ public:
     UNIT_TEST(MigrationLostMessage);
     UNIT_TEST(MigrationUndo);
     UNIT_TEST(MigrationDeletedPathNavigate);
-    UNIT_TEST(WatchRoot); 
+    UNIT_TEST(WatchRoot);
     UNIT_TEST_SUITE_END();
 
     void Navigate();
@@ -75,7 +75,7 @@ public:
     void MigrationLostMessage();
     void MigrationUndo();
     void MigrationDeletedPathNavigate();
-    void WatchRoot(); 
+    void WatchRoot();
 
 protected:
     TNavigate::TEntry TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
@@ -92,11 +92,11 @@ protected:
     TResolve::TEntry TestResolve(const TTableId& tableId, TResolve::EStatus expectedStatus = TResolve::EStatus::OkData,
         const TString& sid = TString());
 
-    TActorId TestWatch(const TPathId& pathId, const TActorId& watcher = {}, ui64 key = 0); 
-    void TestWatchRemove(const TActorId& watcher, ui64 key = 0); 
+    TActorId TestWatch(const TPathId& pathId, const TActorId& watcher = {}, ui64 key = 0);
+    void TestWatchRemove(const TActorId& watcher, ui64 key = 0);
     NSchemeCache::TDescribeResult::TCPtr ExpectWatchUpdated(const TActorId& watcher, const TString& expectedPath = {});
-    TPathId ExpectWatchDeleted(const TActorId& watcher); 
- 
+    TPathId ExpectWatchDeleted(const TActorId& watcher);
+
     void CreateAndMigrateWithoutDecision(ui64& txId);
 
 private:
@@ -428,7 +428,7 @@ TResolve::TEntry TCacheTest::TestResolve(const TTableId& tableId, TResolve::ESta
         TKeyDesc::ERowOperation::Unknown,
         TVector<NScheme::TTypeId>(), TVector<TKeyDesc::TColumnOp>()
     );
-    request->ResultSet.emplace_back(std::move(keyDesc)); 
+    request->ResultSet.emplace_back(std::move(keyDesc));
 
     if (sid) {
         request->UserToken = new NACLib::TUserToken(sid, {});
@@ -441,34 +441,34 @@ TResolve::TEntry TCacheTest::TestResolve(const TTableId& tableId, TResolve::ESta
     UNIT_ASSERT(ev->Get());
     UNIT_ASSERT(!ev->Get()->Request->ResultSet.empty());
 
-    TResolve::TEntry result = std::move(ev->Get()->Request->ResultSet[0]); 
+    TResolve::TEntry result = std::move(ev->Get()->Request->ResultSet[0]);
     UNIT_ASSERT_VALUES_EQUAL(result.Status, expectedStatus);
     return result;
 }
 
-TActorId TCacheTest::TestWatch(const TPathId& pathId, const TActorId& watcher, ui64 key) { 
-    const TActorId edge = watcher ? watcher : Context->AllocateEdgeActor(); 
-    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvWatchPathId(pathId, key), 0, 0, 0, true); 
-    return edge; 
-} 
- 
-void TCacheTest::TestWatchRemove(const TActorId& watcher, ui64 key) { 
-    Context->Send(SchemeCache, watcher, new TEvTxProxySchemeCache::TEvWatchRemove(key), 0, 0, 0, true); 
-} 
- 
+TActorId TCacheTest::TestWatch(const TPathId& pathId, const TActorId& watcher, ui64 key) {
+    const TActorId edge = watcher ? watcher : Context->AllocateEdgeActor();
+    Context->Send(SchemeCache, edge, new TEvTxProxySchemeCache::TEvWatchPathId(pathId, key), 0, 0, 0, true);
+    return edge;
+}
+
+void TCacheTest::TestWatchRemove(const TActorId& watcher, ui64 key) {
+    Context->Send(SchemeCache, watcher, new TEvTxProxySchemeCache::TEvWatchRemove(key), 0, 0, 0, true);
+}
+
 NSchemeCache::TDescribeResult::TCPtr TCacheTest::ExpectWatchUpdated(const TActorId& watcher, const TString& expectedPath) {
-    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(watcher); 
+    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvWatchNotifyUpdated>(watcher);
     if (expectedPath) {
         UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Path, expectedPath);
     }
-    return ev->Get()->Result; 
-} 
- 
-TPathId TCacheTest::ExpectWatchDeleted(const TActorId& watcher) { 
-    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvWatchNotifyDeleted>(watcher); 
-    return ev->Get()->PathId; 
-} 
- 
+    return ev->Get()->Result;
+}
+
+TPathId TCacheTest::ExpectWatchDeleted(const TActorId& watcher) {
+    auto ev = Context->GrabEdgeEvent<TEvTxProxySchemeCache::TEvWatchNotifyDeleted>(watcher);
+    return ev->Get()->PathId;
+}
+
 void TCacheTest::CreateAndMigrateWithoutDecision(ui64& txId) {
     auto domainSSNotifier = CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard);
 
@@ -891,63 +891,63 @@ void TCacheTest::MigrationDeletedPathNavigate() {
     }
 }
 
-void TCacheTest::WatchRoot() { 
+void TCacheTest::WatchRoot() {
     auto watcher = TestWatch(TPathId(TTestTxConfig::SchemeShard, 1));
- 
-    { 
+
+    {
         auto result = ExpectWatchUpdated(watcher, "/Root");
         UNIT_ASSERT_VALUES_EQUAL(result->GetStatus(), NKikimrScheme::StatusSuccess);
-        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetSelf().GetPathId(), 1u); 
-        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetChildren().size(), 0u); 
-    } 
- 
-    ui64 txId = 100; 
- 
-    TestMkDir(*Context, ++txId, "/Root", "DirA"); 
+        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetSelf().GetPathId(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetChildren().size(), 0u);
+    }
+
+    ui64 txId = 100;
+
+    TestMkDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
- 
-    // Ignore notification before create finished 
-    ExpectWatchUpdated(watcher); 
- 
-    ui64 dirPathId; 
-    { 
-        auto result = ExpectWatchUpdated(watcher); 
+
+    // Ignore notification before create finished
+    ExpectWatchUpdated(watcher);
+
+    ui64 dirPathId;
+    {
+        auto result = ExpectWatchUpdated(watcher);
         UNIT_ASSERT_VALUES_EQUAL(result->GetStatus(), NKikimrScheme::StatusSuccess);
-        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetSelf().GetPathId(), 1u); 
-        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetChildren().size(), 1u); 
-        dirPathId = result->GetPathDescription().GetChildren(0).GetPathId(); 
-    } 
- 
+        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetSelf().GetPathId(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetChildren().size(), 1u);
+        dirPathId = result->GetPathDescription().GetChildren(0).GetPathId();
+    }
+
     TestWatch(TPathId(TTestTxConfig::SchemeShard, dirPathId), watcher);
- 
-    { 
+
+    {
         auto result = ExpectWatchUpdated(watcher, "/Root/DirA");
         UNIT_ASSERT_VALUES_EQUAL(result->GetStatus(), NKikimrScheme::StatusSuccess);
-        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetSelf().GetPathId(), dirPathId); 
-    } 
- 
-    TestRmDir(*Context, ++txId, "/Root", "DirA"); 
+        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetSelf().GetPathId(), dirPathId);
+    }
+
+    TestRmDir(*Context, ++txId, "/Root", "DirA");
     TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
- 
-    { 
-        auto deleted = ExpectWatchDeleted(watcher); 
-        UNIT_ASSERT_VALUES_EQUAL(deleted.LocalPathId, dirPathId); 
-    } 
- 
-    // Ignore notification before drop finished 
-    ExpectWatchUpdated(watcher); 
- 
-    { 
-        auto result = ExpectWatchUpdated(watcher); 
+
+    {
+        auto deleted = ExpectWatchDeleted(watcher);
+        UNIT_ASSERT_VALUES_EQUAL(deleted.LocalPathId, dirPathId);
+    }
+
+    // Ignore notification before drop finished
+    ExpectWatchUpdated(watcher);
+
+    {
+        auto result = ExpectWatchUpdated(watcher);
         UNIT_ASSERT_VALUES_EQUAL(result->GetStatus(), NKikimrScheme::StatusSuccess);
-        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetSelf().GetPathId(), 1u); 
-        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetChildren().size(), 0u); 
-    } 
- 
-    TestWatchRemove(watcher); 
-    SimulateSleep(*Context, TDuration::Seconds(1)); 
-} 
- 
+        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetSelf().GetPathId(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(result->GetPathDescription().GetChildren().size(), 0u);
+    }
+
+    TestWatchRemove(watcher);
+    SimulateSleep(*Context, TDuration::Seconds(1));
+}
+
 class TCacheTestWithDrops: public TCacheTest {
 public:
     TTestContext::TEventObserver ObserverFunc() override {

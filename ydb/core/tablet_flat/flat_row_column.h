@@ -26,13 +26,13 @@ namespace NTable {
             }
         };
 
-        struct TByPos { 
-            bool operator()(const TColInfo& a, const TColInfo& b) const 
-            { 
-                return a.Pos < b.Pos; 
-            } 
-        }; 
- 
+        struct TByPos {
+            bool operator()(const TColInfo& a, const TColInfo& b) const
+            {
+                return a.Pos < b.Pos;
+            }
+        };
+
         TColInfo() = default;
 
         TColInfo(const TColInfo&) = default;
@@ -45,7 +45,7 @@ namespace NTable {
         TTag Tag = Max<TTag>();
         TPos Pos = Max<TPos>(); /* Position in physical layout */
         TPos Key = Max<TPos>(); /* key column sequence number */
-        TGroup Group = 0; /* Column group */ 
+        TGroup Group = 0; /* Column group */
     };
 }
 }

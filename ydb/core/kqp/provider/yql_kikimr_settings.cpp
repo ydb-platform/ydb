@@ -53,7 +53,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _CommitReadsLimit);
     REGISTER_SETTING(*this, _DefaultCluster);
     REGISTER_SETTING(*this, _ResultRowsLimit);
-    REGISTER_SETTING(*this, _AllowReverseRange); 
+    REGISTER_SETTING(*this, _AllowReverseRange);
     REGISTER_SETTING(*this, CommitSafety).Enum({"Full", "Safe", "Moderate"});
     REGISTER_SETTING(*this, UseNewEngine);
     REGISTER_SETTING(*this, UnwrapReadTableValues);
@@ -103,10 +103,10 @@ bool TKikimrSettings::HasAllowKqpUnsafeCommit() const {
     return GetFlagValue(_KqpAllowUnsafeCommit.Get());
 }
 
-bool TKikimrSettings::AllowReverseRange() const { 
-    return GetFlagValue(_AllowReverseRange.Get()); 
-} 
- 
+bool TKikimrSettings::AllowReverseRange() const {
+    return GetFlagValue(_AllowReverseRange.Get());
+}
+
 bool TKikimrSettings::HasDefaultCluster() const {
     return _DefaultCluster.Get() && !_DefaultCluster.Get().GetRef().empty();
 }

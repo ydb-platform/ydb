@@ -101,7 +101,7 @@ public:
     bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const override;
     ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const override;
     ui64 CalculateResultSize(const TKeyDesc& key) const override;
-    void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) override; 
+    void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount) override;
 
     NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
         TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,
@@ -109,7 +109,7 @@ public:
 
     NUdf::TUnboxedValue SelectRange(const TTableId& tableId, const TTableRange& range,
         TStructLiteral* columnIds, TListLiteral* skipNullKeys, TStructType* returnType,
-        const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse, 
+        const TReadTarget& readTarget, ui64 itemsLimit, ui64 bytesLimit, bool reverse,
         std::pair<const TListLiteral*, const TListLiteral*> forbidNullArgs, const THolderFactory& holderFactory) override;
 
     void UpdateRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
@@ -143,14 +143,14 @@ protected:
     TPeriodicCallback PeriodicCallback;
 };
 
-class TUnversionedEngineHost : public TEngineHost { 
-public: 
-    using TEngineHost::TEngineHost; 
- 
-    TRowVersion GetWriteVersion(const TTableId& tableId) const override { 
-        Y_UNUSED(tableId); 
-        return TRowVersion::Min(); 
-    } 
+class TUnversionedEngineHost : public TEngineHost {
+public:
+    using TEngineHost::TEngineHost;
+
+    TRowVersion GetWriteVersion(const TTableId& tableId) const override {
+        Y_UNUSED(tableId);
+        return TRowVersion::Min();
+    }
 
     TRowVersion GetReadVersion(const TTableId& tableId) const override {
         Y_UNUSED(tableId);
@@ -161,8 +161,8 @@ public:
         Y_UNUSED(tableId);
         return nullptr;
     }
-}; 
- 
+};
+
 void AnalyzeRowType(TStructLiteral* columnIds, TSmallVec<NTable::TTag>& tags, TSmallVec<NTable::TTag>& systemColumnTags);
 NUdf::TUnboxedValue GetCellValue(const TCell& cell, NScheme::TTypeId type);
 NUdf::TUnboxedValue CreateSelectRangeLazyRowsList(NTable::TDatabase& db, const NTable::TScheme& scheme,

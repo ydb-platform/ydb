@@ -44,14 +44,14 @@ struct TProtoBox : public TProto {
     }
 };
 
-// Deserialized and merge persisted protobuf without checking size limit 
-template <class TProto> 
-bool MergeFromStringNoSizeLimit(TProto& proto, TArrayRef<const char> str) { 
+// Deserialized and merge persisted protobuf without checking size limit
+template <class TProto>
+bool MergeFromStringNoSizeLimit(TProto& proto, TArrayRef<const char> str) {
     google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(str.data()), str.size());
     input.SetTotalBytesLimit(str.size());
-    return proto.MergeFromCodedStream(&input) && input.ConsumedEntireMessage(); 
+    return proto.MergeFromCodedStream(&input) && input.ConsumedEntireMessage();
 }
- 
+
 inline TString SingleLineProto(const NProtoBuf::Message& message) {
     NProtoBuf::TextFormat::Printer p;
     p.SetSingleLineMode(true);
@@ -59,6 +59,6 @@ inline TString SingleLineProto(const NProtoBuf::Message& message) {
     const bool success = p.PrintToString(message, &res);
     Y_VERIFY(success);
     return res;
-} 
+}
 
 }

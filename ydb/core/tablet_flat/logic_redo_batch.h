@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util_basics.h" 
+#include "util_basics.h"
 #include "flat_exec_commit.h"
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

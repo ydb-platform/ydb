@@ -51,10 +51,10 @@ TWaitForStreamClearanceUnit::~TWaitForStreamClearanceUnit()
 
 bool TWaitForStreamClearanceUnit::IsReadyToExecute(TOperation::TPtr op) const
 {
-    // Pass aborted operations 
-    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) 
-        return true; 
- 
+    // Pass aborted operations
+    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op))
+        return true;
+
     if (!op->IsWaitingForStreamClearance())
         return true;
 
@@ -68,13 +68,13 @@ EExecutionStatus TWaitForStreamClearanceUnit::Execute(TOperation::TPtr op,
                                                       TTransactionContext &,
                                                       const TActorContext &ctx)
 {
-    // Pass aborted operations 
-    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) { 
-        op->ResetWaitingForStreamClearanceFlag(); 
-        op->ResetProcessDisconnectsFlag(); 
-        return EExecutionStatus::Executed; 
-    } 
- 
+    // Pass aborted operations
+    if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
+        op->ResetWaitingForStreamClearanceFlag();
+        op->ResetProcessDisconnectsFlag();
+        return EExecutionStatus::Executed;
+    }
+
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
     Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
 

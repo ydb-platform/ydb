@@ -1,979 +1,979 @@
-#include "datashard_ut_common.h" 
-#include "datashard_active_transaction.h" 
- 
+#include "datashard_ut_common.h"
+#include "datashard_active_transaction.h"
+
 #include <ydb/core/formats/factory.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
- 
-namespace NKikimr { 
- 
+
+namespace NKikimr {
+
 using namespace NKikimr::NDataShard;
 using namespace NSchemeShard;
-using namespace Tests; 
- 
-namespace { 
- 
-    class TTextFormatBuilder : public IBlockBuilder { 
-    public: 
-        bool Start( 
-                const TVector<std::pair<TString, NScheme::TTypeId>>& columns, 
-                ui64 maxRowsInBlock, 
-                ui64 maxBytesInBlock, 
-                TString& err) override 
-        { 
-            Y_UNUSED(maxRowsInBlock); 
-            Y_UNUSED(maxBytesInBlock); 
-            Y_UNUSED(err); 
-            Columns = columns; 
-            Buffer.clear(); 
-            return true; 
-        } 
- 
-        void AddRow(const NKikimr::TDbTupleRef& key, const NKikimr::TDbTupleRef& value) override { 
-            Y_UNUSED(key); 
- 
-            for (size_t index = 0; index < value.ColumnCount; ++index) { 
-                if (index != 0) { 
-                    Buffer.append(", "); 
-                } 
-                Buffer.append(Columns[index].first); 
-                Buffer.append(" = "); 
-                DbgPrintValue(Buffer, value.Columns[index], value.Types[index]); 
-            } 
-            Buffer.append('\n'); 
-        } 
- 
-        TString Finish() override { 
-            // FIXME: cannot move data out, interface is weird :-/ 
-            return Buffer; 
-        } 
- 
-        size_t Bytes() const override { 
-            return Buffer.size(); 
-        } 
- 
-    private: 
-        std::unique_ptr<IBlockBuilder> Clone() const override { 
-            return std::make_unique<TTextFormatBuilder>(); 
-        } 
- 
-    private: 
-        TVector<std::pair<TString, NScheme::TTypeId>> Columns; 
-        TString Buffer; 
-    }; 
- 
-    void RegisterFormats(TServerSettings& settings) { 
-        if (!settings.Formats) { 
-            settings.Formats = new TFormatFactory; 
-        } 
- 
-        settings.Formats->RegisterBlockBuilder(std::make_unique<TTextFormatBuilder>(), "debug_text"); 
-    } 
- 
-    TString DoReadColumns( 
-            TServer::TPtr server, 
-            const TString& path, 
-            const TRowVersion& snapshot = TRowVersion::Max()) 
-    { 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        const auto shards = GetTableShards(server, sender, path); 
-        const auto tableId = ResolveTableId(server, sender, path); 
- 
-        TString result; 
- 
-        for (ui64 shardId : shards) { 
-            TString fromKey; 
-            bool fromKeyInclusive = true; 
-            for (;;) { 
-                auto req = MakeHolder<TEvDataShard::TEvReadColumnsRequest>(); 
-                req->Record.SetTableId(tableId.PathId.LocalPathId); 
-                if (!snapshot.IsMax()) { 
-                    req->Record.SetSnapshotStep(snapshot.Step); 
-                    req->Record.SetSnapshotTxId(snapshot.TxId); 
-                } 
-                req->Record.SetFromKey(fromKey); 
-                req->Record.SetFromKeyInclusive(fromKeyInclusive); 
-                req->Record.AddColumns("key"); 
-                req->Record.AddColumns("value"); 
-                req->Record.SetFormat("debug_text"); 
-                runtime.SendToPipe(shardId, sender, req.Release()); 
- 
-                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadColumnsResponse>(sender); 
-                auto* msg = ev->Get(); 
-                //Cerr << msg->Record.DebugString() << Endl; 
-                UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), 0u); 
-                result.append(msg->Record.GetBlocks()); 
- 
-                if (msg->Record.GetEndOfShard()) { 
-                    break; // go to the next shard 
-                } 
- 
-                if (msg->Record.GetLastKey()) { 
-                    fromKey = msg->Record.GetLastKey(); 
-                    fromKeyInclusive = !msg->Record.GetLastKeyInclusive(); 
-                } 
-            } 
-        } 
- 
-        return result; 
-    } 
- 
-    ui64 GetSnapshotCount(TTestActorRuntime& runtime, ui64 shard) { 
-        auto sender = runtime.AllocateEdgeActor(); 
-        auto request = MakeHolder<TEvTablet::TEvLocalMKQL>(); 
-        TString miniKQL = R"___(( 
-            (let range '('IncFrom 
-                '('Oid (Uint64 '0) (Void)) 
-                '('Tid (Uint64 '0) (Void)) 
-                '('Step (Uint64 '0) (Void)) 
-                '('TxId (Uint64 '0) (Void)))) 
-            (let select '('Oid 'Tid 'Step 'TxId)) 
-            (let options '()) 
-            (let pgmReturn (AsList 
-                (SetResult 'myRes (Length (Member (SelectRange 'Snapshots range select options) 'List))))) 
-            (return pgmReturn) 
-        ))___"; 
- 
-        request->Record.MutableProgram()->MutableProgram()->SetText(miniKQL); 
-        runtime.SendToPipe(shard, sender, request.Release(), 0, GetPipeConfigWithRetries()); 
- 
-        auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(sender); 
-        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), 0); 
-        return ev->Get()->Record 
-                .GetExecutionEngineEvaluatedResponse() 
-                .GetValue() 
-                .GetStruct(0) 
-                .GetOptional() 
-                .GetUint64(); 
-    } 
- 
-} // namespace 
- 
-Y_UNIT_TEST_SUITE(DataShardSnapshots) { 
- 
+using namespace Tests;
+
+namespace {
+
+    class TTextFormatBuilder : public IBlockBuilder {
+    public:
+        bool Start(
+                const TVector<std::pair<TString, NScheme::TTypeId>>& columns,
+                ui64 maxRowsInBlock,
+                ui64 maxBytesInBlock,
+                TString& err) override
+        {
+            Y_UNUSED(maxRowsInBlock);
+            Y_UNUSED(maxBytesInBlock);
+            Y_UNUSED(err);
+            Columns = columns;
+            Buffer.clear();
+            return true;
+        }
+
+        void AddRow(const NKikimr::TDbTupleRef& key, const NKikimr::TDbTupleRef& value) override {
+            Y_UNUSED(key);
+
+            for (size_t index = 0; index < value.ColumnCount; ++index) {
+                if (index != 0) {
+                    Buffer.append(", ");
+                }
+                Buffer.append(Columns[index].first);
+                Buffer.append(" = ");
+                DbgPrintValue(Buffer, value.Columns[index], value.Types[index]);
+            }
+            Buffer.append('\n');
+        }
+
+        TString Finish() override {
+            // FIXME: cannot move data out, interface is weird :-/
+            return Buffer;
+        }
+
+        size_t Bytes() const override {
+            return Buffer.size();
+        }
+
+    private:
+        std::unique_ptr<IBlockBuilder> Clone() const override {
+            return std::make_unique<TTextFormatBuilder>();
+        }
+
+    private:
+        TVector<std::pair<TString, NScheme::TTypeId>> Columns;
+        TString Buffer;
+    };
+
+    void RegisterFormats(TServerSettings& settings) {
+        if (!settings.Formats) {
+            settings.Formats = new TFormatFactory;
+        }
+
+        settings.Formats->RegisterBlockBuilder(std::make_unique<TTextFormatBuilder>(), "debug_text");
+    }
+
+    TString DoReadColumns(
+            TServer::TPtr server,
+            const TString& path,
+            const TRowVersion& snapshot = TRowVersion::Max())
+    {
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        const auto shards = GetTableShards(server, sender, path);
+        const auto tableId = ResolveTableId(server, sender, path);
+
+        TString result;
+
+        for (ui64 shardId : shards) {
+            TString fromKey;
+            bool fromKeyInclusive = true;
+            for (;;) {
+                auto req = MakeHolder<TEvDataShard::TEvReadColumnsRequest>();
+                req->Record.SetTableId(tableId.PathId.LocalPathId);
+                if (!snapshot.IsMax()) {
+                    req->Record.SetSnapshotStep(snapshot.Step);
+                    req->Record.SetSnapshotTxId(snapshot.TxId);
+                }
+                req->Record.SetFromKey(fromKey);
+                req->Record.SetFromKeyInclusive(fromKeyInclusive);
+                req->Record.AddColumns("key");
+                req->Record.AddColumns("value");
+                req->Record.SetFormat("debug_text");
+                runtime.SendToPipe(shardId, sender, req.Release());
+
+                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvReadColumnsResponse>(sender);
+                auto* msg = ev->Get();
+                //Cerr << msg->Record.DebugString() << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), 0u);
+                result.append(msg->Record.GetBlocks());
+
+                if (msg->Record.GetEndOfShard()) {
+                    break; // go to the next shard
+                }
+
+                if (msg->Record.GetLastKey()) {
+                    fromKey = msg->Record.GetLastKey();
+                    fromKeyInclusive = !msg->Record.GetLastKeyInclusive();
+                }
+            }
+        }
+
+        return result;
+    }
+
+    ui64 GetSnapshotCount(TTestActorRuntime& runtime, ui64 shard) {
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        TString miniKQL = R"___((
+            (let range '('IncFrom
+                '('Oid (Uint64 '0) (Void))
+                '('Tid (Uint64 '0) (Void))
+                '('Step (Uint64 '0) (Void))
+                '('TxId (Uint64 '0) (Void))))
+            (let select '('Oid 'Tid 'Step 'TxId))
+            (let options '())
+            (let pgmReturn (AsList
+                (SetResult 'myRes (Length (Member (SelectRange 'Snapshots range select options) 'List)))))
+            (return pgmReturn)
+        ))___";
+
+        request->Record.MutableProgram()->MutableProgram()->SetText(miniKQL);
+        runtime.SendToPipe(shard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+        auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), 0);
+        return ev->Get()->Record
+                .GetExecutionEngineEvaluatedResponse()
+                .GetValue()
+                .GetStruct(0)
+                .GetOptional()
+                .GetUint64();
+    }
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(DataShardSnapshots) {
+
     Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotSplit) {
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
             .SetEnableMvcc(WithMvcc)
-            .SetUseRealThreads(false); 
-        RegisterFormats(serverSettings); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
- 
-        InitRoot(server, sender); 
- 
+            .SetUseRealThreads(false);
+        RegisterFormats(serverSettings);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         CreateShardedTable(server, sender, "/Root", "table-2", 1);
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);"); 
- 
-        auto table1snapshot = DoReadColumns(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot, "key = 1, value = 1\nkey = 2, value = 2\nkey = 3, value = 3\n"); 
-        auto table2snapshot = DoReadColumns(server, "/Root/table-2", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table2snapshot, "key = 10, value = 10\nkey = 20, value = 20\nkey = 30, value = 30\n"); 
- 
-        auto table1head = DoReadColumns(server, "/Root/table-1"); 
-        UNIT_ASSERT_VALUES_EQUAL(table1head, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\nkey = 4, value = 44\n"); 
-        auto table2head = DoReadColumns(server, "/Root/table-2"); 
-        UNIT_ASSERT_VALUES_EQUAL(table2head, "key = 10, value = 11\nkey = 20, value = 22\nkey = 30, value = 33\nkey = 40, value = 44\n"); 
- 
-        // Split/merge would fail otherwise :( 
-        SetSplitMergePartCountLimit(server->GetRuntime(), -1); 
- 
-        // Split table in two shards 
-        { 
-            //Cerr << "----Split Begin----" << Endl; 
-            auto senderSplit = runtime.AllocateEdgeActor(); 
-            auto tablets = GetTableShards(server, senderSplit, "/Root/table-1"); 
-            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets.at(0), 3); 
-            WaitTxNotification(server, senderSplit, txId); 
-            //Cerr << "----Split End----" << Endl; 
-        } 
- 
-        auto table1snapshotAfterSplit = DoReadColumns(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshotAfterSplit, "key = 1, value = 1\nkey = 2, value = 2\nkey = 3, value = 3\n"); 
-        auto table1headAfterSplit = DoReadColumns(server, "/Root/table-1"); 
-        UNIT_ASSERT_VALUES_EQUAL(table1headAfterSplit, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\nkey = 4, value = 44\n"); 
-    } 
- 
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" });
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        auto table1snapshot = DoReadColumns(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot, "key = 1, value = 1\nkey = 2, value = 2\nkey = 3, value = 3\n");
+        auto table2snapshot = DoReadColumns(server, "/Root/table-2", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table2snapshot, "key = 10, value = 10\nkey = 20, value = 20\nkey = 30, value = 30\n");
+
+        auto table1head = DoReadColumns(server, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(table1head, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\nkey = 4, value = 44\n");
+        auto table2head = DoReadColumns(server, "/Root/table-2");
+        UNIT_ASSERT_VALUES_EQUAL(table2head, "key = 10, value = 11\nkey = 20, value = 22\nkey = 30, value = 33\nkey = 40, value = 44\n");
+
+        // Split/merge would fail otherwise :(
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+
+        // Split table in two shards
+        {
+            //Cerr << "----Split Begin----" << Endl;
+            auto senderSplit = runtime.AllocateEdgeActor();
+            auto tablets = GetTableShards(server, senderSplit, "/Root/table-1");
+            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets.at(0), 3);
+            WaitTxNotification(server, senderSplit, txId);
+            //Cerr << "----Split End----" << Endl;
+        }
+
+        auto table1snapshotAfterSplit = DoReadColumns(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshotAfterSplit, "key = 1, value = 1\nkey = 2, value = 2\nkey = 3, value = 3\n");
+        auto table1headAfterSplit = DoReadColumns(server, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(table1headAfterSplit, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\nkey = 4, value = 44\n");
+    }
+
     Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotMerge) {
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
             .SetEnableMvcc(WithMvcc)
-            .SetUseRealThreads(false); 
-        RegisterFormats(serverSettings); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
- 
-        InitRoot(server, sender); 
- 
+            .SetUseRealThreads(false);
+        RegisterFormats(serverSettings);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         CreateShardedTable(server, sender, "/Root", "table-2", 1);
- 
-        // Split/merge would fail otherwise :( 
-        SetSplitMergePartCountLimit(server->GetRuntime(), -1); 
- 
-        // Split table in two shards (before it has any data) 
-        { 
-            //Cerr << "----Split Begin----" << Endl; 
-            auto senderSplit = runtime.AllocateEdgeActor(); 
-            auto tablets = GetTableShards(server, senderSplit, "/Root/table-1"); 
-            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets.at(0), 3); 
-            WaitTxNotification(server, senderSplit, txId); 
-            //Cerr << "----Split End----" << Endl; 
-        } 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);"); 
- 
-        auto table1snapshot = DoReadColumns(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot, "key = 1, value = 1\nkey = 2, value = 2\nkey = 3, value = 3\n"); 
-        auto table2snapshot = DoReadColumns(server, "/Root/table-2", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table2snapshot, "key = 10, value = 10\nkey = 20, value = 20\nkey = 30, value = 30\n"); 
- 
-        auto table1head = DoReadColumns(server, "/Root/table-1"); 
-        UNIT_ASSERT_VALUES_EQUAL(table1head, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\nkey = 4, value = 44\n"); 
-        auto table2head = DoReadColumns(server, "/Root/table-2"); 
-        UNIT_ASSERT_VALUES_EQUAL(table2head, "key = 10, value = 11\nkey = 20, value = 22\nkey = 30, value = 33\nkey = 40, value = 44\n"); 
- 
-        // Merge table back into a single shard 
-        { 
-            //Cerr << "----Merge Begin----" << Endl; 
-            auto senderMerge = runtime.AllocateEdgeActor(); 
-            auto tablets = GetTableShards(server, senderMerge, "/Root/table-1"); 
-            ui64 txId = AsyncMergeTable(server, senderMerge, "/Root/table-1", tablets); 
-            WaitTxNotification(server, senderMerge, txId); 
-            //Cerr << "----Merge End----" << Endl; 
-        } 
- 
-        auto table1headAfterMerge = DoReadColumns(server, "/Root/table-1"); 
-        UNIT_ASSERT_VALUES_EQUAL(table1headAfterMerge, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\nkey = 4, value = 44\n"); 
-        auto table1snapshotAfterMerge = DoReadColumns(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshotAfterMerge, "key = 1, value = 1\nkey = 2, value = 2\nkey = 3, value = 3\n"); 
-    } 
- 
+
+        // Split/merge would fail otherwise :(
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+
+        // Split table in two shards (before it has any data)
+        {
+            //Cerr << "----Split Begin----" << Endl;
+            auto senderSplit = runtime.AllocateEdgeActor();
+            auto tablets = GetTableShards(server, senderSplit, "/Root/table-1");
+            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", tablets.at(0), 3);
+            WaitTxNotification(server, senderSplit, txId);
+            //Cerr << "----Split End----" << Endl;
+        }
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" });
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        auto table1snapshot = DoReadColumns(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot, "key = 1, value = 1\nkey = 2, value = 2\nkey = 3, value = 3\n");
+        auto table2snapshot = DoReadColumns(server, "/Root/table-2", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table2snapshot, "key = 10, value = 10\nkey = 20, value = 20\nkey = 30, value = 30\n");
+
+        auto table1head = DoReadColumns(server, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(table1head, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\nkey = 4, value = 44\n");
+        auto table2head = DoReadColumns(server, "/Root/table-2");
+        UNIT_ASSERT_VALUES_EQUAL(table2head, "key = 10, value = 11\nkey = 20, value = 22\nkey = 30, value = 33\nkey = 40, value = 44\n");
+
+        // Merge table back into a single shard
+        {
+            //Cerr << "----Merge Begin----" << Endl;
+            auto senderMerge = runtime.AllocateEdgeActor();
+            auto tablets = GetTableShards(server, senderMerge, "/Root/table-1");
+            ui64 txId = AsyncMergeTable(server, senderMerge, "/Root/table-1", tablets);
+            WaitTxNotification(server, senderMerge, txId);
+            //Cerr << "----Merge End----" << Endl;
+        }
+
+        auto table1headAfterMerge = DoReadColumns(server, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(table1headAfterMerge, "key = 1, value = 11\nkey = 2, value = 22\nkey = 3, value = 33\nkey = 4, value = 44\n");
+        auto table1snapshotAfterMerge = DoReadColumns(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshotAfterMerge, "key = 1, value = 1\nkey = 2, value = 2\nkey = 3, value = 3\n");
+    }
+
     Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotAndLocalMKQLUpdate) {
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
             .SetEnableMvcc(WithMvcc)
-            .SetUseRealThreads(false); 
-        RegisterFormats(serverSettings); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
- 
-        InitRoot(server, sender); 
- 
+            .SetUseRealThreads(false);
+        RegisterFormats(serverSettings);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         CreateShardedTable(server, sender, "/Root", "table-2", 1);
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }); 
- 
-        // Update user table using a local minikql tx 
-        { 
-            unsigned newKey = 2; 
-            unsigned newValue = 42; 
-            auto programText = Sprintf(R"(( 
-                (let row1_ '('('key (Uint32 '%u)))) 
-                (let upd1_ '('('value (Uint32 '%u)))) 
-                (let ret_ (AsList 
-                    (UpdateRow '__user__table-1 row1_ upd1_) 
-                )) 
-                (return ret_) 
-            ))", newKey, newValue); 
- 
-            auto shards = GetTableShards(server, sender, "/Root/table-1"); 
- 
-            auto request = MakeHolder<TEvTablet::TEvLocalMKQL>(); 
-            request->Record.MutableProgram()->MutableProgram()->SetText(programText); 
-            runtime.SendToPipe(shards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries()); 
- 
-            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender); 
-            auto* msg = ev->Get(); 
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), 0); 
-        } 
- 
-        // Snapshot must not be damaged 
-        auto table1snapshot = DoReadColumns(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        // New row must be visible in non-snapshot reads 
-        auto table1head = DoReadColumns(server, "/Root/table-1"); 
-        UNIT_ASSERT_VALUES_EQUAL(table1head, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 42\n" 
-            "key = 3, value = 3\n"); 
-    } 
- 
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" });
+
+        // Update user table using a local minikql tx
+        {
+            unsigned newKey = 2;
+            unsigned newValue = 42;
+            auto programText = Sprintf(R"((
+                (let row1_ '('('key (Uint32 '%u))))
+                (let upd1_ '('('value (Uint32 '%u))))
+                (let ret_ (AsList
+                    (UpdateRow '__user__table-1 row1_ upd1_)
+                ))
+                (return ret_)
+            ))", newKey, newValue);
+
+            auto shards = GetTableShards(server, sender, "/Root/table-1");
+
+            auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+            request->Record.MutableProgram()->MutableProgram()->SetText(programText);
+            runtime.SendToPipe(shards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+            auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
+            auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), 0);
+        }
+
+        // Snapshot must not be damaged
+        auto table1snapshot = DoReadColumns(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        // New row must be visible in non-snapshot reads
+        auto table1head = DoReadColumns(server, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(table1head,
+            "key = 1, value = 1\n"
+            "key = 2, value = 42\n"
+            "key = 3, value = 3\n");
+    }
+
     Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotReadTable) {
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
             .SetEnableMvcc(WithMvcc)
-            .SetUseRealThreads(false); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-        runtime.GetAppData().AllowReadTableImmediate = true; 
- 
-        InitRoot(server, sender); 
- 
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
         CreateShardedTable(server, sender, "/Root", "table-1", 2);
         CreateShardedTable(server, sender, "/Root", "table-2", 2);
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);"); 
- 
-        auto table1head = ReadShardedTable(server, "/Root/table-1"); 
-        UNIT_ASSERT_VALUES_EQUAL(table1head, 
-            "key = 1, value = 11\n" 
-            "key = 2, value = 22\n" 
-            "key = 3, value = 33\n" 
-            "key = 4, value = 44\n"); 
- 
-        auto table2head = ReadShardedTable(server, "/Root/table-2"); 
-        UNIT_ASSERT_VALUES_EQUAL(table2head, 
-            "key = 10, value = 11\n" 
-            "key = 20, value = 22\n" 
-            "key = 30, value = 33\n" 
-            "key = 40, value = 44\n"); 
- 
-        auto table1snapshot = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        auto table2snapshot = ReadShardedTable(server, "/Root/table-2", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table2snapshot, 
-            "key = 10, value = 10\n" 
-            "key = 20, value = 20\n" 
-            "key = 30, value = 30\n"); 
- 
-        auto table1badsnapshot = ReadShardedTable(server, "/Root/table-1", snapshot.Prev()); 
-        UNIT_ASSERT_VALUES_EQUAL(table1badsnapshot, "ERROR: WrongRequest\n"); 
- 
-        auto table1snapshotagain = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        { 
-            auto senderDiscard = runtime.AllocateEdgeActor(); 
-            auto tablets = GetTableShards(server, senderDiscard, "/Root/table-1"); 
-            const auto tableId = ResolveTableId(server, senderDiscard, "/Root/table-1"); 
-            for (ui64 shardId : tablets) { 
-                auto req = MakeHolder<TEvDataShard::TEvDiscardVolatileSnapshotRequest>(); 
-                req->Record.SetOwnerId(tableId.PathId.OwnerId); 
-                req->Record.SetPathId(tableId.PathId.LocalPathId); 
-                req->Record.SetStep(snapshot.Step); 
-                req->Record.SetTxId(snapshot.TxId); 
-                runtime.SendToPipe(shardId, senderDiscard, req.Release()); 
- 
-                using TResponse = NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse; 
- 
-                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvDiscardVolatileSnapshotResponse>(senderDiscard); 
-                UNIT_ASSERT_C(ev->Get()->Record.GetStatus() == TResponse::DISCARDED, 
-                    "Unexpected status " << TResponse::EStatus_Name(ev->Get()->Record.GetStatus())); 
-            } 
-        } 
- 
-        auto table1snapshotdiscarded = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshotdiscarded, "ERROR: WrongRequest\n"); 
-    } 
- 
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" });
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        auto table1head = ReadShardedTable(server, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(table1head,
+            "key = 1, value = 11\n"
+            "key = 2, value = 22\n"
+            "key = 3, value = 33\n"
+            "key = 4, value = 44\n");
+
+        auto table2head = ReadShardedTable(server, "/Root/table-2");
+        UNIT_ASSERT_VALUES_EQUAL(table2head,
+            "key = 10, value = 11\n"
+            "key = 20, value = 22\n"
+            "key = 30, value = 33\n"
+            "key = 40, value = 44\n");
+
+        auto table1snapshot = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        auto table2snapshot = ReadShardedTable(server, "/Root/table-2", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table2snapshot,
+            "key = 10, value = 10\n"
+            "key = 20, value = 20\n"
+            "key = 30, value = 30\n");
+
+        auto table1badsnapshot = ReadShardedTable(server, "/Root/table-1", snapshot.Prev());
+        UNIT_ASSERT_VALUES_EQUAL(table1badsnapshot, "ERROR: WrongRequest\n");
+
+        auto table1snapshotagain = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        {
+            auto senderDiscard = runtime.AllocateEdgeActor();
+            auto tablets = GetTableShards(server, senderDiscard, "/Root/table-1");
+            const auto tableId = ResolveTableId(server, senderDiscard, "/Root/table-1");
+            for (ui64 shardId : tablets) {
+                auto req = MakeHolder<TEvDataShard::TEvDiscardVolatileSnapshotRequest>();
+                req->Record.SetOwnerId(tableId.PathId.OwnerId);
+                req->Record.SetPathId(tableId.PathId.LocalPathId);
+                req->Record.SetStep(snapshot.Step);
+                req->Record.SetTxId(snapshot.TxId);
+                runtime.SendToPipe(shardId, senderDiscard, req.Release());
+
+                using TResponse = NKikimrTxDataShard::TEvDiscardVolatileSnapshotResponse;
+
+                auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvDiscardVolatileSnapshotResponse>(senderDiscard);
+                UNIT_ASSERT_C(ev->Get()->Record.GetStatus() == TResponse::DISCARDED,
+                    "Unexpected status " << TResponse::EStatus_Name(ev->Get()->Record.GetStatus()));
+            }
+        }
+
+        auto table1snapshotdiscarded = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshotdiscarded, "ERROR: WrongRequest\n");
+    }
+
     Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotRefreshDiscard) {
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
             .SetEnableMvcc(WithMvcc)
-            .SetUseRealThreads(false); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-        runtime.GetAppData().AllowReadTableImmediate = true; 
- 
-        InitRoot(server, sender); 
- 
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
         CreateShardedTable(server, sender, "/Root", "table-1", 2);
         CreateShardedTable(server, sender, "/Root", "table-2", 2);
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);"); 
- 
-        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        UNIT_ASSERT(RefreshVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot)); 
- 
-        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        UNIT_ASSERT(DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot)); 
- 
-        auto table1snapshot3 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot3, "ERROR: WrongRequest\n"); 
- 
-        UNIT_ASSERT(!RefreshVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot)); 
-        UNIT_ASSERT(!DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot)); 
-    } 
- 
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" });
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        UNIT_ASSERT(RefreshVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot));
+
+        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        UNIT_ASSERT(DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot));
+
+        auto table1snapshot3 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot3, "ERROR: WrongRequest\n");
+
+        UNIT_ASSERT(!RefreshVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot));
+        UNIT_ASSERT(!DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot));
+    }
+
     Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotTimeout) {
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
             .SetEnableMvcc(WithMvcc)
-            .SetUseRealThreads(false) 
-            .SetDomainPlanResolution(1000); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-        runtime.GetAppData().AllowReadTableImmediate = true; 
- 
-        InitRoot(server, sender); 
- 
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
         CreateShardedTable(server, sender, "/Root", "table-1", 2);
         CreateShardedTable(server, sender, "/Root", "table-2", 2);
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000)); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);"); 
- 
-        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        Cerr << "---- Sleeping ----" << Endl; 
-        SimulateSleep(server, TDuration::Seconds(60)); 
- 
-        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2, 
-            "ERROR: WrongRequest\n"); 
-    } 
- 
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        Cerr << "---- Sleeping ----" << Endl;
+        SimulateSleep(server, TDuration::Seconds(60));
+
+        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2,
+            "ERROR: WrongRequest\n");
+    }
+
     Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotTimeoutRefresh) {
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
             .SetEnableMvcc(WithMvcc)
-            .SetUseRealThreads(false) 
-            .SetDomainPlanResolution(1000); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-        runtime.GetAppData().AllowReadTableImmediate = true; 
- 
-        InitRoot(server, sender); 
- 
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
         CreateShardedTable(server, sender, "/Root", "table-1", 2);
         CreateShardedTable(server, sender, "/Root", "table-2", 2);
- 
-        const auto shards1 = GetTableShards(server, sender, "/Root/table-1"); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot1 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000)); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);"); 
- 
-        auto snapshot2 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000)); 
- 
-        // Snapshots table must have 2 rows 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 2u); 
- 
-        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot1); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot2); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2, 
-            "key = 1, value = 11\n" 
-            "key = 2, value = 22\n" 
-            "key = 3, value = 33\n" 
-            "key = 4, value = 44\n"); 
- 
-        // Refresh snapshot1 every 5 seconds for 60 seconds 
-        for (size_t i = 0; i < 12; ++i) { 
-            Cerr << "---- Refresh attempt: " << (i + 1) << " ----" << Endl; 
-            UNIT_ASSERT(RefreshVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot1)); 
-            SimulateSleep(server, TDuration::Seconds(5)); 
-        } 
- 
-        // Test snapshot1 still works correctly 
-        auto table1snapshot1again = ReadShardedTable(server, "/Root/table-1", snapshot1); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1again, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        // Test snapshot2 no longer works 
-        auto table1snapshot2again = ReadShardedTable(server, "/Root/table-1", snapshot2); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2again, 
-            "ERROR: WrongRequest\n"); 
- 
-        // Snapshots table must have 1 row 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u); 
-    } 
- 
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot1 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        auto snapshot2 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
+
+        // Snapshots table must have 2 rows
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 2u);
+
+        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot1);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot2);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2,
+            "key = 1, value = 11\n"
+            "key = 2, value = 22\n"
+            "key = 3, value = 33\n"
+            "key = 4, value = 44\n");
+
+        // Refresh snapshot1 every 5 seconds for 60 seconds
+        for (size_t i = 0; i < 12; ++i) {
+            Cerr << "---- Refresh attempt: " << (i + 1) << " ----" << Endl;
+            UNIT_ASSERT(RefreshVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot1));
+            SimulateSleep(server, TDuration::Seconds(5));
+        }
+
+        // Test snapshot1 still works correctly
+        auto table1snapshot1again = ReadShardedTable(server, "/Root/table-1", snapshot1);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1again,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        // Test snapshot2 no longer works
+        auto table1snapshot2again = ReadShardedTable(server, "/Root/table-1", snapshot2);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2again,
+            "ERROR: WrongRequest\n");
+
+        // Snapshots table must have 1 row
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
+    }
+
     Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotCleanupOnReboot) {
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
             .SetEnableMvcc(WithMvcc)
-            .SetUseRealThreads(false) 
-            .SetDomainPlanResolution(1000); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-        runtime.GetAppData().AllowReadTableImmediate = true; 
- 
-        InitRoot(server, sender); 
- 
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         CreateShardedTable(server, sender, "/Root", "table-2", 1);
- 
-        const auto shards1 = GetTableShards(server, sender, "/Root/table-1"); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000)); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);"); 
- 
-        // Snapshots table must have 1 row 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u); 
- 
-        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        // Start ReadTable using snapshot and pause on quota requests 
-        StartReadShardedTable(server, "/Root/table-1", snapshot); 
- 
-        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        UNIT_ASSERT(DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot)); 
- 
-        auto table1snapshot3 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot3, 
-            "ERROR: WrongRequest\n"); 
- 
-        // Snapshots table must still have snapshot (used by paused ReadTable) 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u); 
- 
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        // Snapshots table must have 1 row
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
+
+        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        // Start ReadTable using snapshot and pause on quota requests
+        StartReadShardedTable(server, "/Root/table-1", snapshot);
+
+        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        UNIT_ASSERT(DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot));
+
+        auto table1snapshot3 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot3,
+            "ERROR: WrongRequest\n");
+
+        // Snapshots table must still have snapshot (used by paused ReadTable)
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
+
         RebootTablet(runtime, shards1[0], sender);
- 
-        // Snapshots table should be cleaned up on reboot 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 0u); 
-    } 
- 
+
+        // Snapshots table should be cleaned up on reboot
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 0u);
+    }
+
     Y_UNIT_TEST_WITH_MVCC(VolatileSnapshotCleanupOnFinish) {
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
             .SetEnableMvcc(WithMvcc)
-            .SetUseRealThreads(false) 
-            .SetDomainPlanResolution(1000); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-        runtime.GetAppData().AllowReadTableImmediate = true; 
- 
-        InitRoot(server, sender); 
- 
+            .SetUseRealThreads(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         CreateShardedTable(server, sender, "/Root", "table-2", 1);
- 
-        const auto shards1 = GetTableShards(server, sender, "/Root/table-1"); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000)); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);"); 
- 
-        // Snapshots table must have 1 row 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u); 
- 
-        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        // Start ReadTable using snapshot and pause on quota requests 
-        auto state = StartReadShardedTable(server, "/Root/table-1", snapshot); 
- 
-        UNIT_ASSERT(DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot)); 
- 
-        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2, 
-            "ERROR: WrongRequest\n"); 
- 
-        // Snapshots table must still have snapshot (used by paused ReadTable) 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u); 
- 
-        // Resume paused ReadTable and check the result 
-        ResumeReadShardedTable(server, state); 
-        UNIT_ASSERT_VALUES_EQUAL(state.Result, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        // Snapshots table should be cleaned up after ReadTable has finished 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 0u); 
-    } 
- 
-    // Regression test for KIKIMR-12289 
-    Y_UNIT_TEST(VolatileSnapshotCleanupOnReboot_KIKIMR_12289) { 
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
-            .SetUseRealThreads(false) 
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        // Snapshots table must have 1 row
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
+
+        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        // Start ReadTable using snapshot and pause on quota requests
+        auto state = StartReadShardedTable(server, "/Root/table-1", snapshot);
+
+        UNIT_ASSERT(DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot));
+
+        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2,
+            "ERROR: WrongRequest\n");
+
+        // Snapshots table must still have snapshot (used by paused ReadTable)
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
+
+        // Resume paused ReadTable and check the result
+        ResumeReadShardedTable(server, state);
+        UNIT_ASSERT_VALUES_EQUAL(state.Result,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        // Snapshots table should be cleaned up after ReadTable has finished
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 0u);
+    }
+
+    // Regression test for KIKIMR-12289
+    Y_UNIT_TEST(VolatileSnapshotCleanupOnReboot_KIKIMR_12289) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
             .SetEnableMvcc(false)
-            .SetDomainPlanResolution(1000); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-        runtime.GetAppData().AllowReadTableImmediate = true; 
- 
-        InitRoot(server, sender); 
- 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 1); 
- 
-        const auto shards1 = GetTableShards(server, sender, "/Root/table-1"); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000)); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);"); 
- 
-        // Snapshots table must have 1 row 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u); 
- 
-        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        // Start ReadTable using snapshot and pause on quota requests 
-        StartReadShardedTable(server, "/Root/table-1", snapshot); 
- 
-        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        UNIT_ASSERT(DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot)); 
- 
-        auto table1snapshot3 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot3, 
-            "ERROR: WrongRequest\n"); 
- 
-        // Snapshots table must still have snapshot (used by paused ReadTable) 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u); 
- 
-        // Verify snapshot is not among removed versions at the first shard 
-        for (TString table : { "/Root/table-1" }) { 
-            auto shards = GetTableShards(server, sender, table); 
-            auto ranges = GetRemovedRowVersions(server, shards.at(0)); 
-            UNIT_ASSERT(ranges.size() >= 1); 
-            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Lower, TRowVersion::Min()); 
-            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Upper, snapshot); 
-        } 
- 
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        // Snapshots table must have 1 row
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
+
+        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        // Start ReadTable using snapshot and pause on quota requests
+        StartReadShardedTable(server, "/Root/table-1", snapshot);
+
+        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        UNIT_ASSERT(DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot));
+
+        auto table1snapshot3 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot3,
+            "ERROR: WrongRequest\n");
+
+        // Snapshots table must still have snapshot (used by paused ReadTable)
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
+
+        // Verify snapshot is not among removed versions at the first shard
+        for (TString table : { "/Root/table-1" }) {
+            auto shards = GetTableShards(server, sender, table);
+            auto ranges = GetRemovedRowVersions(server, shards.at(0));
+            UNIT_ASSERT(ranges.size() >= 1);
+            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Lower, TRowVersion::Min());
+            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Upper, snapshot);
+        }
+
         RebootTablet(runtime, shards1[0], sender);
- 
-        // Snapshots table should be cleaned up on reboot 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 0u); 
- 
-        // Verify snapshot is removed at the first shard 
-        for (TString table : { "/Root/table-1" }) { 
-            auto shards = GetTableShards(server, sender, table); 
-            auto ranges = GetRemovedRowVersions(server, shards.at(0)); 
-            UNIT_ASSERT(ranges.size() >= 1); 
-            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Lower, TRowVersion::Min()); 
-            UNIT_ASSERT(ranges.begin()->Upper > snapshot); 
-        } 
-    } 
- 
-    // Regression test for KIKIMR-12289 
-    Y_UNIT_TEST(VolatileSnapshotCleanupOnFinish_KIKIMR_12289) { 
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
-            .SetUseRealThreads(false) 
+
+        // Snapshots table should be cleaned up on reboot
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 0u);
+
+        // Verify snapshot is removed at the first shard
+        for (TString table : { "/Root/table-1" }) {
+            auto shards = GetTableShards(server, sender, table);
+            auto ranges = GetRemovedRowVersions(server, shards.at(0));
+            UNIT_ASSERT(ranges.size() >= 1);
+            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Lower, TRowVersion::Min());
+            UNIT_ASSERT(ranges.begin()->Upper > snapshot);
+        }
+    }
+
+    // Regression test for KIKIMR-12289
+    Y_UNIT_TEST(VolatileSnapshotCleanupOnFinish_KIKIMR_12289) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
             .SetEnableMvcc(false)
-            .SetDomainPlanResolution(1000); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-        runtime.GetAppData().AllowReadTableImmediate = true; 
- 
-        InitRoot(server, sender); 
- 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 1); 
- 
-        const auto shards1 = GetTableShards(server, sender, "/Root/table-1"); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000)); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);"); 
- 
-        // Snapshots table must have 1 row 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u); 
- 
-        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        // Start ReadTable using snapshot and pause on quota requests 
-        auto state = StartReadShardedTable(server, "/Root/table-1", snapshot); 
- 
-        UNIT_ASSERT(DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot)); 
- 
-        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2, 
-            "ERROR: WrongRequest\n"); 
- 
-        // Snapshots table must still have snapshot (used by paused ReadTable) 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u); 
- 
-        // Verify snapshot is not among removed versions at the first shard 
-        for (TString table : { "/Root/table-1" }) { 
-            auto shards = GetTableShards(server, sender, table); 
-            auto ranges = GetRemovedRowVersions(server, shards.at(0)); 
-            UNIT_ASSERT(ranges.size() >= 1); 
-            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Lower, TRowVersion::Min()); 
-            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Upper, snapshot); 
-        } 
- 
-        // Resume paused ReadTable and check the result 
-        ResumeReadShardedTable(server, state); 
-        UNIT_ASSERT_VALUES_EQUAL(state.Result, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
- 
-        // Snapshots table should be cleaned up after ReadTable has finished 
-        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 0u); 
- 
-        // Verify snapshot is removed at the first shard 
-        for (TString table : { "/Root/table-1" }) { 
-            auto shards = GetTableShards(server, sender, table); 
-            auto ranges = GetRemovedRowVersions(server, shards.at(0)); 
-            UNIT_ASSERT(ranges.size() >= 1); 
-            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Lower, TRowVersion::Min()); 
-            UNIT_ASSERT(ranges.begin()->Upper > snapshot); 
-        } 
-    } 
- 
-    void CompactTable(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) { 
-        auto sender = runtime.AllocateEdgeActor(); 
-        auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId.OwnerId, tableId.PathId.LocalPathId); 
-        runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries()); 
- 
-        auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender); 
-        auto& result = ev->Get()->Record; 
-        UNIT_ASSERT(result.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::OK); 
-    } 
- 
-    Y_UNIT_TEST(SwitchMvccSnapshots) { 
-        TPortManager pm; 
-        TServerSettings serverSettings(pm.GetPort(2134)); 
-        serverSettings.SetDomainName("Root") 
-            .SetUseRealThreads(false) 
-            .SetEnableMvcc(false) 
-            .SetDomainPlanResolution(1000); 
- 
-        Tests::TServer::TPtr server = new TServer(serverSettings); 
-        auto &runtime = *server->GetRuntime(); 
-        auto sender = runtime.AllocateEdgeActor(); 
- 
-        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE); 
-        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG); 
-        runtime.GetAppData().AllowReadTableImmediate = true; 
- 
-        InitRoot(server, sender); 
- 
-        CreateShardedTable(server, sender, "/Root", "table-1", 1); 
-        CreateShardedTable(server, sender, "/Root", "table-2", 1); 
- 
-        auto shards1 = GetTableShards(server, sender, "/Root/table-1"); 
-        auto shards2 = GetTableShards(server, sender, "/Root/table-2"); 
-        auto tableId1 = ResolveTableId(server, sender, "/Root/table-1"); 
-        auto tableId2 = ResolveTableId(server, sender, "/Root/table-2"); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);"); 
- 
-        auto snapshot1 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(30000)); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);"); 
- 
-        runtime.GetAppData().FeatureFlags.SetEnableMvccForTest(true); 
-        RebootTablet(runtime, shards1.at(0), sender); 
-        RebootTablet(runtime, shards2.at(0), sender); 
- 
-        auto snapshot2 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(30000)); 
- 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 111), (2, 222), (3, 333), (4, 444);"); 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 111), (20, 222), (30, 333), (40, 444);"); 
- 
-        auto snapshot3 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(30000)); 
- 
-        CompactTable(runtime, shards1.at(0), tableId1); 
-        CompactTable(runtime, shards2.at(0), tableId2); 
- 
-        // None of created snapshots should be removed 
-        auto removed1 = GetRemovedRowVersions(server, shards1.at(0)); 
-        UNIT_ASSERT(!removed1.Contains(snapshot1, snapshot1.Next())); 
-        UNIT_ASSERT(!removed1.Contains(snapshot2, snapshot2.Next())); 
-        UNIT_ASSERT(!removed1.Contains(snapshot3, snapshot3.Next())); 
- 
-        // Versions to the left and to the right of the first snapshot must be removed 
-        UNIT_ASSERT(removed1.Contains(snapshot1.Prev(), snapshot1)); 
-        UNIT_ASSERT(removed1.Contains(snapshot1.Next(), snapshot1.Next().Next())); 
- 
-        auto table1snapshot3 = ReadShardedTable(server, "/Root/table-1", snapshot3); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot3, 
-            "key = 1, value = 111\n" 
-            "key = 2, value = 222\n" 
-            "key = 3, value = 333\n" 
-            "key = 4, value = 444\n"); 
- 
-        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot2); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2, 
-            "key = 1, value = 11\n" 
-            "key = 2, value = 22\n" 
-            "key = 3, value = 33\n" 
-            "key = 4, value = 44\n"); 
- 
-        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot1); 
-        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1, 
-            "key = 1, value = 1\n" 
-            "key = 2, value = 2\n" 
-            "key = 3, value = 3\n"); 
-    } 
- 
-} 
- 
-} // namespace NKikimr 
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        // Snapshots table must have 1 row
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
+
+        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        // Start ReadTable using snapshot and pause on quota requests
+        auto state = StartReadShardedTable(server, "/Root/table-1", snapshot);
+
+        UNIT_ASSERT(DiscardVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, snapshot));
+
+        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2,
+            "ERROR: WrongRequest\n");
+
+        // Snapshots table must still have snapshot (used by paused ReadTable)
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
+
+        // Verify snapshot is not among removed versions at the first shard
+        for (TString table : { "/Root/table-1" }) {
+            auto shards = GetTableShards(server, sender, table);
+            auto ranges = GetRemovedRowVersions(server, shards.at(0));
+            UNIT_ASSERT(ranges.size() >= 1);
+            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Lower, TRowVersion::Min());
+            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Upper, snapshot);
+        }
+
+        // Resume paused ReadTable and check the result
+        ResumeReadShardedTable(server, state);
+        UNIT_ASSERT_VALUES_EQUAL(state.Result,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+
+        // Snapshots table should be cleaned up after ReadTable has finished
+        UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 0u);
+
+        // Verify snapshot is removed at the first shard
+        for (TString table : { "/Root/table-1" }) {
+            auto shards = GetTableShards(server, sender, table);
+            auto ranges = GetRemovedRowVersions(server, shards.at(0));
+            UNIT_ASSERT(ranges.size() >= 1);
+            UNIT_ASSERT_VALUES_EQUAL(ranges.begin()->Lower, TRowVersion::Min());
+            UNIT_ASSERT(ranges.begin()->Upper > snapshot);
+        }
+    }
+
+    void CompactTable(TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId) {
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId.OwnerId, tableId.PathId.LocalPathId);
+        runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+        auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
+        auto& result = ev->Get()->Record;
+        UNIT_ASSERT(result.GetStatus() == NKikimrTxDataShard::TEvCompactTableResult::OK);
+    }
+
+    Y_UNIT_TEST(SwitchMvccSnapshots) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMvcc(false)
+            .SetDomainPlanResolution(1000);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.GetAppData().AllowReadTableImmediate = true;
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+        CreateShardedTable(server, sender, "/Root", "table-2", 1);
+
+        auto shards1 = GetTableShards(server, sender, "/Root/table-1");
+        auto shards2 = GetTableShards(server, sender, "/Root/table-2");
+        auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
+        auto tableId2 = ResolveTableId(server, sender, "/Root/table-2");
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+
+        auto snapshot1 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(30000));
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+
+        runtime.GetAppData().FeatureFlags.SetEnableMvccForTest(true);
+        RebootTablet(runtime, shards1.at(0), sender);
+        RebootTablet(runtime, shards2.at(0), sender);
+
+        auto snapshot2 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(30000));
+
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 111), (2, 222), (3, 333), (4, 444);");
+        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 111), (20, 222), (30, 333), (40, 444);");
+
+        auto snapshot3 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(30000));
+
+        CompactTable(runtime, shards1.at(0), tableId1);
+        CompactTable(runtime, shards2.at(0), tableId2);
+
+        // None of created snapshots should be removed
+        auto removed1 = GetRemovedRowVersions(server, shards1.at(0));
+        UNIT_ASSERT(!removed1.Contains(snapshot1, snapshot1.Next()));
+        UNIT_ASSERT(!removed1.Contains(snapshot2, snapshot2.Next()));
+        UNIT_ASSERT(!removed1.Contains(snapshot3, snapshot3.Next()));
+
+        // Versions to the left and to the right of the first snapshot must be removed
+        UNIT_ASSERT(removed1.Contains(snapshot1.Prev(), snapshot1));
+        UNIT_ASSERT(removed1.Contains(snapshot1.Next(), snapshot1.Next().Next()));
+
+        auto table1snapshot3 = ReadShardedTable(server, "/Root/table-1", snapshot3);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot3,
+            "key = 1, value = 111\n"
+            "key = 2, value = 222\n"
+            "key = 3, value = 333\n"
+            "key = 4, value = 444\n");
+
+        auto table1snapshot2 = ReadShardedTable(server, "/Root/table-1", snapshot2);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot2,
+            "key = 1, value = 11\n"
+            "key = 2, value = 22\n"
+            "key = 3, value = 33\n"
+            "key = 4, value = 44\n");
+
+        auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot1);
+        UNIT_ASSERT_VALUES_EQUAL(table1snapshot1,
+            "key = 1, value = 1\n"
+            "key = 2, value = 2\n"
+            "key = 3, value = 3\n");
+    }
+
+}
+
+} // namespace NKikimr

@@ -32,7 +32,7 @@ public:
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         auto tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, params.GetTableSchemaVersion());
-        DataShard.AddUserTable(pathId, tableInfo); 
+        DataShard.AddUserTable(pathId, tableInfo);
 
         ui64 step = params.GetSnapshotStep();
         ui64 txId = params.GetSnapshotTxId();

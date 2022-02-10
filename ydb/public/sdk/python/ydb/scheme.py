@@ -19,7 +19,7 @@ class SchemeEntryType(enum.IntEnum):
     RTMR_VOLUME = 5
     BLOCK_STORE_VOLUME = 6
     COORDINATION_NODE = 7
-    SEQUENCE = 15 
+    SEQUENCE = 15
     REPLICATION = 16
 
     @staticmethod

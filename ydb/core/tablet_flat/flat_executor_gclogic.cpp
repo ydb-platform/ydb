@@ -11,8 +11,8 @@ TExecutorGCLogic::TExecutorGCLogic(TIntrusiveConstPtr<TTabletStorageInfo> info, 
     , Generation(Cookies->Gen)
     , Slicer(1, Cookies.Get(), NBlockIO::BlockSize)
     , SnapshotStep(0)
-    , PrevSnapshotStep(0) 
-    , ConfirmedOnSendStep(0) 
+    , PrevSnapshotStep(0)
+    , ConfirmedOnSendStep(0)
     , AllowGarbageCollection(false)
 {
 }
@@ -77,7 +77,7 @@ TGCLogEntry TExecutorGCLogic::SnapshotLog(ui32 step) {
         TExecutorGCLogic::MergeVectors(snapshot.Delta.Deleted, it.second.Delta.Deleted);
     }
 
-    PrevSnapshotStep = SnapshotStep; 
+    PrevSnapshotStep = SnapshotStep;
     SnapshotStep = step;
     return snapshot;
 }
@@ -105,16 +105,16 @@ void TExecutorGCLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, ui32 s
     }
 }
 
-void TExecutorGCLogic::OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext& ctx) { 
+void TExecutorGCLogic::OnCommitLog(ui32 step, ui32 confirmedOnSend, const TActorContext& ctx) {
     auto it = UncommittedDeltaLog.find(TGCTime(Generation, step));
     if (it != UncommittedDeltaLog.end()) {
         ApplyDelta(it->first, it->second.Delta);
         UncommittedDeltaLog.erase(it);
     }
- 
-    ConfirmedOnSendStep = Max(ConfirmedOnSendStep, confirmedOnSend); 
- 
-    if (step >= SnapshotStep) 
+
+    ConfirmedOnSendStep = Max(ConfirmedOnSendStep, confirmedOnSend);
+
+    if (step >= SnapshotStep)
         SendCollectGarbage(ctx);
 }
 
@@ -179,7 +179,7 @@ void TExecutorGCLogic::SendCollectGarbage(const TActorContext& ctx) {
         return;
 
     const TGCTime uncommittedTime(UncommittedDeltaLog.empty() ? TGCTime::Infinity() : UncommittedDeltaLog.begin()->first);
-    const TGCTime uncommitedSnap(Generation, ConfirmedOnSendStep >= SnapshotStep ? SnapshotStep : PrevSnapshotStep); 
+    const TGCTime uncommitedSnap(Generation, ConfirmedOnSendStep >= SnapshotStep ? SnapshotStep : PrevSnapshotStep);
     const TGCTime minBarrier = HoldBarriersSet.empty() ? TGCTime::Infinity() : *HoldBarriersSet.begin();
 
     const TGCTime minTime = std::min(uncommittedTime, std::min(uncommitedSnap, minBarrier));
@@ -314,31 +314,31 @@ TExecutorGCLogic::TIntrospection TExecutorGCLogic::IntrospectStateSize() const {
      return ret;
 }
 
-namespace { 
-    void ValidateGCVector(ui64 tabletId, ui32 channel, const char* name, const TVector<TLogoBlobID>& vec) { 
-        for (size_t i = 0; i < vec.size(); ++i) { 
-            Y_VERIFY(vec[i].TabletID() == tabletId, 
-                "Foreign blob %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")", 
-                vec[i].ToString().c_str(), name, tabletId, channel); 
-            Y_VERIFY(vec[i].Channel() == channel, 
-                "Wrong channel blob %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")", 
-                vec[i].ToString().c_str(), name, tabletId, channel); 
-            if (i > 0) { 
-                Y_VERIFY(vec[i-1] < vec[i], 
-                    "Out of order blobs %s and %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")", 
-                    vec[i-1].ToString().c_str(), vec[i].ToString().c_str(), name, tabletId, channel); 
-            } 
-        } 
-    } 
-} 
- 
+namespace {
+    void ValidateGCVector(ui64 tabletId, ui32 channel, const char* name, const TVector<TLogoBlobID>& vec) {
+        for (size_t i = 0; i < vec.size(); ++i) {
+            Y_VERIFY(vec[i].TabletID() == tabletId,
+                "Foreign blob %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")",
+                vec[i].ToString().c_str(), name, tabletId, channel);
+            Y_VERIFY(vec[i].Channel() == channel,
+                "Wrong channel blob %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")",
+                vec[i].ToString().c_str(), name, tabletId, channel);
+            if (i > 0) {
+                Y_VERIFY(vec[i-1] < vec[i],
+                    "Out of order blobs %s and %s in %s vector (tablet %" PRIu64 ", channel %" PRIu32 ")",
+                    vec[i-1].ToString().c_str(), vec[i].ToString().c_str(), name, tabletId, channel);
+            }
+        }
+    }
+}
+
 void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
             const TActorContext &ctx,
             TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep,
             ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation)
 {
-    ValidateGCVector(tabletid, channel, "Keep", keep); 
-    ValidateGCVector(tabletid, channel, "DoNotKeep", notKeep); 
+    ValidateGCVector(tabletid, channel, "Keep", keep);
+    ValidateGCVector(tabletid, channel, "DoNotKeep", notKeep);
     THolder<TEvBlobStorage::TEvCollectGarbage> ev =
         MakeHolder<TEvBlobStorage::TEvCollectGarbage>(
             tabletid,
@@ -358,31 +358,31 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
     if (GcWaitFor > 0)
         return;
 
-    TVector<TLogoBlobID> keep; 
-    TVector<TLogoBlobID> notKeep; 
+    TVector<TLogoBlobID> keep;
+    TVector<TLogoBlobID> notKeep;
 
     TGCTime collectBarrier;
 
     for (auto it = CommittedDelta.begin(), end = CommittedDelta.end(); it != end; ++it) {
         if (it->first < uncommittedTime) {
-            keep.insert(keep.end(), it->second.Created.begin(), it->second.Created.end()); 
-            notKeep.insert(notKeep.end(), it->second.Deleted.begin(), it->second.Deleted.end()); 
+            keep.insert(keep.end(), it->second.Created.begin(), it->second.Created.end());
+            notKeep.insert(notKeep.end(), it->second.Deleted.begin(), it->second.Deleted.end());
             collectBarrier = it->first;
         } else
             break;
     }
 
-    // The first barrier of gen:0 (zero entry) is special 
-    TGCTime zeroTime{ generation, 0 }; 
-    if (KnownGcBarrier < zeroTime && collectBarrier < zeroTime && zeroTime <= uncommittedTime) { 
-        collectBarrier = zeroTime; 
-    } 
- 
-    if (collectBarrier) {
-        Sort(keep); 
-        Sort(notKeep); 
+    // The first barrier of gen:0 (zero entry) is special
+    TGCTime zeroTime{ generation, 0 };
+    if (KnownGcBarrier < zeroTime && collectBarrier < zeroTime && zeroTime <= uncommittedTime) {
+        collectBarrier = zeroTime;
+    }
 
-        DeduplicateGCKeepVectors(&keep, &notKeep, generation, KnownGcBarrier.Step); 
+    if (collectBarrier) {
+        Sort(keep);
+        Sort(notKeep);
+
+        DeduplicateGCKeepVectors(&keep, &notKeep, generation, KnownGcBarrier.Step);
 
         CollectSent = collectBarrier;
         KnownGcBarrier = collectBarrier;
@@ -392,22 +392,22 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
 
 
         const ui32 lastCommitedGcBarrier = CommitedGcBarrier.Generation;
-        const ui32 firstFlagGen = std::min<ui32>(keep.empty() ? Max<ui32>() : keep.front().Generation(), notKeep.empty() ? Max<ui32>() : notKeep.front().Generation()); 
+        const ui32 firstFlagGen = std::min<ui32>(keep.empty() ? Max<ui32>() : keep.front().Generation(), notKeep.empty() ? Max<ui32>() : notKeep.front().Generation());
         const auto *latestEntry = channelInfo->LatestEntry();
 
         if (lastCommitedGcBarrier >= latestEntry->FromGeneration && firstFlagGen >= latestEntry->FromGeneration) {
             // normal case, commit gc info for last entry only
-            SendCollectGarbageEntry(ctx, std::move(keep), std::move(notKeep), tabletStorageInfo->TabletID, channel, latestEntry->GroupID, generation); 
+            SendCollectGarbageEntry(ctx, std::move(keep), std::move(notKeep), tabletStorageInfo->TabletID, channel, latestEntry->GroupID, generation);
         } else {
         // bloated case - spread among different groups
             TMap<ui32, std::pair<TVector<TLogoBlobID>, TVector<TLogoBlobID>>> affectedGroups;
 
             { // mark every actual generation for update
                 auto xit = UpperBound(channelInfo->History.begin(), channelInfo->History.end(), lastCommitedGcBarrier, TTabletChannelInfo::THistoryEntry::TCmp());
-                if (xit != channelInfo->History.begin()) { 
-                    --xit; 
-                } 
-                for (; xit != channelInfo->History.end(); ++xit) 
+                if (xit != channelInfo->History.begin()) {
+                    --xit;
+                }
+                for (; xit != channelInfo->History.end(); ++xit)
                     affectedGroups[xit->GroupID];
             }
 
@@ -415,7 +415,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
             ui32 activeGroup = Max<ui32>();
             TVector<TLogoBlobID> *vec = nullptr;
 
-            for (const auto &blobId : keep) { 
+            for (const auto &blobId : keep) {
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();
                     activeGroup = channelInfo->GroupForGeneration(blobId.Generation());
@@ -429,7 +429,7 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbage(TGCTime uncommittedTime,
             activeGroup = Max<ui32>();
             vec = nullptr;
 
-            for (const auto &blobId : notKeep) { 
+            for (const auto &blobId : notKeep) {
                 if (activeGen != blobId.Generation()) {
                     activeGen = blobId.Generation();
                     activeGroup = channelInfo->GroupForGeneration(blobId.Generation());
@@ -450,8 +450,8 @@ void TExecutorGCLogic::TChannelInfo::OnCollectGarbageSuccess() {
     if (--GcWaitFor || !CollectSent)
         return;
 
-    auto it = CommittedDelta.upper_bound(CollectSent); 
-    if (it != CommittedDelta.begin()) { 
+    auto it = CommittedDelta.upper_bound(CollectSent);
+    if (it != CommittedDelta.begin()) {
         CommittedDelta.erase(CommittedDelta.begin(), it);
     }
 

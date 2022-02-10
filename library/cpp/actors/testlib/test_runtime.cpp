@@ -58,7 +58,7 @@ namespace NActors {
 
     TTestActorRuntimeBase::TNodeDataBase::TNodeDataBase() {
         ActorSystemTimestamp = nullptr;
-        ActorSystemMonotonic = nullptr; 
+        ActorSystemMonotonic = nullptr;
     }
 
     void TTestActorRuntimeBase::TNodeDataBase::Stop() {
@@ -210,10 +210,10 @@ namespace NActors {
         return Scheduled.empty();
     }
 
-    TInstant TEventMailBox::GetFirstScheduleDeadline() const { 
-        return Scheduled.begin()->Deadline; 
-    } 
- 
+    TInstant TEventMailBox::GetFirstScheduleDeadline() const {
+        return Scheduled.begin()->Deadline;
+    }
+
     ui64 TEventMailBox::GetSentEventCount() const {
         return Sent.size();
     }
@@ -245,7 +245,7 @@ namespace NActors {
         void Prepare(TActorSystem *actorSystem, volatile ui64 *currentTimestamp, volatile ui64 *currentMonotonic) override {
             Y_UNUSED(actorSystem);
             Node->ActorSystemTimestamp = currentTimestamp;
-            Node->ActorSystemMonotonic = currentMonotonic; 
+            Node->ActorSystemMonotonic = currentMonotonic;
         }
 
         void PrepareSchedules(NSchedulerQueue::TReader **readers, ui32 scheduleReadersCount) override {
@@ -299,8 +299,8 @@ namespace NActors {
 
         void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override {
             DoSchedule(TInstant::FromValue(deadline.GetValue()), ev, cookie, workerId);
-        } 
- 
+        }
+
         void Schedule(TDuration delay, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override {
             TInstant deadline = Runtime->GetTimeProvider()->Now() + delay;
             DoSchedule(deadline, ev, cookie, workerId);
@@ -467,7 +467,7 @@ namespace NActors {
         , LocalId(0)
         , DispatchCyclesCount(0)
         , DispatchedEventsCount(0)
-        , NeedMonitoring(false) 
+        , NeedMonitoring(false)
         , RandomProvider(CreateDeterministicRandomProvider(DefaultRandomSeed))
         , TimeProvider(new TTimeProvider(*this))
         , ShouldContinue()
@@ -490,7 +490,7 @@ namespace NActors {
         node->LogSettings = new NActors::NLog::TSettings(loggerActorId, 410 /* NKikimrServices::LOGGER */,
             NActors::NLog::PRI_WARN,  NActors::NLog::PRI_WARN, 0);
         node->LogSettings->SetAllowDrop(false);
-        node->LogSettings->SetThrottleDelay(TDuration::Zero()); 
+        node->LogSettings->SetThrottleDelay(TDuration::Zero());
         node->DynamicCounters = new NMonitoring::TDynamicCounters;
 
         InitNodeImpl(node, nodeIndex);
@@ -572,9 +572,9 @@ namespace NActors {
 
     bool TTestActorRuntimeBase::NopFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline) {
         Y_UNUSED(runtime);
-        Y_UNUSED(delay); 
+        Y_UNUSED(delay);
         Y_UNUSED(event);
-        Y_UNUSED(deadline); 
+        Y_UNUSED(deadline);
         return true;
     }
 
@@ -843,14 +843,14 @@ namespace NActors {
     }
 
     ui32 TTestActorRuntimeBase::InterconnectPoolId() const {
-        if (UseRealThreads && NSan::TSanIsOn()) { 
-            // Interconnect coroutines may move across threads 
-            // Use a special single-threaded pool to avoid that 
-            return 4; 
-        } 
-        return 0; 
-    } 
- 
+        if (UseRealThreads && NSan::TSanIsOn()) {
+            // Interconnect coroutines may move across threads
+            // Use a special single-threaded pool to avoid that
+            return 4;
+        }
+        return 0;
+    }
+
     TString TTestActorRuntimeBase::GetTempDir() {
         if (!TmpDir)
             TmpDir.Reset(new TTempDir());
@@ -967,7 +967,7 @@ namespace NActors {
         Y_VERIFY(nodeIndex < NodeCount);
         TActorId edgeActor = Register(new TEdgeActor(this), nodeIndex);
         EdgeActors.insert(edgeActor);
-        EdgeActorByMailbox[TEventMailboxId(edgeActor.NodeId(), edgeActor.Hint())] = edgeActor; 
+        EdgeActorByMailbox[TEventMailboxId(edgeActor.NodeId(), edgeActor.Hint())] = edgeActor;
         return edgeActor;
     }
 
@@ -1161,15 +1161,15 @@ namespace NActors {
                             if (mbox.second->IsActive(TInstant::MicroSeconds(CurrentTimestamp))) {
 
                                 bool isEdgeMailbox = false;
-                                if (EdgeActorByMailbox.FindPtr(TEventMailboxId(mbox.first.NodeId, mbox.first.Hint))) { 
-                                    isEdgeMailbox = true; 
-                                    TEventsList events; 
-                                    mbox.second->Capture(events); 
-                                    for (auto& ev : events) { 
-                                        TInverseGuard<TMutex> inverseGuard(Mutex); 
-                                        ObserverFunc(*this, ev); 
+                                if (EdgeActorByMailbox.FindPtr(TEventMailboxId(mbox.first.NodeId, mbox.first.Hint))) {
+                                    isEdgeMailbox = true;
+                                    TEventsList events;
+                                    mbox.second->Capture(events);
+                                    for (auto& ev : events) {
+                                        TInverseGuard<TMutex> inverseGuard(Mutex);
+                                        ObserverFunc(*this, ev);
                                     }
-                                    mbox.second->PushFront(events); 
+                                    mbox.second->PushFront(events);
                                 }
 
                                 if (!isEdgeMailbox) {
@@ -1246,8 +1246,8 @@ namespace NActors {
                 }
             }
 
-            if (localContext.FinalEventFound) { 
-                return true; 
+            if (localContext.FinalEventFound) {
+                return true;
             }
 
             if (!localContext.FoundNonEmptyMailboxes.empty())
@@ -1287,8 +1287,8 @@ namespace NActors {
                 inspectScheduledEventsAt = dispatchTime + scheduledEventsInspectInterval;
                 bool isEmpty = true;
                 TMaybe<TInstant> nearestMailboxDeadline;
-                TVector<TIntrusivePtr<TEventMailBox>> nextScheduleMboxes; 
-                TMaybe<TInstant> nextScheduleDeadline; 
+                TVector<TIntrusivePtr<TEventMailBox>> nextScheduleMboxes;
+                TMaybe<TInstant> nextScheduleDeadline;
                 for (auto& mbox : currentMailboxes) {
                     if (!mbox.second->IsActive(TInstant::MicroSeconds(CurrentTimestamp))) {
                         if (!nearestMailboxDeadline.Defined() || *nearestMailboxDeadline.Get() > mbox.second->GetInactiveUntil()) {
@@ -1301,29 +1301,29 @@ namespace NActors {
                     if (mbox.second->IsScheduledEmpty())
                         continue;
 
-                    auto firstScheduleDeadline = mbox.second->GetFirstScheduleDeadline(); 
-                    if (!nextScheduleDeadline || firstScheduleDeadline < *nextScheduleDeadline) { 
-                        nextScheduleMboxes.clear(); 
-                        nextScheduleMboxes.emplace_back(mbox.second); 
-                        nextScheduleDeadline = firstScheduleDeadline; 
-                    } else if (firstScheduleDeadline == *nextScheduleDeadline) { 
-                        nextScheduleMboxes.emplace_back(mbox.second); 
-                    } 
-                } 
- 
-                for (const auto& nextScheduleMbox : nextScheduleMboxes) { 
+                    auto firstScheduleDeadline = mbox.second->GetFirstScheduleDeadline();
+                    if (!nextScheduleDeadline || firstScheduleDeadline < *nextScheduleDeadline) {
+                        nextScheduleMboxes.clear();
+                        nextScheduleMboxes.emplace_back(mbox.second);
+                        nextScheduleDeadline = firstScheduleDeadline;
+                    } else if (firstScheduleDeadline == *nextScheduleDeadline) {
+                        nextScheduleMboxes.emplace_back(mbox.second);
+                    }
+                }
+
+                for (const auto& nextScheduleMbox : nextScheduleMboxes) {
                     TEventsList selectedEvents;
                     TScheduledEventsList capturedScheduledEvents;
-                    nextScheduleMbox->CaptureScheduled(capturedScheduledEvents); 
+                    nextScheduleMbox->CaptureScheduled(capturedScheduledEvents);
                     ScheduledEventsSelectorFunc(*this, capturedScheduledEvents, selectedEvents);
-                    nextScheduleMbox->PushScheduled(capturedScheduledEvents); 
+                    nextScheduleMbox->PushScheduled(capturedScheduledEvents);
                     for (auto& event : selectedEvents) {
                         if (verbose && (BlockedOutput.find(event->Sender) == BlockedOutput.end())) {
                             Cerr << "Selected scheduled event at " << TInstant::MicroSeconds(CurrentTimestamp) << ", ";
                             PrintEvent(event, this);
                         }
 
-                        nextScheduleMbox->Send(event); 
+                        nextScheduleMbox->Send(event);
                         isEmpty = false;
                     }
                 }
@@ -1371,10 +1371,10 @@ namespace NActors {
         while (context) {
             for (const auto& finalEvent : context->Options->FinalEvents) {
                 if (finalEvent.EventCheck(ev)) {
-                    auto& freq = context->FinalEventFrequency[&finalEvent]; 
-                    if (++freq >= finalEvent.RequiredCount) { 
-                        context->FinalEventFound = true; 
-                    } 
+                    auto& freq = context->FinalEventFrequency[&finalEvent];
+                    if (++freq >= finalEvent.RequiredCount) {
+                        context->FinalEventFound = true;
+                    }
                 }
             }
 
@@ -1424,15 +1424,15 @@ namespace NActors {
     void TTestActorRuntimeBase::WaitForEdgeEvents(TEventFilter filter, const TSet<TActorId>& edgeFilter, TDuration simTimeout) {
         TGuard<TMutex> guard(Mutex);
         ui32 dispatchCount = 0;
-        if (!edgeFilter.empty()) { 
-            for (auto edgeActor : edgeFilter) { 
+        if (!edgeFilter.empty()) {
+            for (auto edgeActor : edgeFilter) {
                 Y_VERIFY(EdgeActors.contains(edgeActor), "%s is not an edge actor", ToString(edgeActor).data());
-            } 
-        } 
+            }
+        }
         const TSet<TActorId>& edgeActors = edgeFilter.empty() ? EdgeActors : edgeFilter;
-        TInstant deadline = TInstant::MicroSeconds(CurrentTimestamp) + simTimeout; 
+        TInstant deadline = TInstant::MicroSeconds(CurrentTimestamp) + simTimeout;
         for (;;) {
-            for (auto edgeActor : edgeActors) { 
+            for (auto edgeActor : edgeActors) {
                 TEventsList events;
                 auto& mbox = GetMailbox(edgeActor.NodeId(), edgeActor.Hint());
                 bool foundEvent = false;
@@ -1451,7 +1451,7 @@ namespace NActors {
 
             ++dispatchCount;
             {
-                if (!DispatchEventsInternal(TDispatchOptions(), deadline)) { 
+                if (!DispatchEventsInternal(TDispatchOptions(), deadline)) {
                     return; // Timed out; event was not found
                 }
             }
@@ -1522,8 +1522,8 @@ namespace NActors {
         return node->DynamicCounters;
     }
 
-    void TTestActorRuntimeBase::SetupMonitoring() { 
-        NeedMonitoring = true; 
+    void TTestActorRuntimeBase::SetupMonitoring() {
+        NeedMonitoring = true;
     }
 
     void TTestActorRuntimeBase::SendInternal(IEventHandle* ev, ui32 nodeIndex, bool viaActorSystem) {
@@ -1612,13 +1612,13 @@ namespace NActors {
         setup->NodeId = FirstNodeId + nodeIndex;
 
         if (UseRealThreads) {
-            setup->ExecutorsCount = 5; 
-            setup->Executors.Reset(new TAutoPtr<IExecutorPool>[5]); 
+            setup->ExecutorsCount = 5;
+            setup->Executors.Reset(new TAutoPtr<IExecutorPool>[5]);
             setup->Executors[0].Reset(new TBasicExecutorPool(0, 2, 20));
             setup->Executors[1].Reset(new TBasicExecutorPool(1, 2, 20));
             setup->Executors[2].Reset(new TIOExecutorPool(2, 1));
             setup->Executors[3].Reset(new TBasicExecutorPool(3, 2, 20));
-            setup->Executors[4].Reset(new TBasicExecutorPool(4, 1, 20)); 
+            setup->Executors[4].Reset(new TBasicExecutorPool(4, 1, 20));
             setup->Scheduler.Reset(new TBasicSchedulerThread(TSchedulerConfig(512, 100)));
         } else {
             setup->ExecutorsCount = 1;
@@ -1652,14 +1652,14 @@ namespace NActors {
         common->MonCounters = interconnectCounters;
         common->TechnicalSelfHostName = "::1";
 
-        if (!UseRealThreads) { 
+        if (!UseRealThreads) {
             common->Settings.DeadPeer = TDuration::Max();
             common->Settings.CloseOnIdle = TDuration::Max();
             common->Settings.PingPeriod = TDuration::Max();
             common->Settings.ForceConfirmPeriod = TDuration::Max();
             common->Settings.Handshake = TDuration::Max();
-        } 
- 
+        }
+
         common->ClusterUUID = ClusterUUID;
         common->AcceptUUID = {ClusterUUID};
 
@@ -1677,7 +1677,7 @@ namespace NActors {
         }
 
         setup->Interconnect.ProxyWrapperFactory = CreateProxyWrapperFactory(common, InterconnectPoolId(), &InterconnectMock);
- 
+
         if (UseRealInterconnect) {
             setup->LocalServices.emplace_back(MakePollerActorId(), NActors::TActorSetupCmd(CreatePollerActor(),
                 NActors::TMailboxType::Simple, InterconnectPoolId()));

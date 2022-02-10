@@ -27,7 +27,7 @@ namespace NActors {
         char data[12];
         memcpy(data, "ICProxy@", 8);
         memcpy(data + 8, &destNodeId, sizeof(ui32));
-        return TActorId(0, TStringBuf(data, 12)); 
+        return TActorId(0, TStringBuf(data, 12));
     }
 
     inline bool IsInterconnectProxyId(const TActorId& actorId) {
@@ -69,7 +69,7 @@ namespace NActors {
         /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
-         * @param deadline   the wallclock time point in future when event must be send 
+         * @param deadline   the wallclock time point in future when event must be send
          * @param ev         the event to send
          * @param cookie     cookie that will be piggybacked with event
          * @param workerId   index of thread which will perform event dispatching
@@ -77,16 +77,16 @@ namespace NActors {
         virtual void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
 
         /**
-         * Schedule one-shot event that will be send at given time point in the future. 
-         * 
-         * @param deadline   the monotonic time point in future when event must be send 
-         * @param ev         the event to send 
-         * @param cookie     cookie that will be piggybacked with event 
+         * Schedule one-shot event that will be send at given time point in the future.
+         *
+         * @param deadline   the monotonic time point in future when event must be send
+         * @param ev         the event to send
+         * @param cookie     cookie that will be piggybacked with event
          * @param workerId   index of thread which will perform event dispatching
-         */ 
+         */
         virtual void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) = 0;
- 
-        /** 
+
+        /**
          * Schedule one-shot event that will be send after given delay.
          *
          * @param delta      the time from now to delay event sending
@@ -136,9 +136,9 @@ namespace NActors {
         virtual ~ISchedulerThread() {
         }
 
-        virtual void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) = 0; 
+        virtual void Prepare(TActorSystem* actorSystem, volatile ui64* currentTimestamp, volatile ui64* currentMonotonic) = 0;
         virtual void PrepareSchedules(NSchedulerQueue::TReader** readers, ui32 scheduleReadersCount) = 0;
-        virtual void PrepareStart() { /* empty */ } 
+        virtual void PrepareStart() { /* empty */ }
         virtual void Start() = 0;
         virtual void PrepareStop() = 0;
         virtual void Stop() = 0;
@@ -226,7 +226,7 @@ namespace NActors {
         TArrayHolder<TActorId> Interconnect;
 
         volatile ui64 CurrentTimestamp;
-        volatile ui64 CurrentMonotonic; 
+        volatile ui64 CurrentMonotonic;
         volatile ui64 CurrentIDCounter;
 
         THolder<NSchedulerQueue::TQueueType> ScheduleQueue;
@@ -264,22 +264,22 @@ namespace NActors {
         /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
-         * @param deadline   the wallclock time point in future when event must be send 
+         * @param deadline   the wallclock time point in future when event must be send
          * @param ev         the event to send
          * @param cookie     cookie that will be piggybacked with event
          */
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const;
 
         /**
-         * Schedule one-shot event that will be send at given time point in the future. 
-         * 
-         * @param deadline   the monotonic time point in future when event must be send 
-         * @param ev         the event to send 
-         * @param cookie     cookie that will be piggybacked with event 
-         */ 
-        void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const; 
- 
-        /** 
+         * Schedule one-shot event that will be send at given time point in the future.
+         *
+         * @param deadline   the monotonic time point in future when event must be send
+         * @param ev         the event to send
+         * @param cookie     cookie that will be piggybacked with event
+         */
+        void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr) const;
+
+        /**
          * Schedule one-shot event that will be send after given delay.
          *
          * @param delta      the time from now to delay event sending
@@ -340,10 +340,10 @@ namespace NActors {
             return TInstant::MicroSeconds(RelaxedLoad(&CurrentTimestamp));
         }
 
-        TMonotonic Monotonic() const { 
-            return TMonotonic::MicroSeconds(RelaxedLoad(&CurrentMonotonic)); 
-        } 
- 
+        TMonotonic Monotonic() const {
+            return TMonotonic::MicroSeconds(RelaxedLoad(&CurrentMonotonic));
+        }
+
         template <typename T>
         T* AppData() const {
             return (T*)AppData0;

@@ -38,19 +38,19 @@ struct TOperation: TSimpleRefCount<TOperation> {
     THashSet<TSubTxId> DoneParts;
     THashMap<TPathId, NKikimrSchemeOp::EPathState> ReleasePathAtDone;
 
-    THashMap<TShardIdx, THashSet<TSubTxId>> WaitingShardCreatedByShard; 
-    THashMap<TSubTxId, THashSet<TShardIdx>> WaitingShardCreatedByPart; 
- 
+    THashMap<TShardIdx, THashSet<TSubTxId>> WaitingShardCreatedByShard;
+    THashMap<TSubTxId, THashSet<TShardIdx>> WaitingShardCreatedByPart;
+
     TMap<TSubTxId, TSet<TPublishPath>> WaitingPublicationsByPart;
     TMap<TPublishPath, TSet<TSubTxId>> WaitingPublicationsByPath;
 
     TMap<TString, TSet<TSubTxId>> Barriers;
 
-    struct TConsumeQuotaResult { 
+    struct TConsumeQuotaResult {
         NKikimrScheme::EStatus Status = NKikimrScheme::StatusSuccess;
-        TString Reason; 
-    }; 
- 
+        TString Reason;
+    };
+
     struct TSplitTransactionsResult {
         NKikimrScheme::EStatus Status = NKikimrScheme::StatusSuccess;
         TString Reason;
@@ -64,8 +64,8 @@ struct TOperation: TSimpleRefCount<TOperation> {
 
     TTxId GetTxId() const { return TxId; }
 
-    static TConsumeQuotaResult ConsumeQuota(const TTxTransaction& tx, const TOperationContext& context); 
- 
+    static TConsumeQuotaResult ConsumeQuota(const TTxTransaction& tx, const TOperationContext& context);
+
     static TSplitTransactionsResult SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context);
 
     ISubOperationBase::TPtr RestorePart(TTxState::ETxType opType, TTxState::ETxState opState);
@@ -98,9 +98,9 @@ struct TOperation: TSimpleRefCount<TOperation> {
     TSubTxId FindRelatedPartByTabletId(TTabletId tablet, const TActorContext& ctx);
     TSubTxId FindRelatedPartByShardIdx(TShardIdx shardIdx, const TActorContext& ctx);
 
-    void WaitShardCreated(TShardIdx shardIdx, TSubTxId partId); 
-    TVector<TSubTxId> ActivateShardCreated(TShardIdx shardIdx); 
- 
+    void WaitShardCreated(TShardIdx shardIdx, TSubTxId partId);
+    TVector<TSubTxId> ActivateShardCreated(TShardIdx shardIdx);
+
     void RegisterWaitPublication(TSubTxId partId, TPathId pathId, ui64 pathVersion);
     TSet<TOperationId> ActivatePartsWaitPublication(TPathId pathId, ui64 pathVersion);
     ui64 CountWaitPublication(TOperationId opId);

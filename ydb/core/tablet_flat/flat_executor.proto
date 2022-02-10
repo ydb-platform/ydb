@@ -45,44 +45,44 @@ message TBundle {
     // Legacy opaque can only be used for non-empty screen in TPart bundles,
 
     optional bytes Legacy = 3;
- 
+
     // Attached to bundle app. defined data that cannot be placed within parts.
- 
+
     optional bytes Opaque = 4;
- 
-    // An optional epoch used for ordering bundles in logical time 
- 
-    optional int64 Epoch = 5; 
+
+    // An optional epoch used for ordering bundles in logical time
+
+    optional int64 Epoch = 5;
 }
 
-message TBundleChange { 
-    optional NKikimrProto.TLogoBlobID Label = 1; 
+message TBundleChange {
+    optional NKikimrProto.TLogoBlobID Label = 1;
     optional bytes Legacy = 2;
     optional bytes Opaque = 3;
-} 
- 
-message TBundleDelta { 
+}
+
+message TBundleDelta {
+    optional NKikimrProto.TLogoBlobID Label = 1;
+    optional bytes Delta = 2;
+}
+
+message TBundleMove {
     optional NKikimrProto.TLogoBlobID Label = 1; 
-    optional bytes Delta = 2; 
-} 
- 
-message TBundleMove { 
-    optional NKikimrProto.TLogoBlobID Label = 1;  
-    optional int64 RebasedEpoch = 2; 
-    optional uint32 SourceTable = 3; 
-} 
- 
-message TTxStatus { 
-    // Large glob (up to 4GB) that contains tx status data 
-    optional TLargeGlobId DataId = 1; 
- 
-    // Epoch which describes data logical time 
-    optional int64 Epoch = 2; 
- 
-    // Optional data, useful when e.g. transferring it to followers 
-    optional bytes Data = 3; 
-} 
- 
+    optional int64 RebasedEpoch = 2;
+    optional uint32 SourceTable = 3;
+}
+
+message TTxStatus {
+    // Large glob (up to 4GB) that contains tx status data
+    optional TLargeGlobId DataId = 1;
+
+    // Epoch which describes data logical time
+    optional int64 Epoch = 2;
+
+    // Optional data, useful when e.g. transferring it to followers
+    optional bytes Data = 3;
+}
+
 message TEvolution {
     required uint32 Tail  = 1;
     required uint32 Head  = 2;
@@ -101,16 +101,16 @@ message TLogTableSnap {
     repeated TBundle Bundles = 8;
 }
 
-message TLogTxStatusSnap { 
-    optional uint32 Table = 1; 
-    repeated TTxStatus TxStatus = 2; 
-} 
- 
+message TLogTxStatusSnap {
+    optional uint32 Table = 1;
+    repeated TTxStatus TxStatus = 2;
+}
+
 message TLogMemSnap {
     optional uint32 Table = 1;
     optional uint32 Generation = 2;
     optional uint32 Step = 3;
-    optional int64 Head = 4; 
+    optional int64 Head = 4;
 }
 
 message TGcChannelBarrierInfo {
@@ -131,7 +131,7 @@ message TBorrowedList {
 }
 
 message TBorrowedPart {
-    optional NKikimrProto.TLogoBlobID MetaId = 1; 
+    optional NKikimrProto.TLogoBlobID MetaId = 1;
 
     repeated uint64 Loaners = 2;
     repeated TBorrowedList BorrowedList = 3;
@@ -150,27 +150,27 @@ message TSnapWaste {
     optional uint64 Drop = 4;   // Total dropped blobs designed for KEEP.
 }
 
-message TCompactionState { 
-    message TKeyValue { 
-        optional uint64 Key = 1; 
-        optional bytes Value = 2; 
-    } 
- 
-    optional uint32 Table = 1; 
+message TCompactionState {
+    message TKeyValue {
+        optional uint64 Key = 1;
+        optional bytes Value = 2;
+    }
+
+    optional uint32 Table = 1;
     optional NKikimrSchemeOp.ECompactionStrategy Strategy = 2;
-    repeated TKeyValue KeyValues = 3; // Key/value mapping (updates or snapshot) 
-} 
- 
-message TRowVersionState { 
-    message TRemovedRange { 
+    repeated TKeyValue KeyValues = 3; // Key/value mapping (updates or snapshot)
+}
+
+message TRowVersionState {
+    message TRemovedRange {
         optional NKikimrProto.TRowVersion Lower = 1;
         optional NKikimrProto.TRowVersion Upper = 2;
-    } 
- 
-    optional uint32 Table = 1; 
-    repeated TRemovedRange RemovedRanges = 2; 
-} 
- 
+    }
+
+    optional uint32 Table = 1;
+    repeated TRemovedRange RemovedRanges = 2;
+}
+
 message TLogSnapshot {
     repeated NKikimrProto.TLogoBlobID NonSnapLogBodies = 1;
     repeated NKikimrProto.TLogoBlobID SchemeInfoBodies = 2;
@@ -187,26 +187,26 @@ message TLogSnapshot {
     optional TEvolution Version = 16;
     optional uint64 Serial = 17; // db change serial at moment of snapshot
     optional TSnapWaste Waste = 18;
- 
-    repeated TCompactionState CompactionStates = 19; 
-    repeated TRowVersionState RowVersionStates = 20; 
-    repeated TLogTxStatusSnap TxStatusParts = 21; 
+
+    repeated TCompactionState CompactionStates = 19;
+    repeated TRowVersionState RowVersionStates = 20;
+    repeated TLogTxStatusSnap TxStatusParts = 21;
 }
 
 message TTablePartSwitch {
-    optional TLogTableSnap IntroducedParts = 1; 
+    optional TLogTableSnap IntroducedParts = 1;
     optional TLogMemSnap TableSnapshoted = 2;
     optional uint32 TableId = 3;
 
     repeated NKikimrProto.TLogoBlobID LeavingBundles = 10;
-    repeated TBundleChange ChangedBundles = 11; 
-    optional TCompactionState CompactionChanges = 12; 
-    repeated TBundleDelta BundleDeltas = 13; 
-    optional TRowVersionState RowVersionChanges = 14; 
-    repeated TBundleMove BundleMoves = 15; 
- 
-    repeated NKikimrProto.TLogoBlobID LeavingTxStatus = 16; 
-    optional TLogTxStatusSnap IntroducedTxStatus = 17; 
+    repeated TBundleChange ChangedBundles = 11;
+    optional TCompactionState CompactionChanges = 12;
+    repeated TBundleDelta BundleDeltas = 13;
+    optional TRowVersionState RowVersionChanges = 14;
+    repeated TBundleMove BundleMoves = 15;
+
+    repeated NKikimrProto.TLogoBlobID LeavingTxStatus = 16;
+    optional TLogTxStatusSnap IntroducedTxStatus = 17;
 }
 
 message TExternalGcEntry {
@@ -218,7 +218,7 @@ message TFollowerPartSwitchAux {
     message TBySwitch {
         optional NKikimrProto.TLogoBlobID PartSwitchRef = 1;
         repeated TBundle HotBundles = 2;
-        repeated TTxStatus HotTxStatus = 3; 
+        repeated TTxStatus HotTxStatus = 3;
     }
 
     repeated TBySwitch BySwitchAux = 1;
@@ -245,5 +245,5 @@ message TDatabaseBorrowPart {
     optional uint32 SourceTable = 2;
 
     repeated TPartInfo Parts = 3;
-    repeated TTxStatus TxStatusParts = 4; 
+    repeated TTxStatus TxStatusParts = 4;
 }

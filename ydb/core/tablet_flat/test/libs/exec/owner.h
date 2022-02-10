@@ -94,10 +94,10 @@ namespace NFake {
             auto &profile = AppData(ctx)->ResourceProfiles;
 
             if (FollowerId == 0) {
-                Agent = Setup->Tablet(Info.Get(), SelfId(), ctx, 0, profile); 
-            } else { 
+                Agent = Setup->Tablet(Info.Get(), SelfId(), ctx, 0, profile);
+            } else {
                 Agent = Setup->Follower(Info.Get(), SelfId(), ctx, FollowerId, profile);
-            } 
+            }
 
             Y_VERIFY(Agent, "Failed to start new tablet actor");
 

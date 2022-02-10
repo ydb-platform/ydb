@@ -40,11 +40,11 @@ MakeTestConfig()
     queue->SetWeight(20);
     queue->MutableLimit()->AddResource(400);
 
-    queue = config.AddQueues(); 
-    queue->SetName("queue_scan"); 
-    queue->SetWeight(20); 
-    queue->MutableLimit()->AddResource(400); 
- 
+    queue = config.AddQueues();
+    queue->SetName("queue_scan");
+    queue->SetWeight(20);
+    queue->MutableLimit()->AddResource(400);
+
     auto task = config.AddTasks();
     task->SetName("unknown");
     task->SetQueueName("queue_default");
@@ -60,11 +60,11 @@ MakeTestConfig()
     task->SetQueueName("queue_compaction1");
     task->SetDefaultDuration(TDuration::Seconds(20).GetValue());
 
-    task = config.AddTasks(); 
-    task->SetName("scan"); 
-    task->SetQueueName("queue_scan"); 
-    task->SetDefaultDuration(TDuration::Seconds(20).GetValue()); 
- 
+    task = config.AddTasks();
+    task->SetName("scan");
+    task->SetQueueName("queue_scan");
+    task->SetDefaultDuration(TDuration::Seconds(20).GetValue());
+
     config.MutableResourceLimit()->AddResource(500);
     config.MutableResourceLimit()->AddResource(500);
 
@@ -841,56 +841,56 @@ Y_UNIT_TEST_SUITE(TResourceBroker) {
         // Get resources for task-2.
         WaitForResourceAllocation(runtime, 2, cookie1);
     }
- 
-    Y_UNIT_TEST(TestOverusageDifferentResources) { 
-        TTestBasicRuntime runtime; 
-        SetupTabletServices(runtime); 
-        SetupLogging(runtime); 
- 
-        auto now = Now(); 
-        runtime.UpdateCurrentTime(now); 
-        TActorId sender = runtime.AllocateEdgeActor(); 
- 
-        NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>(); 
-        auto config = MakeTestConfig(); 
-        auto broker = CreateResourceBrokerActor(config, counters); 
-        auto brokerId = runtime.Register(broker); 
-        WaitForBootstrap(runtime); 
- 
-        // Submit task-1. 
-        SubmitTask(runtime, brokerId, sender, 1, 500, 0, "compaction0", 5); 
-        // Submit task-2. 
-        SubmitTask(runtime, brokerId, sender, 2, 500, 0, "compaction1", 5); 
- 
-        // Resources are allocated for task-1. 
-        WaitForResourceAllocation(runtime, 1); 
-        // Finish task-1. 
-        now += TDuration::Seconds(10); 
-        runtime.UpdateCurrentTime(now); 
-        FinishTask(runtime, brokerId, sender, 1); 
- 
-        // Resources are allocated for task-2. 
-        WaitForResourceAllocation(runtime, 2); 
-        // Finish task-2. 
-        now += TDuration::Seconds(10); 
-        runtime.UpdateCurrentTime(now); 
-        FinishTask(runtime, brokerId, sender, 2); 
- 
-        // Submit task-3. 
-        SubmitTask(runtime, brokerId, sender, 3, 250, 0, "compaction1", 5); 
-        WaitForResourceAllocation(runtime, 3); 
-        now += TDuration::Seconds(10); 
-        runtime.UpdateCurrentTime(now); 
- 
-        // Submit task-4. 
-        SubmitTask(runtime, brokerId, sender, 4, 0, 800, "scan", 5); 
-        now += TDuration::Seconds(10); 
-        runtime.UpdateCurrentTime(now); 
- 
-        // Submit task-5, then above task-4 must not block this allocation. 
-        SubmitTask(runtime, brokerId, sender, 5, 250, 0, "compaction0", 5); 
-        WaitForResourceAllocation(runtime, 5); 
-    } 
+
+    Y_UNIT_TEST(TestOverusageDifferentResources) {
+        TTestBasicRuntime runtime;
+        SetupTabletServices(runtime);
+        SetupLogging(runtime);
+
+        auto now = Now();
+        runtime.UpdateCurrentTime(now);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto config = MakeTestConfig();
+        auto broker = CreateResourceBrokerActor(config, counters);
+        auto brokerId = runtime.Register(broker);
+        WaitForBootstrap(runtime);
+
+        // Submit task-1.
+        SubmitTask(runtime, brokerId, sender, 1, 500, 0, "compaction0", 5);
+        // Submit task-2.
+        SubmitTask(runtime, brokerId, sender, 2, 500, 0, "compaction1", 5);
+
+        // Resources are allocated for task-1.
+        WaitForResourceAllocation(runtime, 1);
+        // Finish task-1.
+        now += TDuration::Seconds(10);
+        runtime.UpdateCurrentTime(now);
+        FinishTask(runtime, brokerId, sender, 1);
+
+        // Resources are allocated for task-2.
+        WaitForResourceAllocation(runtime, 2);
+        // Finish task-2.
+        now += TDuration::Seconds(10);
+        runtime.UpdateCurrentTime(now);
+        FinishTask(runtime, brokerId, sender, 2);
+
+        // Submit task-3.
+        SubmitTask(runtime, brokerId, sender, 3, 250, 0, "compaction1", 5);
+        WaitForResourceAllocation(runtime, 3);
+        now += TDuration::Seconds(10);
+        runtime.UpdateCurrentTime(now);
+
+        // Submit task-4.
+        SubmitTask(runtime, brokerId, sender, 4, 0, 800, "scan", 5);
+        now += TDuration::Seconds(10);
+        runtime.UpdateCurrentTime(now);
+
+        // Submit task-5, then above task-4 must not block this allocation.
+        SubmitTask(runtime, brokerId, sender, 5, 250, 0, "compaction0", 5);
+        WaitForResourceAllocation(runtime, 5);
+    }
 };
 
 Y_UNIT_TEST_SUITE(TResourceBrokerInstant) {
@@ -1009,127 +1009,127 @@ Y_UNIT_TEST_SUITE(TResourceBrokerInstant) {
     }
 };
 
-Y_UNIT_TEST_SUITE(TResourceBrokerConfig) { 
- 
-    Y_UNIT_TEST(UpdateQueues) { 
-        NKikimrResourceBroker::TResourceBrokerConfig config; 
-        if (auto* q = config.AddQueues()) { 
-            q->SetName("queue0"); 
-            q->SetWeight(10); 
-            q->MutableLimit()->AddResource(1); 
-            q->MutableLimit()->AddResource(128); 
-        } 
- 
-        NKikimrResourceBroker::TResourceBrokerConfig updates; 
-        if (auto* q = updates.AddQueues()) { 
-            q->SetName("queue1"); 
-            q->SetWeight(100); 
-            q->MutableLimit()->SetCpu(10); 
-            q->MutableLimit()->SetMemory(1024); 
-        } 
-        if (auto* q = updates.AddQueues()) { 
-            q->SetName("queue2"); 
-            q->SetWeight(200); 
-            q->MutableLimit()->AddResource(20); 
-            q->MutableLimit()->AddResource(2048); 
-        } 
-        NResourceBroker::MergeConfigUpdates(config, updates); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(config.QueuesSize(), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(0).ShortDebugString(), "Name: \"queue0\" Weight: 10 Limit { Resource: 1 Resource: 128 }"); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(1).ShortDebugString(), "Name: \"queue1\" Weight: 100 Limit { Cpu: 10 Memory: 1024 }"); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(2).ShortDebugString(), "Name: \"queue2\" Weight: 200 Limit { Cpu: 20 Memory: 2048 }"); 
- 
-        updates.Clear(); 
-        if (auto* q = updates.AddQueues()) { 
-            q->SetName("queue0"); 
-            q->MutableLimit()->AddResource(2); 
-        } 
-        if (auto* q = updates.AddQueues()) { 
-            q->SetName("queue1"); 
-            q->MutableLimit()->SetCpu(15); 
-        } 
-        NResourceBroker::MergeConfigUpdates(config, updates); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(config.QueuesSize(), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(0).ShortDebugString(), "Name: \"queue0\" Weight: 10 Limit { Resource: 2 Resource: 128 Cpu: 2 }"); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(1).ShortDebugString(), "Name: \"queue1\" Weight: 100 Limit { Cpu: 15 Memory: 1024 }"); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(2).ShortDebugString(), "Name: \"queue2\" Weight: 200 Limit { Cpu: 20 Memory: 2048 }"); 
- 
-        updates.Clear(); 
-        if (auto* q = updates.AddQueues()) { 
-            q->SetName("queue0"); 
-            q->MutableLimit()->SetCpu(3); 
-            q->MutableLimit()->SetMemory(256); 
-        } 
-        NResourceBroker::MergeConfigUpdates(config, updates); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(config.QueuesSize(), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(0).ShortDebugString(), "Name: \"queue0\" Weight: 10 Limit { Resource: 3 Resource: 256 Cpu: 3 Memory: 256 }"); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(1).ShortDebugString(), "Name: \"queue1\" Weight: 100 Limit { Cpu: 15 Memory: 1024 }"); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(2).ShortDebugString(), "Name: \"queue2\" Weight: 200 Limit { Cpu: 20 Memory: 2048 }"); 
-    } 
- 
-    Y_UNIT_TEST(UpdateTasks) { 
-        NKikimrResourceBroker::TResourceBrokerConfig config; 
-        if (auto* t = config.AddTasks()) { 
-            t->SetName("task0"); 
-            t->SetQueueName("queue0"); 
-            t->SetDefaultDuration(TDuration::Seconds(1).GetValue()); 
-        } 
- 
-        NKikimrResourceBroker::TResourceBrokerConfig updates; 
-        if (auto* t = updates.AddTasks()) { 
-            t->SetName("task1"); 
-            t->SetQueueName("queue1"); 
-            t->SetDefaultDuration(TDuration::Seconds(2).GetValue()); 
-        } 
-        if (auto* t = updates.AddTasks()) { 
-            t->SetName("task2"); 
-            t->SetQueueName("queue2"); 
-            t->SetDefaultDuration(TDuration::Seconds(3).GetValue()); 
-        } 
-        NResourceBroker::MergeConfigUpdates(config, updates); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(config.TasksSize(), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(0).ShortDebugString(), "Name: \"task0\" QueueName: \"queue0\" DefaultDuration: 1000000"); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(1).ShortDebugString(), "Name: \"task1\" QueueName: \"queue1\" DefaultDuration: 2000000"); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(2).ShortDebugString(), "Name: \"task2\" QueueName: \"queue2\" DefaultDuration: 3000000"); 
- 
-        updates.Clear(); 
-        if (auto* t = updates.AddTasks()) { 
-            t->SetName("task0"); 
-            t->SetQueueName("changed0"); 
-        } 
-        if (auto* t = updates.AddTasks()) { 
-            t->SetName("task1"); 
-            t->SetDefaultDuration(TDuration::Seconds(4).GetValue()); 
-        } 
-        NResourceBroker::MergeConfigUpdates(config, updates); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(config.TasksSize(), 3); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(0).ShortDebugString(), "Name: \"task0\" QueueName: \"changed0\" DefaultDuration: 1000000"); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(1).ShortDebugString(), "Name: \"task1\" QueueName: \"queue1\" DefaultDuration: 4000000"); 
-        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(2).ShortDebugString(), "Name: \"task2\" QueueName: \"queue2\" DefaultDuration: 3000000"); 
-    } 
- 
-    Y_UNIT_TEST(UpdateResourceLimit) { 
-        NKikimrResourceBroker::TResourceBrokerConfig config; 
-        if (auto* r = config.MutableResourceLimit()) { 
-            r->SetCpu(10); 
-            r->SetMemory(1024); 
-        } 
- 
-        NKikimrResourceBroker::TResourceBrokerConfig updates; 
-        if (auto* r = updates.MutableResourceLimit()) { 
-            r->AddResource(20); 
-            r->SetMemory(2048); 
-        } 
-        NResourceBroker::MergeConfigUpdates(config, updates); 
- 
-        UNIT_ASSERT_VALUES_EQUAL(config.ShortDebugString(), "ResourceLimit { Cpu: 20 Memory: 2048 }"); 
-    } 
- 
-} // TResourceBrokerConfig 
- 
+Y_UNIT_TEST_SUITE(TResourceBrokerConfig) {
+
+    Y_UNIT_TEST(UpdateQueues) {
+        NKikimrResourceBroker::TResourceBrokerConfig config;
+        if (auto* q = config.AddQueues()) {
+            q->SetName("queue0");
+            q->SetWeight(10);
+            q->MutableLimit()->AddResource(1);
+            q->MutableLimit()->AddResource(128);
+        }
+
+        NKikimrResourceBroker::TResourceBrokerConfig updates;
+        if (auto* q = updates.AddQueues()) {
+            q->SetName("queue1");
+            q->SetWeight(100);
+            q->MutableLimit()->SetCpu(10);
+            q->MutableLimit()->SetMemory(1024);
+        }
+        if (auto* q = updates.AddQueues()) {
+            q->SetName("queue2");
+            q->SetWeight(200);
+            q->MutableLimit()->AddResource(20);
+            q->MutableLimit()->AddResource(2048);
+        }
+        NResourceBroker::MergeConfigUpdates(config, updates);
+
+        UNIT_ASSERT_VALUES_EQUAL(config.QueuesSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(0).ShortDebugString(), "Name: \"queue0\" Weight: 10 Limit { Resource: 1 Resource: 128 }");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(1).ShortDebugString(), "Name: \"queue1\" Weight: 100 Limit { Cpu: 10 Memory: 1024 }");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(2).ShortDebugString(), "Name: \"queue2\" Weight: 200 Limit { Cpu: 20 Memory: 2048 }");
+
+        updates.Clear();
+        if (auto* q = updates.AddQueues()) {
+            q->SetName("queue0");
+            q->MutableLimit()->AddResource(2);
+        }
+        if (auto* q = updates.AddQueues()) {
+            q->SetName("queue1");
+            q->MutableLimit()->SetCpu(15);
+        }
+        NResourceBroker::MergeConfigUpdates(config, updates);
+
+        UNIT_ASSERT_VALUES_EQUAL(config.QueuesSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(0).ShortDebugString(), "Name: \"queue0\" Weight: 10 Limit { Resource: 2 Resource: 128 Cpu: 2 }");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(1).ShortDebugString(), "Name: \"queue1\" Weight: 100 Limit { Cpu: 15 Memory: 1024 }");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(2).ShortDebugString(), "Name: \"queue2\" Weight: 200 Limit { Cpu: 20 Memory: 2048 }");
+
+        updates.Clear();
+        if (auto* q = updates.AddQueues()) {
+            q->SetName("queue0");
+            q->MutableLimit()->SetCpu(3);
+            q->MutableLimit()->SetMemory(256);
+        }
+        NResourceBroker::MergeConfigUpdates(config, updates);
+
+        UNIT_ASSERT_VALUES_EQUAL(config.QueuesSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(0).ShortDebugString(), "Name: \"queue0\" Weight: 10 Limit { Resource: 3 Resource: 256 Cpu: 3 Memory: 256 }");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(1).ShortDebugString(), "Name: \"queue1\" Weight: 100 Limit { Cpu: 15 Memory: 1024 }");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetQueues(2).ShortDebugString(), "Name: \"queue2\" Weight: 200 Limit { Cpu: 20 Memory: 2048 }");
+    }
+
+    Y_UNIT_TEST(UpdateTasks) {
+        NKikimrResourceBroker::TResourceBrokerConfig config;
+        if (auto* t = config.AddTasks()) {
+            t->SetName("task0");
+            t->SetQueueName("queue0");
+            t->SetDefaultDuration(TDuration::Seconds(1).GetValue());
+        }
+
+        NKikimrResourceBroker::TResourceBrokerConfig updates;
+        if (auto* t = updates.AddTasks()) {
+            t->SetName("task1");
+            t->SetQueueName("queue1");
+            t->SetDefaultDuration(TDuration::Seconds(2).GetValue());
+        }
+        if (auto* t = updates.AddTasks()) {
+            t->SetName("task2");
+            t->SetQueueName("queue2");
+            t->SetDefaultDuration(TDuration::Seconds(3).GetValue());
+        }
+        NResourceBroker::MergeConfigUpdates(config, updates);
+
+        UNIT_ASSERT_VALUES_EQUAL(config.TasksSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(0).ShortDebugString(), "Name: \"task0\" QueueName: \"queue0\" DefaultDuration: 1000000");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(1).ShortDebugString(), "Name: \"task1\" QueueName: \"queue1\" DefaultDuration: 2000000");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(2).ShortDebugString(), "Name: \"task2\" QueueName: \"queue2\" DefaultDuration: 3000000");
+
+        updates.Clear();
+        if (auto* t = updates.AddTasks()) {
+            t->SetName("task0");
+            t->SetQueueName("changed0");
+        }
+        if (auto* t = updates.AddTasks()) {
+            t->SetName("task1");
+            t->SetDefaultDuration(TDuration::Seconds(4).GetValue());
+        }
+        NResourceBroker::MergeConfigUpdates(config, updates);
+
+        UNIT_ASSERT_VALUES_EQUAL(config.TasksSize(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(0).ShortDebugString(), "Name: \"task0\" QueueName: \"changed0\" DefaultDuration: 1000000");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(1).ShortDebugString(), "Name: \"task1\" QueueName: \"queue1\" DefaultDuration: 4000000");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetTasks(2).ShortDebugString(), "Name: \"task2\" QueueName: \"queue2\" DefaultDuration: 3000000");
+    }
+
+    Y_UNIT_TEST(UpdateResourceLimit) {
+        NKikimrResourceBroker::TResourceBrokerConfig config;
+        if (auto* r = config.MutableResourceLimit()) {
+            r->SetCpu(10);
+            r->SetMemory(1024);
+        }
+
+        NKikimrResourceBroker::TResourceBrokerConfig updates;
+        if (auto* r = updates.MutableResourceLimit()) {
+            r->AddResource(20);
+            r->SetMemory(2048);
+        }
+        NResourceBroker::MergeConfigUpdates(config, updates);
+
+        UNIT_ASSERT_VALUES_EQUAL(config.ShortDebugString(), "ResourceLimit { Cpu: 20 Memory: 2048 }");
+    }
+
+} // TResourceBrokerConfig
+
 } // NKikimr

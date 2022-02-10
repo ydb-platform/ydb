@@ -36,8 +36,8 @@ message BeginTransactionRequest {
 }
 
 message BeginTransactionResult {
-    // Transaction id required for other requests. 
-    string tx_id = 1; 
+    // Transaction id required for other requests.
+    string tx_id = 1;
 }
 
 message BeginTransactionResponse {
@@ -46,11 +46,11 @@ message BeginTransactionResponse {
 
 message CommitTransactionRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    string tx_id = 2; 
+    string tx_id = 2;
 }
 
 message CommitTransactionResult {
-    string tx_id = 1; 
+    string tx_id = 1;
 }
 
 message CommitTransactionResponse {
@@ -59,11 +59,11 @@ message CommitTransactionResponse {
 
 message RollbackTransactionRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    string tx_id = 2; 
+    string tx_id = 2;
 }
 
 message RollbackTransactionResult {
-    string tx_id = 1; 
+    string tx_id = 1;
 }
 
 message RollbackTransactionResponse {
@@ -72,14 +72,14 @@ message RollbackTransactionResponse {
 
 message WriteRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    string tx_id = 2; 
+    string tx_id = 2;
     string path = 3;
     string dedup_id = 4;
     Data data = 5;
 }
 
 message WriteResult {
-    string tx_id = 1; 
+    string tx_id = 1;
     string path = 2;
     string dedup_id = 3;
 }
@@ -90,7 +90,7 @@ message WriteResponse {
 
 message ReadRequest {
     Ydb.Operations.OperationParams operation_params = 1;
-    string tx_id = 2; 
+    string tx_id = 2;
     string path = 3;
     oneof query {
         string sql = 11;
@@ -98,7 +98,7 @@ message ReadRequest {
 }
 
 message ReadResult {
-    string tx_id = 1; 
+    string tx_id = 1;
     string path = 2;
     uint64 chunk = 3;
     bool finished = 4;

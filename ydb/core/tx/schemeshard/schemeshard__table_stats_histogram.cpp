@@ -303,10 +303,10 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     if (!Self->TabletIdToShardIdx.contains(datashardId))
         return true;
 
-    // Don't split/merge backup tables 
-    if (table->IsBackup) 
+    // Don't split/merge backup tables
+    if (table->IsBackup)
         return true;
- 
+
     auto shardIdx = Self->TabletIdToShardIdx[datashardId];
 
     ESplitReason splitReason = ESplitReason::NO_SPLIT;

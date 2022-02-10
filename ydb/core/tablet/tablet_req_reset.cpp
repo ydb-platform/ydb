@@ -22,33 +22,33 @@ class TTabletReqReset : public TActorBootstrapped<TTabletReqReset> {
         Generation = std::max(Generation, ev->Get()->CurrentGeneration);
     }
 
-    void FindLatestLogEntry(const TActorContext& ctx) { 
-        ctx.Register(CreateTabletFindLastEntry(ctx.SelfID, false, TabletStorageInfo.Get(), 0)); 
-        Become(&TTabletReqReset::StateDiscover); 
-    } 
- 
+    void FindLatestLogEntry(const TActorContext& ctx) {
+        ctx.Register(CreateTabletFindLastEntry(ctx.SelfID, false, TabletStorageInfo.Get(), 0));
+        Become(&TTabletReqReset::StateDiscover);
+    }
+
     void Handle(TEvTabletBase::TEvFindLatestLogEntryResult::TPtr& ev, const TActorContext& ctx) {
         if (ev->Get()->Status != NKikimrProto::OK) {
             return ReplyAndDie(ev->Get()->Status, ctx);
         }
         Generation = std::max(Generation, ev->Get()->Latest.Generation());
-        AdjustGeneration(); 
-        BlockBlobStorage(ctx); 
-    } 
- 
-    void AdjustGeneration() { 
-        if (Generation < TabletStorageInfo->Channels[0].LatestEntry()->FromGeneration) { 
-            Generation = TabletStorageInfo->Channels[0].LatestEntry()->FromGeneration; 
-        } 
-    } 
- 
-    void BlockBlobStorage(const TActorContext& ctx) { 
+        AdjustGeneration();
+        BlockBlobStorage(ctx);
+    }
+
+    void AdjustGeneration() {
+        if (Generation < TabletStorageInfo->Channels[0].LatestEntry()->FromGeneration) {
+            Generation = TabletStorageInfo->Channels[0].LatestEntry()->FromGeneration;
+        }
+    }
+
+    void BlockBlobStorage(const TActorContext& ctx) {
         ctx.Register(CreateTabletReqBlockBlobStorage(ctx.SelfID, TabletStorageInfo.Get(), Generation, false));
         Become(&TTabletReqReset::StateBlockBlobStorage);
     }
 
     void Handle(TEvTabletBase::TEvBlockBlobStorageResult::TPtr& ev, const TActorContext& ctx) {
-        if (ev->Get()->Status == NKikimrProto::RACE) { 
+        if (ev->Get()->Status == NKikimrProto::RACE) {
             ++Generation;
             ctx.Register(CreateTabletReqBlockBlobStorage(ctx.SelfID, TabletStorageInfo.Get(), Generation, false));
             return;
@@ -112,7 +112,7 @@ public:
     TTabletReqReset(const TActorId& owner, const TIntrusivePtr<TTabletStorageInfo>& tabletStorageInfo, ui32 knownGeneration)
         : Owner(owner)
         , TabletStorageInfo(tabletStorageInfo)
-        , Generation(knownGeneration) 
+        , Generation(knownGeneration)
     {
         Y_VERIFY(!TabletStorageInfo->Channels.empty());
         Y_VERIFY(TabletStorageInfo->Channels[0].LatestEntry() != nullptr);
@@ -121,17 +121,17 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         TActorId stateStorageProxyId = MakeStateStorageProxyID(StateStorageGroupFromTabletID(TabletStorageInfo->TabletID));
         ctx.Send(stateStorageProxyId, new TEvStateStorage::TEvLookup(TabletStorageInfo->TabletID, 0));
-        if (Generation == 0) { 
-            FindLatestLogEntry(ctx); 
-        } else { 
-            AdjustGeneration(); 
-            BlockBlobStorage(ctx); 
-        } 
+        if (Generation == 0) {
+            FindLatestLogEntry(ctx);
+        } else {
+            AdjustGeneration();
+            BlockBlobStorage(ctx);
+        }
     }
 };
 
 IActor* CreateTabletReqReset(const TActorId& owner, const TIntrusivePtr<NKikimr::TTabletStorageInfo>& info, ui32 knownGeneration) {
-    return new TTabletReqReset(owner, info, knownGeneration); 
+    return new TTabletReqReset(owner, info, knownGeneration);
 }
 
 }

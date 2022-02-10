@@ -57,16 +57,16 @@ public:
             return Error(Ydb::StatusIds::UNAVAILABLE,
                          Sprintf("Database '%s' is busy", path.data()), ctx);
 
-        // Check idempotency key 
-        if (rec.idempotency_key() && Tenant->AlterIdempotencyKey == rec.idempotency_key()) { 
-            LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Returning success due to idempotency key match"); 
-            auto &operation = *Response->Record.MutableResponse()->mutable_operation(); 
-            operation.set_ready(true); 
-            operation.set_status(Ydb::StatusIds::SUCCESS); 
-            Tenant = nullptr; 
-            return true; 
-        } 
- 
+        // Check idempotency key
+        if (rec.idempotency_key() && Tenant->AlterIdempotencyKey == rec.idempotency_key()) {
+            LOG_DEBUG_S(ctx, NKikimrServices::CMS_TENANTS, "Returning success due to idempotency key match");
+            auto &operation = *Response->Record.MutableResponse()->mutable_operation();
+            operation.set_ready(true);
+            operation.set_status(Ydb::StatusIds::SUCCESS);
+            Tenant = nullptr;
+            return true;
+        }
+
         // Check generation.
         if (rec.generation() && rec.generation() != Tenant->Generation)
             return Error(Ydb::StatusIds::BAD_REQUEST,
@@ -77,10 +77,10 @@ public:
         // Check added computational units.
         NewComputationalUnits = Tenant->ComputationalUnits;
         for (auto &unit : rec.computational_units_to_add()) {
-            if (Tenant->SharedDomainId) 
-                return Error(Ydb::StatusIds::BAD_REQUEST, 
-                            Sprintf("Database '%s' is serverless, cannot add computational units", path.data()), ctx); 
- 
+            if (Tenant->SharedDomainId)
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                            Sprintf("Database '%s' is serverless, cannot add computational units", path.data()), ctx);
+
             auto &kind = unit.unit_kind();
             auto &zone = unit.availability_zone();
             ui64 count = unit.count();
@@ -93,10 +93,10 @@ public:
 
         // Check removed computational units.
         for (auto &unit : rec.computational_units_to_remove()) {
-            if (Tenant->SharedDomainId) 
-                return Error(Ydb::StatusIds::BAD_REQUEST, 
-                            Sprintf("Database '%s' is serverless, cannot remove computational units", path.data()), ctx); 
- 
+            if (Tenant->SharedDomainId)
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                            Sprintf("Database '%s' is serverless, cannot remove computational units", path.data()), ctx);
+
             auto &kind = unit.unit_kind();
             auto &zone = unit.availability_zone();
             ui64 count = unit.count();
@@ -125,10 +125,10 @@ public:
                 return Error(Ydb::StatusIds::UNSUPPORTED,
                             Sprintf("Database '%s' is shared, cannot add new storage units", path.data()), ctx);
 
-            if (Tenant->SharedDomainId) 
-                return Error(Ydb::StatusIds::BAD_REQUEST, 
-                            Sprintf("Database '%s' is serverless, cannot add storage units", path.data()), ctx); 
- 
+            if (Tenant->SharedDomainId)
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                            Sprintf("Database '%s' is serverless, cannot add storage units", path.data()), ctx);
+
             auto size = unit.count();
 
             if (!Self->MakeBasicPoolCheck(kind, size, code, error))
@@ -140,10 +140,10 @@ public:
 
         // Check deregistered computational units.
         for (auto &unit : rec.computational_units_to_deregister()) {
-            if (Tenant->SharedDomainId) 
-                return Error(Ydb::StatusIds::BAD_REQUEST, 
-                            Sprintf("Database '%s' is serverless, cannot deregister computational units", path.data()), ctx); 
- 
+            if (Tenant->SharedDomainId)
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                            Sprintf("Database '%s' is serverless, cannot deregister computational units", path.data()), ctx);
+
             auto key = std::make_pair(unit.host(), unit.port());
             auto it = Tenant->RegisteredComputationalUnits.find(key);
             if (it == Tenant->RegisteredComputationalUnits.end())
@@ -156,10 +156,10 @@ public:
 
         // Check registered computational units.
         for (auto &unit : rec.computational_units_to_register()) {
-            if (Tenant->SharedDomainId) 
-                return Error(Ydb::StatusIds::BAD_REQUEST, 
-                            Sprintf("Database '%s' is serverless, cannot register computational units", path.data()), ctx); 
- 
+            if (Tenant->SharedDomainId)
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                            Sprintf("Database '%s' is serverless, cannot register computational units", path.data()), ctx);
+
             auto key = std::make_pair(unit.host(), unit.port());
             auto it1 = Tenant->RegisteredComputationalUnits.find(key);
             if (it1 != Tenant->RegisteredComputationalUnits.end()) {
@@ -188,15 +188,15 @@ public:
         if (newGroups && !Tenant->CheckStorageUnitsQuota(code, error, newGroups))
             return Error(code, error, ctx);
 
-        // Check database quotas. 
-        if (rec.has_database_quotas()) { 
-            const auto& quotas = rec.database_quotas(); 
-            auto hardQuota = quotas.data_size_hard_quota(); 
-            auto softQuota = quotas.data_size_soft_quota(); 
-            if (hardQuota && softQuota && hardQuota < softQuota) { 
-                return Error(Ydb::StatusIds::BAD_REQUEST, "Data size soft quota cannot be larger than hard quota", ctx); 
-            } 
-        } 
+        // Check database quotas.
+        if (rec.has_database_quotas()) {
+            const auto& quotas = rec.database_quotas();
+            auto hardQuota = quotas.data_size_hard_quota();
+            auto softQuota = quotas.data_size_soft_quota();
+            if (hardQuota && softQuota && hardQuota < softQuota) {
+                return Error(Ydb::StatusIds::BAD_REQUEST, "Data size soft quota cannot be larger than hard quota", ctx);
+            }
+        }
         
         // Check attributes.
         THashSet<TString> attrNames;
@@ -209,7 +209,7 @@ public:
                              Sprintf("Multiple attributes with name '%s'", key.data()), ctx);
             attrNames.insert(key);
         }
- 
+
         THashMap<TString, ui64> attributeMap;
         for (ui64 i = 0 ; i < Tenant->Attributes.UserAttributesSize(); i++) {
             bool res = attributeMap.emplace(Tenant->Attributes.GetUserAttributes(i).GetKey(), i).second;
@@ -254,25 +254,25 @@ public:
             Self->DbUpdateRegisteredUnit(Tenant, unit.Host, unit.Port, unit.Kind, txc, ctx);
         }
 
-        bool updateSubdomainVersion = false; 
- 
-        if (rec.has_schema_operation_quotas()) { 
-            SchemaOperationQuotas.ConstructInPlace(rec.schema_operation_quotas()); 
-            Self->DbUpdateSchemaOperationQuotas(Tenant, *SchemaOperationQuotas, txc, ctx); 
-            updateSubdomainVersion = true; 
-        } 
- 
-        if (rec.has_database_quotas()) { 
-            DatabaseQuotas.ConstructInPlace(rec.database_quotas()); 
-            Self->DbUpdateDatabaseQuotas(Tenant, *DatabaseQuotas, txc, ctx); 
-            updateSubdomainVersion = true; 
-        } 
- 
-        if (rec.idempotency_key() || Tenant->AlterIdempotencyKey) { 
-            Tenant->AlterIdempotencyKey = rec.idempotency_key(); 
-            Self->DbUpdateTenantAlterIdempotencyKey(Tenant, Tenant->AlterIdempotencyKey, txc, ctx); 
-        } 
- 
+        bool updateSubdomainVersion = false;
+
+        if (rec.has_schema_operation_quotas()) {
+            SchemaOperationQuotas.ConstructInPlace(rec.schema_operation_quotas());
+            Self->DbUpdateSchemaOperationQuotas(Tenant, *SchemaOperationQuotas, txc, ctx);
+            updateSubdomainVersion = true;
+        }
+
+        if (rec.has_database_quotas()) {
+            DatabaseQuotas.ConstructInPlace(rec.database_quotas());
+            Self->DbUpdateDatabaseQuotas(Tenant, *DatabaseQuotas, txc, ctx);
+            updateSubdomainVersion = true;
+        }
+
+        if (rec.idempotency_key() || Tenant->AlterIdempotencyKey) {
+            Tenant->AlterIdempotencyKey = rec.idempotency_key();
+            Self->DbUpdateTenantAlterIdempotencyKey(Tenant, Tenant->AlterIdempotencyKey, txc, ctx);
+        }
+
         if (!rec.alter_attributes().empty()) {
             for (const auto& [key, value] : rec.alter_attributes()) {
                 const auto it = attributeMap.find(key);
@@ -294,11 +294,11 @@ public:
             updateSubdomainVersion = true;
         }
 
-        if (updateSubdomainVersion) { 
-            SubdomainVersion = Tenant->SubdomainVersion + 1; 
-            Self->DbUpdateSubdomainVersion(Tenant, *SubdomainVersion, txc, ctx); 
-        } 
- 
+        if (updateSubdomainVersion) {
+            SubdomainVersion = Tenant->SubdomainVersion + 1;
+            Self->DbUpdateSubdomainVersion(Tenant, *SubdomainVersion, txc, ctx);
+        }
+
         Self->DbUpdateTenantGeneration(Tenant, Tenant->Generation + 1, txc, ctx);
 
         auto &operation = *Response->Record.MutableResponse()->mutable_operation();
@@ -355,15 +355,15 @@ public:
 
                 Self->Counters.Inc(kind, COUNTER_REQUESTED_STORAGE_UNITS, size);
             }
-            if (SchemaOperationQuotas) { 
-                Tenant->SchemaOperationQuotas.ConstructInPlace(*SchemaOperationQuotas); 
-            } 
-            if (DatabaseQuotas) { 
-                Tenant->DatabaseQuotas.ConstructInPlace(*DatabaseQuotas); 
-            } 
-            if (SubdomainVersion) { 
-                Tenant->SubdomainVersion = *SubdomainVersion; 
-            } 
+            if (SchemaOperationQuotas) {
+                Tenant->SchemaOperationQuotas.ConstructInPlace(*SchemaOperationQuotas);
+            }
+            if (DatabaseQuotas) {
+                Tenant->DatabaseQuotas.ConstructInPlace(*DatabaseQuotas);
+            }
+            if (SubdomainVersion) {
+                Tenant->SubdomainVersion = *SubdomainVersion;
+            }
 
             ++Tenant->Generation;
 
@@ -381,9 +381,9 @@ private:
     THashMap<std::pair<TString, ui32>, TAllocatedComputationalUnit> UnitsToRegister;
     THashSet<std::pair<TString, ui32>> UnitsToDeregister;
     THashMap<TString, ui64> PoolsToAdd;
-    TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas; 
-    TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas; 
-    TMaybe<ui64> SubdomainVersion; 
+    TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas;
+    TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
+    TMaybe<ui64> SubdomainVersion;
     bool ComputationalUnitsModified;
     TTenant::TPtr Tenant;
 };

@@ -1,16 +1,16 @@
-#pragma once 
- 
+#pragma once
+
 #include <limits>
 
-namespace NYdb { 
-namespace NTable { 
- 
-//! Column family compression codec 
-enum class EColumnFamilyCompression { 
-    None, 
-    LZ4, 
-}; 
- 
+namespace NYdb {
+namespace NTable {
+
+//! Column family compression codec
+enum class EColumnFamilyCompression {
+    None,
+    LZ4,
+};
+
 //! State of build index operation
 enum class EBuildIndexState {
     Unspecified = 0,
@@ -29,5 +29,5 @@ enum class EIndexType {
     Unknown = std::numeric_limits<int>::max()
 };
 
-} // namespace NTable 
-} // namespace NYdb 
+} // namespace NTable
+} // namespace NYdb

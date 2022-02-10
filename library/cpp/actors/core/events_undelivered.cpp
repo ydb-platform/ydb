@@ -32,9 +32,9 @@ namespace NActors {
     IEventBase* TEvents::TEvUndelivered::Load(TEventSerializedData* bufs) {
         TString str = bufs->GetString();
         Y_VERIFY(str.size() == (sizeof(ui32) + sizeof(ui32)));
-        const char* p = str.data(); 
-        const ui64 sourceType = ReadUnaligned<ui32>(p + 0); 
-        const ui64 reason = ReadUnaligned<ui32>(p + 4); 
+        const char* p = str.data();
+        const ui64 sourceType = ReadUnaligned<ui32>(p + 0);
+        const ui64 reason = ReadUnaligned<ui32>(p + 4);
         return new TEvUndelivered(sourceType, reason);
     }
 

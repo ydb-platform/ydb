@@ -17,7 +17,7 @@ IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setu
 // Create nameservice for dynamic node providing its info.
 IActor *CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup> &setup,
                                 const NKikimrNodeBroker::TNodeInfo &node,
-                                const TDomainsInfo &domains, 
+                                const TDomainsInfo &domains,
                                 ui32 poolId = 0);
 
 } // NNodeBroker

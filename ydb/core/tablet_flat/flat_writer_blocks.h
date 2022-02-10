@@ -6,7 +6,7 @@
 #include "flat_sausage_solid.h"
 #include "flat_part_iface.h"
 #include "flat_part_loader.h"
-#include "util_basics.h" 
+#include "util_basics.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -30,34 +30,34 @@ namespace NWriter {
 
         ~TBlocks()
         {
-            Y_VERIFY(!Writer.Grab(), "Block writer still has some blobs"); 
+            Y_VERIFY(!Writer.Grab(), "Block writer still has some blobs");
         }
 
-        explicit operator bool() const noexcept 
-        { 
-            return Writer || Regular || Sticky; 
-        } 
- 
+        explicit operator bool() const noexcept
+        {
+            return Writer || Regular || Sticky;
+        }
+
         TIntrusivePtr<TCache> Finish() noexcept
         {
             TIntrusivePtr<TCache> pageCollection;
- 
+
             if (auto meta = Writer.Finish(false /* omit empty page collection */)) {
                 for (auto &glob : Writer.Grab())
                     Cone->Put(std::move(glob));
 
                 pageCollection = MakePageCollection(std::move(meta));
-            } 
+            }
 
-            Y_VERIFY(!Writer, "Block writer is not empty after Finish"); 
-            Y_VERIFY(!Regular && !Sticky, "Unexpected non-empty page lists"); 
- 
+            Y_VERIFY(!Writer, "Block writer is not empty after Finish");
+            Y_VERIFY(!Regular && !Sticky, "Unexpected non-empty page lists");
+
             return pageCollection;
         }
 
-        TPageId Write(TSharedData raw, EPage type) 
+        TPageId Write(TSharedData raw, EPage type)
         {
-            auto pageId = Writer.AddPage(raw, (ui32)type); 
+            auto pageId = Writer.AddPage(raw, (ui32)type);
 
             for (auto &glob : Writer.Grab())
                 Cone->Put(std::move(glob));
@@ -72,10 +72,10 @@ namespace NWriter {
         }
 
         void WriteInplace(TPageId page, TArrayRef<const char> body)
-        { 
-            Writer.AddInplace(page, body); 
-        } 
- 
+        {
+            Writer.AddInplace(page, body);
+        }
+
     private:
         TIntrusivePtr<TCache> MakePageCollection(TSharedData body) noexcept
         {
@@ -90,15 +90,15 @@ namespace NWriter {
             for (auto &paged : Sticky) cache->Fill(paged, true);
             for (auto &paged : Regular) cache->Fill(paged, sticky);
 
-            Sticky.clear(); 
-            Regular.clear(); 
- 
+            Sticky.clear();
+            Regular.clear();
+
             return cache;
         }
 
         NPageCollection::TLargeGlobId CutToChunks(TArrayRef<const char> body)
         {
-            return Cone->Put(0, Channel, body, Writer.Block); 
+            return Cone->Put(0, Channel, body, Writer.Block);
         }
 
     private:

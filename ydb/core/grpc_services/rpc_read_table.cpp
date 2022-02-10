@@ -59,39 +59,39 @@ static NKikimrMiniKQL::TParams ConvertKey(const Ydb::TypedValue& key) {
     return protobuf;
 }
 
-template<class TGetOutput> 
-static void ConvertKeyRange(const Ydb::Table::KeyRange& keyRange, const TGetOutput& getOutput) { 
+template<class TGetOutput>
+static void ConvertKeyRange(const Ydb::Table::KeyRange& keyRange, const TGetOutput& getOutput) {
     switch (keyRange.from_bound_case()) {
-        case Ydb::Table::KeyRange::kGreaterOrEqual: { 
-            auto* output = getOutput(); 
-            output->SetFromInclusive(true); 
-            output->MutableFrom()->CopyFrom(ConvertKey(keyRange.greater_or_equal())); 
-            break; 
-        } 
-        case Ydb::Table::KeyRange::kGreater: { 
-            auto* output = getOutput(); 
-            output->SetFromInclusive(false); 
-            output->MutableFrom()->CopyFrom(ConvertKey(keyRange.greater())); 
-            break; 
-        } 
+        case Ydb::Table::KeyRange::kGreaterOrEqual: {
+            auto* output = getOutput();
+            output->SetFromInclusive(true);
+            output->MutableFrom()->CopyFrom(ConvertKey(keyRange.greater_or_equal()));
+            break;
+        }
+        case Ydb::Table::KeyRange::kGreater: {
+            auto* output = getOutput();
+            output->SetFromInclusive(false);
+            output->MutableFrom()->CopyFrom(ConvertKey(keyRange.greater()));
+            break;
+        }
         default:
-            break; 
+            break;
     }
     switch (keyRange.to_bound_case()) {
-        case Ydb::Table::KeyRange::kLessOrEqual: { 
-            auto* output = getOutput(); 
-            output->SetToInclusive(true); 
-            output->MutableTo()->CopyFrom(ConvertKey(keyRange.less_or_equal())); 
-            break; 
-        } 
-        case Ydb::Table::KeyRange::kLess: { 
-            auto* output = getOutput(); 
-            output->SetToInclusive(false); 
-            output->MutableTo()->CopyFrom(ConvertKey(keyRange.less())); 
-            break; 
-        } 
+        case Ydb::Table::KeyRange::kLessOrEqual: {
+            auto* output = getOutput();
+            output->SetToInclusive(true);
+            output->MutableTo()->CopyFrom(ConvertKey(keyRange.less_or_equal()));
+            break;
+        }
+        case Ydb::Table::KeyRange::kLess: {
+            auto* output = getOutput();
+            output->SetToInclusive(false);
+            output->MutableTo()->CopyFrom(ConvertKey(keyRange.less()));
+            break;
+        }
         default:
-            break; 
+            break;
     }
 }
 
@@ -146,14 +146,14 @@ public:
 
     }
 
-    void PassAway() override { 
-        if (ReadTableActor) { 
-            Send(ReadTableActor, new TEvents::TEvPoison); 
-            ReadTableActor = { }; 
-        } 
-        TActorBootstrapped::PassAway(); 
-    } 
- 
+    void PassAway() override {
+        if (ReadTableActor) {
+            Send(ReadTableActor, new TEvents::TEvPoison);
+            ReadTableActor = { };
+        }
+        TActorBootstrapped::PassAway();
+    }
+
 private:
     void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
         switch (ev->GetTypeRewrite()) {
@@ -224,7 +224,7 @@ private:
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyNotReady:
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardTryLater:
             case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardUnknown:
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined: 
+            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorDeclined:
             case TEvTxUserProxy::TResultStatus::ProxyShardNotAvailable: {
                 TStringStream str;
                 str << "Got " << status << " response from TxProxy";
@@ -233,21 +233,21 @@ private:
                 NYql::IssueToMessage(issue, tmp);
                 return ReplyFinishStream(Ydb::StatusIds::UNAVAILABLE, issueMessage, ctx);
             }
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorUnknown: { 
-                TString str = TStringBuilder() 
-                    << "Got " << status << " response from TxProxy, transaction state unknown"; 
-                const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str); 
-                auto tmp = issueMessage.Add(); 
-                NYql::IssueToMessage(issue, tmp); 
-                return ReplyFinishStream(Ydb::StatusIds::UNDETERMINED, issueMessage, ctx); 
-            } 
-            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout: { 
-                TString str = "Transaction timed out"; 
-                const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str); 
-                auto tmp = issueMessage.Add(); 
-                NYql::IssueToMessage(issue, tmp); 
-                return ReplyFinishStream(Ydb::StatusIds::TIMEOUT, issueMessage, ctx); 
-            } 
+            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::CoordinatorUnknown: {
+                TString str = TStringBuilder()
+                    << "Got " << status << " response from TxProxy, transaction state unknown";
+                const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str);
+                auto tmp = issueMessage.Add();
+                NYql::IssueToMessage(issue, tmp);
+                return ReplyFinishStream(Ydb::StatusIds::UNDETERMINED, issueMessage, ctx);
+            }
+            case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout: {
+                TString str = "Transaction timed out";
+                const NYql::TIssue& issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, str);
+                auto tmp = issueMessage.Add();
+                NYql::IssueToMessage(issue, tmp);
+                return ReplyFinishStream(Ydb::StatusIds::TIMEOUT, issueMessage, ctx);
+            }
             default: {
                 TStringStream str;
                 str << "Got unknown TEvProposeTransactionStatus (" << status << ") response from TxProxy";
@@ -288,9 +288,9 @@ private:
     }
 
     void Handle(TRpcServices::TEvGrpcNextReply::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev); 
-        if (LeftInGRpcAdaptorQueue_ > 0) 
-            LeftInGRpcAdaptorQueue_--; 
+        Y_UNUSED(ev);
+        if (LeftInGRpcAdaptorQueue_ > 0)
+            LeftInGRpcAdaptorQueue_--;
         LastDataStreamTimestamp_ = ctx.Now();
         TryToAllocateQuota();
     }
@@ -448,92 +448,92 @@ private:
             return ReplyFinishStream(StatusIds::BAD_REQUEST, message, ctx);
         }
 
-        const auto& featureFlags = AppData(ctx)->FeatureFlags; 
+        const auto& featureFlags = AppData(ctx)->FeatureFlags;
 
-        bool useSnapshot = featureFlags.GetReadTableWithSnapshot(); 
-        switch (req->use_snapshot()) { 
-            case Ydb::FeatureFlag::STATUS_UNSPECIFIED: 
-                break; 
+        bool useSnapshot = featureFlags.GetReadTableWithSnapshot();
+        switch (req->use_snapshot()) {
+            case Ydb::FeatureFlag::STATUS_UNSPECIFIED:
+                break;
 
-            case Ydb::FeatureFlag::ENABLED: 
-                useSnapshot = true; 
-                break; 
+            case Ydb::FeatureFlag::ENABLED:
+                useSnapshot = true;
+                break;
 
-            case Ydb::FeatureFlag::DISABLED: 
-                useSnapshot = false; 
-                break; 
+            case Ydb::FeatureFlag::DISABLED:
+                useSnapshot = false;
+                break;
 
-            default: { 
-                const NYql::TIssue& issue = MakeIssue( 
-                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, 
-                    TStringBuilder() << "Unsupported use_snapshot feature flag " << int(req->use_snapshot())); 
-                google::protobuf::RepeatedPtrField<TYdbIssueMessageType> message; 
-                auto item = message.Add(); 
-                NYql::IssueToMessage(issue, item); 
-                return ReplyFinishStream(StatusIds::BAD_REQUEST, message, ctx); 
-            } 
+            default: {
+                const NYql::TIssue& issue = MakeIssue(
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
+                    TStringBuilder() << "Unsupported use_snapshot feature flag " << int(req->use_snapshot()));
+                google::protobuf::RepeatedPtrField<TYdbIssueMessageType> message;
+                auto item = message.Add();
+                NYql::IssueToMessage(issue, item);
+                return ReplyFinishStream(StatusIds::BAD_REQUEST, message, ctx);
+            }
         }
 
-        if (useSnapshot) { 
-            NKikimr::NTxProxy::TReadTableSettings settings; 
- 
-            if (Request_->GetInternalToken()) { 
-                settings.UserToken = Request_->GetInternalToken(); 
-            } 
-            settings.DatabaseName = CanonizePath(Request_->GetDatabaseName().GetOrElse("")); 
- 
-            settings.Owner = SelfId(); 
-            settings.TablePath = req->path(); 
-            settings.Ordered = req->ordered(); 
-            if (req->row_limit()) { 
-                settings.MaxRows = req->row_limit(); 
-            } 
- 
-            for (auto &col : req->columns()) { 
-                settings.Columns.push_back(col); 
-            } 
- 
-            try { 
-                ConvertKeyRange(req->key_range(), [&]{ return &settings.KeyRange; }); 
-            } catch (const std::exception& ex) { 
-                const NYql::TIssue& issue = NYql::ExceptionToIssue(ex); 
-                google::protobuf::RepeatedPtrField<TYdbIssueMessageType> message; 
-                auto item = message.Add(); 
-                NYql::IssueToMessage(issue, item); 
-                return ReplyFinishStream(StatusIds::BAD_REQUEST, message, ctx); 
-            } 
- 
+        if (useSnapshot) {
+            NKikimr::NTxProxy::TReadTableSettings settings;
+
+            if (Request_->GetInternalToken()) {
+                settings.UserToken = Request_->GetInternalToken();
+            }
+            settings.DatabaseName = CanonizePath(Request_->GetDatabaseName().GetOrElse(""));
+
+            settings.Owner = SelfId();
+            settings.TablePath = req->path();
+            settings.Ordered = req->ordered();
+            if (req->row_limit()) {
+                settings.MaxRows = req->row_limit();
+            }
+
+            for (auto &col : req->columns()) {
+                settings.Columns.push_back(col);
+            }
+
+            try {
+                ConvertKeyRange(req->key_range(), [&]{ return &settings.KeyRange; });
+            } catch (const std::exception& ex) {
+                const NYql::TIssue& issue = NYql::ExceptionToIssue(ex);
+                google::protobuf::RepeatedPtrField<TYdbIssueMessageType> message;
+                auto item = message.Add();
+                NYql::IssueToMessage(issue, item);
+                return ReplyFinishStream(StatusIds::BAD_REQUEST, message, ctx);
+            }
+
             ReadTableActor = ctx.RegisterWithSameMailbox(NKikimr::NTxProxy::CreateReadTableSnapshotWorker(settings));
-        } else { 
-            auto proposeRequest = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>(); 
- 
-            SetAuthToken(proposeRequest, *Request_); 
-            SetDatabase(proposeRequest.get(), *Request_); 
-            NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record; 
-            record.SetExecTimeoutPeriod(TDuration::Minutes(60).MilliSeconds()); 
-            auto readTransaction = record.MutableTransaction()->MutableReadTableTransaction(); 
- 
-            record.SetStreamResponse(true); 
-            readTransaction->SetPath(req->path()); 
-            readTransaction->SetOrdered(req->ordered()); 
-            readTransaction->SetRowLimit(req->row_limit()); 
- 
-            readTransaction->SetApiVersion(NKikimrTxUserProxy::TReadTableTransaction::YDB_V1); 
- 
-            try { 
-                ConvertKeyRange(req->key_range(), [&]{ return readTransaction->MutableKeyRange(); }); 
-            } catch (const std::exception& ex) { 
-                const NYql::TIssue& issue = NYql::ExceptionToIssue(ex); 
-                google::protobuf::RepeatedPtrField<TYdbIssueMessageType> message; 
-                auto item = message.Add(); 
-                NYql::IssueToMessage(issue, item); 
-                return ReplyFinishStream(StatusIds::BAD_REQUEST, message, ctx); 
-            } 
- 
-            for (auto &col : req->columns()) { 
-                readTransaction->AddColumns(col); 
-            } 
-            ctx.Send(MakeTxProxyID(), proposeRequest.release()); 
+        } else {
+            auto proposeRequest = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
+
+            SetAuthToken(proposeRequest, *Request_);
+            SetDatabase(proposeRequest.get(), *Request_);
+            NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
+            record.SetExecTimeoutPeriod(TDuration::Minutes(60).MilliSeconds());
+            auto readTransaction = record.MutableTransaction()->MutableReadTableTransaction();
+
+            record.SetStreamResponse(true);
+            readTransaction->SetPath(req->path());
+            readTransaction->SetOrdered(req->ordered());
+            readTransaction->SetRowLimit(req->row_limit());
+
+            readTransaction->SetApiVersion(NKikimrTxUserProxy::TReadTableTransaction::YDB_V1);
+
+            try {
+                ConvertKeyRange(req->key_range(), [&]{ return readTransaction->MutableKeyRange(); });
+            } catch (const std::exception& ex) {
+                const NYql::TIssue& issue = NYql::ExceptionToIssue(ex);
+                google::protobuf::RepeatedPtrField<TYdbIssueMessageType> message;
+                auto item = message.Add();
+                NYql::IssueToMessage(issue, item);
+                return ReplyFinishStream(StatusIds::BAD_REQUEST, message, ctx);
+            }
+
+            for (auto &col : req->columns()) {
+                readTransaction->AddColumns(col);
+            }
+            ctx.Send(MakeTxProxyID(), proposeRequest.release());
         }
     }
 
@@ -601,8 +601,8 @@ private:
             return;
 
         auto &cfg = AppData()->StreamingConfig.GetOutputStreamConfig();
-        if (QuotaLimit_ <= QuotaReserved_ + LeftInGRpcAdaptorQueue_) 
-            return; 
+        if (QuotaLimit_ <= QuotaReserved_ + LeftInGRpcAdaptorQueue_)
+            return;
         ui32 freeQuota = QuotaLimit_ - QuotaReserved_ - LeftInGRpcAdaptorQueue_;
 
         // Allow to ignore MinQuotaSize if limit is smaller.
@@ -724,7 +724,7 @@ private:
     std::unique_ptr<TEvReadTableRequest> Request_;
 
     TActorId ReadTableActor;
- 
+
     TList<TEvTxProcessing::TEvStreamQuotaRequest::TPtr> QuotaRequestQueue_;
 
     size_t QuotaLimit_;

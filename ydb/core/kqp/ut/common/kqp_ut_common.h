@@ -132,10 +132,10 @@ public:
             .UseQueryCache(false));
     }
 
-    bool IsUsingSnapshotReads() const { 
+    bool IsUsingSnapshotReads() const {
         return Server->GetRuntime()->GetAppData().FeatureFlags.GetEnableMvccSnapshotReads();
-    } 
- 
+    }
+
 private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();

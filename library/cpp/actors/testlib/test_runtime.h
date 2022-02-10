@@ -16,7 +16,7 @@
 #include <util/datetime/base.h>
 #include <util/folder/tempdir.h>
 #include <util/generic/deque.h>
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
@@ -62,12 +62,12 @@ namespace NActors {
             return (NodeId == other.NodeId) && (Hint == other.Hint);
         }
 
-        struct THash { 
-            ui64 operator()(const TEventMailboxId& mboxId) const noexcept { 
-                return mboxId.NodeId * 31ULL + mboxId.Hint; 
-            } 
-        }; 
- 
+        struct THash {
+            ui64 operator()(const TEventMailboxId& mboxId) const noexcept {
+                return mboxId.NodeId * 31ULL + mboxId.Hint;
+            }
+        };
+
         ui32 NodeId;
         ui32 Hint;
     };
@@ -150,7 +150,7 @@ namespace NActors {
         TInstant GetInactiveUntil() const;
         void Schedule(const TScheduledEventQueueItem& item);
         bool IsScheduledEmpty() const;
-        TInstant GetFirstScheduleDeadline() const; 
+        TInstant GetFirstScheduleDeadline() const;
         ui64 GetSentEventCount() const;
 
     private:
@@ -164,7 +164,7 @@ namespace NActors {
 #endif
     };
 
-    typedef THashMap<TEventMailboxId, TIntrusivePtr<TEventMailBox>, TEventMailboxId::THash> TEventMailBoxList; 
+    typedef THashMap<TEventMailboxId, TIntrusivePtr<TEventMailBox>, TEventMailboxId::THash> TEventMailBoxList;
 
     class TEmptyEventQueueException : public yexception {
     public:
@@ -237,7 +237,7 @@ namespace NActors {
         ui32 GetNodeId(ui32 index = 0) const;
         ui32 GetNodeCount() const;
         ui64 AllocateLocalId();
-        ui32 InterconnectPoolId() const; 
+        ui32 InterconnectPoolId() const;
         TString GetTempDir();
         TActorId Register(IActor* actor, ui32 nodeIndex = 0, ui32 poolId = 0,
             TMailboxType::EType mailboxType = TMailboxType::Simple, ui64 revolvingCounter = 0,
@@ -268,7 +268,7 @@ namespace NActors {
         void EnableScheduleForActor(const TActorId& actorId, bool allow = true);
         bool IsScheduleForActorEnabled(const TActorId& actorId) const;
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetDynamicCounters(ui32 nodeIndex = 0);
-        void SetupMonitoring(); 
+        void SetupMonitoring();
 
         template<typename T>
         void AppendToLogSettings(NLog::EComponent minVal, NLog::EComponent maxVal, T func) {
@@ -303,7 +303,7 @@ namespace NActors {
                 }
 
                 return false;
-            }, {}, simTimeout); 
+            }, {}, simTimeout);
 
             if (simTimeout == TDuration::Max())
                 Y_VERIFY(handle);
@@ -315,44 +315,44 @@ namespace NActors {
             }
         }
 
-        template<class TEvent> 
-        typename TEvent::TPtr GrabEdgeEventIf( 
+        template<class TEvent>
+        typename TEvent::TPtr GrabEdgeEventIf(
                 const TSet<TActorId>& edgeFilter,
-                const std::function<bool(const typename TEvent::TPtr&)>& predicate, 
-                TDuration simTimeout = TDuration::Max()) 
-        { 
-            typename TEvent::TPtr handle; 
-            const ui32 eventType = TEvent::EventType; 
+                const std::function<bool(const typename TEvent::TPtr&)>& predicate,
+                TDuration simTimeout = TDuration::Max())
+        {
+            typename TEvent::TPtr handle;
+            const ui32 eventType = TEvent::EventType;
             WaitForEdgeEvents([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-                Y_UNUSED(runtime); 
-                if (event->GetTypeRewrite() != eventType) 
-                    return false; 
- 
-                typename TEvent::TPtr* typedEvent = reinterpret_cast<typename TEvent::TPtr*>(&event); 
-                if (predicate(*typedEvent)) { 
-                    handle = *typedEvent; 
-                    return true; 
-                } 
- 
-                return false; 
-            }, edgeFilter, simTimeout); 
- 
-            if (simTimeout == TDuration::Max()) 
-                Y_VERIFY(handle); 
- 
-            return handle; 
-        } 
- 
-        template<class TEvent> 
-        typename TEvent::TPtr GrabEdgeEventIf( 
+                Y_UNUSED(runtime);
+                if (event->GetTypeRewrite() != eventType)
+                    return false;
+
+                typename TEvent::TPtr* typedEvent = reinterpret_cast<typename TEvent::TPtr*>(&event);
+                if (predicate(*typedEvent)) {
+                    handle = *typedEvent;
+                    return true;
+                }
+
+                return false;
+            }, edgeFilter, simTimeout);
+
+            if (simTimeout == TDuration::Max())
+                Y_VERIFY(handle);
+
+            return handle;
+        }
+
+        template<class TEvent>
+        typename TEvent::TPtr GrabEdgeEventIf(
                 const TActorId& edgeActor,
-                const std::function<bool(const typename TEvent::TPtr&)>& predicate, 
-                TDuration simTimeout = TDuration::Max()) 
-        { 
+                const std::function<bool(const typename TEvent::TPtr&)>& predicate,
+                TDuration simTimeout = TDuration::Max())
+        {
             TSet<TActorId> edgeFilter{edgeActor};
-            return GrabEdgeEventIf<TEvent>(edgeFilter, predicate, simTimeout); 
-        } 
- 
+            return GrabEdgeEventIf<TEvent>(edgeFilter, predicate, simTimeout);
+        }
+
         template <typename TEvent>
         TEvent* GrabEdgeEvent(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) {
             std::function<bool(const TEvent&)> truth = [](const TEvent&) { return true; };
@@ -367,17 +367,17 @@ namespace NActors {
             return THolder(handle ? handle->Release<TEvent>().Release() : nullptr);
         }
 
-        template<class TEvent> 
+        template<class TEvent>
         typename TEvent::TPtr GrabEdgeEvent(const TSet<TActorId>& edgeFilter, TDuration simTimeout = TDuration::Max()) {
-            return GrabEdgeEventIf<TEvent>(edgeFilter, [](const typename TEvent::TPtr&) { return true; }, simTimeout); 
-        } 
- 
-        template<class TEvent> 
+            return GrabEdgeEventIf<TEvent>(edgeFilter, [](const typename TEvent::TPtr&) { return true; }, simTimeout);
+        }
+
+        template<class TEvent>
         typename TEvent::TPtr GrabEdgeEvent(const TActorId& edgeActor, TDuration simTimeout = TDuration::Max()) {
             TSet<TActorId> edgeFilter{edgeActor};
-            return GrabEdgeEvent<TEvent>(edgeFilter, simTimeout); 
-        } 
- 
+            return GrabEdgeEvent<TEvent>(edgeFilter, simTimeout);
+        }
+
         // replace with std::variant<>
         template <typename... TEvents>
         std::tuple<TEvents*...> GrabEdgeEvents(TAutoPtr<IEventHandle>& handle, TDuration simTimeout = TDuration::Max()) {
@@ -388,7 +388,7 @@ namespace NActors {
                     return false;
                 handle = event;
                 return true;
-            }, {}, simTimeout); 
+            }, {}, simTimeout);
             if (simTimeout == TDuration::Max())
                 Y_VERIFY(handle);
             if (handle) {
@@ -408,24 +408,24 @@ namespace NActors {
             }
         }
 
-        template<class TEvent> 
+        template<class TEvent>
         typename TEvent::TPtr GrabEdgeEventRethrow(const TSet<TActorId>& edgeFilter, TDuration simTimeout = TDuration::Max()) {
-            try { 
-                return GrabEdgeEvent<TEvent>(edgeFilter, simTimeout); 
-            } catch (...) { 
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage(); 
-            } 
-        } 
- 
-        template<class TEvent> 
+            try {
+                return GrabEdgeEvent<TEvent>(edgeFilter, simTimeout);
+            } catch (...) {
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage();
+            }
+        }
+
+        template<class TEvent>
         typename TEvent::TPtr GrabEdgeEventRethrow(const TActorId& edgeActor, TDuration simTimeout = TDuration::Max()) {
-            try { 
-                return GrabEdgeEvent<TEvent>(edgeActor, simTimeout); 
-            } catch (...) { 
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage(); 
-            } 
-        } 
- 
+            try {
+                return GrabEdgeEvent<TEvent>(edgeActor, simTimeout);
+            } catch (...) {
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage();
+            }
+        }
+
         template <typename... TEvents>
         static TString TypeNames() {
             static TString names[] = { TypeName<TEvents>()... };
@@ -530,7 +530,7 @@ namespace NActors {
         ui64 DispatcherRandomSeed;
         TIntrusivePtr<IRandomProvider> DispatcherRandomProvider;
         TAutoPtr<TLogBackend> LogBackend;
-        bool NeedMonitoring; 
+        bool NeedMonitoring;
 
         TIntrusivePtr<IRandomProvider> RandomProvider;
         TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -558,7 +558,7 @@ namespace NActors {
             TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
             TIntrusivePtr<NInterconnect::TPollerThreads> Poller;
             volatile ui64* ActorSystemTimestamp;
-            volatile ui64* ActorSystemMonotonic; 
+            volatile ui64* ActorSystemMonotonic;
             TVector<std::pair<TActorId, TActorSetupCmd> > LocalServices;
             TMap<TActorId, IActor*> LocalServicesActors;
             TMap<IActor*, TActorId> ActorToActorId;
@@ -607,7 +607,7 @@ namespace NActors {
 
             TMap<const TDispatchOptions::TFinalEventCondition*, ui32> FinalEventFrequency;
             TSet<TEventMailboxId> FoundNonEmptyMailboxes;
-            bool FinalEventFound = false; 
+            bool FinalEventFound = false;
         };
 
         TProgramShouldContinue ShouldContinue;

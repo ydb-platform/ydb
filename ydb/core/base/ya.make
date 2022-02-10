@@ -7,12 +7,12 @@ OWNER(
 )
 
 IF (KIKIMR_DEFAULT_SHARDED_COMPACTION)
-    # Makes it easier to test sharded compaction 
+    # Makes it easier to test sharded compaction
     CFLAGS(
         -DKIKIMR_DEFAULT_SHARDED_COMPACTION=1
     )
-ENDIF() 
- 
+ENDIF()
+
 SRCS(
     actor_activity_names.cpp
     appdata.h
@@ -49,10 +49,10 @@ SRCS(
     quoter.cpp
     quoter.h
     resource_profile.h
-    row_version.cpp 
-    row_version.h 
+    row_version.cpp
+    row_version.h
     services_assert.cpp
-    shared_data.cpp 
+    shared_data.cpp
     shared_quota.h
     statestorage.cpp
     statestorage.h

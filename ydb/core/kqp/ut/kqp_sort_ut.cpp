@@ -1,50 +1,50 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
- 
-namespace NKikimr { 
-namespace NKqp { 
- 
-using namespace NYdb; 
-using namespace NYdb::NTable; 
- 
+
+namespace NKikimr {
+namespace NKqp {
+
+using namespace NYdb;
+using namespace NYdb::NTable;
+
 Y_UNIT_TEST_SUITE(KqpSort) {
     Y_UNIT_TEST_NEW_ENGINE(ReverseDefault) {
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            SELECT Group, Name, Amount, Comment 
+            SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
-            ORDER BY Group DESC, Name DESC; 
+            ORDER BY Group DESC, Name DESC;
         )");
- 
-        { 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
+
+        {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
 
             CompareYson(R"([
                 [[2u];["Tony"];[7200u];["None"]];
                 [[1u];["Paul"];[300u];["None"]];
                 [[1u];["Anna"];[3500u];["None"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(ReverseOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting(); 
-        setting.SetName("_AllowReverseRange"); 
-        setting.SetValue("True"); 
- 
-        TKikimrRunner kikimr({setting}); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_AllowReverseRange");
+        setting.SetValue("True");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            SELECT Group, Name, Amount, Comment 
+            SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
-            ORDER BY Group DESC, Name DESC; 
+            ORDER BY Group DESC, Name DESC;
         )");
- 
+
         auto result = session.ExplainDataQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
@@ -61,19 +61,19 @@ Y_UNIT_TEST_SUITE(KqpSort) {
         } else {
             UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             UNIT_ASSERT_C(!result.GetAst().Contains("Sort"), result.GetAst());
-        } 
- 
-        { 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
             CompareYson(R"([
                 [[2u];["Tony"];[7200u];["None"]];
                 [[1u];["Paul"];[300u];["None"]];
                 [[1u];["Anna"];[3500u];["None"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(ReverseOptimizedWithPredicate) {
         auto setting = NKikimrKqp::TKqpSetting();
         setting.SetName("_AllowReverseRange");
@@ -118,24 +118,24 @@ Y_UNIT_TEST_SUITE(KqpSort) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(ReverseFirstKeyOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting(); 
-        setting.SetName("_AllowReverseRange"); 
-        setting.SetValue("True"); 
- 
-        TKikimrRunner kikimr({setting}); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_AllowReverseRange");
+        setting.SetValue("True");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            SELECT Group, Name, Amount, Comment 
+            SELECT Group, Name, Amount, Comment
             FROM [/Root/Test]
-            ORDER BY Group DESC; 
+            ORDER BY Group DESC;
         )");
- 
-        { 
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
+
+        {
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
             if (UseNewEngine) {
                 UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
 
@@ -149,38 +149,38 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             }
-        } 
- 
-        { 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
             CompareYson(R"([
                 [[2u];["Tony"];[7200u];["None"]];
                 [[1u];["Paul"];[300u];["None"]];
                 [[1u];["Anna"];[3500u];["None"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(ReverseMixedOrderNotOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting(); 
-        setting.SetName("_AllowReverseRange"); 
-        setting.SetValue("True"); 
- 
-        TKikimrRunner kikimr({setting}); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_AllowReverseRange");
+        setting.SetValue("True");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            SELECT Group, Name, Amount, Comment 
+            SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
-            ORDER BY Group DESC, Name ASC; 
+            ORDER BY Group DESC, Name ASC;
         )");
- 
+
         {
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
             if (UseNewEngine) {
                 UNIT_ASSERT_C(!result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
 
@@ -192,39 +192,39 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             } else {
                 UNIT_ASSERT_C(!result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             }
-        } 
- 
-        { 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
             CompareYson(R"([
                 [[2u];["Tony"];[7200u];["None"]];
                 [[1u];["Anna"];[3500u];["None"]];
                 [[1u];["Paul"];[300u];["None"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(ReverseRangeOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting(); 
-        setting.SetName("_AllowReverseRange"); 
-        setting.SetValue("True"); 
- 
-        TKikimrRunner kikimr({setting}); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_AllowReverseRange");
+        setting.SetValue("True");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            SELECT Group, Name, Amount, Comment 
+            SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
-            WHERE Group < 2 
-            ORDER BY Group DESC, Name DESC; 
+            WHERE Group < 2
+            ORDER BY Group DESC, Name DESC;
         )");
- 
+
         {
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
             if (UseNewEngine) {
                 UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
 
@@ -238,39 +238,39 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             }
-        } 
- 
-        { 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
             CompareYson(R"([
                 [[1u];["Paul"];[300u];["None"]];
                 [[1u];["Anna"];[3500u];["None"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(ReverseLimitOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting(); 
-        setting.SetName("_AllowReverseRange"); 
-        setting.SetValue("True"); 
- 
-        TKikimrRunner kikimr({setting}); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_AllowReverseRange");
+        setting.SetValue("True");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            SELECT Group, Name, Amount, Comment 
+            SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
-            ORDER BY Group DESC, Name DESC 
-            LIMIT 1; 
+            ORDER BY Group DESC, Name DESC
+            LIMIT 1;
         )");
- 
+
         {
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
-            UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst()); 
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst());
 
             if (UseNewEngine) {
                 UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
@@ -288,38 +288,38 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             }
-        } 
- 
-        { 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
             CompareYson(R"([
                 [[2u];["Tony"];[7200u];["None"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(ReverseRangeLimitOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting(); 
-        setting.SetName("_AllowReverseRange"); 
-        setting.SetValue("True"); 
- 
-        TKikimrRunner kikimr({setting}); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_AllowReverseRange");
+        setting.SetValue("True");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            SELECT Group, Name, Amount, Comment 
+            SELECT Group, Name, Amount, Comment
             FROM `/Root/Test`
-            WHERE Group < 2 
-            ORDER BY Group DESC, Name DESC 
-            LIMIT 1; 
+            WHERE Group < 2
+            ORDER BY Group DESC, Name DESC
+            LIMIT 1;
         )");
- 
+
         {
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
             if (UseNewEngine) {
                 UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
 
@@ -337,39 +337,39 @@ Y_UNIT_TEST_SUITE(KqpSort) {
                 UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             }
 
-            UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst()); 
-        } 
- 
-        { 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
+            UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
             CompareYson(R"([
                 [[1u];["Paul"];[300u];["None"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(ReverseEightShardOptimized) {
-        auto setting = NKikimrKqp::TKqpSetting(); 
-        setting.SetName("_AllowReverseRange"); 
-        setting.SetValue("True"); 
- 
-        TKikimrRunner kikimr({setting}); 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_AllowReverseRange");
+        setting.SetValue("True");
+
+        TKikimrRunner kikimr({setting});
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         TString query = Q_(R"(
-            SELECT Key, Text, Data 
+            SELECT Key, Text, Data
             FROM `/Root/EightShard`
-            ORDER BY Key DESC 
-            LIMIT 8; 
+            ORDER BY Key DESC
+            LIMIT 8;
         )");
- 
+
         {
-            auto result = session.ExplainDataQuery(query).GetValueSync(); 
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS); 
- 
-            UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst()); 
+            auto result = session.ExplainDataQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            UNIT_ASSERT_C(result.GetAst().Contains("'\"ItemsLimit\""), result.GetAst());
 
             if (UseNewEngine) {
                 UNIT_ASSERT_C(result.GetAst().Contains("('\"Reverse\")"), result.GetAst());
@@ -384,11 +384,11 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             } else {
                 UNIT_ASSERT_C(result.GetAst().Contains("'\"Reverse\" (Bool '\"true\")"), result.GetAst());
             }
-        } 
- 
-        { 
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-            UNIT_ASSERT(result.IsSuccess()); 
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
             CompareYson(R"([
                 [[803u];["Value3"];[3]];
                 [[802u];["Value2"];[1]];
@@ -399,9 +399,9 @@ Y_UNIT_TEST_SUITE(KqpSort) {
                 [[603u];["Value3"];[1]];
                 [[602u];["Value2"];[2]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
-        } 
-    } 
- 
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(TopSortParameter) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -1148,7 +1148,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             UNIT_ASSERT(result.GetAst().Contains("(Sort (KiPartialTake (Filter"));
         }
     }
-} 
- 
-} // namespace NKqp 
-} // namespace NKikimr 
+}
+
+} // namespace NKqp
+} // namespace NKikimr

@@ -33,12 +33,12 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
     item->PathType = TPathElement::EPathType::EPathTypeKesus;
     TPathId pathId = item->PathId;
 
-    TTxState& txState = context.SS->CreateTx(operationId, TTxState::TxCreateKesus, pathId); 
+    TTxState& txState = context.SS->CreateTx(operationId, TTxState::TxCreateKesus, pathId);
 
-    auto shardIdx = context.SS->RegisterShardInfo( 
-        TShardInfo::KesusInfo(operationId.GetTxId(), pathId) 
-            .WithBindedChannels(tabletChannels)); 
-    context.SS->TabletCounters->Simple()[COUNTER_KESUS_SHARD_COUNT].Add(1); 
+    auto shardIdx = context.SS->RegisterShardInfo(
+        TShardInfo::KesusInfo(operationId.GetTxId(), pathId)
+            .WithBindedChannels(tabletChannels));
+    context.SS->TabletCounters->Simple()[COUNTER_KESUS_SHARD_COUNT].Add(1);
     txState.Shards.emplace_back(shardIdx, ETabletType::Kesus, TTxState::CreateParts);
     kesus->KesusShardIdx = shardIdx;
 
@@ -57,7 +57,7 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
     }
     context.SS->KesusInfos[pathId] = kesus;
     context.SS->PersistKesusInfo(db, pathId, kesus);
-    context.SS->IncrementPathDbRefCount(pathId); 
+    context.SS->IncrementPathDbRefCount(pathId);
 
     context.SS->PersistTxState(db, operationId);
     context.SS->PersistUpdateNextPathId(db);
@@ -110,7 +110,7 @@ public:
         Y_VERIFY(txState->TxType == TTxState::TxCreateKesus);
         Y_VERIFY(txState->State == TTxState::ConfigureParts);
 
-        auto idx = context.SS->MustGetShardIdx(tabletId); 
+        auto idx = context.SS->MustGetShardIdx(tabletId);
         txState->ShardsInProgress.erase(idx);
 
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);

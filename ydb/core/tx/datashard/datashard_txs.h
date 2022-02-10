@@ -10,22 +10,22 @@ namespace NDataShard {
 using NTabletFlatExecutor::TTransactionContext;
 
 class TDataShard::TTxStopGuard : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public: 
+public:
     TTxStopGuard(TDataShard* ds)
-        : TTransactionBase(ds) 
-    { } 
- 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
-        Y_UNUSED(txc); 
-        Y_UNUSED(ctx); 
-        return true; 
-    } 
- 
-    void Complete(const TActorContext& ctx) override; 
- 
-    TTxType GetTxType() const override { return TXTYPE_STOP_GUARD; } 
-}; 
- 
+        : TTransactionBase(ds)
+    { }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        Y_UNUSED(txc);
+        Y_UNUSED(ctx);
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override;
+
+    TTxType GetTxType() const override { return TXTYPE_STOP_GUARD; }
+};
+
 class TDataShard::TTxGetShardState : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxGetShardState(TDataShard* ds, TEvDataShard::TEvGetShardState::TPtr ev);
@@ -75,20 +75,20 @@ private:
     TOperation::TPtr ActiveOp;
     TVector<EExecutionUnitKind> CompleteList;
     TInstant CommitStart;
-    bool Rescheduled = false; 
+    bool Rescheduled = false;
 };
 
 class TDataShard::TTxProposeTransactionBase : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxProposeTransactionBase(TDataShard *self,
-                              TEvDataShard::TEvProposeTransaction::TPtr &&ev, 
-                              TInstant receivedAt, ui64 tieBreakerIndex, 
-                              bool delayed); 
+                              TEvDataShard::TEvProposeTransaction::TPtr &&ev,
+                              TInstant receivedAt, ui64 tieBreakerIndex,
+                              bool delayed);
 
     bool Execute(NTabletFlatExecutor::TTransactionContext &txc,
                  const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_PROPOSE; } 
+    TTxType GetTxType() const override { return TXTYPE_PROPOSE; }
 
 private:
     bool SyncSchemeOnFollower(TOutputOpData::TResultPtr &result,
@@ -98,14 +98,14 @@ private:
 protected:
     TOperation::TPtr Op;
     TEvDataShard::TEvProposeTransaction::TPtr Ev;
-    const TInstant ReceivedAt; 
-    const ui64 TieBreakerIndex; 
+    const TInstant ReceivedAt;
+    const ui64 TieBreakerIndex;
     EOperationKind Kind;
     ui64 TxId;
     TVector<EExecutionUnitKind> CompleteList;
     TInstant CommitStart;
-    bool Acked; 
-    bool Rescheduled = false; 
+    bool Acked;
+    bool Rescheduled = false;
 };
 
 class TDataShard::TTxReadSet : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -178,35 +178,35 @@ private:
 };
 
 class TDataShard::TTxRefreshVolatileSnapshot : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public: 
+public:
     TTxRefreshVolatileSnapshot(TDataShard* ds, TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr ev);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
-    void Complete(const TActorContext& ctx) override; 
-    TTxType GetTxType() const override { return TXTYPE_REFRESH_VOLATILE_SNAPSHOT; } 
-private: 
-    TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr Ev; 
-    THolder<TEvDataShard::TEvRefreshVolatileSnapshotResponse> Reply; 
-}; 
- 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_REFRESH_VOLATILE_SNAPSHOT; }
+private:
+    TEvDataShard::TEvRefreshVolatileSnapshotRequest::TPtr Ev;
+    THolder<TEvDataShard::TEvRefreshVolatileSnapshotResponse> Reply;
+};
+
 class TDataShard::TTxDiscardVolatileSnapshot : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public: 
+public:
     TTxDiscardVolatileSnapshot(TDataShard* ds, TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr ev);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
-    void Complete(const TActorContext& ctx) override; 
-    TTxType GetTxType() const override { return TXTYPE_DISCARD_VOLATILE_SNAPSHOT; } 
-private: 
-    TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr Ev; 
-    THolder<TEvDataShard::TEvDiscardVolatileSnapshotResponse> Reply; 
-}; 
- 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_DISCARD_VOLATILE_SNAPSHOT; }
+private:
+    TEvDataShard::TEvDiscardVolatileSnapshotRequest::TPtr Ev;
+    THolder<TEvDataShard::TEvDiscardVolatileSnapshotResponse> Reply;
+};
+
 class TDataShard::TTxCleanupRemovedSnapshots : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public: 
+public:
     TTxCleanupRemovedSnapshots(TDataShard* ds);
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override; 
-    void Complete(const TActorContext& ctx) override; 
-    TTxType GetTxType() const override { return TXTYPE_CLEANUP_REMOVED_SNAPSHOTS; } 
-}; 
- 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
+    void Complete(const TActorContext& ctx) override;
+    TTxType GetTxType() const override { return TXTYPE_CLEANUP_REMOVED_SNAPSHOTS; }
+};
+
 class TDataShard::TTxMigrateSchemeShard : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 public:
     TTxMigrateSchemeShard(TDataShard* ds, TEvDataShard::TEvMigrateSchemeShardRequest::TPtr ev);

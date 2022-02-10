@@ -1,6 +1,6 @@
 #include "datashard_locks.h"
 #include "datashard_impl.h"
-#include "datashard_counters.h" 
+#include "datashard_counters.h"
 #include <ydb/core/tablet_flat/flat_dbase_scheme.h>
 
 #include <ydb/core/base/appdata.h>
@@ -18,30 +18,30 @@ TLockInfo::TLockInfo(TLockLocker * locker, ui64 lockId)
 {}
 
 TLockInfo::~TLockInfo() {
-    // nothing 
+    // nothing
 }
 
-void TLockInfo::AddShardLock(const THashSet<TPathId>& affectedTables) { 
-    AffectedTables.insert(affectedTables.begin(), affectedTables.end()); 
-    ShardLock = true; 
-    Points.clear(); 
-    Ranges.clear(); 
+void TLockInfo::AddShardLock(const THashSet<TPathId>& affectedTables) {
+    AffectedTables.insert(affectedTables.begin(), affectedTables.end());
+    ShardLock = true;
+    Points.clear();
+    Ranges.clear();
 }
 
-bool TLockInfo::AddPoint(const TPointKey& point) { 
-    AffectedTables.insert(point.Table->GetTableId()); 
-    if (!ShardLock) { 
-        Points.emplace_back(point); 
-    } 
-    return !ShardLock; 
+bool TLockInfo::AddPoint(const TPointKey& point) {
+    AffectedTables.insert(point.Table->GetTableId());
+    if (!ShardLock) {
+        Points.emplace_back(point);
+    }
+    return !ShardLock;
 }
 
-bool TLockInfo::AddRange(const TRangeKey& range) { 
-    AffectedTables.insert(range.Table->GetTableId()); 
-    if (!ShardLock) { 
-        Ranges.emplace_back(range); 
-    } 
-    return !ShardLock; 
+bool TLockInfo::AddRange(const TRangeKey& range) {
+    AffectedTables.insert(range.Table->GetTableId());
+    if (!ShardLock) {
+        Ranges.emplace_back(range);
+    }
+    return !ShardLock;
 }
 
 void TLockInfo::SetBroken(const TRowVersion& at) {
@@ -56,68 +56,68 @@ void TLockInfo::SetBroken(const TRowVersion& at) {
     if (at)
         return; // if break version is not TrowVersion::Min() we will postpone actual ranges removal
 
-    Points.clear(); 
+    Points.clear();
     Ranges.clear();
 }
 
 // TTableLocks
 
-void TTableLocks::AddPointLock(const TPointKey& point, const TLockInfo::TPtr& lock) { 
-    Y_VERIFY(lock->MayHavePointsAndRanges()); 
-    Y_VERIFY(point.Table == this); 
-    TRangeTreeBase::TOwnedRange added( 
-            point.Key, 
-            true, 
-            point.Key, 
-            true); 
-    Ranges.AddRange(std::move(added), lock.Get()); 
+void TTableLocks::AddPointLock(const TPointKey& point, const TLockInfo::TPtr& lock) {
+    Y_VERIFY(lock->MayHavePointsAndRanges());
+    Y_VERIFY(point.Table == this);
+    TRangeTreeBase::TOwnedRange added(
+            point.Key,
+            true,
+            point.Key,
+            true);
+    Ranges.AddRange(std::move(added), lock.Get());
 }
 
-void TTableLocks::AddRangeLock(const TRangeKey& range, const TLockInfo::TPtr& lock) { 
-    Y_VERIFY(lock->MayHavePointsAndRanges()); 
-    Y_VERIFY(range.Table == this); 
-    // FIXME: we have to force empty From/To to be inclusive due to outdated 
-    // scripts/tests assuming missing columns are +inf, and that expect 
-    // non-inclusive +inf to include everything. This clashes with the new 
-    // notion of missing border columns meaning "any", thus non-inclusive 
-    // empty key would not include anything. Thankfully when there's at least 
-    // one column present engines tend to use inclusive for partial keys. 
-    TRangeTreeBase::TOwnedRange added( 
-            range.From, 
-            range.InclusiveFrom || !range.From, 
-            range.To, 
-            range.InclusiveTo || !range.To); 
-    Ranges.AddRange(std::move(added), lock.Get()); 
+void TTableLocks::AddRangeLock(const TRangeKey& range, const TLockInfo::TPtr& lock) {
+    Y_VERIFY(lock->MayHavePointsAndRanges());
+    Y_VERIFY(range.Table == this);
+    // FIXME: we have to force empty From/To to be inclusive due to outdated
+    // scripts/tests assuming missing columns are +inf, and that expect
+    // non-inclusive +inf to include everything. This clashes with the new
+    // notion of missing border columns meaning "any", thus non-inclusive
+    // empty key would not include anything. Thankfully when there's at least
+    // one column present engines tend to use inclusive for partial keys.
+    TRangeTreeBase::TOwnedRange added(
+            range.From,
+            range.InclusiveFrom || !range.From,
+            range.To,
+            range.InclusiveTo || !range.To);
+    Ranges.AddRange(std::move(added), lock.Get());
 }
 
-void TTableLocks::RemoveLock(const TLockInfo::TPtr& lock) { 
-    Ranges.RemoveRanges(lock.Get()); 
+void TTableLocks::RemoveLock(const TLockInfo::TPtr& lock) {
+    Ranges.RemoveRanges(lock.Get());
 }
 
 void TTableLocks::BreakLocks(TConstArrayRef<TCell> key, const TRowVersion& at) {
     Ranges.EachIntersection(key, [&](const TRangeTreeBase::TRange&, TLockInfo* lock) {
         lock->SetBroken(at);
-    }); 
+    });
 }
 
-void TTableLocks::BreakAllLocks(const TRowVersion& at) { 
-    Ranges.EachRange([&](const TRangeTreeBase::TRange&, TLockInfo* lock) { 
-        lock->SetBroken(at); 
-    }); 
-} 
- 
+void TTableLocks::BreakAllLocks(const TRowVersion& at) {
+    Ranges.EachRange([&](const TRangeTreeBase::TRange&, TLockInfo* lock) {
+        lock->SetBroken(at);
+    });
+}
+
 // TLockLocker
 
-TLockInfo::TPtr TLockLocker::AddShardLock(ui64 lockTxId, const THashSet<TPathId>& affectedTables, const TRowVersion& at) { 
-    TLockInfo::TPtr lock = GetOrAddLock(lockTxId); 
+TLockInfo::TPtr TLockLocker::AddShardLock(ui64 lockTxId, const THashSet<TPathId>& affectedTables, const TRowVersion& at) {
+    TLockInfo::TPtr lock = GetOrAddLock(lockTxId);
     if (!lock || lock->IsBroken(at))
-        return lock; 
+        return lock;
 
     ShardLocks.insert(lockTxId);
-    for (const TPathId& tableId : lock->GetAffectedTables()) { 
-        Tables[tableId]->RemoveLock(lock); 
-    } 
-    lock->AddShardLock(affectedTables); 
+    for (const TPathId& tableId : lock->GetAffectedTables()) {
+        Tables[tableId]->RemoveLock(lock);
+    }
+    lock->AddShardLock(affectedTables);
     return lock;
 }
 
@@ -126,9 +126,9 @@ TLockInfo::TPtr TLockLocker::AddPointLock(ui64 lockId, const TPointKey& point, c
     if (!lock || lock->IsBroken(at))
         return lock;
 
-    if (lock->AddPoint(point)) { 
-        point.Table->AddPointLock(point, lock); 
-    } 
+    if (lock->AddPoint(point)) {
+        point.Table->AddPointLock(point, lock);
+    }
     return lock;
 }
 
@@ -137,9 +137,9 @@ TLockInfo::TPtr TLockLocker::AddRangeLock(ui64 lockId, const TRangeKey& range, c
     if (!lock || lock->IsBroken(at))
         return lock;
 
-    if (lock->AddRange(range)) { 
-        range.Table->AddRangeLock(range, lock); 
-    } 
+    if (lock->AddRange(range)) {
+        range.Table->AddRangeLock(range, lock);
+    }
     return lock;
 }
 
@@ -154,47 +154,47 @@ TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const
 }
 
 void TLockLocker::BreakShardLocks(const TRowVersion& at) {
-    for (ui64 lockId : ShardLocks) { 
-        auto it = Locks.find(lockId); 
-        if (it != Locks.end()) { 
+    for (ui64 lockId : ShardLocks) {
+        auto it = Locks.find(lockId);
+        if (it != Locks.end()) {
             it->second->SetBroken(at);
-        } 
-    } 
+        }
+    }
     if (!at)
         ShardLocks.clear();
-    RemoveBrokenRanges(); 
+    RemoveBrokenRanges();
 }
 
 void TLockLocker::BreakLocks(const TPointKey& point, const TRowVersion& at) {
     point.Table->BreakLocks(point.Key, at);
-    RemoveBrokenRanges(); 
-} 
- 
-void TLockLocker::BreakAllLocks(const TPathId& pathId, const TRowVersion& at) { 
-    auto it = Tables.find(pathId); 
-    if (it != Tables.end()) { 
-        it->second->BreakAllLocks(at); 
-        RemoveBrokenRanges(); 
- 
-    } 
-} 
- 
-void TLockLocker::RemoveBrokenRanges() { 
-    for (ui64 lockId : CleanupPending) { 
-        auto it = Locks.find(lockId); 
-        if (it != Locks.end()) { 
-            const TLockInfo::TPtr& lock = it->second; 
- 
-            if (!lock->IsShardLock()) { 
-                for (const TPathId& tableId : lock->GetAffectedTables()) { 
-                    Tables[tableId]->RemoveLock(lock); 
-                } 
-            } else { 
-                ShardLocks.erase(lockId); 
-            } 
-        } 
-    } 
-    CleanupPending.clear(); 
+    RemoveBrokenRanges();
+}
+
+void TLockLocker::BreakAllLocks(const TPathId& pathId, const TRowVersion& at) {
+    auto it = Tables.find(pathId);
+    if (it != Tables.end()) {
+        it->second->BreakAllLocks(at);
+        RemoveBrokenRanges();
+
+    }
+}
+
+void TLockLocker::RemoveBrokenRanges() {
+    for (ui64 lockId : CleanupPending) {
+        auto it = Locks.find(lockId);
+        if (it != Locks.end()) {
+            const TLockInfo::TPtr& lock = it->second;
+
+            if (!lock->IsShardLock()) {
+                for (const TPathId& tableId : lock->GetAffectedTables()) {
+                    Tables[tableId]->RemoveLock(lock);
+                }
+            } else {
+                ShardLocks.erase(lockId);
+            }
+        }
+    }
+    CleanupPending.clear();
 
     if (CleanupCandidates.empty())
         return;
@@ -213,7 +213,7 @@ void TLockLocker::RemoveBrokenRanges() {
             lock->Ranges.clear();
 
             if (!lock->IsShardLock()) {
-                for (const TPathId& tableId : lock->GetAffectedTables()) { 
+                for (const TPathId& tableId : lock->GetAffectedTables()) {
                     Tables[tableId]->RemoveLock(lock);
                 }
             } else {
@@ -221,21 +221,21 @@ void TLockLocker::RemoveBrokenRanges() {
             }
         }
     }
-} 
- 
-TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId) { 
-    auto it = Locks.find(lockId); 
-    if (it != Locks.end()) { 
-        Limiter.TouchLock(lockId); 
-        return it->second; 
-    } 
- 
-    TLockInfo::TPtr lock = Limiter.TryAddLock(lockId); 
-    if (lock) 
-        Locks[lockId] = lock; 
-    return lock; 
-} 
- 
+}
+
+TLockInfo::TPtr TLockLocker::GetOrAddLock(ui64 lockId) {
+    auto it = Locks.find(lockId);
+    if (it != Locks.end()) {
+        Limiter.TouchLock(lockId);
+        return it->second;
+    }
+
+    TLockInfo::TPtr lock = Limiter.TryAddLock(lockId);
+    if (lock)
+        Locks[lockId] = lock;
+    return lock;
+}
+
 void TLockLocker::RemoveOneLock(ui64 lockTxId) {
     auto it = Locks.find(lockTxId);
     if (it != Locks.end()) {
@@ -247,22 +247,22 @@ void TLockLocker::RemoveOneLock(ui64 lockTxId) {
             Self->IncCounter(COUNTER_LOCKS_REMOVED);
         }
 
-        if (!txLock->IsShardLock()) { 
-            for (const TPathId& tableId : txLock->GetAffectedTables()) { 
-                Tables[tableId]->RemoveLock(txLock); 
-            } 
-        } else { 
+        if (!txLock->IsShardLock()) {
+            for (const TPathId& tableId : txLock->GetAffectedTables()) {
+                Tables[tableId]->RemoveLock(txLock);
+            }
+        } else {
             ShardLocks.erase(lockTxId);
-        } 
+        }
         Limiter.RemoveLock(lockTxId);
         Locks.erase(it);
     }
 }
 
 void TLockLocker::RemoveBrokenLocks() {
-    for (ui64 lockId : BrokenLocks) { 
+    for (ui64 lockId : BrokenLocks) {
         RemoveOneLock(lockId);
-    } 
+    }
     BrokenLocks.clear();
 
     if (BrokenCandidates.empty())
@@ -287,7 +287,7 @@ void TLockLocker::RemoveLock(ui64 lockId) {
     RemoveOneLock(lockId);
 }
 
-void TLockLocker::UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) { 
+void TLockLocker::UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) {
     TTableLocks::TPtr& table = Tables[tableId];
     if (!table)
         table.Reset(new TTableLocks(tableId));
@@ -299,8 +299,8 @@ void TLockLocker::RemoveSchema(const TPathId& tableId) {
 }
 
 
-bool TLockLocker::ForceShardLock(const THashSet<TPathId>& rangeTables) const { 
-    for (const TPathId& tableId : rangeTables) { 
+bool TLockLocker::ForceShardLock(const THashSet<TPathId>& rangeTables) const {
+    for (const TPathId& tableId : rangeTables) {
         auto it = Tables.find(tableId);
         Y_VERIFY(it != Tables.end());
         if (it->second->RangeCount() > TLockLimiter::LockLimit())
@@ -363,27 +363,27 @@ void TLockLocker::TLockLimiter::TouchLock(ui64 lockId) {
 TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
     Y_VERIFY(Update);
 
-    TMicrosecTimerCounter measureApplyLocks(*Self, COUNTER_APPLY_LOCKS_USEC); 
- 
+    TMicrosecTimerCounter measureApplyLocks(*Self, COUNTER_APPLY_LOCKS_USEC);
+
     auto &checkVersion = Update->CheckVersion;
     auto &breakVersion = Update->BreakVersion;
 
-    if (Update->ShardBreak) { 
+    if (Update->ShardBreak) {
         Locker.BreakShardLocks(breakVersion);
-    } 
-
-    if (Update->PointBreaks.size()) {
-        for (const auto& key : Update->PointBreaks) { 
-            Locker.BreakLocks(key, breakVersion);
-        } 
     }
 
-    if (Update->AllBreaks.size()) { 
-        for (const auto& pathId : Update->AllBreaks) { 
-            Locker.BreakAllLocks(pathId, breakVersion); 
-        } 
-    } 
- 
+    if (Update->PointBreaks.size()) {
+        for (const auto& key : Update->PointBreaks) {
+            Locker.BreakLocks(key, breakVersion);
+        }
+    }
+
+    if (Update->AllBreaks.size()) {
+        for (const auto& pathId : Update->AllBreaks) {
+            Locker.BreakAllLocks(pathId, breakVersion);
+        }
+    }
+
     if (!Update->Erases.empty() && Self->TabletCounters) {
         Self->IncCounter(COUNTER_LOCKS_ERASED, Update->Erases.size());
     }
@@ -425,7 +425,7 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
             }
         }
 
-        for (const auto& key : Update->RangeLocks) { 
+        for (const auto& key : Update->RangeLocks) {
             TLockInfo::TPtr lock = Locker.AddRangeLock(Update->LockTxId, key, checkVersion);
             if (lock) {
                 Y_VERIFY(counter == lock->GetCounter(checkVersion) || TLock::IsNotSet(counter));
@@ -461,20 +461,20 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
     // We have to tell client that there were some locks (even if we don't set them)
     TVector<TLock> out;
     out.reserve(Update->AffectedTables.size());
-    for (const TPathId& pathId : Update->AffectedTables) { 
+    for (const TPathId& pathId : Update->AffectedTables) {
         out.emplace_back(MakeLock(Update->LockTxId, counter, pathId));
     }
     return out;
 }
 
-ui64 TSysLocks::ExtractLockTxId(const TArrayRef<const TCell>& key) const { 
-    ui64 lockTxId, tabletId; 
-    bool ok = TLocksTable::ExtractKey(key, TLocksTable::EColumns::LockId, lockTxId); 
-    ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::DataShard, tabletId); 
-    Y_VERIFY(ok && Self->TabletID() == tabletId); 
-    return lockTxId; 
-} 
- 
+ui64 TSysLocks::ExtractLockTxId(const TArrayRef<const TCell>& key) const {
+    ui64 lockTxId, tabletId;
+    bool ok = TLocksTable::ExtractKey(key, TLocksTable::EColumns::LockId, lockTxId);
+    ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::DataShard, tabletId);
+    Y_VERIFY(ok && Self->TabletID() == tabletId);
+    return lockTxId;
+}
+
 TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
     ui64 lockTxId, tabletId;
     bool ok = TLocksTable::ExtractKey(key, TLocksTable::EColumns::LockId, lockTxId);
@@ -493,17 +493,17 @@ TSysLocks::TLock TSysLocks::GetLock(const TArrayRef<const TCell>& key) const {
     auto &checkVersion = Update->CheckVersion;
     TLockInfo::TPtr txLock = Locker.GetLock(lockTxId, checkVersion);
     if (txLock) {
-        const auto& tableIds = txLock->GetAffectedTables(); 
+        const auto& tableIds = txLock->GetAffectedTables();
         if (key.size() == 2) { // locks v1
             Y_VERIFY(tableIds.size() == 1);
             return MakeAndLogLock(lockTxId, txLock->GetCounter(checkVersion), *tableIds.begin());
         } else { // locks v2
             Y_VERIFY(key.size() == 4);
-            TPathId tableId; 
-            ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::SchemeShard, tableId.OwnerId); 
-            ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::PathId, tableId.LocalPathId); 
-            if (ok && tableId && tableIds.contains(tableId)) 
-                return MakeAndLogLock(lockTxId, txLock->GetCounter(checkVersion), tableId); 
+            TPathId tableId;
+            ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::SchemeShard, tableId.OwnerId);
+            ok = ok && TLocksTable::ExtractKey(key, TLocksTable::EColumns::PathId, tableId.LocalPathId);
+            if (ok && tableId && tableIds.contains(tableId))
+                return MakeAndLogLock(lockTxId, txLock->GetCounter(checkVersion), tableId);
         }
     }
 
@@ -523,7 +523,7 @@ void TSysLocks::SetLock(const TTableId& tableId, const TArrayRef<const TCell>& k
 
     if (lockTxId) {
         Y_VERIFY(Update);
-        Update->SetLock(tableId, Locker.MakePoint(tableId, key), lockTxId); 
+        Update->SetLock(tableId, Locker.MakePoint(tableId, key), lockTxId);
     }
 }
 
@@ -549,20 +549,20 @@ void TSysLocks::BreakLock(const TTableId& tableId, const TArrayRef<const TCell>&
         return;
 
     if (Locker.TableHasLocks(tableId))
-        Update->BreakLocks(Locker.MakePoint(tableId, key)); 
+        Update->BreakLocks(Locker.MakePoint(tableId, key));
     Update->BreakShardLock();
 }
 
-void TSysLocks::BreakAllLocks(const TTableId& tableId) { 
-    Y_VERIFY(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks))); 
-    if (!Self->IsUserTable(tableId)) 
-        return; 
- 
-    if (Locker.TableHasLocks(tableId)) 
-        Update->BreakAllLocks(tableId); 
-    Update->BreakShardLock(); 
-} 
- 
+void TSysLocks::BreakAllLocks(const TTableId& tableId) {
+    Y_VERIFY(!tableId.HasSamePath(TTableId(TSysTables::SysSchemeShard, TSysTables::SysTableLocks)));
+    if (!Self->IsUserTable(tableId))
+        return;
+
+    if (Locker.TableHasLocks(tableId))
+        Update->BreakAllLocks(tableId);
+    Update->BreakShardLock();
+}
+
 void TSysLocks::BreakSetLocks(ui64 lockTxId) {
     Y_VERIFY(Update);
 
@@ -576,18 +576,18 @@ bool TSysLocks::IsMyKey(const TArrayRef<const TCell>& key) const {
     return ok && (Self->TabletID() == tabletId);
 }
 
-TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui64 counter, const TPathId& pathId) const { 
+TSysLocks::TLock TSysLocks::MakeLock(ui64 lockTxId, ui64 counter, const TPathId& pathId) const {
     TLock lock;
     lock.LockId = lockTxId;
     lock.DataShard = Self->TabletID();
     lock.Generation = Self->Generation();
     lock.Counter = counter;
-    lock.SchemeShard = pathId.OwnerId; 
-    lock.PathId = pathId.LocalPathId; 
+    lock.SchemeShard = pathId.OwnerId;
+    lock.PathId = pathId.LocalPathId;
     return lock;
 }
 
-TSysLocks::TLock TSysLocks::MakeAndLogLock(ui64 lockTxId, ui64 counter, const TPathId& pathId) const { 
+TSysLocks::TLock TSysLocks::MakeAndLogLock(ui64 lockTxId, ui64 counter, const TPathId& pathId) const {
     TLock lock = MakeLock(lockTxId, counter, pathId);
     if (AccessLog)
         AccessLog->Locks[lockTxId] = lock;

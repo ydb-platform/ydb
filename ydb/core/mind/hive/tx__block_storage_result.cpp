@@ -51,12 +51,12 @@ public:
                     ctx.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
                 } else {
                     tablet->State = ETabletState::ReadyToWork;
-                    if (tablet->IsBootingSuppressed()) { 
-                        // Use best effort to kill currently running tablet 
-                        ctx.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration)); 
-                    } else { 
+                    if (tablet->IsBootingSuppressed()) {
+                        // Use best effort to kill currently running tablet
+                        ctx.Register(CreateTabletKiller(TabletId, /* nodeId */ 0, tablet->KnownGeneration));
+                    } else {
                         Self->Execute(Self->CreateRestartTablet(tablet->GetFullTabletId()));
-                    } 
+                    }
                 }
             } else {
                 BLOG_W("THive::TTxBlockStorageResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));

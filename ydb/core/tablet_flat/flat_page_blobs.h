@@ -3,7 +3,7 @@
 #include "flat_page_label.h"
 #include "flat_sausage_gut.h"
 #include "flat_sausage_solid.h"
-#include "util_deref.h" 
+#include "util_deref.h"
 #include <array>
 
 namespace NKikimr {
@@ -35,18 +35,18 @@ namespace NPage {
             : Raw(std::move(raw))
             , Label_(label)
         {
-            Y_VERIFY(uintptr_t(Raw.data()) % alignof(TEntry) == 0); 
+            Y_VERIFY(uintptr_t(Raw.data()) % alignof(TEntry) == 0);
 
             auto got = NPage::THello().Read(Raw, EPage::Globs);
 
             Y_VERIFY(got == ECodec::Plain && got.Version == 1);
 
-            Header = TDeref<THeader>::At(got.Page.data(), 0); 
+            Header = TDeref<THeader>::At(got.Page.data(), 0);
 
             if (Header->Skip > got.Page.size())
                 Y_FAIL("NPage::TExtBlobs header is out of its blob");
 
-            auto *ptr = TDeref<TEntry>::At(got.Page.data(), Header->Skip); 
+            auto *ptr = TDeref<TEntry>::At(got.Page.data(), Header->Skip);
 
             Array = { ptr, (got.Page.size() - Header->Skip) / sizeof(TEntry) };
         }
@@ -98,13 +98,13 @@ namespace NPage {
             return data && data.size() == Array.at(page).Bytes();
         }
 
-        size_t BackingSize() const noexcept override 
-        { 
-            return Raw.size(); 
-        } 
- 
+        size_t BackingSize() const noexcept override
+        {
+            return Raw.size();
+        }
+
     public:
-        const TSharedData Raw; 
+        const TSharedData Raw;
 
     private:
         const TLogoBlobID Label_;

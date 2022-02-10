@@ -80,23 +80,23 @@ protected:
         const auto& taskName = appData->DataShardConfig.GetBackupTaskName();
         const auto taskPrio = appData->DataShardConfig.GetBackupTaskPriority();
 
-        ui64 readAheadLo = appData->DataShardConfig.GetBackupReadAheadLo(); 
-        if (ui64 readAheadLoOverride = DataShard.GetBackupReadAheadLoOverride(); readAheadLoOverride > 0) { 
-            readAheadLo = readAheadLoOverride; 
-        } 
+        ui64 readAheadLo = appData->DataShardConfig.GetBackupReadAheadLo();
+        if (ui64 readAheadLoOverride = DataShard.GetBackupReadAheadLoOverride(); readAheadLoOverride > 0) {
+            readAheadLo = readAheadLoOverride;
+        }
 
         ui64 readAheadHi = appData->DataShardConfig.GetBackupReadAheadHi();
-        if (ui64 readAheadHiOverride = DataShard.GetBackupReadAheadHiOverride(); readAheadHiOverride > 0) { 
-            readAheadHi = readAheadHiOverride; 
-        } 
- 
+        if (ui64 readAheadHiOverride = DataShard.GetBackupReadAheadHiOverride(); readAheadHiOverride > 0) {
+            readAheadHi = readAheadHiOverride;
+        }
+
         tx->SetScanTask(DataShard.QueueScan(localTableId, scan.Release(), op->GetTxId(),
             TScanOptions()
                 .SetResourceBroker(taskName, taskPrio)
                 .SetReadAhead(readAheadLo, readAheadHi)
                 .SetReadPrio(TScanOptions::EReadPrio::Low)
         ));
- 
+
         return true;
     }
 
@@ -116,7 +116,7 @@ protected:
         schemeOp->BytesProcessed = result->BytesRead;
         schemeOp->RowsProcessed = result->RowsRead;
 
-        op->SetScanResult(nullptr); 
+        op->SetScanResult(nullptr);
         tx->SetScanTask(0);
     }
 

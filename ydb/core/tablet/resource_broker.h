@@ -232,7 +232,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig();
 
 void MergeConfigUpdates(NKikimrResourceBroker::TResourceBrokerConfig &config,
                         const NKikimrResourceBroker::TResourceBrokerConfig &updates);
- 
+
 IActor* CreateResourceBrokerActor(const NKikimrResourceBroker::TResourceBrokerConfig &config,
                                   const NMonitoring::TDynamicCounterPtr& counters);
 

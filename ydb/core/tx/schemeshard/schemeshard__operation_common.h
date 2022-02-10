@@ -162,7 +162,7 @@ public:
         TTabletId tabletId = TTabletId(record.GetTenantSchemeShard());
         auto status = record.GetStatus();
 
-        auto shardIdx = context.SS->MustGetShardIdx(tabletId); 
+        auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
 
         if (status != NKikimrScheme::EStatus::StatusSuccess && status != NKikimrScheme::EStatus::StatusAlreadyExists) {
@@ -218,7 +218,7 @@ public:
         TTabletId tabletId = TTabletId(record.GetOnTabletId());
         auto status = record.GetStatus();
 
-        auto shardIdx = context.SS->MustGetShardIdx(tabletId); 
+        auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
 
         if (status == NKikimrTx::TEvSubDomainConfigurationAck::REJECT) {
@@ -335,12 +335,12 @@ public:
                                                                               path.Base()->UserAttrs->Attrs, path.Base()->UserAttrs->AlterVersion,
                                                                               schemeLimits, ui64(alterData->GetSharedHive()), alterData->GetResourcesDomainId()
                                                                               );
-                if (alterData->GetDeclaredSchemeQuotas()) { 
-                    event->Record.MutableDeclaredSchemeQuotas()->CopyFrom(*alterData->GetDeclaredSchemeQuotas()); 
-                } 
-                if (alterData->GetDatabaseQuotas()) { 
-                    event->Record.MutableDatabaseQuotas()->CopyFrom(*alterData->GetDatabaseQuotas()); 
-                } 
+                if (alterData->GetDeclaredSchemeQuotas()) {
+                    event->Record.MutableDeclaredSchemeQuotas()->CopyFrom(*alterData->GetDeclaredSchemeQuotas());
+                }
+                if (alterData->GetDatabaseQuotas()) {
+                    event->Record.MutableDatabaseQuotas()->CopyFrom(*alterData->GetDatabaseQuotas());
+                }
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Send configure request to schemeshard: " << tabletID <<
                                 " opId: " << OperationId <<
@@ -412,13 +412,13 @@ public:
         Y_VERIFY(alter);
         Y_VERIFY(subDomain->GetVersion() < alter->GetVersion());
 
-        subDomain->ActualizeAlterData(context.SS->ShardInfos, context.Ctx.Now(), 
-                /* isExternal */ path->PathType == TPathElement::EPathType::EPathTypeExtSubDomain, 
-                context.SS); 
+        subDomain->ActualizeAlterData(context.SS->ShardInfos, context.Ctx.Now(),
+                /* isExternal */ path->PathType == TPathElement::EPathType::EPathTypeExtSubDomain,
+                context.SS);
 
         context.SS->SubDomains[pathId] = alter;
         context.SS->PersistSubDomain(db, pathId, *alter);
-        context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alter); 
+        context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alter);
 
         if (txState->TxType == TTxState::TxCreateSubDomain || txState->TxType == TTxState::TxCreateExtSubDomain) {
             auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -517,7 +517,7 @@ public:
         TShardInfo& shardInfo = context.SS->ShardInfos[shardIdx];
         Y_VERIFY(shardInfo.TabletID == InvalidTabletId || shardInfo.TabletID == tabletId);
 
-        Y_VERIFY(tabletId != InvalidTabletId); 
+        Y_VERIFY(tabletId != InvalidTabletId);
         shardInfo.TabletID = tabletId;
         context.SS->TabletIdToShardIdx[tabletId] = shardIdx;
 
@@ -532,7 +532,7 @@ public:
         context.SS->PersistShardMapping(db, shardIdx, tabletId, shardInfo.PathId, OperationId.GetTxId(), shardInfo.TabletType);
 
         context.OnComplete.UnbindMsgFromPipe(OperationId, hive, shardIdx);
-        context.OnComplete.ActivateShardCreated(shardIdx, OperationId.GetTxId()); 
+        context.OnComplete.ActivateShardCreated(shardIdx, OperationId.GetTxId());
 
         // If all datashards have been created
         if (txState->ShardsInProgress.empty()) {
@@ -630,7 +630,7 @@ public:
             }
         }
 
-        Y_VERIFY(tabletId != InvalidTabletId); 
+        Y_VERIFY(tabletId != InvalidTabletId);
         shardInfo.TabletID = tabletId;
         context.SS->TabletIdToShardIdx[tabletId] = shardIdx;
 
@@ -640,7 +640,7 @@ public:
 
         context.SS->PersistShardMapping(db, shardIdx, tabletId, shardInfo.PathId, OperationId.GetTxId(), shardInfo.TabletType);
         context.OnComplete.UnbindMsgFromPipe(OperationId, hive, shardIdx);
-        context.OnComplete.ActivateShardCreated(shardIdx, OperationId.GetTxId()); 
+        context.OnComplete.ActivateShardCreated(shardIdx, OperationId.GetTxId());
 
         // If all datashards have been created
         if (txState.ShardsInProgress.empty()) {
@@ -879,15 +879,15 @@ public:
             }
         }
 
-        // OlapStore tracks all tables that are under operation, make sure to unlink 
-        if (context.SS->OlapTables.contains(pathId)) { 
-            auto tableInfo = context.SS->OlapTables.at(pathId); 
-            if (context.SS->OlapStores.contains(tableInfo->OlapStorePathId)) { 
-                auto storeInfo = context.SS->OlapStores.at(tableInfo->OlapStorePathId); 
-                storeInfo->OlapTablesUnderOperation.erase(pathId); 
-            } 
-        } 
- 
+        // OlapStore tracks all tables that are under operation, make sure to unlink
+        if (context.SS->OlapTables.contains(pathId)) {
+            auto tableInfo = context.SS->OlapTables.at(pathId);
+            if (context.SS->OlapStores.contains(tableInfo->OlapStorePathId)) {
+                auto storeInfo = context.SS->OlapStores.at(tableInfo->OlapStorePathId);
+                storeInfo->OlapTablesUnderOperation.erase(pathId);
+            }
+        }
+
         context.OnComplete.DoneOperation(OperationId);
         return true;
     }
@@ -950,7 +950,7 @@ public:
 
         Y_VERIFY(txState->State == TTxState::ConfigureParts);
 
-        TShardIdx idx = context.SS->MustGetShardIdx(tabletId); 
+        TShardIdx idx = context.SS->MustGetShardIdx(tabletId);
         txState->ShardsInProgress.erase(idx);
 
         // Dettach datashard pipe
@@ -1232,7 +1232,7 @@ public:
             return false;
         }
 
-        TShardIdx idx = context.SS->MustGetShardIdx(tabletId); 
+        TShardIdx idx = context.SS->MustGetShardIdx(tabletId);
         txState->ShardsInProgress.erase(idx);
 
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);
@@ -1353,13 +1353,13 @@ public:
 
         TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(pathId);
 
-        auto oldVolumeSpace = volume->GetVolumeSpace(); 
+        auto oldVolumeSpace = volume->GetVolumeSpace();
         volume->FinishAlter();
-        auto newVolumeSpace = volume->GetVolumeSpace(); 
+        auto newVolumeSpace = volume->GetVolumeSpace();
         // Decrease in occupied space is appled on tx finish
-        auto domainDir = context.SS->PathsById.at(context.SS->ResolveDomainId(path)); 
-        Y_VERIFY(domainDir); 
-        domainDir->ChangeVolumeSpaceCommit(newVolumeSpace, oldVolumeSpace); 
+        auto domainDir = context.SS->PathsById.at(context.SS->ResolveDomainId(path));
+        Y_VERIFY(domainDir);
+        domainDir->ChangeVolumeSpaceCommit(newVolumeSpace, oldVolumeSpace);
 
         context.SS->PersistBlockStoreVolume(db, pathId, volume);
         context.SS->PersistRemoveBlockStoreVolumeAlter(db, pathId);

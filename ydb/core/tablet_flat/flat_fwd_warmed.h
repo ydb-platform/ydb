@@ -25,7 +25,7 @@ namespace NFwd {
         {
             if (trace) {
                 for (auto &one: *trace)
-                    if (auto *blobs = one->GetBlobs()) 
+                    if (auto *blobs = one->GetBlobs())
                         Offset = Min(Offset, blobs->Head);
 
                 Blobs = TMemTable::MakeBlobsPage(*trace);
@@ -60,7 +60,7 @@ namespace NFwd {
                 if (Touches[seq])
                     trace.Pass(seq);
 
-            return { std::move(Blobs), nullptr, nullptr, trace.Unwrap() }; 
+            return { std::move(Blobs), nullptr, nullptr, trace.Unwrap() };
         }
 
     private:

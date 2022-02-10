@@ -116,7 +116,7 @@ public:
         auto tabletId = TTabletId(record.GetTenantSchemeShard());
         auto status = record.GetStatus();
 
-        auto shardIdx = context.SS->MustGetShardIdx(tabletId); 
+        auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
 
         if (status != NKikimrScheme::EStatus::StatusSuccess && status != NKikimrScheme::EStatus::StatusAlreadyExists) {
@@ -225,10 +225,10 @@ public:
             colDescr->SetDeleteVersion(column.DeleteVersion);
             colDescr->SetFamily(column.Family);
             colDescr->SetNotNull(column.NotNull);
-            if (column.DefaultKind != ETableColumnDefaultKind::None) { 
-                colDescr->SetDefaultKind(ui32(column.DefaultKind)); 
-                colDescr->SetDefaultValue(column.DefaultValue); 
-            } 
+            if (column.DefaultKind != ETableColumnDefaultKind::None) {
+                colDescr->SetDefaultKind(ui32(column.DefaultKind));
+                colDescr->SetDefaultValue(column.DefaultValue);
+            }
         }
 
         for (ui32 partNum = 0; partNum < tableInfo->GetPartitions().size(); ++partNum) {
@@ -562,7 +562,7 @@ public:
         auto subDomain = context.SS->SubDomains.at(pathId);
         subDomain->SetAlterPrivate(nullptr);
         context.SS->PersistSubDomain(db, pathId, *subDomain);
-        context.SS->PersistSubDomainSchemeQuotas(db, pathId, *subDomain); 
+        context.SS->PersistSubDomainSchemeQuotas(db, pathId, *subDomain);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::RewriteOwners);
         context.OnComplete.ActivateTx(OperationId);
@@ -596,7 +596,7 @@ public:
         auto alterData = subDomain->GetAlter();
         Y_VERIFY(alterData);
         alterData->Initialize(context.SS->ShardInfos);
-        subDomain->ActualizeAlterData(context.SS->ShardInfos, context.Ctx.Now(), /* isExternal */ false, context.SS); 
+        subDomain->ActualizeAlterData(context.SS->ShardInfos, context.Ctx.Now(), /* isExternal */ false, context.SS);
 
         context.SS->RevertedMigrations[pathId].push_back(subDomain->GetTenantSchemeShardID());
         context.SS->PersistRevertedMirgration(db, pathId, subDomain->GetTenantSchemeShardID());
@@ -608,7 +608,7 @@ public:
         context.SS->SubDomains[pathId] = alterData;
 
         context.SS->PersistSubDomainVersion(db, pathId, *alterData);
-        context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alterData); 
+        context.SS->PersistSubDomainSchemeQuotas(db, pathId, *alterData);
         context.SS->PersistDeleteSubDomainAlter(db, pathId, *subDomain);
 
         item->ACLVersion += 100;
@@ -654,7 +654,7 @@ public:
         Y_VERIFY(subDomain->GetVersion() < alterData->GetVersion());
 
         alterData->Initialize(context.SS->ShardInfos);
-        subDomain->ActualizeAlterData(context.SS->ShardInfos, context.Ctx.Now(), /* isExternal */ true, context.SS); 
+        subDomain->ActualizeAlterData(context.SS->ShardInfos, context.Ctx.Now(), /* isExternal */ true, context.SS);
 
         alterData->SetAlterPrivate(subDomain);
         subDomain->SetAlterPrivate(nullptr);
@@ -997,9 +997,9 @@ public:
             const auto shardIdx = ShardsToRememder.back();
             TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
 
-            context.SS->IncrementPathDbRefCount(txState->TargetPathId); 
-            context.SS->DecrementPathDbRefCount(shardInfo.PathId); 
- 
+            context.SS->IncrementPathDbRefCount(txState->TargetPathId);
+            context.SS->DecrementPathDbRefCount(shardInfo.PathId);
+
             shardInfo.PathId = txState->TargetPathId;
             db.Table<Schema::SubDomainShards>().Key(txState->TargetPathId.LocalPathId, shardIdx.GetLocalId()).Update();
             db.Table<Schema::Shards>().Key(shardIdx.GetLocalId()).Update(
@@ -1240,10 +1240,10 @@ public:
         path.Base()->PathState = TPathElement::EPathState::EPathStateUpgrade;
 
         // add tenant schemeshard into tx shards
-        const TShardIdx shardIdx = context.SS->RegisterShardInfo( 
-            TShardInfo(OperationId.GetTxId(), pathId, TTabletTypes::SchemeShard) 
-                .WithBindedChannels(channelBindings)); 
-        const TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx); 
+        const TShardIdx shardIdx = context.SS->RegisterShardInfo(
+            TShardInfo(OperationId.GetTxId(), pathId, TTabletTypes::SchemeShard)
+                .WithBindedChannels(channelBindings));
+        const TShardInfo& shardInfo = context.SS->ShardInfos.at(shardIdx);
         txState.Shards.emplace_back(shardIdx, TTabletTypes::SchemeShard, TTxState::CreateParts);
         alterData->AddPrivateShard(shardIdx);
         subDomain->SetAlter(alterData);

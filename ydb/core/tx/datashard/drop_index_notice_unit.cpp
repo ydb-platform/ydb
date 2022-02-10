@@ -52,7 +52,7 @@ public:
         }
 
         Y_VERIFY(tableInfo);
-        DataShard.AddUserTable(pathId, tableInfo); 
+        DataShard.AddUserTable(pathId, tableInfo);
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

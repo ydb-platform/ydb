@@ -107,7 +107,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
 
     auto& data = Proto(ev->Get()).GetData();
-    const ui64 tableId = ev->Get()->Record.GetTableId(); 
+    const ui64 tableId = ev->Get()->Record.GetTableId();
     bool error = data.empty() || data.size() > TLimits::MAX_BLOB_SIZE || !PrimaryIndex || !IsTableWritable(tableId)
         || ev->Get()->PutStatus == NKikimrProto::ERROR;
 
@@ -144,17 +144,17 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvRead::TPtr& ev, const TActorContext& ctx) {
-    const auto* msg = ev->Get(); 
-    TRowVersion readVersion(msg->Record.GetPlanStep(), msg->Record.GetTxId()); 
-    TRowVersion maxReadVersion = GetMaxReadVersion(); 
+    const auto* msg = ev->Get();
+    TRowVersion readVersion(msg->Record.GetPlanStep(), msg->Record.GetTxId());
+    TRowVersion maxReadVersion = GetMaxReadVersion();
     LOG_S_DEBUG("Read at tablet " << TabletID() << " version=" << readVersion << " readable=" << maxReadVersion);
 
-    if (maxReadVersion < readVersion) { 
-        WaitingReads.emplace(readVersion, std::move(ev)); 
-        WaitPlanStep(readVersion.Step); 
-        return; 
-    } 
- 
+    if (maxReadVersion < readVersion) {
+        WaitingReads.emplace(readVersion, std::move(ev));
+        WaitPlanStep(readVersion.Step);
+        return;
+    }
+
     Execute(new TTxRead(this, ev), ctx);
 }
 
@@ -192,19 +192,19 @@ void TColumnShard::Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorConte
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx) {
-    const auto* msg = ev->Get(); 
+    const auto* msg = ev->Get();
     ui64 txId = msg->Record.GetTxId();
-    const auto& snapshot = msg->Record.GetSnapshot(); 
-    TRowVersion readVersion(snapshot.GetStep(), snapshot.GetTxId()); 
-    TRowVersion maxReadVersion = GetMaxReadVersion(); 
+    const auto& snapshot = msg->Record.GetSnapshot();
+    TRowVersion readVersion(snapshot.GetStep(), snapshot.GetTxId());
+    TRowVersion maxReadVersion = GetMaxReadVersion();
     LOG_S_DEBUG("Scan at tablet " << TabletID() << " version=" << readVersion << " readable=" << maxReadVersion);
- 
-    if (maxReadVersion < readVersion) { 
-        WaitingScans.emplace(readVersion, std::move(ev)); 
-        WaitPlanStep(readVersion.Step); 
-        return; 
-    } 
- 
+
+    if (maxReadVersion < readVersion) {
+        WaitingScans.emplace(readVersion, std::move(ev));
+        WaitPlanStep(readVersion.Step);
+        return;
+    }
+
     ScanTxInFlight.insert({txId, TAppData::TimeProvider->Now()});
     SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());
     Execute(new TTxScan(this, ev), ctx);

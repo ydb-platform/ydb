@@ -86,7 +86,7 @@ public:
 
     struct TShardLimits {
         ui32 ShardCount = 10000;
-        ui32 RSCount = 1000000; 
+        ui32 RSCount = 1000000;
 
         TShardLimits()
         {}
@@ -164,7 +164,7 @@ public:
         ui32 DynKeysCount;
         bool HasOutReadsets;
         bool HasInReadsets;
-        bool Loaded; 
+        bool Loaded;
 
         TValidationInfo() {
             Clear();
@@ -183,7 +183,7 @@ public:
             DynKeysCount = 0;
             HasOutReadsets = false;
             HasInReadsets = false;
-            Loaded = false; 
+            Loaded = false;
         }
     };
 
@@ -199,7 +199,7 @@ public:
 
     //-- proxy interface
     virtual EResult SetProgram(TStringBuf program, TStringBuf params = TStringBuf()) noexcept = 0;
-    virtual TVector<THolder<TKeyDesc>>& GetDbKeys() noexcept = 0; 
+    virtual TVector<THolder<TKeyDesc>>& GetDbKeys() noexcept = 0;
     virtual EResult PrepareShardPrograms(const TShardLimits& shardLimits = TShardLimits()) noexcept = 0;
     virtual ui32 GetAffectedShardCount() const noexcept = 0;
     virtual EResult GetAffectedShard(ui32 index, TShardData& data) const noexcept = 0;
@@ -213,7 +213,7 @@ public:
 
     //-- datashard interface
     virtual EResult AddProgram(ui64 origin, const TStringBuf& program, bool readOnly = false) noexcept = 0;
-    virtual EResult ValidateKeys(TValidationInfo& validationInfo) = 0; 
+    virtual EResult ValidateKeys(TValidationInfo& validationInfo) = 0;
     virtual EResult Validate(TValidationInfo& validationInfo) = 0;
 
     virtual EResult PrepareOutgoingReadsets() = 0;
@@ -228,7 +228,7 @@ public:
     virtual void AddIncomingReadset(const TStringBuf& readset) noexcept = 0;
 
     virtual EResult Cancel() = 0;
-    virtual EResult PinPages(ui64 pageFaultCount = 0) = 0; 
+    virtual EResult PinPages(ui64 pageFaultCount = 0) = 0;
     virtual EResult Execute() = 0;
     virtual TString GetShardReply(ui64 origin) const noexcept = 0;
 

@@ -22,9 +22,9 @@ class TestSchemeShardAlterTest(object):
         host = cls.cluster.nodes[1].host
         port = cls.cluster.nodes[1].grpc_port
         cls.root_dir = os.path.join("/", "Root")
-        cls.ydb_client = ydb.Driver(ydb.DriverConfig( 
-            database=cls.root_dir, 
-            endpoint="%s:%s" % (host, port))) 
+        cls.ydb_client = ydb.Driver(ydb.DriverConfig(
+            database=cls.root_dir,
+            endpoint="%s:%s" % (host, port)))
         cls.ydb_client.wait(timeout=5)
 
     @classmethod
@@ -291,7 +291,7 @@ class TestSchemeShardAlterTest(object):
 
         # Act
         scheme = self.cluster.client.send(
-            SchemeDescribeRequest(os.path.join(self.root_dir, dirname, tablename)).with_partition_config().protobuf, 
+            SchemeDescribeRequest(os.path.join(self.root_dir, dirname, tablename)).with_partition_config().protobuf,
             method='SchemeDescribe'
         ).PathDescription.Table.PartitionConfig
         self.cluster.client.send_and_poll_request(
@@ -306,7 +306,7 @@ class TestSchemeShardAlterTest(object):
 
         # Assert
         new_scheme = self.cluster.client.send(
-            SchemeDescribeRequest(os.path.join(self.root_dir, dirname, tablename)).with_partition_config().protobuf, 
+            SchemeDescribeRequest(os.path.join(self.root_dir, dirname, tablename)).with_partition_config().protobuf,
             method='SchemeDescribe'
         ).PathDescription.Table.PartitionConfig
         assert_that(new_scheme.ExecutorCacheSize, equal_to(scheme.ExecutorCacheSize * 2))
@@ -327,7 +327,7 @@ class TestSchemeShardAlterTest(object):
 
         # Act
         c_policy = self.cluster.client.send(
-            SchemeDescribeRequest(os.path.join(self.root_dir, table_name)).with_partition_config().protobuf, 
+            SchemeDescribeRequest(os.path.join(self.root_dir, table_name)).with_partition_config().protobuf,
             method='SchemeDescribe'
         ).PathDescription.Table.PartitionConfig.CompactionPolicy
 
@@ -343,7 +343,7 @@ class TestSchemeShardAlterTest(object):
 
         # Assert
         new_c_policy = self.cluster.client.send(
-            SchemeDescribeRequest(os.path.join(self.root_dir, table_name)).with_partition_config().protobuf, 
+            SchemeDescribeRequest(os.path.join(self.root_dir, table_name)).with_partition_config().protobuf,
             method='SchemeDescribe'
         ).PathDescription.Table.PartitionConfig.CompactionPolicy
         assert_that(new_c_policy.InMemForceSizeToSnapshot, equal_to(c_policy.InMemForceSizeToSnapshot * 2))

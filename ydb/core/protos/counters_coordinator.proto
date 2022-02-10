@@ -8,11 +8,11 @@ option (TabletTypeName) = "Coordinator"; // Used as prefix for all counters
 
 // Real coordinator counters are dynamic. Probably we should fix this?
 enum ESimpleCounters {
-    COUNTER_SIMPLE_IGNORE = 0; 
+    COUNTER_SIMPLE_IGNORE = 0;
 }
 
 enum ECumulativeCounters {
-    COUNTER_CUMULATIVE_IGNORE = 0; 
+    COUNTER_CUMULATIVE_IGNORE = 0;
 }
 
 enum EPercentileCounters {
@@ -21,7 +21,7 @@ enum EPercentileCounters {
         Ranges { Value: 1      Name: "1 ms"      }
     };
 
-    COUNTER_PERCENTILE_IGNORE = 0; 
+    COUNTER_PERCENTILE_IGNORE = 0;
 }
 
 enum ETxTypes {
@@ -29,5 +29,5 @@ enum ETxTypes {
     TXTYPE_STEP = 1                                       [(TxTypeOpts) = {Name: "TxStep"}];
     TXTYPE_MEDIATOR_CONFIRMATIONS = 2                     [(TxTypeOpts) = {Name: "TxMediatorConfirmations"}];
     TXTYPE_RESTART_MEDIATOR = 3                           [(TxTypeOpts) = {Name: "TxRestartMediator"}];
-    TXTYPE_ACQUIRE_READ_STEP = 4                          [(TxTypeOpts) = {Name: "TxAcquireReadStep"}]; 
+    TXTYPE_ACQUIRE_READ_STEP = 4                          [(TxTypeOpts) = {Name: "TxAcquireReadStep"}];
 }

@@ -1,7 +1,7 @@
 #include "console_configs_subscriber.h"
 #include "console.h"
 #include "config_index.h"
-#include "util.h" 
+#include "util.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -25,19 +25,19 @@
 namespace NKikimr::NConsole {
 
 class TConfigsSubscriber : public TActorBootstrapped<TConfigsSubscriber> {
-private: 
-    using TBase = TActorBootstrapped<TConfigsSubscriber>; 
+private:
+    using TBase = TActorBootstrapped<TConfigsSubscriber>;
 
-    struct TEvPrivate { 
-        enum EEv { 
-            EvRetryPoolStatus = EventSpaceBegin(TKikimrEvents::ES_PRIVATE), 
-        }; 
- 
-        struct TEvRetryPoolStatus : public TEventLocal<TEvRetryPoolStatus, EvRetryPoolStatus> { 
-            // empty 
-        }; 
-    }; 
- 
+    struct TEvPrivate {
+        enum EEv {
+            EvRetryPoolStatus = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        };
+
+        struct TEvRetryPoolStatus : public TEventLocal<TEvRetryPoolStatus, EvRetryPoolStatus> {
+            // empty
+        };
+    };
+
 public:
     TConfigsSubscriber(const TActorId &ownerId, const TVector<ui32> &kinds, const NKikimrConfig::TAppConfig &currentConfig)
         : OwnerId(ownerId)
@@ -64,7 +64,7 @@ public:
         DomainUid = dinfo->Domains.begin()->second->DomainUid;
         StateStorageGroup = dinfo->GetDefaultStateStorageGroup(DomainUid);
 
-        SendPoolStatusRequest(ctx); 
+        SendPoolStatusRequest(ctx);
         Become(&TThis::StateWork);
     }
 
@@ -72,7 +72,7 @@ public:
         TRACE_EVENT(NKikimrServices::CMS_CONFIGS);
 
         switch (ev->GetTypeRewrite()) {
-            HFuncTraced(TEvPrivate::TEvRetryPoolStatus, Handle); 
+            HFuncTraced(TEvPrivate::TEvRetryPoolStatus, Handle);
             HFuncTraced(TEvTenantPool::TEvTenantPoolStatus, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionResponse, Handle);
             HFuncTraced(TEvConsole::TEvConfigSubscriptionError, Handle);
@@ -89,15 +89,15 @@ public:
         }
     }
 
-    void SendPoolStatusRequest(const TActorContext &ctx) { 
-        ctx.Send(MakeTenantPoolID(ctx.SelfID.NodeId(), DomainUid), new TEvTenantPool::TEvGetStatus(true), 
-            IEventHandle::FlagTrackDelivery); 
-    } 
- 
-    void Handle(TEvPrivate::TEvRetryPoolStatus::TPtr &/*ev*/, const TActorContext &ctx) { 
-        SendPoolStatusRequest(ctx); 
-    } 
- 
+    void SendPoolStatusRequest(const TActorContext &ctx) {
+        ctx.Send(MakeTenantPoolID(ctx.SelfID.NodeId(), DomainUid), new TEvTenantPool::TEvGetStatus(true),
+            IEventHandle::FlagTrackDelivery);
+    }
+
+    void Handle(TEvPrivate::TEvRetryPoolStatus::TPtr &/*ev*/, const TActorContext &ctx) {
+        SendPoolStatusRequest(ctx);
+    }
+
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev, const TActorContext &ctx) {
         auto &rec = ev->Get()->Record;
 
@@ -208,16 +208,16 @@ public:
         OnPipeDestroyed(ctx);
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) { 
-        switch (ev->Get()->SourceType) { 
-            case TEvTenantPool::TEvGetStatus::EventType: { 
-                ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRetryPoolStatus); 
-                break; 
-            } 
- 
-            default: 
-                Die(ctx); 
-        } 
+    void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
+        switch (ev->Get()->SourceType) {
+            case TEvTenantPool::TEvGetStatus::EventType: {
+                ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRetryPoolStatus);
+                break;
+            }
+
+            default:
+                Die(ctx);
+        }
     }
 
     void Handle(TEvents::TEvPoisonPill::TPtr &/*ev*/, const TActorContext &ctx) {
@@ -271,7 +271,7 @@ private:
         auto console = MakeConsoleID(StateStorageGroup);
 
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = FastConnectRetryPolicy(); 
+        pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, console, pipeConfig);
         Pipe = ctx.ExecutorThread.RegisterActor(pipe);
     }

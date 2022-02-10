@@ -15,7 +15,7 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     const ui64 Cookie;
 
     NKikimrProto::EReplyStatus Status;
-    NKikimrHive::EErrorReason ErrorReason; 
+    NKikimrHive::EErrorReason ErrorReason;
     ui64 TabletId;
     TObjectId ObjectId;
     TSubDomainKey ObjectDomain;
@@ -28,7 +28,7 @@ class TTxCreateTablet : public TTransactionBase<THive> {
     ETabletState State;
     NKikimrHive::TTabletCategory TabletCategory;
     TVector<NKikimrHive::TFollowerGroup> FollowerGroups;
-    NKikimrHive::ETabletBootMode BootMode; 
+    NKikimrHive::ETabletBootMode BootMode;
     NKikimrHive::TForwardRequest ForwardRequest;
 
 public:
@@ -147,16 +147,16 @@ public:
         if (BoundChannels.size() < tablet.BoundChannels.size()) {
             ErrorReason = NKikimrHive::ERROR_REASON_CHANNELS_CANNOT_SHRINK;
             return false;
-        } 
-        return true; 
-    } 
- 
+        }
+        return true;
+    }
+
     TTxType GetTxType() const override { return NHive::TXTYPE_CREATE_TABLET; }
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxCreateTablet::Execute");
         State = ETabletState::Unknown;
-        ErrorReason = NKikimrHive::ERROR_REASON_UNKNOWN; 
+        ErrorReason = NKikimrHive::ERROR_REASON_UNKNOWN;
         for (const auto& domain : AllowedDomains) {
             if (!Self->SeenDomain(domain)) {
                 ++Self->ConfigurationGeneration;
@@ -201,7 +201,7 @@ public:
                                 follower.InitiateStop();
                             }
                             tablet->InitiateStop();
-                        } 
+                        }
 
                         State = tablet->State;
                         if (State == ETabletState::StoppingInGroupAssignment) {
@@ -238,7 +238,7 @@ public:
                         Status = NKikimrProto::ERROR;
                         return true;
                     }
- 
+
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::State>(State);
                     tablet->ActorsToNotify.push_back(Sender);
                     db.Table<Schema::Tablet>().Key(TabletId).Update<Schema::Tablet::ActorsToNotify>(tablet->ActorsToNotify);
@@ -350,7 +350,7 @@ public:
         tablet.Owner = ownerIdx;
         tablet.AllowedDataCenters = AllowedDataCenterIds;
         tablet.DataCentersPreference = DataCentersPreference;
-        tablet.BootMode = BootMode; 
+        tablet.BootMode = BootMode;
         tablet.ObjectId = ObjectId;
         tablet.AssignDomains(ObjectDomain, AllowedDomains);
         tablet.Statistics.SetLastAliveTimestamp(now.MilliSeconds());
@@ -492,7 +492,7 @@ public:
                 } else {
                     tablet->TryToBoot();
                 }
-            } 
+            }
             Self->ProcessBootQueue();
         } else {
             BLOG_D("THive::TTxCreateTablet::Complete CreateTablet Postponed");

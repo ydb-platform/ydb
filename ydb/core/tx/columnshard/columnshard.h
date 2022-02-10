@@ -7,7 +7,7 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 
 #include <ydb/core/tx/long_tx_service/public/types.h>
- 
+
 // TODO: temporarily reuse datashard TEvScan (KIKIMR-11069)
 #include <ydb/core/tx/datashard/datashard.h>
 
@@ -18,8 +18,8 @@ struct TEvColumnShard {
         EvProposeTransaction = EventSpaceBegin(TKikimrEvents::ES_TX_COLUMNSHARD),
         EvCancelTransactionProposal,
         EvProposeTransactionResult,
-        EvNotifyTxCompletion, 
-        EvNotifyTxCompletionResult, 
+        EvNotifyTxCompletion,
+        EvNotifyTxCompletionResult,
         EvReadBlobRanges,
         EvReadBlobRangesResult,
 
@@ -34,99 +34,99 @@ struct TEvColumnShard {
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COLUMNSHARD),
                   "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_TX_COLUMNSHARD)");
 
-    struct TEvProposeTransaction 
-        : public TEventPB<TEvProposeTransaction, 
-                          NKikimrTxColumnShard::TEvProposeTransaction, 
-                          EvProposeTransaction> 
-    { 
+    struct TEvProposeTransaction
+        : public TEventPB<TEvProposeTransaction,
+                          NKikimrTxColumnShard::TEvProposeTransaction,
+                          EvProposeTransaction>
+    {
         TEvProposeTransaction() = default;
 
-        TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, const TActorId& source, 
-                ui64 txId, TString txBody) 
+        TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, const TActorId& source,
+                ui64 txId, TString txBody)
         {
             Record.SetTxKind(txKind);
             ActorIdToProto(source, Record.MutableSource());
             Record.SetTxId(txId);
-            Record.SetTxBody(std::move(txBody)); 
+            Record.SetTxBody(std::move(txBody));
         }
 
-        TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source, 
-                ui64 txId, TString txBody) 
-            : TEvProposeTransaction(txKind, source, txId, std::move(txBody)) 
-        { 
-            Y_VERIFY(txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA); 
-            Record.SetSchemeShardId(ssId); 
-        } 
- 
-        TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source, 
-                ui64 txId, TString txBody, const NKikimrSubDomains::TProcessingParams& processingParams) 
-            : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody)) 
-        { 
-            Record.MutableProcessingParams()->CopyFrom(processingParams); 
-        } 
- 
+        TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
+                ui64 txId, TString txBody)
+            : TEvProposeTransaction(txKind, source, txId, std::move(txBody))
+        {
+            Y_VERIFY(txKind == NKikimrTxColumnShard::TX_KIND_SCHEMA);
+            Record.SetSchemeShardId(ssId);
+        }
+
+        TEvProposeTransaction(NKikimrTxColumnShard::ETransactionKind txKind, ui64 ssId, const TActorId& source,
+                ui64 txId, TString txBody, const NKikimrSubDomains::TProcessingParams& processingParams)
+            : TEvProposeTransaction(txKind, ssId, source, txId, std::move(txBody))
+        {
+            Record.MutableProcessingParams()->CopyFrom(processingParams);
+        }
+
         TActorId GetSource() const {
             return ActorIdFromProto(Record.GetSource());
         }
     };
 
-    struct TEvCancelTransactionProposal 
-        : public TEventPB<TEvCancelTransactionProposal, 
-                          NKikimrTxColumnShard::TEvCancelTransactionProposal, 
-                          EvCancelTransactionProposal> 
-    { 
-        TEvCancelTransactionProposal() = default; 
- 
-        explicit TEvCancelTransactionProposal(ui64 txId) { 
-            Record.SetTxId(txId); 
-        } 
-    }; 
- 
+    struct TEvCancelTransactionProposal
+        : public TEventPB<TEvCancelTransactionProposal,
+                          NKikimrTxColumnShard::TEvCancelTransactionProposal,
+                          EvCancelTransactionProposal>
+    {
+        TEvCancelTransactionProposal() = default;
+
+        explicit TEvCancelTransactionProposal(ui64 txId) {
+            Record.SetTxId(txId);
+        }
+    };
+
     struct TEvProposeTransactionResult : public TEventPB<TEvProposeTransactionResult,
                                             NKikimrTxColumnShard::TEvProposeTransactionResult,
                                             TEvColumnShard::EvProposeTransactionResult> {
         TEvProposeTransactionResult() = default;
 
         TEvProposeTransactionResult(ui64 origin, NKikimrTxColumnShard::ETransactionKind txKind, ui64 txId,
-                                    NKikimrTxColumnShard::EResultStatus status, 
-                                    const TString& statusMessage = TString()) 
+                                    NKikimrTxColumnShard::EResultStatus status,
+                                    const TString& statusMessage = TString())
         {
             Record.SetOrigin(origin);
             Record.SetTxKind(txKind);
             Record.SetTxId(txId);
             Record.SetMinStep(0);
             Record.SetStatus(status);
-            if (!statusMessage.empty()) { 
-                Record.SetStatusMessage(statusMessage); 
-            } 
+            if (!statusMessage.empty()) {
+                Record.SetStatusMessage(statusMessage);
+            }
         }
     };
 
-    struct TEvNotifyTxCompletion 
-        : public TEventPB<TEvNotifyTxCompletion, 
-                          NKikimrTxColumnShard::TEvNotifyTxCompletion, 
-                          EvNotifyTxCompletion> 
-    { 
-        TEvNotifyTxCompletion() = default; 
- 
-        explicit TEvNotifyTxCompletion(ui64 txId) { 
-            Record.SetTxId(txId); 
-        } 
-    }; 
- 
-    struct TEvNotifyTxCompletionResult 
-        : public TEventPB<TEvNotifyTxCompletionResult, 
-                          NKikimrTxColumnShard::TEvNotifyTxCompletionResult, 
-                          EvNotifyTxCompletionResult> 
-    { 
-        TEvNotifyTxCompletionResult() = default; 
- 
-        TEvNotifyTxCompletionResult(ui64 origin, ui64 txId) { 
-            Record.SetOrigin(origin); 
-            Record.SetTxId(txId); 
-        } 
-    }; 
- 
+    struct TEvNotifyTxCompletion
+        : public TEventPB<TEvNotifyTxCompletion,
+                          NKikimrTxColumnShard::TEvNotifyTxCompletion,
+                          EvNotifyTxCompletion>
+    {
+        TEvNotifyTxCompletion() = default;
+
+        explicit TEvNotifyTxCompletion(ui64 txId) {
+            Record.SetTxId(txId);
+        }
+    };
+
+    struct TEvNotifyTxCompletionResult
+        : public TEventPB<TEvNotifyTxCompletionResult,
+                          NKikimrTxColumnShard::TEvNotifyTxCompletionResult,
+                          EvNotifyTxCompletionResult>
+    {
+        TEvNotifyTxCompletionResult() = default;
+
+        TEvNotifyTxCompletionResult(ui64 origin, ui64 txId) {
+            Record.SetOrigin(origin);
+            Record.SetTxId(txId);
+        }
+    };
+
     // Read small blobs from the tablet
     struct TEvReadBlobRanges : public TEventPB<TEvReadBlobRanges,
                                                 NKikimrTxColumnShard::TEvReadBlobRanges,
@@ -156,15 +156,15 @@ struct TEvColumnShard {
             Record.SetData(data);
         }
 
-        TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, ui64 tableId, 
-                 const TString& dedupId, const TString& data) { 
-            ActorIdToProto(source, Record.MutableSource()); 
-            Record.SetTableId(tableId); 
-            Record.SetDedupId(dedupId); 
-            Record.SetData(data); 
-            longTxId.ToProto(Record.MutableLongTxId()); 
-        } 
- 
+        TEvWrite(const TActorId& source, const NLongTxService::TLongTxId& longTxId, ui64 tableId,
+                 const TString& dedupId, const TString& data) {
+            ActorIdToProto(source, Record.MutableSource());
+            Record.SetTableId(tableId);
+            Record.SetDedupId(dedupId);
+            Record.SetData(data);
+            longTxId.ToProto(Record.MutableLongTxId());
+        }
+
         // Optionally set schema to deserialize data with
         void SetArrowSchema(const TString& arrowSchema) {
             Record.MutableMeta()->SetFormat(NKikimrTxColumnShard::FORMAT_ARROW);
@@ -262,10 +262,10 @@ inline auto& Proto(TEvColumnShard::TEvReadResult* ev) {
     return ev->Record;
 }
 
-inline TMessageSeqNo SeqNoFromProto(const NKikimrTxColumnShard::TSchemaSeqNo& proto) { 
-    return TMessageSeqNo(proto.GetGeneration(), proto.GetRound()); 
-} 
- 
+inline TMessageSeqNo SeqNoFromProto(const NKikimrTxColumnShard::TSchemaSeqNo& proto) {
+    return TMessageSeqNo(proto.GetGeneration(), proto.GetRound());
+}
+
 IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info);
 
 }

@@ -22,7 +22,7 @@ public:
         : TClientImplCommon(std::move(connections), settings)
     {}
 
-    TAsyncBeginTxResult BeginTx(Ydb::LongTx::BeginTransactionRequest::TxTypeId txType, 
+    TAsyncBeginTxResult BeginTx(Ydb::LongTx::BeginTransactionRequest::TxTypeId txType,
                                 const TOpSettings& settings = TOpSettings()) {
         auto request = MakeOperationRequest<Ydb::LongTx::BeginTransactionRequest>(settings);
         request.set_tx_type(txType);
@@ -35,10 +35,10 @@ public:
             settings.ClientTimeout_);
     }
 
-    TAsyncCommitTxResult CommitTx(const TString& txId, 
+    TAsyncCommitTxResult CommitTx(const TString& txId,
                                   const TOpSettings& settings = TOpSettings()) {
         auto request = MakeOperationRequest<Ydb::LongTx::CommitTransactionRequest>(settings);
-        request.set_tx_id(txId); 
+        request.set_tx_id(txId);
 
         return RunOperation<Ydb::LongTx::V1::LongTxService,
                             Ydb::LongTx::CommitTransactionRequest, Ydb::LongTx::CommitTransactionResponse, TLongTxCommitResult>(
@@ -48,10 +48,10 @@ public:
             settings.ClientTimeout_);
     }
 
-    TAsyncRollbackTxResult RollbackTx(const TString& txId, 
+    TAsyncRollbackTxResult RollbackTx(const TString& txId,
                                       const TOpSettings& settings = TOpSettings()) {
         auto request = MakeOperationRequest<Ydb::LongTx::RollbackTransactionRequest>(settings);
-        request.set_tx_id(txId); 
+        request.set_tx_id(txId);
 
         return RunOperation<Ydb::LongTx::V1::LongTxService,
                             Ydb::LongTx::RollbackTransactionRequest, Ydb::LongTx::RollbackTransactionResponse, TLongTxRollbackResult>(
@@ -61,11 +61,11 @@ public:
             settings.ClientTimeout_);
     }
 
-    TAsyncWriteResult Write(const TString& txId, const TString& table, const TString& dedupId, 
+    TAsyncWriteResult Write(const TString& txId, const TString& table, const TString& dedupId,
                             const TString& data, Ydb::LongTx::Data::Format format,
                             const TOpSettings& settings = TOpSettings()) {
         auto request = MakeOperationRequest<Ydb::LongTx::WriteRequest>(settings);
-        request.set_tx_id(txId); 
+        request.set_tx_id(txId);
         request.set_path(table);
         request.set_dedup_id(dedupId);
 
@@ -81,10 +81,10 @@ public:
             settings.ClientTimeout_);
     }
 
-    TAsyncReadResult Read(const TString& txId, const TString& table, 
+    TAsyncReadResult Read(const TString& txId, const TString& table,
                           const TOpSettings& settings = TOpSettings()) {
         auto request = MakeOperationRequest<Ydb::LongTx::ReadRequest>(settings);
-        request.set_tx_id(txId); 
+        request.set_tx_id(txId);
         request.set_path(table);
         // TODO: query
 
@@ -101,29 +101,29 @@ TClient::TClient(const TDriver& driver, const TClientSettings& settings)
     : Impl_(new TImpl(CreateInternalInterface(driver), settings))
 {}
 
-TClient::TAsyncBeginTxResult TClient::BeginWriteTx() { 
-    return Impl_->BeginTx(Ydb::LongTx::BeginTransactionRequest::WRITE); 
+TClient::TAsyncBeginTxResult TClient::BeginWriteTx() {
+    return Impl_->BeginTx(Ydb::LongTx::BeginTransactionRequest::WRITE);
 }
 
-TClient::TAsyncBeginTxResult TClient::BeginReadTx() { 
-    return Impl_->BeginTx(Ydb::LongTx::BeginTransactionRequest::READ); 
+TClient::TAsyncBeginTxResult TClient::BeginReadTx() {
+    return Impl_->BeginTx(Ydb::LongTx::BeginTransactionRequest::READ);
 }
 
-TClient::TAsyncCommitTxResult TClient::CommitTx(const TString& txId) { 
-    return Impl_->CommitTx(txId); 
+TClient::TAsyncCommitTxResult TClient::CommitTx(const TString& txId) {
+    return Impl_->CommitTx(txId);
 }
 
-TClient::TAsyncRollbackTxResult TClient::RollbackTx(const TString& txId) { 
-    return Impl_->RollbackTx(txId); 
+TClient::TAsyncRollbackTxResult TClient::RollbackTx(const TString& txId) {
+    return Impl_->RollbackTx(txId);
 }
 
-TClient::TAsyncWriteResult TClient::Write(const TString& txId, const TString& table, const TString& dedupId, 
+TClient::TAsyncWriteResult TClient::Write(const TString& txId, const TString& table, const TString& dedupId,
                                           const TString& data, Ydb::LongTx::Data::Format format) {
-    return Impl_->Write(txId, table, dedupId, data, format); 
+    return Impl_->Write(txId, table, dedupId, data, format);
 }
 
-TClient::TAsyncReadResult TClient::Read(const TString& txId, const TString& table) { 
-    return Impl_->Read(txId, table); 
+TClient::TAsyncReadResult TClient::Read(const TString& txId, const TString& table) {
+    return Impl_->Read(txId, table);
 }
 
 } // namespace NLongTx

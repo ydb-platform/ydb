@@ -763,165 +763,165 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
 
         UNIT_ASSERT_EQUAL(tenantSVP, tenantSVPOnTSS);
     }
- 
-    Y_UNIT_TEST(SchemeQuotas) { 
-        TTestBasicRuntime runtime; 
-        TTestEnv env(runtime); 
-        ui64 txId = 100; 
- 
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"( 
-                        Name: "USER_0" 
-                )"); 
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"( 
-                        Name: "USER_0" 
-                        ExternalSchemeShard: true 
-                        PlanResolution: 50 
-                        Coordinators: 1 
-                        Mediators: 1 
-                        TimeCastBucketsPerMediator: 2 
+
+    Y_UNIT_TEST(SchemeQuotas) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                        Name: "USER_0"
+                )");
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                        Name: "USER_0"
+                        ExternalSchemeShard: true
+                        PlanResolution: 50
+                        Coordinators: 1
+                        Mediators: 1
+                        TimeCastBucketsPerMediator: 2
                         StoragePools {
                             Name: "/dc-1/users/tenant-1:hdd"
                             Kind: "hdd"
                         }
-                        DeclaredSchemeQuotas { 
-                            SchemeQuotas { 
-                                BucketSize: 1 
-                                BucketSeconds: 60 
-                            } 
-                            SchemeQuotas { 
-                                BucketSize: 2 
-                                BucketSeconds: 600 
-                            } 
-                        } 
-                )"); 
-        env.TestWaitNotification(runtime, {txId, txId - 1}); 
- 
-        ui64 tenantSchemeShard = 0; 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"), 
-                           {NLs::PathExist, 
-                            NLs::IsExternalSubDomain("USER_0"), 
-                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)}); 
- 
-        // First table should succeed 
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table1" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+                        DeclaredSchemeQuotas {
+                            SchemeQuotas {
+                                BucketSize: 1
+                                BucketSeconds: 60
+                            }
+                            SchemeQuotas {
+                                BucketSize: 2
+                                BucketSeconds: 600
+                            }
+                        }
+                )");
+        env.TestWaitNotification(runtime, {txId, txId - 1});
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::IsExternalSubDomain("USER_0"),
+                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
+
+        // First table should succeed
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table1"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusAccepted});
- 
-        // Second table should fail (out of per-minute quota) 
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table2" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+
+        // Second table should fail (out of per-minute quota)
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table2"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusQuotaExceeded});
- 
-        // After a minute we should be able to create one more table 
-        runtime.AdvanceCurrentTime(TDuration::Minutes(1)); 
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table3" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+
+        // After a minute we should be able to create one more table
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table3"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusAccepted});
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table4" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table4"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusQuotaExceeded});
- 
-        // After 1 more minute we should still fail because of per 10 minute quota 
-        runtime.AdvanceCurrentTime(TDuration::Minutes(1)); 
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table5" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+
+        // After 1 more minute we should still fail because of per 10 minute quota
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table5"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusQuotaExceeded});
- 
-        // After 3 more minutes we should succeed, because enough per 10 minute quota regenerates 
-        runtime.AdvanceCurrentTime(TDuration::Minutes(3)); 
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table6" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+
+        // After 3 more minutes we should succeed, because enough per 10 minute quota regenerates
+        runtime.AdvanceCurrentTime(TDuration::Minutes(3));
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table6"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusAccepted});
- 
-        // Quotas consuption is persistent, on reboot they should stay consumed 
-        { 
-            TActorId sender = runtime.AllocateEdgeActor(); 
+
+        // Quotas consuption is persistent, on reboot they should stay consumed
+        {
+            TActorId sender = runtime.AllocateEdgeActor();
             RebootTablet(runtime, tenantSchemeShard, sender);
-        } 
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table7" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+        }
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table7"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusQuotaExceeded});
- 
-        // Need 5 more minutes to create a table 
-        runtime.AdvanceCurrentTime(TDuration::Minutes(5)); 
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table7" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+
+        // Need 5 more minutes to create a table
+        runtime.AdvanceCurrentTime(TDuration::Minutes(5));
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table7"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusAccepted});
- 
-        // Change quotas to 2 per minute, use ext alter for that 
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"( 
-                        Name: "USER_0" 
-                        DeclaredSchemeQuotas { 
-                            SchemeQuotas { 
-                                BucketSize: 2 
-                                BucketSeconds: 60 
-                            } 
-                        } 
-                )"); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table8" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+
+        // Change quotas to 2 per minute, use ext alter for that
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                        Name: "USER_0"
+                        DeclaredSchemeQuotas {
+                            SchemeQuotas {
+                                BucketSize: 2
+                                BucketSeconds: 60
+                            }
+                        }
+                )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table8"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusAccepted});
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table9" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table9"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusAccepted});
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table10" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table10"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusQuotaExceeded});
- 
-        // After 1 minute we should be able to create more tables 
-        runtime.AdvanceCurrentTime(TDuration::Minutes(1)); 
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table10" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+
+        // After 1 minute we should be able to create more tables
+        runtime.AdvanceCurrentTime(TDuration::Minutes(1));
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table10"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusAccepted});
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table11" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table11"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusAccepted});
-        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"( 
-                            Name: "Table12" 
-                            Columns { Name: "key"        Type: "Uint32"} 
-                            Columns { Name: "Value"      Type: "Utf8"} 
-                            KeyColumnNames: ["key"] 
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0", R"(
+                            Name: "Table12"
+                            Columns { Name: "key"        Type: "Uint32"}
+                            Columns { Name: "Value"      Type: "Utf8"}
+                            KeyColumnNames: ["key"]
                 )", {NKikimrScheme::StatusQuotaExceeded});
-    } 
+    }
 }

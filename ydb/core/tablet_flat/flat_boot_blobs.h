@@ -30,25 +30,25 @@ namespace NBoot {
 
         void Feed(TLogoBlobID blobId, TString body)
         {
-            if (State.Apply(blobId, std::move(body)) && Env) 
-                Env->Finish(this); 
+            if (State.Apply(blobId, std::move(body)) && Env)
+                Env->Finish(this);
         }
 
-        const TVector<TLogoBlobID> Blobs() const 
+        const TVector<TLogoBlobID> Blobs() const
         {
-            return State.GetBlobs(); 
+            return State.GetBlobs();
         }
 
-        TString Plain() 
+        TString Plain()
         {
-            return State.ExtractString(); 
+            return State.ExtractString();
         }
 
-        TSharedData PlainData() 
-        { 
-            return State.ExtractSharedData(); 
-        } 
- 
+        TSharedData PlainData()
+        {
+            return State.ExtractSharedData();
+        }
+
     public:
         const ui64 Cookie = Max<ui64>();
         NPageCollection::TLargeGlobId LargeGlobId; /* new method of holding blobs range */

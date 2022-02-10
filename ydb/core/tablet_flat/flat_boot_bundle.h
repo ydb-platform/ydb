@@ -24,12 +24,12 @@ namespace NBoot {
 
         TBundleLoadStep(IStep *owner, ui32 table, TSwitch::TBundle &bundle)
             : IStep(owner, NBoot::EStep::Bundle)
-            , Table(table) 
+            , Table(table)
             , LargeGlobIds(std::move(bundle.LargeGlobIds))
             , Legacy(std::move(bundle.Legacy))
-            , Opaque(std::move(bundle.Opaque)) 
-            , Deltas(std::move(bundle.Deltas)) 
-            , Epoch(bundle.Epoch) 
+            , Opaque(std::move(bundle.Opaque))
+            , Deltas(std::move(bundle.Deltas))
+            , Epoch(bundle.Epoch)
         {
 
         }
@@ -40,7 +40,7 @@ namespace NBoot {
             PageCollections.resize(LargeGlobIds.size());
 
             for (auto slot: xrange(LargeGlobIds.size())) {
-                if (auto *info = Back->PageCaches.FindPtr(LargeGlobIds[slot].Lead)) { 
+                if (auto *info = Back->PageCaches.FindPtr(LargeGlobIds[slot].Lead)) {
                     PageCollections[slot] = *info;
                 } else {
                     LeftMetas += Spawn<TLoadBlobs>(LargeGlobIds[slot], slot);
@@ -54,10 +54,10 @@ namespace NBoot {
         {
             Y_VERIFY(Loader, "PageCollections loader got un unexpected pages fetch");
 
-            LeftReads -= 1; 
- 
+            LeftReads -= 1;
+
             if (msg.Status == NKikimrProto::OK) {
-                Loader->Save(msg.Cookie, msg.Loaded); 
+                Loader->Save(msg.Cookie, msg.Loaded);
 
                 TryFinalize();
 
@@ -93,12 +93,12 @@ namespace NBoot {
         void TryLoad()
         {
             if (!LeftMetas) {
-                Loader = new NTable::TLoader( 
+                Loader = new NTable::TLoader(
                     std::move(PageCollections),
                     std::move(Legacy),
-                    std::move(Opaque), 
-                    std::move(Deltas), 
-                    Epoch); 
+                    std::move(Opaque),
+                    std::move(Deltas),
+                    Epoch);
 
                 TryFinalize();
             }
@@ -106,15 +106,15 @@ namespace NBoot {
 
         void TryFinalize()
         {
-            if (!LeftReads) { 
-                for (auto req : Loader->Run()) { 
-                    LeftReads += Logic->LoadPages(this, req); 
-                } 
-            } 
- 
-            if (!LeftReads) { 
+            if (!LeftReads) {
+                for (auto req : Loader->Run()) {
+                    LeftReads += Logic->LoadPages(this, req);
+                }
+            }
+
+            if (!LeftReads) {
                 NTable::TPartView partView = Loader->Result();
- 
+
                 if (auto logl = Env->Logger()->Log(ELnLev::Debug)) {
                     logl
                         << NFmt::Do(*Back) << " table " << Table
@@ -129,17 +129,17 @@ namespace NBoot {
                 PropagateSideEffects(partView);
                 Back->DatabaseImpl->Merge(Table, std::move(partView));
 
-                Env->Finish(this); /* return self to owner */ 
+                Env->Finish(this); /* return self to owner */
             }
         }
 
         void PropagateSideEffects(const NTable::TPartView &partView)
         {
             for (auto &cache : partView.As<NTable::TPartStore>()->PageCollections)
-                Logic->Result().PageCaches.push_back(cache); 
+                Logic->Result().PageCaches.push_back(cache);
 
             if (auto &cache = partView.As<NTable::TPartStore>()->Pseudo)
-                Logic->Result().PageCaches.push_back(cache); 
+                Logic->Result().PageCaches.push_back(cache);
         }
 
     private:
@@ -150,8 +150,8 @@ namespace NBoot {
         TVector<TIntrusivePtr<TCache>> PageCollections;
         TString Legacy;
         TString Opaque;
-        TVector<TString> Deltas; 
-        NTable::TEpoch Epoch; 
+        TVector<TString> Deltas;
+        NTable::TEpoch Epoch;
 
         TLeft LeftMetas;
         TLeft LeftReads;

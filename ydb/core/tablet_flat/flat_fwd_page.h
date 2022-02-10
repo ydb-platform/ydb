@@ -23,7 +23,7 @@ namespace NFwd {
 
     struct TPage {
         TPage(TPageId id, ui64 size, ui16 tag, TPageId refer)
-            : Size(size), PageId(id), Refer(refer), Tag(tag) 
+            : Size(size), PageId(id), Refer(refer), Tag(tag)
         {
 
         }
@@ -48,7 +48,7 @@ namespace NFwd {
             return PageId < pageId;
         }
 
-        const TSharedData* Plain() const noexcept 
+        const TSharedData* Plain() const noexcept
         {
             return Data ? &Data : nullptr;
         }
@@ -62,7 +62,7 @@ namespace NFwd {
             } else if (Size != page.Data.size()) {
                 Y_FAIL("Requested and obtained page sizes are not the same");
             } else if (was == EFetch::Drop) {
-                std::exchange(page.Data, { }); 
+                std::exchange(page.Data, { });
             } else if (was != EFetch::Wait) {
                 Y_FAIL("Settling page that is not waiting for any data");
             } else {
@@ -72,7 +72,7 @@ namespace NFwd {
             return Data.size();
         }
 
-        const TSharedData* Touch(TPageId pageId, TStat &stat) noexcept 
+        const TSharedData* Touch(TPageId pageId, TStat &stat) noexcept
         {
             if (PageId != pageId || (!Data && Fetch == EFetch::Done)) {
                 Y_FAIL("Touching page thatd doesn't fits to this action");
@@ -86,20 +86,20 @@ namespace NFwd {
             return Plain();
         }
 
-        TSharedData Release() noexcept 
+        TSharedData Release() noexcept
         {
             Fetch = Max(Fetch, EFetch::Drop);
 
-            return std::exchange(Data, { }); 
+            return std::exchange(Data, { });
         }
 
-        const ui64 Size = 0; 
+        const ui64 Size = 0;
         const ui32 PageId = Max<ui32>();
         const ui32 Refer = 0;
         const ui16 Tag  = Max<ui16>();
         EUsage Usage    = EUsage::None;
         EFetch Fetch    = EFetch::None;
-        TSharedData Data; 
+        TSharedData Data;
     };
 
 }

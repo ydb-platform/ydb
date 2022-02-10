@@ -11,11 +11,11 @@ class TSerializedCellVec;
 
 namespace NTxProxy {
 
-enum class EUploadRowsMode { 
-    Normal, 
-    WriteToTableShadow, 
-}; 
- 
+enum class EUploadRowsMode {
+    Normal,
+    WriteToTableShadow,
+};
+
 IActor* CreateUploadRowsInternal(const TActorId& sender,
                                  const TString& table,
                                  std::shared_ptr<TVector<std::pair<TString, Ydb::Type> > > types,

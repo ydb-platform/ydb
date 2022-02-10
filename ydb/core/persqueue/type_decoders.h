@@ -81,7 +81,7 @@ public:
 
     static inline IChunkDecoder::TPtr ReadNextImpl(const TDataRef& data, const TTypeCodecs* codecs) {
         Y_VERIFY_DEBUG(data.Size() >= sizeof(TCodecSig));
-        const TCodecSig sig = ReadUnaligned<TCodecSig>(data.Data()); 
+        const TCodecSig sig = ReadUnaligned<TCodecSig>(data.Data());
         if (Y_LIKELY(sig == Sig())) {
             return new TDerived(data);
         } else {
@@ -94,7 +94,7 @@ public:
 protected:
     static inline void VerifySignature(const TDataRef& data) {
         Y_VERIFY(data.Size() >= sizeof(TCodecSig));
-        Y_VERIFY(ReadUnaligned<TCodecSig>(data.Data()) == Sig()); 
+        Y_VERIFY(ReadUnaligned<TCodecSig>(data.Data()) == Sig());
     }
 };
 

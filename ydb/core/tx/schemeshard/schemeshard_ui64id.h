@@ -64,10 +64,10 @@ public:
         return Value != invalidValue;
     }
 
-    ui64 GetValue() const { 
-        return Value; 
-    } 
- 
+    ui64 GetValue() const {
+        return Value;
+    }
+
     explicit operator ui64() const {
         return Value;
     }

@@ -52,7 +52,7 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxInitiateBorrowedPartsRetu
 void TDataShard::CompletedLoansChanged(const TActorContext &ctx) {
     Y_VERIFY(Executor()->GetStats().CompactedPartLoans);
 
-    CheckInitiateBorrowedPartsReturn(ctx); 
+    CheckInitiateBorrowedPartsReturn(ctx);
 }
 
 // Accept returned part on the source datashard
@@ -89,7 +89,7 @@ public:
         TActorId ackTo = Ev->Sender;
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack parts " << PartMetaVec << " return to tablet " << FromTabletId);
 
-        ctx.Send(ackTo, new TEvDataShard::TEvReturnBorrowedPartAck(PartMetaVec), 0, Ev->Cookie); 
+        ctx.Send(ackTo, new TEvDataShard::TEvReturnBorrowedPartAck(PartMetaVec), 0, Ev->Cookie);
         Self->CheckStateChange(ctx);
     }
 };
@@ -194,7 +194,7 @@ void TDataShard::CheckInitiateBorrowedPartsReturn(const TActorContext &ctx) {
     if (!Executor()->GetStats().CompactedPartLoans->empty()) {
         Execute(CreateTxInitiateBorrowedPartsReturn(), ctx);
     }
-} 
+}
 
 void TDataShard::CheckStateChange(const TActorContext& ctx) {
     if (State == TShardState::PreOffline) {

@@ -1,26 +1,26 @@
-LIBRARY() 
- 
+LIBRARY()
+
 OWNER(
     snaury
     g:kikimr
 )
- 
-SRCS( 
-    events.cpp 
-    proxy.cpp 
-    proxy_actor.cpp 
-) 
- 
-PEERDIR( 
+
+SRCS(
+    events.cpp
+    proxy.cpp
+    proxy_actor.cpp
+)
+
+PEERDIR(
     ydb/core/base
     ydb/core/erasure
     ydb/core/kesus/tablet
     ydb/core/scheme
     ydb/core/tx/scheme_cache
     ydb/public/api/protos
-) 
- 
-END() 
+)
+
+END()
 
 RECURSE_FOR_TESTS(
     ut

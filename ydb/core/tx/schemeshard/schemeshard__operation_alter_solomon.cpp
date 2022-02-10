@@ -77,8 +77,8 @@ public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), 
-                       {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType}); 
+        IgnoreMessages(DebugHint(),
+                       {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -318,9 +318,9 @@ public:
             for (const auto& [shardIdx, partitionInfo] : solomon->Partitions) {
                 txState.Shards.emplace_back(shardIdx, TTabletTypes::KeyValue, TTxState::CreateParts);
 
-                auto& shardInfo = context.SS->ShardInfos.at(shardIdx); 
-                shardInfo.CurrentTxId = OperationId.GetTxId(); 
-                shardInfo.BindedChannels = channelsBinding; 
+                auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
+                shardInfo.CurrentTxId = OperationId.GetTxId();
+                shardInfo.BindedChannels = channelsBinding;
 
                 context.SS->PersistShardMapping(db, shardIdx, partitionInfo->TabletId, path.Base()->PathId, OperationId.GetTxId(), solomonPartitionInfo.TabletType);
                 context.SS->PersistChannelsBinding(db, shardIdx, channelsBinding);
@@ -331,14 +331,14 @@ public:
             const ui64 shardsToCreate = alter.GetPartitionCount() - solomon->Partitions.size();
 
             for (ui64 i = 0; i < shardsToCreate; ++i) {
-                const auto shardIdx = context.SS->RegisterShardInfo(solomonPartitionInfo); 
-                context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, path.Base()->PathId, OperationId.GetTxId(), solomonPartitionInfo.TabletType); 
-                context.SS->PersistChannelsBinding(db, shardIdx, channelsBinding); 
- 
+                const auto shardIdx = context.SS->RegisterShardInfo(solomonPartitionInfo);
+                context.SS->PersistShardMapping(db, shardIdx, InvalidTabletId, path.Base()->PathId, OperationId.GetTxId(), solomonPartitionInfo.TabletType);
+                context.SS->PersistChannelsBinding(db, shardIdx, channelsBinding);
+
                 alterSolomon->Partitions[shardIdx] = new TSolomonPartitionInfo(solomon->Partitions.size() + i);
                 txState.Shards.emplace_back(shardIdx, TTabletTypes::KeyValue, TTxState::CreateParts);
             }
-            context.SS->PersistUpdateNextShardIdx(db); 
+            context.SS->PersistUpdateNextShardIdx(db);
 
             path.Base()->IncShardsInside(shardsToCreate);
         }

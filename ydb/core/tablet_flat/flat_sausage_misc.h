@@ -35,7 +35,7 @@ namespace NPageCollection {
             return Size > 0;
         }
 
-        ui64 Size; 
+        ui64 Size;
         ui32 Type;
     };
 

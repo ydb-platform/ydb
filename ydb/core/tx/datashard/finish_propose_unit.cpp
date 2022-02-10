@@ -44,80 +44,80 @@ bool TFinishProposeUnit::IsReadyToExecute(TOperation::TPtr) const
 }
 
 EExecutionStatus TFinishProposeUnit::Execute(TOperation::TPtr op,
-                                             TTransactionContext &txc, 
+                                             TTransactionContext &txc,
                                              const TActorContext &ctx)
 {
     if (op->Result())
         UpdateCounters(op, ctx);
 
-    bool hadWrites = false; 
+    bool hadWrites = false;
 
-    // When mvcc is enabled we perform marking after transaction is executed 
-    if (DataShard.IsMvccEnabled() && op->IsImmediate()) { 
-        if (op->IsMvccSnapshotRead()) { 
-            hadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(op->GetMvccSnapshot(), txc); 
-            if (op->IsMvccSnapshotRepeatable()) { 
-                hadWrites |= DataShard.PromoteCompleteEdge(op.Get(), txc); 
-                if (!hadWrites && DataShard.GetSnapshotManager().GetCommittedCompleteEdge() < op->GetMvccSnapshot()) { 
-                    // We need to wait for completion because some other transaction 
-                    // has moved complete edge, but it's not committed yet. 
-                    op->SetWaitCompletionFlag(true); 
-                } 
-            } 
-        } else if (op->MvccReadWriteVersion) { 
-            hadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(*op->MvccReadWriteVersion, txc); 
-        } 
- 
-        if (hadWrites) { 
-            // FIXME: even if transaction itself didn't promote, we may still need to 
-            // wait for completion, when current in-memory state is not actually committed 
-            op->SetWaitCompletionFlag(true); 
-        } 
-    } 
- 
+    // When mvcc is enabled we perform marking after transaction is executed
+    if (DataShard.IsMvccEnabled() && op->IsImmediate()) {
+        if (op->IsMvccSnapshotRead()) {
+            hadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(op->GetMvccSnapshot(), txc);
+            if (op->IsMvccSnapshotRepeatable()) {
+                hadWrites |= DataShard.PromoteCompleteEdge(op.Get(), txc);
+                if (!hadWrites && DataShard.GetSnapshotManager().GetCommittedCompleteEdge() < op->GetMvccSnapshot()) {
+                    // We need to wait for completion because some other transaction
+                    // has moved complete edge, but it's not committed yet.
+                    op->SetWaitCompletionFlag(true);
+                }
+            }
+        } else if (op->MvccReadWriteVersion) {
+            hadWrites |= Pipeline.MarkPlannedLogicallyCompleteUpTo(*op->MvccReadWriteVersion, txc);
+        }
+
+        if (hadWrites) {
+            // FIXME: even if transaction itself didn't promote, we may still need to
+            // wait for completion, when current in-memory state is not actually committed
+            op->SetWaitCompletionFlag(true);
+        }
+    }
+
     if (!op->HasResultSentFlag() && (op->IsDirty() || !Pipeline.WaitCompletion(op)))
         CompleteRequest(op, ctx);
 
     if (!DataShard.IsFollower())
-        DataShard.PlanCleanup(ctx); 
+        DataShard.PlanCleanup(ctx);
 
-    // Release acquired snapshot for immediate and aborted operations 
-    // N.B. currently only immediate operations may acquire snapshots, but in 
-    // the future it may be possible for read/write operations to read and write 
-    // at different points in time. Those snapshots would need to stay acquired 
-    // until the operation is complete. 
-    auto status = EExecutionStatus::DelayComplete; 
-    if (hadWrites) { 
-        status = EExecutionStatus::DelayCompleteNoMoreRestarts; 
-    } 
-    if (op->HasAcquiredSnapshotKey() && (op->IsImmediate() || op->IsAborted())) { 
-        if (DataShard.GetSnapshotManager().ReleaseReference(op->GetAcquiredSnapshotKey(), txc.DB, ctx.Now())) { 
-            status = EExecutionStatus::DelayCompleteNoMoreRestarts; 
-        } 
- 
-        op->ResetAcquiredSnapshotKey(); 
-    } 
- 
-    return status; 
+    // Release acquired snapshot for immediate and aborted operations
+    // N.B. currently only immediate operations may acquire snapshots, but in
+    // the future it may be possible for read/write operations to read and write
+    // at different points in time. Those snapshots would need to stay acquired
+    // until the operation is complete.
+    auto status = EExecutionStatus::DelayComplete;
+    if (hadWrites) {
+        status = EExecutionStatus::DelayCompleteNoMoreRestarts;
+    }
+    if (op->HasAcquiredSnapshotKey() && (op->IsImmediate() || op->IsAborted())) {
+        if (DataShard.GetSnapshotManager().ReleaseReference(op->GetAcquiredSnapshotKey(), txc.DB, ctx.Now())) {
+            status = EExecutionStatus::DelayCompleteNoMoreRestarts;
+        }
+
+        op->ResetAcquiredSnapshotKey();
+    }
+
+    return status;
 }
 
 void TFinishProposeUnit::Complete(TOperation::TPtr op,
                                   const TActorContext &ctx)
 {
-    if (!op->HasResultSentFlag()) { 
-        DataShard.IncCounter(COUNTER_PREPARE_COMPLETE); 
+    if (!op->HasResultSentFlag()) {
+        DataShard.IncCounter(COUNTER_PREPARE_COMPLETE);
 
-        if (op->Result()) 
-            CompleteRequest(op, ctx); 
-    } 
+        if (op->Result())
+            CompleteRequest(op, ctx);
+    }
 
     Pipeline.ForgetUnproposedTx(op->GetTxId());
-    if (op->IsImmediate()) { 
+    if (op->IsImmediate()) {
         Pipeline.RemoveCommittingOp(op);
         Pipeline.RemoveActiveOp(op);
 
         DataShard.EnqueueChangeRecords(std::move(op->ChangeRecords()));
-    } 
+    }
 
     DataShard.SendRegistrationRequestTimeCast(ctx);
 }
@@ -125,7 +125,7 @@ void TFinishProposeUnit::Complete(TOperation::TPtr op,
 void TFinishProposeUnit::CompleteRequest(TOperation::TPtr op,
                                          const TActorContext &ctx)
 {
-    auto res = std::move(op->Result()); 
+    auto res = std::move(op->Result());
     Y_VERIFY(res);
 
     TDuration duration = TAppData::TimeProvider->Now() - op->GetReceivedAt();

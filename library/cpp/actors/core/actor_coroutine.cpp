@@ -1,9 +1,9 @@
 #include "actor_coroutine.h"
 #include "executor_thread.h"
 
-#include <util/system/sanitizers.h> 
+#include <util/system/sanitizers.h>
 #include <util/system/type_name.h>
- 
+
 namespace NActors {
     static constexpr size_t StackOverflowGap = 4096;
     static char GoodStack[StackOverflowGap];
@@ -92,8 +92,8 @@ namespace NActors {
         }
 
         // prepare actor context for in-coroutine use
-        TActivationContext *ac = TlsActivationContext; 
-        TlsActivationContext = nullptr; 
+        TActivationContext *ac = TlsActivationContext;
+        TlsActivationContext = nullptr;
         TActorContext ctx(ac->Mailbox, ac->ExecutorThread, ac->EventStart, SelfActorId);
         ActorContext = &ctx;
 

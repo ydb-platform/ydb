@@ -13,10 +13,10 @@ namespace NRedo {
         Begin   = 5,    /* ABI and API evolution label  */
         Annex   = 6,    /* Array of used external blobs */
         Flush   = 8,
-        UpdateV = 9, 
-        UpdateTx = 10, 
-        CommitTx = 11, 
-        RemoveTx = 12, 
+        UpdateV = 9,
+        UpdateTx = 10,
+        CommitTx = 11,
+        RemoveTx = 12,
     };
 
     #pragma pack(push, 1)
@@ -44,7 +44,7 @@ namespace NRedo {
         TChunk_Legacy Hdr;
 
         ui64 TxStamp;
-        i64 Epoch; 
+        i64 Epoch;
         ui64 Unused1_;
     } Y_PACKED;
 
@@ -88,42 +88,42 @@ namespace NRedo {
         ui16 Ops;
     } Y_PACKED;
 
-    struct TEvUpdateV { 
-        ui64 RowVersionStep; 
-        ui64 RowVersionTxId; 
+    struct TEvUpdateV {
+        ui64 RowVersionStep;
+        ui64 RowVersionTxId;
     } Y_PACKED;
- 
-    struct TEvUpdateTx { 
-        ui64 TxId; 
-    } Y_PACKED; 
- 
+
+    struct TEvUpdateTx {
+        ui64 TxId;
+    } Y_PACKED;
+
     struct TEvFlush {
         TChunk Label;
 
         ui32 Table;
         ui32 Pad0_;
         ui64 Stamp;
-        i64 Epoch; 
+        i64 Epoch;
     } Y_PACKED;
 
-    struct TEvRemoveTx { 
-        TChunk Label; 
- 
-        ui32 Table; 
-        ui32 Pad0_; 
-        ui64 TxId; 
-    } Y_PACKED; 
- 
-    struct TEvCommitTx { 
-        TChunk Label; 
- 
-        ui32 Table; 
-        ui32 Pad0_; 
-        ui64 TxId; 
-        ui64 RowVersionStep; 
-        ui64 RowVersionTxId; 
-    } Y_PACKED; 
- 
+    struct TEvRemoveTx {
+        TChunk Label;
+
+        ui32 Table;
+        ui32 Pad0_;
+        ui64 TxId;
+    } Y_PACKED;
+
+    struct TEvCommitTx {
+        TChunk Label;
+
+        ui32 Table;
+        ui32 Pad0_;
+        ui64 TxId;
+        ui64 RowVersionStep;
+        ui64 RowVersionTxId;
+    } Y_PACKED;
+
     struct TValue {
         bool IsNull() const noexcept
         {
@@ -146,8 +146,8 @@ namespace NRedo {
     static_assert(sizeof(TEvBegin_v0) == 16, "");
     static_assert(sizeof(TEvBegin_v1) == 32, "");
     static_assert(sizeof(TEvUpdate) == 18, "");
-    static_assert(sizeof(TEvUpdateV) == 16, ""); 
-    static_assert(sizeof(TEvAnnex) == 12, ""); 
+    static_assert(sizeof(TEvUpdateV) == 16, "");
+    static_assert(sizeof(TEvAnnex) == 12, "");
     static_assert(sizeof(TEvFlush) == 32, "");
 
 }

@@ -12,7 +12,7 @@ OWNER(
 
 SRCS(
     rope_ut.cpp
-    unordered_cache_ut.cpp 
+    unordered_cache_ut.cpp
 )
 
 END()

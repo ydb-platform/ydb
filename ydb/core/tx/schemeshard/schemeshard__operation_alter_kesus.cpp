@@ -90,7 +90,7 @@ public:
         Y_VERIFY(txState->TxType == TTxState::TxAlterKesus);
         Y_VERIFY(txState->State == TTxState::ConfigureParts);
 
-        TShardIdx idx = context.SS->MustGetShardIdx(tabletId); 
+        TShardIdx idx = context.SS->MustGetShardIdx(tabletId);
         txState->ShardsInProgress.erase(idx);
 
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);

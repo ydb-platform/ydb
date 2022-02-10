@@ -108,27 +108,27 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             return KeyMap;
         }
 
-        THolder<TKeyDesc> TakeKeyDesc() { 
-            return std::move(KeyDesc); 
-        } 
- 
-        void SetKeyDesc(THolder<TKeyDesc> keyDesc) { 
-            KeyDesc = std::move(keyDesc); 
-        } 
- 
+        THolder<TKeyDesc> TakeKeyDesc() {
+            return std::move(KeyDesc);
+        }
+
+        void SetKeyDesc(THolder<TKeyDesc> keyDesc) {
+            KeyDesc = std::move(keyDesc);
+        }
+
         const TKeyDesc* GetKeyDesc() const {
             return KeyDesc.Get();
         }
 
-    public: 
-        uintptr_t ToUserDataHandle() { 
-            return reinterpret_cast<uintptr_t>(this); 
+    public:
+        uintptr_t ToUserDataHandle() {
+            return reinterpret_cast<uintptr_t>(this);
         }
 
-        static TTableInfo& FromUserDataHandle(uintptr_t userData) { 
-            return *reinterpret_cast<TTableInfo*>(userData); 
-        } 
- 
+        static TTableInfo& FromUserDataHandle(uintptr_t userData) {
+            return *reinterpret_cast<TTableInfo*>(userData);
+        }
+
     private:
         const TKeyMap KeyMap;
         THolder<TKeyDesc> KeyDesc;
@@ -495,9 +495,9 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
         auto request = MakeHolder<TResolve>();
         for (auto& [_, info] : TableInfos) {
-            auto& entry = request->ResultSet.emplace_back(info.TakeKeyDesc()); 
-            entry.Access = NACLib::EAccessRights::EraseRow; 
-            entry.UserData = info.ToUserDataHandle(); 
+            auto& entry = request->ResultSet.emplace_back(info.TakeKeyDesc());
+            entry.Access = NACLib::EAccessRights::EraseRow;
+            entry.UserData = info.ToUserDataHandle();
         }
 
         Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
@@ -536,7 +536,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         }
 
         for (ui32 i = 0; i < request->ResultSet.size(); ++i) {
-            auto& entry = request->ResultSet.at(i); 
+            auto& entry = request->ResultSet.at(i);
             if (!CheckEntrySucceeded(entry, marker)) {
                 return;
             }
@@ -545,9 +545,9 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 return SchemeError(TStringBuilder() << "Empty partitions list"
                     << ": entry# " << entry.ToString(*AppData()->TypeRegistry));
             }
- 
-            auto& info = TTableInfo::FromUserDataHandle(entry.UserData); 
-            info.SetKeyDesc(std::move(entry.KeyDescription)); 
+
+            auto& info = TTableInfo::FromUserDataHandle(entry.UserData);
+            info.SetKeyDesc(std::move(entry.KeyDescription));
         }
 
         if (Request) {
@@ -637,7 +637,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
                 auto it = keys[tableId].find(shardId);
                 if (it == keys[tableId].end()) {
-                    it = keys[tableId].emplace(shardId, TShardKeys()).first; 
+                    it = keys[tableId].emplace(shardId, TShardKeys()).first;
                 }
 
                 it->second.Add(TSerializedCellVec::Serialize(cells), i);
@@ -951,7 +951,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
         case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusOutdated:
         case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclined:
         case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusDeclinedNoSpace:
-        case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting: // TODO: retry 
+        case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusRestarting: // TODO: retry
             CancelProposal();
             [[fallthrough]];
         default:

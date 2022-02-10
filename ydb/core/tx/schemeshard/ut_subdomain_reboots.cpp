@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                     NLs::PathVersionEqual(5),
                                     NLs::PathsInsideDomain(2),
                                     NLs::ShardsInsideDomain(0)});
- 
+
                 UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
                 UNIT_ASSERT(CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
             }
@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                    {NLs::PathVersionEqual(7),
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
-                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2}); 
+                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
@@ -284,7 +284,7 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                    {NLs::PathVersionEqual(7),
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
-                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2}); 
+                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
@@ -374,10 +374,10 @@ Y_UNIT_TEST_SUITE(SubDomainWithReboots) {
                                    {NLs::PathVersionEqual(7),
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
-                // FIXME: DropTable breaks down during ForceDropSubDomain and leaves table half-dropped 
-                //        an additional reboot "fixes" the half-dropped table 
+                // FIXME: DropTable breaks down during ForceDropSubDomain and leaves table half-dropped
+                //        an additional reboot "fixes" the half-dropped table
                 RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5}); 
+                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
@@ -539,7 +539,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
                                    {NLs::PathNotExist});
-                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2}); 
+                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
@@ -565,7 +565,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                 TInactiveZone inactive(activeZone);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/DirA/USER_0"),
                                    {NLs::PathNotExist});
-                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2}); 
+                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
@@ -604,7 +604,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                    {NLs::PathVersionOneOf({5, 6}),
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
-                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3}); 
+                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
@@ -643,7 +643,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                    {NLs::PathVersionOneOf({6, 7}),
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
-                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3}); 
+                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
@@ -700,7 +700,7 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                    {NLs::PathVersionEqual(7),
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
-                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5}); 
+                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }
@@ -750,10 +750,10 @@ Y_UNIT_TEST_SUITE(ForceDropWithReboots) {
                                    {NLs::PathVersionEqual(7),
                                     NLs::PathsInsideDomain(1),
                                     NLs::ShardsInsideDomain(0)});
-                // FIXME: DropTable breaks down during ForceDropSubDomain and leaves table half-dropped 
-                //        an additional reboot "fixes" the half-dropped table 
+                // FIXME: DropTable breaks down during ForceDropSubDomain and leaves table half-dropped
+                //        an additional reboot "fixes" the half-dropped table
                 RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3}); 
+                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
             }

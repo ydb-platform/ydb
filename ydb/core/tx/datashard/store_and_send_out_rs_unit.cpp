@@ -54,8 +54,8 @@ EExecutionStatus TStoreAndSendOutRSUnit::Execute(TOperation::TPtr op,
         newArtifact = true;
     }
     if (!tx->IsLocksStored() && !tx->LocksAccessLog().Locks.empty()) {
-        // N.B. we copy access log to locks cache, so that future lock access is repeatable 
-        tx->LocksCache().Locks = tx->LocksAccessLog().Locks; 
+        // N.B. we copy access log to locks cache, so that future lock access is repeatable
+        tx->LocksCache().Locks = tx->LocksAccessLog().Locks;
         tx->DbStoreLocksAccessLog(&DataShard, txc, ctx);
         tx->MarkLocksStored();
         newArtifact = true;
@@ -63,18 +63,18 @@ EExecutionStatus TStoreAndSendOutRSUnit::Execute(TOperation::TPtr op,
     if (newArtifact)
         tx->DbStoreArtifactFlags(&DataShard, txc, ctx);
 
-    bool hadWrites = false; 
-    if (tx->IsOutRSStored() || tx->IsLocksStored()) { 
-        // Don't allow immediate writes to corrupt data we have read 
-        hadWrites |= Pipeline.MarkPlannedLogicallyIncompleteUpTo(TRowVersion(op->GetStep(), op->GetTxId()), txc); 
-    } 
- 
+    bool hadWrites = false;
+    if (tx->IsOutRSStored() || tx->IsLocksStored()) {
+        // Don't allow immediate writes to corrupt data we have read
+        hadWrites |= Pipeline.MarkPlannedLogicallyIncompleteUpTo(TRowVersion(op->GetStep(), op->GetTxId()), txc);
+    }
+
     if (!op->PreparedOutReadSets().empty())
         return EExecutionStatus::DelayCompleteNoMoreRestarts;
 
-    if (newArtifact || hadWrites) 
-        return EExecutionStatus::ExecutedNoMoreRestarts; 
- 
+    if (newArtifact || hadWrites)
+        return EExecutionStatus::ExecutedNoMoreRestarts;
+
     return EExecutionStatus::Executed;
 }
 

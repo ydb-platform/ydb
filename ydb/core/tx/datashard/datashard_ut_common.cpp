@@ -17,8 +17,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <google/protobuf/text_format.h>
 
-#include <util/system/valgrind.h> 
- 
+#include <util/system/valgrind.h>
+
 namespace NKikimr {
 
 using namespace NMiniKQL;
@@ -139,7 +139,7 @@ TTester::TKeyResolver TTester::GetKeyResolver() const {
         case ESchema_KV:
         case ESchema_SpecialKV:
         case ESchema_DoubleKV:
-        case ESchema_DoubleKVExternal: 
+        case ESchema_DoubleKVExternal:
             return SingleShardKeyResolver;
         case ESchema_MultiShardKV:
             return ThreeShardPointKeyResolver;
@@ -156,7 +156,7 @@ void TTester::CreateDataShard(TFakeMiniKQLProxy& proxy, ui64 tabletId, const TSt
     options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
     Runtime.DispatchEvents(options);
 
-    UNIT_ASSERT_EQUAL(proxy.ExecSchemeCreateTable(schemeText, {tabletId}), IEngineFlat::EStatus::Complete); 
+    UNIT_ASSERT_EQUAL(proxy.ExecSchemeCreateTable(schemeText, {tabletId}), IEngineFlat::EStatus::Complete);
 
     RebootTablet(Runtime, tabletId, Sender);
 
@@ -220,18 +220,18 @@ void TTester::CreateSchema(ESchema schema, const TOptions& opts) {
         "KeyColumnIds: [ 34, 35 ]\n"
         ;
 
-    TString doubleKeyValueExternalSchemeText = 
-        "Name: \"table2\"\n" 
-        "PathId { OwnerId: " + ToString(FAKE_SCHEMESHARD_TABLET_ID) + " LocalId: 14 }\n" 
- 
-        "Path: \"/Root/table2\"\n" 
-        "Columns { Id: 34 Name: \"key1\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n" 
-        "Columns { Id: 35 Name: \"key2\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n" 
-        "Columns { Id: 56 Name: \"value\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n" 
-        "KeyColumnIds: [ 34, 35 ]\n" 
-        "PartitionConfig { ColumnFamilies { Id: 0 Storage: ColumnStorageTest_1_2_1k } }\n" 
-        ; 
- 
+    TString doubleKeyValueExternalSchemeText =
+        "Name: \"table2\"\n"
+        "PathId { OwnerId: " + ToString(FAKE_SCHEMESHARD_TABLET_ID) + " LocalId: 14 }\n"
+
+        "Path: \"/Root/table2\"\n"
+        "Columns { Id: 34 Name: \"key1\" TypeId: " + ToString<int>(NScheme::NTypeIds::Uint32) + " }\n"
+        "Columns { Id: 35 Name: \"key2\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n"
+        "Columns { Id: 56 Name: \"value\" TypeId: " + ToString<int>(NScheme::NTypeIds::Utf8) + " }\n"
+        "KeyColumnIds: [ 34, 35 ]\n"
+        "PartitionConfig { ColumnFamilies { Id: 0 Storage: ColumnStorageTest_1_2_1k } }\n"
+        ;
+
     TString specialKeyValueSchemeText =
         "Name: \"table1\"\n"
         "Id_Deprecated: 13\n"
@@ -259,9 +259,9 @@ void TTester::CreateSchema(ESchema schema, const TOptions& opts) {
     case ESchema_DoubleKV:
         CreateDataShard(proxy, TTestTxConfig::TxTablet0, doubleKeyValueSchemeText, true);
         break;
-    case ESchema_DoubleKVExternal: 
+    case ESchema_DoubleKVExternal:
         CreateDataShard(proxy, TTestTxConfig::TxTablet0, doubleKeyValueExternalSchemeText, true);
-        break; 
+        break;
     case ESchema_SpecialKV:
         CreateDataShard(proxy, TTestTxConfig::TxTablet0, specialKeyValueSchemeText, true);
         break;
@@ -283,9 +283,9 @@ TRuntimeNode TEngineHolder::ProgramText2Bin(TTester& tester, const TString& prog
         &Env, &tester.DbSchemeResolver
     );
 
-    const TDuration TIME_LIMIT = TDuration::Seconds(NValgrind::PlainOrUnderValgrind(60, 300)); 
-    Y_VERIFY(resFuture.Wait(TIME_LIMIT), "ProgramText2Bin is taking too long to compile"); 
-    NYql::TConvertResult res = resFuture.GetValue(); 
+    const TDuration TIME_LIMIT = TDuration::Seconds(NValgrind::PlainOrUnderValgrind(60, 300));
+    Y_VERIFY(resFuture.Wait(TIME_LIMIT), "ProgramText2Bin is taking too long to compile");
+    NYql::TConvertResult res = resFuture.GetValue();
     res.Errors.PrintTo(Cerr);
     UNIT_ASSERT(res.Node.GetNode());
     return res.Node;
@@ -359,7 +359,7 @@ ui32 TFakeProxyTx::GetShardProgram(ui32 idx, TString& outTxBody) {
 }
 
 void TFakeProxyTx::AddProposeShardResult(ui32 shardId, const TEvDataShard::TEvProposeTransactionResult * event) {
-    if (event->IsExecError() || event->IsError()) { 
+    if (event->IsExecError() || event->IsError()) {
         for (auto err : event->Record.GetError()) {
             Cerr << "DataShard error: " << shardId << ", kind: " <<
                 NKikimrTxDataShard::TError::EKind_Name(err.GetKind()) << ", reason: " << err.GetReason() << Endl;
@@ -370,10 +370,10 @@ void TFakeProxyTx::AddProposeShardResult(ui32 shardId, const TEvDataShard::TEvPr
     if (event->IsComplete()) {
         Engine->AddShardReply(event->GetOrigin(), event->Record.GetTxResult());
         Engine->FinalizeOriginReplies(shardId);
-    } else if (event->IsPrepared()) { 
-        Shards.push_back(shardId); 
-        MinStep = Max(MinStep, event->Record.GetMinStep()); 
-        MaxStep = Min(MaxStep, event->Record.GetMaxStep()); 
+    } else if (event->IsPrepared()) {
+        Shards.push_back(shardId);
+        MinStep = Max(MinStep, event->Record.GetMinStep());
+        MaxStep = Min(MaxStep, event->Record.GetMaxStep());
     } else {
         UNIT_ASSERT(event->IsExecError() || event->IsError() || event->IsBadRequest());
     }
@@ -531,7 +531,7 @@ IEngineFlat::EStatus TFakeMiniKQLProxy::Execute(const TString& programText,
     return status;
 }
 
-IEngineFlat::EStatus TFakeMiniKQLProxy::ExecSchemeCreateTable(const TString& tableDesc, const TVector<ui64>& shards) { 
+IEngineFlat::EStatus TFakeMiniKQLProxy::ExecSchemeCreateTable(const TString& tableDesc, const TVector<ui64>& shards) {
     ui64 txId = ++LastTxId_;
     ui64 stepId = ++LastStep_;
     TMap<ui64, TFakeProxyTx::TPtr> txs;
@@ -539,11 +539,11 @@ IEngineFlat::EStatus TFakeMiniKQLProxy::ExecSchemeCreateTable(const TString& tab
     TFakeProxyTx& tx = *(txs.begin()->second);
     tx.SetKindSchema();
 
-    ProposeSchemeCreateTable(tx, shards); 
-    if (stepId < tx.MinStep) { 
-        stepId = LastStep_ = tx.MinStep; 
-    } 
-    UNIT_ASSERT(tx.MaxStep == Max<ui64>()); 
+    ProposeSchemeCreateTable(tx, shards);
+    if (stepId < tx.MinStep) {
+        stepId = LastStep_ = tx.MinStep;
+    }
+    UNIT_ASSERT(tx.MaxStep == Max<ui64>());
     LastStep_ = Plan(stepId, txs);
     return IEngineFlat::EStatus::Complete;
 }
@@ -559,33 +559,33 @@ void TFakeMiniKQLProxy::Cancel(ui64 txId) {
 }
 #endif
 
-void TFakeMiniKQLProxy::ProposeSchemeCreateTable(TFakeProxyTx& tx, const TVector<ui64>& shards) { 
+void TFakeMiniKQLProxy::ProposeSchemeCreateTable(TFakeProxyTx& tx, const TVector<ui64>& shards) {
     const TString& schemaText = tx.TxBody();
     NKikimrSchemeOp::TTableDescription tableDesc;
     bool parsed = NProtoBuf::TextFormat::ParseFromString(schemaText, &tableDesc);
     UNIT_ASSERT(parsed);
 
-    auto txBodyForShard = [&](ui64 shard) { 
-        Y_UNUSED(shard); 
- 
-        NKikimrTxDataShard::TFlatSchemeTransaction schemeTx; 
-        schemeTx.MutableCreateTable()->CopyFrom(tableDesc); 
-        return schemeTx; 
-    }; 
- 
-    return ProposeScheme(tx, shards, txBodyForShard); 
-} 
- 
-void TFakeMiniKQLProxy::ProposeScheme(TFakeProxyTx& tx, const TVector<ui64>& shards, 
-        const std::function<NKikimrTxDataShard::TFlatSchemeTransaction(ui64)>& txBodyForShard) 
-{ 
+    auto txBodyForShard = [&](ui64 shard) {
+        Y_UNUSED(shard);
+
+        NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+        schemeTx.MutableCreateTable()->CopyFrom(tableDesc);
+        return schemeTx;
+    };
+
+    return ProposeScheme(tx, shards, txBodyForShard);
+}
+
+void TFakeMiniKQLProxy::ProposeScheme(TFakeProxyTx& tx, const TVector<ui64>& shards,
+        const std::function<NKikimrTxDataShard::TFlatSchemeTransaction(ui64)>& txBodyForShard)
+{
     NKikimrTxDataShard::ETransactionKind kind = NKikimrTxDataShard::TX_KIND_SCHEME;
 
     ui64 txId = tx.TxId();
     bool hasErrors = false;
     for (ui32 i = 0; i < shards.size(); ++i) {
         ui64 shardId = shards[i];
-        auto txBody = txBodyForShard(shards[i]).SerializeAsString(); 
+        auto txBody = txBodyForShard(shards[i]).SerializeAsString();
         ui32 txFlags = NDataShard::TTxFlags::Default;
 
         for (;;) {
@@ -618,8 +618,8 @@ void TFakeMiniKQLProxy::ProposeScheme(TFakeProxyTx& tx, const TVector<ui64>& sha
 
             UNIT_ASSERT(event->IsPrepared());
             tx.Shards.push_back(shardId);
-            tx.MinStep = Max(tx.MinStep, event->Record.GetMinStep()); 
-            tx.MaxStep = Min(tx.MaxStep, event->Record.GetMaxStep()); 
+            tx.MinStep = Max(tx.MinStep, event->Record.GetMinStep());
+            tx.MaxStep = Min(tx.MaxStep, event->Record.GetMaxStep());
             break;
         }
     }
@@ -1147,27 +1147,27 @@ void CreateShardedTable(Tests::TServer::TPtr server,
 
         if (opts.Policy_) {
             opts.Policy_->Serialize(*desc->MutablePartitionConfig()->MutableCompactionPolicy());
-        } 
- 
+        }
+
         switch (opts.ShadowData_) {
-            case EShadowDataMode::Default: 
-                break; 
-            case EShadowDataMode::Enabled: 
+            case EShadowDataMode::Default:
+                break;
+            case EShadowDataMode::Enabled:
                 desc->MutablePartitionConfig()->SetShadowData(true);
-                break; 
-        } 
- 
-        if (opts.Followers_ > 0) { 
-            auto& followerGroup = *desc->MutablePartitionConfig()->AddFollowerGroups(); 
-            followerGroup.SetFollowerCount(opts.Followers_); 
-            followerGroup.SetAllowLeaderPromotion(opts.FollowerPromotion_); 
-        } 
- 
-        if (opts.ExternalStorage_) { 
-            auto& family = *desc->MutablePartitionConfig()->AddColumnFamilies(); 
-            family.SetStorage(NKikimrSchemeOp::ColumnStorageTest_1_2_1k); 
-        } 
- 
+                break;
+        }
+
+        if (opts.Followers_ > 0) {
+            auto& followerGroup = *desc->MutablePartitionConfig()->AddFollowerGroups();
+            followerGroup.SetFollowerCount(opts.Followers_);
+            followerGroup.SetAllowLeaderPromotion(opts.FollowerPromotion_);
+        }
+
+        if (opts.ExternalStorage_) {
+            auto& family = *desc->MutablePartitionConfig()->AddColumnFamilies();
+            family.SetStorage(NKikimrSchemeOp::ColumnStorageTest_1_2_1k);
+        }
+
         runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
         auto reply = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
@@ -1251,328 +1251,328 @@ std::pair<TTableInfoMap, ui64> GetTables(
     return std::make_pair(result, ownerId);
 }
 
-TTableId ResolveTableId( 
-        Tests::TServer::TPtr server, 
+TTableId ResolveTableId(
+        Tests::TServer::TPtr server,
         TActorId sender,
-        const TString& path) 
-{ 
-    auto& runtime = *server->GetRuntime(); 
- 
-    { 
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate()); 
-        auto& entry = request->ResultSet.emplace_back(); 
-        entry.Path = SplitPath(path); 
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable; 
+        const TString& path)
+{
+    auto& runtime = *server->GetRuntime();
+
+    {
+        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Path = SplitPath(path);
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
         entry.ShowPrivatePath = true;
-        runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender, new TEvTxProxySchemeCache::TEvNavigateKeySet(request))); 
-    } 
- 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender); 
-    NSchemeCache::TSchemeCacheNavigate* req = ev->Get()->Request.Get(); 
-    Y_VERIFY(req->ErrorCount == 0); 
- 
-    auto& res = req->ResultSet.at(0); 
-    return res.TableId; 
-} 
- 
-NTable::TRowVersionRanges GetRemovedRowVersions( 
-        Tests::TServer::TPtr server, 
-        ui64 shardId) 
-{ 
-    auto& runtime = *server->GetRuntime(); 
-    TActorId sender = runtime.AllocateEdgeActor(); 
- 
-    { 
-        auto request = MakeHolder<TEvDataShard::TEvGetRemovedRowVersions>(TPathId{}); 
+        runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender, new TEvTxProxySchemeCache::TEvNavigateKeySet(request)));
+    }
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender);
+    NSchemeCache::TSchemeCacheNavigate* req = ev->Get()->Request.Get();
+    Y_VERIFY(req->ErrorCount == 0);
+
+    auto& res = req->ResultSet.at(0);
+    return res.TableId;
+}
+
+NTable::TRowVersionRanges GetRemovedRowVersions(
+        Tests::TServer::TPtr server,
+        ui64 shardId)
+{
+    auto& runtime = *server->GetRuntime();
+    TActorId sender = runtime.AllocateEdgeActor();
+
+    {
+        auto request = MakeHolder<TEvDataShard::TEvGetRemovedRowVersions>(TPathId{});
         ForwardToTablet(runtime, shardId, sender, request.Release());
-    } 
- 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetRemovedRowVersionsResult>(sender); 
-    return ev->Get()->RemovedRowVersions; 
-} 
- 
-TRowVersion CreateVolatileSnapshot( 
-        Tests::TServer::TPtr server, 
-        const TVector<TString>& tables, 
-        TDuration timeout) 
-{ 
-    auto& runtime = *server->GetRuntime(); 
- 
+    }
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetRemovedRowVersionsResult>(sender);
+    return ev->Get()->RemovedRowVersions;
+}
+
+TRowVersion CreateVolatileSnapshot(
+        Tests::TServer::TPtr server,
+        const TVector<TString>& tables,
+        TDuration timeout)
+{
+    auto& runtime = *server->GetRuntime();
+
     TActorId sender = runtime.AllocateEdgeActor();
- 
-    { 
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-        auto* tx = request->Record.MutableTransaction()->MutableCreateVolatileSnapshot(); 
-        for (const auto& path : tables) { 
-            tx->AddTables()->SetTablePath(path); 
-        } 
-        tx->SetTimeoutMs(timeout.MilliSeconds()); 
-        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
-    } 
- 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
-    const auto& record = ev->Get()->Record; 
-    auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus()); 
-    Y_VERIFY_S(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, 
-        "Unexpected status " << status); 
- 
-    auto step = record.GetStep(); 
-    auto txId = record.GetTxId(); 
-    Y_VERIFY_S(step != 0 && txId != 0, 
-        "Unexpected step " << step << " and txId " << txId); 
- 
-    return { step, txId }; 
-} 
- 
-bool RefreshVolatileSnapshot( 
-        Tests::TServer::TPtr server, 
-        const TVector<TString>& tables, 
-        TRowVersion snapshot) 
-{ 
-    auto& runtime = *server->GetRuntime(); 
- 
+
+    {
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto* tx = request->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
+        for (const auto& path : tables) {
+            tx->AddTables()->SetTablePath(path);
+        }
+        tx->SetTimeoutMs(timeout.MilliSeconds());
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    }
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    const auto& record = ev->Get()->Record;
+    auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
+    Y_VERIFY_S(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete,
+        "Unexpected status " << status);
+
+    auto step = record.GetStep();
+    auto txId = record.GetTxId();
+    Y_VERIFY_S(step != 0 && txId != 0,
+        "Unexpected step " << step << " and txId " << txId);
+
+    return { step, txId };
+}
+
+bool RefreshVolatileSnapshot(
+        Tests::TServer::TPtr server,
+        const TVector<TString>& tables,
+        TRowVersion snapshot)
+{
+    auto& runtime = *server->GetRuntime();
+
     TActorId sender = runtime.AllocateEdgeActor();
- 
-    { 
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-        auto* tx = request->Record.MutableTransaction()->MutableRefreshVolatileSnapshot(); 
-        for (const auto& path : tables) { 
-            tx->AddTables()->SetTablePath(path); 
-        } 
-        tx->SetSnapshotStep(snapshot.Step); 
-        tx->SetSnapshotTxId(snapshot.TxId); 
-        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
-    } 
- 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
-    const auto& record = ev->Get()->Record; 
-    auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus()); 
-    return status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete; 
-} 
- 
-bool DiscardVolatileSnapshot( 
-        Tests::TServer::TPtr server, 
-        const TVector<TString>& tables, 
-        TRowVersion snapshot) 
-{ 
-    auto& runtime = *server->GetRuntime(); 
- 
+
+    {
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto* tx = request->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
+        for (const auto& path : tables) {
+            tx->AddTables()->SetTablePath(path);
+        }
+        tx->SetSnapshotStep(snapshot.Step);
+        tx->SetSnapshotTxId(snapshot.TxId);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    }
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    const auto& record = ev->Get()->Record;
+    auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
+    return status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete;
+}
+
+bool DiscardVolatileSnapshot(
+        Tests::TServer::TPtr server,
+        const TVector<TString>& tables,
+        TRowVersion snapshot)
+{
+    auto& runtime = *server->GetRuntime();
+
     TActorId sender = runtime.AllocateEdgeActor();
- 
-    { 
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-        auto* tx = request->Record.MutableTransaction()->MutableDiscardVolatileSnapshot(); 
-        for (const auto& path : tables) { 
-            tx->AddTables()->SetTablePath(path); 
-        } 
-        tx->SetSnapshotStep(snapshot.Step); 
-        tx->SetSnapshotTxId(snapshot.TxId); 
-        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
-    } 
- 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
-    const auto& record = ev->Get()->Record; 
-    auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus()); 
-    return status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete; 
-} 
- 
-void ApplyChanges( 
-        const Tests::TServer::TPtr& server, 
-        ui64 shardId, 
-        const TTableId& tableId, 
-        const TString& sourceId, 
-        const TVector<TChange>& changes, 
-        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus expected) 
-{ 
-    auto &runtime = *server->GetRuntime(); 
- 
-    auto evReq = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion); 
-    evReq->Record.SetSource(sourceId); 
-    for (const auto& change : changes) { 
-        auto* p = evReq->Record.AddChanges(); 
-        p->SetSourceOffset(change.Offset); 
-        p->SetWriteTxId(change.WriteTxId); 
-        TCell keyCell = TCell::Make(change.Key); 
-        p->SetKey(TSerializedCellVec::Serialize({ &keyCell, 1 })); 
-        auto* u = p->MutableUpsert(); 
-        u->AddTags(2); 
-        TCell valueCell = TCell::Make(change.Value); 
-        u->SetData(TSerializedCellVec::Serialize({ &valueCell, 1 })); 
-    } 
- 
-    auto sender = runtime.AllocateEdgeActor(); 
-    runtime.SendToPipe(shardId, sender, evReq.Release(), 0, GetPipeConfigWithRetries()); 
- 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(sender); 
-    auto status = ev->Get()->Record.GetStatus(); 
-    UNIT_ASSERT_C(status == expected, 
-        "Unexpected status " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(status) 
-        << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected)); 
-} 
- 
-TRowVersion CommitWrites( 
-        Tests::TServer::TPtr server, 
-        const TVector<TString>& tables, 
-        ui64 writeTxId) 
-{ 
-    auto& runtime = *server->GetRuntime(); 
- 
-    TActorId sender = runtime.AllocateEdgeActor(); 
- 
-    { 
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-        auto* tx = request->Record.MutableTransaction()->MutableCommitWrites(); 
-        for (const auto& path : tables) { 
-            tx->AddTables()->SetTablePath(path); 
-        } 
-        tx->SetWriteTxId(writeTxId); 
-        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
-    } 
- 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
-    const auto& record = ev->Get()->Record; 
-    auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus()); 
-    Y_VERIFY_S(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, 
-        "Unexpected status " << status); 
- 
-    auto step = record.GetStep(); 
-    auto txId = record.GetTxId(); 
-    Y_VERIFY_S(txId != 0, 
-        "Unexpected step " << step << " and txId " << txId); 
- 
-    return { step, txId }; 
-} 
- 
-ui64 AsyncSplitTable( 
-        Tests::TServer::TPtr server, 
+
+    {
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto* tx = request->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
+        for (const auto& path : tables) {
+            tx->AddTables()->SetTablePath(path);
+        }
+        tx->SetSnapshotStep(snapshot.Step);
+        tx->SetSnapshotTxId(snapshot.TxId);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    }
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    const auto& record = ev->Get()->Record;
+    auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
+    return status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete;
+}
+
+void ApplyChanges(
+        const Tests::TServer::TPtr& server,
+        ui64 shardId,
+        const TTableId& tableId,
+        const TString& sourceId,
+        const TVector<TChange>& changes,
+        NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus expected)
+{
+    auto &runtime = *server->GetRuntime();
+
+    auto evReq = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>(tableId.PathId, tableId.SchemaVersion);
+    evReq->Record.SetSource(sourceId);
+    for (const auto& change : changes) {
+        auto* p = evReq->Record.AddChanges();
+        p->SetSourceOffset(change.Offset);
+        p->SetWriteTxId(change.WriteTxId);
+        TCell keyCell = TCell::Make(change.Key);
+        p->SetKey(TSerializedCellVec::Serialize({ &keyCell, 1 }));
+        auto* u = p->MutableUpsert();
+        u->AddTags(2);
+        TCell valueCell = TCell::Make(change.Value);
+        u->SetData(TSerializedCellVec::Serialize({ &valueCell, 1 }));
+    }
+
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(shardId, sender, evReq.Release(), 0, GetPipeConfigWithRetries());
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvApplyReplicationChangesResult>(sender);
+    auto status = ev->Get()->Record.GetStatus();
+    UNIT_ASSERT_C(status == expected,
+        "Unexpected status " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(status)
+        << ", expected " << NKikimrTxDataShard::TEvApplyReplicationChangesResult::EStatus_Name(expected));
+}
+
+TRowVersion CommitWrites(
+        Tests::TServer::TPtr server,
+        const TVector<TString>& tables,
+        ui64 writeTxId)
+{
+    auto& runtime = *server->GetRuntime();
+
+    TActorId sender = runtime.AllocateEdgeActor();
+
+    {
+        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto* tx = request->Record.MutableTransaction()->MutableCommitWrites();
+        for (const auto& path : tables) {
+            tx->AddTables()->SetTablePath(path);
+        }
+        tx->SetWriteTxId(writeTxId);
+        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    }
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    const auto& record = ev->Get()->Record;
+    auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
+    Y_VERIFY_S(status == TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete,
+        "Unexpected status " << status);
+
+    auto step = record.GetStep();
+    auto txId = record.GetTxId();
+    Y_VERIFY_S(txId != 0,
+        "Unexpected step " << step << " and txId " << txId);
+
+    return { step, txId };
+}
+
+ui64 AsyncSplitTable(
+        Tests::TServer::TPtr server,
         TActorId sender,
-        const TString& path, 
-        ui64 sourceTablet, 
-        ui32 splitKey) 
-{ 
-    auto &runtime = *server->GetRuntime(); 
- 
-    // Create table with four shards. 
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-    request->Record.SetExecTimeoutPeriod(Max<ui64>()); 
-    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme(); 
+        const TString& path,
+        ui64 sourceTablet,
+        ui32 splitKey)
+{
+    auto &runtime = *server->GetRuntime();
+
+    // Create table with four shards.
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
     tx.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
-    auto &desc = *tx.MutableSplitMergeTablePartitions(); 
-    desc.SetTablePath(path); 
-    desc.AddSourceTabletId(sourceTablet); 
-    desc.AddSplitBoundary()->MutableKeyPrefix()->AddTuple()->MutableOptional()->SetUint32(splitKey); 
- 
-    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, /* viaActorSystem */ true); 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress); 
-    return ev->Get()->Record.GetTxId(); 
-} 
- 
-ui64 AsyncMergeTable( 
-        Tests::TServer::TPtr server, 
+    auto &desc = *tx.MutableSplitMergeTablePartitions();
+    desc.SetTablePath(path);
+    desc.AddSourceTabletId(sourceTablet);
+    desc.AddSplitBoundary()->MutableKeyPrefix()->AddTuple()->MutableOptional()->SetUint32(splitKey);
+
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()), 0, /* viaActorSystem */ true);
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+    return ev->Get()->Record.GetTxId();
+}
+
+ui64 AsyncMergeTable(
+        Tests::TServer::TPtr server,
         TActorId sender,
-        const TString& path, 
-        const TVector<ui64>& sourceTabletIds) 
-{ 
-    auto &runtime = *server->GetRuntime(); 
- 
-    // Create table with four shards. 
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-    request->Record.SetExecTimeoutPeriod(Max<ui64>()); 
-    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme(); 
+        const TString& path,
+        const TVector<ui64>& sourceTabletIds)
+{
+    auto &runtime = *server->GetRuntime();
+
+    // Create table with four shards.
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
     tx.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
-    auto &desc = *tx.MutableSplitMergeTablePartitions(); 
-    desc.SetTablePath(path); 
-    for (ui64 tabletId : sourceTabletIds) { 
-        desc.AddSourceTabletId(tabletId); 
-    } 
- 
-    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress); 
-    return ev->Get()->Record.GetTxId(); 
-} 
- 
-ui64 AsyncAlterAddExtraColumn( 
-        Tests::TServer::TPtr server, 
-        const TString& workingDir, 
-        const TString& name) 
-{ 
-    auto &runtime = *server->GetRuntime(); 
-    auto sender = runtime.AllocateEdgeActor(); 
- 
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-    request->Record.SetExecTimeoutPeriod(Max<ui64>()); 
-    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme(); 
+    auto &desc = *tx.MutableSplitMergeTablePartitions();
+    desc.SetTablePath(path);
+    for (ui64 tabletId : sourceTabletIds) {
+        desc.AddSourceTabletId(tabletId);
+    }
+
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+    return ev->Get()->Record.GetTxId();
+}
+
+ui64 AsyncAlterAddExtraColumn(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name)
+{
+    auto &runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
     tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-    tx.SetWorkingDir(workingDir); 
-    auto &desc = *tx.MutableAlterTable(); 
-    desc.SetName(name); 
- 
-    auto* col = desc.AddColumns(); 
-    col->SetName("extra"); 
-    col->SetType("Uint32"); 
- 
-    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress); 
-    return ev->Get()->Record.GetTxId(); 
-} 
- 
-ui64 AsyncAlterDropColumn( 
-        Tests::TServer::TPtr server, 
-        const TString& workingDir, 
-        const TString& name, 
-        const TString& colName) 
-{ 
-    auto &runtime = *server->GetRuntime(); 
-    auto sender = runtime.AllocateEdgeActor(); 
- 
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-    request->Record.SetExecTimeoutPeriod(Max<ui64>()); 
-    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme(); 
+    tx.SetWorkingDir(workingDir);
+    auto &desc = *tx.MutableAlterTable();
+    desc.SetName(name);
+
+    auto* col = desc.AddColumns();
+    col->SetName("extra");
+    col->SetType("Uint32");
+
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+    return ev->Get()->Record.GetTxId();
+}
+
+ui64 AsyncAlterDropColumn(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        const TString& colName)
+{
+    auto &runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
     tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-    tx.SetWorkingDir(workingDir); 
-    auto &desc = *tx.MutableAlterTable(); 
-    desc.SetName(name); 
- 
-    auto* col = desc.AddDropColumns(); 
-    col->SetName(colName); 
- 
-    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress); 
-    return ev->Get()->Record.GetTxId(); 
-} 
- 
-ui64 AsyncAlterAndDisableShadow( 
-        Tests::TServer::TPtr server, 
-        const TString& workingDir, 
-        const TString& name, 
-        const NLocalDb::TCompactionPolicy* policy) 
-{ 
-    auto &runtime = *server->GetRuntime(); 
-    auto sender = runtime.AllocateEdgeActor(); 
- 
-    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-    request->Record.SetExecTimeoutPeriod(Max<ui64>()); 
-    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme(); 
+    tx.SetWorkingDir(workingDir);
+    auto &desc = *tx.MutableAlterTable();
+    desc.SetName(name);
+
+    auto* col = desc.AddDropColumns();
+    col->SetName(colName);
+
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+    return ev->Get()->Record.GetTxId();
+}
+
+ui64 AsyncAlterAndDisableShadow(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& name,
+        const NLocalDb::TCompactionPolicy* policy)
+{
+    auto &runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    request->Record.SetExecTimeoutPeriod(Max<ui64>());
+    auto &tx = *request->Record.MutableTransaction()->MutableModifyScheme();
     tx.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
-    tx.SetWorkingDir(workingDir); 
-    auto &desc = *tx.MutableAlterTable(); 
-    desc.SetName(name); 
-    desc.MutablePartitionConfig()->SetShadowData(false); 
- 
-    if (policy) { 
-        policy->Serialize(*desc.MutablePartitionConfig()->MutableCompactionPolicy()); 
-    } 
- 
-    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release())); 
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender); 
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress); 
-    return ev->Get()->Record.GetTxId(); 
-} 
- 
+    tx.SetWorkingDir(workingDir);
+    auto &desc = *tx.MutableAlterTable();
+    desc.SetName(name);
+    desc.MutablePartitionConfig()->SetShadowData(false);
+
+    if (policy) {
+        policy->Serialize(*desc.MutablePartitionConfig()->MutableCompactionPolicy());
+    }
+
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress);
+    return ev->Get()->Record.GetTxId();
+}
+
 ui64 AsyncAlterAddIndex(
         Tests::TServer::TPtr server,
         const TString& dbName,
@@ -1689,29 +1689,29 @@ ui64 AsyncAlterDropStream(
 }
 
 void WaitTxNotification(Tests::TServer::TPtr server, TActorId sender, ui64 txId) {
-    auto &runtime = *server->GetRuntime(); 
-    auto &settings = server->GetSettings(); 
- 
+    auto &runtime = *server->GetRuntime();
+    auto &settings = server->GetSettings();
+
     auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
-    request->Record.SetTxId(txId); 
-    auto tid = ChangeStateStorage(SchemeRoot, settings.Domain); 
-    runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries()); 
+    request->Record.SetTxId(txId);
+    auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
+    runtime.SendToPipe(tid, sender, request.Release(), 0, GetPipeConfigWithRetries());
     runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvNotifyTxCompletionResult>(sender);
-} 
- 
-void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId) { 
-    auto &runtime = *server->GetRuntime(); 
-    auto sender = runtime.AllocateEdgeActor(); 
-    WaitTxNotification(server, sender, txId); 
-} 
- 
-void SimulateSleep(Tests::TServer::TPtr server, TDuration duration) { 
-    auto &runtime = *server->GetRuntime(); 
-    auto sender = runtime.AllocateEdgeActor(); 
-    runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration); 
-    runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender); 
-} 
- 
+}
+
+void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId) {
+    auto &runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+    WaitTxNotification(server, sender, txId);
+}
+
+void SimulateSleep(Tests::TServer::TPtr server, TDuration duration) {
+    auto &runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
+    runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
+}
+
 void SendSQL(Tests::TServer::TPtr server,
              TActorId sender,
              const TString &sql,
@@ -1733,8 +1733,8 @@ void ExecSQL(Tests::TServer::TPtr server,
 
     auto request = MakeSQLRequest(sql, dml);
     runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
-    auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender); 
-    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code); 
+    auto ev = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetRef().GetYdbStatus(), code);
 }
 
 void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)
@@ -1765,150 +1765,150 @@ void WaitTabletBecomesOffline(TServer::TPtr server, ui64 tabletId)
     server->GetRuntime()->DispatchEvents(options);
 }
 
-namespace { 
- 
-    class TReadTableImpl : public TActorBootstrapped<TReadTableImpl> { 
-    public: 
-        enum EEv { 
-            EvResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE), 
-            EvResume, 
-        }; 
- 
-        enum class EState { 
-            PauseWait, 
-            PauseSent, 
-            Normal, 
-        }; 
- 
-        struct TEvResult : public TEventLocal<TEvResult, EvResult> { 
-            TString Result; 
- 
-            TEvResult(TString result) 
-                : Result(std::move(result)) 
-            { } 
-        }; 
- 
-        struct TEvResume : public TEventLocal<TEvResume, EvResume> { 
-            // nothing 
-        }; 
- 
-        TReadTableImpl(TActorId owner, const TString& path, TRowVersion snapshot, bool pause, bool ordered) 
-            : Owner(owner) 
-            , Path(path) 
-            , Snapshot(snapshot) 
-            , Ordered(ordered) 
-            , State(pause ? EState::PauseWait : EState::Normal) 
-        { } 
- 
-        void Bootstrap(const TActorContext& ctx) { 
-            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>(); 
-            request->Record.SetStreamResponse(true); 
-            auto &tx = *request->Record.MutableTransaction()->MutableReadTableTransaction(); 
-            tx.SetPath(Path); 
-            tx.SetOrdered(Ordered); 
-            tx.SetApiVersion(NKikimrTxUserProxy::TReadTableTransaction::YDB_V1); 
- 
-            if (!Snapshot.IsMax()) { 
-                tx.SetSnapshotStep(Snapshot.Step); 
-                tx.SetSnapshotTxId(Snapshot.TxId); 
-            } 
- 
-            ctx.Send(MakeTxProxyID(), request.Release()); 
- 
-            Become(&TThis::StateWork); 
-        } 
- 
-        STRICT_STFUNC(StateWork, 
-            HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle) 
-            HFunc(TEvTxProcessing::TEvStreamQuotaRequest, Handle) 
-            HFunc(TEvTxProcessing::TEvStreamQuotaRelease, Handle) 
-            IgnoreFunc(TEvents::TEvSubscribe) 
-            HFunc(TEvResume, Handle) 
-        ) 
- 
-        void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) { 
-            const auto* msg = ev->Get(); 
- 
-            const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus()); 
-            switch (status) { 
-                case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResponseData: { 
-                    const auto rsData = msg->Record.GetSerializedReadTableResponse(); 
-                    Ydb::ResultSet rsParsed; 
-                    Y_VERIFY(rsParsed.ParseFromString(rsData)); 
-                    NYdb::TResultSet rs(rsParsed); 
-                    auto& columns = rs.GetColumnsMeta(); 
-                    NYdb::TResultSetParser parser(rs); 
-                    while (parser.TryNextRow()) { 
-                        for (size_t idx = 0; idx < columns.size(); ++idx) { 
-                            if (idx > 0) { 
-                                Result << ", "; 
-                            } 
-                            Result << columns[idx].Name << " = "; 
+namespace {
+
+    class TReadTableImpl : public TActorBootstrapped<TReadTableImpl> {
+    public:
+        enum EEv {
+            EvResult = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+            EvResume,
+        };
+
+        enum class EState {
+            PauseWait,
+            PauseSent,
+            Normal,
+        };
+
+        struct TEvResult : public TEventLocal<TEvResult, EvResult> {
+            TString Result;
+
+            TEvResult(TString result)
+                : Result(std::move(result))
+            { }
+        };
+
+        struct TEvResume : public TEventLocal<TEvResume, EvResume> {
+            // nothing
+        };
+
+        TReadTableImpl(TActorId owner, const TString& path, TRowVersion snapshot, bool pause, bool ordered)
+            : Owner(owner)
+            , Path(path)
+            , Snapshot(snapshot)
+            , Ordered(ordered)
+            , State(pause ? EState::PauseWait : EState::Normal)
+        { }
+
+        void Bootstrap(const TActorContext& ctx) {
+            auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+            request->Record.SetStreamResponse(true);
+            auto &tx = *request->Record.MutableTransaction()->MutableReadTableTransaction();
+            tx.SetPath(Path);
+            tx.SetOrdered(Ordered);
+            tx.SetApiVersion(NKikimrTxUserProxy::TReadTableTransaction::YDB_V1);
+
+            if (!Snapshot.IsMax()) {
+                tx.SetSnapshotStep(Snapshot.Step);
+                tx.SetSnapshotTxId(Snapshot.TxId);
+            }
+
+            ctx.Send(MakeTxProxyID(), request.Release());
+
+            Become(&TThis::StateWork);
+        }
+
+        STRICT_STFUNC(StateWork,
+            HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle)
+            HFunc(TEvTxProcessing::TEvStreamQuotaRequest, Handle)
+            HFunc(TEvTxProcessing::TEvStreamQuotaRelease, Handle)
+            IgnoreFunc(TEvents::TEvSubscribe)
+            HFunc(TEvResume, Handle)
+        )
+
+        void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
+            const auto* msg = ev->Get();
+
+            const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
+            switch (status) {
+                case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecResponseData: {
+                    const auto rsData = msg->Record.GetSerializedReadTableResponse();
+                    Ydb::ResultSet rsParsed;
+                    Y_VERIFY(rsParsed.ParseFromString(rsData));
+                    NYdb::TResultSet rs(rsParsed);
+                    auto& columns = rs.GetColumnsMeta();
+                    NYdb::TResultSetParser parser(rs);
+                    while (parser.TryNextRow()) {
+                        for (size_t idx = 0; idx < columns.size(); ++idx) {
+                            if (idx > 0) {
+                                Result << ", ";
+                            }
+                            Result << columns[idx].Name << " = ";
                             PrintValue(Result, parser.ColumnParser(idx));
-                        } 
-                        Result << Endl; 
-                    } 
-                    break; 
-                } 
-                case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete: { 
-                    ctx.Send(Owner, new TEvResult(Result)); 
-                    return Die(ctx); 
-                } 
-                default: { 
-                    Result << "ERROR: " << status << Endl; 
-                    ctx.Send(Owner, new TEvResult(Result)); 
-                    return Die(ctx); 
-                } 
-            } 
-        } 
- 
-        void Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr& ev, const TActorContext& ctx) { 
-            const auto* msg = ev->Get(); 
- 
-            auto& req = QuotaRequests.emplace_back(); 
-            req.Sender = ev->Sender; 
-            req.Cookie = ev->Cookie; 
-            req.TxId = msg->Record.GetTxId(); 
- 
-            switch (State) { 
-                case EState::PauseWait: 
-                    ctx.Send(Owner, new TEvResult("PAUSED")); 
-                    State = EState::PauseSent; 
-                    break; 
-                case EState::PauseSent: 
-                    break; 
-                case EState::Normal: 
-                    SendQuotas(ctx); 
-                    break; 
-            } 
-        } 
- 
-        void Handle(TEvTxProcessing::TEvStreamQuotaRelease::TPtr& ev, const TActorContext& ctx) { 
-            Y_UNUSED(ev); 
-            Y_UNUSED(ctx); 
-        } 
- 
-        void Handle(TEvResume::TPtr&, const TActorContext& ctx) { 
-            Y_VERIFY(State == EState::PauseSent); 
-            State = EState::Normal; 
-            SendQuotas(ctx); 
-        } 
- 
-        void SendQuotas(const TActorContext& ctx) { 
-            while (QuotaRequests) { 
-                auto& req = QuotaRequests.front(); 
- 
-                auto response = MakeHolder<TEvTxProcessing::TEvStreamQuotaResponse>(); 
-                response->Record.SetTxId(req.TxId); 
-                response->Record.SetMessageSizeLimit(16 * 1024 * 1024); 
-                response->Record.SetReservedMessages(1); 
- 
-                ctx.Send(req.Sender, response.Release(), 0, req.Cookie); 
- 
-                QuotaRequests.pop_front(); 
-            } 
-        } 
- 
+                        }
+                        Result << Endl;
+                    }
+                    break;
+                }
+                case TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete: {
+                    ctx.Send(Owner, new TEvResult(Result));
+                    return Die(ctx);
+                }
+                default: {
+                    Result << "ERROR: " << status << Endl;
+                    ctx.Send(Owner, new TEvResult(Result));
+                    return Die(ctx);
+                }
+            }
+        }
+
+        void Handle(TEvTxProcessing::TEvStreamQuotaRequest::TPtr& ev, const TActorContext& ctx) {
+            const auto* msg = ev->Get();
+
+            auto& req = QuotaRequests.emplace_back();
+            req.Sender = ev->Sender;
+            req.Cookie = ev->Cookie;
+            req.TxId = msg->Record.GetTxId();
+
+            switch (State) {
+                case EState::PauseWait:
+                    ctx.Send(Owner, new TEvResult("PAUSED"));
+                    State = EState::PauseSent;
+                    break;
+                case EState::PauseSent:
+                    break;
+                case EState::Normal:
+                    SendQuotas(ctx);
+                    break;
+            }
+        }
+
+        void Handle(TEvTxProcessing::TEvStreamQuotaRelease::TPtr& ev, const TActorContext& ctx) {
+            Y_UNUSED(ev);
+            Y_UNUSED(ctx);
+        }
+
+        void Handle(TEvResume::TPtr&, const TActorContext& ctx) {
+            Y_VERIFY(State == EState::PauseSent);
+            State = EState::Normal;
+            SendQuotas(ctx);
+        }
+
+        void SendQuotas(const TActorContext& ctx) {
+            while (QuotaRequests) {
+                auto& req = QuotaRequests.front();
+
+                auto response = MakeHolder<TEvTxProcessing::TEvStreamQuotaResponse>();
+                response->Record.SetTxId(req.TxId);
+                response->Record.SetMessageSizeLimit(16 * 1024 * 1024);
+                response->Record.SetReservedMessages(1);
+
+                ctx.Send(req.Sender, response.Release(), 0, req.Cookie);
+
+                QuotaRequests.pop_front();
+            }
+        }
+
         static void PrintValue(TStringBuilder& out, NYdb::TValueParser& parser) {
             switch (parser.GetKind()) {
             case NYdb::TTypeParser::ETypeKind::Optional:
@@ -1952,60 +1952,60 @@ namespace {
             #undef PRINT_PRIMITIVE
         }
 
-    private: 
-        struct TPendingRequest { 
+    private:
+        struct TPendingRequest {
             TActorId Sender;
-            ui64 Cookie; 
-            ui64 TxId; 
-        }; 
- 
-    private: 
+            ui64 Cookie;
+            ui64 TxId;
+        };
+
+    private:
         const TActorId Owner;
-        const TString Path; 
-        const TRowVersion Snapshot; 
-        const bool Ordered; 
-        TStringBuilder Result; 
- 
-        EState State; 
-        TDeque<TPendingRequest> QuotaRequests; 
-    }; 
- 
-} // namespace 
- 
-TReadShardedTableState StartReadShardedTable( 
-        Tests::TServer::TPtr server, 
-        const TString& path, 
-        TRowVersion snapshot, 
-        bool pause, 
-        bool ordered) 
-{ 
-    auto& runtime = *server->GetRuntime(); 
-    auto sender = runtime.AllocateEdgeActor(); 
-    auto worker = runtime.Register(new TReadTableImpl(sender, path, snapshot, pause, ordered)); 
-    auto ev = runtime.GrabEdgeEventRethrow<TReadTableImpl::TEvResult>(sender); 
-    TString result = ev->Get()->Result; 
-    if (pause) { 
-        UNIT_ASSERT_VALUES_EQUAL(result, "PAUSED"); 
-    } 
-    return { sender, worker, result }; 
+        const TString Path;
+        const TRowVersion Snapshot;
+        const bool Ordered;
+        TStringBuilder Result;
+
+        EState State;
+        TDeque<TPendingRequest> QuotaRequests;
+    };
+
+} // namespace
+
+TReadShardedTableState StartReadShardedTable(
+        Tests::TServer::TPtr server,
+        const TString& path,
+        TRowVersion snapshot,
+        bool pause,
+        bool ordered)
+{
+    auto& runtime = *server->GetRuntime();
+    auto sender = runtime.AllocateEdgeActor();
+    auto worker = runtime.Register(new TReadTableImpl(sender, path, snapshot, pause, ordered));
+    auto ev = runtime.GrabEdgeEventRethrow<TReadTableImpl::TEvResult>(sender);
+    TString result = ev->Get()->Result;
+    if (pause) {
+        UNIT_ASSERT_VALUES_EQUAL(result, "PAUSED");
+    }
+    return { sender, worker, result };
 }
- 
-void ResumeReadShardedTable( 
-        Tests::TServer::TPtr server, 
-        TReadShardedTableState& state) 
-{ 
-    auto& runtime = *server->GetRuntime(); 
+
+void ResumeReadShardedTable(
+        Tests::TServer::TPtr server,
+        TReadShardedTableState& state)
+{
+    auto& runtime = *server->GetRuntime();
     runtime.Send(new IEventHandle(state.Worker, TActorId(), new TReadTableImpl::TEvResume()), 0, true);
-    auto ev = runtime.GrabEdgeEventRethrow<TReadTableImpl::TEvResult>(state.Sender); 
-    state.Result = ev->Get()->Result; 
-} 
- 
-TString ReadShardedTable( 
-        Tests::TServer::TPtr server, 
-        const TString& path, 
-        TRowVersion snapshot) 
-{ 
-    return StartReadShardedTable(server, path, snapshot, /* pause = */ false).Result; 
-} 
- 
-} 
+    auto ev = runtime.GrabEdgeEventRethrow<TReadTableImpl::TEvResult>(state.Sender);
+    state.Result = ev->Get()->Result;
+}
+
+TString ReadShardedTable(
+        Tests::TServer::TPtr server,
+        const TString& path,
+        TRowVersion snapshot)
+{
+    return StartReadShardedTable(server, path, snapshot, /* pause = */ false).Result;
+}
+
+}

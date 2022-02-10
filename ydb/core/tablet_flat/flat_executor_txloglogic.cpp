@@ -1,20 +1,20 @@
 #include "flat_executor_txloglogic.h"
 #include "flat_executor_counters.h"
 #include "flat_exec_seat.h"
-#include "flat_exec_commit_mgr.h" 
+#include "flat_exec_commit_mgr.h"
 #include "flat_bio_eggs.h"
 #include "logic_redo_batch.h"
 #include "logic_redo_entry.h"
 #include "logic_redo_queue.h"
-#include "probes.h" 
+#include "probes.h"
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 #include <util/system/sanitizers.h>
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-LWTRACE_USING(TABLET_FLAT_PROVIDER) 
- 
+LWTRACE_USING(TABLET_FLAT_PROVIDER)
+
 const static ui64 MaxSizeToEmbedInLog = 2048;
 const static ui64 MaxBytesToBatch = 2 * 1024 * 1024;
 const static ui64 MaxItemsToBatch = 64;
@@ -25,7 +25,7 @@ TLogicRedo::TCompletionEntry::TCompletionEntry(TAutoPtr<TSeat> seat, ui32 step)
 {}
 
 TLogicRedo::TLogicRedo(TAutoPtr<NPageCollection::TSteppedCookieAllocator> cookies, TCommitManager *commitManager, TAutoPtr<NRedo::TQueue> queue)
-    : CommitManager(commitManager) 
+    : CommitManager(commitManager)
     , Cookies(cookies)
     , Batch(new NRedo::TBatch)
     , Queue(queue)
@@ -77,9 +77,9 @@ void CompleteRoTransaction(TAutoPtr<TSeat> seat, const TActorContext &ownerCtx, 
     counters->Percentile()[TExecutorCounters::TX_PERCENTILE_LATENCY_RO].IncrementFor(latencyus);
 
     THPTimer completeTimer;
-    LWTRACK(TransactionCompleteBegin, seat->Self->Orbit, seat->UniqID); 
-    seat->Complete(ownerCtx); 
-    LWTRACK(TransactionCompleteEnd, seat->Self->Orbit, seat->UniqID); 
+    LWTRACK(TransactionCompleteBegin, seat->Self->Orbit, seat->UniqID);
+    seat->Complete(ownerCtx);
+    LWTRACK(TransactionCompleteEnd, seat->Self->Orbit, seat->UniqID);
 
     const ui64 completeTimeus = ui64(1000000. * completeTimer.Passed());
 
@@ -97,7 +97,7 @@ bool TLogicRedo::CommitROTransaction(TAutoPtr<TSeat> seat, const TActorContext &
         CompleteRoTransaction(seat, ownerCtx, Counters, AppTxCounters);
         return true;
     } else {
-        LWTRACK(TransactionReadOnlyWait, seat->Self->Orbit, seat->UniqID, CompletionQueue.back().Step); 
+        LWTRACK(TransactionReadOnlyWait, seat->Self->Orbit, seat->UniqID, CompletionQueue.back().Step);
         CompletionQueue.back().WaitingROTransactions.push_back(seat);
         return false;
     }
@@ -108,7 +108,7 @@ void TLogicRedo::FlushBatchedLog()
     if (TAutoPtr<TLogCommit> commit = Batch->Commit) {
         auto affects = Batch->Affects();
         MakeLogEntry(*commit, Batch->Flush(), affects, true);
-        CommitManager->Commit(commit); 
+        CommitManager->Commit(commit);
     }
 
     Y_VERIFY(Batch->Commit == nullptr, "Batch still has acquired commit");
@@ -121,32 +121,32 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
 
     Y_VERIFY(force || !(change.Scheme || change.Annex));
 
-    const TTxType txType = seat->Self->GetTxType(); 
- 
+    const TTxType txType = seat->Self->GetTxType();
+
     if (auto bytes = change.Redo.size()) {
         Counters->Cumulative()[TMonCo::DB_REDO_WRITTEN_BYTES].Increment(bytes);
-        if (AppTxCounters && txType != UnknownTxType) 
+        if (AppTxCounters && txType != UnknownTxType)
             AppTxCounters->TxCumulative(txType, COUNTER_TT_REDO_WRITTEN_BYTES).Increment(bytes);
-    } 
- 
+    }
+
     if (change.Annex) {
         ui64 bytes = 0;
         for (const auto &one : change.Annex) {
             bytes += one.Data.size();
-        } 
+        }
 
         Counters->Cumulative()[TMonCo::DB_ANNEX_ITEMS_GROW].Increment(change.Annex.size());
         Counters->Cumulative()[TMonCo::DB_ANNEX_WRITTEN_BYTES].Increment(bytes);
-        if (AppTxCounters && txType != UnknownTxType) 
+        if (AppTxCounters && txType != UnknownTxType)
             AppTxCounters->TxCumulative(txType, COUNTER_TT_ANNEX_WRITTEN_BYTES).Increment(bytes);
-    } 
- 
+    }
+
     if (force || MaxItemsToBatch < 2 || change.Redo.size() > MaxBytesToBatch) {
         FlushBatchedLog();
 
-        auto commit = CommitManager->Begin(true, ECommit::Redo); 
+        auto commit = CommitManager->Begin(true, ECommit::Redo);
 
-        commit->PushTx(seat.Get()); 
+        commit->PushTx(seat.Get());
         CompletionQueue.push_back({ seat, commit->Step });
         MakeLogEntry(*commit, std::move(change.Redo), change.Affects, !force);
 
@@ -161,7 +161,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
             }
 
             commit->GcDelta.Created.emplace_back(one.GId.Logo);
-            commit->Refs.emplace_back(one.GId.Logo, one.Data.ToString()); 
+            commit->Refs.emplace_back(one.GId.Logo, one.Data.ToString());
         }
 
         /* Sometimes clang drops the last emplace_back above if move was used
@@ -177,9 +177,9 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
             FlushBatchedLog();
 
         if (!Batch->Commit)
-            Batch->Commit = CommitManager->Begin(false, ECommit::Redo); 
+            Batch->Commit = CommitManager->Begin(false, ECommit::Redo);
 
-        Batch->Commit->PushTx(seat.Get()); 
+        Batch->Commit->PushTx(seat.Get());
         CompletionQueue.push_back({ seat, Batch->Commit->Step });
 
         Batch->Add(std::move(change.Redo), change.Affects);
@@ -232,19 +232,19 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
     ui64 confirmedTransactions = 0;
     do {
         TCompletionEntry &entry = CompletionQueue[0];
-        auto &seat = entry.InFlyRWTransaction; 
+        auto &seat = entry.InFlyRWTransaction;
 
-        const TTxType txType = seat->Self->GetTxType(); 
-        const ui64 commitLatencyus = ui64(1000000. * seat->CommitTimer.Passed()); 
-        const ui64 latencyus = ui64(1000000. * seat->LatencyTimer.Passed()); 
+        const TTxType txType = seat->Self->GetTxType();
+        const ui64 commitLatencyus = ui64(1000000. * seat->CommitTimer.Passed());
+        const ui64 latencyus = ui64(1000000. * seat->LatencyTimer.Passed());
         Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_LATENCY_COMMIT].IncrementFor(commitLatencyus);
         Counters->Percentile()[TExecutorCounters::TX_PERCENTILE_LATENCY_RW].IncrementFor(latencyus);
 
         ++confirmedTransactions;
         THPTimer completeTimer;
-        LWTRACK(TransactionCompleteBegin, seat->Self->Orbit, seat->UniqID); 
-        entry.InFlyRWTransaction->Complete(ownerCtx); 
-        LWTRACK(TransactionCompleteEnd, seat->Self->Orbit, seat->UniqID); 
+        LWTRACK(TransactionCompleteBegin, seat->Self->Orbit, seat->UniqID);
+        entry.InFlyRWTransaction->Complete(ownerCtx);
+        LWTRACK(TransactionCompleteEnd, seat->Self->Orbit, seat->UniqID);
 
         const ui64 completeTimeus = ui64(1000000. * completeTimer.Passed());
 
@@ -290,7 +290,7 @@ void TLogicRedo::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap)
         x->SetTable(xpair.first);
         x->SetGeneration(genstep.first);
         x->SetStep(genstep.second);
-        x->SetHead(xpair.second.Head.ToProto()); 
+        x->SetHead(xpair.second.Head.ToProto());
     }
 }
 

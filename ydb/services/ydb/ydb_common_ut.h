@@ -50,8 +50,8 @@ public:
             TAppPrepare::TFnReg udfFrFactory = nullptr,
             std::function<void(TServerSettings& settings)> builder = nullptr)
     {
-        ui16 port = PortManager.GetPort(2134); 
-        ui16 grpc = PortManager.GetPort(2135); 
+        ui16 port = PortManager.GetPort(2134);
+        ui16 grpc = PortManager.GetPort(2135);
         ServerSettings = new TServerSettings(port);
         ServerSettings->SetGrpcPort(grpc);
         ServerSettings->SetLogBackend(logBackend);
@@ -152,7 +152,7 @@ public:
     Tests::TServer::TPtr Server_;
     THolder<Tests::TTenants> Tenants_;
 private:
-    TPortManager PortManager; 
+    TPortManager PortManager;
     ui16 GRpcPort_;
 };
 

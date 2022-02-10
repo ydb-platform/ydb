@@ -167,38 +167,38 @@ private:
             issues.AddIssue(NYql::TIssue(error));
             return Reply(code, issues, ctx);
         }
- 
-        TColumnFamilyManager families(tableDesc->MutablePartitionConfig()); 
- 
-        // Apply storage settings to the default column family 
-        if (req->has_storage_settings()) { 
+
+        TColumnFamilyManager families(tableDesc->MutablePartitionConfig());
+
+        // Apply storage settings to the default column family
+        if (req->has_storage_settings()) {
             if (tableProfileSet) {
                 MEWarning("StorageSettings");
             }
-            if (!families.ApplyStorageSettings(req->storage_settings(), &code, &error)) { 
-                NYql::TIssues issues; 
-                issues.AddIssue(NYql::TIssue(error)); 
-                return Reply(code, issues, ctx); 
-            } 
-        } 
- 
+            if (!families.ApplyStorageSettings(req->storage_settings(), &code, &error)) {
+                NYql::TIssues issues;
+                issues.AddIssue(NYql::TIssue(error));
+                return Reply(code, issues, ctx);
+            }
+        }
+
         if (tableProfileSet && req->column_familiesSize()) {
             MEWarning("ColumnFamilies");
         }
-        for (const auto& familySettings : req->column_families()) { 
-            if (!families.ApplyFamilySettings(familySettings, &code, &error)) { 
-                NYql::TIssues issues; 
-                issues.AddIssue(NYql::TIssue(error)); 
-                return Reply(code, issues, ctx); 
-            } 
-        } 
- 
-        if (families.Modified && !families.ValidateColumnFamilies(&code, &error)) { 
-            NYql::TIssues issues; 
-            issues.AddIssue(NYql::TIssue(error)); 
-            return Reply(code, issues, ctx); 
-        } 
- 
+        for (const auto& familySettings : req->column_families()) {
+            if (!families.ApplyFamilySettings(familySettings, &code, &error)) {
+                NYql::TIssues issues;
+                issues.AddIssue(NYql::TIssue(error));
+                return Reply(code, issues, ctx);
+            }
+        }
+
+        if (families.Modified && !families.ValidateColumnFamilies(&code, &error)) {
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue(error));
+            return Reply(code, issues, ctx);
+        }
+
         // Attributes
         for (auto [key, value] : req->attributes()) {
             auto& attr = *modifyScheme->MutableAlterUserAttributes()->AddUserAttributes();

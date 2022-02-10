@@ -18,7 +18,7 @@ static const bool ENABLE_SCHEMESHARD_LOG = true;
 static const bool ENABLE_DATASHARD_LOG = false;
 static const bool ENABLE_COORDINATOR_MEDIATOR_LOG = false;
 static const bool ENABLE_SCHEMEBOARD_LOG = false;
-static const bool ENABLE_OLAP_LOG = false; 
+static const bool ENABLE_OLAP_LOG = false;
 static const bool ENABLE_EXPORT_LOG = false;
 
 using namespace NKikimr;
@@ -502,10 +502,10 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableAsyncIndexes(opts.EnableAsyncIndexes_);
     app.SetEnableNotNullColumns(opts.EnableNotNullColumns_);
     app.SetEnableSchemeTransactionsAtSchemeShard(opts.EnableSchemeTransactionsAtSchemeShard_);
-    app.SetEnableOlapSchemaOperations(opts.EnableOlapSchemaOperations_); 
+    app.SetEnableOlapSchemaOperations(opts.EnableOlapSchemaOperations_);
     app.SetEnableProtoSourceIdInfo(opts.EnableProtoSourceIdInfo_);
     app.SetEnableBackgroundCompaction(opts.EnableBackgroundCompaction_);
-    app.FeatureFlags.SetEnablePublicApiExternalBlobs(true); 
+    app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
 
     for (const auto& sid : opts.SystemBackupSIDs_) {
         app.AddSystemBackupSID(sid);
@@ -603,20 +603,20 @@ void NSchemeShardUT_Private::TTestEnv::SetupLogging(TTestActorRuntime &runtime) 
     runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR, NActors::NLog::PRI_ERROR);
     runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TIMECAST, NActors::NLog::PRI_ERROR);
-    runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TABLETQUEUE, NActors::NLog::PRI_ERROR); 
+    runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TABLETQUEUE, NActors::NLog::PRI_ERROR);
     if (ENABLE_COORDINATOR_MEDIATOR_LOG) {
         runtime.SetLogPriority(NKikimrServices::TX_COORDINATOR, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TIMECAST, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TABLETQUEUE, NActors::NLog::PRI_DEBUG); 
+        runtime.SetLogPriority(NKikimrServices::TX_MEDIATOR_TABLETQUEUE, NActors::NLog::PRI_DEBUG);
     }
- 
-    runtime.SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_NOTICE); 
-    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_NOTICE); 
-    if (ENABLE_OLAP_LOG) { 
-        runtime.SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG); 
-        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG); 
-    } 
+
+    runtime.SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_NOTICE);
+    runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_NOTICE);
+    if (ENABLE_OLAP_LOG) {
+        runtime.SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+    }
 }
 
 void NSchemeShardUT_Private::TTestEnv::AddDomain(TTestActorRuntime &runtime, TAppPrepare &app, ui32 domainUid, ui32 ssId, ui64 hive, ui64 schemeRoot) {
@@ -727,41 +727,41 @@ void NSchemeShardUT_Private::TTestEnv::TestWaitTabletDeletion(NActors::TTestActo
     TestWaitTabletDeletion(runtime, TSet<ui64>{tabletId});
 }
 
-void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActorRuntime &runtime, ui64 schemeShard, TSet<TShardIdx> shardIds) { 
-    TActorId sender = runtime.AllocateEdgeActor(); 
- 
-    for (auto shardIdx : shardIds) { 
-        Cerr << "Waiting until shard idx " << shardIdx << " is deleted" << Endl; 
-        auto ev = new TEvPrivate::TEvSubscribeToShardDeletion(shardIdx); 
+void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActorRuntime &runtime, ui64 schemeShard, TSet<TShardIdx> shardIds) {
+    TActorId sender = runtime.AllocateEdgeActor();
+
+    for (auto shardIdx : shardIds) {
+        Cerr << "Waiting until shard idx " << shardIdx << " is deleted" << Endl;
+        auto ev = new TEvPrivate::TEvSubscribeToShardDeletion(shardIdx);
         ForwardToTablet(runtime, schemeShard, sender, ev);
-    } 
- 
-    while (!shardIds.empty()) { 
-        auto ev = runtime.GrabEdgeEvent<TEvPrivate::TEvNotifyShardDeleted>(sender); 
-        auto shardIdx = ev->Get()->ShardIdx; 
-        Cerr << "Deleted shard idx " << shardIdx << Endl; 
-        shardIds.erase(shardIdx); 
-    } 
-} 
- 
-void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActorRuntime &runtime, ui64 schemeShard, TSet<ui64> localIds) { 
-    TSet<TShardIdx> shardIds; 
-    for (ui64 localId : localIds) { 
-        shardIds.emplace(schemeShard, localId); 
-    } 
-    TestWaitShardDeletion(runtime, schemeShard, std::move(shardIds)); 
-} 
- 
-void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActorRuntime &runtime, TSet<ui64> localIds) { 
+    }
+
+    while (!shardIds.empty()) {
+        auto ev = runtime.GrabEdgeEvent<TEvPrivate::TEvNotifyShardDeleted>(sender);
+        auto shardIdx = ev->Get()->ShardIdx;
+        Cerr << "Deleted shard idx " << shardIdx << Endl;
+        shardIds.erase(shardIdx);
+    }
+}
+
+void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActorRuntime &runtime, ui64 schemeShard, TSet<ui64> localIds) {
+    TSet<TShardIdx> shardIds;
+    for (ui64 localId : localIds) {
+        shardIds.emplace(schemeShard, localId);
+    }
+    TestWaitShardDeletion(runtime, schemeShard, std::move(shardIds));
+}
+
+void NSchemeShardUT_Private::TTestEnv::TestWaitShardDeletion(NActors::TTestActorRuntime &runtime, TSet<ui64> localIds) {
     TestWaitShardDeletion(runtime, TTestTxConfig::SchemeShard, std::move(localIds));
-} 
- 
-void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) { 
-    auto sender = runtime.AllocateEdgeActor(); 
-    runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration); 
-    runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender); 
-} 
- 
+}
+
+void NSchemeShardUT_Private::TTestEnv::SimulateSleep(NActors::TTestActorRuntime &runtime, TDuration duration) {
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
+    runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
+}
+
 std::function<NActors::IActor *(const NActors::TActorId &, NKikimr::TTabletStorageInfo *)> NSchemeShardUT_Private::TTestEnv::GetTabletCreationFunc(ui32 type) {
     switch (type) {
     case TTabletTypes::BlockStoreVolume:

@@ -69,20 +69,20 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
     Y_UNIT_TEST(BasicSchemaTest) {
         TDatabase DB;
         NIceDb::TNiceDb db(DB);
-        ui64 stamp = 0; 
+        ui64 stamp = 0;
 
         TInstant timestamp = TInstant::Now();
 
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             db.Materialize<Schema>();
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             for (ui64 i = 0; i < 1000; ++i) {
                 NKikimrMiniKQL::TValue protoValue;
                 protoValue.SetUint64(i);
@@ -120,32 +120,32 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                         .Update<Schema::TestTable::EnumValue>(ESomeEnum::SomeValue1)
                         .Update<Schema::TestTable::InstantValue>(timestamp);
             }
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             for (ui64 i = 0; i < 100; ++i) {
                 for (ui64 j = 0; j < 10; ++j) {
                     db.Table<Schema::TestTable2>().Key(i, j).Update(NIceDb::TUpdate<Schema::TestTable2::Value>(i * 10 + j));
                 }
             }
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
         // NoCopy
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             NKikimrMiniKQL::TValue protoValue;
             protoValue.SetText("test");
             db.Table<Schema::TestTable4>().Key(1).Update<Schema::TestTable4::Value, Schema::TestTable4::ProtoValue>("test", protoValue);
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             {
                 auto row = db.Table<Schema::TestTable4>().Key(1).Select<Schema::TestTable4::Value>();
             }
@@ -162,13 +162,13 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
             auto protoValue = row.GetValue<Schema::TestTable4::ProtoValue>();
             UNIT_ASSERT(typeid(protoValue) == typeid(NKikimrMiniKQL::TValue));
             UNIT_ASSERT(protoValue.GetText() == "test");
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
         // SelectRow
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             for (ui64 i = 0; i < 1000; ++i) {
                 auto row = db.Table<Schema::TestTable>().Key(i).Select<
                         Schema::TestTable::Value,
@@ -197,13 +197,13 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 UNIT_ASSERT_EQUAL(row.GetValueOrDefault<Schema::TestTable::EmptyValue>(), 13);
                 UNIT_ASSERT_EQUAL(row.GetValueOrDefault<Schema::TestTable::EmptyValue>(i), i);
             }
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
         // All
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             UNIT_ASSERT(db.Table<Schema::TestTable>().Precharge());
             auto table = db.Table<Schema::TestTable>();
             // move semantics test
@@ -227,44 +227,44 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 UNIT_ASSERT(rowset.Next());
             }
             UNIT_ASSERT(rowset.EndOfSet());
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
-        // All in reverse 
-        { 
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
-            UNIT_ASSERT(db.Table<Schema::TestTable>().Reverse().Precharge()); 
-            auto table = db.Table<Schema::TestTable>(); 
-            // move semantics test 
-            decltype(table) new_table = std::move(table); 
-            table = std::move(new_table); 
-            //////////////////////// 
-            auto rowset = table.Reverse().Select<Schema::TestTable::Value, Schema::TestTable::Name, Schema::TestTable::BoolValue>(); 
-            UNIT_ASSERT(rowset.IsReady()); 
-            // move semantics test 
-            decltype(rowset) new_rowset = std::move(rowset); 
-            rowset = std::move(new_rowset); 
-            //////////////////////// 
-            for (int i = 999; i >= 0; --i) { 
-                ui64 expected = i; 
-                UNIT_ASSERT(!rowset.EndOfSet()); 
-                ui64 value = rowset.GetValue<Schema::TestTable::Value>(); 
-                TString name = rowset.GetValue<Schema::TestTable::Name>(); 
-                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>(); 
-                UNIT_ASSERT_VALUES_EQUAL(value, expected); 
-                UNIT_ASSERT_VALUES_EQUAL(ToString(value), name); 
-                UNIT_ASSERT_VALUES_EQUAL(boolValue, (expected % 2 == 0)); 
-                UNIT_ASSERT(rowset.Next()); 
-            } 
-            UNIT_ASSERT(rowset.EndOfSet()); 
-            DB.Commit(stamp, true); 
-        } 
- 
+        // All in reverse
+        {
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
+            UNIT_ASSERT(db.Table<Schema::TestTable>().Reverse().Precharge());
+            auto table = db.Table<Schema::TestTable>();
+            // move semantics test
+            decltype(table) new_table = std::move(table);
+            table = std::move(new_table);
+            ////////////////////////
+            auto rowset = table.Reverse().Select<Schema::TestTable::Value, Schema::TestTable::Name, Schema::TestTable::BoolValue>();
+            UNIT_ASSERT(rowset.IsReady());
+            // move semantics test
+            decltype(rowset) new_rowset = std::move(rowset);
+            rowset = std::move(new_rowset);
+            ////////////////////////
+            for (int i = 999; i >= 0; --i) {
+                ui64 expected = i;
+                UNIT_ASSERT(!rowset.EndOfSet());
+                ui64 value = rowset.GetValue<Schema::TestTable::Value>();
+                TString name = rowset.GetValue<Schema::TestTable::Name>();
+                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>();
+                UNIT_ASSERT_VALUES_EQUAL(value, expected);
+                UNIT_ASSERT_VALUES_EQUAL(ToString(value), name);
+                UNIT_ASSERT_VALUES_EQUAL(boolValue, (expected % 2 == 0));
+                UNIT_ASSERT(rowset.Next());
+            }
+            UNIT_ASSERT(rowset.EndOfSet());
+            DB.Commit(stamp, true);
+        }
+
         // Prefix
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             UNIT_ASSERT(db.Table<Schema::TestTable2>().Prefix(50).Precharge<Schema::TestTable2::Value>());
             auto rowset = db.Table<Schema::TestTable2>().Prefix(50).Select<Schema::TestTable2::Value>();
             UNIT_ASSERT(rowset.IsReady());
@@ -278,34 +278,34 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 UNIT_ASSERT(rowset.Next());
             }
             UNIT_ASSERT(rowset.EndOfSet());
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
-        // Prefix in reverse 
-        { 
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
-            UNIT_ASSERT(db.Table<Schema::TestTable2>().Reverse().Prefix(50).Precharge<Schema::TestTable2::Value>()); 
-            auto rowset = db.Table<Schema::TestTable2>().Reverse().Prefix(50).Select<Schema::TestTable2::Value>(); 
-            UNIT_ASSERT(rowset.IsReady()); 
-            // move semantics test 
-            decltype(rowset) new_rowset = std::move(rowset); 
-            rowset = std::move(new_rowset); 
-            //////////////////////// 
-            for (int i = 9; i >= 0; --i) { 
-                ui64 expected = 50 * 10 + i; 
-                UNIT_ASSERT(!rowset.EndOfSet()); 
-                UNIT_ASSERT_VALUES_EQUAL(rowset.GetValue<Schema::TestTable2::Value>(), expected); 
-                UNIT_ASSERT(rowset.Next()); 
-            } 
-            UNIT_ASSERT(rowset.EndOfSet()); 
-            DB.Commit(stamp, true); 
-        } 
- 
+        // Prefix in reverse
+        {
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
+            UNIT_ASSERT(db.Table<Schema::TestTable2>().Reverse().Prefix(50).Precharge<Schema::TestTable2::Value>());
+            auto rowset = db.Table<Schema::TestTable2>().Reverse().Prefix(50).Select<Schema::TestTable2::Value>();
+            UNIT_ASSERT(rowset.IsReady());
+            // move semantics test
+            decltype(rowset) new_rowset = std::move(rowset);
+            rowset = std::move(new_rowset);
+            ////////////////////////
+            for (int i = 9; i >= 0; --i) {
+                ui64 expected = 50 * 10 + i;
+                UNIT_ASSERT(!rowset.EndOfSet());
+                UNIT_ASSERT_VALUES_EQUAL(rowset.GetValue<Schema::TestTable2::Value>(), expected);
+                UNIT_ASSERT(rowset.Next());
+            }
+            UNIT_ASSERT(rowset.EndOfSet());
+            DB.Commit(stamp, true);
+        }
+
         // GreaterOrEqual
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             auto rowset = db.Table<Schema::TestTable>().GreaterOrEqual(500).Select();
             UNIT_ASSERT(rowset.IsReady());
             // move semantics test
@@ -323,37 +323,37 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 UNIT_ASSERT(rowset.Next());
             }
             UNIT_ASSERT(rowset.EndOfSet());
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
-        // GreaterOrEqual in reverse 
-        { 
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
-            auto rowset = db.Table<Schema::TestTable>().Reverse().GreaterOrEqual(500).Select(); 
-            UNIT_ASSERT(rowset.IsReady()); 
-            // move semantics test 
-            decltype(rowset) new_rowset = std::move(rowset); 
-            rowset = std::move(new_rowset); 
-            //////////////////////// 
-            for (ui64 i = 999; i >= 500; --i) { 
-                UNIT_ASSERT(!rowset.EndOfSet()); 
-                ui64 value = rowset.GetValue<Schema::TestTable::Value>(); 
-                TString name = rowset.GetValue<Schema::TestTable::Name>(); 
-                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>(); 
-                UNIT_ASSERT_VALUES_EQUAL(value, i); 
-                UNIT_ASSERT_VALUES_EQUAL(ToString(value), name); 
-                UNIT_ASSERT_VALUES_EQUAL(boolValue, (i % 2 == 0)); 
-                UNIT_ASSERT(rowset.Next()); 
-            } 
-            UNIT_ASSERT(rowset.EndOfSet()); 
-            DB.Commit(stamp, true); 
-        } 
- 
+        // GreaterOrEqual in reverse
+        {
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
+            auto rowset = db.Table<Schema::TestTable>().Reverse().GreaterOrEqual(500).Select();
+            UNIT_ASSERT(rowset.IsReady());
+            // move semantics test
+            decltype(rowset) new_rowset = std::move(rowset);
+            rowset = std::move(new_rowset);
+            ////////////////////////
+            for (ui64 i = 999; i >= 500; --i) {
+                UNIT_ASSERT(!rowset.EndOfSet());
+                ui64 value = rowset.GetValue<Schema::TestTable::Value>();
+                TString name = rowset.GetValue<Schema::TestTable::Name>();
+                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>();
+                UNIT_ASSERT_VALUES_EQUAL(value, i);
+                UNIT_ASSERT_VALUES_EQUAL(ToString(value), name);
+                UNIT_ASSERT_VALUES_EQUAL(boolValue, (i % 2 == 0));
+                UNIT_ASSERT(rowset.Next());
+            }
+            UNIT_ASSERT(rowset.EndOfSet());
+            DB.Commit(stamp, true);
+        }
+
         // LessOrEqual
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             auto rowset = db.Table<Schema::TestTable>().LessOrEqual(500).Select();
             UNIT_ASSERT(rowset.IsReady());
             // move semantics test
@@ -371,37 +371,37 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 UNIT_ASSERT(rowset.Next());
             }
             UNIT_ASSERT(rowset.EndOfSet());
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
-        // LessOrEqual in reverse 
-        { 
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
-            auto rowset = db.Table<Schema::TestTable>().Reverse().LessOrEqual(500).Select(); 
-            UNIT_ASSERT(rowset.IsReady()); 
-            // move semantics test 
-            decltype(rowset) new_rowset = std::move(rowset); 
-            rowset = std::move(new_rowset); 
-            //////////////////////// 
-            for (int i = 500; i >= 0; --i) { 
-                UNIT_ASSERT(!rowset.EndOfSet()); 
-                ui64 value = rowset.GetValue<Schema::TestTable::Value>(); 
-                TString name = rowset.GetValue<Schema::TestTable::Name>(); 
-                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>(); 
-                UNIT_ASSERT_VALUES_EQUAL(value, i); 
-                UNIT_ASSERT_VALUES_EQUAL(ToString(value), name); 
-                UNIT_ASSERT_VALUES_EQUAL(boolValue, (i % 2 == 0)); 
-                UNIT_ASSERT(rowset.Next()); 
-            } 
-            UNIT_ASSERT(rowset.EndOfSet()); 
-            DB.Commit(stamp, true); 
-        } 
- 
+        // LessOrEqual in reverse
+        {
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
+            auto rowset = db.Table<Schema::TestTable>().Reverse().LessOrEqual(500).Select();
+            UNIT_ASSERT(rowset.IsReady());
+            // move semantics test
+            decltype(rowset) new_rowset = std::move(rowset);
+            rowset = std::move(new_rowset);
+            ////////////////////////
+            for (int i = 500; i >= 0; --i) {
+                UNIT_ASSERT(!rowset.EndOfSet());
+                ui64 value = rowset.GetValue<Schema::TestTable::Value>();
+                TString name = rowset.GetValue<Schema::TestTable::Name>();
+                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>();
+                UNIT_ASSERT_VALUES_EQUAL(value, i);
+                UNIT_ASSERT_VALUES_EQUAL(ToString(value), name);
+                UNIT_ASSERT_VALUES_EQUAL(boolValue, (i % 2 == 0));
+                UNIT_ASSERT(rowset.Next());
+            }
+            UNIT_ASSERT(rowset.EndOfSet());
+            DB.Commit(stamp, true);
+        }
+
         // GreaterOrEqual + LessOrEqual
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             auto operation = db.Table<Schema::TestTable>().GreaterOrEqual(500).LessOrEqual(501);
             // move semantics test
             decltype(operation) new_operation = std::move(operation);
@@ -424,126 +424,126 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 UNIT_ASSERT(rowset.Next());
             }
             UNIT_ASSERT(rowset.EndOfSet());
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
-        // GreaterOrEqual + LessOrEqual in reverse 
+        // GreaterOrEqual + LessOrEqual in reverse
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
-            auto operation = db.Table<Schema::TestTable>().Reverse().GreaterOrEqual(500).LessOrEqual(501); 
-            // move semantics test 
-            decltype(operation) new_operation = std::move(operation); 
-            operation = std::move(new_operation); 
-            //////////////////////// 
-            auto rowset = operation.Select(); 
-            UNIT_ASSERT(rowset.IsReady()); 
-            // move semantics test 
-            decltype(rowset) new_rowset = std::move(rowset); 
-            rowset = std::move(new_rowset); 
-            //////////////////////// 
-            for (ui64 i = 501; i >= 500; --i) { 
-                UNIT_ASSERT(!rowset.EndOfSet()); 
-                ui64 value = rowset.GetValue<Schema::TestTable::Value>(); 
-                TString name = rowset.GetValue<Schema::TestTable::Name>(); 
-                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>(); 
-                UNIT_ASSERT_VALUES_EQUAL(value, i); 
-                UNIT_ASSERT_VALUES_EQUAL(ToString(value), name); 
-                UNIT_ASSERT_VALUES_EQUAL(boolValue, (i % 2 == 0)); 
-                UNIT_ASSERT(rowset.Next()); 
-            } 
-            UNIT_ASSERT(rowset.EndOfSet()); 
-            DB.Commit(stamp, true); 
-        } 
- 
-        // LessOrEqual + GreaterOrEqual 
-        { 
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
-            auto operation = db.Table<Schema::TestTable>().LessOrEqual(501).GreaterOrEqual(500); 
-            // move semantics test 
-            decltype(operation) new_operation = std::move(operation); 
-            operation = std::move(new_operation); 
-            //////////////////////// 
-            auto rowset = operation.Select(); 
-            UNIT_ASSERT(rowset.IsReady()); 
-            // move semantics test 
-            decltype(rowset) new_rowset = std::move(rowset); 
-            rowset = std::move(new_rowset); 
-            //////////////////////// 
-            for (ui64 i = 500; i <= 501; ++i) { 
-                UNIT_ASSERT(!rowset.EndOfSet()); 
-                ui64 value = rowset.GetValue<Schema::TestTable::Value>(); 
-                TString name = rowset.GetValue<Schema::TestTable::Name>(); 
-                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>(); 
-                UNIT_ASSERT_EQUAL(value, i); 
-                UNIT_ASSERT_EQUAL(ToString(value), name); 
-                UNIT_ASSERT_EQUAL(boolValue, (i % 2 == 0)); 
-                UNIT_ASSERT(rowset.Next()); 
-            } 
-            UNIT_ASSERT(rowset.EndOfSet()); 
-            DB.Commit(stamp, true); 
-        } 
- 
-        // LessOrEqual + GreaterOrEqual in reverse 
-        { 
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
-            auto operation = db.Table<Schema::TestTable>().Reverse().LessOrEqual(501).GreaterOrEqual(500); 
-            // move semantics test 
-            decltype(operation) new_operation = std::move(operation); 
-            operation = std::move(new_operation); 
-            //////////////////////// 
-            auto rowset = operation.Select(); 
-            UNIT_ASSERT(rowset.IsReady()); 
-            // move semantics test 
-            decltype(rowset) new_rowset = std::move(rowset); 
-            rowset = std::move(new_rowset); 
-            //////////////////////// 
-            for (ui64 i = 501; i >= 500; --i) { 
-                UNIT_ASSERT(!rowset.EndOfSet()); 
-                ui64 value = rowset.GetValue<Schema::TestTable::Value>(); 
-                TString name = rowset.GetValue<Schema::TestTable::Name>(); 
-                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>(); 
-                UNIT_ASSERT_VALUES_EQUAL(value, i); 
-                UNIT_ASSERT_VALUES_EQUAL(ToString(value), name); 
-                UNIT_ASSERT_VALUES_EQUAL(boolValue, (i % 2 == 0)); 
-                UNIT_ASSERT(rowset.Next()); 
-            } 
-            UNIT_ASSERT(rowset.EndOfSet()); 
-            DB.Commit(stamp, true); 
-        } 
- 
-        { 
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
+            auto operation = db.Table<Schema::TestTable>().Reverse().GreaterOrEqual(500).LessOrEqual(501);
+            // move semantics test
+            decltype(operation) new_operation = std::move(operation);
+            operation = std::move(new_operation);
+            ////////////////////////
+            auto rowset = operation.Select();
+            UNIT_ASSERT(rowset.IsReady());
+            // move semantics test
+            decltype(rowset) new_rowset = std::move(rowset);
+            rowset = std::move(new_rowset);
+            ////////////////////////
+            for (ui64 i = 501; i >= 500; --i) {
+                UNIT_ASSERT(!rowset.EndOfSet());
+                ui64 value = rowset.GetValue<Schema::TestTable::Value>();
+                TString name = rowset.GetValue<Schema::TestTable::Name>();
+                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>();
+                UNIT_ASSERT_VALUES_EQUAL(value, i);
+                UNIT_ASSERT_VALUES_EQUAL(ToString(value), name);
+                UNIT_ASSERT_VALUES_EQUAL(boolValue, (i % 2 == 0));
+                UNIT_ASSERT(rowset.Next());
+            }
+            UNIT_ASSERT(rowset.EndOfSet());
+            DB.Commit(stamp, true);
+        }
+
+        // LessOrEqual + GreaterOrEqual
+        {
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
+            auto operation = db.Table<Schema::TestTable>().LessOrEqual(501).GreaterOrEqual(500);
+            // move semantics test
+            decltype(operation) new_operation = std::move(operation);
+            operation = std::move(new_operation);
+            ////////////////////////
+            auto rowset = operation.Select();
+            UNIT_ASSERT(rowset.IsReady());
+            // move semantics test
+            decltype(rowset) new_rowset = std::move(rowset);
+            rowset = std::move(new_rowset);
+            ////////////////////////
+            for (ui64 i = 500; i <= 501; ++i) {
+                UNIT_ASSERT(!rowset.EndOfSet());
+                ui64 value = rowset.GetValue<Schema::TestTable::Value>();
+                TString name = rowset.GetValue<Schema::TestTable::Name>();
+                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>();
+                UNIT_ASSERT_EQUAL(value, i);
+                UNIT_ASSERT_EQUAL(ToString(value), name);
+                UNIT_ASSERT_EQUAL(boolValue, (i % 2 == 0));
+                UNIT_ASSERT(rowset.Next());
+            }
+            UNIT_ASSERT(rowset.EndOfSet());
+            DB.Commit(stamp, true);
+        }
+
+        // LessOrEqual + GreaterOrEqual in reverse
+        {
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
+            auto operation = db.Table<Schema::TestTable>().Reverse().LessOrEqual(501).GreaterOrEqual(500);
+            // move semantics test
+            decltype(operation) new_operation = std::move(operation);
+            operation = std::move(new_operation);
+            ////////////////////////
+            auto rowset = operation.Select();
+            UNIT_ASSERT(rowset.IsReady());
+            // move semantics test
+            decltype(rowset) new_rowset = std::move(rowset);
+            rowset = std::move(new_rowset);
+            ////////////////////////
+            for (ui64 i = 501; i >= 500; --i) {
+                UNIT_ASSERT(!rowset.EndOfSet());
+                ui64 value = rowset.GetValue<Schema::TestTable::Value>();
+                TString name = rowset.GetValue<Schema::TestTable::Name>();
+                bool boolValue = rowset.GetValue<Schema::TestTable::BoolValue>();
+                UNIT_ASSERT_VALUES_EQUAL(value, i);
+                UNIT_ASSERT_VALUES_EQUAL(ToString(value), name);
+                UNIT_ASSERT_VALUES_EQUAL(boolValue, (i % 2 == 0));
+                UNIT_ASSERT(rowset.Next());
+            }
+            UNIT_ASSERT(rowset.EndOfSet());
+            DB.Commit(stamp, true);
+        }
+
+        {
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             for (ui64 i = 0; i < 1000; ++i) {
                 db.Table<Schema::TestTable>().Key(i).Delete();
             }
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             auto rowset = db.Table<Schema::TestTable>().Select<Schema::TestTable::Value, Schema::TestTable::Name>();
             UNIT_ASSERT(rowset.IsReady());
             UNIT_ASSERT(rowset.EndOfSet());
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             for (ui64 i = 0; i < 1000; ++i) {
                 db.Table<Schema::TestTable2>().Key(i / 100, i % 100).Update();
             }
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             auto rowset = db.Table<Schema::TestTable2>().GreaterOrEqual(5,0).Select();
             UNIT_ASSERT(rowset.IsReady());
             for (ui64 i = 500; i < 1000; ++i) {
@@ -551,23 +551,23 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 UNIT_ASSERT_EQUAL(rowset.GetKey(), std::make_tuple(i / 100, i % 100));
                 UNIT_ASSERT(rowset.Next());
             }
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
 
             for (ui64 i = 0; i < 1000; ++i) {
                 db.Table<Schema::TestTable3>().Key(IntToString<16>(i / 4), IntToString<16>(i % 4)).Update(NIceDb::TUpdate<Schema::TestTable3::Value>(i));
             }
 
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
 
         {
-            TDummyEnv env; 
-            DB.Begin(++stamp, env); 
+            TDummyEnv env;
+            DB.Begin(++stamp, env);
             for (ui64 i = 250; i > 0; --i) {
                 auto rowset = db.Table<Schema::TestTable3>().Range(IntToString<16>(i - 1)).Select();
                 UNIT_ASSERT(rowset.IsReady());
@@ -581,7 +581,7 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 }
                 UNIT_ASSERT(rowset.EndOfSet());
             }
-            DB.Commit(stamp, true); 
+            DB.Commit(stamp, true);
         }
     }
 

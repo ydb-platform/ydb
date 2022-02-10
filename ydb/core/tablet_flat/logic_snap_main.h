@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util_basics.h" 
+#include "util_basics.h"
 #include "util_fmt_abort.h"
 #include "util_fmt_line.h"
 #include "flat_sausage_slicer.h"
@@ -45,7 +45,7 @@ namespace NTabletFlatExecutor {
                 && (force
                     || Waste_->Trace >= 300
                     || Waste_->Items >= 300
-                    || Waste_->Bytes >= 128*1024*1024); 
+                    || Waste_->Bytes >= 128*1024*1024);
         }
 
         const NSnap::TWaste& Waste() const noexcept { return *Waste_; }

@@ -23,17 +23,17 @@ namespace NTable {
                 pack->SaveAllBlobIdsTo(vec);
         }
     };
- 
-    /** 
-     * A more generic interface for bundles that may be borrowed 
-     */ 
-    class IBorrowBundle : public virtual TThrRefBase { 
-    public: 
-        virtual const TLogoBlobID& BundleId() const = 0; 
-        virtual ui64 BackingSize() const = 0; 
- 
-        virtual void SaveAllBlobIdsTo(TVector<TLogoBlobID> &vec) const = 0; 
-    }; 
- 
+
+    /**
+     * A more generic interface for bundles that may be borrowed
+     */
+    class IBorrowBundle : public virtual TThrRefBase {
+    public:
+        virtual const TLogoBlobID& BundleId() const = 0;
+        virtual ui64 BackingSize() const = 0;
+
+        virtual void SaveAllBlobIdsTo(TVector<TLogoBlobID> &vec) const = 0;
+    };
+
 }
 }

@@ -20,14 +20,14 @@ namespace NPerf {
             , Remap(TRemap::Full(*Table->Scheme))
         {
             if (auto logl = logger->Log(NKikiSched::ELnLev::INF1)) {
-                const auto raw = Table->GetUsedMem(); 
-                const auto waste = Table->GetWastedMem(); 
+                const auto raw = Table->GetUsedMem();
+                const auto waste = Table->GetWastedMem();
 
                 logl
                     << "mem-tree has " << Table->GetOpsCount() << " ops"
                     << " in " << NKikiSched::NFmt::TLarge(raw) << "b"
-                    << ", " <<  NKikiSched::NFmt::TLarge(waste) << "b" 
-                    << " waste"; 
+                    << ", " <<  NKikiSched::NFmt::TLarge(waste) << "b"
+                    << " waste";
             }
         }
 
@@ -35,7 +35,7 @@ namespace NPerf {
         {
             const TCelled key(key_, *Table->Scheme->Keys, false);
 
-            Iter = TMemIt::Make(*Table, Table->Immediate(), key, seek, Nulls, &Remap, nullptr); 
+            Iter = TMemIt::Make(*Table, Table->Immediate(), key, seek, Nulls, &Remap, nullptr);
         }
 
         ui64 Scan(ui64 items, TSponge &aggr) override
@@ -64,7 +64,7 @@ namespace NPerf {
             for (auto &pin: Remap.KeyPins())
                 State.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]);
 
-            Iter->Apply(State, /* committed */ {}); 
+            Iter->Apply(State, /* committed */ {});
             aggr(State);
         }
 

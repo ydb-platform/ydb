@@ -13,7 +13,7 @@ namespace {
 using namespace NCommon;
 using namespace NNodes;
 
-const TString DocApiTableVersionAttribute = "__document_api_version"; 
+const TString DocApiTableVersionAttribute = "__document_api_version";
 
 const TTypeAnnotationNode* GetExpectedRowType(const TKikimrTableDescription& tableDesc,
     const TVector<TString>& columns, const TPosition& pos, TExprContext& ctx)

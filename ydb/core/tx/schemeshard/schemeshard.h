@@ -28,8 +28,8 @@ struct TEvSchemeShard {
         EvModifySchemeTransactionResult = EvModifySchemeTransaction + 1 * 512,
         EvDescribeScheme,
         EvDescribeSchemeResult,
-        EvFindTabletSubDomainPathId, 
-        EvFindTabletSubDomainPathIdResult, 
+        EvFindTabletSubDomainPathId,
+        EvFindTabletSubDomainPathIdResult,
 
         EvInitRootShard = EvModifySchemeTransaction + 5 * 512,
         EvInitRootShardResult,
@@ -160,7 +160,7 @@ struct TEvSchemeShard {
         }
 
         void SetPathCreateTxId(ui64 txId) { Record.SetPathCreateTxId(txId); }
-        void SetPathDropTxId(ui64 txId) { Record.SetPathDropTxId(txId); } 
+        void SetPathDropTxId(ui64 txId) { Record.SetPathDropTxId(txId); }
         void SetPathId(ui64 pathId) { Record.SetPathId(pathId); }
 
         TString ToString() const {
@@ -492,42 +492,42 @@ struct TEvSchemeShard {
             Record.SetUpdateTenantRootACL(acl);
         }
     };
- 
-    struct TEvFindTabletSubDomainPathId 
-        : public TEventPB<TEvFindTabletSubDomainPathId, 
+
+    struct TEvFindTabletSubDomainPathId
+        : public TEventPB<TEvFindTabletSubDomainPathId,
                           NKikimrScheme::TEvFindTabletSubDomainPathId,
-                          EvFindTabletSubDomainPathId> 
-    { 
-        TEvFindTabletSubDomainPathId() = default; 
- 
-        explicit TEvFindTabletSubDomainPathId(ui64 tabletId) { 
-            Record.SetTabletId(tabletId); 
-        } 
-    }; 
- 
-    struct TEvFindTabletSubDomainPathIdResult 
-        : public TEventPB<TEvFindTabletSubDomainPathIdResult, 
+                          EvFindTabletSubDomainPathId>
+    {
+        TEvFindTabletSubDomainPathId() = default;
+
+        explicit TEvFindTabletSubDomainPathId(ui64 tabletId) {
+            Record.SetTabletId(tabletId);
+        }
+    };
+
+    struct TEvFindTabletSubDomainPathIdResult
+        : public TEventPB<TEvFindTabletSubDomainPathIdResult,
                           NKikimrScheme::TEvFindTabletSubDomainPathIdResult,
-                          EvFindTabletSubDomainPathIdResult> 
-    { 
+                          EvFindTabletSubDomainPathIdResult>
+    {
         using EStatus = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus;
- 
-        TEvFindTabletSubDomainPathIdResult() = default; 
- 
-        // Failure 
-        TEvFindTabletSubDomainPathIdResult(ui64 tabletId, EStatus status) { 
-            Record.SetStatus(status); 
-            Record.SetTabletId(tabletId); 
-        } 
- 
-        // Success 
-        TEvFindTabletSubDomainPathIdResult(ui64 tabletId, ui64 schemeShardId, ui64 subDomainPathId) { 
+
+        TEvFindTabletSubDomainPathIdResult() = default;
+
+        // Failure
+        TEvFindTabletSubDomainPathIdResult(ui64 tabletId, EStatus status) {
+            Record.SetStatus(status);
+            Record.SetTabletId(tabletId);
+        }
+
+        // Success
+        TEvFindTabletSubDomainPathIdResult(ui64 tabletId, ui64 schemeShardId, ui64 subDomainPathId) {
             Record.SetStatus(NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
-            Record.SetTabletId(tabletId); 
-            Record.SetSchemeShardId(schemeShardId); 
-            Record.SetSubDomainPathId(subDomainPathId); 
-        } 
-    }; 
+            Record.SetTabletId(tabletId);
+            Record.SetSchemeShardId(schemeShardId);
+            Record.SetSubDomainPathId(subDomainPathId);
+        }
+    };
 
     struct TEvLogin : TEventPB<TEvLogin, NKikimrScheme::TEvLogin, EvLogin> {
         TEvLogin() = default;

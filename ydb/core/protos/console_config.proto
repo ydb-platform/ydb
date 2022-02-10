@@ -99,20 +99,20 @@ message TConfigItem {
         KeyConfigItem = 35;
         NodeBrokerConfigItem = 36;
         TableServiceConfigItem = 37;
-        SharedCacheConfigItem = 38; 
+        SharedCacheConfigItem = 38;
         ImmediateControlsConfigItem = 39;
         AllocatorConfigItem = 40;
         PQClusterDiscoveryConfigItem = 41;
         NetClassifierConfigItem = 42;
         NetClassifierDistributableConfigItem = 43;
-        ResourceBrokerConfigItem = 44; 
+        ResourceBrokerConfigItem = 44;
         MeteringConfigItem = 45;
         HiveConfigItem = 46;
-        DataShardConfigItem = 49; 
+        DataShardConfigItem = 49;
         YandexQueryConfigItem = 50;
         PDiskKeyConfigItem = 51;
         CompactionConfigItem = 52;
- 
+
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
     }

@@ -14,7 +14,7 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-    class TCommitManager { 
+    class TCommitManager {
         /*_ TExecutor log commits flow controller module
 
                      Optional synchronous ~ on the current Step0 --.
@@ -23,7 +23,7 @@ namespace NTabletFlatExecutor {
                  | Pending.4 | Pending.3 | Detach.2  | Detach.1  |   Sync   |
        >---------'-----------'-----------'-----------'-----------'----------'->
 
-       Confirmed |      Commit(..)-ed    |     Acquired with Begin(..)      | 
+       Confirmed |      Commit(..)-ed    |     Acquired with Begin(..)      |
 
            .    N-4         N-3         N-2         N-1          N         N+1
       Step | >---|-----------'-----------|-----------'-----------|----------'>
@@ -31,16 +31,16 @@ namespace NTabletFlatExecutor {
            '    Back                    Tail                    Head
 
             * There may be at most one synchronous ~ on the current Head step;
-            * detached ~ acquires step by moving Head forward on Begin(false); 
-            * synchronus ~ moves Head step forward only on its Commit(...); 
-            * all Commit(..) calls have to be serialized by commit Step order. 
+            * detached ~ acquires step by moving Head forward on Begin(false);
+            * synchronus ~ moves Head step forward only on its Commit(...);
+            * all Commit(..) calls have to be serialized by commit Step order.
 
-            > CommitManager{ 1:1 | 4 [7, 7], lvl 5982068b } 
-                             ^^^.  ^.^^^^^^.     ^^^^^^^. 
-                                 `.  `.     `.           `- Blobs KEEPing by tablet 
-                                   `.  `.     `-- Current active commits steps span 
-                                     `.  `------- Pending commit confirmation step 
-                                       `--------- Tablet:Generation of the tablet 
+            > CommitManager{ 1:1 | 4 [7, 7], lvl 5982068b }
+                             ^^^.  ^.^^^^^^.     ^^^^^^^.
+                                 `.  `.     `.           `- Blobs KEEPing by tablet
+                                   `.  `.     `-- Current active commits steps span
+                                     `.  `------- Pending commit confirmation step
+                                       `--------- Tablet:Generation of the tablet
 
               [7, 7] has one active synchronous commit on the Head
               [7, 8) has one detached commit on past step 7
@@ -70,7 +70,7 @@ namespace NTabletFlatExecutor {
         void Describe(IOutputStream &out) const noexcept
         {
             out
-                << "CommitManager{" << Tablet << ":" << Gen << " | " 
+                << "CommitManager{" << Tablet << ":" << Gen << " | "
                 << Min(Back, Tail) << " [" << Tail << ", "
                 << Head << (Sync ? "]" : ")")
                 << ", lvl " << Waste->Level << "b}";
@@ -78,7 +78,7 @@ namespace NTabletFlatExecutor {
 
         void Start(IOps *ops, TActorId owner, ui32 *step0, TMonCo *monCo)
         {
-            Y_VERIFY(!std::exchange(Ops, ops), "Commit manager is already started"); 
+            Y_VERIFY(!std::exchange(Ops, ops), "Commit manager is already started");
 
             Step0 = step0;
             Owner = owner;
@@ -126,11 +126,11 @@ namespace NTabletFlatExecutor {
             StatsAccount(*commit);
             Waste->Account(commit->GcDelta);
             GcLogic->WriteToLog(*commit);
-            TrackCommitTxs(*commit); 
+            TrackCommitTxs(*commit);
             SendCommitEv(*commit);
         }
 
-        void Confirm(const ui32 step) noexcept 
+        void Confirm(const ui32 step) noexcept
         {
             if (Back == Max<ui32>() || step != Back || step >= Tail) {
                 Y_Fail(NFmt::Do(*this) << " got unexpected confirm " << step);
@@ -160,8 +160,8 @@ namespace NTabletFlatExecutor {
             MonCo->Cumulative()[TMonCo::LOG_EMBEDDED].Increment(commit.Embedded.size());
         }
 
-        void TrackCommitTxs(TLogCommit &commit) noexcept; 
- 
+        void TrackCommitTxs(TLogCommit &commit) noexcept;
+
         void SendCommitEv(TLogCommit &commit) noexcept
         {
             const bool snap = (commit.Type == ECommit::Snap);

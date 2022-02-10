@@ -40,11 +40,11 @@ struct TCompactionPolicy : public TThrRefBase {
         TString ResourceBrokerTask;
         bool KeepInCache;
         TBackgroundPolicy BackgroundCompactionPolicy;
-        ui32 ExtraCompactionPercent; 
-        ui32 ExtraCompactionExpPercent; 
-        ui64 ExtraCompactionMinSize; 
-        ui64 ExtraCompactionExpMaxSize; 
-        ui64 UpliftPartSize; 
+        ui32 ExtraCompactionPercent;
+        ui32 ExtraCompactionExpPercent;
+        ui64 ExtraCompactionMinSize;
+        ui64 ExtraCompactionExpMaxSize;
+        ui64 UpliftPartSize;
 
         TGenerationPolicy(ui64 sizeToCompact, ui32 countToCompact, ui32 forceCountToCompact,
                           ui64 forceSizeToCompact, const TString &resourceBrokerTask,
@@ -62,12 +62,12 @@ struct TCompactionPolicy : public TThrRefBase {
                     && CompactionBrokerQueue == p.CompactionBrokerQueue
                     && ResourceBrokerTask == p.ResourceBrokerTask
                     && KeepInCache == p.KeepInCache
-                    && BackgroundCompactionPolicy == p.BackgroundCompactionPolicy 
-                    && ExtraCompactionPercent == p.ExtraCompactionPercent 
-                    && ExtraCompactionExpPercent == p.ExtraCompactionExpPercent 
-                    && ExtraCompactionMinSize == p.ExtraCompactionMinSize 
-                    && ExtraCompactionExpMaxSize == p.ExtraCompactionExpMaxSize 
-                    && UpliftPartSize == p.UpliftPartSize; 
+                    && BackgroundCompactionPolicy == p.BackgroundCompactionPolicy
+                    && ExtraCompactionPercent == p.ExtraCompactionPercent
+                    && ExtraCompactionExpPercent == p.ExtraCompactionExpPercent
+                    && ExtraCompactionMinSize == p.ExtraCompactionMinSize
+                    && ExtraCompactionExpMaxSize == p.ExtraCompactionExpMaxSize
+                    && UpliftPartSize == p.UpliftPartSize;
         }
     };
 
@@ -86,12 +86,12 @@ struct TCompactionPolicy : public TThrRefBase {
     TString BackupResourceBrokerTask;
     ui32 DefaultTaskPriority;
     TBackgroundPolicy BackgroundSnapshotPolicy;
-    ui64 LogOverheadSizeToSnapshot; 
-    ui32 LogOverheadCountToSnapshot; 
-    ui32 DroppedRowsPercentToCompact; 
+    ui64 LogOverheadSizeToSnapshot;
+    ui32 LogOverheadCountToSnapshot;
+    ui32 DroppedRowsPercentToCompact;
     NKikimrSchemeOp::ECompactionStrategy CompactionStrategy;
     NKikimrSchemeOp::TCompactionPolicy::TShardPolicy ShardPolicy;
-    bool KeepEraseMarkers; 
+    bool KeepEraseMarkers;
 
     TVector<TGenerationPolicy> Generations;
 
@@ -116,19 +116,19 @@ struct TCompactionPolicy : public TThrRefBase {
                 && BackupCompactionBrokerQueue == p.BackupCompactionBrokerQueue
                 && BackupResourceBrokerTask == p.BackupResourceBrokerTask
                 && DefaultTaskPriority == p.DefaultTaskPriority
-                && BackgroundSnapshotPolicy == p.BackgroundSnapshotPolicy 
-                && LogOverheadSizeToSnapshot == p.LogOverheadSizeToSnapshot 
-                && LogOverheadCountToSnapshot == p.LogOverheadCountToSnapshot 
-                && DroppedRowsPercentToCompact == p.DroppedRowsPercentToCompact 
-                && CompactionStrategy == p.CompactionStrategy 
-                && KeepEraseMarkers == p.KeepEraseMarkers 
-                && ::google::protobuf::util::MessageDifferencer::Equals(ShardPolicy, p.ShardPolicy); 
+                && BackgroundSnapshotPolicy == p.BackgroundSnapshotPolicy
+                && LogOverheadSizeToSnapshot == p.LogOverheadSizeToSnapshot
+                && LogOverheadCountToSnapshot == p.LogOverheadCountToSnapshot
+                && DroppedRowsPercentToCompact == p.DroppedRowsPercentToCompact
+                && CompactionStrategy == p.CompactionStrategy
+                && KeepEraseMarkers == p.KeepEraseMarkers
+                && ::google::protobuf::util::MessageDifferencer::Equals(ShardPolicy, p.ShardPolicy);
     }
 };
 
 typedef TIntrusivePtr<TCompactionPolicy> TCompactionPolicyPtr;
 
-TCompactionPolicyPtr CreateDefaultTablePolicy(); 
+TCompactionPolicyPtr CreateDefaultTablePolicy();
 TCompactionPolicyPtr CreateDefaultUserTablePolicy();
 
 bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err);
@@ -136,9 +136,9 @@ bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TC
 // Get Resource Broker task type name by Compaction Broker queue ID.
 TString LegacyQueueIdToTaskName(ui32 id);
 
-// Check if Resource Broker task name is for a legacy queue ID. 
-bool IsLegacyQueueIdTaskName(const TString& taskName); 
- 
+// Check if Resource Broker task name is for a legacy queue ID.
+bool IsLegacyQueueIdTaskName(const TString& taskName);
+
 extern const TString DefaultQueueName;
 extern const TString UnknownTaskName;
 extern const TString TransactionTaskName;
@@ -146,6 +146,6 @@ extern const TString ScanTaskName;
 extern const TString BackgroundCompactionTaskName;
 extern const TString KqpResourceManagerTaskName;
 extern const TString KqpResourceManagerQueue;
-extern const TString LegacyQueueIdTaskNamePrefix; 
+extern const TString LegacyQueueIdTaskNamePrefix;
 
 }}

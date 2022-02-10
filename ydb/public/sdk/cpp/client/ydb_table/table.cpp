@@ -40,121 +40,121 @@ constexpr TDuration KEEP_ALIVE_CLIENT_TIMEOUT = TDuration::Seconds(5);
 constexpr ui64 PERIODIC_ACTION_BATCH_SIZE = 10; //Max number of tasks to perform during one interval
 constexpr ui32 MAX_BACKOFF_DURATION_MS = TDuration::Hours(1).MilliSeconds();
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-class TStorageSettings::TImpl { 
-public: 
-    TImpl() { } 
- 
-    explicit TImpl(const Ydb::Table::StorageSettings& proto) 
-        : Proto_(proto) 
-    { } 
- 
-public: 
-    const Ydb::Table::StorageSettings Proto_; 
-}; 
- 
-TStorageSettings::TStorageSettings() 
-    : Impl_(std::make_shared<TImpl>()) 
-{ } 
- 
-TStorageSettings::TStorageSettings(const Ydb::Table::StorageSettings& proto) 
-    : Impl_(std::make_shared<TImpl>(proto)) 
-{ } 
- 
-const Ydb::Table::StorageSettings& TStorageSettings::GetProto() const { 
-    return Impl_->Proto_; 
-} 
- 
-TMaybe<TString> TStorageSettings::GetTabletCommitLog0() const { 
-    if (GetProto().has_tablet_commit_log0()) { 
-        return GetProto().tablet_commit_log0().media(); 
-    } else { 
-        return { }; 
-    } 
-} 
- 
-TMaybe<TString> TStorageSettings::GetTabletCommitLog1() const { 
-    if (GetProto().has_tablet_commit_log1()) { 
-        return GetProto().tablet_commit_log1().media(); 
-    } else { 
-        return { }; 
-    } 
-} 
- 
-TMaybe<TString> TStorageSettings::GetExternal() const { 
-    if (GetProto().has_external()) { 
-        return GetProto().external().media(); 
-    } else { 
-        return { }; 
-    } 
-} 
- 
-TMaybe<bool> TStorageSettings::GetStoreExternalBlobs() const { 
-    switch (GetProto().store_external_blobs()) { 
-        case Ydb::FeatureFlag::ENABLED: 
-            return true; 
-        case Ydb::FeatureFlag::DISABLED: 
-            return false; 
-        default: 
-            return { }; 
-    } 
-} 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-class TColumnFamilyDescription::TImpl { 
-public: 
-    explicit TImpl(const Ydb::Table::ColumnFamily& desc) 
-        : Proto_(desc) 
-    { } 
- 
-public: 
-    const Ydb::Table::ColumnFamily Proto_; 
-}; 
- 
-TColumnFamilyDescription::TColumnFamilyDescription(const Ydb::Table::ColumnFamily& desc) 
-    : Impl_(std::make_shared<TImpl>(desc)) 
-{ } 
- 
-const Ydb::Table::ColumnFamily& TColumnFamilyDescription::GetProto() const { 
-    return Impl_->Proto_; 
-} 
- 
-const TString& TColumnFamilyDescription::GetName() const { 
-    return GetProto().name(); 
-} 
- 
-TMaybe<TString> TColumnFamilyDescription::GetData() const { 
-    if (GetProto().has_data()) { 
-        return GetProto().data().media(); 
-    } else { 
-        return { }; 
-    } 
-} 
- 
-TMaybe<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression() const { 
-    switch (GetProto().compression()) { 
-        case Ydb::Table::ColumnFamily::COMPRESSION_NONE: 
-            return EColumnFamilyCompression::None; 
-        case Ydb::Table::ColumnFamily::COMPRESSION_LZ4: 
-            return EColumnFamilyCompression::LZ4; 
-        default: 
-            return { }; 
-    } 
-} 
- 
-TMaybe<bool> TColumnFamilyDescription::GetKeepInMemory() const { 
-    switch (GetProto().keep_in_memory()) { 
-        case Ydb::FeatureFlag::ENABLED: 
-            return true; 
-        case Ydb::FeatureFlag::DISABLED: 
-            return false; 
-        default: 
-            return { }; 
-    } 
-} 
- 
+////////////////////////////////////////////////////////////////////////////////
+
+class TStorageSettings::TImpl {
+public:
+    TImpl() { }
+
+    explicit TImpl(const Ydb::Table::StorageSettings& proto)
+        : Proto_(proto)
+    { }
+
+public:
+    const Ydb::Table::StorageSettings Proto_;
+};
+
+TStorageSettings::TStorageSettings()
+    : Impl_(std::make_shared<TImpl>())
+{ }
+
+TStorageSettings::TStorageSettings(const Ydb::Table::StorageSettings& proto)
+    : Impl_(std::make_shared<TImpl>(proto))
+{ }
+
+const Ydb::Table::StorageSettings& TStorageSettings::GetProto() const {
+    return Impl_->Proto_;
+}
+
+TMaybe<TString> TStorageSettings::GetTabletCommitLog0() const {
+    if (GetProto().has_tablet_commit_log0()) {
+        return GetProto().tablet_commit_log0().media();
+    } else {
+        return { };
+    }
+}
+
+TMaybe<TString> TStorageSettings::GetTabletCommitLog1() const {
+    if (GetProto().has_tablet_commit_log1()) {
+        return GetProto().tablet_commit_log1().media();
+    } else {
+        return { };
+    }
+}
+
+TMaybe<TString> TStorageSettings::GetExternal() const {
+    if (GetProto().has_external()) {
+        return GetProto().external().media();
+    } else {
+        return { };
+    }
+}
+
+TMaybe<bool> TStorageSettings::GetStoreExternalBlobs() const {
+    switch (GetProto().store_external_blobs()) {
+        case Ydb::FeatureFlag::ENABLED:
+            return true;
+        case Ydb::FeatureFlag::DISABLED:
+            return false;
+        default:
+            return { };
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TColumnFamilyDescription::TImpl {
+public:
+    explicit TImpl(const Ydb::Table::ColumnFamily& desc)
+        : Proto_(desc)
+    { }
+
+public:
+    const Ydb::Table::ColumnFamily Proto_;
+};
+
+TColumnFamilyDescription::TColumnFamilyDescription(const Ydb::Table::ColumnFamily& desc)
+    : Impl_(std::make_shared<TImpl>(desc))
+{ }
+
+const Ydb::Table::ColumnFamily& TColumnFamilyDescription::GetProto() const {
+    return Impl_->Proto_;
+}
+
+const TString& TColumnFamilyDescription::GetName() const {
+    return GetProto().name();
+}
+
+TMaybe<TString> TColumnFamilyDescription::GetData() const {
+    if (GetProto().has_data()) {
+        return GetProto().data().media();
+    } else {
+        return { };
+    }
+}
+
+TMaybe<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression() const {
+    switch (GetProto().compression()) {
+        case Ydb::Table::ColumnFamily::COMPRESSION_NONE:
+            return EColumnFamilyCompression::None;
+        case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
+            return EColumnFamilyCompression::LZ4;
+        default:
+            return { };
+    }
+}
+
+TMaybe<bool> TColumnFamilyDescription::GetKeepInMemory() const {
+    switch (GetProto().keep_in_memory()) {
+        case Ydb::FeatureFlag::ENABLED:
+            return true;
+        case Ydb::FeatureFlag::DISABLED:
+            return false;
+        default:
+            return { };
+    }
+}
+
 TBuildIndexOperation::TBuildIndexOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
     : TOperation(std::move(status), std::move(operation))
 {
@@ -171,8 +171,8 @@ const TBuildIndexOperation::TMetadata& TBuildIndexOperation::Metadata() const {
     return Metadata_;
 }
 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+////////////////////////////////////////////////////////////////////////////////
+
 class TPartitioningSettings::TImpl {
 public:
     TImpl() { }
@@ -264,7 +264,7 @@ class TTableDescription::TImpl {
 
         // columns
         for (const auto& col : proto.columns()) {
-            Columns_.emplace_back(col.name(), col.type(), col.family()); 
+            Columns_.emplace_back(col.name(), col.type(), col.family());
         }
 
         // indexes
@@ -378,7 +378,7 @@ public:
                 TMaybe<TKeyBound>()));
         }
     }
- 
+
     struct TCreateTableRequestTag {}; // to avoid delegation cycle
 
     TImpl(const Ydb::Table::CreateTableRequest& request, TCreateTableRequestTag)
@@ -415,8 +415,8 @@ public:
         return Proto_;
     }
 
-    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family) { 
-        Columns_.emplace_back(name, type, family); 
+    void AddColumn(const TString& name, const Ydb::Type& type, const TString& family) {
+        Columns_.emplace_back(name, type, family);
     }
 
     void SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns) {
@@ -439,15 +439,15 @@ public:
         TtlSettings_ = settings;
     }
 
-    void SetStorageSettings(const TStorageSettings& settings) { 
-        StorageSettings_ = settings; 
-        HasStorageSettings_ = true; 
-    } 
- 
-    void AddColumnFamily(const TColumnFamilyDescription& desc) { 
-        ColumnFamilies_.emplace_back(desc); 
-    } 
- 
+    void SetStorageSettings(const TStorageSettings& settings) {
+        StorageSettings_ = settings;
+        HasStorageSettings_ = true;
+    }
+
+    void AddColumnFamily(const TColumnFamilyDescription& desc) {
+        ColumnFamilies_.emplace_back(desc);
+    }
+
     void AddAttribute(const TString& key, const TString& value) {
         Attributes_[key] = value;
     }
@@ -489,7 +489,7 @@ public:
         return PrimaryKey_;
     }
 
-    const TVector<TTableColumn>& GetColumns() const { 
+    const TVector<TTableColumn>& GetColumns() const {
         return Columns_;
     }
 
@@ -529,14 +529,14 @@ public:
         return HasStorageSettings_;
     }
 
-    const TStorageSettings& GetStorageSettings() const { 
-        return StorageSettings_; 
-    } 
- 
-    const TVector<TColumnFamilyDescription>& GetColumnFamilies() const { 
-        return ColumnFamilies_; 
-    } 
- 
+    const TStorageSettings& GetStorageSettings() const {
+        return StorageSettings_;
+    }
+
+    const TVector<TColumnFamilyDescription>& GetColumnFamilies() const {
+        return ColumnFamilies_;
+    }
+
     const THashMap<TString, TString>& GetAttributes() const {
         return Attributes_;
     }
@@ -571,9 +571,9 @@ public:
 
 private:
     Ydb::Table::DescribeTableResult Proto_;
-    TStorageSettings StorageSettings_; 
+    TStorageSettings StorageSettings_;
     TVector<TString> PrimaryKey_;
-    TVector<TTableColumn> Columns_; 
+    TVector<TTableColumn> Columns_;
     TVector<TIndexDescription> Indexes_;
     TMaybe<TTtlSettings> TtlSettings_;
     TString Owner_;
@@ -582,7 +582,7 @@ private:
     TVector<TKeyRange> Ranges_;
     TVector<TPartitionStats> PartitionStats_;
     TTableStats TableStats;
-    TVector<TColumnFamilyDescription> ColumnFamilies_; 
+    TVector<TColumnFamilyDescription> ColumnFamilies_;
     THashMap<TString, TString> Attributes_;
     TString CompactionPolicy_;
     TMaybe<ui64> UniformPartitions_;
@@ -590,7 +590,7 @@ private:
     TPartitioningSettings PartitioningSettings_;
     TMaybe<bool> KeyBloomFilter_;
     TMaybe<TReadReplicasSettings> ReadReplicasSettings_;
-    bool HasStorageSettings_ = false; 
+    bool HasStorageSettings_ = false;
     bool HasPartitioningSettings_ = false;
 };
 
@@ -615,16 +615,16 @@ const TVector<TString>& TTableDescription::GetPrimaryKeyColumns() const {
 }
 
 TVector<TColumn> TTableDescription::GetColumns() const {
-    // Conversion to TColumn for API compatibility 
-    const auto& columns = Impl_->GetColumns(); 
-    TVector<TColumn> legacy(Reserve(columns.size())); 
-    for (const auto& column : columns) { 
-        legacy.emplace_back(column.Name, column.Type); 
-    } 
-    return legacy; 
-} 
- 
-TVector<TTableColumn> TTableDescription::GetTableColumns() const { 
+    // Conversion to TColumn for API compatibility
+    const auto& columns = Impl_->GetColumns();
+    TVector<TColumn> legacy(Reserve(columns.size()));
+    for (const auto& column : columns) {
+        legacy.emplace_back(column.Name, column.Type);
+    }
+    return legacy;
+}
+
+TVector<TTableColumn> TTableDescription::GetTableColumns() const {
     return Impl_->GetColumns();
 }
 
@@ -652,8 +652,8 @@ const TVector<TKeyRange>& TTableDescription::GetKeyRanges() const {
     return Impl_->GetKeyRanges();
 }
 
-void TTableDescription::AddColumn(const TString& name, const Ydb::Type& type, const TString& family) { 
-    Impl_->AddColumn(name, type, family); 
+void TTableDescription::AddColumn(const TString& name, const Ydb::Type& type, const TString& family) {
+    Impl_->AddColumn(name, type, family);
 }
 
 void TTableDescription::SetPrimaryKeyColumns(const TVector<TString>& primaryKeyColumns) {
@@ -700,14 +700,14 @@ void TTableDescription::SetTtlSettings(const TTtlSettings& settings) {
     Impl_->SetTtlSettings(settings);
 }
 
-void TTableDescription::SetStorageSettings(const TStorageSettings& settings) { 
-    Impl_->SetStorageSettings(settings); 
-} 
- 
-void TTableDescription::AddColumnFamily(const TColumnFamilyDescription& desc) { 
-    Impl_->AddColumnFamily(desc); 
-} 
- 
+void TTableDescription::SetStorageSettings(const TStorageSettings& settings) {
+    Impl_->SetStorageSettings(settings);
+}
+
+void TTableDescription::AddColumnFamily(const TColumnFamilyDescription& desc) {
+    Impl_->AddColumnFamily(desc);
+}
+
 void TTableDescription::AddAttribute(const TString& key, const TString& value) {
     Impl_->AddAttribute(key, value);
 }
@@ -768,14 +768,14 @@ ui64 TTableDescription::GetPartitionsCount() const {
     return Impl_->GetTableStats().Partitions;
 }
 
-const TStorageSettings& TTableDescription::GetStorageSettings() const { 
-    return Impl_->GetStorageSettings(); 
-} 
- 
-const TVector<TColumnFamilyDescription>& TTableDescription::GetColumnFamilies() const { 
-    return Impl_->GetColumnFamilies(); 
-} 
- 
+const TStorageSettings& TTableDescription::GetStorageSettings() const {
+    return Impl_->GetStorageSettings();
+}
+
+const TVector<TColumnFamilyDescription>& TTableDescription::GetColumnFamilies() const {
+    return Impl_->GetColumnFamilies();
+}
+
 const THashMap<TString, TString>& TTableDescription::GetAttributes() const {
     return Impl_->GetAttributes();
 }
@@ -876,44 +876,44 @@ void TTableDescription::SerializeTo(Ydb::Table::CreateTableRequest& request) con
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TStorageSettingsBuilder::TImpl { 
-public: 
-    Ydb::Table::StorageSettings Proto; 
-}; 
- 
-TStorageSettingsBuilder::TStorageSettingsBuilder() 
-    : Impl_(new TImpl) 
-{ } 
- 
-TStorageSettingsBuilder::~TStorageSettingsBuilder() { } 
- 
-TStorageSettingsBuilder& TStorageSettingsBuilder::SetTabletCommitLog0(const TString& media) { 
-    Impl_->Proto.mutable_tablet_commit_log0()->set_media(media); 
-    return *this; 
-} 
- 
-TStorageSettingsBuilder& TStorageSettingsBuilder::SetTabletCommitLog1(const TString& media) { 
-    Impl_->Proto.mutable_tablet_commit_log1()->set_media(media); 
-    return *this; 
-} 
- 
-TStorageSettingsBuilder& TStorageSettingsBuilder::SetExternal(const TString& media) { 
-    Impl_->Proto.mutable_external()->set_media(media); 
-    return *this; 
-} 
- 
-TStorageSettingsBuilder& TStorageSettingsBuilder::SetStoreExternalBlobs(bool enabled) { 
-    Impl_->Proto.set_store_external_blobs( 
-        enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED); 
-    return *this; 
-} 
- 
-TStorageSettings TStorageSettingsBuilder::Build() const { 
-    return TStorageSettings(Impl_->Proto); 
-} 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
+class TStorageSettingsBuilder::TImpl {
+public:
+    Ydb::Table::StorageSettings Proto;
+};
+
+TStorageSettingsBuilder::TStorageSettingsBuilder()
+    : Impl_(new TImpl)
+{ }
+
+TStorageSettingsBuilder::~TStorageSettingsBuilder() { }
+
+TStorageSettingsBuilder& TStorageSettingsBuilder::SetTabletCommitLog0(const TString& media) {
+    Impl_->Proto.mutable_tablet_commit_log0()->set_media(media);
+    return *this;
+}
+
+TStorageSettingsBuilder& TStorageSettingsBuilder::SetTabletCommitLog1(const TString& media) {
+    Impl_->Proto.mutable_tablet_commit_log1()->set_media(media);
+    return *this;
+}
+
+TStorageSettingsBuilder& TStorageSettingsBuilder::SetExternal(const TString& media) {
+    Impl_->Proto.mutable_external()->set_media(media);
+    return *this;
+}
+
+TStorageSettingsBuilder& TStorageSettingsBuilder::SetStoreExternalBlobs(bool enabled) {
+    Impl_->Proto.set_store_external_blobs(
+        enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+    return *this;
+}
+
+TStorageSettings TStorageSettingsBuilder::Build() const {
+    return TStorageSettings(Impl_->Proto);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TPartitioningSettingsBuilder::TImpl {
 public:
     Ydb::Table::PartitioningSettings Proto;
@@ -958,60 +958,60 @@ TPartitioningSettings TPartitioningSettingsBuilder::Build() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TColumnFamilyBuilder::TImpl { 
-public: 
-    Ydb::Table::ColumnFamily Proto; 
-}; 
- 
-TColumnFamilyBuilder::TColumnFamilyBuilder(const TString& name) 
-    : Impl_(new TImpl) 
-{ 
-    Impl_->Proto.set_name(name); 
-} 
- 
-TColumnFamilyBuilder::~TColumnFamilyBuilder() { } 
- 
-TColumnFamilyBuilder& TColumnFamilyBuilder::SetData(const TString& media) { 
-    Impl_->Proto.mutable_data()->set_media(media); 
-    return *this; 
-} 
- 
-TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompression compression) { 
-    switch (compression) { 
-        case EColumnFamilyCompression::None: 
-            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE); 
-            break; 
-        case EColumnFamilyCompression::LZ4: 
-            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4); 
-            break; 
-    } 
-    return *this; 
-} 
- 
-TColumnFamilyDescription TColumnFamilyBuilder::Build() const { 
-    return TColumnFamilyDescription(Impl_->Proto); 
-} 
- 
-//////////////////////////////////////////////////////////////////////////////// 
- 
-TTableBuilder& TTableBuilder::AddNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family) { 
+class TColumnFamilyBuilder::TImpl {
+public:
+    Ydb::Table::ColumnFamily Proto;
+};
+
+TColumnFamilyBuilder::TColumnFamilyBuilder(const TString& name)
+    : Impl_(new TImpl)
+{
+    Impl_->Proto.set_name(name);
+}
+
+TColumnFamilyBuilder::~TColumnFamilyBuilder() { }
+
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetData(const TString& media) {
+    Impl_->Proto.mutable_data()->set_media(media);
+    return *this;
+}
+
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompression compression) {
+    switch (compression) {
+        case EColumnFamilyCompression::None:
+            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_NONE);
+            break;
+        case EColumnFamilyCompression::LZ4:
+            Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+            break;
+    }
+    return *this;
+}
+
+TColumnFamilyDescription TColumnFamilyBuilder::Build() const {
+    return TColumnFamilyDescription(Impl_->Proto);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TTableBuilder& TTableBuilder::AddNullableColumn(const TString& name, const EPrimitiveType& type, const TString& family) {
     auto columnType = TTypeBuilder()
         .BeginOptional()
             .Primitive(type)
         .EndOptional()
         .Build();
 
-    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family); 
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family);
     return *this;
 }
 
-TTableBuilder& TTableBuilder::AddNullableColumn(const TString& name, const TDecimalType& type, const TString& family) { 
+TTableBuilder& TTableBuilder::AddNullableColumn(const TString& name, const TDecimalType& type, const TString& family) {
     auto columnType = TTypeBuilder()
         .BeginOptional()
             .Decimal(type)
         .EndOptional()
         .Build();
-    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family); 
+    TableDescription_.AddColumn(name, TProtoAccessor::GetProto(columnType), family);
     return *this;
 }
 
@@ -1112,16 +1112,16 @@ TTableBuilder& TTableBuilder::SetTtlSettings(const TString& columnName, EUnit co
     return SetTtlSettings(TTtlSettings(columnName, columnUnit, expireAfter));
 }
 
-TTableBuilder& TTableBuilder::SetStorageSettings(const TStorageSettings& settings) { 
-    TableDescription_.SetStorageSettings(settings); 
-    return *this; 
-} 
- 
-TTableBuilder& TTableBuilder::AddColumnFamily(const TColumnFamilyDescription& desc) { 
-    TableDescription_.AddColumnFamily(std::move(desc)); 
-    return *this; 
-} 
- 
+TTableBuilder& TTableBuilder::SetStorageSettings(const TStorageSettings& settings) {
+    TableDescription_.SetStorageSettings(settings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddColumnFamily(const TColumnFamilyDescription& desc) {
+    TableDescription_.AddColumnFamily(std::move(desc));
+    return *this;
+}
+
 TTableBuilder& TTableBuilder::AddAttribute(const TString& key, const TString& value) {
     TableDescription_.AddAttribute(key, value);
     return *this;
@@ -2383,12 +2383,12 @@ public:
         for (const auto& col : settings.Columns_) {
             request.add_columns(col);
         }
-        if (settings.UseSnapshot_) { 
-            request.set_use_snapshot( 
-                settings.UseSnapshot_.GetRef() 
-                ? Ydb::FeatureFlag::ENABLED 
-                : Ydb::FeatureFlag::DISABLED); 
-        } 
+        if (settings.UseSnapshot_) {
+            request.set_use_snapshot(
+                settings.UseSnapshot_.GetRef()
+                ? Ydb::FeatureFlag::ENABLED
+                : Ydb::FeatureFlag::DISABLED);
+        }
 
         if (settings.From_) {
             const auto& from = settings.From_.GetRef();
@@ -3596,41 +3596,41 @@ static void ConvertCreateTableSettingsToProto(const TCreateTableSettings& settin
             proto->mutable_storage_policy()->set_preset_name(policy.PresetName_.GetRef());
         }
         if (policy.SysLog_) {
-            proto->mutable_storage_policy()->mutable_syslog()->set_media(policy.SysLog_.GetRef()); 
+            proto->mutable_storage_policy()->mutable_syslog()->set_media(policy.SysLog_.GetRef());
         }
         if (policy.Log_) {
-            proto->mutable_storage_policy()->mutable_log()->set_media(policy.Log_.GetRef()); 
+            proto->mutable_storage_policy()->mutable_log()->set_media(policy.Log_.GetRef());
         }
         if (policy.Data_) {
-            proto->mutable_storage_policy()->mutable_data()->set_media(policy.Data_.GetRef()); 
+            proto->mutable_storage_policy()->mutable_data()->set_media(policy.Data_.GetRef());
         }
         if (policy.External_) {
-            proto->mutable_storage_policy()->mutable_external()->set_media(policy.External_.GetRef()); 
+            proto->mutable_storage_policy()->mutable_external()->set_media(policy.External_.GetRef());
         }
-        for (const auto& familyPolicy : policy.ColumnFamilies_) { 
-            auto* familyProto = proto->mutable_storage_policy()->add_column_families(); 
-            if (familyPolicy.Name_) { 
-                familyProto->set_name(familyPolicy.Name_.GetRef()); 
-            } 
-            if (familyPolicy.Data_) { 
-                familyProto->mutable_data()->set_media(familyPolicy.Data_.GetRef()); 
-            } 
-            if (familyPolicy.External_) { 
-                familyProto->mutable_external()->set_media(familyPolicy.External_.GetRef()); 
-            } 
-            if (familyPolicy.KeepInMemory_) { 
-                familyProto->set_keep_in_memory( 
-                    familyPolicy.KeepInMemory_.GetRef() 
-                    ? Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED 
-                    : Ydb::FeatureFlag_Status::FeatureFlag_Status_DISABLED 
-                ); 
-            } 
-            if (familyPolicy.Compressed_) { 
-                familyProto->set_compression(familyPolicy.Compressed_.GetRef() 
-                    ? Ydb::Table::ColumnFamilyPolicy::COMPRESSED 
-                    : Ydb::Table::ColumnFamilyPolicy::UNCOMPRESSED); 
-            } 
-        } 
+        for (const auto& familyPolicy : policy.ColumnFamilies_) {
+            auto* familyProto = proto->mutable_storage_policy()->add_column_families();
+            if (familyPolicy.Name_) {
+                familyProto->set_name(familyPolicy.Name_.GetRef());
+            }
+            if (familyPolicy.Data_) {
+                familyProto->mutable_data()->set_media(familyPolicy.Data_.GetRef());
+            }
+            if (familyPolicy.External_) {
+                familyProto->mutable_external()->set_media(familyPolicy.External_.GetRef());
+            }
+            if (familyPolicy.KeepInMemory_) {
+                familyProto->set_keep_in_memory(
+                    familyPolicy.KeepInMemory_.GetRef()
+                    ? Ydb::FeatureFlag_Status::FeatureFlag_Status_ENABLED
+                    : Ydb::FeatureFlag_Status::FeatureFlag_Status_DISABLED
+                );
+            }
+            if (familyPolicy.Compressed_) {
+                familyProto->set_compression(familyPolicy.Compressed_.GetRef()
+                    ? Ydb::Table::ColumnFamilyPolicy::COMPRESSED
+                    : Ydb::Table::ColumnFamilyPolicy::UNCOMPRESSED);
+            }
+        }
     }
     if (settings.ReplicationPolicy_) {
         const auto& policy = settings.ReplicationPolicy_.GetRef();
@@ -3714,19 +3714,19 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
         auto& protoColumn = *request.add_add_columns();
         protoColumn.set_name(column.Name);
         protoColumn.mutable_type()->CopyFrom(TProtoAccessor::GetProto(column.Type));
-        protoColumn.set_family(column.Family); 
+        protoColumn.set_family(column.Family);
     }
 
     for (const auto& columnName : settings.DropColumns_) {
         request.add_drop_columns(columnName);
     }
 
-    for (const auto& alter : settings.AlterColumns_) { 
-        auto& protoAlter = *request.add_alter_columns(); 
-        protoAlter.set_name(alter.Name); 
-        protoAlter.set_family(alter.Family); 
-    } 
- 
+    for (const auto& alter : settings.AlterColumns_) {
+        auto& protoAlter = *request.add_alter_columns();
+        protoAlter.set_name(alter.Name);
+        protoAlter.set_family(alter.Family);
+    }
+
     for (const auto& addIndex : settings.AddIndexes_) {
         addIndex.SerializeTo(*request.add_add_indexes());
     }
@@ -3735,18 +3735,18 @@ static Ydb::Table::AlterTableRequest MakeAlterTableProtoRequest(
         request.add_drop_indexes(dropIndex);
     }
 
-    if (settings.AlterStorageSettings_) { 
-        request.mutable_alter_storage_settings()->CopyFrom(settings.AlterStorageSettings_->GetProto()); 
-    } 
- 
-    for (const auto& family : settings.AddColumnFamilies_) { 
-        request.add_add_column_families()->CopyFrom(family.GetProto()); 
-    } 
- 
-    for (const auto& family : settings.AlterColumnFamilies_) { 
-        request.add_alter_column_families()->CopyFrom(family.GetProto()); 
-    } 
- 
+    if (settings.AlterStorageSettings_) {
+        request.mutable_alter_storage_settings()->CopyFrom(settings.AlterStorageSettings_->GetProto());
+    }
+
+    for (const auto& family : settings.AddColumnFamilies_) {
+        request.add_add_column_families()->CopyFrom(family.GetProto());
+    }
+
+    for (const auto& family : settings.AlterColumnFamilies_) {
+        request.add_alter_column_families()->CopyFrom(family.GetProto());
+    }
+
     if (const auto& ttl = settings.GetAlterTtlSettings()) {
         switch (ttl->GetAction()) {
         case TAlterTtlSettings::EAction::Set:

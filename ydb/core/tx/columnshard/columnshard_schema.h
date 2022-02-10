@@ -37,13 +37,13 @@ struct Schema : NIceDb::Schema {
     };
 
     enum class EValueIds : ui32 {
-        CurrentSchemeShardId = 1, 
-        ProcessingParams = 2, 
-        LastWriteId = 3, 
-        LastPlannedStep = 4, 
-        LastPlannedTxId = 5, 
-        LastSchemaSeqNoGeneration = 6, 
-        LastSchemaSeqNoRound = 7, 
+        CurrentSchemeShardId = 1,
+        ProcessingParams = 2,
+        LastWriteId = 3,
+        LastPlannedStep = 4,
+        LastPlannedTxId = 5,
+        LastSchemaSeqNoGeneration = 6,
+        LastSchemaSeqNoRound = 7,
 
         LastGcBarrierGen = 8,
         LastGcBarrierStep = 9,
@@ -66,82 +66,82 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Id, Digit, Bytes>;
     };
 
-    struct TxInfo : Table<2> { 
+    struct TxInfo : Table<2> {
         struct TxId : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct TxKind : Column<2, NScheme::NTypeIds::Uint32> { using Type = NKikimrTxColumnShard::ETransactionKind; }; 
+        struct TxKind : Column<2, NScheme::NTypeIds::Uint32> { using Type = NKikimrTxColumnShard::ETransactionKind; };
         struct TxBody : Column<3, NScheme::NTypeIds::String> {};
-        struct MaxStep : Column<4, NScheme::NTypeIds::Uint64> {}; 
-        struct PlanStep : Column<5, NScheme::NTypeIds::Uint64> {}; 
-        struct Source : Column<6, NScheme::NTypeIds::ActorId> {}; 
-        struct Cookie : Column<7, NScheme::NTypeIds::Uint64> {}; 
+        struct MaxStep : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct PlanStep : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Source : Column<6, NScheme::NTypeIds::ActorId> {};
+        struct Cookie : Column<7, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<TxId>;
-        using TColumns = TableColumns<TxId, TxKind, TxBody, MaxStep, PlanStep, Source, Cookie>; 
+        using TColumns = TableColumns<TxId, TxKind, TxBody, MaxStep, PlanStep, Source, Cookie>;
     };
 
-    struct SchemaPresetInfo : Table<3> { 
-        struct Id : Column<1, NScheme::NTypeIds::Uint32> {}; 
-        struct Name : Column<2, NScheme::NTypeIds::Utf8> {}; 
-        struct DropStep : Column<3, NScheme::NTypeIds::Uint64> {}; 
-        struct DropTxId : Column<4, NScheme::NTypeIds::Uint64> {}; 
+    struct SchemaPresetInfo : Table<3> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct Name : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct DropStep : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct DropTxId : Column<4, NScheme::NTypeIds::Uint64> {};
 
-        using TKey = TableKey<Id>; 
-        using TColumns = TableColumns<Id, Name, DropStep, DropTxId>; 
-    }; 
- 
-    struct SchemaPresetVersionInfo : Table<9> { 
-        struct Id : Column<1, NScheme::NTypeIds::Uint32> {}; 
-        struct SinceStep : Column<2, NScheme::NTypeIds::Uint64> {}; 
-        struct SinceTxId : Column<3, NScheme::NTypeIds::Uint64> {}; 
-        struct InfoProto : Column<4, NScheme::NTypeIds::String> {}; // TSchemaPresetVersionInfo 
- 
-        using TKey = TableKey<Id, SinceStep, SinceTxId>; 
-        using TColumns = TableColumns<Id, SinceStep, SinceTxId, InfoProto>; 
-    }; 
- 
-    struct TtlSettingsPresetInfo : Table<4> { 
-        struct Id : Column<1, NScheme::NTypeIds::Uint32> {}; 
-        struct Name : Column<2, NScheme::NTypeIds::Utf8> {}; 
-        struct DropStep : Column<3, NScheme::NTypeIds::Uint64> {}; 
-        struct DropTxId : Column<4, NScheme::NTypeIds::Uint64> {}; 
- 
-        using TKey = TableKey<Id>; 
-        using TColumns = TableColumns<Id, Name, DropStep, DropTxId>; 
-    }; 
- 
-    struct TtlSettingsPresetVersionInfo : Table<10> { 
-        struct Id : Column<1, NScheme::NTypeIds::Uint32> {}; 
-        struct SinceStep : Column<2, NScheme::NTypeIds::Uint64> {}; 
-        struct SinceTxId : Column<3, NScheme::NTypeIds::Uint64> {}; 
-        struct InfoProto : Column<4, NScheme::NTypeIds::String> {}; // TTtlSettingsPresetVersionInfo 
- 
-        using TKey = TableKey<Id, SinceStep, SinceTxId>; 
-        using TColumns = TableColumns<Id, SinceStep, SinceTxId, InfoProto>; 
-    }; 
- 
-    struct TableInfo : Table<5> { 
-        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {}; 
-        struct DropStep : Column<2, NScheme::NTypeIds::Uint64> {}; 
-        struct DropTxId : Column<3, NScheme::NTypeIds::Uint64> {}; 
- 
-        using TKey = TableKey<PathId>; 
-        using TColumns = TableColumns<PathId, DropStep, DropTxId>; 
-    }; 
- 
-    struct TableVersionInfo : Table<11> { 
-        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {}; 
-        struct SinceStep : Column<2, NScheme::NTypeIds::Uint64> {}; 
-        struct SinceTxId : Column<3, NScheme::NTypeIds::Uint64> {}; 
-        struct InfoProto : Column<4, NScheme::NTypeIds::String> {}; // TTableVersionInfo 
- 
-        using TKey = TableKey<PathId, SinceStep, SinceTxId>; 
-        using TColumns = TableColumns<PathId, SinceStep, SinceTxId, InfoProto>; 
-    }; 
- 
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<Id, Name, DropStep, DropTxId>;
+    };
+
+    struct SchemaPresetVersionInfo : Table<9> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct SinceStep : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SinceTxId : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct InfoProto : Column<4, NScheme::NTypeIds::String> {}; // TSchemaPresetVersionInfo
+
+        using TKey = TableKey<Id, SinceStep, SinceTxId>;
+        using TColumns = TableColumns<Id, SinceStep, SinceTxId, InfoProto>;
+    };
+
+    struct TtlSettingsPresetInfo : Table<4> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct Name : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct DropStep : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct DropTxId : Column<4, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<Id, Name, DropStep, DropTxId>;
+    };
+
+    struct TtlSettingsPresetVersionInfo : Table<10> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct SinceStep : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SinceTxId : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct InfoProto : Column<4, NScheme::NTypeIds::String> {}; // TTtlSettingsPresetVersionInfo
+
+        using TKey = TableKey<Id, SinceStep, SinceTxId>;
+        using TColumns = TableColumns<Id, SinceStep, SinceTxId, InfoProto>;
+    };
+
+    struct TableInfo : Table<5> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct DropStep : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct DropTxId : Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, DropStep, DropTxId>;
+    };
+
+    struct TableVersionInfo : Table<11> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct SinceStep : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct SinceTxId : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct InfoProto : Column<4, NScheme::NTypeIds::String> {}; // TTableVersionInfo
+
+        using TKey = TableKey<PathId, SinceStep, SinceTxId>;
+        using TColumns = TableColumns<PathId, SinceStep, SinceTxId, InfoProto>;
+    };
+
     struct LongTxWrites : Table<6> {
         struct WriteId : Column<1, NScheme::NTypeIds::Uint64> {};
         struct LongTxId : Column<2, NScheme::NTypeIds::String> {};
- 
+
         using TKey = TableKey<WriteId>;
         using TColumns = TableColumns<WriteId, LongTxId>;
     };
@@ -155,11 +155,11 @@ struct Schema : NIceDb::Schema {
 
     struct BlobsToDelete : Table<8> {
         struct BlobId : Column<1, NScheme::NTypeIds::String> {};
- 
+
         using TKey = TableKey<BlobId>;
         using TColumns = TableColumns<BlobId>;
-    }; 
- 
+    };
+
     struct SmallBlobs : Table<12> {
         struct BlobId : Column<1, NScheme::NTypeIds::String> {};
         struct Data : Column<2, NScheme::NTypeIds::String> {};
@@ -225,15 +225,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Index, Counter, ValueUI64>;
     };
 
-    using TTables = SchemaTables< 
-        Value, 
-        TxInfo, 
-        SchemaPresetInfo, 
-        SchemaPresetVersionInfo, 
-        TtlSettingsPresetInfo, 
-        TtlSettingsPresetVersionInfo, 
-        TableInfo, 
-        TableVersionInfo, 
+    using TTables = SchemaTables<
+        Value,
+        TxInfo,
+        SchemaPresetInfo,
+        SchemaPresetVersionInfo,
+        TtlSettingsPresetInfo,
+        TtlSettingsPresetVersionInfo,
+        TableInfo,
+        TableVersionInfo,
         LongTxWrites,
         BlobsToKeep,
         BlobsToDelete,
@@ -243,7 +243,7 @@ struct Schema : NIceDb::Schema {
         IndexCounters,
         SmallBlobs
         >;
- 
+
     //
 
     template <typename TTable>
@@ -269,18 +269,18 @@ struct Schema : NIceDb::Schema {
         return false;
     }
 
-    template<class TMessage> 
-    static bool GetSpecialProtoValue(NIceDb::TNiceDb& db, EValueIds key, std::optional<TMessage>& value) { 
-        auto rowset = db.Table<Value>().Key(ui32(key)).Select<Value::Bytes>(); 
-        if (rowset.IsReady()) { 
-            if (rowset.IsValid()) { 
-                Y_VERIFY(value.emplace().ParseFromString(rowset.GetValue<Value::Bytes>())); 
-            } 
-            return true; 
-        } 
-        return false; 
-    } 
- 
+    template<class TMessage>
+    static bool GetSpecialProtoValue(NIceDb::TNiceDb& db, EValueIds key, std::optional<TMessage>& value) {
+        auto rowset = db.Table<Value>().Key(ui32(key)).Select<Value::Bytes>();
+        if (rowset.IsReady()) {
+            if (rowset.IsValid()) {
+                Y_VERIFY(value.emplace().ParseFromString(rowset.GetValue<Value::Bytes>()));
+            }
+            return true;
+        }
+        return false;
+    }
+
     static void SaveSpecialValue(NIceDb::TNiceDb& db, EValueIds key, const TString& value) {
         db.Table<Value>().Key((ui32)key).Update(NIceDb::TUpdate<Value::Bytes>(value));
     }
@@ -289,137 +289,137 @@ struct Schema : NIceDb::Schema {
         db.Table<Value>().Key((ui32)key).Update(NIceDb::TUpdate<Value::Digit>(value));
     }
 
-    template<class TMessage> 
-    static void SaveSpecialProtoValue(NIceDb::TNiceDb& db, EValueIds key, const TMessage& message) { 
-        TString serialized; 
-        Y_VERIFY(message.SerializeToString(&serialized)); 
-        SaveSpecialValue(db, key, serialized); 
+    template<class TMessage>
+    static void SaveSpecialProtoValue(NIceDb::TNiceDb& db, EValueIds key, const TMessage& message) {
+        TString serialized;
+        Y_VERIFY(message.SerializeToString(&serialized));
+        SaveSpecialValue(db, key, serialized);
     }
 
-    static void SaveTxInfo(NIceDb::TNiceDb& db, ui64 txId, NKikimrTxColumnShard::ETransactionKind txKind, 
-                           const TString& txBody, ui64 maxStep, const TActorId& source, ui64 cookie) 
-    { 
-        db.Table<TxInfo>().Key(txId).Update( 
-            NIceDb::TUpdate<TxInfo::TxKind>(txKind), 
-            NIceDb::TUpdate<TxInfo::TxBody>(txBody), 
-            NIceDb::TUpdate<TxInfo::MaxStep>(maxStep), 
-            NIceDb::TUpdate<TxInfo::Source>(source), 
-            NIceDb::TUpdate<TxInfo::Cookie>(cookie)); 
+    static void SaveTxInfo(NIceDb::TNiceDb& db, ui64 txId, NKikimrTxColumnShard::ETransactionKind txKind,
+                           const TString& txBody, ui64 maxStep, const TActorId& source, ui64 cookie)
+    {
+        db.Table<TxInfo>().Key(txId).Update(
+            NIceDb::TUpdate<TxInfo::TxKind>(txKind),
+            NIceDb::TUpdate<TxInfo::TxBody>(txBody),
+            NIceDb::TUpdate<TxInfo::MaxStep>(maxStep),
+            NIceDb::TUpdate<TxInfo::Source>(source),
+            NIceDb::TUpdate<TxInfo::Cookie>(cookie));
     }
 
-    static void UpdateTxInfoPlanStep(NIceDb::TNiceDb& db, ui64 txId, ui64 planStep) { 
-        db.Table<TxInfo>().Key(txId).Update( 
-            NIceDb::TUpdate<TxInfo::PlanStep>(planStep)); 
-    } 
- 
-    static void EraseTxInfo(NIceDb::TNiceDb& db, ui64 txId) { 
-        db.Table<TxInfo>().Key(txId).Delete(); 
+    static void UpdateTxInfoPlanStep(NIceDb::TNiceDb& db, ui64 txId, ui64 planStep) {
+        db.Table<TxInfo>().Key(txId).Update(
+            NIceDb::TUpdate<TxInfo::PlanStep>(planStep));
     }
 
-    static void SaveSchemaPresetInfo(NIceDb::TNiceDb& db, ui64 id, const TString& name) { 
-        db.Table<SchemaPresetInfo>().Key(id).Update( 
-            NIceDb::TUpdate<SchemaPresetInfo::Name>(name)); 
-    } 
- 
-    static void SaveSchemaPresetVersionInfo( 
-            NIceDb::TNiceDb& db, 
-            ui64 id, const TRowVersion& version, 
-            const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info) 
-    { 
-        TString serialized; 
-        Y_VERIFY(info.SerializeToString(&serialized)); 
-        db.Table<SchemaPresetVersionInfo>().Key(id, version.Step, version.TxId).Update( 
-            NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(serialized)); 
-    } 
- 
-    static void SaveSchemaPresetDropVersion(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& dropVersion) { 
-        db.Table<SchemaPresetInfo>().Key(id).Update( 
-            NIceDb::TUpdate<SchemaPresetInfo::DropStep>(dropVersion.Step), 
-            NIceDb::TUpdate<SchemaPresetInfo::DropTxId>(dropVersion.TxId)); 
-    } 
- 
-    static void EraseSchemaPresetVersionInfo(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& version) { 
-        db.Table<SchemaPresetVersionInfo>().Key(id, version.Step, version.TxId).Delete(); 
-    } 
- 
-    static void EraseSchemaPresetInfo(NIceDb::TNiceDb& db, ui64 id) { 
-        db.Table<SchemaPresetInfo>().Key(id).Delete(); 
-    } 
+    static void EraseTxInfo(NIceDb::TNiceDb& db, ui64 txId) {
+        db.Table<TxInfo>().Key(txId).Delete();
+    }
+
+    static void SaveSchemaPresetInfo(NIceDb::TNiceDb& db, ui64 id, const TString& name) {
+        db.Table<SchemaPresetInfo>().Key(id).Update(
+            NIceDb::TUpdate<SchemaPresetInfo::Name>(name));
+    }
+
+    static void SaveSchemaPresetVersionInfo(
+            NIceDb::TNiceDb& db,
+            ui64 id, const TRowVersion& version,
+            const NKikimrTxColumnShard::TSchemaPresetVersionInfo& info)
+    {
+        TString serialized;
+        Y_VERIFY(info.SerializeToString(&serialized));
+        db.Table<SchemaPresetVersionInfo>().Key(id, version.Step, version.TxId).Update(
+            NIceDb::TUpdate<SchemaPresetVersionInfo::InfoProto>(serialized));
+    }
+
+    static void SaveSchemaPresetDropVersion(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& dropVersion) {
+        db.Table<SchemaPresetInfo>().Key(id).Update(
+            NIceDb::TUpdate<SchemaPresetInfo::DropStep>(dropVersion.Step),
+            NIceDb::TUpdate<SchemaPresetInfo::DropTxId>(dropVersion.TxId));
+    }
+
+    static void EraseSchemaPresetVersionInfo(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& version) {
+        db.Table<SchemaPresetVersionInfo>().Key(id, version.Step, version.TxId).Delete();
+    }
+
+    static void EraseSchemaPresetInfo(NIceDb::TNiceDb& db, ui64 id) {
+        db.Table<SchemaPresetInfo>().Key(id).Delete();
+    }
 #if 0
-    static void SaveTtlSettingsPresetInfo(NIceDb::TNiceDb& db, ui64 id, const TString& name) { 
-        db.Table<TtlSettingsPresetInfo>().Key(id).Update( 
-            NIceDb::TUpdate<TtlSettingsPresetInfo::Name>(name)); 
-    } 
- 
-    static void SaveTtlSettingsPresetVersionInfo( 
-            NIceDb::TNiceDb& db, 
-            ui64 id, const TRowVersion& version, 
-            const NKikimrTxColumnShard::TTtlSettingsPresetVersionInfo& info) 
-    { 
-        TString serialized; 
-        Y_VERIFY(info.SerializeToString(&serialized)); 
-        db.Table<TtlSettingsPresetVersionInfo>().Key(id, version.Step, version.TxId).Update( 
-            NIceDb::TUpdate<TtlSettingsPresetVersionInfo::InfoProto>(serialized)); 
-    } 
- 
-    static void SaveTtlSettingsPresetDropVersion(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& dropVersion) { 
-        db.Table<TtlSettingsPresetInfo>().Key(id).Update( 
-            NIceDb::TUpdate<TtlSettingsPresetInfo::DropStep>(dropVersion.Step), 
-            NIceDb::TUpdate<TtlSettingsPresetInfo::DropTxId>(dropVersion.TxId)); 
-    } 
- 
-    static void EraseTtlSettingsPresetVersionInfo(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& version) { 
-        db.Table<TtlSettingsPresetVersionInfo>().Key(id, version.Step, version.TxId).Delete(); 
-    } 
- 
-    static void EraseTtlSettingsPresetInfo(NIceDb::TNiceDb& db, ui64 id) { 
-        db.Table<TtlSettingsPresetInfo>().Key(id).Delete(); 
-    } 
+    static void SaveTtlSettingsPresetInfo(NIceDb::TNiceDb& db, ui64 id, const TString& name) {
+        db.Table<TtlSettingsPresetInfo>().Key(id).Update(
+            NIceDb::TUpdate<TtlSettingsPresetInfo::Name>(name));
+    }
+
+    static void SaveTtlSettingsPresetVersionInfo(
+            NIceDb::TNiceDb& db,
+            ui64 id, const TRowVersion& version,
+            const NKikimrTxColumnShard::TTtlSettingsPresetVersionInfo& info)
+    {
+        TString serialized;
+        Y_VERIFY(info.SerializeToString(&serialized));
+        db.Table<TtlSettingsPresetVersionInfo>().Key(id, version.Step, version.TxId).Update(
+            NIceDb::TUpdate<TtlSettingsPresetVersionInfo::InfoProto>(serialized));
+    }
+
+    static void SaveTtlSettingsPresetDropVersion(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& dropVersion) {
+        db.Table<TtlSettingsPresetInfo>().Key(id).Update(
+            NIceDb::TUpdate<TtlSettingsPresetInfo::DropStep>(dropVersion.Step),
+            NIceDb::TUpdate<TtlSettingsPresetInfo::DropTxId>(dropVersion.TxId));
+    }
+
+    static void EraseTtlSettingsPresetVersionInfo(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& version) {
+        db.Table<TtlSettingsPresetVersionInfo>().Key(id, version.Step, version.TxId).Delete();
+    }
+
+    static void EraseTtlSettingsPresetInfo(NIceDb::TNiceDb& db, ui64 id) {
+        db.Table<TtlSettingsPresetInfo>().Key(id).Delete();
+    }
 #endif
-    static void SaveTableInfo(NIceDb::TNiceDb& db, ui64 pathId) { 
-        db.Table<TableInfo>().Key(pathId).Update(); 
-    } 
- 
-    static void SaveTableVersionInfo( 
-            NIceDb::TNiceDb& db, 
-            ui64 pathId, const TRowVersion& version, 
-            const NKikimrTxColumnShard::TTableVersionInfo& info) 
-    { 
-        TString serialized; 
-        Y_VERIFY(info.SerializeToString(&serialized)); 
-        db.Table<TableVersionInfo>().Key(pathId, version.Step, version.TxId).Update( 
-            NIceDb::TUpdate<TableVersionInfo::InfoProto>(serialized)); 
-    } 
- 
-    static void SaveTableDropVersion( 
-            NIceDb::TNiceDb& db, ui64 pathId, ui64 dropStep, ui64 dropTxId) 
-    { 
-        db.Table<TableInfo>().Key(pathId).Update( 
-            NIceDb::TUpdate<TableInfo::DropStep>(dropStep), 
-            NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId)); 
-    } 
- 
-    static void EraseTableVersionInfo(NIceDb::TNiceDb& db, ui64 pathId, const TRowVersion& version) { 
-        db.Table<TableVersionInfo>().Key(pathId, version.Step, version.TxId).Delete(); 
-    } 
- 
-    static void EraseTableInfo(NIceDb::TNiceDb& db, ui64 pathId) { 
-        db.Table<TableInfo>().Key(pathId).Delete(); 
-    } 
- 
+    static void SaveTableInfo(NIceDb::TNiceDb& db, ui64 pathId) {
+        db.Table<TableInfo>().Key(pathId).Update();
+    }
+
+    static void SaveTableVersionInfo(
+            NIceDb::TNiceDb& db,
+            ui64 pathId, const TRowVersion& version,
+            const NKikimrTxColumnShard::TTableVersionInfo& info)
+    {
+        TString serialized;
+        Y_VERIFY(info.SerializeToString(&serialized));
+        db.Table<TableVersionInfo>().Key(pathId, version.Step, version.TxId).Update(
+            NIceDb::TUpdate<TableVersionInfo::InfoProto>(serialized));
+    }
+
+    static void SaveTableDropVersion(
+            NIceDb::TNiceDb& db, ui64 pathId, ui64 dropStep, ui64 dropTxId)
+    {
+        db.Table<TableInfo>().Key(pathId).Update(
+            NIceDb::TUpdate<TableInfo::DropStep>(dropStep),
+            NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId));
+    }
+
+    static void EraseTableVersionInfo(NIceDb::TNiceDb& db, ui64 pathId, const TRowVersion& version) {
+        db.Table<TableVersionInfo>().Key(pathId, version.Step, version.TxId).Delete();
+    }
+
+    static void EraseTableInfo(NIceDb::TNiceDb& db, ui64 pathId) {
+        db.Table<TableInfo>().Key(pathId).Delete();
+    }
+
     static void SaveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, const NLongTxService::TLongTxId& longTxId) {
-        NKikimrLongTxService::TLongTxId proto; 
-        longTxId.ToProto(&proto); 
-        TString serialized; 
-        Y_VERIFY(proto.SerializeToString(&serialized)); 
+        NKikimrLongTxService::TLongTxId proto;
+        longTxId.ToProto(&proto);
+        TString serialized;
+        Y_VERIFY(proto.SerializeToString(&serialized));
         db.Table<LongTxWrites>().Key((ui64)writeId).Update(
-            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized)); 
-    } 
- 
+            NIceDb::TUpdate<LongTxWrites::LongTxId>(serialized));
+    }
+
     static void EraseLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId) {
         db.Table<LongTxWrites>().Key((ui64)writeId).Delete();
-    } 
- 
+    }
+
     // InsertTable activities
 
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {

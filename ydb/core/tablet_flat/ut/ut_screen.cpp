@@ -13,19 +13,19 @@ namespace NKikimr {
 namespace NTable {
 
 namespace {
-    const NTest::TMass& Mass0() 
-    { 
-        static const NTest::TMass mass0(new NTest::TModelStd(false), 24000); 
-        return mass0; 
-    } 
- 
-    const NTest::TPartEggs& Eggs0() 
-    { 
-        static const NTest::TPartEggs eggs0 = NTest::TPartCook::Make(Mass0(), { }); 
+    const NTest::TMass& Mass0()
+    {
+        static const NTest::TMass mass0(new NTest::TModelStd(false), 24000);
+        return mass0;
+    }
+
+    const NTest::TPartEggs& Eggs0()
+    {
+        static const NTest::TPartEggs eggs0 = NTest::TPartCook::Make(Mass0(), { });
         UNIT_ASSERT_C(eggs0.Parts.size() == 1,
             "Unexpected " << eggs0.Parts.size() << " results");
-        return eggs0; 
-    } 
+        return eggs0;
+    }
 }
 
 Y_UNIT_TEST_SUITE(TScreen) {
@@ -89,46 +89,46 @@ Y_UNIT_TEST_SUITE(TScreen) {
     {
         using namespace NTable::NTest;
 
-        NTest::TCurtain cook(Eggs0()); 
+        NTest::TCurtain cook(Eggs0());
 
         for (size_t off = 0; off < 16; off++) {
             const size_t len = off << 8;
 
-            auto cu0 = cook.Make(Mass0().Saved, 3, (7 + (len >> 1) - 3) >> 1); 
-            auto cu = cook.Make(Mass0().Saved, 7 + (len >> 1), 13 + len); 
-            Y_VERIFY(cu0.End != cu.Begin); 
+            auto cu0 = cook.Make(Mass0().Saved, 3, (7 + (len >> 1) - 3) >> 1);
+            auto cu = cook.Make(Mass0().Saved, 7 + (len >> 1), 13 + len);
+            Y_VERIFY(cu0.End != cu.Begin);
 
-            for (int joined = 0; joined < 2; ++joined) { 
-                auto screen = joined ? TScreen::Join(cu0.Screen, cu.Screen) : cu.Screen; 
+            for (int joined = 0; joined < 2; ++joined) {
+                auto screen = joined ? TScreen::Join(cu0.Screen, cu.Screen) : cu.Screen;
                 auto slice = TSlicer(*Eggs0().Scheme).Cut(*Eggs0().Lone(), *screen);
 
-                { /*_ Check that simple screen is really working */ 
+                { /*_ Check that simple screen is really working */
                     TCheckIt iter(Eggs0(), { new TForwardEnv(1, 2), 3 }, slice);
 
-                    iter.To(4 + (off << 2) + (joined << 1)) 
-                        .Seek({}, ESeek::Lower); 
+                    iter.To(4 + (off << 2) + (joined << 1))
+                        .Seek({}, ESeek::Lower);
 
-                    if (joined) { 
-                        iter.Is(cu0.Begin, cu0.End); 
-                    } 
+                    if (joined) {
+                        iter.Is(cu0.Begin, cu0.End);
+                    }
 
-                    iter.Is(cu.Begin, cu.End); 
+                    iter.Is(cu.Begin, cu.End);
 
-                    iter.Is(EReady::Gone); 
-                } 
+                    iter.Is(EReady::Gone);
+                }
 
-                { /* Check working partial screening on hole edge */ 
+                { /* Check working partial screening on hole edge */
                     TCheckIt iter(Eggs0(), { new TForwardEnv(1, 2), 3 }, slice);
 
-                    auto it = cu.Begin + (len >> 2); 
- 
-                    iter.To(5 + (off << 2) + (joined << 1)) 
-                        .Seek(*it, ESeek::Lower) 
-                        .Is(it, cu.End); 
- 
-                    iter.Is(EReady::Gone); 
-                } 
- 
+                    auto it = cu.Begin + (len >> 2);
+
+                    iter.To(5 + (off << 2) + (joined << 1))
+                        .Seek(*it, ESeek::Lower)
+                        .Is(it, cu.End);
+
+                    iter.Is(EReady::Gone);
+                }
+
             }
         }
     }
@@ -137,12 +137,12 @@ Y_UNIT_TEST_SUITE(TScreen) {
     {
         using namespace NTable::NTest;
 
-        NTest::TCurtain cook(Eggs0()); 
+        NTest::TCurtain cook(Eggs0());
 
         TMersenne<ui64> rnd;
 
         for (size_t z = 0; z < 8192; z++) {
-            auto cu = cook.Make(Mass0().Saved, rnd, 8192); 
+            auto cu = cook.Make(Mass0().Saved, rnd, 8192);
             auto slice = TSlicer(*Eggs0().Scheme).Cut(*Eggs0().Lone(), *cu.Screen);
 
             TCheckIt iter(Eggs0(), { new TTestEnv, 0 }, slice);
@@ -150,12 +150,12 @@ Y_UNIT_TEST_SUITE(TScreen) {
             iter.To(4 + z);
 
             if (rnd.Uniform(0, 2) == 0) {
-                auto it = Mass0().Saved.AnyIn(rnd, cu.Begin, cu.End); 
+                auto it = Mass0().Saved.AnyIn(rnd, cu.Begin, cu.End);
 
                 iter.Seek(*it, ESeek::Exact).Is(*it, true);
                 iter.Seek(*it, ESeek::Lower).Is(*it, true);
             } else {
-                auto it = Mass0().Saved.AnyOff(rnd, cu.Begin, cu.End); 
+                auto it = Mass0().Saved.AnyOff(rnd, cu.Begin, cu.End);
 
                 iter.Seek(*it, ESeek::Exact).Is(EReady::Gone);
 
@@ -176,12 +176,12 @@ Y_UNIT_TEST_SUITE(TScreen) {
     {
         using namespace NTable::NTest;
 
-        const TRowTool tool(*Eggs0().Scheme); 
+        const TRowTool tool(*Eggs0().Scheme);
         TAutoPtr<TTestEnv> env = new TTestEnv;
-        TShrink shrink(env.Get(), Eggs0().Scheme->Keys); 
+        TShrink shrink(env.Get(), Eggs0().Scheme->Keys);
 
         { /* shrink to empty set shoudn't produce any results */
-            const auto key = tool.LookupKey(Mass0().Saved[0]); 
+            const auto key = tool.LookupKey(Mass0().Saved[0]);
 
             shrink.Put(Eggs0().ToPartView(), { }, key);
 
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(TScreen) {
         }
 
         { /* shrink to the entire set should leave part as is */
-            const auto key = tool.LookupKey(Mass0().Saved[0]); 
+            const auto key = tool.LookupKey(Mass0().Saved[0]);
 
             shrink.Put(Eggs0().ToPartView(), key, { });
 
@@ -203,8 +203,8 @@ Y_UNIT_TEST_SUITE(TScreen) {
         { /* basic regular shrink of some trivial subset */
             const auto hole = TScreen::THole(666, 891);
 
-            auto begin = tool.LookupKey(Mass0().Saved[hole.Begin]); 
-            auto end = tool.LookupKey(Mass0().Saved[hole.End]); 
+            auto begin = tool.LookupKey(Mass0().Saved[hole.Begin]);
+            auto end = tool.LookupKey(Mass0().Saved[hole.End]);
 
             shrink.Put(Eggs0().ToPartView(), begin, end);
 
@@ -215,46 +215,46 @@ Y_UNIT_TEST_SUITE(TScreen) {
 
             UNIT_ASSERT(scr && shrink.PartView[1].Part.Get() == Eggs0().At(0).Get());
             UNIT_ASSERT(scr->Size() == 1 && scr->Hole(0) == hole);
-            UNIT_ASSERT(run && run->size() == 1); 
-            UNIT_ASSERT(run->front().FirstRowId == hole.Begin); 
-            UNIT_ASSERT(run->front().FirstInclusive == true); 
-            UNIT_ASSERT(run->back().LastRowId == hole.End); 
-            UNIT_ASSERT(run->back().LastInclusive == false); 
+            UNIT_ASSERT(run && run->size() == 1);
+            UNIT_ASSERT(run->front().FirstRowId == hole.Begin);
+            UNIT_ASSERT(run->front().FirstInclusive == true);
+            UNIT_ASSERT(run->back().LastRowId == hole.End);
+            UNIT_ASSERT(run->back().LastInclusive == false);
         }
     }
 
-    Y_UNIT_TEST(Cook) 
-    { 
-        TScreen::TCook cook; 
- 
-        // Using for the first time 
-        { 
-            cook.Pass(1); 
-            cook.Pass(2); 
-            cook.Pass(3); 
-            cook.Pass(10); 
-            cook.Pass(15); 
-            cook.Pass(16); 
- 
-            auto result = cook.Unwrap(); 
-            UNIT_ASSERT_VALUES_EQUAL(result.size(), 3u); 
-            UNIT_ASSERT(result[0] == TScreen::THole(1, 4)); 
-            UNIT_ASSERT(result[1] == TScreen::THole(10, 11)); 
-            UNIT_ASSERT(result[2] == TScreen::THole(15, 17)); 
-        } 
- 
-        // Unwrap should start a new screen 
-        { 
-            cook.Pass(2); 
-            cook.Pass(5); 
- 
-            auto result = cook.Unwrap(); 
-            UNIT_ASSERT_VALUES_EQUAL(result.size(), 2u); 
-            UNIT_ASSERT(result[0] == TScreen::THole(2, 3)); 
-            UNIT_ASSERT(result[1] == TScreen::THole(5, 6)); 
-        } 
-    } 
- 
+    Y_UNIT_TEST(Cook)
+    {
+        TScreen::TCook cook;
+
+        // Using for the first time
+        {
+            cook.Pass(1);
+            cook.Pass(2);
+            cook.Pass(3);
+            cook.Pass(10);
+            cook.Pass(15);
+            cook.Pass(16);
+
+            auto result = cook.Unwrap();
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 3u);
+            UNIT_ASSERT(result[0] == TScreen::THole(1, 4));
+            UNIT_ASSERT(result[1] == TScreen::THole(10, 11));
+            UNIT_ASSERT(result[2] == TScreen::THole(15, 17));
+        }
+
+        // Unwrap should start a new screen
+        {
+            cook.Pass(2);
+            cook.Pass(5);
+
+            auto result = cook.Unwrap();
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 2u);
+            UNIT_ASSERT(result[0] == TScreen::THole(2, 3));
+            UNIT_ASSERT(result[1] == TScreen::THole(5, 6));
+        }
+    }
+
 }
 
 }

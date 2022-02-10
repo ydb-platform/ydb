@@ -1,8 +1,8 @@
 #pragma once
-#include "flat_table_stats.h" 
+#include "flat_table_stats.h"
 
 #include <ydb/core/scheme_types/scheme_raw_type_value.h>
-#include <util/generic/hash.h> 
+#include <util/generic/hash.h>
 #include <util/system/types.h>
 
 namespace NKikimr {
@@ -14,12 +14,12 @@ namespace NTable {
 
         void Describe(IOutputStream &out) const noexcept
         {
-            const ui64 sys = Parts.IndexBytes + Parts.ByKeyBytes + Parts.OtherBytes; 
+            const ui64 sys = Parts.IndexBytes + Parts.ByKeyBytes + Parts.OtherBytes;
 
             out
-                << "DBase{" << Tables << "t " << Parts.PartsCount << "p" 
+                << "DBase{" << Tables << "t " << Parts.PartsCount << "p"
                 << " " << Parts.RowsTotal << "r" << ", (" << MemTableBytes << " mem, "
-                << sys << " sys, " << (Parts.CodedBytes + Parts.LargeBytes) << ")b}"; 
+                << sys << " sys, " << (Parts.CodedBytes + Parts.LargeBytes) << ")b}";
         }
 
         ui32 Tables = 0;
@@ -27,8 +27,8 @@ namespace NTable {
         ui64 MemTableWaste = 0;
         ui64 MemTableBytes = 0;
         ui64 MemTableOps = 0;
-        TPartStats Parts; 
-        THashMap<ui64, TPartStats> PartsPerTablet; 
+        TPartStats Parts;
+        THashMap<ui64, TPartStats> PartsPerTablet;
     };
 
 }

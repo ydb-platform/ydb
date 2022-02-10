@@ -50,7 +50,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Self->PathsById[Self->RootPathId()] = newPath;
         Self->NextLocalPathId = Self->RootPathId().LocalPathId + 1;
         Self->NextLocalShardIdx = 1;
-        Self->ShardInfos.clear(); 
+        Self->ShardInfos.clear();
         Self->RootPathElemets = std::move(rootPathElemets);
 
 
@@ -176,10 +176,10 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
     template<class TContainer>
     void RegisterShard(NIceDb::TNiceDb& db, TSubDomainInfo::TPtr& subdomain, const TContainer& tabletIds, TTabletTypes::EType type) {
         for (ui32 i = 0; i < (ui64)tabletIds.size(); ++i) {
-            const auto id = TTabletId(tabletIds[i]); 
-            const auto shardIdx = Self->RegisterShardInfo( 
-                TShardInfo(InvalidTxId, Self->RootPathId(), type) 
-                    .WithTabletID(id)); 
+            const auto id = TTabletId(tabletIds[i]);
+            const auto shardIdx = Self->RegisterShardInfo(
+                TShardInfo(InvalidTxId, Self->RootPathId(), type)
+                    .WithTabletID(id));
 
             Self->PersistShardMapping(db, shardIdx, id, Self->RootPathId(), InvalidTxId, type);
 
@@ -268,7 +268,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         TUserAttributes::TPtr userAttrs = new TUserAttributes(userAttrsVersion);
         {
             TString errStr;
-            bool isOk = userAttrs->ApplyPatch(EUserAttributesOp::InitRoot, userAttrData, errStr); 
+            bool isOk = userAttrs->ApplyPatch(EUserAttributesOp::InitRoot, userAttrData, errStr);
             Y_VERIFY_S(isOk, errStr);
         }
 
@@ -282,7 +282,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
         Self->PathsById[Self->RootPathId()] = newPath;
         Self->NextLocalPathId = Self->RootPathId().LocalPathId + 1;
         Self->NextLocalShardIdx = 1;
-        Self->ShardInfos.clear(); 
+        Self->ShardInfos.clear();
 
         Self->RootPathElemets = std::move(rootPathElemets);
 
@@ -314,14 +314,14 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
 
         subdomain->SetSchemeLimits(TSchemeLimits(schemeLimits));
 
-        if (record.HasDeclaredSchemeQuotas()) { 
-            subdomain->ApplyDeclaredSchemeQuotas(record.GetDeclaredSchemeQuotas(), ctx.Now()); 
-        } 
- 
-        if (record.HasDatabaseQuotas()) { 
-            subdomain->SetDatabaseQuotas(record.GetDatabaseQuotas(), Self); 
-        } 
- 
+        if (record.HasDeclaredSchemeQuotas()) {
+            subdomain->ApplyDeclaredSchemeQuotas(record.GetDeclaredSchemeQuotas(), ctx.Now());
+        }
+
+        if (record.HasDatabaseQuotas()) {
+            subdomain->SetDatabaseQuotas(record.GetDatabaseQuotas(), Self);
+        }
+
         RegisterShard(db, subdomain, processingParams.GetCoordinators(), TTabletTypes::Coordinator);
         RegisterShard(db, subdomain, processingParams.GetMediators(), TTabletTypes::Mediator);
         RegisterShard(db, subdomain, TVector<ui64>{processingParams.GetSchemeShard()}, TTabletTypes::SchemeShard);
@@ -342,7 +342,7 @@ struct TSchemeShard::TTxInitTenantSchemeShard : public TSchemeShard::TRwTxBase {
 
         Self->PersistSubDomain(db, Self->RootPathId(), *subdomain);
         Self->PersistSchemeLimit(db, Self->RootPathId(), *subdomain);
-        Self->PersistSubDomainSchemeQuotas(db, Self->RootPathId(), *subdomain); 
+        Self->PersistSubDomainSchemeQuotas(db, Self->RootPathId(), *subdomain);
 
         Self->PersistUpdateNextPathId(db);
         Self->PersistUpdateNextShardIdx(db);
@@ -617,8 +617,8 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
                     NIceDb::TUpdate<Schema::MigratedColumns::ColKeyOrder>(colDescr.GetColKeyOrder()),
                     NIceDb::TUpdate<Schema::MigratedColumns::CreateVersion>(colDescr.GetCreateVersion()),
                     NIceDb::TUpdate<Schema::MigratedColumns::DeleteVersion>(colDescr.GetDeleteVersion()),
-                    NIceDb::TUpdate<Schema::MigratedColumns::Family>(colDescr.GetFamily()), 
-                    NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(ETableColumnDefaultKind(colDescr.GetDefaultKind())), 
+                    NIceDb::TUpdate<Schema::MigratedColumns::Family>(colDescr.GetFamily()),
+                    NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(ETableColumnDefaultKind(colDescr.GetDefaultKind())),
                     NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(colDescr.GetDefaultValue()),
                     NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(colDescr.GetNotNull()));
             }

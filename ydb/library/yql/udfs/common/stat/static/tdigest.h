@@ -38,12 +38,12 @@ class TDigest {
     double Delta;
     double K;
 
-    void Add(const TDigest& otherDigest); 
+    void Add(const TDigest& otherDigest);
     void AddCentroid(const TCentroid& centroid);
     double GetThreshold(double q);
 
     void MergeCentroid(TVector<TCentroid>& merged, double& sum, const TCentroid& centroid);
- 
+
 protected:
     void Update(double x, double w = 1.0);
 

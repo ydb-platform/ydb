@@ -4,7 +4,7 @@
 #include "flat_update_op.h"
 #include "flat_util_binary.h"
 #include "flat_sausage_solid.h"
-#include "util_basics.h" 
+#include "util_basics.h"
 
 #include <util/stream/buffer.h>
 #include <util/system/sanitizers.h>
@@ -15,15 +15,15 @@ namespace NTable {
 namespace NRedo {
 
     struct IAnnex {
-        struct TLimit { 
-            ui32 MinExternSize; 
-            ui32 MaxExternSize; 
- 
-            bool IsExtern(ui32 size) const noexcept { 
-                return size >= MinExternSize && size <= MaxExternSize; 
-            } 
-        }; 
- 
+        struct TLimit {
+            ui32 MinExternSize;
+            ui32 MaxExternSize;
+
+            bool IsExtern(ui32 size) const noexcept {
+                return size >= MinExternSize && size <= MaxExternSize;
+            }
+        };
+
         struct TResult {
             TResult() = default;
 
@@ -44,17 +44,17 @@ namespace NRedo {
             single family tables but it is not scaled to multiple families.
          */
 
-        virtual TLimit Limit(ui32 table) noexcept = 0; 
+        virtual TLimit Limit(ui32 table) noexcept = 0;
         virtual TResult Place(ui32 table, TTag, TArrayRef<const char>) noexcept = 0;
     };
 
     class TWriter {
-    private: 
-        struct TSizeInfo { 
-            ui32 Size; 
-            IAnnex::TLimit Limit; 
-        }; 
- 
+    private:
+        struct TSizeInfo {
+            ui32 Size;
+            IAnnex::TLimit Limit;
+        };
+
     public:
         using TOpsRef = TArrayRef<const TUpdateOp>;
         using IOut = IOutputStream;
@@ -95,12 +95,12 @@ namespace NRedo {
             return Push(TString(NUtil::NBin::ToByte(evBegin), size), size);
         }
 
-        TWriter& EvFlush(ui32 table, ui64 stamp, TEpoch epoch) 
+        TWriter& EvFlush(ui32 table, ui64 stamp, TEpoch epoch)
         {
             const ui32 size = sizeof(TEvFlush);
 
             TEvFlush ev{ { ERedo::Flush, 0, 0x8000, size },
-                                table, 0, stamp, epoch.ToRedoLog() }; 
+                                table, 0, stamp, epoch.ToRedoLog() };
             void* evBegin = &ev;
             return Push(TString(NUtil::NBin::ToByte(evBegin), size), size);
         }
@@ -123,8 +123,8 @@ namespace NRedo {
             return Push(std::move(out.Str()), size);
         }
 
-        template<class TCallback> 
-        TWriter& EvUpdate(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ERedo tag, ui32 tailSize, TCallback&& tailCallback, bool isDelta = false) 
+        template<class TCallback>
+        TWriter& EvUpdate(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ERedo tag, ui32 tailSize, TCallback&& tailCallback, bool isDelta = false)
         {
             if (TCellOp::HaveNoOps(rop) && ops) {
                 Y_FAIL("Given ERowOp cannot have update operations");
@@ -132,68 +132,68 @@ namespace NRedo {
                 Y_FAIL("Too large key or too many operations in one ops");
             }
 
-            const auto sizeInfo = CalcSize(key, ops, table, isDelta); 
- 
-            const ui32 size = sizeof(TEvUpdate) + tailSize + sizeInfo.Size; 
+            const auto sizeInfo = CalcSize(key, ops, table, isDelta);
+
+            const ui32 size = sizeof(TEvUpdate) + tailSize + sizeInfo.Size;
             auto out = Begin(size);
 
-            TEvUpdate ev{ { tag, 0, 0x8000, size }, 
+            TEvUpdate ev{ { tag, 0, 0x8000, size },
                                 table, rop, 0, ui16(key.size()), ui16(ops.size()) };
 
             Write(out, &ev, sizeof(ev));
- 
-            tailCallback(out); 
- 
+
+            tailCallback(out);
+
             Write(out, key);
-            Write(out, ops, table, sizeInfo.Limit); 
+            Write(out, ops, table, sizeInfo.Limit);
 
             return Push(std::move(out.Str()), size);
         }
 
         TWriter& EvUpdate(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, TRowVersion rowVersion)
-        { 
-            if (rowVersion > TRowVersion::Min()) { 
-                return EvUpdate(table, rop, key, ops, ERedo::UpdateV, sizeof(TEvUpdateV), [&](auto& out) { 
-                    TEvUpdateV tail{ rowVersion.Step, rowVersion.TxId }; 
-                    Write(out, &tail, sizeof(tail)); 
-                }); 
-            } else { 
-                return EvUpdate(table, rop, key, ops, ERedo::Update, 0, [](auto&){ 
-                    // nothing 
-                }); 
-            } 
-        } 
- 
+        {
+            if (rowVersion > TRowVersion::Min()) {
+                return EvUpdate(table, rop, key, ops, ERedo::UpdateV, sizeof(TEvUpdateV), [&](auto& out) {
+                    TEvUpdateV tail{ rowVersion.Step, rowVersion.TxId };
+                    Write(out, &tail, sizeof(tail));
+                });
+            } else {
+                return EvUpdate(table, rop, key, ops, ERedo::Update, 0, [](auto&){
+                    // nothing
+                });
+            }
+        }
+
         TWriter& EvUpdateTx(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ui64 txId)
-        { 
-            return EvUpdate(table, rop, key, ops, ERedo::UpdateTx, sizeof(TEvUpdateTx), 
-                [&](auto& out) { 
-                    TEvUpdateTx tail{ txId }; 
-                    Write(out, &tail, sizeof(tail)); 
-                }, 
-                /* isDelta */ true); 
-        } 
- 
-        TWriter& EvRemoveTx(ui32 table, ui64 txId) 
-        { 
-            const ui32 size = sizeof(TEvRemoveTx); 
- 
-            TEvRemoveTx ev{ { ERedo::RemoveTx, 0, 0x8000, size }, 
-                            table, 0, txId }; 
- 
-            return Push(TString(NUtil::NBin::ToByte(&ev), size), size); 
-        } 
- 
-        TWriter& EvCommitTx(ui32 table, ui64 txId, TRowVersion rowVersion) 
-        { 
-            const ui32 size = sizeof(TEvCommitTx); 
- 
-            TEvCommitTx ev{ { ERedo::CommitTx, 0, 0x8000, size }, 
-                            table, 0, txId, rowVersion.Step, rowVersion.TxId }; 
- 
-            return Push(TString(NUtil::NBin::ToByte(&ev), size), size); 
-        } 
- 
+        {
+            return EvUpdate(table, rop, key, ops, ERedo::UpdateTx, sizeof(TEvUpdateTx),
+                [&](auto& out) {
+                    TEvUpdateTx tail{ txId };
+                    Write(out, &tail, sizeof(tail));
+                },
+                /* isDelta */ true);
+        }
+
+        TWriter& EvRemoveTx(ui32 table, ui64 txId)
+        {
+            const ui32 size = sizeof(TEvRemoveTx);
+
+            TEvRemoveTx ev{ { ERedo::RemoveTx, 0, 0x8000, size },
+                            table, 0, txId };
+
+            return Push(TString(NUtil::NBin::ToByte(&ev), size), size);
+        }
+
+        TWriter& EvCommitTx(ui32 table, ui64 txId, TRowVersion rowVersion)
+        {
+            const ui32 size = sizeof(TEvCommitTx);
+
+            TEvCommitTx ev{ { ERedo::CommitTx, 0, 0x8000, size },
+                            table, 0, txId, rowVersion.Step, rowVersion.TxId };
+
+            return Push(TString(NUtil::NBin::ToByte(&ev), size), size);
+        }
+
         TWriter& Join(TWriter &log)
         {
             TotalSize += std::exchange(log.TotalSize, 0);
@@ -235,39 +235,39 @@ namespace NRedo {
             return *this;
         }
 
-        IAnnex::TLimit GetLimit(ui32 table, bool isDelta) const noexcept 
+        IAnnex::TLimit GetLimit(ui32 table, bool isDelta) const noexcept
         {
-            IAnnex::TLimit limit; 
-            // FIXME: we cannot handle blob references during scans, so we 
-            //        avoid creating large objects when they are in deltas 
-            if (!isDelta && Annex && table != Max<ui32>()) { 
-                limit = Annex->Limit(table); 
-            } else { 
-                limit = { Max<ui32>(), Max<ui32>() }; 
-            } 
-            limit.MinExternSize = Max(limit.MinExternSize, Edge); 
-            return limit; 
-        } 
+            IAnnex::TLimit limit;
+            // FIXME: we cannot handle blob references during scans, so we
+            //        avoid creating large objects when they are in deltas
+            if (!isDelta && Annex && table != Max<ui32>()) {
+                limit = Annex->Limit(table);
+            } else {
+                limit = { Max<ui32>(), Max<ui32>() };
+            }
+            limit.MinExternSize = Max(limit.MinExternSize, Edge);
+            return limit;
+        }
 
-        TSizeInfo CalcSize(TRawVals key, TOpsRef ops, ui32 table, bool isDelta) const noexcept 
-        { 
-            auto limit = GetLimit(table, isDelta); 
- 
+        TSizeInfo CalcSize(TRawVals key, TOpsRef ops, ui32 table, bool isDelta) const noexcept
+        {
+            auto limit = GetLimit(table, isDelta);
+
             ui32 size = 0;
 
             for (const auto &one : ops) {
                 /* hack for annex blobs, its replaced by 4-byte reference */
-                auto valueSize = one.Value.Size(); 
-                if (Annex && table != Max<ui32>() && limit.IsExtern(valueSize)) { 
-                    valueSize = 4; 
-                } 
+                auto valueSize = one.Value.Size();
+                if (Annex && table != Max<ui32>() && limit.IsExtern(valueSize)) {
+                    valueSize = 4;
+                }
 
-                size += sizeof(TUpdate) + valueSize; 
+                size += sizeof(TUpdate) + valueSize;
             }
 
-            size += CalcSize(key); 
- 
-            return TSizeInfo{ size, limit }; 
+            size += CalcSize(key);
+
+            return TSizeInfo{ size, limit };
         }
 
         ui32 CalcSize(TRawVals key) const noexcept
@@ -294,7 +294,7 @@ namespace NRedo {
             }
         }
 
-        void Write(IOut &out, TOpsRef ops, ui32 table, const IAnnex::TLimit &limit) const noexcept 
+        void Write(IOut &out, TOpsRef ops, ui32 table, const IAnnex::TLimit &limit) const noexcept
         {
             for (const auto &one: ops) {
                 /* Log enty cannot represent this ECellOp types with payload */
@@ -312,7 +312,7 @@ namespace NRedo {
 
                 if (cellOp != ELargeObj::Inline) {
                     Y_FAIL("User supplied cell value has an invalid ECellOp");
-                } else if (auto got = Place(table, limit, one.Tag, one.AsRef())) { 
+                } else if (auto got = Place(table, limit, one.Tag, one.AsRef())) {
                     const auto payload = NUtil::NBin::ToRef(got.Ref);
 
                     Write(out, cellOp = ELargeObj::Extern, one.Tag, type, payload);
@@ -325,9 +325,9 @@ namespace NRedo {
 
         IAnnex::TResult Place(ui32 table, const IAnnex::TLimit &limit, TTag tag, TArrayRef<const char> raw) const noexcept
         {
-            if (Annex && table != Max<ui32>() && limit.IsExtern(raw.size())) { 
-                return Annex->Place(table, tag, raw); 
-            } else { 
+            if (Annex && table != Max<ui32>() && limit.IsExtern(raw.size())) {
+                return Annex->Place(table, tag, raw);
+            } else {
                 return { };
             }
         }
@@ -350,7 +350,7 @@ namespace NRedo {
     private:
         const ui32 Edge = 1024;
         IAnnex * const Annex = nullptr;
-        size_t TotalSize = 0; 
+        size_t TotalSize = 0;
         TList<TString> Events;
     };
 

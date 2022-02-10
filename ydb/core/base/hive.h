@@ -28,9 +28,9 @@ namespace NKikimr {
             EvDrainNode,
             EvFillNode,
             EvInitiateDeleteStorage,
-            EvGetTabletStorageInfo, 
-            EvLockTabletExecution, 
-            EvUnlockTabletExecution, 
+            EvGetTabletStorageInfo,
+            EvLockTabletExecution,
+            EvUnlockTabletExecution,
             EvInitiateTabletExternalBoot,
             EvRequestHiveDomainStats,
             EvAdoptTable,
@@ -57,11 +57,11 @@ namespace NKikimr {
             EvResponseHiveInfo,
             EvDrainNodeResult,
             EvFillNodeResult,
-            EvGetTabletStorageInfoResult, 
-            EvGetTabletStorageInfoRegistered, 
-            EvLockTabletExecutionResult, 
-            EvUnlockTabletExecutionResult, 
-            EvLockTabletExecutionLost, 
+            EvGetTabletStorageInfoResult,
+            EvGetTabletStorageInfoRegistered,
+            EvLockTabletExecutionResult,
+            EvUnlockTabletExecutionResult,
+            EvLockTabletExecutionLost,
             EvResponseHiveDomainStats,
             EvAdoptTabletReply,
             EvResponseHiveNodeStats,
@@ -208,20 +208,20 @@ namespace NKikimr {
                 Record.SetOrigin(origin);
             }
 
-            TEvCreateTabletReply( 
-                    NKikimrProto::EReplyStatus status, 
-                    ui64 ownerId, 
-                    ui64 ownerIdx, 
-                    ui64 tabletId, 
-                    ui64 origin, 
-                    NKikimrHive::EErrorReason errorReason) 
-                : TEvCreateTabletReply(status, ownerId, ownerIdx, tabletId, origin) 
-            { 
-                if (errorReason != NKikimrHive::ERROR_REASON_UNKNOWN) { 
-                    Record.SetErrorReason(errorReason); 
-                } 
-            } 
- 
+            TEvCreateTabletReply(
+                    NKikimrProto::EReplyStatus status,
+                    ui64 ownerId,
+                    ui64 ownerIdx,
+                    ui64 tabletId,
+                    ui64 origin,
+                    NKikimrHive::EErrorReason errorReason)
+                : TEvCreateTabletReply(status, ownerId, ownerIdx, tabletId, origin)
+            {
+                if (errorReason != NKikimrHive::ERROR_REASON_UNKNOWN) {
+                    Record.SetErrorReason(errorReason);
+                }
+            }
+
             TString ToString() const {
                 TStringStream str;
                 str << "{EvCreateTabletReply Status: " << NKikimrProto::EReplyStatus_Name(Record.GetStatus()).data();
@@ -602,103 +602,103 @@ namespace NKikimr {
                 Record.SetStatus(status);
             }
         };
- 
-        struct TEvGetTabletStorageInfo : public TEventPB<TEvGetTabletStorageInfo, 
-                NKikimrHive::TEvGetTabletStorageInfo, EvGetTabletStorageInfo> 
-        { 
-            TEvGetTabletStorageInfo() = default; 
- 
-            explicit TEvGetTabletStorageInfo(ui64 tabletId) { 
-                Record.SetTabletID(tabletId); 
-            } 
-        }; 
- 
-        struct TEvGetTabletStorageInfoResult : public TEventPB<TEvGetTabletStorageInfoResult, 
-                NKikimrHive::TEvGetTabletStorageInfoResult, EvGetTabletStorageInfoResult> 
-        { 
-            TEvGetTabletStorageInfoResult() = default; 
- 
-            TEvGetTabletStorageInfoResult(ui64 tabletId, NKikimrProto::EReplyStatus status) { 
-                Record.SetTabletID(tabletId); 
-                Record.SetStatus(status); 
-            } 
- 
-            TEvGetTabletStorageInfoResult(ui64 tabletId, NKikimrProto::EReplyStatus status, const TString& statusMessage) 
-                : TEvGetTabletStorageInfoResult(tabletId, status) 
-            { 
-                Record.SetStatusMessage(statusMessage); 
-            } 
- 
-            TEvGetTabletStorageInfoResult(ui64 tabletId, const TTabletStorageInfo& info) { 
-                Record.SetTabletID(tabletId); 
-                Record.SetStatus(NKikimrProto::OK); 
-                TabletStorageInfoToProto(info, Record.MutableInfo()); 
-            } 
-        }; 
- 
-        struct TEvGetTabletStorageInfoRegistered : public TEventPB<TEvGetTabletStorageInfoRegistered, 
-                NKikimrHive::TEvGetTabletStorageInfoRegistered, EvGetTabletStorageInfoRegistered> 
-        { 
-            TEvGetTabletStorageInfoRegistered() = default; 
- 
-            explicit TEvGetTabletStorageInfoRegistered(ui64 tabletId) { 
-                Record.SetTabletID(tabletId); 
-            } 
-        }; 
- 
-        struct TEvLockTabletExecution : public TEventPB<TEvLockTabletExecution, 
-                NKikimrHive::TEvLockTabletExecution, EvLockTabletExecution> 
-        { 
-            TEvLockTabletExecution() = default; 
- 
-            explicit TEvLockTabletExecution(ui64 tabletId) { 
-                Record.SetTabletID(tabletId); 
-            } 
-        }; 
- 
-        struct TEvLockTabletExecutionResult : public TEventPB<TEvLockTabletExecutionResult, 
-                NKikimrHive::TEvLockTabletExecutionResult, EvLockTabletExecutionResult> 
-        { 
-            TEvLockTabletExecutionResult() = default; 
- 
-            TEvLockTabletExecutionResult(ui64 tabletId, NKikimrProto::EReplyStatus status, const TString& statusMessage) { 
-                Record.SetTabletID(tabletId); 
-                Record.SetStatus(status); 
-                Record.SetStatusMessage(statusMessage); 
-            } 
-        }; 
- 
-        struct TEvLockTabletExecutionLost : public TEventPB<TEvLockTabletExecutionLost, 
-                NKikimrHive::TEvLockTabletExecutionLost, EvLockTabletExecutionLost> 
-        { 
-            TEvLockTabletExecutionLost() = default; 
- 
-            explicit TEvLockTabletExecutionLost(ui64 tabletId) { 
-                Record.SetTabletID(tabletId); 
-            } 
-        }; 
- 
-        struct TEvUnlockTabletExecution : public TEventPB<TEvUnlockTabletExecution, 
-                NKikimrHive::TEvUnlockTabletExecution, EvUnlockTabletExecution> 
-        { 
-            TEvUnlockTabletExecution() = default; 
- 
-            explicit TEvUnlockTabletExecution(ui64 tabletId) { 
-                Record.SetTabletID(tabletId); 
-            } 
-        }; 
- 
-        struct TEvUnlockTabletExecutionResult : public TEventPB<TEvUnlockTabletExecutionResult, 
-                NKikimrHive::TEvUnlockTabletExecutionResult, EvUnlockTabletExecutionResult> 
-        { 
-            TEvUnlockTabletExecutionResult() = default; 
- 
-            TEvUnlockTabletExecutionResult(ui64 tabletId, NKikimrProto::EReplyStatus status, const TString& statusMessage) { 
-                Record.SetTabletID(tabletId); 
-                Record.SetStatus(status); 
-                Record.SetStatusMessage(statusMessage); 
-            } 
-        }; 
+
+        struct TEvGetTabletStorageInfo : public TEventPB<TEvGetTabletStorageInfo,
+                NKikimrHive::TEvGetTabletStorageInfo, EvGetTabletStorageInfo>
+        {
+            TEvGetTabletStorageInfo() = default;
+
+            explicit TEvGetTabletStorageInfo(ui64 tabletId) {
+                Record.SetTabletID(tabletId);
+            }
+        };
+
+        struct TEvGetTabletStorageInfoResult : public TEventPB<TEvGetTabletStorageInfoResult,
+                NKikimrHive::TEvGetTabletStorageInfoResult, EvGetTabletStorageInfoResult>
+        {
+            TEvGetTabletStorageInfoResult() = default;
+
+            TEvGetTabletStorageInfoResult(ui64 tabletId, NKikimrProto::EReplyStatus status) {
+                Record.SetTabletID(tabletId);
+                Record.SetStatus(status);
+            }
+
+            TEvGetTabletStorageInfoResult(ui64 tabletId, NKikimrProto::EReplyStatus status, const TString& statusMessage)
+                : TEvGetTabletStorageInfoResult(tabletId, status)
+            {
+                Record.SetStatusMessage(statusMessage);
+            }
+
+            TEvGetTabletStorageInfoResult(ui64 tabletId, const TTabletStorageInfo& info) {
+                Record.SetTabletID(tabletId);
+                Record.SetStatus(NKikimrProto::OK);
+                TabletStorageInfoToProto(info, Record.MutableInfo());
+            }
+        };
+
+        struct TEvGetTabletStorageInfoRegistered : public TEventPB<TEvGetTabletStorageInfoRegistered,
+                NKikimrHive::TEvGetTabletStorageInfoRegistered, EvGetTabletStorageInfoRegistered>
+        {
+            TEvGetTabletStorageInfoRegistered() = default;
+
+            explicit TEvGetTabletStorageInfoRegistered(ui64 tabletId) {
+                Record.SetTabletID(tabletId);
+            }
+        };
+
+        struct TEvLockTabletExecution : public TEventPB<TEvLockTabletExecution,
+                NKikimrHive::TEvLockTabletExecution, EvLockTabletExecution>
+        {
+            TEvLockTabletExecution() = default;
+
+            explicit TEvLockTabletExecution(ui64 tabletId) {
+                Record.SetTabletID(tabletId);
+            }
+        };
+
+        struct TEvLockTabletExecutionResult : public TEventPB<TEvLockTabletExecutionResult,
+                NKikimrHive::TEvLockTabletExecutionResult, EvLockTabletExecutionResult>
+        {
+            TEvLockTabletExecutionResult() = default;
+
+            TEvLockTabletExecutionResult(ui64 tabletId, NKikimrProto::EReplyStatus status, const TString& statusMessage) {
+                Record.SetTabletID(tabletId);
+                Record.SetStatus(status);
+                Record.SetStatusMessage(statusMessage);
+            }
+        };
+
+        struct TEvLockTabletExecutionLost : public TEventPB<TEvLockTabletExecutionLost,
+                NKikimrHive::TEvLockTabletExecutionLost, EvLockTabletExecutionLost>
+        {
+            TEvLockTabletExecutionLost() = default;
+
+            explicit TEvLockTabletExecutionLost(ui64 tabletId) {
+                Record.SetTabletID(tabletId);
+            }
+        };
+
+        struct TEvUnlockTabletExecution : public TEventPB<TEvUnlockTabletExecution,
+                NKikimrHive::TEvUnlockTabletExecution, EvUnlockTabletExecution>
+        {
+            TEvUnlockTabletExecution() = default;
+
+            explicit TEvUnlockTabletExecution(ui64 tabletId) {
+                Record.SetTabletID(tabletId);
+            }
+        };
+
+        struct TEvUnlockTabletExecutionResult : public TEventPB<TEvUnlockTabletExecutionResult,
+                NKikimrHive::TEvUnlockTabletExecutionResult, EvUnlockTabletExecutionResult>
+        {
+            TEvUnlockTabletExecutionResult() = default;
+
+            TEvUnlockTabletExecutionResult(ui64 tabletId, NKikimrProto::EReplyStatus status, const TString& statusMessage) {
+                Record.SetTabletID(tabletId);
+                Record.SetStatus(status);
+                Record.SetStatusMessage(statusMessage);
+            }
+        };
 
         struct TEvInitiateTabletExternalBoot : public TEventPB<TEvInitiateTabletExternalBoot,
                 NKikimrHive::TEvBootTablet, EvInitiateTabletExternalBoot>

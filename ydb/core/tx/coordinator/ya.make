@@ -8,7 +8,7 @@ OWNER(
 SRCS(
     coordinator.cpp
     coordinator_impl.cpp
-    coordinator__acquire_read_step.cpp 
+    coordinator__acquire_read_step.cpp
     coordinator__configure.cpp
     coordinator__check.cpp
     coordinator__init.cpp
@@ -19,7 +19,7 @@ SRCS(
     coordinator__restore_transaction.cpp
     coordinator__schema.cpp
     coordinator__schema_upgrade.cpp
-    coordinator__stop_guard.cpp 
+    coordinator__stop_guard.cpp
     defs.h
     mediator_queue.cpp
 )

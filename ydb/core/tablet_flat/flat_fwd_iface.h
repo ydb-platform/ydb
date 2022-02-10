@@ -19,7 +19,7 @@ namespace NFwd {
     class IPageLoadingLogic {
     public:
         struct TResult {
-            const TSharedData *Page; 
+            const TSharedData *Page;
             bool Grow; /* Should give more pages on Forward() */
             bool Need; /* Is vital to client to make progress */
         };

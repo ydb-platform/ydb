@@ -280,7 +280,7 @@ public:
                     BLOG_NOTICE("THive::TTxUpdateTabletGroups{" << (ui64)this << "}(" << TabletId << ")::Complete"
                                 " - TryToBoot was not successfull");
                 }
-            } 
+            }
             Self->ProcessBootQueue();
         }
     }

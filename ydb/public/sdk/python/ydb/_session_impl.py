@@ -385,14 +385,14 @@ def read_table_request_factory(
     if row_limit:
         # NOTE(gvit): pylint cannot understand that row_limit is not None
         request.row_limit = row_limit  # pylint: disable=E5903
-    if use_snapshot is not None: 
-        if isinstance(use_snapshot, bool): 
-            if use_snapshot: 
-                request.use_snapshot = _apis.FeatureFlag.ENABLED 
-            else: 
-                request.use_snapshot = _apis.FeatureFlag.DISABLED 
-        else: 
-            request.use_snapshot = use_snapshot 
+    if use_snapshot is not None:
+        if isinstance(use_snapshot, bool):
+            if use_snapshot:
+                request.use_snapshot = _apis.FeatureFlag.ENABLED
+            else:
+                request.use_snapshot = _apis.FeatureFlag.DISABLED
+        else:
+            request.use_snapshot = use_snapshot
     return session_state.attach_request(request)
 
 

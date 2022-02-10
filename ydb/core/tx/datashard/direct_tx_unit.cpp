@@ -1,7 +1,7 @@
 #include "datashard_direct_transaction.h"
 #include "datashard_pipeline.h"
 #include "execution_unit_ctors.h"
-#include "setup_sys_locks.h" 
+#include "setup_sys_locks.h"
 
 namespace NKikimr {
 namespace NDataShard {
@@ -18,26 +18,26 @@ public:
     }
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
-        return !op->HasRuntimeConflicts(); 
+        return !op->HasRuntimeConflicts();
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(ctx);
 
         if (op->IsImmediate()) {
-            // Every time we execute immediate transaction we may choose a new mvcc version 
+            // Every time we execute immediate transaction we may choose a new mvcc version
             op->MvccReadWriteVersion.reset();
-        } 
- 
+        }
+
         TSetupSysLocks guardLocks(op, DataShard);
- 
+
         TDirectTransaction* tx = dynamic_cast<TDirectTransaction*>(op.Get());
         Y_VERIFY(tx != nullptr);
 
         if (!tx->Execute(&DataShard, txc)) {
-            return EExecutionStatus::Restart; 
-        } 
- 
+            return EExecutionStatus::Restart;
+        }
+
         if (auto changes = tx->GetCollectedChanges()) {
             op->ChangeRecords().reserve(changes.size());
             for (const auto& change : changes) {
@@ -45,10 +45,10 @@ public:
             }
         }
 
-        DataShard.SysLocksTable().ApplyLocks(); 
+        DataShard.SysLocksTable().ApplyLocks();
         Pipeline.AddCommittingOp(op);
- 
-        return EExecutionStatus::DelayCompleteNoMoreRestarts; 
+
+        return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
     void Complete(TOperation::TPtr op, const TActorContext& ctx) override {

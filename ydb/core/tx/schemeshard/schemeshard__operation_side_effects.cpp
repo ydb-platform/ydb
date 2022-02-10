@@ -94,14 +94,14 @@ void TSideEffects::ActivateOperation(TTxId txId) {
     ActivationOps.insert(txId);
 }
 
-void TSideEffects::WaitShardCreated(TShardIdx idx, TOperationId opId) { 
-    PendingWaitShardCreated.emplace_back(idx, opId); 
-} 
- 
-void TSideEffects::ActivateShardCreated(TShardIdx idx, TTxId txId) { 
-    PendingActivateShardCreated.emplace_back(idx, txId); 
-} 
- 
+void TSideEffects::WaitShardCreated(TShardIdx idx, TOperationId opId) {
+    PendingWaitShardCreated.emplace_back(idx, opId);
+}
+
+void TSideEffects::ActivateShardCreated(TShardIdx idx, TTxId txId) {
+    PendingActivateShardCreated.emplace_back(idx, txId);
+}
+
 void TSideEffects::PublishAndWaitPublication(TOperationId opId, TPathId pathId) {
     PublishToSchemeBoard(opId, pathId);
     WaitPublications.emplace_back(opId, pathId);
@@ -148,9 +148,9 @@ void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransa
     DoSetBarriers(ss, ctx);
     DoCheckBarriers(ss, txc, ctx);
 
-    DoWaitShardCreated(ss, ctx); 
-    DoActivateShardCreated(ss, ctx); 
- 
+    DoWaitShardCreated(ss, ctx);
+    DoActivateShardCreated(ss, ctx);
+
     DoPersistPublishPaths(ss, txc, ctx); // before DoReadyToNotify
 
     DoReadyToNotify(ss, ctx);
@@ -859,31 +859,31 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
 }
 
 void TSideEffects::DoWaitShardCreated(TSchemeShard* ss, const TActorContext&) {
-    for (auto& entry : PendingWaitShardCreated) { 
-        TShardIdx shardIdx; 
-        TOperationId opId; 
-        std::tie(shardIdx, opId) = entry; 
-        auto it = ss->Operations.find(opId.GetTxId()); 
-        if (it != ss->Operations.end()) { 
-            it->second->WaitShardCreated(shardIdx, opId.GetSubTxId()); 
-        } 
-    } 
+    for (auto& entry : PendingWaitShardCreated) {
+        TShardIdx shardIdx;
+        TOperationId opId;
+        std::tie(shardIdx, opId) = entry;
+        auto it = ss->Operations.find(opId.GetTxId());
+        if (it != ss->Operations.end()) {
+            it->second->WaitShardCreated(shardIdx, opId.GetSubTxId());
+        }
+    }
 }
- 
+
 void TSideEffects::DoActivateShardCreated(TSchemeShard* ss, const TActorContext&) {
-    for (auto& entry : PendingActivateShardCreated) { 
-        TShardIdx shardIdx; 
-        TTxId txId; 
-        std::tie(shardIdx, txId) = entry; 
-        auto it = ss->Operations.find(txId); 
-        if (it != ss->Operations.end()) { 
-            for (TSubTxId partId : it->second->ActivateShardCreated(shardIdx)) { 
-                ActivateTx(TOperationId(txId, partId)); 
-            } 
-        } 
-    } 
+    for (auto& entry : PendingActivateShardCreated) {
+        TShardIdx shardIdx;
+        TTxId txId;
+        std::tie(shardIdx, txId) = entry;
+        auto it = ss->Operations.find(txId);
+        if (it != ss->Operations.end()) {
+            for (TSubTxId partId : it->second->ActivateShardCreated(shardIdx)) {
+                ActivateTx(TOperationId(txId, partId));
+            }
+        }
+    }
 }
- 
+
 void TSideEffects::DoWaitPublication(TSchemeShard *ss, const TActorContext &/*ctx*/) {
     for (auto& entry : WaitPublications) {
         TOperationId opId;
@@ -896,7 +896,7 @@ void TSideEffects::DoWaitPublication(TSchemeShard *ss, const TActorContext &/*ct
             it->second->RegisterWaitPublication(opId.GetSubTxId(), pathId, version);
         }
     }
-} 
+}
 
 void TSideEffects::DoSetBarriers(TSchemeShard *ss, const TActorContext &ctx) {
     for (auto& entry : Barriers) {
@@ -918,7 +918,7 @@ void TSideEffects::DoSetBarriers(TSchemeShard *ss, const TActorContext &ctx) {
                              << ", parts count: " << operation->Parts.size());
         }
     }
-} 
+}
 
 void TSideEffects::DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) {
     TSet<TTxId> touchedOperations;

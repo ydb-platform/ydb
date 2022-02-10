@@ -167,7 +167,7 @@ namespace NKikimr {
                         const TKeyBarrier &key,
                         const TMemRecBarrier &memRec);
                 bool Shared() const;
-                bool NeedRollUp() const; 
+                bool NeedRollUp() const;
                 TMemViewSnap GetSnapshot() const;
             };
 
@@ -178,7 +178,7 @@ namespace NKikimr {
         public:
             TMemView(TIntrusivePtr<TIngressCache> ingrCache, const TString &vdiskLogPrefix, bool gcOnlySynced);
             void Update(const TKeyBarrier &key, const TMemRecBarrier &memRec);
-            TMemViewSnap GetSnapshot(); 
+            TMemViewSnap GetSnapshot();
         };
 
     } // NBarriers

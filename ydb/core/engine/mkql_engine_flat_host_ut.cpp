@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
     Y_UNIT_TEST(ShardId) {
         NTable::TDatabase DB;
         TEngineHostCounters hostCounters;
-        TUnversionedEngineHost host(DB, hostCounters, TEngineHostSettings(100)); 
+        TUnversionedEngineHost host(DB, hostCounters, TEngineHostSettings(100));
         UNIT_ASSERT_VALUES_EQUAL(host.GetShardId(), 100);
     }
 
@@ -51,15 +51,15 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
         NIceDb::TNiceDb db(DB);
 
         { // Create tables
-            NTable::TDummyEnv env; 
-            DB.Begin(1, env); 
+            NTable::TDummyEnv env;
+            DB.Begin(1, env);
             db.Materialize<Schema>();
             DB.Commit(1, true);
         }
 
         { // Fill tables with some stuff
-            NTable::TDummyEnv env; 
-            DB.Begin(2, env); 
+            NTable::TDummyEnv env;
+            DB.Begin(2, env);
             for (ui64 i = 0; i < 1000; ++i) {
                 db.Table<Schema::TestTable>().Key(i).Update(NIceDb::TUpdate<Schema::TestTable::Value>(i),
                                                             NIceDb::TUpdate<Schema::TestTable::Name>(ToString(i)),
@@ -69,10 +69,10 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
         }
 
         { // Execute some minikql
-            NTable::TDummyEnv env; 
-            DB.Begin(3, env); 
+            NTable::TDummyEnv env;
+            DB.Begin(3, env);
             TEngineHostCounters hostCounters;
-            TUnversionedEngineHost host(DB, hostCounters); 
+            TUnversionedEngineHost host(DB, hostCounters);
 
             // TODO: ... MINIKQL ...
 
@@ -81,8 +81,8 @@ Y_UNIT_TEST_SUITE(TMiniKQLEngineFlatHostTest) {
         }
 
         { // Check data
-            NTable::TDummyEnv env; 
-            DB.Begin(4, env); 
+            NTable::TDummyEnv env;
+            DB.Begin(4, env);
             for (ui64 i = 0; i < 1000; ++i) {
                 auto row = db.Table<Schema::TestTable>().Key(i).Select<Schema::TestTable::Value, Schema::TestTable::Name, Schema::TestTable::BoolValue>();
                 UNIT_ASSERT(row.IsReady());

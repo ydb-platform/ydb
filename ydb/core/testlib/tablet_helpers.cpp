@@ -572,23 +572,23 @@ namespace NKikimr {
         return runtime.Register(CreateTabletFollower(launcher, info, new TTabletSetupInfo(op, TMailboxType::Simple, 0, TMailboxType::Simple, 0), 0, new TResourceProfiles));
     }
 
-    TActorId ResolveTablet(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex, bool sysTablet) { 
-        auto sender = runtime.AllocateEdgeActor(nodeIndex); 
-        runtime.Send(new IEventHandle(MakeTabletResolverID(), sender, 
-            new TEvTabletResolver::TEvForward(tabletId, nullptr))); 
-        auto ev = runtime.GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(sender); 
-        Y_VERIFY(ev->Get()->Status == NKikimrProto::OK, "Failed to resolve tablet %" PRIu64, tabletId); 
-        if (sysTablet) { 
-            return ev->Get()->Tablet; 
-        } else { 
-            return ev->Get()->TabletActor; 
-        } 
-    } 
- 
+    TActorId ResolveTablet(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex, bool sysTablet) {
+        auto sender = runtime.AllocateEdgeActor(nodeIndex);
+        runtime.Send(new IEventHandle(MakeTabletResolverID(), sender,
+            new TEvTabletResolver::TEvForward(tabletId, nullptr)));
+        auto ev = runtime.GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(sender);
+        Y_VERIFY(ev->Get()->Status == NKikimrProto::OK, "Failed to resolve tablet %" PRIu64, tabletId);
+        if (sysTablet) {
+            return ev->Get()->Tablet;
+        } else {
+            return ev->Get()->TabletActor;
+        }
+    }
+
     void ForwardToTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId& sender, IEventBase *ev, ui32 nodeIndex, bool sysTablet) {
         runtime.Send(new IEventHandle(MakeTabletResolverID(), sender,
-            new TEvTabletResolver::TEvForward(tabletId, new IEventHandle(TActorId(), sender, ev), { }, 
-                sysTablet ? TEvTabletResolver::TEvForward::EActor::SysTablet : TEvTabletResolver::TEvForward::EActor::Tablet)), nodeIndex); 
+            new TEvTabletResolver::TEvForward(tabletId, new IEventHandle(TActorId(), sender, ev), { },
+                sysTablet ? TEvTabletResolver::TEvForward::EActor::SysTablet : TEvTabletResolver::TEvForward::EActor::Tablet)), nodeIndex);
     }
 
     void InvalidateTabletResolverCache(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex) {
@@ -603,19 +603,19 @@ namespace NKikimr {
         runtime.DispatchEvents(rebootOptions);
 
         InvalidateTabletResolverCache(runtime, tabletId, nodeIndex);
-        WaitScheduledEvents(runtime, TDuration::Seconds(1), sender, nodeIndex); 
+        WaitScheduledEvents(runtime, TDuration::Seconds(1), sender, nodeIndex);
     }
 
-    void GracefulRestartTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId &sender, ui32 nodeIndex) { 
+    void GracefulRestartTablet(TTestActorRuntime &runtime, ui64 tabletId, const TActorId &sender, ui32 nodeIndex) {
         ForwardToTablet(runtime, tabletId, sender, new TEvTablet::TEvTabletStop(tabletId, TEvTablet::TEvTabletStop::ReasonStop), nodeIndex, /* sysTablet = */ true);
-        TDispatchOptions rebootOptions; 
-        rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1)); 
-        runtime.DispatchEvents(rebootOptions); 
- 
+        TDispatchOptions rebootOptions;
+        rebootOptions.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
+        runtime.DispatchEvents(rebootOptions);
+
         InvalidateTabletResolverCache(runtime, tabletId, nodeIndex);
-        WaitScheduledEvents(runtime, TDuration::Seconds(1), sender, nodeIndex); 
-    } 
- 
+        WaitScheduledEvents(runtime, TDuration::Seconds(1), sender, nodeIndex);
+    }
+
     void SetupTabletServices(TTestActorRuntime &runtime, TAppPrepare *app, bool mockDisk, NFake::TStorage storage,
                             NFake::TCaches caches) {
         TAutoPtr<TAppPrepare> dummy;
@@ -1151,16 +1151,16 @@ namespace NKikimr {
             NKikimrProto::EReplyStatus status = NKikimrProto::OK;
             const std::pair<ui64, ui64> key(ev->Get()->Record.GetOwner(), ev->Get()->Record.GetOwnerIdx());
             const auto type = ev->Get()->Record.GetTabletType();
-            const auto bootMode = ev->Get()->Record.GetTabletBootMode(); 
+            const auto bootMode = ev->Get()->Record.GetTabletBootMode();
             auto it = State->Tablets.find(key);
             const auto& defaultTabletTypes = AppData(ctx)->DefaultTabletTypes;
             TActorId bootstrapperActorId;
             if (it == State->Tablets.end()) {
-                if (bootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) { 
-                    // don't boot anything 
-                } else if (auto x = GetTabletCreationFunc(type)) { 
+                if (bootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
+                    // don't boot anything
+                } else if (auto x = GetTabletCreationFunc(type)) {
                     bootstrapperActorId = Boot(ctx, type, x, DataGroupErasure);
-                } else if (type == defaultTabletTypes.DataShard) { 
+                } else if (type == defaultTabletTypes.DataShard) {
                     bootstrapperActorId = Boot(ctx, type, &CreateDataShard, DataGroupErasure);
                 } else if (type == defaultTabletTypes.KeyValue) {
                     bootstrapperActorId = Boot(ctx, type, &CreateKeyValueFlat, DataGroupErasure);
@@ -1176,8 +1176,8 @@ namespace NKikimr {
                     bootstrapperActorId = Boot(ctx, type, &CreateTxMediator, DataGroupErasure);
                 } else if (type == defaultTabletTypes.SchemeShard) {
                     bootstrapperActorId = Boot(ctx, type, &CreateFlatTxSchemeShard, DataGroupErasure);
-                } else if (type == defaultTabletTypes.Kesus) { 
-                    bootstrapperActorId = Boot(ctx, type, &NKesus::CreateKesusTablet, DataGroupErasure); 
+                } else if (type == defaultTabletTypes.Kesus) {
+                    bootstrapperActorId = Boot(ctx, type, &NKesus::CreateKesusTablet, DataGroupErasure);
                 } else if (type == defaultTabletTypes.Hive) {
                     TFakeHiveState::TPtr state = State->AllocateSubHive();
                     bootstrapperActorId = Boot(ctx, type, [=](const TActorId& tablet, TTabletStorageInfo* info) {
@@ -1185,12 +1185,12 @@ namespace NKikimr {
                                                }, DataGroupErasure);
                 } else if (type == defaultTabletTypes.SysViewProcessor) {
                     bootstrapperActorId = Boot(ctx, type, &NSysView::CreateSysViewProcessor, DataGroupErasure);
-                } else if (type == defaultTabletTypes.SequenceShard) { 
-                    bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure); 
+                } else if (type == defaultTabletTypes.SequenceShard) {
+                    bootstrapperActorId = Boot(ctx, type, &NSequenceShard::CreateSequenceShard, DataGroupErasure);
                 } else if (type == defaultTabletTypes.ReplicationController) {
                     bootstrapperActorId = Boot(ctx, type, &NReplication::CreateController, DataGroupErasure);
                 } else {
-                    status = NKikimrProto::ERROR; 
+                    status = NKikimrProto::ERROR;
                 }
 
                 if (status == NKikimrProto::OK) {
@@ -1204,12 +1204,12 @@ namespace NKikimr {
                 }
             }
 
-            if (status == NKikimrProto::OK) { 
-                auto& boundChannels = ev->Get()->Record.GetBindedChannels(); 
-                it->second.BoundChannels.assign(boundChannels.begin(), boundChannels.end()); 
-                it->second.ChannelsProfile = ev->Get()->Record.GetChannelsProfile(); 
-            } 
- 
+            if (status == NKikimrProto::OK) {
+                auto& boundChannels = ev->Get()->Record.GetBindedChannels();
+                it->second.BoundChannels.assign(boundChannels.begin(), boundChannels.end());
+                it->second.ChannelsProfile = ev->Get()->Record.GetChannelsProfile();
+            }
+
             ctx.Send(ev->Sender, new TEvHive::TEvCreateTabletReply(status, key.first,
                 key.second, it->second.TabletId, TabletID()), 0, ev->Cookie);
         }

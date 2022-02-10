@@ -81,12 +81,12 @@ class TStateStorageProxyRequest : public TActor<TStateStorageProxyRequest> {
 
     void PassAway() override {
         if (UseInterconnectSubscribes && ReplicaSelection) {
-            const ui32 selfNode = SelfId().NodeId(); 
+            const ui32 selfNode = SelfId().NodeId();
             for (ui32 i = 0; i < ReplicaSelection->Sz; ++i) {
                 const ui32 node = ReplicaSelection->SelectedReplicas[i].NodeId();
-                if (node != selfNode) { 
-                    Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe()); 
-                } 
+                if (node != selfNode) {
+                    Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe());
+                }
             }
         }
 
@@ -515,7 +515,7 @@ public:
         : TActor(&TThis::StateInit)
         , Info(info)
         , FlowControlledInfo(flowControlledInfo)
-        , UseInterconnectSubscribes(true) 
+        , UseInterconnectSubscribes(true)
         , TabletID(0)
         , Cookie(0)
         , SuggestedGeneration(0)
@@ -551,7 +551,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvReplicaInfo, HandleLookup);
             hFunc(TEvents::TEvUndelivered, HandleLookup);
-            IgnoreFunc(TEvInterconnect::TEvNodeConnected); 
+            IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleLookup);
             cFunc(TEvents::TSystem::Wakeup, HandleLookupTimeout);
             default:
@@ -568,7 +568,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvReplicaInfo, HandleUpdate);
             hFunc(TEvents::TEvUndelivered, HandleUpdate);
-            IgnoreFunc(TEvInterconnect::TEvNodeConnected); 
+            IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleUpdate);
             cFunc(TEvents::TSystem::Wakeup, HandleUpdateTimeout);
             default:
@@ -585,7 +585,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvReplicaInfo, HandleUpdateSig);
             hFunc(TEvents::TEvUndelivered, HandleUpdateSig);
-            IgnoreFunc(TEvInterconnect::TEvNodeConnected); 
+            IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleUpdateSig);
             cFunc(TEvents::TSystem::Wakeup, HandleUpdateSigTimeout);
             default:

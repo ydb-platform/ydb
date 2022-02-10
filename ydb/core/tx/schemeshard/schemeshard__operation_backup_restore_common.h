@@ -162,7 +162,7 @@ public:
         TTxState& txState = *context.SS->FindTx(operationId);
 
         auto tabletId = TTabletId(evRecord.GetOrigin());
-        auto shardIdx = context.SS->MustGetShardIdx(tabletId); 
+        auto shardIdx = context.SS->MustGetShardIdx(tabletId);
         Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
 
         if (!txState.SchemeChangeNotificationReceived.contains(shardIdx)) {

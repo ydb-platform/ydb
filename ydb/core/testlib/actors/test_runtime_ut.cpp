@@ -477,159 +477,159 @@ Y_UNIT_TEST_SUITE(TActorTest) {
             throw;
         }
     }
- 
+
     Y_UNIT_TEST(TestScheduleReaction) {
-        class TMyActor : public TActor<TMyActor> { 
-        public: 
-            TMyActor() 
-                : TActor(&TMyActor::StateFunc) 
-            {} 
- 
-            STFUNC(StateFunc) { 
-                switch (ev->GetTypeRewrite()) { 
-                    HFunc(TEvents::TEvBootstrap, Handle); 
-                    HFunc(TEvents::TEvCompleted, Handle); 
-                    HFunc(TEvents::TEvPing, Handle); 
-                    HFunc(TEvents::TEvPong, Handle); 
-                    default: 
-                        Y_FAIL("unexpected event"); 
-                } 
-            } 
- 
-            void Handle(TEvents::TEvBootstrap::TPtr& ev, const TActorContext& ctx) { 
-                ctx.Send(ev->Sender, new TEvents::TEvCompleted()); 
-            } 
- 
-            void Handle(TEvents::TEvPing::TPtr&, const TActorContext& ctx) { 
-                ctx.Schedule(TDuration::MilliSeconds(400), new TEvents::TEvPong()); 
-                ctx.Schedule(TDuration::MilliSeconds(500), new TEvents::TEvCompleted()); 
-            } 
- 
-            void Handle(TEvents::TEvPong::TPtr&, const TActorContext&) { 
-            } 
- 
-            void Handle(TEvents::TEvCompleted::TPtr&, const TActorContext&) { 
-                CompletedReceived = true; 
-            } 
- 
-            bool CompletedReceived = false; 
-        }; 
- 
-        TTestActorRuntime runtime; 
+        class TMyActor : public TActor<TMyActor> {
+        public:
+            TMyActor()
+                : TActor(&TMyActor::StateFunc)
+            {}
+
+            STFUNC(StateFunc) {
+                switch (ev->GetTypeRewrite()) {
+                    HFunc(TEvents::TEvBootstrap, Handle);
+                    HFunc(TEvents::TEvCompleted, Handle);
+                    HFunc(TEvents::TEvPing, Handle);
+                    HFunc(TEvents::TEvPong, Handle);
+                    default:
+                        Y_FAIL("unexpected event");
+                }
+            }
+
+            void Handle(TEvents::TEvBootstrap::TPtr& ev, const TActorContext& ctx) {
+                ctx.Send(ev->Sender, new TEvents::TEvCompleted());
+            }
+
+            void Handle(TEvents::TEvPing::TPtr&, const TActorContext& ctx) {
+                ctx.Schedule(TDuration::MilliSeconds(400), new TEvents::TEvPong());
+                ctx.Schedule(TDuration::MilliSeconds(500), new TEvents::TEvCompleted());
+            }
+
+            void Handle(TEvents::TEvPong::TPtr&, const TActorContext&) {
+            }
+
+            void Handle(TEvents::TEvCompleted::TPtr&, const TActorContext&) {
+                CompletedReceived = true;
+            }
+
+            bool CompletedReceived = false;
+        };
+
+        TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
         TActorId sender = runtime.AllocateEdgeActor();
-        TMyActor* myActor = new TMyActor; 
+        TMyActor* myActor = new TMyActor;
         TActorId actorId = runtime.Register(myActor);
-        runtime.EnableScheduleForActor(actorId); 
-        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvBootstrap())); 
-        TAutoPtr<IEventHandle> handle; 
-        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(handle)); 
+        runtime.EnableScheduleForActor(actorId);
+        runtime.Send(new IEventHandle(actorId, sender, new TEvents::TEvBootstrap()));
+        TAutoPtr<IEventHandle> handle;
+        UNIT_ASSERT(runtime.GrabEdgeEventRethrow<TEvents::TEvCompleted>(handle));
         runtime.Send(new IEventHandle(actorId, TActorId(), new TEvents::TEvPing()));
         runtime.Schedule(new IEventHandle(sender, TActorId(), new TEvents::TEvWakeup()),
-            TDuration::MilliSeconds(1000000)); 
-        do { 
-            runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(handle); 
-        } while (handle->GetRecipientRewrite() != sender); 
-        UNIT_ASSERT(myActor->CompletedReceived); 
-    } 
- 
+            TDuration::MilliSeconds(1000000));
+        do {
+            runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(handle);
+        } while (handle->GetRecipientRewrite() != sender);
+        UNIT_ASSERT(myActor->CompletedReceived);
+    }
+
     Y_UNIT_TEST(TestFilteredGrab) {
-        enum EEv { 
-            EvCounter = EventSpaceBegin(TEvents::ES_PRIVATE) 
-        }; 
- 
-        struct TEvCounter : public TEventLocal<TEvCounter, EvCounter> { 
-            const ui32 Index; 
- 
-            TEvCounter(ui32 index) 
-                : Index(index) 
-            {}; 
-        }; 
- 
-        class TCountingActor : public TActorBootstrapped<TCountingActor> { 
-        private: 
+        enum EEv {
+            EvCounter = EventSpaceBegin(TEvents::ES_PRIVATE)
+        };
+
+        struct TEvCounter : public TEventLocal<TEvCounter, EvCounter> {
+            const ui32 Index;
+
+            TEvCounter(ui32 index)
+                : Index(index)
+            {};
+        };
+
+        class TCountingActor : public TActorBootstrapped<TCountingActor> {
+        private:
             TVector<TActorId> Targets;
-            ui32 Counter = 0; 
- 
-        public: 
+            ui32 Counter = 0;
+
+        public:
             TCountingActor(TVector<TActorId> targets)
-                : Targets(targets) 
-            {} 
- 
-            void Bootstrap(const TActorContext& ctx) { 
-                ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup()); 
-                Become(&TThis::StateWork); 
-            } 
- 
-            void Handle(const TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) { 
-                size_t index = Counter++ % Targets.size(); 
-                ctx.Send(Targets[index], new TEvCounter(Counter)); 
-                ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup()); 
-            } 
- 
-            STFUNC(StateWork) { 
-                switch (ev->GetTypeRewrite()) { 
-                    HFunc(TEvents::TEvWakeup, Handle); 
-                    default: 
-                        Y_FAIL("unexpected event"); 
-                } 
-            } 
-        }; 
- 
-        TTestActorRuntime runtime; 
+                : Targets(targets)
+            {}
+
+            void Bootstrap(const TActorContext& ctx) {
+                ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+                Become(&TThis::StateWork);
+            }
+
+            void Handle(const TEvents::TEvWakeup::TPtr&, const TActorContext& ctx) {
+                size_t index = Counter++ % Targets.size();
+                ctx.Send(Targets[index], new TEvCounter(Counter));
+                ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
+            }
+
+            STFUNC(StateWork) {
+                switch (ev->GetTypeRewrite()) {
+                    HFunc(TEvents::TEvWakeup, Handle);
+                    default:
+                        Y_FAIL("unexpected event");
+                }
+            }
+        };
+
+        TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
         TActorId edge1 = runtime.AllocateEdgeActor();
         TActorId edge2 = runtime.AllocateEdgeActor();
         TActorId edge3 = runtime.AllocateEdgeActor();
         TActorId countingActor = runtime.Register(new TCountingActor({edge1, edge2}));
-        runtime.EnableScheduleForActor(countingActor); 
- 
-        // Ignores edge1 event 
-        { 
-            auto event = runtime.GrabEdgeEvent<TEvCounter>(edge2); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Recipient, edge2); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 2u); 
-        } 
- 
-        // Ignores another edge1 event 
-        { 
-            auto event = runtime.GrabEdgeEventRethrow<TEvCounter>(edge2); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Recipient, edge2); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 4u); 
-        } 
- 
-        // There are no edge3 events, so timeout hits 
-        { 
-            auto event = runtime.GrabEdgeEvent<TEvCounter>(edge3, TDuration::Seconds(5)); 
-            UNIT_ASSERT(!event); 
-        } 
- 
-        // Now we take skipped event for edge1 
-        { 
-            auto event = runtime.GrabEdgeEvent<TEvCounter>(edge1); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Recipient, edge1); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 1u); 
-        } 
- 
-        // And another event for edge1 
-        { 
-            auto event = runtime.GrabEdgeEventRethrow<TEvCounter>(edge1); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Recipient, edge1); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 3u); 
-        } 
- 
-        // Grab event using complex filters 
-        { 
-            auto event = runtime.GrabEdgeEventIf<TEvCounter>( 
-                {edge1, edge2}, 
-                [](const auto& ev) { 
-                    const auto* msg = ev->Get(); 
-                    return msg->Index > 10 && msg->Index % 2 == 0; 
-                }); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Recipient, edge2); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 12u); 
-        } 
-    } 
+        runtime.EnableScheduleForActor(countingActor);
+
+        // Ignores edge1 event
+        {
+            auto event = runtime.GrabEdgeEvent<TEvCounter>(edge2);
+            UNIT_ASSERT_VALUES_EQUAL(event->Recipient, edge2);
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 2u);
+        }
+
+        // Ignores another edge1 event
+        {
+            auto event = runtime.GrabEdgeEventRethrow<TEvCounter>(edge2);
+            UNIT_ASSERT_VALUES_EQUAL(event->Recipient, edge2);
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 4u);
+        }
+
+        // There are no edge3 events, so timeout hits
+        {
+            auto event = runtime.GrabEdgeEvent<TEvCounter>(edge3, TDuration::Seconds(5));
+            UNIT_ASSERT(!event);
+        }
+
+        // Now we take skipped event for edge1
+        {
+            auto event = runtime.GrabEdgeEvent<TEvCounter>(edge1);
+            UNIT_ASSERT_VALUES_EQUAL(event->Recipient, edge1);
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 1u);
+        }
+
+        // And another event for edge1
+        {
+            auto event = runtime.GrabEdgeEventRethrow<TEvCounter>(edge1);
+            UNIT_ASSERT_VALUES_EQUAL(event->Recipient, edge1);
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 3u);
+        }
+
+        // Grab event using complex filters
+        {
+            auto event = runtime.GrabEdgeEventIf<TEvCounter>(
+                {edge1, edge2},
+                [](const auto& ev) {
+                    const auto* msg = ev->Get();
+                    return msg->Index > 10 && msg->Index % 2 == 0;
+                });
+            UNIT_ASSERT_VALUES_EQUAL(event->Recipient, edge2);
+            UNIT_ASSERT_VALUES_EQUAL(event->Get()->Index, 12u);
+        }
+    }
 };
 
 }

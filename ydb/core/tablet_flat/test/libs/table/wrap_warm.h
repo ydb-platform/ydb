@@ -9,8 +9,8 @@ namespace NKikimr {
 namespace NTable {
 namespace NTest {
 
-    template<EDirection Direction> 
-    struct TWrapMemtableImpl { 
+    template<EDirection Direction>
+    struct TWrapMemtableImpl {
         TWrapMemtableImpl(TIntrusiveConstPtr<TMemTable> egg, bool defaults = true)
             : Table(egg)
             , Scheme(Table->Scheme)
@@ -45,18 +45,18 @@ namespace NTest {
         {
             const TCelled key(key_, *Scheme->Keys, false);
 
-            Iter = TMemIt::Make(*Table, Table->Immediate(), key, seek, Scheme->Keys, &Remap_, Env, Direction); 
+            Iter = TMemIt::Make(*Table, Table->Immediate(), key, seek, Scheme->Keys, &Remap_, Env, Direction);
 
             return RollUp();
         }
 
         EReady Next() noexcept
         {
-            if constexpr (Direction == EDirection::Reverse) { 
-                Iter->Prev(); 
-            } else { 
-                Iter->Next(); 
-            } 
+            if constexpr (Direction == EDirection::Reverse) {
+                Iter->Prev();
+            } else {
+                Iter->Next();
+            }
 
             return RollUp();
         }
@@ -82,7 +82,7 @@ namespace NTest {
                 for (auto &pin: Remap_.KeyPins())
                     State.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]);
 
-                Iter->Apply(State, /* committed */ {}); 
+                Iter->Apply(State, /* committed */ {});
             }
 
             return Iter->IsValid() ? EReady::Data : EReady::Gone;
@@ -99,9 +99,9 @@ namespace NTest {
         TAutoPtr<TMemIt> Iter;
     };
 
-    using TWrapMemtable = TWrapMemtableImpl<EDirection::Forward>; 
-    using TWrapReverseMemtable = TWrapMemtableImpl<EDirection::Reverse>; 
- 
+    using TWrapMemtable = TWrapMemtableImpl<EDirection::Forward>;
+    using TWrapReverseMemtable = TWrapMemtableImpl<EDirection::Reverse>;
+
 }
 }
 }

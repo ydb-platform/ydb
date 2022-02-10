@@ -90,11 +90,11 @@ public:
             SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_);
         } else {
             auto endpoint = dbState->EndpointPool.GetEndpoint(preferredEndpoint);
-            if (!endpoint) { 
+            if (!endpoint) {
                 return {nullptr, ""};
             }
-            clientConfig.Locator = endpoint.Endpoint; 
-            clientConfig.SslTargetNameOverride = endpoint.SslTargetNameOverride; 
+            clientConfig.Locator = endpoint.Endpoint;
+            clientConfig.SslTargetNameOverride = endpoint.SslTargetNameOverride;
             if (GRpcKeepAliveTimeout_) {
                 SetGrpcKeepAlive(clientConfig, GRpcKeepAliveTimeout_, GRpcKeepAlivePermitWithoutCalls_);
             }

@@ -35,17 +35,17 @@ namespace NKikimr {
                 }
             }
 
-            void Write(NBarriers::TMemView &memView, const TKeyBarrier &key, ui32 collectGen, ui32 collectStep) { 
-                for (const auto &x : {Cache0, Cache1, Cache2, Cache3}) { 
-                    TMemRecBarrier memRec(collectGen, collectStep, TBarrierIngress(x.Get())); 
-                    memView.Update(key, memRec); 
-                } 
-            } 
- 
-            TIngressCachePtr GetCache0() const { 
-                return Cache0; 
-            } 
- 
+            void Write(NBarriers::TMemView &memView, const TKeyBarrier &key, ui32 collectGen, ui32 collectStep) {
+                for (const auto &x : {Cache0, Cache1, Cache2, Cache3}) {
+                    TMemRecBarrier memRec(collectGen, collectStep, TBarrierIngress(x.Get()));
+                    memView.Update(key, memRec);
+                }
+            }
+
+            TIngressCachePtr GetCache0() const {
+                return Cache0;
+            }
+
         private:
             TBlobStorageGroupInfo Info;
             TIngressCachePtr Cache0;
@@ -75,37 +75,37 @@ namespace NKikimr {
             tree.GetBarrier(tabletId, channel, soft, hard);
             UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
         }
- 
-        Y_UNIT_TEST(MemViewSnapshots) { 
-            TWriter writer; 
+
+        Y_UNIT_TEST(MemViewSnapshots) {
+            TWriter writer;
             NBarriers::TMemView memView(writer.GetCache0(), VDiskLogPrefix, true);
-            TMaybe<NBarriers::TCurrentBarrier> soft; 
-            TMaybe<NBarriers::TCurrentBarrier> hard; 
- 
-            const ui64 tabletId = 893475; 
-            const ui32 channel = 4; 
- 
-            writer.Write(memView, TKeyBarrier(tabletId, channel, 15, 1, false), 14, 100); 
-            TMaybe<NBarriers::TMemViewSnap> snap1 = memView.GetSnapshot(); 
-            writer.Write(memView, TKeyBarrier(tabletId, channel, 15, 2, false), 14, 200); 
-            NBarriers::TMemViewSnap snap2 = memView.GetSnapshot(); 
-            snap1->GetBarrier(tabletId, channel, soft, hard); 
-            UNIT_ASSERT(soft && *soft == NBarriers::TCurrentBarrier(15, 1, 14, 100)); 
-            snap2.GetBarrier(tabletId, channel, soft, hard); 
-            UNIT_ASSERT(soft && *soft == NBarriers::TCurrentBarrier(15, 2, 14, 200)); 
- 
-            writer.Write(memView, TKeyBarrier(tabletId, channel, 15, 3, true), Max<ui32>(), Max<ui32>()); 
- 
-            // Drop the oldest snapshot after the write 
-            snap1 = { }; 
- 
-            // Take a new snapshot before any new writes 
-            NBarriers::TMemViewSnap snap3 = memView.GetSnapshot(); 
- 
-            // New snapshot must see the latest write 
-            snap3.GetBarrier(tabletId, channel, soft, hard); 
-            UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead()); 
-        } 
+            TMaybe<NBarriers::TCurrentBarrier> soft;
+            TMaybe<NBarriers::TCurrentBarrier> hard;
+
+            const ui64 tabletId = 893475;
+            const ui32 channel = 4;
+
+            writer.Write(memView, TKeyBarrier(tabletId, channel, 15, 1, false), 14, 100);
+            TMaybe<NBarriers::TMemViewSnap> snap1 = memView.GetSnapshot();
+            writer.Write(memView, TKeyBarrier(tabletId, channel, 15, 2, false), 14, 200);
+            NBarriers::TMemViewSnap snap2 = memView.GetSnapshot();
+            snap1->GetBarrier(tabletId, channel, soft, hard);
+            UNIT_ASSERT(soft && *soft == NBarriers::TCurrentBarrier(15, 1, 14, 100));
+            snap2.GetBarrier(tabletId, channel, soft, hard);
+            UNIT_ASSERT(soft && *soft == NBarriers::TCurrentBarrier(15, 2, 14, 200));
+
+            writer.Write(memView, TKeyBarrier(tabletId, channel, 15, 3, true), Max<ui32>(), Max<ui32>());
+
+            // Drop the oldest snapshot after the write
+            snap1 = { };
+
+            // Take a new snapshot before any new writes
+            NBarriers::TMemViewSnap snap3 = memView.GetSnapshot();
+
+            // New snapshot must see the latest write
+            snap3.GetBarrier(tabletId, channel, soft, hard);
+            UNIT_ASSERT(soft && soft->IsDead() && hard && hard->IsDead());
+        }
     }
 
 } // NKikimr

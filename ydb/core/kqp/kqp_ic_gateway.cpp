@@ -1894,7 +1894,7 @@ public:
                 {
                     IKqpGateway::TKqpSnapshotHandle handle;
                     handle.Snapshot = response.Snapshot;
-                    handle.Status = response.Status; 
+                    handle.Status = response.Status;
                     handle.AddIssues(response.Issues);
                     promise.SetValue(handle);
                 }

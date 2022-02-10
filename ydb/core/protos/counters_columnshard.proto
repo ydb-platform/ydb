@@ -143,10 +143,10 @@ enum ETxTypes {
     TXTYPE_READ = 4                                         [(TxTypeOpts) = {Name: "TxRead"}];
     TXTYPE_PROPOSE = 5                                      [(TxTypeOpts) = {Name: "TxPropose"}];
     TXTYPE_WRITE_INDEX = 6                                  [(TxTypeOpts) = {Name: "TxWriteIndex"}];
-    TXTYPE_PLANSTEP = 7                                     [(TxTypeOpts) = {Name: "TxPlanStep"}]; 
-    TXTYPE_NOTIFY_TX_COMPLETION = 8                         [(TxTypeOpts) = {Name: "TxNotifyTxCompletion"}]; 
-    TXTYPE_PROPOSE_CANCEL = 9                               [(TxTypeOpts) = {Name: "TxProposeCancel"}]; 
-    TXTYPE_PROGRESS = 10                                    [(TxTypeOpts) = {Name: "TxProgress"}]; 
+    TXTYPE_PLANSTEP = 7                                     [(TxTypeOpts) = {Name: "TxPlanStep"}];
+    TXTYPE_NOTIFY_TX_COMPLETION = 8                         [(TxTypeOpts) = {Name: "TxNotifyTxCompletion"}];
+    TXTYPE_PROPOSE_CANCEL = 9                               [(TxTypeOpts) = {Name: "TxProposeCancel"}];
+    TXTYPE_PROGRESS = 10                                    [(TxTypeOpts) = {Name: "TxProgress"}];
     TXTYPE_START_SCAN = 11                                  [(TxTypeOpts) = {Name: "TxStartScan"}];
     TXTYPE_READ_BLOB_RANGES = 12                            [(TxTypeOpts) = {Name: "TxReadBlobRanges"}];
 }

@@ -26,22 +26,22 @@ PEERDIR(
 )
 
 END()
- 
-RECURSE( 
+
+RECURSE(
     balance_coverage
-    columnshard 
+    columnshard
     coordinator
     datashard
-    long_tx_service 
+    long_tx_service
     mediator
     replication
     scheme_board
     scheme_cache
     schemeshard
-    sequenceproxy 
-    sequenceshard 
+    sequenceproxy
+    sequenceshard
     time_cast
     tx_allocator
     tx_allocator_client
     tx_proxy
-) 
+)

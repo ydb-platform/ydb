@@ -387,11 +387,11 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             if exception is not None:
                 saved_exceptions.append(exception)
 
-        for node in self.nodes.values(): 
-            exception = self.__stop_node(node) 
-            if exception is not None: 
-                saved_exceptions.append(exception) 
- 
+        for node in self.nodes.values():
+            exception = self.__stop_node(node)
+            if exception is not None:
+                saved_exceptions.append(exception)
+
         self.__port_allocator.release_ports()
 
         if saved_exceptions:

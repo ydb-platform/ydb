@@ -15,7 +15,7 @@ class ITestIterator {
 public:
     virtual ~ITestIterator() {}
 
-    virtual EReady Next(ENext mode) = 0; 
+    virtual EReady Next(ENext mode) = 0;
     virtual bool IsValid() = 0;
     virtual bool IsRowDeleted() = 0;
     virtual TDbTupleRef GetKey() = 0;
@@ -57,9 +57,9 @@ public:
         : Iter(iter)
     {}
 
-    EReady Next(ENext mode) override 
+    EReady Next(ENext mode) override
     {
-        const auto ready = Iter->Next(mode); 
+        const auto ready = Iter->Next(mode);
 
         if (ready == EReady::Page)
             throw TIteratorNotReady();
@@ -162,10 +162,10 @@ public:
         , It2(it2)
     {}
 
-    EReady Next(ENext mode) override 
+    EReady Next(ENext mode) override
     {
-        const auto one = It1->Next(mode); 
-        const auto two = It2->Next(mode); 
+        const auto one = It1->Next(mode);
+        const auto two = It2->Next(mode);
         UNIT_ASSERT(one == two);
         return one;
     }
@@ -301,12 +301,12 @@ private:
         while (true) {
             TDbTupleRef key1, key2, val1, val2;
 
-            if ((rdy1 = cmp <= 0 ? it1->Next(ENext::Data) : rdy1) == EReady::Data) { 
+            if ((rdy1 = cmp <= 0 ? it1->Next(ENext::Data) : rdy1) == EReady::Data) {
                 key1 = it1->GetKey();
                 val1 = it1->GetValues();
             }
 
-            if ((rdy2 = cmp >= 0 ? it2->Next(ENext::Data) : rdy2) == EReady::Data) { 
+            if ((rdy2 = cmp >= 0 ? it2->Next(ENext::Data) : rdy2) == EReady::Data) {
                 key2 = it2->GetKey();
                 val2 = it2->GetValues();
             }

@@ -117,24 +117,24 @@ public:
         return TString(this->Context.peer());
     }
 
-    bool SslServer() const override { 
-        return Server_->SslServer(); 
-    } 
- 
+    bool SslServer() const override {
+        return Server_->SslServer();
+    }
+
     void Run() {
-        // Start request unless server is shutting down 
-        if (auto guard = Server_->ProtectShutdown()) { 
-            Ref(); //For grpc c runtime 
-            this->Context.AsyncNotifyWhenDone(OnFinishTag.Prepare()); 
-            if (RequestCallback_) { 
-                (this->Service->*RequestCallback_) 
-                        (&this->Context, Request_, 
-                        reinterpret_cast<grpc::ServerAsyncResponseWriter<TOut>*>(Writer_.Get()), this->CQ, this->CQ, GetGRpcTag()); 
-            } else { 
-                (this->Service->*StreamRequestCallback_) 
-                        (&this->Context, Request_, 
-                        reinterpret_cast<grpc::ServerAsyncWriter<TOut>*>(StreamWriter_.Get()), this->CQ, this->CQ, GetGRpcTag()); 
-            } 
+        // Start request unless server is shutting down
+        if (auto guard = Server_->ProtectShutdown()) {
+            Ref(); //For grpc c runtime
+            this->Context.AsyncNotifyWhenDone(OnFinishTag.Prepare());
+            if (RequestCallback_) {
+                (this->Service->*RequestCallback_)
+                        (&this->Context, Request_,
+                        reinterpret_cast<grpc::ServerAsyncResponseWriter<TOut>*>(Writer_.Get()), this->CQ, this->CQ, GetGRpcTag());
+            } else {
+                (this->Service->*StreamRequestCallback_)
+                        (&this->Context, Request_,
+                        reinterpret_cast<grpc::ServerAsyncWriter<TOut>*>(StreamWriter_.Get()), this->CQ, this->CQ, GetGRpcTag());
+            }
         }
     }
 
@@ -148,10 +148,10 @@ public:
     }
 
     void DestroyRequest() override {
-        if (RequestRegistered_) { 
-            Server_->DeregisterRequestCtx(this); 
-            RequestRegistered_ = false; 
-        } 
+        if (RequestRegistered_) {
+            Server_->DeregisterRequestCtx(this);
+            RequestRegistered_ = false;
+        }
         UnRef();
     }
 
@@ -346,15 +346,15 @@ private:
             ok ? "true" : "false", makeRequestString().data(), this->Context.peer().c_str());
 
         if (this->Context.c_call() == nullptr) {
-            Y_VERIFY(!ok); 
+            Y_VERIFY(!ok);
             // One ref by OnFinishTag, grpc will not call this tag if no request received
             UnRef();
-        } else if (!(RequestRegistered_ = Server_->RegisterRequestCtx(this))) { 
-            // Request cannot be registered due to shutdown 
-            // It's unsafe to continue, so drop this request without processing 
+        } else if (!(RequestRegistered_ = Server_->RegisterRequestCtx(this))) {
+            // Request cannot be registered due to shutdown
+            // It's unsafe to continue, so drop this request without processing
             GRPC_LOG_DEBUG(Logger_, "[%p] dropping request Name# %s due to shutdown", this, Name_);
-            this->Context.TryCancel(); 
-            return false; 
+            this->Context.TryCancel();
+            return false;
         }
 
         Clone(); // TODO: Request pool?
@@ -501,7 +501,7 @@ private:
     ui32 ResponseStatus = 0;
     THPTimer RequestTimer;
     TAuthState AuthState_ = 0;
-    bool RequestRegistered_ = false; 
+    bool RequestRegistered_ = false;
 
     using TFixedEvent = TQueueFixedEvent<TGRpcRequestImpl>;
     TFixedEvent OnFinishTag = { this, &TGRpcRequestImpl::OnFinish };

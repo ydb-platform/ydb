@@ -201,10 +201,10 @@ namespace Tests {
 
         NKikimr::SetupChannelProfiles(app, Settings->Domain);
 
-        Runtime->SetupMonitoring(); 
+        Runtime->SetupMonitoring();
         Runtime->SetLogBackend(Settings->LogBackend);
 
-        SetupTabletServices(*Runtime, &app, (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode, Settings->CustomDiskParams); 
+        SetupTabletServices(*Runtime, &app, (StaticNodes() + DynamicNodes()) == 1 && Settings->EnableMockOnSingleNode, Settings->CustomDiskParams);
 
         CreateBootstrapTablets();
         SetupStorage();
@@ -308,7 +308,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcOperationService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxyId));
-        GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxyId)); 
+        GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcDiscoveryService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcYdbExperimentalService(system, counters, grpcRequestProxyId));
@@ -343,14 +343,14 @@ namespace Tests {
 
     void TServer::SetupDomains(TAppPrepare &app) {
         const ui32 domainId = Settings->Domain;
-        ui64 planResolution = Settings->DomainPlanResolution; 
-        if (!planResolution) { 
-            planResolution = Settings->UseRealThreads ? 7 : 500; 
-        } 
+        ui64 planResolution = Settings->DomainPlanResolution;
+        if (!planResolution) {
+            planResolution = Settings->UseRealThreads ? 7 : 500;
+        }
         auto domain = TDomainsInfo::TDomain::ConstructDomainWithExplicitTabletIds(Settings->DomainName, domainId, ChangeStateStorage(SchemeRoot, domainId),
                                                                                   domainId, domainId, TVector<ui32>{domainId},
                                                                                   domainId, TVector<ui32>{domainId},
-                                                                                  planResolution, 
+                                                                                  planResolution,
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxCoordinatorIDFixed(domainId, 1)},
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxMediatorIDFixed(domainId, 1)},
                                                                                   TVector<ui64>{TDomainsInfo::MakeTxAllocatorIDFixed(domainId, 1)},
@@ -525,10 +525,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateTxMediator, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Kesus] = 
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
-                &NKesus::CreateKesusTablet, TMailboxType::Revolving, appData.UserPoolId, 
-                TMailboxType::Revolving, appData.SystemPoolId)); 
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.Kesus] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NKesus::CreateKesusTablet, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
         localConfig.TabletClassInfo[appData.DefaultTabletTypes.SchemeShard] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &CreateFlatTxSchemeShard, TMailboxType::Revolving, appData.UserPoolId,
@@ -541,10 +541,10 @@ namespace Tests {
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NSysView::CreateSysViewProcessorForTests, TMailboxType::Revolving, appData.UserPoolId,
                 TMailboxType::Revolving, appData.SystemPoolId));
-        localConfig.TabletClassInfo[appData.DefaultTabletTypes.SequenceShard] = 
-            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo( 
-                &NSequenceShard::CreateSequenceShard, TMailboxType::Revolving, appData.UserPoolId, 
-                TMailboxType::Revolving, appData.SystemPoolId)); 
+        localConfig.TabletClassInfo[appData.DefaultTabletTypes.SequenceShard] =
+            TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
+                &NSequenceShard::CreateSequenceShard, TMailboxType::Revolving, appData.UserPoolId,
+                TMailboxType::Revolving, appData.SystemPoolId));
         localConfig.TabletClassInfo[appData.DefaultTabletTypes.ReplicationController] =
             TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
                 &NReplication::CreateController, TMailboxType::Revolving, appData.UserPoolId,
@@ -624,18 +624,18 @@ namespace Tests {
             Runtime->RegisterService(MakeMiniKQLCompileServiceID(), compileServiceId, nodeIdx);
         }
 
-        { 
-            IActor* longTxService = NLongTxService::CreateLongTxService(); 
-            TActorId longTxServiceId = Runtime->Register(longTxService, nodeIdx); 
-            Runtime->RegisterService(NLongTxService::MakeLongTxServiceID(Runtime->GetNodeId(nodeIdx)), longTxServiceId, nodeIdx); 
-        } 
- 
-        { 
-            IActor* sequenceProxy = NSequenceProxy::CreateSequenceProxy(); 
-            TActorId sequenceProxyId = Runtime->Register(sequenceProxy, nodeIdx); 
-            Runtime->RegisterService(NSequenceProxy::MakeSequenceProxyServiceID(), sequenceProxyId, nodeIdx); 
-        } 
- 
+        {
+            IActor* longTxService = NLongTxService::CreateLongTxService();
+            TActorId longTxServiceId = Runtime->Register(longTxService, nodeIdx);
+            Runtime->RegisterService(NLongTxService::MakeLongTxServiceID(Runtime->GetNodeId(nodeIdx)), longTxServiceId, nodeIdx);
+        }
+
+        {
+            IActor* sequenceProxy = NSequenceProxy::CreateSequenceProxy();
+            TActorId sequenceProxyId = Runtime->Register(sequenceProxy, nodeIdx);
+            Runtime->RegisterService(NSequenceProxy::MakeSequenceProxyServiceID(), sequenceProxyId, nodeIdx);
+        }
+
         if (BusServer && nodeIdx == 0) { // MsgBus and GRPC are run now only on first node
             {
                 IActor* proxy = BusServer->CreateProxy();
@@ -670,7 +670,7 @@ namespace Tests {
                 Runtime->RegisterService(NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), pqMetaCacheId, nodeIdx);
             }
         }
- 
+
         {
             if (Settings->EnableMetering) {
                 THolder<TFileLogBackend> fileBackend;
@@ -837,7 +837,7 @@ namespace Tests {
         //Runtime->SetLogPriority(NKikimrServices::MINIKQL_ENGINE, NLog::PRI_DEBUG);
         //Runtime->SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
         //Runtime->SetLogPriority(NKikimrServices::KQP_WORKER, NLog::PRI_DEBUG);
- 
+
         //Runtime->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_TRACE);
         //Runtime->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_TRACE);
         //Runtime->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
@@ -847,7 +847,7 @@ namespace Tests {
 
         if (Settings->LoggerInitializer) {
             Settings->LoggerInitializer(*Runtime);
-        } 
+        }
     }
 
     void TServer::StartDummyTablets() {
@@ -858,7 +858,7 @@ namespace Tests {
         CreateTestBootstrapper(*Runtime, CreateTestTabletInfo(ChangeStateStorage(DummyTablet2, Settings->Domain), TTabletTypes::TX_DUMMY), &CreateFlatDummyTablet);
     }
 
-    TTestActorRuntime* TServer::GetRuntime() const { 
+    TTestActorRuntime* TServer::GetRuntime() const {
         return Runtime.Get();
     }
 
@@ -1412,19 +1412,19 @@ namespace Tests {
         return CreateTable(parent, table, timeout);
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateKesus(const TString& parent, const TString& name) { 
-        auto* request = new NMsgBusProxy::TBusSchemeOperation(); 
-        auto* tx = request->Record.MutableTransaction()->MutableModifyScheme(); 
+    NMsgBusProxy::EResponseStatus TClient::CreateKesus(const TString& parent, const TString& name) {
+        auto* request = new NMsgBusProxy::TBusSchemeOperation();
+        auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
         tx->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateKesus);
-        tx->SetWorkingDir(parent); 
-        tx->MutableKesus()->SetName(name); 
-        TAutoPtr<NBus::TBusMessage> reply; 
-        NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply); 
-        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK); 
-        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record; 
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
-    } 
- 
+        tx->SetWorkingDir(parent);
+        tx->MutableKesus()->SetName(name);
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus msgStatus = SendAndWaitCompletion(request, reply);
+        UNIT_ASSERT_VALUES_EQUAL(msgStatus, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse &response = dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
     NMsgBusProxy::EResponseStatus TClient::DeleteKesus(const TString& parent, const TString& name) {
         auto* request = new NMsgBusProxy::TBusSchemeOperation();
         auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -1459,27 +1459,27 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateOlapTable(const TString& parent, const TString& scheme) { 
+    NMsgBusProxy::EResponseStatus TClient::CreateOlapTable(const TString& parent, const TString& scheme) {
         NKikimrSchemeOp::TColumnTableDescription table;
-        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table); 
-        UNIT_ASSERT(parseOk); 
-        return CreateOlapTable(parent, table); 
-    } 
- 
-    NMsgBusProxy::EResponseStatus TClient::CreateOlapTable(const TString& parent, 
+        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table);
+        UNIT_ASSERT(parseOk);
+        return CreateOlapTable(parent, table);
+    }
+
+    NMsgBusProxy::EResponseStatus TClient::CreateOlapTable(const TString& parent,
                                                            const NKikimrSchemeOp::TColumnTableDescription& table) {
-        auto request = std::make_unique<NMsgBusProxy::TBusSchemeOperation>(); 
-        auto* op = request->Record.MutableTransaction()->MutableModifyScheme(); 
+        auto request = std::make_unique<NMsgBusProxy::TBusSchemeOperation>();
+        auto* op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable);
-        op->SetWorkingDir(parent); 
+        op->SetWorkingDir(parent);
         op->MutableCreateColumnTable()->CopyFrom(table);
-        TAutoPtr<NBus::TBusMessage> reply; 
-        NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply); 
-        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK); 
-        const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record; 
-        return (NMsgBusProxy::EResponseStatus)response.GetStatus(); 
-    } 
- 
+        TAutoPtr<NBus::TBusMessage> reply;
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        const NKikimrClient::TResponse& response = dynamic_cast<NMsgBusProxy::TBusResponse*>(reply.Get())->Record;
+        return (NMsgBusProxy::EResponseStatus)response.GetStatus();
+    }
+
     NMsgBusProxy::EResponseStatus TClient::CreateSolomon(const TString& parent, const TString& name, ui32 parts, ui32 channelProfile) {
         auto* request = new NMsgBusProxy::TBusSchemeOperation();
         auto* tx = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -2268,7 +2268,7 @@ namespace Tests {
 
     TServerSetup GetServerSetup() {
         if (!IsServerRedirected()) {
-            return TServerSetup("localhost", 0); 
+            return TServerSetup("localhost", 0);
         }
 
         TStringBuf str(GetEnv(ServerRedirectEnvVar));

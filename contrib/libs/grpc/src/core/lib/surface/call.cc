@@ -63,8 +63,8 @@
 #include "src/core/lib/transport/status_metadata.h"
 #include "src/core/lib/transport/transport.h"
 
-#include <util/system/yassert.h> 
- 
+#include <util/system/yassert.h>
+
 /** The maximum number of concurrent batches possible.
     Based upon the maximum number of individually queueable ops in the batch
     api:
@@ -1915,7 +1915,7 @@ static grpc_call_error call_start_batch(grpc_call* call, const grpc_op* ops,
 
   GRPC_CALL_INTERNAL_REF(call, "completion");
   if (!is_notify_tag_closure) {
-    Y_VERIFY(grpc_cq_begin_op(call->cq, notify_tag)); 
+    Y_VERIFY(grpc_cq_begin_op(call->cq, notify_tag));
   }
   bctl->set_num_steps_to_complete((has_send_ops ? 1 : 0) + num_recv_ops);
 

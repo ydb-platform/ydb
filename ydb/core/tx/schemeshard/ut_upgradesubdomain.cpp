@@ -752,10 +752,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                             })");
         env.TestWaitNotification(runtime, txId);
 
-        for (ui32 index = 2; index <= 4; ++index) { 
+        for (ui32 index = 2; index <= 4; ++index) {
             auto subDomainPathId = TestFindTabletSubDomainPathId(runtime, TTestTxConfig::FakeHiveTablets + 2);
             UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, TPathId(TTestTxConfig::SchemeShard, 2));
-        } 
+        }
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/DirA"),
                            {NLs::PathExist,
@@ -833,47 +833,47 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainTest) {
                             NLs::DomainCoordinators({TTestTxConfig::FakeHiveTablets}),
                             NLs::DomainMediators({TTestTxConfig::FakeHiveTablets + 1})});
 
-        // Inactive shard is not migrated 
+        // Inactive shard is not migrated
         TestFindTabletSubDomainPathId(runtime, tenantSchemeShard, TTestTxConfig::FakeHiveTablets + 2,
             NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SHARD_NOT_FOUND);
- 
-        for (ui32 index = 3; index <= 4; ++index) { 
+
+        for (ui32 index = 3; index <= 4; ++index) {
             auto subDomainPathId = TestFindTabletSubDomainPathId(runtime, tenantSchemeShard, TTestTxConfig::FakeHiveTablets + index);
-            UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, TPathId(tenantSchemeShard, 1)); 
-        } 
- 
-        for (ui32 index = 3; index <= 4; ++index) { 
-            NKikimrMiniKQL::TResult result; 
-            TString err; 
-            ui32 status = LocalMiniKQL( 
+            UNIT_ASSERT_VALUES_EQUAL(subDomainPathId, TPathId(tenantSchemeShard, 1));
+        }
+
+        for (ui32 index = 3; index <= 4; ++index) {
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            ui32 status = LocalMiniKQL(
                 runtime, TTestTxConfig::FakeHiveTablets + index, R"(
-                    ( 
-                        (let range '('('Id (Uint64 '33) (Uint64 '34)))) 
-                        (let select '('Id 'Uint64)) 
-                        (let options '()) 
-                        (let result (SelectRange 'Sys range select options)) 
-                        (return (AsList (SetResult 'Data result) )) 
-                    ) 
-                )", result, err); 
-            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK); 
-            UNIT_ASSERT_VALUES_EQUAL(err, ""); 
-            // Cerr << result << Endl; 
-            // { Type { Kind: Struct Struct { Member { Name: "Data" Type { Kind: Optional Optional { Item { Kind: Struct Struct { Member { Name: "List" Type { Kind: List List { Item { Kind: Struct Struct { Member { Name: "Id" Type { Kind: Optional Optional { Item { Kind: Data Data { Scheme: 4 } } } } } Member { Name: "Uint64" Type { Kind: Optional Optional { Item { Kind: Data Data { Scheme: 4 } } } } } } } } } } Member { Name: "Truncated" Type { Kind: Data Data { Scheme: 6 } } } } } } } } } } Value { Struct { Optional { Struct { List { Struct { Optional { Uint64: 33 } } Struct { Optional { Uint64: 9437199 } } } List { Struct { Optional { Uint64: 34 } } Struct { Optional { Uint64: 1 } } } } Struct { Bool: false } } } } } 
-            const auto& list = result.GetValue().GetStruct(0).GetOptional().GetStruct(0); 
- 
-            const auto& item0 = list.GetList(0); 
-            const ui64 id0 = item0.GetStruct(0).GetOptional().GetUint64(); 
-            UNIT_ASSERT_VALUES_EQUAL(id0, 33); 
-            const ui64 value0 = item0.GetStruct(1).GetOptional().GetUint64(); 
-            UNIT_ASSERT_VALUES_EQUAL(value0, tenantSchemeShard); 
- 
-            const auto& item1 = list.GetList(1); 
-            const ui64 id1 = item1.GetStruct(0).GetOptional().GetUint64(); 
-            UNIT_ASSERT_VALUES_EQUAL(id1, 34); 
-            const ui64 value1 = item1.GetStruct(1).GetOptional().GetUint64(); 
-            UNIT_ASSERT_VALUES_EQUAL(value1, 1); 
-        } 
- 
+                    (
+                        (let range '('('Id (Uint64 '33) (Uint64 '34))))
+                        (let select '('Id 'Uint64))
+                        (let options '())
+                        (let result (SelectRange 'Sys range select options))
+                        (return (AsList (SetResult 'Data result) ))
+                    )
+                )", result, err);
+            UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(err, "");
+            // Cerr << result << Endl;
+            // { Type { Kind: Struct Struct { Member { Name: "Data" Type { Kind: Optional Optional { Item { Kind: Struct Struct { Member { Name: "List" Type { Kind: List List { Item { Kind: Struct Struct { Member { Name: "Id" Type { Kind: Optional Optional { Item { Kind: Data Data { Scheme: 4 } } } } } Member { Name: "Uint64" Type { Kind: Optional Optional { Item { Kind: Data Data { Scheme: 4 } } } } } } } } } } Member { Name: "Truncated" Type { Kind: Data Data { Scheme: 6 } } } } } } } } } } Value { Struct { Optional { Struct { List { Struct { Optional { Uint64: 33 } } Struct { Optional { Uint64: 9437199 } } } List { Struct { Optional { Uint64: 34 } } Struct { Optional { Uint64: 1 } } } } Struct { Bool: false } } } } }
+            const auto& list = result.GetValue().GetStruct(0).GetOptional().GetStruct(0);
+
+            const auto& item0 = list.GetList(0);
+            const ui64 id0 = item0.GetStruct(0).GetOptional().GetUint64();
+            UNIT_ASSERT_VALUES_EQUAL(id0, 33);
+            const ui64 value0 = item0.GetStruct(1).GetOptional().GetUint64();
+            UNIT_ASSERT_VALUES_EQUAL(value0, tenantSchemeShard);
+
+            const auto& item1 = list.GetList(1);
+            const ui64 id1 = item1.GetStruct(0).GetOptional().GetUint64();
+            UNIT_ASSERT_VALUES_EQUAL(id1, 34);
+            const ui64 value1 = item1.GetStruct(1).GetOptional().GetUint64();
+            UNIT_ASSERT_VALUES_EQUAL(value1, 1);
+        }
+
         TestDropTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0/DirA", "table_1");
         env.TestWaitNotification(runtime, txId, tenantSchemeShard);
 

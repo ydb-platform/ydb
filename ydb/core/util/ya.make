@@ -19,24 +19,24 @@ SRCS(
     defs.h
     failure_injection.cpp
     failure_injection.h
-    fast_tls.cpp 
+    fast_tls.cpp
     format.cpp
     format.h
     fragmented_buffer.cpp
     fragmented_buffer.h
-    hazard.cpp 
+    hazard.cpp
     hyperlog_counter.cpp
     hyperlog_counter.h
     interval_set.h
     intrusive_fixed_hash_set.h
-    intrusive_heap.cpp 
-    intrusive_heap.h 
+    intrusive_heap.cpp
+    intrusive_heap.h
     intrusive_stack.h
     log_priority_mute_checker.h
     memory_tracker.cpp
     memory_tracker.h
     operation_queue.h
-    page_map.cpp 
+    page_map.cpp
     pb.h
     proto_duration.h
     queue_inplace.h
@@ -54,9 +54,9 @@ SRCS(
     token_bucket.h
     throughput_meter.h
     tuples.h
-    type_alias.h 
-    ulid.cpp 
-    ulid.h 
+    type_alias.h
+    ulid.cpp
+    ulid.h
     wildcard.h
     yverify_stream.h
 )

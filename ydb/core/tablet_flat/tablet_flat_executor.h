@@ -5,10 +5,10 @@
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
-#include <library/cpp/lwtrace/shuttle.h> 
-#include <util/generic/maybe.h> 
+#include <library/cpp/lwtrace/shuttle.h>
+#include <util/generic/maybe.h>
 #include <util/system/type_name.h>
-#include <util/generic/variant.h> 
+#include <util/generic/variant.h>
 
 ////////////////////////////////////////////
 namespace NKikimr {
@@ -16,7 +16,7 @@ class TTabletCountersBase;
 
 namespace NTable {
     class TDatabase;
-    class TScheme; 
+    class TScheme;
 }
 
 namespace NTabletFlatExecutor {
@@ -35,9 +35,9 @@ public:
     TTableSnapshotContext();
     virtual ~TTableSnapshotContext();
     virtual TConstArrayRef<ui32> TablesToSnapshot() const = 0;
- 
-public: 
-    NTable::TSnapEdge Edge(ui32 table) const; 
+
+public:
+    NTable::TSnapEdge Edge(ui32 table) const;
 };
 
 class TMemoryGCToken : public TThrRefBase {
@@ -95,7 +95,7 @@ struct IExecuting {
 
     virtual void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext>) = 0;
     virtual void DropSnapshot(TIntrusivePtr<TTableSnapshotContext>) = 0;
-    virtual void MoveSnapshot(const TTableSnapshotContext&, ui32 src, ui32 dst) = 0; 
+    virtual void MoveSnapshot(const TTableSnapshotContext&, ui32 src, ui32 dst) = 0;
     virtual void ClearSnapshot(const TTableSnapshotContext&) = 0;
     virtual void LoanTable(ui32 tableId, const TString &partsInfo) = 0; // attach table parts to table (called on part destination)
     virtual void CleanupLoan(const TLogoBlobID &bundleId, ui64 from) = 0; // mark loan completion (called on part source)
@@ -196,8 +196,8 @@ private:
 };
 
 class TTransactionContext : public TTxMemoryProviderBase {
-    friend class TExecutor; 
- 
+    friend class TExecutor;
+
 public:
     TTransactionContext(ui64 tablet, ui32 gen, ui32 step, NTable::TDatabase &db, IExecuting &env,
                         ui64 memoryLimit, ui64 taskId)
@@ -210,20 +210,20 @@ public:
     {}
 
     ~TTransactionContext() {}
- 
-    void OnCommitted(std::function<void()> callback) { 
-        OnCommitted_.emplace_back(std::move(callback)); 
-    } 
- 
-public: 
-    const ui64 Tablet = Max<ui32>(); 
-    const ui32 Generation = Max<ui32>(); 
-    const ui32 Step = Max<ui32>(); 
-    IExecuting &Env; 
-    NTable::TDatabase &DB; 
- 
-private: 
-    TVector<std::function<void()>> OnCommitted_; 
+
+    void OnCommitted(std::function<void()> callback) {
+        OnCommitted_.emplace_back(std::move(callback));
+    }
+
+public:
+    const ui64 Tablet = Max<ui32>();
+    const ui32 Generation = Max<ui32>();
+    const ui32 Step = Max<ui32>();
+    IExecuting &Env;
+    NTable::TDatabase &DB;
+
+private:
+    TVector<std::function<void()>> OnCommitted_;
 };
 
 struct TCompactedPartLoans {
@@ -259,12 +259,12 @@ class ITransaction : TNonCopyable {
 public:
     using TTransactionContext = NTabletFlatExecutor::TTransactionContext;
 
-    ITransaction() = default; 
- 
-    ITransaction(NLWTrace::TOrbit &&orbit) 
-        : Orbit(std::move(orbit)) 
-    { } 
- 
+    ITransaction() = default;
+
+    ITransaction(NLWTrace::TOrbit &&orbit)
+        : Orbit(std::move(orbit))
+    { }
+
     virtual ~ITransaction() = default;
     /// @return true if execution complete and transaction is ready for commit
     virtual bool Execute(TTransactionContext &txc, const TActorContext &ctx) = 0;
@@ -279,9 +279,9 @@ public:
     {
         out << TypeName(*this);
     }
- 
-public: 
-    NLWTrace::TOrbit Orbit; 
+
+public:
+    NLWTrace::TOrbit Orbit;
 };
 
 template<typename T>
@@ -295,11 +295,11 @@ public:
     TTransactionBase(T *self)
         : Self(self)
     {}
- 
-    TTransactionBase(T *self, NLWTrace::TOrbit &&orbit) 
-        : ITransaction(std::move(orbit)) 
-        , Self(self) 
-    { } 
+
+    TTransactionBase(T *self, NLWTrace::TOrbit &&orbit)
+        : ITransaction(std::move(orbit))
+        , Self(self)
+    { }
 };
 
 struct TExecutorStats {
@@ -314,12 +314,12 @@ struct TExecutorStats {
 
     TVector<ui32> YellowMoveChannels;
     TVector<ui32> YellowStopChannels;
- 
+
     bool IsYellowMoveChannel(ui32 channel) const {
         auto it = std::lower_bound(YellowMoveChannels.begin(), YellowMoveChannels.end(), channel);
         return it != YellowMoveChannels.end() && *it == channel;
-    } 
- 
+    }
+
     bool IsYellowStopChannel(ui32 channel) const {
         auto it = std::lower_bound(YellowStopChannels.begin(), YellowStopChannels.end(), channel);
         return it != YellowStopChannels.end() && *it == channel;
@@ -329,102 +329,102 @@ protected:
     virtual ~TExecutorStats() {}
 };
 
-struct TScanOptions { 
-    enum class EReadPrio { 
-        Default, 
-        Fast, 
-        Bulk, 
-        Low, 
-    }; 
- 
-    struct TReadAheadDefaults { 
-        // nothing 
-    }; 
- 
-    struct TReadAheadOptions { 
-        ui64 ReadAheadLo; 
-        ui64 ReadAheadHi; 
-    }; 
- 
-    struct TResourceBrokerDefaults { 
-        // nothing 
-    }; 
- 
-    struct TResourceBrokerOptions { 
-        TString Type; 
-        ui32 Prio; 
-    }; 
- 
-    struct TResourceBrokerDisabled { 
-        // nothing 
-    }; 
- 
-    struct TSnapshotNone { 
-        // nothing 
-    }; 
- 
-    struct TSnapshotById { 
-        ui64 SnapshotId; 
-    }; 
- 
-    struct TSnapshotByRowVersion { 
-        TRowVersion RowVersion; 
-    }; 
- 
-    struct TActorPoolDefault { 
-        // nothing 
-    }; 
- 
-    struct TActorPoolById { 
-        ui32 PoolId; 
-    }; 
- 
-    EReadPrio ReadPrio = EReadPrio::Default; 
+struct TScanOptions {
+    enum class EReadPrio {
+        Default,
+        Fast,
+        Bulk,
+        Low,
+    };
+
+    struct TReadAheadDefaults {
+        // nothing
+    };
+
+    struct TReadAheadOptions {
+        ui64 ReadAheadLo;
+        ui64 ReadAheadHi;
+    };
+
+    struct TResourceBrokerDefaults {
+        // nothing
+    };
+
+    struct TResourceBrokerOptions {
+        TString Type;
+        ui32 Prio;
+    };
+
+    struct TResourceBrokerDisabled {
+        // nothing
+    };
+
+    struct TSnapshotNone {
+        // nothing
+    };
+
+    struct TSnapshotById {
+        ui64 SnapshotId;
+    };
+
+    struct TSnapshotByRowVersion {
+        TRowVersion RowVersion;
+    };
+
+    struct TActorPoolDefault {
+        // nothing
+    };
+
+    struct TActorPoolById {
+        ui32 PoolId;
+    };
+
+    EReadPrio ReadPrio = EReadPrio::Default;
     std::variant<TReadAheadDefaults, TReadAheadOptions> ReadAhead;
     std::variant<TResourceBrokerDefaults, TResourceBrokerOptions, TResourceBrokerDisabled> ResourceBroker;
     std::variant<TSnapshotNone, TSnapshotById, TSnapshotByRowVersion> Snapshot;
     std::variant<TActorPoolDefault, TActorPoolById> ActorPool;
- 
-    TScanOptions& SetReadPrio(EReadPrio prio) { 
-        ReadPrio = prio; 
-        return *this; 
-    } 
- 
-    TScanOptions& SetReadAhead(ui64 lo, ui64 hi) { 
-        ReadAhead = TReadAheadOptions{ lo, hi }; 
-        return *this; 
-    } 
- 
-    TScanOptions& SetResourceBroker(TString type, ui32 prio) { 
-        ResourceBroker = TResourceBrokerOptions{ std::move(type), prio }; 
-        return *this; 
-    } 
- 
-    TScanOptions& DisableResourceBroker() { 
-        ResourceBroker = TResourceBrokerDisabled{ }; 
-        return *this; 
-    } 
- 
-    TScanOptions& SetSnapshotId(ui64 snapshotId) { 
-        Snapshot = TSnapshotById{ snapshotId }; 
-        return *this; 
-    } 
- 
-    TScanOptions& SetSnapshotRowVersion(TRowVersion rowVersion) { 
-        Snapshot = TSnapshotByRowVersion{ rowVersion }; 
-        return *this; 
-    } 
- 
-    TScanOptions& SetActorPoolId(ui32 poolId) { 
-        ActorPool = TActorPoolById{ poolId }; 
-        return *this; 
-    } 
- 
-    bool IsResourceBrokerDisabled() const { 
+
+    TScanOptions& SetReadPrio(EReadPrio prio) {
+        ReadPrio = prio;
+        return *this;
+    }
+
+    TScanOptions& SetReadAhead(ui64 lo, ui64 hi) {
+        ReadAhead = TReadAheadOptions{ lo, hi };
+        return *this;
+    }
+
+    TScanOptions& SetResourceBroker(TString type, ui32 prio) {
+        ResourceBroker = TResourceBrokerOptions{ std::move(type), prio };
+        return *this;
+    }
+
+    TScanOptions& DisableResourceBroker() {
+        ResourceBroker = TResourceBrokerDisabled{ };
+        return *this;
+    }
+
+    TScanOptions& SetSnapshotId(ui64 snapshotId) {
+        Snapshot = TSnapshotById{ snapshotId };
+        return *this;
+    }
+
+    TScanOptions& SetSnapshotRowVersion(TRowVersion rowVersion) {
+        Snapshot = TSnapshotByRowVersion{ rowVersion };
+        return *this;
+    }
+
+    TScanOptions& SetActorPoolId(ui32 poolId) {
+        ActorPool = TActorPoolById{ poolId };
+        return *this;
+    }
+
+    bool IsResourceBrokerDisabled() const {
         return std::holds_alternative<TResourceBrokerDisabled>(ResourceBroker);
-    } 
-}; 
- 
+    }
+};
+
 namespace NFlatExecutorSetup {
     struct ITablet : TNonCopyable {
         virtual ~ITablet() {}
@@ -445,8 +445,8 @@ namespace NFlatExecutorSetup {
 
         virtual void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
 
-        virtual bool ReassignChannelsEnabled() const; 
- 
+        virtual bool ReassignChannelsEnabled() const;
+
         // memory usage excluding transactions and executor cache.
         virtual ui64 GetMemoryUsage() const { return 50 << 10; }
 
@@ -508,18 +508,18 @@ namespace NFlatExecutorSetup {
         virtual ui64 MakeScanSnapshot(ui32 table) = 0;
         virtual void DropScanSnapshot(ui64 snapId) = 0;
         virtual ui64 QueueScan(ui32 tableId, TAutoPtr<NTable::IScan> scan, ui64 cookie, const TScanOptions& options = TScanOptions()) = 0;
-        virtual bool CancelScan(ui32 tableId, ui64 taskId) = 0; 
+        virtual bool CancelScan(ui32 tableId, ui64 taskId) = 0;
 
         // edge and ts of last full compaction
         virtual TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 tableId) const = 0;
 
-        // Forces full compaction of the specified table in the near future 
+        // Forces full compaction of the specified table in the near future
         // Returns 0 if can't compact, otherwise compaction ID
-        virtual ui64 CompactBorrowed(ui32 tableId) = 0; 
-        virtual ui64 CompactMemTable(ui32 tableId) = 0; 
+        virtual ui64 CompactBorrowed(ui32 tableId) = 0;
+        virtual ui64 CompactMemTable(ui32 tableId) = 0;
         virtual ui64 CompactTable(ui32 tableId) = 0;
-        virtual bool CompactTables() = 0; 
- 
+        virtual bool CompactTables() = 0;
+
         virtual void RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr&) const = 0;
         virtual void RenderHtmlCounters(NMon::TEvRemoteHttpInfo::TPtr&) const = 0;
         virtual void RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const = 0;
@@ -530,12 +530,12 @@ namespace NFlatExecutorSetup {
 
         virtual void SendUserAuxUpdateToFollowers(TString upd, const TActorContext &ctx) = 0;
 
-        // Returns parts owned by this tablet and borrowed by other tablets 
-        virtual THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const = 0; 
- 
-        // This method lets executor know about new yellow channels 
+        // Returns parts owned by this tablet and borrowed by other tablets
+        virtual THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const = 0;
+
+        // This method lets executor know about new yellow channels
         virtual void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) = 0;
- 
+
         virtual const TExecutorStats& GetStats() const = 0;
         virtual NMetrics::TResourceMetrics* GetResourceMetrics() const = 0;
 
@@ -543,9 +543,9 @@ namespace NFlatExecutorSetup {
 
         virtual float GetRejectProbability() const = 0;
 
-        // Returns current database scheme (executor must be active) 
-        virtual const NTable::TScheme& Scheme() const noexcept = 0; 
- 
+        // Returns current database scheme (executor must be active)
+        virtual const NTable::TScheme& Scheme() const noexcept = 0;
+
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }
 

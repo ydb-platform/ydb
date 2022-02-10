@@ -26,12 +26,12 @@ void FillYdbStatus(Draft::Dummy::PingResponse& resp, const NYql::TIssues& issues
 }
 
 template <>
-void FillYdbStatus(Ydb::Coordination::SessionResponse& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) { 
-    auto* failure = resp.mutable_failure(); 
-    failure->set_status(status); 
-    NYql::IssuesToMessage(issues, failure->mutable_issues()); 
-} 
- 
+void FillYdbStatus(Ydb::Coordination::SessionResponse& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) {
+    auto* failure = resp.mutable_failure();
+    failure->set_status(status);
+    NYql::IssuesToMessage(issues, failure->mutable_issues());
+}
+
 std::pair<TString, TString> SplitPath(const TMaybe<TString>& database, const TString& path) {
     std::pair<TString, TString> pathPair;
     TString error;

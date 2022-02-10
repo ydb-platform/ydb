@@ -7,8 +7,8 @@ option java_package = "ru.yandex.kikimr.proto";
 option (TabletTypeName) = "SchemeShard"; // Used as prefix for all counters
 
 enum ESimpleCounters {
-    COUNTER_SIMPLE_IGNORE = 0; 
- 
+    COUNTER_SIMPLE_IGNORE = 0;
+
     COUNTER_RESPONSE_TIME_USEC = 1                        [(CounterOpts) = {Name: "ResponseTimeMicrosec"}];
     COUNTER_DIR_COUNT = 2                                 [(CounterOpts) = {Name: "Directories"}];
     COUNTER_TABLE_COUNT = 3                               [(CounterOpts) = {Name: "Tables"}];
@@ -22,9 +22,9 @@ enum ESimpleCounters {
     COUNTER_SUB_DOMAIN_MEDIATOR_COUNT = 11                [(CounterOpts) = {Name: "SubDomainsMediators"}];
     COUNTER_RTMR_VOLUME_COUNT = 12                        [(CounterOpts) = {Name: "RtmrVolumesCount"}];
     COUNTER_RTMR_PARTITIONS_COUNT = 13                    [(CounterOpts) = {Name: "RtmrPartitionsCount"}];
-    COUNTER_BLOCKSTORE_VOLUME_COUNT = 14                  [(CounterOpts) = {Name: "BlockStoreVolumes"}]; 
-    COUNTER_BLOCKSTORE_VOLUME_SHARD_COUNT = 15            [(CounterOpts) = {Name: "BlockStoreVolumeShards"}]; 
-    COUNTER_BLOCKSTORE_PARTITION_SHARD_COUNT = 16         [(CounterOpts) = {Name: "BlockStorePartitionShards"}]; 
+    COUNTER_BLOCKSTORE_VOLUME_COUNT = 14                  [(CounterOpts) = {Name: "BlockStoreVolumes"}];
+    COUNTER_BLOCKSTORE_VOLUME_SHARD_COUNT = 15            [(CounterOpts) = {Name: "BlockStoreVolumeShards"}];
+    COUNTER_BLOCKSTORE_PARTITION_SHARD_COUNT = 16         [(CounterOpts) = {Name: "BlockStorePartitionShards"}];
 
     COUNTER_IN_FLIGHT_OPS_TxInvalid = 17                  [(CounterOpts) = {Name: "InFlightOps/Invalid"}];
     COUNTER_IN_FLIGHT_OPS_TxMkDir = 18                    [(CounterOpts) = {Name: "InFlightOps/MkDir"}];
@@ -47,17 +47,17 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxAssignBlockStoreVolume = 35   [(CounterOpts) = {Name: "InFlightOps/AssignBlockStoreVolume"}];
     COUNTER_IN_FLIGHT_OPS_TxDropBlockStoreVolume = 36     [(CounterOpts) = {Name: "InFlightOps/DropBlockStoreVolume"}];
     COUNTER_IN_FLIGHT_OPS_UNKNOWN = 37                    [(CounterOpts) = {Name: "InFlightOps/UNKNOWN"}];
- 
-    COUNTER_KESUS_COUNT = 38                              [(CounterOpts) = {Name: "Kesus"}]; 
-    COUNTER_KESUS_SHARD_COUNT = 39                        [(CounterOpts) = {Name: "KesusShards"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxCreateKesus = 40              [(CounterOpts) = {Name: "InFlightOps/CreateKesus"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxDropKesus = 41                [(CounterOpts) = {Name: "InFlightOps/DropKesus"}]; 
+
+    COUNTER_KESUS_COUNT = 38                              [(CounterOpts) = {Name: "Kesus"}];
+    COUNTER_KESUS_SHARD_COUNT = 39                        [(CounterOpts) = {Name: "KesusShards"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateKesus = 40              [(CounterOpts) = {Name: "InFlightOps/CreateKesus"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropKesus = 41                [(CounterOpts) = {Name: "InFlightOps/DropKesus"}];
     COUNTER_IN_FLIGHT_OPS_TxForceDropSubDomain = 42       [(CounterOpts) = {Name: "InFlightOps/ForceDropSubDomain"}];
     COUNTER_IN_FLIGHT_OPS_TxCreateSolomonVolume = 43      [(CounterOpts) = {Name: "InFlightOps/CreateSolomonVolume"}];
     COUNTER_IN_FLIGHT_OPS_TxDropSolomonVolume = 44        [(CounterOpts) = {Name: "InFlightOps/DropSolomonVolume"}];
     COUNTER_SOLOMON_VOLUME_COUNT = 45                     [(CounterOpts) = {Name: "SolomonVolumesCount"}];
     COUNTER_SOLOMON_PARTITIONS_COUNT = 46                 [(CounterOpts) = {Name: "SolomonPartitionsCount"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterKesus = 47               [(CounterOpts) = {Name: "InFlightOps/AlterKesus"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxAlterKesus = 47               [(CounterOpts) = {Name: "InFlightOps/AlterKesus"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterSubDomain = 48           [(CounterOpts) = {Name: "InFlightOps/AlterSubDomain"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterUserAttributes = 49      [(CounterOpts) = {Name: "InFlightOps/AlterUserAttributes"}];
     COUNTER_USER_ATTRIBUTES_COUNT = 50                    [(CounterOpts) = {Name: "UserAttributes"}];
@@ -100,39 +100,39 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateOlapStore = 82          [(CounterOpts) = {Name: "InFlightOps/CreateOlapStore"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterOlapStore = 83           [(CounterOpts) = {Name: "InFlightOps/AlterOlapStore"}];
     COUNTER_IN_FLIGHT_OPS_TxDropOlapStore = 84            [(CounterOpts) = {Name: "InFlightOps/DropOlapStore"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateOlapTable = 85          [(CounterOpts) = {Name: "InFlightOps/CreateOlapTable"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxAlterOlapTable = 86           [(CounterOpts) = {Name: "InFlightOps/AlterOlapTable"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxDropOlapTable = 87            [(CounterOpts) = {Name: "InFlightOps/DropOlapTable"}]; 
- 
-    COUNTER_OLAP_STORE_COUNT = 88                         [(CounterOpts) = {Name: "OlapStores"}]; 
-    COUNTER_OLAP_TABLE_COUNT = 89                         [(CounterOpts) = {Name: "OlapTables"}]; 
-    COUNTER_OLAP_META_SHARDS = 90                         [(CounterOpts) = {Name: "OlapMetaShards"}]; 
-    COUNTER_OLAP_COLUMN_SHARDS = 91                       [(CounterOpts) = {Name: "OlapColumnShards"}]; 
- 
-    COUNTER_DISK_SPACE_TABLES_DATA_BYTES = 92             [(CounterOpts) = {Name: "DiskSpaceTablesDataBytes"}]; 
-    COUNTER_DISK_SPACE_TABLES_INDEX_BYTES = 93            [(CounterOpts) = {Name: "DiskSpaceTablesIndexBytes"}]; 
-    COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES = 94            [(CounterOpts) = {Name: "DiskSpaceTablesTotalBytes"}]; 
-    COUNTER_DISK_SPACE_QUOTA_EXCEEDED = 95                [(CounterOpts) = {Name: "DiskSpaceQuotaExceeded"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCreateOlapTable = 85          [(CounterOpts) = {Name: "InFlightOps/CreateOlapTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterOlapTable = 86           [(CounterOpts) = {Name: "InFlightOps/AlterOlapTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropOlapTable = 87            [(CounterOpts) = {Name: "InFlightOps/DropOlapTable"}];
 
-    COUNTER_DISK_SPACE_HARD_QUOTA_BYTES = 96              [(CounterOpts) = {Name: "DiskSpaceHardQuotaBytes"}]; 
-    COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES = 97              [(CounterOpts) = {Name: "DiskSpaceSoftQuotaBytes"}]; 
+    COUNTER_OLAP_STORE_COUNT = 88                         [(CounterOpts) = {Name: "OlapStores"}];
+    COUNTER_OLAP_TABLE_COUNT = 89                         [(CounterOpts) = {Name: "OlapTables"}];
+    COUNTER_OLAP_META_SHARDS = 90                         [(CounterOpts) = {Name: "OlapMetaShards"}];
+    COUNTER_OLAP_COLUMN_SHARDS = 91                       [(CounterOpts) = {Name: "OlapColumnShards"}];
 
-    COUNTER_IN_FLIGHT_OPS_TxCreateCdcStream = 98          [(CounterOpts) = {Name: "InFlightOps/CreateCdcStream"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxCreateCdcStreamAtTable = 99   [(CounterOpts) = {Name: "InFlightOps/CreateCdcStreamAtTable"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxAlterCdcStream = 100          [(CounterOpts) = {Name: "InFlightOps/AlterCdcStream"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxAlterCdcStreamAtTable = 101   [(CounterOpts) = {Name: "InFlightOps/AlterCdcStreamAtTable"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxDropCdcStream = 102           [(CounterOpts) = {Name: "InFlightOps/DropCdcStream"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxDropCdcStreamAtTable = 103    [(CounterOpts) = {Name: "InFlightOps/DropCdcStreamAtTable"}]; 
-    COUNTER_CDC_STREAMS_COUNT = 104                       [(CounterOpts) = {Name: "CdcStreams"}]; 
- 
-    COUNTER_IN_FLIGHT_OPS_TxMoveTable = 105               [(CounterOpts) = {Name: "InFlightOps/MoveTable"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxMoveTableIndex = 106          [(CounterOpts) = {Name: "InFlightOps/MoveTableIndex"}]; 
- 
-    COUNTER_SEQUENCE_COUNT = 107                          [(CounterOpts) = {Name: "Sequences"}]; 
-    COUNTER_SEQUENCESHARD_COUNT = 108                     [(CounterOpts) = {Name: "SequenceShards"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxCreateSequence = 109          [(CounterOpts) = {Name: "InFlightOps/CreateSequence"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxAlterSequence = 110           [(CounterOpts) = {Name: "InFlightOps/AlterSequence"}]; 
-    COUNTER_IN_FLIGHT_OPS_TxDropSequence = 111            [(CounterOpts) = {Name: "InFlightOps/DropSequence"}]; 
+    COUNTER_DISK_SPACE_TABLES_DATA_BYTES = 92             [(CounterOpts) = {Name: "DiskSpaceTablesDataBytes"}];
+    COUNTER_DISK_SPACE_TABLES_INDEX_BYTES = 93            [(CounterOpts) = {Name: "DiskSpaceTablesIndexBytes"}];
+    COUNTER_DISK_SPACE_TABLES_TOTAL_BYTES = 94            [(CounterOpts) = {Name: "DiskSpaceTablesTotalBytes"}];
+    COUNTER_DISK_SPACE_QUOTA_EXCEEDED = 95                [(CounterOpts) = {Name: "DiskSpaceQuotaExceeded"}];
+
+    COUNTER_DISK_SPACE_HARD_QUOTA_BYTES = 96              [(CounterOpts) = {Name: "DiskSpaceHardQuotaBytes"}];
+    COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES = 97              [(CounterOpts) = {Name: "DiskSpaceSoftQuotaBytes"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxCreateCdcStream = 98          [(CounterOpts) = {Name: "InFlightOps/CreateCdcStream"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateCdcStreamAtTable = 99   [(CounterOpts) = {Name: "InFlightOps/CreateCdcStreamAtTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterCdcStream = 100          [(CounterOpts) = {Name: "InFlightOps/AlterCdcStream"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterCdcStreamAtTable = 101   [(CounterOpts) = {Name: "InFlightOps/AlterCdcStreamAtTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropCdcStream = 102           [(CounterOpts) = {Name: "InFlightOps/DropCdcStream"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropCdcStreamAtTable = 103    [(CounterOpts) = {Name: "InFlightOps/DropCdcStreamAtTable"}];
+    COUNTER_CDC_STREAMS_COUNT = 104                       [(CounterOpts) = {Name: "CdcStreams"}];
+
+    COUNTER_IN_FLIGHT_OPS_TxMoveTable = 105               [(CounterOpts) = {Name: "InFlightOps/MoveTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxMoveTableIndex = 106          [(CounterOpts) = {Name: "InFlightOps/MoveTableIndex"}];
+
+    COUNTER_SEQUENCE_COUNT = 107                          [(CounterOpts) = {Name: "Sequences"}];
+    COUNTER_SEQUENCESHARD_COUNT = 108                     [(CounterOpts) = {Name: "SequenceShards"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateSequence = 109          [(CounterOpts) = {Name: "InFlightOps/CreateSequence"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterSequence = 110           [(CounterOpts) = {Name: "InFlightOps/AlterSequence"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropSequence = 111            [(CounterOpts) = {Name: "InFlightOps/DropSequence"}];
 
     COUNTER_STREAM_SHARDS_COUNT = 112                     [(CounterOpts) = {Name: "StreamShardsCount"}];
     COUNTER_STREAM_SHARDS_QUOTA = 113                     [(CounterOpts) = {Name: "StreamShardsQuota"}];
@@ -151,7 +151,7 @@ enum ESimpleCounters {
 }
 
 enum ECumulativeCounters {
-    COUNTER_CUMULATIVE_IGNORE = 0; 
+    COUNTER_CUMULATIVE_IGNORE = 0;
 
     COUNTER_FINISHED_OPS_TxInvalid = 1                    [(CounterOpts) = {Name: "FinishedOps/Invalid"}];
     COUNTER_FINISHED_OPS_TxMkDir = 2                      [(CounterOpts) = {Name: "FinishedOps/MkDir"}];
@@ -174,13 +174,13 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxAssignBlockStoreVolume = 19    [(CounterOpts) = {Name: "FinishedOps/AssignBlockStoreVolume"}];
     COUNTER_FINISHED_OPS_TxDropBlockStoreVolume = 20      [(CounterOpts) = {Name: "FinishedOps/DropBlockStoreVolume"}];
     COUNTER_FINISHED_OPS_UNKNOWN = 21                     [(CounterOpts) = {Name: "FinishedOps/UNKNOWN"}];
- 
-    COUNTER_FINISHED_OPS_TxCreateKesus = 22               [(CounterOpts) = {Name: "FinishedOps/CreateKesus"}]; 
-    COUNTER_FINISHED_OPS_TxDropKesus = 23                 [(CounterOpts) = {Name: "FinishedOps/DropKesus"}]; 
+
+    COUNTER_FINISHED_OPS_TxCreateKesus = 22               [(CounterOpts) = {Name: "FinishedOps/CreateKesus"}];
+    COUNTER_FINISHED_OPS_TxDropKesus = 23                 [(CounterOpts) = {Name: "FinishedOps/DropKesus"}];
     COUNTER_FINISHED_OPS_TxForceDropSubDomain = 24        [(CounterOpts) = {Name: "FinishedOps/ForceDropSubDomain"}];
     COUNTER_FINISHED_OPS_TxCreateSolomonVolume = 25       [(CounterOpts) = {Name: "FinishedOps/CreateSolomonVolume"}];
     COUNTER_FINISHED_OPS_TxDropSolomonVolume = 26         [(CounterOpts) = {Name: "FinishedOps/DropSolomonVolume"}];
-    COUNTER_FINISHED_OPS_TxAlterKesus = 27                [(CounterOpts) = {Name: "FinishedOps/AlterKesus"}]; 
+    COUNTER_FINISHED_OPS_TxAlterKesus = 27                [(CounterOpts) = {Name: "FinishedOps/AlterKesus"}];
     COUNTER_FINISHED_OPS_TxAlterSubDomain = 28            [(CounterOpts) = {Name: "FinishedOps/AlterSubDomain"}];
     COUNTER_FINISHED_OPS_TxAlterUserAttributes = 29       [(CounterOpts) = {Name: "FinishedOps/AlterUserAttributes"}];
     COUNTER_FINISHED_OPS_TxCreateTableIndex = 30          [(CounterOpts) = {Name: "FinishedOps/CreateTableIndex"}];
@@ -209,9 +209,9 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateOlapStore = 50           [(CounterOpts) = {Name: "FinishedOps/CreateOlapStore"}];
     COUNTER_FINISHED_OPS_TxAlterOlapStore = 51            [(CounterOpts) = {Name: "FinishedOps/AlterOlapStore"}];
     COUNTER_FINISHED_OPS_TxDropOlapStore = 52             [(CounterOpts) = {Name: "FinishedOps/DropOlapStore"}];
-    COUNTER_FINISHED_OPS_TxCreateOlapTable = 53           [(CounterOpts) = {Name: "FinishedOps/CreateOlapTable"}]; 
-    COUNTER_FINISHED_OPS_TxAlterOlapTable = 54            [(CounterOpts) = {Name: "FinishedOps/AlterOlapTable"}]; 
-    COUNTER_FINISHED_OPS_TxDropOlapTable = 55             [(CounterOpts) = {Name: "FinishedOps/DropOlapTable"}]; 
+    COUNTER_FINISHED_OPS_TxCreateOlapTable = 53           [(CounterOpts) = {Name: "FinishedOps/CreateOlapTable"}];
+    COUNTER_FINISHED_OPS_TxAlterOlapTable = 54            [(CounterOpts) = {Name: "FinishedOps/AlterOlapTable"}];
+    COUNTER_FINISHED_OPS_TxDropOlapTable = 55             [(CounterOpts) = {Name: "FinishedOps/DropOlapTable"}];
 
 
     COUNTER_FINISHED_OPS_TxCreateCdcStream = 56           [(CounterOpts) = {Name: "FinishedOps/CreateCdcStream"}];
@@ -223,10 +223,10 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxMoveTable = 62                 [(CounterOpts) = {Name: "FinishedOps/MoveTable"}];
     COUNTER_FINISHED_OPS_TxMoveTableIndex = 63            [(CounterOpts) = {Name: "FinishedOps/MoveTableIndex"}];
- 
-    COUNTER_FINISHED_OPS_TxCreateSequence = 64            [(CounterOpts) = {Name: "FinishedOps/CreateSequence"}]; 
-    COUNTER_FINISHED_OPS_TxAlterSequence = 65             [(CounterOpts) = {Name: "FinishedOps/AlterSequence"}]; 
-    COUNTER_FINISHED_OPS_TxDropSequence = 66              [(CounterOpts) = {Name: "FinishedOps/DropSequence"}]; 
+
+    COUNTER_FINISHED_OPS_TxCreateSequence = 64            [(CounterOpts) = {Name: "FinishedOps/CreateSequence"}];
+    COUNTER_FINISHED_OPS_TxAlterSequence = 65             [(CounterOpts) = {Name: "FinishedOps/AlterSequence"}];
+    COUNTER_FINISHED_OPS_TxDropSequence = 66              [(CounterOpts) = {Name: "FinishedOps/DropSequence"}];
 
     COUNTER_BACKGROUND_COMPACTION_FAILED = 67             [(CounterOpts) = {Name: "BackgroundCompactionFailed"}];
     COUNTER_BACKGROUND_COMPACTION_OK = 68                 [(CounterOpts) = {Name: "BackgroundCompactionOK"}];
@@ -343,23 +343,23 @@ enum ETxTypes {
     TXTYPE_SERVERLESS_STORAGE_BILLING = 55                [(TxTypeOpts) = {Name: "TxServerlessStorageBilling"}];
     TXTYPE_OLAPSHARD_PROPOSE_RESULT = 56                  [(TxTypeOpts) = {Name: "TxOlapShardProposeResult"}];
     TXTYPE_COLUMNSHARD_PROPOSE_RESULT = 57                [(TxTypeOpts) = {Name: "TxColumnShardProposeResult"}];
-    TXTYPE_OLAPSHARD_NOTIFY_TX_COMPLETION_RESULT = 58     [(TxTypeOpts) = {Name: "TxOlapShardNotifyTxCompletionResult"}]; 
-    TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT = 59   [(TxTypeOpts) = {Name: "TxColumnShardNotifyTxCompletionResult"}]; 
- 
-    TXTYPE_FIND_TABLET_SUBDOMAIN_PATH_ID = 60             [(TxTypeOpts) = {Name: "TxFindTabletSubDomainPathId"}]; 
- 
-    TXTYPE_CLEAN_BLOCKSTORE_VOLUMES = 61                  [(TxTypeOpts) = {Name: "TxCleanBlockStoreVolumes"}]; 
-    TXTYPE_CLEAN_DROPPED_PATHS = 62                       [(TxTypeOpts) = {Name: "TxCleanDroppedPaths"}]; 
-    TXTYPE_CLEAN_DROPPED_SUBDOMAINS = 63                  [(TxTypeOpts) = {Name: "TxCleanDroppedSubDomains"}]; 
+    TXTYPE_OLAPSHARD_NOTIFY_TX_COMPLETION_RESULT = 58     [(TxTypeOpts) = {Name: "TxOlapShardNotifyTxCompletionResult"}];
+    TXTYPE_COLUMNSHARD_NOTIFY_TX_COMPLETION_RESULT = 59   [(TxTypeOpts) = {Name: "TxColumnShardNotifyTxCompletionResult"}];
+
+    TXTYPE_FIND_TABLET_SUBDOMAIN_PATH_ID = 60             [(TxTypeOpts) = {Name: "TxFindTabletSubDomainPathId"}];
+
+    TXTYPE_CLEAN_BLOCKSTORE_VOLUMES = 61                  [(TxTypeOpts) = {Name: "TxCleanBlockStoreVolumes"}];
+    TXTYPE_CLEAN_DROPPED_PATHS = 62                       [(TxTypeOpts) = {Name: "TxCleanDroppedPaths"}];
+    TXTYPE_CLEAN_DROPPED_SUBDOMAINS = 63                  [(TxTypeOpts) = {Name: "TxCleanDroppedSubDomains"}];
 
     TXTYPE_LOGIN = 64                                     [(TxTypeOpts) = {Name: "TxLogin"}];
- 
-    TXTYPE_SEQUENCESHARD_CREATE_SEQUENCE_RESULT = 65      [(TxTypeOpts) = {Name: "TxSequenceShardCreateSequenceResult"}]; 
-    TXTYPE_SEQUENCESHARD_DROP_SEQUENCE_RESULT = 66        [(TxTypeOpts) = {Name: "TxSequenceShardDropSequenceResult"}]; 
-    TXTYPE_SEQUENCESHARD_UPDATE_SEQUENCE_RESULT = 67      [(TxTypeOpts) = {Name: "TxSequenceShardUpdateSequenceResult"}]; 
-    TXTYPE_SEQUENCESHARD_FREEZE_SEQUENCE_RESULT = 68      [(TxTypeOpts) = {Name: "TxSequenceShardFreezeSequenceResult"}]; 
-    TXTYPE_SEQUENCESHARD_RESTORE_SEQUENCE_RESULT = 69     [(TxTypeOpts) = {Name: "TxSequenceShardRestoreSequenceResult"}]; 
-    TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT = 70    [(TxTypeOpts) = {Name: "TxSequenceShardRedirectSequenceResult"}]; 
+
+    TXTYPE_SEQUENCESHARD_CREATE_SEQUENCE_RESULT = 65      [(TxTypeOpts) = {Name: "TxSequenceShardCreateSequenceResult"}];
+    TXTYPE_SEQUENCESHARD_DROP_SEQUENCE_RESULT = 66        [(TxTypeOpts) = {Name: "TxSequenceShardDropSequenceResult"}];
+    TXTYPE_SEQUENCESHARD_UPDATE_SEQUENCE_RESULT = 67      [(TxTypeOpts) = {Name: "TxSequenceShardUpdateSequenceResult"}];
+    TXTYPE_SEQUENCESHARD_FREEZE_SEQUENCE_RESULT = 68      [(TxTypeOpts) = {Name: "TxSequenceShardFreezeSequenceResult"}];
+    TXTYPE_SEQUENCESHARD_RESTORE_SEQUENCE_RESULT = 69     [(TxTypeOpts) = {Name: "TxSequenceShardRestoreSequenceResult"}];
+    TXTYPE_SEQUENCESHARD_REDIRECT_SEQUENCE_RESULT = 70    [(TxTypeOpts) = {Name: "TxSequenceShardRedirectSequenceResult"}];
 
     TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION = 71     [(TxTypeOpts) = {Name: "TxNotifyOperationCompletePublication"}];
     TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER = 72         [(TxTypeOpts) = {Name: "TxNotifyOperationCompleteBarrier"}];

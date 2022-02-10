@@ -477,7 +477,7 @@ namespace NActors {
         ui32 SendBufferSize;
         ui64 InflightDataAmount = 0;
 
-        std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers; 
+        std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;
 
         // time at which we want to send confirmation packet even if there was no outgoing data
         ui64 UnconfirmedBytes = 0;

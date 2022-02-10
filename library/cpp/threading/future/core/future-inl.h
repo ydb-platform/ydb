@@ -619,8 +619,8 @@ namespace NThreading {
 
     template <typename T>
     template <typename F>
-    inline TFuture<TFutureType<TFutureCallResult<F, T>>> TFuture<T>::Apply(F&& func) const { 
-        auto promise = NewPromise<TFutureType<TFutureCallResult<F, T>>>(); 
+    inline TFuture<TFutureType<TFutureCallResult<F, T>>> TFuture<T>::Apply(F&& func) const {
+        auto promise = NewPromise<TFutureType<TFutureCallResult<F, T>>>();
         Subscribe([promise, func = std::forward<F>(func)](const TFuture<T>& future) mutable {
             NImpl::SetValue(promise, [&]() { return func(future); });
         });
@@ -718,8 +718,8 @@ namespace NThreading {
 
 
     template <typename F>
-    inline TFuture<TFutureType<TFutureCallResult<F, void>>> TFuture<void>::Apply(F&& func) const { 
-        auto promise = NewPromise<TFutureType<TFutureCallResult<F, void>>>(); 
+    inline TFuture<TFutureType<TFutureCallResult<F, void>>> TFuture<void>::Apply(F&& func) const {
+        auto promise = NewPromise<TFutureType<TFutureCallResult<F, void>>>();
         Subscribe([promise, func = std::forward<F>(func)](const TFuture<void>& future) mutable {
             NImpl::SetValue(promise, [&]() { return func(future); });
         });

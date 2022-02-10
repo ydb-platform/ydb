@@ -49,16 +49,16 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
 
     DataShard.ReleaseCache(*tx);
 
-    if (tx->IsTxDataReleased()) { 
-        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) { 
-            case ERestoreDataStatus::Ok: 
-                break; 
-            case ERestoreDataStatus::Restart: 
-                return EExecutionStatus::Restart; 
-            case ERestoreDataStatus::Error: 
-                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str()); 
-        } 
-    } 
+    if (tx->IsTxDataReleased()) {
+        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
+            case ERestoreDataStatus::Ok:
+                break;
+            case ERestoreDataStatus::Restart:
+                return EExecutionStatus::Restart;
+            case ERestoreDataStatus::Error:
+                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
+        }
+    }
 
     tx->GetDataTx()->SetReadVersion(DataShard.GetReadWriteVersions(tx).ReadVersion);
     IEngineFlat *engine = tx->GetDataTx()->GetEngine();

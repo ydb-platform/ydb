@@ -10,7 +10,7 @@ class TTxDeleteTabletResult : public TTransactionBase<THive> {
     TLeaderTabletInfo* Tablet = nullptr;
     TVector<TActorId> StorageInfoSubscribers;
     TActorId UnlockedFromActor;
- 
+
 public:
     TTxDeleteTabletResult(TEvTabletBase::TEvDeleteTabletResult::TPtr& ev, THive* hive)
         : TBase(hive)
@@ -66,14 +66,14 @@ public:
             }
         }
         for (const TActorId& subscriber : StorageInfoSubscribers) {
-            ctx.Send( 
-                subscriber, 
-                new TEvHive::TEvGetTabletStorageInfoResult(TabletId, NKikimrProto::ERROR, "Tablet deleted")); 
-        } 
-        if (UnlockedFromActor) { 
-            // Notify lock owner that lock has been lost 
-            ctx.Send(UnlockedFromActor, new TEvHive::TEvLockTabletExecutionLost(TabletId)); 
-        } 
+            ctx.Send(
+                subscriber,
+                new TEvHive::TEvGetTabletStorageInfoResult(TabletId, NKikimrProto::ERROR, "Tablet deleted"));
+        }
+        if (UnlockedFromActor) {
+            // Notify lock owner that lock has been lost
+            ctx.Send(UnlockedFromActor, new TEvHive::TEvLockTabletExecutionLost(TabletId));
+        }
     }
 };
 

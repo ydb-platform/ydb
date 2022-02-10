@@ -70,7 +70,7 @@ EBalancingPolicy TDbDriverState::GetBalancingPolicy() const {
 }
 
 TStringType TDbDriverState::GetEndpoint() const {
-    return EndpointPool.GetEndpoint(TStringType()).Endpoint; 
+    return EndpointPool.GetEndpoint(TStringType()).Endpoint;
 }
 
 TPeriodicCb CreatePeriodicDiscoveryTask(TDbDriverState::TPtr driverState) {

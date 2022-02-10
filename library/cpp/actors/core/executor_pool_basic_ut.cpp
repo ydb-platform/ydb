@@ -47,8 +47,8 @@ public:
             if (GetCounter() == 0) {
                 break;
             }
- 
-            Sleep(TDuration::MilliSeconds(1)); 
+
+            Sleep(TDuration::MilliSeconds(1));
         }
     }
 
@@ -69,8 +69,8 @@ private:
     {
         Y_UNUSED(ev);
         Action();
-        TAtomicBase count = AtomicDecrement(Counter); 
-        Y_VERIFY(count != Max<TAtomicBase>()); 
+        TAtomicBase count = AtomicDecrement(Counter);
+        Y_VERIFY(count != Max<TAtomicBase>());
         if (count) {
             Send(Receiver, new TEvMsg());
         }
@@ -206,19 +206,19 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         actorSystem.Send(changerActorId, new TEvMsg());
 
         while (true) {
-            size_t maxCounter = 0; 
+            size_t maxCounter = 0;
             for (size_t i = 0; i < size; ++i) {
-                maxCounter = Max(maxCounter, actors[i]->GetCounter()); 
+                maxCounter = Max(maxCounter, actors[i]->GetCounter());
             }
 
-            if (maxCounter == 0) { 
-                break; 
-            } 
- 
-            auto now = TInstant::Now();
-            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter); 
+            if (maxCounter == 0) {
+                break;
+            }
 
-            Sleep(TDuration::MilliSeconds(1)); 
+            auto now = TInstant::Now();
+            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
+
+            Sleep(TDuration::MilliSeconds(1));
         }
 
         changerActor->Stop();
@@ -242,9 +242,9 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
 
         while (actor->GetCounter()) {
             auto now = TInstant::Now();
-            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Counter is " << actor->GetCounter()); 
- 
-            Sleep(TDuration::MilliSeconds(1)); 
+            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Counter is " << actor->GetCounter());
+
+            Sleep(TDuration::MilliSeconds(1));
         }
     }
 
@@ -275,19 +275,19 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
 
 
         while (true) {
-            size_t maxCounter = 0; 
+            size_t maxCounter = 0;
             for (size_t i = 0; i < size; ++i) {
-                maxCounter = Max(maxCounter, actors[i]->GetCounter()); 
+                maxCounter = Max(maxCounter, actors[i]->GetCounter());
             }
 
-            if (maxCounter == 0) { 
-                break; 
-            } 
- 
-            auto now = TInstant::Now();
-            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter); 
+            if (maxCounter == 0) {
+                break;
+            }
 
-            Sleep(TDuration::MilliSeconds(1)); 
+            auto now = TInstant::Now();
+            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
+
+            Sleep(TDuration::MilliSeconds(1));
         }
     }
 
@@ -319,19 +319,19 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
 
 
         while (true) {
-            size_t maxCounter = 0; 
+            size_t maxCounter = 0;
             for (size_t i = 0; i < actorsCount; ++i) {
-                maxCounter = Max(maxCounter, actors[i]->GetCounter()); 
+                maxCounter = Max(maxCounter, actors[i]->GetCounter());
             }
 
-            if (maxCounter == 0) { 
-                break; 
-            } 
- 
-            auto now = TInstant::Now();
-            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter); 
+            if (maxCounter == 0) {
+                break;
+            }
 
-            Sleep(TDuration::MilliSeconds(1)); 
+            auto now = TInstant::Now();
+            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
+
+            Sleep(TDuration::MilliSeconds(1));
         }
     }
 
@@ -362,19 +362,19 @@ Y_UNIT_TEST_SUITE(BasicExecutorPool) {
         }
 
         while (true) {
-            size_t maxCounter = 0; 
+            size_t maxCounter = 0;
             for (size_t i = 0; i < actorsCount; ++i) {
-                maxCounter = Max(maxCounter, actors[i]->GetCounter()); 
+                maxCounter = Max(maxCounter, actors[i]->GetCounter());
             }
 
-            if (maxCounter == 0) { 
-                break; 
-            } 
- 
-            auto now = TInstant::Now();
-            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter); 
+            if (maxCounter == 0) {
+                break;
+            }
 
-            Sleep(TDuration::MilliSeconds(1)); 
+            auto now = TInstant::Now();
+            UNIT_ASSERT_C(now - begin < TDuration::Seconds(5), "Max counter is " << maxCounter);
+
+            Sleep(TDuration::MilliSeconds(1));
         }
     }
 

@@ -2,7 +2,7 @@
 
 #include "flat_sausage_misc.h"
 #include "flat_sausage_solid.h"
-#include "util_basics.h" 
+#include "util_basics.h"
 
 namespace NKikimr {
 namespace NPageCollection {
@@ -17,7 +17,7 @@ namespace NPageCollection {
         virtual TBorder Bounds(ui32 page) const noexcept = 0;
         virtual TGlobId Glob(ui32 blob) const noexcept = 0;
         virtual bool Verify(ui32 page, TArrayRef<const char>) const noexcept = 0;
-        virtual size_t BackingSize() const noexcept = 0; 
+        virtual size_t BackingSize() const noexcept = 0;
     };
 
 }

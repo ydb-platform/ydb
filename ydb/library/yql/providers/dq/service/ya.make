@@ -11,7 +11,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/actors/core
-    library/cpp/actors/dnsresolver 
+    library/cpp/actors/dnsresolver
     library/cpp/actors/interconnect
     library/cpp/build_info
     library/cpp/grpc/server

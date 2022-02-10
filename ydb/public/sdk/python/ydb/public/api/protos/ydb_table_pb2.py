@@ -5347,27 +5347,27 @@ _BULKUPSERTREQUEST = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor( 
-      name='arrow_batch_settings', full_name='Ydb.Table.BulkUpsertRequest.arrow_batch_settings', index=3, 
-      number=7, type=11, cpp_type=10, label=1, 
-      has_default_value=False, default_value=None, 
-      message_type=None, enum_type=None, containing_type=None, 
-      is_extension=False, extension_scope=None, 
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
-    _descriptor.FieldDescriptor( 
-      name='csv_settings', full_name='Ydb.Table.BulkUpsertRequest.csv_settings', index=4, 
-      number=8, type=11, cpp_type=10, label=1, 
-      has_default_value=False, default_value=None, 
-      message_type=None, enum_type=None, containing_type=None, 
-      is_extension=False, extension_scope=None, 
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
-    _descriptor.FieldDescriptor( 
-      name='data', full_name='Ydb.Table.BulkUpsertRequest.data', index=5, 
-      number=1000, type=12, cpp_type=9, label=1, 
-      has_default_value=False, default_value=b"", 
-      message_type=None, enum_type=None, containing_type=None, 
-      is_extension=False, extension_scope=None, 
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
+    _descriptor.FieldDescriptor(
+      name='arrow_batch_settings', full_name='Ydb.Table.BulkUpsertRequest.arrow_batch_settings', index=3,
+      number=7, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='csv_settings', full_name='Ydb.Table.BulkUpsertRequest.csv_settings', index=4,
+      number=8, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='data', full_name='Ydb.Table.BulkUpsertRequest.data', index=5,
+      number=1000, type=12, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"",
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -5379,11 +5379,11 @@ _BULKUPSERTREQUEST = _descriptor.Descriptor(
   syntax='proto3',
   extension_ranges=[],
   oneofs=[
-    _descriptor.OneofDescriptor( 
-      name='data_format', full_name='Ydb.Table.BulkUpsertRequest.data_format', 
-      index=0, containing_type=None, 
-      create_key=_descriptor._internal_create_key, 
-    fields=[]), 
+    _descriptor.OneofDescriptor(
+      name='data_format', full_name='Ydb.Table.BulkUpsertRequest.data_format',
+      index=0, containing_type=None,
+      create_key=_descriptor._internal_create_key,
+    fields=[]),
   ],
   serialized_start=15987,
   serialized_end=16256,
@@ -5889,12 +5889,12 @@ _BULKUPSERTREQUEST.fields_by_name['rows'].message_type = ydb_dot_public_dot_api_
 _BULKUPSERTREQUEST.fields_by_name['operation_params'].message_type = ydb_dot_public_dot_api_dot_protos_dot_ydb__operation__pb2._OPERATIONPARAMS
 _BULKUPSERTREQUEST.fields_by_name['arrow_batch_settings'].message_type = ydb_dot_public_dot_api_dot_protos_dot_ydb__formats__pb2._ARROWBATCHSETTINGS
 _BULKUPSERTREQUEST.fields_by_name['csv_settings'].message_type = ydb_dot_public_dot_api_dot_protos_dot_ydb__formats__pb2._CSVSETTINGS
-_BULKUPSERTREQUEST.oneofs_by_name['data_format'].fields.append( 
-  _BULKUPSERTREQUEST.fields_by_name['arrow_batch_settings']) 
-_BULKUPSERTREQUEST.fields_by_name['arrow_batch_settings'].containing_oneof = _BULKUPSERTREQUEST.oneofs_by_name['data_format'] 
-_BULKUPSERTREQUEST.oneofs_by_name['data_format'].fields.append( 
-  _BULKUPSERTREQUEST.fields_by_name['csv_settings']) 
-_BULKUPSERTREQUEST.fields_by_name['csv_settings'].containing_oneof = _BULKUPSERTREQUEST.oneofs_by_name['data_format'] 
+_BULKUPSERTREQUEST.oneofs_by_name['data_format'].fields.append(
+  _BULKUPSERTREQUEST.fields_by_name['arrow_batch_settings'])
+_BULKUPSERTREQUEST.fields_by_name['arrow_batch_settings'].containing_oneof = _BULKUPSERTREQUEST.oneofs_by_name['data_format']
+_BULKUPSERTREQUEST.oneofs_by_name['data_format'].fields.append(
+  _BULKUPSERTREQUEST.fields_by_name['csv_settings'])
+_BULKUPSERTREQUEST.fields_by_name['csv_settings'].containing_oneof = _BULKUPSERTREQUEST.oneofs_by_name['data_format']
 _BULKUPSERTRESPONSE.fields_by_name['operation'].message_type = ydb_dot_public_dot_api_dot_protos_dot_ydb__operation__pb2._OPERATION
 _EXECUTESCANQUERYREQUEST_PARAMETERSENTRY.fields_by_name['value'].message_type = ydb_dot_public_dot_api_dot_protos_dot_ydb__value__pb2._TYPEDVALUE
 _EXECUTESCANQUERYREQUEST_PARAMETERSENTRY.containing_type = _EXECUTESCANQUERYREQUEST

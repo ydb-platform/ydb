@@ -30,8 +30,8 @@ private:
     using TRelationByShardIdx = std::tuple<TOperationId, TShardIdx>;
     using TDependence = std::tuple<TTxId, TTxId>;
     using TPathStateRec = std::tuple<TOperationId, TPathId, NKikimrSchemeOp::EPathState>;
-    using TWaitShardCreated = std::tuple<TShardIdx, TOperationId>; 
-    using TActivateShardCreated = std::tuple<TShardIdx, TTxId>; 
+    using TWaitShardCreated = std::tuple<TShardIdx, TOperationId>;
+    using TActivateShardCreated = std::tuple<TShardIdx, TTxId>;
     using TWaitPublication = std::tuple<TOperationId, TPathId>;
     using TBarrierRec = std::tuple<TOperationId, TString>;
 
@@ -59,8 +59,8 @@ private:
     TDeque<TPathStateRec> ReleasePathStateRecs;
     THashSet<TPathId> TenantsToUpdate;
     TDeque<TIndexBuildId> IndexToProgress;
-    TVector<TWaitShardCreated> PendingWaitShardCreated; 
-    TVector<TActivateShardCreated> PendingActivateShardCreated; 
+    TVector<TWaitShardCreated> PendingWaitShardCreated;
+    TVector<TActivateShardCreated> PendingActivateShardCreated;
     TDeque<TWaitPublication> WaitPublications;
     TDeque<TBarrierRec> Barriers;
 
@@ -112,9 +112,9 @@ public:
     void ActivateTx(TOperationId opId);
     void ActivateOperation(TTxId txId);
 
-    void WaitShardCreated(TShardIdx idx, TOperationId opId); 
-    void ActivateShardCreated(TShardIdx idx, TTxId txId); 
- 
+    void WaitShardCreated(TShardIdx idx, TOperationId opId);
+    void ActivateShardCreated(TShardIdx idx, TTxId txId);
+
     void PublishAndWaitPublication(TOperationId opId, TPathId pathId);
 
     void DeleteShard(TShardIdx idx);
@@ -160,7 +160,7 @@ private:
 
     void ResumeLongOps(TSchemeShard* ss, const TActorContext& ctx);
     void SetupRoutingLongOps(TSchemeShard* ss, const TActorContext& ctx);
- 
+
     void DoWaitShardCreated(TSchemeShard* ss, const TActorContext& ctx);
     void DoActivateShardCreated(TSchemeShard* ss, const TActorContext& ctx);
 

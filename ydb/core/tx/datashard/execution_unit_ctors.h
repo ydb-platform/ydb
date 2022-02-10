@@ -9,12 +9,12 @@ THolder<TExecutionUnit> CreateCheckDataTxUnit(TDataShard &dataShard, TPipeline &
 THolder<TExecutionUnit> CreateCheckSchemeTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCheckSnapshotTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCheckDistributedEraseTxUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateCheckCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline); 
+THolder<TExecutionUnit> CreateCheckCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateStoreDataTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateStoreSchemeTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateStoreSnapshotTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateStoreDistributedEraseTxUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateStoreCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline); 
+THolder<TExecutionUnit> CreateStoreCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateBuildAndWaitDependenciesUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateFinishProposeUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCompletedOperationsUnit(TDataShard &dataShard, TPipeline &pipeline);
@@ -34,7 +34,7 @@ THolder<TExecutionUnit> CreateLoadAndWaitInRSUnit(TDataShard &dataShard, TPipeli
 THolder<TExecutionUnit> CreateExecuteDataTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateExecuteKqpDataTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateExecuteDistributedEraseTxUnit(TDataShard &dataShard, TPipeline &pipeline);
-THolder<TExecutionUnit> CreateExecuteCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline); 
+THolder<TExecutionUnit> CreateExecuteCommitWritesTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCompleteOperationUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateExecuteKqpScanTxUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateMakeScanSnapshotUnit(TDataShard &dataShard, TPipeline &pipeline);

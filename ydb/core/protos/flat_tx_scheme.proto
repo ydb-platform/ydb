@@ -35,9 +35,9 @@ enum EStatus  {
     StatusNotAvailable = 13;
     StatusPreconditionFailed = 14;
     StatusRedirectDomain = 15;
-    StatusQuotaExceeded = 16; 
+    StatusQuotaExceeded = 16;
     StatusResourceExhausted = 17;
-    StatusReserved18 = 18; 
+    StatusReserved18 = 18;
     StatusReserved19 = 19;
     // when adding a new status and keeping parse compatibility with the old version
     // rename existing reserved status to desired one, and add new reserved status to
@@ -60,7 +60,7 @@ message TEvModifySchemeTransactionResult {
     optional uint64 SchemeshardId = 4;
     optional uint64 PathId = 5;
     optional uint64 PathCreateTxId = 6;
-    optional uint64 PathDropTxId = 7; 
+    optional uint64 PathDropTxId = 7;
 }
 
 message TEvDescribeSchemeResult {
@@ -167,9 +167,9 @@ message TEvInitTenantSchemeShard {
     optional fixed64 ResourcesDomainOwnerId = 13;
     optional fixed64 ResourcesDomainPathId = 14;
     optional fixed64 SharedHive = 15;
- 
-    optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 16; 
-    optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 17; 
+
+    optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 16;
+    optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 17;
 }
 
 message TEvInitTenantSchemeShardResult {
@@ -214,8 +214,8 @@ message TMigrateColumn {
     optional uint64 CreateVersion = 5;
     optional uint64 DeleteVersion = 6;
     optional uint32 Family = 7;
-    optional uint32 DefaultKind = 8; 
-    optional bytes DefaultValue = 9; 
+    optional uint32 DefaultKind = 8;
+    optional bytes DefaultValue = 9;
     optional bool NotNull = 10;
 }
 
@@ -331,27 +331,27 @@ message TEvUpdateTenantSchemeShard {
 
     optional uint64 TenantHive = 10;
     optional uint64 TenantSysViewProcessor = 11;
- 
-    optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 12; 
-    optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 14; 
+
+    optional NKikimrSubDomains.TSchemeQuotas DeclaredSchemeQuotas = 12;
+    optional Ydb.Cms.DatabaseQuotas DatabaseQuotas = 14;
 
     optional string UpdateTenantRootACL = 13;
 }
 
-message TEvFindTabletSubDomainPathId { 
-    optional uint64 TabletId = 1; // DataShard tablet id 
-} 
- 
-message TEvFindTabletSubDomainPathIdResult { 
-    enum EStatus { 
-        UNSPECIFIED = 0; 
-        SUCCESS = 1; 
-        SHARD_NOT_FOUND = 2; 
-        PATH_NOT_FOUND = 3; 
-    } 
- 
-    optional EStatus Status = 1; 
-    optional uint64 TabletId = 2; // DataShard tablet id 
-    optional uint64 SchemeShardId = 3; // OwnerId of the subdomain 
-    optional uint64 SubDomainPathId = 4; // LocalPathId of the subdomain 
-} 
+message TEvFindTabletSubDomainPathId {
+    optional uint64 TabletId = 1; // DataShard tablet id
+}
+
+message TEvFindTabletSubDomainPathIdResult {
+    enum EStatus {
+        UNSPECIFIED = 0;
+        SUCCESS = 1;
+        SHARD_NOT_FOUND = 2;
+        PATH_NOT_FOUND = 3;
+    }
+
+    optional EStatus Status = 1;
+    optional uint64 TabletId = 2; // DataShard tablet id
+    optional uint64 SchemeShardId = 3; // OwnerId of the subdomain
+    optional uint64 SubDomainPathId = 4; // LocalPathId of the subdomain
+}

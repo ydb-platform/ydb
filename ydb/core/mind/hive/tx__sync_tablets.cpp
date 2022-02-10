@@ -61,7 +61,7 @@ public:
                     TabletsToStop.erase(tabletId);
                     if (tablet->GetLeader().IsBootingSuppressed()) {
                         tablet->InitiateStop();
-                    } 
+                    }
                     continue;
                 }
             } else {
@@ -93,7 +93,7 @@ public:
                     TabletsToStop.erase(tabletId);
                     if (tablet->GetLeader().IsBootingSuppressed()) {
                         tablet->InitiateStop();
-                    } 
+                    }
                     continue;
                 } else if (ti.GetBootMode() == NKikimrLocal::EBootMode::BOOT_MODE_FOLLOWER) {
                     Self->StopTablet(Local, tabletId); // the tablet is running somewhere else

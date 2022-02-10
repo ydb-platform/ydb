@@ -13,38 +13,38 @@ namespace NKikimr {
 namespace NTable {
 
 class TColdPartStore : public TColdPart {
-public: 
+public:
     TColdPartStore(
             TVector<NPageCollection::TLargeGlobId> largeGlobIds,
-            TString legacy, 
-            TString opaque, 
-            TEpoch epoch) 
+            TString legacy,
+            TString opaque,
+            TEpoch epoch)
         : TColdPart(ExtractLabel(largeGlobIds), epoch)
         , LargeGlobIds(std::move(largeGlobIds))
-        , Legacy(std::move(legacy)) 
-        , Opaque(std::move(opaque)) 
-    { } 
- 
-private: 
+        , Legacy(std::move(legacy))
+        , Opaque(std::move(opaque))
+    { }
+
+private:
     static TLogoBlobID ExtractLabel(const TVector<NPageCollection::TLargeGlobId>& largeGlobIds) {
         Y_VERIFY(!largeGlobIds.empty());
         return largeGlobIds[0].Lead;
-    } 
- 
-public: 
+    }
+
+public:
     TVector<NPageCollection::TLargeGlobId> LargeGlobIds;
-    TString Legacy; 
-    TString Opaque; 
-}; 
- 
+    TString Legacy;
+    TString Opaque;
+};
+
 class TPartStore : public TPart, public IBundle {
-protected: 
+protected:
     TPartStore(const TPartStore& src, TEpoch epoch)
-        : TPart(src, epoch) 
+        : TPart(src, epoch)
         , PageCollections(src.PageCollections)
-        , Pseudo(src.Pseudo) 
-    { } 
- 
+        , Pseudo(src.Pseudo)
+    { }
+
 public:
     using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
 
@@ -61,29 +61,29 @@ public:
 
     ui64 BackingSize() const override
     {
-        ui64 size = 0; 
+        ui64 size = 0;
         for (const auto &cache : PageCollections) {
             size += cache->PageCollection->BackingSize();
-        } 
-        return size; 
+        }
+        return size;
     }
 
     ui64 DataSize() const override
     {
-        return BackingSize() - IndexesRawSize; 
+        return BackingSize() - IndexesRawSize;
     }
 
-    ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId) const override 
-    { 
+    ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId) const override
+    {
         Y_VERIFY(groupId.Index < PageCollections.size());
         return PageCollections[groupId.Index]->PageCollection->Page(id).Size;
-    } 
- 
+    }
+
     TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const override
-    { 
+    {
         return new TPartStore(*this, epoch);
-    } 
- 
+    }
+
     const NPageCollection::TPageCollection* Packet(ui32 room) const noexcept override
     {
         auto *pageCollection = room < PageCollections.size() ? PageCollections[room]->PageCollection.Get() : nullptr;
@@ -106,9 +106,9 @@ public:
 
         pages.reserve(Index->End() - Index->Begin());
 
-        auto it = Index.LookupKey({ }, Scheme->Groups[0], ESeek::Lower, nullptr); 
+        auto it = Index.LookupKey({ }, Scheme->Groups[0], ESeek::Lower, nullptr);
 
-        for (; it; ++it) pages.emplace_back(it->GetPageId()); 
+        for (; it; ++it) pages.emplace_back(it->GetPageId());
 
         return new NPageCollection::TFetch{ 0, PageCollections[0]->PageCollection , std::move(pages) };
     }
@@ -141,33 +141,33 @@ public:
 };
 
 class TTxStatusPartStore : public TTxStatusPart, public IBorrowBundle {
-public: 
+public:
     TTxStatusPartStore(const NPageCollection::TLargeGlobId& dataId, TEpoch epoch, TSharedData data)
-        : TTxStatusPart(dataId.Lead, epoch, new NPage::TTxStatusPage(data)) 
-        , DataId(dataId) 
-    { } 
- 
-    const NPageCollection::TLargeGlobId& GetDataId() const { 
-        return DataId; 
-    } 
- 
-    const TLogoBlobID& BundleId() const override { 
-        return DataId.Lead; 
-    } 
- 
-    ui64 BackingSize() const override { 
-        return DataId.Bytes; 
-    } 
- 
-    void SaveAllBlobIdsTo(TVector<TLogoBlobID>& vec) const override { 
-        for (auto blobId : DataId.Blobs()) { 
-            vec.emplace_back(blobId); 
-        } 
-    } 
- 
-private: 
-    const NPageCollection::TLargeGlobId DataId; 
-}; 
- 
+        : TTxStatusPart(dataId.Lead, epoch, new NPage::TTxStatusPage(data))
+        , DataId(dataId)
+    { }
+
+    const NPageCollection::TLargeGlobId& GetDataId() const {
+        return DataId;
+    }
+
+    const TLogoBlobID& BundleId() const override {
+        return DataId.Lead;
+    }
+
+    ui64 BackingSize() const override {
+        return DataId.Bytes;
+    }
+
+    void SaveAllBlobIdsTo(TVector<TLogoBlobID>& vec) const override {
+        for (auto blobId : DataId.Blobs()) {
+            vec.emplace_back(blobId);
+        }
+    }
+
+private:
+    const NPageCollection::TLargeGlobId DataId;
+};
+
 }
 }

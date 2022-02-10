@@ -31,14 +31,14 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
     auto putStatus = Ev->Get()->PutStatus;
 
     bool ok = false;
-    if (!Self->PrimaryIndex || !Self->IsTableWritable(tableId)) { 
-        status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR; 
-    } else if (putStatus == NKikimrProto::OK && logoBlobId.IsValid()) { 
-        if (record.HasLongTxId()) { 
-            Y_VERIFY(metaShard == 0); 
-            auto longTxId = NLongTxService::TLongTxId::FromProto(record.GetLongTxId()); 
+    if (!Self->PrimaryIndex || !Self->IsTableWritable(tableId)) {
+        status = NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR;
+    } else if (putStatus == NKikimrProto::OK && logoBlobId.IsValid()) {
+        if (record.HasLongTxId()) {
+            Y_VERIFY(metaShard == 0);
+            auto longTxId = NLongTxService::TLongTxId::FromProto(record.GetLongTxId());
             writeId = (ui64)Self->GetLongTxWrite(db, longTxId);
-        } 
+        }
 
         ui64 writeUnixTime = meta.GetDirtyWriteTimeSeconds();
         TInstant time = TInstant::Seconds(writeUnixTime);

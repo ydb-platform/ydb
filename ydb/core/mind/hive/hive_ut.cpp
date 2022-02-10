@@ -20,7 +20,7 @@
 #include <ydb/core/tx/mediator/mediator.h>
 
 #include <library/cpp/actors/interconnect/interconnect_impl.h>
- 
+
 #include <library/cpp/malloc/api/malloc.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <util/random/entropy.h>
@@ -530,17 +530,17 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         return tabletId;
     }
 
-    bool SendDeleteTestTablet(TTestActorRuntime &runtime, ui64 hiveTablet, 
+    bool SendDeleteTestTablet(TTestActorRuntime &runtime, ui64 hiveTablet,
             THolder<TEvHive::TEvDeleteTablet> ev, ui32 nodeIndex = 0,
             NKikimrProto::EReplyStatus expectedStatus = NKikimrProto::OK) {
-        bool seenEvDeleteTabletResult = false; 
-        TTestActorRuntime::TEventObserver prevObserverFunc; 
+        bool seenEvDeleteTabletResult = false;
+        TTestActorRuntime::TEventObserver prevObserverFunc;
         prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-            if (event->GetTypeRewrite() == TEvTabletBase::EvDeleteTabletResult) { 
-                seenEvDeleteTabletResult = true; 
-            } 
-            return prevObserverFunc(runtime, event); 
-        }); 
+            if (event->GetTypeRewrite() == TEvTabletBase::EvDeleteTabletResult) {
+                seenEvDeleteTabletResult = true;
+            }
+            return prevObserverFunc(runtime, event);
+        });
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
         runtime.SendToPipe(hiveTablet, senderB, ev.Release(), 0, GetPipeConfigWithRetries());
         TAutoPtr<IEventHandle> handle;
@@ -548,8 +548,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT(deleteTabletReply);
         UNIT_ASSERT_EQUAL_C(deleteTabletReply->Record.GetStatus(), expectedStatus,
             (ui32)deleteTabletReply->Record.GetStatus() << " != " << (ui32)expectedStatus);
-        runtime.SetObserverFunc(prevObserverFunc); 
-        return seenEvDeleteTabletResult; 
+        runtime.SetObserverFunc(prevObserverFunc);
+        return seenEvDeleteTabletResult;
     }
 
     bool SendDeleteTestOwner(TTestActorRuntime &runtime, ui64 hiveTablet,
@@ -581,12 +581,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         return seenEvDeleteTabletResult;
     }
 
-    void WaitEvDeleteTabletResult(TTestActorRuntime& runtime) { 
-        TDispatchOptions options; 
-        options.FinalEvents.emplace_back(TEvTabletBase::EvDeleteTabletResult); 
-        runtime.DispatchEvents(options); 
-    } 
- 
+    void WaitEvDeleteTabletResult(TTestActorRuntime& runtime) {
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvTabletBase::EvDeleteTabletResult);
+        runtime.DispatchEvents(options);
+    }
+
     void SendStopTablet(TTestActorRuntime &runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex) {
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
         runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvStopTablet(tabletId), 0, GetPipeConfigWithRetries());
@@ -1896,11 +1896,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             options.FinalEvents.emplace_back(TEvLocal::EvBootTablet);
             runtime.DispatchEvents(options);
         }
- 
+
         if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
-            WaitEvDeleteTabletResult(runtime); 
+            WaitEvDeleteTabletResult(runtime);
         }
- 
+
         runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(true));
         TAutoPtr<IEventHandle> handle;
         TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
@@ -2010,8 +2010,8 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 0, tabletType, BINDED_CHANNELS), 0, true);
         MakeSureTabletIsUp(runtime, tabletId, 0);
         if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
-            WaitEvDeleteTabletResult(runtime); 
-        } 
+            WaitEvDeleteTabletResult(runtime);
+        }
         MakeSureTabletIsDown(runtime, tabletId, 0);
 
         NTabletPipe::TClientConfig clientConfig;
@@ -2597,7 +2597,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
             new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, 0), 0, true);
         MakeSureTabletIsUp(runtime, tabletId, 0);
@@ -2619,7 +2619,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet,
             new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, 0), 0, true);
         MakeSureTabletIsUp(runtime, tabletId, 0);
@@ -2770,7 +2770,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         SendKillLocal(runtime, leaderNode);
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus); 
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus);
             runtime.DispatchEvents(options);
         }
         std::array<bool, NODES> tabletRolesIntermediate = {};
@@ -2793,10 +2793,10 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             TAutoPtr<IEventHandle> handle;
             NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse* response = runtime.GrabEdgeEventRethrow<NNodeWhiteboard::TEvWhiteboard::TEvTabletStateResponse>(handle);
             for (const NKikimrWhiteboard::TTabletStateInfo& tabletInfo : response->Record.GetTabletStateInfo()) {
-                if (tabletInfo.GetTabletId() == tabletId && ( 
-                        tabletInfo.GetState() == NKikimrWhiteboard::TTabletStateInfo::Active || 
+                if (tabletInfo.GetTabletId() == tabletId && (
+                        tabletInfo.GetState() == NKikimrWhiteboard::TTabletStateInfo::Active ||
                         tabletInfo.GetState() == NKikimrWhiteboard::TTabletStateInfo::ResolveLeader))
-                { 
+                {
                     activeTablets.insert({tabletInfo.GetTabletId(), tabletInfo.GetFollowerId()});
                 }
             }
@@ -2826,7 +2826,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, 4); 
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, 4);
             runtime.DispatchEvents(options);
         }
         // checking distribution, should be equal number of tablets on every node
@@ -2906,7 +2906,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             ev->Record.SetObjectId(i);
             ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
             tablets.emplace_back(tabletId);
-            MakeSureTabletIsUp(runtime, tabletId, 0); 
+            MakeSureTabletIsUp(runtime, tabletId, 0);
         }
 
         // checking distribution, should be equal number of tablets on every node
@@ -2949,11 +2949,11 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         // killing all tablets
         for (ui64 tabletId : tablets) {
             runtime.Register(CreateTabletKiller(tabletId));
- 
-            // wait for tablet to stop and start back up again 
-            TDispatchOptions options; 
-            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, 2); 
-            runtime.DispatchEvents(options); 
+
+            // wait for tablet to stop and start back up again
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, 2);
+            runtime.DispatchEvents(options);
         }
 
         // checking distribution, should be almost all tablets on one node and two other tablets on two other nodes (7,1,1)
@@ -3739,7 +3739,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         }
     }
- 
+
     Y_UNIT_TEST(TestFollowersCrossDC_KillingHiveAndFollower) {
         static constexpr ui32 NODES = 3;
         static constexpr ui32 DCS = 3;
@@ -3846,517 +3846,517 @@ Y_UNIT_TEST_SUITE(THiveTest) {
 
     Y_UNIT_TEST(TestCreateExternalTablet) {
         TTestBasicRuntime runtime(1, false);
-        Setup(runtime, true); 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ev->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL); 
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
-    } 
- 
+        ev->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+    }
+
     Y_UNIT_TEST(TestCreateTabletChangeToExternal) {
         TTestBasicRuntime runtime(1, false);
-        Setup(runtime, true); 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
         THolder<TEvHive::TEvCreateTablet> ev2(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ev2->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL); 
-        ui64 tabletId2 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev2), 0, false, NKikimrProto::ALREADY); 
-        UNIT_ASSERT_VALUES_EQUAL(tabletId, tabletId2); 
-        MakeSureTabletIsDown(runtime, tabletId2, 0); 
-    } 
- 
-    void SendGetTabletStorageInfo(TTestActorRuntime& runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex) { 
+        ev2->Record.SetTabletBootMode(NKikimrHive::TABLET_BOOT_MODE_EXTERNAL);
+        ui64 tabletId2 = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev2), 0, false, NKikimrProto::ALREADY);
+        UNIT_ASSERT_VALUES_EQUAL(tabletId, tabletId2);
+        MakeSureTabletIsDown(runtime, tabletId2, 0);
+    }
+
+    void SendGetTabletStorageInfo(TTestActorRuntime& runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex) {
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
-        runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvGetTabletStorageInfo(tabletId), nodeIndex, GetPipeConfigWithRetries()); 
-    } 
- 
+        runtime.SendToPipe(hiveTablet, senderB, new TEvHive::TEvGetTabletStorageInfo(tabletId), nodeIndex, GetPipeConfigWithRetries());
+    }
+
     Y_UNIT_TEST(TestGetStorageInfo) {
         TTestBasicRuntime runtime(1, false);
-        Setup(runtime, true); 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false); 
- 
-        SendGetTabletStorageInfo(runtime, hiveTablet, tabletId, 0); 
- 
-        TAutoPtr<IEventHandle> handle; 
-        auto getTabletStorageResult = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle); 
-        UNIT_ASSERT(getTabletStorageResult); 
-        UNIT_ASSERT_VALUES_EQUAL(getTabletStorageResult->Record.GetStatus(), NKikimrProto::OK); 
-        UNIT_ASSERT_VALUES_EQUAL(getTabletStorageResult->Record.GetTabletID(), tabletId); 
-    } 
- 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+
+        SendGetTabletStorageInfo(runtime, hiveTablet, tabletId, 0);
+
+        TAutoPtr<IEventHandle> handle;
+        auto getTabletStorageResult = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
+        UNIT_ASSERT(getTabletStorageResult);
+        UNIT_ASSERT_VALUES_EQUAL(getTabletStorageResult->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(getTabletStorageResult->Record.GetTabletID(), tabletId);
+    }
+
     Y_UNIT_TEST(TestGetStorageInfoDeleteTabletBeforeAssigned) {
         TTestBasicRuntime runtime(1, false);
-        Setup(runtime, true); 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
- 
-        // Block group assignment 
+
+        // Block group assignment
         runtime.SetObserverFunc([](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-            if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerSelectGroups) { 
-                return TTestActorRuntime::EEventAction::DROP; 
-            } 
-            return TTestActorRuntime::DefaultObserverFunc(runtime, event); 
-        }); 
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+            if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerSelectGroups) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::DefaultObserverFunc(runtime, event);
+        });
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false); 
- 
-        SendGetTabletStorageInfo(runtime, hiveTablet, tabletId, 0); 
- 
-        // Must get a registered response 
-        { 
-            TAutoPtr<IEventHandle> handle; 
-            auto event = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoRegistered>(handle); 
-            UNIT_ASSERT(event); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTabletID(), tabletId); 
-        } 
- 
-        // Delete tablet while info request is pending 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, false);
+
+        SendGetTabletStorageInfo(runtime, hiveTablet, tabletId, 0);
+
+        // Must get a registered response
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto event = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoRegistered>(handle);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTabletID(), tabletId);
+        }
+
+        // Delete tablet while info request is pending
         if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
-            WaitEvDeleteTabletResult(runtime); 
-        } 
- 
-        // Must get a final response 
-        { 
-            TAutoPtr<IEventHandle> handle; 
-            auto event = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle); 
-            UNIT_ASSERT(event); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTabletID(), tabletId); 
-            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrProto::ERROR); 
-        } 
-    } 
- 
-    void SendLockTabletExecution(TTestActorRuntime& runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex, 
-                                 NKikimrProto::EReplyStatus expectedStatus = NKikimrProto::OK, 
+            WaitEvDeleteTabletResult(runtime);
+        }
+
+        // Must get a final response
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto event = runtime.GrabEdgeEventRethrow<TEvHive::TEvGetTabletStorageInfoResult>(handle);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTabletID(), tabletId);
+            UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrProto::ERROR);
+        }
+    }
+
+    void SendLockTabletExecution(TTestActorRuntime& runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex,
+                                 NKikimrProto::EReplyStatus expectedStatus = NKikimrProto::OK,
                                  const TActorId& owner = TActorId(), ui64 maxTimeout = 0,
-                                 bool reconnect = false) 
-    { 
-        THolder<TEvHive::TEvLockTabletExecution> event(new TEvHive::TEvLockTabletExecution(tabletId)); 
-        if (owner) { 
+                                 bool reconnect = false)
+    {
+        THolder<TEvHive::TEvLockTabletExecution> event(new TEvHive::TEvLockTabletExecution(tabletId));
+        if (owner) {
             ActorIdToProto(owner, event->Record.MutableOwnerActor());
-        } 
-        if (maxTimeout > 0) { 
-            event->Record.SetMaxReconnectTimeout(maxTimeout); 
-        } 
-        if (reconnect) { 
-            event->Record.SetReconnect(true); 
-        } 
+        }
+        if (maxTimeout > 0) {
+            event->Record.SetMaxReconnectTimeout(maxTimeout);
+        }
+        if (reconnect) {
+            event->Record.SetReconnect(true);
+        }
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
-        runtime.SendToPipe(hiveTablet, senderB, event.Release(), nodeIndex, GetPipeConfigWithRetries()); 
- 
-        TAutoPtr<IEventHandle> handle; 
-        auto result = runtime.GrabEdgeEventRethrow<TEvHive::TEvLockTabletExecutionResult>(handle); 
-        UNIT_ASSERT(result); 
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTabletID(), tabletId); 
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), expectedStatus); 
-    } 
- 
+        runtime.SendToPipe(hiveTablet, senderB, event.Release(), nodeIndex, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = runtime.GrabEdgeEventRethrow<TEvHive::TEvLockTabletExecutionResult>(handle);
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTabletID(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), expectedStatus);
+    }
+
     void VerifyLockTabletExecutionLost(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& owner) {
-        TAutoPtr<IEventHandle> handle; 
-        auto result = runtime.GrabEdgeEventRethrow<TEvHive::TEvLockTabletExecutionLost>(handle); 
-        UNIT_ASSERT(result); 
-        UNIT_ASSERT_VALUES_EQUAL(handle->GetRecipientRewrite(), owner); 
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTabletID(), tabletId); 
-    } 
- 
+        TAutoPtr<IEventHandle> handle;
+        auto result = runtime.GrabEdgeEventRethrow<TEvHive::TEvLockTabletExecutionLost>(handle);
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(handle->GetRecipientRewrite(), owner);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTabletID(), tabletId);
+    }
+
     Y_UNIT_TEST(TestLockTabletExecution) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
         TActorId disconnecter = runtime.AllocateEdgeActor(0);
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
-        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0); 
- 
-        // Tablet should boot when the locking node disconnects 
-        WaitForTabletIsUp(runtime, tabletId, 0); 
-    } 
- 
+        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
+
+        // Tablet should boot when the locking node disconnects
+        WaitForTabletIsUp(runtime, tabletId, 0);
+    }
+
     Y_UNIT_TEST(TestLockTabletExecutionBadOwner) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
-        // Owner cannot be on a different node 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        // Owner cannot be on a different node
         TActorId owner = runtime.AllocateEdgeActor(0);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::ERROR, owner); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
-    } 
- 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::ERROR, owner);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+    }
+
     Y_UNIT_TEST(TestLockTabletExecutionTimeout) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
-        runtime.EnableScheduleForActor(hiveActor); 
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+        runtime.EnableScheduleForActor(hiveActor);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
         TActorId owner = runtime.AllocateEdgeActor(1);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 1000); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 1000);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
         TActorId disconnecter = runtime.AllocateEdgeActor(0);
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
-        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0); 
- 
-        // Tablet should boot when timeout expires 
-        WaitForTabletIsUp(runtime, tabletId, 0); 
- 
-        // Hive should try to notify owner on unlocking 
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner); 
-    } 
- 
+        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
+
+        // Tablet should boot when timeout expires
+        WaitForTabletIsUp(runtime, tabletId, 0);
+
+        // Hive should try to notify owner on unlocking
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+    }
+
     Y_UNIT_TEST(TestLockTabletExecutionRebootTimeout) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
-        runtime.EnableScheduleForActor(hiveActor); 
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+        runtime.EnableScheduleForActor(hiveActor);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
-        // Lock with a 40 second timeout (test reboots take 30 seconds) 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        // Lock with a 40 second timeout (test reboots take 30 seconds)
         TActorId owner = runtime.AllocateEdgeActor(1);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 40000); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
-        // Reboot the hive tablet 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 40000);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        // Reboot the hive tablet
         RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
- 
-        // Tablet should boot when timeout expires 
-        WaitForTabletIsUp(runtime, tabletId, 0); 
- 
-        // Hive should try to notify owner on unlocking 
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner); 
-    } 
- 
+
+        // Tablet should boot when timeout expires
+        WaitForTabletIsUp(runtime, tabletId, 0);
+
+        // Hive should try to notify owner on unlocking
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+    }
+
     Y_UNIT_TEST(TestLockTabletExecutionDelete) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
         TActorId sender = runtime.AllocateEdgeActor();
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
-        runtime.EnableScheduleForActor(hiveActor); 
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+        runtime.EnableScheduleForActor(hiveActor);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
         TActorId owner = runtime.AllocateEdgeActor(1);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 1000); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
-        // Delete tablet while it is locked 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 1000);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        // Delete tablet while it is locked
         if (!SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0))) {
-            WaitEvDeleteTabletResult(runtime); 
-        } 
- 
-        // Make sure tablet does not exist anymore 
-        runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(true)); 
-        TAutoPtr<IEventHandle> handle; 
-        TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle); 
-        for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) { 
-            UNIT_ASSERT_VALUES_UNEQUAL(tablet.GetTabletID(), tabletId); 
-        } 
- 
-        // Hive should try to notify owner on unlocking 
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner); 
-    } 
- 
-    Y_UNIT_TEST(TestLockTabletExecutionDeleteReboot) { 
-        TTestBasicRuntime runtime(2, false); 
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+            WaitEvDeleteTabletResult(runtime);
+        }
+
+        // Make sure tablet does not exist anymore
+        runtime.SendToPipe(hiveTablet, sender, new TEvHive::TEvRequestHiveInfo(true));
+        TAutoPtr<IEventHandle> handle;
+        TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+        for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+            UNIT_ASSERT_VALUES_UNEQUAL(tablet.GetTabletID(), tabletId);
+        }
+
+        // Hive should try to notify owner on unlocking
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+    }
+
+    Y_UNIT_TEST(TestLockTabletExecutionDeleteReboot) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
-        runtime.EnableScheduleForActor(hiveActor); 
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+        runtime.EnableScheduleForActor(hiveActor);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
         TActorId owner = runtime.AllocateEdgeActor(1);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 1000); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
-        // Setup observer that would drop EvDeleteTabletResult messages 
-        TTestActorRuntime::TEventObserver prevObserverFunc; 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 1000);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        // Setup observer that would drop EvDeleteTabletResult messages
+        TTestActorRuntime::TEventObserver prevObserverFunc;
         prevObserverFunc = runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-            if (event->GetTypeRewrite() == TEvTabletBase::EvDeleteTabletResult) { 
-                return TTestActorRuntime::EEventAction::DROP; 
-            } 
-            return prevObserverFunc(runtime, event); 
-        }); 
- 
-        // Delete tablet while it is locked 
+            if (event->GetTypeRewrite() == TEvTabletBase::EvDeleteTabletResult) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return prevObserverFunc(runtime, event);
+        });
+
+        // Delete tablet while it is locked
         SendDeleteTestTablet(runtime, hiveTablet, MakeHolder<TEvHive::TEvDeleteTablet>(testerTablet, 0, 0));
- 
-        // Reboot hive while tablet deletion is still delayed. 
+
+        // Reboot hive while tablet deletion is still delayed.
         RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
- 
-        // Remove observer and reboot hive one more time, letting delete to finish normally. 
-        runtime.SetObserverFunc(prevObserverFunc); 
+
+        // Remove observer and reboot hive one more time, letting delete to finish normally.
+        runtime.SetObserverFunc(prevObserverFunc);
         RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
- 
-        // Hive should try to notify owner on unlocking 
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner); 
-    } 
- 
-    void MakeSureTabletStaysDown(TTestActorRuntime& runtime, ui64 tabletId, const TDuration& timeout) { 
+
+        // Hive should try to notify owner on unlocking
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+    }
+
+    void MakeSureTabletStaysDown(TTestActorRuntime& runtime, ui64 tabletId, const TDuration& timeout) {
         TActorId edge = runtime.AllocateEdgeActor();
-        NTabletPipe::TClientConfig clientConfig; 
+        NTabletPipe::TClientConfig clientConfig;
         clientConfig.AllowFollower = true;
         clientConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         TActorId pipeClient = runtime.Register(NTabletPipe::CreateClient(edge, tabletId, clientConfig));
-        TAutoPtr<IEventHandle> handle; 
-        TInstant deadline = TInstant::Now() + timeout; 
-        bool res = false; 
- 
-        do { 
-            TEvTabletPipe::TEvClientConnected* ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(handle, timeout); 
-            if (!ev) { 
-                continue; 
-            } 
-            if (ev->TabletId == tabletId) { 
-                res = (ev->Status == NKikimrProto::OK); 
-                if (res) { 
-                    break; 
-                } 
-            } 
-        } while (TInstant::Now() <= deadline); 
- 
+        TAutoPtr<IEventHandle> handle;
+        TInstant deadline = TInstant::Now() + timeout;
+        bool res = false;
+
+        do {
+            TEvTabletPipe::TEvClientConnected* ev = runtime.GrabEdgeEvent<TEvTabletPipe::TEvClientConnected>(handle, timeout);
+            if (!ev) {
+                continue;
+            }
+            if (ev->TabletId == tabletId) {
+                res = (ev->Status == NKikimrProto::OK);
+                if (res) {
+                    break;
+                }
+            }
+        } while (TInstant::Now() <= deadline);
+
         runtime.Send(new IEventHandle(pipeClient, TActorId(), new TEvents::TEvPoisonPill()));
-        UNIT_ASSERT_C(!res, "Unexpected successful tablet connection"); 
-    } 
- 
+        UNIT_ASSERT_C(!res, "Unexpected successful tablet connection");
+    }
+
     Y_UNIT_TEST(TestLockTabletExecutionReconnect) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
-        runtime.EnableScheduleForActor(hiveActor); 
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+        runtime.EnableScheduleForActor(hiveActor);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
-        // lock with a 500ms timeout 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        // lock with a 500ms timeout
         TActorId owner = runtime.AllocateEdgeActor(1);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 500); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
-        // disconnect the node 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 500);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        // disconnect the node
         TActorId disconnecter = runtime.AllocateEdgeActor(0);
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
-        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0); 
- 
-        // reconnect the lock 
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 500, true); 
-        MakeSureTabletStaysDown(runtime, tabletId, TDuration::MilliSeconds(1000)); 
-    } 
- 
+        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
+
+        // reconnect the lock
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 500, true);
+        MakeSureTabletStaysDown(runtime, tabletId, TDuration::MilliSeconds(1000));
+    }
+
     Y_UNIT_TEST(TestLockTabletExecutionRebootReconnect) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
-        runtime.EnableScheduleForActor(hiveActor); 
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+        runtime.EnableScheduleForActor(hiveActor);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
-        // Lock with a 40 second timeout (test reboots take 30 seconds) 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        // Lock with a 40 second timeout (test reboots take 30 seconds)
         TActorId owner = runtime.AllocateEdgeActor(1);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 40000); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
-        // Reboot the hive tablet 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 40000);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        // Reboot the hive tablet
         RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
- 
-        // Reconnect the lock 
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 40000, true); 
-    } 
- 
+
+        // Reconnect the lock
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 40000, true);
+    }
+
     Y_UNIT_TEST(TestLockTabletExecutionReconnectExpire) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
-        runtime.EnableScheduleForActor(hiveActor); 
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+        runtime.EnableScheduleForActor(hiveActor);
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
-        // lock with a 500ms timeout 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        // lock with a 500ms timeout
         TActorId owner = runtime.AllocateEdgeActor(1);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 500); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
-        // disconnect the node 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner, 500);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        // disconnect the node
         TActorId disconnecter = runtime.AllocateEdgeActor(0);
         TActorId proxy = runtime.GetInterconnectProxy(0, 1);
-        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0); 
- 
-        // wait for the lost lock notification 
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner); 
- 
-        // lock reconnect should fail 
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::ERROR, owner, 500, true); 
-    } 
- 
-    void SendUnlockTabletExecution(TTestActorRuntime& runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex, 
-                                   NKikimrProto::EReplyStatus expectedStatus = NKikimrProto::OK, 
+        runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
+
+        // wait for the lost lock notification
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+
+        // lock reconnect should fail
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::ERROR, owner, 500, true);
+    }
+
+    void SendUnlockTabletExecution(TTestActorRuntime& runtime, ui64 hiveTablet, ui64 tabletId, ui32 nodeIndex,
+                                   NKikimrProto::EReplyStatus expectedStatus = NKikimrProto::OK,
                                    const TActorId& owner = TActorId())
-    { 
-        THolder<TEvHive::TEvUnlockTabletExecution> event(new TEvHive::TEvUnlockTabletExecution(tabletId)); 
-        if (owner) { 
+    {
+        THolder<TEvHive::TEvUnlockTabletExecution> event(new TEvHive::TEvUnlockTabletExecution(tabletId));
+        if (owner) {
             ActorIdToProto(owner, event->Record.MutableOwnerActor());
-        } 
+        }
         TActorId senderB = runtime.AllocateEdgeActor(nodeIndex);
-        runtime.SendToPipe(hiveTablet, senderB, event.Release(), nodeIndex, GetPipeConfigWithRetries()); 
- 
-        TAutoPtr<IEventHandle> handle; 
-        auto result = runtime.GrabEdgeEventRethrow<TEvHive::TEvUnlockTabletExecutionResult>(handle); 
-        UNIT_ASSERT(result); 
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTabletID(), tabletId); 
-        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), expectedStatus); 
-    } 
- 
+        runtime.SendToPipe(hiveTablet, senderB, event.Release(), nodeIndex, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        auto result = runtime.GrabEdgeEventRethrow<TEvHive::TEvUnlockTabletExecutionResult>(handle);
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTabletID(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), expectedStatus);
+    }
+
     Y_UNIT_TEST(TestLockTabletExecutionBadUnlock) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
-        // Unlocking with a different owner (sender by default) is prohibited 
-        SendUnlockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::ERROR); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
-    } 
- 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        // Unlocking with a different owner (sender by default) is prohibited
+        SendUnlockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::ERROR);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+    }
+
     Y_UNIT_TEST(TestLockTabletExecutionGoodUnlock) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
         TActorId owner = runtime.AllocateEdgeActor(1);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
-        // Unlocking with the same owner should succeed and boot the tablet 
-        SendUnlockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner); 
-        WaitForTabletIsUp(runtime, tabletId, 0); 
- 
-        // Hive should try to notify owner on unlocking 
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner); 
-    } 
- 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        // Unlocking with the same owner should succeed and boot the tablet
+        SendUnlockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner);
+        WaitForTabletIsUp(runtime, tabletId, 0);
+
+        // Hive should try to notify owner on unlocking
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+    }
+
     Y_UNIT_TEST(TestLockTabletExecutionStealLock) {
         TTestBasicRuntime runtime(2, false);
-        Setup(runtime, false); 
-        CreateLocal(runtime, 0); // only the 1st node has local running 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+        Setup(runtime, false);
+        CreateLocal(runtime, 0); // only the 1st node has local running
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
- 
-        TTabletTypes::EType tabletType = TTabletTypes::Dummy; 
+
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, tabletType, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
         TActorId owner = runtime.AllocateEdgeActor(1);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
-        // Lock to a different owner 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        // Lock to a different owner
         TActorId owner2 = runtime.AllocateEdgeActor(1);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner2); 
- 
-        // Hive should notify the old owner on unlocking 
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner); 
-    } 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner2);
+
+        // Hive should notify the old owner on unlocking
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+    }
 
     Y_UNIT_TEST(TestExternalBoot) {
         TTestBasicRuntime runtime(1, false);
@@ -4384,47 +4384,47 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_EQUAL(storageInfo.GetTabletType(), TTabletTypes::Dummy);
         UNIT_ASSERT(storageInfo.ChannelsSize() > 0);
     }
- 
-    Y_UNIT_TEST(TestExternalBootWhenLocked) { 
-        TTestBasicRuntime runtime(2, false); 
-        Setup(runtime, true); 
-        const ui64 hiveTablet = MakeDefaultHiveID(0); 
-        const ui64 testerTablet = MakeDefaultHiveID(1); 
+
+    Y_UNIT_TEST(TestExternalBootWhenLocked) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+        const ui64 hiveTablet = MakeDefaultHiveID(0);
+        const ui64 testerTablet = MakeDefaultHiveID(1);
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::FLAT_HIVE), &CreateDefaultHive);
- 
+
         THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 0, TTabletTypes::Dummy, BINDED_CHANNELS));
-        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true); 
-        MakeSureTabletIsUp(runtime, tabletId, 0); 
- 
+        ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+        MakeSureTabletIsUp(runtime, tabletId, 0);
+
         TActorId bootOwner = runtime.AllocateEdgeActor(1);
- 
-        // cannot use external boot for normal tablets 
-        { 
-            runtime.SendToPipe(hiveTablet, bootOwner, new TEvHive::TEvInitiateTabletExternalBoot(tabletId), 1, GetPipeConfigWithRetries()); 
- 
-            auto result = runtime.GrabEdgeEvent<TEvHive::TEvBootTabletReply>(bootOwner); 
-            const auto* msg = result->Get(); 
-            UNIT_ASSERT_EQUAL(msg->Record.GetStatus(), NKikimrProto::EReplyStatus::ERROR); 
-        } 
- 
+
+        // cannot use external boot for normal tablets
+        {
+            runtime.SendToPipe(hiveTablet, bootOwner, new TEvHive::TEvInitiateTabletExternalBoot(tabletId), 1, GetPipeConfigWithRetries());
+
+            auto result = runtime.GrabEdgeEvent<TEvHive::TEvBootTabletReply>(bootOwner);
+            const auto* msg = result->Get();
+            UNIT_ASSERT_EQUAL(msg->Record.GetStatus(), NKikimrProto::EReplyStatus::ERROR);
+        }
+
         TActorId lockOwner = runtime.AllocateEdgeActor(1);
-        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, lockOwner); 
-        MakeSureTabletIsDown(runtime, tabletId, 0); 
- 
-        // should be possible to boot it externally after locking 
-        { 
-            runtime.SendToPipe(hiveTablet, bootOwner, new TEvHive::TEvInitiateTabletExternalBoot(tabletId), 1, GetPipeConfigWithRetries()); 
- 
-            auto result = runtime.GrabEdgeEvent<TEvLocal::TEvBootTablet>(bootOwner); 
-            const auto* msg = result->Get(); 
+        SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, lockOwner);
+        MakeSureTabletIsDown(runtime, tabletId, 0);
+
+        // should be possible to boot it externally after locking
+        {
+            runtime.SendToPipe(hiveTablet, bootOwner, new TEvHive::TEvInitiateTabletExternalBoot(tabletId), 1, GetPipeConfigWithRetries());
+
+            auto result = runtime.GrabEdgeEvent<TEvLocal::TEvBootTablet>(bootOwner);
+            const auto* msg = result->Get();
             UNIT_ASSERT_EQUAL(msg->Record.GetBootMode(), NKikimrLocal::EBootMode::BOOT_MODE_LEADER);
- 
-            const auto& storageInfo = msg->Record.GetInfo(); 
-            UNIT_ASSERT_EQUAL(storageInfo.GetTabletID(), tabletId); 
-            UNIT_ASSERT_EQUAL(storageInfo.GetTabletType(), TTabletTypes::Dummy); 
-            UNIT_ASSERT(storageInfo.ChannelsSize() > 0); 
-        } 
-    } 
+
+            const auto& storageInfo = msg->Record.GetInfo();
+            UNIT_ASSERT_EQUAL(storageInfo.GetTabletID(), tabletId);
+            UNIT_ASSERT_EQUAL(storageInfo.GetTabletType(), TTabletTypes::Dummy);
+            UNIT_ASSERT(storageInfo.ChannelsSize() > 0);
+        }
+    }
 }
 
 }

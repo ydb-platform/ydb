@@ -23,7 +23,7 @@ namespace NTable {
             return { true, Touch(partStore->Locate(lob, ref), ref) };
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId page, TGroupId groupId) override 
+        const TSharedData* TryGetPage(const TPart* part, TPageId page, TGroupId groupId) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
@@ -35,7 +35,7 @@ namespace NTable {
         }
 
     private:
-        const TSharedData* Touch(TInfo *info, TPageId page) noexcept 
+        const TSharedData* Touch(TInfo *info, TPageId page) noexcept
         {
             if (Touched[info].insert(page).second) {
                 Pages++;

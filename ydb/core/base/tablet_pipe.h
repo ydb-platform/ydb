@@ -17,7 +17,7 @@ namespace NKikimr {
             EvConnectResult,
             EvPush,
             EvPeerClosed,
-            EvPeerShutdown, 
+            EvPeerShutdown,
 
             //-- Local events
             EvClientConnected = EvConnect + 512,
@@ -30,8 +30,8 @@ namespace NKikimr {
             EvShutdown,
             EvClientRetry,
             EvClientCheckDelay,
-            EvClientShuttingDown, 
-            EvMessage, // replacement for EvSend 
+            EvClientShuttingDown,
+            EvMessage, // replacement for EvSend
 
             EvEnd
         };
@@ -41,13 +41,13 @@ namespace NKikimr {
         struct TEvConnect : public TEventPB<TEvConnect, NKikimrTabletPipe::TEvConnect, EvConnect> {
             TEvConnect() {}
 
-            TEvConnect(ui64 tabletId, const TActorId& clientId, ui32 features = 0) 
+            TEvConnect(ui64 tabletId, const TActorId& clientId, ui32 features = 0)
             {
                 Record.SetTabletId(tabletId);
                 ActorIdToProto(clientId, Record.MutableClientId());
-                if (features) { 
-                    Record.SetFeatures(features); 
-                } 
+                if (features) {
+                    Record.SetFeatures(features);
+                }
             }
         };
 
@@ -76,10 +76,10 @@ namespace NKikimr {
                 Record.SetCookie(cookie);
                 Record.SetExtendedFormat(extendedFormat);
             }
- 
-            void SetSeqNo(ui64 seqNo) { 
-                Record.SetSeqNo(seqNo); 
-            } 
+
+            void SetSeqNo(ui64 seqNo) {
+                Record.SetSeqNo(seqNo);
+            }
         };
 
         struct TEvPeerClosed : public TEventPB<TEvPeerClosed, NKikimrTabletPipe::TEvPeerClosed, EvPeerClosed> {
@@ -93,26 +93,26 @@ namespace NKikimr {
             }
         };
 
-        struct TEvPeerShutdown : public TEventPB<TEvPeerShutdown, NKikimrTabletPipe::TEvPeerShutdown, EvPeerShutdown> { 
-            TEvPeerShutdown() {} 
- 
-            TEvPeerShutdown(ui64 tabletId, const TActorId& clientId, const TActorId& serverId, ui64 maxForwardedSeqNo) 
-            { 
-                Record.SetTabletId(tabletId); 
-                ActorIdToProto(clientId, Record.MutableClientId()); 
-                ActorIdToProto(serverId, Record.MutableServerId()); 
-                Record.SetMaxForwardedSeqNo(maxForwardedSeqNo); 
-            } 
- 
-            ui64 GetMaxForwardedSeqNo() const { 
-                if (Record.HasMaxForwardedSeqNo()) { 
-                    return Record.GetMaxForwardedSeqNo(); 
-                } else { 
-                    return Max<ui64>(); 
-                } 
-            } 
-        }; 
- 
+        struct TEvPeerShutdown : public TEventPB<TEvPeerShutdown, NKikimrTabletPipe::TEvPeerShutdown, EvPeerShutdown> {
+            TEvPeerShutdown() {}
+
+            TEvPeerShutdown(ui64 tabletId, const TActorId& clientId, const TActorId& serverId, ui64 maxForwardedSeqNo)
+            {
+                Record.SetTabletId(tabletId);
+                ActorIdToProto(clientId, Record.MutableClientId());
+                ActorIdToProto(serverId, Record.MutableServerId());
+                Record.SetMaxForwardedSeqNo(maxForwardedSeqNo);
+            }
+
+            ui64 GetMaxForwardedSeqNo() const {
+                if (Record.HasMaxForwardedSeqNo()) {
+                    return Record.GetMaxForwardedSeqNo();
+                } else {
+                    return Max<ui64>();
+                }
+            }
+        };
+
         struct TEvClientConnected : public TEventLocal<TEvClientConnected, EvClientConnected> {
             TEvClientConnected(ui64 tabletId, NKikimrProto::EReplyStatus status, const TActorId& clientId, const TActorId& serverId, bool leader, bool dead)
                 : TabletId(tabletId)
@@ -155,20 +155,20 @@ namespace NKikimr {
             const TActorId ServerId;
         };
 
-        struct TEvClientShuttingDown : public TEventLocal<TEvClientShuttingDown, EvClientShuttingDown> { 
-            TEvClientShuttingDown(ui64 tabletId, const TActorId& clientId, const TActorId& serverId, ui64 maxForwardedSeqNo) 
-                : TabletId(tabletId) 
-                , ClientId(clientId) 
-                , ServerId(serverId) 
-                , MaxForwardedSeqNo(maxForwardedSeqNo) 
-            {} 
- 
-            const ui64 TabletId; 
-            const TActorId ClientId; 
-            const TActorId ServerId; 
-            const ui64 MaxForwardedSeqNo; 
-        }; 
- 
+        struct TEvClientShuttingDown : public TEventLocal<TEvClientShuttingDown, EvClientShuttingDown> {
+            TEvClientShuttingDown(ui64 tabletId, const TActorId& clientId, const TActorId& serverId, ui64 maxForwardedSeqNo)
+                : TabletId(tabletId)
+                , ClientId(clientId)
+                , ServerId(serverId)
+                , MaxForwardedSeqNo(maxForwardedSeqNo)
+            {}
+
+            const ui64 TabletId;
+            const TActorId ClientId;
+            const TActorId ServerId;
+            const ui64 MaxForwardedSeqNo;
+        };
+
         struct TEvServerDisconnected : public TEventLocal<TEvServerDisconnected, EvServerDisconnected> {
             TEvServerDisconnected(ui64 tabletId, const TActorId& clientId, const TActorId& serverId)
                 : TabletId(tabletId)
@@ -218,60 +218,60 @@ namespace NKikimr {
         struct TEvClientCheckDelay : public TEventLocal<TEvClientCheckDelay, EvClientCheckDelay> {
             TEvClientCheckDelay() {}
         };
- 
-        class TEvMessage : public TEventLocal<TEvMessage, EvMessage> { 
-        public: 
-            TEvMessage(const TActorId& sender, THolder<IEventBase> event) 
-                : Type(event->Type()) 
-                , Sender(sender) 
-                , Event(std::move(event)) 
-            { } 
- 
-            TEvMessage(const TActorId& sender, ui32 type, TIntrusivePtr<TEventSerializedData> buffer) 
-                : Type(type) 
-                , Sender(sender) 
-                , Buffer(std::move(buffer)) 
-            { } 
- 
-        public: 
-            void SetSeqNo(ui64 seqNo) { 
-                SeqNo = seqNo; 
-            } 
- 
-            ui64 GetSeqNo() const { 
-                return SeqNo; 
-            } 
- 
-        public: 
-            bool HasEvent() const { 
-                return bool(Event); 
-            } 
- 
-            const THolder<IEventBase>& GetEvent() const { 
-                return Event; 
-            } 
- 
-            const TIntrusivePtr<TEventSerializedData>& GetBuffer() const { 
-                return Buffer; 
-            } 
- 
-            THolder<IEventBase> ReleaseEvent() { 
-                return std::move(Event); 
-            } 
- 
-            TIntrusivePtr<TEventSerializedData> ReleaseBuffer() { 
-                return std::move(Buffer); 
-            } 
- 
-        public: 
-            const ui32 Type; 
-            const TActorId Sender; 
- 
-        private: 
-            THolder<IEventBase> Event; 
-            TIntrusivePtr<TEventSerializedData> Buffer; 
-            ui64 SeqNo = 0; 
-        }; 
+
+        class TEvMessage : public TEventLocal<TEvMessage, EvMessage> {
+        public:
+            TEvMessage(const TActorId& sender, THolder<IEventBase> event)
+                : Type(event->Type())
+                , Sender(sender)
+                , Event(std::move(event))
+            { }
+
+            TEvMessage(const TActorId& sender, ui32 type, TIntrusivePtr<TEventSerializedData> buffer)
+                : Type(type)
+                , Sender(sender)
+                , Buffer(std::move(buffer))
+            { }
+
+        public:
+            void SetSeqNo(ui64 seqNo) {
+                SeqNo = seqNo;
+            }
+
+            ui64 GetSeqNo() const {
+                return SeqNo;
+            }
+
+        public:
+            bool HasEvent() const {
+                return bool(Event);
+            }
+
+            const THolder<IEventBase>& GetEvent() const {
+                return Event;
+            }
+
+            const TIntrusivePtr<TEventSerializedData>& GetBuffer() const {
+                return Buffer;
+            }
+
+            THolder<IEventBase> ReleaseEvent() {
+                return std::move(Event);
+            }
+
+            TIntrusivePtr<TEventSerializedData> ReleaseBuffer() {
+                return std::move(Buffer);
+            }
+
+        public:
+            const ui32 Type;
+            const TActorId Sender;
+
+        private:
+            THolder<IEventBase> Event;
+            TIntrusivePtr<TEventSerializedData> Buffer;
+            ui64 SeqNo = 0;
+        };
     };
 
     namespace NTabletPipe {
@@ -287,9 +287,9 @@ namespace NKikimr {
             // Rejects connect with an error.
             virtual void Reject(TEvTabletPipe::TEvConnect::TPtr &ev, TActorIdentity owner, NKikimrProto::EReplyStatus status, bool leader = true) = 0;
 
-            // Stop all servers, gracefully notifying clients. 
-            virtual void Stop(TActorIdentity owner) = 0; 
- 
+            // Stop all servers, gracefully notifying clients.
+            virtual void Stop(TActorIdentity owner) = 0;
+
             // Destroys all servers, created by Accept or Enqueue.
             virtual void Detach(TActorIdentity owner) = 0;
 
@@ -305,7 +305,7 @@ namespace NKikimr {
             virtual void Erase(TEvTabletPipe::TEvServerDestroyed::TPtr &ev) = 0;
 
             virtual bool IsActive() const = 0;
-            virtual bool IsStopped() const = 0; 
+            virtual bool IsStopped() const = 0;
         };
 
         struct TClientRetryPolicy {
@@ -349,7 +349,7 @@ namespace NKikimr {
             bool ForceLocal = false;
             bool PreferLocal = false;
             bool CheckAliveness = false;
-            bool ExpectShutdown = false; 
+            bool ExpectShutdown = false;
             TClientRetryPolicy RetryPolicy;
 
             TClientConfig()
@@ -372,7 +372,7 @@ namespace NKikimr {
         void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0);
         void SendData(TActorId self, TActorId clientId, IEventBase* payload, ui64 cookie = 0);
         void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie = 0);
-        void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase* payload, ui64 seqNo, ui64 cookie = 0); 
+        void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase* payload, ui64 seqNo, ui64 cookie = 0);
         void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0);
 
         // Shutdown client actor.
@@ -384,7 +384,7 @@ namespace NKikimr {
         void CloseAndForgetClient(TActorIdentity self, TActorId &clientId);
 
         // Returns server actor in inactive state.
-        IActor* CreateServer(ui64 tabletId, const TActorId& clientId, const TActorId& interconnectSession, ui32 features, ui64 connectCookie); 
+        IActor* CreateServer(ui64 tabletId, const TActorId& clientId, const TActorId& interconnectSession, ui32 features, ui64 connectCookie);
 
         // Promotes server actor to the active state.
         void ActivateServer(ui64 tabletId, TActorId serverId, TActorIdentity owner, TActorId recipientId, bool leader);

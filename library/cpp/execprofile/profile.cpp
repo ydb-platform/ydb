@@ -188,11 +188,11 @@ private:
 #endif
 #elif defined _darwin_
 #if defined _64_
-#if defined(_arm_) 
-        return (void*)(*mctx)->__ss.__pc; 
-#else 
+#if defined(_arm_)
+        return (void*)(*mctx)->__ss.__pc;
+#else
         return (void*)(*mctx)->__ss.__rip;
-#endif 
+#endif
 #else
 #if defined(__IOS__)
         return (void*)(*mctx)->__ss.__pc;

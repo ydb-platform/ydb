@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/row_version.h>
- 
+
 #include <util/system/types.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/array_ref.h>
@@ -13,7 +13,7 @@ namespace NTable {
     using TTag  = ui32;
     using TPos  = ui32;  /* Column logical position      */
     using TTagsRef = TArrayRef<const TTag>;
-    using TGroup = ui32; /* Column logical group         */ 
+    using TGroup = ui32; /* Column logical group         */
 
     enum class ESeek {
         Exact = 1,
@@ -27,11 +27,11 @@ namespace NTable {
         Gone    = 2,    /* Iterator finally invalidated */
     };
 
-    enum class EDirection { 
-        Forward, 
-        Reverse, 
-    }; 
- 
+    enum class EDirection {
+        Forward,
+        Reverse,
+    };
+
     enum class ERowOp : ui8 { /* row operation code */
         Absent  = 0,
         Upsert  = 1,    /* Set value or update row      */
@@ -71,8 +71,8 @@ namespace NTable {
         ui64 Ref = Max<ui64>();
     };
 
-#pragma pack(push, 1) 
- 
+#pragma pack(push, 1)
+
     struct TCellOp {
         constexpr TCellOp() = default;
 
@@ -138,8 +138,8 @@ namespace NTable {
         ui8 Value = 0;
     } Y_PACKED;
 
-#pragma pack(pop) 
- 
+#pragma pack(pop)
+
     static_assert(sizeof(TCellOp) == 1, "Unexpected TCellOp unit size");
 
 }

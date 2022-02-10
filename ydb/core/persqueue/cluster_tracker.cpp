@@ -1,5 +1,5 @@
 #include "cluster_tracker.h"
-#include "pq_database.h" 
+#include "pq_database.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kqp/kqp.h>
@@ -62,14 +62,14 @@ private:
         Send(Ctx().SelfID, new TEvents::TEvWakeup);
     }
 
-    const TString& GetDatabase() { 
-        if (Database.empty()) { 
-            Database = GetDatabaseFromConfig(Cfg()); 
-        } 
- 
-        return Database; 
-    } 
- 
+    const TString& GetDatabase() {
+        if (Database.empty()) {
+            Database = GetDatabaseFromConfig(Cfg());
+        }
+
+        return Database;
+    }
+
     TString MakeListClustersQuery() const {
         return Sprintf(
             R"(
@@ -120,7 +120,7 @@ private:
         req->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
         req->Record.MutableRequest()->SetKeepSession(false);
         req->Record.MutableRequest()->SetQuery(MakeListClustersQuery());
-        req->Record.MutableRequest()->SetDatabase(GetDatabase()); 
+        req->Record.MutableRequest()->SetDatabase(GetDatabase());
         // useless without explicit session
         // req->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
         req->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
@@ -189,7 +189,7 @@ private:
     TClustersList::TConstPtr ClustersList = nullptr;
     TMaybe<TInstant> ClustersListUpdateTimestamp;
     THashSet<TActorId> Subscribers;
-    TString Database; 
+    TString Database;
 };
 
 NActors::IActor* CreateClusterTracker() {

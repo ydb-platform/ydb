@@ -20,7 +20,7 @@ namespace NDataShard {
 //
 struct TUserTable : public TThrRefBase {
     using TPtr = TIntrusivePtr<TUserTable>;
-    using TCPtr = TIntrusiveConstPtr<TUserTable>; 
+    using TCPtr = TIntrusiveConstPtr<TUserTable>;
 
     struct TUserFamily {
         using ECodec = NTable::NPage::ECodec;
@@ -34,7 +34,7 @@ struct TUserTable : public TThrRefBase {
             , Storage(family.GetStorage())
             , Codec(ExtractDbCodec(family))
             , Cache(ExtractDbCache(family))
-            , Room(new TStorageRoom(family.GetRoom())) 
+            , Room(new TStorageRoom(family.GetRoom()))
             , Name(family.GetName())
         {
         }
@@ -57,7 +57,7 @@ struct TUserTable : public TThrRefBase {
             if (family.HasStorage()) {
                 Storage = family.GetStorage();
             }
-            Room.Reset(new TStorageRoom(family.GetRoom())); 
+            Room.Reset(new TStorageRoom(family.GetRoom()));
         }
 
         static ui32 SaveGetThreshold(ui32 value) {
@@ -343,7 +343,7 @@ struct TUserTable : public TThrRefBase {
     };
 
     ui32 LocalTid = Max<ui32>();
-    ui32 ShadowTid = 0; 
+    ui32 ShadowTid = 0;
     TString Name;
     TString Path;
     TMap<ui32, TStorageRoom::TPtr> Rooms;
@@ -352,22 +352,22 @@ struct TUserTable : public TThrRefBase {
     TVector<NScheme::TTypeId> KeyColumnTypes;
     TVector<ui32> KeyColumnIds;
     TSerializedTableRange Range;
-    bool IsBackup = false; 
+    bool IsBackup = false;
 
     TMap<TPathId, TTableIndex> Indexes;
     TMap<TPathId, TCdcStream> CdcStreams;
     ui32 AsyncIndexCount = 0;
 
-    // Tablet thread access only, updated in-place 
-    mutable TStats Stats; 
-    mutable bool StatsUpdateInProgress = false; 
-    mutable bool StatsNeedUpdate = true; 
- 
+    // Tablet thread access only, updated in-place
+    mutable TStats Stats;
+    mutable bool StatsUpdateInProgress = false;
+    mutable bool StatsNeedUpdate = true;
+
     ui32 SpecialColTablet = Max<ui32>();
     ui32 SpecialColEpoch = Max<ui32>();
     ui32 SpecialColUpdateNo = Max<ui32>();
 
-    TUserTable() { } 
+    TUserTable() { }
 
     TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& descr, ui32 shadowTid); // for create
     TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDescription& descr); // for alter
@@ -380,7 +380,7 @@ struct TUserTable : public TThrRefBase {
                     const NKikimrSchemeOp::TTableDescription& alter, TString& strError);
     void ApplyDefaults(NTabletFlatExecutor::TTransactionContext& txc) const;
 
-    TTableRange GetTableRange() const { return Range.ToTableRange(); } 
+    TTableRange GetTableRange() const { return Range.ToTableRange(); }
     const TString& GetSchema() const { return Schema; }
 
     void GetSchema(NKikimrSchemeOp::TTableDescription& description) const {
@@ -397,7 +397,7 @@ struct TUserTable : public TThrRefBase {
 
     ui64 GetTableSchemaVersion() const { return TableSchemaVersion; }
     void SetTableSchemaVersion(ui64 schemaVersion);
-    bool ResetTableSchemaVersion(); 
+    bool ResetTableSchemaVersion();
 
     void AddIndex(const NKikimrSchemeOp::TIndexDescription& indexDesc);
     void DropIndex(const TPathId& indexPathId);
@@ -411,8 +411,8 @@ struct TUserTable : public TThrRefBase {
 private:
     void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,
             const NKikimrSchemeOp::TPartitionConfig& partConfig) const;
- 
-private: 
+
+private:
     TString Schema;
     ui64 TableSchemaVersion = 0;
 

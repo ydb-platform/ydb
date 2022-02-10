@@ -185,18 +185,18 @@ private:
     ui64 RowsLimit = 100000;
     ui64 BytesLimit = 1024*1024;
     ui64 Restarts = 0;
-    TRowVersion ReadVersion = TRowVersion::Max(); 
+    TRowVersion ReadVersion = TRowVersion::Max();
 
 public:
     TTxReadColumns(TDataShard* ds, TEvDataShard::TEvReadColumnsRequest::TPtr ev)
         : TBase(ds)
         , Ev(ev)
-    { 
-        if (Ev->Get()->Record.HasSnapshotStep() && Ev->Get()->Record.HasSnapshotTxId()) { 
-            ReadVersion.Step = Ev->Get()->Record.GetSnapshotStep(); 
-            ReadVersion.TxId = Ev->Get()->Record.GetSnapshotTxId(); 
-        } 
-    } 
+    {
+        if (Ev->Get()->Record.HasSnapshotStep() && Ev->Get()->Record.HasSnapshotTxId()) {
+            ReadVersion.Step = Ev->Get()->Record.GetSnapshotStep();
+            ReadVersion.TxId = Ev->Get()->Record.GetSnapshotTxId();
+        }
+    }
 
     TTxType GetTxType() const override { return TXTYPE_READ_COLUMNS; }
 
@@ -206,8 +206,8 @@ public:
                                    KeyTo,
                                    valueColumns,
                                    0,
-                                   RowsLimit, BytesLimit, 
-                                   NTable::EDirection::Forward, ReadVersion); 
+                                   RowsLimit, BytesLimit,
+                                   NTable::EDirection::Forward, ReadVersion);
         return ready;
     }
 
@@ -270,26 +270,26 @@ public:
         }
 
         TMaybe<TSnapshotKey> snapshotKey;
-        if (!ReadVersion.IsMax()) { 
-            // FIXME: protocol needs a full table id (both owner id and path id) 
+        if (!ReadVersion.IsMax()) {
+            // FIXME: protocol needs a full table id (both owner id and path id)
             ui64 ownerId = Self->GetPathOwnerId();
             snapshotKey = TSnapshotKey(ownerId, tableId, ReadVersion.Step, ReadVersion.TxId);
- 
-            // Check if readVersion is a valid snapshot 
+
+            // Check if readVersion is a valid snapshot
             if (!Self->GetSnapshotManager().FindAvailable(*snapshotKey)) {
-                SetError(NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST, 
+                SetError(NKikimrTxDataShard::TError::SNAPSHOT_NOT_EXIST,
                     TStringBuilder() << "Table id " << tableId << " has no snapshot at " << ReadVersion
                          << " shard " << Self->TabletID() << (Self->IsFollower() ? " RO replica" : ""));
-                return true; 
-            } 
-        } 
- 
-        const TUserTable& tableInfo = *Self->TableInfos[tableId]; 
-        if (tableInfo.IsBackup) { 
-            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Cannot read from a backup table"); 
-            return true; 
-        } 
- 
+                return true;
+            }
+        }
+
+        const TUserTable& tableInfo = *Self->TableInfos[tableId];
+        if (tableInfo.IsBackup) {
+            SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, "Cannot read from a backup table");
+            return true;
+        }
+
         const ui32 localTableId = tableInfo.LocalTid;
         THashMap<TString, ui32> columnsByName;
         for (const auto& col : tableInfo.Columns) {
@@ -297,9 +297,9 @@ public:
         }
 
         TString format = "clickhouse_native";
-        if (Ev->Get()->Record.HasFormat()) { 
-            format = Ev->Get()->Record.GetFormat(); 
-        } 
+        if (Ev->Get()->Record.HasFormat()) {
+            format = Ev->Get()->Record.GetFormat();
+        }
         std::unique_ptr<IBlockBuilder> blockBuilder = AppData()->FormatFactory->CreateBlockBuilder(format);
         if (!blockBuilder) {
             SetError(NKikimrTxDataShard::TError::BAD_ARGUMENT,
@@ -360,7 +360,7 @@ public:
             NTable::TTag colId = columnsByName[col];
             valueColumns.push_back(colId);
             valueColumnTypes.push_back(tableInfo.Columns.at(colId).Type);
-            columns.push_back({col, tableInfo.Columns.at(colId).Type}); 
+            columns.push_back({col, tableInfo.Columns.at(colId).Type});
         }
 
         ui64 rowsPerBlock = Ev->Get()->Record.GetMaxRows() ? Ev->Get()->Record.GetMaxRows() : 64000;
@@ -419,12 +419,12 @@ public:
         bool shardFinished = false;
 
         {
-            NTable::TKeyRange iterRange; 
-            iterRange.MinKey = KeyFrom; 
-            iterRange.MinInclusive = InclusiveFrom; 
+            NTable::TKeyRange iterRange;
+            iterRange.MinKey = KeyFrom;
+            iterRange.MinInclusive = InclusiveFrom;
 
-            auto iter = txc.DB.IterateRange(localTableId, iterRange, valueColumns, ReadVersion); 
- 
+            auto iter = txc.DB.IterateRange(localTableId, iterRange, valueColumns, ReadVersion);
+
             TString lastKeySerialized;
             bool lastKeyInclusive = true;
             while (iter->Next(NTable::ENext::All) == NTable::EReady::Data) {
@@ -480,7 +480,7 @@ public:
             Result->Record.SetBlocks(buffer);
             Result->Record.SetLastKey(lastKeySerialized);
             Result->Record.SetLastKeyInclusive(lastKeyInclusive);
-            Result->Record.SetEndOfShard(shardFinished); 
+            Result->Record.SetEndOfShard(shardFinished);
         }
 
         Self->IncCounter(COUNTER_READ_COLUMNS_ROWS, rows);

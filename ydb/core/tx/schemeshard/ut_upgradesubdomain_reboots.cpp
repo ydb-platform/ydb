@@ -568,12 +568,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardUpgradeSubDomainCommit) {
                                 NLs::ShardsInsideDomain(0)});
 
             t.TestEnv->TestWaitTabletDeletion(runtime, xrange(TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+6));
-            { 
-                TInactiveZone inactive(activeZone); 
-                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5, 6}); 
+            {
+                TInactiveZone inactive(activeZone);
+                t.TestEnv->TestWaitShardDeletion(runtime, {1, 2, 3, 4, 5, 6});
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "SubDomains", "PathId", 3));
                 UNIT_ASSERT(!CheckLocalRowExists(runtime, TTestTxConfig::SchemeShard, "Paths", "Id", 3));
-            } 
+            }
         });
     }
 

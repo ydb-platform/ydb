@@ -30,33 +30,33 @@ namespace NActors {
         ui32 workerId = wctx.WorkerId;
         Y_VERIFY_DEBUG(workerId < PoolThreads);
 
-        NHPTimer::STime elapsed = 0; 
-        NHPTimer::STime parked = 0; 
+        NHPTimer::STime elapsed = 0;
+        NHPTimer::STime parked = 0;
         NHPTimer::STime hpstart = GetCycleCountFast();
-        NHPTimer::STime hpnow; 
- 
+        NHPTimer::STime hpnow;
+
         const TAtomic x = AtomicDecrement(Semaphore);
         if (x < 0) {
             TThreadCtx& threadCtx = Threads[workerId];
             ThreadQueue.Push(workerId + 1, revolvingCounter);
             hpnow = GetCycleCountFast();
-            elapsed += hpnow - hpstart; 
+            elapsed += hpnow - hpstart;
             if (threadCtx.Pad.Park())
                 return 0;
             hpstart = GetCycleCountFast();
-            parked += hpstart - hpnow; 
+            parked += hpstart - hpnow;
         }
 
         while (!RelaxedLoad(&StopFlag)) {
-            if (const ui32 activation = Activations.Pop(++revolvingCounter)) { 
+            if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
                 hpnow = GetCycleCountFast();
-                elapsed += hpnow - hpstart; 
+                elapsed += hpnow - hpstart;
                 wctx.AddElapsedCycles(IActor::ACTOR_SYSTEM, elapsed);
-                if (parked > 0) { 
+                if (parked > 0) {
                     wctx.AddParkedCycles(parked);
-                } 
+                }
                 return activation;
-            } 
+            }
             SpinLockPause();
         }
 
@@ -69,18 +69,18 @@ namespace NActors {
 
     void TIOExecutorPool::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
         Y_UNUSED(workerId);
- 
-        const auto current = ActorSystem->Monotonic(); 
-        if (deadline < current) 
-            deadline = current; 
- 
-        TTicketLock::TGuard guard(&ScheduleLock); 
-        ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie); 
-    } 
- 
+
+        const auto current = ActorSystem->Monotonic();
+        if (deadline < current)
+            deadline = current;
+
+        TTicketLock::TGuard guard(&ScheduleLock);
+        ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);
+    }
+
     void TIOExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
         Y_UNUSED(workerId);
-        const auto deadline = ActorSystem->Monotonic() + delta; 
+        const auto deadline = ActorSystem->Monotonic() + delta;
 
         TTicketLock::TGuard guard(&ScheduleLock);
         ScheduleQueue->Writer.Push(deadline.MicroSeconds(), ev.Release(), cookie);

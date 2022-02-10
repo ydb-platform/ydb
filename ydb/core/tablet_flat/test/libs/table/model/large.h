@@ -85,7 +85,7 @@ namespace NTest {
             } else if (up->Cell.Size() != sizeof(ui64) || !up->Cell.Data()) {
                 Y_FAIL("Last saved tow reference TCell is invalid in TRow");
             } else {
-                return up->Cell.AsValue<ui64>(); 
+                return up->Cell.AsValue<ui64>();
             }
         }
 

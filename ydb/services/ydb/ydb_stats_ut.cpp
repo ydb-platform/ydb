@@ -295,7 +295,7 @@ Y_UNIT_TEST_SUITE(ClientStatsCollector) {
             auto tx = beginResult.GetTransaction();
             auto query = Sprintf(R"(
                 SELECT * FROM [Root/names];
-                UPSERT INTO [Root/names] (id, name) VALUES (2, "Bob"); 
+                UPSERT INTO [Root/names] (id, name) VALUES (2, "Bob");
             )");
             auto queryResult = session.ExecuteDataQuery(query, TTxControl::Tx(tx), settings).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(queryResult.IsSuccess(), true);
@@ -315,7 +315,7 @@ Y_UNIT_TEST_SUITE(ClientStatsCollector) {
             auto tx = beginResult.GetTransaction();
             auto query = Sprintf(R"(
                 SELECT * FROM [Root/names];
-                UPSERT INTO [Root/names] (id, name) VALUES (2, "Bob"); 
+                UPSERT INTO [Root/names] (id, name) VALUES (2, "Bob");
             )");
             auto queryResult = session.ExecuteDataQuery(query, TTxControl::Tx(tx), settings).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(queryResult.IsSuccess(), true);

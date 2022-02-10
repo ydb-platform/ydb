@@ -139,8 +139,8 @@ private:
 
     void Connect(const TActorContext &ctx)
     {
-        auto dinfo = AppData(ctx)->DomainsInfo; 
-        auto &domain = dinfo->GetDomain(NodeIdToDomain(ctx.SelfID.NodeId(), *dinfo)); 
+        auto dinfo = AppData(ctx)->DomainsInfo;
+        auto &domain = dinfo->GetDomain(NodeIdToDomain(ctx.SelfID.NodeId(), *dinfo));
         ui32 group = domain.DefaultStateStorageGroup;
 
         NTabletPipe::TClientConfig config;

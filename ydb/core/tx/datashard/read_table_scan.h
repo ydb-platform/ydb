@@ -8,18 +8,18 @@ namespace NDataShard {
 
 class TReadTableProd : public IDestructable {
 public:
-    TReadTableProd(const TString &error, bool schemaChanged = false) 
+    TReadTableProd(const TString &error, bool schemaChanged = false)
         : Error(error)
-        , SchemaChanged(schemaChanged) 
+        , SchemaChanged(schemaChanged)
     {}
 
     TString Error;
-    bool SchemaChanged; 
+    bool SchemaChanged;
 };
 
 TAutoPtr<NTable::IScan> CreateReadTableScan(ui64 txId,
                                         ui64 shardId,
-                                        TUserTable::TCPtr tableInfo, 
+                                        TUserTable::TCPtr tableInfo,
                                         const NKikimrTxDataShard::TReadTableTransaction &tx,
                                         TActorId sink,
                                         TActorId dataShard);

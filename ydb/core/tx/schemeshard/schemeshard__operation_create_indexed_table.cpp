@@ -35,10 +35,10 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
             indexedTableShards += 1;
         }
     }
-    ui32 sequencesCount = indexedTable.SequenceDescriptionSize(); 
+    ui32 sequencesCount = indexedTable.SequenceDescriptionSize();
     ui32 baseShards = TTableInfo::ShardsToCreate(baseTableDescription);
-    ui32 shardsToCreate = baseShards + indexedTableShards; 
-    ui32 pathToCreate = 1 + indexesCount * 2 + sequencesCount; 
+    ui32 shardsToCreate = baseShards + indexedTableShards;
+    ui32 pathToCreate = 1 + indexesCount * 2 + sequencesCount;
 
     TPath workingDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     if (workingDir.IsEmpty()) {
@@ -60,10 +60,10 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
 
     TSubDomainInfo::TPtr domainInfo = baseTablePath.DomainInfo();
 
-    if (sequencesCount > 0 && domainInfo->GetSequenceShards().empty()) { 
-        ++shardsToCreate; 
-    } 
- 
+    if (sequencesCount > 0 && domainInfo->GetSequenceShards().empty()) {
+        ++shardsToCreate;
+    }
+
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TCreateTableIndex construct operation "
                     << " table path: " << baseTablePath.PathString()
@@ -185,68 +185,68 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
         indexes.emplace(indexName, std::move(impTableColumns));
     }
 
-    THashSet<TString> sequences; 
-    for (auto& sequenceDescription : indexedTable.GetSequenceDescription()) { 
-        const auto& sequenceName = sequenceDescription.GetName(); 
+    THashSet<TString> sequences;
+    for (auto& sequenceDescription : indexedTable.GetSequenceDescription()) {
+        const auto& sequenceName = sequenceDescription.GetName();
 
-        TPath sequencePath = baseTablePath.Child(sequenceName); 
-        { 
-            TString msg = "invalid sequence name: "; 
-            if (!sequencePath.IsValidLeafName(msg)) { 
+        TPath sequencePath = baseTablePath.Child(sequenceName);
+        {
+            TString msg = "invalid sequence name: ";
+            if (!sequencePath.IsValidLeafName(msg)) {
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
-            } 
-        } 
- 
-        if (indexes.contains(sequenceName) || sequences.contains(sequenceName)) { 
-            TString msg = TStringBuilder() << "Can't create sequences with non-unique names for table, for example: " << sequenceName; 
+            }
+        }
+
+        if (indexes.contains(sequenceName) || sequences.contains(sequenceName)) {
+            TString msg = TStringBuilder() << "Can't create sequences with non-unique names for table, for example: " << sequenceName;
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
-        } 
- 
-        TString errStr; 
-        if (!TSequenceInfo::ValidateCreate(sequenceDescription, errStr)) { 
+        }
+
+        TString errStr;
+        if (!TSequenceInfo::ValidateCreate(sequenceDescription, errStr)) {
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, errStr)};
-        } 
- 
-        sequences.emplace(sequenceName); 
-    } 
- 
-    THashSet<TString> keys; 
-    for (const TString& key : baseTableColumns.Keys) { 
-        keys.insert(key); 
-    } 
- 
-    for (auto& column : baseTableDescription.GetColumns()) { 
+        }
+
+        sequences.emplace(sequenceName);
+    }
+
+    THashSet<TString> keys;
+    for (const TString& key : baseTableColumns.Keys) {
+        keys.insert(key);
+    }
+
+    for (auto& column : baseTableDescription.GetColumns()) {
         if (column.GetNotNull() && !AppData()->FeatureFlags.GetEnableNotNullColumns()) {
             TString msg = TStringBuilder() << "It is not allowed to create not null column";
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
         }
 
-        if (column.HasDefaultFromSequence()) { 
-            const TString& sequenceName = column.GetDefaultFromSequence(); 
- 
-            if (sequenceName.StartsWith('/')) { 
-                TString msg = TStringBuilder() 
-                    << "Using non-local sequences in tables not supported, e.g. column '" 
-                    << column.GetName() << "' using sequence '" << sequenceName << "'"; 
+        if (column.HasDefaultFromSequence()) {
+            const TString& sequenceName = column.GetDefaultFromSequence();
+
+            if (sequenceName.StartsWith('/')) {
+                TString msg = TStringBuilder()
+                    << "Using non-local sequences in tables not supported, e.g. column '"
+                    << column.GetName() << "' using sequence '" << sequenceName << "'";
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
-            } 
- 
-            if (!sequences.contains(sequenceName)) { 
-                TString msg = TStringBuilder() 
-                    << "Cannot specify default from an unknown sequence, e.g. column '" 
-                    << column.GetName() << "' using sequence '" << sequenceName << "'"; 
+            }
+
+            if (!sequences.contains(sequenceName)) {
+                TString msg = TStringBuilder()
+                    << "Cannot specify default from an unknown sequence, e.g. column '"
+                    << column.GetName() << "' using sequence '" << sequenceName << "'";
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
-            } 
- 
-            if (!keys.contains(column.GetName())) { 
-                TString msg = TStringBuilder() 
-                    << "Cannot specify default from sequence from non-key columns, e.g. column'" 
-                    << column.GetName() << "' using sequence '" << sequenceName << "'"; 
+            }
+
+            if (!keys.contains(column.GetName())) {
+                TString msg = TStringBuilder()
+                    << "Cannot specify default from sequence from non-key columns, e.g. column'"
+                    << column.GetName() << "' using sequence '" << sequenceName << "'";
                 return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, msg)};
-            } 
-        } 
-    } 
- 
+            }
+        }
+    }
+
     TVector<ISubOperationBase::TPtr> result;
 
     {
@@ -258,7 +258,7 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
             scheme.MutableAlterUserAttributes()->CopyFrom(tx.GetAlterUserAttributes());
         }
 
-        result.push_back(CreateNewTable(NextPartId(nextId, result), scheme, sequences)); 
+        result.push_back(CreateNewTable(NextPartId(nextId, result), scheme, sequences));
     }
 
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
@@ -293,17 +293,17 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
         }
     }
 
-    for (auto& sequenceDescription : indexedTable.GetSequenceDescription()) { 
-        auto scheme = TransactionTemplate( 
-            tx.GetWorkingDir() + "/" + baseTableDescription.GetName(), 
+    for (auto& sequenceDescription : indexedTable.GetSequenceDescription()) {
+        auto scheme = TransactionTemplate(
+            tx.GetWorkingDir() + "/" + baseTableDescription.GetName(),
             NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
-        scheme.SetFailOnExist(tx.GetFailOnExist()); 
- 
-        *scheme.MutableSequence() = sequenceDescription; 
- 
-        result.push_back(CreateNewSequence(NextPartId(nextId, result), scheme)); 
-    } 
- 
+        scheme.SetFailOnExist(tx.GetFailOnExist());
+
+        *scheme.MutableSequence() = sequenceDescription;
+
+        result.push_back(CreateNewSequence(NextPartId(nextId, result), scheme));
+    }
+
     return result;
 }
 

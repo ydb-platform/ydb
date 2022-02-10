@@ -200,7 +200,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
 
     ui32 RequestsLeft;
     NMetrics::TTabletThroughputRawValue GroupReadBytes;
-    NMetrics::TTabletIopsRawValue GroupReadOps; 
+    NMetrics::TTabletIopsRawValue GroupReadOps;
 
     THolder<NTracing::ITrace> IntrospectionTrace;
     const ui64 FollowerCookie;
@@ -418,8 +418,8 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             Confirmed = std::pair<ui32, ui32>(LatestKnownStep.first, 0);
 
             ProcessZeroEntry(id.Generation(), logEntry);
-            lastGen = LatestKnownStep.first; 
-            lastStep = 0; 
+            lastGen = LatestKnownStep.first;
+            lastStep = 0;
         } else {
             Confirmed = std::pair<ui32, ui32>(LatestKnownStep.first, logEntry.GetConfirmed());
 
@@ -454,7 +454,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             const TLogoBlobID &id = it->Id;
 
             GroupReadBytes[std::make_pair(id.Channel(), msg->GroupId)] += it->Buffer.size();
-            GroupReadOps[std::make_pair(id.Channel(), msg->GroupId)] += 1; 
+            GroupReadOps[std::make_pair(id.Channel(), msg->GroupId)] += 1;
 
             NKikimrTabletBase::TTabletLogEntry logEntry;
             if (!logEntry.ParseFromString(it->Buffer)) {
@@ -578,7 +578,7 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
             case NKikimrProto::OK:
                 Y_VERIFY(1 == RefsToCheck.erase(response.Id));
                 GroupReadBytes[std::make_pair(response.Id.Channel(), msg->GroupId)] += response.Buffer.size();
-                GroupReadOps[std::make_pair(response.Id.Channel(), msg->GroupId)] += 1; 
+                GroupReadOps[std::make_pair(response.Id.Channel(), msg->GroupId)] += 1;
                 break;
             case NKikimrProto::NODATA:
                 BLOG_W("TTabletReqRebuildHistoryGraph::CheckReferences - NODATA for blob " << response.Id);
@@ -623,9 +623,9 @@ class TTabletReqRebuildHistoryGraph : public TActorBootstrapped<TTabletReqRebuil
                 if (isTail) {
                     // Ignore unconfirmed commits on followers
                     if (FollowerCookie != 0) {
-                        break; 
-                    } 
- 
+                        break;
+                    }
+
                     switch (entry.Status) {
                     case TLogEntry::StatusUnknown:
                         break;

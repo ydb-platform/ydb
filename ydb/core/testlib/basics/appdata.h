@@ -77,7 +77,7 @@ namespace NKikimr {
         NKikimrConfig::TCompactionConfig CompactionConfig;
         TString NetDataSourceUrl;
         NKikimrConfig::THiveConfig HiveConfig;
-        NKikimrConfig::TDataShardConfig DataShardConfig; 
+        NKikimrConfig::TDataShardConfig DataShardConfig;
         NKikimrConfig::TMeteringConfig MeteringConfig;
         NKikimrPQ::TPQConfig PQConfig;
 

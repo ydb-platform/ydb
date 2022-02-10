@@ -432,7 +432,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
         res->Record.SetTxId(record.GetTxId());
         res->Record.SetOrigin(TabletID());
         ctx.Send(ev->Sender, res.Release());
-        return; 
+        return;
     }
 
     if ((int)record.GetVersion() == Version) {

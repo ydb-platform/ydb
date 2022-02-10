@@ -29,7 +29,7 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         return EStatus::Error;
     }
 
-    const TUserTable& tableInfo = *self->GetUserTables().at(tableId); 
+    const TUserTable& tableInfo = *self->GetUserTables().at(tableId);
     Y_VERIFY(tableInfo.LocalTid == localTableId);
 
     if (request.GetSchemaVersion() && tableInfo.GetTableSchemaVersion()

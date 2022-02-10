@@ -38,7 +38,7 @@ bool TStoreDataTxUnit::IsReadyToExecute(TOperation::TPtr) const
 
 EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op,
                                            TTransactionContext &txc,
-                                           const TActorContext &ctx) 
+                                           const TActorContext &ctx)
 {
     Y_VERIFY(op->IsDataTx() || op->IsReadTable());
     Y_VERIFY(!op->IsAborted() && !op->IsInterrupted());
@@ -48,18 +48,18 @@ EExecutionStatus TStoreDataTxUnit::Execute(TOperation::TPtr op,
     Y_VERIFY(tx->GetDataTx());
 
     Pipeline.SaveForPropose(tx->GetDataTx());
-    Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx); 
+    Pipeline.ProposeTx(op, tx->GetTxBody(), txc, ctx);
 
     tx->ClearTxBody();
     tx->ClearDataTx();
 
-    return EExecutionStatus::DelayCompleteNoMoreRestarts; 
+    return EExecutionStatus::DelayCompleteNoMoreRestarts;
 }
 
-void TStoreDataTxUnit::Complete(TOperation::TPtr op, 
-                                const TActorContext &ctx) 
+void TStoreDataTxUnit::Complete(TOperation::TPtr op,
+                                const TActorContext &ctx)
 {
-    Pipeline.ProposeComplete(op, ctx); 
+    Pipeline.ProposeComplete(op, ctx);
 }
 
 THolder<TExecutionUnit> CreateStoreDataTxUnit(TDataShard &dataShard,

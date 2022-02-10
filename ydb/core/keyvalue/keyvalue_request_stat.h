@@ -32,8 +32,8 @@ struct TRequestStat {
     TRequestType::EType RequestType;
     NMetrics::TTabletThroughputRawValue GroupReadBytes;
     NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
-    NMetrics::TTabletIopsRawValue GroupReadIops; 
-    NMetrics::TTabletIopsRawValue GroupWrittenIops; 
+    NMetrics::TTabletIopsRawValue GroupReadIops;
+    NMetrics::TTabletIopsRawValue GroupWrittenIops;
 
     TVector<ui32> YellowStopChannels;
     TVector<ui32> YellowMoveChannels;

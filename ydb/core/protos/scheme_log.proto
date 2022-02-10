@@ -34,10 +34,10 @@ message TAlterRecord {
     //_ Table: Common options
 
     optional uint32 ByKeyFilter = 17 [default = 0]; // TPart's key filter
-    optional bool EraseCacheEnabled = 20; 
-    optional uint32 EraseCacheMinRows = 21; 
-    optional uint32 EraseCacheMaxBytes = 22; 
-    optional bool ColdBorrow = 23 [default = false]; 
+    optional bool EraseCacheEnabled = 20;
+    optional uint32 EraseCacheMinRows = 21;
+    optional uint32 EraseCacheMaxBytes = 22;
+    optional bool ColdBorrow = 23 [default = false];
 
     //_ Table: Attributes of storage (page collection)
 

@@ -7,13 +7,13 @@
 #include <util/generic/vector.h>
 #include <util/generic/hash.h>
 #include <util/generic/map.h>
-#include <util/generic/set.h> 
+#include <util/generic/set.h>
 
 namespace NKikimr {
 namespace NTable {
 
     class TRowScheme : public TAtomicRefCount<TRowScheme> {
-        template<class TNullsType, class TType> 
+        template<class TNullsType, class TType>
         struct TNullsCook {
             TNullsCook(ui32 slots)
                 : Types(slots)
@@ -30,22 +30,22 @@ namespace NTable {
 
             TIntrusiveConstPtr<TNullsType> operator*() const noexcept
             {
-                return TNullsType::Make(Types, Cells); 
+                return TNullsType::Make(Types, Cells);
             }
 
             TVector<TType> Types;
             TVector<TCell> Cells;
         };
 
-        TRowScheme( 
-                TVector<TColInfo> cols, 
+        TRowScheme(
+                TVector<TColInfo> cols,
                 TIntrusiveConstPtr<TKeyNulls> keys,
                 TIntrusiveConstPtr<TRowNulls> nulls,
-                TVector<ui32> families) 
+                TVector<ui32> families)
             : Cols(std::move(cols))
             , Keys(std::move(keys))
             , Nulls(std::move(nulls))
-            , Families(std::move(families)) 
+            , Families(std::move(families))
         {
             for (const auto &col: Cols)
                 ByTag.emplace(col.Tag, col.Pos);
@@ -56,36 +56,36 @@ namespace NTable {
         static TIntrusiveConstPtr<TRowScheme> Make(const TSeq &cols_, TGet)
         {
             size_t keyCount = 0;
-            TSet<ui32> familySet; 
+            TSet<ui32> familySet;
             TMap<ui32, const TColumn*> cols; /* order by tag */
 
             for (auto &it : cols_) {
                 auto &meta = TGet::Do(it);
-                familySet.insert(meta.Family); 
+                familySet.insert(meta.Family);
                 cols[meta.Id] = &meta;
                 keyCount += (meta.KeyOrder == Max<TPos>() ? 0 : 1);
             }
 
-            TNullsCook<TKeyNulls, NScheme::TTypeIdOrder> keys(keyCount); 
-            TNullsCook<TRowNulls, NScheme::TTypeId> vals(cols.size()); 
+            TNullsCook<TKeyNulls, NScheme::TTypeIdOrder> keys(keyCount);
+            TNullsCook<TRowNulls, NScheme::TTypeId> vals(cols.size());
 
             TVector<TColInfo> info;
             info.reserve(cols.size());
 
-            TVector<ui32> families(familySet.begin(), familySet.end()); 
- 
+            TVector<ui32> families(familySet.begin(), familySet.end());
+
             for (auto &it: cols) {
                 auto &meta = *it.second;
                 auto &col = *info.emplace(info.end());
 
-                auto familyIt = std::lower_bound(families.begin(), families.end(), meta.Family); 
-                Y_VERIFY(familyIt != families.end() && *familyIt == meta.Family); 
- 
+                auto familyIt = std::lower_bound(families.begin(), families.end(), meta.Family);
+                Y_VERIFY(familyIt != families.end() && *familyIt == meta.Family);
+
                 col.Tag = meta.Id;
                 col.TypeId = meta.PType;
                 col.Key = meta.KeyOrder;
                 col.Pos = info.size() - 1;
-                col.Group = familyIt - families.begin(); 
+                col.Group = familyIt - families.begin();
 
                 vals.Set(col.Pos, col.TypeId, meta.Null);
 
@@ -93,7 +93,7 @@ namespace NTable {
                     keys.Set(col.Key, col.TypeId, meta.Null);
             }
 
-            return new TRowScheme(std::move(info), *keys, *vals, std::move(families)); 
+            return new TRowScheme(std::move(info), *keys, *vals, std::move(families));
         }
 
         static bool HasTag(TArrayRef<const ui32> array, ui32 tag) noexcept
@@ -153,7 +153,7 @@ namespace NTable {
         const TVector<TColInfo> Cols;
         const TIntrusiveConstPtr<TKeyNulls> Keys;
         const TIntrusiveConstPtr<TRowNulls> Nulls;
-        const TVector<ui32> Families; // per-group families 
+        const TVector<ui32> Families; // per-group families
 
     private:
         THashMap<TTag, NTable::TPos> ByTag;

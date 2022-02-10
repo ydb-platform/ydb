@@ -36,16 +36,16 @@ bool IsReady(T &t, Ts &...args)
 
 void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
 {
-    const auto *appData = AppData(ctx); 
+    const auto *appData = AppData(ctx);
 
-    DomainId = appData->DomainsInfo->GetDomainUidByTabletId(TabletID()); 
-    Y_VERIFY(DomainId < DOMAINS_COUNT); 
-    SingleDomain = appData->DomainsInfo->Domains.size() == 1; 
-    SingleDomainAlloc = SingleDomain && appData->FeatureFlags.GetEnableNodeBrokerSingleDomainMode(); 
+    DomainId = appData->DomainsInfo->GetDomainUidByTabletId(TabletID());
+    Y_VERIFY(DomainId < DOMAINS_COUNT);
+    SingleDomain = appData->DomainsInfo->Domains.size() == 1;
+    SingleDomainAlloc = SingleDomain && appData->FeatureFlags.GetEnableNodeBrokerSingleDomainMode();
 
-    MaxStaticId = Min(appData->DynamicNameserviceConfig->MaxStaticNodeId, TActorId::MaxNodeId); 
-    MaxDynamicId = Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId); 
- 
+    MaxStaticId = Min(appData->DynamicNameserviceConfig->MaxStaticNodeId, TActorId::MaxNodeId);
+    MaxDynamicId = Min(appData->DynamicNameserviceConfig->MaxDynamicNodeId, TActorId::MaxNodeId);
+
     ClearState();
 
     ProcessTx(CreateTxInitScheme(), ctx);
@@ -151,13 +151,13 @@ void TNodeBroker::ClearState()
 
 void TNodeBroker::AddNode(const TNodeInfo &info)
 {
-    FreeIds.Reset(info.NodeId); 
+    FreeIds.Reset(info.NodeId);
 
     if (info.Expire > Epoch.Start) {
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                     "Added node " << info.IdString());
 
-        Hosts.emplace(std::make_tuple(info.Host, info.Address, info.Port), info.NodeId); 
+        Hosts.emplace(std::make_tuple(info.Host, info.Address, info.Port), info.NodeId);
         Nodes.emplace(info.NodeId, info);
     } else {
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -188,35 +188,35 @@ void TNodeBroker::FixNodeId(TNodeInfo &node)
 
 void TNodeBroker::RecomputeFreeIds()
 {
-    FreeIds.Clear(); 
+    FreeIds.Clear();
 
-    if (SingleDomainAlloc) { 
-        FreeIds.Set(MaxStaticId + 1, MaxDynamicId + 1); 
-    } else { 
-        auto firstId = RewriteNodeId(MaxStaticId + 1); 
-        if (firstId <= MaxStaticId) 
-            firstId += NodeIdStep(); 
+    if (SingleDomainAlloc) {
+        FreeIds.Set(MaxStaticId + 1, MaxDynamicId + 1);
+    } else {
+        auto firstId = RewriteNodeId(MaxStaticId + 1);
+        if (firstId <= MaxStaticId)
+            firstId += NodeIdStep();
 
-        auto lastId = RewriteNodeId(MaxDynamicId); 
-        if (lastId > MaxDynamicId) 
-            lastId -= NodeIdStep(); 
+        auto lastId = RewriteNodeId(MaxDynamicId);
+        if (lastId > MaxDynamicId)
+            lastId -= NodeIdStep();
 
-        // Only ids marked with our domain id are available 
-        FreeIds.Reserve(lastId + 1); 
-        for (ui32 id = firstId; id <= lastId; id += NodeIdStep()) { 
-            FreeIds.Set(id); 
-        } 
-    } 
- 
+        // Only ids marked with our domain id are available
+        FreeIds.Reserve(lastId + 1);
+        for (ui32 id = firstId; id <= lastId; id += NodeIdStep()) {
+            FreeIds.Set(id);
+        }
+    }
+
     // Remove all allocated IDs from the set.
     for (auto &pr : Nodes)
-        FreeIds.Reset(pr.first); 
+        FreeIds.Reset(pr.first);
     for (auto &pr : ExpiredNodes)
-        FreeIds.Reset(pr.first); 
+        FreeIds.Reset(pr.first);
 
     // Remove banned intervals from the set.
     for (auto &pr : BannedIds) {
-        FreeIds.Reset(pr.first, pr.second + 1); 
+        FreeIds.Reset(pr.first, pr.second + 1);
     }
 }
 
@@ -328,7 +328,7 @@ void TNodeBroker::ApplyStateDiff(const TStateDiff &diff)
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                     "Node " << it->second.IdString() << " has expired");
 
-        Hosts.erase(std::make_tuple(it->second.Host, it->second.Address, it->second.Port)); 
+        Hosts.erase(std::make_tuple(it->second.Host, it->second.Address, it->second.Port));
         ExpiredNodes.emplace(id, std::move(it->second));
         Nodes.erase(it);
     }
@@ -341,8 +341,8 @@ void TNodeBroker::ApplyStateDiff(const TStateDiff &diff)
                     "Remove node " << it->second.IdString());
 
         ExpiredNodes.erase(it);
-        if (!IsBannedId(id) && NodeIdDomain(id) == DomainId) 
-            FreeIds.Set(id); 
+        if (!IsBannedId(id) && NodeIdDomain(id) == DomainId)
+            FreeIds.Set(id);
     }
 
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -580,15 +580,15 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
     while (!nodesRowset.EndOfSet()) {
         using T = Schema::Nodes;
         auto id = nodesRowset.GetValue<T::ID>();
-        // We don't remove nodes with a different domain id when there's a 
-        // single domain. We may have been running in a single domain allocation 
-        // mode, and now temporarily restarted without this mode enabled. We 
-        // should still support nodes that have been registered before we 
-        // restarted, even though it's not available for allocation. 
-        if (!SingleDomain && NodeIdDomain(id) != DomainId) { 
+        // We don't remove nodes with a different domain id when there's a
+        // single domain. We may have been running in a single domain allocation
+        // mode, and now temporarily restarted without this mode enabled. We
+        // should still support nodes that have been registered before we
+        // restarted, even though it's not available for allocation.
+        if (!SingleDomain && NodeIdDomain(id) != DomainId) {
             LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
                         "Ignoring node with wrong ID " << id << " from domain "
-                        << NodeIdDomain(id) << " (expected " << DomainId <<  ")"); 
+                        << NodeIdDomain(id) << " (expected " << DomainId <<  ")");
             toRemove.push_back(id);
         } else if (id <= MaxStaticId || id > MaxDynamicId) {
             LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
@@ -890,7 +890,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 << ": scope id# " << ScopeIdToString(ScopeId));
 
             Self->ProcessTx(Self->CreateTxRegisterNode(Ev, ScopeId), ctx);
-            Die(ctx); 
+            Die(ctx);
         }
 
         STRICT_STFUNC(StateFunc, {

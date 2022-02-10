@@ -974,7 +974,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
 
         CheckLabels(counters, TENANT1_1_NAME, "slot-1", attrs);
 
-        WaitTenantRunning(runtime, TENANT1_1_NAME); // workaround for scheme cache race 
+        WaitTenantRunning(runtime, TENANT1_1_NAME); // workaround for scheme cache race
         CheckRemoveTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS);
 
         runtime.WaitForHiveState({});

@@ -28,10 +28,10 @@ namespace NTable {
             Y_FAIL("IPages::Locate(TPart*, ...) shouldn't be used here");
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId id, TGroupId groupId) override 
+        const TSharedData* TryGetPage(const TPart* part, TPageId id, TGroupId groupId) override
         {
             Y_VERIFY(part == Part, "Unsupported part");
-            Y_VERIFY(groupId.IsMain(), "Unsupported column group"); 
+            Y_VERIFY(groupId.IsMain(), "Unsupported column group");
 
             if (auto* extra = ExtraPages.FindPtr(id)) {
                 return extra;
@@ -63,16 +63,16 @@ namespace NTable {
 
         void Save(ui32 cookie, NSharedCache::TEvResult::TLoaded&& loaded) noexcept
         {
-            if (cookie == 0 && NeedPages.erase(loaded.PageId)) { 
-                ExtraPages[loaded.PageId] = TPinnedPageRef(loaded.Page).GetData(); 
-                Cache->Fill(std::move(loaded)); 
+            if (cookie == 0 && NeedPages.erase(loaded.PageId)) {
+                ExtraPages[loaded.PageId] = TPinnedPageRef(loaded.Page).GetData();
+                Cache->Fill(std::move(loaded));
             }
         }
 
     private:
         const TPart* Part;
         TIntrusivePtr<TCache> Cache;
-        THashMap<TPageId, TSharedData> ExtraPages; 
+        THashMap<TPageId, TSharedData> ExtraPages;
         THashSet<TPageId> NeedPages;
     };
 
@@ -97,33 +97,33 @@ namespace NTable {
             bool ok = SeekLastRow();
 
             for (const auto& hole : *screen) {
-                TSlice slice; 
+                TSlice slice;
 
                 if (ok &= SeekRow(hole.Begin)) {
                     if (GetRowId() == Max<TRowId>()) {
                         // all subsequent holes are out of range
                         break;
                     }
-                    slice.FirstRowId = GetRowId(); 
-                    slice.FirstKey = GetKey(); 
-                    slice.FirstInclusive = true; 
+                    slice.FirstRowId = GetRowId();
+                    slice.FirstKey = GetKey();
+                    slice.FirstInclusive = true;
                 }
                 if (ok &= SeekRow(hole.End)) {
                     if (GetRowId() == Max<TRowId>()) {
                         // Prefer a true inclusive last key
                         if (ok &= SeekLastRow()) {
-                            slice.LastRowId = GetRowId(); 
-                            slice.LastKey = GetKey(); 
-                            slice.LastInclusive = true; 
+                            slice.LastRowId = GetRowId();
+                            slice.LastKey = GetKey();
+                            slice.LastInclusive = true;
                         }
                     } else {
-                        slice.LastRowId = GetRowId(); 
-                        slice.LastKey = GetKey(); 
-                        slice.LastInclusive = false; 
+                        slice.LastRowId = GetRowId();
+                        slice.LastKey = GetKey();
+                        slice.LastInclusive = false;
                     }
                 }
-                if (ok && slice.Rows() > 0) { 
-                    run->push_back(std::move(slice)); 
+                if (ok && slice.Rows() > 0) {
+                    run->push_back(std::move(slice));
                 }
             }
 
@@ -150,10 +150,10 @@ namespace NTable {
                     return true;
                 }
                 if (const auto* lastKey = Part->Index.GetLastKeyRecord()) {
-                    if (lastKey->GetRowId() == rowId) { 
+                    if (lastKey->GetRowId() == rowId) {
                         LoadIndexKey(*lastKey);
                         return true;
-                    } else if (lastKey->GetRowId() < rowId) { 
+                    } else if (lastKey->GetRowId() < rowId) {
                         // Row is out of range for this part
                         RowId = Max<TRowId>();
                         Key = { };
@@ -161,15 +161,15 @@ namespace NTable {
                     }
                 }
                 SeekIndex(rowId);
-                if (Index->GetRowId() == rowId) { 
+                if (Index->GetRowId() == rowId) {
                     LoadIndexKey(*Index);
                     return true;
                 }
-                Y_VERIFY(Index->GetRowId() < rowId, "SeekIndex invariant failure"); 
-                if (!LoadPage(Index->GetPageId())) { 
+                Y_VERIFY(Index->GetRowId() < rowId, "SeekIndex invariant failure");
+                if (!LoadPage(Index->GetPageId())) {
                     return false;
                 }
-                Y_VERIFY(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync"); 
+                Y_VERIFY(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync");
                 auto lastRowId = Page.BaseRow() + (Page->Records - 1);
                 if (lastRowId < rowId) {
                     // Row is out of range for this page
@@ -190,10 +190,10 @@ namespace NTable {
             }
             auto it = Part->Index->End();
             Y_VERIFY(--it, "Unexpected failure to find the last index record");
-            if (!LoadPage(it->GetPageId())) { 
+            if (!LoadPage(it->GetPageId())) {
                 return false;
             }
-            Y_VERIFY(Page.BaseRow() == it->GetRowId(), "Index and data are out of sync"); 
+            Y_VERIFY(Page.BaseRow() == it->GetRowId(), "Index and data are out of sync");
             auto lastRowId = Page.BaseRow() + (Page->Records - 1);
             LoadRow(lastRowId);
             return true;
@@ -201,7 +201,7 @@ namespace NTable {
 
         void SeekIndex(TRowId rowId) noexcept
         {
-            Index = Part->Index.LookupRow(rowId, Index); 
+            Index = Part->Index.LookupRow(rowId, Index);
             Y_VERIFY(Index, "SeekIndex called with an out of bounds row");
         }
 
@@ -225,7 +225,7 @@ namespace NTable {
                 auto it = Page->Begin() + (rowId - Page.BaseRow());
                 Y_VERIFY(it, "Unexpected failure to find row on the data page");
                 Key.clear();
-                for (const auto& info : Part->Scheme->Groups[0].ColsKeyData) { 
+                for (const auto& info : Part->Scheme->Groups[0].ColsKeyData) {
                     Key.push_back(it->Cell(info));
                 }
                 RowId = rowId;
@@ -234,12 +234,12 @@ namespace NTable {
 
         void LoadIndexKey(const NPage::TIndex::TRecord& record) noexcept
         {
-            if (RowId != record.GetRowId()) { 
+            if (RowId != record.GetRowId()) {
                 Key.clear();
-                for (const auto& info : Part->Scheme->Groups[0].ColsKeyIdx) { 
+                for (const auto& info : Part->Scheme->Groups[0].ColsKeyIdx) {
                     Key.push_back(record.Cell(info));
                 }
-                RowId = record.GetRowId(); 
+                RowId = record.GetRowId();
             }
         }
 

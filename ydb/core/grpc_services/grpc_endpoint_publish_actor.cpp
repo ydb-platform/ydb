@@ -46,15 +46,15 @@ class TGRpcEndpointPublishActor : public TActorBootstrapped<TGRpcEndpointPublish
                 entry.MutableServices()->Reserve(Description->ServedServices.size());
                 entry.SetDataCenter(SelfDatacenter);
                 entry.SetNodeId(nodeId);
-                for (const auto& addr : Description->AddressesV4) { 
-                    entry.AddAddressesV4(addr); 
-                } 
-                for (const auto& addr : Description->AddressesV6) { 
-                    entry.AddAddressesV6(addr); 
-                } 
-                if (Description->TargetNameOverride) { 
-                    entry.SetTargetNameOverride(Description->TargetNameOverride); 
-                } 
+                for (const auto& addr : Description->AddressesV4) {
+                    entry.AddAddressesV4(addr);
+                }
+                for (const auto& addr : Description->AddressesV6) {
+                    entry.AddAddressesV6(addr);
+                }
+                if (Description->TargetNameOverride) {
+                    entry.SetTargetNameOverride(Description->TargetNameOverride);
+                }
                 for (const auto &service : Description->ServedServices)
                     entry.AddServices(service);
                 Y_VERIFY(entry.SerializeToString(&payload));

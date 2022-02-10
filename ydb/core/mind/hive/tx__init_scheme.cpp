@@ -88,7 +88,7 @@ public:
             }
             }
         }
-        NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(TSchemeIds::State::DatabaseVersion).Update(NIceDb::TUpdate<Schema::State::Value>(19)); 
+        NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(TSchemeIds::State::DatabaseVersion).Update(NIceDb::TUpdate<Schema::State::Value>(19));
         return true;
     }
 

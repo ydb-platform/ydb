@@ -26,15 +26,15 @@ protected:
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
     void Execute(TAutoPtr<ITransaction> transaction);
 
-    const NTable::TScheme& Scheme() const noexcept; 
- 
+    const NTable::TScheme& Scheme() const noexcept;
+
     TActorContext ExecutorCtx(const TActivationContext &ctx) {
-        return TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ExecutorID()); 
+        return TActorContext(ctx.Mailbox, ctx.ExecutorThread, ctx.EventStart, ExecutorID());
     }
 
     virtual void OnActivateExecutor(const TActorContext &ctx) = 0;
     virtual void OnDetach(const TActorContext &ctx) = 0;
-    virtual void OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx); 
+    virtual void OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx);
     virtual void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) = 0;
     virtual bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx);
 
@@ -53,7 +53,7 @@ protected:
     void Handle(TEvTablet::TEvNewFollowerAttached::TPtr&);
     void Handle(TEvTablet::TEvUpdateConfig::TPtr&);
 
-    void HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx); 
+    void HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx);
     void HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx);
     void HandleLocalMKQL(TEvTablet::TEvLocalMKQL::TPtr &ev, const TActorContext &ctx);
     void HandleLocalSchemeTx(TEvTablet::TEvLocalSchemeTx::TPtr &ev, const TActorContext &ctx);

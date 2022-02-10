@@ -34,10 +34,10 @@ enum class EExecutionStatus {
     // continue execution when operation is
     // ready again.
     Continue,
-    // Stay on the same execution unit and 
-    // continue execution in another transaction 
-    // as soon as possible. 
-    Reschedule, 
+    // Stay on the same execution unit and
+    // continue execution in another transaction
+    // as soon as possible.
+    Reschedule,
     // Execution completed. Should wait for tx
     // commit then call Complete and move to
     // to the next execution unit.
@@ -101,13 +101,13 @@ public:
     virtual void Complete(TOperation::TPtr op,
                           const TActorContext &ctx) = 0;
 protected:
-    // Call during unit execution when it's ok to reject operation before completion 
-    // Returns true if operation has been rejected as a result of this call 
-    bool CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx); 
- 
-    // Returns true if CheckRejectDataTx will reject operation when called 
-    bool WillRejectDataTx(TOperation::TPtr op) const; 
- 
+    // Call during unit execution when it's ok to reject operation before completion
+    // Returns true if operation has been rejected as a result of this call
+    bool CheckRejectDataTx(TOperation::TPtr op, const TActorContext& ctx);
+
+    // Returns true if CheckRejectDataTx will reject operation when called
+    bool WillRejectDataTx(TOperation::TPtr op) const;
+
     TOutputOpData::TResultPtr &BuildResult(TOperation::TPtr op,
                                            NKikimrTxDataShard::TEvProposeTransactionResult::EStatus status = NKikimrTxDataShard::TEvProposeTransactionResult::ERROR);
 

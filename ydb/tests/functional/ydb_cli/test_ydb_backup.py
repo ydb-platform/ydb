@@ -143,9 +143,9 @@ class BaseTestBackupInFiles(object):
         cls.cluster = kikimr_cluster_factory()
         cls.cluster.start()
         cls.root_dir = "/Root"
-        driver_config = ydb.DriverConfig( 
-            database="/Root", 
-            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port)) 
+        driver_config = ydb.DriverConfig(
+            database="/Root",
+            endpoint="%s:%s" % (cls.cluster.nodes[1].host, cls.cluster.nodes[1].port))
         cls.driver = ydb.Driver(driver_config)
         cls.driver.wait(timeout=4)
 

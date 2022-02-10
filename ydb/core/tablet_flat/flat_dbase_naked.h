@@ -11,8 +11,8 @@
 #include "flat_abi_evol.h"
 #include "flat_abi_check.h"
 #include "util_fmt_flat.h"
-#include "util_basics.h" 
-#include "util_deref.h" 
+#include "util_basics.h"
+#include "util_deref.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -60,20 +60,20 @@ namespace NTable {
                     aggr.MemTableWaste += Self->GetMemWaste();
                     aggr.MemTableBytes += Self->GetMemSize();
                     aggr.MemTableOps += Self->GetOpsCount();
-                    aggr.Parts += stat.Parts; 
-                    for (const auto& kv : stat.PartsPerTablet) { 
-                        aggr.PartsPerTablet[kv.first] += kv.second; 
-                    } 
+                    aggr.Parts += stat.Parts;
+                    for (const auto& kv : stat.PartsPerTablet) {
+                        aggr.PartsPerTablet[kv.first] += kv.second;
+                    }
                 } else {
                     NUtil::SubSafe(aggr.MemTableWaste, Self->GetMemWaste());
                     NUtil::SubSafe(aggr.MemTableBytes, Self->GetMemSize());
                     NUtil::SubSafe(aggr.MemTableOps, Self->GetOpsCount());
-                    for (const auto& kv : stat.PartsPerTablet) { 
-                        // Note: we don't cleanup old tablets, because 
-                        // usually there is a very small number of them 
-                        aggr.PartsPerTablet[kv.first] -= kv.second; 
-                    } 
-                    aggr.Parts -= stat.Parts; 
+                    for (const auto& kv : stat.PartsPerTablet) {
+                        // Note: we don't cleanup old tablets, because
+                        // usually there is a very small number of them
+                        aggr.PartsPerTablet[kv.first] -= kv.second;
+                    }
+                    aggr.Parts -= stat.Parts;
                 }
             }
 
@@ -134,40 +134,40 @@ namespace NTable {
             return *this;
         }
 
-        void Assign(TVector<TMemGlob> annex) noexcept 
+        void Assign(TVector<TMemGlob> annex) noexcept
         {
             Y_VERIFY(!Annex, "Annex has been already attached to TDatabaseImpl");
 
             Annex = std::move(annex);
         }
 
-        void ReplaceSlices(ui32 tid, TBundleSlicesMap slices) noexcept 
+        void ReplaceSlices(ui32 tid, TBundleSlicesMap slices) noexcept
         {
             auto &wrap = Get(tid, true);
 
             wrap.Aggr(Stats, false /* leave */);
-            wrap->ReplaceSlices(std::move(slices)); 
+            wrap->ReplaceSlices(std::move(slices));
             wrap.Aggr(Stats, true /* enter */);
         }
 
         void Replace(ui32 tid, TArrayRef<const TPartView> partViews, const TSubset &subset) noexcept
-        { 
-            auto &wrap = Get(tid, true); 
- 
-            wrap.Aggr(Stats, false /* leave */); 
+        {
+            auto &wrap = Get(tid, true);
+
+            wrap.Aggr(Stats, false /* leave */);
             wrap->Replace(partViews, subset);
-            wrap.Aggr(Stats, true /* enter */); 
-        } 
- 
+            wrap.Aggr(Stats, true /* enter */);
+        }
+
         void ReplaceTxStatus(ui32 tid, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> txStatus, const TSubset &subset) noexcept
-        { 
-            auto &wrap = Get(tid, true); 
- 
-            wrap.Aggr(Stats, false /* leave */); 
-            wrap->ReplaceTxStatus(txStatus, subset); 
-            wrap.Aggr(Stats, true /* enter */); 
-        } 
- 
+        {
+            auto &wrap = Get(tid, true);
+
+            wrap.Aggr(Stats, false /* leave */);
+            wrap->ReplaceTxStatus(txStatus, subset);
+            wrap.Aggr(Stats, true /* enter */);
+        }
+
         void Merge(ui32 tid, TPartView partView) noexcept
         {
             auto &wrap = Get(tid, true);
@@ -178,23 +178,23 @@ namespace NTable {
         }
 
         void Merge(ui32 tid, TIntrusiveConstPtr<TColdPart> part) noexcept
-        { 
-            auto &wrap = Get(tid, true); 
- 
-            wrap.Aggr(Stats, false /* leave */); 
-            wrap->Merge(std::move(part)); 
-            wrap.Aggr(Stats, true /* enter */); 
-        } 
- 
+        {
+            auto &wrap = Get(tid, true);
+
+            wrap.Aggr(Stats, false /* leave */);
+            wrap->Merge(std::move(part));
+            wrap.Aggr(Stats, true /* enter */);
+        }
+
         void Merge(ui32 tid, TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
-        { 
-            auto &wrap = Get(tid, true); 
- 
-            wrap.Aggr(Stats, false /* leave */); 
-            wrap->Merge(std::move(txStatus)); 
-            wrap.Aggr(Stats, true /* enter */); 
-        } 
- 
+        {
+            auto &wrap = Get(tid, true);
+
+            wrap.Aggr(Stats, false /* leave */);
+            wrap->Merge(std::move(txStatus));
+            wrap.Aggr(Stats, true /* enter */);
+        }
+
         bool Apply(const TSchemeChanges &delta, NRedo::TWriter *writer)
         {
             TModifier modifier(*Scheme);
@@ -218,7 +218,7 @@ namespace NTable {
             return std::move(Affects);
         }
 
-        TVector<TMemGlob> GrabAnnex() noexcept 
+        TVector<TMemGlob> GrabAnnex() noexcept
         {
             return std::move(Annex);
         }
@@ -244,17 +244,17 @@ namespace NTable {
         {
             if (edge.TxStamp == Max<ui64>()) {
                 Y_FAIL("Cannot make table on undefined TxStamp edge");
-            } else if (edge.Head == TEpoch::Zero()) { 
+            } else if (edge.Head == TEpoch::Zero()) {
                 /* Table written in compatability mode utilizes global
                     TxStamp instead of private TEpoch values. In order
                     to correcly handle legacy tables should rewind epoch
                     above of the last tx.
                  */
 
-                ui64 head = edge.TxStamp + 1; 
-                Y_VERIFY(head < Max<i64>(), "TxStamp is too large for epoch"); 
- 
-                edge.Head = TEpoch(i64(head)); 
+                ui64 head = edge.TxStamp + 1;
+                Y_VERIFY(head < Max<i64>(), "TxStamp is too large for epoch");
+
+                edge.Head = TEpoch(i64(head));
             }
 
             TArgs args{ table, edge.Head, edge.TxStamp };
@@ -346,7 +346,7 @@ namespace NTable {
                 Annex.reserve(annex.size());
 
                 for (auto &one : annex)
-                    Annex.emplace_back(*one, TSharedData{ }); 
+                    Annex.emplace_back(*one, TSharedData{ });
             }
         }
 
@@ -356,53 +356,53 @@ namespace NTable {
 
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
-            wrap->Update(rop, key, ops, Annex, rowVersion); 
+            wrap->Update(rop, key, ops, Annex, rowVersion);
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
             Stats.MemTableOps += 1;
         }
 
         void DoUpdateTx(ui32 tid, ERowOp rop, TKeys key, TOps ops, ui64 txId) noexcept
-        { 
-            auto &wrap = Touch(tid); 
- 
+        {
+            auto &wrap = Touch(tid);
+
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
-            wrap->UpdateTx(rop, key, ops, Annex, txId); 
+            wrap->UpdateTx(rop, key, ops, Annex, txId);
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
             Stats.MemTableOps += 1;
-        } 
- 
-        void DoCommitTx(ui32 tid, ui64 txId, TRowVersion rowVersion) noexcept 
-        { 
-            auto &wrap = Touch(tid); 
- 
+        }
+
+        void DoCommitTx(ui32 tid, ui64 txId, TRowVersion rowVersion) noexcept
+        {
+            auto &wrap = Touch(tid);
+
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
-            wrap->CommitTx(txId, rowVersion); 
+            wrap->CommitTx(txId, rowVersion);
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
-        } 
- 
-        void DoRemoveTx(ui32 tid, ui64 txId) noexcept 
-        { 
-            auto &wrap = Touch(tid); 
- 
+        }
+
+        void DoRemoveTx(ui32 tid, ui64 txId) noexcept
+        {
+            auto &wrap = Touch(tid);
+
             NUtil::SubSafe(Stats.MemTableWaste, wrap->GetMemWaste());
             NUtil::SubSafe(Stats.MemTableBytes, wrap->GetMemSize());
-            wrap->RemoveTx(txId); 
+            wrap->RemoveTx(txId);
             Stats.MemTableWaste += wrap->GetMemWaste();
             Stats.MemTableBytes += wrap->GetMemSize();
-        } 
- 
-        void DoFlush(ui32 tid, ui64 /* stamp */, TEpoch epoch) noexcept 
+        }
+
+        void DoFlush(ui32 tid, ui64 /* stamp */, TEpoch epoch) noexcept
         {
             auto on = Touch(tid)->Snapshot();
 
-            if (epoch != TEpoch::Zero() && epoch != on) { 
+            if (epoch != TEpoch::Zero() && epoch != on) {
                 Y_Fail("EvFlush{" << tid << ", " << epoch << "eph} turned"
-                        << " table to unexpected epoch " << on); 
+                        << " table to unexpected epoch " << on);
             }
         }
 
@@ -422,13 +422,13 @@ namespace NTable {
             return First_ = Min(First_, Serial_), wrap;
         }
 
-    public: 
+    public:
         void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) {
-            for (auto &it : Tables) { 
-                it.second->EnumerateTxStatusParts(callback); 
-            } 
-        } 
- 
+            for (auto &it : Tables) {
+                it.second->EnumerateTxStatusParts(callback);
+            }
+        }
+
     private:
         const TTxStamp Weak;    /* db bootstrap upper stamp         */
         ui64 Stamp = 0;
@@ -439,7 +439,7 @@ namespace NTable {
         THashMap<ui32, TTableWrapper> Tables;
         NRedo::TPlayer<TDatabaseImpl> Redo;
         TVector<ui32> Affects;
-        TVector<TMemGlob> Annex; 
+        TVector<TMemGlob> Annex;
 
     public:
         const TAutoPtr<TScheme> Scheme;

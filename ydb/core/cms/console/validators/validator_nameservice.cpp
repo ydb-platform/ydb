@@ -85,9 +85,9 @@ bool TNameserviceConfigValidator::CheckConfig(const NKikimrConfig::TAppConfig &o
         idMap.emplace(id, TTableNameserverSetup::TNodeInfo(addr, host, ihost, port, {}));
         hostMap.emplace(hostPort, id);
         ihostMap.emplace(ihostPort, id);
-        if (addr) { 
-            addrMap.emplace(addrPort, id); 
-        } 
+        if (addr) {
+            addrMap.emplace(addrPort, id);
+        }
     }
 
     if (idMap.empty()) {
@@ -128,7 +128,7 @@ bool TNameserviceConfigValidator::CheckConfig(const NKikimrConfig::TAppConfig &o
             }
 
             auto addrPort = std::make_pair(addr, port);
-            if (addr && addrMap.contains(addrPort) && addrMap.at(addrPort) != id) { 
+            if (addr && addrMap.contains(addrPort) && addrMap.at(addrPort) != id) {
                 AddError(issues,
                          TStringBuilder() << "modified id for " << addr << ":" << port
                          << " from " << id << " to " << addrMap.at(addrPort));

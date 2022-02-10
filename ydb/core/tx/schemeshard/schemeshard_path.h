@@ -50,11 +50,11 @@ public:
         const TChecker& IsUnderOperation(EStatus status = EStatus::StatusMultipleModifications) const;
         const TChecker& IsUnderTheSameOperation(TTxId txId, EStatus status = EStatus::StatusMultipleModifications) const;
         const TChecker& NotUnderTheSameOperation(TTxId txId, EStatus status = EStatus::StatusInvalidParameter) const;
-        const TChecker& NoOlapStore(EStatus status = EStatus::StatusNameConflict) const; 
-        const TChecker& HasOlapStore(EStatus status = EStatus::StatusInvalidParameter) const; 
-        const TChecker& IsOlapStore(EStatus status = EStatus::StatusNameConflict) const; 
-        const TChecker& IsOlapTable(EStatus status = EStatus::StatusNameConflict) const; 
-        const TChecker& IsSequence(EStatus status = EStatus::StatusNameConflict) const; 
+        const TChecker& NoOlapStore(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& HasOlapStore(EStatus status = EStatus::StatusInvalidParameter) const;
+        const TChecker& IsOlapStore(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsOlapTable(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsSequence(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsReplication(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsCommonSensePath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsInsideTableIndexPath(EStatus status = EStatus::StatusNameConflict) const;
@@ -126,7 +126,7 @@ public:
     TPath& Dive(const TString& name);
     TPath Child(const TString& name) const;
     TPathElement::TPtr Base() const;
-    TPathElement* operator->() const; 
+    TPathElement* operator->() const;
     bool IsDeleted() const;
     bool IsUnderOperation() const;
     TTxId ActiveOperation() const;
@@ -138,8 +138,8 @@ public:
     bool IsUnderRestoring() const;
     bool IsUnderDeleting() const;
     bool IsUnderMoving() const;
-    TPath& RiseUntilOlapStore(); 
-    TPath FindOlapStore() const; 
+    TPath& RiseUntilOlapStore();
+    TPath FindOlapStore() const;
     bool IsCommonSensePath() const;
     bool AtLocalSchemeShardPath() const;
     bool IsInsideTableIndexPath() const;
@@ -147,7 +147,7 @@ public:
     bool IsTableIndex() const;
     bool IsBackupTable() const;
     bool IsCdcStream() const;
-    bool IsSequence() const; 
+    bool IsSequence() const;
     bool IsReplication() const;
     ui32 Depth() const;
     ui64 Shards() const;

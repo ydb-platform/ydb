@@ -148,8 +148,8 @@ public:
     TPropose(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), 
-            {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType}); 
+        IgnoreMessages(DebugHint(),
+            {TEvHive::TEvCreateTabletReply::EventType, TEvHive::TEvAdoptTabletReply::EventType});
     }
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
@@ -393,7 +393,7 @@ public:
         context.SS->SolomonVolumes[newSolomon->PathId] = solomonVolume;
         context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_VOLUME_COUNT].Add(1);
         context.SS->TabletCounters->Simple()[COUNTER_SOLOMON_PARTITIONS_COUNT].Add(solomonVolume->Partitions.size());
-        context.SS->IncrementPathDbRefCount(newSolomon->PathId); 
+        context.SS->IncrementPathDbRefCount(newSolomon->PathId);
 
         TShardInfo solomonPartitionInfo = TShardInfo::SolomonPartitionInfo(OperationId.GetTxId(), newSolomon->PathId);
         solomonPartitionInfo.BindedChannels = channelsBinding;
@@ -407,7 +407,7 @@ public:
 
         for (const auto& part: solomonVolume->Partitions) {
             TShardIdx shardIdx = part.first;
-            context.SS->RegisterShardInfo(shardIdx, solomonPartitionInfo); 
+            context.SS->RegisterShardInfo(shardIdx, solomonPartitionInfo);
 
             if (part.second->TabletId != InvalidTabletId) {
                 auto tabletId = part.second->TabletId;
@@ -417,7 +417,7 @@ public:
                 context.SS->ShardInfos[shardIdx].TabletID = tabletId;
             }
 
-            context.SS->PersistShardMapping(db, shardIdx, part.second->TabletId, newSolomon->PathId, OperationId.GetTxId(), solomonPartitionInfo.TabletType); 
+            context.SS->PersistShardMapping(db, shardIdx, part.second->TabletId, newSolomon->PathId, OperationId.GetTxId(), solomonPartitionInfo.TabletType);
             context.SS->PersistChannelsBinding(db, shardIdx, channelsBinding);
         }
         context.SS->PersistSolomonVolume(db, newSolomon->PathId, solomonVolume);

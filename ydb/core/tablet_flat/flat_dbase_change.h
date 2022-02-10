@@ -5,7 +5,7 @@
 #include "util_fmt_flat.h"
 
 #include <ydb/core/base/row_version.h>
- 
+
 namespace NKikimr {
 namespace NTable {
 
@@ -16,7 +16,7 @@ namespace NTable {
             TSnapshot(ui32 table) : Table(table) { }
 
             ui32 Table = Max<ui32>();
-            TEpoch Epoch = TEpoch::Max(); 
+            TEpoch Epoch = TEpoch::Max();
         };
 
         struct TStats {
@@ -28,17 +28,17 @@ namespace NTable {
             ui64 SelectInvisible = 0;
         };
 
-        struct TRemovedRowVersions { 
-            TRowVersion Lower; 
-            TRowVersion Upper; 
-        }; 
- 
+        struct TRemovedRowVersions {
+            TRowVersion Lower;
+            TRowVersion Upper;
+        };
+
         TChange(TTxStamp stamp, ui64 serial)
             : Stamp(stamp), Serial(serial) { }
 
         bool HasAny() const noexcept
         {
-            return Scheme || Redo || RemovedRowVersions; 
+            return Scheme || Redo || RemovedRowVersions;
         }
 
         void Describe(IOutputStream &out) const noexcept
@@ -57,7 +57,7 @@ namespace NTable {
 
         TString Scheme;         /* Serialized sheme delta       */
         TString Redo;           /* Serialized db redo log       */
-        TMemGlobs Annex;        /* Enum of blobs used in redo   */ 
+        TMemGlobs Annex;        /* Enum of blobs used in redo   */
 
         TVector<ui32> Affects;  /* This tables touched in redo  */
         TVector<ui32> Deleted;  /* Tables deleted in some alter */
@@ -65,8 +65,8 @@ namespace NTable {
 
         TVector<TSnapshot> Snapshots;
 
-        TMap<ui32, TVector<TRemovedRowVersions>> RemovedRowVersions; 
- 
+        TMap<ui32, TVector<TRemovedRowVersions>> RemovedRowVersions;
+
         TStats Stats;
     };
 

@@ -73,46 +73,46 @@ Y_UNIT_TEST_SUITE(Memtable)
         wrap.To(41).Is(foo).Next().Is(bar).Next().Is(EReady::Gone);
     }
 
-    Y_UNIT_TEST(BasicsReverse) 
-    { 
-        const auto lay = BasicRowLayout(); 
- 
-        /* Test copied from TPart::Basics with except of iteration */ 
- 
-        const auto foo = *TNatural(*lay).Col(555_u32, "foo", 3.14, nullptr); 
-        const auto bar = *TNatural(*lay).Col(777_u32, "bar", 2.72, true); 
- 
-        TCheckReverseIt wrap(TCooker(lay).Add(foo).Add(bar).Unwrap(), { }); 
- 
-        wrap.To(10).Has(foo).Has(bar); 
-        wrap.To(11).NoVal(*TNatural(*lay).Col(555_u32, "foo", 10.)); 
-        wrap.To(12).NoKey(*TNatural(*lay).Col(888_u32, "foo", 3.14)); 
- 
-        /*_ Basic lower and upper bounds lookup semantic  */ 
- 
-        wrap.To(20).Seek(foo, ESeek::Lower).Is(foo); 
-        wrap.To(21).Seek(foo, ESeek::Upper).Is(EReady::Gone); 
-        wrap.To(22).Seek(bar, ESeek::Lower).Is(bar); 
-        wrap.To(22).Seek(bar, ESeek::Upper).Is(foo); 
- 
-        /*_ The empty key is interpreted depending on ESeek mode... */ 
- 
-        wrap.To(30).Seek({ }, ESeek::Lower).Is(bar); 
-        wrap.To(31).Seek({ }, ESeek::Exact).Is(EReady::Gone); 
-        wrap.To(32).Seek({ }, ESeek::Upper).Is(EReady::Gone); 
- 
-        /* ... but incomplete keys are padded with +inf instead of nulls 
-            on lookup. Check that it really happens for Seek()'s */ 
- 
-        wrap.To(33).Seek(*TNatural(*lay).Col(555_u32), ESeek::Lower).Is(foo); 
-        wrap.To(34).Seek(*TNatural(*lay).Col(555_u32), ESeek::Upper).Is(foo); 
- 
-        /*_ Basic iteration over two rows in tables */ 
- 
-        wrap.To(40).Seek({ }, ESeek::Lower); 
-        wrap.To(41).Is(bar).Next().Is(foo).Next().Is(EReady::Gone); 
-    } 
- 
+    Y_UNIT_TEST(BasicsReverse)
+    {
+        const auto lay = BasicRowLayout();
+
+        /* Test copied from TPart::Basics with except of iteration */
+
+        const auto foo = *TNatural(*lay).Col(555_u32, "foo", 3.14, nullptr);
+        const auto bar = *TNatural(*lay).Col(777_u32, "bar", 2.72, true);
+
+        TCheckReverseIt wrap(TCooker(lay).Add(foo).Add(bar).Unwrap(), { });
+
+        wrap.To(10).Has(foo).Has(bar);
+        wrap.To(11).NoVal(*TNatural(*lay).Col(555_u32, "foo", 10.));
+        wrap.To(12).NoKey(*TNatural(*lay).Col(888_u32, "foo", 3.14));
+
+        /*_ Basic lower and upper bounds lookup semantic  */
+
+        wrap.To(20).Seek(foo, ESeek::Lower).Is(foo);
+        wrap.To(21).Seek(foo, ESeek::Upper).Is(EReady::Gone);
+        wrap.To(22).Seek(bar, ESeek::Lower).Is(bar);
+        wrap.To(22).Seek(bar, ESeek::Upper).Is(foo);
+
+        /*_ The empty key is interpreted depending on ESeek mode... */
+
+        wrap.To(30).Seek({ }, ESeek::Lower).Is(bar);
+        wrap.To(31).Seek({ }, ESeek::Exact).Is(EReady::Gone);
+        wrap.To(32).Seek({ }, ESeek::Upper).Is(EReady::Gone);
+
+        /* ... but incomplete keys are padded with +inf instead of nulls
+            on lookup. Check that it really happens for Seek()'s */
+
+        wrap.To(33).Seek(*TNatural(*lay).Col(555_u32), ESeek::Lower).Is(foo);
+        wrap.To(34).Seek(*TNatural(*lay).Col(555_u32), ESeek::Upper).Is(foo);
+
+        /*_ Basic iteration over two rows in tables */
+
+        wrap.To(40).Seek({ }, ESeek::Lower);
+        wrap.To(41).Is(bar).Next().Is(foo).Next().Is(EReady::Gone);
+    }
+
     Y_UNIT_TEST(Markers)
     {
         const auto lay = BasicRowLayout();

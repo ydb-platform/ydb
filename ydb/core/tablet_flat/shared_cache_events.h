@@ -2,13 +2,13 @@
 
 #include "defs.h"
 #include "flat_bio_events.h"
-#include "shared_handle.h" 
- 
-#include <util/generic/map.h> 
-#include <util/generic/set.h> 
-#include <util/generic/hash.h> 
-#include <util/generic/hash_set.h> 
- 
+#include "shared_handle.h"
+
+#include <util/generic/map.h>
+#include <util/generic/set.h>
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+
 #include <memory>
 
 namespace NKikimr {
@@ -17,15 +17,15 @@ namespace NSharedCache {
     using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
 
     enum EEv {
-        EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR), 
+        EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR),
 
-        EvTouch = EvBegin + 512, 
+        EvTouch = EvBegin + 512,
         EvUnregister,
         EvInvalidate,
-        EvAttach, 
+        EvAttach,
         EvRequest,
-        EvResult, 
-        EvUpdated, 
+        EvResult,
+        EvUpdated,
 
         EvEnd
 
@@ -46,25 +46,25 @@ namespace NSharedCache {
     };
 
     struct TEvTouch : public TEventLocal<TEvTouch, EvTouch> {
-        THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> Touched; 
+        THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> Touched;
 
-        TEvTouch(THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> &&touched) 
+        TEvTouch(THashMap<TLogoBlobID, THashMap<ui32, TSharedData>> &&touched)
             : Touched(std::move(touched))
         {}
     };
 
-    struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> { 
+    struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TActorId Owner;
- 
+
         TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TActorId owner)
             : PageCollection(std::move(pageCollection))
-            , Owner(owner) 
-        { 
-            Y_VERIFY(Owner, "Cannot send request with empty owner"); 
-        } 
-    }; 
- 
+            , Owner(owner)
+        {
+            Y_VERIFY(Owner, "Cannot send request with empty owner");
+        }
+    };
+
     struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> {
         const EPriority Priority;
         TAutoPtr<NPageCollection::TFetch> Fetch;
@@ -72,64 +72,64 @@ namespace NSharedCache {
 
         TEvRequest(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch, TActorId owner)
             : Priority(priority)
-            , Fetch(fetch) 
+            , Fetch(fetch)
             , Owner(owner)
         {
             Y_VERIFY(Owner, "Cannot sent request with empty owner");
         }
     };
 
-    struct TEvResult : public TEventLocal<TEvResult, EvResult> { 
-        using EStatus = NKikimrProto::EReplyStatus; 
+    struct TEvResult : public TEventLocal<TEvResult, EvResult> {
+        using EStatus = NKikimrProto::EReplyStatus;
 
         TEvResult(TIntrusiveConstPtr<NPageCollection::IPageCollection> origin, ui64 cookie, EStatus status)
-            : Status(status) 
-            , Cookie(cookie) 
-            , Origin(origin) 
-        { } 
- 
-        void Describe(IOutputStream &out) const 
-        { 
-            out 
-                << "TEvResult{" << Loaded.size() << " pages" 
-                << " " << Origin->Label() 
-                << " " << (Status == NKikimrProto::OK ? "ok" : "fail") 
-                << " " << NKikimrProto::EReplyStatus_Name(Status) << "}"; 
-        } 
- 
-        ui64 Bytes() const 
-        { 
-            return 
-                std::accumulate(Loaded.begin(), Loaded.end(), ui64(0), 
-                    [](ui64 bytes, const TLoaded& loaded) 
-                        { return bytes + TPinnedPageRef(loaded.Page)->size(); }); 
-        } 
- 
-        struct TLoaded { 
-            TLoaded(ui32 pageId, TSharedPageRef page) 
-                : PageId(pageId) 
-                , Page(std::move(page)) 
-            { } 
- 
-            ui32 PageId; 
-            TSharedPageRef Page; 
-        }; 
- 
-        const EStatus Status; 
-        const ui64 Cookie; 
+            : Status(status)
+            , Cookie(cookie)
+            , Origin(origin)
+        { }
+
+        void Describe(IOutputStream &out) const
+        {
+            out
+                << "TEvResult{" << Loaded.size() << " pages"
+                << " " << Origin->Label()
+                << " " << (Status == NKikimrProto::OK ? "ok" : "fail")
+                << " " << NKikimrProto::EReplyStatus_Name(Status) << "}";
+        }
+
+        ui64 Bytes() const
+        {
+            return
+                std::accumulate(Loaded.begin(), Loaded.end(), ui64(0),
+                    [](ui64 bytes, const TLoaded& loaded)
+                        { return bytes + TPinnedPageRef(loaded.Page)->size(); });
+        }
+
+        struct TLoaded {
+            TLoaded(ui32 pageId, TSharedPageRef page)
+                : PageId(pageId)
+                , Page(std::move(page))
+            { }
+
+            ui32 PageId;
+            TSharedPageRef Page;
+        };
+
+        const EStatus Status;
+        const ui64 Cookie;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> Origin;
-        TVector<TLoaded> Loaded; 
+        TVector<TLoaded> Loaded;
     };
 
-    struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> { 
-        struct TActions { 
-            THashMap<ui32, TSharedPageRef> Accepted; 
-            THashSet<ui32> Dropped; 
-        }; 
- 
-        THashMap<TLogoBlobID, TActions> Actions; 
-    }; 
- 
+    struct TEvUpdated : public TEventLocal<TEvUpdated, EvUpdated> {
+        struct TActions {
+            THashMap<ui32, TSharedPageRef> Accepted;
+            THashSet<ui32> Dropped;
+        };
+
+        THashMap<TLogoBlobID, TActions> Actions;
+    };
+
 }
 }
 

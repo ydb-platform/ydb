@@ -14,7 +14,7 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-class TCommitManager; 
+class TCommitManager;
 
 namespace NRedo {
     struct TBatch;
@@ -25,7 +25,7 @@ namespace NRedo {
 class TLogicRedo {
     using TMonCo = TExecutorCounters;
 
-    TCommitManager * const CommitManager; 
+    TCommitManager * const CommitManager;
     TAutoPtr<NPageCollection::TSteppedCookieAllocator> Cookies;
     TAutoPtr<NRedo::TBatch> Batch;
     TAutoPtr<NRedo::TQueue> Queue;

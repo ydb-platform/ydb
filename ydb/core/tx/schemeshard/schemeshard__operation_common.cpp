@@ -43,7 +43,7 @@ bool CollectProposeTxResults(
         context.SS->PersistTxMinStep(db, operationId, txState.MinStep);
     }
 
-    auto shardIdx = context.SS->MustGetShardIdx(tabletId); 
+    auto shardIdx = context.SS->MustGetShardIdx(tabletId);
 
     // Ignore if this is a repeated message
     if (!txState.ShardsInProgress.contains(shardIdx)) {
@@ -125,7 +125,7 @@ bool NTableState::CollectSchemaChanged(
     Y_VERIFY(context.SS->FindTx(operationId));
     TTxState& txState = *context.SS->FindTx(operationId);
 
-    auto shardIdx = context.SS->MustGetShardIdx(datashardId); 
+    auto shardIdx = context.SS->MustGetShardIdx(datashardId);
     Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
 
     // Save this notification if was received earlier than the Tx swithched to ProposedWaitParts state
@@ -236,13 +236,13 @@ void NTableState::UpdatePartitioningForTableModification(TOperationId operationI
     NIceDb::TNiceDb db(context.Txc.DB);
 
     THashSet<TShardIdx> prevAlterCreateParts;
- 
+
     // Delete old tx shards from db
     for (const auto& shard : txState.Shards) {
-        if (txState.TxType == TTxState::TxAlterTable && shard.Operation == TTxState::CreateParts) { 
-            // Remember alter table parts that had CreateParts set (possible channel bindings change) 
-            prevAlterCreateParts.insert(shard.Idx); 
-        } 
+        if (txState.TxType == TTxState::TxAlterTable && shard.Operation == TTxState::CreateParts) {
+            // Remember alter table parts that had CreateParts set (possible channel bindings change)
+            prevAlterCreateParts.insert(shard.Idx);
+        }
         context.SS->PersistRemoveTxShard(db, operationId, shard.Idx);
     }
     txState.Shards.clear();
@@ -250,16 +250,16 @@ void NTableState::UpdatePartitioningForTableModification(TOperationId operationI
 
     Y_VERIFY(context.SS->Tables.contains(txState.TargetPathId));
     TTableInfo::TPtr table = context.SS->Tables.at(txState.TargetPathId);
-    TTxState::ETxState commonShardOp = TTxState::CreateParts; 
+    TTxState::ETxState commonShardOp = TTxState::CreateParts;
 
     if (txState.TxType == TTxState::TxAlterTable) {
-        commonShardOp = table->NeedRecreateParts() 
+        commonShardOp = table->NeedRecreateParts()
                     ? TTxState::CreateParts
                     : TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropTable) {
-        commonShardOp = TTxState::DropParts; 
+        commonShardOp = TTxState::DropParts;
     } else if (txState.TxType == TTxState::TxBackup) {
-        commonShardOp = TTxState::ConfigureParts; 
+        commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxRestore) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxInitializeBuildIndex) {
@@ -278,61 +278,61 @@ void NTableState::UpdatePartitioningForTableModification(TOperationId operationI
         Y_FAIL("UNREACHABLE");
     }
 
-    TBindingsRoomsChanges bindingChanges; 
- 
-    bool tryApplyBindingChanges = ( 
-        txState.TxType == TTxState::TxAlterTable && 
-        table->AlterData->IsFullPartitionConfig() && 
-        context.SS->IsStorageConfigLogic(table)); 
- 
-    if (tryApplyBindingChanges) { 
-        TString errStr; 
-        auto dstPath = context.SS->PathsById.at(txState.TargetPathId); 
-        bool isOk = context.SS->GetBindingsRoomsChanges( 
-                dstPath->DomainPathId, 
-                table->GetPartitions(), 
-                table->AlterData->PartitionConfigFull(), 
-                bindingChanges, 
-                errStr); 
-        if (!isOk) { 
-            Y_FAIL("Unexpected failure to rebind column families to storage pools: %s", errStr.c_str()); 
-        } 
-    } 
- 
+    TBindingsRoomsChanges bindingChanges;
+
+    bool tryApplyBindingChanges = (
+        txState.TxType == TTxState::TxAlterTable &&
+        table->AlterData->IsFullPartitionConfig() &&
+        context.SS->IsStorageConfigLogic(table));
+
+    if (tryApplyBindingChanges) {
+        TString errStr;
+        auto dstPath = context.SS->PathsById.at(txState.TargetPathId);
+        bool isOk = context.SS->GetBindingsRoomsChanges(
+                dstPath->DomainPathId,
+                table->GetPartitions(),
+                table->AlterData->PartitionConfigFull(),
+                bindingChanges,
+                errStr);
+        if (!isOk) {
+            Y_FAIL("Unexpected failure to rebind column families to storage pools: %s", errStr.c_str());
+        }
+    }
+
     // Fill new list of tx shards
     for (auto& shard : table->GetPartitions()) {
         auto shardIdx = shard.ShardIdx;
-        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx)); 
-        auto& shardInfo = context.SS->ShardInfos.at(shardIdx); 
- 
-        auto shardOp = commonShardOp; 
-        if (txState.TxType == TTxState::TxAlterTable) { 
-            if (tryApplyBindingChanges && shardInfo.BindedChannels) { 
+        Y_VERIFY(context.SS->ShardInfos.contains(shardIdx));
+        auto& shardInfo = context.SS->ShardInfos.at(shardIdx);
+
+        auto shardOp = commonShardOp;
+        if (txState.TxType == TTxState::TxAlterTable) {
+            if (tryApplyBindingChanges && shardInfo.BindedChannels) {
                 auto it = bindingChanges.find(GetPoolsMapping(shardInfo.BindedChannels));
                 if (it != bindingChanges.end()) {
-                    if (it->second.ChannelsBindingsUpdated) { 
-                        // We must recreate this shard to apply new channel bindings 
-                        shardOp = TTxState::CreateParts; 
-                        shardInfo.BindedChannels = it->second.ChannelsBindings; 
-                        context.SS->PersistChannelsBinding(db, shardIdx, shardInfo.BindedChannels); 
-                    } 
- 
-                    table->PerShardPartitionConfig[shardIdx].CopyFrom(it->second.PerShardConfig); 
-                    context.SS->PersistAddTableShardPartitionConfig(db, shardIdx, it->second.PerShardConfig); 
-                } 
-            } 
- 
-            if (prevAlterCreateParts.contains(shardIdx)) { 
-                // Make sure shards that don't have channel changes this time 
-                // still go through their CreateParts round to apply any 
-                // previously changed ChannelBindings 
-                shardOp = TTxState::CreateParts; 
-            } 
-        } 
- 
+                    if (it->second.ChannelsBindingsUpdated) {
+                        // We must recreate this shard to apply new channel bindings
+                        shardOp = TTxState::CreateParts;
+                        shardInfo.BindedChannels = it->second.ChannelsBindings;
+                        context.SS->PersistChannelsBinding(db, shardIdx, shardInfo.BindedChannels);
+                    }
+
+                    table->PerShardPartitionConfig[shardIdx].CopyFrom(it->second.PerShardConfig);
+                    context.SS->PersistAddTableShardPartitionConfig(db, shardIdx, it->second.PerShardConfig);
+                }
+            }
+
+            if (prevAlterCreateParts.contains(shardIdx)) {
+                // Make sure shards that don't have channel changes this time
+                // still go through their CreateParts round to apply any
+                // previously changed ChannelBindings
+                shardOp = TTxState::CreateParts;
+            }
+        }
+
         txState.Shards.emplace_back(shardIdx, ETabletType::DataShard, shardOp);
 
-        shardInfo.CurrentTxId = operationId.GetTxId(); 
+        shardInfo.CurrentTxId = operationId.GetTxId();
         context.SS->PersistShardTx(db, shardIdx, operationId.GetTxId());
         context.SS->PersistUpdateTxShard(db, operationId, shardIdx, shardOp);
     }
@@ -388,8 +388,8 @@ void NTableState::UpdatePartitioningForCopyTable(TOperationId operationId, TTxSt
         if (shard.Operation == TTxState::CreateParts) {
             Y_VERIFY(context.SS->ShardInfos.contains(shard.Idx));
             Y_VERIFY(context.SS->ShardInfos[shard.Idx].TabletID == InvalidTabletId, "Dst shard must not exist yet");
-            auto pathId = context.SS->ShardInfos[shard.Idx].PathId; 
-            dstTableInfo->PerShardPartitionConfig.erase(shard.Idx); 
+            auto pathId = context.SS->ShardInfos[shard.Idx].PathId;
+            dstTableInfo->PerShardPartitionConfig.erase(shard.Idx);
             context.SS->PersistShardDeleted(db, shard.Idx, context.SS->ShardInfos[shard.Idx].BindedChannels);
             context.SS->ShardInfos.erase(shard.Idx);
             domainInfo->RemoveInternalShard(shard.Idx);
@@ -400,30 +400,30 @@ void NTableState::UpdatePartitioningForCopyTable(TOperationId operationId, TTxSt
 
     TChannelsBindings channelsBinding;
 
-    bool storePerShardConfig = false; 
+    bool storePerShardConfig = false;
     NKikimrSchemeOp::TPartitionConfig perShardConfig;
- 
+
     if (context.SS->IsStorageConfigLogic(dstTableInfo)) {
-        TVector<TStorageRoom> storageRooms; 
-        storageRooms.emplace_back(0); 
-        THashMap<ui32, ui32> familyRooms; 
- 
+        TVector<TStorageRoom> storageRooms;
+        storageRooms.emplace_back(0);
+        THashMap<ui32, ui32> familyRooms;
+
         TString errStr;
-        bool isOk = context.SS->GetBindingsRooms(dstPath->DomainPathId, dstTableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr); 
+        bool isOk = context.SS->GetBindingsRooms(dstPath->DomainPathId, dstTableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr);
         if (!isOk) {
             errStr = TString("database must have required storage pools to create tablet with storage config, details: ") + errStr;
             Y_FAIL("%s", errStr.c_str());
         }
- 
-        storePerShardConfig = true; 
-        for (const auto& room : storageRooms) { 
-            perShardConfig.AddStorageRooms()->CopyFrom(room); 
-        } 
-        for (const auto& familyRoom : familyRooms) { 
-            auto* protoFamily = perShardConfig.AddColumnFamilies(); 
-            protoFamily->SetId(familyRoom.first); 
-            protoFamily->SetRoom(familyRoom.second); 
-        } 
+
+        storePerShardConfig = true;
+        for (const auto& room : storageRooms) {
+            perShardConfig.AddStorageRooms()->CopyFrom(room);
+        }
+        for (const auto& familyRoom : familyRooms) {
+            auto* protoFamily = perShardConfig.AddColumnFamilies();
+            protoFamily->SetId(familyRoom.first);
+            protoFamily->SetRoom(familyRoom.second);
+        }
     } else if (context.SS->IsCompatibleChannelProfileLogic(dstPath->DomainPathId, dstTableInfo)) {
         TString errStr;
         bool isOk = context.SS->GetChannelsBindings(dstPath->DomainPathId, dstTableInfo, channelsBinding, errStr);
@@ -455,11 +455,11 @@ void NTableState::UpdatePartitioningForCopyTable(TOperationId operationId, TTxSt
         const auto tabletType = context.SS->ShardInfos[shard.ShardIdx].TabletType;
         context.SS->PersistShardMapping(db, shard.ShardIdx, InvalidTabletId, txState.TargetPathId, operationId.GetTxId(), tabletType);
         context.SS->PersistChannelsBinding(db, shard.ShardIdx, channelsBinding);
- 
-        if (storePerShardConfig) { 
-            dstTableInfo->PerShardPartitionConfig[shard.ShardIdx].CopyFrom(perShardConfig); 
-            context.SS->PersistAddTableShardPartitionConfig(db, shard.ShardIdx, perShardConfig); 
-        } 
+
+        if (storePerShardConfig) {
+            dstTableInfo->PerShardPartitionConfig[shard.ShardIdx].CopyFrom(perShardConfig);
+            context.SS->PersistAddTableShardPartitionConfig(db, shard.ShardIdx, perShardConfig);
+        }
     }
 
     txState.TxShardsListFinalized = true;
@@ -479,7 +479,7 @@ TVector<TTableShardInfo> NTableState::ApplyPartitioningCopyTable(const TShardInf
         Y_VERIFY(srcTabletId != InvalidTabletId);
         txState.Shards.emplace_back(srcShardIdx, ETabletType::DataShard, TTxState::ConfigureParts);
         // Destination shards need to be created, configured and then they will receive parts
-        auto idx = ss->RegisterShardInfo(templateDatashardInfo); 
+        auto idx = ss->RegisterShardInfo(templateDatashardInfo);
         txState.Shards.emplace_back(idx, ETabletType::DataShard, TTxState::CreateParts);
         // Properly set new shard idx
         dstPartitions[i].ShardIdx = idx;

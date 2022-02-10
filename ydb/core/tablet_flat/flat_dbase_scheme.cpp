@@ -36,16 +36,16 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             delta.AddColumnToKey(table, columnId);
 
         delta.SetCompactionPolicy(table, *itTable.second.CompactionPolicy);
- 
-        delta.SetEraseCache( 
-                table, 
-                itTable.second.EraseCacheEnabled, 
-                itTable.second.EraseCacheMinRows, 
-                itTable.second.EraseCacheMaxBytes); 
- 
-        // N.B. must be last for compatibility with older versions :( 
+
+        delta.SetEraseCache(
+                table,
+                itTable.second.EraseCacheEnabled,
+                itTable.second.EraseCacheMinRows,
+                itTable.second.EraseCacheMaxBytes);
+
+        // N.B. must be last for compatibility with older versions :(
         delta.SetByKeyFilter(table, itTable.second.ByKeyFilter);
-        delta.SetColdBorrow(table, itTable.second.ColdBorrow); 
+        delta.SetColdBorrow(table, itTable.second.ColdBorrow);
     }
 
     delta.SetRedo(Redo.Annex);
@@ -266,30 +266,30 @@ TAlter& TAlter::SetByKeyFilter(ui32 tableId, bool enabled)
     return *this;
 }
 
-TAlter& TAlter::SetColdBorrow(ui32 tableId, bool enabled) 
-{ 
-    TAlterRecord &delta = *Log.AddDelta(); 
-    delta.SetDeltaType(TAlterRecord::SetTable); 
-    delta.SetTableId(tableId); 
-    delta.SetColdBorrow(enabled); 
- 
-    return *this; 
-} 
- 
-TAlter& TAlter::SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes) 
-{ 
-    TAlterRecord &delta = *Log.AddDelta(); 
-    delta.SetDeltaType(TAlterRecord::SetTable); 
-    delta.SetTableId(tableId); 
-    delta.SetEraseCacheEnabled(enabled ? 1 : 0); 
-    if (enabled) { 
-        delta.SetEraseCacheMinRows(minRows); 
-        delta.SetEraseCacheMaxBytes(maxBytes); 
-    } 
- 
-    return *this; 
-} 
- 
+TAlter& TAlter::SetColdBorrow(ui32 tableId, bool enabled)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    delta.SetColdBorrow(enabled);
+
+    return *this;
+}
+
+TAlter& TAlter::SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes)
+{
+    TAlterRecord &delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetTable);
+    delta.SetTableId(tableId);
+    delta.SetEraseCacheEnabled(enabled ? 1 : 0);
+    if (enabled) {
+        delta.SetEraseCacheMinRows(minRows);
+        delta.SetEraseCacheMaxBytes(maxBytes);
+    }
+
+    return *this;
+}
+
 TAutoPtr<TSchemeChanges> TAlter::Flush()
 {
     TAutoPtr<TSchemeChanges> log(new TSchemeChanges);

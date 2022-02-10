@@ -1,46 +1,46 @@
-#include "columnshard_impl.h" 
-#include "columnshard_schema.h" 
- 
+#include "columnshard_impl.h"
+#include "columnshard_schema.h"
+
 namespace NKikimr::NColumnShard {
- 
-class TColumnShard::TTxProposeCancel : public TTransactionBase<TColumnShard> { 
-public: 
-    TTxProposeCancel(TColumnShard* self, TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev) 
-        : TTransactionBase(self) 
-        , Ev(ev) 
-    { } 
- 
-    TTxType GetTxType() const override { return TXTYPE_PROPOSE_CANCEL; } 
- 
+
+class TColumnShard::TTxProposeCancel : public TTransactionBase<TColumnShard> {
+public:
+    TTxProposeCancel(TColumnShard* self, TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev)
+        : TTransactionBase(self)
+        , Ev(ev)
+    { }
+
+    TTxType GetTxType() const override { return TXTYPE_PROPOSE_CANCEL; }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         LOG_S_DEBUG("TTxProposeCancel.Execute");
- 
-        NIceDb::TNiceDb db(txc.DB); 
- 
-        const auto* msg = Ev->Get(); 
-        const ui64 txId = msg->Record.GetTxId(); 
- 
-        if (Self->BasicTxInfo.contains(txId)) { 
-            auto& txInfo = Self->BasicTxInfo[txId]; 
-            if (txInfo.PlanStep == 0) { 
-                // Not planned yet, safe to remove 
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        const auto* msg = Ev->Get();
+        const ui64 txId = msg->Record.GetTxId();
+
+        if (Self->BasicTxInfo.contains(txId)) {
+            auto& txInfo = Self->BasicTxInfo[txId];
+            if (txInfo.PlanStep == 0) {
+                // Not planned yet, safe to remove
                 Self->RemoveTx(txc.DB, txId);
-            } 
-        } 
- 
-        return true; 
-    } 
- 
+            }
+        }
+
+        return true;
+    }
+
     void Complete(const TActorContext&) override {
         LOG_S_DEBUG("TTxProposeCancel.Complete");
-    } 
- 
-private: 
-    const TEvColumnShard::TEvCancelTransactionProposal::TPtr Ev; 
-}; 
- 
-void TColumnShard::Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx) { 
-    Execute(new TTxProposeCancel(this, ev), ctx); 
-} 
- 
+    }
+
+private:
+    const TEvColumnShard::TEvCancelTransactionProposal::TPtr Ev;
+};
+
+void TColumnShard::Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx) {
+    Execute(new TTxProposeCancel(this, ev), ctx);
+}
+
 }

@@ -375,7 +375,7 @@ std::pair<ui32, bool> TValuePacker::SkipEmbeddedLength(TStringBuf& buf) {
     ui32 length = 0;
     bool emptySingleOptional = false;
     if (buf.size() > 8) {
-        length = ReadUnaligned<ui32>(buf.data()); 
+        length = ReadUnaligned<ui32>(buf.data());
         MKQL_ENSURE(length + 4 == buf.size(), "Bad packed data. Invalid embedded size");
         buf.Skip(4);
     } else {

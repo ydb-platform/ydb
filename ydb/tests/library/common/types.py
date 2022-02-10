@@ -147,7 +147,7 @@ class TabletTypes(Enum):
     RTMR_PARTITION = _tablet_type(10, 999)
     KEYVALUEFLAT = _tablet_type(12, 999)
 
-    KESUS = _tablet_type(29, 999) 
+    KESUS = _tablet_type(29, 999)
     PERSQUEUE = _tablet_type(20, 999)
     FLAT_DATASHARD = _tablet_type(18, 999, service_name='DATASHARD')
     BLOCKSTORE_VOLUME = _tablet_type(25, 999)

@@ -21,13 +21,13 @@ public:
 
     NIceDb::TNiceDb Begin() noexcept {
         Annex->Switch(++Step, /* require step switch */ true);
-        DB.Begin({ Gen, Step }, Env.emplace()); 
+        DB.Begin({ Gen, Step }, Env.emplace());
         return DB;
     }
 
     void Commit() noexcept {
         DB.Commit({ Gen, Step }, true, Annex.Get());
-        Env.reset(); 
+        Env.reset();
     }
 
     TSnapEdge SnapshotTable(ui32 table) noexcept {
@@ -39,10 +39,10 @@ public:
         return { txStamp, chg.Epoch };
     }
 
-    ui64 OwnerTabletId() const override { 
-        return 123; 
-    } 
- 
+    ui64 OwnerTabletId() const override {
+        return 123;
+    }
+
     const TScheme& DatabaseScheme() override {
         return DB.GetScheme();
     }
@@ -316,7 +316,7 @@ private:
 
 public:
     TDatabase DB;
-    std::optional<TTestEnv> Env; 
+    std::optional<TTestEnv> Env;
     THashMap<ui64, THolder<ICompactionRead>> PendingReads;
     THashMap<ui64, THolder<TCompactionParams>> StartedCompactions;
     THashMap<ui32, THashMap<ui64, TString>> TableState;

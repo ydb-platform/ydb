@@ -9,15 +9,15 @@ namespace NCache {
 
 namespace NTabletPipe {
 
-    class IClientFactory : public TThrRefBase { 
-    public: 
-        using TPtr = TIntrusivePtr<IClientFactory>; 
- 
-        virtual ~IClientFactory(); 
- 
-        virtual TActorId CreateClient(const TActorContext& ctx, ui64 tabletId, const TClientConfig& pipeConfig) = 0; 
-    }; 
- 
+    class IClientFactory : public TThrRefBase {
+    public:
+        using TPtr = TIntrusivePtr<IClientFactory>;
+
+        virtual ~IClientFactory();
+
+        virtual TActorId CreateClient(const TActorContext& ctx, ui64 tabletId, const TClientConfig& pipeConfig) = 0;
+    };
+
     class IClientCache {
     public:
         virtual ~IClientCache() {}
@@ -34,7 +34,7 @@ namespace NTabletPipe {
         virtual void PopWhileOverflow() = 0;
     };
 
-    IClientCache* CreateUnboundedClientCache(const TClientConfig& pipeConfig = TClientConfig(), IClientFactory::TPtr pipeFactory = nullptr); 
+    IClientCache* CreateUnboundedClientCache(const TClientConfig& pipeConfig = TClientConfig(), IClientFactory::TPtr pipeFactory = nullptr);
 
     struct TBoundedClientCacheConfig : public TThrRefBase {
         ui64 ClientPoolLimit;
@@ -44,7 +44,7 @@ namespace NTabletPipe {
         {}
     };
 
-    IClientCache* CreateBoundedClientCache(TIntrusivePtr<TBoundedClientCacheConfig> cacheConfig, const TClientConfig& pipeConfig = TClientConfig(), IClientFactory::TPtr pipeFactory = nullptr); 
+    IClientCache* CreateBoundedClientCache(TIntrusivePtr<TBoundedClientCacheConfig> cacheConfig, const TClientConfig& pipeConfig = TClientConfig(), IClientFactory::TPtr pipeFactory = nullptr);
 }
 
 }

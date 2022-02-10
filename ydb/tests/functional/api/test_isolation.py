@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from hamcrest import assert_that, equal_to, raises, contains_string 
+from hamcrest import assert_that, equal_to, raises, contains_string
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
 import pytest
@@ -284,13 +284,13 @@ class TestTransactionIsolation(object):
         t2.execute('{} upsert into {} (id, value) values(3, 30);'.format(prefix, table_name))
         t2.commit()
 
-        try: 
-            result_rows = t1.execute('{} select id from {} where value % 3 = 0;'.format(prefix, table_name)) 
+        try:
+            result_rows = t1.execute('{} select id from {} where value % 3 = 0;'.format(prefix, table_name))
             t1.commit()
-        except ydb.Aborted as e: 
-            assert_that(str(e), contains_string("Transaction locks invalidated")) 
-        else: 
-            assert_that(result_rows[0].rows, equal_to([])) 
+        except ydb.Aborted as e:
+            assert_that(str(e), contains_string("Transaction locks invalidated"))
+        else:
+            assert_that(result_rows[0].rows, equal_to([]))
 
     @pytest.mark.parametrize('new_engine', [True, False])
     def test_lost_update_p4(self, new_engine):
@@ -455,18 +455,18 @@ class TestTransactionIsolation(object):
         t2.execute('{} upsert into {} (id, value) values (2, 18);'.format(prefix, table_name))
         t2.commit()
 
-        try: 
-            result_rows = t1.execute('{} select value from {} where id = 2;'.format(prefix, table_name)) 
+        try:
+            result_rows = t1.execute('{} select value from {} where id = 2;'.format(prefix, table_name))
             t1.commit()
-        except ydb.Aborted as e: 
-            assert_that(str(e), contains_string("Transaction locks invalidated")) 
-        else: 
-            assert_that( 
-                result_rows[0].rows, equal_to( 
-                    [ 
-                        {'value': 20} 
-                    ] 
-                ) 
+        except ydb.Aborted as e:
+            assert_that(str(e), contains_string("Transaction locks invalidated"))
+        else:
+            assert_that(
+                result_rows[0].rows, equal_to(
+                    [
+                        {'value': 20}
+                    ]
+                )
             )
 
     @pytest.mark.parametrize('new_engine', [True, False])
@@ -483,13 +483,13 @@ class TestTransactionIsolation(object):
 
         t2.commit()
 
-        try: 
-            result_rows = t1.execute('{} select value from {} where value % 3 = 0;'.format(prefix, table_name)) 
+        try:
+            result_rows = t1.execute('{} select value from {} where value % 3 = 0;'.format(prefix, table_name))
             t1.commit()
-        except ydb.Aborted as e: 
-            assert_that(str(e), contains_string("Transaction locks invalidated")) 
-        else: 
-            assert_that(result_rows[0].rows, equal_to([])) 
+        except ydb.Aborted as e:
+            assert_that(str(e), contains_string("Transaction locks invalidated"))
+        else:
+            assert_that(result_rows[0].rows, equal_to([]))
 
     @pytest.mark.parametrize('new_engine', [True, False])
     def test_read_skew_g_single_write_predicate(self, new_engine):
@@ -516,7 +516,7 @@ class TestTransactionIsolation(object):
         t2.commit()
 
         def callee():
-            t1.execute('{} delete from {} where value = 20;'.format(prefix, table_name), commit_tx=True) 
+            t1.execute('{} delete from {} where value = 20;'.format(prefix, table_name), commit_tx=True)
 
         assert_that(
             callee,

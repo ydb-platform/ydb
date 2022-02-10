@@ -48,8 +48,8 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
 
         // "Forget" the deleted shard
         if (Self->ShardInfos.contains(ShardIdx)) {
-            auto tabletType = Self->ShardInfos[ShardIdx].TabletType; 
-            switch (tabletType) { 
+            auto tabletType = Self->ShardInfos[ShardIdx].TabletType;
+            switch (tabletType) {
             case ETabletType::DataShard:
                 Self->TabletCounters->Simple()[COUNTER_TABLE_SHARD_INACTIVE_COUNT].Sub(1);
                 break;
@@ -92,67 +92,67 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             case ETabletType::SysViewProcessor:
                 Self->TabletCounters->Simple()[COUNTER_SYS_VIEW_PROCESSOR_COUNT].Sub(1);
                 break;
-            case ETabletType::ColumnShard: 
+            case ETabletType::ColumnShard:
                 Self->TabletCounters->Simple()[COUNTER_OLAP_COLUMN_SHARDS].Sub(-1);
-                break; 
-            case ETabletType::SequenceShard: 
+                break;
+            case ETabletType::SequenceShard:
                 Self->TabletCounters->Simple()[COUNTER_SEQUENCESHARD_COUNT].Sub(1);
-                break; 
+                break;
             case ETabletType::ReplicationController:
                 Self->TabletCounters->Simple()[COUNTER_REPLICATION_CONTROLLER_COUNT].Sub(1);
                 break;
             default:
                 Y_FAIL_S("Unknown TabletType"
                          << ", ShardIdx " << ShardIdx
-                         << ", (ui32)TabletType" << (ui32)tabletType); 
+                         << ", (ui32)TabletType" << (ui32)tabletType);
             };
 
             auto& shardInfo = Self->ShardInfos.at(ShardIdx);
- 
-            auto pathId = shardInfo.PathId; 
-            auto it = Self->Tables.find(pathId); 
+
+            auto pathId = shardInfo.PathId;
+            auto it = Self->Tables.find(pathId);
             if (it != Self->Tables.end()) {
-                it->second->PerShardPartitionConfig.erase(ShardIdx); 
-            } 
- 
+                it->second->PerShardPartitionConfig.erase(ShardIdx);
+            }
+
             NIceDb::TNiceDb db(txc.DB);
             Self->PersistShardDeleted(db, ShardIdx, shardInfo.BindedChannels);
 
             Y_VERIFY_S(Self->PathsById.contains(pathId), "pathid: " << pathId);
-            auto path = Self->PathsById.at(pathId); 
+            auto path = Self->PathsById.at(pathId);
             path->DecShardsInside();
 
             auto domain = Self->ResolveDomainInfo(path);
             domain->RemoveInternalShard(ShardIdx);
             switch (tabletType) {
             case ETabletType::SequenceShard:
-                domain->RemoveSequenceShard(ShardIdx); 
+                domain->RemoveSequenceShard(ShardIdx);
                 break;
             case ETabletType::ReplicationController:
                 domain->RemoveReplicationController(ShardIdx);
                 break;
             default:
                 break;
-            } 
+            }
 
             TabletId = shardInfo.TabletID;
             Self->TabletIdToShardIdx[TabletId] = ShardIdx;
 
             Self->ShardInfos.erase(ShardIdx);
- 
+
             Self->DecrementPathDbRefCount(pathId, "shard deleted");
- 
-            // This is for tests, so it's kinda ok to reply from execute 
-            auto itSubscribers = Self->ShardDeletionSubscribers.find(ShardIdx); 
-            if (itSubscribers != Self->ShardDeletionSubscribers.end()) { 
-                for (const auto& subscriber : itSubscribers->second) { 
-                    ctx.Send(subscriber, new TEvPrivate::TEvNotifyShardDeleted(ShardIdx)); 
-                } 
-                Self->ShardDeletionSubscribers.erase(itSubscribers); 
-            } 
-        } else { 
-            NIceDb::TNiceDb db(txc.DB); 
-            Self->PersistUnknownShardDeleted(db, ShardIdx); 
+
+            // This is for tests, so it's kinda ok to reply from execute
+            auto itSubscribers = Self->ShardDeletionSubscribers.find(ShardIdx);
+            if (itSubscribers != Self->ShardDeletionSubscribers.end()) {
+                for (const auto& subscriber : itSubscribers->second) {
+                    ctx.Send(subscriber, new TEvPrivate::TEvNotifyShardDeleted(ShardIdx));
+                }
+                Self->ShardDeletionSubscribers.erase(itSubscribers);
+            }
+        } else {
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistUnknownShardDeleted(db, ShardIdx);
         }
     }
 
@@ -184,14 +184,14 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxDeleteTabletReply(TEvHi
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvSubscribeToShardDeletion::TPtr& ev, const TActorContext& ctx) {
-    auto shardIdx = ev->Get()->ShardIdx; 
-    if (ShardInfos.contains(shardIdx)) { 
-        ShardDeletionSubscribers[shardIdx].push_back(ev->Sender); 
-        return; 
-    } 
- 
-    // This is for tests, so it's kinda ok to reply from handler 
-    ctx.Send(ev->Sender, new TEvPrivate::TEvNotifyShardDeleted(shardIdx)); 
-} 
- 
+    auto shardIdx = ev->Get()->ShardIdx;
+    if (ShardInfos.contains(shardIdx)) {
+        ShardDeletionSubscribers[shardIdx].push_back(ev->Sender);
+        return;
+    }
+
+    // This is for tests, so it's kinda ok to reply from handler
+    ctx.Send(ev->Sender, new TEvPrivate::TEvNotifyShardDeleted(shardIdx));
+}
+
 }}

@@ -82,28 +82,28 @@ namespace NTest {
         TDbExec& Reject() { return DoCommit(true, false); }
         TDbExec& Relax()  { return DoCommit(false, true); }
 
-        TDbExec& ReadVer(TRowVersion readVersion) { 
-            DoBegin(false); 
- 
-            ReadVersion = readVersion; 
- 
-            return *this; 
-        } 
- 
-        TDbExec& WriteVer(TRowVersion writeVersion) { 
-            Y_VERIFY(OnTx != EOnTx::None); 
- 
-            WriteVersion = writeVersion; 
- 
-            return *this; 
-        } 
- 
+        TDbExec& ReadVer(TRowVersion readVersion) {
+            DoBegin(false);
+
+            ReadVersion = readVersion;
+
+            return *this;
+        }
+
+        TDbExec& WriteVer(TRowVersion writeVersion) {
+            Y_VERIFY(OnTx != EOnTx::None);
+
+            WriteVersion = writeVersion;
+
+            return *this;
+        }
+
         TDbExec& Add(ui32 table, const TRow &row, ERowOp rop = ERowOp::Upsert)
         {
             const NTest::TRowTool tool(RowSchemeFor(table));
             auto pair = tool.Split(row, true, rop != ERowOp::Erase);
 
-            Base->Update(table, rop, pair.Key, pair.Ops, WriteVersion); 
+            Base->Update(table, rop, pair.Key, pair.Ops, WriteVersion);
 
             return *this;
         }
@@ -140,7 +140,7 @@ namespace NTest {
         {
             DoBegin(false), RowSchemeFor(table);
 
-            TCheckIter check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion }; 
+            TCheckIter check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion };
 
             return check.To(CurrentStep()), check;
         }
@@ -149,7 +149,7 @@ namespace NTest {
         {
             DoBegin(false), RowSchemeFor(table);
 
-            TCheckSelect check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion }; 
+            TCheckSelect check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion };
 
             return check.To(CurrentStep()), check;
         }
@@ -172,9 +172,9 @@ namespace NTest {
             TAutoPtr<TSubset> subset;
 
             if (last /* make full subset */) {
-                subset = Base->Subset(table, TEpoch::Max(), { }, { }); 
+                subset = Base->Subset(table, TEpoch::Max(), { }, { });
             } else /* only flush memtables */ {
-                subset = Base->Subset(table, { }, TEpoch::Max()); 
+                subset = Base->Subset(table, { }, TEpoch::Max());
             }
 
             TLogoBlobID logo(1, Gen, ++Step, 1, 0, 0);
@@ -185,7 +185,7 @@ namespace NTest {
 
             conf.ByKeyFilter = Base->GetScheme().GetTableInfo(table)->ByKeyFilter;
             conf.MaxRows = subset->MaxRows();
-            conf.MinRowVersion = subset->MinRowVersion(); 
+            conf.MinRowVersion = subset->MinRowVersion();
             conf.SmallEdge = family->Small;
 
             auto keys = subset->Scheme->Tags(true /* only keys */);
@@ -206,7 +206,7 @@ namespace NTest {
                 partViews.push_back({ part, nullptr, part->Slices });
 
             Base->Replace(table, std::move(partViews), *subset);
- 
+
             return *this;
         }
 
@@ -218,9 +218,9 @@ namespace NTest {
 
             Birth(), Base = nullptr, OnTx = EOnTx::None;
 
-            ReadVersion = TRowVersion::Max(); 
-            WriteVersion = TRowVersion::Min(); 
- 
+            ReadVersion = TRowVersion::Max();
+            WriteVersion = TRowVersion::Min();
+
             if (play == EPlay::Boot) {
                 TAutoPtr<TScheme> scheme = new TScheme;
 
@@ -274,7 +274,7 @@ namespace NTest {
 
                 Scheme = TRowScheme::Make(info->Columns, NUtil::TSecond());
             } else {
-                Scheme = Base->Subset(table, { }, TEpoch::Zero())->Scheme; 
+                Scheme = Base->Subset(table, { }, TEpoch::Zero())->Scheme;
             }
 
             return *Scheme;
@@ -363,7 +363,7 @@ namespace NTest {
 
             if (OnTx == EOnTx::None || real) {
                 Annex->Switch(++Step, true /* require step switch */);
-                Base->Begin({ Gen, Step }, Env.emplace()); 
+                Base->Begin({ Gen, Step }, Env.emplace());
 
                 OnTx = (real ? EOnTx::Real : EOnTx::Auto);
             }
@@ -379,7 +379,7 @@ namespace NTest {
                 Y_FAIL("There is no active dbase tx");
 
             auto up = Base->Commit({ Gen, Step }, apply, Annex.Get()).Change;
-            Env.reset(); 
+            Env.reset();
 
             Last = Max<ui32>(), Altered = false;
 
@@ -402,15 +402,15 @@ namespace NTest {
                 RedoLog.emplace_back(std::move(up));
             }
 
-            ReadVersion = TRowVersion::Max(); 
-            WriteVersion = TRowVersion::Min(); 
- 
+            ReadVersion = TRowVersion::Max();
+            WriteVersion = TRowVersion::Min();
+
             return *this;
         }
 
     private:
         TAutoPtr<TDatabase> Base;
-        std::optional<TTestEnv> Env; 
+        std::optional<TTestEnv> Env;
         ui32 Gen = 0;
         ui32 Step = 0;
         ui32 Last = Max<ui32>();
@@ -419,8 +419,8 @@ namespace NTest {
         TIntrusiveConstPtr<TRowScheme> Scheme;
         TRedoLog RedoLog;
         TAutoPtr<TSteppedCookieAllocator> Annex;
-        TRowVersion ReadVersion = TRowVersion::Max(); 
-        TRowVersion WriteVersion = TRowVersion::Min(); 
+        TRowVersion ReadVersion = TRowVersion::Max();
+        TRowVersion WriteVersion = TRowVersion::Min();
     };
 
 }

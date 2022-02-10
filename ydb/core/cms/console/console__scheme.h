@@ -44,17 +44,17 @@ struct Schema : NIceDb::Schema {
         struct SharedDomainPathId : Column<22, NScheme::NTypeIds::Uint64> {};
         struct IsExternalSysViewProcessor : Column<23, NScheme::NTypeIds::Bool> {};
         // } // SharedDomainId
-        struct SchemaOperationQuotas : Column<24, NScheme::NTypeIds::String> {}; 
-        struct CreateIdempotencyKey : Column<25, NScheme::NTypeIds::Utf8> {}; 
-        struct AlterIdempotencyKey : Column<26, NScheme::NTypeIds::Utf8> {}; 
-        struct DatabaseQuotas : Column<27, NScheme::NTypeIds::String> {}; 
+        struct SchemaOperationQuotas : Column<24, NScheme::NTypeIds::String> {};
+        struct CreateIdempotencyKey : Column<25, NScheme::NTypeIds::Utf8> {};
+        struct AlterIdempotencyKey : Column<26, NScheme::NTypeIds::Utf8> {};
+        struct DatabaseQuotas : Column<27, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<Path>;
         using TColumns = TableColumns<Path, State, Coordinators, Mediators, PlanResolution,
             Issue, TxId, UserToken, SubdomainVersion, ConfirmedSubdomain, TimeCastBucketsPerMediator,
             Attributes, Generation, SchemeShardId, PathId, ErrorCode, IsExternalSubDomain, IsExternalHive,
-            AreResourcesShared, SharedDomainSchemeShardId, SharedDomainPathId, IsExternalSysViewProcessor, 
-            SchemaOperationQuotas, CreateIdempotencyKey, AlterIdempotencyKey, DatabaseQuotas>; 
+            AreResourcesShared, SharedDomainSchemeShardId, SharedDomainPathId, IsExternalSysViewProcessor,
+            SchemaOperationQuotas, CreateIdempotencyKey, AlterIdempotencyKey, DatabaseQuotas>;
     };
 
     struct TenantPools : Table<3> {
@@ -84,10 +84,10 @@ struct Schema : NIceDb::Schema {
         struct Issue : Column<3, NScheme::NTypeIds::Utf8> {};
         struct Code : Column<4, NScheme::NTypeIds::Uint32> {};
         struct ErrorCode : Column<17, NScheme::NTypeIds::Uint32> {};
-        struct CreateIdempotencyKey : Column<25, NScheme::NTypeIds::Utf8> {}; 
+        struct CreateIdempotencyKey : Column<25, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Path>;
-        using TColumns = TableColumns<Path, TxId, Issue, Code, ErrorCode, CreateIdempotencyKey>; 
+        using TColumns = TableColumns<Path, TxId, Issue, Code, ErrorCode, CreateIdempotencyKey>;
     };
 
     struct RegisteredUnits : Table<6> {

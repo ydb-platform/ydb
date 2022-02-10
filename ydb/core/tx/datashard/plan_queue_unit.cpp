@@ -97,11 +97,11 @@ TOperation::TPtr TPlanQueueUnit::FindReadyOperation() const
     return op;
 }
 
-EExecutionStatus TPlanQueueUnit::Execute(TOperation::TPtr op, 
+EExecutionStatus TPlanQueueUnit::Execute(TOperation::TPtr op,
                                          TTransactionContext &,
                                          const TActorContext &)
 {
-    DataShard.IncCounter(COUNTER_PLAN_QUEUE_LATENCY_MS, op->GetCurrentElapsedAndReset().MilliSeconds()); 
+    DataShard.IncCounter(COUNTER_PLAN_QUEUE_LATENCY_MS, op->GetCurrentElapsedAndReset().MilliSeconds());
     return EExecutionStatus::Executed;
 }
 

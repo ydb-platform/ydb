@@ -26,8 +26,8 @@ namespace NTxProxy {
         NMonitoring::THistogramPtr SchemeRequestLatency;
         NMonitoring::TDynamicCounters::TCounterPtr MakeRequest;
         //NMonitoring::THistogramPtr MakeRequestLatency;
-        NMonitoring::TDynamicCounters::TCounterPtr SnapshotRequest; 
-        NMonitoring::TDynamicCounters::TCounterPtr CommitWritesRequest; 
+        NMonitoring::TDynamicCounters::TCounterPtr SnapshotRequest;
+        NMonitoring::TDynamicCounters::TCounterPtr CommitWritesRequest;
 
         NMonitoring::TDynamicCounters::TCounterPtr SchemeRequestProxyNotReady;
         NMonitoring::TDynamicCounters::TCounterPtr MakeRequestProxyNotReady;

@@ -1090,8 +1090,8 @@ public:
             return "FS";
         case TTabletTypes::TestShard:
             return "TS";
-        case TTabletTypes::SequenceShard: 
-            return "S"; 
+        case TTabletTypes::SequenceShard:
+            return "S";
         case TTabletTypes::ReplicationController:
             return "RC";
         default:
@@ -2871,7 +2871,7 @@ class TTxMonEvent_ResetTablet : public TTransactionBase<THive> {
     class TResetter : public TActorBootstrapped<TResetter> {
         TIntrusivePtr<TTabletStorageInfo> Info;
         const TActorId Source;
-        const ui32 KnownGeneration; 
+        const ui32 KnownGeneration;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -2881,12 +2881,12 @@ class TTxMonEvent_ResetTablet : public TTransactionBase<THive> {
         TResetter(TIntrusivePtr<TTabletStorageInfo> info, TActorId source, ui32 knownGeneration)
             : Info(std::move(info))
             , Source(source)
-            , KnownGeneration(knownGeneration) 
+            , KnownGeneration(knownGeneration)
         {}
 
         void Bootstrap(const TActorContext& ctx) {
             Become(&TThis::StateFunc);
-            ctx.Register(CreateTabletReqReset(SelfId(), std::move(Info), KnownGeneration)); 
+            ctx.Register(CreateTabletReqReset(SelfId(), std::move(Info), KnownGeneration));
         }
 
         STRICT_STFUNC(StateFunc,
@@ -2904,7 +2904,7 @@ public:
     TTabletId TabletId = 0;
     TString Error;
     TIntrusivePtr<TTabletStorageInfo> Info;
-    ui32 KnownGeneration = 0; 
+    ui32 KnownGeneration = 0;
 
     TTxMonEvent_ResetTablet(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
@@ -2919,7 +2919,7 @@ public:
         if (TabletId) {
             if (TLeaderTabletInfo* tablet = Self->FindTablet(TabletId)) {
                 Info = tablet->TabletStorageInfo;
-                KnownGeneration = tablet->KnownGeneration; 
+                KnownGeneration = tablet->KnownGeneration;
             } else {
                 Error = "tablet not found";
             }
@@ -2931,7 +2931,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (Info) {
-            ctx.Register(new TResetter(std::move(Info), Source, KnownGeneration)); 
+            ctx.Register(new TResetter(std::move(Info), Source, KnownGeneration));
         } else if (Error) {
             ctx.Send(Source, new NMon::TEvRemoteJsonInfoRes(TStringBuilder() << "{\"error\":\"" << Error << "\"}"));
         } else {

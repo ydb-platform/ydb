@@ -97,7 +97,7 @@ void TEvTablet::TEvTabletDead::Out(IOutputStream& os, EReason x) {
 }
 
 }
- 
-Y_DECLARE_OUT_SPEC(, NKikimr::TEvTablet::TEvTabletStop::EReason, o, x) { 
-    o << NKikimrTabletBase::TEvTabletStop::EReason_Name(x); 
-} 
+
+Y_DECLARE_OUT_SPEC(, NKikimr::TEvTablet::TEvTabletStop::EReason, o, x) {
+    o << NKikimrTabletBase::TEvTabletStop::EReason_Name(x);
+}

@@ -58,34 +58,34 @@ message DatabaseOptions {
     bool disable_tx_service = 1;
     // Old-style database, do not create external schemeshard for database
     bool disable_external_subdomain = 2;
-    // Transaction plan resolution in milliseconds 
-    uint32 plan_resolution = 3; 
+    // Transaction plan resolution in milliseconds
+    uint32 plan_resolution = 3;
 }
 
-// A set of quotas for schema operations 
-message SchemaOperationQuotas { 
-    // A single quota based on leaky bucket 
-    message LeakyBucket { 
-        // Bucket size, e.g. <1000> per day 
-        double bucket_size = 1; 
-        // Bucket duration in seconds, e.g. 1000 per <day> 
-        uint64 bucket_seconds = 2; 
-    } 
- 
-    // Leaky bucket based quotas 
-    repeated LeakyBucket leaky_bucket_quotas = 1; 
-} 
- 
-// A set of quotas for the database 
-message DatabaseQuotas { 
-    // A maximum data size in bytes, new data will be rejected when exceeded 
-    uint64 data_size_hard_quota = 1; 
- 
-    // An optional size in bytes (lower than data_size_hard_quota). When data 
-    // size becomes lower than this value new data ingestion is re-enabled 
-    // again. This is useful to help avoid database from rapidly entering and 
-    // exiting from the overloaded state. 
-    uint64 data_size_soft_quota = 2; 
+// A set of quotas for schema operations
+message SchemaOperationQuotas {
+    // A single quota based on leaky bucket
+    message LeakyBucket {
+        // Bucket size, e.g. <1000> per day
+        double bucket_size = 1;
+        // Bucket duration in seconds, e.g. 1000 per <day>
+        uint64 bucket_seconds = 2;
+    }
+
+    // Leaky bucket based quotas
+    repeated LeakyBucket leaky_bucket_quotas = 1;
+}
+
+// A set of quotas for the database
+message DatabaseQuotas {
+    // A maximum data size in bytes, new data will be rejected when exceeded
+    uint64 data_size_hard_quota = 1;
+
+    // An optional size in bytes (lower than data_size_hard_quota). When data
+    // size becomes lower than this value new data ingestion is re-enabled
+    // again. This is useful to help avoid database from rapidly entering and
+    // exiting from the overloaded state.
+    uint64 data_size_soft_quota = 2;
 
     // A maximum count of shards in all data streams.
     uint64 data_stream_shards_quota = 3;
@@ -94,8 +94,8 @@ message DatabaseQuotas {
     // A minimum value of `TtlSettings.run_interval_seconds` that can be specified.
     // Default is 1800 (15 minutes).
     uint32 ttl_min_run_internal_seconds = 4;
-} 
- 
+}
+
 // Request to create a new database. For successfull creation
 // specified database shouldn't exist. At least one storage
 // unit should be requested for the database.
@@ -115,12 +115,12 @@ message CreateDatabaseRequest {
     DatabaseOptions options = 4;
     // Attach attributes to database.
     map<string, string> attributes = 5;
-    // Optional quotas for schema operations 
-    SchemaOperationQuotas schema_operation_quotas = 8; 
-    // Optional idempotency key 
-    string idempotency_key = 9; 
-    // Optional quotas for the database 
-    DatabaseQuotas database_quotas = 10; 
+    // Optional quotas for schema operations
+    SchemaOperationQuotas schema_operation_quotas = 8;
+    // Optional idempotency key
+    string idempotency_key = 9;
+    // Optional quotas for the database
+    DatabaseQuotas database_quotas = 10;
 }
 
 message CreateDatabaseResponse {
@@ -147,7 +147,7 @@ message GetDatabaseStatusResult {
         RUNNING = 2;
         REMOVING = 3;
         PENDING_RESOURCES = 4;
-        CONFIGURING = 5; 
+        CONFIGURING = 5;
     }
 
     // Full path to database's home dir.
@@ -167,10 +167,10 @@ message GetDatabaseStatusResult {
     // Current database generation. Incremented at each successful
     // alter request.
     uint64 generation = 6;
-    // Current quotas for schema operations 
-    SchemaOperationQuotas schema_operation_quotas = 9; 
-    // Current quotas for the database 
-    DatabaseQuotas database_quotas = 10; 
+    // Current quotas for schema operations
+    SchemaOperationQuotas schema_operation_quotas = 9;
+    // Current quotas for the database
+    DatabaseQuotas database_quotas = 10;
 }
 
 // Change resources allocated for database.
@@ -191,12 +191,12 @@ message AlterDatabaseRequest {
     Ydb.Operations.OperationParams operation_params = 7;
     // Current generation of altered database.
     uint64 generation = 8;
-    // Change quotas for schema operations 
-    SchemaOperationQuotas schema_operation_quotas = 9; 
-    // Optional idempotency key 
-    string idempotency_key = 10; 
-    // Change quotas for the database 
-    DatabaseQuotas database_quotas = 11; 
+    // Change quotas for schema operations
+    SchemaOperationQuotas schema_operation_quotas = 9;
+    // Optional idempotency key
+    string idempotency_key = 10;
+    // Change quotas for the database
+    DatabaseQuotas database_quotas = 11;
     // Alter attributes. Leave the value blank to drop an attribute.
     map<string, string> alter_attributes = 12;
 }

@@ -11,7 +11,7 @@ class TTabletKillRequest : public TActorBootstrapped<TTabletKillRequest> {
 private:
     const ui64 TabletId;
     const ui32 NodeId;
-    const ui32 MaxGeneration; 
+    const ui32 MaxGeneration;
 
     void Handle(TEvStateStorage::TEvInfo::TPtr &ev, const TActorContext &ctx) {
         TEvStateStorage::TEvInfo *msg = ev->Get();
@@ -39,10 +39,10 @@ public:
         return NKikimrServices::TActivity::TABLET_KILLER;
     }
 
-    TTabletKillRequest(ui64 tabletId, ui32 nodeId, ui32 maxGeneration) 
+    TTabletKillRequest(ui64 tabletId, ui32 nodeId, ui32 maxGeneration)
         : TabletId(tabletId)
         , NodeId(nodeId)
-        , MaxGeneration(maxGeneration) 
+        , MaxGeneration(maxGeneration)
     {}
 
     void Bootstrap(const TActorContext &ctx) {
@@ -58,8 +58,8 @@ public:
     }
 };
 
-IActor* CreateTabletKiller(ui64 tabletId, ui32 nodeId, ui32 maxGeneration) { 
-    return new TTabletKillRequest(tabletId, nodeId, maxGeneration); 
+IActor* CreateTabletKiller(ui64 tabletId, ui32 nodeId, ui32 maxGeneration) {
+    return new TTabletKillRequest(tabletId, nodeId, maxGeneration);
 }
 
 }

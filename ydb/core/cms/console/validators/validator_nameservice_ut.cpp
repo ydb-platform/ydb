@@ -152,13 +152,13 @@ Y_UNIT_TEST_SUITE(NameserviceConfigValidatorTests) {
     Y_UNIT_TEST(TestEmptyAddresses) {
         NKikimrConfig::TStaticNameserviceConfig oldCfg = MakeDefaultNameserviceConfig();
         NKikimrConfig::TStaticNameserviceConfig newCfg = MakeDefaultNameserviceConfig();
-        AddNode(5, "host1", 102, "rhost3", "", "dc1", newCfg); 
-        AddNode(6, "host6", 19001, "rhost6", "", "dc1", newCfg); 
-        AddNode(7, "host7", 19001, "rhost7", "", "dc1", newCfg); 
+        AddNode(5, "host1", 102, "rhost3", "", "dc1", newCfg);
+        AddNode(6, "host6", 19001, "rhost6", "", "dc1", newCfg);
+        AddNode(7, "host7", 19001, "rhost7", "", "dc1", newCfg);
         CheckConfig(oldCfg, newCfg, true);
-        NKikimrConfig::TStaticNameserviceConfig midCfg = newCfg; 
-        AddNode(8, "host8", 19001, "rhost8", "", "dc1", newCfg); 
-        CheckConfig(midCfg, newCfg, true); 
+        NKikimrConfig::TStaticNameserviceConfig midCfg = newCfg;
+        AddNode(8, "host8", 19001, "rhost8", "", "dc1", newCfg);
+        CheckConfig(midCfg, newCfg, true);
     }
 }
 

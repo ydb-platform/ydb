@@ -68,10 +68,10 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
 
         Y_VERIFY(snapBody, "Failed to make full borrow snap. w/o tx restarts");
 
-        TString rsBody; 
-        bool extended = false; 
- 
-        const bool mvcc = DataShard.IsMvccEnabled(); 
+        TString rsBody;
+        bool extended = false;
+
+        const bool mvcc = DataShard.IsMvccEnabled();
 
         TRowVersion minVersion = mvcc ? TRowVersion(op->GetStep(), op->GetTxId()).Next()
                                       : DataShard.GetSnapshotManager().GetMinWriteVersion();
@@ -83,18 +83,18 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
                                    TRowVersion::Min();
 
         if (minVersion || completeEdge || incompleteEdge || lowWatermark)
-            extended = true; // Must use an extended format 
- 
-        if (extended) { 
-            // New format, wrap in an additional protobuf layer 
-            NKikimrTxDataShard::TSnapshotTransferReadSet rs; 
- 
-            // Use lz4 compression so snapshots use less bandwidth 
-            TString compressedBody = NBlockCodecs::Codec("lz4fast")->Encode(snapBody); 
- 
-            // TODO: make it possible to send multiple tables 
-            rs.SetBorrowedSnapshot(compressedBody); 
- 
+            extended = true; // Must use an extended format
+
+        if (extended) {
+            // New format, wrap in an additional protobuf layer
+            NKikimrTxDataShard::TSnapshotTransferReadSet rs;
+
+            // Use lz4 compression so snapshots use less bandwidth
+            TString compressedBody = NBlockCodecs::Codec("lz4fast")->Encode(snapBody);
+
+            // TODO: make it possible to send multiple tables
+            rs.SetBorrowedSnapshot(compressedBody);
+
             if (minVersion) {
                 rs.SetMinWriteVersionStep(minVersion.Step);
                 rs.SetMinWriteVersionTxId(minVersion.TxId);
@@ -115,15 +115,15 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
                 rs.SetMvccLowWatermarkTxId(lowWatermark.TxId);
             }
 
-            rsBody.reserve(SnapshotTransferReadSetMagic.size() + rs.ByteSizeLong()); 
-            rsBody.append(SnapshotTransferReadSetMagic); 
+            rsBody.reserve(SnapshotTransferReadSetMagic.size() + rs.ByteSizeLong());
+            rsBody.append(SnapshotTransferReadSetMagic);
             Y_PROTOBUF_SUPPRESS_NODISCARD rs.AppendToString(&rsBody);
-        } else { 
-            // Legacy format, no additional protobuf layer 
-            rsBody = snapBody; 
-        } 
- 
-        outReadSets[std::make_pair(srcTablet, targetTablet)] = rsBody; 
+        } else {
+            // Legacy format, no additional protobuf layer
+            rsBody = snapBody;
+        }
+
+        outReadSets[std::make_pair(srcTablet, targetTablet)] = rsBody;
     }
 
     op->InputSnapshots().clear();

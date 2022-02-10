@@ -20,8 +20,8 @@ TTxProxyMon::TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
     SchemeRequestLatency = TxGroup->GetHistogram("SchemeRequest/LatencyMs", NMonitoring::ExponentialHistogram(10, 4, 1));
     SchemeRequestProxyNotReady = TxGroup->GetCounter("Propose/SchemeRequestProxyNotReady", true);
     MakeRequest = TxGroup->GetCounter("Propose/MakeRequest", true);
-    SnapshotRequest = TxGroup->GetCounter("Propose/SnapshotRequest", true); 
-    CommitWritesRequest = TxGroup->GetCounter("Propose/CommitWritesRequest", true); 
+    SnapshotRequest = TxGroup->GetCounter("Propose/SnapshotRequest", true);
+    CommitWritesRequest = TxGroup->GetCounter("Propose/CommitWritesRequest", true);
     MakeRequestProxyNotReady = TxGroup->GetCounter("Propose/MakeRequestProxyNotReady", true);
     TxNotImplemented = TxGroup->GetCounter("Propose/TxNotImplemented", true);
     KqpRequest = TxGroup->GetCounter("Propose/KqpRequest", true);

@@ -35,7 +35,7 @@ bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
     if (!Impl->Execute(self, txc, readVersion, writeVersion))
         return false;
 
-    self->PromoteCompleteEdge(writeVersion.Step, txc); 
+    self->PromoteCompleteEdge(writeVersion.Step, txc);
     return true;
 }
 

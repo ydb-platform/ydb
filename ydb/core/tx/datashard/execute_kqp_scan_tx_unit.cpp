@@ -18,23 +18,23 @@ public:
     }
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
-        if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) { 
-            return true; 
-        } 
- 
-        if (DataShard.IsStopping()) { 
-            // Avoid doing any new work when datashard is stopping 
-            return false; 
-        } 
- 
-        return !op->HasRuntimeConflicts(); 
+        if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && WillRejectDataTx(op)) {
+            return true;
+        }
+
+        if (DataShard.IsStopping()) {
+            // Avoid doing any new work when datashard is stopping
+            return false;
+        }
+
+        return !op->HasRuntimeConflicts();
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext&, const TActorContext& ctx) override {
-        if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) { 
-            return EExecutionStatus::Executed; 
-        } 
- 
+        if (op->Result() || op->HasResultSentFlag() || op->IsImmediate() && CheckRejectDataTx(op, ctx)) {
+            return EExecutionStatus::Executed;
+        }
+
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::BAD_REQUEST)
             ->AddError(NKikimrTxDataShard::TError::BAD_TX_KIND, "Unexpected KqpScanTx");
         op->Abort();

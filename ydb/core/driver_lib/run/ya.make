@@ -44,7 +44,7 @@ SRCS(
 PEERDIR(
     contrib/libs/protobuf
     library/cpp/actors/core
-    library/cpp/actors/dnsresolver 
+    library/cpp/actors/dnsresolver
     library/cpp/actors/interconnect
     library/cpp/actors/memory_log
     library/cpp/actors/prof

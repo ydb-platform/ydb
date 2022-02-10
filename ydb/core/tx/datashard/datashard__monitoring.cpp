@@ -14,7 +14,7 @@ namespace NDataShard {
 
 class TDataShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
     NMon::TEvRemoteHttpInfo::TPtr Ev;
- 
+
 public:
     TTxMonitoring(TDataShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
         : TBase(self)
@@ -289,13 +289,13 @@ public:
             tx->FillState(resp);
     }
 
-    void FillDependencies(const NFH::TFlatHashSet<TOperation::TPtr> &deps, 
+    void FillDependencies(const NFH::TFlatHashSet<TOperation::TPtr> &deps,
                           ::google::protobuf::RepeatedPtrField<NKikimrTxDataShard::TEvGetOperationResponse_TDependency> &arr)
     {
-        for (auto &op : deps) { 
+        for (auto &op : deps) {
             auto &dep = *arr.Add();
-            dep.SetTarget(op->GetTxId()); 
-            dep.AddTypes("Data"); 
+            dep.SetTarget(op->GetTxId());
+            dep.AddTypes("Data");
         }
     }
 

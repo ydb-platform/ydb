@@ -281,9 +281,9 @@ NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     result.ClearColumns();
     for (auto& iter: baseTableInfo->Columns) {
         const NSchemeShard::TTableInfo::TColumn& column = iter.second;
-        if (column.IsDropped()) { 
-            continue; 
-        } 
+        if (column.IsDropped()) {
+            continue;
+        }
 
         if (implTableColumns.Columns.contains(column.Name)) {
             auto item = result.AddColumns();

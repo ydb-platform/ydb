@@ -1,6 +1,6 @@
-package NKikimrBlockStore; 
-option java_package = "ru.yandex.kikimr.proto"; 
- 
+package NKikimrBlockStore;
+option java_package = "ru.yandex.kikimr.proto";
+
 message TChannelProfile {
     // storage settings
     optional string PoolKind = 1;
@@ -19,30 +19,30 @@ enum EPartitionType {
     NonReplicated = 1; // directly mapped network partitions
 }
 
-message TVolumeConfig { 
-    optional uint32 BlockSize = 1; // block size in bytes 
-    optional uint32 StripeSize = 2; // stripe chunk size in blocks, default 0 (linear addressing) 
- 
-    message TPartition { 
-        optional uint64 BlockCount = 2; // size of partition in blocks 
+message TVolumeConfig {
+    optional uint32 BlockSize = 1; // block size in bytes
+    optional uint32 StripeSize = 2; // stripe chunk size in blocks, default 0 (linear addressing)
+
+    message TPartition {
+        optional uint64 BlockCount = 2; // size of partition in blocks
         optional EPartitionType Type = 3; // partition type
-    } 
- 
-    repeated TPartition Partitions = 3; 
- 
-    optional uint32 NumChannels = 4; // FIXME: tablet creation only? 
-    optional uint32 ChannelProfileId = 5; // FIXME: tablet creation only? 
+    }
+
+    repeated TPartition Partitions = 3;
+
+    optional uint32 NumChannels = 4; // FIXME: tablet creation only?
+    optional uint32 ChannelProfileId = 5; // FIXME: tablet creation only?
     optional uint32 Version = 6;
- 
-    // Volume private data 
+
+    // Volume private data
     optional string DiskId = 7;
     optional string ProjectId = 8;
     optional string FolderId = 9;
     optional string CloudId = 10;
     optional uint32 TabletVersion = 11;
- 
+
     // Binary data for private use by BlockStore implementation (legacy, unused)
-    optional bytes Opaque = 12; 
+    optional bytes Opaque = 12;
 
     // Volume disk type
     optional uint32 StorageMediaKind = 13;
@@ -99,31 +99,31 @@ message TVolumeConfig {
 
     // Channel descriptions for volume tablets
     repeated TChannelProfile VolumeExplicitChannelProfiles = 41;
-} 
- 
-message TUpdateVolumeConfig { 
-    optional uint64 TxId = 1; 
-    optional TVolumeConfig VolumeConfig = 2; 
- 
-    message TPartition { 
-        // Index in VolumeConfig.Partitions 
-        optional uint32 PartitionId = 1; 
-        optional uint64 TabletId = 2; 
-    } 
- 
-    // Associates volume with its partition tablets 
-    repeated TPartition Partitions = 3; 
-} 
- 
-enum EStatus { 
-    OK = 0; 
-    ERROR = 1; 
-    ERROR_BAD_VERSION = 2; 
-    ERROR_UPDATE_IN_PROGRESS = 3; 
-} 
- 
-message TUpdateVolumeConfigResponse { 
-    optional uint64 TxId = 1; 
-    optional uint64 Origin = 2; 
-    optional EStatus Status = 3; 
-} 
+}
+
+message TUpdateVolumeConfig {
+    optional uint64 TxId = 1;
+    optional TVolumeConfig VolumeConfig = 2;
+
+    message TPartition {
+        // Index in VolumeConfig.Partitions
+        optional uint32 PartitionId = 1;
+        optional uint64 TabletId = 2;
+    }
+
+    // Associates volume with its partition tablets
+    repeated TPartition Partitions = 3;
+}
+
+enum EStatus {
+    OK = 0;
+    ERROR = 1;
+    ERROR_BAD_VERSION = 2;
+    ERROR_UPDATE_IN_PROGRESS = 3;
+}
+
+message TUpdateVolumeConfigResponse {
+    optional uint64 TxId = 1;
+    optional uint64 Origin = 2;
+    optional EStatus Status = 3;
+}

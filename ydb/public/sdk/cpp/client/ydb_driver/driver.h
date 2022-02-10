@@ -120,13 +120,13 @@ class TDriver {
 public:
     TDriver(const TDriverConfig& config);
 
-    //! Cancel all currently running and future requests 
-    //! This method is useful to make sure there are no new asynchronous 
-    //! callbacks and it is safe to destroy the driver 
-    //! When wait is true this method will not return until the underlying 
-    //! client thread pool is stopped completely 
-    void Stop(bool wait = false); 
- 
+    //! Cancel all currently running and future requests
+    //! This method is useful to make sure there are no new asynchronous
+    //! callbacks and it is safe to destroy the driver
+    //! When wait is true this method will not return until the underlying
+    //! client thread pool is stopped completely
+    void Stop(bool wait = false);
+
     template<typename TExtension>
     void AddExtension(typename TExtension::TParams params = typename TExtension::TParams());
 

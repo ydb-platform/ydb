@@ -84,7 +84,7 @@ namespace Tests {
         using TConstPtr = TIntrusiveConstPtr<TServerSettings>;
 
         using TControls = NKikimrConfig::TImmediateControlsConfig;
-        using TLoggerInitializer = std::function<void (TTestActorRuntime&)>; 
+        using TLoggerInitializer = std::function<void (TTestActorRuntime&)>;
         using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
 
         ui16 Port;
@@ -105,7 +105,7 @@ namespace Tests {
         TIntrusivePtr<TFormatFactory> Formats;
         bool EnableMockOnSingleNode = true;
         TAutoPtr<TLogBackend> LogBackend;
-        TLoggerInitializer LoggerInitializer; 
+        TLoggerInitializer LoggerInitializer;
         TStoragePoolKinds StoragePoolTypes;
         TVector<NKikimrKqp::TKqpSetting> KqpSettings;
         bool EnableConsole = true;
@@ -119,7 +119,7 @@ namespace Tests {
         NKikimrConfig::TAppConfig AppConfig;
         NKikimrConfig::TCompactionConfig CompactionConfig;
         TMap<ui32, TString> NodeKeys;
-        ui64 DomainPlanResolution = 0; 
+        ui64 DomainPlanResolution = 0;
         std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PersQueueGetReadSessionsInfoWorkerFactory;
 
         bool EnableMetering = false;
@@ -140,7 +140,7 @@ namespace Tests {
         TServerSettings& SetFrFactory(const TAppPrepare::TFnReg& value) { FrFactory = value; return *this; }
         TServerSettings& SetEnableMockOnSingleNode(bool value) { EnableMockOnSingleNode = value; return *this; }
         TServerSettings& SetLogBackend(TAutoPtr<TLogBackend> value) { LogBackend = value; return *this; }
-        TServerSettings& SetLoggerInitializer(TLoggerInitializer value) { LoggerInitializer = std::move(value); return *this; } 
+        TServerSettings& SetLoggerInitializer(TLoggerInitializer value) { LoggerInitializer = std::move(value); return *this; }
         TServerSettings& AddStoragePoolType(const TString& poolKind, ui32 encryptionMode = 0);
         TServerSettings& AddStoragePool(const TString& poolKind, const TString& poolName = {}, ui32 numGroups = 1, ui32 encryptionMode = 0);
         TServerSettings& SetKqpSettings(const TVector<NKikimrKqp::TKqpSetting>& settings) { KqpSettings = settings; return *this; }
@@ -150,7 +150,7 @@ namespace Tests {
         TServerSettings& SetAppConfig(const NKikimrConfig::TAppConfig value) { AppConfig = value; return *this; }
         TServerSettings& SetKeyFor(ui32 nodeId, TString keyValue) { NodeKeys[nodeId] = keyValue; return *this; }
         TServerSettings& SetEnableKqpSpilling(bool value) { EnableKqpSpilling = value; return *this; }
-        TServerSettings& SetDomainPlanResolution(ui64 resolution) { DomainPlanResolution = resolution; return *this; } 
+        TServerSettings& SetDomainPlanResolution(ui64 resolution) { DomainPlanResolution = resolution; return *this; }
         TServerSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
         TServerSettings& SetCompactionConfig(const NKikimrConfig::TCompactionConfig& value) { CompactionConfig = value; return *this; }
         TServerSettings& SetEnableDbCounters(bool value) { FeatureFlags.SetEnableDbCounters(value); return *this; }
@@ -233,7 +233,7 @@ namespace Tests {
             }
         }
         void StartDummyTablets();
-        TTestActorRuntime* GetRuntime() const; 
+        TTestActorRuntime* GetRuntime() const;
         const TServerSettings& GetSettings() const;
         const NScheme::TTypeRegistry* GetTypeRegistry();
         const NMiniKQL::IFunctionRegistry* GetFunctionRegistry();
@@ -366,7 +366,7 @@ namespace Tests {
             const TVector<TString> indexColumns, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus SplitTable(const TString& table, ui64 datashardId, ui64 border, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CopyTable(const TString& parent, const TString& name, const TString& src);
-        NMsgBusProxy::EResponseStatus CreateKesus(const TString& parent, const TString& name); 
+        NMsgBusProxy::EResponseStatus CreateKesus(const TString& parent, const TString& name);
         NMsgBusProxy::EResponseStatus DeleteKesus(const TString& parent, const TString& name);
         NMsgBusProxy::EResponseStatus ConsistentCopyTables(TVector<std::pair<TString, TString>> desc, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus DeleteTable(const TString& parent, const TString& name);
@@ -377,7 +377,7 @@ namespace Tests {
 
         NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const TString& scheme);
         NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const NKikimrSchemeOp::TColumnStoreDescription& store);
-        NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const TString& scheme); 
+        NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const TString& scheme);
         NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const NKikimrSchemeOp::TColumnTableDescription& table);
         NMsgBusProxy::EResponseStatus CreateSolomon(const TString& parent, const TString& name, ui32 parts = 4, ui32 channelProfile = 0);
         NMsgBusProxy::EResponseStatus StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task);

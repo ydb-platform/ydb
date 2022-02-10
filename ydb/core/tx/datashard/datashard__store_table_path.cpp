@@ -23,12 +23,12 @@ bool TDataShard::TTxStoreTablePath::Execute(TTransactionContext &txc, const TAct
 
     txc.DB.NoMoreReadsForTx();
 
-    TUserTable::TPtr copy = new TUserTable(*Self->TableInfos.at(PathId)); 
-    copy->SetPath(Path); 
+    TUserTable::TPtr copy = new TUserTable(*Self->TableInfos.at(PathId));
+    copy->SetPath(Path);
 
     NIceDb::TNiceDb db(txc.DB);
-    Self->PersistUserTable(db, PathId, *copy); 
-    Self->AddUserTable(TPathId(Self->GetPathOwnerId(), PathId), copy); 
+    Self->PersistUserTable(db, PathId, *copy);
+    Self->AddUserTable(TPathId(Self->GetPathOwnerId(), PathId), copy);
 
     return true;
 }

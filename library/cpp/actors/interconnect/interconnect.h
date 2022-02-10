@@ -133,7 +133,7 @@ namespace NActors {
         const TIntrusivePtr<TTableNameserverSetup>& setup,
         ui32 poolId = 0);
 
-    /** 
+    /**
      * Name service which can be paired with external discovery service.
      * Copies information from setup on the start (table may be empty).
      * Handles TEvNodesInfo to change list of known nodes. 
@@ -147,17 +147,17 @@ namespace NActors {
         ui32 poolId = 0);
 
     /**
-     * Creates an actor that resolves host/port and replies with either: 
-     * 
-     * - TEvLocalNodeInfo on success 
-     * - TEvResolveError on errors 
-     * 
-     * Optional defaultAddress may be used as fallback. 
-     */ 
-    IActor* CreateResolveActor( 
-        const TString& host, ui16 port, ui32 nodeId, const TString& defaultAddress, 
-        const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline); 
- 
+     * Creates an actor that resolves host/port and replies with either:
+     *
+     * - TEvLocalNodeInfo on success
+     * - TEvResolveError on errors
+     *
+     * Optional defaultAddress may be used as fallback.
+     */
+    IActor* CreateResolveActor(
+        const TString& host, ui16 port, ui32 nodeId, const TString& defaultAddress,
+        const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline);
+
     inline IActor* CreateResolveActor(
         ui32 nodeId, const TTableNameserverSetup::TNodeInfo& nodeInfo,
         const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline)
@@ -166,14 +166,14 @@ namespace NActors {
             replyTo, replyFrom, deadline);
     }
 
-    /** 
-     * Creates an actor that resolves host/port and replies with either: 
-     *  
-     * - TEvAddressInfo on success 
-     * - TEvResolveError on errors 
-     */ 
-    IActor* CreateResolveActor( 
-        const TString& host, ui16 port, 
-        const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline); 
- 
+    /**
+     * Creates an actor that resolves host/port and replies with either:
+     * 
+     * - TEvAddressInfo on success
+     * - TEvResolveError on errors
+     */
+    IActor* CreateResolveActor(
+        const TString& host, ui16 port,
+        const TActorId& replyTo, const TActorId& replyFrom, TInstant deadline);
+
 }

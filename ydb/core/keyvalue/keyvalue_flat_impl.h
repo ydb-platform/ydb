@@ -93,7 +93,7 @@ protected:
             if (!db.Precharge(TABLE_ID, {}, {}, tags, 0, -1, -1))
                 return false;
 
-            while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) { 
+            while (iter->Next(NTable::ENext::Data) == NTable::EReady::Data) {
                 const auto &row = iter->Row();
 
                 TString key(row.Get(0).AsBuf());

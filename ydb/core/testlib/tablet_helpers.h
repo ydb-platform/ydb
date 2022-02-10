@@ -20,11 +20,11 @@ namespace NKikimr {
 
     TActorId FollowerTablet(TTestActorRuntime &runtime, const TActorId &launcher, TTabletStorageInfo *info,
         std::function<IActor* (const TActorId &, TTabletStorageInfo*)> op);
-    TActorId ResolveTablet(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex = 0, bool sysTablet = false); 
+    TActorId ResolveTablet(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex = 0, bool sysTablet = false);
     void ForwardToTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, IEventBase *ev, ui32 nodeIndex = 0, bool sysTablet = false);
     void InvalidateTabletResolverCache(TTestActorRuntime& runtime, ui64 tabletId, ui32 nodeIndex = 0);
     void RebootTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0, bool sysTablet = false);
-    void GracefulRestartTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0); 
+    void GracefulRestartTablet(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& sender, ui32 nodeIndex = 0);
     void SetupTabletServices(TTestActorRuntime& runtime, TAppPrepare* app = nullptr, bool mockDisk = false,
                              NFake::TStorage storage = {}, NFake::TCaches caches = {});
 
@@ -114,9 +114,9 @@ namespace NKikimr {
         const ui64 TabletId;
         TActorId BootstrapperActorId;
 
-        TChannelsBindings BoundChannels; 
-        ui32 ChannelsProfile; 
- 
+        TChannelsBindings BoundChannels;
+        ui32 ChannelsProfile;
+
         THashSet<TActorId> DeletionWaiters;
 
         TFakeHiveTabletInfo(TTabletTypes::EType type, ui64 tabletId, TActorId bootstrapperActorId)

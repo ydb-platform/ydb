@@ -110,31 +110,31 @@ Y_UNIT_TEST_SUITE(TCompaction) {
             .Key({ 0 });
 
         auto lower =
-            TPartCook(lay, { false, 4096 }, { }, TEpoch::FromIndex(1)) 
+            TPartCook(lay, { false, 4096 }, { }, TEpoch::FromIndex(1))
                 .AddN(1_u64, 1_u32, 1_u32)
                 .AddN(2_u64, 2_u32, 3_u32)
                 .AddN(3_u64, 3_u32, 6_u32)
                 .AddN(4_u64, 4_u32, 8_u32)
-                .Finish(); 
+                .Finish();
 
         auto middle =
-            TPartCook(lay, { false, 4096 }, { }, TEpoch::FromIndex(2)) 
+            TPartCook(lay, { false, 4096 }, { }, TEpoch::FromIndex(2))
                 .AddOpN(ERowOp::Erase, 2_u64)
                 .AddOpN(ERowOp::Erase, 3_u64)
                 .AddOpN(ERowOp::Reset, 4_u64, 9_u32, nullptr)
-                .Finish(); 
+                .Finish();
 
         auto upper =
-            TPartCook(lay, { false, 4096 }, { }, TEpoch::FromIndex(3)) 
+            TPartCook(lay, { false, 4096 }, { }, TEpoch::FromIndex(3))
                 .AddOpN(ERowOp::Erase, 2_u64)
                 .AddOpN(ERowOp::Upsert, 3_u64, ECellOp::Empty, nullptr)
                 .AddOpN(ERowOp::Upsert, 4_u64, ECellOp::Empty, ECellOp::Reset)
-                .Finish(); 
+                .Finish();
 
         { /* full parts merge, check final results only */
             TCompaction make(nullptr, { true, 7 * 1024 });
 
-            auto born = make.Do(lower.Scheme, { &lower, &middle, &upper }); 
+            auto born = make.Do(lower.Scheme, { &lower, &middle, &upper });
 
             TCheckIt
                 (born, { nullptr, 0 }, nullptr, true /* expand defaults */)
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(TCompaction) {
         { /* partial merge, check intermediate states */
             TCompaction make(nullptr, { false, 7 * 1024 });
 
-            auto born = make.Do(lower.Scheme, { &middle, &upper }); 
+            auto born = make.Do(lower.Scheme, { &middle, &upper });
 
             TCheckIt
                 (born, { nullptr, 0 }, nullptr, true /* expand defaults */)

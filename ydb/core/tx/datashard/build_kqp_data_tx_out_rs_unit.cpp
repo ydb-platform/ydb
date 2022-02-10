@@ -49,15 +49,15 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
 
     DataShard.ReleaseCache(*tx);
 
-    if (tx->IsTxDataReleased()) { 
-        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) { 
-            case ERestoreDataStatus::Ok: 
-                break; 
-            case ERestoreDataStatus::Restart: 
-                return EExecutionStatus::Restart; 
-            case ERestoreDataStatus::Error: 
-                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str()); 
-        } 
+    if (tx->IsTxDataReleased()) {
+        switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
+            case ERestoreDataStatus::Ok:
+                break;
+            case ERestoreDataStatus::Restart:
+                return EExecutionStatus::Restart;
+            case ERestoreDataStatus::Error:
+                Y_FAIL("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
+        }
     }
 
     const auto& dataTx = tx->GetDataTx();

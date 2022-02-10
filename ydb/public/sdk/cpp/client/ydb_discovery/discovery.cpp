@@ -11,7 +11,7 @@ TListEndpointsResult::TListEndpointsResult(TStatus&& status, const Ydb::Discover
     const auto& endpoints = proto.endpoints();
     Info_.reserve(proto.endpoints().size());
     for (const auto& endpointInfo : endpoints) {
-        TEndpointInfo& info = Info_.emplace_back(); 
+        TEndpointInfo& info = Info_.emplace_back();
         info.Address = endpointInfo.address();
         info.Port = endpointInfo.port();
         info.Location = endpointInfo.location();
@@ -21,15 +21,15 @@ TListEndpointsResult::TListEndpointsResult(TStatus&& status, const Ydb::Discover
         for (const auto& s : endpointInfo.service()) {
             info.Services.emplace_back(s);
         }
-        info.IPv4Addrs.reserve(endpointInfo.ip_v4().size()); 
-        for (const auto& addr : endpointInfo.ip_v4()) { 
-            info.IPv4Addrs.emplace_back(addr); 
-        } 
-        info.IPv6Addrs.reserve(endpointInfo.ip_v6().size()); 
-        for (const auto& addr : endpointInfo.ip_v6()) { 
-            info.IPv6Addrs.emplace_back(addr); 
-        } 
-        info.SslTargetNameOverride = endpointInfo.ssl_target_name_override(); 
+        info.IPv4Addrs.reserve(endpointInfo.ip_v4().size());
+        for (const auto& addr : endpointInfo.ip_v4()) {
+            info.IPv4Addrs.emplace_back(addr);
+        }
+        info.IPv6Addrs.reserve(endpointInfo.ip_v6().size());
+        for (const auto& addr : endpointInfo.ip_v6()) {
+            info.IPv6Addrs.emplace_back(addr);
+        }
+        info.SslTargetNameOverride = endpointInfo.ssl_target_name_override();
     }
 }
 

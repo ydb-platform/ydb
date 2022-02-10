@@ -36,7 +36,7 @@ namespace NTest {
 
         template<typename ... TArgs>
         TChecker(const TEggs &eggs, TConf conf, TArgs && ...args)
-            : Retries(Max(conf.Retry, ui64(1) + conf.Retry)) 
+            : Retries(Max(conf.Retry, ui64(1) + conf.Retry))
             , Erased(conf.Erased)
             , Env(conf.Env ? conf.Env : new TTestEnv)
             , Wrap(eggs, std::forward<TArgs>(args)...)
@@ -129,14 +129,14 @@ namespace NTest {
         }
 
         template<typename TIter>
-        TChecker& IsTheSame(const TIter begin, const TIter end) 
-        { 
-            Seek({ }, ESeek::Lower); 
- 
-            return Is(begin, end); 
-        } 
- 
-        template<typename TIter> 
+        TChecker& IsTheSame(const TIter begin, const TIter end)
+        {
+            Seek({ }, ESeek::Lower);
+
+            return Is(begin, end);
+        }
+
+        template<typename TIter>
         TChecker& Is(TIter it, const TIter end)
         {
             for (; it != end; ++it) Is(*it, true, ERowOp::Absent).Next();
@@ -149,17 +149,17 @@ namespace NTest {
             return Make(TRowTool(Scheme).LookupKey(tagged), seek);
         }
 
-        TChecker& SeekAgain(const TRow &tagged, ESeek seek) 
+        TChecker& SeekAgain(const TRow &tagged, ESeek seek)
         {
-            return Make(TRowTool(Scheme).LookupKey(tagged), seek, /* make = */ false); 
-        } 
+            return Make(TRowTool(Scheme).LookupKey(tagged), seek, /* make = */ false);
+        }
 
-        TChecker& Make(const TRawVals rawkey, const ESeek seek, bool make = true) 
-        { 
-            if (make) { 
-                Wrap.Make(Env.Get()); 
-            } 
- 
+        TChecker& Make(const TRawVals rawkey, const ESeek seek, bool make = true)
+        {
+            if (make) {
+                Wrap.Make(Env.Get());
+            }
+
             for (bool first = true; ; first = false)  {
                 for (Hoped = 0; Hoped < Retries; Hoped++) {
                     Ready = first ? Wrap.Seek(rawkey, seek) : Wrap.Next();
@@ -200,54 +200,54 @@ namespace NTest {
             return *this;
         }
 
-        TChecker& Ver(TRowVersion rowVersion) 
-        { 
-            Y_VERIFY(Erased, "Working with versions needs Erased == true"); 
- 
-            for (Hoped = 0; Hoped < Retries; Hoped++) { 
-                Ready = Wrap.SkipToRowVersion(rowVersion); 
- 
-                if (Ready != EReady::Page) break; 
-            } 
- 
-            if (Ready == EReady::Data) { 
-                Wrap.Apply(); 
-            } 
- 
-            return *this; 
-        } 
- 
-        TChecker& IsVer(TRowVersion expected) { 
-            if (EReady::Gone == Ready) { 
-                TBase::Log() 
-                    << "Row not found, expected " << expected << Endl; 
- 
-                UNIT_ASSERT(false); 
-            } 
- 
-            TRowVersion current = Wrap.GetRowVersion(); 
- 
-            bool success = true; 
- 
-            if (current != expected) { 
-                TBase::Log() 
-                    << "Row version is " << current 
-                    << ", expected " << expected 
-                    << Endl; 
- 
-                success = false; 
-            } 
- 
-            UNIT_ASSERT(success); 
- 
-            return *this; 
-        } 
- 
+        TChecker& Ver(TRowVersion rowVersion)
+        {
+            Y_VERIFY(Erased, "Working with versions needs Erased == true");
+
+            for (Hoped = 0; Hoped < Retries; Hoped++) {
+                Ready = Wrap.SkipToRowVersion(rowVersion);
+
+                if (Ready != EReady::Page) break;
+            }
+
+            if (Ready == EReady::Data) {
+                Wrap.Apply();
+            }
+
+            return *this;
+        }
+
+        TChecker& IsVer(TRowVersion expected) {
+            if (EReady::Gone == Ready) {
+                TBase::Log()
+                    << "Row not found, expected " << expected << Endl;
+
+                UNIT_ASSERT(false);
+            }
+
+            TRowVersion current = Wrap.GetRowVersion();
+
+            bool success = true;
+
+            if (current != expected) {
+                TBase::Log()
+                    << "Row version is " << current
+                    << ", expected " << expected
+                    << Endl;
+
+                success = false;
+            }
+
+            UNIT_ASSERT(success);
+
+            return *this;
+        }
+
         TChecker& IsOp(ERowOp op, const TRow &row)
-        { 
-            return Is(row, true, op); 
-        } 
- 
+        {
+            return Is(row, true, op);
+        }
+
         TChecker& Is(const TRow &row, bool same = true, ERowOp op = ERowOp::Absent)
         {
             if (EReady::Gone == Ready) {
@@ -292,16 +292,16 @@ namespace NTest {
         TChecker& Is(EReady ready)
         {
             if (ready != Ready) {
-                if (Ready == EReady::Data) { 
-                    const auto &state = Wrap.Apply(); 
-                    const auto &remap = Wrap.Remap(); 
-                    TBase::Log() 
-                        << "Unexpected row " 
-                        << (int)state.GetRowState() 
-                        << ": " << NFmt::TCells(*state, remap, DbgRegistry()) 
-                        << Endl; 
-                } 
- 
+                if (Ready == EReady::Data) {
+                    const auto &state = Wrap.Apply();
+                    const auto &remap = Wrap.Remap();
+                    TBase::Log()
+                        << "Unexpected row "
+                        << (int)state.GetRowState()
+                        << ": " << NFmt::TCells(*state, remap, DbgRegistry())
+                        << Endl;
+                }
+
                 TBase::Log()
                     << "Iterator has "
                     << " EReady " << static_cast<int>(Ready)

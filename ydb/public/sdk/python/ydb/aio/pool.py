@@ -123,9 +123,9 @@ class Discovery:
             return False
 
         resolved_endpoints = set(
-            endpoint 
-            for resolved_endpoint in resolve_details.endpoints 
-            for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options() 
+            endpoint
+            for resolved_endpoint in resolve_details.endpoints
+            for endpoint, endpoint_options in resolved_endpoint.endpoints_with_options()
         )
         for cached_endpoint in self._cache.values():
             if cached_endpoint.endpoint not in resolved_endpoints:
@@ -140,24 +140,24 @@ class Discovery:
 
             preferred = resolve_details.self_location == resolved_endpoint.location
 
-            for ( 
-                endpoint, 
-                endpoint_options, 
-            ) in resolved_endpoint.endpoints_with_options(): 
-                if self._cache.size >= self._max_size or self._cache.already_exists( 
-                    endpoint 
-                ): 
-                    continue 
+            for (
+                endpoint,
+                endpoint_options,
+            ) in resolved_endpoint.endpoints_with_options():
+                if self._cache.size >= self._max_size or self._cache.already_exists(
+                    endpoint
+                ):
+                    continue
 
-                ready_connection = Connection( 
-                    endpoint, self._driver_config, endpoint_options=endpoint_options 
-                ) 
-                await ready_connection.connection_ready( 
-                    ready_timeout=self._ready_timeout 
-                ) 
+                ready_connection = Connection(
+                    endpoint, self._driver_config, endpoint_options=endpoint_options
+                )
+                await ready_connection.connection_ready(
+                    ready_timeout=self._ready_timeout
+                )
 
-                self._cache.add(ready_connection, preferred) 
- 
+                self._cache.add(ready_connection, preferred)
+
         await self._cache.cleanup_outdated()
         return self._cache.size > 0
 

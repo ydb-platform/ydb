@@ -319,15 +319,15 @@ class KiKiMRMessageBusClient(object):
 
         return self.invoke(request, 'KeyValue')
 
-    def console_request(self, request_text, raise_on_error=True): 
+    def console_request(self, request_text, raise_on_error=True):
         request = msgbus.TConsoleRequest()
         Parse(request_text, request)
-        response = self.invoke(request, 'ConsoleRequest') 
-        if raise_on_error and response.Status.Code != StatusIds.SUCCESS: 
-            raise RuntimeError('console_request failed: %s: %s' % (response.Status.Code, response.Status.Reason)) 
-        return response 
+        response = self.invoke(request, 'ConsoleRequest')
+        if raise_on_error and response.Status.Code != StatusIds.SUCCESS:
+            raise RuntimeError('console_request failed: %s: %s' % (response.Status.Code, response.Status.Reason))
+        return response
 
-    def add_config_item(self, config, cookie=None, raise_on_error=True): 
+    def add_config_item(self, config, cookie=None, raise_on_error=True):
         request = msgbus.TConsoleRequest()
         action = request.ConfigureRequest.Actions.add()
         item = action.AddConfigItem.ConfigItem
@@ -335,10 +335,10 @@ class KiKiMRMessageBusClient(object):
             Parse(config, item.Config)
         else:
             item.Config.MergeFrom(config)
-        response = self.invoke(request, 'ConsoleRequest') 
-        if raise_on_error and response.Status.Code != StatusIds.SUCCESS: 
-            raise RuntimeError('add_config_item failed: %s: %s' % (response.Status.Code, response.Status.Reason)) 
-        return response 
+        response = self.invoke(request, 'ConsoleRequest')
+        if raise_on_error and response.Status.Code != StatusIds.SUCCESS:
+            raise RuntimeError('add_config_item failed: %s: %s' % (response.Status.Code, response.Status.Reason))
+        return response
 
     def kv_cmd_delete_range(self, tablet_id, cmd_range_delete, generation=None):
 

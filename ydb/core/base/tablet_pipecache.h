@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 #include "events.h"
-#include "counters.h" 
+#include "counters.h"
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <library/cpp/actors/core/event_local.h>
@@ -13,10 +13,10 @@ struct TEvPipeCache {
     enum EEv {
         EvForward = EventSpaceBegin(TKikimrEvents::ES_PIPECACHE),
         EvUnlink,
-        EvGetTabletNode, 
+        EvGetTabletNode,
 
         EvDeliveryProblem = EvForward + 1 * 512,
-        EvGetTabletNodeResult, 
+        EvGetTabletNodeResult,
 
         EvEnd
     };
@@ -53,37 +53,37 @@ struct TEvPipeCache {
             , NotDelivered(notDelivered)
         {}
     };
- 
-    /** 
-     * Requests node id of the given tablet id, where pipe cache is connected 
-     */ 
-    struct TEvGetTabletNode : public TEventLocal<TEvGetTabletNode, EvGetTabletNode> { 
-        const ui64 TabletId; 
- 
-        explicit TEvGetTabletNode(ui64 tabletId) 
-            : TabletId(tabletId) 
-        {} 
-    }; 
- 
-    /** 
-     * Returns node id of the given tablet id, or zero if there's a connection error 
-     */ 
-    struct TEvGetTabletNodeResult : public TEventLocal<TEvGetTabletNodeResult, EvGetTabletNodeResult> { 
-        const ui64 TabletId; 
-        const ui32 NodeId; 
- 
-        TEvGetTabletNodeResult(ui64 tabletId, ui32 nodeId) 
-            : TabletId(tabletId) 
-            , NodeId(nodeId) 
-        {} 
-    }; 
+
+    /**
+     * Requests node id of the given tablet id, where pipe cache is connected
+     */
+    struct TEvGetTabletNode : public TEventLocal<TEvGetTabletNode, EvGetTabletNode> {
+        const ui64 TabletId;
+
+        explicit TEvGetTabletNode(ui64 tabletId)
+            : TabletId(tabletId)
+        {}
+    };
+
+    /**
+     * Returns node id of the given tablet id, or zero if there's a connection error
+     */
+    struct TEvGetTabletNodeResult : public TEventLocal<TEvGetTabletNodeResult, EvGetTabletNodeResult> {
+        const ui64 TabletId;
+        const ui32 NodeId;
+
+        TEvGetTabletNodeResult(ui64 tabletId, ui32 nodeId)
+            : TabletId(tabletId)
+            , NodeId(nodeId)
+        {}
+    };
 };
 
 struct TPipePeNodeCacheConfig : public TAtomicRefCount<TPipePeNodeCacheConfig>{
     ui64 TabletCacheLimit;
     TDuration PipeRefreshTime;
     NTabletPipe::TClientConfig PipeConfig;
-    NMonitoring::TDynamicCounterPtr Counters; 
+    NMonitoring::TDynamicCounterPtr Counters;
 
     TPipePeNodeCacheConfig()
         : TabletCacheLimit(500000)

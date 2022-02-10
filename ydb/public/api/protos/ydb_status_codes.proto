@@ -21,8 +21,8 @@ message StatusIds {
         BAD_SESSION =         400100;
         PRECONDITION_FAILED = 400120;
         ALREADY_EXISTS      = 400130;
-        NOT_FOUND =           400140; 
-        SESSION_EXPIRED =     400150; 
+        NOT_FOUND =           400140;
+        SESSION_EXPIRED =     400150;
         CANCELLED =           400160;
         UNDETERMINED =        400170;
         UNSUPPORTED =         400180;

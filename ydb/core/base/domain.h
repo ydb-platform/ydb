@@ -240,7 +240,7 @@ struct TDomainsInfo : public TThrRefBase {
 
     TDomainsInfo() {
         // Add default configs. They can be overriden by user
-        NamedCompactionPolicies[SystemTableDefaultPoicyName()] = NLocalDb::CreateDefaultTablePolicy(); 
+        NamedCompactionPolicies[SystemTableDefaultPoicyName()] = NLocalDb::CreateDefaultTablePolicy();
         NamedCompactionPolicies[UserTableDefaultPoicyName()] = NLocalDb::CreateDefaultUserTablePolicy();
     }
 

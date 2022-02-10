@@ -15,12 +15,12 @@ namespace NDataShard {
 class TDataShard;
 class TPipeline;
 
-enum class ECleanupStatus { 
-    None, 
-    Restart, 
-    Success, 
-}; 
- 
+enum class ECleanupStatus {
+    None,
+    Restart,
+    Success,
+};
+
 /// Manages datashard's user transactions
 class TTransQueue {
 public:
@@ -34,10 +34,10 @@ public:
     void Reset() {
         TxsInFly.clear();
         SchemaOps.clear();
-        PlannedTxs.clear(); 
-        DeadlineQueue.clear(); 
-        ProposeDelayers.clear(); 
-        PlanWaitingTxCount = 0; 
+        PlannedTxs.clear();
+        DeadlineQueue.clear();
+        ProposeDelayers.clear();
+        PlanWaitingTxCount = 0;
     }
 
     bool Load(NIceDb::TNiceDb& db);
@@ -69,11 +69,11 @@ public:
     const TMap<ui64, TSchemaOperation>& GetSchemaOperations() const { return SchemaOps; }
     bool HasNotAckedSchemaTx() const { return ! SchemaOps.empty(); }
 
-    ui64 TxPlanWaiting() const { return PlanWaitingTxCount; } 
- 
-    bool HasProposeDelayers() const { return !ProposeDelayers.empty(); } 
-    bool RemoveProposeDelayer(ui64 txId) { return ProposeDelayers.erase(txId) > 0; } 
- 
+    ui64 TxPlanWaiting() const { return PlanWaitingTxCount; }
+
+    bool HasProposeDelayers() const { return !ProposeDelayers.empty(); }
+    bool RemoveProposeDelayer(ui64 txId) { return ProposeDelayers.erase(txId) > 0; }
+
     // Debug
     TString TxInFlyToString() const;
 
@@ -82,24 +82,24 @@ private: // for pipeline only
     // Propose
 
     void ProposeTx(NIceDb::TNiceDb& db, TOperation::TPtr op, TActorId source, const TStringBuf& txBody);
-    void UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags); 
-    void UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf& txBody); 
+    void UpdateTxFlags(NIceDb::TNiceDb& db, ui64 txId, ui64 flags);
+    void UpdateTxBody(NIceDb::TNiceDb& db, ui64 txId, const TStringBuf& txBody);
     void ProposeSchemaTx(NIceDb::TNiceDb& db, const TSchemaOperation& op);
     bool CancelPropose(NIceDb::TNiceDb& db, ui64 txId);
-    ECleanupStatus CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize, TVector<ui64>& outdatedTxs); 
+    ECleanupStatus CleanupOutdated(NIceDb::TNiceDb& db, ui64 outdatedStep, ui32 batchSize, TVector<ui64>& outdatedTxs);
 
     // Plan
 
     void PlanTx(TOperation::TPtr op,
                 ui64 step,
                 NIceDb::TNiceDb &db);
-    void ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId); 
+    void ForgetPlannedTx(NIceDb::TNiceDb &db, ui64 step, ui64 txId);
 
     // Execute
 
     // get first planned tx starting from {step, txId}
     void GetPlannedTxId(ui64& step, ui64& txId) const;
-    bool GetNextPlannedTxId(ui64& step, ui64& txId) const; 
+    bool GetNextPlannedTxId(ui64& step, ui64& txId) const;
     bool LoadTxDetails(NIceDb::TNiceDb &db,
                        ui64 txId,
                        TActorId &targets,
@@ -114,12 +114,12 @@ private: // for pipeline only
     void RemoveSchemaOperation(NIceDb::TNiceDb& db, ui64 txId);
     void RemoveScanProgress(NIceDb::TNiceDb& db, ui64 txId);
 
-    ui64 NextDeadlineStep() const { 
-        if (DeadlineQueue.empty()) 
-            return Max<ui64>(); 
-        return DeadlineQueue.begin()->first; 
-    } 
- 
+    ui64 NextDeadlineStep() const {
+        if (DeadlineQueue.empty())
+            return Max<ui64>();
+        return DeadlineQueue.begin()->first;
+    }
+
 private:
     TDataShard * Self;
     THashMap<ui64, TOperation::TPtr> TxsInFly;
@@ -127,8 +127,8 @@ private:
     THashMap<EOperationKind, TSet<TStepOrder>> PlannedTxsByKind;
     TSet<std::pair<ui64, ui64>> DeadlineQueue; // {maxStep, txId}
     TMap<ui64, TSchemaOperation> SchemaOps; // key - txId
-    TSet<ui64> ProposeDelayers; 
-    ui64 PlanWaitingTxCount = 0; 
+    TSet<ui64> ProposeDelayers;
+    ui64 PlanWaitingTxCount = 0;
 
     static const TSet<TStepOrder> EMPTY_PLAN;
 

@@ -27,7 +27,7 @@ public:
         return TXTYPE_CREATE_INDEX_BUILD;
     }
 
-    bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override { 
+    bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
         const NKikimrIndexBuilder::TEvCreateRequest& request = Request->Get()->Record;
 
         LOG_N("TIndexBuilder::TTxCreate: DoExecute"
@@ -106,22 +106,22 @@ public:
             }
         }
 
-        NIceDb::TNiceDb db(txc.DB); 
- 
-        auto subDomainId = domainPath.DomainId(); 
-        auto subDomainInfo = domainPath.DomainInfo(); 
-        bool quotaAcquired = subDomainInfo->TryConsumeSchemeQuota(ctx.Now()); 
- 
-        // We need to persist updated/consumed quotas even if operation fails for other reasons 
-        Self->PersistSubDomainSchemeQuotas(db, subDomainId, *subDomainInfo); 
- 
-        if (!quotaAcquired) { 
-            return Reply( 
-                std::move(response), 
-                Ydb::StatusIds::OVERLOADED, 
-                "Request exceeded a limit on the number of schema operations, try again later."); 
-        } 
- 
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto subDomainId = domainPath.DomainId();
+        auto subDomainInfo = domainPath.DomainInfo();
+        bool quotaAcquired = subDomainInfo->TryConsumeSchemeQuota(ctx.Now());
+
+        // We need to persist updated/consumed quotas even if operation fails for other reasons
+        Self->PersistSubDomainSchemeQuotas(db, subDomainId, *subDomainInfo);
+
+        if (!quotaAcquired) {
+            return Reply(
+                std::move(response),
+                Ydb::StatusIds::OVERLOADED,
+                "Request exceeded a limit on the number of schema operations, try again later.");
+        }
+
         const auto& settings = request.GetSettings();
 
         const TPath path = TPath::Resolve(settings.source_path(), Self);

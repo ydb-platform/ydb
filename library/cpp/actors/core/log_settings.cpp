@@ -12,7 +12,7 @@ namespace NActors {
             , LoggerComponent(loggerComponent)
             , TimeThresholdMs(timeThresholdMs)
             , AllowDrop(true)
-            , ThrottleDelay(TDuration::MilliSeconds(100)) 
+            , ThrottleDelay(TDuration::MilliSeconds(100))
             , MinVal(0)
             , MaxVal(0)
             , Mask(0)
@@ -34,7 +34,7 @@ namespace NActors {
             , LoggerComponent(loggerComponent)
             , TimeThresholdMs(timeThresholdMs)
             , AllowDrop(true)
-            , ThrottleDelay(TDuration::MilliSeconds(100)) 
+            , ThrottleDelay(TDuration::MilliSeconds(100))
             , MinVal(0)
             , MaxVal(0)
             , Mask(0)
@@ -205,10 +205,10 @@ namespace NActors {
             AllowDrop = val;
         }
 
-        void TSettings::SetThrottleDelay(TDuration value) { 
-            ThrottleDelay = value; 
-        } 
- 
+        void TSettings::SetThrottleDelay(TDuration value) {
+            ThrottleDelay = value;
+        }
+
         void TSettings::SetUseLocalTimestamps(bool value) {
             UseLocalTimestamps = value;
         }

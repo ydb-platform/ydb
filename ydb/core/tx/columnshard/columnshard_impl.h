@@ -49,7 +49,7 @@ class TColumnShard
     friend class TTxInitSchema;
     friend class TTxUpdateSchema;
     friend class TTxProposeTransaction;
-    friend class TTxNotifyTxCompletion; 
+    friend class TTxNotifyTxCompletion;
     friend class TTxPlanStep;
     friend class TTxWrite;
     friend class TTxReadBase;
@@ -60,9 +60,9 @@ class TColumnShard
     friend class TTxProcessGCResult;
     friend class TTxReadBlobRanges;
 
-    class TTxProgressTx; 
-    class TTxProposeCancel; 
- 
+    class TTxProgressTx;
+    class TTxProposeCancel;
+
     // proto
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx);
@@ -70,15 +70,15 @@ class TColumnShard
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvColumnShard::TEvNotifyTxCompletion::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvRead::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvReadBlobRanges::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx); 
-    void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPrivate::TEvScanStats::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvReadFinished::TPtr &ev, const TActorContext &ctx);
@@ -101,7 +101,7 @@ class TColumnShard
 
     void Die(const TActorContext& ctx) override {
         // TODO
-        UnregisterMediatorTimeCast(); 
+        UnregisterMediatorTimeCast();
         return IActor::Die(ctx);
     }
 
@@ -166,15 +166,15 @@ protected:
             HFunc(TEvTabletPipe::TEvServerConnected, Handle);
             HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
             HFunc(TEvColumnShard::TEvProposeTransaction, Handle);
-            HFunc(TEvColumnShard::TEvCancelTransactionProposal, Handle); 
-            HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle); 
+            HFunc(TEvColumnShard::TEvCancelTransactionProposal, Handle);
+            HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
             HFunc(TEvColumnShard::TEvScan, Handle);
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
             HFunc(TEvColumnShard::TEvWrite, Handle);
             HFunc(TEvColumnShard::TEvRead, Handle);
             HFunc(TEvColumnShard::TEvReadBlobRanges, Handle);
-            HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle); 
-            HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle); 
+            HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
+            HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             HFunc(TEvPrivate::TEvWriteIndex, Handle);
             HFunc(TEvPrivate::TEvScanStats, Handle);
@@ -191,48 +191,48 @@ protected:
     }
 
 private:
-    struct TBasicTxInfo { 
-        ui64 TxId; 
-        ui64 MaxStep = Max<ui64>(); 
-        ui64 PlanStep = 0; 
-        TActorId Source; 
-        ui64 Cookie = 0; 
-        NKikimrTxColumnShard::ETransactionKind TxKind; 
-    }; 
- 
-    struct TDeadlineQueueItem { 
-        ui64 MaxStep; 
-        ui64 TxId; 
- 
-        TDeadlineQueueItem() = default; 
-        TDeadlineQueueItem(ui64 maxStep, ui64 txId) 
-            : MaxStep(maxStep) 
-            , TxId(txId) 
-        { } 
- 
-        inline bool operator<(const TDeadlineQueueItem& rhs) const { 
-            return MaxStep < rhs.MaxStep || (MaxStep == rhs.MaxStep && TxId < rhs.TxId); 
-        } 
-    }; 
- 
-    struct TPlanQueueItem { 
-        ui64 Step; 
-        ui64 TxId; 
- 
-        TPlanQueueItem() = default; 
-        TPlanQueueItem(ui64 step, ui64 txId) 
-            : Step(step) 
-            , TxId(txId) 
-        { } 
- 
-        inline bool operator<(const TPlanQueueItem& rhs) const { 
-            return Step < rhs.Step || (Step == rhs.Step && TxId < rhs.TxId); 
-        } 
-    }; 
- 
+    struct TBasicTxInfo {
+        ui64 TxId;
+        ui64 MaxStep = Max<ui64>();
+        ui64 PlanStep = 0;
+        TActorId Source;
+        ui64 Cookie = 0;
+        NKikimrTxColumnShard::ETransactionKind TxKind;
+    };
+
+    struct TDeadlineQueueItem {
+        ui64 MaxStep;
+        ui64 TxId;
+
+        TDeadlineQueueItem() = default;
+        TDeadlineQueueItem(ui64 maxStep, ui64 txId)
+            : MaxStep(maxStep)
+            , TxId(txId)
+        { }
+
+        inline bool operator<(const TDeadlineQueueItem& rhs) const {
+            return MaxStep < rhs.MaxStep || (MaxStep == rhs.MaxStep && TxId < rhs.TxId);
+        }
+    };
+
+    struct TPlanQueueItem {
+        ui64 Step;
+        ui64 TxId;
+
+        TPlanQueueItem() = default;
+        TPlanQueueItem(ui64 step, ui64 txId)
+            : Step(step)
+            , TxId(txId)
+        { }
+
+        inline bool operator<(const TPlanQueueItem& rhs) const {
+            return Step < rhs.Step || (Step == rhs.Step && TxId < rhs.TxId);
+        }
+    };
+
     struct TAlterMeta {
         NKikimrTxColumnShard::TSchemaTxBody Body;
-        THashSet<TActorId> NotifySubscribers; 
+        THashSet<TActorId> NotifySubscribers;
     };
 
     struct TCommitMeta {
@@ -247,64 +247,64 @@ private:
     struct TSchemaPreset {
         using TVerProto = NKikimrTxColumnShard::TSchemaPresetVersionInfo;
 
-        ui32 Id; 
-        TString Name; 
+        ui32 Id;
+        TString Name;
         TMap<TRowVersion, TVerProto> Versions;
-        TRowVersion DropVersion = TRowVersion::Max(); 
- 
-        bool IsDropped() const { 
-            return DropVersion != TRowVersion::Max(); 
-        } 
-    }; 
+        TRowVersion DropVersion = TRowVersion::Max();
+
+        bool IsDropped() const {
+            return DropVersion != TRowVersion::Max();
+        }
+    };
 #if 0
     struct TTtlSettingsPreset {
         using TVerProto = NKikimrTxColumnShard::TTtlSettingsPresetVersionInfo;
- 
-        ui32 Id; 
-        TString Name; 
+
+        ui32 Id;
+        TString Name;
         TMap<TRowVersion, TVerProto> Versions;
-        TRowVersion DropVersion = TRowVersion::Max(); 
- 
-        bool IsDropped() const { 
-            return DropVersion != TRowVersion::Max(); 
-        } 
-    }; 
+        TRowVersion DropVersion = TRowVersion::Max();
+
+        bool IsDropped() const {
+            return DropVersion != TRowVersion::Max();
+        }
+    };
 #endif
     struct TTableInfo {
         using TVerProto = NKikimrTxColumnShard::TTableVersionInfo;
- 
-        ui64 PathId; 
+
+        ui64 PathId;
         std::map<TRowVersion, TVerProto> Versions;
-        TRowVersion DropVersion = TRowVersion::Max(); 
- 
-        bool IsDropped() const { 
-            return DropVersion != TRowVersion::Max(); 
-        } 
-    }; 
- 
-    struct TLongTxWriteInfo { 
-        ui64 WriteId; 
-        NLongTxService::TLongTxId LongTxId; 
-        ui64 PreparedTxId = 0; 
-    }; 
- 
-    ui64 CurrentSchemeShardId = 0; 
-    TMessageSeqNo LastSchemaSeqNo; 
-    std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams; 
+        TRowVersion DropVersion = TRowVersion::Max();
+
+        bool IsDropped() const {
+            return DropVersion != TRowVersion::Max();
+        }
+    };
+
+    struct TLongTxWriteInfo {
+        ui64 WriteId;
+        NLongTxService::TLongTxId LongTxId;
+        ui64 PreparedTxId = 0;
+    };
+
+    ui64 CurrentSchemeShardId = 0;
+    TMessageSeqNo LastSchemaSeqNo;
+    std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
     TWriteId LastWriteId = TWriteId{0};
-    ui64 LastPlannedStep = 0; 
-    ui64 LastPlannedTxId = 0; 
+    ui64 LastPlannedStep = 0;
+    ui64 LastPlannedTxId = 0;
     ui64 LastCompactedGranule = 0;
- 
-    TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry; 
-    bool MediatorTimeCastRegistered = false; 
-    TSet<ui64> MediatorTimeCastWaitingSteps; 
+
+    TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
+    bool MediatorTimeCastRegistered = false;
+    TSet<ui64> MediatorTimeCastWaitingSteps;
     TDuration MaxReadStaleness = TDuration::Minutes(5); // TODO: Make configurable?
     TDuration MaxCommitTxDelay = TDuration::Seconds(30); // TODO: Make configurable?
     TDuration ActivationPeriod = TDuration::Seconds(60);
     TDuration FailActivationDelay = TDuration::Seconds(1);
     TInstant LastBackActivation;
- 
+
     TActorId IndexingActor;     // It's logically bounded to 1: we move each portion of data to multiple indices.
     TActorId CompactionActor;   // It's memory bounded to 1: we have no memory for parallel compation.
     std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
@@ -313,22 +313,22 @@ private:
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     TTtl Ttl;
- 
-    THashMap<ui64, TBasicTxInfo> BasicTxInfo; 
-    TSet<TDeadlineQueueItem> DeadlineQueue; 
-    TSet<TPlanQueueItem> PlanQueue; 
-    bool ProgressTxInFlight = false; 
+
+    THashMap<ui64, TBasicTxInfo> BasicTxInfo;
+    TSet<TDeadlineQueueItem> DeadlineQueue;
+    TSet<TPlanQueueItem> PlanQueue;
+    bool ProgressTxInFlight = false;
     THashMap<ui64, TInstant> ScanTxInFlight;
- 
+
     THashMap<ui64, TAlterMeta> AltersInFlight;
     THashMap<ui64, TCommitMeta> CommitsInFlight; // key is TxId from propose
     THashMap<ui32, TSchemaPreset> SchemaPresets;
     //THashMap<ui32, TTtlSettingsPreset> TtlSettingsPresets;
-    THashMap<ui64, TTableInfo> Tables; 
+    THashMap<ui64, TTableInfo> Tables;
     THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
-    THashMap<TULID, TLongTxWriteInfo*> LongTxWritesByUniqueId; 
-    TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads; 
-    TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans; 
+    THashMap<TULID, TLongTxWriteInfo*> LongTxWritesByUniqueId;
+    TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads;
+    TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans;
     THashSet<ui64> PathsToDrop;
     bool ActiveIndexing = false;
     bool ActiveCompaction = false;
@@ -340,18 +340,18 @@ private:
     TLimits Limits;
     TCompactionLimits CompactionLimits;
 
-    void TryRegisterMediatorTimeCast(); 
-    void UnregisterMediatorTimeCast(); 
- 
-    bool WaitPlanStep(ui64 step); 
+    void TryRegisterMediatorTimeCast();
+    void UnregisterMediatorTimeCast();
+
+    bool WaitPlanStep(ui64 step);
     void SendWaitPlanStep(ui64 step);
-    void RescheduleWaitingReads(); 
-    TRowVersion GetMaxReadVersion() const; 
+    void RescheduleWaitingReads();
+    TRowVersion GetMaxReadVersion() const;
     ui64 GetMinReadStep() const;
-    ui64 GetOutdatedStep() const; 
+    ui64 GetOutdatedStep() const;
     ui64 GetAllowedStep() const;
-    bool HaveOutdatedTxs() const; 
- 
+    bool HaveOutdatedTxs() const;
+
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId);
     void AddLongTxWrite(TWriteId writeId, ui64 txId);
     void LoadLongTxWrite(TWriteId writeId, const NLongTxService::TLongTxId& longTxId);
@@ -360,20 +360,20 @@ private:
 
     void EnqueueProgressTx();
     void EnqueueBackgroundActivities(bool periodic = false, bool insertOnly = false);
- 
-    void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc); 
-    void ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto, NTabletFlatExecutor::TTransactionContext& txc); 
- 
-    bool IsTableWritable(ui64 tableId) const; 
- 
+
+    void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
+    void ProtectSchemaSeqNo(const NKikimrTxColumnShard::TSchemaSeqNo& seqNoProto, NTabletFlatExecutor::TTransactionContext& txc);
+
+    bool IsTableWritable(ui64 tableId) const;
+
     ui32 EnsureSchemaPreset(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TColumnTableSchemaPreset& presetProto, const TRowVersion& version);
     //ui32 EnsureTtlSettingsPreset(NIceDb::TNiceDb& db, const NKikimrSchemeOp::TColumnTableTtlSettingsPreset& presetProto, const TRowVersion& version);
- 
-    void RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc); 
-    void RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc); 
-    void RunAlterTable(const NKikimrTxColumnShard::TAlterTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc); 
-    void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc); 
-    void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc); 
+
+    void RunSchemaTx(const NKikimrTxColumnShard::TSchemaTxBody& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunAlterTable(const NKikimrTxColumnShard::TAlterTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunDropTable(const NKikimrTxColumnShard::TDropTable& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
+    void RunAlterStore(const NKikimrTxColumnShard::TAlterStore& body, const TRowVersion& version, NTabletFlatExecutor::TTransactionContext& txc);
     void SetPrimaryIndex(TMap<NOlap::TSnapshot, NOlap::TIndexInfo>&& schemaVersions, const THashSet<TString>& ttlColumns);
 
     NOlap::TIndexInfo ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema);

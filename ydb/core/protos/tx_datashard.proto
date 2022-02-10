@@ -16,7 +16,7 @@ import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
 import "ydb/library/yql/dq/actors/protos/dq_stats.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
-import "google/protobuf/empty.proto"; 
+import "google/protobuf/empty.proto";
 
 package NKikimrTxDataShard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -108,8 +108,8 @@ message TReadTableTransaction {
     repeated TColumn Columns = 2;
     optional NKikimrTx.TKeyRange Range = 3;
     optional uint32 ApiVersion = 4;
-    optional uint64 SnapshotStep = 5; 
-    optional uint64 SnapshotTxId = 6; 
+    optional uint64 SnapshotStep = 5;
+    optional uint64 SnapshotTxId = 6;
 }
 
 message TKqpLocks {
@@ -259,37 +259,37 @@ message TDataTransaction {
     optional bool CollectStats = 16;
 }
 
-message TCreateVolatileSnapshot { 
-    optional uint64 OwnerId = 1; 
-    optional uint64 PathId = 2; 
-    optional string Name = 3; 
-    optional uint64 TimeoutMs = 4; 
-} 
- 
-message TDropVolatileSnapshot { 
-    optional uint64 OwnerId = 1; 
-    optional uint64 PathId = 2; 
-    optional uint64 Step = 3; 
-    optional uint64 TxId = 4; 
-} 
- 
-message TSnapshotTransaction { 
-    optional TCreateVolatileSnapshot CreateVolatileSnapshot = 1; 
-    optional TDropVolatileSnapshot DropVolatileSnapshot = 2; 
-} 
- 
-message TSnapshotTransferReadSet { 
-    optional bytes BorrowedSnapshot = 1; 
-    optional uint64 MinWriteVersionStep = 2; 
-    optional uint64 MinWriteVersionTxId = 3; 
+message TCreateVolatileSnapshot {
+    optional uint64 OwnerId = 1;
+    optional uint64 PathId = 2;
+    optional string Name = 3;
+    optional uint64 TimeoutMs = 4;
+}
+
+message TDropVolatileSnapshot {
+    optional uint64 OwnerId = 1;
+    optional uint64 PathId = 2;
+    optional uint64 Step = 3;
+    optional uint64 TxId = 4;
+}
+
+message TSnapshotTransaction {
+    optional TCreateVolatileSnapshot CreateVolatileSnapshot = 1;
+    optional TDropVolatileSnapshot DropVolatileSnapshot = 2;
+}
+
+message TSnapshotTransferReadSet {
+    optional bytes BorrowedSnapshot = 1;
+    optional uint64 MinWriteVersionStep = 2;
+    optional uint64 MinWriteVersionTxId = 3;
     optional uint64 MvccCompleteEdgeStep = 4;
     optional uint64 MvccCompleteEdgeTxId = 5;
     optional uint64 MvccIncompleteEdgeStep = 6;
     optional uint64 MvccIncompleteEdgeTxId = 7;
     optional uint64 MvccLowWatermarkStep = 8;
     optional uint64 MvccLowWatermarkTxId = 9;
-} 
- 
+}
+
 message TSnapshotTransferInfo {
     optional uint64 Shard = 1;
 };
@@ -311,19 +311,19 @@ message TSchemeOpSeqNo {
     optional uint64 Round = 2;
 }
 
-message TCreatePersistentSnapshot { 
-    optional uint64 OwnerId = 1; 
-    optional uint64 PathId = 2; 
-    optional string Name = 3; 
-} 
- 
-message TDropPersistentSnapshot { 
-    optional uint64 OwnerId = 1; 
-    optional uint64 PathId = 2; 
-    optional uint64 Step = 3; 
-    optional uint64 TxId = 4; 
-} 
- 
+message TCreatePersistentSnapshot {
+    optional uint64 OwnerId = 1;
+    optional uint64 PathId = 2;
+    optional string Name = 3;
+}
+
+message TDropPersistentSnapshot {
+    optional uint64 OwnerId = 1;
+    optional uint64 PathId = 2;
+    optional uint64 Step = 3;
+    optional uint64 TxId = 4;
+}
+
 message TInitiateBuildIndex {
     optional NKikimrProto.TPathID PathId = 1;
     optional string SnapshotName = 2;
@@ -399,9 +399,9 @@ message TFlatSchemeTransaction {
     optional TSchemeOpSeqNo SeqNo = 7;
     optional bool ReadOnly = 8;
     reserved 9;
- 
-    optional TCreatePersistentSnapshot CreatePersistentSnapshot = 10; 
-    optional TDropPersistentSnapshot DropPersistentSnapshot = 11; 
+
+    optional TCreatePersistentSnapshot CreatePersistentSnapshot = 10;
+    optional TDropPersistentSnapshot DropPersistentSnapshot = 11;
 
     optional TInitiateBuildIndex InitiateBuildIndex = 12;
     optional TFinalizeBuildIndex FinalizeBuildIndex = 13;
@@ -441,14 +441,14 @@ message TDistributedEraseRS {
     optional bytes ConfirmedRows = 1; // bitmap
 }
 
-// This transaction commits all changes previously written using some WriteTxId 
-message TCommitWritesTransaction { 
-    // TODO: add lock checking in the future 
- 
-    optional TTableId TableId = 1; 
-    optional uint64 WriteTxId = 2; 
-} 
- 
+// This transaction commits all changes previously written using some WriteTxId
+message TCommitWritesTransaction {
+    // TODO: add lock checking in the future
+
+    optional TTableId TableId = 1;
+    optional uint64 WriteTxId = 2;
+}
+
 enum ETransactionKind {
     TX_KIND_NONE = 0;
     TX_KIND_DATA = 1;
@@ -456,9 +456,9 @@ enum ETransactionKind {
     DEPRECATED_3 = 3; //TX_KIND_BALANCE
     DEPRECATED_4 = 4; //TX_KIND_SNAPSHOT_POLICY
     TX_KIND_SCAN = 5;
-    TX_KIND_SNAPSHOT = 6; 
+    TX_KIND_SNAPSHOT = 6;
     TX_KIND_DISTRIBUTED_ERASE = 7;
-    TX_KIND_COMMIT_WRITES = 8; 
+    TX_KIND_COMMIT_WRITES = 8;
 
     // Values [100, inf) are used for internal datashard operation
     // kinds. See NKikimr::NDataShard::EOperationKind.
@@ -478,7 +478,7 @@ message TEvProposeTransaction {
     optional uint32 Flags = 6;
     optional uint64 SchemeShardId = 7;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 8;
-    optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId) 
+    optional uint64 SubDomainPathId = 9; // LocalPathId (SchemeShardId is the OwnerId)
     optional TMvccSnapshot MvccSnapshot = 10;
 }
 
@@ -577,28 +577,28 @@ message TEvProposeTransactionResult {
     repeated fixed64 DomainCoordinators = 21;
     optional uint32 ApiVersion = 22; // Version of TxResult response data
     optional NKikimrQueryStats.TTxStats TxStats = 23;
-    optional uint64 DataSeqNo = 24; // Response data seqno (1, 2, ...) 
-    optional bytes DataLastKey = 25; // Response data last key (for retries) 
+    optional uint64 DataSeqNo = 24; // Response data seqno (1, 2, ...)
+    optional bytes DataLastKey = 25; // Response data last key (for retries)
     reserved 26; // optional NKqpProto.TKqpStatsRun KqpRunStats = 26;
     optional NYql.NDqProto.TDqComputeActorStats ComputeActorStats = 27; // overall time + per-task statistics
 }
 
-message TEvProposeTransactionRestart { 
-    optional uint64 TabletId = 1; 
-    optional uint64 TxId = 2; 
-} 
- 
-message TEvProposeTransactionAttach { 
-    optional uint64 TabletId = 1; 
-    optional uint64 TxId = 2; 
-} 
- 
-message TEvProposeTransactionAttachResult { 
-    optional uint64 TabletId = 1; 
-    optional uint64 TxId = 2; 
-    optional NKikimrProto.EReplyStatus Status = 3; 
-} 
- 
+message TEvProposeTransactionRestart {
+    optional uint64 TabletId = 1;
+    optional uint64 TxId = 2;
+}
+
+message TEvProposeTransactionAttach {
+    optional uint64 TabletId = 1;
+    optional uint64 TxId = 2;
+}
+
+message TEvProposeTransactionAttachResult {
+    optional uint64 TabletId = 1;
+    optional uint64 TxId = 2;
+    optional NKikimrProto.EReplyStatus Status = 3;
+}
+
 message TAddSnapshotPolicyTransaction {
     optional uint32 SnapshotCountLimit = 1;
     optional uint64 StartStep = 2;
@@ -633,7 +633,7 @@ message TEvInitSplitMergeDestination {
     optional TSplitMergeDescription SplitDescription = 3;
     optional NKikimrSubDomains.TProcessingParams ProcessingParams = 4;
     optional NKikimrSchemeOp.TTableDescription CreateTable = 5;
-    optional uint64 SubDomainPathId = 6; // LocalPathId (SchemeshardTabletId is the OwnerId) 
+    optional uint64 SubDomainPathId = 6; // LocalPathId (SchemeshardTabletId is the OwnerId)
 }
 
 message TEvInitSplitMergeDestinationAck {
@@ -657,25 +657,25 @@ message TTableSnapshot {
     optional bytes SnapshotData = 2;
 }
 
-message TPersistentSnapshot { 
-    optional uint64 OwnerId = 1; 
-    optional uint64 PathId = 2; 
-    optional uint64 Step = 3; 
-    optional uint64 TxId = 4; 
-    optional string Name = 5; 
-    optional uint64 Flags = 6; 
-    optional uint64 TimeoutMs = 7; 
-} 
- 
+message TPersistentSnapshot {
+    optional uint64 OwnerId = 1;
+    optional uint64 PathId = 2;
+    optional uint64 Step = 3;
+    optional uint64 TxId = 4;
+    optional string Name = 5;
+    optional uint64 Flags = 6;
+    optional uint64 TimeoutMs = 7;
+}
+
 // Src datashard -> Dst datashard
 message TEvSplitTransferSnapshot {
     optional uint64 OperationCookie = 1;
     optional uint64 SrcTabletId = 2;
     optional NKikimrSchemeOp.TTableDescription UserTableScheme = 3;
     repeated TTableSnapshot TableSnapshot = 4;
-    optional uint64 MinWriteVersionStep = 5; 
-    optional uint64 MinWriteVersionTxId = 6; 
-    repeated TPersistentSnapshot PersistentSnapshots = 7; 
+    optional uint64 MinWriteVersionStep = 5;
+    optional uint64 MinWriteVersionTxId = 6;
+    repeated TPersistentSnapshot PersistentSnapshots = 7;
     optional uint64 MvccCompleteEdgeStep = 8;
     optional uint64 MvccCompleteEdgeTxId = 9;
     optional uint64 MvccIncompleteEdgeStep = 10;
@@ -683,12 +683,12 @@ message TEvSplitTransferSnapshot {
     optional uint64 MvccLowWatermarkStep = 12;
     optional uint64 MvccLowWatermarkTxId = 13;
     optional bool WaitForActivation = 14;
- 
-    // Generation of the sender tablet 
-    optional uint64 SrcTabletGeneration = 15; 
- 
-    // Number of bytes that are in the ReplicationSourceOffsets table 
-    optional uint64 ReplicationSourceOffsetsBytes = 16; 
+
+    // Generation of the sender tablet
+    optional uint64 SrcTabletGeneration = 15;
+
+    // Number of bytes that are in the ReplicationSourceOffsets table
+    optional uint64 ReplicationSourceOffsetsBytes = 16;
 }
 
 message TEvSplitTransferSnapshotAck {
@@ -797,7 +797,7 @@ message TEvUploadRowsRequest {
     optional TSerializedRowColumnsScheme RowScheme = 2;
     repeated TSerializedRowToLoad Rows = 3;
     optional uint64 CancelDeadlineMs = 4; // Wallclock timestamp (not duration)
-    optional bool WriteToTableShadow = 5; 
+    optional bool WriteToTableShadow = 5;
 }
 
 message TEvUploadRowsResponse {
@@ -814,11 +814,11 @@ message TEvReadColumnsRequest {
 
     optional bytes FromKey = 5;
     optional bool FromKeyInclusive = 6;
- 
-    optional uint64 SnapshotStep = 7; 
-    optional uint64 SnapshotTxId = 8; 
- 
-    optional string Format = 9; 
+
+    optional uint64 SnapshotStep = 7;
+    optional uint64 SnapshotTxId = 8;
+
+    optional string Format = 9;
 }
 
 message TEvReadColumnsResponse {
@@ -829,7 +829,7 @@ message TEvReadColumnsResponse {
     optional bytes Blocks = 4;              // The data
     optional bytes LastKey = 5;             // For continuation
     optional bool LastKeyInclusive = 6;
-    optional bool EndOfShard = 7; 
+    optional bool EndOfShard = 7;
 }
 
 message TStatus {
@@ -1150,56 +1150,56 @@ message TEvGetDataHistogramResponse {
     optional TStatus Status = 1;
     repeated TTableHistograms TableHistograms = 2;
 }
- 
-message TEvRefreshVolatileSnapshotRequest { 
-    optional uint64 OwnerId = 1; 
-    optional uint64 PathId = 2; 
-    optional uint64 Step = 3; 
-    optional uint64 TxId = 4; 
-} 
- 
-message TEvRefreshVolatileSnapshotResponse { 
-    enum EStatus { 
-        REFRESHED = 1; 
-        WRONG_SHARD_STATE = 2; 
-        SNAPSHOT_NOT_FOUND = 3; 
-        SNAPSHOT_TRANSFERRED = 4; 
-        SNAPSHOT_NOT_READY = 5; 
-    } 
- 
-    optional uint64 Origin = 1; 
-    optional uint64 OwnerId = 2; 
-    optional uint64 PathId = 3; 
-    optional uint64 Step = 4; 
-    optional uint64 TxId = 5; 
-    optional EStatus Status = 6; 
-    repeated uint64 TransferredToShards = 7; 
-} 
- 
-message TEvDiscardVolatileSnapshotRequest { 
-    optional uint64 OwnerId = 1; 
-    optional uint64 PathId = 2; 
-    optional uint64 Step = 3; 
-    optional uint64 TxId = 4; 
-} 
- 
-message TEvDiscardVolatileSnapshotResponse { 
-    enum EStatus { 
-        DISCARDED = 1; 
-        WRONG_SHARD_STATE = 2; 
-        SNAPSHOT_NOT_FOUND = 3; 
-        SNAPSHOT_TRANSFERRED = 4; 
-        SNAPSHOT_NOT_READY = 5; 
-    } 
- 
-    optional uint64 Origin = 1; 
-    optional uint64 OwnerId = 2; 
-    optional uint64 PathId = 3; 
-    optional uint64 Step = 4; 
-    optional uint64 TxId = 5; 
-    optional EStatus Status = 6; 
-    repeated uint64 TransferredToShards = 7; 
-} 
+
+message TEvRefreshVolatileSnapshotRequest {
+    optional uint64 OwnerId = 1;
+    optional uint64 PathId = 2;
+    optional uint64 Step = 3;
+    optional uint64 TxId = 4;
+}
+
+message TEvRefreshVolatileSnapshotResponse {
+    enum EStatus {
+        REFRESHED = 1;
+        WRONG_SHARD_STATE = 2;
+        SNAPSHOT_NOT_FOUND = 3;
+        SNAPSHOT_TRANSFERRED = 4;
+        SNAPSHOT_NOT_READY = 5;
+    }
+
+    optional uint64 Origin = 1;
+    optional uint64 OwnerId = 2;
+    optional uint64 PathId = 3;
+    optional uint64 Step = 4;
+    optional uint64 TxId = 5;
+    optional EStatus Status = 6;
+    repeated uint64 TransferredToShards = 7;
+}
+
+message TEvDiscardVolatileSnapshotRequest {
+    optional uint64 OwnerId = 1;
+    optional uint64 PathId = 2;
+    optional uint64 Step = 3;
+    optional uint64 TxId = 4;
+}
+
+message TEvDiscardVolatileSnapshotResponse {
+    enum EStatus {
+        DISCARDED = 1;
+        WRONG_SHARD_STATE = 2;
+        SNAPSHOT_NOT_FOUND = 3;
+        SNAPSHOT_TRANSFERRED = 4;
+        SNAPSHOT_NOT_READY = 5;
+    }
+
+    optional uint64 Origin = 1;
+    optional uint64 OwnerId = 2;
+    optional uint64 PathId = 3;
+    optional uint64 Step = 4;
+    optional uint64 TxId = 5;
+    optional EStatus Status = 6;
+    repeated uint64 TransferredToShards = 7;
+}
 
 message TEvMigrateSchemeShardRequest {
     optional fixed64 CurrentSchemeShardId = 1;
@@ -1400,7 +1400,7 @@ message TEvKqpScan {
 
 message TEvCompactTable {
     optional NKikimrProto.TPathID PathId = 1;
-    optional bool CompactBorrowed = 2; 
+    optional bool CompactBorrowed = 2;
 }
 
 message TEvCompactTableResult {
@@ -1414,10 +1414,10 @@ message TEvCompactTableResult {
     optional NKikimrProto.TPathID PathId = 2;
     optional EStatus Status = 3;
 }
- 
-message TEvCompactBorrowed { 
+
+message TEvCompactBorrowed {
     optional NKikimrProto.TPathID PathId = 1;
-} 
+}
 
 message TEvGetCompactTableStats {
     optional NKikimrProto.TPathID PathId = 1;
@@ -1572,130 +1572,130 @@ message TEvReadAck {
 message TEvReadCancel {
     optional uint64 ReadId = 1;
 };
- 
-// Applies a batch of replication changes 
-message TEvApplyReplicationChanges { 
-    message TUpdates { 
-        // Column tags 
+
+// Applies a batch of replication changes
+message TEvApplyReplicationChanges {
+    message TUpdates {
+        // Column tags
         repeated uint32 Tags = 1;
-        // Serialized values (TSerializedCellVec) 
-        optional bytes Data = 2; 
-    } 
- 
-    message TChange { 
-        // Offset of the change within a particular source 
-        optional int64 SourceOffset = 1; 
- 
-        // Changes will be applied using the specified uncommitted TxId 
-        optional uint64 WriteTxId = 2; 
- 
-        // TSerializedCellVec with the table primary key 
-        optional bytes Key = 3; 
- 
-        oneof RowOperation { 
-            // Upsert the specified key with these column updates 
-            TUpdates Upsert = 4; 
- 
-            // Remove the specified key 
-            google.protobuf.Empty Erase = 5; 
- 
-            // Reset all columns to default values and apply updates 
-            TUpdates Reset = 6; 
-        } 
-    } 
- 
-    // Table these changes are applied to 
-    optional TTableId TableId = 1; 
- 
-    // Source of changes for deduplication and exactly-once processing. This 
-    // should be a source which guarantees monotonically increasing offsets, 
-    // e.g. a topic partition id. All changes with offsets not greater than 
-    // the maximum accepted will be ignored. 
-    optional bytes Source = 2; 
- 
-    repeated TChange Changes = 3; 
-} 
- 
-message TEvApplyReplicationChangesResult { 
-    enum EStatus { 
-        STATUS_UNKNOWN = 0; 
-        STATUS_OK = 1; 
-        STATUS_REJECTED = 2; 
-    } 
- 
-    enum EReason { 
-        REASON_NONE = 0; 
-        REASON_WRONG_STATE = 1; 
-        REASON_SCHEME_ERROR = 2; 
-        REASON_BAD_REQUEST = 3; 
-        REASON_UNEXPECTED_ROW_OPERATION = 4; 
-    } 
- 
-    optional EStatus Status = 1; 
-    optional EReason Reason = 2; 
-    optional string ErrorDescription = 3; 
-} 
- 
-message TEvGetReplicationSourceOffsets { 
-    // Each read must have a unique (Sender, ReadId) pair for identification 
-    optional uint64 ReadId = 1; 
- 
-    optional TTableId TableId = 2; 
- 
-    // The tuple (SourceId, SplitKeyId) where the read should start, inclusive 
-    optional uint64 FromSourceId = 3; 
-    optional uint64 FromSplitKeyId = 4; 
- 
-    // Maximum total number of unACKed bytes the client is willing to accept 
-    optional uint64 WindowSize = 5; 
-} 
- 
-message TEvReplicationSourceOffsets { 
-    message TSourceOffset { 
-        // The pair (SourceId, SplitKeyId) is non decreasing during read 
-        optional uint64 SourceId = 1; 
-        optional uint64 SplitKeyId = 2; 
- 
-        optional bytes Source = 3; 
- 
-        // The left PK prefix of the [SplitKey, NextSplitKey) range for MaxOffset 
-        optional bytes SplitKey = 4; 
- 
-        // The special value -1 is not transmitted 
-        optional int64 MaxOffset = 5 [default = -1]; 
-    } 
- 
-    // Same as ReadId in the request, so result and request may be matched 
-    optional uint64 ReadId = 1; 
- 
-    // Each consecutive result has a monotonically increasing SeqNo, starting from 1 
-    optional uint64 SeqNo = 2; 
- 
-    // When true this is the last result for this read 
-    // Note that datashard may still be waiting for either ack or cancel to free up the send window 
-    optional bool EndOfStream = 3; 
- 
-    // The size of the result in bytes as it counts towards WindowSize 
-    optional uint64 ResultSize = 4; 
- 
-    // A possibly partial read result 
-    // The sum of these protobuf values counts towards WindowSize 
-    repeated TSourceOffset Result = 5; 
-} 
- 
-message TEvReplicationSourceOffsetsAck { 
-    // Same as ReadId in the request 
-    optional uint64 ReadId = 1; 
- 
-    // The client is acknowledging every SeqNo <= AckSeqNo has been received and processed 
-    // This will remove their corresponding  
-    optional uint64 AckSeqNo = 2; 
- 
-    // The client may optionally change the current window size 
-    optional uint64 WindowSize = 3; 
-} 
- 
-message TEvReplicationSourceOffsetsCancel { 
-    // Cancels a previously started read for (Sender, ReadId) 
-    optional uint64 ReadId = 1; 
-} 
+        // Serialized values (TSerializedCellVec)
+        optional bytes Data = 2;
+    }
+
+    message TChange {
+        // Offset of the change within a particular source
+        optional int64 SourceOffset = 1;
+
+        // Changes will be applied using the specified uncommitted TxId
+        optional uint64 WriteTxId = 2;
+
+        // TSerializedCellVec with the table primary key
+        optional bytes Key = 3;
+
+        oneof RowOperation {
+            // Upsert the specified key with these column updates
+            TUpdates Upsert = 4;
+
+            // Remove the specified key
+            google.protobuf.Empty Erase = 5;
+
+            // Reset all columns to default values and apply updates
+            TUpdates Reset = 6;
+        }
+    }
+
+    // Table these changes are applied to
+    optional TTableId TableId = 1;
+
+    // Source of changes for deduplication and exactly-once processing. This
+    // should be a source which guarantees monotonically increasing offsets,
+    // e.g. a topic partition id. All changes with offsets not greater than
+    // the maximum accepted will be ignored.
+    optional bytes Source = 2;
+
+    repeated TChange Changes = 3;
+}
+
+message TEvApplyReplicationChangesResult {
+    enum EStatus {
+        STATUS_UNKNOWN = 0;
+        STATUS_OK = 1;
+        STATUS_REJECTED = 2;
+    }
+
+    enum EReason {
+        REASON_NONE = 0;
+        REASON_WRONG_STATE = 1;
+        REASON_SCHEME_ERROR = 2;
+        REASON_BAD_REQUEST = 3;
+        REASON_UNEXPECTED_ROW_OPERATION = 4;
+    }
+
+    optional EStatus Status = 1;
+    optional EReason Reason = 2;
+    optional string ErrorDescription = 3;
+}
+
+message TEvGetReplicationSourceOffsets {
+    // Each read must have a unique (Sender, ReadId) pair for identification
+    optional uint64 ReadId = 1;
+
+    optional TTableId TableId = 2;
+
+    // The tuple (SourceId, SplitKeyId) where the read should start, inclusive
+    optional uint64 FromSourceId = 3;
+    optional uint64 FromSplitKeyId = 4;
+
+    // Maximum total number of unACKed bytes the client is willing to accept
+    optional uint64 WindowSize = 5;
+}
+
+message TEvReplicationSourceOffsets {
+    message TSourceOffset {
+        // The pair (SourceId, SplitKeyId) is non decreasing during read
+        optional uint64 SourceId = 1;
+        optional uint64 SplitKeyId = 2;
+
+        optional bytes Source = 3;
+
+        // The left PK prefix of the [SplitKey, NextSplitKey) range for MaxOffset
+        optional bytes SplitKey = 4;
+
+        // The special value -1 is not transmitted
+        optional int64 MaxOffset = 5 [default = -1];
+    }
+
+    // Same as ReadId in the request, so result and request may be matched
+    optional uint64 ReadId = 1;
+
+    // Each consecutive result has a monotonically increasing SeqNo, starting from 1
+    optional uint64 SeqNo = 2;
+
+    // When true this is the last result for this read
+    // Note that datashard may still be waiting for either ack or cancel to free up the send window
+    optional bool EndOfStream = 3;
+
+    // The size of the result in bytes as it counts towards WindowSize
+    optional uint64 ResultSize = 4;
+
+    // A possibly partial read result
+    // The sum of these protobuf values counts towards WindowSize
+    repeated TSourceOffset Result = 5;
+}
+
+message TEvReplicationSourceOffsetsAck {
+    // Same as ReadId in the request
+    optional uint64 ReadId = 1;
+
+    // The client is acknowledging every SeqNo <= AckSeqNo has been received and processed
+    // This will remove their corresponding 
+    optional uint64 AckSeqNo = 2;
+
+    // The client may optionally change the current window size
+    optional uint64 WindowSize = 3;
+}
+
+message TEvReplicationSourceOffsetsCancel {
+    // Cancels a previously started read for (Sender, ReadId)
+    optional uint64 ReadId = 1;
+}

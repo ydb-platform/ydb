@@ -721,13 +721,13 @@ private:
             case EState::Dropping:
                 if (isMultipleMods || isNotExist) {
                     if (record.GetPathDropTxId()) {
-                        // We may need to wait for an earlier tx 
+                        // We may need to wait for an earlier tx
                         txId = TTxId(record.GetPathDropTxId());
-                    } else if (isNotExist) { 
-                        // Already dropped and fully forgotten 
-                        txId = TTxId(record.GetTxId()); 
+                    } else if (isNotExist) {
+                        // Already dropped and fully forgotten
+                        txId = TTxId(record.GetTxId());
                     } else {
-                        // We need to wait and retry the operation 
+                        // We need to wait and retry the operation
                         txId = TTxId(record.GetTxId());
                         THolder<IEventBase> ev;
 

@@ -40,8 +40,8 @@ Y_UNIT_TEST_SUITE(NPage) {
 
         NPage::TConf conf{ true, 2 * 1024 };
 
-        conf.Group(0).Codec = NPage::ECodec::LZ4; 
-        conf.Group(0).ForceCompression = true; /* required for this UT only */ 
+        conf.Group(0).Codec = NPage::ECodec::LZ4;
+        conf.Group(0).ForceCompression = true; /* required for this UT only */
 
         TCheckIt wrap(TPartCook(lay, conf).Add(foo).Finish(), { });
 
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(NPage) {
         auto &part = dynamic_cast<const NTest::TPartStore&>(*(*wrap).Eggs.Lone());
 
         for (auto page: xrange(part.Store->PageCollectionPagesCount(0))) {
-            auto *raw = part.Store->GetPage(0, page); 
+            auto *raw = part.Store->GetPage(0, page);
             auto got = NPage::THello().Read(*raw, NPage::EPage::Undef);
 
             if (got.Type != NPage::EPage::DataPage) {
@@ -80,23 +80,23 @@ Y_UNIT_TEST_SUITE(NPage) {
         }
     }
 
-    Y_UNIT_TEST(GroupIdEncoding) { 
-        NPage::TGroupId main; 
-        UNIT_ASSERT_VALUES_EQUAL(main.Raw(), 0u); 
-        NPage::TGroupId alt(1); 
-        UNIT_ASSERT_VALUES_EQUAL(alt.Raw(), 1u); 
-        NPage::TGroupId mainHist(0, true); 
-        UNIT_ASSERT_VALUES_EQUAL(mainHist.Raw(), 0x80000000u); 
-        NPage::TGroupId altHist(1, true); 
-        UNIT_ASSERT_VALUES_EQUAL(altHist.Raw(), 0x80000001u); 
-        UNIT_ASSERT(main == main); 
-        UNIT_ASSERT(main < alt); 
-        UNIT_ASSERT(main < mainHist); 
-        UNIT_ASSERT(alt < mainHist); 
-        UNIT_ASSERT(alt < altHist); 
-        UNIT_ASSERT(mainHist < altHist); 
-    } 
- 
+    Y_UNIT_TEST(GroupIdEncoding) {
+        NPage::TGroupId main;
+        UNIT_ASSERT_VALUES_EQUAL(main.Raw(), 0u);
+        NPage::TGroupId alt(1);
+        UNIT_ASSERT_VALUES_EQUAL(alt.Raw(), 1u);
+        NPage::TGroupId mainHist(0, true);
+        UNIT_ASSERT_VALUES_EQUAL(mainHist.Raw(), 0x80000000u);
+        NPage::TGroupId altHist(1, true);
+        UNIT_ASSERT_VALUES_EQUAL(altHist.Raw(), 0x80000001u);
+        UNIT_ASSERT(main == main);
+        UNIT_ASSERT(main < alt);
+        UNIT_ASSERT(main < mainHist);
+        UNIT_ASSERT(alt < mainHist);
+        UNIT_ASSERT(alt < altHist);
+        UNIT_ASSERT(mainHist < altHist);
+    }
+
 }
 
 }

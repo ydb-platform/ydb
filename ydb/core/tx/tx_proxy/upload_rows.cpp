@@ -22,14 +22,14 @@ public:
     {
         AllowWriteToPrivateTable = writeToPrivateTable;
 
-        switch (mode) { 
-            case EUploadRowsMode::Normal: 
-                // nothing 
-                break; 
-            case EUploadRowsMode::WriteToTableShadow: 
-                WriteToTableShadow = true; 
-                break; 
-        } 
+        switch (mode) {
+            case EUploadRowsMode::Normal:
+                // nothing
+                break;
+            case EUploadRowsMode::WriteToTableShadow:
+                WriteToTableShadow = true;
+                break;
+        }
     }
 
 private:
@@ -87,7 +87,7 @@ IActor* CreateUploadRowsInternal(const TActorId& sender,
     std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
     EUploadRowsMode mode,
     bool writeToPrivateTable)
-{ 
+{
     return new TUploadRowsInternal(sender,
         table,
         types,

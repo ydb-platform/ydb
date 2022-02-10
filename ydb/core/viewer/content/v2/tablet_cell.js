@@ -23,7 +23,7 @@ TabletCell.prototype.tabletTypes = {
     'PersQueueReadBalancer': 'PB',
     'BlockStorePartition': 'BP',
     'BlockStoreVolume': 'BV',
-    'SequenceShard': 'S', 
+    'SequenceShard': 'S',
     'ReplicationController': 'RC',
 };
 

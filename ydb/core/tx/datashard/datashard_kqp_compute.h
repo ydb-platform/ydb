@@ -45,7 +45,7 @@ public:
     void SetTaskOutputChannel(ui64 taskId, ui64 channelId, TActorId actorId);
     TActorId GetTaskOutputChannel(ui64 taskId, ui64 channelId) const;
 
-    bool PinPages(const TVector<IEngineFlat::TValidatedKey>& keys, ui64 pageFaultCount = 0); 
+    bool PinPages(const TVector<IEngineFlat::TValidatedKey>& keys, ui64 pageFaultCount = 0);
 
     void Clear();
 

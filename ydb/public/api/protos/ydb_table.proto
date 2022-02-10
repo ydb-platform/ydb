@@ -117,43 +117,43 @@ message IndexBuildMetadata {
     float progress = 3;
 }
 
-message StoragePool { 
-    string media = 1; 
+message StoragePool {
+    string media = 1;
 }
 
 message StoragePolicy {
     string preset_name = 1;
-    StoragePool syslog = 2; 
-    StoragePool log = 3; 
-    StoragePool data = 4; 
-    StoragePool external = 5; 
+    StoragePool syslog = 2;
+    StoragePool log = 3;
+    StoragePool data = 4;
+    StoragePool external = 5;
     Ydb.FeatureFlag.Status keep_in_memory = 6;
-    repeated ColumnFamilyPolicy column_families = 7; 
+    repeated ColumnFamilyPolicy column_families = 7;
 }
 
-message ColumnFamilyPolicy { 
-    enum Compression { 
-        COMPRESSION_UNSPECIFIED = 0; 
-        UNCOMPRESSED = 1; 
-        COMPRESSED = 2; 
-    } 
- 
-    // Name of the column family, the name "default" must be used for the 
-    // primary column family that contains as least primary key columns 
-    string name = 1; 
- 
-    // Storage settings for the column group (default to values in storage policy) 
-    StoragePool data = 2; 
-    StoragePool external = 3; 
- 
-    // When enabled table data will be kept in memory 
-    // WARNING: DO NOT USE 
-    Ydb.FeatureFlag.Status keep_in_memory = 4; 
- 
-    // Optionally specify whether data should be compressed 
-    Compression compression = 5; 
-} 
- 
+message ColumnFamilyPolicy {
+    enum Compression {
+        COMPRESSION_UNSPECIFIED = 0;
+        UNCOMPRESSED = 1;
+        COMPRESSED = 2;
+    }
+
+    // Name of the column family, the name "default" must be used for the
+    // primary column family that contains as least primary key columns
+    string name = 1;
+
+    // Storage settings for the column group (default to values in storage policy)
+    StoragePool data = 2;
+    StoragePool external = 3;
+
+    // When enabled table data will be kept in memory
+    // WARNING: DO NOT USE
+    Ydb.FeatureFlag.Status keep_in_memory = 4;
+
+    // Optionally specify whether data should be compressed
+    Compression compression = 5;
+}
+
 message CompactionPolicy {
     string preset_name = 1;
 }
@@ -246,8 +246,8 @@ message ColumnMeta {
     string name = 1;
     // Type of column
     Type type = 2;
-    // Column family name of the column 
-    string family = 3; 
+    // Column family name of the column
+    string family = 3;
 }
 
 message DateTypeColumnModeSettings {
@@ -309,49 +309,49 @@ message TtlSettings {
     uint32 run_interval_seconds = 3;
 }
 
-message StorageSettings { 
-    // This specifies internal channel 0 commit log storage pool 
-    // Fastest available storage recommended, negligible amounts of short-lived data 
-    StoragePool tablet_commit_log0 = 1; 
- 
-    // This specifies internal channel 1 commit log storage pool 
-    // Fastest available storage recommended, small amounts of short-lived data 
-    StoragePool tablet_commit_log1 = 2; 
- 
-    // This specifies external blobs storage pool 
-    StoragePool external = 4; 
- 
-    // Optionally store large values in "external blobs" 
-    // WARNING: DO NOT USE 
-    // This feature is experimental and should not be used, restrictions apply: 
-    // * Table cannot split/merge when this is enabled 
-    // * Table cannot be copied or backed up when this is enabled 
-    // * This feature cannot be disabled once enabled for a table 
-    Ydb.FeatureFlag.Status store_external_blobs = 5; 
-} 
- 
-message ColumnFamily { 
-    enum Compression { 
-        COMPRESSION_UNSPECIFIED = 0; 
-        COMPRESSION_NONE = 1; 
-        COMPRESSION_LZ4 = 2; 
-    } 
- 
-    // Name of the column family, the name "default" must be used for the 
-    // primary column family that contains at least primary key columns 
-    string name = 1; 
- 
-    // This specifies data storage settings for column family 
-    StoragePool data = 2; 
- 
-    // Optionally specify how data should be compressed 
-    Compression compression = 3; 
- 
-    // When enabled table data will be kept in memory 
-    // WARNING: DO NOT USE 
-    Ydb.FeatureFlag.Status keep_in_memory = 4; 
-} 
- 
+message StorageSettings {
+    // This specifies internal channel 0 commit log storage pool
+    // Fastest available storage recommended, negligible amounts of short-lived data
+    StoragePool tablet_commit_log0 = 1;
+
+    // This specifies internal channel 1 commit log storage pool
+    // Fastest available storage recommended, small amounts of short-lived data
+    StoragePool tablet_commit_log1 = 2;
+
+    // This specifies external blobs storage pool
+    StoragePool external = 4;
+
+    // Optionally store large values in "external blobs"
+    // WARNING: DO NOT USE
+    // This feature is experimental and should not be used, restrictions apply:
+    // * Table cannot split/merge when this is enabled
+    // * Table cannot be copied or backed up when this is enabled
+    // * This feature cannot be disabled once enabled for a table
+    Ydb.FeatureFlag.Status store_external_blobs = 5;
+}
+
+message ColumnFamily {
+    enum Compression {
+        COMPRESSION_UNSPECIFIED = 0;
+        COMPRESSION_NONE = 1;
+        COMPRESSION_LZ4 = 2;
+    }
+
+    // Name of the column family, the name "default" must be used for the
+    // primary column family that contains at least primary key columns
+    string name = 1;
+
+    // This specifies data storage settings for column family
+    StoragePool data = 2;
+
+    // Optionally specify how data should be compressed
+    Compression compression = 3;
+
+    // When enabled table data will be kept in memory
+    // WARNING: DO NOT USE
+    Ydb.FeatureFlag.Status keep_in_memory = 4;
+}
+
 message PartitioningSettings {
     // List of columns (primary key prefix) to partition by
     reserved 1; // partition_by
@@ -409,10 +409,10 @@ message CreateTableRequest {
     repeated TableIndex indexes = 7;
     // Table rows time to live settings
     TtlSettings ttl_settings = 8;
-    // Storage settings for table 
-    StorageSettings storage_settings = 9; 
-    // Column families 
-    repeated ColumnFamily column_families = 10; 
+    // Storage settings for table
+    StorageSettings storage_settings = 9;
+    // Column families
+    repeated ColumnFamily column_families = 10;
     // Attributes. Total size is limited to 10 KB.
     map<string, string> attributes = 11 [(map_key).length.range = {min: 1, max: 100}, (length).range = {min: 1, max: 4096}];
     // Predefined named set of settings for table compaction ["default", "small_table", "log_table"].
@@ -462,8 +462,8 @@ message AlterTableRequest {
     // Columns to remove
     repeated string drop_columns = 4;
     Ydb.Operations.OperationParams operation_params = 5;
-    // Columns to alter 
-    repeated ColumnMeta alter_columns = 6; 
+    // Columns to alter
+    repeated ColumnMeta alter_columns = 6;
     // Setup or remove time to live settings
     oneof ttl_action {
         TtlSettings set_ttl_settings = 7;
@@ -473,11 +473,11 @@ message AlterTableRequest {
     repeated TableIndex add_indexes = 9;
     // Remove secondary indexes
     repeated string drop_indexes = 10;
-    // Change table storage settings 
-    StorageSettings alter_storage_settings = 11; 
-    // Add/alter column families 
-    repeated ColumnFamily add_column_families = 12; 
-    repeated ColumnFamily alter_column_families = 13; 
+    // Change table storage settings
+    StorageSettings alter_storage_settings = 11;
+    // Add/alter column families
+    repeated ColumnFamily add_column_families = 12;
+    repeated ColumnFamily alter_column_families = 13;
     // Alter attributes. Leave the value blank to drop an attribute.
     // Cannot be used in combination with other fields (except session_id and path) at the moment.
     map<string, string> alter_attributes = 14 [(map_key).length.range = {min: 1, max: 100}, (length).le = 4096];
@@ -590,10 +590,10 @@ message DescribeTableResult {
     TableStats table_stats = 6;
     // TTL params
     TtlSettings ttl_settings = 7;
-    // Storage settings for table 
-    StorageSettings storage_settings = 8; 
-    // Column families 
-    repeated ColumnFamily column_families = 9; 
+    // Storage settings for table
+    StorageSettings storage_settings = 8;
+    // Column families
+    repeated ColumnFamily column_families = 9;
     // Attributes
     map<string, string> attributes = 10;
     // Predefined named set of settings for table compaction
@@ -920,8 +920,8 @@ message ReadTableRequest {
     bool ordered = 5;
     // Limits row count to read
     uint64 row_limit = 6;
-    // Use a server-side snapshot 
-    Ydb.FeatureFlag.Status use_snapshot = 7; 
+    // Use a server-side snapshot
+    Ydb.FeatureFlag.Status use_snapshot = 7;
 }
 
 // ReadTable doesn't use Operation, returns result directly

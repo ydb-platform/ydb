@@ -431,53 +431,53 @@ private:
             return Reply(code, issues, ctx);
         }
 
-        for (const auto& alter : req->alter_columns()) { 
-            auto column = desc->AddColumns(); 
-            column->SetName(alter.name()); 
-            if (!alter.family().empty()) { 
-                column->SetFamilyName(alter.family()); 
-            } 
-        } 
- 
-        bool hadPartitionConfig = desc->HasPartitionConfig(); 
-        TColumnFamilyManager families(desc->MutablePartitionConfig()); 
- 
-        // Apply storage settings to the default column family 
-        if (req->has_alter_storage_settings()) { 
-            Ydb::StatusIds::StatusCode code; 
-            TString error; 
-            if (!families.ApplyStorageSettings(req->alter_storage_settings(), &code, &error)) { 
-                NYql::TIssues issues; 
-                issues.AddIssue(NYql::TIssue(error)); 
-                return Reply(code, issues, ctx); 
-            } 
-        } 
- 
-        for (const auto& familySettings : req->add_column_families()) { 
-            Ydb::StatusIds::StatusCode code; 
-            TString error; 
-            if (!families.ApplyFamilySettings(familySettings, &code, &error)) { 
-                NYql::TIssues issues; 
-                issues.AddIssue(NYql::TIssue(error)); 
-                return Reply(code, issues, ctx); 
-            } 
-        } 
- 
-        for (const auto& familySettings : req->alter_column_families()) { 
-            Ydb::StatusIds::StatusCode code; 
-            TString error; 
-            if (!families.ApplyFamilySettings(familySettings, &code, &error)) { 
-                NYql::TIssues issues; 
-                issues.AddIssue(NYql::TIssue(error)); 
-                return Reply(code, issues, ctx); 
-            } 
-        } 
- 
-        // Avoid altering partition config unless we changed something 
-        if (!families.Modified && !hadPartitionConfig) { 
-            desc->ClearPartitionConfig(); 
-        } 
- 
+        for (const auto& alter : req->alter_columns()) {
+            auto column = desc->AddColumns();
+            column->SetName(alter.name());
+            if (!alter.family().empty()) {
+                column->SetFamilyName(alter.family());
+            }
+        }
+
+        bool hadPartitionConfig = desc->HasPartitionConfig();
+        TColumnFamilyManager families(desc->MutablePartitionConfig());
+
+        // Apply storage settings to the default column family
+        if (req->has_alter_storage_settings()) {
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!families.ApplyStorageSettings(req->alter_storage_settings(), &code, &error)) {
+                NYql::TIssues issues;
+                issues.AddIssue(NYql::TIssue(error));
+                return Reply(code, issues, ctx);
+            }
+        }
+
+        for (const auto& familySettings : req->add_column_families()) {
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!families.ApplyFamilySettings(familySettings, &code, &error)) {
+                NYql::TIssues issues;
+                issues.AddIssue(NYql::TIssue(error));
+                return Reply(code, issues, ctx);
+            }
+        }
+
+        for (const auto& familySettings : req->alter_column_families()) {
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!families.ApplyFamilySettings(familySettings, &code, &error)) {
+                NYql::TIssues issues;
+                issues.AddIssue(NYql::TIssue(error));
+                return Reply(code, issues, ctx);
+            }
+        }
+
+        // Avoid altering partition config unless we changed something
+        if (!families.Modified && !hadPartitionConfig) {
+            desc->ClearPartitionConfig();
+        }
+
         if (!FillAlterTableSettingsDesc(*desc, *req, Profiles, code, error, AppData())) {
             NYql::TIssues issues;
             issues.AddIssue(NYql::TIssue(error));

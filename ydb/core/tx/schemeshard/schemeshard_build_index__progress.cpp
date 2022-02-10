@@ -39,7 +39,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateLockForIndexBuild);
-    modifyScheme.SetInternal(true); 
+    modifyScheme.SetInternal(true);
 
     TPath path = TPath::Init(buildInfo->TablePathId, ss);
     modifyScheme.SetWorkingDir(path.Parent().PathString());
@@ -60,7 +60,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> InitiatePropose(
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateIndexBuild);
-    modifyScheme.SetInternal(true); 
+    modifyScheme.SetInternal(true);
 
     modifyScheme.SetWorkingDir(TPath::Init(buildInfo->DomainPathId, ss).PathString());
 
@@ -79,7 +79,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> ApplyPropose(
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpApplyIndexBuild);
-    modifyScheme.SetInternal(true); 
+    modifyScheme.SetInternal(true);
 
     modifyScheme.SetWorkingDir(TPath::Init(buildInfo->DomainPathId, ss).PathString());
 
@@ -102,7 +102,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropLock);
-    modifyScheme.SetInternal(true); 
+    modifyScheme.SetInternal(true);
 
     modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo->LockTxId));
 
@@ -123,7 +123,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CancelPropose(
 
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCancelIndexBuild);
-    modifyScheme.SetInternal(true); 
+    modifyScheme.SetInternal(true);
 
     modifyScheme.SetWorkingDir(TPath::Init(buildInfo->DomainPathId, ss).PathString());
 

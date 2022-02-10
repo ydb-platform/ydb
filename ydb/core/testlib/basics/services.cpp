@@ -65,23 +65,23 @@ namespace NPDisk {
             TActorSetupCmd(tabletResolver, TMailboxType::Revolving, 0), nodeIndex);
     }
 
-    void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex) 
-    { 
+    void SetupTabletPipePeNodeCaches(TTestActorRuntime& runtime, ui32 nodeIndex)
+    {
         TIntrusivePtr<TPipePeNodeCacheConfig> leaderPipeConfig = new TPipePeNodeCacheConfig();
         leaderPipeConfig->PipeRefreshTime = TDuration::Zero();
         leaderPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
- 
-        TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig(); 
-        followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30); 
-        followerPipeConfig->PipeConfig.AllowFollower = true; 
-        followerPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3}; 
- 
-        runtime.AddLocalService(MakePipePeNodeCacheID(false), 
+
+        TIntrusivePtr<TPipePeNodeCacheConfig> followerPipeConfig = new TPipePeNodeCacheConfig();
+        followerPipeConfig->PipeRefreshTime = TDuration::Seconds(30);
+        followerPipeConfig->PipeConfig.AllowFollower = true;
+        followerPipeConfig->PipeConfig.RetryPolicy = {.RetryLimitCount = 3};
+
+        runtime.AddLocalService(MakePipePeNodeCacheID(false),
             TActorSetupCmd(CreatePipePeNodeCache(leaderPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
-        runtime.AddLocalService(MakePipePeNodeCacheID(true), 
-            TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex); 
-    } 
- 
+        runtime.AddLocalService(MakePipePeNodeCacheID(true),
+            TActorSetupCmd(CreatePipePeNodeCache(followerPipeConfig), TMailboxType::Revolving, 0), nodeIndex);
+    }
+
     void SetupResourceBroker(TTestActorRuntime& runtime, ui32 nodeIndex)
     {
         runtime.AddLocalService(NResourceBroker::MakeResourceBrokerID(),
@@ -241,7 +241,7 @@ namespace NPDisk {
     {
         runtime.SetDispatchTimeout(storage.UseDisk ? DISK_DISPATCH_TIMEOUT : DEFAULT_DISPATCH_TIMEOUT);
 
-        TTestStorageFactory disk(runtime, storage, mock); 
+        TTestStorageFactory disk(runtime, storage, mock);
 
         {
             NKikimrBlobStorage::TNodeWardenServiceSet bsConfig;
@@ -263,7 +263,7 @@ namespace NPDisk {
             SetupBSNodeWarden(runtime, nodeIndex, disk.MakeWardenConf(*app.Domains, keyConfig));
 
             SetupTabletResolver(runtime, nodeIndex);
-            SetupTabletPipePeNodeCaches(runtime, nodeIndex); 
+            SetupTabletPipePeNodeCaches(runtime, nodeIndex);
             SetupResourceBroker(runtime, nodeIndex);
             SetupSharedPageCache(runtime, nodeIndex, caches);
             SetupBlobCache(runtime, nodeIndex);
@@ -275,15 +275,15 @@ namespace NPDisk {
 
         runtime.Initialize(app.Unwrap());
 
-        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) { 
-            // NodeWarden (and its actors) relies on timers to work correctly 
-            auto actorId = runtime.GetLocalServiceId( 
-                MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)), 
-                nodeIndex); 
-            Y_VERIFY(actorId, "Missing node warden on node %" PRIu32, nodeIndex); 
-            runtime.EnableScheduleForActor(actorId); 
-        } 
- 
+        for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+            // NodeWarden (and its actors) relies on timers to work correctly
+            auto actorId = runtime.GetLocalServiceId(
+                MakeBlobStorageNodeWardenID(runtime.GetNodeId(nodeIndex)),
+                nodeIndex);
+            Y_VERIFY(actorId, "Missing node warden on node %" PRIu32, nodeIndex);
+            runtime.EnableScheduleForActor(actorId);
+        }
+
         if (!mock && !runtime.IsRealThreads()) {
             ui32 evNum = disk.DomainsNum * disk.DisksInDomain;
             TDispatchOptions options;

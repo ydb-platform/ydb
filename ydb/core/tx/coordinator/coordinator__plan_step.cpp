@@ -113,7 +113,7 @@ struct TTxCoordinator::TTxPlanStep : public TTransactionBase<TTxCoordinator> {
                     }
                 }
 
-                if (lowDiskSpace && !proposal->IgnoreLowDiskSpace) { 
+                if (lowDiskSpace && !proposal->IgnoreLowDiskSpace) {
                     Self->MonCounters.StepDeclinedNoSpaceTx->Inc();
                     ProxyPlanConfirmations->Queue->Push(new TCoordinatorStepConfirmations::TEntry{
                         txId,

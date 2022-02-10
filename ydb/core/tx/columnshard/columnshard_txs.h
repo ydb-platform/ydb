@@ -165,12 +165,12 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext& ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_PLANSTEP; } 
+    TTxType GetTxType() const override { return TXTYPE_PLANSTEP; }
 
 private:
     TEvTxProcessing::TEvPlanStep::TPtr Ev;
-    THashMap<TActorId, TVector<ui64>> TxAcks; 
-    std::unique_ptr<TEvTxProcessing::TEvPlanStepAccepted> Result; 
+    THashMap<TActorId, TVector<ui64>> TxAcks;
+    std::unique_ptr<TEvTxProcessing::TEvPlanStepAccepted> Result;
 };
 
 /// Write portion of data in OLAP transaction

@@ -123,9 +123,9 @@ TExprNode::TPtr KiRewriteAggregate(TExprBase node, TExprContext& ctx) {
     return ExpandAggregate(node.Ptr(), ctx);
 }
 
-TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx, 
-    const TKikimrTablesData& tablesData, const TKikimrConfiguration& config) 
-{ 
+TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
+    const TKikimrTablesData& tablesData, const TKikimrConfiguration& config)
+{
     auto maybeSort = node.Maybe<TCoSort>();
     auto maybePartialSort = node.Maybe<TKiPartialSort>();
 
@@ -156,44 +156,44 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
     auto selectRange = read.Cast<TKiSelectRange>();
 
     if (HasSetting(selectRange.Settings().Ref(), "Reverse")) {
-        // N.B. when SelectRange has a Reverse option we cannot optimize 
-        // sort without complex analysis of how it interacts with sorting 
-        return node.Ptr(); 
-    } 
- 
-    enum : ui32 { 
-        SortDirectionNone = 0, 
-        SortDirectionForward = 1, 
-        SortDirectionReverse = 2, 
-        SortDirectionUnknown = 4, 
-    }; 
- 
-    auto getDirection = [] (TExprBase expr) -> ui32 { 
+        // N.B. when SelectRange has a Reverse option we cannot optimize
+        // sort without complex analysis of how it interacts with sorting
+        return node.Ptr();
+    }
+
+    enum : ui32 {
+        SortDirectionNone = 0,
+        SortDirectionForward = 1,
+        SortDirectionReverse = 2,
+        SortDirectionUnknown = 4,
+    };
+
+    auto getDirection = [] (TExprBase expr) -> ui32 {
         if (!expr.Maybe<TCoBool>()) {
-            return SortDirectionUnknown; 
+            return SortDirectionUnknown;
         }
 
         if (!FromString<bool>(expr.Cast<TCoBool>().Literal().Value())) {
-            return SortDirectionReverse; 
+            return SortDirectionReverse;
         }
 
-        return SortDirectionForward; 
+        return SortDirectionForward;
     };
 
-    ui32 direction = SortDirectionNone; 
- 
+    ui32 direction = SortDirectionNone;
+
     if (auto maybeList = sortDirections.Maybe<TExprList>()) {
         for (const auto& expr : maybeList.Cast()) {
-            direction |= getDirection(expr); 
-            if (direction != SortDirectionForward && direction != SortDirectionReverse) { 
+            direction |= getDirection(expr);
+            if (direction != SortDirectionForward && direction != SortDirectionReverse) {
                 return node.Ptr();
             }
         }
-    } else { 
-        direction |= getDirection(sortDirections); 
-        if (direction != SortDirectionForward && direction != SortDirectionReverse) { 
-            return node.Ptr(); 
-        } 
+    } else {
+        direction |= getDirection(sortDirections);
+        if (direction != SortDirectionForward && direction != SortDirectionReverse) {
+            return node.Ptr();
+        }
     }
 
     auto& tableData = tablesData.ExistingTable(selectRange.Cluster().StringValue(), selectRange.Table().Path().StringValue());
@@ -235,23 +235,23 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
         }
     }
 
-    if (direction == SortDirectionReverse) { 
-        if (!config.AllowReverseRange()) { 
-            return node.Ptr(); 
-        } 
- 
-        auto reverseValue = Build<TCoBool>(ctx, node.Pos()) 
-            .Literal().Build("true") 
-            .Done(); 
- 
-        auto newSettings = Build<TCoNameValueTupleList>(ctx, selectRange.Settings().Pos()) 
-            .Add(TVector<TExprBase>(selectRange.Settings().begin(), selectRange.Settings().end())) 
-            .Add<TCoNameValueTuple>() 
-                .Name().Build("Reverse") 
-                .Value(reverseValue) 
-                .Build() 
-            .Done(); 
- 
+    if (direction == SortDirectionReverse) {
+        if (!config.AllowReverseRange()) {
+            return node.Ptr();
+        }
+
+        auto reverseValue = Build<TCoBool>(ctx, node.Pos())
+            .Literal().Build("true")
+            .Done();
+
+        auto newSettings = Build<TCoNameValueTupleList>(ctx, selectRange.Settings().Pos())
+            .Add(TVector<TExprBase>(selectRange.Settings().begin(), selectRange.Settings().end()))
+            .Add<TCoNameValueTuple>()
+                .Name().Build("Reverse")
+                .Value(reverseValue)
+                .Build()
+            .Done();
+
         TExprNode::TPtr newSelect = Build<TKiSelectRange>(ctx, selectRange.Pos())
             .Cluster(selectRange.Cluster())
             .Table(selectRange.Table())
@@ -260,21 +260,21 @@ TExprNode::TPtr KiRedundantSortByPk(TExprBase node, TExprContext& ctx,
             .Settings(newSettings)
             .Done()
             .Ptr();
- 
-        YQL_CLOG(INFO, ProviderKikimr) << "KiRedundantSortByPkReverse"; 
- 
-        if (input.Maybe<TCoFlatMap>()) { 
-            auto flatmap = input.Cast<TCoFlatMap>(); 
- 
-            return Build<TCoFlatMap>(ctx, flatmap.Pos()) 
-                .Input(newSelect) 
-                .Lambda(flatmap.Lambda()) 
-                .Done().Ptr(); 
-        } else { 
+
+        YQL_CLOG(INFO, ProviderKikimr) << "KiRedundantSortByPkReverse";
+
+        if (input.Maybe<TCoFlatMap>()) {
+            auto flatmap = input.Cast<TCoFlatMap>();
+
+            return Build<TCoFlatMap>(ctx, flatmap.Pos())
+                .Input(newSelect)
+                .Lambda(flatmap.Lambda())
+                .Done().Ptr();
+        } else {
             return newSelect;
-        } 
-    } 
- 
+        }
+    }
+
     YQL_CLOG(INFO, ProviderKikimr) << "KiRedundantSortByPk";
     return input.Ptr();
 }
@@ -685,7 +685,7 @@ TAutoPtr<IGraphTransformer> CreateKiLogicalOptProposalTransformer(TIntrusivePtr<
                 return ret;
             }
 
-            ret = KiRedundantSortByPk(node, ctx, sessionCtx->Tables(), sessionCtx->Config()); 
+            ret = KiRedundantSortByPk(node, ctx, sessionCtx->Tables(), sessionCtx->Config());
             if (ret != inputNode) {
                 return ret;
             }

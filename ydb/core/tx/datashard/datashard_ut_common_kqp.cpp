@@ -1,1 +1,1 @@
-#include "datashard_ut_common_kqp.h" 
+#include "datashard_ut_common_kqp.h"

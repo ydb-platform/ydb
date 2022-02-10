@@ -866,41 +866,41 @@ _QUERYMETA = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor( 
-      name='expire_at', full_name='YandexQuery.QueryMeta.expire_at', index=7, 
-      number=8, type=11, cpp_type=10, label=1, 
-      has_default_value=False, default_value=None, 
-      message_type=None, enum_type=None, containing_type=None, 
-      is_extension=False, extension_scope=None, 
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
-    _descriptor.FieldDescriptor( 
-      name='result_expire_at', full_name='YandexQuery.QueryMeta.result_expire_at', index=8, 
-      number=9, type=11, cpp_type=10, label=1, 
-      has_default_value=False, default_value=None, 
-      message_type=None, enum_type=None, containing_type=None, 
-      is_extension=False, extension_scope=None, 
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
-    _descriptor.FieldDescriptor( 
-      name='started_by', full_name='YandexQuery.QueryMeta.started_by', index=9, 
-      number=10, type=9, cpp_type=9, label=1, 
-      has_default_value=False, default_value=b"".decode('utf-8'), 
-      message_type=None, enum_type=None, containing_type=None, 
-      is_extension=False, extension_scope=None, 
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
-    _descriptor.FieldDescriptor( 
-      name='aborted_by', full_name='YandexQuery.QueryMeta.aborted_by', index=10, 
-      number=11, type=9, cpp_type=9, label=1, 
-      has_default_value=False, default_value=b"".decode('utf-8'), 
-      message_type=None, enum_type=None, containing_type=None, 
-      is_extension=False, extension_scope=None, 
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
-    _descriptor.FieldDescriptor( 
-      name='paused_by', full_name='YandexQuery.QueryMeta.paused_by', index=11, 
-      number=12, type=9, cpp_type=9, label=1, 
-      has_default_value=False, default_value=b"".decode('utf-8'), 
-      message_type=None, enum_type=None, containing_type=None, 
-      is_extension=False, extension_scope=None, 
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
+    _descriptor.FieldDescriptor(
+      name='expire_at', full_name='YandexQuery.QueryMeta.expire_at', index=7,
+      number=8, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='result_expire_at', full_name='YandexQuery.QueryMeta.result_expire_at', index=8,
+      number=9, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='started_by', full_name='YandexQuery.QueryMeta.started_by', index=9,
+      number=10, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='aborted_by', full_name='YandexQuery.QueryMeta.aborted_by', index=10,
+      number=11, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='paused_by', full_name='YandexQuery.QueryMeta.paused_by', index=11,
+      number=12, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -913,11 +913,11 @@ _QUERYMETA = _descriptor.Descriptor(
   syntax='proto3',
   extension_ranges=[],
   oneofs=[
-    _descriptor.OneofDescriptor( 
-      name='action', full_name='YandexQuery.QueryMeta.action', 
-      index=0, containing_type=None, 
-      create_key=_descriptor._internal_create_key, 
-    fields=[]), 
+    _descriptor.OneofDescriptor(
+      name='action', full_name='YandexQuery.QueryMeta.action',
+      index=0, containing_type=None,
+      create_key=_descriptor._internal_create_key,
+    fields=[]),
   ],
   serialized_start=1718,
   serialized_end=2459,
@@ -1717,13 +1717,13 @@ _GETQUERYSTATUSRESULT = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor( 
-      name='meta_revision', full_name='YandexQuery.GetQueryStatusResult.meta_revision', index=1, 
-      number=2, type=3, cpp_type=2, label=1, 
-      has_default_value=False, default_value=0, 
-      message_type=None, enum_type=None, containing_type=None, 
-      is_extension=False, extension_scope=None, 
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
+    _descriptor.FieldDescriptor(
+      name='meta_revision', full_name='YandexQuery.GetQueryStatusResult.meta_revision', index=1,
+      number=2, type=3, cpp_type=2, label=1,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -1895,7 +1895,7 @@ _MODIFYQUERYREQUEST = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='state_load_mode', full_name='YandexQuery.ModifyQueryRequest.state_load_mode', index=5, 
+      name='state_load_mode', full_name='YandexQuery.ModifyQueryRequest.state_load_mode', index=5,
       number=6, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
@@ -2149,13 +2149,13 @@ _BRIEFJOB = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor( 
-      name='expire_at', full_name='YandexQuery.BriefJob.expire_at', index=5, 
-      number=12, type=11, cpp_type=10, label=1, 
-      has_default_value=False, default_value=None, 
-      message_type=None, enum_type=None, containing_type=None, 
-      is_extension=False, extension_scope=None, 
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
+    _descriptor.FieldDescriptor(
+      name='expire_at', full_name='YandexQuery.BriefJob.expire_at', index=5,
+      number=12, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -2258,13 +2258,13 @@ _JOB = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor( 
-      name='expire_at', full_name='YandexQuery.Job.expire_at', index=11, 
-      number=12, type=11, cpp_type=10, label=1, 
-      has_default_value=False, default_value=None, 
-      message_type=None, enum_type=None, containing_type=None, 
-      is_extension=False, extension_scope=None, 
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
+    _descriptor.FieldDescriptor(
+      name='expire_at', full_name='YandexQuery.Job.expire_at', index=11,
+      number=12, type=11, cpp_type=10, label=1,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
   ],
   extensions=[
   ],
@@ -2874,14 +2874,14 @@ _CLICKHOUSECLUSTER = _descriptor.Descriptor(
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
-      serialized_options=b'\242\346*\003\030\200\010\270\346*\001', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
+      serialized_options=b'\242\346*\003\030\200\010\270\346*\001', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
       name='password', full_name='YandexQuery.ClickHouseCluster.password', index=2,
       number=3, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
-      serialized_options=b'\242\346*\003\030\200\010\270\346*\001', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key), 
+      serialized_options=b'\242\346*\003\030\200\010\270\346*\001', file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
       name='auth', full_name='YandexQuery.ClickHouseCluster.auth', index=3,
       number=4, type=11, cpp_type=10, label=1,
@@ -5055,15 +5055,15 @@ _QUERYMETA.fields_by_name['started_at'].message_type = google_dot_protobuf_dot_t
 _QUERYMETA.fields_by_name['finished_at'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _QUERYMETA.fields_by_name['execute_mode'].enum_type = _EXECUTEMODE
 _QUERYMETA.fields_by_name['status'].enum_type = _QUERYMETA_COMPUTESTATUS
-_QUERYMETA.fields_by_name['expire_at'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP 
-_QUERYMETA.fields_by_name['result_expire_at'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP 
+_QUERYMETA.fields_by_name['expire_at'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
+_QUERYMETA.fields_by_name['result_expire_at'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _QUERYMETA_COMPUTESTATUS.containing_type = _QUERYMETA
-_QUERYMETA.oneofs_by_name['action'].fields.append( 
-  _QUERYMETA.fields_by_name['aborted_by']) 
-_QUERYMETA.fields_by_name['aborted_by'].containing_oneof = _QUERYMETA.oneofs_by_name['action'] 
-_QUERYMETA.oneofs_by_name['action'].fields.append( 
-  _QUERYMETA.fields_by_name['paused_by']) 
-_QUERYMETA.fields_by_name['paused_by'].containing_oneof = _QUERYMETA.oneofs_by_name['action'] 
+_QUERYMETA.oneofs_by_name['action'].fields.append(
+  _QUERYMETA.fields_by_name['aborted_by'])
+_QUERYMETA.fields_by_name['aborted_by'].containing_oneof = _QUERYMETA.oneofs_by_name['action']
+_QUERYMETA.oneofs_by_name['action'].fields.append(
+  _QUERYMETA.fields_by_name['paused_by'])
+_QUERYMETA.fields_by_name['paused_by'].containing_oneof = _QUERYMETA.oneofs_by_name['action']
 _BRIEFQUERY.fields_by_name['type'].enum_type = _QUERYCONTENT_QUERYTYPE
 _BRIEFQUERY.fields_by_name['meta'].message_type = _QUERYMETA
 _BRIEFQUERY.fields_by_name['visibility'].enum_type = _ACL_VISIBILITY
@@ -5103,7 +5103,7 @@ _MODIFYQUERYREQUEST.fields_by_name['operation_params'].message_type = ydb_dot_pu
 _MODIFYQUERYREQUEST.fields_by_name['content'].message_type = _QUERYCONTENT
 _MODIFYQUERYREQUEST.fields_by_name['execute_mode'].enum_type = _EXECUTEMODE
 _MODIFYQUERYREQUEST.fields_by_name['disposition'].message_type = _STREAMINGDISPOSITION
-_MODIFYQUERYREQUEST.fields_by_name['state_load_mode'].enum_type = _STATELOADMODE 
+_MODIFYQUERYREQUEST.fields_by_name['state_load_mode'].enum_type = _STATELOADMODE
 _MODIFYQUERYRESPONSE.fields_by_name['operation'].message_type = ydb_dot_public_dot_api_dot_protos_dot_ydb__operation__pb2._OPERATION
 _CONTROLQUERYREQUEST.fields_by_name['operation_params'].message_type = ydb_dot_public_dot_api_dot_protos_dot_ydb__operation__pb2._OPERATIONPARAMS
 _CONTROLQUERYREQUEST.fields_by_name['action'].enum_type = _QUERYACTION
@@ -5111,7 +5111,7 @@ _CONTROLQUERYRESPONSE.fields_by_name['operation'].message_type = ydb_dot_public_
 _BRIEFJOB.fields_by_name['meta'].message_type = _COMMONMETA
 _BRIEFJOB.fields_by_name['query_meta'].message_type = _QUERYMETA
 _BRIEFJOB.fields_by_name['visibility'].enum_type = _ACL_VISIBILITY
-_BRIEFJOB.fields_by_name['expire_at'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP 
+_BRIEFJOB.fields_by_name['expire_at'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _JOB.fields_by_name['meta'].message_type = _COMMONMETA
 _JOB.fields_by_name['query_meta'].message_type = _QUERYMETA
 _JOB.fields_by_name['plan'].message_type = _QUERYPLAN
@@ -5120,7 +5120,7 @@ _JOB.fields_by_name['statistics'].message_type = _QUERYSTATISTICS
 _JOB.fields_by_name['result_set_meta'].message_type = _RESULTSETMETA
 _JOB.fields_by_name['ast'].message_type = _QUERYAST
 _JOB.fields_by_name['acl'].message_type = _ACL
-_JOB.fields_by_name['expire_at'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP 
+_JOB.fields_by_name['expire_at'].message_type = google_dot_protobuf_dot_timestamp__pb2._TIMESTAMP
 _LISTJOBSREQUEST_FILTER.containing_type = _LISTJOBSREQUEST
 _LISTJOBSREQUEST.fields_by_name['operation_params'].message_type = ydb_dot_public_dot_api_dot_protos_dot_ydb__operation__pb2._OPERATIONPARAMS
 _LISTJOBSREQUEST.fields_by_name['filter'].message_type = _LISTJOBSREQUEST_FILTER

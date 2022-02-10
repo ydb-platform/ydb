@@ -359,7 +359,7 @@ public:
         context.SS->RtmrVolumes[newRtmrVolume->PathId] = rtmrVolumeInfo;
         context.SS->TabletCounters->Simple()[COUNTER_RTMR_VOLUME_COUNT].Add(1);
         context.SS->TabletCounters->Simple()[COUNTER_RTMR_PARTITIONS_COUNT].Add(rtmrVolumeInfo->Partitions.size());
-        context.SS->IncrementPathDbRefCount(newRtmrVolume->PathId); 
+        context.SS->IncrementPathDbRefCount(newRtmrVolume->PathId);
 
         context.SS->PersistPath(db, newRtmrVolume->PathId);
 
@@ -380,7 +380,7 @@ public:
             auto shardIdx = part.second->ShardIdx;
             auto tabletId = part.second->TabletId;
 
-            context.SS->RegisterShardInfo(shardIdx, rtmrPartitionInfo); 
+            context.SS->RegisterShardInfo(shardIdx, rtmrPartitionInfo);
 
             context.SS->PersistShardMapping(db, shardIdx, tabletId, newRtmrVolume->PathId, OperationId.GetTxId(), TTabletTypes::RTMRPartition);
             context.SS->PersistChannelsBinding(db, shardIdx, channelsBinding);

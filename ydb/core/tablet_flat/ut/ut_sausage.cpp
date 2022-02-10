@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
     const std::array<ui32, 9> Pages= {{ 50, 30, 80, 60, 40, 60, 70, 380, 10 }};
 
-    TSharedData MakeMeta() 
+    TSharedData MakeMeta()
     {
         NPageCollection::TRecord meta(0);
 
@@ -59,10 +59,10 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
         for (auto size: Pages) {
             TString lumber(size, '9');
-            meta.Push(0, lumber); 
+            meta.Push(0, lumber);
         }
 
-        return meta.Finish(); 
+        return meta.Finish();
     }
 
     Y_UNIT_TEST(Align)
@@ -113,17 +113,17 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
         TWriter writer(cookieAllocator, 1 /* channel */, 8192 * 1024);
 
-        const auto r1 = writer.AddPage(chunk1, 1); 
+        const auto r1 = writer.AddPage(chunk1, 1);
         writer.AddInplace(r1, TStringBuf("chunk 1"));
 
         UNIT_ASSERT(r1 == 0 && checkGlobs(writer.Grab()) == 0);
 
-        const auto r2 = writer.AddPage(chunk2, 2); 
+        const auto r2 = writer.AddPage(chunk2, 2);
         writer.AddInplace(r2, TStringBuf("chunk 2"));
 
         UNIT_ASSERT(r2 == 1 && checkGlobs(writer.Grab()) == 2);
 
-        const auto r3 = writer.AddPage(chunk3, 3); 
+        const auto r3 = writer.AddPage(chunk3, 3);
         writer.AddInplace(r3, TStringBuf("chunk 3"));
 
         UNIT_ASSERT(r3 == 2 && checkGlobs(writer.Grab()) == 1);
@@ -355,22 +355,22 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
         { /*_ LargeGlobId spanned over several blobs */
             auto largeGlobId = cookieAllocator.Do(3, 25, 10);
-            auto itBlobs = largeGlobId.Blobs().begin(); 
+            auto itBlobs = largeGlobId.Blobs().begin();
 
-            UNIT_ASSERT(largeGlobId.Group == 999 && largeGlobId.BlobCount() == 3); 
-            UNIT_ASSERT(*itBlobs++ == TLogoBlobID(1, 2, 3, 3, 10, 10)); 
-            UNIT_ASSERT(*itBlobs++ == TLogoBlobID(1, 2, 3, 3, 10, 11)); 
-            UNIT_ASSERT(*itBlobs++ == TLogoBlobID(1, 2, 3, 3,  5, 12)); 
-            UNIT_ASSERT(itBlobs == largeGlobId.Blobs().end()); 
+            UNIT_ASSERT(largeGlobId.Group == 999 && largeGlobId.BlobCount() == 3);
+            UNIT_ASSERT(*itBlobs++ == TLogoBlobID(1, 2, 3, 3, 10, 10));
+            UNIT_ASSERT(*itBlobs++ == TLogoBlobID(1, 2, 3, 3, 10, 11));
+            UNIT_ASSERT(*itBlobs++ == TLogoBlobID(1, 2, 3, 3,  5, 12));
+            UNIT_ASSERT(itBlobs == largeGlobId.Blobs().end());
         }
 
         { /*_ Trivial largeGlobId occupying one blob */
             auto largeGlobId = cookieAllocator.Do(3, 9, 10);
-            auto itBlobs = largeGlobId.Blobs().begin(); 
+            auto itBlobs = largeGlobId.Blobs().begin();
 
-            UNIT_ASSERT(largeGlobId.Group == 999 && largeGlobId.BlobCount() == 1); 
-            UNIT_ASSERT(*itBlobs++ == TLogoBlobID(1, 2, 3, 3,  9, 14)); 
-            UNIT_ASSERT(itBlobs == largeGlobId.Blobs().end()); 
+            UNIT_ASSERT(largeGlobId.Group == 999 && largeGlobId.BlobCount() == 1);
+            UNIT_ASSERT(*itBlobs++ == TLogoBlobID(1, 2, 3, 3,  9, 14));
+            UNIT_ASSERT(itBlobs == largeGlobId.Blobs().end());
         }
 
         { /*_ Single blob just after placed largeGlobId */
@@ -387,11 +387,11 @@ Y_UNIT_TEST_SUITE(NPageCollection) {
 
         { /*_ Trivial largeGlobId with exact blob size */
             auto largeGlobId = cookieAllocator.Do(3, 10, 10);
-            auto itBlobs = largeGlobId.Blobs().begin(); 
+            auto itBlobs = largeGlobId.Blobs().begin();
 
-            UNIT_ASSERT(largeGlobId.Group == 999 && largeGlobId.BlobCount() == 1); 
-            UNIT_ASSERT(*itBlobs++ == TLogoBlobID(1, 2, 3, 3, 10, 19)); 
-            UNIT_ASSERT(itBlobs == largeGlobId.Blobs().end()); 
+            UNIT_ASSERT(largeGlobId.Group == 999 && largeGlobId.BlobCount() == 1);
+            UNIT_ASSERT(*itBlobs++ == TLogoBlobID(1, 2, 3, 3, 10, 19));
+            UNIT_ASSERT(itBlobs == largeGlobId.Blobs().end());
         }
 
         cookieAllocator.Switch(6, true /* require step switch*/);

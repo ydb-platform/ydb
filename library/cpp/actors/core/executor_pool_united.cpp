@@ -1235,7 +1235,7 @@ namespace NActors {
     inline void TUnitedWorkers::TryWake(TPoolId pool) {
         // Avoid using multiple atomic seq_cst loads in cycle, use barrier once
         AtomicBarrier();
- 
+
         // Scan every allowed cpu in pool's wakeup order and try to wake the first idle cpu
         if (RelaxedLoad(&Pools[pool].Waiters) > 0) {
             for (TCpu* cpu : Pools[pool].WakeOrderCpus) {
@@ -1247,11 +1247,11 @@ namespace NActors {
 
         // Cpu has not been woken up
     }
- 
+
     inline void TUnitedWorkers::BeginExecution(TPoolId pool, ui32& activation, ui64 revolvingCounter) {
         Pools[pool].BeginExecution(activation, revolvingCounter);
-    } 
- 
+    }
+
     inline bool TUnitedWorkers::NextExecution(TPoolId pool, ui32& activation, ui64 revolvingCounter) {
         return Pools[pool].NextExecution(activation, revolvingCounter);
     }

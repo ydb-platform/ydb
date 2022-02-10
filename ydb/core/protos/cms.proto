@@ -16,8 +16,8 @@ message TStatus {
         ERROR         = 7;
         ERROR_TEMP    = 8;
         UNAUTHORIZED  = 9;
-        NO_SUCH_HOST   = 10; 
-        NO_SUCH_DEVICE = 11; 
+        NO_SUCH_HOST   = 10;
+        NO_SUCH_DEVICE = 11;
         NO_SUCH_SERVICE = 12;
     }
 

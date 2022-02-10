@@ -53,11 +53,11 @@ TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(ui64 sizeToCompact,
     , ResourceBrokerTask(resourceBrokerTask)
     , KeepInCache(keepInCache)
     , BackgroundCompactionPolicy(backgroundCompactionPolicy)
-    , ExtraCompactionPercent(10) 
-    , ExtraCompactionExpPercent(110) 
-    , ExtraCompactionMinSize(16384) 
-    , ExtraCompactionExpMaxSize(sizeToCompact / countToCompact) 
-    , UpliftPartSize(sizeToCompact / countToCompact) 
+    , ExtraCompactionPercent(10)
+    , ExtraCompactionExpPercent(110)
+    , ExtraCompactionMinSize(16384)
+    , ExtraCompactionExpMaxSize(sizeToCompact / countToCompact)
+    , UpliftPartSize(sizeToCompact / countToCompact)
 {}
 
 TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(const NKikimrSchemeOp::TCompactionPolicy::TGenerationPolicy &policyPb)
@@ -69,11 +69,11 @@ TCompactionPolicy::TGenerationPolicy::TGenerationPolicy(const NKikimrSchemeOp::T
     , ResourceBrokerTask(policyPb.HasResourceBrokerTask() ? policyPb.GetResourceBrokerTask() : TString())
     , KeepInCache(policyPb.HasKeepInCache() ? policyPb.GetKeepInCache() : false)
     , BackgroundCompactionPolicy(policyPb.HasBackgroundCompactionPolicy() ? policyPb.GetBackgroundCompactionPolicy() : TBackgroundPolicy())
-    , ExtraCompactionPercent(policyPb.HasExtraCompactionPercent() ? policyPb.GetExtraCompactionPercent() : 10) 
-    , ExtraCompactionExpPercent(policyPb.HasExtraCompactionExpPercent() ? policyPb.GetExtraCompactionExpPercent() : 110) 
-    , ExtraCompactionMinSize(policyPb.HasExtraCompactionMinSize() ? policyPb.GetExtraCompactionMinSize() : 16384) 
-    , ExtraCompactionExpMaxSize(policyPb.HasExtraCompactionExpMaxSize() ? policyPb.GetExtraCompactionExpMaxSize() : SizeToCompact / CountToCompact) 
-    , UpliftPartSize(policyPb.HasUpliftPartSize() ? policyPb.GetUpliftPartSize() : SizeToCompact / CountToCompact) 
+    , ExtraCompactionPercent(policyPb.HasExtraCompactionPercent() ? policyPb.GetExtraCompactionPercent() : 10)
+    , ExtraCompactionExpPercent(policyPb.HasExtraCompactionExpPercent() ? policyPb.GetExtraCompactionExpPercent() : 110)
+    , ExtraCompactionMinSize(policyPb.HasExtraCompactionMinSize() ? policyPb.GetExtraCompactionMinSize() : 16384)
+    , ExtraCompactionExpMaxSize(policyPb.HasExtraCompactionExpMaxSize() ? policyPb.GetExtraCompactionExpMaxSize() : SizeToCompact / CountToCompact)
+    , UpliftPartSize(policyPb.HasUpliftPartSize() ? policyPb.GetUpliftPartSize() : SizeToCompact / CountToCompact)
 {
     if (!ResourceBrokerTask)
         ResourceBrokerTask = LegacyQueueIdToTaskName(CompactionBrokerQueue);
@@ -89,11 +89,11 @@ void TCompactionPolicy::TGenerationPolicy::Serialize(NKikimrSchemeOp::TCompactio
     policyPb.SetResourceBrokerTask(ResourceBrokerTask);
     policyPb.SetKeepInCache(KeepInCache);
     BackgroundCompactionPolicy.Serialize(*policyPb.MutableBackgroundCompactionPolicy());
-    policyPb.SetExtraCompactionPercent(ExtraCompactionPercent); 
-    policyPb.SetExtraCompactionMinSize(ExtraCompactionMinSize); 
-    policyPb.SetExtraCompactionExpPercent(ExtraCompactionExpPercent); 
-    policyPb.SetExtraCompactionExpMaxSize(ExtraCompactionExpMaxSize); 
-    policyPb.SetUpliftPartSize(UpliftPartSize); 
+    policyPb.SetExtraCompactionPercent(ExtraCompactionPercent);
+    policyPb.SetExtraCompactionMinSize(ExtraCompactionMinSize);
+    policyPb.SetExtraCompactionExpPercent(ExtraCompactionExpPercent);
+    policyPb.SetExtraCompactionExpMaxSize(ExtraCompactionExpMaxSize);
+    policyPb.SetUpliftPartSize(UpliftPartSize);
 }
 
 TCompactionPolicy::TCompactionPolicy()
@@ -112,11 +112,11 @@ TCompactionPolicy::TCompactionPolicy()
     , BackupResourceBrokerTask(ScanTaskName)
     , DefaultTaskPriority(5)
     , BackgroundSnapshotPolicy()
-    , LogOverheadSizeToSnapshot(16 * 1024 * 1024) 
-    , LogOverheadCountToSnapshot(500) 
-    , DroppedRowsPercentToCompact(50) 
+    , LogOverheadSizeToSnapshot(16 * 1024 * 1024)
+    , LogOverheadCountToSnapshot(500)
+    , DroppedRowsPercentToCompact(50)
     , CompactionStrategy(NKikimrSchemeOp::CompactionStrategyUnset)
-    , KeepEraseMarkers(false) 
+    , KeepEraseMarkers(false)
 {}
 
 TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb)
@@ -135,27 +135,27 @@ TCompactionPolicy::TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& p
     , BackupResourceBrokerTask(policyPb.HasBackupResourceBrokerTask() ? policyPb.GetBackupResourceBrokerTask() : ScanTaskName)
     , DefaultTaskPriority(policyPb.HasDefaultTaskPriority() ? policyPb.GetDefaultTaskPriority() : 5)
     , BackgroundSnapshotPolicy(policyPb.HasBackgroundSnapshotPolicy() ? policyPb.GetBackgroundSnapshotPolicy() : TBackgroundPolicy())
-    , LogOverheadSizeToSnapshot(policyPb.HasLogOverheadSizeToSnapshot() ? policyPb.GetLogOverheadSizeToSnapshot() : 16 * 1024 * 1024) 
-    , LogOverheadCountToSnapshot(policyPb.HasLogOverheadCountToSnapshot() ? policyPb.GetLogOverheadCountToSnapshot() : 500) 
-    , DroppedRowsPercentToCompact(policyPb.HasDroppedRowsPercentToCompact() ? policyPb.GetDroppedRowsPercentToCompact() : 50) 
-    , CompactionStrategy(policyPb.GetCompactionStrategy()) 
-    , KeepEraseMarkers(policyPb.HasKeepEraseMarkers() ? policyPb.GetKeepEraseMarkers() : false) 
+    , LogOverheadSizeToSnapshot(policyPb.HasLogOverheadSizeToSnapshot() ? policyPb.GetLogOverheadSizeToSnapshot() : 16 * 1024 * 1024)
+    , LogOverheadCountToSnapshot(policyPb.HasLogOverheadCountToSnapshot() ? policyPb.GetLogOverheadCountToSnapshot() : 500)
+    , DroppedRowsPercentToCompact(policyPb.HasDroppedRowsPercentToCompact() ? policyPb.GetDroppedRowsPercentToCompact() : 50)
+    , CompactionStrategy(policyPb.GetCompactionStrategy())
+    , KeepEraseMarkers(policyPb.HasKeepEraseMarkers() ? policyPb.GetKeepEraseMarkers() : false)
 {
     if (!InMemResourceBrokerTask)
         InMemResourceBrokerTask = LegacyQueueIdToTaskName(InMemCompactionBrokerQueue);
     if (!SnapshotResourceBrokerTask)
         SnapshotResourceBrokerTask = LegacyQueueIdToTaskName(SnapshotCompactionBrokerQueue);
-    if (!BackupResourceBrokerTask || IsLegacyQueueIdTaskName(BackupResourceBrokerTask)) 
-        BackupResourceBrokerTask = ScanTaskName; 
+    if (!BackupResourceBrokerTask || IsLegacyQueueIdTaskName(BackupResourceBrokerTask))
+        BackupResourceBrokerTask = ScanTaskName;
     Generations.reserve(policyPb.GenerationSize());
     for (ui32 i = 0; i < policyPb.GenerationSize(); ++i) {
         const auto& g = policyPb.GetGeneration(i);
         Y_VERIFY_DEBUG(g.GetGenerationId() == i);
         Generations.emplace_back(g);
     }
-    if (policyPb.HasShardPolicy()) { 
-        ShardPolicy.CopyFrom(policyPb.GetShardPolicy()); 
-    } 
+    if (policyPb.HasShardPolicy()) {
+        ShardPolicy.CopyFrom(policyPb.GetShardPolicy());
+    }
 }
 
 void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) const {
@@ -174,18 +174,18 @@ void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) 
     policyPb.SetBackupResourceBrokerTask(BackupResourceBrokerTask);
     policyPb.SetDefaultTaskPriority(DefaultTaskPriority);
     BackgroundSnapshotPolicy.Serialize(*policyPb.MutableBackgroundSnapshotPolicy());
-    policyPb.SetLogOverheadSizeToSnapshot(LogOverheadSizeToSnapshot); 
-    policyPb.SetLogOverheadCountToSnapshot(LogOverheadCountToSnapshot); 
-    policyPb.SetDroppedRowsPercentToCompact(DroppedRowsPercentToCompact); 
+    policyPb.SetLogOverheadSizeToSnapshot(LogOverheadSizeToSnapshot);
+    policyPb.SetLogOverheadCountToSnapshot(LogOverheadCountToSnapshot);
+    policyPb.SetDroppedRowsPercentToCompact(DroppedRowsPercentToCompact);
     if (CompactionStrategy != NKikimrSchemeOp::CompactionStrategyUnset) {
-        policyPb.SetCompactionStrategy(CompactionStrategy); 
-    } 
-    if (KeepEraseMarkers) { 
-        policyPb.SetKeepEraseMarkers(KeepEraseMarkers); 
-    } 
-    if (ShardPolicy.ByteSizeLong() > 0) { 
-        policyPb.MutableShardPolicy()->CopyFrom(ShardPolicy); 
-    } 
+        policyPb.SetCompactionStrategy(CompactionStrategy);
+    }
+    if (KeepEraseMarkers) {
+        policyPb.SetKeepEraseMarkers(KeepEraseMarkers);
+    }
+    if (ShardPolicy.ByteSizeLong() > 0) {
+        policyPb.MutableShardPolicy()->CopyFrom(ShardPolicy);
+    }
 
     for (ui32 i = 0; i < Generations.size(); ++i) {
         auto &g = *policyPb.AddGeneration();
@@ -194,13 +194,13 @@ void TCompactionPolicy::Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) 
     }
 }
 
-TCompactionPolicyPtr CreateDefaultTablePolicy() { 
-    TCompactionPolicyPtr policy = new TCompactionPolicy; 
-#if KIKIMR_DEFAULT_SHARDED_COMPACTION 
+TCompactionPolicyPtr CreateDefaultTablePolicy() {
+    TCompactionPolicyPtr policy = new TCompactionPolicy;
+#if KIKIMR_DEFAULT_SHARDED_COMPACTION
     policy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
-    policy->ShardPolicy.SetTaskPriorityBase(100); 
-#endif 
-    return policy; 
+    policy->ShardPolicy.SetTaskPriorityBase(100);
+#endif
+    return policy;
 }
 
 TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
@@ -208,13 +208,13 @@ TCompactionPolicyPtr CreateDefaultUserTablePolicy() {
     userPolicy->Generations.reserve(3);
     userPolicy->Generations.push_back({0, 8, 8, 128 * 1024 * 1024,
                 LegacyQueueIdToTaskName(1), true});
-    userPolicy->Generations.push_back({40 * 1024 * 1024, 5, 16, 512 * 1024 * 1024, 
+    userPolicy->Generations.push_back({40 * 1024 * 1024, 5, 16, 512 * 1024 * 1024,
                 LegacyQueueIdToTaskName(2), false});
-    userPolicy->Generations.push_back({400 * 1024 * 1024, 5, 16, 16ull * 1024 * 1024 * 1024, 
+    userPolicy->Generations.push_back({400 * 1024 * 1024, 5, 16, 16ull * 1024 * 1024 * 1024,
                 LegacyQueueIdToTaskName(3), false});
-#if KIKIMR_DEFAULT_SHARDED_COMPACTION 
+#if KIKIMR_DEFAULT_SHARDED_COMPACTION
     userPolicy->CompactionStrategy = NKikimrSchemeOp::CompactionStrategySharded;
-#endif 
+#endif
     return userPolicy;
 }
 
@@ -243,18 +243,18 @@ TString LegacyQueueIdToTaskName(ui32 id)
     };
 }
 
-bool IsLegacyQueueIdTaskName(const TString& taskName) 
-{ 
-    if (taskName.size() == LegacyQueueIdTaskNamePrefix.size() + 1 && 
-        taskName.StartsWith(LegacyQueueIdTaskNamePrefix) && 
-        taskName.back() >= '0' && taskName.back() <= '9') 
-    { 
-        return true; 
-    } 
- 
-    return false; 
-} 
- 
+bool IsLegacyQueueIdTaskName(const TString& taskName)
+{
+    if (taskName.size() == LegacyQueueIdTaskNamePrefix.size() + 1 &&
+        taskName.StartsWith(LegacyQueueIdTaskNamePrefix) &&
+        taskName.back() >= '0' && taskName.back() <= '9')
+    {
+        return true;
+    }
+
+    return false;
+}
+
 const TString DefaultQueueName = "queue_default";
 const TString UnknownTaskName = "unknown";
 const TString TransactionTaskName = "transaction";
@@ -262,6 +262,6 @@ const TString ScanTaskName = "scan";
 const TString BackgroundCompactionTaskName = "background_compaction";
 const TString KqpResourceManagerTaskName = "kqp_query";
 const TString KqpResourceManagerQueue = "queue_kqp_resource_manager";
-const TString LegacyQueueIdTaskNamePrefix = "compaction_gen"; 
+const TString LegacyQueueIdTaskNamePrefix = "compaction_gen";
 
 }}

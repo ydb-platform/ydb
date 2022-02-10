@@ -80,7 +80,7 @@ constexpr TOperationId InvalidOperationId = TOperationId(InvalidTxId, InvalidSub
 
 NKikimrSchemeOp::TShardIdx AsProto(const TShardIdx& shardIdx);
 TShardIdx FromProto(const NKikimrSchemeOp::TShardIdx& shardIdx);
- 
+
 class TIndexBuildIdTag {};
 using TIndexBuildId = TUi64Id<TIndexBuildIdTag, Max<ui64>()>;
 constexpr TIndexBuildId InvalidIndexBuildId = TIndexBuildId();

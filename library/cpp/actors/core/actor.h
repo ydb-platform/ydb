@@ -1,7 +1,7 @@
 #pragma once
 
 #include "event.h"
-#include "monotonic.h" 
+#include "monotonic.h"
 #include <util/system/tls.h>
 #include <library/cpp/actors/util/local_process_key.h>
 
@@ -24,13 +24,13 @@ namespace NActors {
     public:
         TMailboxHeader& Mailbox;
         TExecutorThread& ExecutorThread;
-        const NHPTimer::STime EventStart; 
+        const NHPTimer::STime EventStart;
 
     protected:
-        explicit TActivationContext(TMailboxHeader& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart) 
+        explicit TActivationContext(TMailboxHeader& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart)
             : Mailbox(mailbox)
             , ExecutorThread(executorThread)
-            , EventStart(eventStart) 
+            , EventStart(eventStart)
         {
         }
 
@@ -40,22 +40,22 @@ namespace NActors {
         /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
-         * @param deadline   the wallclock time point in future when event must be send 
+         * @param deadline   the wallclock time point in future when event must be send
          * @param ev         the event to send
          * @param cookie     cookie that will be piggybacked with event
          */
         static void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
 
         /**
-         * Schedule one-shot event that will be send at given time point in the future. 
-         * 
-         * @param deadline   the monotonic time point in future when event must be send 
-         * @param ev         the event to send 
-         * @param cookie     cookie that will be piggybacked with event 
-         */ 
-        static void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr); 
- 
-        /** 
+         * Schedule one-shot event that will be send at given time point in the future.
+         *
+         * @param deadline   the monotonic time point in future when event must be send
+         * @param ev         the event to send
+         * @param cookie     cookie that will be piggybacked with event
+         */
+        static void Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
+
+        /**
          * Schedule one-shot event that will be send after given delay.
          *
          * @param delta      the time from now to delay event sending
@@ -65,7 +65,7 @@ namespace NActors {
         static void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie = nullptr);
 
         static TInstant Now();
-        static TMonotonic Monotonic(); 
+        static TMonotonic Monotonic();
         NLog::TSettings* LoggerSettings() const;
 
         // register new actor in ActorSystem on new fresh mailbox.
@@ -83,16 +83,16 @@ namespace NActors {
 
         static TActorId InterconnectProxy(ui32 nodeid);
         static TActorSystem* ActorSystem();
- 
-        static i64 GetCurrentEventTicks(); 
-        static double GetCurrentEventTicksAsSeconds(); 
+
+        static i64 GetCurrentEventTicks();
+        static double GetCurrentEventTicksAsSeconds();
     };
 
     struct TActorContext: public TActivationContext {
         const TActorId SelfID;
 
         explicit TActorContext(TMailboxHeader& mailbox, TExecutorThread& executorThread, NHPTimer::STime eventStart, const TActorId& selfID)
-            : TActivationContext(mailbox, executorThread, eventStart) 
+            : TActivationContext(mailbox, executorThread, eventStart)
             , SelfID(selfID)
         {
         }
@@ -110,22 +110,22 @@ namespace NActors {
         /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
-         * @param deadline   the wallclock time point in future when event must be send 
+         * @param deadline   the wallclock time point in future when event must be send
          * @param ev         the event to send
          * @param cookie     cookie that will be piggybacked with event
          */
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
 
         /**
-         * Schedule one-shot event that will be send at given time point in the future. 
-         * 
-         * @param deadline   the monotonic time point in future when event must be send 
-         * @param ev         the event to send 
-         * @param cookie     cookie that will be piggybacked with event 
-         */ 
-        void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const; 
- 
-        /** 
+         * Schedule one-shot event that will be send at given time point in the future.
+         *
+         * @param deadline   the monotonic time point in future when event must be send
+         * @param ev         the event to send
+         * @param cookie     cookie that will be piggybacked with event
+         */
+        void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
+
+        /**
          * Schedule one-shot event that will be send after given delay.
          *
          * @param delta      the time from now to delay event sending
@@ -135,7 +135,7 @@ namespace NActors {
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const;
 
         TActorContext MakeFor(const TActorId& otherId) const {
-            return TActorContext(Mailbox, ExecutorThread, EventStart, otherId); 
+            return TActorContext(Mailbox, ExecutorThread, EventStart, otherId);
         }
 
         // register new actor in ActorSystem on new fresh mailbox.
@@ -179,22 +179,22 @@ namespace NActors {
         /**
          * Schedule one-shot event that will be send at given time point in the future.
          *
-         * @param deadline   the wallclock time point in future when event must be send 
+         * @param deadline   the wallclock time point in future when event must be send
          * @param ev         the event to send
          * @param cookie     cookie that will be piggybacked with event
          */
         virtual void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept = 0;
 
         /**
-         * Schedule one-shot event that will be send at given time point in the future. 
-         * 
-         * @param deadline   the monotonic time point in future when event must be send 
-         * @param ev         the event to send 
-         * @param cookie     cookie that will be piggybacked with event 
-         */ 
-        virtual void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept = 0; 
- 
-        /** 
+         * Schedule one-shot event that will be send at given time point in the future.
+         *
+         * @param deadline   the monotonic time point in future when event must be send
+         * @param ev         the event to send
+         * @param cookie     cookie that will be piggybacked with event
+         */
+        virtual void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept = 0;
+
+        /**
          * Schedule one-shot event that will be send after given delay.
          *
          * @param delta      the time from now to delay event sending
@@ -240,11 +240,11 @@ namespace NActors {
             INTERCONNECT_SESSION_KILLER = 286,
             ACTOR_SYSTEM_SCHEDULER_ACTOR = 312,
             ACTOR_FUTURE_CALLBACK = 337,
-            INTERCONNECT_MONACTOR = 362, 
+            INTERCONNECT_MONACTOR = 362,
             INTERCONNECT_LOAD_ACTOR = 376,
             INTERCONNECT_LOAD_RESPONDER = 377,
             NAMESERVICE = 450,
-            DNS_RESOLVER = 481, 
+            DNS_RESOLVER = 481,
             INTERCONNECT_PROXY_WRAPPER = 546,
         };
 
@@ -362,7 +362,7 @@ namespace NActors {
         }
 
         void Schedule(TInstant deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
-        void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final; 
+        void Schedule(TMonotonic deadline, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
         void Schedule(TDuration delta, IEventBase* ev, ISchedulerCookie* cookie = nullptr) const noexcept final;
 
         // register new actor in ActorSystem on new fresh mailbox.
@@ -456,7 +456,7 @@ namespace NActors {
 
     inline TActorContext TActivationContext::ActorContextFor(TActorId id) {
         auto& tls = *TlsActivationContext;
-        return TActorContext(tls.Mailbox, tls.ExecutorThread, tls.EventStart, id); 
+        return TActorContext(tls.Mailbox, tls.ExecutorThread, tls.EventStart, id);
     }
 
     class TDecorator : public IActor {

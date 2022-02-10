@@ -551,7 +551,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
-            break; 
+            break;
         }
         case NKikimrSchemeOp::ESchemeOpRmDir:
         case NKikimrSchemeOp::ESchemeOpDropBlockStoreVolume:
@@ -625,7 +625,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
-            break; 
+            break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables: {
             for (auto& item: pbModifyScheme.GetCreateConsistentCopyTables().GetCopyTableDescriptions()) {
@@ -1039,7 +1039,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
 
         SendPropose(request.Release(), shardToRequest, ctx);
-        static_cast<TDerived*>(this)->Become(&TDerived::StateWaitPrepare); 
+        static_cast<TDerived*>(this)->Become(&TDerived::StateWaitPrepare);
     }
 };
 

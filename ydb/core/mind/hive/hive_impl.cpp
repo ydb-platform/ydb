@@ -162,12 +162,12 @@ void THive::Handle(TEvHive::TEvDeleteOwnerTablets::TPtr& ev) {
 void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet) {
     Y_ENSURE_LOG(tablet->IsDeleting(), "tablet " << tablet->Id);
     Y_ENSURE_LOG(tablet->TabletStorageInfo->Channels.empty() || tablet->TabletStorageInfo->Channels[0].History.empty(), "tablet " << tablet->Id);
- 
-    // Tablet has no storage, so there's nothing to block or delete 
-    // Simulate a response from CreateTabletReqDelete as if all steps have been completed 
+
+    // Tablet has no storage, so there's nothing to block or delete
+    // Simulate a response from CreateTabletReqDelete as if all steps have been completed
     Send(SelfId(), new TEvTabletBase::TEvDeleteTabletResult(NKikimrProto::OK, tablet->Id));
-} 
- 
+}
+
 void THive::RunProcessBootQueue() {
     TInstant now = TActivationContext::Now();
     BLOG_D("Handle ProcessBootQueue (size: " << BootQueue.BootQueue.size() << ")");
@@ -426,7 +426,7 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         } else if (tablet.IsDeleting()) {
             if (!tablet.InitiateBlockStorage(std::numeric_limits<ui32>::max())) {
                 DeleteTabletWithoutStorage(&tablet);
-            } 
+            }
         } else if (tablet.IsStopped() && tablet.State == ETabletState::Stopped) {
             ReportStoppedToWhiteboard(tablet);
             BLOG_D("Report tablet " << tablet.ToString() << " as stopped to Whiteboard");
@@ -700,7 +700,7 @@ void THive::Handle(TEvHive::TEvInitiateBlockStorage::TPtr& ev) {
         if (tablet->IsDeleting()) {
             if (!tablet->InitiateBlockStorage(std::numeric_limits<ui32>::max())) {
                 DeleteTabletWithoutStorage(tablet);
-            } 
+            }
         } else
         if (tablet->IsReadyToBlockStorage()) {
             tablet->InitiateBlockStorage();
@@ -718,46 +718,46 @@ void THive::Handle(TEvHive::TEvInitiateDeleteStorage::TPtr &ev) {
 }
 
 void THive::Handle(TEvHive::TEvGetTabletStorageInfo::TPtr& ev) {
-    TTabletId tabletId = ev->Get()->Record.GetTabletID(); 
+    TTabletId tabletId = ev->Get()->Record.GetTabletID();
     BLOG_D("THive::Handle::TEvGetTabletStorageInfo TabletId=" << tabletId);
- 
+
     TLeaderTabletInfo* tablet = FindTabletEvenInDeleting(tabletId);
-    if (tablet == nullptr) { 
-        // Tablet doesn't exist 
+    if (tablet == nullptr) {
+        // Tablet doesn't exist
         Send(
-            ev->Sender, 
-            new TEvHive::TEvGetTabletStorageInfoResult(tabletId, NKikimrProto::ERROR, "Tablet doesn't exist"), 
-            0, ev->Cookie); 
-        return; 
-    } 
- 
-    switch (tablet->State) { 
-    case ETabletState::Unknown: 
-    case ETabletState::StoppingInGroupAssignment: 
-        // Subscribing in these states doesn't make sense, as it will never complete 
+            ev->Sender,
+            new TEvHive::TEvGetTabletStorageInfoResult(tabletId, NKikimrProto::ERROR, "Tablet doesn't exist"),
+            0, ev->Cookie);
+        return;
+    }
+
+    switch (tablet->State) {
+    case ETabletState::Unknown:
+    case ETabletState::StoppingInGroupAssignment:
+        // Subscribing in these states doesn't make sense, as it will never complete
         BLOG_ERROR("Requesting TabletStorageInfo with tablet State="
-                << ETabletStateName(tablet->State)); 
+                << ETabletStateName(tablet->State));
         Send(
-            ev->Sender, 
-            new TEvHive::TEvGetTabletStorageInfoResult(tabletId, NKikimrProto::ERROR, "Tablet is in an unexpected state"), 
-            0, ev->Cookie); 
-        break; 
-    case ETabletState::Deleting: 
-    case ETabletState::GroupAssignment: 
-        // We need to subscribe until group assignment or deletion is finished 
-        tablet->StorageInfoSubscribers.emplace_back(ev->Sender); 
+            ev->Sender,
+            new TEvHive::TEvGetTabletStorageInfoResult(tabletId, NKikimrProto::ERROR, "Tablet is in an unexpected state"),
+            0, ev->Cookie);
+        break;
+    case ETabletState::Deleting:
+    case ETabletState::GroupAssignment:
+        // We need to subscribe until group assignment or deletion is finished
+        tablet->StorageInfoSubscribers.emplace_back(ev->Sender);
         Send(ev->Sender, new TEvHive::TEvGetTabletStorageInfoRegistered(tabletId), 0, ev->Cookie);
-        break; 
-    default: 
-        // Return what we have right now 
+        break;
+    default:
+        // Return what we have right now
         Send(
-            ev->Sender, 
-            new TEvHive::TEvGetTabletStorageInfoResult(tabletId, *tablet->TabletStorageInfo), 
-            0, ev->Cookie); 
-        break; 
-    } 
-} 
- 
+            ev->Sender,
+            new TEvHive::TEvGetTabletStorageInfoResult(tabletId, *tablet->TabletStorageInfo),
+            0, ev->Cookie);
+        break;
+    }
+}
+
 void THive::Handle(TEvents::TEvUndelivered::TPtr &ev) {
     BLOG_W("THive::Handle::TEvUndelivered Sender=" << ev->Sender << ", Type=" << ev->Get()->SourceType );
     switch (ev->Get()->SourceType) {
@@ -1840,15 +1840,15 @@ void THive::Handle(TEvHive::TEvInitiateTabletExternalBoot::TPtr& ev) {
         return;
     }
 
-    if (tablet->State == ETabletState::GroupAssignment || 
-        tablet->State == ETabletState::BlockStorage) 
-    { 
+    if (tablet->State == ETabletState::GroupAssignment ||
+        tablet->State == ETabletState::BlockStorage)
+    {
         Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::TRYLATER), 0, ev->Cookie);
         BLOG_W("Tablet waiting for group assignment " << tabletId);
         return;
     }
 
-    if (!tablet->IsBootingSuppressed()) { 
+    if (!tablet->IsBootingSuppressed()) {
         Send(ev->Sender, new TEvHive::TEvBootTabletReply(NKikimrProto::EReplyStatus::ERROR), 0, ev->Cookie);
         BLOG_ERROR("Tablet " << tabletId << " is not expected to boot externally");
         return;

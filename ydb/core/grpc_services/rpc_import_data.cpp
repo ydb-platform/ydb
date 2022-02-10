@@ -176,7 +176,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
         auto request = MakeHolder<TResolve>();
         request->DatabaseName = NKikimr::CanonizePath(DatabaseName);
 
-        request->ResultSet.emplace_back(std::move(KeyDesc)); 
+        request->ResultSet.emplace_back(std::move(KeyDesc));
         request->ResultSet.back().Access = NACLib::UpdateRow;
 
         Send(MakeSchemeCacheID(), new TEvResolve(request.Release()));
@@ -196,8 +196,8 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
             return Reply(StatusIds::SCHEME_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
         }
 
-        auto& entry = request->ResultSet.front(); 
-        KeyDesc = std::move(entry.KeyDescription); 
+        auto& entry = request->ResultSet.front();
+        KeyDesc = std::move(entry.KeyDescription);
 
         switch (entry.Status) {
         case TResolve::EStatus::OkData:
@@ -211,7 +211,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
             return Reply(StatusIds::SCHEME_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
         }
 
-        if (KeyDesc->Partitions.empty()) { 
+        if (KeyDesc->Partitions.empty()) {
             return Reply(StatusIds::SCHEME_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
         }
 

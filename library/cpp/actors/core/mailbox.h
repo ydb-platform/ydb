@@ -277,7 +277,7 @@ namespace NActors {
         TAtomic LastAllocatedLine;
         TAtomic AllocatedMailboxCount;
 
-        typedef TUnorderedCache<ui32, 512, 4> TMailboxCache; 
+        typedef TUnorderedCache<ui32, 512, 4> TMailboxCache;
         TMailboxCache MailboxCacheSimple;
         TAtomic CachedSimpleMailboxes;
         TMailboxCache MailboxCacheRevolving;

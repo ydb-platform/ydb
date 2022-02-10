@@ -704,18 +704,18 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsert) {
         }
 
         {
-            auto res = TestUpsertRow(client, {TString(500000, 'a'), TString(500000, 'b'), "", TString(17*1000000, '1'), "val2", "val3"}); 
+            auto res = TestUpsertRow(client, {TString(500000, 'a'), TString(500000, 'b'), "", TString(17*1000000, '1'), "val2", "val3"});
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::BAD_REQUEST);
         }
 
         {
-            auto res = TestUpsertRow(client, {TString(500000, 'a'), TString(500000, 'b'), "", TString(15.9*1000000, '1'), "val2", "val3"}); 
+            auto res = TestUpsertRow(client, {TString(500000, 'a'), TString(500000, 'b'), "", TString(15.9*1000000, '1'), "val2", "val3"});
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
         }
 
         {
             auto res = TestUpsertRow(client, {TString(500000, 'a'), "",  TString(500000, 'c'),
-                                              TString(15.9*1000000, '1'), TString(15.9*1000000, '2'), TString(15.9*1000000, '3')}); 
+                                              TString(15.9*1000000, '1'), TString(15.9*1000000, '2'), TString(15.9*1000000, '3')});
             UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), EStatus::SUCCESS);
         }
     }

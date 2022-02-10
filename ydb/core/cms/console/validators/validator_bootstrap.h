@@ -19,8 +19,8 @@ private:
                       TVector<Ydb::Issue::IssueMessage> &issues) const;
     bool CheckResourceBrokerConfig(const NKikimrConfig::TAppConfig &config,
                                    TVector<Ydb::Issue::IssueMessage> &issues) const;
-    bool CheckResourceBrokerOverrides(const NKikimrConfig::TAppConfig &config, 
-                                      TVector<Ydb::Issue::IssueMessage> &issues) const; 
+    bool CheckResourceBrokerOverrides(const NKikimrConfig::TAppConfig &config,
+                                      TVector<Ydb::Issue::IssueMessage> &issues) const;
     bool IsUnlimitedResource(const NKikimrResourceBroker::TResources &limit) const;
 };
 

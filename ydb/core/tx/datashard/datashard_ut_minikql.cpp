@@ -1415,63 +1415,63 @@ Y_UNIT_TEST(WriteAndReadMany) {
     }
 }
 
-Y_UNIT_TEST(WriteKeyTooLarge) { 
-    TTester t(TTester::ESchema_DoubleKV); 
-    TFakeMiniKQLProxy proxy(t); 
- 
-    const char * progUpsert = R"___(( 
-        (return (AsList 
-            (UpdateRow 'table2 '('('key1 (Uint32 '%u)) '('key2 (Utf8 '%s))) '('('value (Utf8 '%s)))) 
-        )) 
-    ))___"; 
- 
-    TString key2; 
-    key2.resize(2 * 1024 * 1024, 'x'); 
- 
-    UNIT_ASSERT_EQUAL(proxy.Execute(Sprintf(progUpsert, 123u, key2.c_str(), "foo"), /* wait */ false), IEngineFlat::EStatus::Error); 
-} 
- 
-Y_UNIT_TEST(WriteValueTooLarge) { 
-    TTester t(TTester::ESchema_DoubleKV); 
-    TFakeMiniKQLProxy proxy(t); 
- 
-    const char * progUpsert = R"___(( 
-        (return (AsList 
-            (UpdateRow 'table2 '('('key1 (Uint32 '%u)) '('key2 (Utf8 '%s))) '('('value (Utf8 '%s)))) 
-        )) 
-    ))___"; 
- 
-    TString value; 
-    value.resize(17 * 1024 * 1024, 'x'); 
- 
-    UNIT_ASSERT_EQUAL(proxy.Execute(Sprintf(progUpsert, 123u, "foo", value.c_str()), /* wait */ false), IEngineFlat::EStatus::Error); 
-} 
- 
-Y_UNIT_TEST(WriteLargeExternalBlob) { 
-    TTester t(TTester::ESchema_DoubleKVExternal); 
-    TFakeMiniKQLProxy proxy(t); 
- 
-    const char * progUpsert = R"___(( 
-        (return (AsList 
-            (UpdateRow 'table2 '('('key1 (Uint32 '%u)) '('key2 (Utf8 '%s))) '('('value (Utf8 '%s)))) 
-        )) 
-    ))___"; 
- 
-    TString value; 
- 
-    value.resize(7 * 1024 * 1024, 'x'); 
- 
-    // Would write an external blob 
-    NKikimrMiniKQL::TResult res1; 
-    UNIT_ASSERT_EQUAL(proxy.Execute(Sprintf(progUpsert, 123u, "foo", value.c_str()), res1), IEngineFlat::EStatus::Complete); 
- 
-    value.resize(16 * 1024 * 1024, 'x'); 
- 
-    // Would write an inline value (too large for an external blob) 
-    NKikimrMiniKQL::TResult res2; 
-    UNIT_ASSERT_EQUAL(proxy.Execute(Sprintf(progUpsert, 234u, "bar", value.c_str()), res2), IEngineFlat::EStatus::Complete); 
-} 
- 
+Y_UNIT_TEST(WriteKeyTooLarge) {
+    TTester t(TTester::ESchema_DoubleKV);
+    TFakeMiniKQLProxy proxy(t);
+
+    const char * progUpsert = R"___((
+        (return (AsList
+            (UpdateRow 'table2 '('('key1 (Uint32 '%u)) '('key2 (Utf8 '%s))) '('('value (Utf8 '%s))))
+        ))
+    ))___";
+
+    TString key2;
+    key2.resize(2 * 1024 * 1024, 'x');
+
+    UNIT_ASSERT_EQUAL(proxy.Execute(Sprintf(progUpsert, 123u, key2.c_str(), "foo"), /* wait */ false), IEngineFlat::EStatus::Error);
+}
+
+Y_UNIT_TEST(WriteValueTooLarge) {
+    TTester t(TTester::ESchema_DoubleKV);
+    TFakeMiniKQLProxy proxy(t);
+
+    const char * progUpsert = R"___((
+        (return (AsList
+            (UpdateRow 'table2 '('('key1 (Uint32 '%u)) '('key2 (Utf8 '%s))) '('('value (Utf8 '%s))))
+        ))
+    ))___";
+
+    TString value;
+    value.resize(17 * 1024 * 1024, 'x');
+
+    UNIT_ASSERT_EQUAL(proxy.Execute(Sprintf(progUpsert, 123u, "foo", value.c_str()), /* wait */ false), IEngineFlat::EStatus::Error);
+}
+
+Y_UNIT_TEST(WriteLargeExternalBlob) {
+    TTester t(TTester::ESchema_DoubleKVExternal);
+    TFakeMiniKQLProxy proxy(t);
+
+    const char * progUpsert = R"___((
+        (return (AsList
+            (UpdateRow 'table2 '('('key1 (Uint32 '%u)) '('key2 (Utf8 '%s))) '('('value (Utf8 '%s))))
+        ))
+    ))___";
+
+    TString value;
+
+    value.resize(7 * 1024 * 1024, 'x');
+
+    // Would write an external blob
+    NKikimrMiniKQL::TResult res1;
+    UNIT_ASSERT_EQUAL(proxy.Execute(Sprintf(progUpsert, 123u, "foo", value.c_str()), res1), IEngineFlat::EStatus::Complete);
+
+    value.resize(16 * 1024 * 1024, 'x');
+
+    // Would write an inline value (too large for an external blob)
+    NKikimrMiniKQL::TResult res2;
+    UNIT_ASSERT_EQUAL(proxy.Execute(Sprintf(progUpsert, 234u, "bar", value.c_str()), res2), IEngineFlat::EStatus::Complete);
+}
+
 void SetupProfiles(TTestActorRuntime &runtime)
 {
     TResourceProfiles::TResourceProfile profile;
@@ -1514,22 +1514,22 @@ std::tuple<ui64, ui64, ui64> ReadTxMemoryCounters(TTester &t, ui64 tabletId)
     return res;
 }
 
-struct TCounterRange { 
-    const ui64 MinValue; 
-    const ui64 MaxValue; 
- 
-    friend inline bool operator==(ui64 value, const TCounterRange& range) { 
-        return range.MinValue <= value && value <= range.MaxValue; 
-    } 
- 
-    friend inline IOutputStream& operator<<(IOutputStream& out, const TCounterRange& range) { 
-        return out << '[' << range.MinValue << ',' << range.MaxValue << ']'; 
-    } 
-}; 
- 
-template<class TCounter1, class TCounter2, class TCounter3> 
+struct TCounterRange {
+    const ui64 MinValue;
+    const ui64 MaxValue;
+
+    friend inline bool operator==(ui64 value, const TCounterRange& range) {
+        return range.MinValue <= value && value <= range.MaxValue;
+    }
+
+    friend inline IOutputStream& operator<<(IOutputStream& out, const TCounterRange& range) {
+        return out << '[' << range.MinValue << ',' << range.MaxValue << ']';
+    }
+};
+
+template<class TCounter1, class TCounter2, class TCounter3>
 void CheckCounters(const std::tuple<ui64, ui64, ui64> &newCnt, const std::tuple<ui64, ui64, ui64> &oldCnt,
-                   const TCounter1& d1, const TCounter2& d2, const TCounter3& d3) 
+                   const TCounter1& d1, const TCounter2& d2, const TCounter3& d3)
 {
     UNIT_ASSERT_VALUES_EQUAL(std::get<0>(newCnt) - std::get<0>(oldCnt), d1);
     UNIT_ASSERT_VALUES_EQUAL(std::get<1>(newCnt) - std::get<1>(oldCnt), d2);
@@ -1610,9 +1610,9 @@ Y_UNIT_TEST(MemoryUsageImmediateMediumTx) {
     }
 
     auto counters2 = ReadTxMemoryCounters(t, TTestTxConfig::TxTablet0);
-    // Expect one allocation on prepare and one or two 
+    // Expect one allocation on prepare and one or two
     // allocations during execution.
-    CheckCounters(counters2, counters1, TCounterRange{2, 3}, 0, 0); 
+    CheckCounters(counters2, counters1, TCounterRange{2, 3}, 0, 0);
 }
 
 Y_UNIT_TEST(MemoryUsageImmediateHugeTx) {

@@ -5,7 +5,7 @@
 #include <ydb/core/protos/base.pb.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <util/stream/str.h>
-#include <util/string/builder.h> 
+#include <util/string/builder.h>
 
 namespace NKikimr {
 
@@ -13,7 +13,7 @@ struct TEvTabletResolver {
     enum EEv {
         EvForward = EventSpaceBegin(TKikimrEvents::ES_TABLETRESOLVER),
         EvTabletProblem,
-        EvNodeProblem, 
+        EvNodeProblem,
 
         EvForwardResult = EvForward + 1 * 512,
 
@@ -58,11 +58,11 @@ struct TEvTabletResolver {
 
                 ui32 prio = 1;
                 if (isLocalNode && (LocalNodePrio == EResolvePrio::ResPrioPrefer))
-                    prio |= 2; 
+                    prio |= 2;
                 if (isLocalDc && (LocalDcPrio == EResolvePrio::ResPrioPrefer))
-                    prio |= 8; 
+                    prio |= 8;
                 if (isFollower && (FollowerPrio == EResolvePrio::ResPrioPrefer))
-                    prio |= 4; 
+                    prio |= 4;
                 return prio;
             }
 
@@ -98,22 +98,22 @@ struct TEvTabletResolver {
             }
         };
 
-        /// 
-        enum class EActor : ui8 { 
-            Tablet, 
-            SysTablet, 
-        }; 
- 
+        ///
+        enum class EActor : ui8 {
+            Tablet,
+            SysTablet,
+        };
+
         const ui64 TabletID;
         THolder<IEventHandle> Ev;
         TResolveFlags ResolveFlags;
-        EActor Actor; 
+        EActor Actor;
 
-        TEvForward(ui64 tabletId, IEventHandle *ev, TResolveFlags flags = TResolveFlags(), EActor actor = EActor::Tablet) 
+        TEvForward(ui64 tabletId, IEventHandle *ev, TResolveFlags flags = TResolveFlags(), EActor actor = EActor::Tablet)
             : TabletID(tabletId)
             , Ev(ev)
             , ResolveFlags(flags)
-            , Actor(actor) 
+            , Actor(actor)
         {}
 
         TString ToString() const {
@@ -124,15 +124,15 @@ struct TEvTabletResolver {
             str << "}";
             return str.Str();
         }
- 
-        TActorId SelectActor(const TActorId& tablet, const TActorId& sysTablet) const { 
-            switch (Actor) { 
-                case EActor::Tablet: 
-                    return tablet; 
-                case EActor::SysTablet: 
-                    return sysTablet; 
-            } 
-        } 
+
+        TActorId SelectActor(const TActorId& tablet, const TActorId& sysTablet) const {
+            switch (Actor) {
+                case EActor::Tablet:
+                    return tablet;
+                case EActor::SysTablet:
+                    return sysTablet;
+            }
+        }
     };
 
     struct TEvTabletProblem : public TEventLocal<TEvTabletProblem, EvTabletProblem> {
@@ -153,30 +153,30 @@ struct TEvTabletResolver {
         }
     };
 
-    struct TEvNodeProblem : public TEventLocal<TEvNodeProblem, EvNodeProblem> { 
-        const ui32 NodeId; 
-        const ui64 CacheEpoch; 
- 
-        TEvNodeProblem(ui32 nodeId, ui64 cacheEpoch) 
-            : NodeId(nodeId) 
-            , CacheEpoch(cacheEpoch) 
-        {} 
- 
-        TString ToString() const { 
-            return TStringBuilder() 
-                << "{EvNodeProblem NodeId: " << NodeId 
-                << " CacheEpoch: " << CacheEpoch 
-                << "}"; 
-        } 
-    }; 
- 
+    struct TEvNodeProblem : public TEventLocal<TEvNodeProblem, EvNodeProblem> {
+        const ui32 NodeId;
+        const ui64 CacheEpoch;
+
+        TEvNodeProblem(ui32 nodeId, ui64 cacheEpoch)
+            : NodeId(nodeId)
+            , CacheEpoch(cacheEpoch)
+        {}
+
+        TString ToString() const {
+            return TStringBuilder()
+                << "{EvNodeProblem NodeId: " << NodeId
+                << " CacheEpoch: " << CacheEpoch
+                << "}";
+        }
+    };
+
     struct TEvForwardResult : public TEventLocal<TEvForwardResult, EvForwardResult> {
         const NKikimrProto::EReplyStatus Status;
 
         ui64 TabletID;
         TActorId TabletActor;
         TActorId Tablet;
-        ui64 CacheEpoch; 
+        ui64 CacheEpoch;
 
         TEvForwardResult(NKikimrProto::EReplyStatus status, ui64 tabletId)
             : Status(status)
@@ -184,12 +184,12 @@ struct TEvTabletResolver {
             , CacheEpoch(0)
         {}
 
-        TEvForwardResult(ui64 tabletId, const TActorId &tabletActor, const TActorId &tablet, ui64 cacheEpoch) 
+        TEvForwardResult(ui64 tabletId, const TActorId &tabletActor, const TActorId &tablet, ui64 cacheEpoch)
             : Status(NKikimrProto::OK)
             , TabletID(tabletId)
             , TabletActor(tabletActor)
             , Tablet(tablet)
-            , CacheEpoch(cacheEpoch) 
+            , CacheEpoch(cacheEpoch)
         {}
 
         TString ToString() const {
@@ -198,7 +198,7 @@ struct TEvTabletResolver {
             str << " TabletID: " << TabletID;
             str << " TabletActor: " << TabletActor.ToString();
             str << " Tablet: " << Tablet.ToString();
-            str << " CacheEpoch: " << CacheEpoch; 
+            str << " CacheEpoch: " << CacheEpoch;
             str << "}";
             return str.Str();
         }

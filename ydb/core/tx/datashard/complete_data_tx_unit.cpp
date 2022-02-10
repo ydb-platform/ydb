@@ -58,16 +58,16 @@ EExecutionStatus TCompleteOperationUnit::Execute(TOperation::TPtr op,
     if (op->IsDirty()) {
         DataShard.IncCounter(COUNTER_TX_PROGRESS_DIRTY);
         CompleteOperation(op, ctx);
-    } else if (result) { 
-        Pipeline.AddCompletingOp(op); 
+    } else if (result) {
+        Pipeline.AddCompletingOp(op);
     }
 
-    // TODO: release snapshot used by a planned tx (not currently used) 
-    // TODO: prepared txs may be cancelled until planned, in which case we may 
-    // end up with a dangling snapshot reference. Such references would have 
-    // to be handled in a restart-safe manner too. 
-    Y_VERIFY_DEBUG(!op->HasAcquiredSnapshotKey()); 
- 
+    // TODO: release snapshot used by a planned tx (not currently used)
+    // TODO: prepared txs may be cancelled until planned, in which case we may
+    // end up with a dangling snapshot reference. Such references would have
+    // to be handled in a restart-safe manner too.
+    Y_VERIFY_DEBUG(!op->HasAcquiredSnapshotKey());
+
     return EExecutionStatus::DelayComplete;
 }
 
@@ -90,7 +90,7 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
         Pipeline.HoldExecutionProfile(op);
     }
 
-    TOutputOpData::TResultPtr result = std::move(op->Result()); 
+    TOutputOpData::TResultPtr result = std::move(op->Result());
     if (result) {
         result->Record.SetProposeLatency(duration.MilliSeconds());
 
@@ -99,8 +99,8 @@ void TCompleteOperationUnit::CompleteOperation(TOperation::TPtr op,
         if (!gSkipRepliesFailPoint.Check(DataShard.TabletID(), op->GetTxId()))
             DataShard.SendResult(ctx, result, op->GetTarget(), op->GetStep(), op->GetTxId());
     }
- 
-    Pipeline.RemoveCompletingOp(op); 
+
+    Pipeline.RemoveCompletingOp(op);
 }
 
 void TCompleteOperationUnit::Complete(TOperation::TPtr op,

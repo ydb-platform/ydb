@@ -8,7 +8,7 @@ ssh_username = yatest_common.get_param("kikimr.ci.ssh_username", os.getenv('NEME
 deploy_cluster = yatest_common.get_bool_param("kikimr.ci.deploy_cluster", False)
 use_packages = yatest_common.get_bool_param('kikimr.ci.packages', True)
 
-log_level = int(yatest_common.get_param('kikimr.ci.driver.log_level', 5)) 
+log_level = int(yatest_common.get_param('kikimr.ci.driver.log_level', 5))
 
 kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'
 kikimr_configure_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr_configure'

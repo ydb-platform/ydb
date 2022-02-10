@@ -5,21 +5,21 @@
 #include "flat_mem_warm.h"
 #include "flat_iterator.h"
 #include "flat_row_scheme.h"
-#include "flat_row_versions.h" 
+#include "flat_row_versions.h"
 #include "flat_part_laid.h"
-#include "flat_part_slice.h" 
-#include "flat_table_committed.h" 
+#include "flat_part_slice.h"
+#include "flat_table_committed.h"
 #include "flat_table_part.h"
-#include "flat_table_stats.h" 
+#include "flat_table_stats.h"
 #include "flat_table_subset.h"
 #include "flat_table_misc.h"
 #include "flat_sausage_solid.h"
-#include "util_basics.h" 
+#include "util_basics.h"
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
-#include <util/generic/deque.h> 
+#include <util/generic/deque.h>
 #include <util/generic/set.h>
 #include <util/generic/hash.h>
 #include <util/generic/ptr.h>
@@ -27,9 +27,9 @@
 namespace NKikimr {
 namespace NTable {
 
-class TTableEpochs; 
-class TKeyRangeCache; 
- 
+class TTableEpochs;
+class TKeyRangeCache;
+
 class TTable: public TAtomicRefCount<TTable> {
 public:
     using TOpsRef = TArrayRef<const TUpdateOp>;
@@ -38,15 +38,15 @@ public:
     struct TStat {
         /*_ In memory (~memtable) data statistics   */
 
-        ui64 FrozenWaste = 0; 
+        ui64 FrozenWaste = 0;
         ui64 FrozenSize = 0;
         ui64 FrozenOps  = 0;
         ui64 FrozenRows = 0;
 
         /*_ Already flatten data statistics (parts) */
 
-        TPartStats Parts; 
-        THashMap<ui64, TPartStats> PartsPerTablet; 
+        TPartStats Parts;
+        THashMap<ui64, TPartStats> PartsPerTablet;
     };
 
     struct TReady {
@@ -67,7 +67,7 @@ public:
     void SetScheme(const TScheme::TTableInfo& tableScheme);
 
     TIntrusiveConstPtr<TRowScheme> GetScheme() const noexcept;
- 
+
     TEpoch Snapshot() noexcept;
 
     TEpoch Head() const noexcept
@@ -80,18 +80,18 @@ public:
     TAutoPtr<TSubset> ScanSnapshot(TRowVersion snapshot = TRowVersion::Max()) noexcept;
     TAutoPtr<TSubset> Unwrap() noexcept; /* full Subset(..) + final Replace(..) */
 
-    /** 
-     * Returns current slices for bundles 
-     * 
-     * Map will only contain bundles that currently exist in the table 
-     */ 
-    TBundleSlicesMap LookupSlices(TArrayRef<const TLogoBlobID> bundles) const noexcept; 
- 
-    /** 
-     * Replaces slices for bundles in the slices map 
-     */ 
-    void ReplaceSlices(TBundleSlicesMap slices) noexcept; 
- 
+    /**
+     * Returns current slices for bundles
+     *
+     * Map will only contain bundles that currently exist in the table
+     */
+    TBundleSlicesMap LookupSlices(TArrayRef<const TLogoBlobID> bundles) const noexcept;
+
+    /**
+     * Replaces slices for bundles in the slices map
+     */
+    void ReplaceSlices(TBundleSlicesMap slices) noexcept;
+
     /* Interface for redistributing data layout within the table. Take some
         subset with Subset(...) call, do some work and then return result
         with Replace(...) method. The result should hold the same set of rows
@@ -110,13 +110,13 @@ public:
     void Merge(TPartView partView) noexcept;
     void Merge(TIntrusiveConstPtr<TColdPart> part) noexcept;
     void Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept;
-    void ProcessCheckTransactions() noexcept; 
+    void ProcessCheckTransactions() noexcept;
 
-    /** 
-     * Returns constructed levels for slices 
-     */ 
-    const TLevels& GetLevels() const noexcept; 
- 
+    /**
+     * Returns constructed levels for slices
+     */
+    const TLevels& GetLevels() const noexcept;
+
     /**
      * Returns search height if there are no cold parts, 0 otherwise
      */
@@ -129,19 +129,19 @@ public:
     TAutoPtr<TTableIt> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept;
     TAutoPtr<TTableReverseIt> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept;
     TReady Select(TRawVals key, TTagsRef tags, IPages* env, TRowState& row,
-                   ui64 flg, TRowVersion snapshot, TDeque<TPartSimpleIt>& tempIterators) const noexcept; 
+                   ui64 flg, TRowVersion snapshot, TDeque<TPartSimpleIt>& tempIterators) const noexcept;
 
-    TReady Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags, 
+    TReady Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
                    IPages* env, ui64 flg,
-                   ui64 itemsLimit, ui64 bytesLimit, 
-                   EDirection direction, TRowVersion snapshot) const; 
+                   ui64 itemsLimit, ui64 bytesLimit,
+                   EDirection direction, TRowVersion snapshot) const;
 
     void Update(ERowOp, TRawVals key, TOpsRef, TArrayRef<TMemGlob> apart, TRowVersion rowVersion);
 
     void UpdateTx(ERowOp, TRawVals key, TOpsRef, TArrayRef<TMemGlob> apart, ui64 txId);
-    void CommitTx(ui64 txId, TRowVersion rowVersion); 
-    void RemoveTx(ui64 txId); 
- 
+    void CommitTx(ui64 txId, TRowVersion rowVersion);
+    void RemoveTx(ui64 txId);
+
     TPartView GetPartView(const TLogoBlobID &bundle) const
     {
         auto *partView = Flatten.FindPtr(bundle);
@@ -150,79 +150,79 @@ public:
     }
 
     TVector<TPartView> GetAllParts() const
-    { 
+    {
         TVector<TPartView> parts(Reserve(Flatten.size()));
- 
-        for (auto& x : Flatten) { 
-            parts.emplace_back(x.second); 
-        } 
- 
-        return parts; 
-    } 
- 
+
+        for (auto& x : Flatten) {
+            parts.emplace_back(x.second);
+        }
+
+        return parts;
+    }
+
     TVector<TIntrusiveConstPtr<TColdPart>> GetColdParts() const
-    { 
+    {
         TVector<TIntrusiveConstPtr<TColdPart>> parts(Reserve(ColdParts.size()));
- 
-        for (auto& x : ColdParts) { 
-            parts.emplace_back(x.second); 
-        } 
- 
-        return parts; 
-    } 
- 
+
+        for (auto& x : ColdParts) {
+            parts.emplace_back(x.second);
+        }
+
+        return parts;
+    }
+
     void EnumerateParts(const std::function<void(const TPartView&)>& callback) const
-    { 
-        for (auto& x : Flatten) { 
-            callback(x.second); 
-        } 
-    } 
- 
+    {
+        for (auto& x : Flatten) {
+            callback(x.second);
+        }
+    }
+
     void EnumerateColdParts(const std::function<void(const TIntrusiveConstPtr<TColdPart>&)>& callback) const
-    { 
-        for (auto& x : ColdParts) { 
-            callback(x.second); 
-        } 
-    } 
- 
+    {
+        for (auto& x : ColdParts) {
+            callback(x.second);
+        }
+    }
+
     void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const
-    { 
-        for (auto& x : TxStatus) { 
-            callback(x.second); 
-        } 
-    } 
- 
+    {
+        for (auto& x : TxStatus) {
+            callback(x.second);
+        }
+    }
+
     const TStat& Stat() const noexcept
     {
         return Stat_;
     }
 
-    ui64 GetMemSize(TEpoch epoch = TEpoch::Max()) const noexcept 
+    ui64 GetMemSize(TEpoch epoch = TEpoch::Max()) const noexcept
     {
-        if (Y_LIKELY(epoch == TEpoch::Max())) { 
-            return Stat_.FrozenSize + (Mutable ? Mutable->GetUsedMem() : 0); 
-        } 
- 
-        ui64 size = 0; 
- 
-        for (const auto& x : Frozen) { 
-            if (x->Epoch < epoch) { 
-                size += x->GetUsedMem(); 
-            } 
-        } 
- 
-        if (Mutable && Mutable->Epoch < epoch) { 
-            size += Mutable->GetUsedMem(); 
-        } 
- 
-        return size; 
+        if (Y_LIKELY(epoch == TEpoch::Max())) {
+            return Stat_.FrozenSize + (Mutable ? Mutable->GetUsedMem() : 0);
+        }
+
+        ui64 size = 0;
+
+        for (const auto& x : Frozen) {
+            if (x->Epoch < epoch) {
+                size += x->GetUsedMem();
+            }
+        }
+
+        if (Mutable && Mutable->Epoch < epoch) {
+            size += Mutable->GetUsedMem();
+        }
+
+        return size;
     }
 
-    ui64 GetMemWaste() const noexcept 
-    { 
-        return Stat_.FrozenWaste + (Mutable ? Mutable->GetWastedMem() : 0); 
-    } 
- 
+    ui64 GetMemWaste() const noexcept
+    {
+        return Stat_.FrozenWaste + (Mutable ? Mutable->GetWastedMem() : 0);
+    }
+
     ui64 GetMemRowCount() const noexcept
     {
         return Stat_.FrozenRows + (Mutable ? Mutable->GetRowCount() : 0);
@@ -255,33 +255,33 @@ public:
 
     void DebugDump(IOutputStream& str, IPages *env, const NScheme::TTypeRegistry& typeRegistry) const;
 
-    TKeyRangeCache* GetErasedKeysCache() const; 
- 
-    bool RemoveRowVersions(const TRowVersion& lower, const TRowVersion& upper); 
- 
-    const TRowVersionRanges& GetRemovedRowVersions() const { 
-        return RemovedRowVersions; 
-    } 
- 
+    TKeyRangeCache* GetErasedKeysCache() const;
+
+    bool RemoveRowVersions(const TRowVersion& lower, const TRowVersion& upper);
+
+    const TRowVersionRanges& GetRemovedRowVersions() const {
+        return RemovedRowVersions;
+    }
+
     TCompactionStats GetCompactionStats() const;
 
-    void FillTxStatusCache(THashMap<TLogoBlobID, TSharedData>& cache) const noexcept; 
- 
+    void FillTxStatusCache(THashMap<TLogoBlobID, TSharedData>& cache) const noexcept;
+
 private:
     TMemTable& MemTable();
     void AddSafe(TPartView partView);
 
     void AddStat(const TPartView& partView);
     void RemoveStat(const TPartView& partView);
- 
+
 private:
-    struct TOpenTransaction { 
+    struct TOpenTransaction {
         THashSet<TIntrusiveConstPtr<TMemTable>> Mem;
         THashSet<TIntrusiveConstPtr<TPart>> Parts;
-    }; 
- 
-private: 
-    TEpoch Epoch; /* Monotonic table change number, with holes */ 
+    };
+
+private:
+    TEpoch Epoch; /* Monotonic table change number, with holes */
     ui64 Annexed = 0; /* Monotonic serial of attached external blobs */
     TIntrusiveConstPtr<TRowScheme> Scheme;
     TIntrusivePtr<TMemTable> Mutable;
@@ -289,20 +289,20 @@ private:
     THashMap<TLogoBlobID, TPartView> Flatten;
     THashMap<TLogoBlobID, TIntrusiveConstPtr<TColdPart>> ColdParts;
     THashMap<TLogoBlobID, TIntrusiveConstPtr<TTxStatusPart>> TxStatus;
-    TEpoch FlattenEpoch = TEpoch::Min(); /* Current maximum flatten epoch */ 
+    TEpoch FlattenEpoch = TEpoch::Min(); /* Current maximum flatten epoch */
     TStat Stat_;
-    mutable THolder<TLevels> Levels; 
-    mutable TIntrusivePtr<TKeyRangeCache> ErasedKeysCache; 
- 
-    bool EraseCacheEnabled = false; 
-    TKeyRangeCacheConfig EraseCacheConfig; 
- 
-    TRowVersionRanges RemovedRowVersions; 
- 
-    THashSet<ui64> CheckTransactions; 
-    THashMap<ui64, TOpenTransaction> OpenTransactions; 
-    TTransactionMap<TRowVersion> CommittedTransactions; 
-    TTransactionSet RemovedTransactions; 
+    mutable THolder<TLevels> Levels;
+    mutable TIntrusivePtr<TKeyRangeCache> ErasedKeysCache;
+
+    bool EraseCacheEnabled = false;
+    TKeyRangeCacheConfig EraseCacheConfig;
+
+    TRowVersionRanges RemovedRowVersions;
+
+    THashSet<ui64> CheckTransactions;
+    THashMap<ui64, TOpenTransaction> OpenTransactions;
+    TTransactionMap<TRowVersion> CommittedTransactions;
+    TTransactionSet RemovedTransactions;
 };
 
 }

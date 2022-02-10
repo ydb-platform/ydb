@@ -1,6 +1,6 @@
 #include "config_helpers.h"
 #include "console.h"
-#include "util.h" 
+#include "util.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
@@ -28,16 +28,16 @@ class TConfigHelper : public TActorBootstrapped<TConfigHelper> {
 private:
     using TBase = TActorBootstrapped<TConfigHelper>;
 
-    struct TEvPrivate { 
-        enum EEv { 
-            EvRetryPoolStatus = EventSpaceBegin(TKikimrEvents::ES_PRIVATE), 
-        }; 
- 
-        struct TEvRetryPoolStatus : public TEventLocal<TEvRetryPoolStatus, EvRetryPoolStatus> { 
-            // empty 
-        }; 
-    }; 
- 
+    struct TEvPrivate {
+        enum EEv {
+            EvRetryPoolStatus = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        };
+
+        struct TEvRetryPoolStatus : public TEventLocal<TEvRetryPoolStatus, EvRetryPoolStatus> {
+            // empty
+        };
+    };
+
     ui64 TabletId;
     TActorId ServiceId;
     TString Tenant;
@@ -114,7 +114,7 @@ public:
         : TabletId(0)
         , DetectTenant(true)
         , ConfigItemKinds(configItemKinds)
-        , SubscriptionId(0) 
+        , SubscriptionId(0)
         , Action(EAction::GET_NODE_CONFIG)
         , OwnerId(ownerId)
         , Cookie(cookie)
@@ -130,7 +130,7 @@ public:
         , Tenant(tenant)
         , DetectTenant(false)
         , ConfigItemKinds(configItemKinds)
-        , SubscriptionId(0) 
+        , SubscriptionId(0)
         , Action(EAction::GET_NODE_CONFIG)
         , OwnerId(ownerId)
         , Cookie(cookie)
@@ -166,7 +166,7 @@ public:
         auto console = MakeConsoleID(group);
 
         NTabletPipe::TClientConfig pipeConfig;
-        pipeConfig.RetryPolicy = FastConnectRetryPolicy(); 
+        pipeConfig.RetryPolicy = FastConnectRetryPolicy();
         auto pipe = NTabletPipe::CreateClient(ctx.SelfID, console, pipeConfig);
         Pipe = ctx.ExecutorThread.RegisterActor(pipe);
     }
@@ -176,7 +176,7 @@ public:
         auto domains = AppData(ctx)->DomainsInfo;
         Y_VERIFY(domains->Domains.size() == 1, "multiple domains are not supported by TConfigHelper");
         auto tenantPool = MakeTenantPoolID(ctx.SelfID.NodeId(), domains->Domains.begin()->second->DomainUid);
-        ctx.Send(tenantPool, new TEvTenantPool::TEvGetStatus(true), IEventHandle::FlagTrackDelivery); 
+        ctx.Send(tenantPool, new TEvTenantPool::TEvGetStatus(true), IEventHandle::FlagTrackDelivery);
     }
 
     void BuildSubscription(NKikimrConsole::TSubscription &subscription)
@@ -300,10 +300,10 @@ public:
         OnPipeDestroyed(ctx);
     }
 
-    void Handle(TEvPrivate::TEvRetryPoolStatus::TPtr &, const TActorContext &ctx) { 
-        SendPoolStatusRequest(ctx); 
-    } 
- 
+    void Handle(TEvPrivate::TEvRetryPoolStatus::TPtr &, const TActorContext &ctx) {
+        SendPoolStatusRequest(ctx);
+    }
+
     void Handle(TEvTenantPool::TEvTenantPoolStatus::TPtr &ev, const TActorContext &ctx) {
         auto &rec = ev->Get()->Record;
         LOG_DEBUG_S(ctx, NKikimrServices::CMS_CONFIGS,
@@ -326,17 +326,17 @@ public:
         SendSubscriptionRequest(ctx);
     }
 
-    void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) { 
-        switch (ev->Get()->SourceType) { 
-            case TEvTenantPool::TEvGetStatus::EventType: { 
-                LOG_WARN_S(ctx, NKikimrServices::CMS_CONFIGS, 
-                           "TConfigHelper cannot deliver message to domain tenant, will retry"); 
-                ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRetryPoolStatus); 
-                break; 
-            } 
-        } 
-    } 
- 
+    void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
+        switch (ev->Get()->SourceType) {
+            case TEvTenantPool::TEvGetStatus::EventType: {
+                LOG_WARN_S(ctx, NKikimrServices::CMS_CONFIGS,
+                           "TConfigHelper cannot deliver message to domain tenant, will retry");
+                ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvRetryPoolStatus);
+                break;
+            }
+        }
+    }
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvConsole::TEvAddConfigSubscriptionResponse, Handle);
@@ -345,9 +345,9 @@ public:
             HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvPrivate::TEvRetryPoolStatus, Handle); 
-            HFunc(TEvTenantPool::TEvTenantPoolStatus, Handle); 
-            HFunc(TEvents::TEvUndelivered, Handle); 
+            HFunc(TEvPrivate::TEvRetryPoolStatus, Handle);
+            HFunc(TEvTenantPool::TEvTenantPoolStatus, Handle);
+            HFunc(TEvents::TEvUndelivered, Handle);
 
         default:
             Y_FAIL("unexpected event type: %" PRIx32 " event: %s",

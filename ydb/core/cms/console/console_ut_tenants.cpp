@@ -120,7 +120,7 @@ TTenantTestConfig ConsoleTestConfig3DC()
 void CheckAlterTenantSlots(TTenantTestRuntime &runtime, const TString &path,
                            ui64 generation, Ydb::StatusIds::StatusCode code,
                            TVector<TSlotRequest> add,
-                           TVector<TSlotRequest> remove, 
+                           TVector<TSlotRequest> remove,
                            const TString &idempotencyKey = TString(),
                            const TVector<std::pair<TString, TString>> attrs = {})
 {
@@ -142,9 +142,9 @@ void CheckAlterTenantSlots(TTenantTestRuntime &runtime, const TString &path,
     for (const auto& [key, value] : attrs) {
         (*event->Record.MutableRequest()->mutable_alter_attributes())[key] = value;
     }
-    if (idempotencyKey) { 
-        event->Record.MutableRequest()->set_idempotency_key(idempotencyKey); 
-    } 
+    if (idempotencyKey) {
+        event->Record.MutableRequest()->set_idempotency_key(idempotencyKey);
+    }
 
     TAutoPtr<IEventHandle> handle;
     runtime.SendToConsole(event);
@@ -273,10 +273,10 @@ void CheckSetConfig(TTenantTestRuntime &runtime,
     UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), code);
 }
 
-TString SendTenantCreationCommand( 
-        TTenantTestRuntime &runtime, const TString &name, 
-        const TString &idempotencyKey = TString(), 
-        TMaybe<Ydb::StatusIds::StatusCode> expectedStatus = Nothing()) 
+TString SendTenantCreationCommand(
+        TTenantTestRuntime &runtime, const TString &name,
+        const TString &idempotencyKey = TString(),
+        TMaybe<Ydb::StatusIds::StatusCode> expectedStatus = Nothing())
 {
     auto *request = new TEvConsole::TEvCreateTenantRequest;
     request->Record.MutableRequest()->set_path(name);
@@ -288,20 +288,20 @@ TString SendTenantCreationCommand(
     comp.set_availability_zone(ZONE1);
     comp.set_count(1);
 
-    if (idempotencyKey) { 
-        request->Record.MutableRequest()->set_idempotency_key(idempotencyKey); 
-    } 
- 
+    if (idempotencyKey) {
+        request->Record.MutableRequest()->set_idempotency_key(idempotencyKey);
+    }
+
     runtime.SendToConsole(request);
     TAutoPtr<IEventHandle> handle;
     auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvCreateTenantResponse>(handle);
 
-    if (expectedStatus) { 
-        UNIT_ASSERT(reply->Record.GetResponse().operation().ready()); 
-        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), *expectedStatus); 
-        return { }; 
-    } 
- 
+    if (expectedStatus) {
+        UNIT_ASSERT(reply->Record.GetResponse().operation().ready());
+        UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetResponse().operation().status(), *expectedStatus);
+        return { };
+    }
+
     UNIT_ASSERT(!reply->Record.GetResponse().operation().ready());
     return reply->Record.GetResponse().operation().id();
 }
@@ -1203,9 +1203,9 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         CheckTenantStatus(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS,
                           Ydb::Cms::GetDatabaseStatusResult::RUNNING, {}, {});
         // alter serverless tenant
-        CheckAlterTenantSlots(runtime, TENANT1_2_NAME, Ydb::StatusIds::BAD_REQUEST, 
-                        {{ {SLOT1_TYPE, ZONE_ANY, 1} }}, 
-                        {}); 
+        CheckAlterTenantSlots(runtime, TENANT1_2_NAME, Ydb::StatusIds::BAD_REQUEST,
+                        {{ {SLOT1_TYPE, ZONE_ANY, 1} }},
+                        {});
         // check counters
         CheckCounter(runtime, {}, TTenantsManager::COUNTER_ALTER_REQUESTS, 1);
         CheckCounter(runtime, {{ {"status", "BAD_REQUEST"} }}, TTenantsManager::COUNTER_ALTER_RESPONSES, 1);
@@ -1878,7 +1878,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         runtime.SetObserverFunc(CatchPoolEvent(captured));
 
         // Send tenant creation command and store operation id.
-        TString id = SendTenantCreationCommand(runtime, TENANT1_1_NAME, "create-1-key"); 
+        TString id = SendTenantCreationCommand(runtime, TENANT1_1_NAME, "create-1-key");
         // Send notification request. Tenant shouldn't be created by that time,
         // so we should get TEvNotifyOperationCompletionResponse.
         CheckNotificationRequest(runtime, id);
@@ -1905,13 +1905,13 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
         // with no TEvNotifyOperationCompletionResponse.
         CheckNotificationRequest(runtime, id, Ydb::StatusIds::SUCCESS);
 
-        // Create existing tenant using correct idempotency key, we should get the same operation id 
-        TString id2 = SendTenantCreationCommand(runtime, TENANT1_1_NAME, "create-1-key"); 
-        UNIT_ASSERT_VALUES_EQUAL(id, id2); 
- 
-        // Create existing tenant using different idempotency key, we should get an error 
-        SendTenantCreationCommand(runtime, TENANT1_1_NAME, "create-1-wrong-key", Ydb::StatusIds::ALREADY_EXISTS); 
- 
+        // Create existing tenant using correct idempotency key, we should get the same operation id
+        TString id2 = SendTenantCreationCommand(runtime, TENANT1_1_NAME, "create-1-key");
+        UNIT_ASSERT_VALUES_EQUAL(id, id2);
+
+        // Create existing tenant using different idempotency key, we should get an error
+        SendTenantCreationCommand(runtime, TENANT1_1_NAME, "create-1-wrong-key", Ydb::StatusIds::ALREADY_EXISTS);
+
         // Send another tenant creation command and store operation id.
         runtime.SetObserverFunc(CatchPoolEvent(captured));
         id = SendTenantCreationCommand(runtime, TENANT1_1_NAME + "/sub");
@@ -2176,7 +2176,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           {{"hdd", 1}},
                           SLOT1_TYPE, ZONE1, 1);
         // Remove tenant to get some free quota.
-        WaitTenantRunning(runtime, TENANT1_2_NAME); // workaround for scheme cache race 
+        WaitTenantRunning(runtime, TENANT1_2_NAME); // workaround for scheme cache race
         CheckRemoveTenant(runtime, TENANT1_2_NAME, Ydb::StatusIds::SUCCESS);
         // Create second tenant.
         CheckCreateTenant(runtime, TENANT1_3_NAME, Ydb::StatusIds::SUCCESS,
@@ -2424,42 +2424,42 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
 
         CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 1,
                               Ydb::StatusIds::SUCCESS,
-                              {{ {SLOT1_TYPE, ZONE1, 1} }}, {}, 
-                              "alter-key-1"); 
+                              {{ {SLOT1_TYPE, ZONE1, 1} }}, {},
+                              "alter-key-1");
         CheckTenantGeneration(runtime, TENANT1_1_NAME, 2);
 
         CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 1,
                               Ydb::StatusIds::BAD_REQUEST,
                               {{ {SLOT1_TYPE, ZONE1, 1} }}, {});
 
-        // Repeating the same idempotency key should result in a success 
-        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 1, 
-                              Ydb::StatusIds::SUCCESS, 
-                              {{ {SLOT1_TYPE, ZONE1, 1} }}, {}, 
-                              "alter-key-1"); 
-        CheckTenantGeneration(runtime, TENANT1_1_NAME, 2); 
- 
+        // Repeating the same idempotency key should result in a success
+        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 1,
+                              Ydb::StatusIds::SUCCESS,
+                              {{ {SLOT1_TYPE, ZONE1, 1} }}, {},
+                              "alter-key-1");
+        CheckTenantGeneration(runtime, TENANT1_1_NAME, 2);
+
         RestartConsole(runtime);
         CheckTenantGeneration(runtime, TENANT1_1_NAME, 2);
- 
-        // Repeating the same idempotency key should result in a success after restart 
-        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 1, 
-                              Ydb::StatusIds::SUCCESS, 
-                              {{ {SLOT1_TYPE, ZONE1, 1} }}, {}, 
-                              "alter-key-1"); 
-        CheckTenantGeneration(runtime, TENANT1_1_NAME, 2); 
- 
-        // Alter tenant without setting an idempotency key 
-        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 2, 
-                              Ydb::StatusIds::SUCCESS, 
-                              {{ {SLOT1_TYPE, ZONE1, 2} }}, {}); 
-        CheckTenantGeneration(runtime, TENANT1_1_NAME, 3); 
- 
-        // As a side effect we forget old idempotency keys 
-        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 1, 
-                              Ydb::StatusIds::BAD_REQUEST, 
-                              {{ {SLOT1_TYPE, ZONE1, 1} }}, {}, 
-                              "alter-key-1"); 
+
+        // Repeating the same idempotency key should result in a success after restart
+        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 1,
+                              Ydb::StatusIds::SUCCESS,
+                              {{ {SLOT1_TYPE, ZONE1, 1} }}, {},
+                              "alter-key-1");
+        CheckTenantGeneration(runtime, TENANT1_1_NAME, 2);
+
+        // Alter tenant without setting an idempotency key
+        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 2,
+                              Ydb::StatusIds::SUCCESS,
+                              {{ {SLOT1_TYPE, ZONE1, 2} }}, {});
+        CheckTenantGeneration(runtime, TENANT1_1_NAME, 3);
+
+        // As a side effect we forget old idempotency keys
+        CheckAlterTenantSlots(runtime, TENANT1_1_NAME, 1,
+                              Ydb::StatusIds::BAD_REQUEST,
+                              {{ {SLOT1_TYPE, ZONE1, 1} }}, {},
+                              "alter-key-1");
     }
 
     Y_UNIT_TEST(TestTenantGeneration) {
@@ -2489,55 +2489,55 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                           {{"hdd", 1}},
                           SLOT1_TYPE, ZONE1, 1);
     }
- 
-    void RunTestAlterTenantTooManyStorageResourcesForRunning(TTenantTestRuntime& runtime) { 
-        using EType = TCreateTenantRequest::EType; 
- 
-        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS, 
-            TCreateTenantRequest(TENANT1_1_NAME, EType::Common) 
-                .WithPools({{"hdd", 1}, {"hdd-1", 3}}) 
-                .WithSlots(SLOT1_TYPE, ZONE1, 1) 
-                .WithPlanResolution(500)); 
- 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {}, 
-                          SLOT1_TYPE, ZONE1, 1, 1); 
- 
-        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                              {{"hdd-1", 1000}}, {}); 
- 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {}, 
-                          SLOT1_TYPE, ZONE1, 1, 1); 
- 
-        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                              {}, false); 
- 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {}, 
-                          SLOT1_TYPE, ZONE1, 1, 1); 
- 
-        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                              {{"hdd-2", 1000}}); 
- 
-        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, 
-                          Ydb::Cms::GetDatabaseStatusResult::RUNNING, 
-                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}, {"hdd-2", 0, 0}}, {}, 
-                          SLOT1_TYPE, ZONE1, 1, 1); 
-    } 
- 
-    Y_UNIT_TEST(TestAlterTenantTooManyStorageResourcesForRunning) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig()); 
-        RunTestAlterTenantTooManyStorageResourcesForRunning(runtime); 
-    } 
- 
-    Y_UNIT_TEST(TestAlterTenantTooManyStorageResourcesForRunningExtSubdomain) { 
-        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true); 
-        RunTestAlterTenantTooManyStorageResourcesForRunning(runtime); 
-    } 
+
+    void RunTestAlterTenantTooManyStorageResourcesForRunning(TTenantTestRuntime& runtime) {
+        using EType = TCreateTenantRequest::EType;
+
+        CheckCreateTenant(runtime, Ydb::StatusIds::SUCCESS,
+            TCreateTenantRequest(TENANT1_1_NAME, EType::Common)
+                .WithPools({{"hdd", 1}, {"hdd-1", 3}})
+                .WithSlots(SLOT1_TYPE, ZONE1, 1)
+                .WithPlanResolution(500));
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
+                          SLOT1_TYPE, ZONE1, 1, 1);
+
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                              {{"hdd-1", 1000}}, {});
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
+                          SLOT1_TYPE, ZONE1, 1, 1);
+
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                              {}, false);
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}}, {},
+                          SLOT1_TYPE, ZONE1, 1, 1);
+
+        CheckAlterTenantPools(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                              {{"hdd-2", 1000}});
+
+        CheckTenantStatus(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+                          Ydb::Cms::GetDatabaseStatusResult::RUNNING,
+                          {{"hdd", 1, 1}, {"hdd-1", 3, 3}, {"hdd-2", 0, 0}}, {},
+                          SLOT1_TYPE, ZONE1, 1, 1);
+    }
+
+    Y_UNIT_TEST(TestAlterTenantTooManyStorageResourcesForRunning) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        RunTestAlterTenantTooManyStorageResourcesForRunning(runtime);
+    }
+
+    Y_UNIT_TEST(TestAlterTenantTooManyStorageResourcesForRunningExtSubdomain) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), {}, true);
+        RunTestAlterTenantTooManyStorageResourcesForRunning(runtime);
+    }
 }
 
 } // namespace NKikimr

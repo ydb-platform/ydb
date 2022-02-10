@@ -43,7 +43,7 @@ namespace NActors {
         TPollerToken::TPtr PollerToken;
 
         ui64 RealTime;
-        ui64 MonotonicTime; 
+        ui64 MonotonicTime;
 
         ui64 ActiveTick;
         typedef TMap<ui64, TAutoPtr<NSchedulerQueue::TQueueType>> TMomentMap; // intrasecond queues
@@ -56,7 +56,7 @@ namespace NActors {
         static const ui64 IntrasecondThreshold = 1048576; // ~second
         TAutoPtr<TMomentMap> ActiveSec;
         volatile ui64* CurrentTimestamp = nullptr;
-        volatile ui64* CurrentMonotonic = nullptr; 
+        volatile ui64* CurrentMonotonic = nullptr;
         TDeque<TAutoPtr<IEventHandle>> EventsToBeSent;
 
     public:
@@ -84,9 +84,9 @@ namespace NActors {
             Y_ASSERT(evInitialize.CurrentTimestamp != nullptr);
             CurrentTimestamp = evInitialize.CurrentTimestamp;
 
-            Y_ASSERT(evInitialize.CurrentMonotonic != nullptr); 
-            CurrentMonotonic = evInitialize.CurrentMonotonic; 
- 
+            Y_ASSERT(evInitialize.CurrentMonotonic != nullptr);
+            CurrentMonotonic = evInitialize.CurrentMonotonic;
+
             struct itimerspec new_time;
             memset(&new_time, 0, sizeof(new_time));
             new_time.it_value.tv_nsec = Cfg.ResolutionMicroseconds * 1000;
@@ -96,10 +96,10 @@ namespace NActors {
             const bool success = ctx.Send(PollerActor, new TEvPollerRegister(TimerDescriptor, SelfId(), {}));
             Y_VERIFY(success);
 
-            RealTime = RelaxedLoad(CurrentTimestamp); 
-            MonotonicTime = RelaxedLoad(CurrentMonotonic); 
+            RealTime = RelaxedLoad(CurrentTimestamp);
+            MonotonicTime = RelaxedLoad(CurrentMonotonic);
 
-            ActiveTick = AlignUp<ui64>(MonotonicTime, IntrasecondThreshold); 
+            ActiveTick = AlignUp<ui64>(MonotonicTime, IntrasecondThreshold);
         }
 
         void Handle(TEvPollerRegisterResult::TPtr ev, const TActorContext& ctx) {
@@ -108,10 +108,10 @@ namespace NActors {
         }
 
         void UpdateTime() {
-            RealTime = TInstant::Now().MicroSeconds(); 
-            MonotonicTime = Max(MonotonicTime, GetMonotonicMicroSeconds()); 
-            AtomicStore(CurrentTimestamp, RealTime); 
-            AtomicStore(CurrentMonotonic, MonotonicTime); 
+            RealTime = TInstant::Now().MicroSeconds();
+            MonotonicTime = Max(MonotonicTime, GetMonotonicMicroSeconds());
+            AtomicStore(CurrentTimestamp, RealTime);
+            AtomicStore(CurrentMonotonic, MonotonicTime);
         }
 
         void TryUpdateTime(NHPTimer::STime* lastTimeUpdate) {

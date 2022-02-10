@@ -184,34 +184,34 @@ void TCms::AdjustInfo(TClusterInfoPtr &info, const TActorContext &ctx) const
         info->AddExternalLocks(entry.second, &ctx);
 }
 
-namespace { 
-    THashMap<NKikimrCms::TStatus::ECode, ui32> BuildCodesRateMap(std::initializer_list<NKikimrCms::TStatus::ECode> l) { 
-        ui32 nextCodeRate = 0; 
-        THashMap<NKikimrCms::TStatus::ECode, ui32> m; 
-        for (auto it = l.begin(); it != l.end(); ++it, ++nextCodeRate) { 
-            m[*it] = nextCodeRate; 
-        } 
-        return m; 
-    } 
-} 
- 
+namespace {
+    THashMap<NKikimrCms::TStatus::ECode, ui32> BuildCodesRateMap(std::initializer_list<NKikimrCms::TStatus::ECode> l) {
+        ui32 nextCodeRate = 0;
+        THashMap<NKikimrCms::TStatus::ECode, ui32> m;
+        for (auto it = l.begin(); it != l.end(); ++it, ++nextCodeRate) {
+            m[*it] = nextCodeRate;
+        }
+        return m;
+    }
+}
+
 bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                                   TPermissionResponse &response,
                                   TPermissionRequest &scheduled,
                                   const TActorContext &ctx)
 {
-    static THashMap<EStatusCode, ui32> CodesRate = BuildCodesRateMap({ 
-        TStatus::DISALLOW_TEMP, 
-        TStatus::ERROR_TEMP, 
-        TStatus::DISALLOW, 
-        TStatus::WRONG_REQUEST, 
-        TStatus::ERROR, 
-        TStatus::NO_SUCH_HOST, 
-        TStatus::NO_SUCH_DEVICE, 
-        TStatus::ALLOW_PARTIAL, 
-        TStatus::ALLOW, 
-        TStatus::UNKNOWN, 
-    }); 
+    static THashMap<EStatusCode, ui32> CodesRate = BuildCodesRateMap({
+        TStatus::DISALLOW_TEMP,
+        TStatus::ERROR_TEMP,
+        TStatus::DISALLOW,
+        TStatus::WRONG_REQUEST,
+        TStatus::ERROR,
+        TStatus::NO_SUCH_HOST,
+        TStatus::NO_SUCH_DEVICE,
+        TStatus::ALLOW_PARTIAL,
+        TStatus::ALLOW,
+        TStatus::UNKNOWN,
+    });
     bool allowPartial = request.GetPartialPermissionAllowed();
     bool schedule = request.GetSchedule() && !request.GetDryRun();
 
@@ -320,7 +320,7 @@ bool TCms::IsActionHostValid(const TAction &action, TErrorInfo &error) const
 {
     if (!ClusterInfo->HasNode(action.GetHost())
         && ActionRequiresHost(action)) {
-        error.Code = TStatus::NO_SUCH_HOST; 
+        error.Code = TStatus::NO_SUCH_HOST;
         error.Reason = Sprintf("Unknown host '%s'", action.GetHost().data());
         return false;
     }
@@ -744,7 +744,7 @@ bool TCms::CheckActionReplaceDevices(const TAction &action,
                 break;
             }
         } else {
-            error.Code = TStatus::NO_SUCH_DEVICE; 
+            error.Code = TStatus::NO_SUCH_DEVICE;
             error.Reason = Sprintf("Unknown device %s (use cluster state command"
                                    " to get list of known devices)", device.data());
             res = false;
@@ -961,7 +961,7 @@ void TCms::AddHostState(const TNodeInfo &node, TClusterStateResponse &resp, TIns
     host->SetNodeId(node.NodeId);
     host->SetInterconnectPort(node.IcPort);
     host->SetTimestamp(timestamp.GetValue());
-    if (node.State == UP || node.VDisks || node.PDisks) { 
+    if (node.State == UP || node.VDisks || node.PDisks) {
         for (const auto flag : GetEnumAllValues<EService>()) {
             if (!(node.Services & flag)) {
                 continue;
@@ -974,7 +974,7 @@ void TCms::AddHostState(const TNodeInfo &node, TClusterStateResponse &resp, TIns
                 service->SetVersion(node.Version);
             }
             service->SetTimestamp(timestamp.GetValue());
-        } 
+        }
 
         for (const auto &vdId : node.VDisks) {
             const auto &vdisk = ClusterInfo->VDisk(vdId);
@@ -1458,12 +1458,12 @@ void TCms::Handle(TEvCms::TEvClusterStateRequest::TPtr &ev,
     if (rec.HostsSize() > 0) {
         for (const auto &host : rec.GetHosts()) {
             if (ClusterInfo->NodesCount(host) >= 1) {
-                for (const TNodeInfo *node : ClusterInfo->HostNodes(host)) { 
+                for (const TNodeInfo *node : ClusterInfo->HostNodes(host)) {
                     AddHostState(*node, resp->Record, ClusterInfo->GetTimestamp());
                 }
             } else {
                 return ReplyWithError<TEvCms::TEvClusterStateResponse>(
-                    ev, TStatus::NO_SUCH_HOST, "Unknown host " + host, ctx); 
+                    ev, TStatus::NO_SUCH_HOST, "Unknown host " + host, ctx);
             }
         }
     } else {
@@ -1654,7 +1654,7 @@ bool TCms::CheckNotificationReplaceDevices(const TAction &action, TInstant time,
         if (!ClusterInfo->HasPDisk(device)
                 && !ClusterInfo->HasPDisk(action.GetHost(), device)
                 && !ClusterInfo->HasVDisk(device)) {
-            error.Code = TStatus::NO_SUCH_DEVICE; 
+            error.Code = TStatus::NO_SUCH_DEVICE;
             error.Reason = Sprintf("Unknown device %s (use cluster state command"
                                    " to get list of known devices)", device.data());
             return false;

@@ -262,7 +262,7 @@ public:
     }
 
     ui16 MonPort() const {
-        return Server_->GetRuntime()->GetMonPort(); 
+        return Server_->GetRuntime()->GetMonPort();
     }
 
     ui16 GrpcPort() const {
@@ -314,7 +314,7 @@ public:
         }
 
         TActorId clientId = ActorSystem().AllocateEdgeActor();
-        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(MonPort()) + path); 
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet("http://[::1]:" + ToString(MonPort()) + path);
         ActorSystem().Send(new NActors::IEventHandle(HttpProxyId_, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
 
         return ActorSystem().GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(clientId);

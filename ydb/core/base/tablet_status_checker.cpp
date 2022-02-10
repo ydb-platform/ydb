@@ -3,8 +3,8 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 
-#include <util/generic/hash_set.h> 
- 
+#include <util/generic/hash_set.h>
+
 namespace NKikimr {
 
 class TTabletStatusCheckRequest : public TActorBootstrapped<TTabletStatusCheckRequest> {
@@ -45,13 +45,13 @@ public:
     {}
 
     void Bootstrap(const TActorContext &ctx) {
-        THashSet<ui32> seen; 
+        THashSet<ui32> seen;
         for (const auto &channel : Info->Channels) {
             const ui32 groupToCheck = channel.History.back().GroupID;
-            if (seen.insert(groupToCheck).second) { 
-                SendToBSProxy(ctx, groupToCheck, new TEvBlobStorage::TEvStatus(TInstant::Max()), groupToCheck); 
-                ++RequestsLeft; 
-            } 
+            if (seen.insert(groupToCheck).second) {
+                SendToBSProxy(ctx, groupToCheck, new TEvBlobStorage::TEvStatus(TInstant::Max()), groupToCheck);
+                ++RequestsLeft;
+            }
         }
         Become(&TTabletStatusCheckRequest::StateFunc);
     }

@@ -56,32 +56,32 @@ void TResourceMetricsValues::Fill(NKikimrTabletBase::TMetrics& metrics) const {
             }
         }
     }
-    { 
-        metrics.ClearGroupReadIops(); 
-        for (const auto& kv : ReadIops) { 
-            auto groupId = kv.first; 
-            if (kv.second.IsValueReady()) { 
-                auto value = kv.second.GetValue(); 
-                auto& iops = *metrics.AddGroupReadIops(); 
-                iops.SetChannel(groupId.first); 
-                iops.SetGroupID(groupId.second); 
-                iops.SetIops(value); 
-            } 
-        } 
-    } 
-    { 
-        metrics.ClearGroupWriteIops(); 
-        for (const auto& kv : WriteIops) { 
-            auto groupId = kv.first; 
-            if (kv.second.IsValueReady()) { 
-                auto value = kv.second.GetValue(); 
-                auto& iops = *metrics.AddGroupWriteIops(); 
-                iops.SetChannel(groupId.first); 
-                iops.SetGroupID(groupId.second); 
-                iops.SetIops(value); 
-            } 
-        } 
-    } 
+    {
+        metrics.ClearGroupReadIops();
+        for (const auto& kv : ReadIops) {
+            auto groupId = kv.first;
+            if (kv.second.IsValueReady()) {
+                auto value = kv.second.GetValue();
+                auto& iops = *metrics.AddGroupReadIops();
+                iops.SetChannel(groupId.first);
+                iops.SetGroupID(groupId.second);
+                iops.SetIops(value);
+            }
+        }
+    }
+    {
+        metrics.ClearGroupWriteIops();
+        for (const auto& kv : WriteIops) {
+            auto groupId = kv.first;
+            if (kv.second.IsValueReady()) {
+                auto value = kv.second.GetValue();
+                auto& iops = *metrics.AddGroupWriteIops();
+                iops.SetChannel(groupId.first);
+                iops.SetGroupID(groupId.second);
+                iops.SetIops(value);
+            }
+        }
+    }
 }
 
 TResourceMetricsSendState::TResourceMetricsSendState(ui64 tabletId, ui32 followerId, const TActorId& launcher)
@@ -90,51 +90,51 @@ TResourceMetricsSendState::TResourceMetricsSendState(ui64 tabletId, ui32 followe
     , Launcher(launcher)
 {}
 
-namespace { 
-    template<class TGroupValues, class TGroupLevels, class TCallback> 
-    bool ProcessChangedGroupMetrics( 
-            TGroupValues& values, 
-            TGroupLevels& levels, 
-            ui64 significantChange, 
-            TInstant now, 
-            bool force, 
-            const TCallback& callback) 
-    { 
-        bool haveChanges = false; 
-        for (auto it = values.begin(); it != values.end(); ++it) { 
-            auto groupId = it->first; 
-            const auto& value = it->second; 
-            if (value.IsValueReady()) { 
-                auto val = !value.IsValueObsolete(now) ? value.GetValue() : 0; 
-                ui32 levelVal = val / significantChange; 
-                auto& lit = levels[groupId]; 
-                if (lit != levelVal || force) { 
-                    lit = levelVal; 
-                    haveChanges = true; 
-                    // N.B. keep going so all levels are properly updated 
-                } 
-            } 
-        } 
-        if (!haveChanges) { 
-            return false; 
-        } 
-        for (auto it = values.begin(); it != values.end();) { 
-            auto groupId(it->first); 
-            const auto& value(it->second); 
-            if (value.IsValueReady()) { 
-                auto val = !value.IsValueObsolete(now) ? value.GetValue() : 0; 
-                callback(groupId.first, groupId.second, val); 
-                if (val == 0) { 
-                    it = values.erase(it); 
-                    continue; 
-                } 
-            } 
-            ++it; 
-        } 
-        return true; 
-    } 
-} 
- 
+namespace {
+    template<class TGroupValues, class TGroupLevels, class TCallback>
+    bool ProcessChangedGroupMetrics(
+            TGroupValues& values,
+            TGroupLevels& levels,
+            ui64 significantChange,
+            TInstant now,
+            bool force,
+            const TCallback& callback)
+    {
+        bool haveChanges = false;
+        for (auto it = values.begin(); it != values.end(); ++it) {
+            auto groupId = it->first;
+            const auto& value = it->second;
+            if (value.IsValueReady()) {
+                auto val = !value.IsValueObsolete(now) ? value.GetValue() : 0;
+                ui32 levelVal = val / significantChange;
+                auto& lit = levels[groupId];
+                if (lit != levelVal || force) {
+                    lit = levelVal;
+                    haveChanges = true;
+                    // N.B. keep going so all levels are properly updated
+                }
+            }
+        }
+        if (!haveChanges) {
+            return false;
+        }
+        for (auto it = values.begin(); it != values.end();) {
+            auto groupId(it->first);
+            const auto& value(it->second);
+            if (value.IsValueReady()) {
+                auto val = !value.IsValueObsolete(now) ? value.GetValue() : 0;
+                callback(groupId.first, groupId.second, val);
+                if (val == 0) {
+                    it = values.erase(it);
+                    continue;
+                }
+            }
+            ++it;
+        }
+        return true;
+    }
+}
+
 bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimrTabletBase::TMetrics& metrics, TInstant now, bool force) {
     bool have = false;
 
@@ -206,58 +206,58 @@ bool TResourceMetricsSendState::FillChanged(TResourceMetricsValues& src, NKikimr
         have = true;
     }
 
-    have |= ProcessChangedGroupMetrics( 
-        src.ReadThroughput, 
-        LevelReadThroughput, 
-        SignificantChangeThroughput, 
-        now, 
-        force, 
-        [&metrics](TChannel channel, TGroupId groupId, ui64 value) { 
-            auto& throughput= *metrics.AddGroupReadThroughput(); 
-            throughput.SetChannel(channel); 
-            throughput.SetGroupID(groupId); 
-            throughput.SetThroughput(value); 
-        }); 
- 
-    have |= ProcessChangedGroupMetrics( 
-        src.WriteThroughput, 
-        LevelWriteThroughput, 
-        SignificantChangeThroughput, 
-        now, 
-        force, 
-        [&metrics](TChannel channel, TGroupId groupId, ui64 value) { 
-            auto& throughput= *metrics.AddGroupWriteThroughput(); 
-            throughput.SetChannel(channel); 
-            throughput.SetGroupID(groupId); 
-            throughput.SetThroughput(value); 
-        }); 
- 
-    have |= ProcessChangedGroupMetrics( 
-        src.ReadIops, 
-        LevelReadIops, 
-        SignificantChangeIops, 
-        now, 
-        force, 
-        [&metrics](TChannel channel, TGroupId groupId, ui64 value) { 
-            auto& iops = *metrics.AddGroupReadIops(); 
-            iops.SetChannel(channel); 
-            iops.SetGroupID(groupId); 
-            iops.SetIops(value); 
-        }); 
- 
-    have |= ProcessChangedGroupMetrics( 
-        src.WriteIops, 
-        LevelWriteIops, 
-        SignificantChangeIops, 
-        now, 
-        force, 
-        [&metrics](TChannel channel, TGroupId groupId, ui64 value) { 
-            auto& iops = *metrics.AddGroupWriteIops(); 
-            iops.SetChannel(channel); 
-            iops.SetGroupID(groupId); 
-            iops.SetIops(value); 
-        }); 
- 
+    have |= ProcessChangedGroupMetrics(
+        src.ReadThroughput,
+        LevelReadThroughput,
+        SignificantChangeThroughput,
+        now,
+        force,
+        [&metrics](TChannel channel, TGroupId groupId, ui64 value) {
+            auto& throughput= *metrics.AddGroupReadThroughput();
+            throughput.SetChannel(channel);
+            throughput.SetGroupID(groupId);
+            throughput.SetThroughput(value);
+        });
+
+    have |= ProcessChangedGroupMetrics(
+        src.WriteThroughput,
+        LevelWriteThroughput,
+        SignificantChangeThroughput,
+        now,
+        force,
+        [&metrics](TChannel channel, TGroupId groupId, ui64 value) {
+            auto& throughput= *metrics.AddGroupWriteThroughput();
+            throughput.SetChannel(channel);
+            throughput.SetGroupID(groupId);
+            throughput.SetThroughput(value);
+        });
+
+    have |= ProcessChangedGroupMetrics(
+        src.ReadIops,
+        LevelReadIops,
+        SignificantChangeIops,
+        now,
+        force,
+        [&metrics](TChannel channel, TGroupId groupId, ui64 value) {
+            auto& iops = *metrics.AddGroupReadIops();
+            iops.SetChannel(channel);
+            iops.SetGroupID(groupId);
+            iops.SetIops(value);
+        });
+
+    have |= ProcessChangedGroupMetrics(
+        src.WriteIops,
+        LevelWriteIops,
+        SignificantChangeIops,
+        now,
+        force,
+        [&metrics](TChannel channel, TGroupId groupId, ui64 value) {
+            auto& iops = *metrics.AddGroupWriteIops();
+            iops.SetChannel(channel);
+            iops.SetGroupID(groupId);
+            iops.SetIops(value);
+        });
+
     return have;
 }
 

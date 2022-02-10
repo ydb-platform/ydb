@@ -39,22 +39,22 @@ struct TEvTabletBase {
     struct TEvBlockBlobStorageResult : public TEventLocal<TEvBlockBlobStorageResult, EvBlockBlobStorageResult> {
         const NKikimrProto::EReplyStatus Status;
         const ui64 TabletId;
-        const TString ErrorReason; 
+        const TString ErrorReason;
 
-        TEvBlockBlobStorageResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TString &reason = TString()) 
+        TEvBlockBlobStorageResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TString &reason = TString())
             : Status(status)
             , TabletId(tabletId)
-            , ErrorReason(reason) 
+            , ErrorReason(reason)
         {}
     };
 
     struct TEvRebuildGraphResult : public TEventLocal<TEvRebuildGraphResult, EvRebuildGraphResult> {
         const NKikimrProto::EReplyStatus Status;
-        const TString ErrorReason; 
+        const TString ErrorReason;
 
         TIntrusivePtr<TEvTablet::TDependencyGraph> DependencyGraph;
         NMetrics::TTabletThroughputRawValue GroupReadBytes;
-        NMetrics::TTabletIopsRawValue GroupReadOps; 
+        NMetrics::TTabletIopsRawValue GroupReadOps;
         THolder<NTracing::ITrace> Trace;
 
         TEvRebuildGraphResult(
@@ -63,20 +63,20 @@ struct TEvTabletBase {
             const TString &reason = TString()
         )
             : Status(status)
-            , ErrorReason(reason) 
+            , ErrorReason(reason)
             , Trace(trace)
         {}
 
         TEvRebuildGraphResult(
             const TIntrusivePtr<TEvTablet::TDependencyGraph> &graph,
             NMetrics::TTabletThroughputRawValue &&read,
-            NMetrics::TTabletIopsRawValue &&readOps, 
+            NMetrics::TTabletIopsRawValue &&readOps,
             NTracing::ITrace *trace
         )
             : Status(NKikimrProto::OK)
             , DependencyGraph(graph)
             , GroupReadBytes(std::move(read))
-            , GroupReadOps(std::move(readOps)) 
+            , GroupReadOps(std::move(readOps))
             , Trace(trace)
         {}
     };
@@ -86,12 +86,12 @@ struct TEvTabletBase {
         const TLogoBlobID Latest;
         const ui32 BlockedGeneration;
         const TString Buffer;
-        const TString ErrorReason; 
+        const TString ErrorReason;
 
-        TEvFindLatestLogEntryResult(NKikimrProto::EReplyStatus status, const TString &reason = TString()) 
+        TEvFindLatestLogEntryResult(NKikimrProto::EReplyStatus status, const TString &reason = TString())
             : Status(status)
             , BlockedGeneration(0)
-            , ErrorReason(reason) 
+            , ErrorReason(reason)
         {
             Y_VERIFY_DEBUG(status != NKikimrProto::OK);
         }
@@ -110,28 +110,28 @@ struct TEvTabletBase {
         TVector<ui32> YellowMoveChannels;
         TVector<ui32> YellowStopChannels;
         NMetrics::TTabletThroughputRawValue GroupWrittenBytes;
-        NMetrics::TTabletIopsRawValue GroupWrittenOps; 
-        const TString ErrorReason; 
+        NMetrics::TTabletIopsRawValue GroupWrittenOps;
+        const TString ErrorReason;
 
         struct TErrorCondition {
 
         } ErrorCondition;
 
-        TEvWriteLogResult( 
-                NKikimrProto::EReplyStatus status, 
-                const TLogoBlobID &entryId, 
+        TEvWriteLogResult(
+                NKikimrProto::EReplyStatus status,
+                const TLogoBlobID &entryId,
                 TVector<ui32>&& yellowMoveChannels,
                 TVector<ui32>&& yellowStopChannels,
-                NMetrics::TTabletThroughputRawValue&& written, 
-                NMetrics::TTabletIopsRawValue&& writtenOps, 
-                const TString &reason = TString()) 
+                NMetrics::TTabletThroughputRawValue&& written,
+                NMetrics::TTabletIopsRawValue&& writtenOps,
+                const TString &reason = TString())
             : Status(status)
             , EntryId(entryId)
             , YellowMoveChannels(std::move(yellowMoveChannels))
             , YellowStopChannels(std::move(yellowStopChannels))
             , GroupWrittenBytes(std::move(written))
-            , GroupWrittenOps(std::move(writtenOps)) 
-            , ErrorReason(reason) 
+            , GroupWrittenOps(std::move(writtenOps))
+            , ErrorReason(reason)
         {}
     };
 

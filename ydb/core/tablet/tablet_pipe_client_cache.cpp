@@ -8,8 +8,8 @@ namespace NKikimr {
 
 namespace NTabletPipe {
 
-    IClientFactory::~IClientFactory() {} 
- 
+    IClientFactory::~IClientFactory() {}
+
     struct TClientCacheEntry {
         enum {
             Opened = 1 << 0,
@@ -35,12 +35,12 @@ namespace NTabletPipe {
 
     class TClientCache : public IClientCache {
     public:
-        TClientCache(const TClientConfig& config, TAutoPtr<IClientCacheContainer> container, TAutoPtr<IClientCacheContainer> poolContainer, IClientFactory::TPtr pipeFactory) 
+        TClientCache(const TClientConfig& config, TAutoPtr<IClientCacheContainer> container, TAutoPtr<IClientCacheContainer> poolContainer, IClientFactory::TPtr pipeFactory)
             : PipeClientConfig(config)
             , Container(container)
             , PoolContainer(poolContainer)
             , ActorSystem(nullptr)
-            , PipeFactory(std::move(pipeFactory)) 
+            , PipeFactory(std::move(pipeFactory))
         {
             Container->SetEvictionCallback([&](const ui64& key, TClientCacheEntry& value, ui64 size) {
                 return EvictionCallback(key, value, size);
@@ -87,13 +87,13 @@ namespace NTabletPipe {
             }
 
             ActorSystem = ctx.ExecutorThread.ActorSystem;
-            TActorId clientId; 
-            if (PipeFactory) { 
-                clientId = PipeFactory->CreateClient(ctx, tabletId, PipeClientConfig); 
-            } else { 
-                IActor* client = CreateClient(ctx.SelfID, tabletId, PipeClientConfig); 
-                clientId = ctx.ExecutorThread.RegisterActor(client); 
-            } 
+            TActorId clientId;
+            if (PipeFactory) {
+                clientId = PipeFactory->CreateClient(ctx, tabletId, PipeClientConfig);
+            } else {
+                IActor* client = CreateClient(ctx.SelfID, tabletId, PipeClientConfig);
+                clientId = ctx.ExecutorThread.RegisterActor(client);
+            }
             Container->Insert(tabletId, TClientCacheEntry(clientId, 0), currentClient);
             return clientId;
         }
@@ -211,16 +211,16 @@ namespace NTabletPipe {
         TAutoPtr<IClientCacheContainer> PoolContainer;
 
         TActorSystem* ActorSystem;
- 
-        IClientFactory::TPtr PipeFactory; 
+
+        IClientFactory::TPtr PipeFactory;
     };
 
-    IClientCache* CreateUnboundedClientCache(const TClientConfig& pipeConfig, IClientFactory::TPtr pipeFactory) { 
+    IClientCache* CreateUnboundedClientCache(const TClientConfig& pipeConfig, IClientFactory::TPtr pipeFactory) {
         TAutoPtr<IClientCacheContainer> container(new NCache::TUnboundedCacheOnMap<ui64, TClientCacheEntry>());
-        return new TClientCache(pipeConfig, container, TAutoPtr<IClientCacheContainer>(), std::move(pipeFactory)); 
+        return new TClientCache(pipeConfig, container, TAutoPtr<IClientCacheContainer>(), std::move(pipeFactory));
     }
 
-    IClientCache* CreateBoundedClientCache(TIntrusivePtr<TBoundedClientCacheConfig> cacheConfig, const TClientConfig& pipeConfig, IClientFactory::TPtr pipeFactory) { 
+    IClientCache* CreateBoundedClientCache(TIntrusivePtr<TBoundedClientCacheConfig> cacheConfig, const TClientConfig& pipeConfig, IClientFactory::TPtr pipeFactory) {
         TAutoPtr<IClientCacheContainer> container(new NCache::TUnboundedCacheOnMap<ui64, TClientCacheEntry>());
         TIntrusivePtr<NCache::T2QCacheConfig> poolContainerConfig(new NCache::T2QCacheConfig);
         TAutoPtr<IClientCacheContainer> poolContainer(new NCache::T2QCache<ui64, TClientCacheEntry>(poolContainerConfig));
@@ -228,7 +228,7 @@ namespace NTabletPipe {
             return cache.GetUsedSize() >= cacheConfig->ClientPoolLimit;
         });
 
-        return new TClientCache(pipeConfig, container, poolContainer, std::move(pipeFactory)); 
+        return new TClientCache(pipeConfig, container, poolContainer, std::move(pipeFactory));
     }
 }
 

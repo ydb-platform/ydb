@@ -14,7 +14,7 @@ public:
             if (reqIdBegin == reqIdEnd) {
                 return grpc::Status(grpc::StatusCode::UNAUTHENTICATED,
                                     TStringBuilder() << "Authorization data is not provided");
-	    } else if (Identity != TStringBuf(reqIdBegin->second.cbegin(), reqIdBegin->second.cend())) { 
+	    } else if (Identity != TStringBuf(reqIdBegin->second.cbegin(), reqIdBegin->second.cend())) {
                 return grpc::Status(grpc::StatusCode::UNAUTHENTICATED,
                                     TStringBuilder() << "Access for user " << Identity << " is forbidden");
             }

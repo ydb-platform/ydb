@@ -102,41 +102,41 @@ void RunQueryInLoop(NYdb::NTable::TTableClient& client, TString query, int keyCo
 };
 
 Y_UNIT_TEST_SUITE(YdbTableSplit) {
-    void DoTestSplitByLoad(TKikimrWithGrpcAndRootSchema& server, TString query, bool fillWithData = false, size_t minSplits = 1) { 
+    void DoTestSplitByLoad(TKikimrWithGrpcAndRootSchema& server, TString query, bool fillWithData = false, size_t minSplits = 1) {
         NYdb::TDriver driver(TDriverConfig().SetEndpoint(TStringBuilder() << "localhost:" << server.GetPort()));
         NYdb::NTable::TTableClient client(driver);
         NFlatTests::TFlatMsgBusClient oldClient(server.ServerSettings->Port);
 
         CreateTestTable(client, "/Root/Foo");
- 
-        if (fillWithData) { 
-            IThreadFactory* pool = SystemThreadFactory(); 
- 
-            TAtomic enough = 0; 
- 
-            TVector<TAutoPtr<IThreadFactory::IThread>> threads; 
-            threads.resize(10); 
-            for (size_t i = 0; i < threads.size(); i++) { 
-                TString namePrefix = ToString(i) + "_"; 
-                TString upsertQuery = R"( 
-                    DECLARE $name_hash AS Uint32; 
-                    DECLARE $name AS Utf8; 
-                    DECLARE $version AS Uint32; 
-                    DECLARE $timestamp AS Int64; 
- 
-                    UPSERT INTO [/Root/Foo] (NameHash, Name, Version, Timestamp) 
-                    VALUES ($name_hash, $name, $version, $timestamp); 
-                )"; 
-                threads[i] = pool->Run([&client, upsertQuery, &enough, namePrefix]() { 
-                    RunQueryInLoop(client, upsertQuery, 100, enough, namePrefix); 
-                }); 
-            } 
-            for (size_t i = 0; i < threads.size(); i++) { 
-                threads[i]->Join(); 
-            } 
-            Cerr << "Table filled with data" << Endl; 
-        } 
- 
+
+        if (fillWithData) {
+            IThreadFactory* pool = SystemThreadFactory();
+
+            TAtomic enough = 0;
+
+            TVector<TAutoPtr<IThreadFactory::IThread>> threads;
+            threads.resize(10);
+            for (size_t i = 0; i < threads.size(); i++) {
+                TString namePrefix = ToString(i) + "_";
+                TString upsertQuery = R"(
+                    DECLARE $name_hash AS Uint32;
+                    DECLARE $name AS Utf8;
+                    DECLARE $version AS Uint32;
+                    DECLARE $timestamp AS Int64;
+
+                    UPSERT INTO [/Root/Foo] (NameHash, Name, Version, Timestamp)
+                    VALUES ($name_hash, $name, $version, $timestamp);
+                )";
+                threads[i] = pool->Run([&client, upsertQuery, &enough, namePrefix]() {
+                    RunQueryInLoop(client, upsertQuery, 100, enough, namePrefix);
+                });
+            }
+            for (size_t i = 0; i < threads.size(); i++) {
+                threads[i]->Join();
+            }
+            Cerr << "Table filled with data" << Endl;
+        }
+
         SetAutoSplitByLoad(client, "/Root/Foo", true);
 
         size_t shardsBefore = oldClient.GetTablePartitions("/Root/Foo").size();
@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         for (size_t i = 0; i < threads.size(); i++) {
             TString namePrefix = ToString(i) + "_";
             threads[i] = pool->Run([&client, &query, &enough, namePrefix, &finished]() {
-                RunQueryInLoop(client, query, 100000, enough, namePrefix); 
+                RunQueryInLoop(client, query, 100000, enough, namePrefix);
                 AtomicIncrement(finished);
             });
         }
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         // Wait for split to happen
         while (AtomicGet(finished) < (i64)threads.size()) {
             size_t shardsAfter = oldClient.GetTablePartitions("/Root/Foo").size();
-            if (shardsAfter >= shardsBefore + minSplits) { 
+            if (shardsAfter >= shardsBefore + minSplits) {
                 AtomicSet(enough, 1);
                 break;
             }
@@ -185,11 +185,11 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         int retries = 5;
         size_t shardsAfter = 0;
-        for (;retries > 0 && !(shardsAfter >= shardsBefore + minSplits); --retries, Sleep(TDuration::Seconds(1))) { 
+        for (;retries > 0 && !(shardsAfter >= shardsBefore + minSplits); --retries, Sleep(TDuration::Seconds(1))) {
             shardsAfter = oldClient.GetTablePartitions("/Root/Foo").size();
         }
         Cerr << "Table has " << shardsAfter << " shards" << Endl;
-        UNIT_ASSERT_C(shardsAfter >= shardsBefore + minSplits, "Table didn't split!!11 O_O"); 
+        UNIT_ASSERT_C(shardsAfter >= shardsBefore + minSplits, "Table didn't split!!11 O_O");
     }
 
     Y_UNIT_TEST(SplitByLoadWithReads) {
@@ -205,19 +205,19 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         DoTestSplitByLoad(server, query);
     }
 
-    Y_UNIT_TEST(SplitByLoadWithReadsMultipleSplitsWithData) { 
-        TString query = 
-                "DECLARE $name_hash AS Uint32;\n" 
-                "DECLARE $name AS Utf8;\n" 
-                "DECLARE $version AS Uint32;\n" 
-                "DECLARE $timestamp AS Int64;\n\n" 
-                "SELECT * FROM [/Root/Foo] \n" 
-                "WHERE NameHash = $name_hash AND Name = $name"; 
- 
-        TKikimrWithGrpcAndRootSchema server; 
-        DoTestSplitByLoad(server, query, /* fill with data */ true, /* at least two splits */ 2); 
-    } 
- 
+    Y_UNIT_TEST(SplitByLoadWithReadsMultipleSplitsWithData) {
+        TString query =
+                "DECLARE $name_hash AS Uint32;\n"
+                "DECLARE $name AS Utf8;\n"
+                "DECLARE $version AS Uint32;\n"
+                "DECLARE $timestamp AS Int64;\n\n"
+                "SELECT * FROM [/Root/Foo] \n"
+                "WHERE NameHash = $name_hash AND Name = $name";
+
+        TKikimrWithGrpcAndRootSchema server;
+        DoTestSplitByLoad(server, query, /* fill with data */ true, /* at least two splits */ 2);
+    }
+
     Y_UNIT_TEST(SplitByLoadWithUpdates) {
         TString query =
                 "DECLARE $name_hash AS Uint32;\n"

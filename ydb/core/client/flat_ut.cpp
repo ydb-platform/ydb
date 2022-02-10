@@ -1760,7 +1760,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         NTable::NTest::TRandomString<decltype(rnd)> blobs(rnd);
 
         for (auto seq : xrange(rows)) {
-            WriteRow(client, table, seq, blobs.Do(rnd.Uniform(4, 1600))); 
+            WriteRow(client, table, seq, blobs.Do(rnd.Uniform(4, 1600)));
         }
     }
 
@@ -2250,11 +2250,11 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
                             ForceSizeToCompact: 20000
                             CompactionBrokerQueue: 1
                             KeepInCache: true
-                            ExtraCompactionPercent: 0 
-                            ExtraCompactionMinSize: 0 
-                            ExtraCompactionExpPercent: 0 
-                            ExtraCompactionExpMaxSize: 0 
-                            UpliftPartSize: 0 
+                            ExtraCompactionPercent: 0
+                            ExtraCompactionMinSize: 0
+                            ExtraCompactionExpPercent: 0
+                            ExtraCompactionExpMaxSize: 0
+                            UpliftPartSize: 0
                         }
                     }
                     ColumnFamilies {
@@ -2901,7 +2901,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
                 PartitionConfig {
                     PartitioningPolicy {
-                        SizeToSplit: 45000000 
+                        SizeToSplit: 45000000
                     }
                     CompactionPolicy {
                       InMemSizeToSnapshot: 100000
@@ -2969,7 +2969,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
             }
         };
 
-        TString bigValue(6*1024*1024, 'a'); 
+        TString bigValue(6*1024*1024, 'a');
 
         for (int i = 0; i < 4; ++i) {
             fnWriteRow(Sprintf("A-%d", i), bigValue);
@@ -2984,7 +2984,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(partitions.size(), 2);
 
         // Write some more rows to trigger another split
-        for (int i = 0; i < 4; ++i) { 
+        for (int i = 0; i < 4; ++i) {
             fnWriteRow(Sprintf("C-%d", i), bigValue);
         }
 
@@ -3115,7 +3115,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         };
 
         TString smallValue(10*1024, '0');
-        TString bigValue(7*1024*1024, '0'); 
+        TString bigValue(7*1024*1024, '0');
 
         // Allow the table to shrink to 2 partitions
         annoyingClient.AlterTable("/dc-1/Dir", R"(
@@ -3850,7 +3850,7 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL((TString)list[0]["Value"], "Three");
         UNIT_ASSERT_VALUES_EQUAL((TString)list[1]["Value"], "Five");
     }
- 
+
     Y_UNIT_TEST(SelectRangeForbidNullArgs1) {
         auto res = CreateTableAndExecuteMkql(Sprintf(R"(
             (
@@ -3992,276 +3992,276 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         UNIT_ASSERT_VALUES_EQUAL(list.Size(), 0);
     }
 
-    Y_UNIT_TEST(SelectRangeReverse) { 
-        const ui32 TABLE_ROWS = 10; 
- 
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
-        TServer cleverServer = TServer(TServerSettings(port)); 
-        TFlatMsgBusClient annoyingClient(port); 
- 
-        annoyingClient.InitRoot(); 
-        annoyingClient.MkDir("/dc-1", "test"); 
- 
-        annoyingClient.CreateTable("/dc-1/test", 
-            R"(Name: "TestTable" 
-                Columns { Name: "Key"   Type: "Uint64"} 
-                Columns { Name: "Value" Type: "Uint64"} 
-                KeyColumnNames: ["Key"] 
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } } 
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } } 
-            )"); 
- 
-        for (ui32 shard = 0; shard < 3; ++shard) { 
-            for (ui32 i = 0; i < TABLE_ROWS; ++i) { 
-                auto key = shard * 100 + i; 
- 
-                annoyingClient.FlatQuery(Sprintf(R"( 
-                    ( 
-                    (let key '('('Key (Uint64 '%d)) )) 
-                    (let payload '('('Value (Uint64 '%d)))) 
-                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload))) 
-                    ) 
-                    )", key, i 
-                )); 
-            } 
-        } 
- 
-        auto res = annoyingClient.FlatQuery(R"( 
-            ( 
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void)))) 
-            (let data (SelectRange 
-                '"/dc-1/test/TestTable" 
-                range 
-                '('Key 'Value) 
-                '( 
-                    '('"Reverse" (Bool 'true)) 
-                 ) 
-            )) 
-            (return (AsList (SetResult 'Result data))) 
-            ) 
-            )" 
-        ); 
- 
-        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
-        TValue result = value["Result"]; 
-        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], false); 
-        auto list = result["List"]; 
-        ui64 expected = 200 + TABLE_ROWS - 1; 
-        for (ui32 i = 0; i < list.Size(); ++i) { 
-            auto key = (ui64) list[i]["Key"]; 
-            UNIT_ASSERT_VALUES_EQUAL(key, expected); 
-            if ((expected % 100) == 0) { 
-                expected -= 100; 
-                expected += TABLE_ROWS - 1; 
-            } else { 
-                --expected; 
-            } 
-        } 
-    } 
- 
-    Y_UNIT_TEST(SelectRangeReverseItemsLimit) { 
-        const ui32 TABLE_ROWS = 10; 
- 
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
-        TServer cleverServer = TServer(TServerSettings(port)); 
-        TFlatMsgBusClient annoyingClient(port); 
- 
-        annoyingClient.InitRoot(); 
-        annoyingClient.MkDir("/dc-1", "test"); 
- 
-        annoyingClient.CreateTable("/dc-1/test", 
-            R"(Name: "TestTable" 
-                Columns { Name: "Key"   Type: "Uint64"} 
-                Columns { Name: "Value" Type: "Uint64"} 
-                KeyColumnNames: ["Key"] 
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } } 
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } } 
-            )"); 
- 
-        for (ui32 shard = 0; shard < 3; ++shard) { 
-            for (ui32 i = 0; i < TABLE_ROWS; ++i) { 
-                auto key = shard * 100 + i; 
- 
-                annoyingClient.FlatQuery(Sprintf(R"( 
-                    ( 
-                    (let key '('('Key (Uint64 '%d)) )) 
-                    (let payload '('('Value (Uint64 '%d)))) 
-                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload))) 
-                    ) 
-                    )", key, i 
-                )); 
-            } 
-        } 
- 
-        auto res = annoyingClient.FlatQuery(Sprintf(R"( 
-            ( 
-            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void)))) 
-            (let data (SelectRange 
-                '"/dc-1/test/TestTable" 
-                range 
-                '('Key 'Value) 
-                '( 
-                    '('"ItemsLimit" (Uint64 '%d)) 
-                    '('"Reverse" (Bool 'true)) 
-                 ) 
-            )) 
-            (return (AsList (SetResult 'Result data))) 
-            ) 
-            )", 5 
-        )); 
- 
-        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
-        TValue result = value["Result"]; 
-        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], true); 
-        auto list = result["List"]; 
-        ui64 expected = 200 + TABLE_ROWS - 1; 
-        for (ui32 i = 0; i < list.Size(); ++i) { 
-            auto key = (ui64) list[i]["Key"]; 
-            UNIT_ASSERT_VALUES_EQUAL(key, expected); 
-            --expected; 
-        } 
-    } 
- 
-    Y_UNIT_TEST(SelectRangeReverseIncludeKeys) { 
-        const ui32 TABLE_ROWS = 10; 
- 
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
-        TServer cleverServer = TServer(TServerSettings(port)); 
-        TFlatMsgBusClient annoyingClient(port); 
- 
-        annoyingClient.InitRoot(); 
-        annoyingClient.MkDir("/dc-1", "test"); 
- 
-        annoyingClient.CreateTable("/dc-1/test", 
-            R"(Name: "TestTable" 
-                Columns { Name: "Key"   Type: "Uint64"} 
-                Columns { Name: "Value" Type: "Uint64"} 
-                KeyColumnNames: ["Key"] 
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } } 
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } } 
-            )"); 
- 
-        for (ui32 shard = 0; shard < 3; ++shard) { 
-            for (ui32 i = 0; i < TABLE_ROWS; ++i) { 
-                auto key = shard * 100 + i; 
- 
-                annoyingClient.FlatQuery(Sprintf(R"( 
-                    ( 
-                    (let key '('('Key (Uint64 '%d)) )) 
-                    (let payload '('('Value (Uint64 '%d)))) 
-                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload))) 
-                    ) 
-                    )", key, i 
-                )); 
-            } 
-        } 
- 
-        auto res = annoyingClient.FlatQuery(R"( 
-            ( 
-            (let range '('IncFrom 'IncTo '('Key (Uint64 '5) (Uint64 '205)))) 
-            (let data (SelectRange 
-                '"/dc-1/test/TestTable" 
-                range 
-                '('Key 'Value) 
-                '( 
-                    '('"Reverse" (Bool 'true)) 
-                 ) 
-            )) 
-            (return (AsList (SetResult 'Result data))) 
-            ) 
-            )" 
-        ); 
- 
-        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
-        TValue result = value["Result"]; 
-        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], false); 
-        auto list = result["List"]; 
-        ui64 expected = 205; // 205 should be included 
-        for (ui32 i = 0; i < list.Size(); ++i) { 
-            auto key = (ui64) list[i]["Key"]; 
-            UNIT_ASSERT_VALUES_EQUAL(key, expected); 
-            if ((expected % 100) == 0) { 
-                expected -= 100; 
-                expected += TABLE_ROWS - 1; 
-            } else { 
-                --expected; 
-            } 
-        } 
-        UNIT_ASSERT_VALUES_EQUAL(expected, 4); // 5 should have been included 
-    } 
- 
-    Y_UNIT_TEST(SelectRangeReverseExcludeKeys) { 
-        const ui32 TABLE_ROWS = 10; 
- 
-        TPortManager pm; 
-        ui16 port = pm.GetPort(2134); 
-        TServer cleverServer = TServer(TServerSettings(port)); 
-        TFlatMsgBusClient annoyingClient(port); 
- 
-        annoyingClient.InitRoot(); 
-        annoyingClient.MkDir("/dc-1", "test"); 
- 
-        annoyingClient.CreateTable("/dc-1/test", 
-            R"(Name: "TestTable" 
-                Columns { Name: "Key"   Type: "Uint64"} 
-                Columns { Name: "Value" Type: "Uint64"} 
-                KeyColumnNames: ["Key"] 
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } } 
-                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } } 
-            )"); 
- 
-        for (ui32 shard = 0; shard < 3; ++shard) { 
-            for (ui32 i = 0; i < TABLE_ROWS; ++i) { 
-                auto key = shard * 100 + i; 
- 
-                annoyingClient.FlatQuery(Sprintf(R"( 
-                    ( 
-                    (let key '('('Key (Uint64 '%d)) )) 
-                    (let payload '('('Value (Uint64 '%d)))) 
-                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload))) 
-                    ) 
-                    )", key, i 
-                )); 
-            } 
-        } 
- 
-        auto res = annoyingClient.FlatQuery(R"( 
-            ( 
-            (let range '('ExcFrom 'ExcTo '('Key (Uint64 '5) (Uint64 '205)))) 
-            (let data (SelectRange 
-                '"/dc-1/test/TestTable" 
-                range 
-                '('Key 'Value) 
-                '( 
-                    '('"Reverse" (Bool 'true)) 
-                 ) 
-            )) 
-            (return (AsList (SetResult 'Result data))) 
-            ) 
-            )" 
-        ); 
- 
-        TValue value = TValue::Create(res.GetValue(), res.GetType()); 
-        TValue result = value["Result"]; 
-        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], false); 
-        auto list = result["List"]; 
-        ui64 expected = 204; // 205 should not be included 
-        for (ui32 i = 0; i < list.Size(); ++i) { 
-            auto key = (ui64) list[i]["Key"]; 
-            UNIT_ASSERT_VALUES_EQUAL(key, expected); 
-            if ((expected % 100) == 0) { 
-                expected -= 100; 
-                expected += TABLE_ROWS - 1; 
-            } else { 
-                --expected; 
-            } 
-        } 
-        UNIT_ASSERT_VALUES_EQUAL(expected, 5); // 5 should not have been included 
-    } 
- 
+    Y_UNIT_TEST(SelectRangeReverse) {
+        const ui32 TABLE_ROWS = 10;
+
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServer cleverServer = TServer(TServerSettings(port));
+        TFlatMsgBusClient annoyingClient(port);
+
+        annoyingClient.InitRoot();
+        annoyingClient.MkDir("/dc-1", "test");
+
+        annoyingClient.CreateTable("/dc-1/test",
+            R"(Name: "TestTable"
+                Columns { Name: "Key"   Type: "Uint64"}
+                Columns { Name: "Value" Type: "Uint64"}
+                KeyColumnNames: ["Key"]
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } }
+            )");
+
+        for (ui32 shard = 0; shard < 3; ++shard) {
+            for (ui32 i = 0; i < TABLE_ROWS; ++i) {
+                auto key = shard * 100 + i;
+
+                annoyingClient.FlatQuery(Sprintf(R"(
+                    (
+                    (let key '('('Key (Uint64 '%d)) ))
+                    (let payload '('('Value (Uint64 '%d))))
+                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload)))
+                    )
+                    )", key, i
+                ));
+            }
+        }
+
+        auto res = annoyingClient.FlatQuery(R"(
+            (
+            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let data (SelectRange
+                '"/dc-1/test/TestTable"
+                range
+                '('Key 'Value)
+                '(
+                    '('"Reverse" (Bool 'true))
+                 )
+            ))
+            (return (AsList (SetResult 'Result data)))
+            )
+            )"
+        );
+
+        TValue value = TValue::Create(res.GetValue(), res.GetType());
+        TValue result = value["Result"];
+        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], false);
+        auto list = result["List"];
+        ui64 expected = 200 + TABLE_ROWS - 1;
+        for (ui32 i = 0; i < list.Size(); ++i) {
+            auto key = (ui64) list[i]["Key"];
+            UNIT_ASSERT_VALUES_EQUAL(key, expected);
+            if ((expected % 100) == 0) {
+                expected -= 100;
+                expected += TABLE_ROWS - 1;
+            } else {
+                --expected;
+            }
+        }
+    }
+
+    Y_UNIT_TEST(SelectRangeReverseItemsLimit) {
+        const ui32 TABLE_ROWS = 10;
+
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServer cleverServer = TServer(TServerSettings(port));
+        TFlatMsgBusClient annoyingClient(port);
+
+        annoyingClient.InitRoot();
+        annoyingClient.MkDir("/dc-1", "test");
+
+        annoyingClient.CreateTable("/dc-1/test",
+            R"(Name: "TestTable"
+                Columns { Name: "Key"   Type: "Uint64"}
+                Columns { Name: "Value" Type: "Uint64"}
+                KeyColumnNames: ["Key"]
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } }
+            )");
+
+        for (ui32 shard = 0; shard < 3; ++shard) {
+            for (ui32 i = 0; i < TABLE_ROWS; ++i) {
+                auto key = shard * 100 + i;
+
+                annoyingClient.FlatQuery(Sprintf(R"(
+                    (
+                    (let key '('('Key (Uint64 '%d)) ))
+                    (let payload '('('Value (Uint64 '%d))))
+                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload)))
+                    )
+                    )", key, i
+                ));
+            }
+        }
+
+        auto res = annoyingClient.FlatQuery(Sprintf(R"(
+            (
+            (let range '('ExcFrom 'ExcTo '('Key (Null) (Void))))
+            (let data (SelectRange
+                '"/dc-1/test/TestTable"
+                range
+                '('Key 'Value)
+                '(
+                    '('"ItemsLimit" (Uint64 '%d))
+                    '('"Reverse" (Bool 'true))
+                 )
+            ))
+            (return (AsList (SetResult 'Result data)))
+            )
+            )", 5
+        ));
+
+        TValue value = TValue::Create(res.GetValue(), res.GetType());
+        TValue result = value["Result"];
+        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], true);
+        auto list = result["List"];
+        ui64 expected = 200 + TABLE_ROWS - 1;
+        for (ui32 i = 0; i < list.Size(); ++i) {
+            auto key = (ui64) list[i]["Key"];
+            UNIT_ASSERT_VALUES_EQUAL(key, expected);
+            --expected;
+        }
+    }
+
+    Y_UNIT_TEST(SelectRangeReverseIncludeKeys) {
+        const ui32 TABLE_ROWS = 10;
+
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServer cleverServer = TServer(TServerSettings(port));
+        TFlatMsgBusClient annoyingClient(port);
+
+        annoyingClient.InitRoot();
+        annoyingClient.MkDir("/dc-1", "test");
+
+        annoyingClient.CreateTable("/dc-1/test",
+            R"(Name: "TestTable"
+                Columns { Name: "Key"   Type: "Uint64"}
+                Columns { Name: "Value" Type: "Uint64"}
+                KeyColumnNames: ["Key"]
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } }
+            )");
+
+        for (ui32 shard = 0; shard < 3; ++shard) {
+            for (ui32 i = 0; i < TABLE_ROWS; ++i) {
+                auto key = shard * 100 + i;
+
+                annoyingClient.FlatQuery(Sprintf(R"(
+                    (
+                    (let key '('('Key (Uint64 '%d)) ))
+                    (let payload '('('Value (Uint64 '%d))))
+                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload)))
+                    )
+                    )", key, i
+                ));
+            }
+        }
+
+        auto res = annoyingClient.FlatQuery(R"(
+            (
+            (let range '('IncFrom 'IncTo '('Key (Uint64 '5) (Uint64 '205))))
+            (let data (SelectRange
+                '"/dc-1/test/TestTable"
+                range
+                '('Key 'Value)
+                '(
+                    '('"Reverse" (Bool 'true))
+                 )
+            ))
+            (return (AsList (SetResult 'Result data)))
+            )
+            )"
+        );
+
+        TValue value = TValue::Create(res.GetValue(), res.GetType());
+        TValue result = value["Result"];
+        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], false);
+        auto list = result["List"];
+        ui64 expected = 205; // 205 should be included
+        for (ui32 i = 0; i < list.Size(); ++i) {
+            auto key = (ui64) list[i]["Key"];
+            UNIT_ASSERT_VALUES_EQUAL(key, expected);
+            if ((expected % 100) == 0) {
+                expected -= 100;
+                expected += TABLE_ROWS - 1;
+            } else {
+                --expected;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(expected, 4); // 5 should have been included
+    }
+
+    Y_UNIT_TEST(SelectRangeReverseExcludeKeys) {
+        const ui32 TABLE_ROWS = 10;
+
+        TPortManager pm;
+        ui16 port = pm.GetPort(2134);
+        TServer cleverServer = TServer(TServerSettings(port));
+        TFlatMsgBusClient annoyingClient(port);
+
+        annoyingClient.InitRoot();
+        annoyingClient.MkDir("/dc-1", "test");
+
+        annoyingClient.CreateTable("/dc-1/test",
+            R"(Name: "TestTable"
+                Columns { Name: "Key"   Type: "Uint64"}
+                Columns { Name: "Value" Type: "Uint64"}
+                KeyColumnNames: ["Key"]
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
+                SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 200 } } } }
+            )");
+
+        for (ui32 shard = 0; shard < 3; ++shard) {
+            for (ui32 i = 0; i < TABLE_ROWS; ++i) {
+                auto key = shard * 100 + i;
+
+                annoyingClient.FlatQuery(Sprintf(R"(
+                    (
+                    (let key '('('Key (Uint64 '%d)) ))
+                    (let payload '('('Value (Uint64 '%d))))
+                    (return (AsList (UpdateRow '"/dc-1/test/TestTable" key payload)))
+                    )
+                    )", key, i
+                ));
+            }
+        }
+
+        auto res = annoyingClient.FlatQuery(R"(
+            (
+            (let range '('ExcFrom 'ExcTo '('Key (Uint64 '5) (Uint64 '205))))
+            (let data (SelectRange
+                '"/dc-1/test/TestTable"
+                range
+                '('Key 'Value)
+                '(
+                    '('"Reverse" (Bool 'true))
+                 )
+            ))
+            (return (AsList (SetResult 'Result data)))
+            )
+            )"
+        );
+
+        TValue value = TValue::Create(res.GetValue(), res.GetType());
+        TValue result = value["Result"];
+        UNIT_ASSERT_VALUES_EQUAL((bool)result["Truncated"], false);
+        auto list = result["List"];
+        ui64 expected = 204; // 205 should not be included
+        for (ui32 i = 0; i < list.Size(); ++i) {
+            auto key = (ui64) list[i]["Key"];
+            UNIT_ASSERT_VALUES_EQUAL(key, expected);
+            if ((expected % 100) == 0) {
+                expected -= 100;
+                expected += TABLE_ROWS - 1;
+            } else {
+                --expected;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(expected, 5); // 5 should not have been included
+    }
+
 }
 
 }}

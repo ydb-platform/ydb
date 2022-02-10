@@ -26,7 +26,7 @@ namespace NTabletFlatExecutor {
             ui32 Step = Max<ui32>();
             TVector<TIntrusivePtr<TBarrier>> Barriers;
             THashMap<TLogoBlobID, TSet<ui64>> Bundles;
-            TMap<ui32, ui32> Moved; 
+            TMap<ui32, ui32> Moved;
         };
 
         void Prepare(ui32 table, TSnapEdge edge)
@@ -56,18 +56,18 @@ namespace NTabletFlatExecutor {
             Holds.Bundles[bundle].insert(loaner);
         }
 
-        void Moved(ui32 src, ui32 dst) 
-        { 
-            Get(src, EReady::Done); 
-            Y_VERIFY(!Holds.Moved.contains(src), "Table moved multiple times"); 
-            Holds.Moved[src] = dst; 
-        } 
- 
+        void Moved(ui32 src, ui32 dst)
+        {
+            Get(src, EReady::Done);
+            Y_VERIFY(!Holds.Moved.contains(src), "Table moved multiple times");
+            Holds.Moved[src] = dst;
+        }
+
         void Clear()
         {
             Holds.Step = Max<ui32>();
             Holds.Bundles.clear();
-            Holds.Moved.clear(); 
+            Holds.Moved.clear();
         }
 
         TSnapEdge Edge(ui32 table)

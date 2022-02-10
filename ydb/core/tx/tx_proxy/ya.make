@@ -9,16 +9,16 @@ SRCS(
     datareq.cpp
     describe.cpp
     proxy.cpp
-    read_table_impl.cpp 
-    resolvereq.cpp 
-    snapshotreq.cpp 
-    commitreq.cpp 
+    read_table_impl.cpp
+    resolvereq.cpp
+    snapshotreq.cpp
+    commitreq.cpp
     upload_rows_common_impl.cpp
     upload_rows.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(read_table_impl.h) 
- 
+GENERATE_ENUM_SERIALIZATION(read_table_impl.h)
+
 PEERDIR(
     library/cpp/actors/core
     library/cpp/actors/helpers

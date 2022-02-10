@@ -12,7 +12,7 @@ namespace {
 bool HasKeyConflict(const TKeyDesc& aKey,
                     const TKeyDesc& bKey)
 {
-    return CheckRangesOverlap(aKey.Range, bKey.Range, aKey.KeyColumnTypes, bKey.KeyColumnTypes); 
+    return CheckRangesOverlap(aKey.Range, bKey.Range, aKey.KeyColumnTypes, bKey.KeyColumnTypes);
 }
 
 bool HasKeyConflict(const TValidatedKey& a,
@@ -24,34 +24,34 @@ bool HasKeyConflict(const TValidatedKey& a,
     const TKeyDesc& aKey = *a.Key;
     const TKeyDesc& bKey = *b.Key;
 
-    bool aLocks = TSysTables::IsLocksTable(aKey.TableId); 
-    bool bLocks = TSysTables::IsLocksTable(bKey.TableId); 
- 
-    // We must check for lock conflicts even when different table versions are used 
-    if (aLocks && bLocks) { 
-        using TLocksTable = TSysTables::TLocksTable; 
- 
-        ui64 aLockId, bLockId; 
-        Y_VERIFY(aKey.Range.Point && bKey.Range.Point, "Unexpected non-point locks table key accesses"); 
-        bool ok = TLocksTable::ExtractKey(aKey.Range.From, TLocksTable::EColumns::LockId, aLockId) && 
-                TLocksTable::ExtractKey(bKey.Range.From, TLocksTable::EColumns::LockId, bLockId); 
-        Y_VERIFY(ok, "Cannot extract LockId from locks table key accesses"); 
- 
-        // Only conflict on the same LockId 
-        return aLockId == bLockId; 
+    bool aLocks = TSysTables::IsLocksTable(aKey.TableId);
+    bool bLocks = TSysTables::IsLocksTable(bKey.TableId);
+
+    // We must check for lock conflicts even when different table versions are used
+    if (aLocks && bLocks) {
+        using TLocksTable = TSysTables::TLocksTable;
+
+        ui64 aLockId, bLockId;
+        Y_VERIFY(aKey.Range.Point && bKey.Range.Point, "Unexpected non-point locks table key accesses");
+        bool ok = TLocksTable::ExtractKey(aKey.Range.From, TLocksTable::EColumns::LockId, aLockId) &&
+                TLocksTable::ExtractKey(bKey.Range.From, TLocksTable::EColumns::LockId, bLockId);
+        Y_VERIFY(ok, "Cannot extract LockId from locks table key accesses");
+
+        // Only conflict on the same LockId
+        return aLockId == bLockId;
     }
 
-    // There is no conflict between lock and non-lock tables 
-    if (aLocks || bLocks) { 
-        return false; 
-    } 
+    // There is no conflict between lock and non-lock tables
+    if (aLocks || bLocks) {
+        return false;
+    }
 
-    // Future support for colocated tables: different tables never conflict 
-    if (Y_LIKELY(aKey.TableId.HasSamePath(bKey.TableId))) { 
-        return HasKeyConflict(aKey, bKey); 
-    } 
- 
-    return false; 
+    // Future support for colocated tables: different tables never conflict
+    if (Y_LIKELY(aKey.TableId.HasSamePath(bKey.TableId))) {
+        return HasKeyConflict(aKey, bKey);
+    }
+
+    return false;
 }
 
 }

@@ -335,8 +335,8 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
             Self->DescribeCdcStream(childPathId, childName, *entry->AddCdcStreams());
             break;
         case NKikimrSchemeOp::EPathTypeSequence:
-            Self->DescribeSequence(childPathId, childName, *entry->AddSequences()); 
-            break; 
+            Self->DescribeSequence(childPathId, childName, *entry->AddSequences());
+            break;
         default:
             Y_FAIL_S("Unexpected table's child"
                 << ": tableId# " << pathId
@@ -348,51 +348,51 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
 }
 
 void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl) {
-    const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(pathId); 
-    Y_VERIFY(storeInfo, "OlapStore not found"); 
+    const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(pathId);
+    Y_VERIFY(storeInfo, "OlapStore not found");
     Y_UNUSED(pathEl);
 
     auto description = Result->Record.MutablePathDescription()->MutableColumnStoreDescription();
-    description->CopyFrom(storeInfo->Description); 
+    description->CopyFrom(storeInfo->Description);
 
-    description->ClearColumnShards(); 
-    description->MutableColumnShards()->Reserve(storeInfo->ColumnShards.size()); 
-    for (auto& shard : storeInfo->ColumnShards) { 
+    description->ClearColumnShards();
+    description->MutableColumnShards()->Reserve(storeInfo->ColumnShards.size());
+    for (auto& shard : storeInfo->ColumnShards) {
         auto shardInfo = Self->ShardInfos.FindPtr(shard);
-        Y_VERIFY(shardInfo, "ColumnShard not found"); 
-        description->AddColumnShards(shardInfo->TabletID.GetValue()); 
+        Y_VERIFY(shardInfo, "ColumnShard not found");
+        description->AddColumnShards(shardInfo->TabletID.GetValue());
     }
-} 
+}
 
-void TPathDescriber::DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl) { 
-    const TOlapTableInfo::TPtr tableInfo = *Self->OlapTables.FindPtr(pathId); 
-    Y_VERIFY(tableInfo, "OlapTable not found"); 
-    const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(tableInfo->OlapStorePathId); 
-    Y_VERIFY(storeInfo, "OlapStore not found"); 
-    Y_UNUSED(pathEl); 
+void TPathDescriber::DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl) {
+    const TOlapTableInfo::TPtr tableInfo = *Self->OlapTables.FindPtr(pathId);
+    Y_VERIFY(tableInfo, "OlapTable not found");
+    const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(tableInfo->OlapStorePathId);
+    Y_VERIFY(storeInfo, "OlapStore not found");
+    Y_UNUSED(pathEl);
 
     auto description = Result->Record.MutablePathDescription()->MutableColumnTableDescription();
-    description->CopyFrom(tableInfo->Description); 
-    description->MutableSharding()->CopyFrom(tableInfo->Sharding); 
+    description->CopyFrom(tableInfo->Description);
+    description->MutableSharding()->CopyFrom(tableInfo->Sharding);
 
-    if (!description->HasSchema() && description->HasSchemaPresetId()) { 
-        auto& preset = storeInfo->SchemaPresets.at(description->GetSchemaPresetId()); 
-        auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.ProtoIndex); 
-        *description->MutableSchema() = presetProto.GetSchema(); 
-        if (description->HasSchemaPresetVersionAdj()) { 
-            description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj()); 
-        } 
+    if (!description->HasSchema() && description->HasSchemaPresetId()) {
+        auto& preset = storeInfo->SchemaPresets.at(description->GetSchemaPresetId());
+        auto& presetProto = storeInfo->Description.GetSchemaPresets(preset.ProtoIndex);
+        *description->MutableSchema() = presetProto.GetSchema();
+        if (description->HasSchemaPresetVersionAdj()) {
+            description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
+        }
     }
 #if 0
-    if (!description->HasTtlSettings() && description->HasTtlSettingsPresetId()) { 
-        auto& preset = storeInfo->TtlSettingsPresets.at(description->GetTtlSettingsPresetId()); 
-        auto& presetProto = storeInfo->Description.GetTtlSettingsPresets(preset.ProtoIndex); 
-        *description->MutableTtlSettings() = presetProto.GetTtlSettings(); 
-        if (description->HasTtlSettingsPresetVersionAdj()) { 
+    if (!description->HasTtlSettings() && description->HasTtlSettingsPresetId()) {
+        auto& preset = storeInfo->TtlSettingsPresets.at(description->GetTtlSettingsPresetId());
+        auto& presetProto = storeInfo->Description.GetTtlSettingsPresets(preset.ProtoIndex);
+        *description->MutableTtlSettings() = presetProto.GetTtlSettings();
+        if (description->HasTtlSettingsPresetVersionAdj()) {
             description->MutableTtlSettings()->SetVersion(
                 description->GetTtlSettings().GetVersion() + description->GetTtlSettingsPresetVersionAdj());
-        } 
-    } 
+        }
+    }
 #endif
 }
 
@@ -552,7 +552,7 @@ void TPathDescriber::DescribeSolomonVolume(TPathId pathId, TPathElement::TPtr pa
 }
 
 void TPathDescriber::DescribeUserAttributes(TPathElement::TPtr pathEl) {
-    if (!pathEl->UserAttrs->Size() && !pathEl->HasRuntimeAttrs()) { 
+    if (!pathEl->UserAttrs->Size() && !pathEl->HasRuntimeAttrs()) {
         return;
     }
 
@@ -562,7 +562,7 @@ void TPathDescriber::DescribeUserAttributes(TPathElement::TPtr pathEl) {
         attr->SetKey(item.first);
         attr->SetValue(item.second);
     }
-    pathEl->SerializeRuntimeAttrs(userAttrs); 
+    pathEl->SerializeRuntimeAttrs(userAttrs);
 }
 
 void TPathDescriber::DescribePathVersion(const TPath& path) {
@@ -630,18 +630,18 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
     diskSpaceUsage->MutableTables()->SetTotalSize(subDomainInfo->GetDiskSpaceUsage().Tables.TotalSize);
     diskSpaceUsage->MutableTables()->SetDataSize(subDomainInfo->GetDiskSpaceUsage().Tables.DataSize);
     diskSpaceUsage->MutableTables()->SetIndexSize(subDomainInfo->GetDiskSpaceUsage().Tables.IndexSize);
- 
-    if (subDomainInfo->GetDeclaredSchemeQuotas()) { 
-        entry->MutableDeclaredSchemeQuotas()->CopyFrom(*subDomainInfo->GetDeclaredSchemeQuotas()); 
-    } 
- 
-    if (const auto& databaseQuotas = subDomainInfo->GetDatabaseQuotas()) { 
-        entry->MutableDatabaseQuotas()->CopyFrom(*databaseQuotas); 
-    } 
- 
-    if (subDomainInfo->GetDiskQuotaExceeded()) { 
-        entry->MutableDomainState()->SetDiskQuotaExceeded(true); 
-    } 
+
+    if (subDomainInfo->GetDeclaredSchemeQuotas()) {
+        entry->MutableDeclaredSchemeQuotas()->CopyFrom(*subDomainInfo->GetDeclaredSchemeQuotas());
+    }
+
+    if (const auto& databaseQuotas = subDomainInfo->GetDatabaseQuotas()) {
+        entry->MutableDatabaseQuotas()->CopyFrom(*databaseQuotas);
+    }
+
+    if (subDomainInfo->GetDiskQuotaExceeded()) {
+        entry->MutableDomainState()->SetDiskQuotaExceeded(true);
+    }
 }
 
 void TPathDescriber::DescribeDomainExtra(TPathElement::TPtr pathEl) {
@@ -719,11 +719,11 @@ void TPathDescriber::DescribeKesus(TPathId pathId, TPathElement::TPtr pathEl) {
     entry->SetVersion(kesus->Version);
 }
 
-void TPathDescriber::DescribeSequence(TPathId pathId, TPathElement::TPtr pathEl) { 
-    Y_VERIFY(pathEl->IsSequence()); 
-    Self->DescribeSequence(pathId, pathEl->Name, *Result->Record.MutablePathDescription()->MutableSequenceDescription()); 
-} 
- 
+void TPathDescriber::DescribeSequence(TPathId pathId, TPathElement::TPtr pathEl) {
+    Y_VERIFY(pathEl->IsSequence());
+    Self->DescribeSequence(pathId, pathEl->Name, *Result->Record.MutablePathDescription()->MutableSequenceDescription());
+}
+
 void TPathDescriber::DescribeReplication(TPathId pathId, TPathElement::TPtr pathEl) {
     Y_VERIFY(pathEl->IsReplication());
     Self->DescribeReplication(pathId, pathEl->Name, *Result->Record.MutablePathDescription()->MutableReplicationDescription());
@@ -851,8 +851,8 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             DescribeCdcStream(path);
             break;
         case NKikimrSchemeOp::EPathTypeSequence:
-            DescribeSequence(path.Base()->PathId, path.Base()); 
-            break; 
+            DescribeSequence(path.Base()->PathId, path.Base());
+            break;
         case NKikimrSchemeOp::EPathTypeReplication:
             DescribeReplication(path.Base()->PathId, path.Base());
             break;
@@ -895,9 +895,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
 
 void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme::TTypeRegistry* typeRegistry,
                                      bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TTableDescription* entry) const
-{ 
-    THashMap<ui32, TString> familyNames; 
-    bool familyNamesBuilt = false; 
+{
+    THashMap<ui32, TString> familyNames;
+    bool familyNamesBuilt = false;
 
     entry->SetTableSchemaVersion(tableInfo->AlterVersion);
     entry->MutableColumns()->Reserve(tableInfo->Columns.size());
@@ -912,32 +912,32 @@ void TSchemeShard::DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme
         colDescr->SetTypeId(cinfo.PType);
         colDescr->SetId(cinfo.Id);
         colDescr->SetNotNull(cinfo.NotNull);
- 
-        if (cinfo.Family != 0) { 
-            colDescr->SetFamily(cinfo.Family); 
- 
-            if (!familyNamesBuilt) { 
-                for (const auto& family : tableInfo->PartitionConfig().GetColumnFamilies()) { 
-                    if (family.HasName() && family.HasId()) { 
-                        familyNames[family.GetId()] = family.GetName(); 
-                    } 
-                } 
-                familyNamesBuilt = true; 
-            } 
- 
-            auto it = familyNames.find(cinfo.Family); 
-            if (it != familyNames.end() && !it->second.empty()) { 
-                colDescr->SetFamilyName(it->second); 
-            } 
-        } 
- 
-        switch (cinfo.DefaultKind) { 
-            case ETableColumnDefaultKind::None: 
-                break; 
-            case ETableColumnDefaultKind::FromSequence: 
-                colDescr->SetDefaultFromSequence(cinfo.DefaultValue); 
-                break; 
-        } 
+
+        if (cinfo.Family != 0) {
+            colDescr->SetFamily(cinfo.Family);
+
+            if (!familyNamesBuilt) {
+                for (const auto& family : tableInfo->PartitionConfig().GetColumnFamilies()) {
+                    if (family.HasName() && family.HasId()) {
+                        familyNames[family.GetId()] = family.GetName();
+                    }
+                }
+                familyNamesBuilt = true;
+            }
+
+            auto it = familyNames.find(cinfo.Family);
+            if (it != familyNames.end() && !it->second.empty()) {
+                colDescr->SetFamilyName(it->second);
+            }
+        }
+
+        switch (cinfo.DefaultKind) {
+            case ETableColumnDefaultKind::None:
+                break;
+            case ETableColumnDefaultKind::FromSequence:
+                colDescr->SetDefaultFromSequence(cinfo.DefaultValue);
+                break;
+        }
     }
     Y_VERIFY(!tableInfo->KeyColumnIds.empty());
 
@@ -1034,37 +1034,37 @@ void TSchemeShard::DescribeCdcStream(const TPathId& pathId, const TString& name,
 
 void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name,
         NKikimrSchemeOp::TSequenceDescription& desc)
-{ 
-    auto it = Sequences.find(pathId); 
-    Y_VERIFY_S(it != Sequences.end(), "Sequence not found" 
-        << " pathId# " << pathId 
-        << " name# " << name); 
-    DescribeSequence(pathId, name, it->second, desc); 
-} 
- 
+{
+    auto it = Sequences.find(pathId);
+    Y_VERIFY_S(it != Sequences.end(), "Sequence not found"
+        << " pathId# " << pathId
+        << " name# " << name);
+    DescribeSequence(pathId, name, it->second, desc);
+}
+
 void TSchemeShard::DescribeSequence(const TPathId& pathId, const TString& name, TSequenceInfo::TPtr info,
         NKikimrSchemeOp::TSequenceDescription& desc)
-{ 
-    Y_VERIFY_S(info, "Empty sequence info" 
-        << " pathId# " << pathId 
-        << " name# " << name); 
- 
-    desc = info->Description; 
- 
-    desc.SetName(name); 
+{
+    Y_VERIFY_S(info, "Empty sequence info"
+        << " pathId# " << pathId
+        << " name# " << name);
+
+    desc = info->Description;
+
+    desc.SetName(name);
     PathIdFromPathId(pathId, desc.MutablePathId());
-    desc.SetVersion(info->AlterVersion); 
- 
-    if (info->Sharding.SequenceShardsSize() > 0) { 
-        auto lastIdx = info->Sharding.SequenceShardsSize() - 1; 
-        TShardIdx shardIdx = FromProto(info->Sharding.GetSequenceShards(lastIdx)); 
-        const auto& shardInfo = ShardInfos.at(shardIdx); 
-        if (shardInfo.TabletID != InvalidTabletId) { 
-            desc.SetSequenceShard(ui64(shardInfo.TabletID)); 
-        } 
-    } 
-} 
- 
+    desc.SetVersion(info->AlterVersion);
+
+    if (info->Sharding.SequenceShardsSize() > 0) {
+        auto lastIdx = info->Sharding.SequenceShardsSize() - 1;
+        TShardIdx shardIdx = FromProto(info->Sharding.GetSequenceShards(lastIdx));
+        const auto& shardInfo = ShardInfos.at(shardIdx);
+        if (shardInfo.TabletID != InvalidTabletId) {
+            desc.SetSequenceShard(ui64(shardInfo.TabletID));
+        }
+    }
+}
+
 void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& name,
         NKikimrSchemeOp::TReplicationDescription& desc)
 {

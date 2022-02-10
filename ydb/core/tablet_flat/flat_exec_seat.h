@@ -24,13 +24,13 @@ namespace NTabletFlatExecutor {
 
         void Describe(IOutputStream &out) const noexcept
         {
-            out << "Tx{" << UniqID << ", "; 
-            Self->Describe(out); 
-            out << "}"; 
+            out << "Tx{" << UniqID << ", ";
+            Self->Describe(out);
+            out << "}";
         }
 
-        void Complete(const TActorContext& ctx) noexcept; 
- 
+        void Complete(const TActorContext& ctx) noexcept;
+
         const ui64 UniqID = Max<ui64>();
         const TAutoPtr<ITransaction> Self;
         ui64 Retries = 0;
@@ -52,11 +52,11 @@ namespace NTabletFlatExecutor {
 
         TAutoPtr<TMemoryToken> AttachedMemory;
         TIntrusivePtr<TMemoryGCToken> CapturedMemory;
-        TVector<std::function<void()>> OnCommitted; 
+        TVector<std::function<void()>> OnCommitted;
 
         ETerminationReason TerminationReason = ETerminationReason::None;
- 
-        TSeat *NextCommitTx = nullptr; 
+
+        TSeat *NextCommitTx = nullptr;
     };
 
 

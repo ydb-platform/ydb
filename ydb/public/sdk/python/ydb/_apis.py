@@ -18,7 +18,7 @@ from ydb.public.api.grpc import ydb_operation_v1_pb2_grpc
 
 
 StatusIds = ydb_status_codes_pb2.StatusIds
-FeatureFlag = ydb_common_pb2.FeatureFlag 
+FeatureFlag = ydb_common_pb2.FeatureFlag
 primitive_types = ydb_value_pb2.Type.PrimitiveTypeId
 ydb_value = ydb_value_pb2
 ydb_scheme = ydb_scheme_pb2

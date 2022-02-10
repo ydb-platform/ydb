@@ -16,7 +16,7 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 DEPENDS(ydb/apps/ydbd)
 
 PEERDIR(
-    contrib/python/tornado/tornado-4 
+    contrib/python/tornado/tornado-4
     ydb/tests/library
     ydb/public/sdk/python/ydb
 )

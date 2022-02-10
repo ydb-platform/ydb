@@ -117,7 +117,7 @@ void ApplyPartitioning(TTxId txId,
     ui64 count = partitions.size();
     txState.Shards.reserve(count);
     for (ui64 i = 0; i < count; ++i) {
-        auto idx = ss->RegisterShardInfo(datashardInfo); 
+        auto idx = ss->RegisterShardInfo(datashardInfo);
         txState.Shards.emplace_back(idx, ETabletType::DataShard, TTxState::CreateParts);
         partitions[i].ShardIdx = idx;
     }
@@ -171,8 +171,8 @@ public:
 
         txState->ClearShardsInProgress();
 
-        const ui64 subDomainPathId = context.SS->ResolveDomainId(txState->TargetPathId).LocalPathId; 
- 
+        const ui64 subDomainPathId = context.SS->ResolveDomainId(txState->TargetPathId).LocalPathId;
+
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             TShardIdx shardIdx = txState->Shards[i].Idx;
             TTabletId datashardId = context.SS->ShardInfos[shardIdx].TabletID;
@@ -196,7 +196,7 @@ public:
             THolder<TEvDataShard::TEvProposeTransaction> event =
                 THolder(new TEvDataShard::TEvProposeTransaction(NKikimrTxDataShard::TX_KIND_SCHEME,
                                                         context.SS->TabletID(),
-                                                        subDomainPathId, 
+                                                        subDomainPathId,
                                                         context.Ctx.SelfID,
                                                         ui64(OperationId.GetTxId()),
                                                         txBody,
@@ -323,7 +323,7 @@ class TCreateTable: public TSubOperation {
     TTxState::ETxState State = TTxState::Invalid;
 
     bool AllowShadowData = false;
-    THashSet<TString> LocalSequences; 
+    THashSet<TString> LocalSequences;
 
     TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -391,10 +391,10 @@ public:
         AllowShadowData = true;
     }
 
-    void SetLocalSequences(const THashSet<TString>& localSequences) { 
-        LocalSequences = localSequences; 
-    } 
- 
+    void SetLocalSequences(const THashSet<TString>& localSequences) {
+        LocalSequences = localSequences;
+    }
+
     bool IsShadowDataAllowed() const {
         return AllowShadowData || AppData()->AllowShadowDataInSchemeShardForTests;
     }
@@ -562,29 +562,29 @@ public:
 
         TChannelsBindings channelsBinding;
 
-        bool storePerShardConfig = false; 
+        bool storePerShardConfig = false;
         NKikimrSchemeOp::TPartitionConfig perShardConfig;
- 
+
         if (context.SS->IsStorageConfigLogic(tableInfo)) {
-            TVector<TStorageRoom> storageRooms; 
-            THashMap<ui32, ui32> familyRooms; 
-            storageRooms.emplace_back(0); 
-            if (!context.SS->GetBindingsRooms(dstPath.DomainId(), tableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr)) { 
+            TVector<TStorageRoom> storageRooms;
+            THashMap<ui32, ui32> familyRooms;
+            storageRooms.emplace_back(0);
+            if (!context.SS->GetBindingsRooms(dstPath.DomainId(), tableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr)) {
                 errStr = TString("database doesn't have required storage pools to create tablet with storage config, details: ") + errStr;
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }
-            tableInfo->SetRoom(storageRooms[0]); 
- 
-            storePerShardConfig = true; 
-            for (const auto& room : storageRooms) { 
-                perShardConfig.AddStorageRooms()->CopyFrom(room); 
-            } 
-            for (const auto& familyRoom : familyRooms) { 
-                auto* protoFamily = perShardConfig.AddColumnFamilies(); 
-                protoFamily->SetId(familyRoom.first); 
-                protoFamily->SetRoom(familyRoom.second); 
-            } 
+            tableInfo->SetRoom(storageRooms[0]);
+
+            storePerShardConfig = true;
+            for (const auto& room : storageRooms) {
+                perShardConfig.AddStorageRooms()->CopyFrom(room);
+            }
+            for (const auto& familyRoom : familyRooms) {
+                auto* protoFamily = perShardConfig.AddColumnFamilies();
+                protoFamily->SetId(familyRoom.first);
+                protoFamily->SetRoom(familyRoom.second);
+            }
         } else if (context.SS->IsCompatibleChannelProfileLogic(dstPath.DomainId(), tableInfo)) {
             if (!context.SS->GetChannelsBindings(dstPath.DomainId(), tableInfo, channelsBinding, errStr)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
@@ -599,9 +599,9 @@ public:
 
         TUserAttributes::TPtr userAttrs = new TUserAttributes(1);
         const auto& userAttrsDetails = Transaction.GetAlterUserAttributes();
-        if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateTable, userAttrsDetails, errStr) || 
-            !userAttrs->CheckLimits(errStr)) 
-        { 
+        if (!userAttrs->ApplyPatch(EUserAttributesOp::CreateTable, userAttrsDetails, errStr) ||
+            !userAttrs->CheckLimits(errStr))
+        {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
@@ -655,11 +655,11 @@ public:
             const auto& bindedChannels = context.SS->ShardInfos[shard.ShardIdx].BindedChannels;
             context.SS->PersistShardMapping(db, shard.ShardIdx, InvalidTabletId, newTable->PathId, OperationId.GetTxId(), tabletType);
             context.SS->PersistChannelsBinding(db, shard.ShardIdx, bindedChannels);
- 
-            if (storePerShardConfig) { 
-                tableInfo->PerShardPartitionConfig[shard.ShardIdx].CopyFrom(perShardConfig); 
-                context.SS->PersistAddTableShardPartitionConfig(db, shard.ShardIdx, perShardConfig); 
-            } 
+
+            if (storePerShardConfig) {
+                tableInfo->PerShardPartitionConfig[shard.ShardIdx].CopyFrom(perShardConfig);
+                context.SS->PersistAddTableShardPartitionConfig(db, shard.ShardIdx, perShardConfig);
+            }
         }
 
         if (parentPath.Base()->IsDirectory() || parentPath.Base()->IsDomainRoot()) {
@@ -704,10 +704,10 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) { 
-    auto obj = MakeHolder<TCreateTable>(id, tx); 
-    obj->SetLocalSequences(localSequences); 
-    return obj.Release(); 
+ISubOperationBase::TPtr CreateNewTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
+    auto obj = MakeHolder<TCreateTable>(id, tx);
+    obj->SetLocalSequences(localSequences);
+    return obj.Release();
 }
 
 ISubOperationBase::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state) {

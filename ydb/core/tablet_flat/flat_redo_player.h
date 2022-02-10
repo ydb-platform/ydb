@@ -4,8 +4,8 @@
 #include "flat_redo_layout.h"
 #include "flat_sausage_solid.h"
 #include "util_fmt_abort.h"
-#include "util_basics.h" 
-#include "util_deref.h" 
+#include "util_basics.h"
+#include "util_deref.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -44,77 +44,77 @@ namespace NRedo {
             TReader iter(plain);
 
             while (auto chunk = iter.Next()) {
-                auto *legacy = reinterpret_cast<const TChunk_Legacy*>(chunk.data()); 
+                auto *legacy = reinterpret_cast<const TChunk_Legacy*>(chunk.data());
 
-                if (Y_LIKELY(legacy->RootId & (ui32(1) << 31))) { 
+                if (Y_LIKELY(legacy->RootId & (ui32(1) << 31))) {
                     auto *label = reinterpret_cast<const TChunk*>(chunk.data());
 
-                    Handle(label, chunk); 
-                } else { 
-                    // legacy records, required for (Evolution < 12) 
-                    HandleLegacy(legacy, chunk); 
+                    Handle(label, chunk);
+                } else {
+                    // legacy records, required for (Evolution < 12)
+                    HandleLegacy(legacy, chunk);
                 }
             }
         }
 
     private:
         void Handle(const TChunk* label, const TArrayRef<const char> chunk)
-        { 
-            switch (label->Event) { 
-                case ERedo::Noop: 
-                    return; 
-                case ERedo::Update: 
-                case ERedo::UpdateV: 
-                    return DoUpdate(chunk); 
-                case ERedo::Flush: 
-                    return DoFlush(chunk); 
-                case ERedo::Begin: 
-                    return DoBegin(chunk); 
-                case ERedo::Annex: 
-                    return DoAnnex(chunk); 
-                case ERedo::UpdateTx: 
-                    return DoUpdateTx(chunk); 
-                case ERedo::RemoveTx: 
-                    return DoRemoveTx(chunk); 
-                case ERedo::CommitTx: 
-                    return DoCommitTx(chunk); 
-                case ERedo::Erase: 
-                    // Not used in current log format 
-                    break; 
-            } 
- 
-            Y_FAIL("Unexpected rodo log chunk type"); 
-        } 
- 
+        {
+            switch (label->Event) {
+                case ERedo::Noop:
+                    return;
+                case ERedo::Update:
+                case ERedo::UpdateV:
+                    return DoUpdate(chunk);
+                case ERedo::Flush:
+                    return DoFlush(chunk);
+                case ERedo::Begin:
+                    return DoBegin(chunk);
+                case ERedo::Annex:
+                    return DoAnnex(chunk);
+                case ERedo::UpdateTx:
+                    return DoUpdateTx(chunk);
+                case ERedo::RemoveTx:
+                    return DoRemoveTx(chunk);
+                case ERedo::CommitTx:
+                    return DoCommitTx(chunk);
+                case ERedo::Erase:
+                    // Not used in current log format
+                    break;
+            }
+
+            Y_FAIL("Unexpected rodo log chunk type");
+        }
+
         void HandleLegacy(const TChunk_Legacy* label, const TArrayRef<const char> chunk)
-        { 
-            if (!Base.NeedIn(label->RootId)) { 
-                return; 
-            } 
- 
-            switch (label->Op) { 
-                case ERedo::Noop: 
-                    return; 
-                case ERedo::Update: 
-                    return DoUpdateLegacy(chunk); 
-                case ERedo::Erase: 
-                    return DoEraseLegacy(chunk); 
-                case ERedo::Flush: 
-                    return DoFlushLegacy(chunk); 
-                case ERedo::Begin: 
-                case ERedo::Annex: 
-                case ERedo::UpdateV: 
-                case ERedo::UpdateTx: 
-                case ERedo::RemoveTx: 
-                case ERedo::CommitTx: 
-                    // Not used in legacy log format 
-                    break; 
-            } 
- 
-            Y_FAIL("Unexpected rodo log legacy chunk type"); 
-        } 
- 
-    private: 
+        {
+            if (!Base.NeedIn(label->RootId)) {
+                return;
+            }
+
+            switch (label->Op) {
+                case ERedo::Noop:
+                    return;
+                case ERedo::Update:
+                    return DoUpdateLegacy(chunk);
+                case ERedo::Erase:
+                    return DoEraseLegacy(chunk);
+                case ERedo::Flush:
+                    return DoFlushLegacy(chunk);
+                case ERedo::Begin:
+                case ERedo::Annex:
+                case ERedo::UpdateV:
+                case ERedo::UpdateTx:
+                case ERedo::RemoveTx:
+                case ERedo::CommitTx:
+                    // Not used in legacy log format
+                    break;
+            }
+
+            Y_FAIL("Unexpected rodo log legacy chunk type");
+        }
+
+    private:
         void DoBegin(const TArrayRef<const char> chunk)
         {
             if (chunk.size() < sizeof(TEvBegin_v0)) {
@@ -151,7 +151,7 @@ namespace NRedo {
             auto *ev = reinterpret_cast<const TEvFlush*>(chunk.begin());
 
             if (Base.NeedIn(ev->Table))
-                Base.DoFlush(ev->Table, ev->Stamp, TEpoch(ev->Epoch)); 
+                Base.DoFlush(ev->Table, ev->Stamp, TEpoch(ev->Epoch));
         }
 
         void DoUpdate(const TArrayRef<const char> chunk)
@@ -161,60 +161,60 @@ namespace NRedo {
             if (Base.NeedIn(ev->Table)) {
                 const char *buf = chunk.begin() + sizeof(*ev);
 
-                TRowVersion rowVersion; 
-                if (ev->Label.Event == ERedo::UpdateV) { 
-                    auto *v = reinterpret_cast<const TEvUpdateV*>(buf); 
-                    rowVersion.Step = v->RowVersionStep; 
-                    rowVersion.TxId = v->RowVersionTxId; 
-                    buf += sizeof(*v); 
-                } else { 
-                    rowVersion = TRowVersion::Min(); 
-                } 
- 
+                TRowVersion rowVersion;
+                if (ev->Label.Event == ERedo::UpdateV) {
+                    auto *v = reinterpret_cast<const TEvUpdateV*>(buf);
+                    rowVersion.Step = v->RowVersionStep;
+                    rowVersion.TxId = v->RowVersionTxId;
+                    buf += sizeof(*v);
+                } else {
+                    rowVersion = TRowVersion::Min();
+                }
+
                 buf += ReadKey(buf, chunk.end() - buf, ev->Keys);
                 buf += ReadOps(buf, chunk.end() - buf, ev->Ops);
 
-                Base.DoUpdate(ev->Table, ev->Rop, KeyVec, OpsVec, rowVersion); 
+                Base.DoUpdate(ev->Table, ev->Rop, KeyVec, OpsVec, rowVersion);
             }
         }
 
         void DoUpdateTx(const TArrayRef<const char> chunk)
-        { 
-            auto *ev = reinterpret_cast<const TEvUpdate*>(chunk.data()); 
- 
-            if (Base.NeedIn(ev->Table)) { 
-                const char *buf = chunk.begin() + sizeof(*ev); 
- 
-                auto *v = reinterpret_cast<const TEvUpdateTx*>(buf); 
-                buf += sizeof(*v); 
- 
-                buf += ReadKey(buf, chunk.end() - buf, ev->Keys); 
-                buf += ReadOps(buf, chunk.end() - buf, ev->Ops); 
- 
-                Base.DoUpdateTx(ev->Table, ev->Rop, KeyVec, OpsVec, v->TxId); 
-            } 
-        } 
- 
+        {
+            auto *ev = reinterpret_cast<const TEvUpdate*>(chunk.data());
+
+            if (Base.NeedIn(ev->Table)) {
+                const char *buf = chunk.begin() + sizeof(*ev);
+
+                auto *v = reinterpret_cast<const TEvUpdateTx*>(buf);
+                buf += sizeof(*v);
+
+                buf += ReadKey(buf, chunk.end() - buf, ev->Keys);
+                buf += ReadOps(buf, chunk.end() - buf, ev->Ops);
+
+                Base.DoUpdateTx(ev->Table, ev->Rop, KeyVec, OpsVec, v->TxId);
+            }
+        }
+
         void DoCommitTx(const TArrayRef<const char> chunk)
-        { 
-            auto *ev = reinterpret_cast<const TEvCommitTx*>(chunk.data()); 
- 
-            if (Base.NeedIn(ev->Table)) { 
-                TRowVersion rowVersion(ev->RowVersionStep, ev->RowVersionTxId); 
- 
-                Base.DoCommitTx(ev->Table, ev->TxId, rowVersion); 
-            } 
-        } 
- 
+        {
+            auto *ev = reinterpret_cast<const TEvCommitTx*>(chunk.data());
+
+            if (Base.NeedIn(ev->Table)) {
+                TRowVersion rowVersion(ev->RowVersionStep, ev->RowVersionTxId);
+
+                Base.DoCommitTx(ev->Table, ev->TxId, rowVersion);
+            }
+        }
+
         void DoRemoveTx(const TArrayRef<const char> chunk)
-        { 
-            auto *ev = reinterpret_cast<const TEvRemoveTx*>(chunk.data()); 
- 
-            if (Base.NeedIn(ev->Table)) { 
-                Base.DoRemoveTx(ev->Table, ev->TxId); 
-            } 
-        } 
- 
+        {
+            auto *ev = reinterpret_cast<const TEvRemoveTx*>(chunk.data());
+
+            if (Base.NeedIn(ev->Table)) {
+                Base.DoRemoveTx(ev->Table, ev->TxId);
+            }
+        }
+
         void DoUpdateLegacy(const TArrayRef<const char> chunk)
         {
             const char *buf = chunk.begin();
@@ -242,7 +242,7 @@ namespace NRedo {
 
             auto *op = reinterpret_cast<const TEvFlush_Legacy*>(chunk.begin());
 
-            Base.DoFlush(op->Hdr.RootId, op->TxStamp, TEpoch(op->Epoch)); 
+            Base.DoFlush(op->Hdr.RootId, op->TxStamp, TEpoch(op->Epoch));
         }
 
         ui32 ReadKey(const char* buf, ui32 maxSz, ui32 count)

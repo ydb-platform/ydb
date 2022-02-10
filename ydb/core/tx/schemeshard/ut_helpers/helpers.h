@@ -34,20 +34,20 @@ namespace NSchemeShardUT_Private {
 
     ////////// tablet
     NKikimrProto::EReplyStatus LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query, NKikimrMiniKQL::TResult& result, TString& err);
-    NKikimrMiniKQL::TResult LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query); 
+    NKikimrMiniKQL::TResult LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query);
     NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId, const TString& schemeChangesStr, bool dryRun, NTabletFlatScheme::TSchemeChanges& scheme, TString& err);
 
-    bool CheckLocalRowExists(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn, ui64 keyValue); 
- 
-    ////////// describe options 
+    bool CheckLocalRowExists(TTestActorRuntime& runtime, ui64 tabletId, const TString& tableName, const TString& keyColumn, ui64 keyValue);
+
+    ////////// describe options
     struct TDescribeOptionsBuilder : public NKikimrSchemeOp::TDescribeOptions {
-        TDescribeOptionsBuilder& SetReturnPartitioningInfo(bool value) { TDescribeOptions::SetReturnPartitioningInfo(value); return *this; } 
-        TDescribeOptionsBuilder& SetReturnPartitionConfig(bool value) { TDescribeOptions::SetReturnPartitionConfig(value); return *this; } 
-        TDescribeOptionsBuilder& SetBackupInfo(bool value) { TDescribeOptions::SetBackupInfo(value); return *this; } 
-        TDescribeOptionsBuilder& SetReturnBoundaries(bool value) { TDescribeOptions::SetReturnBoundaries(value); return *this; } 
-        TDescribeOptionsBuilder& SetShowPrivateTable(bool value) { TDescribeOptions::SetShowPrivateTable(value); return *this; } 
-    }; 
- 
+        TDescribeOptionsBuilder& SetReturnPartitioningInfo(bool value) { TDescribeOptions::SetReturnPartitioningInfo(value); return *this; }
+        TDescribeOptionsBuilder& SetReturnPartitionConfig(bool value) { TDescribeOptions::SetReturnPartitionConfig(value); return *this; }
+        TDescribeOptionsBuilder& SetBackupInfo(bool value) { TDescribeOptions::SetBackupInfo(value); return *this; }
+        TDescribeOptionsBuilder& SetReturnBoundaries(bool value) { TDescribeOptions::SetReturnBoundaries(value); return *this; }
+        TDescribeOptionsBuilder& SetShowPrivateTable(bool value) { TDescribeOptions::SetShowPrivateTable(value); return *this; }
+    };
+
     ////////// describe
     NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, ui64 schemeShard, const TString& path, const NKikimrSchemeOp::TDescribeOptions& opts);
     NKikimrScheme::TEvDescribeSchemeResult DescribePath(TTestActorRuntime& runtime, const TString& path, const NKikimrSchemeOp::TDescribeOptions& opts);
@@ -61,7 +61,7 @@ namespace NSchemeShardUT_Private {
     TString TestDescribe(TTestActorRuntime& runtime, const TString& path);
     TString TestLs(TTestActorRuntime& runtime, const TString& path, bool returnPartitioningInfo = false, NLs::TCheckFunc check = nullptr);
     TString TestLs(TTestActorRuntime& runtime, const TString& path, const NKikimrSchemeOp::TDescribeOptions& opts, NLs::TCheckFunc check = nullptr);
-    TString TestLsPathId(TTestActorRuntime& runtime, ui64 pathId, NLs::TCheckFunc check = nullptr); 
+    TString TestLsPathId(TTestActorRuntime& runtime, ui64 pathId, NLs::TCheckFunc check = nullptr);
 
     ////////// modification results
     void CheckExpected(const TVector<TEvSchemeShard::EStatus>& expected, TEvSchemeShard::EStatus result, const TString& reason);
@@ -391,13 +391,13 @@ namespace NSchemeShardUT_Private {
         const TVector<TString>& tables,
         TDuration timeout);
 
-    TPathId TestFindTabletSubDomainPathId( 
-        TTestActorRuntime& runtime, ui64 tabletId, 
+    TPathId TestFindTabletSubDomainPathId(
+        TTestActorRuntime& runtime, ui64 tabletId,
         NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
-    TPathId TestFindTabletSubDomainPathId( 
-        TTestActorRuntime& runtime, ui64 schemeShard, ui64 tabletId, 
+    TPathId TestFindTabletSubDomainPathId(
+        TTestActorRuntime& runtime, ui64 schemeShard, ui64 tabletId,
         NKikimrScheme::TEvFindTabletSubDomainPathIdResult::EStatus expected = NKikimrScheme::TEvFindTabletSubDomainPathIdResult::SUCCESS);
- 
+
     // Login
     TEvTx* CreateAlterLoginCreateUser(ui64 txId, const TString& user, const TString& password);
     NKikimrScheme::TEvLoginResult Login(TTestActorRuntime& runtime, const TString& user, const TString& password);

@@ -90,7 +90,7 @@
   - mutex
   - new
   - numeric
-  - optional 
+  - optional
   - ostream
   - queue
   - random
@@ -118,7 +118,7 @@
   - use_ansi.h
   - utility
   - valarray
-  - variant 
+  - variant
   - vector
   - unwind.h:
     - contrib/libs/libunwind/include/unwind.h

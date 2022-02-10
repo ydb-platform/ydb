@@ -4,7 +4,7 @@
 
 #include <util/generic/noncopyable.h>
 
-#include <cstddef>
+#include <cstddef> 
 
 struct TLogRecord;
 
@@ -25,6 +25,6 @@ public:
     virtual ELogPriority FiltrationLevel() const;
 
     static void ReopenAllBackends(bool flush = true);
-
-    virtual size_t QueueSize() const;
+ 
+    virtual size_t QueueSize() const; 
 };

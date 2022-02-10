@@ -450,7 +450,7 @@ void TThread::SetCurrentThreadName(const char* name) {
 
 #if defined(_freebsd_)
     pthread_t thread = pthread_self();
-    pthread_set_name_np(thread, name);
+    pthread_set_name_np(thread, name); 
 #elif defined(_linux_)
     prctl(PR_SET_NAME, name, 0, 0, 0);
 #elif defined(_darwin_)

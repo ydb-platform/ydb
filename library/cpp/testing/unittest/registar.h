@@ -136,13 +136,13 @@ namespace NUnitTest {
         virtual bool CheckAccessTest(TString /*suite*/, const char* /*name*/);
 
         virtual void Run(std::function<void()> f, const TString& /*suite*/, const char* /*name*/, bool /*forceFork*/);
-
-        // This process is forked for current test
+ 
+        // This process is forked for current test 
         virtual bool GetIsForked() const;
 
-        // --fork-tests is set (warning: this may be false, but never the less test will be forked if called inside UNIT_FORKED_TEST)
+        // --fork-tests is set (warning: this may be false, but never the less test will be forked if called inside UNIT_FORKED_TEST) 
         virtual bool GetForkTests() const;
-
+ 
     private:
         virtual void OnStart();
 
@@ -236,7 +236,7 @@ namespace NUnitTest {
         void AfterTest();
 
         bool GetIsForked() const;
-
+ 
         bool GetForkTests() const;
 
         ITestSuiteProcessor* Processor() const noexcept;
@@ -290,11 +290,11 @@ private:                                                   \
 #endif
 
 #define UNIT_TEST_CHECK_TEST_IS_DECLARED_ONLY_ONCE(F)                                       \
-    /* If you see this message - delete multiple UNIT_TEST(TestName) with same TestName. */ \
+    /* If you see this message - delete multiple UNIT_TEST(TestName) with same TestName. */ \ 
     /* It's forbidden to declare same test twice because it breaks --fork-tests logic.  */  \
     int You_have_declared_test_##F##_multiple_times_This_is_forbidden;                      \
     Y_UNUSED(You_have_declared_test_##F##_multiple_times_This_is_forbidden);
-
+ 
 #define UNIT_TEST_RUN(F, FF, context)                                                             \
     this->BeforeTest((#F));                                                                       \
     {                                                                                             \
@@ -306,7 +306,7 @@ private:                                                   \
         };                                                                                        \
         this->TTestBase::Run(std::bind(&T##F##Caller::X, this, context), StaticName(), (#F), FF); \
     }
-
+ 
 #define UNIT_TEST_IMPL(F, FF)                                          \
     UNIT_TEST_CHECK_TEST_IS_DECLARED_ONLY_ONCE(F) {                    \
         NUnitTest::TTestContext context(this->TTestBase::Processor()); \
@@ -325,10 +325,10 @@ private:                                                   \
         }                                                              \
     }
 
-#define UNIT_TEST(F) UNIT_TEST_IMPL(F, false)
+#define UNIT_TEST(F) UNIT_TEST_IMPL(F, false) 
 
-#define UNIT_FORKED_TEST(F) UNIT_TEST_IMPL(F, true)
-
+#define UNIT_FORKED_TEST(F) UNIT_TEST_IMPL(F, true) 
+ 
 #define UNIT_TEST_EXCEPTION(F, E)                                                                                      \
     /* main process with "--fork-tests" flag treats exceptions as errors - it's result of forked test run */           \
     if (this->GetForkTests() && !this->GetIsForked()) {                                                                \
@@ -811,7 +811,7 @@ public:                       \
             , ForceFork_(forceFork)
         {
         }
-
+ 
         virtual ~TBaseTestCase() = default;
 
         // Each test case is executed in 3 steps:
@@ -837,7 +837,7 @@ public:                       \
         std::function<void(TTestContext&)> Body_;
         bool ForceFork_;
     };
-
+ 
     using TBaseFixture = TBaseTestCase;
 
     // Class for checking that code raises unittest failure
@@ -1014,7 +1014,7 @@ public:                       \
 #define Y_UNIT_TEST(N) Y_UNIT_TEST_IMPL(N, false, TCurrentTestCase)
 #define Y_UNIT_TEST_F(N, F) Y_UNIT_TEST_IMPL(N, false, F)
 #define SIMPLE_UNIT_FORKED_TEST(N) Y_UNIT_TEST_IMPL(N, true, TCurrentTestCase)
-
+ 
 #define Y_UNIT_TEST_SUITE_IMPLEMENTATION(N) \
     namespace NTestSuite##N
 

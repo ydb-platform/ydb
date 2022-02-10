@@ -88,42 +88,42 @@ static bool GetDigit(const char c, ui32& digit) {
 }
 
 bool GetGuid(const TStringBuf s, TGUID& result) {
-    size_t partId = 0;
-    ui64 partValue = 0;
-    bool isEmptyPart = true;
+    size_t partId = 0; 
+    ui64 partValue = 0; 
+    bool isEmptyPart = true; 
 
-    for (size_t i = 0; i != s.size(); ++i) {
-        const char c = s[i];
-
-        if (c == '-') {
+    for (size_t i = 0; i != s.size(); ++i) { 
+        const char c = s[i]; 
+ 
+        if (c == '-') { 
             if (isEmptyPart || partId == 3) { // x-y--z, -x-y-z or x-y-z-m-...
                 return false;
-            }
-            result.dw[partId] = static_cast<ui32>(partValue);
-            ++partId;
-            partValue = 0;
-            isEmptyPart = true;
-            continue;
-        }
-
-        ui32 digit = 0;
+            } 
+            result.dw[partId] = static_cast<ui32>(partValue); 
+            ++partId; 
+            partValue = 0; 
+            isEmptyPart = true; 
+            continue; 
+        } 
+ 
+        ui32 digit = 0; 
         if (!GetDigit(c, digit)) {
             return false;
-        }
-
-        partValue = partValue * 16 + digit;
-        isEmptyPart = false;
-
-        // overflow check
+        } 
+ 
+        partValue = partValue * 16 + digit; 
+        isEmptyPart = false; 
+ 
+        // overflow check 
         if (partValue > Max<ui32>()) {
             return false;
-        }
-    }
-
+        } 
+    } 
+ 
     if (partId != 3 || isEmptyPart) { // x-y or x-y-z-
         return false;
-    }
-    result.dw[partId] = static_cast<ui32>(partValue);
+    } 
+    result.dw[partId] = static_cast<ui32>(partValue); 
     return true;
 }
 

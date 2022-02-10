@@ -78,7 +78,7 @@ private:
 #if (!defined(_MSC_VER))
         // In MSVC __has_trivial_copy returns false to enums, primitive types and arrays.
         static_assert(__has_trivial_copy(T), "Class is nontrivial copyable, you must define operator&, see");
-#endif
+#endif 
         DataChunk(p, sizeof(T));
     }
 

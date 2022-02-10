@@ -1,5 +1,5 @@
-LIBRARY()
-
+LIBRARY() 
+ 
 LICENSE(Apache-2.0)
 
 VERSION(1.0)
@@ -13,10 +13,10 @@ OWNER(
 
 NO_UTIL()
 
-NO_COMPILER_WARNINGS()
+NO_COMPILER_WARNINGS() 
 
 NO_JOIN_SRC()
-
+ 
 IF (GCC AND USE_LTO)
     CFLAGS(-DCRCUTIL_FORCE_ASM_CRC32C=1)
 ENDIF()
@@ -61,10 +61,10 @@ IF (ARCH_I386 OR ARCH_X86_64)
         SRC_CPP_SSE4(crc32c_sse4.cc)
     ENDIF()
 ENDIF()
-
-SRCS(
-    interface.cc
-    multiword_64_64_intrinsic_i386_mmx.cc
-)
-
-END()
+ 
+SRCS( 
+    interface.cc 
+    multiword_64_64_intrinsic_i386_mmx.cc 
+) 
+ 
+END() 

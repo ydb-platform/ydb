@@ -14,23 +14,23 @@ namespace NHPTimer {
     double GetClockRate() noexcept;
     // same as GetClockRate, but in integer
     ui64 GetCyclesPerSecond() noexcept;
-}
-
-struct THPTimer {
+} 
+ 
+struct THPTimer { 
     THPTimer() noexcept {
-        Reset();
-    }
+        Reset(); 
+    } 
     void Reset() noexcept {
-        NHPTimer::GetTime(&Start);
-    }
+        NHPTimer::GetTime(&Start); 
+    } 
     double Passed() const noexcept {
-        NHPTimer::STime tmp = Start;
-        return NHPTimer::GetTimePassed(&tmp);
-    }
+        NHPTimer::STime tmp = Start; 
+        return NHPTimer::GetTimePassed(&tmp); 
+    } 
     double PassedReset() noexcept {
-        return NHPTimer::GetTimePassed(&Start);
-    }
+        return NHPTimer::GetTimePassed(&Start); 
+    } 
 
-private:
-    NHPTimer::STime Start;
+private: 
+    NHPTimer::STime Start; 
 };

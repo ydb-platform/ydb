@@ -131,9 +131,9 @@ public:
     }
 #endif
 
-    // class name of derived class
-    virtual const char* GetClassName() const = 0;
-
+    // class name of derived class 
+    virtual const char* GetClassName() const = 0; 
+ 
     ui32 IsRefInvalid() const {
         return (ObjData & 0x80000000);
     }
@@ -313,7 +313,7 @@ public:
     const char* GetClassName() const {
         return ptr->GetClassName();
     }
-
+ 
     // assignment operators
     TPtrBase& operator=(TUserObj* _ptr) {
         Set(_ptr);

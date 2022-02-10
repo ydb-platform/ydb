@@ -354,7 +354,7 @@ private:
     /**
      * private construct from microseconds since epoch
      */
-    constexpr explicit TInstant(TValue value) noexcept
+    constexpr explicit TInstant(TValue value) noexcept 
         : TBase(value)
     {
     }
@@ -363,7 +363,7 @@ public:
     constexpr TInstant() noexcept {
     }
 
-    constexpr TInstant(const struct timeval& tv) noexcept
+    constexpr TInstant(const struct timeval& tv) noexcept 
         : TBase(tv)
     {
     }

@@ -6,7 +6,7 @@
 
 #include <deque>
 #include <memory>
-#include <initializer_list>
+#include <initializer_list> 
 
 template <class T, class A>
 class TDeque: public std::deque<T, TReboundAllocator<A, T>> {

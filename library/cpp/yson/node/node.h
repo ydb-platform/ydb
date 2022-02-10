@@ -1,9 +1,9 @@
 #pragma once
 
-#include <util/generic/bt_exception.h>
+#include <util/generic/bt_exception.h> 
 #include <util/generic/cast.h>
 #include <util/generic/hash.h>
-#include <util/generic/variant.h>
+#include <util/generic/variant.h> 
 #include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 #include <util/generic/ylimits.h>
@@ -31,57 +31,57 @@ public:
     { };
 
     enum EType {
-        Undefined = 0   /*"undefined"*/,
-
-        // NOTE: string representation of all node types
-        // are compatible with server node type (except `Undefined' which is missing on server).
-        String = 1  /*"string_node"*/,
-        Int64 = 2   /*"int64_node"*/,
-        Uint64 = 3  /*"uint64_node"*/,
-        Double = 4  /*"double_node"*/,
-        Bool = 5    /*"boolean_node"*/,
-        List = 6    /*"list_node"*/,
-        Map = 7     /*"map_node"*/,
-        Null = 8    /*"null"*/,
+        Undefined = 0   /*"undefined"*/, 
+ 
+        // NOTE: string representation of all node types 
+        // are compatible with server node type (except `Undefined' which is missing on server). 
+        String = 1  /*"string_node"*/, 
+        Int64 = 2   /*"int64_node"*/, 
+        Uint64 = 3  /*"uint64_node"*/, 
+        Double = 4  /*"double_node"*/, 
+        Bool = 5    /*"boolean_node"*/, 
+        List = 6    /*"list_node"*/, 
+        Map = 7     /*"map_node"*/, 
+        Null = 8    /*"null"*/, 
     };
 
     using TListType = TVector<TNode>;
     using TMapType = THashMap<TString, TNode>;
 
-private:
-    struct TNull {
-        bool operator==(const TNull&) const;
-    };
+private: 
+    struct TNull { 
+        bool operator==(const TNull&) const; 
+    }; 
 
-    struct TUndefined {
-        bool operator==(const TUndefined&) const;
-    };
+    struct TUndefined { 
+        bool operator==(const TUndefined&) const; 
+    }; 
 
     using TValue = std::variant<
-        bool,
-        i64,
-        ui64,
-        double,
+        bool, 
+        i64, 
+        ui64, 
+        double, 
         TString,
         TListType,
         TMapType,
-        TNull,
-        TUndefined
-        >;
+        TNull, 
+        TUndefined 
+        >; 
 
-public:
+public: 
 
-    TNode();
-    TNode(const char* s);
+    TNode(); 
+    TNode(const char* s); 
     TNode(TStringBuf s);
     explicit TNode(std::string_view s);
     explicit TNode(const std::string& s);
     TNode(TString s);
-    TNode(int i);
+    TNode(int i); 
 
     //this case made speccially for prevent mess cast of EType into TNode through TNode(int) constructor
-    //usual case of error SomeNode == TNode::Undefined <-- SomeNode indeed will be compared with TNode(0) without this method
-    //correct way is SomeNode.GetType() == TNode::Undefined
+    //usual case of error SomeNode == TNode::Undefined <-- SomeNode indeed will be compared with TNode(0) without this method 
+    //correct way is SomeNode.GetType() == TNode::Undefined 
     template<class T = EType>
     Y_FORCE_INLINE TNode(EType)
     {
@@ -94,37 +94,37 @@ public:
         static_assert(!std::is_same<T,T>::value, "looks like a mistake, and pointer have converted to bool");
     }
 
-    TNode(unsigned int ui);
-    TNode(long i);
-    TNode(unsigned long ui);
-    TNode(long long i);
-    TNode(unsigned long long ui);
-    TNode(double d);
-    TNode(bool b);
+    TNode(unsigned int ui); 
+    TNode(long i); 
+    TNode(unsigned long ui); 
+    TNode(long long i); 
+    TNode(unsigned long long ui); 
+    TNode(double d); 
+    TNode(bool b); 
     TNode(TMapType map);
 
-    TNode(const TNode& rhs);
-    TNode& operator=(const TNode& rhs);
+    TNode(const TNode& rhs); 
+    TNode& operator=(const TNode& rhs); 
 
     TNode(TNode&& rhs) noexcept;
     TNode& operator=(TNode&& rhs) noexcept;
 
-    ~TNode();
+    ~TNode(); 
 
-    void Clear();
+    void Clear(); 
 
-    bool IsString() const;
-    bool IsInt64() const;
-    bool IsUint64() const;
-    bool IsDouble() const;
-    bool IsBool() const;
-    bool IsList() const;
-    bool IsMap() const;
-
-    // `IsEntity' is deprecated use `IsNull' instead.
-    bool IsEntity() const;
-    bool IsNull() const;
-    bool IsUndefined() const;
+    bool IsString() const; 
+    bool IsInt64() const; 
+    bool IsUint64() const; 
+    bool IsDouble() const; 
+    bool IsBool() const; 
+    bool IsList() const; 
+    bool IsMap() const; 
+ 
+    // `IsEntity' is deprecated use `IsNull' instead. 
+    bool IsEntity() const; 
+    bool IsNull() const; 
+    bool IsUndefined() const; 
     // Returns true if TNode is neither Null, nor Undefined
     bool HasValue() const;
 
@@ -134,16 +134,16 @@ public:
     // Int64, Uint64, Double, or Bool
     bool IsArithmetic() const;
 
-    bool Empty() const;
-    size_t Size() const;
+    bool Empty() const; 
+    size_t Size() const; 
 
-    EType GetType() const;
+    EType GetType() const; 
 
     const TString& AsString() const;
-    i64 AsInt64() const;
-    ui64 AsUint64() const;
-    double AsDouble() const;
-    bool AsBool() const;
+    i64 AsInt64() const; 
+    ui64 AsUint64() const; 
+    double AsDouble() const; 
+    bool AsBool() const; 
     const TListType& AsList() const;
     const TMapType& AsMap() const;
     TListType& AsList();
@@ -175,14 +175,14 @@ public:
     template<typename T>
     const T& As() const;
 
-    static TNode CreateList();
-    static TNode CreateList(TListType list);
-    static TNode CreateMap();
-    static TNode CreateMap(TMapType map);
-    static TNode CreateEntity();
+    static TNode CreateList(); 
+    static TNode CreateList(TListType list); 
+    static TNode CreateMap(); 
+    static TNode CreateMap(TMapType map); 
+    static TNode CreateEntity(); 
 
-    const TNode& operator[](size_t index) const;
-    TNode& operator[](size_t index);
+    const TNode& operator[](size_t index) const; 
+    TNode& operator[](size_t index); 
     const TNode& At(size_t index) const;
     TNode& At(size_t index);
 
@@ -193,15 +193,15 @@ public:
     TNode& Add(TNode&& node) &;
     TNode Add(TNode&& node) &&;
 
-    bool HasKey(const TStringBuf key) const;
-
+    bool HasKey(const TStringBuf key) const; 
+ 
     TNode& operator()(const TString& key, const TNode& value) &;
     TNode operator()(const TString& key, const TNode& value) &&;
     TNode& operator()(const TString& key, TNode&& value) &;
     TNode operator()(const TString& key, TNode&& value) &&;
 
-    const TNode& operator[](const TStringBuf key) const;
-    TNode& operator[](const TStringBuf key);
+    const TNode& operator[](const TStringBuf key) const; 
+    TNode& operator[](const TStringBuf key); 
     const TNode& At(const TStringBuf key) const;
     TNode& At(const TStringBuf key);
 
@@ -255,40 +255,40 @@ public:
 
 
     // attributes
-    bool HasAttributes() const;
-    void ClearAttributes();
-    const TNode& GetAttributes() const;
-    TNode& Attributes();
+    bool HasAttributes() const; 
+    void ClearAttributes(); 
+    const TNode& GetAttributes() const; 
+    TNode& Attributes(); 
 
-    void MoveWithoutAttributes(TNode&& rhs);
+    void MoveWithoutAttributes(TNode&& rhs); 
 
-    // Serialize TNode using binary yson format.
-    // Methods for ysaveload.
+    // Serialize TNode using binary yson format. 
+    // Methods for ysaveload. 
     void Save(IOutputStream* output) const;
     void Load(IInputStream* input);
+ 
+private:
+    void Move(TNode&& rhs); 
+
+    void CheckType(EType type) const; 
+
+    void AssureMap(); 
+    void AssureList(); 
+
+    void CreateAttributes(); 
 
 private:
-    void Move(TNode&& rhs);
-
-    void CheckType(EType type) const;
-
-    void AssureMap();
-    void AssureList();
-
-    void CreateAttributes();
-
-private:
-    TValue Value_;
-    THolder<TNode> Attributes_;
+    TValue Value_; 
+    THolder<TNode> Attributes_; 
 
     friend bool operator==(const TNode& lhs, const TNode& rhs);
     friend bool operator!=(const TNode& lhs, const TNode& rhs);
 };
 
-bool operator==(const TNode& lhs, const TNode& rhs);
-bool operator!=(const TNode& lhs, const TNode& rhs);
+bool operator==(const TNode& lhs, const TNode& rhs); 
+bool operator!=(const TNode& lhs, const TNode& rhs); 
 
-bool GetBool(const TNode& node);
+bool GetBool(const TNode& node); 
 
 inline bool TNode::IsArithmetic() const {
     return IsInt64() || IsUint64() || IsDouble() || IsBool();
@@ -344,20 +344,20 @@ inline T TNode::ConvertTo() const {
 template<>
 inline TString TNode::ConvertTo<TString>() const {
     switch (GetType()) {
-        case NYT::TNode::String:
+        case NYT::TNode::String: 
             return AsString();
-        case NYT::TNode::Int64:
+        case NYT::TNode::Int64: 
             return ::ToString(AsInt64());
-        case NYT::TNode::Uint64:
+        case NYT::TNode::Uint64: 
             return ::ToString(AsUint64());
-        case NYT::TNode::Double:
+        case NYT::TNode::Double: 
             return ::ToString(AsDouble());
-        case NYT::TNode::Bool:
+        case NYT::TNode::Bool: 
             return ::ToString(AsBool());
-        case NYT::TNode::List:
-        case NYT::TNode::Map:
-        case NYT::TNode::Null:
-        case NYT::TNode::Undefined:
+        case NYT::TNode::List: 
+        case NYT::TNode::Map: 
+        case NYT::TNode::Null: 
+        case NYT::TNode::Undefined: 
             ythrow TTypeError() << "ConvertTo<TString>() called for type " << GetType();
     }
     Y_UNREACHABLE();
@@ -366,20 +366,20 @@ inline TString TNode::ConvertTo<TString>() const {
 template<>
 inline double TNode::ConvertTo<double>() const {
     switch (GetType()) {
-        case NYT::TNode::String:
+        case NYT::TNode::String: 
             return ::FromString(AsString());
-        case NYT::TNode::Int64:
+        case NYT::TNode::Int64: 
             return AsInt64();
-        case NYT::TNode::Uint64:
+        case NYT::TNode::Uint64: 
             return AsUint64();
-        case NYT::TNode::Double:
+        case NYT::TNode::Double: 
             return AsDouble();
-        case NYT::TNode::Bool:
+        case NYT::TNode::Bool: 
             return AsBool();
-        case NYT::TNode::List:
-        case NYT::TNode::Map:
-        case NYT::TNode::Null:
-        case NYT::TNode::Undefined:
+        case NYT::TNode::List: 
+        case NYT::TNode::Map: 
+        case NYT::TNode::Null: 
+        case NYT::TNode::Undefined: 
             ythrow TTypeError() << "ConvertTo<double>() called for type " << GetType();
     }
 }
@@ -387,20 +387,20 @@ inline double TNode::ConvertTo<double>() const {
 template<>
 inline bool TNode::ConvertTo<bool>() const {
     switch (GetType()) {
-        case NYT::TNode::String:
+        case NYT::TNode::String: 
             return ::FromString(AsString());
-        case NYT::TNode::Int64:
+        case NYT::TNode::Int64: 
             return AsInt64();
-        case NYT::TNode::Uint64:
+        case NYT::TNode::Uint64: 
             return AsUint64();
-        case NYT::TNode::Double:
+        case NYT::TNode::Double: 
             return AsDouble();
-        case NYT::TNode::Bool:
+        case NYT::TNode::Bool: 
             return AsBool();
-        case NYT::TNode::List:
-        case NYT::TNode::Map:
-        case NYT::TNode::Null:
-        case NYT::TNode::Undefined:
+        case NYT::TNode::List: 
+        case NYT::TNode::Map: 
+        case NYT::TNode::Null: 
+        case NYT::TNode::Undefined: 
             ythrow TTypeError() << "ConvertTo<bool>() called for type " << GetType();
     }
 }

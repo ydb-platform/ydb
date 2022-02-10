@@ -59,10 +59,10 @@ void TDequeTest::TestConstructorsAndAssignments() {
     UNIT_ASSERT_VALUES_EQUAL(0, c2.size());
     UNIT_ASSERT_VALUES_EQUAL(4, c3.size());
     UNIT_ASSERT_VALUES_EQUAL(400, c3.at(3));
-
-    int array[] = {2, 3, 4};
-    container c4 = {2, 3, 4};
-    UNIT_ASSERT_VALUES_EQUAL(c4, container(std::begin(array), std::end(array)));
+ 
+    int array[] = {2, 3, 4}; 
+    container c4 = {2, 3, 4}; 
+    UNIT_ASSERT_VALUES_EQUAL(c4, container(std::begin(array), std::end(array))); 
 }
 
 void TDequeTest::TestDeque1() {

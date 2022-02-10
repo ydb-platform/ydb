@@ -10,15 +10,15 @@
 #include <util/generic/singleton.h>
 #include <util/string/printf.h>
 #include <util/system/event.h>
-
+ 
 using namespace NActor;
 using namespace NBus;
 using namespace NBus::NPrivate;
 
-namespace {
+namespace { 
     Y_POD_STATIC_THREAD(TBusJob*)
     ThreadCurrentJob;
-
+ 
     struct TThreadCurrentJobGuard {
         TBusJob* Prev;
 
@@ -53,13 +53,13 @@ namespace {
 
         for (auto& call : *vec) {
             ClearState(&call);
-        }
-
+        } 
+ 
         vec->clear();
-    }
-
-}
-
+    } 
+ 
+} 
+ 
 namespace NBus {
     namespace NPrivate {
         class TJobStorage {
@@ -146,7 +146,7 @@ namespace NBus {
                 Y_VERIFY(State != RUNNING, "if running, must explicitly call Shutdown() before destructor");
 
                 Scheduler.Stop();
-
+ 
                 while (!Jobs.empty()) {
                     DestroyJob(Jobs.front());
                 }
@@ -577,7 +577,7 @@ namespace NBus {
         ClearJobStateVector(&Finished);
         ClearJobStateVector(&Pending);
     }
-
+ 
     void TBusJob::Sleep(int milliSeconds) {
         CheckThreadCurrentJob();
 
@@ -831,8 +831,8 @@ void TBusModuleImpl::Shutdown() {
             ShutdownCondVar.WaitI(Lock);
         }
     }
-}
-
+} 
+ 
 EMessageStatus TBusModule::StartJob(TAutoPtr<TBusMessage> message) {
     Y_VERIFY(Impl->State == TBusModuleImpl::RUNNING);
     Y_VERIFY(!!Impl->Queue);

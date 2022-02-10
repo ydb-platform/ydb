@@ -16,7 +16,7 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestHMapConstructorsAndAssignments);
     UNIT_TEST(TestHMap1);
     UNIT_TEST(TestHMapEqualityOperator);
-    UNIT_TEST(TestHMMapEqualityOperator);
+    UNIT_TEST(TestHMMapEqualityOperator); 
     UNIT_TEST(TestHMMapConstructorsAndAssignments);
     UNIT_TEST(TestHMMap1);
     UNIT_TEST(TestHMMapHas);
@@ -53,10 +53,10 @@ class THashTest: public TTestBase {
     UNIT_TEST(TestAssignmentClear);
     UNIT_TEST(TestReleaseNodes);
     UNIT_TEST(TestAt);
-    UNIT_TEST(TestHMapInitializerList);
-    UNIT_TEST(TestHMMapInitializerList);
-    UNIT_TEST(TestHSetInitializerList);
-    UNIT_TEST(TestHMSetInitializerList);
+    UNIT_TEST(TestHMapInitializerList); 
+    UNIT_TEST(TestHMMapInitializerList); 
+    UNIT_TEST(TestHSetInitializerList); 
+    UNIT_TEST(TestHMSetInitializerList); 
     UNIT_TEST(TestHSetInsertInitializerList);
     UNIT_TEST(TestTupleHash);
     UNIT_TEST_SUITE_END();
@@ -67,7 +67,7 @@ protected:
     void TestHMapConstructorsAndAssignments();
     void TestHMap1();
     void TestHMapEqualityOperator();
-    void TestHMMapEqualityOperator();
+    void TestHMMapEqualityOperator(); 
     void TestHMMapConstructorsAndAssignments();
     void TestHMMap1();
     void TestHMMapHas();
@@ -104,10 +104,10 @@ protected:
     void TestAssignmentClear();
     void TestReleaseNodes();
     void TestAt();
-    void TestHMapInitializerList();
-    void TestHMMapInitializerList();
-    void TestHSetInitializerList();
-    void TestHMSetInitializerList();
+    void TestHMapInitializerList(); 
+    void TestHMMapInitializerList(); 
+    void TestHSetInitializerList(); 
+    void TestHMSetInitializerList(); 
     void TestHSetInsertInitializerList();
     void TestTupleHash();
 };
@@ -225,41 +225,41 @@ void THashTest::TestHMapEqualityOperator() {
     UNIT_ASSERT(c3 != base);
 }
 
-void THashTest::TestHMMapEqualityOperator() {
+void THashTest::TestHMMapEqualityOperator() { 
     using container = THashMultiMap<TString, int>;
-    using value = container::value_type;
-
-    container base;
-    base.insert(value("one", 1));
-    base.insert(value("one", -1));
-    base.insert(value("two", 2));
-
-    container c1(base);
-    UNIT_ASSERT(c1 == base);
-
-    container c2;
-    c2.insert(value("two", 2));
-    c2.insert(value("one", -1));
-    c2.insert(value("one", 1));
-    UNIT_ASSERT(c2 == base);
-
-    c2.insert(value("three", 3));
-    UNIT_ASSERT(c2 != base);
-
-    container c3;
-    c3.insert(value("one", 0));
-    c3.insert(value("one", -1));
-    c3.insert(value("two", 2));
-    UNIT_ASSERT(c3 != base);
-
-    container c4;
-    c4.insert(value("one", 1));
-    c4.insert(value("one", -1));
-    c4.insert(value("one", 0));
-    c4.insert(value("two", 2));
-    UNIT_ASSERT(c3 != base);
-}
-
+    using value = container::value_type; 
+ 
+    container base; 
+    base.insert(value("one", 1)); 
+    base.insert(value("one", -1)); 
+    base.insert(value("two", 2)); 
+ 
+    container c1(base); 
+    UNIT_ASSERT(c1 == base); 
+ 
+    container c2; 
+    c2.insert(value("two", 2)); 
+    c2.insert(value("one", -1)); 
+    c2.insert(value("one", 1)); 
+    UNIT_ASSERT(c2 == base); 
+ 
+    c2.insert(value("three", 3)); 
+    UNIT_ASSERT(c2 != base); 
+ 
+    container c3; 
+    c3.insert(value("one", 0)); 
+    c3.insert(value("one", -1)); 
+    c3.insert(value("two", 2)); 
+    UNIT_ASSERT(c3 != base); 
+ 
+    container c4; 
+    c4.insert(value("one", 1)); 
+    c4.insert(value("one", -1)); 
+    c4.insert(value("one", 0)); 
+    c4.insert(value("two", 2)); 
+    UNIT_ASSERT(c3 != base); 
+} 
+ 
 void THashTest::TestHMMapConstructorsAndAssignments() {
     using container = THashMultiMap<TString, int>;
 
@@ -1147,46 +1147,46 @@ void THashTest::TestAt() {
 
 #undef TEST_AT_THROWN_EXCEPTION
 }
-
-void THashTest::TestHMapInitializerList() {
+ 
+void THashTest::TestHMapInitializerList() { 
     THashMap<TString, TString> h1 = {{"foo", "bar"}, {"bar", "baz"}, {"baz", "qux"}};
     THashMap<TString, TString> h2;
     h2.insert(std::pair<TString, TString>("foo", "bar"));
     h2.insert(std::pair<TString, TString>("bar", "baz"));
     h2.insert(std::pair<TString, TString>("baz", "qux"));
-    UNIT_ASSERT_EQUAL(h1, h2);
-}
-
-void THashTest::TestHMMapInitializerList() {
+    UNIT_ASSERT_EQUAL(h1, h2); 
+} 
+ 
+void THashTest::TestHMMapInitializerList() { 
     THashMultiMap<TString, TString> h1 = {
-        {"foo", "bar"},
-        {"foo", "baz"},
-        {"baz", "qux"}};
+        {"foo", "bar"}, 
+        {"foo", "baz"}, 
+        {"baz", "qux"}}; 
     THashMultiMap<TString, TString> h2;
     h2.insert(std::pair<TString, TString>("foo", "bar"));
     h2.insert(std::pair<TString, TString>("foo", "baz"));
     h2.insert(std::pair<TString, TString>("baz", "qux"));
-    UNIT_ASSERT_EQUAL(h1, h2);
-}
-
-void THashTest::TestHSetInitializerList() {
+    UNIT_ASSERT_EQUAL(h1, h2); 
+} 
+ 
+void THashTest::TestHSetInitializerList() { 
     THashSet<TString> h1 = {"foo", "bar", "baz"};
     THashSet<TString> h2;
-    h2.insert("foo");
-    h2.insert("bar");
-    h2.insert("baz");
-    UNIT_ASSERT_EQUAL(h1, h2);
-}
-
-void THashTest::TestHMSetInitializerList() {
+    h2.insert("foo"); 
+    h2.insert("bar"); 
+    h2.insert("baz"); 
+    UNIT_ASSERT_EQUAL(h1, h2); 
+} 
+ 
+void THashTest::TestHMSetInitializerList() { 
     THashMultiSet<TString> h1 = {"foo", "foo", "bar", "baz"};
     THashMultiSet<TString> h2;
-    h2.insert("foo");
-    h2.insert("foo");
-    h2.insert("bar");
-    h2.insert("baz");
-    UNIT_ASSERT_EQUAL(h1, h2);
-}
+    h2.insert("foo"); 
+    h2.insert("foo"); 
+    h2.insert("bar"); 
+    h2.insert("baz"); 
+    UNIT_ASSERT_EQUAL(h1, h2); 
+} 
 
 namespace {
     struct TFoo {

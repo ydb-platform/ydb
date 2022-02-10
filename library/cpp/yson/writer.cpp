@@ -1,16 +1,16 @@
 #include "writer.h"
-
-#include "detail.h"
+ 
+#include "detail.h" 
 #include "format.h"
-#include "parser.h"
-#include "varint.h"
+#include "parser.h" 
+#include "varint.h" 
 #include "zigzag.h"
 
 #include <util/string/cast.h>
 
 #include <cmath>
 
-namespace NYson {
+namespace NYson { 
     ////////////////////////////////////////////////////////////////////////////////
 
     // Copied from <util/string/escape.cpp>
@@ -352,4 +352,4 @@ namespace NYson {
 
     ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYson
+} // namespace NYson 

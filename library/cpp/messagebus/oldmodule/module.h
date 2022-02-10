@@ -264,7 +264,7 @@ namespace NBus {
 
         /// clears all message states
         void ClearAllMessageStates();
-
+ 
         /// returns true if job is done
         bool IsDone();
 

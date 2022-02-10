@@ -64,7 +64,7 @@ public:
     }
 
     THashSet(std::initializer_list<value_type> list)
-        : rep(list.size(), hasher(), key_equal())
+        : rep(list.size(), hasher(), key_equal()) 
     {
         rep.insert_unique(list.begin(), list.end());
     }
@@ -355,11 +355,11 @@ public:
     }
 
     THashMultiSet(std::initializer_list<value_type> list)
-        : rep(list.size(), hasher(), key_equal())
-    {
-        rep.insert_equal(list.begin(), list.end());
-    }
-
+        : rep(list.size(), hasher(), key_equal()) 
+    { 
+        rep.insert_equal(list.begin(), list.end()); 
+    } 
+ 
     // THashMultiSet has implicit copy/move constructors and copy-/move-assignment operators
     // because its implementation is backed by THashTable.
     // See hash_ut.cpp

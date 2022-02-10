@@ -362,7 +362,7 @@ RECURSE(
     terminate_handler/sample
     testing
     text_processing
-    threading
+    threading 
     timezone_conversion
     timezone_conversion/ut
     tld
@@ -380,8 +380,8 @@ RECURSE(
     trace_usage/ut
     tvmauth
     tvmknife
-    type_info
-    type_info/bench
+    type_info 
+    type_info/bench 
     ucompress
     udp
     uilangdetect
@@ -410,10 +410,10 @@ RECURSE(
     yconf/patcher
     yconf/patcher/ut
     yconf/ut
-    yson
-    yson/json
-    yson/node
-    yson/node/pybind
+    yson 
+    yson/json 
+    yson/node 
+    yson/node/pybind 
     yson_pull
     yson_pull/ut
     yt

@@ -92,17 +92,17 @@ struct TRefCountedWrapperWithCookie final
 
 namespace NDetail {
 
-Y_FORCE_INLINE void* AllignedMalloc(size_t size, size_t allignment)
-{
-#ifdef _win_
-    return ::_aligned_malloc(size, allignment);
-#else
-    void* ptr = nullptr;
-    ::posix_memalign(&ptr, allignment, size);
-    return ptr;
-#endif
-}
-
+Y_FORCE_INLINE void* AllignedMalloc(size_t size, size_t allignment) 
+{ 
+#ifdef _win_ 
+    return ::_aligned_malloc(size, allignment); 
+#else 
+    void* ptr = nullptr; 
+    ::posix_memalign(&ptr, allignment, size); 
+    return ptr; 
+#endif 
+} 
+ 
 template <class... Args>
 Y_FORCE_INLINE void CustomInitialize(Args... args)
 {
@@ -189,7 +189,7 @@ void* AllocateConstSizeAligned()
     if (Alignment <= 16) {
         return NYTAlloc::AllocateConstSize<Size>();
     } else {
-        return AllignedMalloc(Size, Alignment);
+        return AllignedMalloc(Size, Alignment); 
     }
 }
 

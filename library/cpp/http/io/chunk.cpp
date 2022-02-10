@@ -1,7 +1,7 @@
 #include "chunk.h"
 
-#include "headers.h"
-
+#include "headers.h" 
+ 
 #include <util/string/cast.h>
 #include <util/generic/utility.h>
 #include <util/generic/yexception.h>
@@ -52,13 +52,13 @@ class TChunkedInput::TImpl {
 public:
     inline TImpl(IInputStream* slave, TMaybe<THttpHeaders>* trailers)
         : Slave_(slave)
-        , Trailers_(trailers)
+        , Trailers_(trailers) 
         , Pending_(0)
         , LastChunkReaded_(false)
     {
-        if (Trailers_) {
-            Trailers_->Clear();
-        }
+        if (Trailers_) { 
+            Trailers_->Clear(); 
+        } 
     }
 
     inline ~TImpl() {
@@ -127,9 +127,9 @@ private:
             return true;
         }
 
-        if (Trailers_) {
-            Trailers_->ConstructInPlace(Slave_);
-        }
+        if (Trailers_) { 
+            Trailers_->ConstructInPlace(Slave_); 
+        } 
         LastChunkReaded_ = true;
 
         return false;
@@ -137,13 +137,13 @@ private:
 
 private:
     IInputStream* Slave_;
-    TMaybe<THttpHeaders>* Trailers_;
+    TMaybe<THttpHeaders>* Trailers_; 
     size_t Pending_;
     bool LastChunkReaded_;
 };
 
 TChunkedInput::TChunkedInput(IInputStream* slave, TMaybe<THttpHeaders>* trailers)
-    : Impl_(new TImpl(slave, trailers))
+    : Impl_(new TImpl(slave, trailers)) 
 {
 }
 

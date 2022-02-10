@@ -68,8 +68,8 @@ public:
 
 private:
     void UpdatePart(TArrayRef<const ui8> data);
-
-private:
+ 
+private: 
     ui8 BufferSize;  /* size of buffer */
     ui8 Buffer[64];  /* input buffer */
     ui32 State[4];   /* state (ABCD) */

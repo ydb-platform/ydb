@@ -445,37 +445,37 @@ Y_UNIT_TEST_SUITE(TYMapTest) {
             UNIT_ASSERT_VALUES_EQUAL(values[2], 101);
         }
     }
-
+ 
     Y_UNIT_TEST(TestMapInitializerList) {
         TMap<TString, int> m = {
-            {"one", 1},
-            {"two", 2},
-            {"three", 3},
-            {"four", 4},
-        };
-
-        UNIT_ASSERT_VALUES_EQUAL(m.size(), 4);
-        UNIT_ASSERT_VALUES_EQUAL(m["one"], 1);
-        UNIT_ASSERT_VALUES_EQUAL(m["two"], 2);
-        UNIT_ASSERT_VALUES_EQUAL(m["three"], 3);
-        UNIT_ASSERT_VALUES_EQUAL(m["four"], 4);
-    }
-
+            {"one", 1}, 
+            {"two", 2}, 
+            {"three", 3}, 
+            {"four", 4}, 
+        }; 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(m.size(), 4); 
+        UNIT_ASSERT_VALUES_EQUAL(m["one"], 1); 
+        UNIT_ASSERT_VALUES_EQUAL(m["two"], 2); 
+        UNIT_ASSERT_VALUES_EQUAL(m["three"], 3); 
+        UNIT_ASSERT_VALUES_EQUAL(m["four"], 4); 
+    } 
+ 
     Y_UNIT_TEST(TestMMapInitializerList) {
         TMultiMap<TString, int> mm = {
-            {"one", 1},
-            {"two", 2},
-            {"two", -2},
-            {"three", 3},
-        };
+            {"one", 1}, 
+            {"two", 2}, 
+            {"two", -2}, 
+            {"three", 3}, 
+        }; 
         UNIT_ASSERT(mm.contains("two"));
         TMultiMap<TString, int> expected;
-        expected.emplace("one", 1);
-        expected.emplace("two", 2);
-        expected.emplace("two", -2);
-        expected.emplace("three", 3);
-        UNIT_ASSERT_VALUES_EQUAL(mm, expected);
-    }
+        expected.emplace("one", 1); 
+        expected.emplace("two", 2); 
+        expected.emplace("two", -2); 
+        expected.emplace("three", 3); 
+        UNIT_ASSERT_VALUES_EQUAL(mm, expected); 
+    } 
 
     Y_UNIT_TEST(TestMovePoolAlloc) {
         using TMapInPool = TMap<int, int, TLess<int>, TPoolAllocator>;

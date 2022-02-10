@@ -1,12 +1,12 @@
-UNITTEST_FOR(library/cpp/yson/node)
-
-OWNER(
-    ermolovd
+UNITTEST_FOR(library/cpp/yson/node) 
+ 
+OWNER( 
+    ermolovd 
     g:yt
-)
-
-SRCS(
-    node_ut.cpp
-)
-
-END()
+) 
+ 
+SRCS( 
+    node_ut.cpp 
+) 
+ 
+END() 

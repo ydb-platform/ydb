@@ -425,8 +425,8 @@ bool TFileHandle::Flush() noexcept {
      */
     return ok || GetLastError() == ERROR_INVALID_HANDLE;
 #elif defined(_unix_)
-    int ret = ::fsync(Fd_);
-
+    int ret = ::fsync(Fd_); 
+ 
     /*
      * Ignore EROFS, EINVAL - fd is bound to a special file
      * (PIPE, FIFO, or socket) which does not support synchronization.
@@ -449,10 +449,10 @@ bool TFileHandle::FlushData() noexcept {
         return false;
     }
 
-    int ret = ::fdatasync(Fd_);
-
+    int ret = ::fdatasync(Fd_); 
+ 
     // Same loginc in error handling as for fsync above.
-    return ret == 0 || errno == EROFS || errno == EINVAL;
+    return ret == 0 || errno == EROFS || errno == EINVAL; 
 #else
     return Flush();
 #endif

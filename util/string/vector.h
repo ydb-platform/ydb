@@ -12,9 +12,9 @@
 
 #define KEEP_EMPTY_TOKENS 0x01
 
-//
+// 
 // NOTE: Check StringSplitter below to get more convenient split string interface.
-
+ 
 namespace NPrivate {
 
     void SplitStringImpl(TVector<TString>* res, const char* ptr,

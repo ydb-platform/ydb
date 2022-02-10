@@ -1,12 +1,12 @@
 #pragma once
 
-#include "node.h"
-#include <library/cpp/yson/public.h>
+#include "node.h" 
+#include <library/cpp/yson/public.h> 
 
-namespace NJson {
-    class TJsonValue;
-} // namespace NJson
-
+namespace NJson { 
+    class TJsonValue; 
+} // namespace NJson 
+ 
 namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -25,7 +25,7 @@ TNode NodeFromYsonStream(IInputStream* input, ::NYson::EYsonType type = ::NYson:
 
 // Serialize TNode to stream in one of YSON formats with random order of maps' keys (don't use in tests)
 void NodeToYsonStream(const TNode& node, IOutputStream* output, ::NYson::EYsonFormat format = ::NYson::EYsonFormat::Text);
-
+ 
 // Same as the latter, but maps' keys are sorted lexicographically (to be used in tests)
 void NodeToCanonicalYsonStream(const TNode& node, IOutputStream* output, ::NYson::EYsonFormat format = ::NYson::EYsonFormat::Text);
 
@@ -33,7 +33,7 @@ void NodeToCanonicalYsonStream(const TNode& node, IOutputStream* output, ::NYson
 TNode NodeFromJsonString(const TStringBuf input);
 
 // Convert TJsonValue to TNode
-TNode NodeFromJsonValue(const NJson::TJsonValue& input);
+TNode NodeFromJsonValue(const NJson::TJsonValue& input); 
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -6,7 +6,7 @@
 #include <util/stream/input.h>
 #include <util/generic/buffer.h>
 
-namespace NYson {
+namespace NYson { 
     ////////////////////////////////////////////////////////////////////////////////
 
     class TYsonParser::TImpl {
@@ -176,4 +176,4 @@ namespace NYson {
 
     ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYson
+} // namespace NYson 

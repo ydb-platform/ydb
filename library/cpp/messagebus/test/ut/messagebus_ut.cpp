@@ -5,16 +5,16 @@
 #include <library/cpp/messagebus/test/helper/hanging_server.h>
 #include <library/cpp/messagebus/test/helper/object_count_check.h>
 #include <library/cpp/messagebus/test/helper/wait_for.h>
-
+ 
 #include <library/cpp/messagebus/misc/test_sync.h>
-
+ 
 #include <util/network/sock.h>
 
 #include <utility>
 
-using namespace NBus;
+using namespace NBus; 
 using namespace NBus::NTest;
-
+ 
 namespace {
     struct TExampleClientSlowOnMessageSent: public TExampleClient {
         TAtomic SentCompleted;
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
 
         TExampleClient client(sessionConfig);
         client.CrashOnError = true;
-
+ 
         server.UseCompression = useCompression;
         client.UseCompression = useCompression;
 
@@ -1148,4 +1148,4 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         // but it should occur at least once
         UNIT_ASSERT(client.Session->GetConnectSyscallsNumForTest(noServerAddr) > 2);
     };
-};
+}; 

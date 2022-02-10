@@ -18,7 +18,7 @@ ENDIF()
 
 PEERDIR(
     library/cpp/testing/unittest
-    library/cpp/yson/node
+    library/cpp/yson/node 
     ydb/core/kqp/ut/common
     ydb/core/testlib
     ydb/public/sdk/cpp/client/draft

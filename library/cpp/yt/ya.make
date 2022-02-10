@@ -1,14 +1,14 @@
-RECURSE(
-    assert
+RECURSE( 
+    assert 
     coding
     exception
-    misc
-    string
+    misc 
+    string 
     system
     yson
-    yson_string
-)
-
+    yson_string 
+) 
+ 
 IF (NOT OS_WINDOWS)
     RECURSE(
         containers
@@ -21,4 +21,4 @@ IF (NOT OS_WINDOWS)
         small_containers
         threading
     )
-ENDIF()
+ENDIF() 

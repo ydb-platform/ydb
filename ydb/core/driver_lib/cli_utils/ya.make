@@ -40,7 +40,7 @@ PEERDIR(
     library/cpp/deprecated/enum_codegen
     library/cpp/grpc/client
     library/cpp/protobuf/json
-    library/cpp/yson
+    library/cpp/yson 
     ydb/core/actorlib_impl
     ydb/core/base
     ydb/core/blobstorage/pdisk

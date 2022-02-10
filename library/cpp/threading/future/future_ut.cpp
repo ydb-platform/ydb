@@ -232,12 +232,12 @@ namespace {
             } catch (...) {
                 promise.SetException(std::current_exception());
             }
-
+ 
             UNIT_ASSERT(!promise.HasValue());
             UNIT_ASSERT(promise.HasException());
             UNIT_ASSERT_EXCEPTION(promise.GetValue(), TCustomException);
             UNIT_ASSERT_EXCEPTION(promise.TryRethrow(), TCustomException);
-        }
+        } 
 
         Y_UNIT_TEST(ShouldRethrowCallbackException) {
             TPromise<int> promise = NewPromise<int>();

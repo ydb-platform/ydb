@@ -427,7 +427,7 @@ void TFsPath::CopyTo(const TString& newPath, bool force) const {
         if (force) {
             TFsPath(newPath).MkDirs();
         } else if (!TFsPath(newPath).IsDirectory()) {
-            ythrow TIoException() << "Target path is not a directory " << newPath;
+            ythrow TIoException() << "Target path is not a directory " << newPath; 
         }
         TVector<TFsPath> children;
         List(children);
@@ -439,10 +439,10 @@ void TFsPath::CopyTo(const TString& newPath, bool force) const {
             TFsPath(newPath).Parent().MkDirs();
         } else {
             if (!TFsPath(newPath).Parent().IsDirectory()) {
-                ythrow TIoException() << "Parent (" << TFsPath(newPath).Parent() << ") of a target path is not a directory " << newPath;
+                ythrow TIoException() << "Parent (" << TFsPath(newPath).Parent() << ") of a target path is not a directory " << newPath; 
             }
             if (TFsPath(newPath).Exists()) {
-                ythrow TIoException() << "Path already exists " << newPath;
+                ythrow TIoException() << "Path already exists " << newPath; 
             }
         }
         NFs::Copy(Path_, newPath);

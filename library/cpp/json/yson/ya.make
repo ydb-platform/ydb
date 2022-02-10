@@ -7,8 +7,8 @@ OWNER(
 
 PEERDIR(
     library/cpp/json
-    library/cpp/yson
-    library/cpp/yson/json
+    library/cpp/yson 
+    library/cpp/yson/json 
 )
 
 SRCS(

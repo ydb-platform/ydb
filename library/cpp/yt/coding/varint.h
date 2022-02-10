@@ -41,12 +41,12 @@ int ReadVarUint32(const char* input, ui32* value);
 int ReadVarInt32(const char* input, i32* value);
 int ReadVarInt64(const char* input, i64* value);
 
-// Throws exception if integer is not complete when `end' is reached.
-int ReadVarUint64(const char* input, const char* end, ui64* value);
-int ReadVarUint32(const char* input, const char* end, ui32* value);
-int ReadVarInt32(const char* input, const char* end, i32* value);
-int ReadVarInt64(const char* input, const char* end, i64* value);
-
+// Throws exception if integer is not complete when `end' is reached. 
+int ReadVarUint64(const char* input, const char* end, ui64* value); 
+int ReadVarUint32(const char* input, const char* end, ui32* value); 
+int ReadVarInt32(const char* input, const char* end, i32* value); 
+int ReadVarInt64(const char* input, const char* end, i64* value); 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

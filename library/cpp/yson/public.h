@@ -6,7 +6,7 @@
 #include <library/cpp/yt/yson_string/public.h>
 #include <library/cpp/yt/yson/public.h>
 
-namespace NYson {
+namespace NYson { 
 
     ////////////////////////////////////////////////////////////////////////////////
 
@@ -15,16 +15,16 @@ namespace NYson {
 
     class TYsonStringBuf;
 
-    struct TYsonConsumerBase;
+    struct TYsonConsumerBase; 
 
-    class TYsonWriter;
-    class TYsonParser;
-    class TStatelessYsonParser;
-    class TYsonListParser;
-
+    class TYsonWriter; 
+    class TYsonParser; 
+    class TStatelessYsonParser; 
+    class TYsonListParser; 
+ 
     class TYsonException
        : public yexception {};
 
     ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYson
+} // namespace NYson 

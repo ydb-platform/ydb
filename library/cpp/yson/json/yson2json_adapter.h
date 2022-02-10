@@ -1,6 +1,6 @@
 #pragma once
 
-#include <library/cpp/yson/consumer.h>
+#include <library/cpp/yson/consumer.h> 
 
 #include <library/cpp/json/json_reader.h>
 
@@ -21,7 +21,7 @@ namespace NYT {
         };
 
     public:
-        TYson2JsonCallbacksAdapter(::NYson::TYsonConsumerBase* impl, bool throwException = false);
+        TYson2JsonCallbacksAdapter(::NYson::TYsonConsumerBase* impl, bool throwException = false); 
 
         bool OnNull() override;
         bool OnBoolean(bool val) override;
@@ -47,7 +47,7 @@ namespace NYT {
         void WrapIfListItem();
 
     private:
-        ::NYson::TYsonConsumerBase* Impl_;
+        ::NYson::TYsonConsumerBase* Impl_; 
         TState State_;
     };
 }

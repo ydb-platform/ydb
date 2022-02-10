@@ -1,11 +1,11 @@
 #pragma once
 
 #include <util/stream/output.h>
-#include <util/generic/maybe.h>
+#include <util/generic/maybe.h> 
 #include <util/generic/ptr.h>
 
-class THttpHeaders;
-
+class THttpHeaders; 
+ 
 /// @addtogroup Streams_Chunked
 /// @{
 /// Ввод данных порциями.
@@ -13,8 +13,8 @@ class THttpHeaders;
 /// данные записаны в виде <длина блока><блок данных>.
 class TChunkedInput: public IInputStream {
 public:
-    /// Если передан указатель на trailers, то туда будут записаны HTTP trailer'ы (возможно пустые),
-    /// которые идут после чанков.
+    /// Если передан указатель на trailers, то туда будут записаны HTTP trailer'ы (возможно пустые), 
+    /// которые идут после чанков. 
     TChunkedInput(IInputStream* slave, TMaybe<THttpHeaders>* trailers = nullptr);
     ~TChunkedInput() override;
 

@@ -139,25 +139,25 @@ Y_FORCE_INLINE int ReadVarUint64(const char* input, ui64* value)
     }, value);
 }
 
-Y_FORCE_INLINE int ReadVarUint64(const char* input, const char* end, ui64* value)
-{
-    return ReadVarUint64Impl([&] () {
-        if (input == end) {
+Y_FORCE_INLINE int ReadVarUint64(const char* input, const char* end, ui64* value) 
+{ 
+    return ReadVarUint64Impl([&] () { 
+        if (input == end) { 
             throw TSimpleException("Premature end of data while reading varuint64");
-        }
-        char byte = *input;
-        ++input;
-        return byte;
-    }, value);
-}
-
+        } 
+        char byte = *input; 
+        ++input; 
+        return byte; 
+    }, value); 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class... Args>
-Y_FORCE_INLINE int ReadVarUint32Impl(ui32* value, Args... args)
+template <class... Args> 
+Y_FORCE_INLINE int ReadVarUint32Impl(ui32* value, Args... args) 
 {
     ui64 varInt;
-    int bytesRead = ReadVarUint64(args..., &varInt);
+    int bytesRead = ReadVarUint64(args..., &varInt); 
     if (varInt > std::numeric_limits<ui32>::max()) {
         throw TSimpleException("Value is too big for varuint32");
     }
@@ -167,26 +167,26 @@ Y_FORCE_INLINE int ReadVarUint32Impl(ui32* value, Args... args)
 
 Y_FORCE_INLINE int ReadVarUint32(IInputStream* input, ui32* value)
 {
-    return ReadVarUint32Impl(value, input);
+    return ReadVarUint32Impl(value, input); 
 }
 
 Y_FORCE_INLINE int ReadVarUint32(const char* input, ui32* value)
 {
-    return ReadVarUint32Impl(value, input);
+    return ReadVarUint32Impl(value, input); 
 }
 
-Y_FORCE_INLINE int ReadVarUint32(const char* input, const char* end, ui32* value)
-{
-    return ReadVarUint32Impl(value, input, end);
-}
-
+Y_FORCE_INLINE int ReadVarUint32(const char* input, const char* end, ui32* value) 
+{ 
+    return ReadVarUint32Impl(value, input, end); 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class... Args>
-Y_FORCE_INLINE int ReadVarInt32Impl(i32* value, Args... args)
+template <class... Args> 
+Y_FORCE_INLINE int ReadVarInt32Impl(i32* value, Args... args) 
 {
     ui64 varInt;
-    int bytesRead = ReadVarUint64(args..., &varInt);
+    int bytesRead = ReadVarUint64(args..., &varInt); 
     if (varInt > std::numeric_limits<ui32>::max()) {
         throw TSimpleException("Value is too big for varint32");
     }
@@ -196,45 +196,45 @@ Y_FORCE_INLINE int ReadVarInt32Impl(i32* value, Args... args)
 
 Y_FORCE_INLINE int ReadVarInt32(IInputStream* input, i32* value)
 {
-    return ReadVarInt32Impl(value, input);
+    return ReadVarInt32Impl(value, input); 
 }
 
 Y_FORCE_INLINE int ReadVarInt32(const char* input, i32* value)
 {
-    return ReadVarInt32Impl(value, input);
+    return ReadVarInt32Impl(value, input); 
 }
 
-Y_FORCE_INLINE int ReadVarInt32(const char* input, const char* end, i32* value)
-{
-    return ReadVarInt32Impl(value, input, end);
-}
-
+Y_FORCE_INLINE int ReadVarInt32(const char* input, const char* end, i32* value) 
+{ 
+    return ReadVarInt32Impl(value, input, end); 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class... Args>
-Y_FORCE_INLINE int ReadVarInt64Impl(i64* value, Args... args)
+template <class... Args> 
+Y_FORCE_INLINE int ReadVarInt64Impl(i64* value, Args... args) 
 {
     ui64 varInt;
-    int bytesRead = ReadVarUint64(args..., &varInt);
+    int bytesRead = ReadVarUint64(args..., &varInt); 
     *value = ZigZagDecode64(varInt);
     return bytesRead;
 }
 
 Y_FORCE_INLINE int ReadVarInt64(IInputStream* input, i64* value)
 {
-    return ReadVarInt64Impl(value, input);
+    return ReadVarInt64Impl(value, input); 
 }
 
 Y_FORCE_INLINE int ReadVarInt64(const char* input, i64* value)
 {
-    return ReadVarInt64Impl(value, input);
+    return ReadVarInt64Impl(value, input); 
 }
 
-Y_FORCE_INLINE int ReadVarInt64(const char* input, const char* end, i64* value)
-{
-    return ReadVarInt64Impl(value, input, end);
-}
-
+Y_FORCE_INLINE int ReadVarInt64(const char* input, const char* end, i64* value) 
+{ 
+    return ReadVarInt64Impl(value, input, end); 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

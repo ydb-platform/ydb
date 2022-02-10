@@ -8,7 +8,7 @@ OWNER(
 PEERDIR(
     library/cpp/charset
     library/cpp/enumbitset
-    library/cpp/yson/node
+    library/cpp/yson/node 
     ydb/library/yql/core/sql_types
     ydb/library/yql/minikql
     ydb/library/yql/public/udf

@@ -130,10 +130,10 @@ constexpr bool Y_IS_DEBUG_BUILD = true;
 
 #undef Y_ARRAY_BEGIN
 #define Y_ARRAY_BEGIN(arr) (arr)
-
+ 
 #undef Y_ARRAY_END
 #define Y_ARRAY_END(arr) ((arr) + Y_ARRAY_SIZE(arr))
-
+ 
 /**
  * Concatenates two symbols, even if one of them is itself a macro.
  */

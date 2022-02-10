@@ -84,7 +84,7 @@ inline void SetPromiseValue(NThreading::TPromise<T>& promise, const NThreading::
         try {
             promise.SetValue(f.GetValue());
         } catch (...) {
-            promise.SetException(std::current_exception());
+            promise.SetException(std::current_exception()); 
         }
     });
 }

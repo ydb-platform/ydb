@@ -17,8 +17,8 @@ class TFileTest: public TTestBase {
     UNIT_TEST(TestLinkTo);
     UNIT_TEST(TestResize);
     UNIT_TEST(TestLocale);
-    UNIT_TEST(TestFlush);
-    UNIT_TEST(TestFlushSpecialFile);
+    UNIT_TEST(TestFlush); 
+    UNIT_TEST(TestFlushSpecialFile); 
     UNIT_TEST(TestRawRead);
     UNIT_TEST(TestRead);
     UNIT_TEST(TestRawPread);
@@ -31,8 +31,8 @@ public:
     void TestOpenSync();
     void TestRW();
     void TestLocale();
-    void TestFlush();
-    void TestFlushSpecialFile();
+    void TestFlush(); 
+    void TestFlushSpecialFile(); 
     void TestRawRead();
     void TestRead();
     void TestRawPread();
@@ -216,29 +216,29 @@ void TFileTest::TestLocale() {
 #endif
 }
 
-void TFileTest::TestFlush() {
-    TTempFile tmp("tmp");
-
-    {
-        TFile f(tmp.Name(), OpenAlways | WrOnly);
-        f.Flush();
-        f.FlushData();
-        f.Close();
-
-        UNIT_ASSERT_EXCEPTION(f.Flush(), TFileError);
-        UNIT_ASSERT_EXCEPTION(f.FlushData(), TFileError);
-    }
-}
-
-void TFileTest::TestFlushSpecialFile() {
-#ifdef _unix_
-    TFile devNull("/dev/null", WrOnly);
-    devNull.FlushData();
-    devNull.Flush();
-    devNull.Close();
-#endif
-}
-
+void TFileTest::TestFlush() { 
+    TTempFile tmp("tmp"); 
+ 
+    { 
+        TFile f(tmp.Name(), OpenAlways | WrOnly); 
+        f.Flush(); 
+        f.FlushData(); 
+        f.Close(); 
+ 
+        UNIT_ASSERT_EXCEPTION(f.Flush(), TFileError); 
+        UNIT_ASSERT_EXCEPTION(f.FlushData(), TFileError); 
+    } 
+} 
+ 
+void TFileTest::TestFlushSpecialFile() { 
+#ifdef _unix_ 
+    TFile devNull("/dev/null", WrOnly); 
+    devNull.FlushData(); 
+    devNull.Flush(); 
+    devNull.Close(); 
+#endif 
+} 
+ 
 void TFileTest::TestRawRead() {
     TTempFile tmp("tmp");
 

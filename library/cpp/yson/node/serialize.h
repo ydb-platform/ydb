@@ -4,10 +4,10 @@
 
 namespace NYT {
 
-namespace NYson {
-struct IYsonConsumer;
-} // namespace NYson
-
+namespace NYson { 
+struct IYsonConsumer; 
+} // namespace NYson 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 void Serialize(const TString& value, NYson::IYsonConsumer* consumer);
@@ -39,7 +39,7 @@ void Serialize(const TNode& node, NYson::IYsonConsumer* consumer);
 void Deserialize(TNode& value, const TNode& node);
 
 void Serialize(const THashMap<TString, TString>& renameColumns, NYson::IYsonConsumer* consumer);
-
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

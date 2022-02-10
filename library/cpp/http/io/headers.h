@@ -59,17 +59,17 @@ public:
     inline TConstIterator Begin() const noexcept {
         return Headers_.begin();
     }
-    inline TConstIterator begin() const noexcept {
-        return Headers_.begin();
-    }
+    inline TConstIterator begin() const noexcept { 
+        return Headers_.begin(); 
+    } 
 
     /// Стандартный итератор.
     inline TConstIterator End() const noexcept {
         return Headers_.end();
     }
-    inline TConstIterator end() const noexcept {
-        return Headers_.end();
-    }
+    inline TConstIterator end() const noexcept { 
+        return Headers_.end(); 
+    } 
 
     /// Возвращает количество заголовков в контейнере.
     inline size_t Count() const noexcept {

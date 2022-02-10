@@ -1,12 +1,12 @@
-#include "node_io.h"
+#include "node_io.h" 
 
 #include "node_builder.h"
 #include "node_visitor.h"
 
-#include <library/cpp/yson/json/json_writer.h>
-#include <library/cpp/yson/parser.h>
-#include <library/cpp/yson/writer.h>
-#include <library/cpp/yson/json/yson2json_adapter.h>
+#include <library/cpp/yson/json/json_writer.h> 
+#include <library/cpp/yson/parser.h> 
+#include <library/cpp/yson/writer.h> 
+#include <library/cpp/yson/json/yson2json_adapter.h> 
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
@@ -18,56 +18,56 @@
 
 namespace NYT {
 
-static void WalkJsonTree(const NJson::TJsonValue& jsonValue, NJson::TJsonCallbacks* callbacks)
-{
-    using namespace NJson;
-    switch (jsonValue.GetType()) {
-        case JSON_NULL:
-            callbacks->OnNull();
-            return;
-        case JSON_BOOLEAN:
-            callbacks->OnBoolean(jsonValue.GetBoolean());
-            return;
-        case JSON_INTEGER:
-            callbacks->OnInteger(jsonValue.GetInteger());
-            return;
-        case JSON_UINTEGER:
-            callbacks->OnUInteger(jsonValue.GetUInteger());
-            return;
-        case JSON_DOUBLE:
-            callbacks->OnDouble(jsonValue.GetDouble());
-            return;
-        case JSON_STRING:
-            callbacks->OnString(jsonValue.GetString());
-            return;
-        case JSON_MAP:
-            {
-                callbacks->OnOpenMap();
-                for (const auto& item : jsonValue.GetMap()) {
-                    callbacks->OnMapKey(item.first);
-                    WalkJsonTree(item.second, callbacks);
-                }
-                callbacks->OnCloseMap();
-            }
-            return;
-        case JSON_ARRAY:
-            {
-                callbacks->OnOpenArray();
-                for (const auto& item : jsonValue.GetArray()) {
-                    WalkJsonTree(item, callbacks);
-                }
-                callbacks->OnCloseArray();
-            }
-            return;
-        case JSON_UNDEFINED:
-            ythrow yexception() << "cannot consume undefined json value";
-            return;
-    }
-    Y_UNREACHABLE();
-}
-
+static void WalkJsonTree(const NJson::TJsonValue& jsonValue, NJson::TJsonCallbacks* callbacks) 
+{ 
+    using namespace NJson; 
+    switch (jsonValue.GetType()) { 
+        case JSON_NULL: 
+            callbacks->OnNull(); 
+            return; 
+        case JSON_BOOLEAN: 
+            callbacks->OnBoolean(jsonValue.GetBoolean()); 
+            return; 
+        case JSON_INTEGER: 
+            callbacks->OnInteger(jsonValue.GetInteger()); 
+            return; 
+        case JSON_UINTEGER: 
+            callbacks->OnUInteger(jsonValue.GetUInteger()); 
+            return; 
+        case JSON_DOUBLE: 
+            callbacks->OnDouble(jsonValue.GetDouble()); 
+            return; 
+        case JSON_STRING: 
+            callbacks->OnString(jsonValue.GetString()); 
+            return; 
+        case JSON_MAP: 
+            { 
+                callbacks->OnOpenMap(); 
+                for (const auto& item : jsonValue.GetMap()) { 
+                    callbacks->OnMapKey(item.first); 
+                    WalkJsonTree(item.second, callbacks); 
+                } 
+                callbacks->OnCloseMap(); 
+            } 
+            return; 
+        case JSON_ARRAY: 
+            { 
+                callbacks->OnOpenArray(); 
+                for (const auto& item : jsonValue.GetArray()) { 
+                    WalkJsonTree(item, callbacks); 
+                } 
+                callbacks->OnCloseArray(); 
+            } 
+            return; 
+        case JSON_UNDEFINED: 
+            ythrow yexception() << "cannot consume undefined json value"; 
+            return; 
+    } 
+    Y_UNREACHABLE(); 
+} 
+ 
 static TNode CreateEmptyNodeByType(::NYson::EYsonType type)
-{
+{ 
     TNode result;
     switch (type) {
         case ::NYson::EYsonType::ListFragment:
@@ -85,16 +85,16 @@ static TNode CreateEmptyNodeByType(::NYson::EYsonType type)
 TNode NodeFromYsonString(const TStringBuf input, ::NYson::EYsonType type)
 {
     TMemoryInput stream(input);
-    return NodeFromYsonStream(&stream, type);
-}
+    return NodeFromYsonStream(&stream, type); 
+} 
 
 TString NodeToYsonString(const TNode& node, NYson::EYsonFormat format)
-{
-    TStringStream stream;
-    NodeToYsonStream(node, &stream, format);
-    return stream.Str();
-}
-
+{ 
+    TStringStream stream; 
+    NodeToYsonStream(node, &stream, format); 
+    return stream.Str(); 
+} 
+ 
 TString NodeToCanonicalYsonString(const TNode& node, NYson::EYsonFormat format)
 {
     TStringStream stream;
@@ -103,7 +103,7 @@ TString NodeToCanonicalYsonString(const TNode& node, NYson::EYsonFormat format)
 }
 
 TNode NodeFromYsonStream(IInputStream* input, ::NYson::EYsonType type)
-{
+{ 
     TNode result = CreateEmptyNodeByType(type);
 
     TNodeBuilder builder(&result);
@@ -127,10 +127,10 @@ void NodeToCanonicalYsonStream(const TNode& node, IOutputStream* output, NYson::
 }
 
 TNode NodeFromJsonString(const TStringBuf input)
-{
+{ 
     TMemoryInput stream(input);
 
-    TNode result;
+    TNode result; 
 
     TNodeBuilder builder(&result);
     TYson2JsonCallbacksAdapter callbacks(&builder, /*throwException*/ true);
@@ -140,15 +140,15 @@ TNode NodeFromJsonString(const TStringBuf input)
     return result;
 }
 
-TNode NodeFromJsonValue(const NJson::TJsonValue& input)
-{
-    TNode result;
-    TNodeBuilder builder(&result);
-    TYson2JsonCallbacksAdapter callbacks(&builder, /*throwException*/ true);
-    WalkJsonTree(input, &callbacks);
-    return result;
-}
-
+TNode NodeFromJsonValue(const NJson::TJsonValue& input) 
+{ 
+    TNode result; 
+    TNodeBuilder builder(&result); 
+    TYson2JsonCallbacksAdapter callbacks(&builder, /*throwException*/ true); 
+    WalkJsonTree(input, &callbacks); 
+    return result; 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

@@ -18,7 +18,7 @@ PEERDIR(
     library/cpp/charset
     library/cpp/containers/bitseq
     library/cpp/deprecated/enum_codegen
-    library/cpp/yson
+    library/cpp/yson 
     ydb/core/base
     ydb/core/scheme_types
     ydb/core/util

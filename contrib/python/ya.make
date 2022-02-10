@@ -283,9 +283,9 @@ RECURSE(
     django-postgrespool2
     django-proxy-storage
     django-query-exchange
-    django-redis 
+    django-redis
     django-redis-cache
-    django-replicated 
+    django-replicated
     django-rest-framework-docs
     django-rest-multiple-models
     django-reversion
@@ -916,7 +916,7 @@ RECURSE(
     python-telegram-bot
     python-utils
     python3-saml
-    pytils 
+    pytils
     pytracemalloc
     pytz
     pyudev

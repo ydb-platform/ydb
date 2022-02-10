@@ -206,7 +206,6 @@ RECURSE(
     linux-headers
     linuxvdso
     liquidfun
-    llvm11
     llvm12
     llvm8
     lmdbxx

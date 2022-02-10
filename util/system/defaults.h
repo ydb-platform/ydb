@@ -75,7 +75,7 @@
 
 #include "compiler.h"
 
-#ifdef _win_ 
+#ifdef _win_
     #include <malloc.h>
 #elif defined(_sun_)
     #include <alloca.h>

@@ -84,7 +84,7 @@ time_t TimeGM(const struct tm* t) {
     unsigned long secs = days * 86400ul + t->tm_hour * 3600 + t->tm_min * 60 + t->tm_sec;
     return (time_t)secs;
 }
- 
+
 struct tm* GmTimeR(const time_t* timer, struct tm* tmbuf) {
     static const int _ytab[2][12] = {
         {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31},

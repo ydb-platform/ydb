@@ -1,6 +1,6 @@
 #include "sem.h"
 
-#ifdef _win_ 
+#ifdef _win_
     #include <malloc.h>
 #elif defined(_sun)
     #include <alloca.h>
@@ -48,7 +48,7 @@ union semun arg;
 namespace {
     class TSemaphoreImpl {
     private:
-#ifdef _win_ 
+#ifdef _win_
         using SEMHANDLE = HANDLE;
 #else
     #ifdef USE_SYSV_SEMAPHORES
@@ -105,7 +105,7 @@ namespace {
         }
 
         inline ~TSemaphoreImpl() {
-#ifdef _win_ 
+#ifdef _win_
             ::CloseHandle(Handle);
 #else
     #ifdef USE_SYSV_SEMAPHORES
@@ -120,7 +120,7 @@ namespace {
         }
 
         inline void Release() noexcept {
-#ifdef _win_ 
+#ifdef _win_
             ::ReleaseSemaphore(Handle, 1, 0);
 #else
     #ifdef USE_SYSV_SEMAPHORES
@@ -136,7 +136,7 @@ namespace {
         //The UNIX semaphore object does not support a timed "wait", and
         //hence to maintain consistancy, for win32 case we use INFINITE or 0 timeout.
         inline void Acquire() noexcept {
-#ifdef _win_ 
+#ifdef _win_
             Y_VERIFY(::WaitForSingleObject(Handle, INFINITE) == WAIT_OBJECT_0, "can not acquire semaphore");
 #else
     #ifdef USE_SYSV_SEMAPHORES
@@ -150,7 +150,7 @@ namespace {
         }
 
         inline bool TryAcquire() noexcept {
-#ifdef _win_ 
+#ifdef _win_
             // zero-second time-out interval
             // WAIT_OBJECT_0: current free count > 0
             // WAIT_TIMEOUT:  current free count == 0

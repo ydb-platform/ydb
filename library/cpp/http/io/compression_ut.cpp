@@ -31,18 +31,18 @@ Y_UNIT_TEST_SUITE(THttpCompressionTest) {
 
     Y_UNIT_TEST(TestDecoder) {
         TStringStream buffer;
-
-        {
+ 
+        { 
             TZLibCompress compressor(TZLibCompress::TParams(&buffer).SetType(ZLib::GZip));
             compressor.Write(DATA);
-        }
-
+        } 
+ 
         auto decoder = TCompressionCodecFactory::Instance().FindDecoder("gzip");
         UNIT_ASSERT(decoder);
-
+ 
         auto decodedStream = (*decoder)(&buffer);
         UNIT_ASSERT_EQUAL(decodedStream->ReadAll(), DATA);
-    }
+    } 
 
     Y_UNIT_TEST(TestChooseBestCompressionScheme) {
         THashSet<TString> accepted;

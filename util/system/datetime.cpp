@@ -23,19 +23,19 @@ static ui64 ToMicroSeconds(const struct timeval& tv) {
 
 #if defined(_win_)
 static ui64 ToMicroSeconds(const FILETIME& ft) {
-    return (((ui64)ft.dwHighDateTime << 32) + (ui64)ft.dwLowDateTime) / (ui64)10;
-}
+    return (((ui64)ft.dwHighDateTime << 32) + (ui64)ft.dwLowDateTime) / (ui64)10; 
+} 
 #elif defined(Y_HAS_CLOCK_GETTIME)
 static ui64 ToMicroSeconds(const struct timespec& ts) {
     return (ui64)ts.tv_sec * 1000000 + (ui64)ts.tv_nsec / 1000;
 }
-#endif
-
+#endif 
+ 
 ui64 MicroSeconds() noexcept {
     struct timeval tv;
     gettimeofday(&tv, nullptr);
 
-    return ToMicroSeconds(tv);
+    return ToMicroSeconds(tv); 
 }
 
 ui64 ThreadCPUUserTime() noexcept {
@@ -64,9 +64,9 @@ ui64 ThreadCPUTime() noexcept {
     GetThreadTimes(GetCurrentThread(), &creationTime, &exitTime, &kernelTime, &userTime);
     return ToMicroSeconds(userTime) + ToMicroSeconds(kernelTime);
 #elif defined(Y_HAS_CLOCK_GETTIME)
-    struct timespec ts;
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts);
-    return ToMicroSeconds(ts);
+    struct timespec ts; 
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts); 
+    return ToMicroSeconds(ts); 
 #else
     return 0;
 #endif

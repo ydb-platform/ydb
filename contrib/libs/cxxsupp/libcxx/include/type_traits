@@ -3050,9 +3050,9 @@ struct __member_pointer_class_type<_Ret _ClassType::*> {
 
 // template <class T, class... Args> struct is_constructible;
 
-template <class _Tp, class ..._Args>
+template <class _Tp, class ..._Args> 
 struct _LIBCPP_TEMPLATE_VIS is_constructible
-    : public integral_constant<bool, __is_constructible(_Tp, _Args...)>
+    : public integral_constant<bool, __is_constructible(_Tp, _Args...)> 
 { };
 
 #if _LIBCPP_STD_VER > 14

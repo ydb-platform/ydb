@@ -36,10 +36,10 @@ module std [system] {
     }
     // <iso646.h> provided by compiler.
     // <limits.h> provided by compiler or C library.
-    module locale_h {
-      header "locale.h"
-      export *
-    }
+    module locale_h { 
+      header "locale.h" 
+      export * 
+    } 
     module math_h {
       header "math.h"
       export *
@@ -56,13 +56,13 @@ module std [system] {
       // <stddef.h>'s __need_* macros require textual inclusion.
       textual header "stddef.h"
     }
-    module stdint_h {
-      header "stdint.h"
-      export *
-      // FIXME: This module only exists on OS X and for some reason the
-      // wildcard above doesn't export it.
-      export Darwin.C.stdint
-    }
+    module stdint_h { 
+      header "stdint.h" 
+      export * 
+      // FIXME: This module only exists on OS X and for some reason the 
+      // wildcard above doesn't export it. 
+      export Darwin.C.stdint 
+    } 
     module stdio_h {
       // <stdio.h>'s __need_* macros require textual inclusion.
       textual header "stdio.h"
@@ -176,7 +176,7 @@ module std [system] {
     }
     module cstdint {
       header "cstdint"
-      export depr.stdint_h
+      export depr.stdint_h 
       export *
     }
     module cstdio {

@@ -53,4 +53,4 @@ namespace NProtobufJson {
         return res;
     }
 
-} 
+}

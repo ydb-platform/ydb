@@ -6,7 +6,7 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_value.h>
 
-#include <util/stream/input.h> 
+#include <util/stream/input.h>
 #include <util/stream/str.h>
 #include <util/stream/mem.h>
 
@@ -15,7 +15,7 @@ namespace google {
         class Message;
     }
 }
- 
+
 namespace NProtobufJson {
     struct TJson2ProtoConfig {
         using TSelf = TJson2ProtoConfig;
@@ -198,21 +198,21 @@ namespace NProtobufJson {
         readerConfig.DontValidateUtf8 = true;
         return Json2Proto<T>(in, readerConfig, config);
     }
- 
+
     /// @throw yexception
     template <typename T>
     T Json2Proto(const TString& value, const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
         TStringInput in(value);
         return Json2Proto<T>(in, config);
     }
- 
+
     /// @throw yexception
     template <typename T>
     T Json2Proto(const TStringBuf& value, const TJson2ProtoConfig& config = TJson2ProtoConfig()) {
         TMemoryInput in(value);
         return Json2Proto<T>(in, config);
     }
- 
+
     /// @throw yexception
     template <typename T>
     T Json2Proto(const char* ptr, const TJson2ProtoConfig& config = TJson2ProtoConfig()) {

@@ -65,7 +65,7 @@ struct TEnvironmentSetup {
             TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureNone)
         : TEnvironmentSetup(TSettings{
             .NodeCount = nodeCount,
-            .Erasure = erasure,
+            .Erasure = erasure, 
             .NodeWardenMockSetup = std::move(nodeWardenMockSetup),
         })
     {}

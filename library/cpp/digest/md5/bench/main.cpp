@@ -1,15 +1,15 @@
-#include <benchmark/benchmark.h>
-
+#include <benchmark/benchmark.h> 
+ 
 #include <library/cpp/digest/md5/md5.h>
 
 #define MD5_DEF(N)                                                  \
-    static void MD5Benchmark_##N(benchmark::State& st) {            \
+    static void MD5Benchmark_##N(benchmark::State& st) {            \ 
         char buf[N];                                                \
-        for (auto _ : st) {                                         \
+        for (auto _ : st) {                                         \ 
             Y_DO_NOT_OPTIMIZE_AWAY(MD5().Update(buf, sizeof(buf))); \
         }                                                           \
-    }                                                               \
-    BENCHMARK(MD5Benchmark_##N);
+    }                                                               \ 
+    BENCHMARK(MD5Benchmark_##N); 
 
 MD5_DEF(32)
 MD5_DEF(64)

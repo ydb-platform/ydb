@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(ClientSettings) {
             TTestCase{
                 .Name = "dsts with selfTvmId",
                 .Settings = {
-                    .SelfTvmId = 43,
+                    .SelfTvmId = 43, 
                     .FetchServiceTicketsForDsts = {42},
                 },
                 .Err = "Secret is required for fetching of Service Tickets",
@@ -47,7 +47,7 @@ Y_UNIT_TEST_SUITE(ClientSettings) {
                 .Settings = {
                     .SelfTvmId = 43,
                     .Secret = TStringBuf("foobar"),
-                    .FetchServiceTicketsForDsts = {42},
+                    .FetchServiceTicketsForDsts = {42}, 
                 },
                 .Err = "",
             },

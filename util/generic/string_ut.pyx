@@ -1,14 +1,14 @@
-# cython: c_string_type=str, c_string_encoding=utf8
-
+# cython: c_string_type=str, c_string_encoding=utf8 
+ 
 from libcpp.string cimport string as std_string
 from util.generic.string cimport TString, npos
 
 import pytest
 import unittest
 
-import sys
+import sys 
 
-
+ 
 class TestStroka(unittest.TestCase):
     def test_unicode(self):
         cdef TString x = "привет"
@@ -18,38 +18,38 @@ class TestStroka(unittest.TestCase):
     def test_ctor1(self):
         cdef TString tmp = TString()
         cdef TString tmp2 = TString(tmp)
-        self.assertEquals(tmp2, "")
+        self.assertEquals(tmp2, "") 
 
     def test_ctor2(self):
         cdef std_string tmp = b"hello"
         cdef TString tmp2 = TString(tmp)
-        self.assertEquals(tmp2, "hello")
+        self.assertEquals(tmp2, "hello") 
 
     def test_ctor3(self):
         cdef TString tmp = b"hello"
         cdef TString tmp2 = TString(tmp, 0, 4)
-        self.assertEquals(tmp2, "hell")
+        self.assertEquals(tmp2, "hell") 
 
     def test_ctor4(self):
         cdef TString tmp = TString(<char*>b"hello")
-        self.assertEquals(tmp, "hello")
+        self.assertEquals(tmp, "hello") 
 
     def test_ctor5(self):
         cdef TString tmp = TString(<char*>b"hello", 4)
-        self.assertEquals(tmp, "hell")
+        self.assertEquals(tmp, "hell") 
 
     def test_ctor6(self):
         cdef TString tmp = TString(<char*>b"hello", 1, 3)
-        self.assertEquals(tmp, "ell")
+        self.assertEquals(tmp, "ell") 
 
     def test_ctor7(self):
         cdef TString tmp = TString(3, <char>'x')
-        self.assertEquals(tmp, "xxx")
+        self.assertEquals(tmp, "xxx") 
 
     def test_ctor8(self):
         cdef bytes tmp = b"hello"
         cdef TString tmp2 = TString(<char*>tmp, <char*>tmp + 4)
-        self.assertEquals(tmp2, "hell")
+        self.assertEquals(tmp2, "hell") 
 
     def test_compare(self):
         cdef TString tmp1 = b"abacab"
@@ -72,18 +72,18 @@ class TestStroka(unittest.TestCase):
     def test_operator_assign(self):
         cdef TString tmp = b"hello"
         cdef TString tmp2 = tmp
-        self.assertEquals(tmp2, "hello")
+        self.assertEquals(tmp2, "hello") 
 
     def test_operator_plus(self):
         cdef TString tmp = TString(b"hello ") + TString(b"world")
-        self.assertEquals(tmp, "hello world")
+        self.assertEquals(tmp, "hello world") 
 
     def test_c_str(self):
         cdef TString tmp = b"hello"
-        if sys.version_info.major == 2:
-            self.assertEquals(bytes(tmp.c_str()), b"hello")
-        else:
-            self.assertEquals(bytes(tmp.c_str(), 'utf8'), b"hello")
+        if sys.version_info.major == 2: 
+            self.assertEquals(bytes(tmp.c_str()), b"hello") 
+        else: 
+            self.assertEquals(bytes(tmp.c_str(), 'utf8'), b"hello") 
 
     def test_length(self):
         cdef TString tmp = b"hello"
@@ -107,70 +107,70 @@ class TestStroka(unittest.TestCase):
         cdef TString tmp2 = b"fuu"
 
         tmp.append(tmp2)
-        self.assertEquals(tmp, "fuu")
+        self.assertEquals(tmp, "fuu") 
 
         tmp.append(tmp2, 1, 2)
-        self.assertEquals(tmp, "fuuuu")
+        self.assertEquals(tmp, "fuuuu") 
 
         tmp.append(<char*>"ll ")
-        self.assertEquals(tmp, "fuuuull ")
+        self.assertEquals(tmp, "fuuuull ") 
 
         tmp.append(<char*>"of greatness", 4)
-        self.assertEquals(tmp, "fuuuull of g")
+        self.assertEquals(tmp, "fuuuull of g") 
 
         tmp.append(2, <char>b'o')
-        self.assertEquals(tmp, "fuuuull of goo")
+        self.assertEquals(tmp, "fuuuull of goo") 
 
         tmp.push_back(b'z')
-        self.assertEquals(tmp, "fuuuull of gooz")
+        self.assertEquals(tmp, "fuuuull of gooz") 
 
     def test_assign(self):
         cdef TString tmp
 
         tmp.assign(b"one")
-        self.assertEquals(tmp, "one")
+        self.assertEquals(tmp, "one") 
 
         tmp.assign(b"two hundred", 0, 3)
-        self.assertEquals(tmp, "two")
+        self.assertEquals(tmp, "two") 
 
         tmp.assign(<char*>b"three")
-        self.assertEquals(tmp, "three")
+        self.assertEquals(tmp, "three") 
 
         tmp.assign(<char*>b"three fiddy", 5)
-        self.assertEquals(tmp, "three")
+        self.assertEquals(tmp, "three") 
 
     def test_insert(self):
         cdef TString tmp
 
         tmp = b"xx"
         tmp.insert(1, b"foo")
-        self.assertEquals(tmp, "xfoox")
+        self.assertEquals(tmp, "xfoox") 
 
         tmp = b"xx"
         tmp.insert(1, b"haxor", 1, 3)
-        self.assertEquals(tmp, "xaxox")
+        self.assertEquals(tmp, "xaxox") 
 
         tmp = b"xx"
         tmp.insert(1, <char*>b"foo")
-        self.assertEquals(tmp, "xfoox")
+        self.assertEquals(tmp, "xfoox") 
 
         tmp = b"xx"
         tmp.insert(1, <char*>b"foozzy", 3)
-        self.assertEquals(tmp, "xfoox")
+        self.assertEquals(tmp, "xfoox") 
 
         tmp = b"xx"
         tmp.insert(1, 2, <char>b'u')
-        self.assertEquals(tmp, "xuux")
+        self.assertEquals(tmp, "xuux") 
 
     def test_copy(self):
         cdef char buf[16]
         cdef TString tmp = b"hello"
         tmp.copy(buf, 5, 0)
-        self.assertEquals(buf[:5], "hello")
+        self.assertEquals(buf[:5], "hello") 
 
     def test_find(self):
         cdef TString haystack = b"whole lotta bytes"
-        cdef TString needle = "hole"
+        cdef TString needle = "hole" 
 
         self.assertEquals(haystack.find(needle), 1)
         self.assertEquals(haystack.find(needle, 3), npos)
@@ -221,5 +221,5 @@ class TestStroka(unittest.TestCase):
     def test_substr(self):
         cdef TString tmp = b"foobar"
 
-        self.assertEquals(tmp.substr(1), "oobar")
-        self.assertEquals(tmp.substr(1, 4), "ooba")
+        self.assertEquals(tmp.substr(1), "oobar") 
+        self.assertEquals(tmp.substr(1, 4), "ooba") 

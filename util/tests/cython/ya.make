@@ -1,4 +1,4 @@
-PY23_TEST()
+PY23_TEST() 
 
 OWNER(g:util)
 SUBSCRIBER(g:util-subscribers)
@@ -10,9 +10,9 @@ NO_WSHADOW()
 PY_SRCS(
     NAMESPACE
     util
-    folder/path_ut.pyx
+    folder/path_ut.pyx 
     generic/array_ref_ut.pyx
-    generic/deque_ut.pyx
+    generic/deque_ut.pyx 
     generic/maybe_ut.pyx
     generic/ptr_ut.pyx
     generic/string_ut.pyx
@@ -20,19 +20,19 @@ PY_SRCS(
     generic/list_ut.pyx
     generic/hash_set_ut.pyx
     generic/hash_ut.pyx
-    memory/blob_ut.pyx
-    stream/str_ut.pyx
+    memory/blob_ut.pyx 
+    stream/str_ut.pyx 
     string/cast_ut.pyx
     system/types_ut.pyx
     digest/multi_ut.pyx
 )
 
 TEST_SRCS(
-    test_digest.py
-    test_folder.py
+    test_digest.py 
+    test_folder.py 
     test_generic.py
-    test_memory.py
-    test_stream.py
+    test_memory.py 
+    test_stream.py 
     test_system.py
 )
 

@@ -139,7 +139,7 @@ class TTypeEnvironment;
     XX(Optional, 7)         \
     XX(Dict, 8)             \
     XX(Callable, 9)         \
-    XX(Any, 10)             \ 
+    XX(Any, 10)             \
     XX(Tuple, 11)           \
     XX(Resource, 12)        \
     XX(Flow, 13)            \
@@ -425,23 +425,23 @@ public:
         return ListOfVoid;
     }
 
-    TAnyType* GetAnyType() const { 
-        return AnyType; 
-    } 
- 
+    TAnyType* GetAnyType() const {
+        return AnyType;
+    }
+
     TTupleLiteral* GetEmptyTuple() const {
         return EmptyTuple;
     }
 
-    TDataType* GetUi32() const { 
-        return Ui32; 
-    } 
- 
+    TDataType* GetUi32() const {
+        return Ui32;
+    }
+
     TDataType* GetUi64() const {
         return Ui64;
     }
 
- 
+
     std::vector<TNode*>& GetNodeStack() const {
         return Stack;
     }
@@ -485,9 +485,9 @@ private:
     TEmptyList* EmptyList;
     TEmptyDictType* TypeOfEmptyDict;
     TEmptyDict* EmptyDict;
-    TDataType* Ui32; 
+    TDataType* Ui32;
     TDataType* Ui64;
-    TAnyType* AnyType; 
+    TAnyType* AnyType;
     TStructLiteral* EmptyStruct;
     TTupleLiteral* EmptyTuple;
     TListLiteral* ListOfVoid;
@@ -1061,61 +1061,61 @@ inline TType* TRuntimeNode::GetStaticType() const {
     }
 }
 
-class TAnyType : public TType { 
-friend class TTypeEnvironment; 
-friend class TType; 
-public: 
-    using TType::IsSameType; 
-    bool IsSameType(const TAnyType& typeToCompare) const; 
- 
-    using TType::IsConvertableTo; 
+class TAnyType : public TType {
+friend class TTypeEnvironment;
+friend class TType;
+public:
+    using TType::IsSameType;
+    bool IsSameType(const TAnyType& typeToCompare) const;
+
+    using TType::IsConvertableTo;
     bool IsConvertableTo(const TAnyType& typeToCompare, bool ignoreTagged = false) const;
- 
-private: 
-    TAnyType(TTypeType* type) 
-        : TType(EKind::Any, type) 
-    {} 
- 
-    static TAnyType* Create(TTypeType* type, const TTypeEnvironment& env); 
- 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
-    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const; 
-    void DoFreeze(const TTypeEnvironment& env); 
-}; 
- 
-class TAny : public TNode { 
-friend class TNode; 
-public: 
-    static TAny* Create(const TTypeEnvironment& env); 
-    TAnyType* GetType() const { 
-        return static_cast<TAnyType*>(GetGenericType()); 
-    } 
- 
-    bool HasItem() const { 
-        return !!Item.GetNode(); 
-    } 
- 
-    TRuntimeNode GetItem() const { 
-        Y_VERIFY_DEBUG(Item.GetNode()); 
-        return Item; 
-    } 
- 
-    void SetItem(TRuntimeNode newItem); 
-private: 
-    TAny(TAnyType* type) 
-        : TNode(type) 
-    {} 
- 
-    using TNode::Equals; 
-    bool Equals(const TAny& nodeToCompare) const; 
- 
-    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links); 
-    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const; 
-    void DoFreeze(const TTypeEnvironment& env); 
-private: 
-    TRuntimeNode Item; 
-}; 
- 
+
+private:
+    TAnyType(TTypeType* type)
+        : TType(EKind::Any, type)
+    {}
+
+    static TAnyType* Create(TTypeType* type, const TTypeEnvironment& env);
+
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
+    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
+    void DoFreeze(const TTypeEnvironment& env);
+};
+
+class TAny : public TNode {
+friend class TNode;
+public:
+    static TAny* Create(const TTypeEnvironment& env);
+    TAnyType* GetType() const {
+        return static_cast<TAnyType*>(GetGenericType());
+    }
+
+    bool HasItem() const {
+        return !!Item.GetNode();
+    }
+
+    TRuntimeNode GetItem() const {
+        Y_VERIFY_DEBUG(Item.GetNode());
+        return Item;
+    }
+
+    void SetItem(TRuntimeNode newItem);
+private:
+    TAny(TAnyType* type)
+        : TNode(type)
+    {}
+
+    using TNode::Equals;
+    bool Equals(const TAny& nodeToCompare) const;
+
+    void DoUpdateLinks(const THashMap<TNode*, TNode*>& links);
+    TNode* DoCloneOnCallableWrite(const TTypeEnvironment& env) const;
+    void DoFreeze(const TTypeEnvironment& env);
+private:
+    TRuntimeNode Item;
+};
+
 class TTupleType : public TType {
 friend class TType;
 public:

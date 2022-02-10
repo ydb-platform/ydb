@@ -32,9 +32,9 @@ TTypeEnvironment::TTypeEnvironment(TScopedAlloc& alloc)
     EmptyList = TEmptyList::Create(*this);
     TypeOfEmptyDict = TEmptyDictType::Create(TypeOfType, *this);
     EmptyDict = TEmptyDict::Create(*this);
-    Ui32 = TDataType::Create(NUdf::TDataType<ui32>::Id, *this); 
+    Ui32 = TDataType::Create(NUdf::TDataType<ui32>::Id, *this);
     Ui64 = TDataType::Create(NUdf::TDataType<ui64>::Id, *this);
-    AnyType = TAnyType::Create(TypeOfType, *this); 
+    AnyType = TAnyType::Create(TypeOfType, *this);
     EmptyStruct = TStructLiteral::Create(0, nullptr, TStructType::Create(0, nullptr, *this), *this);
     EmptyTuple = TTupleLiteral::Create(0, nullptr, TTupleType::Create(0, nullptr, *this), *this);
     ListOfVoid = TListLiteral::Create(nullptr, 0, TListType::Create(Void->GetGenericType(), *this), *this);
@@ -55,7 +55,7 @@ void TTypeEnvironment::ClearCookies() const {
     EmptyDict->SetCookie(0);
     EmptyStruct->SetCookie(0);
     ListOfVoid->SetCookie(0);
-    AnyType->SetCookie(0); 
+    AnyType->SetCookie(0);
     EmptyTuple->SetCookie(0);
 }
 
@@ -70,7 +70,7 @@ void TTypeEnvironment::ClearCookies() const {
     xx(Optional, TOptionalLiteral) \
     xx(Dict, TDictLiteral) \
     xx(Callable, TCallable) \
-    xx(Any, TAny) \ 
+    xx(Any, TAny) \
     xx(Tuple, TTupleLiteral) \
     xx(Variant, TVariantLiteral)
 
@@ -200,7 +200,7 @@ TStringBuf TType::GetKindAsStr() const {
     xx(Optional, TOptionalType) \
     xx(Dict, TDictType) \
     xx(Callable, TCallableType) \
-    xx(Any, TAnyType) \ 
+    xx(Any, TAnyType) \
     xx(Tuple, TTupleType) \
     xx(Resource, TResourceType) \
     xx(Variant, TVariantType) \
@@ -1714,7 +1714,7 @@ void TRuntimeNode::Freeze() {
     }
 }
 
-bool TAnyType::IsSameType(const TAnyType& typeToCompare) const { 
+bool TAnyType::IsSameType(const TAnyType& typeToCompare) const {
     Y_UNUSED(typeToCompare);
     return true;
 }
@@ -1724,76 +1724,76 @@ bool TAnyType::IsConvertableTo(const TAnyType& typeToCompare, bool ignoreTagged)
     return IsSameType(typeToCompare);
 }
 
-void TAnyType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) { 
+void TAnyType::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
     Y_UNUSED(links);
 }
 
-TNode* TAnyType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const { 
+TNode* TAnyType::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
     Y_UNUSED(env);
-    return const_cast<TAnyType*>(this); 
+    return const_cast<TAnyType*>(this);
 }
 
-void TAnyType::DoFreeze(const TTypeEnvironment& env) { 
+void TAnyType::DoFreeze(const TTypeEnvironment& env) {
     Y_UNUSED(env);
 }
 
-TAnyType* TAnyType::Create(TTypeType* type, const TTypeEnvironment& env) { 
-    return ::new(env.Allocate<TAnyType>()) TAnyType(type); 
+TAnyType* TAnyType::Create(TTypeType* type, const TTypeEnvironment& env) {
+    return ::new(env.Allocate<TAnyType>()) TAnyType(type);
 }
 
-TAny* TAny::Create(const TTypeEnvironment& env) { 
-    return ::new(env.Allocate<TAny>()) TAny(env.GetAnyType()); 
+TAny* TAny::Create(const TTypeEnvironment& env) {
+    return ::new(env.Allocate<TAny>()) TAny(env.GetAnyType());
 }
 
-void TAny::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) { 
-    if (Item.GetNode()) { 
-        auto itemIt = links.find(Item.GetNode()); 
-        if (itemIt != links.end()) { 
-            TNode* newNode = itemIt->second; 
-            Y_VERIFY_DEBUG(Item.GetNode()->Equals(*newNode)); 
-            Item = TRuntimeNode(newNode, Item.IsImmediate()); 
-        } 
-    } 
-} 
-
-TNode* TAny::DoCloneOnCallableWrite(const TTypeEnvironment& env) const { 
-    if (!Item.GetNode()) 
-        return const_cast<TAny*>(this); 
- 
-    auto newItemNode = (TNode*)Item.GetNode()->GetCookie(); 
-    if (!newItemNode) { 
-        return const_cast<TAny*>(this); 
-    } 
- 
-    auto any = TAny::Create(env); 
-    any->SetItem(TRuntimeNode(newItemNode, Item.IsImmediate())); 
-    return any; 
+void TAny::DoUpdateLinks(const THashMap<TNode*, TNode*>& links) {
+    if (Item.GetNode()) {
+        auto itemIt = links.find(Item.GetNode());
+        if (itemIt != links.end()) {
+            TNode* newNode = itemIt->second;
+            Y_VERIFY_DEBUG(Item.GetNode()->Equals(*newNode));
+            Item = TRuntimeNode(newNode, Item.IsImmediate());
+        }
+    }
 }
 
-void TAny::DoFreeze(const TTypeEnvironment& env) { 
-    Y_UNUSED(env); 
-    if (Item.GetNode()) { 
-        Item.Freeze(); 
-    } 
-} 
+TNode* TAny::DoCloneOnCallableWrite(const TTypeEnvironment& env) const {
+    if (!Item.GetNode())
+        return const_cast<TAny*>(this);
 
-void TAny::SetItem(TRuntimeNode newItem) { 
-    MKQL_ENSURE(!Item.GetNode(), "item is already set"); 
+    auto newItemNode = (TNode*)Item.GetNode()->GetCookie();
+    if (!newItemNode) {
+        return const_cast<TAny*>(this);
+    }
 
-    Item = newItem; 
-    Item.Freeze(); 
-} 
- 
-bool TAny::Equals(const TAny& nodeToCompare) const { 
-    if (!Item.GetNode() || !nodeToCompare.Item.GetNode()) 
-        return false; 
- 
-    if (!Item.IsImmediate() != !nodeToCompare.Item.IsImmediate()) 
-        return false; 
- 
-    return Item.GetNode()->Equals(*nodeToCompare.Item.GetNode()); 
-} 
- 
+    auto any = TAny::Create(env);
+    any->SetItem(TRuntimeNode(newItemNode, Item.IsImmediate()));
+    return any;
+}
+
+void TAny::DoFreeze(const TTypeEnvironment& env) {
+    Y_UNUSED(env);
+    if (Item.GetNode()) {
+        Item.Freeze();
+    }
+}
+
+void TAny::SetItem(TRuntimeNode newItem) {
+    MKQL_ENSURE(!Item.GetNode(), "item is already set");
+
+    Item = newItem;
+    Item.Freeze();
+}
+
+bool TAny::Equals(const TAny& nodeToCompare) const {
+    if (!Item.GetNode() || !nodeToCompare.Item.GetNode())
+        return false;
+
+    if (!Item.IsImmediate() != !nodeToCompare.Item.IsImmediate())
+        return false;
+
+    return Item.GetNode()->Equals(*nodeToCompare.Item.GetNode());
+}
+
 TTupleType::TTupleType(ui32 elementsCount, TType** elements, const TTypeEnvironment& env, bool validate)
     : TType(EKind::Tuple, env.GetTypeOfType())
     , ElementsCount(elementsCount)

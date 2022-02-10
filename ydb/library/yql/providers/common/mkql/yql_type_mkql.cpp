@@ -307,9 +307,9 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
         return ctx.MakeType<TCallableExprType>(retType, arguments, callableType->GetOptionalArgumentsCount(), payload);
     }
 
-    case TType::EKind::Any: 
-        YQL_ENSURE(false, "Not supported"); 
-        break; 
+    case TType::EKind::Any:
+        YQL_ENSURE(false, "Not supported");
+        break;
 
     case TType::EKind::Tuple:
     {

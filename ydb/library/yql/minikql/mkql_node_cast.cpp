@@ -37,7 +37,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-MKQL_AS_TYPE(Any) 
+MKQL_AS_TYPE(Any)
 MKQL_AS_TYPE(Callable)
 MKQL_AS_TYPE(Data)
 MKQL_AS_TYPE(Dict)
@@ -54,7 +54,7 @@ MKQL_AS_TYPE(Flow)
 MKQL_AS_TYPE(Tagged)
 MKQL_AS_TYPE(Block)
 
-MKQL_AS_VALUE(Any, Type) 
+MKQL_AS_VALUE(Any, Type)
 MKQL_AS_VALUE(Callable, Type)
 MKQL_AS_VALUE(Data, Type)
 MKQL_AS_VALUE(Dict, Type)

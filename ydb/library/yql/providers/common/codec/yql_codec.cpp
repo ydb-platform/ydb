@@ -35,8 +35,8 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
     // Result format
     switch (type->GetKind()) {
     case TType::EKind::Void:
-        writer.OnVoid(); 
-        return; 
+        writer.OnVoid();
+        return;
     case TType::EKind::Null:
         writer.OnNull();
         return;

@@ -55,11 +55,11 @@ namespace {
         TCallable* callable = TCallable::Create(callableArgs.size(), callableArgs.data(), ctype1, env);
         callable->SetResult(TRuntimeNode(TDataLiteral::Create(NUdf::TUnboxedValuePod(u), dtype1, env), true), env);
         structBuilder.Add("31", TRuntimeNode(callable, true));
-        structBuilder.Add("32", TRuntimeNode(env.GetAnyType(), true)); 
-        structBuilder.Add("33", TRuntimeNode(TAny::Create(env), true)); 
-        auto anyWithData = TAny::Create(env); 
-        anyWithData->SetItem(TRuntimeNode(env.GetVoid(), true)); 
-        structBuilder.Add("34", TRuntimeNode(anyWithData, true)); 
+        structBuilder.Add("32", TRuntimeNode(env.GetAnyType(), true));
+        structBuilder.Add("33", TRuntimeNode(TAny::Create(env), true));
+        auto anyWithData = TAny::Create(env);
+        anyWithData->SetItem(TRuntimeNode(env.GetVoid(), true));
+        structBuilder.Add("34", TRuntimeNode(anyWithData, true));
         structBuilder.Add("35", TRuntimeNode(TCallableType::Create("My callable 2",
             dtype2, callableArgs.size(), smallTypes.data(), env.GetVoid(), env), true));
 

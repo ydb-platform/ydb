@@ -8,7 +8,7 @@
 #include <util/charset/utf8.h>
 #include <util/charset/wide.h>
 #include <util/generic/string.h>
-#include <util/generic/algorithm.h> 
+#include <util/generic/algorithm.h>
 #include <util/generic/yexception.h>
 #include <util/memory/tempbuf.h>
 #include <util/system/yassert.h>

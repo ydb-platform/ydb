@@ -1356,7 +1356,7 @@ public:
         auto oldVolumeSpace = volume->GetVolumeSpace();
         volume->FinishAlter();
         auto newVolumeSpace = volume->GetVolumeSpace();
-        // Decrease in occupied space is appled on tx finish 
+        // Decrease in occupied space is appled on tx finish
         auto domainDir = context.SS->PathsById.at(context.SS->ResolveDomainId(path));
         Y_VERIFY(domainDir);
         domainDir->ChangeVolumeSpaceCommit(newVolumeSpace, oldVolumeSpace);

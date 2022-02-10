@@ -2228,7 +2228,7 @@ public:
             waitActor->TabletsTotal = operations.size();
         }
         for (auto& op : operations) {
-            ctx.Send(Self->SelfId(), op.Release()); 
+            ctx.Send(Self->SelfId(), op.Release());
         }
         return true;
     }
@@ -2310,7 +2310,7 @@ public:
             Self->SubActors.emplace_back(waitActor);
         }
         // TODO: pass arguments as post data json
-        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvInitMigration())); 
+        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvInitMigration()));
         return true;
     }
 
@@ -2382,7 +2382,7 @@ public:
         waitActor = new TQueryMigrationWaitActor(Source, Self);
         waitActorId = ctx.RegisterWithSameMailbox(waitActor);
         Self->SubActors.emplace_back(waitActor);
-        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvQueryMigration())); 
+        ctx.Send(new IEventHandle(Self->SelfId(), waitActorId, new TEvHive::TEvQueryMigration()));
         return true;
     }
 
@@ -3033,7 +3033,7 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        ctx.Send(Hive->SelfId(), Event.Release()); 
+        ctx.Send(Hive->SelfId(), Event.Release());
         Become(&TThis::StateWork, ctx, TDuration::Seconds(30), new TEvents::TEvWakeup());
     }
 };
@@ -3103,7 +3103,7 @@ private:
 
 public:
     void Bootstrap(const TActorContext& ctx) {
-        ctx.Send(Hive->SelfId(), Event.Release()); 
+        ctx.Send(Hive->SelfId(), Event.Release());
         Become(&TThis::StateWork, ctx, TDuration::Seconds(30), new TEvents::TEvWakeup());
     }
 };
@@ -3436,7 +3436,7 @@ void THive::CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorCo
             if (cgi.Get("network")) {
                 metrics.MutableResourceUsage()->SetNetwork(FromStringWithDefault<ui64>(cgi.Get("network"), 0));
             }
-            ctx.RegisterWithSameMailbox(new TUpdateResourcesActor(ev->Sender, SelfId(), metrics)); 
+            ctx.RegisterWithSameMailbox(new TUpdateResourcesActor(ev->Sender, SelfId(), metrics));
             return;
         }
     }

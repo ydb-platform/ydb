@@ -13,25 +13,25 @@ static_assert(int(NActors::NLog::PRI_INFO) == int(::TLOG_INFO), "expect int(NAct
 static_assert(int(NActors::NLog::PRI_DEBUG) == int(::TLOG_DEBUG), "expect int(NActors::NLog::PRI_DEBUG) == int(::TLOG_DEBUG)");
 static_assert(int(NActors::NLog::PRI_TRACE) == int(::TLOG_RESOURCES), "expect int(NActors::NLog::PRI_TRACE) == int(::TLOG_RESOURCES)");
 
-namespace { 
-    struct TRecordWithNewline { 
-        ELogPriority Priority; 
-        TTempBuf Buf; 
- 
-        TRecordWithNewline(const TLogRecord& rec) 
-            : Priority(rec.Priority) 
-            , Buf(rec.Len + 1) 
-        { 
-            Buf.Append(rec.Data, rec.Len); 
-            *Buf.Proceed(1) = '\n'; 
-        } 
- 
-        operator TLogRecord() const { 
-            return TLogRecord(Priority, Buf.Data(), Buf.Filled()); 
-        } 
-    }; 
-} 
- 
+namespace {
+    struct TRecordWithNewline {
+        ELogPriority Priority;
+        TTempBuf Buf;
+
+        TRecordWithNewline(const TLogRecord& rec)
+            : Priority(rec.Priority)
+            , Buf(rec.Len + 1)
+        {
+            Buf.Append(rec.Data, rec.Len);
+            *Buf.Proceed(1) = '\n';
+        }
+
+        operator TLogRecord() const {
+            return TLogRecord(Priority, Buf.Data(), Buf.Filled());
+        }
+    };
+}
+
 namespace NActors {
 
     class TLoggerCounters : public ILoggerMetrics {
@@ -685,8 +685,8 @@ namespace NActors {
             bool isOk = false;
             do {
                 try {
-                    TRecordWithNewline r(rec); 
-                    Cerr.Write(r.Buf.Data(), r.Buf.Filled()); 
+                    TRecordWithNewline r(rec);
+                    Cerr.Write(r.Buf.Data(), r.Buf.Filled());
                     isOk = true;
                 } catch (TSystemError err) {
                     // Interrupted system call
@@ -711,7 +711,7 @@ namespace NActors {
 
         // Append newline after every record
         void WriteData(const TLogRecord& rec) override {
-            TFileLogBackend::WriteData(TRecordWithNewline(rec)); 
+            TFileLogBackend::WriteData(TRecordWithNewline(rec));
         }
     };
 

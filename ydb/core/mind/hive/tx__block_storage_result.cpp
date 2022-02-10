@@ -48,7 +48,7 @@ public:
                     if (msg->Status != NKikimrProto::EReplyStatus::OK) {
                         BLOG_W("THive::TTxBlockStorageResult Complete status was " << NKikimrProto::EReplyStatus_Name(msg->Status) << " for TabletId " << tablet->Id);
                     }
-                    ctx.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id)); 
+                    ctx.Send(Self->SelfId(), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
                 } else {
                     tablet->State = ETabletState::ReadyToWork;
                     if (tablet->IsBootingSuppressed()) {

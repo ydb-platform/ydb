@@ -18,7 +18,7 @@ TTabletExecutedFlat::TTabletExecutedFlat(TTabletStorageInfo *info, const TActorI
 
 IExecutor* TTabletExecutedFlat::CreateExecutor(const TActorContext &ctx) {
     if (!Executor()) {
-        IActor *executor = NFlatExecutorSetup::CreateExecutor(this, ctx.SelfID); 
+        IActor *executor = NFlatExecutorSetup::CreateExecutor(this, ctx.SelfID);
         const TActorId executorID = ctx.RegisterWithSameMailbox(executor);
         Executor0 = dynamic_cast<TExecutor *>(executor);
         Y_VERIFY(Executor0);
@@ -47,8 +47,8 @@ void TTabletExecutedFlat::Handle(TEvTablet::TEvBoot::TPtr &ev, const TActorConte
     // Notify sys tablet that leader supports graceful shutdown
     ctx.Send(Tablet(), new TEvTablet::TEvFeatures(TEvTablet::TEvFeatures::GracefulStop));
 
-    const auto& msg = *ev->Get(); 
-    UpdateTabletInfo(msg.TabletStorageInfo, msg.Launcher); 
+    const auto& msg = *ev->Get();
+    UpdateTabletInfo(msg.TabletStorageInfo, msg.Launcher);
     CreateExecutor(ctx)->Boot(ev, ExecutorCtx(ctx));
     TxCacheQuota = ev->Get()->TxCacheQuota;
 }

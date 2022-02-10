@@ -2927,7 +2927,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 part->PartitionId = rowset.GetValue<Schema::BlockStorePartitions::PartitionId>();
                 part->AlterVersion = rowset.GetValue<Schema::BlockStorePartitions::AlterVersion>();
                 if (part->AlterVersion <= volume->AlterVersion)
-                    ++volume->DefaultPartitionCount; // visible partition 
+                    ++volume->DefaultPartitionCount; // visible partition
 
                 if (!rowset.Next())
                     return false;
@@ -2951,7 +2951,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     Y_VERIFY(parseOk);
                 }
                 alterData->AlterVersion = rowset.GetValue<Schema::BlockStoreVolumeAlters::AlterVersion>();
-                alterData->DefaultPartitionCount = rowset.GetValue<Schema::BlockStoreVolumeAlters::PartitionCount>(); 
+                alterData->DefaultPartitionCount = rowset.GetValue<Schema::BlockStoreVolumeAlters::PartitionCount>();
 
                 auto it = Self->BlockStoreVolumes.find(pathId);
                 Y_VERIFY(it != Self->BlockStoreVolumes.end());

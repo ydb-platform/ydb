@@ -5,8 +5,8 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
 namespace NFlatExecutorSetup {
-    IActor* CreateExecutor(ITablet *owner, const TActorId& ownerActorId) { 
-        return new TExecutor(owner, ownerActorId); 
+    IActor* CreateExecutor(ITablet *owner, const TActorId& ownerActorId) {
+        return new TExecutor(owner, ownerActorId);
     }
 
     void ITablet::SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx) {
@@ -40,9 +40,9 @@ namespace NFlatExecutorSetup {
     void ITablet::UpdateTabletInfo(TIntrusivePtr<TTabletStorageInfo> info, const TActorId& launcherID) {
         if (info)
             TabletInfo = info;
- 
-        if (launcherID) 
-            LauncherActorID = launcherID; 
+
+        if (launcherID)
+            LauncherActorID = launcherID;
     }
 }
 

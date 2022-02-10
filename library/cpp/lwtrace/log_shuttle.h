@@ -5,8 +5,8 @@
 
 #include <library/cpp/lwtrace/protos/lwtrace.pb.h>
 
-#include <util/system/spinlock.h> 
- 
+#include <util/system/spinlock.h>
+
 namespace NLWTrace {
     template <class TDepot>
     class TRunLogShuttleActionExecutor;
@@ -51,7 +51,7 @@ namespace NLWTrace {
         TExecutor* Executor;
         bool Ignore = false;
         size_t MaxTrackLength;
-        TAdaptiveLock Lock; 
+        TAdaptiveLock Lock;
         TAtomic ForkFailed = 0;
 
     public:
@@ -156,21 +156,21 @@ namespace NLWTrace {
 
     template <class TDepot>
     bool TLogShuttle<TDepot>::DoAddProbe(TProbe* probe, const TParams& params, ui64 timestamp) {
-        with_lock (Lock) { 
-            if (TrackLog.Items.size() >= MaxTrackLength) { 
-                TrackLog.Truncated = true; 
-                return true; 
-            } 
-            TrackLog.Items.emplace_back(); 
-            TTrackLog::TItem* item = &TrackLog.Items.back(); 
-            item->ThreadId = 0; // TODO[serxa]: check if it is fast to run TThread::CurrentThreadId(); 
-            item->Probe = probe; 
-            if ((item->SavedParamsCount = probe->Event.Signature.ParamCount) > 0) { 
-                probe->Event.Signature.CloneParams(item->Params, params); 
-            } 
+        with_lock (Lock) {
+            if (TrackLog.Items.size() >= MaxTrackLength) {
+                TrackLog.Truncated = true;
+                return true;
+            }
+            TrackLog.Items.emplace_back();
+            TTrackLog::TItem* item = &TrackLog.Items.back();
+            item->ThreadId = 0; // TODO[serxa]: check if it is fast to run TThread::CurrentThreadId();
+            item->Probe = probe;
+            if ((item->SavedParamsCount = probe->Event.Signature.ParamCount) > 0) {
+                probe->Event.Signature.CloneParams(item->Params, params);
+            }
             item->TimestampCycles = timestamp ? timestamp : GetCycleCount();
         }
- 
+
         return true;
     }
 

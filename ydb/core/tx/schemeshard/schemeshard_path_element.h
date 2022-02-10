@@ -53,7 +53,7 @@ enum class EAttribute {
     VOLUME_SPACE_LIMIT_HDD,
     VOLUME_SPACE_LIMIT_SSD,
     EXTRA_PATH_SYMBOLS_ALLOWED, // deprecated
-    VOLUME_SPACE_LIMIT_SSD_NONREPL, 
+    VOLUME_SPACE_LIMIT_SSD_NONREPL,
     DOCUMENT_API_VERSION,
     VOLUME_SPACE_LIMIT_SSD_SYSTEM,
 };
@@ -62,7 +62,7 @@ struct TVolumeSpace {
     ui64 Raw = 0;
     ui64 SSD = 0;
     ui64 HDD = 0;
-    ui64 SSDNonrepl = 0; 
+    ui64 SSDNonrepl = 0;
     ui64 SSDSystem = 0;
 };
 
@@ -110,7 +110,7 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
                 HANDLE_ATTR(VOLUME_SPACE_LIMIT);
                 HANDLE_ATTR(VOLUME_SPACE_LIMIT_HDD);
                 HANDLE_ATTR(VOLUME_SPACE_LIMIT_SSD);
-                HANDLE_ATTR(VOLUME_SPACE_LIMIT_SSD_NONREPL); 
+                HANDLE_ATTR(VOLUME_SPACE_LIMIT_SSD_NONREPL);
                 HANDLE_ATTR(VOLUME_SPACE_LIMIT_SSD_SYSTEM);
                 HANDLE_ATTR(EXTRA_PATH_SYMBOLS_ALLOWED);
                 HANDLE_ATTR(DOCUMENT_API_VERSION);
@@ -205,7 +205,7 @@ struct TUserAttributes: TSimpleRefCount<TUserAttributes> {
             case EAttribute::VOLUME_SPACE_LIMIT:
             case EAttribute::VOLUME_SPACE_LIMIT_HDD:
             case EAttribute::VOLUME_SPACE_LIMIT_SSD:
-            case EAttribute::VOLUME_SPACE_LIMIT_SSD_NONREPL: 
+            case EAttribute::VOLUME_SPACE_LIMIT_SSD_NONREPL:
             case EAttribute::VOLUME_SPACE_LIMIT_SSD_SYSTEM:
                 return CheckAttributeUint64(name, value, errStr);
             case EAttribute::EXTRA_PATH_SYMBOLS_ALLOWED:
@@ -329,7 +329,7 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     TVolumeSpaceLimits VolumeSpaceRaw;
     TVolumeSpaceLimits VolumeSpaceSSD;
     TVolumeSpaceLimits VolumeSpaceHDD;
-    TVolumeSpaceLimits VolumeSpaceSSDNonrepl; 
+    TVolumeSpaceLimits VolumeSpaceSSDNonrepl;
     TVolumeSpaceLimits VolumeSpaceSSDSystem;
     ui64 DocumentApiVersion = 0;
 
@@ -559,7 +559,7 @@ public:
         VolumeSpaceRaw.Limit = Max<ui64>();
         VolumeSpaceSSD.Limit = Max<ui64>();
         VolumeSpaceHDD.Limit = Max<ui64>();
-        VolumeSpaceSSDNonrepl.Limit = Max<ui64>(); 
+        VolumeSpaceSSDNonrepl.Limit = Max<ui64>();
         VolumeSpaceSSDSystem.Limit = Max<ui64>();
         ExtraPathSymbolsAllowed = TString();
         for (const auto& item : UserAttrs->Attrs) {
@@ -573,9 +573,9 @@ public:
                 case EAttribute::VOLUME_SPACE_LIMIT_HDD:
                     HandleAttributeValue(item.second, VolumeSpaceHDD.Limit);
                     break;
-                case EAttribute::VOLUME_SPACE_LIMIT_SSD_NONREPL: 
-                    HandleAttributeValue(item.second, VolumeSpaceSSDNonrepl.Limit); 
-                    break; 
+                case EAttribute::VOLUME_SPACE_LIMIT_SSD_NONREPL:
+                    HandleAttributeValue(item.second, VolumeSpaceSSDNonrepl.Limit);
+                    break;
                 case EAttribute::VOLUME_SPACE_LIMIT_SSD_SYSTEM:
                     HandleAttributeValue(item.second, VolumeSpaceSSDSystem.Limit);
                     break;
@@ -612,7 +612,7 @@ public:
         update(VolumeSpaceRaw, newSpace.Raw, oldSpace.Raw);
         update(VolumeSpaceSSD, newSpace.SSD, oldSpace.SSD);
         update(VolumeSpaceHDD, newSpace.HDD, oldSpace.HDD);
-        update(VolumeSpaceSSDNonrepl, newSpace.SSDNonrepl, oldSpace.SSDNonrepl); 
+        update(VolumeSpaceSSDNonrepl, newSpace.SSDNonrepl, oldSpace.SSDNonrepl);
         update(VolumeSpaceSSDSystem, newSpace.SSDSystem, oldSpace.SSDSystem);
     }
 
@@ -628,10 +628,10 @@ public:
         update(VolumeSpaceRaw, newSpace.Raw, oldSpace.Raw);
         update(VolumeSpaceSSD, newSpace.SSD, oldSpace.SSD);
         update(VolumeSpaceHDD, newSpace.HDD, oldSpace.HDD);
-        update(VolumeSpaceSSDNonrepl, newSpace.SSDNonrepl, oldSpace.SSDNonrepl); 
+        update(VolumeSpaceSSDNonrepl, newSpace.SSDNonrepl, oldSpace.SSDNonrepl);
         update(VolumeSpaceSSDSystem, newSpace.SSDSystem, oldSpace.SSDSystem);
     }
- 
+
     bool CheckVolumeSpaceChange(TVolumeSpace newSpace, TVolumeSpace oldSpace, TString& errStr) {
         auto check = [&errStr](const TVolumeSpaceLimits& limits, ui64 newValue, ui64 oldValue, const char* suffix) -> bool {
             if (newValue > oldValue) {
@@ -642,12 +642,12 @@ public:
                         << ": " << newAllocated << " > " << limits.Limit;
                     return false;
                 }
-            } 
+            }
             return true;
         };
         return (check(VolumeSpaceRaw, newSpace.Raw, oldSpace.Raw, "") &&
                 check(VolumeSpaceSSD, newSpace.SSD, oldSpace.SSD, " (ssd)") &&
-                check(VolumeSpaceHDD, newSpace.HDD, oldSpace.HDD, " (hdd)") && 
+                check(VolumeSpaceHDD, newSpace.HDD, oldSpace.HDD, " (hdd)") &&
                 check(VolumeSpaceSSDNonrepl, newSpace.SSDNonrepl, oldSpace.SSDNonrepl, " (ssd_nonrepl)") &&
                 check(VolumeSpaceSSDSystem, newSpace.SSDSystem, oldSpace.SSDSystem, " (ssd_system)"));
     }
@@ -655,7 +655,7 @@ public:
     bool HasRuntimeAttrs() const {
         return (VolumeSpaceRaw.Allocated > 0 ||
                 VolumeSpaceSSD.Allocated > 0 ||
-                VolumeSpaceHDD.Allocated > 0 || 
+                VolumeSpaceHDD.Allocated > 0 ||
                 VolumeSpaceSSDNonrepl.Allocated > 0 ||
                 VolumeSpaceSSDSystem.Allocated > 0);
     }
@@ -673,10 +673,10 @@ public:
         process(VolumeSpaceRaw, "__volume_space_allocated");
         process(VolumeSpaceSSD, "__volume_space_allocated_ssd");
         process(VolumeSpaceHDD, "__volume_space_allocated_hdd");
-        process(VolumeSpaceSSDNonrepl, "__volume_space_allocated_ssd_nonrepl"); 
+        process(VolumeSpaceSSDNonrepl, "__volume_space_allocated_ssd_nonrepl");
         process(VolumeSpaceSSDSystem, "__volume_space_allocated_ssd_system");
     }
- 
+
 };
 }
 }

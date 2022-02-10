@@ -129,7 +129,7 @@ void THive::ScheduleUnlockTabletExecution(TNodeInfo& node) {
             if (tablet->LockedReconnectTimeout) {
                 Schedule(tablet->LockedReconnectTimeout, event);
             } else {
-                Send(SelfId(), event); 
+                Send(SelfId(), event);
             }
         }
     }

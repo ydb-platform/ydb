@@ -28,8 +28,8 @@ message TConfig {
     optional uint64 CreationTs = 16;
     optional uint64 AlterTs = 17;
 
-    optional uint32 RangeIdHasherType = 18; 
- 
+    optional uint32 RangeIdHasherType = 18;
+
     repeated TChannelProfile ExplicitChannelProfiles = 30;
     optional bool PoolKindChangeAllowed = 31;
 

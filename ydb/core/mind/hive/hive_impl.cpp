@@ -165,7 +165,7 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet) {
 
     // Tablet has no storage, so there's nothing to block or delete
     // Simulate a response from CreateTabletReqDelete as if all steps have been completed
-    Send(SelfId(), new TEvTabletBase::TEvDeleteTabletResult(NKikimrProto::OK, tablet->Id)); 
+    Send(SelfId(), new TEvTabletBase::TEvDeleteTabletResult(NKikimrProto::OK, tablet->Id));
 }
 
 void THive::RunProcessBootQueue() {
@@ -266,7 +266,7 @@ void THive::ProcessBootQueue() {
     if (!ProcessBootQueueScheduled) {
         BLOG_TRACE("ProcessBootQueue - sending");
         ProcessBootQueueScheduled = true;
-        Send(SelfId(), new TEvPrivate::TEvProcessBootQueue()); 
+        Send(SelfId(), new TEvPrivate::TEvProcessBootQueue());
     }
 }
 
@@ -657,7 +657,7 @@ void THive::ScheduleDisconnectNode(THolder<TEvPrivate::TEvProcessDisconnectNode>
         if (disconnectTimeout > spentTime) {
             Schedule(disconnectTimeout - spentTime, event.Release());
         } else {
-            Send(SelfId(), event.Release()); 
+            Send(SelfId(), event.Release());
         }
     } else {
         KillNode(event->NodeId, event->Local);
@@ -909,7 +909,7 @@ void THive::SendToBSControllerPipe(IEventBase* payload) {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         BSControllerPipeClient = Register(NTabletPipe::CreateClient(
-            SelfId(), MakeBSControllerID(defaultStateStorageGroup), pipeConfig)); 
+            SelfId(), MakeBSControllerID(defaultStateStorageGroup), pipeConfig));
     }
     NTabletPipe::SendData(SelfId(), BSControllerPipeClient, payload);
 }
@@ -918,7 +918,7 @@ void THive::SendToRootHivePipe(IEventBase* payload) {
     if (!RootHivePipeClient) {
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
-        RootHivePipeClient = Register(NTabletPipe::CreateClient(SelfId(), RootHiveId, pipeConfig)); 
+        RootHivePipeClient = Register(NTabletPipe::CreateClient(SelfId(), RootHiveId, pipeConfig));
     }
     NTabletPipe::SendData(SelfId(), RootHivePipeClient, payload);
 }
@@ -2334,7 +2334,7 @@ STFUNC(THive::StateWork) {
 }
 
 void THive::KickTablet(const TTabletInfo& tablet) {
-    Send(SelfId(), new TEvPrivate::TEvKickTablet(tablet)); 
+    Send(SelfId(), new TEvPrivate::TEvKickTablet(tablet));
 }
 
 void THive::StopTablet(const TActorId& local, const TTabletInfo& tablet) {

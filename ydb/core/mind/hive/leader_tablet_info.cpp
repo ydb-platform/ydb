@@ -88,7 +88,7 @@ bool TLeaderTabletInfo::InitiateBlockStorage() {
     // attempt to kill tablet before blocking the storage group
     Kill();
     // blocks PREVIOUS entry of tablet history
-    IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), KnownGeneration, true); 
+    IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), KnownGeneration, true);
     Hive.Register(x);
     return true;
 }
@@ -102,13 +102,13 @@ bool TLeaderTabletInfo::InitiateBlockStorage(ui32 generation) {
         return false;
     }
     Y_VERIFY(channel != nullptr && !channel->History.empty());
-    IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), generation, false); 
+    IActor* x = CreateTabletReqBlockBlobStorage(Hive.SelfId(), TabletStorageInfo.Get(), generation, false);
     Hive.Register(x);
     return true;
 }
 
 bool TLeaderTabletInfo::InitiateDeleteStorage() {
-    IActor* x = CreateTabletReqDelete(Hive.SelfId(), TabletStorageInfo); 
+    IActor* x = CreateTabletReqDelete(Hive.SelfId(), TabletStorageInfo);
     Hive.Register(x);
     return true;
 }

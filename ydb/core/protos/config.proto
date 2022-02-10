@@ -482,7 +482,7 @@ message TMonitoringConfig {
     optional string HostLabelOverride = 10;
     optional string ProcessLocation = 11;
     optional string AllowOrigin = 12;
-    optional string RedirectMainPageTo = 13 [default = "monitoring/"]; 
+    optional string RedirectMainPageTo = 13 [default = "monitoring/"];
 }
 
 message TRestartsCountConfig {

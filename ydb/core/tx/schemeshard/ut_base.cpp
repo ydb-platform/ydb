@@ -3,9 +3,9 @@
 
 #include <ydb/core/base/compile_time_flags.h>
 
-#include <util/generic/size_literals.h> 
-#include <util/string/cast.h> 
- 
+#include <util/generic/size_literals.h>
+#include <util/string/cast.h>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
@@ -7152,43 +7152,43 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume"); 
-        auto& vc = *vdescr.MutableVolumeConfig(); 
- 
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+
         // Missing parameters
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", "", {NKikimrScheme::StatusSchemeError});
 
-        vc.SetBlockSize(4096); 
- 
-        // Creating volumes without partitions not allowed 
+        vc.SetBlockSize(4096);
+
+        // Creating volumes without partitions not allowed
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                                   vdescr.DebugString(), 
+                                   vdescr.DebugString(),
                                    {NKikimrScheme::StatusSchemeError});
 
-        vc.AddPartitions()->SetBlockCount(16); 
- 
-        // Specifying config version not allowed 
-        vc.SetVersion(123); 
- 
+        vc.AddPartitions()->SetBlockCount(16);
+
+        // Specifying config version not allowed
+        vc.SetVersion(123);
+
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                                   vdescr.DebugString(), 
+                                   vdescr.DebugString(),
                                    {NKikimrScheme::StatusSchemeError});
 
-        vc.ClearVersion(); 
- 
-        // No channel profiles 
+        vc.ClearVersion();
+
+        // No channel profiles
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                                   vdescr.DebugString(), 
+                                   vdescr.DebugString(),
                                    {NKikimrScheme::StatusInvalidParameter});
 
         // Normal volume with 2 partitions
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.AddPartitions()->SetBlockCount(16); 
- 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.AddPartitions()->SetBlockCount(16);
+
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
@@ -7196,7 +7196,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // Already exists
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                                   vdescr.DebugString(), 
+                                   vdescr.DebugString(),
                                    {NKikimrScheme::StatusAlreadyExists});
     }
 
@@ -7230,178 +7230,178 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
     }
 
-    Y_UNIT_TEST(CreateBlockStoreVolumeWithNonReplicatedPartitions) { //+ 
-        TTestBasicRuntime runtime; 
-        TTestEnv env(runtime); 
-        ui64 txId = 100; 
- 
+    Y_UNIT_TEST(CreateBlockStoreVolumeWithNonReplicatedPartitions) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume"); 
-        auto& vc = *vdescr.MutableVolumeConfig(); 
- 
-        vc.SetBlockSize(4096); 
- 
-        auto* partition = vc.AddPartitions(); 
-        partition->SetBlockCount(16); 
-        partition->SetType(NKikimrBlockStore::EPartitionType::NonReplicated); 
- 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), 
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)}); 
-    } 
- 
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+
+        vc.SetBlockSize(4096);
+
+        auto* partition = vc.AddPartitions();
+        partition->SetBlockCount(16);
+        partition->SetType(NKikimrBlockStore::EPartitionType::NonReplicated);
+
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
+                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+    }
+
     Y_UNIT_TEST(AlterBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, /* nchannels */ 6);
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume"); 
-        auto& vc = *vdescr.MutableVolumeConfig(); 
- 
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+
         // Cannot alter missing volumes
-        vc.AddPartitions()->SetBlockCount(32); 
-        vc.AddPartitions()->SetBlockCount(32); 
+        vc.AddPartitions()->SetBlockCount(32);
+        vc.AddPartitions()->SetBlockCount(32);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                                  vdescr.DebugString(), 
+                                  vdescr.DebugString(),
                                   {NKikimrScheme::StatusPathDoesNotExist});
-        vc.Clear(); 
+        vc.Clear();
 
         // Create volume with 1 partition
-        vc.SetBlockSize(4096); 
-        vc.AddPartitions()->SetBlockCount(16); 
-        vc.SetDiskId("foo"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.MutableExplicitChannelProfiles(0)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(1)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(2)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(3)->SetSize(1024); 
-        vc.MutableExplicitChannelProfiles(3)->SetReadIops(100); 
-        vc.MutableExplicitChannelProfiles(3)->SetReadBandwidth(100500); 
-        vc.MutableExplicitChannelProfiles(3)->SetWriteIops(200); 
-        vc.MutableExplicitChannelProfiles(3)->SetWriteBandwidth(200500); 
-        vc.MutableExplicitChannelProfiles(3)->SetDataKind(1); 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.SetDiskId("foo");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.MutableExplicitChannelProfiles(0)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(1)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(2)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(3)->SetSize(1024);
+        vc.MutableExplicitChannelProfiles(3)->SetReadIops(100);
+        vc.MutableExplicitChannelProfiles(3)->SetReadBandwidth(100500);
+        vc.MutableExplicitChannelProfiles(3)->SetWriteIops(200);
+        vc.MutableExplicitChannelProfiles(3)->SetWriteBandwidth(200500);
+        vc.MutableExplicitChannelProfiles(3)->SetDataKind(1);
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+        vc.Clear();
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
 
         // Alter it into 2 bigger partitions
-        vc.SetVersion(1); 
-        vc.AddPartitions()->SetBlockCount(32); 
-        vc.AddPartitions()->SetBlockCount(32); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vc.SetVersion(1);
+        vc.AddPartitions()->SetBlockCount(32);
+        vc.AddPartitions()->SetBlockCount(32);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+        vc.Clear();
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(3)});
 
-        vc.SetVersion(2); 
- 
+        vc.SetVersion(2);
+
         // Alter with less partitions not allowed
-        vc.AddPartitions()->SetBlockCount(32); 
+        vc.AddPartitions()->SetBlockCount(32);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                                  vdescr.DebugString(), 
+                                  vdescr.DebugString(),
                                   {NKikimrScheme::StatusInvalidParameter});
 
         // Changing block size not allowed
-        vc.AddPartitions()->SetBlockCount(32); 
-        vc.SetBlockSize(8192); 
+        vc.AddPartitions()->SetBlockCount(32);
+        vc.SetBlockSize(8192);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                                  vdescr.DebugString(), 
+                                  vdescr.DebugString(),
                                   {NKikimrScheme::StatusInvalidParameter});
-        vc.ClearBlockSize(); 
-        vc.ClearPartitions(); 
+        vc.ClearBlockSize();
+        vc.ClearPartitions();
 
-        // Setting media kind for the first time is allowed 
-        vc.SetStorageMediaKind(1); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        // Setting media kind for the first time is allowed
+        vc.SetStorageMediaKind(1);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+        vc.Clear();
 
-        { 
-            NKikimrBlockStore::TVolumeConfig config; 
-            TestLs(runtime, "/MyRoot/BSVolume", false, NLs::ExtractVolumeConfig(&config)); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetStorageMediaKind(), 1); 
-        } 
- 
-        vc.SetVersion(3); 
- 
-        // But changing media kind is not allowed 
-        vc.SetStorageMediaKind(2); 
+        {
+            NKikimrBlockStore::TVolumeConfig config;
+            TestLs(runtime, "/MyRoot/BSVolume", false, NLs::ExtractVolumeConfig(&config));
+            UNIT_ASSERT_VALUES_EQUAL(config.GetStorageMediaKind(), 1);
+        }
+
+        vc.SetVersion(3);
+
+        // But changing media kind is not allowed
+        vc.SetStorageMediaKind(2);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                                  vdescr.DebugString(), 
+                                  vdescr.DebugString(),
                                   {NKikimrScheme::StatusInvalidParameter});
-        vc.ClearStorageMediaKind(); 
- 
-        // Adding channel profiles is allowed 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.MutableExplicitChannelProfiles(0)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(1)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(2)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(3)->SetSize(1024); 
-        vc.MutableExplicitChannelProfiles(3)->SetReadIops(100); 
-        vc.MutableExplicitChannelProfiles(3)->SetReadBandwidth(100500); 
-        vc.MutableExplicitChannelProfiles(3)->SetWriteIops(200); 
-        vc.MutableExplicitChannelProfiles(3)->SetWriteBandwidth(200500); 
-        vc.MutableExplicitChannelProfiles(3)->SetDataKind(1); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(4)->SetSize(2048); 
-        vc.MutableExplicitChannelProfiles(4)->SetReadIops(300); 
-        vc.MutableExplicitChannelProfiles(4)->SetReadBandwidth(300500); 
-        vc.MutableExplicitChannelProfiles(4)->SetWriteIops(400); 
-        vc.MutableExplicitChannelProfiles(4)->SetWriteBandwidth(400500); 
-        vc.MutableExplicitChannelProfiles(4)->SetDataKind(2); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(5)->SetSize(3072); 
-        vc.MutableExplicitChannelProfiles(5)->SetReadIops(500); 
-        vc.MutableExplicitChannelProfiles(5)->SetReadBandwidth(500500); 
-        vc.MutableExplicitChannelProfiles(5)->SetWriteIops(600); 
-        vc.MutableExplicitChannelProfiles(5)->SetWriteBandwidth(600500); 
-        vc.MutableExplicitChannelProfiles(5)->SetDataKind(2); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+        vc.ClearStorageMediaKind();
 
-        vc.SetVersion(4); 
- 
-        // Deleting channel profiles is not allowed 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.MutableExplicitChannelProfiles(0)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(1)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(2)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(3)->SetSize(1024); 
-        vc.MutableExplicitChannelProfiles(3)->SetReadIops(100); 
-        vc.MutableExplicitChannelProfiles(3)->SetReadBandwidth(100500); 
-        vc.MutableExplicitChannelProfiles(3)->SetWriteIops(200); 
-        vc.MutableExplicitChannelProfiles(3)->SetWriteBandwidth(200500); 
-        vc.MutableExplicitChannelProfiles(3)->SetDataKind(1); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(4)->SetSize(2048); 
-        vc.MutableExplicitChannelProfiles(4)->SetReadIops(300); 
-        vc.MutableExplicitChannelProfiles(4)->SetReadBandwidth(300500); 
-        vc.MutableExplicitChannelProfiles(4)->SetWriteIops(400); 
-        vc.MutableExplicitChannelProfiles(4)->SetWriteBandwidth(400500); 
-        vc.MutableExplicitChannelProfiles(4)->SetDataKind(2); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", 
-                                  vdescr.DebugString(), 
+        // Adding channel profiles is allowed
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.MutableExplicitChannelProfiles(0)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(1)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(2)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(3)->SetSize(1024);
+        vc.MutableExplicitChannelProfiles(3)->SetReadIops(100);
+        vc.MutableExplicitChannelProfiles(3)->SetReadBandwidth(100500);
+        vc.MutableExplicitChannelProfiles(3)->SetWriteIops(200);
+        vc.MutableExplicitChannelProfiles(3)->SetWriteBandwidth(200500);
+        vc.MutableExplicitChannelProfiles(3)->SetDataKind(1);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(4)->SetSize(2048);
+        vc.MutableExplicitChannelProfiles(4)->SetReadIops(300);
+        vc.MutableExplicitChannelProfiles(4)->SetReadBandwidth(300500);
+        vc.MutableExplicitChannelProfiles(4)->SetWriteIops(400);
+        vc.MutableExplicitChannelProfiles(4)->SetWriteBandwidth(400500);
+        vc.MutableExplicitChannelProfiles(4)->SetDataKind(2);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(5)->SetSize(3072);
+        vc.MutableExplicitChannelProfiles(5)->SetReadIops(500);
+        vc.MutableExplicitChannelProfiles(5)->SetReadBandwidth(500500);
+        vc.MutableExplicitChannelProfiles(5)->SetWriteIops(600);
+        vc.MutableExplicitChannelProfiles(5)->SetWriteBandwidth(600500);
+        vc.MutableExplicitChannelProfiles(5)->SetDataKind(2);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        vc.Clear();
+
+        vc.SetVersion(4);
+
+        // Deleting channel profiles is not allowed
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.MutableExplicitChannelProfiles(0)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(1)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(2)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(3)->SetSize(1024);
+        vc.MutableExplicitChannelProfiles(3)->SetReadIops(100);
+        vc.MutableExplicitChannelProfiles(3)->SetReadBandwidth(100500);
+        vc.MutableExplicitChannelProfiles(3)->SetWriteIops(200);
+        vc.MutableExplicitChannelProfiles(3)->SetWriteBandwidth(200500);
+        vc.MutableExplicitChannelProfiles(3)->SetDataKind(1);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(4)->SetSize(2048);
+        vc.MutableExplicitChannelProfiles(4)->SetReadIops(300);
+        vc.MutableExplicitChannelProfiles(4)->SetReadBandwidth(300500);
+        vc.MutableExplicitChannelProfiles(4)->SetWriteIops(400);
+        vc.MutableExplicitChannelProfiles(4)->SetWriteBandwidth(400500);
+        vc.MutableExplicitChannelProfiles(4)->SetDataKind(2);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
+                                  vdescr.DebugString(),
                                   {NKikimrScheme::StatusInvalidParameter});
-        vc.ClearExplicitChannelProfiles(); 
- 
+        vc.ClearExplicitChannelProfiles();
+
         // Number of volume channel explicit profiles must be equal to 3
         vc.AddVolumeExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
         vc.AddVolumeExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
@@ -7410,95 +7410,95 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                   {NKikimrScheme::StatusInvalidParameter});
         vc.ClearVolumeExplicitChannelProfiles();
 
-        // Changing PoolKind is not allowed 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.MutableExplicitChannelProfiles(0)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(1)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(2)->SetSize(128); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(3)->SetSize(1024); 
-        vc.MutableExplicitChannelProfiles(3)->SetReadIops(100); 
-        vc.MutableExplicitChannelProfiles(3)->SetReadBandwidth(100500); 
-        vc.MutableExplicitChannelProfiles(3)->SetWriteIops(200); 
-        vc.MutableExplicitChannelProfiles(3)->SetWriteBandwidth(200500); 
-        vc.MutableExplicitChannelProfiles(3)->SetDataKind(1); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(4)->SetSize(2048); 
-        vc.MutableExplicitChannelProfiles(4)->SetReadIops(300); 
-        vc.MutableExplicitChannelProfiles(4)->SetReadBandwidth(300500); 
-        vc.MutableExplicitChannelProfiles(4)->SetWriteIops(400); 
-        vc.MutableExplicitChannelProfiles(4)->SetWriteBandwidth(400500); 
-        vc.MutableExplicitChannelProfiles(4)->SetDataKind(2); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.MutableExplicitChannelProfiles(5)->SetSize(3072); 
-        vc.MutableExplicitChannelProfiles(5)->SetReadIops(500); 
-        vc.MutableExplicitChannelProfiles(5)->SetReadBandwidth(500500); 
-        vc.MutableExplicitChannelProfiles(5)->SetWriteIops(600); 
-        vc.MutableExplicitChannelProfiles(5)->SetWriteBandwidth(600500); 
-        vc.MutableExplicitChannelProfiles(5)->SetDataKind(2); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", 
-                                  vdescr.DebugString(), 
+        // Changing PoolKind is not allowed
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.MutableExplicitChannelProfiles(0)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(1)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(2)->SetSize(128);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(3)->SetSize(1024);
+        vc.MutableExplicitChannelProfiles(3)->SetReadIops(100);
+        vc.MutableExplicitChannelProfiles(3)->SetReadBandwidth(100500);
+        vc.MutableExplicitChannelProfiles(3)->SetWriteIops(200);
+        vc.MutableExplicitChannelProfiles(3)->SetWriteBandwidth(200500);
+        vc.MutableExplicitChannelProfiles(3)->SetDataKind(1);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(4)->SetSize(2048);
+        vc.MutableExplicitChannelProfiles(4)->SetReadIops(300);
+        vc.MutableExplicitChannelProfiles(4)->SetReadBandwidth(300500);
+        vc.MutableExplicitChannelProfiles(4)->SetWriteIops(400);
+        vc.MutableExplicitChannelProfiles(4)->SetWriteBandwidth(400500);
+        vc.MutableExplicitChannelProfiles(4)->SetDataKind(2);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.MutableExplicitChannelProfiles(5)->SetSize(3072);
+        vc.MutableExplicitChannelProfiles(5)->SetReadIops(500);
+        vc.MutableExplicitChannelProfiles(5)->SetReadBandwidth(500500);
+        vc.MutableExplicitChannelProfiles(5)->SetWriteIops(600);
+        vc.MutableExplicitChannelProfiles(5)->SetWriteBandwidth(600500);
+        vc.MutableExplicitChannelProfiles(5)->SetDataKind(2);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
+                                  vdescr.DebugString(),
                                   {NKikimrScheme::StatusInvalidParameter});
- 
-        // Actually, it's allowed if you say a magic word 
-        vc.SetPoolKindChangeAllowed(true); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        vc.ClearPoolKindChangeAllowed(); 
-        vc.ClearExplicitChannelProfiles(); 
- 
-        vc.SetVersion(5); 
- 
-        // Modifying fields apart from PoolKind is allowed 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.MutableExplicitChannelProfiles(0)->SetSize(129); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(1)->SetSize(129); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(2)->SetSize(129); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(3)->SetSize(1025); 
-        vc.MutableExplicitChannelProfiles(3)->SetReadIops(101); 
-        vc.MutableExplicitChannelProfiles(3)->SetReadBandwidth(100501); 
-        vc.MutableExplicitChannelProfiles(3)->SetWriteIops(201); 
-        vc.MutableExplicitChannelProfiles(3)->SetWriteBandwidth(200501); 
-        vc.MutableExplicitChannelProfiles(3)->SetDataKind(2); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2"); 
-        vc.MutableExplicitChannelProfiles(4)->SetSize(2049); 
-        vc.MutableExplicitChannelProfiles(4)->SetReadIops(301); 
-        vc.MutableExplicitChannelProfiles(4)->SetReadBandwidth(300501); 
-        vc.MutableExplicitChannelProfiles(4)->SetWriteIops(401); 
-        vc.MutableExplicitChannelProfiles(4)->SetWriteBandwidth(400501); 
-        vc.MutableExplicitChannelProfiles(4)->SetDataKind(1); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.MutableExplicitChannelProfiles(5)->SetSize(3073); 
-        vc.MutableExplicitChannelProfiles(5)->SetReadIops(501); 
-        vc.MutableExplicitChannelProfiles(5)->SetReadBandwidth(500501); 
-        vc.MutableExplicitChannelProfiles(5)->SetWriteIops(601); 
-        vc.MutableExplicitChannelProfiles(5)->SetWriteBandwidth(600501); 
-        vc.MutableExplicitChannelProfiles(5)->SetDataKind(1); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId); 
-        vc.Clear(); 
- 
-        vc.SetVersion(6); 
- 
-        // Decreasing BlockCount is not allowed 
-        vc.AddPartitions()->SetBlockCount(16); 
-        vc.AddPartitions()->SetBlockCount(32); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", 
-                                  vdescr.DebugString(), 
-                                  {NKikimrScheme::StatusInvalidParameter});
-        vc.ClearPartitions(); 
- 
-        // Changing Opaque is allowed
-        vc.SetOpaque("binary data"); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+
+        // Actually, it's allowed if you say a magic word
+        vc.SetPoolKindChangeAllowed(true);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+
+        vc.ClearPoolKindChangeAllowed();
+        vc.ClearExplicitChannelProfiles();
+
+        vc.SetVersion(5);
+
+        // Modifying fields apart from PoolKind is allowed
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.MutableExplicitChannelProfiles(0)->SetSize(129);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(1)->SetSize(129);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(2)->SetSize(129);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(3)->SetSize(1025);
+        vc.MutableExplicitChannelProfiles(3)->SetReadIops(101);
+        vc.MutableExplicitChannelProfiles(3)->SetReadBandwidth(100501);
+        vc.MutableExplicitChannelProfiles(3)->SetWriteIops(201);
+        vc.MutableExplicitChannelProfiles(3)->SetWriteBandwidth(200501);
+        vc.MutableExplicitChannelProfiles(3)->SetDataKind(2);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-2");
+        vc.MutableExplicitChannelProfiles(4)->SetSize(2049);
+        vc.MutableExplicitChannelProfiles(4)->SetReadIops(301);
+        vc.MutableExplicitChannelProfiles(4)->SetReadBandwidth(300501);
+        vc.MutableExplicitChannelProfiles(4)->SetWriteIops(401);
+        vc.MutableExplicitChannelProfiles(4)->SetWriteBandwidth(400501);
+        vc.MutableExplicitChannelProfiles(4)->SetDataKind(1);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.MutableExplicitChannelProfiles(5)->SetSize(3073);
+        vc.MutableExplicitChannelProfiles(5)->SetReadIops(501);
+        vc.MutableExplicitChannelProfiles(5)->SetReadBandwidth(500501);
+        vc.MutableExplicitChannelProfiles(5)->SetWriteIops(601);
+        vc.MutableExplicitChannelProfiles(5)->SetWriteBandwidth(600501);
+        vc.MutableExplicitChannelProfiles(5)->SetDataKind(1);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        vc.Clear();
+
+        vc.SetVersion(6);
+
+        // Decreasing BlockCount is not allowed
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddPartitions()->SetBlockCount(32);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
+                                  vdescr.DebugString(),
+                                  {NKikimrScheme::StatusInvalidParameter});
+        vc.ClearPartitions();
+
+        // Changing Opaque is allowed
+        vc.SetOpaque("binary data");
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        vc.Clear();
 
         {
             NKikimrBlockStore::TVolumeConfig config;
@@ -7507,25 +7507,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_VALUES_EQUAL(config.GetOpaque(), "binary data");
         }
 
-        vc.SetVersion(7); 
- 
-        // Now change DiskId, FolderId and add some Tags, it shouldn't affect other values 
-        vc.SetDiskId("foobaz"); 
-        vc.SetFolderId("baz"); 
-        *vc.AddTags() = "tag1"; 
-        *vc.AddTags() = "tag2"; 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+        vc.SetVersion(7);
 
-        vc.SetVersion(8); 
- 
-        // Changing Tags 
-        *vc.AddTags() = "tag1"; 
-        *vc.AddTags() = "tag3"; 
-        *vc.AddTags() = "tag4"; 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId); 
+        // Now change DiskId, FolderId and add some Tags, it shouldn't affect other values
+        vc.SetDiskId("foobaz");
+        vc.SetFolderId("baz");
+        *vc.AddTags() = "tag1";
+        *vc.AddTags() = "tag2";
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        vc.Clear();
+
+        vc.SetVersion(8);
+
+        // Changing Tags
+        *vc.AddTags() = "tag1";
+        *vc.AddTags() = "tag3";
+        *vc.AddTags() = "tag4";
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
 
         vc.SetVersion(9);
         // Set volume tablet channels
@@ -7547,8 +7547,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         vc.MutableVolumeExplicitChannelProfiles(2)->SetPoolKind("pool-kind-2");
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
- 
+        vc.Clear();
+
         {
             NKikimrBlockStore::TVolumeConfig config;
             NLs::ExtractVolumeConfig(&config)(DescribePath(runtime, "/MyRoot/BSVolume"));
@@ -7557,61 +7557,61 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_VALUES_EQUAL(config.GetDiskId(), "foobaz");
             UNIT_ASSERT_VALUES_EQUAL(config.GetFolderId(), "baz");
             UNIT_ASSERT_VALUES_EQUAL(config.GetOpaque(), "binary data");
- 
-            UNIT_ASSERT_VALUES_EQUAL(config.TagsSize(), 3); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetTags(0), "tag1"); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetTags(1), "tag3"); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetTags(2), "tag4"); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(config.ExplicitChannelProfilesSize(), 6); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetPoolKind(), "pool-kind-1"); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetSize(), 129); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetReadIops(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetReadBandwidth(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetWriteIops(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetWriteBandwidth(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetDataKind(), 0); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetPoolKind(), "pool-kind-2"); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetSize(), 129); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetReadIops(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetReadBandwidth(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetWriteIops(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetWriteBandwidth(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetDataKind(), 0); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetPoolKind(), "pool-kind-2"); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetSize(), 129); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetReadIops(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetReadBandwidth(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetWriteIops(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetWriteBandwidth(), 0); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetDataKind(), 0); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetPoolKind(), "pool-kind-2"); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetSize(), 1025); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetReadIops(), 101); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetReadBandwidth(), 100501); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetWriteIops(), 201); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetWriteBandwidth(), 200501); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetDataKind(), 2); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetPoolKind(), "pool-kind-2"); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetSize(), 2049); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetReadIops(), 301); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetReadBandwidth(), 300501); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetWriteIops(), 401); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetWriteBandwidth(), 400501); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetDataKind(), 1); 
- 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetPoolKind(), "pool-kind-1"); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetSize(), 3073); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetReadIops(), 501); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetReadBandwidth(), 500501); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetWriteIops(), 601); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetWriteBandwidth(), 600501); 
-            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetDataKind(), 1); 
+
+            UNIT_ASSERT_VALUES_EQUAL(config.TagsSize(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetTags(0), "tag1");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetTags(1), "tag3");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetTags(2), "tag4");
+
+            UNIT_ASSERT_VALUES_EQUAL(config.ExplicitChannelProfilesSize(), 6);
+
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetPoolKind(), "pool-kind-1");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetSize(), 129);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetReadIops(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetReadBandwidth(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetWriteIops(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetWriteBandwidth(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(0).GetDataKind(), 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetPoolKind(), "pool-kind-2");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetSize(), 129);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetReadIops(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetReadBandwidth(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetWriteIops(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetWriteBandwidth(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(1).GetDataKind(), 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetPoolKind(), "pool-kind-2");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetSize(), 129);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetReadIops(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetReadBandwidth(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetWriteIops(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetWriteBandwidth(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(2).GetDataKind(), 0);
+
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetPoolKind(), "pool-kind-2");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetSize(), 1025);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetReadIops(), 101);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetReadBandwidth(), 100501);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetWriteIops(), 201);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetWriteBandwidth(), 200501);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(3).GetDataKind(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetPoolKind(), "pool-kind-2");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetSize(), 2049);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetReadIops(), 301);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetReadBandwidth(), 300501);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetWriteIops(), 401);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetWriteBandwidth(), 400501);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(4).GetDataKind(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetPoolKind(), "pool-kind-1");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetSize(), 3073);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetReadIops(), 501);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetReadBandwidth(), 500501);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetWriteIops(), 601);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetWriteBandwidth(), 600501);
+            UNIT_ASSERT_VALUES_EQUAL(config.GetExplicitChannelProfiles(5).GetDataKind(), 1);
 
             UNIT_ASSERT_VALUES_EQUAL(config.GetVolumeExplicitChannelProfiles(0).GetPoolKind(), "pool-kind-2");
             UNIT_ASSERT_VALUES_EQUAL(config.GetVolumeExplicitChannelProfiles(0).GetSize(), 128);
@@ -7624,58 +7624,58 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         }
     }
 
-    Y_UNIT_TEST(AlterBlockStoreVolumeWithNonReplicatedPartitions) { //+ 
-        TTestBasicRuntime runtime; 
-        TTestEnv env(runtime); 
-        ui64 txId = 100; 
- 
+    Y_UNIT_TEST(AlterBlockStoreVolumeWithNonReplicatedPartitions) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume"); 
-        auto& vc = *vdescr.MutableVolumeConfig(); 
- 
-        // Create volume with 1 partition 
-        vc.SetBlockSize(4096); 
-        { 
-            auto* partition = vc.AddPartitions(); 
-            partition->SetBlockCount(16); 
-            partition->SetType(NKikimrBlockStore::EPartitionType::NonReplicated); 
-        } 
-        vc.SetDiskId("foo"); 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId); 
-        vc.Clear(); 
- 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), 
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)}); 
- 
-        // Alter it into 2 bigger partitions 
-        vc.SetVersion(1); 
- 
-        for (ui32 i = 0; i < 2; ++i) { 
-            auto* partition = vc.AddPartitions(); 
-            partition->SetBlockCount(32); 
-            partition->SetType(NKikimrBlockStore::EPartitionType::NonReplicated); 
-        } 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId); 
-        vc.Clear(); 
- 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), 
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)}); 
- 
-        vc.SetVersion(2); 
- 
-        // Alter with less partitions not allowed 
-        { 
-            auto* partition = vc.AddPartitions(); 
-            partition->SetBlockCount(32); 
-            partition->SetType(NKikimrBlockStore::EPartitionType::NonReplicated); 
-        } 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", 
-                                  vdescr.DebugString(), 
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+
+        // Create volume with 1 partition
+        vc.SetBlockSize(4096);
+        {
+            auto* partition = vc.AddPartitions();
+            partition->SetBlockCount(16);
+            partition->SetType(NKikimrBlockStore::EPartitionType::NonReplicated);
+        }
+        vc.SetDiskId("foo");
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        vc.Clear();
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
+                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+
+        // Alter it into 2 bigger partitions
+        vc.SetVersion(1);
+
+        for (ui32 i = 0; i < 2; ++i) {
+            auto* partition = vc.AddPartitions();
+            partition->SetBlockCount(32);
+            partition->SetType(NKikimrBlockStore::EPartitionType::NonReplicated);
+        }
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        vc.Clear();
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
+                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+
+        vc.SetVersion(2);
+
+        // Alter with less partitions not allowed
+        {
+            auto* partition = vc.AddPartitions();
+            partition->SetBlockCount(32);
+            partition->SetType(NKikimrBlockStore::EPartitionType::NonReplicated);
+        }
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
+                                  vdescr.DebugString(),
                                   {NKikimrScheme::StatusInvalidParameter});
-    } 
- 
+    }
+
     Y_UNIT_TEST(DropBlockStoreVolume) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -7685,16 +7685,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // Create volume with 1 partition
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume"); 
-        auto& vc = *vdescr.MutableVolumeConfig(); 
-        vc.SetBlockSize(4096); 
-        vc.AddPartitions()->SetBlockCount(16); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
- 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
@@ -7711,42 +7711,42 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
     }
 
-    Y_UNIT_TEST(DropBlockStoreVolumeWithNonReplicatedPartitions) { //+ 
-        TTestBasicRuntime runtime; 
-        TTestEnv env(runtime); 
-        ui64 txId = 100; 
- 
+    Y_UNIT_TEST(DropBlockStoreVolumeWithNonReplicatedPartitions) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume"); 
-        auto& vc = *vdescr.MutableVolumeConfig(); 
- 
-        // Create volume with 1 partition 
-        vc.SetBlockSize(4096); 
-        { 
-            auto* partition = vc.AddPartitions(); 
-            partition->SetBlockCount(16); 
-            partition->SetType(NKikimrBlockStore::EPartitionType::NonReplicated); 
-        } 
-        vc.SetDiskId("foo"); 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId); 
-        vc.Clear(); 
- 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), 
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)}); 
- 
-        // Drop the volume 
-        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume"); 
-        env.TestWaitNotification(runtime, txId); 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), 
-                           {NLs::PathNotExist}); 
- 
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+
+        // Create volume with 1 partition
+        vc.SetBlockSize(4096);
+        {
+            auto* partition = vc.AddPartitions();
+            partition->SetBlockCount(16);
+            partition->SetType(NKikimrBlockStore::EPartitionType::NonReplicated);
+        }
+        vc.SetDiskId("foo");
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        vc.Clear();
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
+                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(1)});
+
+        // Drop the volume
+        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
+                           {NLs::PathNotExist});
+
         env.TestWaitTabletDeletion(runtime, {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1});
- 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot"), 
-                           {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)}); 
-    } 
- 
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                           {NLs::Finished, NLs::PathsInsideDomain(0), NLs::ShardsInsideDomain(0)});
+    }
+
     Y_UNIT_TEST(DropBlockStoreVolume2) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -7754,16 +7754,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // Create volume with 1 partition
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume"); 
-        auto& vc = *vdescr.MutableVolumeConfig(); 
-        vc.SetBlockSize(4096); 
-        vc.AddPartitions()->SetBlockCount(16); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
- 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
@@ -7798,18 +7798,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // Create volume with 1 partition
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume"); 
-        auto& vc = *vdescr.MutableVolumeConfig(); 
-        vc.SetBlockSize(4096); 
-        vc.AddPartitions()->SetBlockCount(16); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
- 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+        vc.Clear();
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished});
@@ -7837,10 +7837,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             {NKikimrScheme::StatusPreconditionFailed});
 
         // Alter is allowed
-        vc.SetVersion(1); 
-        vc.AddPartitions()->SetBlockCount(32); 
-        vc.AddPartitions()->SetBlockCount(32); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vc.SetVersion(1);
+        vc.AddPartitions()->SetBlockCount(32);
+        vc.AddPartitions()->SetBlockCount(32);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
 
         // Drop is allowed
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume");
@@ -7853,26 +7853,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // Create volume with 1 partition
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume"); 
-        auto& vc = *vdescr.MutableVolumeConfig(); 
-        vc.SetBlockSize(4096); 
-        vc.AddPartitions()->SetBlockCount(16); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
- 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+        vc.Clear();
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
                            {NLs::Finished});
 
-        vc.SetVersion(1); 
-        vc.AddPartitions()->SetBlockCount(32); 
-        vc.AddPartitions()->SetBlockCount(32); 
-        AsyncAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vc.SetVersion(1);
+        vc.AddPartitions()->SetBlockCount(32);
+        vc.AddPartitions()->SetBlockCount(32);
+        AsyncAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         AsyncAssignBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume", "Owner123");
 
         TestModificationResult(runtime, txId-1);
@@ -7891,52 +7891,52 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         ui64 txId = 100;
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume"); 
-        auto& vc = *vdescr.MutableVolumeConfig(); 
-        vc.SetBlockSize(4096); 
-        vc.AddPartitions()->SetBlockCount(16); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
- 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
 
-        vc.SetVersion(1); 
-        vc.AddPartitions()->SetBlockCount(24); 
-        vc.AddPartitions()->SetBlockCount(24); 
- 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+        vc.Clear();
 
-        vc.SetVersion(0); 
-        vc.AddPartitions()->SetBlockCount(25); 
-        vc.AddPartitions()->SetBlockCount(25); 
- 
+        vc.SetVersion(1);
+        vc.AddPartitions()->SetBlockCount(24);
+        vc.AddPartitions()->SetBlockCount(24);
+
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+        vc.Clear();
+
+        vc.SetVersion(0);
+        vc.AddPartitions()->SetBlockCount(25);
+        vc.AddPartitions()->SetBlockCount(25);
+
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                       vdescr.DebugString(), 
+                       vdescr.DebugString(),
                        {NKikimrScheme::StatusPreconditionFailed});
         env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+        vc.Clear();
 
-        vc.SetVersion(1); 
-        vc.AddPartitions()->SetBlockCount(32); 
-        vc.AddPartitions()->SetBlockCount(32); 
- 
+        vc.SetVersion(1);
+        vc.AddPartitions()->SetBlockCount(32);
+        vc.AddPartitions()->SetBlockCount(32);
+
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                       vdescr.DebugString(), 
+                       vdescr.DebugString(),
                        {NKikimrScheme::StatusPreconditionFailed});
         env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
+        vc.Clear();
 
-        vc.SetVersion(2); 
-        vc.AddPartitions()->SetBlockCount(48); 
-        vc.AddPartitions()->SetBlockCount(48); 
- 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vc.SetVersion(2);
+        vc.AddPartitions()->SetBlockCount(48);
+        vc.AddPartitions()->SetBlockCount(48);
+
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
     }
 
@@ -7950,82 +7950,82 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        auto& vc = *vdescr.MutableVolumeConfig(); 
-        vc.SetBlockSize(4096); 
-        vc.AddPartitions()->SetBlockCount(16); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
- 
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+
         // Use half of the quota initially
-        vdescr.SetName("BSVolume1"); 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vdescr.SetName("BSVolume1");
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // Cannot have more than quota
-        vdescr.SetName("BSVolume2"); 
-        vc.MutablePartitions(0)->SetBlockCount(17); 
+        vdescr.SetName("BSVolume2");
+        vc.MutablePartitions(0)->SetBlockCount(17);
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                        vdescr.DebugString(), 
+                        vdescr.DebugString(),
                         {NKikimrScheme::StatusPreconditionFailed});
 
         // It's ok to use quota completely, but only the first create should succeed
-        vc.SetSizeDecreaseAllowed(true); 
-        vc.MutablePartitions(0)->SetBlockCount(16); 
-        AsyncCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        AsyncCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vc.SetSizeDecreaseAllowed(true);
+        vc.MutablePartitions(0)->SetBlockCount(16);
+        AsyncCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        AsyncCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         TestModificationResult(runtime, txId-1);
         TestModificationResult(runtime, txId, NKikimrScheme::StatusMultipleModifications);
         env.TestWaitNotification(runtime, {txId, txId-1});
 
         // Cannot increase volume size beyond current quota
-        vc.Clear(); 
-        vc.SetVersion(1); 
-        vc.AddPartitions()->SetBlockCount(17); 
+        vc.Clear();
+        vc.SetVersion(1);
+        vc.AddPartitions()->SetBlockCount(17);
         TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                        vdescr.DebugString(), 
+                        vdescr.DebugString(),
                         {NKikimrScheme::StatusPreconditionFailed});
 
-        // It's ok to decrease volume size for volumes with the SizeDecreaseAllowed flag 
-        vc.MutablePartitions(0)->SetBlockCount(8); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        // It's ok to decrease volume size for volumes with the SizeDecreaseAllowed flag
+        vc.MutablePartitions(0)->SetBlockCount(8);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // After successful alter we may use freed quota for more volumes
-        vdescr.SetName("BSVolume3"); 
-        vc.Clear(); 
-        vc.SetBlockSize(4096); 
-        vc.AddPartitions()->SetBlockCount(8); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vdescr.SetName("BSVolume3");
+        vc.Clear();
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(8);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // We may drop a volume and then use freed quota in an alter
         TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume1");
         env.TestWaitNotification(runtime, txId);
 
-        vdescr.SetName("BSVolume2"); 
-        vc.Clear(); 
-        vc.SetVersion(2); 
-        vc.AddPartitions()->SetBlockCount(24); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vdescr.SetName("BSVolume2");
+        vc.Clear();
+        vc.SetVersion(2);
+        vc.AddPartitions()->SetBlockCount(24);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // Currently quota is full, cannot create even a single block volume
-        vdescr.SetName("BSVolume4"); 
-        vc.Clear(); 
-        vc.SetBlockSize(4096); 
-        vc.AddPartitions()->SetBlockCount(1); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
+        vdescr.SetName("BSVolume4");
+        vc.Clear();
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(1);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                        vdescr.DebugString(), 
+                        vdescr.DebugString(),
                         {NKikimrScheme::StatusPreconditionFailed});
 
         // It's possible to modify quota size
@@ -8034,7 +8034,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         // Now single block volume should succeed
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // Change limit to be specifically about SSD
@@ -8043,35 +8043,35 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         // Now we should be able to create any size volumes with the default kind
-        vdescr.SetName("BSVolume5"); 
-        vc.MutablePartitions(0)->SetBlockCount(128); 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vdescr.SetName("BSVolume5");
+        vc.MutablePartitions(0)->SetBlockCount(128);
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
 
         // But no more than 32 blocks for SSD volumes
-        vdescr.SetName("BSVolume6"); 
-        vc.SetStorageMediaKind(1); 
-        vc.SetSizeDecreaseAllowed(true); 
-        vc.MutablePartitions(0)->SetBlockCount(33); 
+        vdescr.SetName("BSVolume6");
+        vc.SetStorageMediaKind(1);
+        vc.SetSizeDecreaseAllowed(true);
+        vc.MutablePartitions(0)->SetBlockCount(33);
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                        vdescr.DebugString(), 
+                        vdescr.DebugString(),
                         {NKikimrScheme::StatusPreconditionFailed});
-        vc.MutablePartitions(0)->SetBlockCount(32); 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        vc.MutablePartitions(0)->SetBlockCount(32);
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
- 
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
             NLs::UserAttrsHas({
                 {"__volume_space_allocated", "790528"},
                 {"__volume_space_allocated_ssd", "147456"}})});
 
-        // It's ok to decrease volume size 
-        vc.Clear(); 
-        vc.SetVersion(1); 
-        vc.AddPartitions()->SetBlockCount(8); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+        // It's ok to decrease volume size
+        vc.Clear();
+        vc.SetVersion(1);
+        vc.AddPartitions()->SetBlockCount(8);
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
- 
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
             NLs::UserAttrsHas({
                 {"__volume_space_allocated", "692224"},
@@ -8081,17 +8081,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         // Now we can create a 24-block volume (in a subdirectory)
-        vdescr.SetName("BSVolume7"); 
-        vc.Clear(); 
-        vc.SetBlockSize(4096); 
-        vc.SetStorageMediaKind(1); 
-        vc.AddPartitions()->SetBlockCount(24); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
+        vdescr.SetName("BSVolume7");
+        vc.Clear();
+        vc.SetBlockSize(4096);
+        vc.SetStorageMediaKind(1);
+        vc.AddPartitions()->SetBlockCount(24);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/MyDir", vdescr.DebugString());
-        env.TestWaitNotification(runtime, txId); 
+        env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot"), {
             NLs::UserAttrsHas({
@@ -8156,149 +8156,149 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot/NBS",
                         vdescr.DebugString(),
                         {NKikimrScheme::StatusPreconditionFailed});
-    } 
- 
-    Y_UNIT_TEST(BlockStoreNonreplVolumeLimits) { //+ 
-        TTestBasicRuntime runtime; 
-        TTestEnv env(runtime); 
-        ui64 txId = 100; 
- 
-        TestUserAttrs( 
-            runtime, 
-            ++txId, 
-            "", 
-            "MyRoot", 
-            AlterUserAttrs({{ 
-                "__volume_space_limit_ssd_nonrepl", 
-                ToString(32 * 4_KB) 
-            }}) 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // Other pool kinds should not be affected 
+    }
+
+    Y_UNIT_TEST(BlockStoreNonreplVolumeLimits) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestUserAttrs(
+            runtime,
+            ++txId,
+            "",
+            "MyRoot",
+            AlterUserAttrs({{
+                "__volume_space_limit_ssd_nonrepl",
+                ToString(32 * 4_KB)
+            }})
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Other pool kinds should not be affected
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        auto& vc = *vdescr.MutableVolumeConfig(); 
-        vc.SetBlockSize(4_KB); 
-        vc.AddPartitions()->SetBlockCount(100500); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
- 
-        vdescr.SetName("BSVolumeOther"); 
-        vc.SetStorageMediaKind(1); 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // Creating a nonrepl volume 
-        vdescr.SetName("BSVolume1"); 
-        vc.SetStorageMediaKind(4); 
-        vc.ClearExplicitChannelProfiles(); 
-        vc.MutablePartitions(0)->SetType( 
-            NKikimrBlockStore::EPartitionType::NonReplicated 
-        ); 
-        vc.MutablePartitions(0)->SetBlockCount(16); 
-        TestCreateBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString() 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // Cannot have more than quota 
-        vdescr.SetName("BSVolume2"); 
-        vc.MutablePartitions(0)->SetBlockCount(17); 
-        TestCreateBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString(), 
+        auto& vc = *vdescr.MutableVolumeConfig();
+        vc.SetBlockSize(4_KB);
+        vc.AddPartitions()->SetBlockCount(100500);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+
+        vdescr.SetName("BSVolumeOther");
+        vc.SetStorageMediaKind(1);
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        // Creating a nonrepl volume
+        vdescr.SetName("BSVolume1");
+        vc.SetStorageMediaKind(4);
+        vc.ClearExplicitChannelProfiles();
+        vc.MutablePartitions(0)->SetType(
+            NKikimrBlockStore::EPartitionType::NonReplicated
+        );
+        vc.MutablePartitions(0)->SetBlockCount(16);
+        TestCreateBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString()
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Cannot have more than quota
+        vdescr.SetName("BSVolume2");
+        vc.MutablePartitions(0)->SetBlockCount(17);
+        TestCreateBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString(),
             {NKikimrScheme::StatusPreconditionFailed}
-        ); 
- 
-        // It's ok to use quota completely, but only the first create should succeed 
-        vdescr.SetName("BSVolume2"); 
-        vc.MutablePartitions(0)->SetBlockCount(16); 
-        TestCreateBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString() 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // Cannot increase volume size beyond current quota 
-        vc.Clear(); 
-        vc.AddPartitions()->SetType( 
-            NKikimrBlockStore::EPartitionType::NonReplicated 
-        ); 
-        vc.MutablePartitions(0)->SetBlockCount(17); 
-        vc.SetVersion(1); 
-        TestAlterBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString(), 
+        );
+
+        // It's ok to use quota completely, but only the first create should succeed
+        vdescr.SetName("BSVolume2");
+        vc.MutablePartitions(0)->SetBlockCount(16);
+        TestCreateBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString()
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Cannot increase volume size beyond current quota
+        vc.Clear();
+        vc.AddPartitions()->SetType(
+            NKikimrBlockStore::EPartitionType::NonReplicated
+        );
+        vc.MutablePartitions(0)->SetBlockCount(17);
+        vc.SetVersion(1);
+        TestAlterBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString(),
             {NKikimrScheme::StatusPreconditionFailed}
-        ); 
- 
-        // We may drop a volume and then use freed quota in an alter 
-        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume1"); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        vdescr.SetName("BSVolume2"); 
-        vc.Clear(); 
-        vc.AddPartitions()->SetType( 
-            NKikimrBlockStore::EPartitionType::NonReplicated 
-        ); 
-        vc.MutablePartitions(0)->SetBlockCount(32); 
-        vc.SetVersion(1); 
-        TestAlterBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString() 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // Cannot have more than quota 
-        vdescr.SetName("BSVolume3"); 
-        vc.MutablePartitions(0)->SetBlockCount(1); 
-        vc.SetStorageMediaKind(4); 
-        vc.ClearVersion(); 
-        vc.SetBlockSize(4_KB); 
-        TestCreateBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString(), 
+        );
+
+        // We may drop a volume and then use freed quota in an alter
+        TestDropBlockStoreVolume(runtime, ++txId, "/MyRoot", "BSVolume1");
+        env.TestWaitNotification(runtime, txId);
+
+        vdescr.SetName("BSVolume2");
+        vc.Clear();
+        vc.AddPartitions()->SetType(
+            NKikimrBlockStore::EPartitionType::NonReplicated
+        );
+        vc.MutablePartitions(0)->SetBlockCount(32);
+        vc.SetVersion(1);
+        TestAlterBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString()
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Cannot have more than quota
+        vdescr.SetName("BSVolume3");
+        vc.MutablePartitions(0)->SetBlockCount(1);
+        vc.SetStorageMediaKind(4);
+        vc.ClearVersion();
+        vc.SetBlockSize(4_KB);
+        TestCreateBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString(),
             {NKikimrScheme::StatusPreconditionFailed}
-        ); 
- 
-        // It's possible to modify quota size 
-        TestUserAttrs( 
-            runtime, 
-            ++txId, 
-            "", 
-            "MyRoot", 
-            AlterUserAttrs({{ 
-                "__volume_space_limit_ssd_nonrepl", 
-                ToString(33 * 4_KB) 
-            }}) 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        // Ok 
-        TestCreateBlockStoreVolume( 
-            runtime, 
-            ++txId, 
-            "/MyRoot", 
-            vdescr.DebugString() 
-        ); 
-        env.TestWaitNotification(runtime, txId); 
-    } 
- 
+        );
+
+        // It's possible to modify quota size
+        TestUserAttrs(
+            runtime,
+            ++txId,
+            "",
+            "MyRoot",
+            AlterUserAttrs({{
+                "__volume_space_limit_ssd_nonrepl",
+                ToString(33 * 4_KB)
+            }})
+        );
+        env.TestWaitNotification(runtime, txId);
+
+        // Ok
+        TestCreateBlockStoreVolume(
+            runtime,
+            ++txId,
+            "/MyRoot",
+            vdescr.DebugString()
+        );
+        env.TestWaitNotification(runtime, txId);
+    }
+
     Y_UNIT_TEST(BlockStoreSystemVolumeLimits) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -8418,49 +8418,49 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    Y_UNIT_TEST(CreateAlterBlockStoreVolumeWithInvalidPoolKinds) { //+ 
-        TTestBasicRuntime runtime; 
-        TTestEnv env(runtime, /* nchannels */ 6); 
-        ui64 txId = 100; 
- 
+    Y_UNIT_TEST(CreateAlterBlockStoreVolumeWithInvalidPoolKinds) { //+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, /* nchannels */ 6);
+        ui64 txId = 100;
+
         NKikimrSchemeOp::TBlockStoreVolumeDescription vdescr;
-        vdescr.SetName("BSVolume"); 
-        auto& vc = *vdescr.MutableVolumeConfig(); 
- 
-        vc.SetBlockSize(4096); 
-        vc.AddPartitions()->SetBlockCount(16); 
-        vc.SetDiskId("foo"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("invalid-pool-kind"); 
+        vdescr.SetName("BSVolume");
+        auto& vc = *vdescr.MutableVolumeConfig();
+
+        vc.SetBlockSize(4096);
+        vc.AddPartitions()->SetBlockCount(16);
+        vc.SetDiskId("foo");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("invalid-pool-kind");
         TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot",
-                                   vdescr.DebugString(), 
+                                   vdescr.DebugString(),
                                    {NKikimrScheme::StatusInvalidParameter});
- 
-        vc.MutableExplicitChannelProfiles(3)->SetPoolKind("pool-kind-1"); 
-        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
+
+        vc.MutableExplicitChannelProfiles(3)->SetPoolKind("pool-kind-1");
+        TestCreateBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
         env.TestWaitNotification(runtime, txId);
-        vc.Clear(); 
- 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), 
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)}); 
- 
-        vc.SetVersion(1); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1"); 
-        vc.AddExplicitChannelProfiles()->SetPoolKind("invalid-pool-kind"); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", 
-                                  vdescr.DebugString(), 
+        vc.Clear();
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
+                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
+
+        vc.SetVersion(1);
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("pool-kind-1");
+        vc.AddExplicitChannelProfiles()->SetPoolKind("invalid-pool-kind");
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot",
+                                  vdescr.DebugString(),
                                   {NKikimrScheme::StatusInvalidParameter});
- 
-        vc.MutableExplicitChannelProfiles(3)->SetPoolKind("pool-kind-1"); 
-        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString()); 
-        env.TestWaitNotification(runtime, txId); 
- 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"), 
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)}); 
+
+        vc.MutableExplicitChannelProfiles(3)->SetPoolKind("pool-kind-1");
+        TestAlterBlockStoreVolume(runtime, ++txId, "/MyRoot", vdescr.DebugString());
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/BSVolume"),
+                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(2)});
     }
 
     Y_UNIT_TEST(CreateDropKesus) { //+

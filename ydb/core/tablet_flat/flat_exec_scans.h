@@ -118,11 +118,11 @@ namespace NTabletFlatExecutor {
 
     public:
         TScans(NUtil::ILogger *logger, IOps *ops, TIntrusivePtr<TIdEmitter> emitter,
-                    ITablet *owner, const TActorId& ownerActorId) 
+                    ITablet *owner, const TActorId& ownerActorId)
             : Logger(logger)
             , Ops(ops)
             , Owner(owner)
-            , OwnerActorId(ownerActorId) 
+            , OwnerActorId(ownerActorId)
             , Tablet(Owner->TabletID())
             , Emitter(std::move(emitter))
         {
@@ -401,7 +401,7 @@ namespace NTabletFlatExecutor {
             } else if (outcome.System || (one.State = last) == EState::Forget) {
                 /* System scan or explicit cancelation omits callback */
             } else {
-                auto ctx = TActivationContext::ActorContextFor(OwnerActorId); 
+                auto ctx = TActivationContext::ActorContextFor(OwnerActorId);
 
                 Owner->ScanComplete(status, result, one.Cookie, ctx);
             }
@@ -442,7 +442,7 @@ namespace NTabletFlatExecutor {
         NUtil::ILogger * const Logger;
         IOps * const Ops;
         ITablet * const Owner;
-        const TActorId OwnerActorId; 
+        const TActorId OwnerActorId;
         const ui64 Tablet;
 
         ui64 Serial = 0;

@@ -39,8 +39,8 @@ TBlockStoreVolumeInfo::TPtr CreateBlockStoreVolumeInfo(const NKikimrSchemeOp::TB
 
     volume->AlterVersion = 1;
     volume->TokenVersion = 0;
-    volume->DefaultPartitionCount = 
-        TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(op.GetVolumeConfig()); 
+    volume->DefaultPartitionCount =
+        TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(op.GetVolumeConfig());
     volume->VolumeConfig.CopyFrom(op.GetVolumeConfig());
 
     return volume;
@@ -50,7 +50,7 @@ void ApplySharding(TTxId txId, TPathId pathId, TBlockStoreVolumeInfo::TPtr volum
                    const TChannelsBindings& partitionChannels, const TChannelsBindings& volumeChannels,
                    TOperationContext& context) {
     Y_VERIFY(volume->VolumeConfig.GetTabletVersion() <= 2);
-    ui64 count = volume->DefaultPartitionCount; 
+    ui64 count = volume->DefaultPartitionCount;
     txState.Shards.reserve(count + 1);
 
     for (ui64 i = 0; i < count; ++i) {
@@ -216,10 +216,10 @@ public:
 
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetCreateBlockStoreVolume().GetName();
-        const auto defaultPartitionCount = 
-            TBlockStoreVolumeInfo::CalculateDefaultPartitionCount( 
-                operation.GetVolumeConfig()); 
-        const ui64 shardsToCreate = defaultPartitionCount + 1; 
+        const auto defaultPartitionCount =
+            TBlockStoreVolumeInfo::CalculateDefaultPartitionCount(
+                operation.GetVolumeConfig());
+        const ui64 shardsToCreate = defaultPartitionCount + 1;
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TCreateBlockStoreVolume Propose"
@@ -318,25 +318,25 @@ public:
                 binding);
         };
 
-        TChannelsBindings partitionChannelsBinding; 
-        if (defaultPartitionCount) { 
-            const auto& ecps = operation.GetVolumeConfig().GetExplicitChannelProfiles(); 
+        TChannelsBindings partitionChannelsBinding;
+        if (defaultPartitionCount) {
+            const auto& ecps = operation.GetVolumeConfig().GetExplicitChannelProfiles();
 
-            if (ecps.empty() || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) { 
-                auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]", 
-                                    ecps.size(), 
-                                    NHive::MAX_TABLET_CHANNELS); 
+            if (ecps.empty() || ui32(ecps.size()) > NHive::MAX_TABLET_CHANNELS) {
+                auto errStr = Sprintf("Wrong number of channels %u , should be [1 .. %lu]",
+                                    ecps.size(),
+                                    NHive::MAX_TABLET_CHANNELS);
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-                return result; 
-            } 
- 
+                return result;
+            }
+
             if (!resolveChannels(ecps, partitionChannelsBinding)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
-                                "Unable to construct channel binding for partition with the storage pool"); 
-                return result; 
-            } 
- 
-            context.SS->SetNbsChannelsParams(ecps, partitionChannelsBinding); 
+                                "Unable to construct channel binding for partition with the storage pool");
+                return result;
+            }
+
+            context.SS->SetNbsChannelsParams(ecps, partitionChannelsBinding);
         }
 
         TChannelsBindings volumeChannelsBinding;

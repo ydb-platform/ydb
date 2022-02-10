@@ -339,7 +339,7 @@ namespace NYson {
     }
 
     ////////////////////////////////////////////////////////////////////////////////
- 
+
     void ReformatYsonStream(
         IInputStream* input,
         IOutputStream* output,
@@ -349,7 +349,7 @@ namespace NYson {
         TYsonParser parser(&writer, input, type);
         parser.Parse();
     }
- 
+
     ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYson

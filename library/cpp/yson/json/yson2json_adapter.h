@@ -10,17 +10,17 @@ namespace NYT {
     class TYson2JsonCallbacksAdapter
        : public NJson::TJsonCallbacks {
     public:
-        class TState { 
-        private: 
-            // Stores current context stack 
-            // If true - we are in a list 
-            // If false - we are in a map 
-            TStack<bool> ContextStack; 
- 
-            friend class TYson2JsonCallbacksAdapter; 
-        }; 
- 
-    public: 
+        class TState {
+        private:
+            // Stores current context stack
+            // If true - we are in a list
+            // If false - we are in a map
+            TStack<bool> ContextStack;
+
+            friend class TYson2JsonCallbacksAdapter;
+        };
+
+    public:
         TYson2JsonCallbacksAdapter(::NYson::TYsonConsumerBase* impl, bool throwException = false);
 
         bool OnNull() override;
@@ -35,19 +35,19 @@ namespace NYT {
         bool OnCloseMap() override;
         bool OnMapKey(const TStringBuf& val) override;
 
-        TState State() const { 
-            return State_; 
-        } 
- 
-        void Reset(const TState& state) { 
-            State_ = state; 
-        } 
- 
+        TState State() const {
+            return State_;
+        }
+
+        void Reset(const TState& state) {
+            State_ = state;
+        }
+
     private:
         void WrapIfListItem();
 
     private:
         ::NYson::TYsonConsumerBase* Impl_;
-        TState State_; 
+        TState State_;
     };
 }

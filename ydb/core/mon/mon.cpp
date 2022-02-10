@@ -471,14 +471,14 @@ namespace NActors {
     }
 
     void TMon::OutputIndexPage(IOutputStream& out) {
-        if (Config.RedirectMainPageTo) { 
-            // XXX manual http response construction 
-            out << "HTTP/1.1 302 Found\r\n" 
-                << "Location: " << Config.RedirectMainPageTo << "\r\n" 
-                << "Connection: Close\r\n\r\n"; 
-        } else { 
-            NMonitoring::TMonService2::OutputIndexPage(out); 
-        } 
+        if (Config.RedirectMainPageTo) {
+            // XXX manual http response construction
+            out << "HTTP/1.1 302 Found\r\n"
+                << "Location: " << Config.RedirectMainPageTo << "\r\n"
+                << "Connection: Close\r\n\r\n";
+        } else {
+            NMonitoring::TMonService2::OutputIndexPage(out);
+        }
     }
 
     void TMon::SetAllowedSIDs(const TVector<TString>& sids) {

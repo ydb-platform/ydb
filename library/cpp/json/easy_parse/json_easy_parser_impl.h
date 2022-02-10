@@ -1,7 +1,7 @@
 #pragma once
 
-#include <util/generic/string.h> 
- 
+#include <util/generic/string.h>
+
 namespace NJson {
     namespace NImpl {
         enum EType {

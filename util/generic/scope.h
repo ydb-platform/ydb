@@ -1,10 +1,10 @@
-#pragma once 
- 
+#pragma once
+
 #include <util/system/compiler.h>
-#include <util/system/defaults.h> 
+#include <util/system/defaults.h>
 
 #include <utility>
- 
+
 namespace NPrivate {
     template <typename F>
     class TScopeGuard {
@@ -13,12 +13,12 @@ namespace NPrivate {
             : Function_{function}
         {
         }
- 
+
         TScopeGuard(F&& function)
             : Function_{std::move(function)}
         {
         }
- 
+
         TScopeGuard(TScopeGuard&&) = default;
         TScopeGuard(const TScopeGuard&) = default;
 

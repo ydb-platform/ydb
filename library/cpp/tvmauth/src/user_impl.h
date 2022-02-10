@@ -14,7 +14,7 @@ namespace NTvmAuth {
     using TUserTicketImplPtr = THolder<TCheckedUserTicket::TImpl>;
     class TCheckedUserTicket::TImpl {
     public:
-        explicit operator bool() const; 
+        explicit operator bool() const;
 
         TUid GetDefaultUid() const;
         time_t GetExpirationTime() const;

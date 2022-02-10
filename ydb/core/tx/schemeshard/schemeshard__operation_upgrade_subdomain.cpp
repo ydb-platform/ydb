@@ -1307,7 +1307,7 @@ public:
 
             THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
             TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
-                context.SS->SelfId(), context.SS->SelfId(), msg.Release()); 
+                context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
         }
 
@@ -1479,14 +1479,14 @@ public:
         case NKikimrSchemeOp::TUpgradeSubDomain::Commit: {
             THolder<TEvPrivate::TEvCommitTenantUpdate> msg = MakeHolder<TEvPrivate::TEvCommitTenantUpdate>();
             TEvPrivate::TEvCommitTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvCommitTenantUpdate>*) new IEventHandle(
-                context.SS->SelfId(), context.SS->SelfId(), msg.Release()); 
+                context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
             break;
         }
         case NKikimrSchemeOp::TUpgradeSubDomain::Undo: {
             THolder<TEvPrivate::TEvUndoTenantUpdate> msg = MakeHolder<TEvPrivate::TEvUndoTenantUpdate>();
             TEvPrivate::TEvUndoTenantUpdate::TPtr personalEv = (TEventHandle<TEvPrivate::TEvUndoTenantUpdate>*) new IEventHandle(
-                context.SS->SelfId(), context.SS->SelfId(), msg.Release()); 
+                context.SS->SelfId(), context.SS->SelfId(), msg.Release());
             operation->Parts.front()->HandleReply(personalEv, context);
             break;
         }

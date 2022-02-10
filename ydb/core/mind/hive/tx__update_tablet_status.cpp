@@ -76,7 +76,7 @@ public:
                         << Local);
             NIceDb::TNiceDb db(txc.DB);
             TInstant now = TActivationContext::Now();
-            Notifications.Reset(Self->SelfId()); 
+            Notifications.Reset(Self->SelfId());
             if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
                 tablet->Statistics.AddRestartTimestamp(now.MilliSeconds());
                 tablet->ActualizeTabletStatistics(now);

@@ -123,8 +123,8 @@ namespace NHyperscan {
     TDatabase CompileMulti(
         const TVector<const char*>& regexs,
         const TVector<unsigned int>& flags,
-        const TVector<unsigned int>& ids, 
-        const TVector<const hs_expr_ext_t*>* extendedParameters = nullptr); 
+        const TVector<unsigned int>& ids,
+        const TVector<const hs_expr_ext_t*>* extendedParameters = nullptr);
 
     TDatabase CompileMulti(
         const TVector<const char*>& regexs,

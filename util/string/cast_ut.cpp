@@ -343,7 +343,7 @@ Y_UNIT_TEST_SUITE(TCastTest) {
         CheckConvertToBuffer<size_t>(2, 5, "2");
         CheckConvertToBuffer<ui64>(1005000000000000ull, 32, "1005000000000000");
         CheckConvertToBuffer<ui64>(1005000000000000ull, 3, "1005000000000000");
- 
+
         // TString longNumber = TString("1.") + TString(1 << 20, '1');
         // UNIT_ASSERT_EXCEPTION(FromString<double>(longNumber), yexception);
     }

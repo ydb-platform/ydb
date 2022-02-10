@@ -6,7 +6,7 @@ import copy
 import logging
 
 from . import tools
-from datetime import date, datetime 
+from datetime import date, datetime
 
 import enum
 import six
@@ -73,8 +73,8 @@ def serialize(value):
             return val
         if is_external(val):
             return dict(val)
-        if isinstance(val, (date, datetime)): 
-            return repr(val) 
+        if isinstance(val, (date, datetime)):
+            return repr(val)
         if is_coroutine(val):
             return None
         raise ValueError("Cannot serialize value '{}' of type {}".format(val, type(val)))

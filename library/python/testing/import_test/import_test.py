@@ -5,18 +5,18 @@ import re
 import sys
 import time
 import traceback
- 
+
 import __res
 from __res import importer
 
 
 def check_imports(no_check=(), extra=(), skip_func=None, py_main=None):
-    """ 
-    tests all bundled modules are importable 
-    just add 
-    "PEERDIR(library/python/import_test)" to your CMakeLists.txt and 
-    "from import_test import test_imports" to your python test source file. 
-    """ 
+    """
+    tests all bundled modules are importable
+    just add
+    "PEERDIR(library/python/import_test)" to your CMakeLists.txt and
+    "from import_test import test_imports" to your python test source file.
+    """
     str_ = lambda s: s
     if not isinstance(b'', str):
         str_ = lambda s: s.decode('UTF-8')
@@ -33,7 +33,7 @@ def check_imports(no_check=(), extra=(), skip_func=None, py_main=None):
 
     failed = []
     import_times = {}
- 
+
     norm = lambda s: s[:-9] if s.endswith('.__init__') else s
 
     modules = sys.extra_modules | set(extra)

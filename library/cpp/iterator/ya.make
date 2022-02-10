@@ -1,7 +1,7 @@
 OWNER(g:util)
- 
-LIBRARY() 
- 
+
+LIBRARY()
+
 SRCS(
     cartesian_product.cpp
     concatenate.cpp
@@ -14,6 +14,6 @@ SRCS(
     zip.cpp
 )
 
-END() 
+END()
 
 RECURSE_FOR_TESTS(ut)

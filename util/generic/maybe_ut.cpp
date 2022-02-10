@@ -796,12 +796,12 @@ Y_UNIT_TEST_SUITE(TMaybeTest) {
     }
 
     Y_UNIT_TEST(TestOutputStreamNothing) {
-        TString s; 
-        TStringOutput output(s); 
-        output << Nothing(); 
-        UNIT_ASSERT_VALUES_EQUAL("(empty maybe)", s); 
-    } 
- 
+        TString s;
+        TStringOutput output(s);
+        output << Nothing();
+        UNIT_ASSERT_VALUES_EQUAL("(empty maybe)", s);
+    }
+
     Y_UNIT_TEST(TestOutputStreamDefinedMaybe) {
         TString s;
         TStringOutput output(s);

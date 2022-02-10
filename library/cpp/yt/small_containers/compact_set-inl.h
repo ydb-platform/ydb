@@ -1,7 +1,7 @@
-#ifndef COMPACT_SET_INL_H_ 
-#error "Direct inclusion of this file is not allowed, include compact_set.h" 
+#ifndef COMPACT_SET_INL_H_
+#error "Direct inclusion of this file is not allowed, include compact_set.h"
 // For the sake of sane code completion.
-#include "compact_set.h" 
+#include "compact_set.h"
 #endif
 
 namespace NYT {
@@ -9,10 +9,10 @@ namespace NYT {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename T, unsigned N,  typename C>
-class TCompactSet<T, N, C>::const_iterator 
+class TCompactSet<T, N, C>::const_iterator
 {
 private:
-    friend class TCompactSet<T, N, C>; 
+    friend class TCompactSet<T, N, C>;
 
     union
     {
@@ -201,26 +201,26 @@ public:
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename T, unsigned N,  typename C>
-bool TCompactSet<T, N, C>::empty() const 
+bool TCompactSet<T, N, C>::empty() const
 {
     return Vector.empty() && Set.empty();
 }
 
 template <typename T, unsigned N,  typename C>
-typename TCompactSet<T, N, C>::size_type TCompactSet<T, N, C>::size() const 
+typename TCompactSet<T, N, C>::size_type TCompactSet<T, N, C>::size() const
 {
     return IsSmall() ? Vector.size() : Set.size();
 }
 
 template <typename T, unsigned N,  typename C>
-const T& TCompactSet<T, N, C>::front() const 
+const T& TCompactSet<T, N, C>::front() const
 {
     return IsSmall() ? Vector.front() : *Set.begin();
 }
 
 
 template <typename T, unsigned N,  typename C>
-typename TCompactSet<T, N, C>::size_type TCompactSet<T, N, C>::count(const T& v) const 
+typename TCompactSet<T, N, C>::size_type TCompactSet<T, N, C>::count(const T& v) const
 {
     if (IsSmall()) {
         return std::binary_search(Vector.begin(), Vector.end(), v, C()) ? 1 : 0;
@@ -230,7 +230,7 @@ typename TCompactSet<T, N, C>::size_type TCompactSet<T, N, C>::count(const T& v)
 }
 
 template <typename T, unsigned N,  typename C>
-std::pair<typename TCompactSet<T, N, C>::const_iterator, bool> TCompactSet<T, N, C>::insert(const T& v) 
+std::pair<typename TCompactSet<T, N, C>::const_iterator, bool> TCompactSet<T, N, C>::insert(const T& v)
 {
     if (!IsSmall()) {
         auto [it, inserted] = Set.insert(v);
@@ -257,7 +257,7 @@ std::pair<typename TCompactSet<T, N, C>::const_iterator, bool> TCompactSet<T, N,
 
 template <typename T, unsigned N,  typename C>
 template <typename TIter>
-void TCompactSet<T, N, C>::insert(TIter i, TIter e) 
+void TCompactSet<T, N, C>::insert(TIter i, TIter e)
 {
     for (; i != e; ++i) {
         insert(*i);
@@ -265,7 +265,7 @@ void TCompactSet<T, N, C>::insert(TIter i, TIter e)
 }
 
 template <typename T, unsigned N,  typename C>
-bool TCompactSet<T, N, C>::erase(const T& v) 
+bool TCompactSet<T, N, C>::erase(const T& v)
 {
     if (!IsSmall()) {
         return Set.erase(v);
@@ -281,38 +281,38 @@ bool TCompactSet<T, N, C>::erase(const T& v)
 }
 
 template <typename T, unsigned N,  typename C>
-void TCompactSet<T, N, C>::clear() 
+void TCompactSet<T, N, C>::clear()
 {
     Vector.clear();
     Set.clear();
 }
 
 template <typename T, unsigned N,  typename C>
-typename TCompactSet<T, N, C>::const_iterator TCompactSet<T, N, C>::begin() const 
+typename TCompactSet<T, N, C>::const_iterator TCompactSet<T, N, C>::begin() const
 {
     return IsSmall() ? const_iterator(Vector.begin()) : const_iterator(Set.begin());
 }
 
 template <typename T, unsigned N,  typename C>
-typename TCompactSet<T, N, C>::const_iterator TCompactSet<T, N, C>::cbegin() const 
+typename TCompactSet<T, N, C>::const_iterator TCompactSet<T, N, C>::cbegin() const
 {
     return begin();
 }
 
 template <typename T, unsigned N,  typename C>
-typename TCompactSet<T, N, C>::const_iterator TCompactSet<T, N, C>::end() const 
+typename TCompactSet<T, N, C>::const_iterator TCompactSet<T, N, C>::end() const
 {
     return IsSmall() ? const_iterator(Vector.end()) : const_iterator(Set.end());
 }
 
 template <typename T, unsigned N,  typename C>
-typename TCompactSet<T, N, C>::const_iterator TCompactSet<T, N, C>::cend() const 
+typename TCompactSet<T, N, C>::const_iterator TCompactSet<T, N, C>::cend() const
 {
     return end();
 }
 
 template <typename T, unsigned N,  typename C>
-bool TCompactSet<T, N, C>::IsSmall() const 
+bool TCompactSet<T, N, C>::IsSmall() const
 {
     return Set.empty();
 }

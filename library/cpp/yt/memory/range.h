@@ -77,13 +77,13 @@ public:
         , Length_(end - begin)
     { }
 
-    //! Constructs a TRange from a TCompactVector. 
-    template <size_t N> 
-    TRange(const TCompactVector<T, N>& elements) 
-        : Data_(elements.data()) 
-        , Length_(elements.size()) 
-    { } 
- 
+    //! Constructs a TRange from a TCompactVector.
+    template <size_t N>
+    TRange(const TCompactVector<T, N>& elements)
+        : Data_(elements.data())
+        , Length_(elements.size())
+    { }
+
     //! Constructs a TRange from an std::vector.
     template <class A>
     TRange(const std::vector<T, A>& elements)
@@ -234,13 +234,13 @@ TRange<T> MakeRange(const T* begin, const T* end)
     return TRange<T>(begin, end);
 }
 
-//! Constructs a TRange from a TCompactVector. 
-template <class T, size_t N> 
-TRange<T> MakeRange(const TCompactVector<T, N>& elements) 
-{ 
-    return elements; 
-} 
- 
+//! Constructs a TRange from a TCompactVector.
+template <class T, size_t N>
+TRange<T> MakeRange(const TCompactVector<T, N>& elements)
+{
+    return elements;
+}
+
 //! "Copy-constructor".
 template <class T>
 TRange<T> MakeRange(TRange<T> range)
@@ -327,12 +327,12 @@ public:
         : TRange<T>(begin, end)
     { }
 
-    //! Constructs a TMutableRange from a TCompactVector. 
-    template <size_t N> 
-    TMutableRange(TCompactVector<T, N>& elements) 
-        : TRange<T>(elements) 
-    { } 
- 
+    //! Constructs a TMutableRange from a TCompactVector.
+    template <size_t N>
+    TMutableRange(TCompactVector<T, N>& elements)
+        : TRange<T>(elements)
+    { }
+
     //! Constructs a TMutableRange from an std::vector.
     TMutableRange(std::vector<T>& elements)
         : TRange<T>(elements)
@@ -445,13 +445,13 @@ TMutableRange<T> MakeMutableRange(T* begin, T* end)
     return TMutableRange<T>(begin, end);
 }
 
-//! Constructs a TMutableRange from a TCompactVector. 
-template <class T, size_t N> 
-TMutableRange<T> MakeMutableRange(TCompactVector<T, N>& elements) 
-{ 
-    return elements; 
-} 
- 
+//! Constructs a TMutableRange from a TCompactVector.
+template <class T, size_t N>
+TMutableRange<T> MakeMutableRange(TCompactVector<T, N>& elements)
+{
+    return elements;
+}
+
 //! "Copy-constructor".
 template <class T>
 TMutableRange<T> MakeMutableRange(TMutableRange<T> range)

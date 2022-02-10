@@ -1,7 +1,7 @@
 #include <yt/yt/core/test_framework/framework.h>
 
-#include <yt/yt/core/misc/compact_flat_map.h> 
- 
+#include <yt/yt/core/misc/compact_flat_map.h>
+
 #include <string>
 #include <vector>
 
@@ -10,7 +10,7 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-using TMap = TCompactFlatMap<std::string, std::string, 2>; 
+using TMap = TCompactFlatMap<std::string, std::string, 2>;
 
 TMap CreateMap()
 {
@@ -18,15 +18,15 @@ TMap CreateMap()
     return {data.begin(), data.end()};
 }
 
-TEST(CompactFlatMapTest, DefaultEmpty) 
-{ 
+TEST(CompactFlatMapTest, DefaultEmpty)
+{
     TMap m;
     EXPECT_TRUE(m.empty());
     EXPECT_EQ(m.begin(), m.end());
 }
 
-TEST(CompactFlatMapTest, Reserve) 
-{ 
+TEST(CompactFlatMapTest, Reserve)
+{
     // No real way to test reserve - just use it and wiggle about.
     auto m1 = CreateMap();
     TMap m2;
@@ -35,26 +35,26 @@ TEST(CompactFlatMapTest, Reserve)
     EXPECT_EQ(m1.size(), m2.size());
 }
 
-TEST(CompactFlatMapTest, Size) 
-{ 
+TEST(CompactFlatMapTest, Size)
+{
     auto m = CreateMap();
 
-    EXPECT_EQ(m.size(), 4u); 
+    EXPECT_EQ(m.size(), 4u);
     EXPECT_EQ(m.ssize(), 4);
 
     m.insert({"Who", "said"});
 
-    EXPECT_EQ(m.size(), 5u); 
+    EXPECT_EQ(m.size(), 5u);
     EXPECT_EQ(m.ssize(), 5);
 
     m.erase("antique");
 
-    EXPECT_EQ(m.size(), 4u); 
+    EXPECT_EQ(m.size(), 4u);
     EXPECT_EQ(m.ssize(), 4);
 }
 
-TEST(CompactFlatMapTest, ClearAndEmpty) 
-{ 
+TEST(CompactFlatMapTest, ClearAndEmpty)
+{
     auto m = CreateMap();
 
     EXPECT_FALSE(m.empty());
@@ -71,8 +71,8 @@ TEST(CompactFlatMapTest, ClearAndEmpty)
     EXPECT_NE(m.begin(), m.end());
 }
 
-TEST(CompactFlatMapTest, FindMutable) 
-{ 
+TEST(CompactFlatMapTest, FindMutable)
+{
     auto m = CreateMap();
     {
         auto it = m.find("from");
@@ -91,8 +91,8 @@ TEST(CompactFlatMapTest, FindMutable)
     }
 }
 
-TEST(CompactFlatMapTest, FindConst) 
-{ 
+TEST(CompactFlatMapTest, FindConst)
+{
     const auto& m = CreateMap();
     {
         auto it = m.find("from");
@@ -105,26 +105,26 @@ TEST(CompactFlatMapTest, FindConst)
     }
 }
 
-TEST(CompactFlatMapTest, Insert) 
-{ 
+TEST(CompactFlatMapTest, Insert)
+{
     auto m = CreateMap();
 
     auto [it, inserted] = m.insert({"Who", "said"});
     EXPECT_TRUE(inserted);
-    EXPECT_EQ(m.ssize(), 5); 
+    EXPECT_EQ(m.ssize(), 5);
     EXPECT_NE(it, m.end());
     EXPECT_EQ(it, m.find("Who"));
     EXPECT_EQ(it->second, "said");
 
     auto [it2, inserted2] = m.insert({"Who", "told"});
     EXPECT_FALSE(inserted2);
-    EXPECT_EQ(m.ssize(), 5); 
+    EXPECT_EQ(m.ssize(), 5);
     EXPECT_EQ(it2, it);
     EXPECT_EQ(it->second, "said");
 
     std::vector<std::pair<std::string, std::string>> data = {{"Two", "vast"}, {"and", "trunkless"}, {"legs", "of"}, {"stone", "Stand"}, {"in", "the"}, {"desert", "..."}};
     m.insert(data.begin(), data.end());
-    EXPECT_EQ(m.ssize(), 11); 
+    EXPECT_EQ(m.ssize(), 11);
     EXPECT_NE(m.find("and"), m.end());
     EXPECT_EQ(m.find("and")->second, "trunkless");
 }
@@ -147,33 +147,33 @@ TEST(CompactFlatMapTest, Emplace)
     EXPECT_EQ(it->second, "place");
 }
 
-TEST(CompactFlatMapTest, Subscript) 
-{ 
+TEST(CompactFlatMapTest, Subscript)
+{
     auto m = CreateMap();
 
     EXPECT_EQ(m["antique"], "land");
-    EXPECT_EQ(m.ssize(), 4); 
+    EXPECT_EQ(m.ssize(), 4);
 
     EXPECT_EQ(m["Who"], "");
-    EXPECT_EQ(m.ssize(), 5); 
+    EXPECT_EQ(m.ssize(), 5);
 }
 
-TEST(CompactFlatMapTest, Erase) 
-{ 
+TEST(CompactFlatMapTest, Erase)
+{
     auto m = CreateMap();
 
     m.erase("antique");
-    EXPECT_EQ(m.ssize(), 3); 
+    EXPECT_EQ(m.ssize(), 3);
 
     m.erase("Who");
-    EXPECT_EQ(m.ssize(), 3); 
+    EXPECT_EQ(m.ssize(), 3);
 
     m.erase(m.begin(), m.end());
     EXPECT_TRUE(m.empty());
 }
 
-TEST(CompactFlatMapTest, GrowShrink) 
-{ 
+TEST(CompactFlatMapTest, GrowShrink)
+{
     TMap m;
     m.insert({"Two", "vast"});
     m.insert({"and", "trunkless"});
@@ -187,13 +187,13 @@ TEST(CompactFlatMapTest, GrowShrink)
     m.erase("in");
     m.erase("desert");
 
-    EXPECT_EQ(m.ssize(), 2); 
+    EXPECT_EQ(m.ssize(), 2);
 
     // Must not crash or trigger asan.
 }
 
-TEST(CompactFlatMapTest, GrowShrinkGrow) 
-{ 
+TEST(CompactFlatMapTest, GrowShrinkGrow)
+{
     TMap m;
     m.insert({"Two", "vast"});
     m.insert({"and", "trunkless"});
@@ -207,14 +207,14 @@ TEST(CompactFlatMapTest, GrowShrinkGrow)
     m.erase("in");
     m.erase("desert");
 
-    EXPECT_EQ(m.ssize(), 2); 
+    EXPECT_EQ(m.ssize(), 2);
 
     m.insert({"I", "met"});
     m.insert({"a", "traveller"});
     m.insert({"from", "an"});
     m.insert({"antique", "land"});
 
-    EXPECT_EQ(m.ssize(), 6); 
+    EXPECT_EQ(m.ssize(), 6);
 
     // Must not crash or trigger asan.
 }

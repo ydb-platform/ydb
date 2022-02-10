@@ -2,7 +2,7 @@
 
 #include <library/cpp/yt/string/format.h>
 
-#include <library/cpp/yt/small_containers/compact_vector.h> 
+#include <library/cpp/yt/small_containers/compact_vector.h>
 
 #include <limits>
 
@@ -71,7 +71,7 @@ TEST(TFormatTest, Strings)
     EXPECT_EQ("abc", Format("%-2s", TString("abc")));
     EXPECT_EQ("abc", Format("%0s", TString("abc")));
     EXPECT_EQ("abc", Format("%-0s", TString("abc")));
-    EXPECT_EQ(100, std::ssize(Format("%100v", "abc"))); 
+    EXPECT_EQ(100, std::ssize(Format("%100v", "abc")));
 }
 
 TEST(TFormatTest, Integers)
@@ -79,9 +79,9 @@ TEST(TFormatTest, Integers)
     EXPECT_EQ("123", Format("%d", 123));
     EXPECT_EQ("123", Format("%v", 123));
 
-    EXPECT_EQ("042", Format("%03d", 42)); 
-    EXPECT_EQ("42", Format("%01d", 42)); 
- 
+    EXPECT_EQ("042", Format("%03d", 42));
+    EXPECT_EQ("42", Format("%01d", 42));
+
     EXPECT_EQ("2147483647", Format("%d", std::numeric_limits<i32>::max()));
     EXPECT_EQ("-2147483648", Format("%d", std::numeric_limits<i32>::min()));
 

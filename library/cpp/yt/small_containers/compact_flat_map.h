@@ -1,12 +1,12 @@
 #pragma once
 
-#include "compact_vector.h" 
+#include "compact_vector.h"
 
 namespace NYT {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-//! A flat map implementation over TCompactVector that tries to keep data inline. 
+//! A flat map implementation over TCompactVector that tries to keep data inline.
 /*!
  *  Similarly to SmallSet, this is implemented via binary search over a sorted
  *  vector. Unlike SmallSet, however, this one never falls back to std::map (or
@@ -22,17 +22,17 @@ namespace NYT {
  *  any call to insert or erase may potentially invalidate all iterators.
  */
 template <class K, class V, unsigned N>
-class TCompactFlatMap 
+class TCompactFlatMap
 {
 public:
-    // NB: can't make this pair<const K, V> as TCompactVector requires its type 
+    // NB: can't make this pair<const K, V> as TCompactVector requires its type
     // parameter to be copy-assignable.
     using value_type = std::pair<K, V>;
     using key_type = K;
     using mapped_type = V;
 
 private:
-    using TStorage = TCompactVector<value_type, N>; 
+    using TStorage = TCompactVector<value_type, N>;
 
     struct TKeyComparer
     {
@@ -52,13 +52,13 @@ public:
     using const_iterator = typename TStorage::const_iterator;
     using size_type = size_t;
 
-    TCompactFlatMap() = default; 
+    TCompactFlatMap() = default;
 
     template <class TInputIterator>
-    TCompactFlatMap(TInputIterator begin, TInputIterator end); 
+    TCompactFlatMap(TInputIterator begin, TInputIterator end);
 
-    bool operator==(const TCompactFlatMap& rhs) const; 
-    bool operator!=(const TCompactFlatMap& rhs) const; 
+    bool operator==(const TCompactFlatMap& rhs) const;
+    bool operator!=(const TCompactFlatMap& rhs) const;
 
     iterator begin();
     const_iterator begin() const;
@@ -104,6 +104,6 @@ private:
 
 } // namespace NYT
 
-#define COMPACT_FLAT_MAP_INL_H_ 
-#include "compact_flat_map-inl.h" 
-#undef COMPACT_FLAT_MAP_INL_H_ 
+#define COMPACT_FLAT_MAP_INL_H_
+#include "compact_flat_map-inl.h"
+#undef COMPACT_FLAT_MAP_INL_H_

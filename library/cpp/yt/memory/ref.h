@@ -278,7 +278,7 @@ public:
     void Reset();
 
     size_t Size() const;
-    size_t size() const; 
+    size_t size() const;
     i64 ByteSize() const;
     bool Empty() const;
     const TSharedRef& operator [] (size_t index) const;

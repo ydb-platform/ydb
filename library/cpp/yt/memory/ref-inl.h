@@ -461,11 +461,11 @@ Y_FORCE_INLINE size_t TSharedRefArray::Size() const
     return Impl_ ? Impl_->Size() : 0;
 }
 
-Y_FORCE_INLINE size_t TSharedRefArray::size() const 
-{ 
-    return Impl_ ? Impl_->Size() : 0; 
-} 
- 
+Y_FORCE_INLINE size_t TSharedRefArray::size() const
+{
+    return Impl_ ? Impl_->Size() : 0;
+}
+
 Y_FORCE_INLINE bool TSharedRefArray::Empty() const
 {
     return Impl_ ? Impl_->Empty() : true;

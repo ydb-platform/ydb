@@ -22,9 +22,9 @@ namespace NYT {
 
 static_assert(sizeof(uintptr_t) == 8);
 
-// TODO(gritukan, babenko): Uncomment check below after DEVTOOLS-7870. 
-// static_assert(std::endian::native == std::endian::little); 
- 
+// TODO(gritukan, babenko): Uncomment check below after DEVTOOLS-7870.
+// static_assert(std::endian::native == std::endian::little);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
@@ -44,7 +44,7 @@ public:
     TCompactVectorReallocationPtrAdjuster(TVector* vector, TPtr& ptr)
         : Vector_(vector)
         , Ptr_(ptr)
-        , Index_(ptr >= Vector_->begin() && ptr <= Vector_->end() 
+        , Index_(ptr >= Vector_->begin() && ptr <= Vector_->end()
             ? std::distance(Vector_->begin(), const_cast<typename TVector::iterator>(ptr))
             : -1)
     { }
@@ -94,7 +94,7 @@ TCompactVector<T, N>::TCompactVector(const TCompactVector<T, OtherN>& other)
 }
 
 template <class T, size_t N>
-TCompactVector<T, N>::TCompactVector(TCompactVector&& other) noexcept(std::is_nothrow_move_constructible_v<T>) 
+TCompactVector<T, N>::TCompactVector(TCompactVector&& other) noexcept(std::is_nothrow_move_constructible_v<T>)
     : TCompactVector()
 {
     swap(other);
@@ -689,26 +689,26 @@ auto TCompactVector<T, N>::insert(const_iterator pos, std::initializer_list<T> l
 }
 
 template <class T, size_t N>
-void TCompactVector<T, N>::shrink_to_small() 
-{ 
-    if (Y_LIKELY(IsInline())) { 
-        return; 
-    } 
- 
-    auto size = this->size(); 
-    if (size > N) { 
-        return; 
-    } 
- 
-    auto* storage = OnHeapMeta_.Storage; 
-    UninitializedMove(storage->Elements, storage->End, &InlineElements_[0]); 
-    Destroy(storage->Elements, storage->End); 
-    ::free(storage); 
- 
-    InlineMeta_.SizePlusOne = size + 1; 
-} 
- 
-template <class T, size_t N> 
+void TCompactVector<T, N>::shrink_to_small()
+{
+    if (Y_LIKELY(IsInline())) {
+        return;
+    }
+
+    auto size = this->size();
+    if (size > N) {
+        return;
+    }
+
+    auto* storage = OnHeapMeta_.Storage;
+    UninitializedMove(storage->Elements, storage->End, &InlineElements_[0]);
+    Destroy(storage->Elements, storage->End);
+    ::free(storage);
+
+    InlineMeta_.SizePlusOne = size + 1;
+}
+
+template <class T, size_t N>
 bool TCompactVector<T, N>::IsInline() const
 {
     return InlineMeta_.SizePlusOne != 0;

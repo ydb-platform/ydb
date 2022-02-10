@@ -10,9 +10,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <class T, size_t N> 
-class TCompactVector; 
- 
+template <class T, size_t N>
+class TCompactVector;
+
 //! TRange with ownership semantics.
 template <class T>
 class TSharedRange
@@ -43,13 +43,13 @@ public:
         , Holder_(std::move(holder))
     { }
 
-    //! Constructs a TSharedRange from a TCompactVector. 
-    template <size_t N> 
-    TSharedRange(const TCompactVector<T, N>& elements, THolderPtr holder) 
-        : TRange<T>(elements) 
-        , Holder_(std::move(holder)) 
-    { } 
- 
+    //! Constructs a TSharedRange from a TCompactVector.
+    template <size_t N>
+    TSharedRange(const TCompactVector<T, N>& elements, THolderPtr holder)
+        : TRange<T>(elements)
+        , Holder_(std::move(holder))
+    { }
+
     //! Constructs a TSharedRange from an std::vector.
     TSharedRange(const std::vector<T>& elements, THolderPtr holder)
         : TRange<T>(elements)
@@ -143,13 +143,13 @@ TSharedRange<T> MakeSharedRange(std::vector<T>&& elements, THolders&&... holders
     return DoMakeSharedRange<T>(std::move(elements), std::forward<THolders>(holders)...);
 }
 
-//! Constructs a TSharedRange by taking ownership of an TCompactVector. 
-template <class T, size_t N, class... THolders> 
-TSharedRange<T> MakeSharedRange(TCompactVector<T, N>&& elements, THolders&&... holders) 
-{ 
-    return DoMakeSharedRange<T>(std::move(elements), std::forward<THolders>(holders)...); 
-} 
- 
+//! Constructs a TSharedRange by taking ownership of an TCompactVector.
+template <class T, size_t N, class... THolders>
+TSharedRange<T> MakeSharedRange(TCompactVector<T, N>&& elements, THolders&&... holders)
+{
+    return DoMakeSharedRange<T>(std::move(elements), std::forward<THolders>(holders)...);
+}
+
 //! Constructs a TSharedRange by copying an std::vector.
 template <class T, class... THolders>
 TSharedRange<T> MakeSharedRange(const std::vector<T>& elements, THolders&&... holders)
@@ -209,13 +209,13 @@ public:
         , Holder_(std::move(holder))
     { }
 
-    //! Constructs a TSharedMutableRange from a TCompactVector. 
-    template <size_t N> 
-    TSharedMutableRange(TCompactVector<T, N>& elements, THolderPtr holder) 
-        : TMutableRange<T>(elements) 
-        , Holder_(std::move(holder)) 
-    { } 
- 
+    //! Constructs a TSharedMutableRange from a TCompactVector.
+    template <size_t N>
+    TSharedMutableRange(TCompactVector<T, N>& elements, THolderPtr holder)
+        : TMutableRange<T>(elements)
+        , Holder_(std::move(holder))
+    { }
+
     //! Constructs a TSharedMutableRange from an std::vector.
     TSharedMutableRange(std::vector<T>& elements, THolderPtr holder)
         : TMutableRange<T>(elements)

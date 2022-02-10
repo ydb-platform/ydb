@@ -119,12 +119,12 @@ public:
     }
 
     //! Returns the size.
-    Y_FORCE_INLINE size_t size() const 
-    { 
-        return Size_; 
-    } 
- 
-    //! Returns the size. 
+    Y_FORCE_INLINE size_t size() const
+    {
+        return Size_;
+    }
+
+    //! Returns the size.
     Y_FORCE_INLINE size_t Size() const
     {
         return Size_;

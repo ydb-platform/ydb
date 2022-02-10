@@ -7,13 +7,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the TCompactSet class. 
+// This file defines the TCompactSet class.
 //
 //===----------------------------------------------------------------------===//
 
 #pragma once
 
-#include "compact_vector.h" 
+#include "compact_vector.h"
 
 #include <util/system/yassert.h>
 
@@ -24,30 +24,30 @@
 
 namespace NYT {
 
-/// TCompactSet - This maintains a set of unique values, optimizing for the case 
+/// TCompactSet - This maintains a set of unique values, optimizing for the case
 /// when the set is small (less than N).  In this case, the set can be
 /// maintained with no mallocs.  If the set gets large, we expand to using an
 /// std::set to maintain reasonable lookup times.
 ///
 /// Note that any modification of the set may invalidate *all* iterators.
 template <typename T, unsigned N, typename C = std::less<T>>
-class TCompactSet 
+class TCompactSet
 {
 private:
-    /// Use a CompactVector to hold the elements here (even though it will never 
+    /// Use a CompactVector to hold the elements here (even though it will never
     /// reach its 'large' stage) to avoid calling the default ctors of elements
     /// we will never use.
-    TCompactVector<T, N> Vector; 
+    TCompactVector<T, N> Vector;
     std::set<T, C> Set;
 
     using TSetConstIterator = typename std::set<T, C>::const_iterator;
-    using TVectorConstIterator = typename TCompactVector<T, N>::const_iterator; 
+    using TVectorConstIterator = typename TCompactVector<T, N>::const_iterator;
 
 public:
     class const_iterator;
     using size_type = std::size_t;
 
-    TCompactSet() {} 
+    TCompactSet() {}
 
     [[nodiscard]] bool empty() const;
 
@@ -80,7 +80,7 @@ private:
 
 } // namespace NYT
 
-#define COMPACT_SET_INL_H_ 
-#include "compact_set-inl.h" 
-#undef COMPACT_SET_INL_H_ 
+#define COMPACT_SET_INL_H_
+#include "compact_set-inl.h"
+#undef COMPACT_SET_INL_H_
 

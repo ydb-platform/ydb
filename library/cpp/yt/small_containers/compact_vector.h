@@ -60,7 +60,7 @@ public:
     TCompactVector(const TCompactVector& other);
     template <size_t OtherN>
     TCompactVector(const TCompactVector<T, OtherN>& other);
-    TCompactVector(TCompactVector&& other) noexcept(std::is_nothrow_move_constructible_v<T>); 
+    TCompactVector(TCompactVector&& other) noexcept(std::is_nothrow_move_constructible_v<T>);
     template <size_t OtherN>
     TCompactVector(TCompactVector<T, OtherN>&& other);
     explicit TCompactVector(size_type count);
@@ -144,8 +144,8 @@ public:
     iterator insert(const_iterator pos, TIterator first, TIterator last);
     iterator insert(const_iterator pos, std::initializer_list<T> list);
 
-    void shrink_to_small(); 
- 
+    void shrink_to_small();
+
 private:
     template <class OtherT, size_t OtherN>
     friend class TCompactVector;

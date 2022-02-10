@@ -62,21 +62,21 @@ void InvertDomain(char* begin, char* end) {
         b = e + 1;
     }
 }
- 
-void InvertUrl(char* begin, char* end) { 
+
+void InvertUrl(char* begin, char* end) {
     char* slash = strchr(begin, '/');
-    if (slash) { 
-        *slash = 0; 
-    } 
-    strlwr(begin); 
-    if (slash) { 
-        *slash = '/'; 
-    } 
-    InvertDomain(begin, end); 
-    TrspChars(begin); 
-} 
- 
-void RevertUrl(char* begin, char* end) { 
-    UnTrspChars(begin); 
-    InvertDomain(begin, end); 
-} 
+    if (slash) {
+        *slash = 0;
+    }
+    strlwr(begin);
+    if (slash) {
+        *slash = '/';
+    }
+    InvertDomain(begin, end);
+    TrspChars(begin);
+}
+
+void RevertUrl(char* begin, char* end) {
+    UnTrspChars(begin);
+    InvertDomain(begin, end);
+}

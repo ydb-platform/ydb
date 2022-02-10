@@ -1,15 +1,15 @@
-#pragma once 
- 
+#pragma once
+
 #include <library/cpp/yson/consumer.h>
- 
+
 #include <library/cpp/json/json_reader.h>
- 
-#include <util/generic/stack.h> 
- 
-namespace NYT { 
-    class TYson2JsonCallbacksAdapter 
-       : public NJson::TJsonCallbacks { 
-    public: 
+
+#include <util/generic/stack.h>
+
+namespace NYT {
+    class TYson2JsonCallbacksAdapter
+       : public NJson::TJsonCallbacks {
+    public:
         class TState {
         private:
             // Stores current context stack
@@ -22,19 +22,19 @@ namespace NYT {
 
     public:
         TYson2JsonCallbacksAdapter(::NYson::TYsonConsumerBase* impl, bool throwException = false);
- 
-        bool OnNull() override; 
-        bool OnBoolean(bool val) override; 
-        bool OnInteger(long long val) override; 
-        bool OnUInteger(unsigned long long val) override; 
-        bool OnString(const TStringBuf& val) override; 
-        bool OnDouble(double val) override; 
-        bool OnOpenArray() override; 
-        bool OnCloseArray() override; 
-        bool OnOpenMap() override; 
-        bool OnCloseMap() override; 
-        bool OnMapKey(const TStringBuf& val) override; 
- 
+
+        bool OnNull() override;
+        bool OnBoolean(bool val) override;
+        bool OnInteger(long long val) override;
+        bool OnUInteger(unsigned long long val) override;
+        bool OnString(const TStringBuf& val) override;
+        bool OnDouble(double val) override;
+        bool OnOpenArray() override;
+        bool OnCloseArray() override;
+        bool OnOpenMap() override;
+        bool OnCloseMap() override;
+        bool OnMapKey(const TStringBuf& val) override;
+
         TState State() const {
             return State_;
         }
@@ -43,11 +43,11 @@ namespace NYT {
             State_ = state;
         }
 
-    private: 
-        void WrapIfListItem(); 
- 
-    private: 
+    private:
+        void WrapIfListItem();
+
+    private:
         ::NYson::TYsonConsumerBase* Impl_;
         TState State_;
-    }; 
+    };
 }

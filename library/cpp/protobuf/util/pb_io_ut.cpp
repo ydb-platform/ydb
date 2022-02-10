@@ -45,8 +45,8 @@ static const TString INCORRECT_ENUM_ID_MESSAGE =
 
 static const TString CORRECT_BASE64_MESSAGE = "CCo,";
 
-static const TString CORRECT_UNEVEN_BASE64_MESSAGE = "CCo"; 
- 
+static const TString CORRECT_UNEVEN_BASE64_MESSAGE = "CCo";
+
 static const TString INCORRECT_BASE64_MESSAGE = "CC";
 
 Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
@@ -60,14 +60,14 @@ Y_UNIT_TEST_SUITE(TTestProtoBufIO) {
             UNIT_ASSERT(!NProtoBuf::TryParseFromBase64String(INCORRECT_BASE64_MESSAGE, message));
         }
         {
-            NProtobufUtilUt::TTextTest message; 
-            UNIT_ASSERT(NProtoBuf::TryParseFromBase64String(CORRECT_UNEVEN_BASE64_MESSAGE , message, true)); 
-        } 
-        { 
-            NProtobufUtilUt::TTextTest message; 
-            UNIT_ASSERT(!NProtoBuf::TryParseFromBase64String(CORRECT_UNEVEN_BASE64_MESSAGE , message, false)); 
-        } 
-        { 
+            NProtobufUtilUt::TTextTest message;
+            UNIT_ASSERT(NProtoBuf::TryParseFromBase64String(CORRECT_UNEVEN_BASE64_MESSAGE , message, true));
+        }
+        {
+            NProtobufUtilUt::TTextTest message;
+            UNIT_ASSERT(!NProtoBuf::TryParseFromBase64String(CORRECT_UNEVEN_BASE64_MESSAGE , message, false));
+        }
+        {
             UNIT_ASSERT_VALUES_EQUAL(CORRECT_BASE64_MESSAGE, NProtoBuf::SerializeToBase64String(GetCorrectMessage()));
         }
         {

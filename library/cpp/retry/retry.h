@@ -82,12 +82,12 @@ struct TRetryOptions {
 };
 
 template <typename TResult, typename TException = yexception>
-TMaybe<TResult> DoWithRetry(std::function<TResult()> func, std::function<void(const TException&)> onFail, TRetryOptions retryOptions, bool throwLast) { 
+TMaybe<TResult> DoWithRetry(std::function<TResult()> func, std::function<void(const TException&)> onFail, TRetryOptions retryOptions, bool throwLast) {
     for (ui32 attempt = 0; attempt <= retryOptions.RetryCount; ++attempt) {
         try {
             return func();
-        } catch (TException& ex) { 
-            onFail(ex); 
+        } catch (TException& ex) {
+            onFail(ex);
             if (attempt == retryOptions.RetryCount) {
                 if (throwLast) {
                     throw;
@@ -101,27 +101,27 @@ TMaybe<TResult> DoWithRetry(std::function<TResult()> func, std::function<void(co
     return Nothing();
 }
 
-template <typename TResult, typename TException = yexception> 
-TMaybe<TResult> DoWithRetry(std::function<TResult()> func, TRetryOptions retryOptions, bool throwLast) { 
-    return DoWithRetry<TResult, TException>(func, [](const TException&){}, retryOptions, throwLast); 
-} 
- 
+template <typename TResult, typename TException = yexception>
+TMaybe<TResult> DoWithRetry(std::function<TResult()> func, TRetryOptions retryOptions, bool throwLast) {
+    return DoWithRetry<TResult, TException>(func, [](const TException&){}, retryOptions, throwLast);
+}
+
 template <typename TException = yexception>
 bool DoWithRetry(std::function<void()> func, std::function<void(const TException&)> onFail, TRetryOptions retryOptions, bool throwLast) {
-    auto f = [&]() { 
-        func(); 
-        return nullptr; 
-    }; 
-    return DoWithRetry<void*, TException>(f, onFail, retryOptions, throwLast).Defined(); 
-} 
- 
-template <typename TException = yexception> 
+    auto f = [&]() {
+        func();
+        return nullptr;
+    };
+    return DoWithRetry<void*, TException>(f, onFail, retryOptions, throwLast).Defined();
+}
+
+template <typename TException = yexception>
 bool DoWithRetry(std::function<void()> func, TRetryOptions retryOptions, bool throwLast) {
     auto f = [&]() {
         func();
         return nullptr;
     };
-    return DoWithRetry<void*, TException>(f, [](const TException&){}, retryOptions, throwLast).Defined(); 
+    return DoWithRetry<void*, TException>(f, [](const TException&){}, retryOptions, throwLast).Defined();
 }
 
 void DoWithRetry(std::function<void()> func, TRetryOptions retryOptions);

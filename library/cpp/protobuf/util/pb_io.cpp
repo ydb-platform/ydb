@@ -21,15 +21,15 @@ namespace NProtoBuf {
         }
     };
 
-    void ParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven) { 
+    void ParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven) {
         if (!m.ParseFromString(allowUneven ? Base64DecodeUneven(dataBase64) : Base64StrictDecode(dataBase64))) {
             ythrow yexception() << "can't parse " << m.GetTypeName() << " from base64-encoded string";
         }
     }
 
-    bool TryParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven) { 
+    bool TryParseFromBase64String(const TStringBuf dataBase64, Message& m, bool allowUneven) {
         try {
-            ParseFromBase64String(dataBase64, m, allowUneven); 
+            ParseFromBase64String(dataBase64, m, allowUneven);
             return true;
         } catch (const std::exception&) {
             return false;

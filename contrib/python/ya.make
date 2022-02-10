@@ -68,7 +68,7 @@ RECURSE(
     asciitree
     asgiref
     asn1crypto
-    astroid
+    astroid 
     asttokens
     astunparse
     async-generator
@@ -330,7 +330,7 @@ RECURSE(
     easywebdav
     ecdsa
     edera
-    editdistance
+    editdistance 
     elasticsearch
     elasticsearch-dsl
     email-validator
@@ -373,10 +373,10 @@ RECURSE(
     filelock
     fingerprints
     fire
-    flake8
+    flake8 
     flake8-bandit
-    flake8-commas
-    flake8-docstrings
+    flake8-commas 
+    flake8-docstrings 
     flake8-polyfill
     flake8-quotes
     flake8-string-format
@@ -495,7 +495,7 @@ RECURSE(
     humanize
     humongous
     hurry.filesize
-    Hydra
+    Hydra 
     hypercorn
     hyperframe
     hyperlink
@@ -536,7 +536,7 @@ RECURSE(
     iso3166
     iso8601
     isodate
-    isort
+    isort 
     itsdangerous
     jaeger-client
     janus
@@ -615,7 +615,7 @@ RECURSE(
     marshmallow-union
     matplotlib
     matplotlib-inline
-    mccabe
+    mccabe 
     mecab-python3
     meld3
     memory-profiler
@@ -807,7 +807,7 @@ RECURSE(
     pydash
     PyDispatcher
     pyDOE
-    pydocstyle
+    pydocstyle 
     pydot
     pydub
     pyelftools
@@ -826,7 +826,7 @@ RECURSE(
     pykdtree
     pyketama
     pylev
-    pylint
+    pylint 
     pylxd
     pylzma
     pymaven-patch
@@ -1042,7 +1042,7 @@ RECURSE(
     subword-nmt
     suds-jurko
     supervenn
-    supervisor
+    supervisor 
     svn
     swagger-spec-validator
     sympy

@@ -268,7 +268,7 @@ namespace NActors {
         const TDuration DeadPeerTimeout;
         TInstant LastReceiveTimestamp;
         void HandleCheckDeadPeer();
-
+ 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // pinger logic
 

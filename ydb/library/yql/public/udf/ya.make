@@ -17,8 +17,8 @@ SRCS(
     udf_ptr.h
     udf_registrator.cpp
     udf_registrator.h
-    udf_static_registry.cpp
-    udf_static_registry.h
+    udf_static_registry.cpp 
+    udf_static_registry.h 
     udf_string.cpp
     udf_string.h
     udf_type_builder.h

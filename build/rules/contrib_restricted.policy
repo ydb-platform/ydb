@@ -89,9 +89,9 @@ ALLOW yandex_io -> contrib/restricted/spdlog
 ALLOW smart_devices/tools/launcher2 -> contrib/restricted/spdlog
 ALLOW smart_devices/tools/updater -> contrib/restricted/spdlog
 
-# cmph is a limited-use library
-ALLOW ads/yacontext -> contrib/restricted/cmph
-
+# cmph is a limited-use library 
+ALLOW ads/yacontext -> contrib/restricted/cmph 
+ 
 # http-parser is a low-level parser for http bytestream.
 # Consider using high-level alternatives.
 ALLOW mds -> contrib/restricted/http-parser

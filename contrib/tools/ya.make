@@ -60,6 +60,6 @@ IF (NOT OS_WINDOWS)
     RECURSE(
         ag
         lftp
-        make
+        make 
     )
 ENDIF ()

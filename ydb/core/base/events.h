@@ -67,7 +67,7 @@ struct TKikimrEvents : TEvents {
         ES_TICKET_PARSER,
         ES_KQP = NYql::NDq::TDqEvents::ES_DQ_COMPUTE_KQP_COMPATIBLE, // 4145
         ES_BLACKBOX_VALIDATOR,
-        ES_SELF_PING, 
+        ES_SELF_PING,
         ES_PIPECACHE,
         ES_PQ_PROXY,
         ES_CMS,

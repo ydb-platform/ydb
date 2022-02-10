@@ -1022,9 +1022,9 @@ TLoggerInitializer::TLoggerInitializer(const TKikimrRunConfig& runConfig,
     , LogSettings(logSettings)
     , LogBackend(logBackend)
     , PathToConfigCacheFile(runConfig.PathToConfigCacheFile)
-{ 
-} 
- 
+{
+}
+
 void TLoggerInitializer::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData) {
@@ -1668,35 +1668,35 @@ void TStatsCollectorInitializer::InitializeServices(
 }
 #endif
 
-// TSelfPingInitializer 
- 
-TSelfPingInitializer::TSelfPingInitializer(const TKikimrRunConfig& runConfig) 
-    : IKikimrServicesInitializer(runConfig) { 
-} 
- 
-void TSelfPingInitializer::InitializeServices( 
-        NActors::TActorSystemSetup* setup, 
-        const NKikimr::TAppData* appData) { 
- 
-    const TDuration selfPingInterval = Config.HasActorSystemConfig() && Config.GetActorSystemConfig().HasSelfPingInterval() 
-        ? TDuration::MicroSeconds(Config.GetActorSystemConfig().GetSelfPingInterval()) 
-        : TDuration::MilliSeconds(10); 
- 
+// TSelfPingInitializer
+
+TSelfPingInitializer::TSelfPingInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig) {
+}
+
+void TSelfPingInitializer::InitializeServices(
+        NActors::TActorSystemSetup* setup,
+        const NKikimr::TAppData* appData) {
+
+    const TDuration selfPingInterval = Config.HasActorSystemConfig() && Config.GetActorSystemConfig().HasSelfPingInterval()
+        ? TDuration::MicroSeconds(Config.GetActorSystemConfig().GetSelfPingInterval())
+        : TDuration::MilliSeconds(10);
+
     const auto counters = GetServiceCounters(appData->Counters, "utils");
- 
+
     for (size_t poolId = 0; poolId < setup->GetExecutorsCount(); ++poolId) {
         const auto& poolName = setup->GetPoolName(poolId);
-        auto poolGroup = counters->GetSubgroup("execpool", poolName); 
-        auto counter = poolGroup->GetCounter("SelfPingMaxUs", false); 
+        auto poolGroup = counters->GetSubgroup("execpool", poolName);
+        auto counter = poolGroup->GetCounter("SelfPingMaxUs", false);
         auto cpuTimeCounter = poolGroup->GetCounter("CpuMatBenchNs", false);
         IActor* selfPingActor = CreateSelfPingActor(selfPingInterval, counter, cpuTimeCounter);
         setup->LocalServices.push_back(std::make_pair(TActorId(),
-                                                      TActorSetupCmd(selfPingActor, 
+                                                      TActorSetupCmd(selfPingActor,
                                                                      TMailboxType::HTSwap,
-                                                                     poolId))); 
-    } 
-} 
- 
+                                                                     poolId)));
+    }
+}
+
 // TWhiteBoardServiceInitializer
 
 TWhiteBoardServiceInitializer::TWhiteBoardServiceInitializer(const TKikimrRunConfig& runConfig)

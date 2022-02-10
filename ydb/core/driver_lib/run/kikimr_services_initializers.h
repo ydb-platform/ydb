@@ -273,13 +273,13 @@ public:
 };
 #endif
 
-class TSelfPingInitializer : public IKikimrServicesInitializer { 
-public: 
-    TSelfPingInitializer(const TKikimrRunConfig& runConfig); 
- 
+class TSelfPingInitializer : public IKikimrServicesInitializer {
+public:
+    TSelfPingInitializer(const TKikimrRunConfig& runConfig);
+
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-}; 
- 
+};
+
 class TWhiteBoardServiceInitializer : public IKikimrServicesInitializer {
 public:
     TWhiteBoardServiceInitializer(const TKikimrRunConfig& runConfig);

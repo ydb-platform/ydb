@@ -166,7 +166,7 @@ namespace NMonitoring {
                 (*Callback_)(duration);
             }
             Timer_->RecordValue(duration);
-        }
+        } 
 
     private:
         TTimer* Timer_;

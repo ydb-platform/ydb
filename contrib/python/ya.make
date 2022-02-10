@@ -1150,7 +1150,7 @@ RECURSE(
     webvtt-py
     weighted-levenshtein
     Werkzeug
-    wheel 
+    wheel
     whitenoise
     whodap
     wmctrl

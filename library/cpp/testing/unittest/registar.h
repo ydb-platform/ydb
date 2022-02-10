@@ -374,14 +374,14 @@ public:                       \
 #define UNIT_FAIL(M) UNIT_FAIL_IMPL("forced failure", M)
 #define UNIT_FAIL_NONFATAL(M) UNIT_FAIL_NONFATAL_IMPL("forced failure", M)
 
-//types 
+//types
 #define UNIT_ASSERT_TYPES_EQUAL(A, B)                                                                                                                                  \
     do {                                                                                                                                                               \
         if (!std::is_same<A, B>::value) {                                                                                                                              \
             UNIT_FAIL_IMPL("types equal assertion failed", (::TStringBuilder() << #A << " (" << TypeName<A>() << ") != " << #B << " (" << TypeName<B>() << ")").data()); \
         }                                                                                                                                                              \
     } while (false)
- 
+
 //doubles
 // UNIT_ASSERT_DOUBLES_EQUAL_DEPRECATED* macros do not handle NaNs correctly (see IGNIETFERRO-1419) and are for backward compatibility
 // only. Consider switching to regular UNIT_ASSERT_DOUBLES_EQUAL* macros if you're still using the deprecated version.

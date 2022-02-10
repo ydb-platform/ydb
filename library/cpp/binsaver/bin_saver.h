@@ -258,11 +258,11 @@ private:
         for (i64 offset = 0; offset < nSize; offset += chunkSize) {
             void* ptr = (char*)pData + offset;
             i64 size = offset + chunkSize < nSize ? chunkSize : (nSize - offset);
-            if (bRead) 
-                File.Read(ptr, size); 
-            else 
-                File.Write(ptr, size); 
-        } 
+            if (bRead)
+                File.Read(ptr, size);
+            else
+                File.Write(ptr, size);
+        }
     }
 
     // storing/loading pointers to objects

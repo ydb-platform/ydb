@@ -8,9 +8,9 @@
 #endif
 
 #define HOST_MAX 260
-#ifndef URL_MAX 
+#ifndef URL_MAX
     #define URL_MAX 1024
-#endif 
+#endif
 #define FULLURL_MAX (URL_MAX + HOST_MAX)
 
 #define LINKTEXT_MAX 1024

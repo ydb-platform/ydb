@@ -530,7 +530,7 @@ public:
         return TBasicString(TUninitialized(n));
     }
 
-private: 
+private:
     template <typename... R>
     static size_t SumLength(const TBasicStringBuf<TCharType, TTraits> s1, const R&... r) noexcept {
         return s1.size() + SumLength(r...);
@@ -542,15 +542,15 @@ private:
     }
 
     static constexpr size_t SumLength() noexcept {
-        return 0; 
+        return 0;
     }
 
     template <typename... R>
     static void CopyAll(TCharType* p, const TBasicStringBuf<TCharType, TTraits> s, const R&... r) {
         TTraits::copy(p, s.data(), s.size());
         CopyAll(p + s.size(), r...);
-    } 
- 
+    }
+
     template <typename... R, class TNextCharType, typename = std::enable_if_t<std::is_same<TCharType, TNextCharType>::value>>
     static void CopyAll(TCharType* p, const TNextCharType s, const R&... r) {
         p[0] = s;
@@ -558,9 +558,9 @@ private:
     }
 
     static void CopyAll(TCharType*) noexcept {
-    } 
- 
-public: 
+    }
+
+public:
     inline void clear() noexcept {
 #ifdef TSTRING_IS_STD_STRING
         Storage_.clear();
@@ -575,13 +575,13 @@ public:
 #endif
     }
 
-    template <typename... R> 
+    template <typename... R>
     static inline TBasicString Join(const R&... r) {
         TBasicString s{TUninitialized{SumLength(r...)}};
 
         TBasicString::CopyAll((TCharType*)s.data(), r...);
 
-        return s; 
+        return s;
     }
 
     // ~~~ Assignment ~~~ : FAMILY0(TBasicString&, assign);

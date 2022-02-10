@@ -397,7 +397,7 @@ public:
             if (!ok && (errno == ESRCH) && DetachSession) {
                 // this could fail when called before child proc completes setsid().
                 ok = kill(Pid, SIGTERM) == 0;
-                kill(-Pid, SIGTERM); // between a failed kill(-Pid) and a successful kill(Pid) a grandchild could have been spawned 
+                kill(-Pid, SIGTERM); // between a failed kill(-Pid) and a successful kill(Pid) a grandchild could have been spawned
             }
 #else
                 TerminateProcess(Pid, 1 /* exit code */);

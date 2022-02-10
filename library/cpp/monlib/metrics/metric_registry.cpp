@@ -152,11 +152,11 @@ namespace NMonitoring {
         }
     }
 
-    void TMetricRegistry::Clear() {
-        TWriteGuard g{Lock_};
-        Metrics_.clear();
-    }
-
+    void TMetricRegistry::Clear() { 
+        TWriteGuard g{Lock_}; 
+        Metrics_.clear(); 
+    } 
+ 
     template <typename TMetric, EMetricType type, typename TLabelsType, typename... Args>
     TMetric* TMetricRegistry::Metric(TLabelsType&& labels, Args&&... args) {
         {

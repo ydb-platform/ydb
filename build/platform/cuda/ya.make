@@ -11,9 +11,9 @@ ENDIF()
 IF (USE_ARCADIA_CUDA)
     IF (HOST_OS_LINUX AND HOST_ARCH_X86_64)
         IF (OS_LINUX AND ARCH_X86_64)
-            IF (CUDA_VERSION == "11.4")
+            IF (CUDA_VERSION == "11.4") 
                 DECLARE_EXTERNAL_RESOURCE(CUDA sbr:2410761119) # CUDA Toolkit 11.4.2 for Linux x86-64
-            ELSEIF (CUDA_VERSION == "11.3")
+            ELSEIF (CUDA_VERSION == "11.3") 
                 DECLARE_EXTERNAL_RESOURCE(CUDA sbr:2213063565) # CUDA Toolkit 11.3.1 for Linux x86-64
             ELSEIF (CUDA_VERSION == "11.2")
                 DECLARE_EXTERNAL_RESOURCE(CUDA sbr:2073566375) # CUDA Toolkit 11.2.2 for Linux x86-64

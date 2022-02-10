@@ -3425,14 +3425,14 @@ bool IsDataTypeDateOrTzDateOrInterval(EDataSlot dataSlot) {
     return NUdf::GetDataTypeInfo(dataSlot).Features & (NUdf::DateType | NUdf::TzDateType | NUdf::TimeIntervalType);
 }
 
-bool IsDataTypeDateOrTzDate(EDataSlot dataSlot) { 
-    return NUdf::GetDataTypeInfo(dataSlot).Features & (NUdf::DateType | NUdf::TzDateType); 
-} 
- 
-bool IsDataTypeInterval(EDataSlot dataSlot) { 
-    return NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::TimeIntervalType; 
-} 
- 
+bool IsDataTypeDateOrTzDate(EDataSlot dataSlot) {
+    return NUdf::GetDataTypeInfo(dataSlot).Features & (NUdf::DateType | NUdf::TzDateType);
+}
+
+bool IsDataTypeInterval(EDataSlot dataSlot) {
+    return NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::TimeIntervalType;
+}
+
 bool IsDataTypeDate(EDataSlot dataSlot) {
     return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::DateType);
 }

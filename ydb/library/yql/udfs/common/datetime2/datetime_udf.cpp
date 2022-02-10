@@ -220,64 +220,64 @@ namespace {
         return timezoneId < zones.size() && !zones[timezoneId].empty();
     }
 
-    inline bool ValidateMonthShortName(const std::string_view& monthName, ui8& month) { 
+    inline bool ValidateMonthShortName(const std::string_view& monthName, ui8& month) {
         static constexpr auto cmp = [](const std::string_view& a, const std::string_view& b) {
-            int cmp = strnicmp(a.data(), b.data(), std::min(a.size(), b.size())); 
-            if (cmp == 0) 
-                return a.size() < b.size(); 
-            return cmp < 0; 
-        }; 
-        static const std::map<std::string_view, ui8, decltype(cmp)> mp = { 
-            {"jan", 1}, 
-            {"feb", 2}, 
-            {"mar", 3}, 
-            {"apr", 4}, 
-            {"may", 5}, 
-            {"jun", 6}, 
-            {"jul", 7}, 
-            {"aug", 8}, 
-            {"sep", 9}, 
-            {"oct", 10}, 
-            {"nov", 11}, 
-            {"dec", 12} 
-        }; 
-        const auto& it = mp.find(monthName); 
-        if (it != mp.end()) { 
-            month = it -> second; 
-            return true; 
-        } 
-        return false; 
-    } 
- 
-    inline bool ValidateMonthFullName(const std::string_view& monthName, ui8& month) { 
+            int cmp = strnicmp(a.data(), b.data(), std::min(a.size(), b.size()));
+            if (cmp == 0)
+                return a.size() < b.size();
+            return cmp < 0;
+        };
+        static const std::map<std::string_view, ui8, decltype(cmp)> mp = {
+            {"jan", 1},
+            {"feb", 2},
+            {"mar", 3},
+            {"apr", 4},
+            {"may", 5},
+            {"jun", 6},
+            {"jul", 7},
+            {"aug", 8},
+            {"sep", 9},
+            {"oct", 10},
+            {"nov", 11},
+            {"dec", 12}
+        };
+        const auto& it = mp.find(monthName);
+        if (it != mp.end()) {
+            month = it -> second;
+            return true;
+        }
+        return false;
+    }
+
+    inline bool ValidateMonthFullName(const std::string_view& monthName, ui8& month) {
         static constexpr auto cmp = [](const std::string_view& a, const std::string_view& b) {
-            int cmp = strnicmp(a.data(), b.data(), std::min(a.size(), b.size())); 
-            if (cmp == 0) 
-                return a.size() < b.size(); 
-            return cmp < 0; 
-        }; 
-        static const std::map<std::string_view, ui8, decltype(cmp)> mp = { 
-            {"january", 1}, 
-            {"february", 2}, 
-            {"march", 3}, 
-            {"april", 4}, 
-            {"may", 5}, 
-            {"june", 6}, 
-            {"july", 7}, 
-            {"august", 8}, 
-            {"september", 9}, 
-            {"october", 10}, 
-            {"november", 11}, 
-            {"december", 12} 
-        }; 
-        const auto& it = mp.find(monthName); 
-        if (it != mp.end()) { 
-            month = it -> second; 
-            return true; 
-        } 
-        return false; 
-    } 
- 
+            int cmp = strnicmp(a.data(), b.data(), std::min(a.size(), b.size()));
+            if (cmp == 0)
+                return a.size() < b.size();
+            return cmp < 0;
+        };
+        static const std::map<std::string_view, ui8, decltype(cmp)> mp = {
+            {"january", 1},
+            {"february", 2},
+            {"march", 3},
+            {"april", 4},
+            {"may", 5},
+            {"june", 6},
+            {"july", 7},
+            {"august", 8},
+            {"september", 9},
+            {"october", 10},
+            {"november", 11},
+            {"december", 12}
+        };
+        const auto& it = mp.find(monthName);
+        if (it != mp.end()) {
+            month = it -> second;
+            return true;
+        }
+        return false;
+    }
+
     inline bool ValidateDatetime(ui32 datetime) {
         return datetime < MAX_DATETIME;
     }
@@ -1233,56 +1233,56 @@ namespace {
                     });
                     ReservedSize_ += MAX_TIMEZONE_NAME_LEN;
                     break;
-                case 'b': { 
-                    static constexpr size_t size = 3; 
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) { 
-                        static constexpr std::string_view mp[] { 
-                            "Jan", 
-                            "Feb", 
+                case 'b': {
+                    static constexpr size_t size = 3;
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                        static constexpr std::string_view mp[] {
+                            "Jan",
+                            "Feb",
                             "Mar",
                             "Apr",
-                            "May", 
-                            "Jun", 
-                            "Jul", 
-                            "Aug", 
-                            "Sep", 
-                            "Oct", 
-                            "Nov", 
-                            "Dec" 
-                        }; 
+                            "May",
+                            "Jun",
+                            "Jul",
+                            "Aug",
+                            "Sep",
+                            "Oct",
+                            "Nov",
+                            "Dec"
+                        };
                         auto month = GetMonth(value);
                         Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value");
                         std::memcpy(out, mp[month - 1].data(), size);
-                        return size; 
-                    }); 
-                    ReservedSize_ += size; 
-                    break; 
-                } 
-                case 'B': { 
-                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) { 
-                        static constexpr std::string_view mp[] { 
-                            "January", 
-                            "February", 
+                        return size;
+                    });
+                    ReservedSize_ += size;
+                    break;
+                }
+                case 'B': {
+                    Printers_.emplace_back([](char* out, const TUnboxedValuePod& value, const IDateBuilder&) {
+                        static constexpr std::string_view mp[] {
+                            "January",
+                            "February",
                             "March",
                             "April",
-                            "May", 
-                            "June", 
-                            "July", 
-                            "August", 
-                            "September", 
-                            "October", 
-                            "November", 
-                            "December" 
-                        }; 
+                            "May",
+                            "June",
+                            "July",
+                            "August",
+                            "September",
+                            "October",
+                            "November",
+                            "December"
+                        };
                         auto month = GetMonth(value);
                         Y_ENSURE(month > 0 && month <= sizeof(mp) / sizeof(mp[0]), "Invalid month value");
                         const std::string_view monthFullName = mp[month - 1];
-                        std::memcpy(out, monthFullName.data(), monthFullName.size()); 
-                        return monthFullName.size(); 
-                    }); 
-                    ReservedSize_ += 9U; // MAX_MONTH_FULL_NAME_LEN 
-                    break; 
-                } 
+                        std::memcpy(out, monthFullName.data(), monthFullName.size());
+                        return monthFullName.size();
+                    });
+                    ReservedSize_ += 9U; // MAX_MONTH_FULL_NAME_LEN
+                    break;
+                }
                 default:
                     ythrow yexception() << "invalid format character: " << *ptr;
                 }
@@ -1567,46 +1567,46 @@ namespace {
                         return true;
                     });
                     break;
-                case 'b': { 
-                    static constexpr size_t size = 3; 
-                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) { 
-                        const auto start = it; 
-                        size_t cnt = 0U; 
-                        while (limit > 0 && cnt < size && std::isalpha(*it)) { 
-                            ++it; 
-                            ++cnt; 
-                            --limit; 
-                        } 
-                        const std::string_view monthName{start, cnt}; 
-                        ui8 month = 0U; 
-                        if (cnt < size || !ValidateMonthShortName(monthName, month)) { 
-                            return false; 
-                        } 
-                        SetMonth(result, month); 
-                        return true; 
-                    }); 
-                    break; 
-                } 
-                case 'B': { 
-                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) { 
-                        const auto start = it; 
-                        size_t cnt = 0U; 
-                        while (limit > 0 && std::isalpha(*it)) { 
-                            ++it; 
-                            ++cnt; 
-                            --limit; 
-                        } 
- 
-                        const std::string_view monthName{start, cnt}; 
-                        ui8 month = 0U; 
-                        if (cnt < 4 || !ValidateMonthFullName(monthName, month)) { 
-                            return false; 
-                        } 
-                        SetMonth(result, month); 
-                        return true; 
-                    }); 
-                    break; 
-                } 
+                case 'b': {
+                    static constexpr size_t size = 3;
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
+                        const auto start = it;
+                        size_t cnt = 0U;
+                        while (limit > 0 && cnt < size && std::isalpha(*it)) {
+                            ++it;
+                            ++cnt;
+                            --limit;
+                        }
+                        const std::string_view monthName{start, cnt};
+                        ui8 month = 0U;
+                        if (cnt < size || !ValidateMonthShortName(monthName, month)) {
+                            return false;
+                        }
+                        SetMonth(result, month);
+                        return true;
+                    });
+                    break;
+                }
+                case 'B': {
+                    Scanners_.emplace_back([](std::string_view::const_iterator& it, size_t limit, TUnboxedValuePod& result, const IDateBuilder&) {
+                        const auto start = it;
+                        size_t cnt = 0U;
+                        while (limit > 0 && std::isalpha(*it)) {
+                            ++it;
+                            ++cnt;
+                            --limit;
+                        }
+
+                        const std::string_view monthName{start, cnt};
+                        ui8 month = 0U;
+                        if (cnt < 4 || !ValidateMonthFullName(monthName, month)) {
+                            return false;
+                        }
+                        SetMonth(result, month);
+                        return true;
+                    });
+                    break;
+                }
                 default:
                     ythrow yexception() << "invalid format character: " << *ptr;
                 }

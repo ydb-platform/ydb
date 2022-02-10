@@ -1909,7 +1909,7 @@ namespace {
 
         const auto stepType = input->ChildrenSize() == 2U ? nullptr : input->Tail().GetTypeAnn();
         if (stepType && !EnsureDataType(input->Tail().Pos(), *stepType, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error; 
+            return IGraphTransformer::TStatus::Error;
         }
 
         const TTypeAnnotationNode* commonType = nullptr;
@@ -1919,7 +1919,7 @@ namespace {
                 if (IGraphTransformer::TStatus::Error == status) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0U)->Pos()), TStringBuilder() << "Impossible silent convert bound of type " <<
                         *input->Child(0U)->GetTypeAnn() << " into " << *stepType));
-                } 
+                }
                 return status;
             }
             if (const auto status = TrySilentConvertTo(input->ChildRef(1U), *stepType, ctx.Expr); IGraphTransformer::TStatus::Ok != status) {
@@ -1953,25 +1953,25 @@ namespace {
         } else {
             TExprNode::TPtr value;
             switch (slot) {
-                case EDataSlot::Date: 
-                case EDataSlot::TzDate: 
+                case EDataSlot::Date:
+                case EDataSlot::TzDate:
                     value = ctx.Expr.NewAtom(input->Pos(), "86400000000", TNodeFlags::Default);
-                    break; 
-                case EDataSlot::Datetime: 
-                case EDataSlot::TzDatetime: 
+                    break;
+                case EDataSlot::Datetime:
+                case EDataSlot::TzDatetime:
                     value = ctx.Expr.NewAtom(input->Pos(), "1000000", TNodeFlags::Default);
-                    break; 
-                default: 
+                    break;
+                default:
                     value = ctx.Expr.NewAtom(input->Pos(), "1", TNodeFlags::Default);
-                    break; 
-            } 
- 
+                    break;
+            }
+
             auto newChildren = input->ChildrenList();
             newChildren.emplace_back(ctx.Expr.NewCallable(input->Pos(), NKikimr::NUdf::GetDataTypeInfo(stepSlot).Name, {std::move(value)}));
-            output = ctx.Expr.ChangeChildren(*input, std::move(newChildren)); 
-            return IGraphTransformer::TStatus::Repeat; 
-        } 
- 
+            output = ctx.Expr.ChangeChildren(*input, std::move(newChildren));
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
         input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(commonType));
         return IGraphTransformer::TStatus::Ok;
     }

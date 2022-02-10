@@ -1433,22 +1433,22 @@ TRuntimeNode TProgramBuilder::BlockAdd(TRuntimeNode arg1, TRuntimeNode arg2) {
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
     MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
     MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");
- 
-    if constexpr (RuntimeVersion < 24U) { 
-        MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType()), "Expected numeric"); 
-    } else { 
+
+    if constexpr (RuntimeVersion < 24U) {
+        MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType()), "Expected numeric");
+    } else {
         MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
             IsDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
             IsTzDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
             IsIntervalType(AS_TYPE(TDataType, start)->GetSchemeType()),
-            "Expected numeric, date or tzdate"); 
+            "Expected numeric, date or tzdate");
 
         if (IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType())) {
             MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected numeric");
         } else {
-            MKQL_ENSURE(IsIntervalType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected interval"); 
-        } 
-    } 
+            MKQL_ENSURE(IsIntervalType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected interval");
+        }
+    }
 
     TCallableBuilder callableBuilder(Env, __func__, TListType::Create(start.GetStaticType(), Env));
     callableBuilder.Add(start);

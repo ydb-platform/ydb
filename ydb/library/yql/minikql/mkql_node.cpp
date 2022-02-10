@@ -2195,16 +2195,16 @@ bool IsDateType(NUdf::TDataTypeId typeId) {
     return slot && NUdf::GetDataTypeInfo(*slot).Features & NUdf::DateType && *slot != NUdf::EDataSlot::Interval;
 }
 
-bool IsTzDateType(NUdf::TDataTypeId typeId) { 
-    auto slot = NUdf::FindDataSlot(typeId); 
-    return slot && NUdf::GetDataTypeInfo(*slot).Features & NUdf::TzDateType && *slot != NUdf::EDataSlot::Interval; 
-} 
- 
-bool IsIntervalType(NUdf::TDataTypeId typeId) { 
-    auto slot = NUdf::FindDataSlot(typeId); 
-    return slot && NUdf::GetDataTypeInfo(*slot).Features & NUdf::TimeIntervalType; 
-} 
- 
+bool IsTzDateType(NUdf::TDataTypeId typeId) {
+    auto slot = NUdf::FindDataSlot(typeId);
+    return slot && NUdf::GetDataTypeInfo(*slot).Features & NUdf::TzDateType && *slot != NUdf::EDataSlot::Interval;
+}
+
+bool IsIntervalType(NUdf::TDataTypeId typeId) {
+    auto slot = NUdf::FindDataSlot(typeId);
+    return slot && NUdf::GetDataTypeInfo(*slot).Features & NUdf::TimeIntervalType;
+}
+
 EValueRepresentation GetValueRepresentation(NUdf::TDataTypeId type) {
     switch (type) {
 #define CASE_FOR(type, layout) \

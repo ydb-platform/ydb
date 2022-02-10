@@ -11,7 +11,7 @@ OWNER(
 )
 
 EXCLUDE_TAGS(
-    GO_PROTO
+    GO_PROTO 
     PY_PROTO
     PY3_PROTO
 )

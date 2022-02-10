@@ -718,7 +718,7 @@ ALLOW .* -> vendor/github.com/insomniacslk/dhcp
 # CONTRIB-2094
 ALLOW .* -> vendor/github.com/osrg/gobgp
 
-#
+# 
 # CONTRIB-2097 QUIC(HTTP/3) implementation library
 #
 ALLOW .* -> vendor/github.com/lucas-clemente/quic-go
@@ -875,103 +875,103 @@ ALLOW vendor -> vendor/github.com/fullstorydev/grpcurl/cmd/grpcurl
 
 
 #
-# Temporary exceptions.
-#
+# Temporary exceptions. 
+# 
+ 
 
-
-# CONTRIB-1863. resposible: tserakhau@
-
-ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/pingcap/errors
-ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/pingcap/parser/ast
-ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/pingcap/parser/format
-ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/pingcap/parser
-ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/satori/go.uuid
-ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/siddontang/go-log/log
-ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/siddontang/go-mysql/client
-ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/siddontang/go-mysql/schema
-
+# CONTRIB-1863. resposible: tserakhau@ 
+ 
+ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/pingcap/errors 
+ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/pingcap/parser/ast 
+ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/pingcap/parser/format 
+ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/pingcap/parser 
+ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/satori/go.uuid 
+ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/siddontang/go-log/log 
+ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/siddontang/go-mysql/client 
+ALLOW transfer_manager/go/pkg/source/mysql/canal -> vendor/github.com/siddontang/go-mysql/schema 
+ 
 # CONTRIB-1244. resposible: frystile@
 ALLOW cloud/compute/gokikimr/client -> vendor/github.com/rcrowley/go-metrics
 ALLOW cloud/compute/snapshot/snapshot/lib/misc -> vendor/github.com/rcrowley/go-metrics
-
-# IGNIETFERRO-1287
-ALLOW cloud/compute/snapshot/snapshot/config -> vendor/github.com/pkg/errors
-ALLOW cloud/compute/snapshot/snapshot/lib/chunker -> vendor/github.com/pkg/errors
-ALLOW contrib/go/patched/hugo -> vendor/github.com/pkg/errors
-ALLOW edadeal/backend/go/charm/internal/pkg/store/pg -> vendor/github.com/pkg/errors
-ALLOW extsearch/video/station/starter/downloader -> vendor/github.com/pkg/errors
-ALLOW extsearch/video/station/starter/input -> vendor/github.com/pkg/errors
-ALLOW extsearch/video/station/starter/players -> vendor/github.com/pkg/errors
-ALLOW extsearch/video/station/starter/pusher -> vendor/github.com/pkg/errors
-ALLOW extsearch/video/station/starter/rules -> vendor/github.com/pkg/errors
-ALLOW library/go/yandex/solomon/reporters/pusher/httppusher -> vendor/github.com/pkg/errors
-ALLOW locdoc/doc/daas-farm/pkg/daasclient -> vendor/github.com/pkg/errors
-ALLOW locdoc/doc/daas-farm/pkg/menugen -> vendor/github.com/pkg/errors
-ALLOW locdoc/doc/daas-farm/pkg/wikiclient -> vendor/github.com/pkg/errors
-ALLOW locdoc/doc/daas-farm/pkg/wikigen -> vendor/github.com/pkg/errors
-ALLOW market/sre/services/rtcstats2graphite/src/internal/blogic -> vendor/github.com/pkg/errors
-ALLOW market/sre/services/rtcstats2graphite/src/internal/nanny -> vendor/github.com/pkg/errors
-ALLOW market/sre/services/rtcstats2graphite/src/internal/oops -> vendor/github.com/pkg/errors
-ALLOW market/sre/services/rtcstats2graphite/src/internal/walle -> vendor/github.com/pkg/errors
-ALLOW market/sre/services/rtcstats2graphite/src/internal/yasm -> vendor/github.com/pkg/errors
-ALLOW market/sre/tools/ya-gde/src/cmd/getthefacts -> vendor/github.com/pkg/errors
-ALLOW market/sre/tools/ya-gde/src/pkg/hostinfo -> vendor/github.com/pkg/errors
-ALLOW market/sre/tools/ya-gde/src/pkg/util -> vendor/github.com/pkg/errors
-ALLOW transfer_manager/go/pkg/abstract -> vendor/github.com/pkg/errors
-ALLOW yabs/telephony/platform/inventory/api/http -> vendor/github.com/pkg/errors
-
-# IGNIETFERRO-1396
-
-ALLOW district/feed_reader/app/lib -> vendor/github.com/jackc/pgx
-ALLOW edadeal/backend/go/charm/cmd/charm -> vendor/github.com/jackc/pgx
-ALLOW edadeal/backend/go/gluon/internal/app/bootstrap -> vendor/github.com/jackc/pgx
-ALLOW edadeal/backend/go/nachalnik/internal/app/bootstrap -> vendor/github.com/jackc/pgx
-ALLOW edadeal/backend/go/nachalnik/internal/pkg/store -> vendor/github.com/jackc/pgx
-ALLOW extsearch/video/robot/rt_transcoder/video-manager/db -> vendor/github.com/jackc/pgx
+ 
+# IGNIETFERRO-1287 
+ALLOW cloud/compute/snapshot/snapshot/config -> vendor/github.com/pkg/errors 
+ALLOW cloud/compute/snapshot/snapshot/lib/chunker -> vendor/github.com/pkg/errors 
+ALLOW contrib/go/patched/hugo -> vendor/github.com/pkg/errors 
+ALLOW edadeal/backend/go/charm/internal/pkg/store/pg -> vendor/github.com/pkg/errors 
+ALLOW extsearch/video/station/starter/downloader -> vendor/github.com/pkg/errors 
+ALLOW extsearch/video/station/starter/input -> vendor/github.com/pkg/errors 
+ALLOW extsearch/video/station/starter/players -> vendor/github.com/pkg/errors 
+ALLOW extsearch/video/station/starter/pusher -> vendor/github.com/pkg/errors 
+ALLOW extsearch/video/station/starter/rules -> vendor/github.com/pkg/errors 
+ALLOW library/go/yandex/solomon/reporters/pusher/httppusher -> vendor/github.com/pkg/errors 
+ALLOW locdoc/doc/daas-farm/pkg/daasclient -> vendor/github.com/pkg/errors 
+ALLOW locdoc/doc/daas-farm/pkg/menugen -> vendor/github.com/pkg/errors 
+ALLOW locdoc/doc/daas-farm/pkg/wikiclient -> vendor/github.com/pkg/errors 
+ALLOW locdoc/doc/daas-farm/pkg/wikigen -> vendor/github.com/pkg/errors 
+ALLOW market/sre/services/rtcstats2graphite/src/internal/blogic -> vendor/github.com/pkg/errors 
+ALLOW market/sre/services/rtcstats2graphite/src/internal/nanny -> vendor/github.com/pkg/errors 
+ALLOW market/sre/services/rtcstats2graphite/src/internal/oops -> vendor/github.com/pkg/errors 
+ALLOW market/sre/services/rtcstats2graphite/src/internal/walle -> vendor/github.com/pkg/errors 
+ALLOW market/sre/services/rtcstats2graphite/src/internal/yasm -> vendor/github.com/pkg/errors 
+ALLOW market/sre/tools/ya-gde/src/cmd/getthefacts -> vendor/github.com/pkg/errors 
+ALLOW market/sre/tools/ya-gde/src/pkg/hostinfo -> vendor/github.com/pkg/errors 
+ALLOW market/sre/tools/ya-gde/src/pkg/util -> vendor/github.com/pkg/errors 
+ALLOW transfer_manager/go/pkg/abstract -> vendor/github.com/pkg/errors 
+ALLOW yabs/telephony/platform/inventory/api/http -> vendor/github.com/pkg/errors 
+ 
+# IGNIETFERRO-1396 
+ 
+ALLOW district/feed_reader/app/lib -> vendor/github.com/jackc/pgx 
+ALLOW edadeal/backend/go/charm/cmd/charm -> vendor/github.com/jackc/pgx 
+ALLOW edadeal/backend/go/gluon/internal/app/bootstrap -> vendor/github.com/jackc/pgx 
+ALLOW edadeal/backend/go/nachalnik/internal/app/bootstrap -> vendor/github.com/jackc/pgx 
+ALLOW edadeal/backend/go/nachalnik/internal/pkg/store -> vendor/github.com/jackc/pgx 
+ALLOW extsearch/video/robot/rt_transcoder/video-manager/db -> vendor/github.com/jackc/pgx 
 ALLOW games/backend/internal/dbutils -> vendor/github.com/jackc/pgx
-ALLOW games/backend/pkg/database -> vendor/github.com/jackc/pgx
-ALLOW mail/calendar/load/bbmock -> vendor/github.com/jackc/pgx
-ALLOW mail/collectors/tests-load/pandora -> vendor/github.com/jackc/pgx
-ALLOW market/sre/services/dist_meta_store/app -> vendor/github.com/jackc/pgx
-ALLOW market/sre/services/dist_meta_store/database -> vendor/github.com/jackc/pgx
-ALLOW quasar/gackend/db -> vendor/github.com/jackc/pgx
-ALLOW transfer_manager/go/cmd/load_generator -> vendor/github.com/jackc/pgx
-ALLOW transfer_manager/go/pkg/mapreduce/pg_to_yt -> vendor/github.com/jackc/pgx
-ALLOW transfer_manager/go/pkg/sink/pg -> vendor/github.com/jackc/pgx
-ALLOW transfer_manager/go/pkg/source/pg -> vendor/github.com/jackc/pgx
-ALLOW transfer_manager/go/pkg/storage/pg -> vendor/github.com/jackc/pgx
-ALLOW transfer_manager/go/pkg/worker/tasks -> vendor/github.com/jackc/pgx
+ALLOW games/backend/pkg/database -> vendor/github.com/jackc/pgx 
+ALLOW mail/calendar/load/bbmock -> vendor/github.com/jackc/pgx 
+ALLOW mail/collectors/tests-load/pandora -> vendor/github.com/jackc/pgx 
+ALLOW market/sre/services/dist_meta_store/app -> vendor/github.com/jackc/pgx 
+ALLOW market/sre/services/dist_meta_store/database -> vendor/github.com/jackc/pgx 
+ALLOW quasar/gackend/db -> vendor/github.com/jackc/pgx 
+ALLOW transfer_manager/go/cmd/load_generator -> vendor/github.com/jackc/pgx 
+ALLOW transfer_manager/go/pkg/mapreduce/pg_to_yt -> vendor/github.com/jackc/pgx 
+ALLOW transfer_manager/go/pkg/sink/pg -> vendor/github.com/jackc/pgx 
+ALLOW transfer_manager/go/pkg/source/pg -> vendor/github.com/jackc/pgx 
+ALLOW transfer_manager/go/pkg/storage/pg -> vendor/github.com/jackc/pgx 
+ALLOW transfer_manager/go/pkg/worker/tasks -> vendor/github.com/jackc/pgx 
 ALLOW transfer_manager/go/pkg/dataagent/pg -> vendor/github.com/jackc/pgx
 ALLOW transfer_manager/go/tests/e2e/pg2pg/replication -> vendor/github.com/jackc/pgx
-ALLOW yabs/telephony/platform/common/db -> vendor/github.com/jackc/pgx
-ALLOW yabs/telephony/platform/common/lifecycle -> vendor/github.com/jackc/pgx
-ALLOW yabs/telephony/platform/registrar-agent -> vendor/github.com/jackc/pgx
-ALLOW yabs/vh/cms-pgaas/dhdd/db -> vendor/github.com/jackc/pgx
-ALLOW yabs/vh/cms-pgaas/transcoded -> vendor/github.com/jackc/pgx
+ALLOW yabs/telephony/platform/common/db -> vendor/github.com/jackc/pgx 
+ALLOW yabs/telephony/platform/common/lifecycle -> vendor/github.com/jackc/pgx 
+ALLOW yabs/telephony/platform/registrar-agent -> vendor/github.com/jackc/pgx 
+ALLOW yabs/vh/cms-pgaas/dhdd/db -> vendor/github.com/jackc/pgx 
+ALLOW yabs/vh/cms-pgaas/transcoded -> vendor/github.com/jackc/pgx 
+ 
 
-
-#
-# Permanent exceptions.
-#
-
+# 
+# Permanent exceptions. 
+# 
+ 
 # Docker is not vendored property. Docker dependency must be pulled-in explicitly.
 ALLOW vendor/ -> vendor/github.com/opencontainers/go-digest
 
-# CONTRIB-865. Jaeger YT plugin. responsible: prime@
+# CONTRIB-865. Jaeger YT plugin. responsible: prime@ 
 ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/plugin/storage/grpc
 ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/storage/spanstore
 ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/storage/dependencystore
 ALLOW yt/jaeger/plugin -> vendor/github.com/jaegertracing/jaeger/model
 ALLOW yt/jaeger/plugin -> vendor/github.com/gogo/protobuf
 ALLOW yt/jaeger/plugin -> vendor/github.com/hashicorp/go-plugin
-
-# CONTRIB-1518 client for monkey-patched Apache Pulsar by TuyaInc. responsible: jock@
-ALLOW alice/iot/adapters/tuya_adapter -> vendor/github.com/TuyaInc/tuya_pulsar_sdk_go
-ALLOW alice/iot/adapters/tuya_adapter/server -> vendor/github.com/sirupsen/logrus
-
-# SUBBOTNIK-90
-ALLOW infra/rtc/instance_resolver/pkg/clients/iss3 -> vendor/git.apache.org/thrift.git/lib/go
-
+ 
+# CONTRIB-1518 client for monkey-patched Apache Pulsar by TuyaInc. responsible: jock@ 
+ALLOW alice/iot/adapters/tuya_adapter -> vendor/github.com/TuyaInc/tuya_pulsar_sdk_go 
+ALLOW alice/iot/adapters/tuya_adapter/server -> vendor/github.com/sirupsen/logrus 
+ 
+# SUBBOTNIK-90 
+ALLOW infra/rtc/instance_resolver/pkg/clients/iss3 -> vendor/git.apache.org/thrift.git/lib/go 
+ 
 # Benchmarks using github.com/pkg/errors
 ALLOW library/go/core/xerrors -> vendor/github.com/pkg/errors
 

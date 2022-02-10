@@ -16,6 +16,6 @@ PEERDIR(
     ydb/library/yql/providers/common/metrics/protos
 )
 
-EXCLUDE_TAGS(GO_PROTO)
-
+EXCLUDE_TAGS(GO_PROTO) 
+ 
 END()

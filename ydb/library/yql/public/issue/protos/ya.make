@@ -7,6 +7,6 @@ SRCS(
     issue_severity.proto
 )
 
-EXCLUDE_TAGS(GO_PROTO)
-
+EXCLUDE_TAGS(GO_PROTO) 
+ 
 END()

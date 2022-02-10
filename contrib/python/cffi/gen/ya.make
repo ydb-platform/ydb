@@ -8,7 +8,7 @@ PEERDIR(
     contrib/python/cffi/gen/lib
 )
 
-INDUCED_DEPS(cpp ${ARCADIA_ROOT}/contrib/python/cffi/cffi/_cffi_include.h)
+INDUCED_DEPS(cpp ${ARCADIA_ROOT}/contrib/python/cffi/cffi/_cffi_include.h) 
 
 END()
 

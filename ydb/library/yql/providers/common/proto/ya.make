@@ -11,8 +11,8 @@ PEERDIR(
     ydb/library/yql/protos
 )
 
-IF (NOT PY_PROTOS_FOR)
-    EXCLUDE_TAGS(GO_PROTO)
-ENDIF()
-
+IF (NOT PY_PROTOS_FOR) 
+    EXCLUDE_TAGS(GO_PROTO) 
+ENDIF() 
+ 
 END()

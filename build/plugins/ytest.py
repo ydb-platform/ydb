@@ -524,25 +524,25 @@ def onadd_ytest(unit, *args):
         save_in_file(unit.get('TEST_DART_OUT_FILE'), data)
 
 
-def java_srcdirs_to_data(unit, var):
-    extra_data = []
-    for srcdir in (unit.get(var) or '').replace('$' + var, '').split():
-        if srcdir == '.':
-            srcdir = unit.get('MODDIR')
-        if srcdir.startswith('${ARCADIA_ROOT}/') or srcdir.startswith('$ARCADIA_ROOT/'):
-            srcdir = srcdir.replace('${ARCADIA_ROOT}/', '$S/')
-            srcdir = srcdir.replace('$ARCADIA_ROOT/', '$S/')
-        if srcdir.startswith('${CURDIR}/') or srcdir.startswith('$CURDIR/'):
-            srcdir = srcdir.replace('${CURDIR}/', os.path.join('$S', unit.get('MODDIR')))
-            srcdir = srcdir.replace('$CURDIR/', os.path.join('$S', unit.get('MODDIR')))
-        srcdir = unit.resolve_arc_path(srcdir)
-        if not srcdir.startswith('$'):
-            srcdir = os.path.join('$S', unit.get('MODDIR'), srcdir)
-        if srcdir.startswith('$S'):
-            extra_data.append(srcdir.replace('$S', 'arcadia'))
-    return serialize_list(extra_data)
-
-
+def java_srcdirs_to_data(unit, var): 
+    extra_data = [] 
+    for srcdir in (unit.get(var) or '').replace('$' + var, '').split(): 
+        if srcdir == '.': 
+            srcdir = unit.get('MODDIR') 
+        if srcdir.startswith('${ARCADIA_ROOT}/') or srcdir.startswith('$ARCADIA_ROOT/'): 
+            srcdir = srcdir.replace('${ARCADIA_ROOT}/', '$S/') 
+            srcdir = srcdir.replace('$ARCADIA_ROOT/', '$S/') 
+        if srcdir.startswith('${CURDIR}/') or srcdir.startswith('$CURDIR/'): 
+            srcdir = srcdir.replace('${CURDIR}/', os.path.join('$S', unit.get('MODDIR'))) 
+            srcdir = srcdir.replace('$CURDIR/', os.path.join('$S', unit.get('MODDIR'))) 
+        srcdir = unit.resolve_arc_path(srcdir) 
+        if not srcdir.startswith('$'): 
+            srcdir = os.path.join('$S', unit.get('MODDIR'), srcdir) 
+        if srcdir.startswith('$S'): 
+            extra_data.append(srcdir.replace('$S', 'arcadia')) 
+    return serialize_list(extra_data) 
+ 
+ 
 def onadd_check(unit, *args):
     if unit.get("TIDY") == "yes":
         # graph changed for clang_tidy tests
@@ -554,16 +554,16 @@ def onadd_check(unit, *args):
 
     test_timeout = ''
     fork_mode = ''
-    extra_test_data = ''
+    extra_test_data = '' 
     extra_test_dart_data = {}
-    ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
+    ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes' 
 
     if check_type in ["flake8.py2", "flake8.py3"]:
         script_rel_path = check_type
         fork_mode = unit.get('TEST_FORK_MODE') or ''
     elif check_type == "JAVA_STYLE":
-        if ymake_java_test and not unit.get('ALL_SRCDIRS') or '':
-            return
+        if ymake_java_test and not unit.get('ALL_SRCDIRS') or '': 
+            return 
         if len(flat_args) < 2:
             raise Exception("Not enough arguments for JAVA_STYLE check")
         check_level = flat_args[1]
@@ -576,13 +576,13 @@ def onadd_check(unit, *args):
         if check_level not in allowed_levels:
             raise Exception('{} is not allowed in LINT(), use one of {}'.format(check_level, allowed_levels.keys()))
         flat_args[1] = allowed_levels[check_level]
-        if check_level == 'none':
-            return
+        if check_level == 'none': 
+            return 
         script_rel_path = "java.style"
         test_timeout = '120'
         fork_mode = unit.get('TEST_FORK_MODE') or ''
-        if ymake_java_test:
-            extra_test_data = java_srcdirs_to_data(unit, 'ALL_SRCDIRS')
+        if ymake_java_test: 
+            extra_test_data = java_srcdirs_to_data(unit, 'ALL_SRCDIRS') 
         extra_test_dart_data['JDK_RESOURCE'] = 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT')
     elif check_type == "gofmt":
         script_rel_path = check_type
@@ -620,7 +620,7 @@ def onadd_check(unit, *args):
         'TESTED-PROJECT-NAME': os.path.basename(test_dir),
         'SOURCE-FOLDER-PATH': test_dir,
         'CUSTOM-DEPENDENCIES': " ".join(spec_args.get('DEPENDS', [])),
-        'TEST-DATA': extra_test_data,
+        'TEST-DATA': extra_test_data, 
         "SBR-UID-EXT": uid_ext,
         'SPLIT-FACTOR': '',
         'TEST_PARTITION': 'SEQUENTIAL',
@@ -635,7 +635,7 @@ def onadd_check(unit, *args):
         # TODO remove FILES, see DEVTOOLS-7052
         'FILES': test_files,
         'TEST-FILES': test_files,
-        'NO_JBUILD': 'yes' if ymake_java_test else 'no',
+        'NO_JBUILD': 'yes' if ymake_java_test else 'no', 
     }
     test_record.update(extra_test_dart_data)
 
@@ -836,7 +836,7 @@ def onjava_test(unit, *args):
     else:
         script_rel_path = 'junit.test'
 
-    ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
+    ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes' 
     test_record = {
         'SOURCE-FOLDER-PATH': path,
         'TEST-NAME': '-'.join([os.path.basename(os.path.dirname(path)), os.path.basename(path)]),
@@ -861,22 +861,22 @@ def onjava_test(unit, *args):
         'SYSTEM_PROPERTIES': props,
         'TEST-CWD': test_cwd,
         'SKIP_TEST': unit.get('SKIP_TEST_VALUE') or '',
-        'JAVA_CLASSPATH_CMD_TYPE': java_cp_arg_type,
+        'JAVA_CLASSPATH_CMD_TYPE': java_cp_arg_type, 
         'NO_JBUILD': 'yes' if ymake_java_test else 'no',
         'JDK_RESOURCE': 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT'),
         'JDK_FOR_TESTS': 'JDK' + (unit.get('JDK_VERSION') or '_DEFAULT') + '_FOR_TESTS',
     }
-    test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE')
-    if test_classpath_origins:
-        test_record['TEST_CLASSPATH_ORIGINS'] = test_classpath_origins
-        test_record['TEST_CLASSPATH'] = '${TEST_CLASSPATH_MANAGED}'
-    elif ymake_java_test:
-        test_record['TEST_CLASSPATH'] = '${DART_CLASSPATH}'
-        test_record['TEST_CLASSPATH_DEPS'] = '${DART_CLASSPATH_DEPS}'
-        if unit.get('UNITTEST_DIR'):
-            test_record['TEST_JAR'] = '${UNITTEST_MOD}'
-        else:
-            test_record['TEST_JAR'] = '{}/{}.jar'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
+    test_classpath_origins = unit.get('TEST_CLASSPATH_VALUE') 
+    if test_classpath_origins: 
+        test_record['TEST_CLASSPATH_ORIGINS'] = test_classpath_origins 
+        test_record['TEST_CLASSPATH'] = '${TEST_CLASSPATH_MANAGED}' 
+    elif ymake_java_test: 
+        test_record['TEST_CLASSPATH'] = '${DART_CLASSPATH}' 
+        test_record['TEST_CLASSPATH_DEPS'] = '${DART_CLASSPATH_DEPS}' 
+        if unit.get('UNITTEST_DIR'): 
+            test_record['TEST_JAR'] = '${UNITTEST_MOD}' 
+        else: 
+            test_record['TEST_JAR'] = '{}/{}.jar'.format(unit.get('MODDIR'), unit.get('REALPRJNAME')) 
 
     data = dump_test(unit, test_record)
     if data:
@@ -893,7 +893,7 @@ def onjava_test_deps(unit, *args):
     mode = args[0]
 
     path = get_norm_unit_path(unit)
-    ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes'
+    ymake_java_test = unit.get('YMAKE_JAVA_TEST') == 'yes' 
 
     test_record = {
         'SOURCE-FOLDER-PATH': path,
@@ -909,7 +909,7 @@ def onjava_test_deps(unit, *args):
         'TAG': '',
         'SIZE': 'SMALL',
         'IGNORE_CLASSPATH_CLASH': ' '.join(get_values_list(unit, 'JAVA_IGNORE_CLASSPATH_CLASH_VALUE')),
-        'NO_JBUILD': 'yes' if ymake_java_test else 'no',
+        'NO_JBUILD': 'yes' if ymake_java_test else 'no', 
 
         # JTEST/JTEST_FOR only
         'MODULE_TYPE': unit.get('MODULE_TYPE'),
@@ -920,9 +920,9 @@ def onjava_test_deps(unit, *args):
     if mode == 'strict':
         test_record['STRICT_CLASSPATH_CLASH'] = 'yes'
 
-    if ymake_java_test:
-        test_record['CLASSPATH'] = '$B/{}/{}.jar ${{DART_CLASSPATH}}'.format(unit.get('MODDIR'), unit.get('REALPRJNAME'))
-
+    if ymake_java_test: 
+        test_record['CLASSPATH'] = '$B/{}/{}.jar ${{DART_CLASSPATH}}'.format(unit.get('MODDIR'), unit.get('REALPRJNAME')) 
+ 
     data = dump_test(unit, test_record)
     unit.set_property(['DART_DATA', data])
 

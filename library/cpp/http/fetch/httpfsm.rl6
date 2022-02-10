@@ -262,7 +262,7 @@ action set_status_303{ if (hd) hd->http_status = 303; }
 url             = url_char+ >clear_buf $update_buf;
 loc_url         = any_text_char+ >clear_buf $update_buf;
 location        = "location"i def loc_url eoh %set_location;
-refresh         = "refresh"i def int ';' lws "url="i loc_url eoh %set_location;
+refresh         = "refresh"i def int ';' lws "url="i loc_url eoh %set_location; 
 
 ################# x-robots-tag ################
 action set_x_robots {

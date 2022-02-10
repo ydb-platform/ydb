@@ -68,7 +68,7 @@ namespace NPar {
                 , LastId(SafeIntegerCast<int>(lastId))
             {
                 Y_ASSERT(LastId >= FirstId);
-                SetBlockSize(1);
+                SetBlockSize(1); 
             }
             // Partition tasks into `blockCount` blocks of approximately equal size, each of which
             // will be executed as a separate bigger task.
@@ -78,7 +78,7 @@ namespace NPar {
                 Y_ASSERT(SafeIntegerCast<int>(blockCount) > 0 || FirstId == LastId);
                 BlockSize = FirstId == LastId ? 0 : CeilDiv(LastId - FirstId, SafeIntegerCast<int>(blockCount));
                 BlockCount = BlockSize == 0 ? 0 : CeilDiv(LastId - FirstId, BlockSize);
-                BlockEqualToThreads = false;
+                BlockEqualToThreads = false; 
                 return *this;
             }
             // Partition tasks into blocks of approximately `blockSize` size, each of which will
@@ -89,22 +89,22 @@ namespace NPar {
                 Y_ASSERT(SafeIntegerCast<int>(blockSize) > 0 || FirstId == LastId);
                 BlockSize = SafeIntegerCast<int>(blockSize);
                 BlockCount = BlockSize == 0 ? 0 : CeilDiv(LastId - FirstId, BlockSize);
-                BlockEqualToThreads = false;
+                BlockEqualToThreads = false; 
                 return *this;
             }
             // Partition tasks into thread count blocks of approximately equal size, each of which
             // will be executed as a separate bigger task.
             //
             TExecRangeParams& SetBlockCountToThreadCount() {
-                BlockEqualToThreads = true;
-                return *this;
-            }
+                BlockEqualToThreads = true; 
+                return *this; 
+            } 
             int GetBlockCount() const {
-                Y_ASSERT(!BlockEqualToThreads);
+                Y_ASSERT(!BlockEqualToThreads); 
                 return BlockCount;
             }
             int GetBlockSize() const {
-                Y_ASSERT(!BlockEqualToThreads);
+                Y_ASSERT(!BlockEqualToThreads); 
                 return BlockSize;
             }
             bool GetBlockEqualToThreads() {
@@ -115,9 +115,9 @@ namespace NPar {
             const int LastId = 0;
 
         private:
-            int BlockSize;
-            int BlockCount;
-            bool BlockEqualToThreads;
+            int BlockSize; 
+            int BlockCount; 
+            bool BlockEqualToThreads; 
         };
 
         // `Exec` and `ExecRange` versions that accept functions.
@@ -277,7 +277,7 @@ namespace NPar {
     inline void ParallelFor(ILocalExecutor& executor, ui32 from, ui32 to, TBody&& body) {
         ILocalExecutor::TExecRangeParams params(from, to);
         params.SetBlockCountToThreadCount();
-        executor.ExecRange(std::forward<TBody>(body), params, TLocalExecutor::WAIT_COMPLETE);
+        executor.ExecRange(std::forward<TBody>(body), params, TLocalExecutor::WAIT_COMPLETE); 
     }
 
     template <typename TBody>
@@ -289,6 +289,6 @@ namespace NPar {
     inline void AsyncParallelFor(ui32 from, ui32 to, TBody&& body) {
         ILocalExecutor::TExecRangeParams params(from, to);
         params.SetBlockCountToThreadCount();
-        LocalExecutor().ExecRange(std::forward<TBody>(body), params, 0);
+        LocalExecutor().ExecRange(std::forward<TBody>(body), params, 0); 
     }
 }

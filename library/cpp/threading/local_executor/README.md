@@ -18,21 +18,21 @@ All tasks should be `NPar::ILocallyExecutable` child class or function equal to 
 
 `void TLocalExecutor::ExecRange(TLocallyExecutableFunction exec, TExecRangeParams blockParams, int flags);` - run range of tasks `[TExecRangeParams::FirstId, TExecRangeParams::LastId).`
 
-`flags` is the same as for `TLocalExecutor::Exec`.
-
+`flags` is the same as for `TLocalExecutor::Exec`. 
+ 
 `TExecRangeParams` is a structure that describes the range.
-By default each task is executed separately. Threads from thread pool are taking
-the tasks in the manner first come first serve.
-
-It is also possible to partition range of tasks in consequtive blocks and execute each block as a bigger task.
+By default each task is executed separately. Threads from thread pool are taking 
+the tasks in the manner first come first serve. 
+ 
+It is also possible to partition range of tasks in consequtive blocks and execute each block as a bigger task. 
 `TExecRangeParams::SetBlockCountToThreadCount()` will result in thread count tasks,
-    where thread count is the count of threads in thread pool.
-    each thread will execute approximately equal count of tasks from range.
-
+    where thread count is the count of threads in thread pool. 
+    each thread will execute approximately equal count of tasks from range. 
+ 
 `TExecRangeParams::SetBlockSize()` and `TExecRangeParams::SetBlockCount()` will partition
-the range of tasks into consequtive blocks of approximately given size, or of size calculated
-     by partitioning the range into approximately equal size blocks of given count.
-
+the range of tasks into consequtive blocks of approximately given size, or of size calculated 
+     by partitioning the range into approximately equal size blocks of given count. 
+ 
 ## Examples
 
 ### Simple task async exec with medium priority
@@ -57,10 +57,10 @@ event.WaitI();
 using namespace NPar;
 
 LocalExecutor().Run(4);
-LocalExecutor().ExecRange([](int id) {
+LocalExecutor().ExecRange([](int id) { 
     SomeFunc(id);
 }, TExecRangeParams(0, 10), TLocalExecutor::WAIT_COMPLETE | TLocalExecutor::MED_PRIORITY);
-```
+``` 
 
 ### Exception handling
 

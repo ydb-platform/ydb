@@ -248,7 +248,7 @@ public:
     void dropHeaderInstructions();
 
     bool startRequest(const char* url,
-                      const char* url_to_merge = nullptr, 
+                      const char* url_to_merge = nullptr,
                       bool persistent = false,
                       const TAddrList& addrs = TAddrList());
 
@@ -270,13 +270,13 @@ public:
     const THttpAuthHeader* getAuthHeader() {
         if (Reader_ && Reader_->getAuthHeader()->use_auth)
             return Reader_->getAuthHeader();
-        return nullptr; 
+        return nullptr;
     }
 
     const THttpHeader* getHeader() {
         if (Reader_)
             return Reader_->getAuthHeader();
-        return nullptr; 
+        return nullptr;
     }
 
     const THttpURL& getURL() {

@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(THolderVectorTest) {
         UNIT_ASSERT(ints);
 
         for (size_t i = 0; i < ints.Size(); ++i) {
-            UNIT_ASSERT_EQUAL(ints[i], (int*)nullptr); 
+            UNIT_ASSERT_EQUAL(ints[i], (int*)nullptr);
         }
     }
 
@@ -34,9 +34,9 @@ Y_UNIT_TEST_SUITE(THolderVectorTest) {
     Y_UNIT_TEST(TestResetNoValue) {
         THolderVector<int> ints;
         ints.Resize(1);
-        UNIT_ASSERT_EQUAL(ints[0], (int*)nullptr); 
+        UNIT_ASSERT_EQUAL(ints[0], (int*)nullptr);
         ints.Reset(0, MakeHolder<int>(1));
-        UNIT_ASSERT_UNEQUAL(ints[0], (int*)nullptr); 
+        UNIT_ASSERT_UNEQUAL(ints[0], (int*)nullptr);
         UNIT_ASSERT_VALUES_EQUAL(*ints[0], 1);
     }
 

@@ -100,7 +100,7 @@ private:
 public:
     class IGrowPolicy {
     public:
-        virtual ~IGrowPolicy() = default; 
+        virtual ~IGrowPolicy() = default;
 
         virtual size_t Next(size_t prev) const noexcept = 0;
     };
@@ -336,13 +336,13 @@ public:
     {
     }
 
-    TBlock Allocate(size_t len) override { 
+    TBlock Allocate(size_t len) override {
         TBlock ret = {Pool_->Allocate(len), len};
 
         return ret;
     }
 
-    void Release(const TBlock& block) override { 
+    void Release(const TBlock& block) override {
         (void)block;
     }
 

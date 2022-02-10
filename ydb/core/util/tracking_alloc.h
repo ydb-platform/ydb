@@ -75,7 +75,7 @@ public:
     ~TTrackingAllocator() {
     }
 
-    pointer allocate(size_type n, const void* hint = nullptr) { 
+    pointer allocate(size_type n, const void* hint = nullptr) {
         *Allocated += n * sizeof(T);
         return std::allocator<T>::allocate(n, hint);
     }

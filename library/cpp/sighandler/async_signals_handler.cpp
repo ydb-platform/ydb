@@ -194,10 +194,10 @@ namespace {
 void SetAsyncSignalHandler(int signum, TAutoPtr<TEventHandler> handler) {
     static TAtomic lock;
 
-    if (Y_UNLIKELY(SIGNALS_HANDLER == nullptr)) { 
+    if (Y_UNLIKELY(SIGNALS_HANDLER == nullptr)) {
         TGuard<TAtomic> dnd(lock);
 
-        if (SIGNALS_HANDLER == nullptr) { 
+        if (SIGNALS_HANDLER == nullptr) {
             // NEVERS GETS DESTROYED
             SIGNALS_HANDLER = new TAsyncSignalsHandler();
         }
@@ -225,7 +225,7 @@ namespace {
                 Func = func;
         }
 
-        int Handle(int signum) override { 
+        int Handle(int signum) override {
             if (Func) {
                 Func(signum);
             }

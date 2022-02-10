@@ -30,7 +30,7 @@ namespace {
 
     class IDns {
     public:
-        virtual ~IDns() = default; 
+        virtual ~IDns() = default;
         virtual const TResolvedHost* Resolve(const TResolveTask&) = 0;
     };
 
@@ -50,7 +50,7 @@ namespace {
 
     class TGlobalCachedDns: public IDns, public TNonCopyable {
     public:
-        const TResolvedHost* Resolve(const TResolveTask& rt) override { 
+        const TResolvedHost* Resolve(const TResolveTask& rt) override {
             //2. search host in cache
             {
                 TReadGuard guard(L_);
@@ -144,7 +144,7 @@ namespace {
         {
         }
 
-        const TResolvedHost* Resolve(const TResolveTask& rt) override { 
+        const TResolvedHost* Resolve(const TResolveTask& rt) override {
             //1. search in local thread cache
             {
                 TCache::const_iterator it = C_.find(rt.Info);

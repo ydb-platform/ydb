@@ -33,9 +33,9 @@ RECURSE(
     sgi_hash
     threadable
     transgene
-    datawork 
-    datawork/conf 
-    calc_module 
+    datawork
+    datawork/conf
+    calc_module
     iterators_heap
     parse_utils
     parse_utils/ut

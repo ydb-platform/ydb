@@ -72,7 +72,7 @@ public:
     }
 
     TItem* RemoveIfOverflown() {
-        TItem* deleted = nullptr; 
+        TItem* deleted = nullptr;
         if (TotalSize > MaxSize && ItemsAmount > 1) {
             deleted = GetOldest();
             Erase(deleted);
@@ -180,7 +180,7 @@ public:
     }
 
     TItem* RemoveIfOverflown() {
-        TItem* deleted = nullptr; 
+        TItem* deleted = nullptr;
         if (ListSize > MaxSize) {
             deleted = GetLeastFrequentlyUsed();
             Erase(deleted);

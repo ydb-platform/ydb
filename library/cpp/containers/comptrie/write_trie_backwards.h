@@ -9,7 +9,7 @@
 namespace NCompactTrie {
     class TReverseNodeEnumerator {
     public:
-        virtual ~TReverseNodeEnumerator() = default; 
+        virtual ~TReverseNodeEnumerator() = default;
         virtual bool Move() = 0;
         virtual size_t GetLeafLength() const = 0;
         virtual size_t RecreateNode(char* buffer, size_t resultLength) = 0;

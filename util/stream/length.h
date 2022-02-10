@@ -20,15 +20,15 @@ public:
     {
     }
 
-    ~TLengthLimitedInput() override = default; 
+    ~TLengthLimitedInput() override = default;
 
     inline ui64 Left() const noexcept {
         return Length_;
     }
 
 private:
-    size_t DoRead(void* buf, size_t len) override; 
-    size_t DoSkip(size_t len) override; 
+    size_t DoRead(void* buf, size_t len) override;
+    size_t DoSkip(size_t len) override;
 
 private:
     IInputStream* Slave_;
@@ -46,7 +46,7 @@ public:
     {
     }
 
-    ~TCountingInput() override = default; 
+    ~TCountingInput() override = default;
 
     /**
      * \returns                         The total number of characters read from
@@ -57,8 +57,8 @@ public:
     }
 
 private:
-    size_t DoRead(void* buf, size_t len) override; 
-    size_t DoSkip(size_t len) override; 
+    size_t DoRead(void* buf, size_t len) override;
+    size_t DoSkip(size_t len) override;
     size_t DoReadTo(TString& st, char ch) override;
     ui64 DoReadAll(IOutputStream& out) override;
 
@@ -78,7 +78,7 @@ public:
     {
     }
 
-    ~TCountingOutput() override = default; 
+    ~TCountingOutput() override = default;
 
     TCountingOutput(TCountingOutput&&) noexcept = default;
     TCountingOutput& operator=(TCountingOutput&&) noexcept = default;
@@ -92,7 +92,7 @@ public:
     }
 
 private:
-    void DoWrite(const void* buf, size_t len) override; 
+    void DoWrite(const void* buf, size_t len) override;
 
 private:
     IOutputStream* Slave_;

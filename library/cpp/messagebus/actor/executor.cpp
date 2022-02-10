@@ -290,7 +290,7 @@ TAutoPtr<IWorkItem> TExecutor::DequeueWork() {
         TWhatThreadDoesAcquireGuard<TMutex> g(WorkMutex, "executor: acquiring lock for DequeueWork");
         while (!WorkItems.TryPop(&wi, &queueSize)) {
             if (AtomicGet(ExitWorkers) != 0)
-                return nullptr; 
+                return nullptr;
 
             TWhatThreadDoesPushPop pp("waiting for work on condvar");
             WorkAvailable.Wait(WorkMutex);

@@ -1,9 +1,9 @@
 #include "utf8.h"
 #include "wide.h"
 
-#include <util/stream/file.h> 
+#include <util/stream/file.h>
 #include <util/ysaveload.h>
- 
+
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/env.h>
 
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(TUtfUtilTest) {
             }
         }
     }
- 
+
     Y_UNIT_TEST(TestToUpperUtfString) {
         UNIT_ASSERT_VALUES_EQUAL(ToUpperUTF8("xyz XYZ привет!"), "XYZ XYZ ПРИВЕТ!");
 
@@ -94,10 +94,10 @@ Y_UNIT_TEST_SUITE(TUtfUtilTest) {
 
     Y_UNIT_TEST(TestUTF8ToWide) {
         TFileInput in(ArcadiaSourceRoot() + TStringBuf("/util/charset/ut/utf8/test1.txt"));
- 
+
         TString text = in.ReadAll();
-        UNIT_ASSERT(WideToUTF8(UTF8ToWide(text)) == text); 
-    } 
+        UNIT_ASSERT(WideToUTF8(UTF8ToWide(text)) == text);
+    }
 
     Y_UNIT_TEST(TestInvalidUTF8) {
         TVector<TString> testData;

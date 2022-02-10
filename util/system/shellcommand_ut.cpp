@@ -263,11 +263,11 @@ Y_UNIT_TEST_SUITE(TShellCommandTest) {
     Y_UNIT_TEST(TestStreamClose) {
         struct TStream: public IOutputStream {
             size_t NumCloses = 0;
-            void DoWrite(const void* buf, size_t len) override { 
+            void DoWrite(const void* buf, size_t len) override {
                 Y_UNUSED(buf);
                 Y_UNUSED(len);
             }
-            void DoFinish() override { 
+            void DoFinish() override {
                 ++NumCloses;
             }
         } stream;

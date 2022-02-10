@@ -7,7 +7,7 @@
 #include <util/network/socket.h>
 #include <util/system/mutex.h>
 
-extern void SetCommonSockOpts(SOCKET sock, const struct sockaddr* sa = nullptr); 
+extern void SetCommonSockOpts(SOCKET sock, const struct sockaddr* sa = nullptr);
 
 class TSocketPool;
 
@@ -90,7 +90,7 @@ class TPooledSocket {
 
 public:
     TPooledSocket()
-        : Impl_(nullptr) 
+        : Impl_(nullptr)
     {
     }
 
@@ -204,7 +204,7 @@ private:
                 return ret.Release();
             }
         }
-        return nullptr; 
+        return nullptr;
     }
 
     void Release(TPooledSocket::TImpl* impl) noexcept {
@@ -235,11 +235,11 @@ public:
     {
     }
 
-    void DoWrite(const void* buf, size_t len) override { 
+    void DoWrite(const void* buf, size_t len) override {
         NCoro::WriteI(Cont_, Fd_, buf, len).Checked();
     }
 
-    size_t DoRead(void* buf, size_t len) override { 
+    size_t DoRead(void* buf, size_t len) override {
         return NCoro::ReadI(Cont_, Fd_, buf, len).Checked();
     }
 

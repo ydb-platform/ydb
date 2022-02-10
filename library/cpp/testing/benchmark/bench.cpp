@@ -63,9 +63,9 @@ namespace {
             Register();
         }
 
-        TResult Run(const TOptions& opts) override; 
+        TResult Run(const TOptions& opts) override;
 
-        TStringBuf Name() const noexcept override { 
+        TStringBuf Name() const noexcept override {
             return N;
         }
 
@@ -299,7 +299,7 @@ namespace {
 
     class TConsoleReporter: public IReporter {
     public:
-        ~TConsoleReporter() override { 
+        ~TConsoleReporter() override {
         }
 
         void Report(TResult&& r) override {
@@ -315,7 +315,7 @@ namespace {
             Cout << "Name\tSamples\tIterations\tRun_time\tPer_iteration_sec\tPer_iteration_cycles" << Endl;
         }
 
-        ~TCSVReporter() override { 
+        ~TCSVReporter() override {
         }
 
         void Report(TResult&& r) override {
@@ -346,7 +346,7 @@ namespace {
 
     class TJSONReporter: public IReporter {
     public:
-        ~TJSONReporter() override { 
+        ~TJSONReporter() override {
         }
 
         void Report(TResult&& r) override {

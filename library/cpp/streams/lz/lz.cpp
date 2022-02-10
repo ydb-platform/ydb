@@ -72,7 +72,7 @@ public:
 
     inline void Finish() {
         this->Flush();
-        this->WriteBlock(nullptr, 0); 
+        this->WriteBlock(nullptr, 0);
     }
 
     template <class T>
@@ -188,7 +188,7 @@ public:
 
     inline TDecompressorBaseImpl(IInputStream* slave)
         : Slave_(slave)
-        , Input_(nullptr, 0) 
+        , Input_(nullptr, 0)
         , Eof_(false)
         , Version_(CheckVer(Load<ui32>()))
         , BlockSize_(Load<ui16>())
@@ -543,7 +543,7 @@ public:
     }
 
     inline TQuickLZBase()
-        : Table_(nullptr) 
+        : Table_(nullptr)
     {
     }
 
@@ -647,7 +647,7 @@ namespace {
         }
 
     private:
-        size_t DoRead(void* buf, size_t len) override { 
+        size_t DoRead(void* buf, size_t len) override {
             return Impl_.Read(buf, len);
         }
 
@@ -673,7 +673,7 @@ static TAutoPtr<IInputStream> TryOpenLzDecompressorX(const TDecompressSignature&
     if (s.Check<TQuickLZDecompress>())
         return new TLzDecompressInput<T, TQuickLZDecompress>(input);
 
-    return nullptr; 
+    return nullptr;
 }
 
 template <class T>
@@ -685,7 +685,7 @@ static inline TAutoPtr<IInputStream> TryOpenLzDecompressorImpl(const TStringBuf&
         return TryOpenLzDecompressorX(s, input);
     }
 
-    return nullptr; 
+    return nullptr;
 }
 
 template <class T>

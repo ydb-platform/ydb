@@ -15,7 +15,7 @@ public:
     }
 
 private:
-    size_t DoNext(const void** ptr, size_t len) override { 
+    size_t DoNext(const void** ptr, size_t len) override {
         if (Pos < Data.end()) {
             len = Min(len, static_cast<size_t>(1));
             *ptr = Pos;
@@ -57,7 +57,7 @@ private:
             ~TExcOutput() override {
             }
 
-            void DoWrite(const void*, size_t) override { 
+            void DoWrite(const void*, size_t) override {
                 throw 12345;
             }
         };

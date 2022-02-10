@@ -22,7 +22,7 @@ bool TExampleModule::Shutdown() {
 }
 
 TBusServerSessionPtr TExampleModule::CreateExtSession(TBusMessageQueue&) {
-    return nullptr; 
+    return nullptr;
 }
 
 TBusServerSessionPtr TExampleServerModule::CreateExtSession(TBusMessageQueue& queue) {
@@ -39,5 +39,5 @@ TExampleClientModule::TExampleClientModule()
 TBusServerSessionPtr TExampleClientModule::CreateExtSession(TBusMessageQueue& queue) {
     Source = CreateDefaultSource(queue, &Proto, TBusServerSessionConfig());
     Source->RegisterService("localhost");
-    return nullptr; 
+    return nullptr;
 }

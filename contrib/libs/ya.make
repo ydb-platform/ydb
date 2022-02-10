@@ -194,7 +194,7 @@ RECURSE(
     libvorbis
     libvorbis/libvorbisenc
     libvpx
-    libwebp 
+    libwebp
     libx264
     libx265
     libxml
@@ -246,7 +246,7 @@ RECURSE(
     odpi
     onnx
     opencl-headers
-    opencv 
+    opencv
     opencv/modules
     opencv/modules/python/src2
     openfst
@@ -428,12 +428,12 @@ IF (OS_LINUX OR OS_WINDOWS)
     )
 ENDIF()
 
-IF (OS_ANDROID) 
-    RECURSE( 
+IF (OS_ANDROID)
+    RECURSE(
         android_cpufeatures
         android_crazy_linker
-    ) 
-ENDIF() 
+    )
+ENDIF()
 
 IF (OS_IOS AND ARCH_ARM64 OR OS_DARWIN)
     RECURSE(

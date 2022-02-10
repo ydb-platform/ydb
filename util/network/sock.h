@@ -152,11 +152,11 @@ struct TSockAddrLocal: public sockaddr_un, public ISockAddr {
         Set(path);
     }
 
-    socklen_t Size() const override { 
+    socklen_t Size() const override {
         return sizeof(sockaddr_un);
     }
 
-    socklen_t Len() const override { 
+    socklen_t Len() const override {
         return strlen(sun_path) + 2;
     }
 
@@ -170,11 +170,11 @@ struct TSockAddrLocal: public sockaddr_un, public ISockAddr {
         strlcpy(sun_path, path, sizeof(sun_path));
     }
 
-    sockaddr* SockAddr() override { 
+    sockaddr* SockAddr() override {
         return (struct sockaddr*)(struct sockaddr_un*)this;
     }
 
-    const sockaddr* SockAddr() const override { 
+    const sockaddr* SockAddr() const override {
         return (const struct sockaddr*)(const struct sockaddr_un*)this;
     }
 
@@ -186,7 +186,7 @@ struct TSockAddrLocal: public sockaddr_un, public ISockAddr {
         return TFsPath(sun_path);
     }
 
-    int Bind(SOCKET s, ui16 mode) const override { 
+    int Bind(SOCKET s, ui16 mode) const override {
         (void)unlink(sun_path);
 
         int ret = bind(s, SockAddr(), Len());
@@ -214,11 +214,11 @@ struct TSockAddrInet: public sockaddr_in, public ISockAddr {
         Set(IpFromString(ip), port);
     }
 
-    socklen_t Size() const override { 
+    socklen_t Size() const override {
         return sizeof(sockaddr_in);
     }
 
-    socklen_t Len() const override { 
+    socklen_t Len() const override {
         return Size();
     }
 
@@ -233,11 +233,11 @@ struct TSockAddrInet: public sockaddr_in, public ISockAddr {
         sin_port = HostToInet(port);
     }
 
-    sockaddr* SockAddr() override { 
+    sockaddr* SockAddr() override {
         return (struct sockaddr*)(struct sockaddr_in*)this;
     }
 
-    const sockaddr* SockAddr() const override { 
+    const sockaddr* SockAddr() const override {
         return (const struct sockaddr*)(const struct sockaddr_in*)this;
     }
 
@@ -245,7 +245,7 @@ struct TSockAddrInet: public sockaddr_in, public ISockAddr {
         return IpToString(sin_addr.s_addr) + ":" + ::ToString(InetToHost(sin_port));
     }
 
-    int Bind(SOCKET s, ui16 mode) const override { 
+    int Bind(SOCKET s, ui16 mode) const override {
         Y_UNUSED(mode);
         int ret = bind(s, SockAddr(), Len());
         if (ret < 0)
@@ -280,11 +280,11 @@ struct TSockAddrInet6: public sockaddr_in6, public ISockAddr {
         Set(ip6, port);
     }
 
-    socklen_t Size() const override { 
+    socklen_t Size() const override {
         return sizeof(sockaddr_in6);
     }
 
-    socklen_t Len() const override { 
+    socklen_t Len() const override {
         return Size();
     }
 
@@ -299,11 +299,11 @@ struct TSockAddrInet6: public sockaddr_in6, public ISockAddr {
         sin6_port = HostToInet(port);
     }
 
-    sockaddr* SockAddr() override { 
+    sockaddr* SockAddr() override {
         return (struct sockaddr*)(struct sockaddr_in6*)this;
     }
 
-    const sockaddr* SockAddr() const override { 
+    const sockaddr* SockAddr() const override {
         return (const struct sockaddr*)(const struct sockaddr_in6*)this;
     }
 
@@ -311,7 +311,7 @@ struct TSockAddrInet6: public sockaddr_in6, public ISockAddr {
         return "[" + GetIp() + "]:" + ::ToString(InetToHost(sin6_port));
     }
 
-    int Bind(SOCKET s, ui16 mode) const override { 
+    int Bind(SOCKET s, ui16 mode) const override {
         Y_UNUSED(mode);
         int ret = bind(s, SockAddr(), Len());
         if (ret < 0) {
@@ -561,7 +561,7 @@ public:
 protected:
     TStreamSocket* Socket;
 
-    size_t DoRead(void* buf, size_t len) override { 
+    size_t DoRead(void* buf, size_t len) override {
         Y_VERIFY(Socket, "TStreamSocketInput: socket isn't set");
         const ssize_t ret = Socket->Recv(buf, len);
 
@@ -589,7 +589,7 @@ public:
 protected:
     TStreamSocket* Socket;
 
-    void DoWrite(const void* buf, size_t len) override { 
+    void DoWrite(const void* buf, size_t len) override {
         Y_VERIFY(Socket, "TStreamSocketOutput: socket isn't set");
 
         const char* ptr = (const char*)buf;

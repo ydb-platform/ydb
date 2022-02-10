@@ -14,4 +14,4 @@ void TDelete::Destroy(void* t) noexcept {
     ::operator delete(t);
 }
 
-TThrRefBase::~TThrRefBase() = default; 
+TThrRefBase::~TThrRefBase() = default;

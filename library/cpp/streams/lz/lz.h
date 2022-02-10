@@ -36,9 +36,9 @@ public:
     ~TLz4Compress() override;
 
 private:
-    void DoWrite(const void* buf, size_t len) override; 
-    void DoFlush() override; 
-    void DoFinish() override; 
+    void DoWrite(const void* buf, size_t len) override;
+    void DoFlush() override;
+    void DoFinish() override;
 
 private:
     class TImpl;
@@ -56,7 +56,7 @@ public:
     ~TLz4Decompress() override;
 
 private:
-    size_t DoRead(void* buf, size_t len) override; 
+    size_t DoRead(void* buf, size_t len) override;
 
 private:
     class TImpl;
@@ -74,9 +74,9 @@ public:
     ~TSnappyCompress() override;
 
 private:
-    void DoWrite(const void* buf, size_t len) override; 
-    void DoFlush() override; 
-    void DoFinish() override; 
+    void DoWrite(const void* buf, size_t len) override;
+    void DoFlush() override;
+    void DoFinish() override;
 
 private:
     class TImpl;
@@ -94,7 +94,7 @@ public:
     ~TSnappyDecompress() override;
 
 private:
-    size_t DoRead(void* buf, size_t len) override; 
+    size_t DoRead(void* buf, size_t len) override;
 
 private:
     class TImpl;
@@ -110,9 +110,9 @@ public:
     ~TLzoCompress() override;
 
 private:
-    void DoWrite(const void* buf, size_t len) override; 
-    void DoFlush() override; 
-    void DoFinish() override; 
+    void DoWrite(const void* buf, size_t len) override;
+    void DoFlush() override;
+    void DoFinish() override;
 
 private:
     class TImpl;
@@ -128,7 +128,7 @@ public:
     ~TLzoDecompress() override;
 
 private:
-    size_t DoRead(void* buf, size_t len) override; 
+    size_t DoRead(void* buf, size_t len) override;
 
 private:
     class TImpl;
@@ -144,9 +144,9 @@ public:
     ~TLzfCompress() override;
 
 private:
-    void DoWrite(const void* buf, size_t len) override; 
-    void DoFlush() override; 
-    void DoFinish() override; 
+    void DoWrite(const void* buf, size_t len) override;
+    void DoFlush() override;
+    void DoFinish() override;
 
 private:
     class TImpl;
@@ -162,7 +162,7 @@ public:
     ~TLzfDecompress() override;
 
 private:
-    size_t DoRead(void* buf, size_t len) override; 
+    size_t DoRead(void* buf, size_t len) override;
 
 private:
     class TImpl;
@@ -196,9 +196,9 @@ public:
     ~TLzqCompress() override;
 
 private:
-    void DoWrite(const void* buf, size_t len) override; 
-    void DoFlush() override; 
-    void DoFinish() override; 
+    void DoWrite(const void* buf, size_t len) override;
+    void DoFlush() override;
+    void DoFinish() override;
 
 private:
     class TImpl;
@@ -214,7 +214,7 @@ public:
     ~TLzqDecompress() override;
 
 private:
-    size_t DoRead(void* buf, size_t len) override; 
+    size_t DoRead(void* buf, size_t len) override;
 
 private:
     class TImpl;

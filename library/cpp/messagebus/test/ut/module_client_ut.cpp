@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         {
         }
 
-        TJobHandler Start(TBusJob* job, TBusMessage* mess) override { 
+        TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
             Y_UNUSED(mess);
             job->Send(new TExampleRequest(&Proto.RequestCount), Source, TReplyHandler(&TParallelOnReplyModule::ReplyHandler), 0, ServerAddr);
             return &TParallelOnReplyModule::HandleReplies;
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
             RepliesLatch.CountDown();
             Y_VERIFY(RepliesLatch.Await(TDuration::Seconds(10)), "failed to get answers");
             job->Cancel(MESSAGE_UNKNOWN);
-            return nullptr; 
+            return nullptr;
         }
     };
 
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         {
         }
 
-        TJobHandler Start(TBusJob* job, TBusMessage* mess) override { 
+        TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
             Y_UNUSED(mess);
             TExampleRequest* message = new TExampleRequest(&Proto.RequestCount);
             job->Send(message, Source, TReplyHandler(&TErrorHandlerCheckerModule::ReplyHandler), 0, ServerAddr);
@@ -188,16 +188,16 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
             Y_UNUSED(mess);
             job->Cancel(MESSAGE_UNKNOWN);
             GotReplyLatch.CountDown();
-            return nullptr; 
+            return nullptr;
         }
 
-        TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override { 
+        TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override {
             TBusClientSessionConfig sessionConfig;
             sessionConfig.SendTimeout = 1; // TODO: allow 0
             sessionConfig.Secret.TimeoutPeriod = TDuration::MilliSeconds(10);
             Source = CreateDefaultSource(queue, &Proto, sessionConfig);
             Source->RegisterService("localhost");
-            return nullptr; 
+            return nullptr;
         }
     };
 
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
             ServerSession = TBusServerSession::Create(&Proto, this, sessionConfig, Bus);
         }
 
-        void OnMessage(TOnMessageContext& req) override { 
+        void OnMessage(TOnMessageContext& req) override {
             if (AtomicIncrement(OnMessageCount) == 1) {
                 TestSync->WaitForAndIncrement(0);
             }
@@ -258,12 +258,12 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         TModuleThatSendsReplyEarly(TTestSync* testSync, unsigned serverPort)
             : TestSync(testSync)
             , ServerPort(serverPort)
-            , ServerSession(nullptr) 
+            , ServerSession(nullptr)
             , ReplyCount(0)
         {
         }
 
-        TJobHandler Start(TBusJob* job, TBusMessage* mess) override { 
+        TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
             Y_UNUSED(mess);
             for (unsigned i = 0; i < 2; ++i) {
                 job->Send(
@@ -291,10 +291,10 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         TJobHandler HandleReplies(TBusJob* job, TBusMessage* mess) {
             Y_UNUSED(mess);
             job->Cancel(MESSAGE_UNKNOWN);
-            return nullptr; 
+            return nullptr;
         }
 
-        TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override { 
+        TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override {
             TExampleClientModule::CreateExtSession(queue);
             TBusServerSessionConfig sessionConfig;
             return ServerSession = CreateDefaultDestination(queue, &Proto, sessionConfig);
@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         {
         }
 
-        TJobHandler Start(TBusJob* job, TBusMessage*) override { 
+        TJobHandler Start(TBusJob* job, TBusMessage*) override {
             TestSync.CheckAndIncrement(0);
 
             job->Send(new TExampleRequest(&Proto.RequestCount), Source,
@@ -345,7 +345,7 @@ Y_UNIT_TEST_SUITE(BusJobTest) {
         TJobHandler End(TBusJob* job, TBusMessage*) {
             TestSync.CheckAndIncrement(2);
             job->Cancel(MESSAGE_SHUTDOWN);
-            return nullptr; 
+            return nullptr;
         }
     };
 

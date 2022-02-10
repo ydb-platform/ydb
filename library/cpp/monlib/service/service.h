@@ -48,7 +48,7 @@ namespace NMonitoring {
 
         // ICallBack implementation
         void OnAcceptFull(const TAcceptFull& a) override;
-        void OnError() override; 
+        void OnError() override;
 
     private:
         TContExecutor& Executor;
@@ -84,7 +84,7 @@ namespace NMonitoring {
 
     private:
         class TConnection;
-        TClientRequest* CreateClient() override; 
+        TClientRequest* CreateClient() override;
 
         THandler Handler;
     };

@@ -500,7 +500,7 @@ public:
         if (pData && pData->Get()) {
         }
         if (IsReading())
-            pData->Set(CastToUserObject(LoadObject(), (T1*)nullptr)); 
+            pData->Set(CastToUserObject(LoadObject(), (T1*)nullptr));
         else
             StoreObject(pData->GetBarePtr());
     }
@@ -574,7 +574,7 @@ template <class TReg>
 struct TRegisterSaveLoadType {
     TRegisterSaveLoadType(int num) {
         StartRegisterSaveload();
-        pSaverClasses->RegisterType(num, TReg::NewSaveLoadNullItem, (TReg*)nullptr); 
+        pSaverClasses->RegisterType(num, TReg::NewSaveLoadNullItem, (TReg*)nullptr);
     }
 };
 

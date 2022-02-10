@@ -24,7 +24,7 @@ namespace NPrivate {
             using TOwner = TThreadSafeCache<Key, Value, List, GettersPromotionPolicy, TArgs...>;
 
         public:
-            virtual ~ICallbacks() = default; 
+            virtual ~ICallbacks() = default;
             virtual TKey GetKey(TArgs... args) const = 0;
             virtual TValue* CreateObject(TArgs... args) const = 0;
         };

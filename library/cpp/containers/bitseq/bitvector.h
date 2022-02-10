@@ -34,7 +34,7 @@ public:
     {
     }
 
-    virtual ~TBitVector() = default; 
+    virtual ~TBitVector() = default;
 
     void Clear() {
         Size_ = 0;

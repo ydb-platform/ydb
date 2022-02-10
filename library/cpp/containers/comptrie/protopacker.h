@@ -6,7 +6,7 @@
 template <class Proto>
 class TProtoPacker {
 public:
-    TProtoPacker() = default; 
+    TProtoPacker() = default;
 
     void UnpackLeaf(const char* p, Proto& entry) const {
         TMemoryInput in(p + sizeof(ui32), SkipLeaf(p) - sizeof(ui32));

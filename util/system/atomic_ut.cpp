@@ -175,7 +175,7 @@ private:
 
     inline void TestAtomicPtr() {
         int* p;
-        AtomicSet(p, nullptr); 
+        AtomicSet(p, nullptr);
 
         UNIT_ASSERT_VALUES_EQUAL(AtomicGet(p), 0);
 
@@ -183,8 +183,8 @@ private:
         AtomicSet(p, &i);
 
         UNIT_ASSERT_VALUES_EQUAL(AtomicGet(p), &i);
-        UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&p, nullptr), &i); 
-        UNIT_ASSERT(AtomicCas(&p, &i, nullptr)); 
+        UNIT_ASSERT_VALUES_EQUAL(AtomicSwap(&p, nullptr), &i);
+        UNIT_ASSERT(AtomicCas(&p, &i, nullptr));
     }
 };
 

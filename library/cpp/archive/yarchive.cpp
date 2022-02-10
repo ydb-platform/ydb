@@ -76,7 +76,7 @@ namespace {
         {
         }
 
-        inline ~TArchiveRecordDescriptor() = default; 
+        inline ~TArchiveRecordDescriptor() = default;
 
         inline void SaveTo(IOutputStream* out) const {
             ESSave(out, Off_);
@@ -116,7 +116,7 @@ public:
     {
     }
 
-    inline ~TImpl() = default; 
+    inline ~TImpl() = default;
 
     inline void Flush() {
         Out_->Flush();
@@ -248,7 +248,7 @@ namespace {
         {
         }
 
-        ~TArchiveInputStream() override = default; 
+        ~TArchiveInputStream() override = default;
     };
 }
 
@@ -263,7 +263,7 @@ public:
         ReadDict();
     }
 
-    inline ~TImpl() = default; 
+    inline ~TImpl() = default;
 
     inline void ReadDict() {
         Y_ENSURE(Blob_.Size() >= sizeof(ui64), "too small blob");

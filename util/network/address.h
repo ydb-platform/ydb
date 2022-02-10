@@ -9,7 +9,7 @@
 namespace NAddr {
     class IRemoteAddr {
     public:
-        virtual ~IRemoteAddr() = default; 
+        virtual ~IRemoteAddr() = default;
 
         virtual const sockaddr* Addr() const = 0;
         virtual socklen_t Len() const = 0;
@@ -47,11 +47,11 @@ namespace NAddr {
             Assign(addr, SockAddrLength(addr));
         }
 
-        const sockaddr* Addr() const override { 
+        const sockaddr* Addr() const override {
             return MutableAddr();
         }
 
-        socklen_t Len() const override { 
+        socklen_t Len() const override {
             return L_;
         }
 
@@ -82,11 +82,11 @@ namespace NAddr {
         {
         }
 
-        const sockaddr* Addr() const override { 
+        const sockaddr* Addr() const override {
             return AI_->ai_addr;
         }
 
-        socklen_t Len() const override { 
+        socklen_t Len() const override {
             return (socklen_t)AI_->ai_addrlen;
         }
 
@@ -102,11 +102,11 @@ namespace NAddr {
         {
         }
 
-        const sockaddr* Addr() const override { 
+        const sockaddr* Addr() const override {
             return A_;
         }
 
-        socklen_t Len() const override { 
+        socklen_t Len() const override {
             return A_;
         }
 
@@ -122,11 +122,11 @@ namespace NAddr {
         {
         }
 
-        const sockaddr* Addr() const override { 
+        const sockaddr* Addr() const override {
             return (sockaddr*)&A_;
         }
 
-        socklen_t Len() const override { 
+        socklen_t Len() const override {
             return sizeof(A_);
         }
 

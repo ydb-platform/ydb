@@ -6,7 +6,7 @@ namespace NCompactTrie {
     class ILeafSkipper {
     public:
         virtual size_t SkipLeaf(const char* p) const = 0;
-        virtual ~ILeafSkipper() = default; 
+        virtual ~ILeafSkipper() = default;
     };
 
     template <class TPacker>
@@ -20,7 +20,7 @@ namespace NCompactTrie {
         {
         }
 
-        size_t SkipLeaf(const char* p) const override { 
+        size_t SkipLeaf(const char* p) const override {
             return Packer->SkipLeaf(p);
         }
 

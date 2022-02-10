@@ -12,7 +12,7 @@ public:
         size_t Len;
     };
 
-    virtual ~IAllocator() = default; 
+    virtual ~IAllocator() = default;
 
     virtual TBlock Allocate(size_t len) = 0;
     virtual void Release(const TBlock& block) = 0;
@@ -20,8 +20,8 @@ public:
 
 class TDefaultAllocator: public IAllocator {
 public:
-    TBlock Allocate(size_t len) override; 
-    void Release(const TBlock& block) override; 
+    TBlock Allocate(size_t len) override;
+    void Release(const TBlock& block) override;
 
     static IAllocator* Instance() noexcept;
 };

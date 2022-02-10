@@ -26,7 +26,7 @@ namespace {
         {
         }
 
-        void Process(void*) override { 
+        void Process(void*) override {
             THolder<TThreadTask> This(this);
 
             if (Id_ == 0) {
@@ -58,7 +58,7 @@ namespace {
         {
         }
 
-        void Process(void*) override { 
+        void Process(void*) override {
             Ev_.Signal();
         }
     };
@@ -74,7 +74,7 @@ namespace {
         {
         }
 
-        void Process(void*) override { 
+        void Process(void*) override {
             Ev->WaitI();
             Ev.Destroy();
         }

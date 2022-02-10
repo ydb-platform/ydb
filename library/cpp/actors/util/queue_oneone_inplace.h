@@ -35,7 +35,7 @@ public:
                 ReadPosition = 0;
                 return Next();
             }
-            return T{}; 
+            return T{};
         }
     };
 
@@ -62,7 +62,7 @@ public:
 
     struct TCleanDestructor {
         static inline void Destroy(TOneOneQueueInplace<T, TSize>* x) noexcept {
-            while (x->Pop() != nullptr) 
+            while (x->Pop() != nullptr)
                 continue;
             delete x;
         }
@@ -102,7 +102,7 @@ public:
             ReadPosition = 0;
             return Head();
         }
-        return T{}; 
+        return T{};
     }
 
     T Pop() {

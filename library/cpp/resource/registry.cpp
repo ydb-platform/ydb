@@ -91,7 +91,7 @@ namespace {
             return D_.size();
         }
 
-        TStringBuf KeyByIndex(size_t idx) const override { 
+        TStringBuf KeyByIndex(size_t idx) const override {
             return D_.at(idx).first;
         }
 

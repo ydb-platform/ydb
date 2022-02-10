@@ -23,5 +23,5 @@ TContinueFunc TSpawnNopTasksSimpleTask::Start() {
 }
 
 TContinueFunc TSpawnNopTasksSimpleTask::Join() {
-    return nullptr; 
+    return nullptr;
 }

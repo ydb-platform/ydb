@@ -7,7 +7,7 @@ TMultiInput::TMultiInput(IInputStream* f, IInputStream* s) noexcept
 {
 }
 
-TMultiInput::~TMultiInput() = default; 
+TMultiInput::~TMultiInput() = default;
 
 size_t TMultiInput::DoRead(void* buf, size_t len) {
     const size_t ret = C_->Read(buf, len);

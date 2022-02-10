@@ -20,7 +20,7 @@ namespace {
         {
         }
 
-        void DoWrite(const void* buf, size_t len) override { 
+        void DoWrite(const void* buf, size_t len) override {
             M_->Update(buf, len);
         }
 

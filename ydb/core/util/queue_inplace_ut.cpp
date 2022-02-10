@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TQueueInplaceTests) {
         using TQueueType = TQueueInplace<TStruct, 32>; // 3 values per chunk
         TQueueType queue;
 
-        UNIT_ASSERT(queue.Head() == nullptr); 
+        UNIT_ASSERT(queue.Head() == nullptr);
 
         queue.Push(10);
         queue.Push(11);
@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(TQueueInplaceTests) {
         UNIT_ASSERT(*queue.Head() == 14);
         queue.Pop();
 
-        UNIT_ASSERT(queue.Head() == nullptr); 
+        UNIT_ASSERT(queue.Head() == nullptr);
     }
 
     Y_UNIT_TEST(CleanInDestructor) {

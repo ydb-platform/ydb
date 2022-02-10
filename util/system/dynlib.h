@@ -49,12 +49,12 @@ private:
 
 public:
     TExternalSymbol() noexcept {
-        PLib = nullptr; 
-        DLib = nullptr; 
+        PLib = nullptr;
+        DLib = nullptr;
     }
     TExternalSymbol(const TExternalSymbol& es) {
-        PLib = nullptr; 
-        DLib = nullptr; 
+        PLib = nullptr;
+        DLib = nullptr;
         if (es.IsDynamic())
             Open(es.LibName().data(), es.VtblName().data());
         else if (es.IsStatic())
@@ -75,7 +75,7 @@ public:
     }
     // set the symbol from dynamic source
     void Open(const char* lib_name, const char* vtbl_name) {
-        if (DLib != nullptr || PLib != nullptr) 
+        if (DLib != nullptr || PLib != nullptr)
             return;
         try {
             DLib = new TDynamicLibrary();
@@ -83,7 +83,7 @@ public:
             PLib = (TLib*)DLib->Sym(vtbl_name);
         } catch (...) {
             delete DLib;
-            DLib = nullptr; 
+            DLib = nullptr;
             throw;
         }
         lname = lib_name;
@@ -91,7 +91,7 @@ public:
     }
     // set the symbol from static source
     void SetSym(TLib* pl) noexcept {
-        if (DLib == nullptr && PLib == nullptr) 
+        if (DLib == nullptr && PLib == nullptr)
             PLib = pl;
     }
     void Close() noexcept {
@@ -111,9 +111,9 @@ public:
         return vname;
     }
     bool IsStatic() const noexcept {
-        return DLib == nullptr && PLib != nullptr; 
+        return DLib == nullptr && PLib != nullptr;
     }
     bool IsDynamic() const noexcept {
-        return DLib && DLib->IsLoaded() && PLib != nullptr; 
+        return DLib && DLib->IsLoaded() && PLib != nullptr;
     }
 };

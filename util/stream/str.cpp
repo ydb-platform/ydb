@@ -2,7 +2,7 @@
 
 static constexpr size_t MIN_BUFFER_GROW_SIZE = 16;
 
-TStringInput::~TStringInput() = default; 
+TStringInput::~TStringInput() = default;
 
 size_t TStringInput::DoNext(const void** ptr, size_t len) {
     len = Min(len, S_->size() - Pos_);
@@ -16,7 +16,7 @@ void TStringInput::DoUndo(size_t len) {
     Pos_ -= len;
 }
 
-TStringOutput::~TStringOutput() = default; 
+TStringOutput::~TStringOutput() = default;
 
 size_t TStringOutput::DoNext(void** ptr) {
     if (S_->size() == S_->capacity()) {
@@ -41,4 +41,4 @@ void TStringOutput::DoWriteC(char c) {
     S_->push_back(c);
 }
 
-TStringStream::~TStringStream() = default; 
+TStringStream::~TStringStream() = default;

@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TFlagsTest) {
     }
 
     Y_UNIT_TEST(TestOutput) {
-        ETest1 value0 = nullptr, value1 = Test1, value7 = Test1 | Test2 | Test4; 
+        ETest1 value0 = nullptr, value1 = Test1, value7 = Test1 | Test2 | Test4;
 
         UNIT_ASSERT_VALUES_EQUAL(ToString(value0), "TFlags(0000000000000000)");
         UNIT_ASSERT_VALUES_EQUAL(ToString(value1), "TFlags(0000000000000001)");
@@ -91,7 +91,7 @@ Y_UNIT_TEST_SUITE(TFlagsTest) {
     }
 
     Y_UNIT_TEST(TestHash) {
-        ETest1 value0 = nullptr, value1 = Test1; 
+        ETest1 value0 = nullptr, value1 = Test1;
 
         THashMap<ETest1, int> hash;
         hash[value0] = 0;

@@ -14,7 +14,7 @@ public:
     {
     }
 
-    TBlock Allocate(size_t len) override { 
+    TBlock Allocate(size_t len) override {
         Check();
 
         Alloced_ += len;
@@ -23,7 +23,7 @@ public:
         return TDefaultAllocator::Allocate(len);
     }
 
-    void Release(const TBlock& block) override { 
+    void Release(const TBlock& block) override {
         Released_ += block.Len;
         ++Frees_;
 

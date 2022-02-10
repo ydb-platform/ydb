@@ -23,7 +23,7 @@ struct TThreadPoolTest {
         {
         }
 
-        void Process(void*) override { 
+        void Process(void*) override {
             THolder<TTask> This(this);
 
             TGuard<TSpinLock> guard(Test->Lock);
@@ -41,7 +41,7 @@ struct TThreadPoolTest {
         {
         }
 
-        ~TOwnedTask() override { 
+        ~TOwnedTask() override {
             Destructed = true;
         }
 
@@ -75,11 +75,11 @@ struct TThreadPoolTest {
 
 class TFailAddQueue: public IThreadPool {
 public:
-    bool Add(IObjectInQueue* /*obj*/) override Y_WARN_UNUSED_RESULT { 
+    bool Add(IObjectInQueue* /*obj*/) override Y_WARN_UNUSED_RESULT {
         return false;
     }
 
-    void Start(size_t, size_t) override { 
+    void Start(size_t, size_t) override {
     }
 
     void Stop() noexcept override {

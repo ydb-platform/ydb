@@ -30,7 +30,7 @@ namespace NUnicode {
 
     namespace NPrivate {
         inline const wchar32* Decomposition(const TDecompositionTable& table, wchar32 ch) {
-            return table.Get(ch, static_cast<const wchar32*>(nullptr)); 
+            return table.Get(ch, static_cast<const wchar32*>(nullptr));
         }
 
         class TDecompositor {

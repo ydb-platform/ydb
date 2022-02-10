@@ -55,7 +55,7 @@ private:
     public:
         inline TOneSocketListener(TImpl* parent, IRemoteAddrPtr addr)
             : Parent_(parent)
-            , C_(nullptr) 
+            , C_(nullptr)
             , ListenSocket_(socket(addr->Addr()->sa_family, SOCK_STREAM, 0))
             , Addr_(std::move(addr))
         {
@@ -92,7 +92,7 @@ private:
         inline void Run(TCont* cont) noexcept {
             C_ = cont;
             DoRun();
-            C_ = nullptr; 
+            C_ = nullptr;
         }
 
         inline void StartListen() {

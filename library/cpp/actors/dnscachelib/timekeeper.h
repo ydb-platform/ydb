@@ -37,7 +37,7 @@ public:
             }
         }
         if (!ConstTime) {
-            gettimeofday(&CurrentTime, nullptr); 
+            gettimeofday(&CurrentTime, nullptr);
             Thread.Start();
         }
     }
@@ -62,9 +62,9 @@ private:
         do {
             /* Race condition may occur here but locking looks too expensive */
 
-            gettimeofday(&owner->CurrentTime, nullptr); 
+            gettimeofday(&owner->CurrentTime, nullptr);
         } while (!owner->Exit.WaitT(TDuration::MicroSeconds(UpdateInterval)));
 
-        return nullptr; 
+        return nullptr;
     }
 };

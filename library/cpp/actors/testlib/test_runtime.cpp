@@ -869,7 +869,7 @@ namespace NActors {
 
         // first step - find good enough mailbox
         ui32 hint = 0;
-        TMailboxHeader *mailbox = nullptr; 
+        TMailboxHeader *mailbox = nullptr;
 
         {
             ui32 hintBackoff = 0;

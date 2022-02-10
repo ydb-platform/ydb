@@ -16,7 +16,7 @@ public:
 UNIT_TEST_SUITE_REGISTRATION(TGetOptTest);
 
 void TGetOptTest::TestZeroArgC() {
-    TGetOpt opt(0, nullptr, ""); 
+    TGetOpt opt(0, nullptr, "");
 }
 
 void TGetOptTest::TestGetOpt() {

@@ -18,11 +18,11 @@ namespace NRainCheck {
 
         THolder<ITaskFactory> TaskFactory;
 
-        void OnMessage(NBus::TOnMessageContext&) override; 
+        void OnMessage(NBus::TOnMessageContext&) override;
 
     public:
         TBusTaskStarter(TAutoPtr<ITaskFactory>);
-        ~TBusTaskStarter() override; 
+        ~TBusTaskStarter() override;
 
     public:
         template <typename TTask, typename TEnv>
@@ -35,7 +35,7 @@ namespace NRainCheck {
                 {
                 }
 
-                void NewTask(NBus::TOnMessageContext& context) override { 
+                void NewTask(NBus::TOnMessageContext& context) override {
                     SpawnTask<TTask, TEnv, NBus::TOnMessageContext&>(Env, context);
                 }
             };

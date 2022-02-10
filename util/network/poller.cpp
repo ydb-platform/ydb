@@ -39,7 +39,7 @@ TSocketPoller::TSocketPoller()
 {
 }
 
-TSocketPoller::~TSocketPoller() = default; 
+TSocketPoller::~TSocketPoller() = default;
 
 void TSocketPoller::WaitRead(SOCKET sock, void* cookie) {
     Impl_->Set(cookie, sock, CONT_POLL_READ);

@@ -115,7 +115,7 @@ private:
                NUnitTest::GetResetTag();
     }
 
-    void OnBeforeTest(const TTest* test) override { 
+    void OnBeforeTest(const TTest* test) override {
         NJson::TJsonValue event;
         event.InsertValue("class", test->unit->name);
         event.InsertValue("subtest", test->name);
@@ -127,19 +127,19 @@ private:
         Cerr.Flush();
     }
 
-    void OnUnitStart(const TUnit* unit) override { 
+    void OnUnitStart(const TUnit* unit) override {
         NJson::TJsonValue event;
         event.InsertValue("class", unit->name);
         Trace("test-started", event);
     }
 
-    void OnUnitStop(const TUnit* unit) override { 
+    void OnUnitStop(const TUnit* unit) override {
         NJson::TJsonValue event;
         event.InsertValue("class", unit->name);
         Trace("test-finished", event);
     }
 
-    void OnError(const TError* descr) override { 
+    void OnError(const TError* descr) override {
         const TString comment = BuildComment(descr->msg, descr->BackTrace.data());
         ErrorMessages.push_back(comment);
     }
@@ -270,7 +270,7 @@ public:
         ForkTests = val;
     }
 
-    inline bool GetForkTests() const override { 
+    inline bool GetForkTests() const override {
         return ForkTests;
     }
 
@@ -279,7 +279,7 @@ public:
         SetIsTTY(IsForked || CalcIsTTY(stderr));
     }
 
-    inline bool GetIsForked() const override { 
+    inline bool GetIsForked() const override {
         return IsForked;
     }
 
@@ -296,7 +296,7 @@ public:
     }
 
 private:
-    void OnUnitStart(const TUnit* unit) override { 
+    void OnUnitStart(const TUnit* unit) override {
         TraceProcessor->UnitStart(*unit);
         if (IsForked) {
             return;
@@ -306,7 +306,7 @@ private:
         }
     }
 
-    void OnUnitStop(const TUnit* unit) override { 
+    void OnUnitStop(const TUnit* unit) override {
         TraceProcessor->UnitStop(*unit);
         if (IsForked) {
             return;
@@ -325,7 +325,7 @@ private:
         fprintf(stderr, "\n");
     }
 
-    void OnBeforeTest(const TTest* test) override { 
+    void OnBeforeTest(const TTest* test) override {
         TraceProcessor->BeforeTest(*test);
         if (IsForked) {
             return;
@@ -335,7 +335,7 @@ private:
         }
     }
 
-    void OnError(const TError* descr) override { 
+    void OnError(const TError* descr) override {
         TraceProcessor->Error(*descr);
         if (!IsForked && ForkExitedCorrectly) {
             return;
@@ -400,7 +400,7 @@ private:
         Cerr << d << "\n";
     }
 
-    void OnEnd() override { 
+    void OnEnd() override {
         TraceProcessor->End();
         if (IsForked) {
             return;

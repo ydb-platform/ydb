@@ -67,7 +67,7 @@ private:
     }
 
 public:
-    TTempArray() = default; 
+    TTempArray() = default;
 
     TTempArray(size_t len)
         : TTempBuf(RawSize(len))

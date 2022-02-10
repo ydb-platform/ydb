@@ -42,7 +42,7 @@ public:
         {
         }
 
-        inline ~TPart() = default; 
+        inline ~TPart() = default;
 
         static inline TPart CrLf() noexcept {
             return TPart("\r\n", 2);

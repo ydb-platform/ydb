@@ -10,7 +10,7 @@ public:
     }
 
 protected:
-    size_t DoRead(void* buf, size_t len) override { 
+    size_t DoRead(void* buf, size_t len) override {
         if (len == 0) {
             return 0;
         }
@@ -20,7 +20,7 @@ protected:
         return 1;
     }
 
-    size_t DoSkip(size_t len) override { 
+    size_t DoSkip(size_t len) override {
         if (len == 0) {
             return 0;
         }

@@ -13,7 +13,7 @@ class TSharedMemory: public TThrRefBase {
 
 public:
     TSharedMemory();
-    ~TSharedMemory() override; 
+    ~TSharedMemory() override;
 
     bool Create(int Size);
     bool Open(const TGUID& id, int size);

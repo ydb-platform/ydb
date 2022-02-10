@@ -239,7 +239,7 @@ namespace NMonitoring {
             , OnLookup(origin->OnLookup)
         {}
 
-        ~TDynamicCounters() override; 
+        ~TDynamicCounters() override;
 
         // This counter allows to track lookups by name within the whole subtree
         void SetLookupCounter(TCounterPtr lookupCounter) {

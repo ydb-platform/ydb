@@ -64,7 +64,7 @@ public:
     class ICallback {
     public:
         virtual void OnMatch(const T* begin, const T* end) = 0;
-        virtual ~ICallback() = default; 
+        virtual ~ICallback() = default;
     };
 
 private:

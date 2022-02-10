@@ -11,7 +11,7 @@ public:
     }
 
 protected:
-    size_t DoUnboundedNext(const void** ptr) override { 
+    size_t DoUnboundedNext(const void** ptr) override {
         if (Index_ >= Data_.size()) {
             return 0;
         }

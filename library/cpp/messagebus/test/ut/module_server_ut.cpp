@@ -47,14 +47,14 @@ Y_UNIT_TEST_SUITE(ModuleServerTests) {
         {
         }
 
-        TJobHandler Start(TBusJob* job, TBusMessage* mess) override { 
+        TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
             WaitTwoRequestsLatch.CountDown();
             Y_VERIFY(WaitTwoRequestsLatch.Await(TDuration::Seconds(5)), "oops");
 
             VerifyDynamicCast<TExampleRequest*>(mess);
 
             job->SendReply(new TExampleResponse(&Proto.ResponseCount));
-            return nullptr; 
+            return nullptr;
         }
     };
 
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(ModuleServerTests) {
         TSystemEvent MessageReceivedEvent;
         TSystemEvent ClientDiedEvent;
 
-        TJobHandler Start(TBusJob* job, TBusMessage* mess) override { 
+        TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
             Y_UNUSED(mess);
 
             MessageReceivedEvent.Signal();
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE(ModuleServerTests) {
             Y_VERIFY(ClientDiedEvent.WaitT(TDuration::Seconds(5)), "oops");
 
             job->SendReply(new TExampleResponse(&Proto.ResponseCount));
-            return nullptr; 
+            return nullptr;
         }
     };
 

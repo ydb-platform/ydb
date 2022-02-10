@@ -177,14 +177,14 @@ public:
     {
     }
 
-    ~TMyStringOutput() override = default; 
+    ~TMyStringOutput() override = default;
 
-    void DoWrite(const void* data, size_t len) override { 
+    void DoWrite(const void* data, size_t len) override {
         S_.Write(data, len);
         UNIT_ASSERT(len < BufLen_ || ((len % BufLen_) == 0));
     }
 
-    void DoWriteV(const TPart* p, size_t count) override { 
+    void DoWriteV(const TPart* p, size_t count) override {
         TString s;
 
         for (size_t i = 0; i < count; ++i) {

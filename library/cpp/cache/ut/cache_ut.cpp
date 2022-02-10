@@ -364,10 +364,10 @@ Y_UNIT_TEST_SUITE(TThreadSafeCacheTest) {
 
     class TCallbacks: public TCache::ICallbacks {
     public:
-        TKey GetKey(ui32 i) const override { 
+        TKey GetKey(ui32 i) const override {
             return i;
         }
-        TValue* CreateObject(ui32 i) const override { 
+        TValue* CreateObject(ui32 i) const override {
             Creations++;
             return new TString(VALS[i]);
         }

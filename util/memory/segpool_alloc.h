@@ -43,7 +43,7 @@ struct segpool_alloc {
     ui64 pool_count, malloc_count, pool_free_count, malloc_free_count;
 #endif
     segpool_alloc()
-        : pool(nullptr) 
+        : pool(nullptr)
     {
         Y_IF_DEBUG(pool_count = malloc_count = pool_free_count = malloc_free_count = 0);
     }
@@ -69,7 +69,7 @@ struct segpool_alloc {
             Y_IF_DEBUG(if (data) malloc_count++);
             return data;
         }
-        _Tp* data = (_Tp*)pool->append(nullptr, __n * sizeof(_Tp)); 
+        _Tp* data = (_Tp*)pool->append(nullptr, __n * sizeof(_Tp));
         Y_IF_DEBUG(pool_count++);
         return data;
     }

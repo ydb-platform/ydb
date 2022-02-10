@@ -168,10 +168,10 @@ namespace NXml {
         xmlNode* child = nullptr;
 
         if (value.empty()) {
-            child = xmlNewTextChild(NodePointer, nullptr, XMLCHAR(name.c_str()), nullptr); 
+            child = xmlNewTextChild(NodePointer, nullptr, XMLCHAR(name.c_str()), nullptr);
         } else {
             child = xmlNewTextChild(
-                NodePointer, nullptr, XMLCHAR(name.c_str()), XMLCHAR(value.c_str())); 
+                NodePointer, nullptr, XMLCHAR(name.c_str()), XMLCHAR(value.c_str()));
         }
 
         if (!child) {

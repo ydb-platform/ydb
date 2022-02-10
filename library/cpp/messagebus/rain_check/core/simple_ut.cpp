@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(RainCheckSimple) {
 
         TSubtaskCompletion SleepCompletion;
 
-        TContinueFunc Start() override { 
+        TContinueFunc Start() override {
             TestSync->CheckAndIncrement(0);
 
             Env->SleepService.Sleep(&SleepCompletion, TDuration::MilliSeconds(1));
@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(RainCheckSimple) {
 
         TContinueFunc Last() {
             TestSync->CheckAndIncrement(3);
-            return nullptr; 
+            return nullptr;
         }
     };
 

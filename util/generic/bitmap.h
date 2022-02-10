@@ -347,7 +347,7 @@ public:
         }
 
     public:
-        ~TReference() = default; 
+        ~TReference() = default;
 
         Y_FORCE_INLINE TReference& operator=(bool val) {
             if (val)
@@ -416,14 +416,14 @@ private:
     }
 
 public:
-    TBitMapOps() = default; 
+    TBitMapOps() = default;
 
     TBitMapOps(TChunk val) {
         Mask.Data[0] = val;
         Mask.Sanitize();
     }
 
-    TBitMapOps(const TThis&) = default; 
+    TBitMapOps(const TThis&) = default;
 
     template <class T>
     TBitMapOps(const TBitMapOps<T>& bitmap)
@@ -1093,7 +1093,7 @@ public:
     {
     }
 
-    TBitMap(const TBitMap<BitCount, TChunkType>&) = default; 
+    TBitMap(const TBitMap<BitCount, TChunkType>&) = default;
 
     template <class T>
     TBitMap(const TBitMapOps<T>& bitmap)

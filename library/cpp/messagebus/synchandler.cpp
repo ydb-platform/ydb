@@ -19,7 +19,7 @@ struct TBusSyncMessageData {
     EMessageStatus ReplyStatus;
 
     TBusSyncMessageData()
-        : Reply(nullptr) 
+        : Reply(nullptr)
         , ReplyStatus(MESSAGE_DONT_ASK)
     {
     }
@@ -29,13 +29,13 @@ class TSyncHandler: public IBusClientHandler {
 public:
     TSyncHandler(bool expectReply = true)
         : ExpectReply(expectReply)
-        , Session(nullptr) 
+        , Session(nullptr)
     {
     }
     ~TSyncHandler() override {
     }
 
-    void OnReply(TAutoPtr<TBusMessage> pMessage0, TAutoPtr<TBusMessage> pReply0) override { 
+    void OnReply(TAutoPtr<TBusMessage> pMessage0, TAutoPtr<TBusMessage> pReply0) override {
         TBusMessage* pMessage = pMessage0.Release();
         TBusMessage* pReply = pReply0.Release();
 
@@ -47,25 +47,25 @@ public:
         SignalResult(data, pReply, MESSAGE_OK);
     }
 
-    void OnError(TAutoPtr<TBusMessage> pMessage0, EMessageStatus status) override { 
+    void OnError(TAutoPtr<TBusMessage> pMessage0, EMessageStatus status) override {
         TBusMessage* pMessage = pMessage0.Release();
         TBusSyncMessageData* data = static_cast<TBusSyncMessageData*>(pMessage->Data);
         if (!data) {
             return;
         }
 
-        SignalResult(data, /*pReply=*/nullptr, status); 
+        SignalResult(data, /*pReply=*/nullptr, status);
     }
 
-    void OnMessageSent(TBusMessage* pMessage) override { 
+    void OnMessageSent(TBusMessage* pMessage) override {
         Y_UNUSED(pMessage);
         Y_ASSERT(ExpectReply);
     }
 
-    void OnMessageSentOneWay(TAutoPtr<TBusMessage> pMessage) override { 
+    void OnMessageSentOneWay(TAutoPtr<TBusMessage> pMessage) override {
         Y_ASSERT(!ExpectReply);
         TBusSyncMessageData* data = static_cast<TBusSyncMessageData*>(pMessage.Release()->Data);
-        SignalResult(data, /*pReply=*/nullptr, MESSAGE_OK); 
+        SignalResult(data, /*pReply=*/nullptr, MESSAGE_OK);
     }
 
     void SetSession(TRemoteClientSession* session) {

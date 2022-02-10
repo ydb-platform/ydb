@@ -1153,7 +1153,7 @@ struct TEvBlobStorage {
         TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, ui32 groupId)
             : Status(status)
             , ResponseSz(sz)
-            , Responses(sz == 0 ? nullptr : new TResponse[sz]) 
+            , Responses(sz == 0 ? nullptr : new TResponse[sz])
             , GroupId(groupId)
         {}
 

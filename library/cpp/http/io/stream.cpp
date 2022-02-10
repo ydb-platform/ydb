@@ -137,8 +137,8 @@ public:
     inline TImpl(IInputStream* slave)
         : Slave_(slave)
         , Buffered_(Slave_, SuggestBufferSize())
-        , ChunkedInput_(nullptr) 
-        , Input_(nullptr) 
+        , ChunkedInput_(nullptr)
+        , Input_(nullptr)
         , FirstLine_(ReadFirstLine(Buffered_))
         , Headers_(&Buffered_)
         , KeepAlive_(false)
@@ -465,7 +465,7 @@ class THttpOutput::TImpl {
         ~TSizeCalculator() override {
         }
 
-        void DoWrite(const void* /*buf*/, size_t len) override { 
+        void DoWrite(const void* /*buf*/, size_t len) override {
             Length_ += len;
         }
 
@@ -877,7 +877,7 @@ private:
 };
 
 THttpOutput::THttpOutput(IOutputStream* slave)
-    : Impl_(new TImpl(slave, nullptr)) 
+    : Impl_(new TImpl(slave, nullptr))
 {
 }
 

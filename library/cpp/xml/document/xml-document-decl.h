@@ -449,8 +449,8 @@ namespace NXml {
         * constructs null node
         */
         TNode()
-            : NodePointer(nullptr) 
-            , DocPointer(nullptr) 
+            : NodePointer(nullptr)
+            , DocPointer(nullptr)
         {
         }
 

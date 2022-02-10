@@ -381,7 +381,7 @@ TMemoryMap::TMemoryMap(const TFile& file, EOpenMode om, TString dbgName)
 {
 }
 
-TMemoryMap::~TMemoryMap() = default; 
+TMemoryMap::~TMemoryMap() = default;
 
 TMemoryMap::TMapResult TMemoryMap::Map(i64 offset, size_t size) {
     return Impl_->Map(offset, size);

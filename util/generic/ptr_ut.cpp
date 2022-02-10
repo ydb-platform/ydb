@@ -166,7 +166,7 @@ void TPointerTest::TestHolderPtrMoveAssignment() {
 }
 
 struct TBase {
-    virtual ~TBase() = default; 
+    virtual ~TBase() = default;
 };
 
 struct TDerived: public TBase {
@@ -319,7 +319,7 @@ public:
     {
         ++Cnt;
     }
-    ~TOp2() override { 
+    ~TOp2() override {
         --Cnt;
     }
 };

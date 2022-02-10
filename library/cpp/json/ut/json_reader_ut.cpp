@@ -15,17 +15,17 @@ public:
     {
     }
 
-    bool OnBoolean(bool val) override { 
+    bool OnBoolean(bool val) override {
         Writer.Write(val);
         return true;
     }
 
-    bool OnInteger(long long val) override { 
+    bool OnInteger(long long val) override {
         Writer.Write(val);
         return true;
     }
 
-    bool OnUInteger(unsigned long long val) override { 
+    bool OnUInteger(unsigned long long val) override {
         Writer.Write(val);
         return true;
     }
@@ -35,27 +35,27 @@ public:
         return true;
     }
 
-    bool OnDouble(double val) override { 
+    bool OnDouble(double val) override {
         Writer.Write(val);
         return true;
     }
 
-    bool OnOpenArray() override { 
+    bool OnOpenArray() override {
         Writer.OpenArray();
         return true;
     }
 
-    bool OnCloseArray() override { 
+    bool OnCloseArray() override {
         Writer.CloseArray();
         return true;
     }
 
-    bool OnOpenMap() override { 
+    bool OnOpenMap() override {
         Writer.OpenArray();
         return true;
     }
 
-    bool OnCloseMap() override { 
+    bool OnCloseMap() override {
         Writer.CloseArray();
         return true;
     }

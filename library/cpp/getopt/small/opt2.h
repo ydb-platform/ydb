@@ -85,7 +85,7 @@ public:
     // For options with parameters
     const char* Arg(char opt, const char* helpUsage, const char* defValue, bool required = false);
     const char* Arg(char opt, const char* helpUsage) {
-        return Arg(opt, helpUsage, nullptr, true); 
+        return Arg(opt, helpUsage, nullptr, true);
     }
     const char* Arg(char opt, const char* helpUsage, TString defValue, bool required = false);
 
@@ -108,7 +108,7 @@ public:
     bool Has(char opt, const char* helpUsage);
 
     // Add user defined error message and set error flag
-    void AddError(const char* message = nullptr); 
+    void AddError(const char* message = nullptr);
 
 public:
     // non-option args

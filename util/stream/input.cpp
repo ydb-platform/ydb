@@ -164,9 +164,9 @@ ui64 TransferData(IInputStream* in, IOutputStream* out) {
 
 namespace {
     struct TStdIn: public IInputStream {
-        ~TStdIn() override = default; 
+        ~TStdIn() override = default;
 
-        size_t DoRead(void* buf, size_t len) override { 
+        size_t DoRead(void* buf, size_t len) override {
             const size_t ret = fread(buf, 1, len, F_);
 
             if (ret < len && ferror(F_)) {

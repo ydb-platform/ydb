@@ -103,7 +103,7 @@ TDynamicLibrary::TDynamicLibrary(const TString& path, int flags) {
     Open(path.data(), flags);
 }
 
-TDynamicLibrary::~TDynamicLibrary() = default; 
+TDynamicLibrary::~TDynamicLibrary() = default;
 
 void TDynamicLibrary::Open(const char* path, int flags) {
     Impl_.Reset(TImpl::SafeCreate(path, flags));

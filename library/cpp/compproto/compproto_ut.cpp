@@ -178,8 +178,8 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
             const TData* Data;
             const TRegInfo* Elem;
             TRegClicks()
-                : Data(nullptr) 
-                , Elem(nullptr) 
+                : Data(nullptr)
+                , Elem(nullptr)
             {
             }
             void BeginSelf(ui32 /*count*/, ui32 /*id*/) {
@@ -236,7 +236,7 @@ Y_UNIT_TEST_SUITE(CompProtoTestBasic) {
             return GetEmptyDecompressor();
         }
         TMultiDecompressor()
-            : Elem(nullptr) 
+            : Elem(nullptr)
         {
         }
     };

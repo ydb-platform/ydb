@@ -20,11 +20,11 @@ public:
         return Level;
     }
 
-    void ReopenLog() override { 
+    void ReopenLog() override {
         Backend->ReopenLog();
     }
 
-    void WriteData(const TLogRecord& rec) override { 
+    void WriteData(const TLogRecord& rec) override {
         if (rec.Priority <= (ELogPriority)Level) {
             Backend->WriteData(rec);
         }

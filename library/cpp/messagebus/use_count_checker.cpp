@@ -20,7 +20,7 @@ void TUseCountChecker::Dec() {
 }
 
 TUseCountHolder::TUseCountHolder()
-    : CurrentChecker(nullptr) 
+    : CurrentChecker(nullptr)
 {
 }
 

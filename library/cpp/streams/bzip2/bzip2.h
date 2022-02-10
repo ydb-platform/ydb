@@ -28,7 +28,7 @@ public:
     ~TBZipDecompress() override;
 
 private:
-    size_t DoRead(void* buf, size_t size) override; 
+    size_t DoRead(void* buf, size_t size) override;
 
 private:
     class TImpl;
@@ -41,9 +41,9 @@ public:
     ~TBZipCompress() override;
 
 private:
-    void DoWrite(const void* buf, size_t size) override; 
-    void DoFlush() override; 
-    void DoFinish() override; 
+    void DoWrite(const void* buf, size_t size) override;
+    void DoFlush() override;
+    void DoFinish() override;
 
 public:
     class TImpl;

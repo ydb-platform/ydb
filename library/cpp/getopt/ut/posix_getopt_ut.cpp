@@ -39,12 +39,12 @@ Y_UNIT_TEST_SUITE(TPosixGetoptTest) {
         NLastGetopt::optreset = 1;
         UNIT_ASSERT_VALUES_EQUAL('b', NLastGetopt::getopt_long(argc, argv, "bf:", longopts, &longIndex));
         UNIT_ASSERT_VALUES_EQUAL(0, longIndex);
-        UNIT_ASSERT_VALUES_EQUAL('b', NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr)); 
+        UNIT_ASSERT_VALUES_EQUAL('b', NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr));
         UNIT_ASSERT_VALUES_EQUAL('f', NLastGetopt::getopt_long(argc, argv, "bf:", longopts, &longIndex));
         UNIT_ASSERT_VALUES_EQUAL(1, longIndex);
-        UNIT_ASSERT_VALUES_EQUAL('f', NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr)); 
-        UNIT_ASSERT_VALUES_EQUAL(0, NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr)); 
-        UNIT_ASSERT_VALUES_EQUAL(-1, NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr)); 
+        UNIT_ASSERT_VALUES_EQUAL('f', NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr));
+        UNIT_ASSERT_VALUES_EQUAL(0, NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr));
+        UNIT_ASSERT_VALUES_EQUAL(-1, NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr));
 
         UNIT_ASSERT_VALUES_EQUAL(6, NLastGetopt::optind);
     }
@@ -63,9 +63,9 @@ Y_UNIT_TEST_SUITE(TPosixGetoptTest) {
         char** const argv = (char**)argv0;
 
         NLastGetopt::optreset = 1;
-        UNIT_ASSERT_VALUES_EQUAL('b', NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr)); 
-        UNIT_ASSERT_VALUES_EQUAL('b', NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr)); 
-        UNIT_ASSERT_VALUES_EQUAL(-1, NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr)); 
+        UNIT_ASSERT_VALUES_EQUAL('b', NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr));
+        UNIT_ASSERT_VALUES_EQUAL('b', NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr));
+        UNIT_ASSERT_VALUES_EQUAL(-1, NLastGetopt::getopt_long(argc, argv, "bf:", longopts, nullptr));
 
         UNIT_ASSERT_VALUES_EQUAL(3, NLastGetopt::optind);
     }
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(TPosixGetoptTest) {
         char** const argv = (char**)argv0;
 
         NLastGetopt::optreset = 1;
-        UNIT_ASSERT_VALUES_EQUAL('?', NLastGetopt::getopt_long(argc, argv, "bf", longopts, nullptr)); 
+        UNIT_ASSERT_VALUES_EQUAL('?', NLastGetopt::getopt_long(argc, argv, "bf", longopts, nullptr));
     }
 
     Y_UNIT_TEST(TestLongOnly) {
@@ -96,10 +96,10 @@ Y_UNIT_TEST_SUITE(TPosixGetoptTest) {
         char** const argv = (char**)argv0;
 
         NLastGetopt::optreset = 1;
-        UNIT_ASSERT_VALUES_EQUAL('F', NLastGetopt::getopt_long_only(argc, argv, "fo", longopts, nullptr)); 
-        UNIT_ASSERT_VALUES_EQUAL('F', NLastGetopt::getopt_long_only(argc, argv, "fo", longopts, nullptr)); 
-        UNIT_ASSERT_VALUES_EQUAL('f', NLastGetopt::getopt_long_only(argc, argv, "fo", longopts, nullptr)); 
-        UNIT_ASSERT_VALUES_EQUAL('o', NLastGetopt::getopt_long_only(argc, argv, "fo", longopts, nullptr)); 
+        UNIT_ASSERT_VALUES_EQUAL('F', NLastGetopt::getopt_long_only(argc, argv, "fo", longopts, nullptr));
+        UNIT_ASSERT_VALUES_EQUAL('F', NLastGetopt::getopt_long_only(argc, argv, "fo", longopts, nullptr));
+        UNIT_ASSERT_VALUES_EQUAL('f', NLastGetopt::getopt_long_only(argc, argv, "fo", longopts, nullptr));
+        UNIT_ASSERT_VALUES_EQUAL('o', NLastGetopt::getopt_long_only(argc, argv, "fo", longopts, nullptr));
         UNIT_ASSERT_VALUES_EQUAL(-1, NLastGetopt::getopt_long_only(argc, argv, "fo", longopts, nullptr));
     }
 
@@ -114,6 +114,6 @@ Y_UNIT_TEST_SUITE(TPosixGetoptTest) {
         char** const argv = (char**)argv0;
 
         NLastGetopt::optreset = 1;
-        UNIT_ASSERT_VALUES_EQUAL('?', NLastGetopt::getopt_long(argc, argv, "z", longopts, nullptr)); 
+        UNIT_ASSERT_VALUES_EQUAL('?', NLastGetopt::getopt_long(argc, argv, "z", longopts, nullptr));
     }
 }

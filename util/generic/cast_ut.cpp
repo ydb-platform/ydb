@@ -13,7 +13,7 @@ class TGenericCastsTest: public TTestBase {
 
 private:
     struct TAaa {
-        virtual ~TAaa() = default; 
+        virtual ~TAaa() = default;
     };
     struct TBbb: public TAaa {};
 

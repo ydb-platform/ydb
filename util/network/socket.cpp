@@ -583,7 +583,7 @@ public:
     {
     }
 
-    inline ~TImpl() = default; 
+    inline ~TImpl() = default;
 
     inline SOCKET Fd() const noexcept {
         return Fd_;
@@ -755,9 +755,9 @@ public:
     inline TCommonSockOps() noexcept {
     }
 
-    ~TCommonSockOps() override = default; 
+    ~TCommonSockOps() override = default;
 
-    ssize_t Send(SOCKET fd, const void* data, size_t len) override { 
+    ssize_t Send(SOCKET fd, const void* data, size_t len) override {
         ssize_t ret = -1;
         do {
             ret = send(fd, (const char*)data, (int)len, MSG_NOSIGNAL);
@@ -770,7 +770,7 @@ public:
         return ret;
     }
 
-    ssize_t Recv(SOCKET fd, void* buf, size_t len) override { 
+    ssize_t Recv(SOCKET fd, void* buf, size_t len) override {
         ssize_t ret = -1;
         do {
             ret = recv(fd, (char*)buf, (int)len, 0);
@@ -783,7 +783,7 @@ public:
         return ret;
     }
 
-    ssize_t SendV(SOCKET fd, const TPart* parts, size_t count) override { 
+    ssize_t SendV(SOCKET fd, const TPart* parts, size_t count) override {
         ssize_t ret = SendVImpl(fd, parts, count);
 
         if (ret < 0) {
@@ -866,7 +866,7 @@ TSocket::TSocket(const TNetworkAddress& addr, const TInstant& deadLine)
 {
 }
 
-TSocket::~TSocket() = default; 
+TSocket::~TSocket() = default;
 
 SOCKET TSocket::Fd() const noexcept {
     return Impl_->Fd();
@@ -893,7 +893,7 @@ TSocketInput::TSocketInput(const TSocket& s) noexcept
 {
 }
 
-TSocketInput::~TSocketInput() = default; 
+TSocketInput::~TSocketInput() = default;
 
 size_t TSocketInput::DoRead(void* buf, size_t len) {
     const ssize_t ret = S_.Recv(buf, len);
@@ -1084,7 +1084,7 @@ TNetworkAddress::TNetworkAddress(ui16 port)
 {
 }
 
-TNetworkAddress::~TNetworkAddress() = default; 
+TNetworkAddress::~TNetworkAddress() = default;
 
 struct addrinfo* TNetworkAddress::Info() const noexcept {
     return Impl_->Info();

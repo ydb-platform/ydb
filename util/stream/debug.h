@@ -13,13 +13,13 @@
 class TDebugOutput: public IOutputStream {
 public:
     inline TDebugOutput() noexcept = default;
-    ~TDebugOutput() override = default; 
+    ~TDebugOutput() override = default;
 
     TDebugOutput(TDebugOutput&&) noexcept = default;
     TDebugOutput& operator=(TDebugOutput&&) noexcept = default;
 
 private:
-    void DoWrite(const void* buf, size_t len) override; 
+    void DoWrite(const void* buf, size_t len) override;
 };
 
 /**

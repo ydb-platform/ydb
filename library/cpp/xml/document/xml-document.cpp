@@ -31,7 +31,7 @@ namespace NXml {
                     THROW(XmlException, "Can't create xml document.");
                 doc->encoding = xmlStrdup(XMLCHAR("utf-8"));
 
-                TNodePtr node(xmlNewNode(nullptr, XMLCHAR(xml.c_str()))); 
+                TNodePtr node(xmlNewNode(nullptr, XMLCHAR(xml.c_str())));
                 if (!node)
                     THROW(XmlException, "Can't create root node.");
                 xmlDocSetRootElement(doc.Get(), node.Get());
@@ -77,7 +77,7 @@ namespace NXml {
 
     void TDocument::ParseString(TZtStringBuf xml) {
         TParserCtxtPtr pctx(xmlNewParserCtxt());
-        if (pctx.Get() == nullptr) 
+        if (pctx.Get() == nullptr)
             THROW(XmlException, "Can't create parser context");
 
         TDocHolder doc(xmlCtxtReadMemory(pctx.Get(), xml.c_str(), (int)xml.size(), nullptr, nullptr, XML_PARSE_NOCDATA));
@@ -90,7 +90,7 @@ namespace NXml {
 
     TNode TDocument::Root() {
         xmlNode* r = xmlDocGetRootElement(Doc.Get());
-        if (r == nullptr) 
+        if (r == nullptr)
             THROW(XmlException, "TDocument hasn't root element");
 
         return TNode(Doc.Get(), r);
@@ -98,14 +98,14 @@ namespace NXml {
 
     TConstNode TDocument::Root() const {
         xmlNode* r = xmlDocGetRootElement(Doc.Get());
-        if (r == nullptr) 
+        if (r == nullptr)
             THROW(XmlException, "TDocument hasn't root element");
 
         return TConstNode(TNode(Doc.Get(), r));
     }
 
     bool TNode::IsNull() const {
-        return NodePointer == nullptr; 
+        return NodePointer == nullptr;
     }
 
     bool TNode::IsElementNode() const {
@@ -208,7 +208,7 @@ namespace NXml {
     }
 
     TNode TNode::Parent() {
-        if (nullptr == NodePointer->parent) 
+        if (nullptr == NodePointer->parent)
             THROW(XmlException, "Parent node not exists");
 
         return TNode(DocPointer, NodePointer->parent);
@@ -315,7 +315,7 @@ namespace NXml {
 
     void TNode::SaveInternal(IOutputStream& stream, TZtStringBuf enc, int options) const {
         const char* encoding = enc.size() ? enc.data() : "utf-8";
-        TSaveCtxtPtr ctx(xmlSaveToIO(XmlWriteToOstream, /* close */ nullptr, &stream, 
+        TSaveCtxtPtr ctx(xmlSaveToIO(XmlWriteToOstream, /* close */ nullptr, &stream,
                                      encoding, options));
         if (xmlSaveTree(ctx.Get(), (xmlNode*)GetPtr()) < 0)
             THROW(XmlException, "Failed saving node to stream");

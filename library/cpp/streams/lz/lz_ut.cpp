@@ -168,7 +168,7 @@ public:
     }
 
 private:
-    size_t DoRead(void* buf, size_t len) override { 
+    size_t DoRead(void* buf, size_t len) override {
         return Slave_->Read(buf, len);
     }
 

@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(TBitOpsTest) {
         static_assert(MostSignificantBitCT(0) == 0, ".");
         static_assert(MostSignificantBitCT(1) == 0, ".");
         static_assert(MostSignificantBitCT(5) == 2, ".");
- 
+
         for (ui32 i = 0; i < 64; ++i) {
             UNIT_ASSERT_VALUES_EQUAL(i, MostSignificantBit(ui64{1} << i));
         }

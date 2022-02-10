@@ -100,7 +100,7 @@ TAutoPtr<TBusMessage> TExampleProtocol::Deserialize(ui16 messageType, TArrayRef<
         exampleReply->Data.append(payload.data(), payload.size());
         return exampleReply;
     } else {
-        return nullptr; 
+        return nullptr;
     }
 }
 

@@ -1,24 +1,24 @@
 #include <library/cpp/testing/benchmark/bench.h>
- 
-#include <util/random/fast.h> 
-#include <util/random/random.h> 
-#include <util/generic/singleton.h> 
-#include <util/generic/vector.h> 
-#include <util/charset/wide.h> 
- 
-#include <cmath> 
- 
-namespace { 
-    template <size_t N> 
+
+#include <util/random/fast.h>
+#include <util/random/random.h>
+#include <util/generic/singleton.h>
+#include <util/generic/vector.h>
+#include <util/charset/wide.h>
+
+#include <cmath>
+
+namespace {
+    template <size_t N>
     struct TRandomAsciiString: public TVector<char> {
-        inline TRandomAsciiString() { 
+        inline TRandomAsciiString() {
             reserve(N);
-            for (size_t i = 0; i < N; ++i) { 
-                push_back(RandomNumber<char>(127)); 
-            } 
-        } 
-    }; 
- 
+            for (size_t i = 0; i < N; ++i) {
+                push_back(RandomNumber<char>(127));
+            }
+        }
+    };
+
     template <size_t N>
     struct TRandomRuString: public TVector<char> {
         inline TRandomRuString() {
@@ -33,18 +33,18 @@ namespace {
         }
     };
 
-    using RAS1 = TRandomAsciiString<1>; 
-    using RAS10 = TRandomAsciiString<10>; 
-    using RAS50 = TRandomAsciiString<50>; 
-    using RAS1000 = TRandomAsciiString<1000>; 
-    using RAS1000000 = TRandomAsciiString<1000000>; 
+    using RAS1 = TRandomAsciiString<1>;
+    using RAS10 = TRandomAsciiString<10>;
+    using RAS50 = TRandomAsciiString<50>;
+    using RAS1000 = TRandomAsciiString<1000>;
+    using RAS1000000 = TRandomAsciiString<1000000>;
 
     using RRS1 = TRandomRuString<1>;
     using RRS10 = TRandomRuString<10>;
     using RRS1000 = TRandomRuString<1000>;
     using RRS1000000 = TRandomRuString<1000000>;
-} 
- 
+}
+
 #ifdef _sse2_
     #define IS_ASCII_BENCHMARK(length)                                                                                                                                           \
         Y_CPU_BENCHMARK(IsStringASCII##length, iface) {                                                                                                                          \
@@ -80,7 +80,7 @@ namespace {
             }                                                                                     \
         }
 #endif
- 
+
 IS_ASCII_BENCHMARK(1);
 IS_ASCII_BENCHMARK(10);
 IS_ASCII_BENCHMARK(50);

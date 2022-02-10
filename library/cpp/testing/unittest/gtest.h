@@ -78,7 +78,7 @@ namespace testing {
 
 #define EXPECT_EQ(A, B) UNIT_ASSERT_VALUES_EQUAL(A, B)
 #define EXPECT_NE(A, B) UNIT_ASSERT_UNEQUAL(A, B)
-#define EXPECT_LE(A, B) UNIT_ASSERT((A) <= (B)) 
+#define EXPECT_LE(A, B) UNIT_ASSERT((A) <= (B))
 #define EXPECT_LT(A, B) UNIT_ASSERT((A) < (B))
 #define EXPECT_GE(A, B) UNIT_ASSERT((A) >= (B))
 #define EXPECT_GT(A, B) UNIT_ASSERT((A) > (B))

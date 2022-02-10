@@ -13,7 +13,7 @@
 static inline void* MallocAligned(size_t size, size_t alignment) {
     void** ptr = (void**)malloc(size + alignment + sizeof(size_t*));
     if (!ptr) {
-        return nullptr; 
+        return nullptr;
     }
 
     size_t mask = ~(alignment - 1);

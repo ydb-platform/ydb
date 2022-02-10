@@ -30,7 +30,7 @@ namespace {
             Session->Shutdown();
         }
 
-        void OnReply(TAutoPtr<TBusMessage> mess, TAutoPtr<TBusMessage> reply) override { 
+        void OnReply(TAutoPtr<TBusMessage> mess, TAutoPtr<TBusMessage> reply) override {
             Y_VERIFY(AtomicGet(SentCompleted), "must be completed");
 
             TExampleClient::OnReply(mess, reply);
@@ -38,7 +38,7 @@ namespace {
             ReplyReceived.Signal();
         }
 
-        void OnMessageSent(TBusMessage*) override { 
+        void OnMessageSent(TBusMessage*) override {
             Sleep(TDuration::MilliSeconds(100));
             AtomicSet(SentCompleted, 1);
         }
@@ -259,13 +259,13 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         {
         }
 
-        ~TSendTimeoutCheckerExampleClient() override { 
+        ~TSendTimeoutCheckerExampleClient() override {
             Session->Shutdown();
         }
 
         TSystemEvent ErrorHappened;
 
-        void OnError(TAutoPtr<TBusMessage>, EMessageStatus status) override { 
+        void OnError(TAutoPtr<TBusMessage>, EMessageStatus status) override {
             Y_VERIFY(status == MESSAGE_CONNECT_FAILED || status == MESSAGE_TIMEOUT, "got status: %s", ToString(status).data());
             ErrorHappened.Signal();
         }
@@ -326,7 +326,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             }
         }
 
-        void OnMessage(TOnMessageContext& mess) override { 
+        void OnMessage(TOnMessageContext& mess) override {
             Y_VERIFY(mess.IsConnectionAlive(), "connection should be alive here");
             TAutoPtr<TOnMessageContext> delayedMsg(new TOnMessageContext);
             delayedMsg->Swap(mess);
@@ -376,7 +376,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             return DelayedMessages.size();
         }
 
-        void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override { 
+        void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
             Y_UNUSED(mess);
             Y_VERIFY(status == MESSAGE_SHUTDOWN, "only shutdown allowed, got %s", ToString(status).data());
         }
@@ -418,7 +418,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             Session = TBusServerSession::Create(&Proto, this, sessionConfig, Bus);
         }
 
-        void OnMessage(TOnMessageContext& mess) override { 
+        void OnMessage(TOnMessageContext& mess) override {
             TBusIdentity ident;
             mess.AckMessage(ident);
 
@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             mess.GetSession()->SendReply(resurrected, new TExampleResponse(&Proto.ResponseCount));
         }
 
-        void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override { 
+        void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
             Y_UNUSED(mess);
             Y_VERIFY(status == MESSAGE_SHUTDOWN, "only shutdown allowed");
         }
@@ -488,7 +488,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             Session->Shutdown();
         }
 
-        void OnMessage(TOnMessageContext& mess) override { 
+        void OnMessage(TOnMessageContext& mess) override {
             TAutoPtr<TBusMessage> response;
 
             if (TestSync.Get() == 0) {
@@ -502,7 +502,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             mess.SendReplyMove(response);
         }
 
-        void OnError(TAutoPtr<TBusMessage>, EMessageStatus status) override { 
+        void OnError(TAutoPtr<TBusMessage>, EMessageStatus status) override {
             TestSync.WaitForAndIncrement(1);
 
             Y_VERIFY(status == MESSAGE_MESSAGE_TOO_LARGE, "status");
@@ -548,7 +548,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             Session->Shutdown();
         }
 
-        void OnMessage(TOnMessageContext& req) override { 
+        void OnMessage(TOnMessageContext& req) override {
             unsigned n = TestSync.Get();
             if (n < 2) {
                 TestSync.CheckAndIncrement(n);
@@ -695,7 +695,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             Session->Shutdown();
         }
 
-        void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override { 
+        void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
             TestSync.WaitForAndIncrement(0);
             Y_VERIFY(status == MESSAGE_CONNECT_FAILED || status == MESSAGE_TIMEOUT, "must be connection failed, got %s", ToString(status).data());
             mess.Destroy();
@@ -723,7 +723,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             Session->Shutdown();
         }
 
-        void OnError(TAutoPtr<TBusMessage> message, EMessageStatus status) override { 
+        void OnError(TAutoPtr<TBusMessage> message, EMessageStatus status) override {
             TestSync.CheckAndIncrement(0);
 
             Y_VERIFY(status == MESSAGE_CONNECT_FAILED, "must be MESSAGE_CONNECT_FAILED, got %s", ToString(status).data());
@@ -777,7 +777,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             Session->Shutdown();
         }
 
-        void OnMessageSentOneWay(TAutoPtr<TBusMessage> sent) override { 
+        void OnMessageSentOneWay(TAutoPtr<TBusMessage> sent) override {
             TestSync.WaitForAndIncrement(0);
             sent->Reset();
             TestSync.CheckAndIncrement(1);
@@ -889,7 +889,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             Session->Shutdown();
         }
 
-        void OnClientConnectionEvent(const TClientConnectionEvent& event) override { 
+        void OnClientConnectionEvent(const TClientConnectionEvent& event) override {
             if (Sync.Get() > 2) {
                 // Test OnClientConnectionEvent_Disconnect is broken.
                 // Sometimes reconnect happens during server shutdown
@@ -905,11 +905,11 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             }
         }
 
-        void OnError(TAutoPtr<TBusMessage>, EMessageStatus) override { 
+        void OnError(TAutoPtr<TBusMessage>, EMessageStatus) override {
             // We do not check for message errors in this test.
         }
 
-        void OnMessageSentOneWay(TAutoPtr<TBusMessage>) override { 
+        void OnMessageSentOneWay(TAutoPtr<TBusMessage>) override {
         }
     };
 
@@ -923,7 +923,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             Session->Shutdown();
         }
 
-        void OnError(TAutoPtr<TBusMessage>, EMessageStatus) override { 
+        void OnError(TAutoPtr<TBusMessage>, EMessageStatus) override {
             // We do not check for server message errors in this test.
         }
     };
@@ -988,7 +988,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             Session->Shutdown();
         }
 
-        void OnMessage(TOnMessageContext& req) override { 
+        void OnMessage(TOnMessageContext& req) override {
             if (!GoOn.Wait(0)) {
                 TGuard<TMutex> guard(OneLock);
 

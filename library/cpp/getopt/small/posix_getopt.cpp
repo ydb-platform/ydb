@@ -17,7 +17,7 @@ namespace NLastGetopt {
     int getopt_long_impl(int argc, char* const* argv, const char* optstring,
                          const struct option* longopts, int* longindex, bool long_only) {
         if (!Opts || optreset == 1) {
-            optarg = nullptr; 
+            optarg = nullptr;
             optind = 1;
             opterr = 1;
             optreset = 0;
@@ -25,7 +25,7 @@ namespace NLastGetopt {
 
             Opts->AllowSingleDashForLong_ = long_only;
 
-            for (const struct option* o = longopts; o != nullptr && o->name != nullptr; ++o) { 
+            for (const struct option* o = longopts; o != nullptr && o->name != nullptr; ++o) {
                 TOpt* opt;
                 if ((unsigned)o->val < 0x80 && isalnum(o->val)) {
                     opt = &Opts->CharOption(char(o->val));
@@ -41,7 +41,7 @@ namespace NLastGetopt {
             OptsParser.Reset(new TOptsParser(&*Opts, argc, (const char**)argv));
         }
 
-        optarg = nullptr; 
+        optarg = nullptr;
 
         try {
             if (!OptsParser->Next()) {
@@ -71,7 +71,7 @@ namespace NLastGetopt {
     // XXX: leading colon is not supported
     // XXX: updating optind by client is not supported
     int getopt(int argc, char* const* argv, const char* optstring) {
-        return getopt_long(argc, argv, optstring, nullptr, nullptr); 
+        return getopt_long(argc, argv, optstring, nullptr, nullptr);
     }
 
 }

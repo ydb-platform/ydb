@@ -241,12 +241,12 @@ TRegExMatch::TRegExMatch(const TString& re, int cflags)
 }
 
 bool TRegExMatch::Match(const char* str) const {
-    return Exec(str, nullptr, 0, 0) == 0; 
+    return Exec(str, nullptr, 0, 0) == 0;
 }
 
 TRegExSubst::TRegExSubst(const char* re, int cflags)
     : TRegExBase(re, cflags)
-    , Replacement(nullptr) 
+    , Replacement(nullptr)
 {
     memset(Brfs, 0, sizeof(TBackReferences) * NMATCHES);
 }
@@ -285,8 +285,8 @@ int TRegExSubst::ParseReplacement(const char* repl) {
     if (!Replacement || *Replacement == 0)
         return 0;
     char* pos = (char*)Replacement;
-    char* pos1 = nullptr; 
-    char* pos2 = nullptr; 
+    char* pos1 = nullptr;
+    char* pos2 = nullptr;
     int i = 0;
     while (pos && *pos && i < NMATCHES) {
         pos1 = strchr(pos, '$');
@@ -306,7 +306,7 @@ int TRegExSubst::ParseReplacement(const char* repl) {
             }
         }
         Brfs[i].Beg = int(pos - (char*)Replacement);
-        Brfs[i].End = (pos1 == nullptr ? (int)strlen(Replacement) : int(pos1 - Replacement)); 
+        Brfs[i].End = (pos1 == nullptr ? (int)strlen(Replacement) : int(pos1 - Replacement));
         pos = pos2;
         i++;
     }

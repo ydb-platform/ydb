@@ -52,7 +52,7 @@ private:
 };
 
 const TMimeTypes::TRecord TMimeTypes::Records[] = {
-    {MIME_UNKNOWN, nullptr, nullptr}, 
+    {MIME_UNKNOWN, nullptr, nullptr},
     {MIME_TEXT, "text/plain\0", "asc\0txt\0"},
     {MIME_HTML, "text/html\0", "html\0htm\0shtml\0"},
     {MIME_PDF, "application/pdf\0", "pdf\0"},
@@ -72,10 +72,10 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_ODT, "application/vnd.oasis.opendocument.text\0", "odt\0"},
     {MIME_ODP, "application/vnd.oasis.opendocument.presentation\0", "odp\0"},
     {MIME_ODS, "application/vnd.oasis.opendocument.spreadsheet\0", "ods\0"},
-    {MIME_UNKNOWN, nullptr, nullptr}, 
+    {MIME_UNKNOWN, nullptr, nullptr},
     {MIME_IMAGE_BMP, "image/bmp\0image/x-ms-bmp\0image/x-windows-bmp\0", "bmp\0"},
     {MIME_WAV, "audio/x-wav\0", "wav\0"},
-    {MIME_ARCHIVE, "application/x-archive\0", nullptr}, 
+    {MIME_ARCHIVE, "application/x-archive\0", nullptr},
     {MIME_EXE, "application/exe\0application/octet-stream\0application/x-dosexec\0application/x-msdownload\0", "exe\0"},
     {MIME_ODG, "application/vnd.oasis.opendocument.graphics\0", "odg\0"},
     {MIME_GZIP, "application/x-gzip\0", "gz\0gzip\0"},
@@ -99,7 +99,7 @@ const TMimeTypes::TRecord TMimeTypes::Records[] = {
     {MIME_WOFF2, "font/woff2\0", "woff2\0"},
     {MIME_TTF, "font/ttf\0", "ttf\0"},
     {MIME_WEBMANIFEST, "application/manifest+json\0", "webmanifest\0"},
-    {MIME_MAX, nullptr, nullptr}, 
+    {MIME_MAX, nullptr, nullptr},
 
     // Additional records
     {MIME_HTML, "application/xhtml+xml\0", "xhtml\0"},
@@ -142,7 +142,7 @@ void TMimeTypes::SetExt() {
 const char* TMimeTypes::StrByExt(const char* ext) const {
     TRecordHash::const_iterator it = Ext.find(ext);
     if (it == Ext.end())
-        return nullptr; 
+        return nullptr;
     return Records[it->second].ContentType;
 }
 
@@ -166,9 +166,9 @@ const char* TMimeTypes::StrByMime(MimeTypes mime) const {
 
 const char* mimetypeByExt(const char* fname, const char* check_ext) {
     const char* ext_p;
-    if (fname == nullptr || *fname == 0 || 
-        (ext_p = strrchr(fname, '.')) == nullptr || strlen(ext_p) - 1 > TMimeTypes::MAX_EXT_LEN) { 
-        return nullptr; 
+    if (fname == nullptr || *fname == 0 ||
+        (ext_p = strrchr(fname, '.')) == nullptr || strlen(ext_p) - 1 > TMimeTypes::MAX_EXT_LEN) {
+        return nullptr;
     }
 
     char ext[TMimeTypes::MAX_EXT_LEN + 1];
@@ -178,11 +178,11 @@ const char* mimetypeByExt(const char* fname, const char* check_ext) {
         ext[i] = (char)tolower(ext_p[i]);
     ext[i] = 0;
 
-    if (check_ext != nullptr) { 
+    if (check_ext != nullptr) {
         if (strcmp(ext, check_ext) == 0)
             return check_ext;
         else
-            return nullptr; 
+            return nullptr;
     }
 
     return Singleton<TMimeTypes>()->StrByExt(ext);
@@ -198,7 +198,7 @@ MimeTypes mimeByStr(const TStringBuf& mimeStr) {
 
 const char* strByMime(MimeTypes mime) {
     if (mime < 0 || mime > MIME_MAX)
-        return nullptr; // index may contain documents with invalid MIME (ex. 255) 
+        return nullptr; // index may contain documents with invalid MIME (ex. 255)
     return Singleton<TMimeTypes>()->StrByMime(mime);
 }
 

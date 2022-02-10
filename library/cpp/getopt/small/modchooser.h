@@ -20,14 +20,14 @@ using TMainFunctionRawPtr = int (*)(const int argc, const char** argv);
 class TMainClassV {
 public:
     virtual int operator()(const TVector<TString>& argv) = 0;
-    virtual ~TMainClassV() = default; 
+    virtual ~TMainClassV() = default;
 };
 
 //! Mode class with classic argc and argv arguments.
 class TMainClass {
 public:
     virtual int operator()(int argc, const char** argv) = 0;
-    virtual ~TMainClass() = default; 
+    virtual ~TMainClass() = default;
 };
 
 //! Function to handle '--version' parameter
@@ -111,7 +111,7 @@ public:
         TVector<TString> Aliases;
 
         TMode()
-            : Main(nullptr) 
+            : Main(nullptr)
         {
         }
 

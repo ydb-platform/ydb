@@ -15,11 +15,11 @@ namespace NCalculator {
             ServerSession = TBusServerSession::Create(&Proto, this, config, MessageQueue);
         }
 
-        ~TCalculatorServer() override { 
+        ~TCalculatorServer() override {
             MessageQueue->Stop();
         }
 
-        void OnMessage(TOnMessageContext& request) override { 
+        void OnMessage(TOnMessageContext& request) override {
             if (request.GetMessage()->GetHeader()->Type == TRequestSum::MessageType) {
                 TRequestSum* requestSum = VerifyDynamicCast<TRequestSum*>(request.GetMessage());
                 int a = requestSum->Record.GetA();

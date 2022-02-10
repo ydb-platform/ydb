@@ -92,9 +92,9 @@ static const char base64_bkw[] = {
 
 static_assert(Y_ARRAY_SIZE(base64_bkw) == 256, "wrong size");
 
-// Base64 for url encoding, RFC3548 
+// Base64 for url encoding, RFC3548
 static const char base64_etab_url[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
- 
+
 static inline unsigned char GetBase64EncodedIndex0(unsigned char octet0) {
     return (octet0 >> 2);
 }
@@ -115,7 +115,7 @@ template <bool urlVersion>
 static inline char* Base64EncodeImpl(char* outstr, const unsigned char* instr, size_t len) {
     const char* const base64_etab = (urlVersion ? base64_etab_url : base64_etab_std);
     const char pad = (urlVersion ? ',' : '=');
- 
+
     size_t idx = 0;
 
     while (idx + 2 < len) {
@@ -140,15 +140,15 @@ static inline char* Base64EncodeImpl(char* outstr, const unsigned char* instr, s
 
     return outstr;
 }
- 
+
 static char* Base64EncodePlain(char* outstr, const unsigned char* instr, size_t len) {
     return Base64EncodeImpl<false>(outstr, instr, len);
-} 
- 
+}
+
 char* Base64EncodeUrl(char* outstr, const unsigned char* instr, size_t len) {
     return Base64EncodeImpl<true>(outstr, instr, len);
-} 
- 
+}
+
 inline void uudecode_1(char* dst, unsigned char* src) {
     dst[0] = char((base64_bkw[src[0]] << 2) | (base64_bkw[src[1]] >> 4));
     dst[1] = char((base64_bkw[src[1]] << 4) | (base64_bkw[src[2]] >> 2));

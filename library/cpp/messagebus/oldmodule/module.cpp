@@ -848,7 +848,7 @@ EMessageStatus TBusModule::StartJob(TAutoPtr<TBusMessage> message) {
 }
 
 void TModuleServerHandler::OnMessage(TOnMessageContext& msg) {
-    Module->OnMessageReceived(nullptr, msg); 
+    Module->OnMessageReceived(nullptr, msg);
 }
 
 void TModuleClientHandler::OnReply(TAutoPtr<TBusMessage> req, TAutoPtr<TBusMessage> resp) {
@@ -863,7 +863,7 @@ void TModuleClientHandler::OnMessageSentOneWay(TAutoPtr<TBusMessage> req) {
     TJobRunner* job = GetJob(req.Get());
     Y_ASSERT(job);
     Y_ASSERT(job->Job->Message != req.Get());
-    job->EnqueueAndSchedule(TJobResponseMessage(req.Release(), nullptr, MESSAGE_OK)); 
+    job->EnqueueAndSchedule(TJobResponseMessage(req.Release(), nullptr, MESSAGE_OK));
     job->UnRef();
 }
 
@@ -871,7 +871,7 @@ void TModuleClientHandler::OnError(TAutoPtr<TBusMessage> msg, EMessageStatus sta
     TJobRunner* job = GetJob(msg.Get());
     if (job) {
         Y_ASSERT(job->Job->Message != msg.Get());
-        job->EnqueueAndSchedule(TJobResponseMessage(msg.Release(), nullptr, status)); 
+        job->EnqueueAndSchedule(TJobResponseMessage(msg.Release(), nullptr, status));
         job->UnRef();
     }
 }

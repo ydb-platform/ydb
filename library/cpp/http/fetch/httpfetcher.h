@@ -72,7 +72,7 @@ public:
         }
 
         bool inheader = 1;
-        void *bufptr = nullptr, *buf = nullptr, *parsebuf = nullptr; 
+        void *bufptr = nullptr, *buf = nullptr, *parsebuf = nullptr;
         ssize_t got;
         size_t buffree = 0, bufsize = 0, buflen = 0;
         size_t maxsize = TCheck::GetMaxHeaderSize();
@@ -81,7 +81,7 @@ public:
                 if (buf) {
                     TAlloc::Shrink(buf, buflen - buffree);
                     if (TWriter::Write(buf, buflen - buffree) < 0) {
-                        buf = nullptr; 
+                        buf = nullptr;
                         ret = EIO;
                         break;
                     }

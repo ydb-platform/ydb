@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(Spawn) {
 
         unsigned I;
 
-        TContinueFunc Start() override { 
+        TContinueFunc Start() override {
             if (I < 4) {
                 I += 1;
                 return &TTestTask::Start;
@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(Spawn) {
             TestSync->CheckAndIncrement(1);
 
             Started.Signal();
-            return nullptr; 
+            return nullptr;
         }
     };
 
@@ -63,10 +63,10 @@ Y_UNIT_TEST_SUITE(Spawn) {
         {
         }
 
-        TContinueFunc Start() override { 
+        TContinueFunc Start() override {
             Sleep(TDuration::MilliSeconds(1));
             TestSync->CheckAndIncrement(1);
-            return nullptr; 
+            return nullptr;
         }
     };
 
@@ -82,7 +82,7 @@ Y_UNIT_TEST_SUITE(Spawn) {
 
         TSubtaskCompletion SubtaskCompletion;
 
-        TContinueFunc Start() override { 
+        TContinueFunc Start() override {
             TestSync->CheckAndIncrement(0);
             SpawnSubtask<TSubtask>(Env, &SubtaskCompletion, TestSync);
             return &TSpawnTask::Continue;
@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(Spawn) {
 
         TContinueFunc Continue() {
             TestSync->CheckAndIncrement(2);
-            return nullptr; 
+            return nullptr;
         }
     };
 
@@ -118,10 +118,10 @@ Y_UNIT_TEST_SUITE(Spawn) {
 
         std::array<TSubtaskCompletion, 3> Subtasks;
 
-        TContinueFunc Start() override { 
+        TContinueFunc Start() override {
             if (I == 1000) {
                 TestSync->CheckAndIncrement(0);
-                return nullptr; 
+                return nullptr;
             }
 
             for (auto& subtask : Subtasks) {

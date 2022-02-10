@@ -3,11 +3,11 @@
 #include <util/stream/mem.h>
 
 TBaseServerRequestData::TBaseServerRequestData(SOCKET s)
-    : Addr(nullptr) 
+    : Addr(nullptr)
     , Host()
     , Port()
-    , Path(nullptr) 
-    , Search(nullptr) 
+    , Path(nullptr)
+    , Search(nullptr)
     , SearchLength(0)
     , Socket(s)
     , BeginTime(MicroSeconds())
@@ -15,10 +15,10 @@ TBaseServerRequestData::TBaseServerRequestData(SOCKET s)
 }
 
 TBaseServerRequestData::TBaseServerRequestData(const char* qs, SOCKET s)
-    : Addr(nullptr) 
+    : Addr(nullptr)
     , Host()
     , Port()
-    , Path(nullptr) 
+    , Path(nullptr)
     , Search((char*)qs)
     , SearchLength(qs ? strlen(qs) : 0)
     , OrigSearch(Search, SearchLength)
@@ -68,7 +68,7 @@ const char* TBaseServerRequestData::HeaderIn(TStringBuf key) const {
     auto it = HeadersIn_.find(key);
 
     if (it == HeadersIn_.end()) {
-        return nullptr; 
+        return nullptr;
     }
 
     return it->second.data();
@@ -76,7 +76,7 @@ const char* TBaseServerRequestData::HeaderIn(TStringBuf key) const {
 
 TString TBaseServerRequestData::HeaderByIndex(size_t n) const noexcept {
     if (n >= HeadersCount()) {
-        return nullptr; 
+        return nullptr;
     }
 
     THttpHeadersContainer::const_iterator i = HeadersIn_.begin();
@@ -104,12 +104,12 @@ const char* TBaseServerRequestData::Environment(const char* key) const {
     } else if (stricmp(key, "SCRIPT_NAME") == 0) {
         return ScriptName();
     }
-    return nullptr; 
+    return nullptr;
 }
 
 void TBaseServerRequestData::Clear() {
     HeadersIn_.clear();
-    Addr = Path = Search = nullptr; 
+    Addr = Path = Search = nullptr;
     OrigSearch = {};
     SearchLength = 0;
     Host.clear();

@@ -15,9 +15,9 @@ namespace NBlockCodecs {
         ~TCodedOutput() override;
 
     private:
-        void DoWrite(const void* buf, size_t len) override; 
-        void DoFlush() override; 
-        void DoFinish() override; 
+        void DoWrite(const void* buf, size_t len) override;
+        void DoFlush() override;
+        void DoFinish() override;
 
         bool FlushImpl();
 
@@ -36,7 +36,7 @@ namespace NBlockCodecs {
         ~TDecodedInput() override;
 
     private:
-        size_t DoUnboundedNext(const void** ptr) override; 
+        size_t DoUnboundedNext(const void** ptr) override;
 
     private:
         TBuffer D_;

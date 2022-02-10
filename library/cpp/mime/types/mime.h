@@ -63,7 +63,7 @@ enum MimeTypes {
 
 extern const char* MimeNames[MIME_MAX];
 
-const char* mimetypeByExt(const char* fname, const char* check_ext = nullptr); 
+const char* mimetypeByExt(const char* fname, const char* check_ext = nullptr);
 MimeTypes mimeByStr(const char* mimeStr);
 MimeTypes mimeByStr(const TStringBuf& mimeStr);
 const char* strByMime(MimeTypes mime);

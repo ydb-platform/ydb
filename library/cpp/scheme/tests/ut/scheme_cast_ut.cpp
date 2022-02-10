@@ -97,13 +97,13 @@ Y_UNIT_TEST_SUITE(TSchemeCastTest) {
             , B(b)
         {
         }
-        NSc::TValue ToTValue() const override { 
+        NSc::TValue ToTValue() const override {
             NSc::TValue res;
             res["a"] = A;
             res["b"] = B;
             return res;
         }
-        void FromTValue(const NSc::TValue& v, const bool) override { 
+        void FromTValue(const NSc::TValue& v, const bool) override {
             A = v["a"].GetNumber();
             B = v["b"].GetNumber();
         }

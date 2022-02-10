@@ -294,7 +294,7 @@ public:
     }
 
     /// actual work is being done here
-    void OnReply(TAutoPtr<TBusMessage> mess, TAutoPtr<TBusMessage> reply) override { 
+    void OnReply(TAutoPtr<TBusMessage> mess, TAutoPtr<TBusMessage> reply) override {
         Y_UNUSED(mess);
 
         if (Config.SimpleProtocol) {
@@ -309,7 +309,7 @@ public:
     }
 
     /// message that could not be delivered
-    void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override { 
+    void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
         Y_UNUSED(mess);
         Y_UNUSED(status);
 
@@ -372,7 +372,7 @@ public:
     }
 
     /// when message comes, send reply
-    void OnMessage(TOnMessageContext& mess) override { 
+    void OnMessage(TOnMessageContext& mess) override {
         if (Config.SimpleProtocol) {
             TSimpleMessage* typed = VerifyDynamicCast<TSimpleMessage*>(mess.GetMessage());
             TAutoPtr<TSimpleMessage> response(new TSimpleMessage);
@@ -425,7 +425,7 @@ public:
     }
 
 private:
-    TJobHandler Start(TBusJob* job, TBusMessage* mess) override { 
+    TJobHandler Start(TBusJob* job, TBusMessage* mess) override {
         TPerftestRequest* typed = VerifyDynamicCast<TPerftestRequest*>(mess);
         CheckRequest(typed);
 
@@ -436,14 +436,14 @@ private:
 
         /// forget replies for few messages, see what happends
         if (TheConfig->Failure > RandomNumber<double>()) {
-            return nullptr; 
+            return nullptr;
         }
 
         job->SendReply(NewResponse(typed).Release());
-        return nullptr; 
+        return nullptr;
     }
 
-    TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override { 
+    TBusServerSessionPtr CreateExtSession(TBusMessageQueue& queue) override {
         return Session = CreateDefaultDestination(queue, Proto.Get(), Config.ServerSessionConfig);
     }
 };
@@ -459,7 +459,7 @@ static TNetworkAddress ParseNetworkAddress(const char* string) {
 
     const char* port = strchr(string, ':');
 
-    if (port != nullptr) { 
+    if (port != nullptr) {
         Name.append(string, port - string);
         Port = atoi(port + 1);
     } else {
@@ -591,8 +591,8 @@ int main(int argc, char* argv[]) {
     NLWTrace::StartLwtraceFromEnv();
 
     /* unix foo */
-    setvbuf(stdout, nullptr, _IONBF, 0); 
-    setvbuf(stderr, nullptr, _IONBF, 0); 
+    setvbuf(stdout, nullptr, _IONBF, 0);
+    setvbuf(stderr, nullptr, _IONBF, 0);
     Umask(0);
     SetAsyncSignalHandler(SIGINT, stopsignal);
     SetAsyncSignalHandler(SIGTERM, stopsignal);

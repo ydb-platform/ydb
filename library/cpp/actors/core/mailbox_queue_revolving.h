@@ -56,7 +56,7 @@ namespace NActors {
 
             T Head(bool pop) {
                 ui64 tag = Max<ui64>();
-                T ret = T{}; 
+                T ret = T{};
                 ui32 idx = 0;
 
                 for (ui32 i = 0; i < TWriteConcurrency; ++i)

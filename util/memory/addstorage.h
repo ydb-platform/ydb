@@ -27,9 +27,9 @@ class alignas(::NPrivate::TAdditionalStorageInfo) TAdditionalStorage {
     using TInfo = ::NPrivate::TAdditionalStorageInfo;
 
 public:
-    inline TAdditionalStorage() noexcept = default; 
+    inline TAdditionalStorage() noexcept = default;
 
-    inline ~TAdditionalStorage() = default; 
+    inline ~TAdditionalStorage() = default;
 
     inline void* operator new(size_t len1, size_t len2) {
         static_assert(alignof(T) >= alignof(TInfo));

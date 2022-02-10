@@ -76,11 +76,11 @@ private:
     const Ion* Ions_;
     bool GotError_;
 
-    void Init(int argc, char* argv[], const char* optString, const Ion* longOptions = nullptr, bool longOnly = false, bool isOpen = false); 
+    void Init(int argc, char* argv[], const char* optString, const Ion* longOptions = nullptr, bool longOnly = false, bool isOpen = false);
 
 public:
-    Opt(int argc, char* argv[], const char* optString, const Ion* longOptions = nullptr, bool longOnly = false, bool isOpen = false); 
-    Opt(int argc, const char* argv[], const char* optString, const Ion* longOptions = nullptr, bool longOnly = false, bool isOpen = false); 
+    Opt(int argc, char* argv[], const char* optString, const Ion* longOptions = nullptr, bool longOnly = false, bool isOpen = false);
+    Opt(int argc, const char* argv[], const char* optString, const Ion* longOptions = nullptr, bool longOnly = false, bool isOpen = false);
 
     // Get() means next
     int Get();

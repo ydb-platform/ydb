@@ -27,7 +27,7 @@ public:
      * We do not really need 'virtual' here
      * but for compiler happiness...
      */
-    virtual ~TImpl() = default; 
+    virtual ~TImpl() = default;
 
     inline void* Data() noexcept {
         return Data_;
@@ -87,7 +87,7 @@ namespace {
         {
         }
 
-        inline ~TAllocedBuf() override = default; 
+        inline ~TAllocedBuf() override = default;
 
     private:
         void Dispose() noexcept override {
@@ -105,7 +105,7 @@ namespace {
         {
         }
 
-        inline ~TPerThreadedBuf() override = default; 
+        inline ~TPerThreadedBuf() override = default;
 
     private:
         void Dispose() noexcept override;
@@ -194,14 +194,14 @@ TTempBuf::TTempBuf(size_t len)
 {
 }
 
-TTempBuf::TTempBuf(const TTempBuf&) noexcept = default; 
+TTempBuf::TTempBuf(const TTempBuf&) noexcept = default;
 
 TTempBuf::TTempBuf(TTempBuf&& b) noexcept
     : Impl_(std::move(b.Impl_))
 {
 }
 
-TTempBuf::~TTempBuf() = default; 
+TTempBuf::~TTempBuf() = default;
 
 TTempBuf& TTempBuf::operator=(const TTempBuf& b) noexcept {
     if (this != &b) {

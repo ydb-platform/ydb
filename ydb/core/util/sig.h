@@ -14,7 +14,7 @@ static inline void ThreadSigmask(int how) {
     SigAddSet(&Mask, SIGHUP);
     SigAddSet(&Mask, SIGURG);
 #endif
-    if (SigProcMask(how, &Mask, nullptr)) 
+    if (SigProcMask(how, &Mask, nullptr))
         ythrow yexception() << "Cannot change signal mask";
 }
 

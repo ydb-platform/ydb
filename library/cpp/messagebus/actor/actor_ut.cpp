@@ -59,7 +59,7 @@ struct TDecrementAndSendActor: public TTestActorBase<TDecrementAndSendActor>, pu
 
     TDecrementAndSendActor(TExecutor* executor)
         : TTestActorBase<TDecrementAndSendActor>(executor)
-        , Next(nullptr) 
+        , Next(nullptr)
     {
     }
 

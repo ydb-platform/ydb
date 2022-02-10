@@ -50,8 +50,8 @@ public:
     }
 
 protected:
-    size_t DoRead(void* buf, size_t len) override; 
-    size_t DoSkip(size_t len) override; 
+    size_t DoRead(void* buf, size_t len) override;
+    size_t DoSkip(size_t len) override;
     ui64 DoReadAll(IOutputStream& out) override;
     virtual size_t DoNext(const void** ptr, size_t len) = 0;
 };

@@ -25,7 +25,7 @@ namespace {
         {
         }
 
-        void Do() override { 
+        void Do() override {
             TIntrusivePtr<TBusSession> session = Session.Get();
             if (!!session) {
                 SessionImpl->Cron();
@@ -579,7 +579,7 @@ TRemoteConnectionPtr TBusSessionImpl::GetConnectionById(ui64 id) {
 
     THashMap<ui64, TRemoteConnectionPtr>::const_iterator it = ConnectionsById.find(id);
     if (it == ConnectionsById.end()) {
-        return nullptr; 
+        return nullptr;
     } else {
         return it->second;
     }
@@ -594,7 +594,7 @@ TAcceptorPtr TBusSessionImpl::GetAcceptorById(ui64 id) {
         }
     }
 
-    return nullptr; 
+    return nullptr;
 }
 
 void TBusSessionImpl::InvokeOnError(TNonDestroyingAutoPtr<TBusMessage> message, EMessageStatus status) {

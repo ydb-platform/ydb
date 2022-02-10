@@ -23,7 +23,7 @@ TBusBufferBase* TBusBufferProtocol::FindType(int type) {
             return Types[i];
         }
     }
-    return nullptr; 
+    return nullptr;
 }
 
 bool TBusBufferProtocol::IsRegisteredType(unsigned type) {
@@ -67,8 +67,8 @@ TAutoPtr<TBusMessage> TBusBufferProtocol::Deserialize(ui16 messageType, TArrayRe
     TWhatThreadDoesPushPop pp("deserialize protobuf message");
 
     TBusBufferBase* messageTemplate = FindType(messageType);
-    if (messageTemplate == nullptr) { 
-        return nullptr; 
+    if (messageTemplate == nullptr) {
+        return nullptr;
         //Y_FAIL("unknown message type: %d", unsigned(messageType));
     }
 
@@ -82,7 +82,7 @@ TAutoPtr<TBusMessage> TBusBufferProtocol::Deserialize(ui16 messageType, TArrayRe
 
     bool ok = bmess->GetRecord()->ParseFromCodedStream(&input) && input.ConsumedEntireMessage();
     if (!ok) {
-        return nullptr; 
+        return nullptr;
     }
     return bmess.Release();
 }

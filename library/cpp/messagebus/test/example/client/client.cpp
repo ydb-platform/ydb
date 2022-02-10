@@ -18,11 +18,11 @@ namespace NCalculator {
             ClientSession = TBusClientSession::Create(&Proto, this, config, MessageQueue);
         }
 
-        ~TCalculatorClient() override { 
+        ~TCalculatorClient() override {
             MessageQueue->Stop();
         }
 
-        void OnReply(TAutoPtr<TBusMessage> request, TAutoPtr<TBusMessage> response0) override { 
+        void OnReply(TAutoPtr<TBusMessage> request, TAutoPtr<TBusMessage> response0) override {
             Y_VERIFY(response0->GetHeader()->Type == TResponse::MessageType, "wrong response");
             TResponse* response = VerifyDynamicCast<TResponse*>(response0.Get());
             if (request->GetHeader()->Type == TRequestSum::MessageType) {
@@ -40,7 +40,7 @@ namespace NCalculator {
             }
         }
 
-        void OnError(TAutoPtr<TBusMessage>, EMessageStatus status) override { 
+        void OnError(TAutoPtr<TBusMessage>, EMessageStatus status) override {
             Cerr << "got error " << status << "\n";
         }
     };

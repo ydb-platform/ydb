@@ -24,7 +24,7 @@ static constexpr const T& Max(const T& a, const T& b, const Args&... args) {
     return Max(a, Max(b, args...));
 }
 
-// replace with http://en.cppreference.com/w/cpp/algorithm/clamp in c++17 
+// replace with http://en.cppreference.com/w/cpp/algorithm/clamp in c++17
 template <class T>
 constexpr const T& ClampVal(const T& val, const T& min, const T& max) {
     return val < min ? min : (max < val ? max : val);
@@ -44,7 +44,7 @@ static T Mean(const Args&... other) noexcept {
 
 template <class T>
 static inline void Zero(T& t) noexcept {
-    memset((void*)&t, 0, sizeof(t)); 
+    memset((void*)&t, 0, sizeof(t));
 }
 
 /**

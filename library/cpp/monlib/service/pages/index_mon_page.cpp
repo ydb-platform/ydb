@@ -100,7 +100,7 @@ IMonPage* TIndexMonPage::FindPage(const TString& relativePath) {
     Y_VERIFY(!relativePath.StartsWith('/'));
     TPagesByPath::iterator i = PagesByPath.find("/" + relativePath);
     if (i == PagesByPath.end()) {
-        return nullptr; 
+        return nullptr;
     } else {
         return i->second.Get();
     }

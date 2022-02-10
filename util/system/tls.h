@@ -180,18 +180,18 @@ namespace NTls {
     class TValue: public TMoveOnly {
         class TConstructor {
         public:
-            TConstructor() noexcept = default; 
+            TConstructor() noexcept = default;
 
-            virtual ~TConstructor() = default; 
+            virtual ~TConstructor() = default;
 
             virtual T* Construct(void* ptr) const = 0;
         };
 
         class TDefaultConstructor: public TConstructor {
         public:
-            ~TDefaultConstructor() override = default; 
+            ~TDefaultConstructor() override = default;
 
-            T* Construct(void* ptr) const override { 
+            T* Construct(void* ptr) const override {
                 //memset(ptr, 0, sizeof(T));
                 return ::new (ptr) T();
             }
@@ -205,9 +205,9 @@ namespace NTls {
             {
             }
 
-            ~TCopyConstructor() override = default; 
+            ~TCopyConstructor() override = default;
 
-            T* Construct(void* ptr) const override { 
+            T* Construct(void* ptr) const override {
                 return ::new (ptr) T(Value);
             }
 

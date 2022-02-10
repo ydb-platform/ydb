@@ -31,7 +31,7 @@ public:
         AtomicSet(CachedSize, RingBuffer.Size());
     }
 
-    bool TryPop(T* r, size_t* sizePtr = nullptr) { 
+    bool TryPop(T* r, size_t* sizePtr = nullptr) {
         if (AtomicGet(CachedSize) == 0) {
             return false;
         }

@@ -30,7 +30,7 @@ namespace NLastGetopt {
         {
         }
 
-        void HandleOpt(const TOptsParser* parser) override { 
+        void HandleOpt(const TOptsParser* parser) override {
             const TStringBuf curval(parser->CurValOrDef());
             if (curval.IsInited()) {
                 StringSplitter(curval).Split(ElementsDelim).Consume([&](const TStringBuf& val) {
@@ -68,7 +68,7 @@ namespace NLastGetopt {
         {
         }
 
-        void HandleOpt(const TOptsParser* parser) override { 
+        void HandleOpt(const TOptsParser* parser) override {
             const TStringBuf curval(parser->CurValOrDef());
             if (curval.IsInited()) {
                 StringSplitter(curval).Split(Delim).Consume([&](const TStringBuf& val) {

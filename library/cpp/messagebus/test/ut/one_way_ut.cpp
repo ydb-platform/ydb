@@ -79,7 +79,7 @@ struct NullClient : TBusClientHandlerError {
         }
     }
 
-    void OnMessageSentOneWay(TAutoPtr<TBusMessage>) override { 
+    void OnMessageSentOneWay(TAutoPtr<TBusMessage>) override {
     }
 };
 
@@ -111,7 +111,7 @@ public:
     }
 
     /// when message comes do not send reply, just acknowledge
-    void OnMessage(TOnMessageContext& mess) override { 
+    void OnMessage(TOnMessageContext& mess) override {
         TExampleRequest* fmess = static_cast<TExampleRequest*>(mess.GetMessage());
 
         Y_ASSERT(fmess->Data == "TADA");
@@ -123,7 +123,7 @@ public:
     }
 
     /// this handler should not be called because this server does not send replies
-    void OnSent(TAutoPtr<TBusMessage> mess) override { 
+    void OnSent(TAutoPtr<TBusMessage> mess) override {
         Y_UNUSED(mess);
         Y_FAIL("This server does not sent replies");
     }
@@ -161,11 +161,11 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
         {
         }
 
-        ~TMessageTooLargeClient() override { 
+        ~TMessageTooLargeClient() override {
             Session->Shutdown();
         }
 
-        void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override { 
+        void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
             Y_UNUSED(mess);
 
             Y_VERIFY(status == MESSAGE_MESSAGE_TOO_LARGE, "wrong status: %s", ToCString(status));
@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
     }
 
     struct TCheckTimeoutClient: public NullClient {
-        ~TCheckTimeoutClient() override { 
+        ~TCheckTimeoutClient() override {
             Session->Shutdown();
         }
 
@@ -208,7 +208,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
         TSystemEvent GotError;
 
         /// message that could not be delivered
-        void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override { 
+        void OnError(TAutoPtr<TBusMessage> mess, EMessageStatus status) override {
             Y_UNUSED(mess);
             Y_UNUSED(status); // TODO: check status
 

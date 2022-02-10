@@ -68,7 +68,7 @@ using TPathSplitTraitsLocal = TPathSplitTraitsWindows;
 template <class TTraits>
 class TPathSplitBase: public TTraits {
 public:
-    inline TPathSplitBase() = default; 
+    inline TPathSplitBase() = default;
 
     inline TPathSplitBase(const TStringBuf part) {
         this->ParseFirstPart(part);

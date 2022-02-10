@@ -16,9 +16,9 @@ public:
     ~TTeeOutput() override;
 
 private:
-    void DoWrite(const void* buf, size_t len) override; 
-    void DoFlush() override; 
-    void DoFinish() override; 
+    void DoWrite(const void* buf, size_t len) override;
+    void DoFlush() override;
+    void DoFinish() override;
 
 private:
     IOutputStream* L_;

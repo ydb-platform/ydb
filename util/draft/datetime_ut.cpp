@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TSimpleTMTest) {
 
         UNIT_ASSERT_VALUES_EQUAL((ui32)0, (ui32)TSimpleTM::New(0));
         UNIT_ASSERT((ui32)TSimpleTM::New(0).IsUTC());
-        time_t t = time(nullptr); 
+        time_t t = time(nullptr);
 
         {
             struct tm tmt;

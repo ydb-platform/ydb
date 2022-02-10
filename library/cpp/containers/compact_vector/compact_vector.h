@@ -39,12 +39,12 @@ public:
     typedef TConstIterator const_iterator;
 
     TCompactVector()
-        : Ptr(nullptr) 
+        : Ptr(nullptr)
     {
     }
 
     TCompactVector(const TThis& that)
-        : Ptr(nullptr) 
+        : Ptr(nullptr)
     {
         Reserve(that.Size());
         for (TConstIterator i = that.Begin(); i != that.End(); ++i) {
@@ -101,9 +101,9 @@ public:
 
     void Reserve(size_t newCapacity) {
         if (newCapacity <= Capacity()) {
-        } else if (Ptr == nullptr) { 
+        } else if (Ptr == nullptr) {
             void* mem = ::malloc(sizeof(THeader) + newCapacity * sizeof(T));
-            if (mem == nullptr) 
+            if (mem == nullptr)
                 ythrow yexception() << "out of memory";
             Ptr = (T*)(((THeader*)mem) + 1);
             Header()->Size = 0;

@@ -97,7 +97,7 @@ struct __yhashtable_iterator {
         return !cur;
     }
     Y_FORCE_INLINE explicit operator bool() const noexcept {
-        return cur != nullptr; 
+        return cur != nullptr;
     }
 };
 
@@ -144,7 +144,7 @@ struct __yhashtable_const_iterator {
         return !cur;
     }
     Y_FORCE_INLINE explicit operator bool() const noexcept {
-        return cur != nullptr; 
+        return cur != nullptr;
     }
 };
 
@@ -1242,9 +1242,9 @@ void THashTable<V, K, HF, Ex, Eq, A>::erase(iterator first, iterator last) {
     else if (f_bucket == l_bucket)
         erase_bucket(f_bucket, first.cur, last.cur);
     else {
-        erase_bucket(f_bucket, first.cur, nullptr); 
+        erase_bucket(f_bucket, first.cur, nullptr);
         for (size_type n = f_bucket + 1; n < l_bucket; ++n)
-            erase_bucket(n, nullptr); 
+            erase_bucket(n, nullptr);
         if (l_bucket != buckets.size()) /*y*/
             erase_bucket(l_bucket, last.cur);
     }
@@ -1322,7 +1322,7 @@ void THashTable<V, K, HF, Ex, Eq, A>::erase_bucket(const size_type n, node* firs
         while (next != last) { /*y; 3.1*/
             cur->next = next->next;
             delete_node(next);
-            next = ((uintptr_t)cur->next & 1) ? nullptr : cur->next; /*y*/ 
+            next = ((uintptr_t)cur->next & 1) ? nullptr : cur->next; /*y*/
             --num_elements;
         }
     }
@@ -1334,7 +1334,7 @@ void THashTable<V, K, HF, Ex, Eq, A>::erase_bucket(const size_type n, node* last
     while (cur != last) {
         node* next = cur->next;
         delete_node(cur);
-        cur = ((uintptr_t)next & 1) ? nullptr : next; /*y*/ 
+        cur = ((uintptr_t)next & 1) ? nullptr : next; /*y*/
         buckets[n] = cur;
         --num_elements;
     }

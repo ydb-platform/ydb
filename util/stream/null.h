@@ -17,9 +17,9 @@ public:
     ~TNullInput() override;
 
 private:
-    size_t DoRead(void* buf, size_t len) override; 
-    size_t DoSkip(size_t len) override; 
-    size_t DoNext(const void** ptr, size_t len) override; 
+    size_t DoRead(void* buf, size_t len) override;
+    size_t DoSkip(size_t len) override;
+    size_t DoNext(const void** ptr, size_t len) override;
 };
 
 /**
@@ -34,7 +34,7 @@ public:
     TNullOutput& operator=(TNullOutput&&) noexcept = default;
 
 private:
-    void DoWrite(const void* buf, size_t len) override; 
+    void DoWrite(const void* buf, size_t len) override;
 };
 
 /**

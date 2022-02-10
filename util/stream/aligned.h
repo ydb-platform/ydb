@@ -42,8 +42,8 @@ public:
     }
 
 private:
-    size_t DoRead(void* ptr, size_t len) override; 
-    size_t DoSkip(size_t len) override; 
+    size_t DoRead(void* ptr, size_t len) override;
+    size_t DoSkip(size_t len) override;
     size_t DoReadTo(TString& st, char ch) override;
     ui64 DoReadAll(IOutputStream& out) override;
 
@@ -89,7 +89,7 @@ public:
     }
 
 private:
-    void DoWrite(const void* ptr, size_t len) override; 
+    void DoWrite(const void* ptr, size_t len) override;
 
 private:
     IOutputStream* Stream_;

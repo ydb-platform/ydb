@@ -20,7 +20,7 @@ Y_UNIT_TEST_SUITE(Sleep) {
 
         TSubtaskCompletion Sleep;
 
-        TContinueFunc Start() override { 
+        TContinueFunc Start() override {
             Env->SleepService.Sleep(&Sleep, TDuration::MilliSeconds(1));
 
             TestSync->CheckAndIncrement(0);
@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(Sleep) {
 
         TContinueFunc Continue() {
             TestSync->CheckAndIncrement(1);
-            return nullptr; 
+            return nullptr;
         }
     };
 

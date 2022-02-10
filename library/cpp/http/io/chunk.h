@@ -19,8 +19,8 @@ public:
     ~TChunkedInput() override;
 
 private:
-    size_t DoRead(void* buf, size_t len) override; 
-    size_t DoSkip(size_t len) override; 
+    size_t DoRead(void* buf, size_t len) override;
+    size_t DoSkip(size_t len) override;
 
 private:
     class TImpl;
@@ -36,9 +36,9 @@ public:
     ~TChunkedOutput() override;
 
 private:
-    void DoWrite(const void* buf, size_t len) override; 
-    void DoFlush() override; 
-    void DoFinish() override; 
+    void DoWrite(const void* buf, size_t len) override;
+    void DoFlush() override;
+    void DoFinish() override;
 
 private:
     class TImpl;

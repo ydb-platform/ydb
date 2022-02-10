@@ -65,7 +65,7 @@ public:
     ~TZLibDecompress() override;
 
 protected:
-    size_t DoRead(void* buf, size_t size) override; 
+    size_t DoRead(void* buf, size_t size) override;
 
 public:
     class TImpl;
@@ -138,9 +138,9 @@ public:
 private:
     void Init(const TParams& opts);
 
-    void DoWrite(const void* buf, size_t size) override; 
-    void DoFlush() override; 
-    void DoFinish() override; 
+    void DoWrite(const void* buf, size_t size) override;
+    void DoFlush() override;
+    void DoFinish() override;
 
 public:
     class TImpl;

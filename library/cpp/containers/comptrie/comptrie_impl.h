@@ -172,7 +172,7 @@ namespace NCompactTrie {
         }
 
         // if we got here, we're past the dataend - bail out ASAP
-        datapos = nullptr; 
+        datapos = nullptr;
         return 0;
     }
 

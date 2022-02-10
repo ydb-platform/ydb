@@ -61,7 +61,7 @@ public:
 
     void* getData(size_t pos = 0) const {
         Y_ASSERT(!Map_ || (pos <= getSize()));
-        return (Map_ ? (void*)((unsigned char*)Map_->Ptr() + pos) : nullptr); 
+        return (Map_ ? (void*)((unsigned char*)Map_->Ptr() + pos) : nullptr);
     }
 
     void precharge(size_t pos = 0, size_t size = (size_t)-1) const;

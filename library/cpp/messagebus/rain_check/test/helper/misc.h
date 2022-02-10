@@ -9,8 +9,8 @@ namespace NRainCheck {
         TNopSimpleTask(IEnv*, const void*) {
         }
 
-        TContinueFunc Start() override { 
-            return nullptr; 
+        TContinueFunc Start() override {
+            return nullptr;
         }
     };
 
@@ -34,7 +34,7 @@ namespace NRainCheck {
 
         std::array<TSubtaskCompletion, 2> Completion;
 
-        void Run() override; 
+        void Run() override;
     };
 
     struct TSpawnNopTasksSimpleTask: public ISimpleTask {
@@ -49,7 +49,7 @@ namespace NRainCheck {
 
         std::array<TSubtaskCompletion, 2> Completion;
 
-        TContinueFunc Start() override; 
+        TContinueFunc Start() override;
 
         TContinueFunc Join();
     };

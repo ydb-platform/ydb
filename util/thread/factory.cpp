@@ -16,7 +16,7 @@ namespace {
                 }
             }
 
-            void DoRun(IThreadAble* func) override { 
+            void DoRun(IThreadAble* func) override {
                 Thr_.Reset(new TThread(ThreadProc, func));
 
                 Thr_->Start();
@@ -45,7 +45,7 @@ namespace {
         inline TSystemThreadFactory() noexcept {
         }
 
-        IThread* DoCreate() override { 
+        IThread* DoCreate() override {
             return new TPoolThread;
         }
     };

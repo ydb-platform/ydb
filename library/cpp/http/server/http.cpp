@@ -142,7 +142,7 @@ public:
 
         }
 
-        return nullptr; 
+        return nullptr;
     }
 
     TAutoPtr<TClientRequest> CreateRequest(TAutoPtr<TClientConnection> c) {
@@ -215,7 +215,7 @@ public:
         TGuard<TMutex> g(StopMutex);
         if (ListenThread) {
             ListenThread->Join();
-            ListenThread.Reset(nullptr); 
+            ListenThread.Reset(nullptr);
         }
     }
 
@@ -225,7 +225,7 @@ public:
         TGuard<TMutex> g(StopMutex);
         if (ListenThread) {
             ListenThread->Join();
-            ListenThread.Reset(nullptr); 
+            ListenThread.Reset(nullptr);
         }
 
         while (ConnectionCount) {
@@ -249,7 +249,7 @@ public:
                 HttpConn_.Reset(parent->HttpConn_.Release());
             }
 
-            bool Reply(void*) override { 
+            bool Reply(void*) override {
                 if (!ProcessHeaders()) {
                     return true;
                 }
@@ -301,7 +301,7 @@ public:
         }
 
         void OnPollEvent(TInstant) override {
-            SOCKET s = ::accept(S_, nullptr, nullptr); 
+            SOCKET s = ::accept(S_, nullptr, nullptr);
 
             if (s == INVALID_SOCKET) {
                 ythrow yexception() << "accept: " << LastSystemErrorText();

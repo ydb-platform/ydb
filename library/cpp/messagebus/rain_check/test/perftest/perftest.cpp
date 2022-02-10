@@ -28,7 +28,7 @@ struct TCoroOuter: public ICoroTask {
     {
     }
 
-    void Run() override { 
+    void Run() override {
         for (;;) {
             TInstant start = TInstant::Now();
 
@@ -73,7 +73,7 @@ struct TSimpleOuter: public ISimpleTask {
     unsigned Current;
     unsigned I;
 
-    TContinueFunc Start() override { 
+    TContinueFunc Start() override {
         StartInstant = TInstant::Now();
         Count = 0;
         Current = 1000;
@@ -126,7 +126,7 @@ struct TReproduceCrashTask: public ISimpleTask {
 
     std::array<TSubtaskCompletion, SUBTASKS> Completion;
 
-    TContinueFunc Start() override { 
+    TContinueFunc Start() override {
         for (unsigned j = 0; j < 2; ++j) {
             //SpawnSubtask<TNopSimpleTask>(Env, &Completion[j]);
             SpawnSubtask<TSpawnNopTasksSimpleTask>(Env, &Completion[j], SUBTASKS);

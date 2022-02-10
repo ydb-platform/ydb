@@ -335,7 +335,7 @@ static char* AllocWithMMapLinuxImpl(uintptr_t sz, EMMapMode mode) {
     for (;;) {
         char* prevAllocPtr = *areaPtr;
         char* nextAllocPtr = prevAllocPtr + sz;
-        if (uintptr_t(nextAllocPtr - (char*)nullptr) >= areaFinish) { 
+        if (uintptr_t(nextAllocPtr - (char*)nullptr) >= areaFinish) {
             if (Y_UNLIKELY(wrapped)) {
                 NMalloc::AbortFromCorruptedAllocator("virtual memory is over fragmented");
             }
@@ -463,16 +463,16 @@ static void* LargeBlockAlloc(size_t _nSize, ELFAllocCounter counter) {
     int lbHash = pgCount % LB_BUF_HASH;
     for (int i = 0; i < LB_BUF_SIZE; ++i) {
         void* p = lbFreePtrs[lbHash][i];
-        if (p == nullptr) 
+        if (p == nullptr)
             continue;
-        if (DoCas(&lbFreePtrs[lbHash][i], (void*)nullptr, p) == p) { 
+        if (DoCas(&lbFreePtrs[lbHash][i], (void*)nullptr, p) == p) {
             size_t realPageCount = TLargeBlk::As(p)->Pages;
             if (realPageCount == pgCount) {
                 AtomicAdd(lbFreePageCount, -pgCount);
                 TLargeBlk::As(p)->Mark(ELarge::Alloc);
                 return p;
             } else {
-                if (DoCas(&lbFreePtrs[lbHash][i], p, (void*)nullptr) != (void*)nullptr) { 
+                if (DoCas(&lbFreePtrs[lbHash][i], p, (void*)nullptr) != (void*)nullptr) {
                     // block was freed while we were busy
                     AtomicAdd(lbFreePageCount, -realPageCount);
                     LargeBlockUnmap(p, realPageCount);
@@ -495,7 +495,7 @@ static void FreeAllLargeBlockMem() {
     for (auto& lbFreePtr : lbFreePtrs) {
         for (int i = 0; i < LB_BUF_SIZE; ++i) {
             void* p = lbFreePtr[i];
-            if (p == nullptr) 
+            if (p == nullptr)
                 continue;
             if (DoCas(&lbFreePtr[i], (void*)nullptr, p) == p) {
                 int pgCount = TLargeBlk::As(p)->Pages;
@@ -508,7 +508,7 @@ static void FreeAllLargeBlockMem() {
 #endif
 
 static void LargeBlockFree(void* p, ELFAllocCounter counter) {
-    if (p == nullptr) 
+    if (p == nullptr)
         return;
 #ifdef _MSC_VER
     VirtualFree((char*)p - 4096ll, 0, MEM_RELEASE);
@@ -523,8 +523,8 @@ static void LargeBlockFree(void* p, ELFAllocCounter counter) {
         FreeAllLargeBlockMem();
     int lbHash = pgCount % LB_BUF_HASH;
     for (int i = 0; i < LB_BUF_SIZE; ++i) {
-        if (lbFreePtrs[lbHash][i] == nullptr) { 
-            if (DoCas(&lbFreePtrs[lbHash][i], p, (void*)nullptr) == nullptr) { 
+        if (lbFreePtrs[lbHash][i] == nullptr) {
+            if (DoCas(&lbFreePtrs[lbHash][i], p, (void*)nullptr) == nullptr) {
                 AtomicAdd(lbFreePageCount, pgCount);
                 return;
             }
@@ -736,7 +736,7 @@ public:
     void* GetWholeList() {
         TNode* res;
         for (res = Head; res; res = Head) {
-            if (DoCas(&Head, (TNode*)nullptr, res) == res) 
+            if (DoCas(&Head, (TNode*)nullptr, res) == res)
                 break;
         }
         return res;
@@ -835,7 +835,7 @@ static bool DefragmentMem() {
                 } else {
                     // reset invalid pointers to 0
                     for (int i = dst; i < FL_GROUP_SIZE; ++i)
-                        g->Ptrs[i] = nullptr; 
+                        g->Ptrs[i] = nullptr;
                     ppPtr = &g->Next;
                 }
             }
@@ -872,12 +872,12 @@ static Y_FORCE_INLINE void* LFAllocFromCurrentChunk(int nSizeIdx, int blockSize,
         if (nextFree >= globalEndPtr) {
             if (nextFree > globalEndPtr)
                 break;
-            nextFree = nullptr; // it was last block in chunk 
+            nextFree = nullptr; // it was last block in chunk
         }
         if (DoCas(pFreeArray, nextFree, newBlock) == newBlock)
             return newBlock;
     }
-    return nullptr; 
+    return nullptr;
 }
 
 enum EDefrag {
@@ -927,7 +927,7 @@ static void* SlowLFAlloc(int nSizeIdx, int blockSize, EDefrag defrag) {
             AddFreeChunk(chunk);
         }
     }
-    return nullptr; 
+    return nullptr;
 }
 
 // allocate single block
@@ -991,7 +991,7 @@ static Y_FORCE_INLINE void PutBlocksToGlobalFreeList(ptrdiff_t nSizeIdx, char** 
         for (int i = 0; i < groupSize; ++i)
             g->Ptrs[i] = buf[startIdx + i];
         for (int i = groupSize; i < FL_GROUP_SIZE; ++i)
-            g->Ptrs[i] = nullptr; 
+            g->Ptrs[i] = nullptr;
 
         // add free group to the global list
         TLFAllocFreeList& fl = globalFreeLists[nSizeIdx];
@@ -1249,7 +1249,7 @@ static void FreeThreadCache(void*) {
     {
         TLFLockHolder ll(&LFLockThreadInfo);
         pToDelete = pThreadInfo;
-        if (pToDelete == nullptr) 
+        if (pToDelete == nullptr)
             return;
 
         // remove from the list
@@ -1260,7 +1260,7 @@ static void FreeThreadCache(void*) {
             }
         }
         IsStoppingThread = true;
-        pThreadInfo = nullptr; 
+        pThreadInfo = nullptr;
     }
 
     // free per thread buf
@@ -1272,7 +1272,7 @@ static void FreeThreadCache(void*) {
 
 static void AllocThreadInfo() {
 #ifndef _win_
-    if (DoCas(&ThreadCacheCleanerStarted, (void*)-2, (void*)nullptr) == (void*)nullptr) { 
+    if (DoCas(&ThreadCacheCleanerStarted, (void*)-2, (void*)nullptr) == (void*)nullptr) {
         pthread_key_create(&ThreadCacheCleaner, FreeThreadCache);
         ThreadCacheCleanerStarted = (void*)-1;
     }
@@ -1590,7 +1590,7 @@ static Y_FORCE_INLINE void LFFree(void* p) {
 
     uintptr_t chkOffset = ((char*)p - ALLOC_START) - 1ll;
     if (chkOffset >= N_MAX_WORKSET_SIZE) {
-        if (p == nullptr) 
+        if (p == nullptr)
             return;
 #if defined(LFALLOC_DBG)
         TrackDeallocation(p, N_SIZES);
@@ -1653,7 +1653,7 @@ static size_t LFGetSize(const void* p) {
 
     uintptr_t chkOffset = ((const char*)p - ALLOC_START);
     if (chkOffset >= N_MAX_WORKSET_SIZE) {
-        if (p == nullptr) 
+        if (p == nullptr)
             return 0;
         return TLargeBlk::As(p)->Pages * 4096ll;
     }

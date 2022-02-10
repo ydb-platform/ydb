@@ -1131,15 +1131,15 @@ extern std::string GenerateFBS(const Parser &parser,
 extern bool GenerateFBS(const Parser &parser, const std::string &path,
                         const std::string &file_name);
 
-// Generate a C++ header for reading with templated file iterator from 
-// the definitions in the Parser object. 
-// See idl_gen_cpp_yandex_maps_iter.cpp. 
-extern std::string GenerateCPPYandexMapsIter(const Parser &parser, 
-                               const std::string &include_guard_ident); 
-extern bool GenerateCPPYandexMapsIter(const Parser &parser, 
-                        const std::string &path, 
-                        const std::string &file_name); 
- 
+// Generate a C++ header for reading with templated file iterator from
+// the definitions in the Parser object.
+// See idl_gen_cpp_yandex_maps_iter.cpp.
+extern std::string GenerateCPPYandexMapsIter(const Parser &parser,
+                               const std::string &include_guard_ident);
+extern bool GenerateCPPYandexMapsIter(const Parser &parser,
+                        const std::string &path,
+                        const std::string &file_name);
+
 // Generate a make rule for the generated TypeScript code.
 // See idl_gen_ts.cpp.
 extern std::string TSMakeRule(const Parser &parser, const std::string &path,

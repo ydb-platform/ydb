@@ -12,15 +12,15 @@ OWNER(
 
 INCLUDE(${ARCADIA_ROOT}/contrib/restricted/boost/boost_common.inc)
 
-IF (DYNAMIC_BOOST) 
+IF (DYNAMIC_BOOST)
     CFLAGS(
         -DBOOST_FILESYSTEM_DYN_LINK=1
     )
-ELSE() 
+ELSE()
     CFLAGS(
         -DBOOST_FILESYSTEM_STATIC_LINK=1
     )
-ENDIF() 
+ENDIF()
 
 PEERDIR(
     ${BOOST_ROOT}/libs/system

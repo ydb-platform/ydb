@@ -41,28 +41,28 @@ PEERDIR(
 
 END()
 
-RECURSE( 
+RECURSE(
     asio
-    atomic 
-    chrono 
-    container 
-    context 
-    coroutine 
-    date_time 
-    exception 
-    filesystem 
-    iostreams 
-    locale 
-    log 
-    program_options 
-    random 
-    regex 
-    serialization 
-    system 
-    test 
-    thread 
-    timer 
-) 
+    atomic
+    chrono
+    container
+    context
+    coroutine
+    date_time
+    exception
+    filesystem
+    iostreams
+    locale
+    log
+    program_options
+    random
+    regex
+    serialization
+    system
+    test
+    thread
+    timer
+)
 
 IF (NOT OS_ANDROID)
     RECURSE(

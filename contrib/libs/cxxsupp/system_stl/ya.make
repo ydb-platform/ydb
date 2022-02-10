@@ -29,11 +29,11 @@ ELSE()
     # libatomic.a is needed in order to make atomic operations work
     LDFLAGS(-l:libatomic.a)
 
-    IF (STATIC_STL) 
+    IF (STATIC_STL)
         LDFLAGS(-l:libstdc++.a)
-    ELSE() 
+    ELSE()
         LDFLAGS(-lstdc++)
-    ENDIF() 
+    ENDIF()
 ENDIF()
 
 END()

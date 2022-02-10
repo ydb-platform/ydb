@@ -215,7 +215,7 @@ class KeyValueResponseProtobufMatcher(BaseMatcher):
 
 
 def is_response_with_status(status):
-    return ProtobufWithStatusMatcher(status)
+    return ProtobufWithStatusMatcher(status) 
 
 
 def is_ok_response():

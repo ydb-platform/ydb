@@ -293,9 +293,9 @@ RECURSE(
     re2
     regional-units/library
     regional-units/library/ut
-    rocksdb 
-    rocksdb/tools/ldb 
-    rocksdb/tools/sst_dump 
+    rocksdb
+    rocksdb/tools/ldb
+    rocksdb/tools/sst_dump
     sasl
     sctp
     sentencepiece

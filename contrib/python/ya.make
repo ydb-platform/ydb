@@ -132,7 +132,7 @@ RECURSE(
     cachetools
     catalogue
     cattrs
-    cbor2 
+    cbor2
     cchardet
     celery
     celery-mock
@@ -369,7 +369,7 @@ RECURSE(
     fbprophet
     feedparser
     ffmpeg-python
-    fido2 
+    fido2
     filelock
     fingerprints
     fire
@@ -562,7 +562,7 @@ RECURSE(
     jsonstreams
     juggler_sdk
     juggler_sdk/cli
-    junitparser 
+    junitparser
     jupyter_client
     jupyter_core
     jupyter-telemetry
@@ -1139,7 +1139,7 @@ RECURSE(
     watchgod
     wcwidth
     webargs
-    webauthn 
+    webauthn
     webcolors
     webencodings
     WebOb

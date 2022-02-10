@@ -31,8 +31,8 @@ namespace Model
    * <p>Specifies information about where to publish analysis or configuration
    * results for an Amazon S3 bucket and S3 Replication Time Control (S3
    * RTC).</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Destination">AWS API
-   * Reference</a></p>
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Destination">AWS API 
+   * Reference</a></p> 
    */
   class AWS_S3_API Destination
   {
@@ -45,49 +45,49 @@ namespace Model
 
 
     /**
-     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to
+     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to 
      * store the results.</p>
      */
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
     /**
-     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to
+     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to 
      * store the results.</p>
      */
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
-
-    /**
-     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
+ 
+    /** 
+     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to 
      * store the results.</p>
-     */
+     */ 
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
     /**
-     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to
+     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to 
      * store the results.</p>
      */
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
     /**
-     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to
+     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to 
      * store the results.</p>
      */
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
     /**
-     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to
+     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to 
      * store the results.</p>
      */
     inline Destination& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
     /**
-     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to
+     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to 
      * store the results.</p>
      */
     inline Destination& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
     /**
-     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to
+     * <p> The Amazon Resource Name (ARN) of the bucket where you want Amazon S3 to 
      * store the results.</p>
      */
     inline Destination& WithBucket(const char* value) { SetBucket(value); return *this;}
@@ -115,9 +115,9 @@ namespace Model
      * Additional Configuration: Changing the Replica Owner</a> in the <i>Amazon Simple
      * Storage Service Developer Guide</i>.</p>
      */
-    inline bool AccountHasBeenSet() const { return m_accountHasBeenSet; }
-
-    /**
+    inline bool AccountHasBeenSet() const { return m_accountHasBeenSet; } 
+ 
+    /** 
      * <p>Destination bucket owner account ID. In a cross-account scenario, if you
      * direct Amazon S3 to change replica ownership to the AWS account that owns the
      * destination bucket by specifying the <code>AccessControlTranslation</code>
@@ -126,7 +126,7 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-change-owner.html">Replication
      * Additional Configuration: Changing the Replica Owner</a> in the <i>Amazon Simple
      * Storage Service Developer Guide</i>.</p>
-     */
+     */ 
     inline void SetAccount(const Aws::String& value) { m_accountHasBeenSet = true; m_account = value; }
 
     /**
@@ -210,9 +210,9 @@ namespace Model
      * Bucket replication</a> action in the <i>Amazon Simple Storage Service API
      * Reference</i>.</p>
      */
-    inline bool StorageClassHasBeenSet() const { return m_storageClassHasBeenSet; }
-
-    /**
+    inline bool StorageClassHasBeenSet() const { return m_storageClassHasBeenSet; } 
+ 
+    /** 
      * <p> The storage class to use when replicating objects, such as S3 Standard or
      * reduced redundancy. By default, Amazon S3 uses the storage class of the source
      * object to create the object replica. </p> <p>For valid values, see the
@@ -220,7 +220,7 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTreplication.html">PUT
      * Bucket replication</a> action in the <i>Amazon Simple Storage Service API
      * Reference</i>.</p>
-     */
+     */ 
     inline void SetStorageClass(const StorageClass& value) { m_storageClassHasBeenSet = true; m_storageClass = value; }
 
     /**
@@ -273,15 +273,15 @@ namespace Model
      * replication configuration, the replicas are owned by same AWS account that owns
      * the source object.</p>
      */
-    inline bool AccessControlTranslationHasBeenSet() const { return m_accessControlTranslationHasBeenSet; }
-
-    /**
+    inline bool AccessControlTranslationHasBeenSet() const { return m_accessControlTranslationHasBeenSet; } 
+ 
+    /** 
      * <p>Specify this only in a cross-account scenario (where source and destination
      * bucket owners are not the same), and you want to change replica ownership to the
      * AWS account that owns the destination bucket. If this is not specified in the
-     * replication configuration, the replicas are owned by same AWS account that owns
+     * replication configuration, the replicas are owned by same AWS account that owns 
      * the source object.</p>
-     */
+     */ 
     inline void SetAccessControlTranslation(const AccessControlTranslation& value) { m_accessControlTranslationHasBeenSet = true; m_accessControlTranslation = value; }
 
     /**
@@ -313,43 +313,43 @@ namespace Model
 
 
     /**
-     * <p>A container that provides information about encryption. If
-     * <code>SourceSelectionCriteria</code> is specified, you must specify this
+     * <p>A container that provides information about encryption. If 
+     * <code>SourceSelectionCriteria</code> is specified, you must specify this 
      * element.</p>
      */
     inline const EncryptionConfiguration& GetEncryptionConfiguration() const{ return m_encryptionConfiguration; }
 
     /**
-     * <p>A container that provides information about encryption. If
-     * <code>SourceSelectionCriteria</code> is specified, you must specify this
+     * <p>A container that provides information about encryption. If 
+     * <code>SourceSelectionCriteria</code> is specified, you must specify this 
      * element.</p>
      */
-    inline bool EncryptionConfigurationHasBeenSet() const { return m_encryptionConfigurationHasBeenSet; }
-
-    /**
-     * <p>A container that provides information about encryption. If
-     * <code>SourceSelectionCriteria</code> is specified, you must specify this
+    inline bool EncryptionConfigurationHasBeenSet() const { return m_encryptionConfigurationHasBeenSet; } 
+ 
+    /** 
+     * <p>A container that provides information about encryption. If 
+     * <code>SourceSelectionCriteria</code> is specified, you must specify this 
      * element.</p>
-     */
+     */ 
     inline void SetEncryptionConfiguration(const EncryptionConfiguration& value) { m_encryptionConfigurationHasBeenSet = true; m_encryptionConfiguration = value; }
 
     /**
-     * <p>A container that provides information about encryption. If
-     * <code>SourceSelectionCriteria</code> is specified, you must specify this
+     * <p>A container that provides information about encryption. If 
+     * <code>SourceSelectionCriteria</code> is specified, you must specify this 
      * element.</p>
      */
     inline void SetEncryptionConfiguration(EncryptionConfiguration&& value) { m_encryptionConfigurationHasBeenSet = true; m_encryptionConfiguration = std::move(value); }
 
     /**
-     * <p>A container that provides information about encryption. If
-     * <code>SourceSelectionCriteria</code> is specified, you must specify this
+     * <p>A container that provides information about encryption. If 
+     * <code>SourceSelectionCriteria</code> is specified, you must specify this 
      * element.</p>
      */
     inline Destination& WithEncryptionConfiguration(const EncryptionConfiguration& value) { SetEncryptionConfiguration(value); return *this;}
 
     /**
-     * <p>A container that provides information about encryption. If
-     * <code>SourceSelectionCriteria</code> is specified, you must specify this
+     * <p>A container that provides information about encryption. If 
+     * <code>SourceSelectionCriteria</code> is specified, you must specify this 
      * element.</p>
      */
     inline Destination& WithEncryptionConfiguration(EncryptionConfiguration&& value) { SetEncryptionConfiguration(std::move(value)); return *this;}

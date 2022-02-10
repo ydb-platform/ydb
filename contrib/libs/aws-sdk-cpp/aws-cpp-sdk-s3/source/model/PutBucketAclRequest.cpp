@@ -45,7 +45,7 @@ Aws::String PutBucketAclRequest::SerializePayload() const
     return payloadDoc.ConvertToString();
   }
 
-  return {};
+  return {}; 
 }
 
 void PutBucketAclRequest::AddQueryStringParameters(URI& uri) const

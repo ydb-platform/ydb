@@ -201,7 +201,7 @@ std::streamsize SimpleStreamBuf::xsputn(const char* s, std::streamsize n)
     return writeCount;
 }
 
-Aws::String SimpleStreamBuf::str() const
+Aws::String SimpleStreamBuf::str() const 
 {
     return Aws::String(m_buffer, pptr());
 }
@@ -236,4 +236,4 @@ void SimpleStreamBuf::str(const Aws::String& value)
 
 }
 }
-}
+} 

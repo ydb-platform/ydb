@@ -23,12 +23,12 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>Contains information about where to publish the analytics
    * results.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AnalyticsS3BucketDestination">AWS
-   * API Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AnalyticsS3BucketDestination">AWS 
+   * API Reference</a></p> 
+   */ 
   class AWS_S3_API AnalyticsS3BucketDestination
   {
   public:
@@ -47,11 +47,11 @@ namespace Model
     /**
      * <p>Specifies the file format used when exporting data to Amazon S3.</p>
      */
-    inline bool FormatHasBeenSet() const { return m_formatHasBeenSet; }
-
-    /**
+    inline bool FormatHasBeenSet() const { return m_formatHasBeenSet; } 
+ 
+    /** 
      * <p>Specifies the file format used when exporting data to Amazon S3.</p>
-     */
+     */ 
     inline void SetFormat(const AnalyticsS3ExportFileFormat& value) { m_formatHasBeenSet = true; m_format = value; }
 
     /**
@@ -84,14 +84,14 @@ namespace Model
      * Although this value is optional, we strongly recommend that you set it to help
      * prevent problems if the destination bucket ownership changes. </p> 
      */
-    inline bool BucketAccountIdHasBeenSet() const { return m_bucketAccountIdHasBeenSet; }
-
-    /**
+    inline bool BucketAccountIdHasBeenSet() const { return m_bucketAccountIdHasBeenSet; } 
+ 
+    /** 
      * <p>The account ID that owns the destination S3 bucket. If no account ID is
      * provided, the owner is not validated before exporting data.</p>  <p>
      * Although this value is optional, we strongly recommend that you set it to help
      * prevent problems if the destination bucket ownership changes. </p> 
-     */
+     */ 
     inline void SetBucketAccountId(const Aws::String& value) { m_bucketAccountIdHasBeenSet = true; m_bucketAccountId = value; }
 
     /**
@@ -143,11 +143,11 @@ namespace Model
     /**
      * <p>The Amazon Resource Name (ARN) of the bucket to which data is exported.</p>
      */
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
-
-    /**
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
+ 
+    /** 
      * <p>The Amazon Resource Name (ARN) of the bucket to which data is exported.</p>
-     */
+     */ 
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
     /**
@@ -186,12 +186,12 @@ namespace Model
      * <p>The prefix to use when exporting data. The prefix is prepended to all
      * results.</p>
      */
-    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; }
-
-    /**
+    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; } 
+ 
+    /** 
      * <p>The prefix to use when exporting data. The prefix is prepended to all
      * results.</p>
-     */
+     */ 
     inline void SetPrefix(const Aws::String& value) { m_prefixHasBeenSet = true; m_prefix = value; }
 
     /**

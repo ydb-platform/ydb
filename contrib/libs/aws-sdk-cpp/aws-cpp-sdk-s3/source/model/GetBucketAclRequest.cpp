@@ -25,7 +25,7 @@ GetBucketAclRequest::GetBucketAclRequest() :
 
 Aws::String GetBucketAclRequest::SerializePayload() const
 {
-  return {};
+  return {}; 
 }
 
 void GetBucketAclRequest::AddQueryStringParameters(URI& uri) const

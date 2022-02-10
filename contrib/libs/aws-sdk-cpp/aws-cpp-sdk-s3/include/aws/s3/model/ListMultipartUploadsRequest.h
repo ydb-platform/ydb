@@ -42,7 +42,7 @@ namespace Model
     Aws::Http::HeaderValueCollection GetRequestSpecificHeaders() const override;
 
 
-    /**
+    /** 
      * <p>The name of the bucket to which the multipart upload was initiated. </p>
      * <p>When using this API with an access point, you must direct requests to the
      * access point hostname. The access point hostname takes the form
@@ -62,10 +62,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /**
+    /** 
      * <p>The name of the bucket to which the multipart upload was initiated. </p>
      * <p>When using this API with an access point, you must direct requests to the
      * access point hostname. The access point hostname takes the form
@@ -85,10 +85,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
-
-    /**
+     */ 
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
+ 
+    /** 
      * <p>The name of the bucket to which the multipart upload was initiated. </p>
      * <p>When using this API with an access point, you must direct requests to the
      * access point hostname. The access point hostname takes the form
@@ -108,10 +108,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
-    /**
+    /** 
      * <p>The name of the bucket to which the multipart upload was initiated. </p>
      * <p>When using this API with an access point, you must direct requests to the
      * access point hostname. The access point hostname takes the form
@@ -131,10 +131,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
-    /**
+    /** 
      * <p>The name of the bucket to which the multipart upload was initiated. </p>
      * <p>When using this API with an access point, you must direct requests to the
      * access point hostname. The access point hostname takes the form
@@ -154,10 +154,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
-    /**
+    /** 
      * <p>The name of the bucket to which the multipart upload was initiated. </p>
      * <p>When using this API with an access point, you must direct requests to the
      * access point hostname. The access point hostname takes the form
@@ -177,10 +177,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline ListMultipartUploadsRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /**
+    /** 
      * <p>The name of the bucket to which the multipart upload was initiated. </p>
      * <p>When using this API with an access point, you must direct requests to the
      * access point hostname. The access point hostname takes the form
@@ -200,10 +200,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline ListMultipartUploadsRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>The name of the bucket to which the multipart upload was initiated. </p>
      * <p>When using this API with an access point, you must direct requests to the
      * access point hostname. The access point hostname takes the form
@@ -223,7 +223,7 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline ListMultipartUploadsRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
@@ -247,9 +247,9 @@ namespace Model
      * <code>CommonPrefixes</code> result element are not returned elsewhere in the
      * response.</p>
      */
-    inline bool DelimiterHasBeenSet() const { return m_delimiterHasBeenSet; }
-
-    /**
+    inline bool DelimiterHasBeenSet() const { return m_delimiterHasBeenSet; } 
+ 
+    /** 
      * <p>Character you use to group keys.</p> <p>All keys that contain the same string
      * between the prefix, if specified, and the first occurrence of the delimiter
      * after the prefix are grouped under a single result element,
@@ -257,7 +257,7 @@ namespace Model
      * substring starts at the beginning of the key. The keys that are grouped under
      * <code>CommonPrefixes</code> result element are not returned elsewhere in the
      * response.</p>
-     */
+     */ 
     inline void SetDelimiter(const Aws::String& value) { m_delimiterHasBeenSet = true; m_delimiter = value; }
 
     /**
@@ -320,9 +320,9 @@ namespace Model
     inline const EncodingType& GetEncodingType() const{ return m_encodingType; }
 
     
-    inline bool EncodingTypeHasBeenSet() const { return m_encodingTypeHasBeenSet; }
-
-    
+    inline bool EncodingTypeHasBeenSet() const { return m_encodingTypeHasBeenSet; } 
+ 
+     
     inline void SetEncodingType(const EncodingType& value) { m_encodingTypeHasBeenSet = true; m_encodingType = value; }
 
     
@@ -357,10 +357,10 @@ namespace Model
      * multipart uploads have upload IDs lexicographically greater than the specified
      * <code>upload-id-marker</code>.</p>
      */
-    inline bool KeyMarkerHasBeenSet() const { return m_keyMarkerHasBeenSet; }
-
-    /**
-     * <p>Together with upload-id-marker, this parameter specifies the multipart upload
+    inline bool KeyMarkerHasBeenSet() const { return m_keyMarkerHasBeenSet; } 
+ 
+    /** 
+     * <p>Together with upload-id-marker, this parameter specifies the multipart upload 
      * after which listing should begin.</p> <p>If <code>upload-id-marker</code> is not
      * specified, only the keys lexicographically greater than the specified
      * <code>key-marker</code> will be included in the list.</p> <p>If
@@ -368,7 +368,7 @@ namespace Model
      * equal to the <code>key-marker</code> might also be included, provided those
      * multipart uploads have upload IDs lexicographically greater than the specified
      * <code>upload-id-marker</code>.</p>
-     */
+     */ 
     inline void SetKeyMarker(const Aws::String& value) { m_keyMarkerHasBeenSet = true; m_keyMarker = value; }
 
     /**
@@ -444,13 +444,13 @@ namespace Model
      * the response body. 1,000 is the maximum number of uploads that can be returned
      * in a response.</p>
      */
-    inline bool MaxUploadsHasBeenSet() const { return m_maxUploadsHasBeenSet; }
-
-    /**
-     * <p>Sets the maximum number of multipart uploads, from 1 to 1,000, to return in
-     * the response body. 1,000 is the maximum number of uploads that can be returned
-     * in a response.</p>
-     */
+    inline bool MaxUploadsHasBeenSet() const { return m_maxUploadsHasBeenSet; } 
+ 
+    /** 
+     * <p>Sets the maximum number of multipart uploads, from 1 to 1,000, to return in 
+     * the response body. 1,000 is the maximum number of uploads that can be returned 
+     * in a response.</p> 
+     */ 
     inline void SetMaxUploads(int value) { m_maxUploadsHasBeenSet = true; m_maxUploads = value; }
 
     /**
@@ -475,14 +475,14 @@ namespace Model
      * keys. (You can think of using prefix to make groups in the same way you'd use a
      * folder in a file system.)</p>
      */
-    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; }
-
-    /**
-     * <p>Lists in-progress uploads only for those keys that begin with the specified
+    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; } 
+ 
+    /** 
+     * <p>Lists in-progress uploads only for those keys that begin with the specified 
      * prefix. You can use prefixes to separate a bucket into different grouping of
      * keys. (You can think of using prefix to make groups in the same way you'd use a
      * folder in a file system.)</p>
-     */
+     */ 
     inline void SetPrefix(const Aws::String& value) { m_prefixHasBeenSet = true; m_prefix = value; }
 
     /**
@@ -542,15 +542,15 @@ namespace Model
      * might be included in the list only if they have an upload ID lexicographically
      * greater than the specified <code>upload-id-marker</code>.</p>
      */
-    inline bool UploadIdMarkerHasBeenSet() const { return m_uploadIdMarkerHasBeenSet; }
-
-    /**
-     * <p>Together with key-marker, specifies the multipart upload after which listing
-     * should begin. If key-marker is not specified, the upload-id-marker parameter is
+    inline bool UploadIdMarkerHasBeenSet() const { return m_uploadIdMarkerHasBeenSet; } 
+ 
+    /** 
+     * <p>Together with key-marker, specifies the multipart upload after which listing 
+     * should begin. If key-marker is not specified, the upload-id-marker parameter is 
      * ignored. Otherwise, any multipart uploads for a key equal to the key-marker
      * might be included in the list only if they have an upload ID lexicographically
      * greater than the specified <code>upload-id-marker</code>.</p>
-     */
+     */ 
     inline void SetUploadIdMarker(const Aws::String& value) { m_uploadIdMarkerHasBeenSet = true; m_uploadIdMarker = value; }
 
     /**
@@ -660,9 +660,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
-
-    
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
+ 
+     
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     

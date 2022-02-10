@@ -122,8 +122,8 @@ Aws::Utils::ByteBuffer Base64::Decode(const Aws::String& str) const
 
 size_t Base64::CalculateBase64DecodedLength(const Aws::String& b64input)
 {
-    const size_t len = b64input.length();
-    if(len < 2)
+    const size_t len = b64input.length(); 
+    if(len < 2) 
     {
         return 0;
     }

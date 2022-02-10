@@ -181,13 +181,13 @@ namespace Aws
                 return os.str();
             }
 
-            /**
-             * locale agnostic implementation of std::isalnum
-             */
-            static bool IsAlnum(char c)
-            {
-                return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
-            }
+            /** 
+             * locale agnostic implementation of std::isalnum 
+             */ 
+            static bool IsAlnum(char c) 
+            { 
+                return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'); 
+            } 
 
             /**
              * Convert an unsigned integer to its hex string in upper case.

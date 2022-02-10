@@ -25,8 +25,8 @@ namespace Model
 {
 
   /**
-   * <p>A container for replication rules. You can add up to 1,000 rules. The maximum
-   * size of a replication configuration is 2 MB.</p><p><h3>See Also:</h3>   <a
+   * <p>A container for replication rules. You can add up to 1,000 rules. The maximum 
+   * size of a replication configuration is 2 MB.</p><p><h3>See Also:</h3>   <a 
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/ReplicationConfiguration">AWS
    * API Reference</a></p>
    */
@@ -41,7 +41,7 @@ namespace Model
 
 
     /**
-     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management
+     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management 
      * (IAM) role that Amazon S3 assumes when replicating objects. For more
      * information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-how-setup.html">How
@@ -51,27 +51,27 @@ namespace Model
     inline const Aws::String& GetRole() const{ return m_role; }
 
     /**
-     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management
+     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management 
      * (IAM) role that Amazon S3 assumes when replicating objects. For more
      * information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-how-setup.html">How
      * to Set Up Replication</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
      */
-    inline bool RoleHasBeenSet() const { return m_roleHasBeenSet; }
-
-    /**
-     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management
+    inline bool RoleHasBeenSet() const { return m_roleHasBeenSet; } 
+ 
+    /** 
+     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management 
      * (IAM) role that Amazon S3 assumes when replicating objects. For more
      * information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-how-setup.html">How
      * to Set Up Replication</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline void SetRole(const Aws::String& value) { m_roleHasBeenSet = true; m_role = value; }
 
     /**
-     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management
+     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management 
      * (IAM) role that Amazon S3 assumes when replicating objects. For more
      * information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-how-setup.html">How
@@ -81,7 +81,7 @@ namespace Model
     inline void SetRole(Aws::String&& value) { m_roleHasBeenSet = true; m_role = std::move(value); }
 
     /**
-     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management
+     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management 
      * (IAM) role that Amazon S3 assumes when replicating objects. For more
      * information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-how-setup.html">How
@@ -91,7 +91,7 @@ namespace Model
     inline void SetRole(const char* value) { m_roleHasBeenSet = true; m_role.assign(value); }
 
     /**
-     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management
+     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management 
      * (IAM) role that Amazon S3 assumes when replicating objects. For more
      * information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-how-setup.html">How
@@ -101,7 +101,7 @@ namespace Model
     inline ReplicationConfiguration& WithRole(const Aws::String& value) { SetRole(value); return *this;}
 
     /**
-     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management
+     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management 
      * (IAM) role that Amazon S3 assumes when replicating objects. For more
      * information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-how-setup.html">How
@@ -111,7 +111,7 @@ namespace Model
     inline ReplicationConfiguration& WithRole(Aws::String&& value) { SetRole(std::move(value)); return *this;}
 
     /**
-     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management
+     * <p>The Amazon Resource Name (ARN) of the AWS Identity and Access Management 
      * (IAM) role that Amazon S3 assumes when replicating objects. For more
      * information, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/replication-how-setup.html">How
@@ -122,50 +122,50 @@ namespace Model
 
 
     /**
-     * <p>A container for one or more replication rules. A replication configuration
-     * must have at least one rule and can contain a maximum of 1,000 rules. </p>
+     * <p>A container for one or more replication rules. A replication configuration 
+     * must have at least one rule and can contain a maximum of 1,000 rules. </p> 
      */
     inline const Aws::Vector<ReplicationRule>& GetRules() const{ return m_rules; }
 
     /**
-     * <p>A container for one or more replication rules. A replication configuration
-     * must have at least one rule and can contain a maximum of 1,000 rules. </p>
+     * <p>A container for one or more replication rules. A replication configuration 
+     * must have at least one rule and can contain a maximum of 1,000 rules. </p> 
      */
-    inline bool RulesHasBeenSet() const { return m_rulesHasBeenSet; }
-
-    /**
-     * <p>A container for one or more replication rules. A replication configuration
-     * must have at least one rule and can contain a maximum of 1,000 rules. </p>
-     */
+    inline bool RulesHasBeenSet() const { return m_rulesHasBeenSet; } 
+ 
+    /** 
+     * <p>A container for one or more replication rules. A replication configuration 
+     * must have at least one rule and can contain a maximum of 1,000 rules. </p> 
+     */ 
     inline void SetRules(const Aws::Vector<ReplicationRule>& value) { m_rulesHasBeenSet = true; m_rules = value; }
 
     /**
-     * <p>A container for one or more replication rules. A replication configuration
-     * must have at least one rule and can contain a maximum of 1,000 rules. </p>
+     * <p>A container for one or more replication rules. A replication configuration 
+     * must have at least one rule and can contain a maximum of 1,000 rules. </p> 
      */
     inline void SetRules(Aws::Vector<ReplicationRule>&& value) { m_rulesHasBeenSet = true; m_rules = std::move(value); }
 
     /**
-     * <p>A container for one or more replication rules. A replication configuration
-     * must have at least one rule and can contain a maximum of 1,000 rules. </p>
+     * <p>A container for one or more replication rules. A replication configuration 
+     * must have at least one rule and can contain a maximum of 1,000 rules. </p> 
      */
     inline ReplicationConfiguration& WithRules(const Aws::Vector<ReplicationRule>& value) { SetRules(value); return *this;}
 
     /**
-     * <p>A container for one or more replication rules. A replication configuration
-     * must have at least one rule and can contain a maximum of 1,000 rules. </p>
+     * <p>A container for one or more replication rules. A replication configuration 
+     * must have at least one rule and can contain a maximum of 1,000 rules. </p> 
      */
     inline ReplicationConfiguration& WithRules(Aws::Vector<ReplicationRule>&& value) { SetRules(std::move(value)); return *this;}
 
     /**
-     * <p>A container for one or more replication rules. A replication configuration
-     * must have at least one rule and can contain a maximum of 1,000 rules. </p>
+     * <p>A container for one or more replication rules. A replication configuration 
+     * must have at least one rule and can contain a maximum of 1,000 rules. </p> 
      */
     inline ReplicationConfiguration& AddRules(const ReplicationRule& value) { m_rulesHasBeenSet = true; m_rules.push_back(value); return *this; }
 
     /**
-     * <p>A container for one or more replication rules. A replication configuration
-     * must have at least one rule and can contain a maximum of 1,000 rules. </p>
+     * <p>A container for one or more replication rules. A replication configuration 
+     * must have at least one rule and can contain a maximum of 1,000 rules. </p> 
      */
     inline ReplicationConfiguration& AddRules(ReplicationRule&& value) { m_rulesHasBeenSet = true; m_rules.push_back(std::move(value)); return *this; }
 

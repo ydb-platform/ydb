@@ -25,9 +25,9 @@ namespace Model
   /**
    * <p>Specifies object key name filtering rules. For information about key name
    * filtering, see <a
-   * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Configuring
-   * Event Notifications</a> in the <i>Amazon Simple Storage Service Developer
-   * Guide</i>.</p><p><h3>See Also:</h3>   <a
+   * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html">Configuring 
+   * Event Notifications</a> in the <i>Amazon Simple Storage Service Developer 
+   * Guide</i>.</p><p><h3>See Also:</h3>   <a 
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/NotificationConfigurationFilter">AWS
    * API Reference</a></p>
    */
@@ -45,9 +45,9 @@ namespace Model
     inline const S3KeyFilter& GetKey() const{ return m_key; }
 
     
-    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
-
-    
+    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; } 
+ 
+     
     inline void SetKey(const S3KeyFilter& value) { m_keyHasBeenSet = true; m_key = value; }
 
     

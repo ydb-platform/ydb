@@ -51,11 +51,11 @@ namespace Model
     /**
      * <p>Server-side encryption algorithm to use for the default encryption.</p>
      */
-    inline bool SSEAlgorithmHasBeenSet() const { return m_sSEAlgorithmHasBeenSet; }
-
-    /**
-     * <p>Server-side encryption algorithm to use for the default encryption.</p>
-     */
+    inline bool SSEAlgorithmHasBeenSet() const { return m_sSEAlgorithmHasBeenSet; } 
+ 
+    /** 
+     * <p>Server-side encryption algorithm to use for the default encryption.</p> 
+     */ 
     inline void SetSSEAlgorithm(const ServerSideEncryption& value) { m_sSEAlgorithmHasBeenSet = true; m_sSEAlgorithm = value; }
 
     /**
@@ -112,9 +112,9 @@ namespace Model
      * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
      * Guide</i>.</p> 
      */
-    inline bool KMSMasterKeyIDHasBeenSet() const { return m_kMSMasterKeyIDHasBeenSet; }
-
-    /**
+    inline bool KMSMasterKeyIDHasBeenSet() const { return m_kMSMasterKeyIDHasBeenSet; } 
+ 
+    /** 
      * <p>AWS Key Management Service (KMS) customer master key ID to use for the
      * default encryption. This parameter is allowed if and only if
      * <code>SSEAlgorithm</code> is set to <code>aws:kms</code>.</p> <p>You can specify
@@ -131,7 +131,7 @@ namespace Model
      * href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using
      * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
      * Guide</i>.</p> 
-     */
+     */ 
     inline void SetKMSMasterKeyID(const Aws::String& value) { m_kMSMasterKeyIDHasBeenSet = true; m_kMSMasterKeyID = value; }
 
     /**

@@ -58,9 +58,9 @@ namespace Model
      * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
      * Guide</i>.</p>
      */
-    inline bool ReplicaKmsKeyIDHasBeenSet() const { return m_replicaKmsKeyIDHasBeenSet; }
-
-    /**
+    inline bool ReplicaKmsKeyIDHasBeenSet() const { return m_replicaKmsKeyIDHasBeenSet; } 
+ 
+    /** 
      * <p>Specifies the ID (Key ARN or Alias ARN) of the customer managed customer
      * master key (CMK) stored in AWS Key Management Service (KMS) for the destination
      * bucket. Amazon S3 uses this key to encrypt replica objects. Amazon S3 only
@@ -68,7 +68,7 @@ namespace Model
      * href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using
      * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline void SetReplicaKmsKeyID(const Aws::String& value) { m_replicaKmsKeyIDHasBeenSet = true; m_replicaKmsKeyID = value; }
 
     /**

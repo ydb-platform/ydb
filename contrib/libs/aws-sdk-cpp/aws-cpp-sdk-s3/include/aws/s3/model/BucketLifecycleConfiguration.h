@@ -23,15 +23,15 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>Specifies the lifecycle configuration for objects in an Amazon S3 bucket. For
    * more information, see <a
    * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/object-lifecycle-mgmt.html">Object
    * Lifecycle Management</a> in the <i>Amazon Simple Storage Service Developer
    * Guide</i>.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/BucketLifecycleConfiguration">AWS
-   * API Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/BucketLifecycleConfiguration">AWS 
+   * API Reference</a></p> 
+   */ 
   class AWS_S3_API BucketLifecycleConfiguration
   {
   public:
@@ -42,44 +42,44 @@ namespace Model
     void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
-    /**
+    /** 
      * <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
-     */
+     */ 
     inline const Aws::Vector<LifecycleRule>& GetRules() const{ return m_rules; }
 
-    /**
+    /** 
      * <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
-     */
-    inline bool RulesHasBeenSet() const { return m_rulesHasBeenSet; }
-
-    /**
+     */ 
+    inline bool RulesHasBeenSet() const { return m_rulesHasBeenSet; } 
+ 
+    /** 
      * <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
-     */
+     */ 
     inline void SetRules(const Aws::Vector<LifecycleRule>& value) { m_rulesHasBeenSet = true; m_rules = value; }
 
-    /**
+    /** 
      * <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
-     */
+     */ 
     inline void SetRules(Aws::Vector<LifecycleRule>&& value) { m_rulesHasBeenSet = true; m_rules = std::move(value); }
 
-    /**
+    /** 
      * <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
-     */
+     */ 
     inline BucketLifecycleConfiguration& WithRules(const Aws::Vector<LifecycleRule>& value) { SetRules(value); return *this;}
 
-    /**
+    /** 
      * <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
-     */
+     */ 
     inline BucketLifecycleConfiguration& WithRules(Aws::Vector<LifecycleRule>&& value) { SetRules(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
-     */
+     */ 
     inline BucketLifecycleConfiguration& AddRules(const LifecycleRule& value) { m_rulesHasBeenSet = true; m_rules.push_back(value); return *this; }
 
-    /**
+    /** 
      * <p>A lifecycle rule for individual objects in an Amazon S3 bucket.</p>
-     */
+     */ 
     inline BucketLifecycleConfiguration& AddRules(LifecycleRule&& value) { m_rulesHasBeenSet = true; m_rules.push_back(std::move(value)); return *this; }
 
   private:

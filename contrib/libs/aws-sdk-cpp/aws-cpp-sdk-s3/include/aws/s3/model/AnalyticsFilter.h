@@ -24,14 +24,14 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>The filter used to describe a set of objects for analyses. A filter must have
    * exactly one prefix, one tag, or one conjunction (AnalyticsAndOperator). If no
    * filter is provided, all objects will be considered in any
    * analysis.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AnalyticsFilter">AWS
-   * API Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AnalyticsFilter">AWS 
+   * API Reference</a></p> 
+   */ 
   class AWS_S3_API AnalyticsFilter
   {
   public:
@@ -50,11 +50,11 @@ namespace Model
     /**
      * <p>The prefix to use when evaluating an analytics filter.</p>
      */
-    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; }
-
-    /**
-     * <p>The prefix to use when evaluating an analytics filter.</p>
-     */
+    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; } 
+ 
+    /** 
+     * <p>The prefix to use when evaluating an analytics filter.</p> 
+     */ 
     inline void SetPrefix(const Aws::String& value) { m_prefixHasBeenSet = true; m_prefix = value; }
 
     /**
@@ -91,11 +91,11 @@ namespace Model
     /**
      * <p>The tag to use when evaluating an analytics filter.</p>
      */
-    inline bool TagHasBeenSet() const { return m_tagHasBeenSet; }
-
-    /**
-     * <p>The tag to use when evaluating an analytics filter.</p>
-     */
+    inline bool TagHasBeenSet() const { return m_tagHasBeenSet; } 
+ 
+    /** 
+     * <p>The tag to use when evaluating an analytics filter.</p> 
+     */ 
     inline void SetTag(const Tag& value) { m_tagHasBeenSet = true; m_tag = value; }
 
     /**
@@ -124,12 +124,12 @@ namespace Model
      * <p>A conjunction (logical AND) of predicates, which is used in evaluating an
      * analytics filter. The operator must have at least two predicates.</p>
      */
-    inline bool AndHasBeenSet() const { return m_andHasBeenSet; }
-
-    /**
-     * <p>A conjunction (logical AND) of predicates, which is used in evaluating an
-     * analytics filter. The operator must have at least two predicates.</p>
-     */
+    inline bool AndHasBeenSet() const { return m_andHasBeenSet; } 
+ 
+    /** 
+     * <p>A conjunction (logical AND) of predicates, which is used in evaluating an 
+     * analytics filter. The operator must have at least two predicates.</p> 
+     */ 
     inline void SetAnd(const AnalyticsAndOperator& value) { m_andHasBeenSet = true; m_and = value; }
 
     /**

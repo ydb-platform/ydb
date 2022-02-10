@@ -22,11 +22,11 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>Container for S3 Glacier job parameters.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/GlacierJobParameters">AWS
-   * API Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/GlacierJobParameters">AWS 
+   * API Reference</a></p> 
+   */ 
   class AWS_S3_API GlacierJobParameters
   {
   public:
@@ -45,11 +45,11 @@ namespace Model
     /**
      * <p>Retrieval tier at which the restore will be processed.</p>
      */
-    inline bool TierHasBeenSet() const { return m_tierHasBeenSet; }
-
-    /**
+    inline bool TierHasBeenSet() const { return m_tierHasBeenSet; } 
+ 
+    /** 
      * <p>Retrieval tier at which the restore will be processed.</p>
-     */
+     */ 
     inline void SetTier(const Tier& value) { m_tierHasBeenSet = true; m_tier = value; }
 
     /**

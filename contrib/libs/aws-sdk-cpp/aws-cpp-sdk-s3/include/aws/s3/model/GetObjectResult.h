@@ -14,8 +14,8 @@
 #include <aws/s3/model/StorageClass.h>
 #include <aws/s3/model/RequestCharged.h>
 #include <aws/s3/model/ReplicationStatus.h>
-#include <aws/s3/model/ObjectLockMode.h>
-#include <aws/s3/model/ObjectLockLegalHoldStatus.h>
+#include <aws/s3/model/ObjectLockMode.h> 
+#include <aws/s3/model/ObjectLockLegalHoldStatus.h> 
 #include <utility>
 
 namespace Aws
@@ -75,39 +75,39 @@ namespace Model
     inline GetObjectResult& WithDeleteMarker(bool value) { SetDeleteMarker(value); return *this;}
 
 
-    /**
+    /** 
      * <p>Indicates that a range of bytes was specified.</p>
-     */
+     */ 
     inline const Aws::String& GetAcceptRanges() const{ return m_acceptRanges; }
 
-    /**
+    /** 
      * <p>Indicates that a range of bytes was specified.</p>
-     */
+     */ 
     inline void SetAcceptRanges(const Aws::String& value) { m_acceptRanges = value; }
 
-    /**
+    /** 
      * <p>Indicates that a range of bytes was specified.</p>
-     */
+     */ 
     inline void SetAcceptRanges(Aws::String&& value) { m_acceptRanges = std::move(value); }
 
-    /**
+    /** 
      * <p>Indicates that a range of bytes was specified.</p>
-     */
+     */ 
     inline void SetAcceptRanges(const char* value) { m_acceptRanges.assign(value); }
 
-    /**
+    /** 
      * <p>Indicates that a range of bytes was specified.</p>
-     */
+     */ 
     inline GetObjectResult& WithAcceptRanges(const Aws::String& value) { SetAcceptRanges(value); return *this;}
 
-    /**
+    /** 
      * <p>Indicates that a range of bytes was specified.</p>
-     */
+     */ 
     inline GetObjectResult& WithAcceptRanges(Aws::String&& value) { SetAcceptRanges(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>Indicates that a range of bytes was specified.</p>
-     */
+     */ 
     inline GetObjectResult& WithAcceptRanges(const char* value) { SetAcceptRanges(value); return *this;}
 
 
@@ -908,10 +908,10 @@ namespace Model
     inline GetObjectResult& WithSSEKMSKeyId(const char* value) { SetSSEKMSKeyId(value); return *this;}
 
 
-    /**
+    /** 
      * <p>Indicates whether the object uses an S3 Bucket Key for server-side encryption
      * with AWS KMS (SSE-KMS).</p>
-     */
+     */ 
     inline bool GetBucketKeyEnabled() const{ return m_bucketKeyEnabled; }
 
     /**
@@ -933,28 +933,28 @@ namespace Model
      */
     inline const StorageClass& GetStorageClass() const{ return m_storageClass; }
 
-    /**
+    /** 
      * <p>Provides storage class information of the object. Amazon S3 returns this
      * header for all objects except for S3 Standard storage class objects.</p>
-     */
+     */ 
     inline void SetStorageClass(const StorageClass& value) { m_storageClass = value; }
 
-    /**
+    /** 
      * <p>Provides storage class information of the object. Amazon S3 returns this
      * header for all objects except for S3 Standard storage class objects.</p>
-     */
+     */ 
     inline void SetStorageClass(StorageClass&& value) { m_storageClass = std::move(value); }
 
-    /**
+    /** 
      * <p>Provides storage class information of the object. Amazon S3 returns this
      * header for all objects except for S3 Standard storage class objects.</p>
-     */
+     */ 
     inline GetObjectResult& WithStorageClass(const StorageClass& value) { SetStorageClass(value); return *this;}
 
-    /**
+    /** 
      * <p>Provides storage class information of the object. Amazon S3 returns this
      * header for all objects except for S3 Standard storage class objects.</p>
-     */
+     */ 
     inline GetObjectResult& WithStorageClass(StorageClass&& value) { SetStorageClass(std::move(value)); return *this;}
 
 
@@ -974,34 +974,34 @@ namespace Model
     inline GetObjectResult& WithRequestCharged(RequestCharged&& value) { SetRequestCharged(std::move(value)); return *this;}
 
 
-    /**
+    /** 
      * <p>Amazon S3 can return this if your request involves a bucket that is either a
      * source or destination in a replication rule.</p>
-     */
+     */ 
     inline const ReplicationStatus& GetReplicationStatus() const{ return m_replicationStatus; }
 
-    /**
+    /** 
      * <p>Amazon S3 can return this if your request involves a bucket that is either a
      * source or destination in a replication rule.</p>
-     */
+     */ 
     inline void SetReplicationStatus(const ReplicationStatus& value) { m_replicationStatus = value; }
 
-    /**
+    /** 
      * <p>Amazon S3 can return this if your request involves a bucket that is either a
      * source or destination in a replication rule.</p>
-     */
+     */ 
     inline void SetReplicationStatus(ReplicationStatus&& value) { m_replicationStatus = std::move(value); }
 
-    /**
+    /** 
      * <p>Amazon S3 can return this if your request involves a bucket that is either a
      * source or destination in a replication rule.</p>
-     */
+     */ 
     inline GetObjectResult& WithReplicationStatus(const ReplicationStatus& value) { SetReplicationStatus(value); return *this;}
 
-    /**
+    /** 
      * <p>Amazon S3 can return this if your request involves a bucket that is either a
      * source or destination in a replication rule.</p>
-     */
+     */ 
     inline GetObjectResult& WithReplicationStatus(ReplicationStatus&& value) { SetReplicationStatus(std::move(value)); return *this;}
 
 
@@ -1037,89 +1037,89 @@ namespace Model
     inline GetObjectResult& WithTagCount(int value) { SetTagCount(value); return *this;}
 
 
-    /**
-     * <p>The Object Lock mode currently in place for this object.</p>
-     */
-    inline const ObjectLockMode& GetObjectLockMode() const{ return m_objectLockMode; }
-
-    /**
-     * <p>The Object Lock mode currently in place for this object.</p>
-     */
-    inline void SetObjectLockMode(const ObjectLockMode& value) { m_objectLockMode = value; }
-
-    /**
-     * <p>The Object Lock mode currently in place for this object.</p>
-     */
-    inline void SetObjectLockMode(ObjectLockMode&& value) { m_objectLockMode = std::move(value); }
-
-    /**
-     * <p>The Object Lock mode currently in place for this object.</p>
-     */
-    inline GetObjectResult& WithObjectLockMode(const ObjectLockMode& value) { SetObjectLockMode(value); return *this;}
-
-    /**
-     * <p>The Object Lock mode currently in place for this object.</p>
-     */
-    inline GetObjectResult& WithObjectLockMode(ObjectLockMode&& value) { SetObjectLockMode(std::move(value)); return *this;}
-
-
-    /**
-     * <p>The date and time when this object's Object Lock will expire.</p>
-     */
-    inline const Aws::Utils::DateTime& GetObjectLockRetainUntilDate() const{ return m_objectLockRetainUntilDate; }
-
-    /**
-     * <p>The date and time when this object's Object Lock will expire.</p>
-     */
-    inline void SetObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { m_objectLockRetainUntilDate = value; }
-
-    /**
-     * <p>The date and time when this object's Object Lock will expire.</p>
-     */
-    inline void SetObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { m_objectLockRetainUntilDate = std::move(value); }
-
-    /**
-     * <p>The date and time when this object's Object Lock will expire.</p>
-     */
-    inline GetObjectResult& WithObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { SetObjectLockRetainUntilDate(value); return *this;}
-
-    /**
-     * <p>The date and time when this object's Object Lock will expire.</p>
-     */
-    inline GetObjectResult& WithObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { SetObjectLockRetainUntilDate(std::move(value)); return *this;}
-
-
-    /**
-     * <p>Indicates whether this object has an active legal hold. This field is only
+    /** 
+     * <p>The Object Lock mode currently in place for this object.</p> 
+     */ 
+    inline const ObjectLockMode& GetObjectLockMode() const{ return m_objectLockMode; } 
+ 
+    /** 
+     * <p>The Object Lock mode currently in place for this object.</p> 
+     */ 
+    inline void SetObjectLockMode(const ObjectLockMode& value) { m_objectLockMode = value; } 
+ 
+    /** 
+     * <p>The Object Lock mode currently in place for this object.</p> 
+     */ 
+    inline void SetObjectLockMode(ObjectLockMode&& value) { m_objectLockMode = std::move(value); } 
+ 
+    /** 
+     * <p>The Object Lock mode currently in place for this object.</p> 
+     */ 
+    inline GetObjectResult& WithObjectLockMode(const ObjectLockMode& value) { SetObjectLockMode(value); return *this;} 
+ 
+    /** 
+     * <p>The Object Lock mode currently in place for this object.</p> 
+     */ 
+    inline GetObjectResult& WithObjectLockMode(ObjectLockMode&& value) { SetObjectLockMode(std::move(value)); return *this;} 
+ 
+ 
+    /** 
+     * <p>The date and time when this object's Object Lock will expire.</p> 
+     */ 
+    inline const Aws::Utils::DateTime& GetObjectLockRetainUntilDate() const{ return m_objectLockRetainUntilDate; } 
+ 
+    /** 
+     * <p>The date and time when this object's Object Lock will expire.</p> 
+     */ 
+    inline void SetObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { m_objectLockRetainUntilDate = value; } 
+ 
+    /** 
+     * <p>The date and time when this object's Object Lock will expire.</p> 
+     */ 
+    inline void SetObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { m_objectLockRetainUntilDate = std::move(value); } 
+ 
+    /** 
+     * <p>The date and time when this object's Object Lock will expire.</p> 
+     */ 
+    inline GetObjectResult& WithObjectLockRetainUntilDate(const Aws::Utils::DateTime& value) { SetObjectLockRetainUntilDate(value); return *this;} 
+ 
+    /** 
+     * <p>The date and time when this object's Object Lock will expire.</p> 
+     */ 
+    inline GetObjectResult& WithObjectLockRetainUntilDate(Aws::Utils::DateTime&& value) { SetObjectLockRetainUntilDate(std::move(value)); return *this;} 
+ 
+ 
+    /** 
+     * <p>Indicates whether this object has an active legal hold. This field is only 
      * returned if you have permission to view an object's legal hold status. </p>
-     */
-    inline const ObjectLockLegalHoldStatus& GetObjectLockLegalHoldStatus() const{ return m_objectLockLegalHoldStatus; }
-
-    /**
-     * <p>Indicates whether this object has an active legal hold. This field is only
+     */ 
+    inline const ObjectLockLegalHoldStatus& GetObjectLockLegalHoldStatus() const{ return m_objectLockLegalHoldStatus; } 
+ 
+    /** 
+     * <p>Indicates whether this object has an active legal hold. This field is only 
      * returned if you have permission to view an object's legal hold status. </p>
-     */
-    inline void SetObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { m_objectLockLegalHoldStatus = value; }
-
-    /**
-     * <p>Indicates whether this object has an active legal hold. This field is only
+     */ 
+    inline void SetObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { m_objectLockLegalHoldStatus = value; } 
+ 
+    /** 
+     * <p>Indicates whether this object has an active legal hold. This field is only 
      * returned if you have permission to view an object's legal hold status. </p>
-     */
-    inline void SetObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { m_objectLockLegalHoldStatus = std::move(value); }
-
-    /**
-     * <p>Indicates whether this object has an active legal hold. This field is only
+     */ 
+    inline void SetObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { m_objectLockLegalHoldStatus = std::move(value); } 
+ 
+    /** 
+     * <p>Indicates whether this object has an active legal hold. This field is only 
      * returned if you have permission to view an object's legal hold status. </p>
-     */
-    inline GetObjectResult& WithObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { SetObjectLockLegalHoldStatus(value); return *this;}
-
-    /**
-     * <p>Indicates whether this object has an active legal hold. This field is only
+     */ 
+    inline GetObjectResult& WithObjectLockLegalHoldStatus(const ObjectLockLegalHoldStatus& value) { SetObjectLockLegalHoldStatus(value); return *this;} 
+ 
+    /** 
+     * <p>Indicates whether this object has an active legal hold. This field is only 
      * returned if you have permission to view an object's legal hold status. </p>
-     */
-    inline GetObjectResult& WithObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { SetObjectLockLegalHoldStatus(std::move(value)); return *this;}
-
-
+     */ 
+    inline GetObjectResult& WithObjectLockLegalHoldStatus(ObjectLockLegalHoldStatus&& value) { SetObjectLockLegalHoldStatus(std::move(value)); return *this;} 
+ 
+ 
     
     inline const Aws::String& GetId2() const{ return m_id2; }
 
@@ -1223,12 +1223,12 @@ namespace Model
 
     int m_tagCount;
 
-    ObjectLockMode m_objectLockMode;
-
-    Aws::Utils::DateTime m_objectLockRetainUntilDate;
-
-    ObjectLockLegalHoldStatus m_objectLockLegalHoldStatus;
-
+    ObjectLockMode m_objectLockMode; 
+ 
+    Aws::Utils::DateTime m_objectLockRetainUntilDate; 
+ 
+    ObjectLockLegalHoldStatus m_objectLockLegalHoldStatus; 
+ 
     Aws::String m_id2;
 
     Aws::String m_requestId;

@@ -40,7 +40,7 @@ Aws::String PutObjectTaggingRequest::SerializePayload() const
     return payloadDoc.ConvertToString();
   }
 
-  return {};
+  return {}; 
 }
 
 void PutObjectTaggingRequest::AddQueryStringParameters(URI& uri) const

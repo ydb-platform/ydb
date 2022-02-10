@@ -22,13 +22,13 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>Specifies data related to access patterns to be collected and made available
    * to analyze the tradeoffs between different storage classes for an Amazon S3
    * bucket.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/StorageClassAnalysis">AWS
-   * API Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/StorageClassAnalysis">AWS 
+   * API Reference</a></p> 
+   */ 
   class AWS_S3_API StorageClassAnalysis
   {
   public:
@@ -49,12 +49,12 @@ namespace Model
      * <p>Specifies how data related to the storage class analysis for an Amazon S3
      * bucket should be exported.</p>
      */
-    inline bool DataExportHasBeenSet() const { return m_dataExportHasBeenSet; }
-
-    /**
+    inline bool DataExportHasBeenSet() const { return m_dataExportHasBeenSet; } 
+ 
+    /** 
      * <p>Specifies how data related to the storage class analysis for an Amazon S3
      * bucket should be exported.</p>
-     */
+     */ 
     inline void SetDataExport(const StorageClassAnalysisDataExport& value) { m_dataExportHasBeenSet = true; m_dataExport = value; }
 
     /**

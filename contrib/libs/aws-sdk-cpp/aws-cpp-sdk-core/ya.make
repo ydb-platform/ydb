@@ -41,13 +41,13 @@ CFLAGS(
     -DAWS_SDK_VERSION_MINOR=8
     -DAWS_SDK_VERSION_PATCH=113
     -DAWS_USE_EPOLL
-    -DCURL_HAS_H2
+    -DCURL_HAS_H2 
     -DCURL_HAS_TLS_PROXY
     -DENABLE_CURL_CLIENT
     -DENABLE_CURL_LOGGING
     -DENABLE_OPENSSL_ENCRYPTION
-    -DHAS_PATHCONF
-    -DHAS_UMASK
+    -DHAS_PATHCONF 
+    -DHAS_UMASK 
     -DS2N_ADX
     -DS2N_CPUID_AVAILABLE
     -DS2N_HAVE_EXECINFO
@@ -126,12 +126,12 @@ SRCS(
     source/utils/crypto/openssl/CryptoImpl.cpp
     source/utils/event/EventDecoderStream.cpp
     source/utils/event/EventEncoderStream.cpp
-    source/utils/event/EventHeader.cpp
-    source/utils/event/EventMessage.cpp
-    source/utils/event/EventStreamBuf.cpp
-    source/utils/event/EventStreamDecoder.cpp
-    source/utils/event/EventStreamEncoder.cpp
-    source/utils/event/EventStreamErrors.cpp
+    source/utils/event/EventHeader.cpp 
+    source/utils/event/EventMessage.cpp 
+    source/utils/event/EventStreamBuf.cpp 
+    source/utils/event/EventStreamDecoder.cpp 
+    source/utils/event/EventStreamEncoder.cpp 
+    source/utils/event/EventStreamErrors.cpp 
     source/utils/json/JsonSerializer.cpp
     source/utils/logging/AWSLogging.cpp
     source/utils/logging/ConsoleLogSystem.cpp
@@ -140,7 +140,7 @@ SRCS(
     source/utils/logging/LogLevel.cpp
     source/utils/memory/AWSMemory.cpp
     source/utils/memory/stl/SimpleStringStream.cpp
-    source/utils/stream/ConcurrentStreamBuf.cpp
+    source/utils/stream/ConcurrentStreamBuf.cpp 
     source/utils/stream/PreallocatedStreamBuf.cpp
     source/utils/stream/ResponseStream.cpp
     source/utils/stream/SimpleStreamBuf.cpp

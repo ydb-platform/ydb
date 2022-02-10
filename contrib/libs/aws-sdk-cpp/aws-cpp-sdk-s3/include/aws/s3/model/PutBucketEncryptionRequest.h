@@ -64,9 +64,9 @@ namespace Model
      * S3 Default Bucket Encryption</a> in the <i>Amazon Simple Storage Service
      * Developer Guide</i>.</p>
      */
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
-
-    /**
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
+ 
+    /** 
      * <p>Specifies default encryption for a bucket using server-side encryption with
      * Amazon S3-managed keys (SSE-S3) or customer master keys stored in AWS KMS
      * (SSE-KMS). For information about the Amazon S3 default encryption feature, see
@@ -74,7 +74,7 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/bucket-encryption.html">Amazon
      * S3 Default Bucket Encryption</a> in the <i>Amazon Simple Storage Service
      * Developer Guide</i>.</p>
-     */
+     */ 
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
     /**
@@ -145,13 +145,13 @@ namespace Model
      * configuration.</p> <p>For requests made using the AWS Command Line Interface
      * (CLI) or AWS SDKs, this field is calculated automatically.</p>
      */
-    inline bool ContentMD5HasBeenSet() const { return m_contentMD5HasBeenSet; }
-
-    /**
-     * <p>The base64-encoded 128-bit MD5 digest of the server-side encryption
+    inline bool ContentMD5HasBeenSet() const { return m_contentMD5HasBeenSet; } 
+ 
+    /** 
+     * <p>The base64-encoded 128-bit MD5 digest of the server-side encryption 
      * configuration.</p> <p>For requests made using the AWS Command Line Interface
      * (CLI) or AWS SDKs, this field is calculated automatically.</p>
-     */
+     */ 
     inline void SetContentMD5(const Aws::String& value) { m_contentMD5HasBeenSet = true; m_contentMD5 = value; }
 
     /**
@@ -194,9 +194,9 @@ namespace Model
     inline const ServerSideEncryptionConfiguration& GetServerSideEncryptionConfiguration() const{ return m_serverSideEncryptionConfiguration; }
 
     
-    inline bool ServerSideEncryptionConfigurationHasBeenSet() const { return m_serverSideEncryptionConfigurationHasBeenSet; }
-
-    
+    inline bool ServerSideEncryptionConfigurationHasBeenSet() const { return m_serverSideEncryptionConfigurationHasBeenSet; } 
+ 
+     
     inline void SetServerSideEncryptionConfiguration(const ServerSideEncryptionConfiguration& value) { m_serverSideEncryptionConfigurationHasBeenSet = true; m_serverSideEncryptionConfiguration = value; }
 
     
@@ -270,9 +270,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
-
-    
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
+ 
+     
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     

@@ -26,7 +26,7 @@ GetBucketMetricsConfigurationRequest::GetBucketMetricsConfigurationRequest() :
 
 Aws::String GetBucketMetricsConfigurationRequest::SerializePayload() const
 {
-  return {};
+  return {}; 
 }
 
 void GetBucketMetricsConfigurationRequest::AddQueryStringParameters(URI& uri) const

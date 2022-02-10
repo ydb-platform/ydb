@@ -23,8 +23,8 @@ namespace Model
 {
 
   /**
-   * <p>A container for information about access control for replicas.</p><p><h3>See
-   * Also:</h3>   <a
+   * <p>A container for information about access control for replicas.</p><p><h3>See 
+   * Also:</h3>   <a 
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AccessControlTranslation">AWS
    * API Reference</a></p>
    */
@@ -52,14 +52,14 @@ namespace Model
      * bucket replication</a> in the <i>Amazon Simple Storage Service API
      * Reference</i>.</p>
      */
-    inline bool OwnerHasBeenSet() const { return m_ownerHasBeenSet; }
-
-    /**
+    inline bool OwnerHasBeenSet() const { return m_ownerHasBeenSet; } 
+ 
+    /** 
      * <p>Specifies the replica ownership. For default and valid values, see <a
      * href="https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTreplication.html">PUT
      * bucket replication</a> in the <i>Amazon Simple Storage Service API
      * Reference</i>.</p>
-     */
+     */ 
     inline void SetOwner(const OwnerOverride& value) { m_ownerHasBeenSet = true; m_owner = value; }
 
     /**

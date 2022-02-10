@@ -47,11 +47,11 @@ namespace Model
     /**
      * <p>Specifies the use of SSE-S3 to encrypt delivered inventory reports.</p>
      */
-    inline bool SSES3HasBeenSet() const { return m_sSES3HasBeenSet; }
-
-    /**
+    inline bool SSES3HasBeenSet() const { return m_sSES3HasBeenSet; } 
+ 
+    /** 
      * <p>Specifies the use of SSE-S3 to encrypt delivered inventory reports.</p>
-     */
+     */ 
     inline void SetSSES3(const SSES3& value) { m_sSES3HasBeenSet = true; m_sSES3 = value; }
 
     /**
@@ -78,11 +78,11 @@ namespace Model
     /**
      * <p>Specifies the use of SSE-KMS to encrypt delivered inventory reports.</p>
      */
-    inline bool SSEKMSHasBeenSet() const { return m_sSEKMSHasBeenSet; }
-
-    /**
+    inline bool SSEKMSHasBeenSet() const { return m_sSEKMSHasBeenSet; } 
+ 
+    /** 
      * <p>Specifies the use of SSE-KMS to encrypt delivered inventory reports.</p>
-     */
+     */ 
     inline void SetSSEKMS(const SSEKMS& value) { m_sSEKMSHasBeenSet = true; m_sSEKMS = value; }
 
     /**

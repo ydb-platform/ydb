@@ -9,7 +9,7 @@
 #include <aws/core/config/AWSProfileConfigLoader.h>
 #include <aws/core/platform/Environment.h>
 #include <aws/core/platform/FileSystem.h>
-#include <aws/core/platform/OSVersionInfo.h>
+#include <aws/core/platform/OSVersionInfo.h> 
 #include <aws/core/utils/logging/LogMacros.h>
 #include <aws/core/utils/StringUtils.h>
 #include <aws/core/utils/json/JsonSerializer.h>
@@ -27,7 +27,7 @@ using namespace Aws::Utils;
 using namespace Aws::Utils::Logging;
 using namespace Aws::Auth;
 using namespace Aws::Internal;
-using namespace Aws::FileSystem;
+using namespace Aws::FileSystem; 
 using namespace Aws::Utils::Xml;
 using namespace Aws::Client;
 using Aws::Utils::Threading::ReaderLockGuard;
@@ -40,11 +40,11 @@ static const char DEFAULT_PROFILE[] = "default";
 static const char AWS_PROFILE_ENV_VAR[] = "AWS_PROFILE";
 static const char AWS_PROFILE_DEFAULT_ENV_VAR[] = "AWS_DEFAULT_PROFILE";
 
-static const char AWS_CREDENTIALS_FILE[] = "AWS_SHARED_CREDENTIALS_FILE";
+static const char AWS_CREDENTIALS_FILE[] = "AWS_SHARED_CREDENTIALS_FILE"; 
 extern const char AWS_CONFIG_FILE[] = "AWS_CONFIG_FILE";
 
 extern const char PROFILE_DIRECTORY[] = ".aws";
-static const char DEFAULT_CREDENTIALS_FILE[] = "credentials";
+static const char DEFAULT_CREDENTIALS_FILE[] = "credentials"; 
 extern const char DEFAULT_CONFIG_FILE[] = "config";
 
 
@@ -98,17 +98,17 @@ AWSCredentials EnvironmentAWSCredentialsProvider::GetAWSCredentials()
     return credentials;
 }
 
-Aws::String Aws::Auth::GetConfigProfileFilename()
+Aws::String Aws::Auth::GetConfigProfileFilename() 
 {
-    auto configFileNameFromVar = Aws::Environment::GetEnv(AWS_CONFIG_FILE);
-    if (!configFileNameFromVar.empty())
-    {
-        return configFileNameFromVar;
-    }
-    else
-    {
+    auto configFileNameFromVar = Aws::Environment::GetEnv(AWS_CONFIG_FILE); 
+    if (!configFileNameFromVar.empty()) 
+    { 
+        return configFileNameFromVar; 
+    } 
+    else 
+    { 
         return Aws::FileSystem::GetHomeDirectory() + PROFILE_DIRECTORY + PATH_DELIM + DEFAULT_CONFIG_FILE;
-    }
+    } 
 }
 
 Aws::String Aws::Auth::GetConfigProfileName()
@@ -129,11 +129,11 @@ Aws::String Aws::Auth::GetConfigProfileName()
     }
 }
 
-static const char* PROFILE_LOG_TAG = "ProfileConfigFileAWSCredentialsProvider";
+static const char* PROFILE_LOG_TAG = "ProfileConfigFileAWSCredentialsProvider"; 
 
 Aws::String ProfileConfigFileAWSCredentialsProvider::GetCredentialsProfileFilename()
 {
-    auto credentialsFileNameFromVar = Aws::Environment::GetEnv(AWS_CREDENTIALS_FILE);
+    auto credentialsFileNameFromVar = Aws::Environment::GetEnv(AWS_CREDENTIALS_FILE); 
 
     if (credentialsFileNameFromVar.empty())
     {
@@ -147,15 +147,15 @@ Aws::String ProfileConfigFileAWSCredentialsProvider::GetCredentialsProfileFilena
 
 Aws::String ProfileConfigFileAWSCredentialsProvider::GetProfileDirectory()
 {
-    Aws::String credentialsFileName = GetCredentialsProfileFilename();
-    auto lastSeparator = credentialsFileName.find_last_of(PATH_DELIM);
+    Aws::String credentialsFileName = GetCredentialsProfileFilename(); 
+    auto lastSeparator = credentialsFileName.find_last_of(PATH_DELIM); 
     if (lastSeparator != std::string::npos)
     {
-        return credentialsFileName.substr(0, lastSeparator);
+        return credentialsFileName.substr(0, lastSeparator); 
     }
     else
     {
-        return {};
+        return {}; 
     }
 }
 
@@ -183,9 +183,9 @@ AWSCredentials ProfileConfigFileAWSCredentialsProvider::GetAWSCredentials()
 {
     RefreshIfExpired();
     ReaderLockGuard guard(m_reloadLock);
-    auto credsFileProfileIter = m_credentialsFileLoader.GetProfiles().find(m_profileToUse);
+    auto credsFileProfileIter = m_credentialsFileLoader.GetProfiles().find(m_profileToUse); 
 
-    if(credsFileProfileIter != m_credentialsFileLoader.GetProfiles().end())
+    if(credsFileProfileIter != m_credentialsFileLoader.GetProfiles().end()) 
     {
         return credsFileProfileIter->second.GetCredentials();
     }
@@ -355,37 +355,37 @@ void TaskRoleCredentialsProvider::RefreshIfExpired()
 
     Reload();
 }
-
-static const char PROCESS_LOG_TAG[] = "ProcessCredentialsProvider";
-ProcessCredentialsProvider::ProcessCredentialsProvider() :
+ 
+static const char PROCESS_LOG_TAG[] = "ProcessCredentialsProvider"; 
+ProcessCredentialsProvider::ProcessCredentialsProvider() : 
     m_profileToUse(Aws::Auth::GetConfigProfileName())
-{
-    AWS_LOGSTREAM_INFO(PROCESS_LOG_TAG, "Setting process credentials provider to read config from " <<  m_profileToUse);
-}
-
-ProcessCredentialsProvider::ProcessCredentialsProvider(const Aws::String& profile) :
+{ 
+    AWS_LOGSTREAM_INFO(PROCESS_LOG_TAG, "Setting process credentials provider to read config from " <<  m_profileToUse); 
+} 
+ 
+ProcessCredentialsProvider::ProcessCredentialsProvider(const Aws::String& profile) : 
     m_profileToUse(profile)
-{
-    AWS_LOGSTREAM_INFO(PROCESS_LOG_TAG, "Setting process credentials provider to read config from " <<  m_profileToUse);
-}
-
-AWSCredentials ProcessCredentialsProvider::GetAWSCredentials()
-{
-    RefreshIfExpired();
-    ReaderLockGuard guard(m_reloadLock);
-    return m_credentials;
-}
-
-
-void ProcessCredentialsProvider::Reload()
-{
+{ 
+    AWS_LOGSTREAM_INFO(PROCESS_LOG_TAG, "Setting process credentials provider to read config from " <<  m_profileToUse); 
+} 
+ 
+AWSCredentials ProcessCredentialsProvider::GetAWSCredentials() 
+{ 
+    RefreshIfExpired(); 
+    ReaderLockGuard guard(m_reloadLock); 
+    return m_credentials; 
+} 
+ 
+ 
+void ProcessCredentialsProvider::Reload() 
+{ 
     auto profile = Aws::Config::GetCachedConfigProfile(m_profileToUse);
     const Aws::String &command = profile.GetCredentialProcess();
     if (command.empty())
-    {
-        AWS_LOGSTREAM_ERROR(PROCESS_LOG_TAG, "Failed to find credential process's profile: " << m_profileToUse);
-        return;
-    }
+    { 
+        AWS_LOGSTREAM_ERROR(PROCESS_LOG_TAG, "Failed to find credential process's profile: " << m_profileToUse); 
+        return; 
+    } 
     m_credentials = GetCredentialsFromProcess(command);
 }
 
@@ -409,41 +409,41 @@ void ProcessCredentialsProvider::RefreshIfExpired()
 AWSCredentials Aws::Auth::GetCredentialsFromProcess(const Aws::String& process)
 {
     Aws::String command = process;
-    command.append(" 2>&1"); // redirect stderr to stdout
-    Aws::String result = Aws::Utils::StringUtils::Trim(Aws::OSVersionInfo::GetSysCommandOutput(command.c_str()).c_str());
-    Json::JsonValue credentialsDoc(result);
+    command.append(" 2>&1"); // redirect stderr to stdout 
+    Aws::String result = Aws::Utils::StringUtils::Trim(Aws::OSVersionInfo::GetSysCommandOutput(command.c_str()).c_str()); 
+    Json::JsonValue credentialsDoc(result); 
     if (!credentialsDoc.WasParseSuccessful())
-    {
+    { 
         AWS_LOGSTREAM_ERROR(PROFILE_LOG_TAG, "Failed to load credential from running: " << command << " Error: " << result);
         return {};
-    }
-
-    Aws::Utils::Json::JsonView credentialsView(credentialsDoc);
-    if (!credentialsView.KeyExists("Version") || credentialsView.GetInteger("Version") != 1)
-    {
+    } 
+ 
+    Aws::Utils::Json::JsonView credentialsView(credentialsDoc); 
+    if (!credentialsView.KeyExists("Version") || credentialsView.GetInteger("Version") != 1) 
+    { 
         AWS_LOGSTREAM_ERROR(PROFILE_LOG_TAG, "Encountered an unsupported process credentials payload version:" << credentialsView.GetInteger("Version"));
         return {};
-    }
-
+    } 
+ 
     AWSCredentials credentials;
-    Aws::String accessKey, secretKey, token, expire;
+    Aws::String accessKey, secretKey, token, expire; 
     if (credentialsView.KeyExists("AccessKeyId"))
     {
         credentials.SetAWSAccessKeyId(credentialsView.GetString("AccessKeyId"));
     }
-
+ 
     if (credentialsView.KeyExists("SecretAccessKey"))
     {
         credentials.SetAWSSecretKey(credentialsView.GetString("SecretAccessKey"));
     }
-
+ 
     if (credentialsView.KeyExists("SessionToken"))
-    {
+    { 
         credentials.SetSessionToken(credentialsView.GetString("SessionToken"));
-    }
-
+    } 
+ 
     if (credentialsView.KeyExists("Expiration"))
-    {
+    { 
         const auto expiration = Aws::Utils::DateTime(credentialsView.GetString("Expiration"), DateFormat::ISO_8601);
         if (expiration.WasParseSuccessful())
         {
@@ -454,13 +454,13 @@ AWSCredentials Aws::Auth::GetCredentialsFromProcess(const Aws::String& process)
             AWS_LOGSTREAM_ERROR(PROFILE_LOG_TAG, "Failed to parse credential's expiration value as an ISO 8601 Date. Credentials will be marked expired.");
             credentials.SetExpiration(Aws::Utils::DateTime::Now());
         }
-    }
+    } 
     else
     {
         credentials.SetExpiration((std::chrono::time_point<std::chrono::system_clock>::max)());
     }
-
+ 
     AWS_LOGSTREAM_DEBUG(PROFILE_LOG_TAG, "Successfully pulled credentials from process credential with AccessKey: " << accessKey << ", Expiration:" << credentialsView.GetString("Expiration"));
     return credentials;
-}
+} 
 

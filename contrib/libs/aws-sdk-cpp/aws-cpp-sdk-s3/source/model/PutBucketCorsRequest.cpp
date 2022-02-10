@@ -38,7 +38,7 @@ Aws::String PutBucketCorsRequest::SerializePayload() const
     return payloadDoc.ConvertToString();
   }
 
-  return {};
+  return {}; 
 }
 
 void PutBucketCorsRequest::AddQueryStringParameters(URI& uri) const

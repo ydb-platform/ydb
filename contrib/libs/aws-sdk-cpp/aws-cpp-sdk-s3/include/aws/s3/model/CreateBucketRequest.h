@@ -51,11 +51,11 @@ namespace Model
     /**
      * <p>The canned ACL to apply to the bucket.</p>
      */
-    inline bool ACLHasBeenSet() const { return m_aCLHasBeenSet; }
-
-    /**
-     * <p>The canned ACL to apply to the bucket.</p>
-     */
+    inline bool ACLHasBeenSet() const { return m_aCLHasBeenSet; } 
+ 
+    /** 
+     * <p>The canned ACL to apply to the bucket.</p> 
+     */ 
     inline void SetACL(const BucketCannedACL& value) { m_aCLHasBeenSet = true; m_aCL = value; }
 
     /**
@@ -74,75 +74,75 @@ namespace Model
     inline CreateBucketRequest& WithACL(BucketCannedACL&& value) { SetACL(std::move(value)); return *this;}
 
 
-    /**
+    /** 
      * <p>The name of the bucket to create.</p>
-     */
+     */ 
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /**
+    /** 
      * <p>The name of the bucket to create.</p>
-     */
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
-
-    /**
+     */ 
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
+ 
+    /** 
      * <p>The name of the bucket to create.</p>
-     */
+     */ 
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
-    /**
+    /** 
      * <p>The name of the bucket to create.</p>
-     */
+     */ 
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
-    /**
+    /** 
      * <p>The name of the bucket to create.</p>
-     */
+     */ 
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
-    /**
+    /** 
      * <p>The name of the bucket to create.</p>
-     */
+     */ 
     inline CreateBucketRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /**
+    /** 
      * <p>The name of the bucket to create.</p>
-     */
+     */ 
     inline CreateBucketRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>The name of the bucket to create.</p>
-     */
+     */ 
     inline CreateBucketRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
-    /**
+    /** 
      * <p>The configuration information for the bucket.</p>
-     */
+     */ 
     inline const CreateBucketConfiguration& GetCreateBucketConfiguration() const{ return m_createBucketConfiguration; }
 
-    /**
+    /** 
      * <p>The configuration information for the bucket.</p>
-     */
-    inline bool CreateBucketConfigurationHasBeenSet() const { return m_createBucketConfigurationHasBeenSet; }
-
-    /**
+     */ 
+    inline bool CreateBucketConfigurationHasBeenSet() const { return m_createBucketConfigurationHasBeenSet; } 
+ 
+    /** 
      * <p>The configuration information for the bucket.</p>
-     */
+     */ 
     inline void SetCreateBucketConfiguration(const CreateBucketConfiguration& value) { m_createBucketConfigurationHasBeenSet = true; m_createBucketConfiguration = value; }
 
-    /**
+    /** 
      * <p>The configuration information for the bucket.</p>
-     */
+     */ 
     inline void SetCreateBucketConfiguration(CreateBucketConfiguration&& value) { m_createBucketConfigurationHasBeenSet = true; m_createBucketConfiguration = std::move(value); }
 
-    /**
+    /** 
      * <p>The configuration information for the bucket.</p>
-     */
+     */ 
     inline CreateBucketRequest& WithCreateBucketConfiguration(const CreateBucketConfiguration& value) { SetCreateBucketConfiguration(value); return *this;}
 
-    /**
+    /** 
      * <p>The configuration information for the bucket.</p>
-     */
+     */ 
     inline CreateBucketRequest& WithCreateBucketConfiguration(CreateBucketConfiguration&& value) { SetCreateBucketConfiguration(std::move(value)); return *this;}
 
 
@@ -156,12 +156,12 @@ namespace Model
      * <p>Allows grantee the read, write, read ACP, and write ACP permissions on the
      * bucket.</p>
      */
-    inline bool GrantFullControlHasBeenSet() const { return m_grantFullControlHasBeenSet; }
-
-    /**
-     * <p>Allows grantee the read, write, read ACP, and write ACP permissions on the
-     * bucket.</p>
-     */
+    inline bool GrantFullControlHasBeenSet() const { return m_grantFullControlHasBeenSet; } 
+ 
+    /** 
+     * <p>Allows grantee the read, write, read ACP, and write ACP permissions on the 
+     * bucket.</p> 
+     */ 
     inline void SetGrantFullControl(const Aws::String& value) { m_grantFullControlHasBeenSet = true; m_grantFullControl = value; }
 
     /**
@@ -203,11 +203,11 @@ namespace Model
     /**
      * <p>Allows grantee to list the objects in the bucket.</p>
      */
-    inline bool GrantReadHasBeenSet() const { return m_grantReadHasBeenSet; }
-
-    /**
-     * <p>Allows grantee to list the objects in the bucket.</p>
-     */
+    inline bool GrantReadHasBeenSet() const { return m_grantReadHasBeenSet; } 
+ 
+    /** 
+     * <p>Allows grantee to list the objects in the bucket.</p> 
+     */ 
     inline void SetGrantRead(const Aws::String& value) { m_grantReadHasBeenSet = true; m_grantRead = value; }
 
     /**
@@ -244,11 +244,11 @@ namespace Model
     /**
      * <p>Allows grantee to read the bucket ACL.</p>
      */
-    inline bool GrantReadACPHasBeenSet() const { return m_grantReadACPHasBeenSet; }
-
-    /**
-     * <p>Allows grantee to read the bucket ACL.</p>
-     */
+    inline bool GrantReadACPHasBeenSet() const { return m_grantReadACPHasBeenSet; } 
+ 
+    /** 
+     * <p>Allows grantee to read the bucket ACL.</p> 
+     */ 
     inline void SetGrantReadACP(const Aws::String& value) { m_grantReadACPHasBeenSet = true; m_grantReadACP = value; }
 
     /**
@@ -285,11 +285,11 @@ namespace Model
     /**
      * <p>Allows grantee to create, overwrite, and delete any object in the bucket.</p>
      */
-    inline bool GrantWriteHasBeenSet() const { return m_grantWriteHasBeenSet; }
-
-    /**
-     * <p>Allows grantee to create, overwrite, and delete any object in the bucket.</p>
-     */
+    inline bool GrantWriteHasBeenSet() const { return m_grantWriteHasBeenSet; } 
+ 
+    /** 
+     * <p>Allows grantee to create, overwrite, and delete any object in the bucket.</p> 
+     */ 
     inline void SetGrantWrite(const Aws::String& value) { m_grantWriteHasBeenSet = true; m_grantWrite = value; }
 
     /**
@@ -326,11 +326,11 @@ namespace Model
     /**
      * <p>Allows grantee to write the ACL for the applicable bucket.</p>
      */
-    inline bool GrantWriteACPHasBeenSet() const { return m_grantWriteACPHasBeenSet; }
-
-    /**
-     * <p>Allows grantee to write the ACL for the applicable bucket.</p>
-     */
+    inline bool GrantWriteACPHasBeenSet() const { return m_grantWriteACPHasBeenSet; } 
+ 
+    /** 
+     * <p>Allows grantee to write the ACL for the applicable bucket.</p> 
+     */ 
     inline void SetGrantWriteACP(const Aws::String& value) { m_grantWriteACPHasBeenSet = true; m_grantWriteACP = value; }
 
     /**
@@ -359,38 +359,38 @@ namespace Model
     inline CreateBucketRequest& WithGrantWriteACP(const char* value) { SetGrantWriteACP(value); return *this;}
 
 
-    /**
-     * <p>Specifies whether you want S3 Object Lock to be enabled for the new
-     * bucket.</p>
-     */
-    inline bool GetObjectLockEnabledForBucket() const{ return m_objectLockEnabledForBucket; }
-
-    /**
-     * <p>Specifies whether you want S3 Object Lock to be enabled for the new
-     * bucket.</p>
-     */
-    inline bool ObjectLockEnabledForBucketHasBeenSet() const { return m_objectLockEnabledForBucketHasBeenSet; }
-
-    /**
-     * <p>Specifies whether you want S3 Object Lock to be enabled for the new
-     * bucket.</p>
-     */
-    inline void SetObjectLockEnabledForBucket(bool value) { m_objectLockEnabledForBucketHasBeenSet = true; m_objectLockEnabledForBucket = value; }
-
-    /**
-     * <p>Specifies whether you want S3 Object Lock to be enabled for the new
-     * bucket.</p>
-     */
-    inline CreateBucketRequest& WithObjectLockEnabledForBucket(bool value) { SetObjectLockEnabledForBucket(value); return *this;}
-
-
+    /** 
+     * <p>Specifies whether you want S3 Object Lock to be enabled for the new 
+     * bucket.</p> 
+     */ 
+    inline bool GetObjectLockEnabledForBucket() const{ return m_objectLockEnabledForBucket; } 
+ 
+    /** 
+     * <p>Specifies whether you want S3 Object Lock to be enabled for the new 
+     * bucket.</p> 
+     */ 
+    inline bool ObjectLockEnabledForBucketHasBeenSet() const { return m_objectLockEnabledForBucketHasBeenSet; } 
+ 
+    /** 
+     * <p>Specifies whether you want S3 Object Lock to be enabled for the new 
+     * bucket.</p> 
+     */ 
+    inline void SetObjectLockEnabledForBucket(bool value) { m_objectLockEnabledForBucketHasBeenSet = true; m_objectLockEnabledForBucket = value; } 
+ 
+    /** 
+     * <p>Specifies whether you want S3 Object Lock to be enabled for the new 
+     * bucket.</p> 
+     */ 
+    inline CreateBucketRequest& WithObjectLockEnabledForBucket(bool value) { SetObjectLockEnabledForBucket(value); return *this;} 
+ 
+ 
     
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
-
-    
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
+ 
+     
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     
@@ -449,9 +449,9 @@ namespace Model
     Aws::String m_grantWriteACP;
     bool m_grantWriteACPHasBeenSet;
 
-    bool m_objectLockEnabledForBucket;
-    bool m_objectLockEnabledForBucketHasBeenSet;
-
+    bool m_objectLockEnabledForBucket; 
+    bool m_objectLockEnabledForBucketHasBeenSet; 
+ 
     Aws::Map<Aws::String, Aws::String> m_customizedAccessLogTag;
     bool m_customizedAccessLogTagHasBeenSet;
   };

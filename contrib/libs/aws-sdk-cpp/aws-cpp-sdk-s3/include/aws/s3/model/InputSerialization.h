@@ -49,11 +49,11 @@ namespace Model
     /**
      * <p>Describes the serialization of a CSV-encoded object.</p>
      */
-    inline bool CSVHasBeenSet() const { return m_cSVHasBeenSet; }
-
-    /**
-     * <p>Describes the serialization of a CSV-encoded object.</p>
-     */
+    inline bool CSVHasBeenSet() const { return m_cSVHasBeenSet; } 
+ 
+    /** 
+     * <p>Describes the serialization of a CSV-encoded object.</p> 
+     */ 
     inline void SetCSV(const CSVInput& value) { m_cSVHasBeenSet = true; m_cSV = value; }
 
     /**
@@ -82,12 +82,12 @@ namespace Model
      * <p>Specifies object's compression format. Valid values: NONE, GZIP, BZIP2.
      * Default Value: NONE.</p>
      */
-    inline bool CompressionTypeHasBeenSet() const { return m_compressionTypeHasBeenSet; }
-
-    /**
-     * <p>Specifies object's compression format. Valid values: NONE, GZIP, BZIP2.
-     * Default Value: NONE.</p>
-     */
+    inline bool CompressionTypeHasBeenSet() const { return m_compressionTypeHasBeenSet; } 
+ 
+    /** 
+     * <p>Specifies object's compression format. Valid values: NONE, GZIP, BZIP2. 
+     * Default Value: NONE.</p> 
+     */ 
     inline void SetCompressionType(const CompressionType& value) { m_compressionTypeHasBeenSet = true; m_compressionType = value; }
 
     /**
@@ -117,11 +117,11 @@ namespace Model
     /**
      * <p>Specifies JSON as object's input serialization format.</p>
      */
-    inline bool JSONHasBeenSet() const { return m_jSONHasBeenSet; }
-
-    /**
-     * <p>Specifies JSON as object's input serialization format.</p>
-     */
+    inline bool JSONHasBeenSet() const { return m_jSONHasBeenSet; } 
+ 
+    /** 
+     * <p>Specifies JSON as object's input serialization format.</p> 
+     */ 
     inline void SetJSON(const JSONInput& value) { m_jSONHasBeenSet = true; m_jSON = value; }
 
     /**
@@ -148,11 +148,11 @@ namespace Model
     /**
      * <p>Specifies Parquet as object's input serialization format.</p>
      */
-    inline bool ParquetHasBeenSet() const { return m_parquetHasBeenSet; }
-
-    /**
-     * <p>Specifies Parquet as object's input serialization format.</p>
-     */
+    inline bool ParquetHasBeenSet() const { return m_parquetHasBeenSet; } 
+ 
+    /** 
+     * <p>Specifies Parquet as object's input serialization format.</p> 
+     */ 
     inline void SetParquet(const ParquetInput& value) { m_parquetHasBeenSet = true; m_parquet = value; }
 
     /**

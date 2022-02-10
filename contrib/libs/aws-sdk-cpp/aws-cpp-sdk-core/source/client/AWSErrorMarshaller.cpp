@@ -72,7 +72,7 @@ AWSError<CoreErrors> XmlErrorMarshaller::Marshall(const Aws::Http::HttpResponse&
     AWS_LOGSTREAM_TRACE(AWS_ERROR_MARSHALLER_LOG_TAG, "Error response is " << doc.ConvertToString());
     bool errorParsed = false;
     AWSError<CoreErrors> error;
-    if (doc.WasParseSuccessful() && !doc.GetRootElement().IsNull())
+    if (doc.WasParseSuccessful() && !doc.GetRootElement().IsNull()) 
     {
         XmlNode errorNode = doc.GetRootElement();
 

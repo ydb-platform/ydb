@@ -36,13 +36,13 @@ static const char RESOURCE_CLIENT_CONFIGURATION_ALLOCATION_TAG[] = "AWSHttpResou
 static const char EC2_METADATA_CLIENT_LOG_TAG[] = "EC2MetadataClient";
 static const char ECS_CREDENTIALS_CLIENT_LOG_TAG[] = "ECSCredentialsClient";
 
-namespace Aws
-{
-    namespace Client
-    {
-        Aws::String ComputeUserAgentString();
-    }
-
+namespace Aws 
+{ 
+    namespace Client 
+    { 
+        Aws::String ComputeUserAgentString(); 
+    } 
+ 
     namespace Internal
     {
         static ClientConfiguration MakeDefaultHttpResourceClientConfiguration(const char *logtag)
@@ -115,7 +115,7 @@ namespace Aws
                                                                    Aws::Utils::Stream::DefaultResponseStreamFactoryMethod));
 
             request->SetUserAgent(ComputeUserAgentString());
-
+ 
             if (authToken)
             {
                 request->SetHeaderValue(Aws::Http::AWS_AUTHORIZATION_HEADER, authToken);

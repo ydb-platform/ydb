@@ -26,8 +26,8 @@ CreateBucketRequest::CreateBucketRequest() :
     m_grantReadACPHasBeenSet(false),
     m_grantWriteHasBeenSet(false),
     m_grantWriteACPHasBeenSet(false),
-    m_objectLockEnabledForBucket(false),
-    m_objectLockEnabledForBucketHasBeenSet(false),
+    m_objectLockEnabledForBucket(false), 
+    m_objectLockEnabledForBucketHasBeenSet(false), 
     m_customizedAccessLogTagHasBeenSet(false)
 {
 }
@@ -45,7 +45,7 @@ Aws::String CreateBucketRequest::SerializePayload() const
     return payloadDoc.ConvertToString();
   }
 
-  return {};
+  return {}; 
 }
 
 void CreateBucketRequest::AddQueryStringParameters(URI& uri) const
@@ -114,12 +114,12 @@ Aws::Http::HeaderValueCollection CreateBucketRequest::GetRequestSpecificHeaders(
     ss.str("");
   }
 
-  if(m_objectLockEnabledForBucketHasBeenSet)
-  {
-    ss << m_objectLockEnabledForBucket;
-    headers.emplace("x-amz-bucket-object-lock-enabled",  ss.str());
-    ss.str("");
-  }
-
+  if(m_objectLockEnabledForBucketHasBeenSet) 
+  { 
+    ss << m_objectLockEnabledForBucket; 
+    headers.emplace("x-amz-bucket-object-lock-enabled",  ss.str()); 
+    ss.str(""); 
+  } 
+ 
   return headers;
 }

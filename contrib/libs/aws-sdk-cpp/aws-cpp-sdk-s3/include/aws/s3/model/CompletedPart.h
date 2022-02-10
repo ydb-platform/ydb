@@ -22,11 +22,11 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>Details of the parts that were uploaded.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/CompletedPart">AWS
-   * API Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/CompletedPart">AWS 
+   * API Reference</a></p> 
+   */ 
   class AWS_S3_API CompletedPart
   {
   public:
@@ -45,11 +45,11 @@ namespace Model
     /**
      * <p>Entity tag returned when the part was uploaded.</p>
      */
-    inline bool ETagHasBeenSet() const { return m_eTagHasBeenSet; }
-
-    /**
-     * <p>Entity tag returned when the part was uploaded.</p>
-     */
+    inline bool ETagHasBeenSet() const { return m_eTagHasBeenSet; } 
+ 
+    /** 
+     * <p>Entity tag returned when the part was uploaded.</p> 
+     */ 
     inline void SetETag(const Aws::String& value) { m_eTagHasBeenSet = true; m_eTag = value; }
 
     /**
@@ -88,12 +88,12 @@ namespace Model
      * <p>Part number that identifies the part. This is a positive integer between 1
      * and 10,000.</p>
      */
-    inline bool PartNumberHasBeenSet() const { return m_partNumberHasBeenSet; }
-
-    /**
-     * <p>Part number that identifies the part. This is a positive integer between 1
-     * and 10,000.</p>
-     */
+    inline bool PartNumberHasBeenSet() const { return m_partNumberHasBeenSet; } 
+ 
+    /** 
+     * <p>Part number that identifies the part. This is a positive integer between 1 
+     * and 10,000.</p> 
+     */ 
     inline void SetPartNumber(int value) { m_partNumberHasBeenSet = true; m_partNumber = value; }
 
     /**

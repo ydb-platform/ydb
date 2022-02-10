@@ -103,17 +103,17 @@ then using the CJSON_API_VISIBILITY flag to "export" the same symbols the way CJ
 
 */
 
-/* Decide calling convention based on the cmake parameters defined in C++ SDK. */
-#ifdef USE_IMPORT_EXPORT
-#ifdef AWS_CORE_EXPORTS
-#define CJSON_EXPORT_SYMBOLS
-#else
-#define CJSON_IMPORT_SYMBOLS
-#endif // AWS_CORE_EXPORTS
-#else
-#define CJSON_HIDE_SYMBOLS
-#endif // USE_IMPORT_EXPORT
-
+/* Decide calling convention based on the cmake parameters defined in C++ SDK. */ 
+#ifdef USE_IMPORT_EXPORT 
+#ifdef AWS_CORE_EXPORTS 
+#define CJSON_EXPORT_SYMBOLS 
+#else 
+#define CJSON_IMPORT_SYMBOLS 
+#endif // AWS_CORE_EXPORTS 
+#else 
+#define CJSON_HIDE_SYMBOLS 
+#endif // USE_IMPORT_EXPORT 
+ 
 /* export symbols by default, this is necessary for copy pasting the C and header file */
 #if !defined(CJSON_HIDE_SYMBOLS) && !defined(CJSON_IMPORT_SYMBOLS) && !defined(CJSON_EXPORT_SYMBOLS)
 #define CJSON_EXPORT_SYMBOLS

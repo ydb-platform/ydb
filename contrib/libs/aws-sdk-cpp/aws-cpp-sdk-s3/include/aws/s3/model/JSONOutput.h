@@ -22,12 +22,12 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>Specifies JSON as request's output serialization format.</p><p><h3>See
    * Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/JSONOutput">AWS API
-   * Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/JSONOutput">AWS API 
+   * Reference</a></p> 
+   */ 
   class AWS_S3_API JSONOutput
   {
   public:
@@ -48,12 +48,12 @@ namespace Model
      * <p>The value used to separate individual records in the output. If no value is
      * specified, Amazon S3 uses a newline character ('\n').</p>
      */
-    inline bool RecordDelimiterHasBeenSet() const { return m_recordDelimiterHasBeenSet; }
-
-    /**
+    inline bool RecordDelimiterHasBeenSet() const { return m_recordDelimiterHasBeenSet; } 
+ 
+    /** 
      * <p>The value used to separate individual records in the output. If no value is
      * specified, Amazon S3 uses a newline character ('\n').</p>
-     */
+     */ 
     inline void SetRecordDelimiter(const Aws::String& value) { m_recordDelimiterHasBeenSet = true; m_recordDelimiter = value; }
 
     /**

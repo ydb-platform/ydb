@@ -1,29 +1,29 @@
-#ifndef AWS_COMMON_SYSTEM_INFO_H
-#define AWS_COMMON_SYSTEM_INFO_H
-
+#ifndef AWS_COMMON_SYSTEM_INFO_H 
+#define AWS_COMMON_SYSTEM_INFO_H 
+ 
 /**
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
- */
-
-#include <aws/common/common.h>
-
+ */ 
+ 
+#include <aws/common/common.h> 
+ 
 enum aws_platform_os {
     AWS_PLATFORM_OS_WINDOWS,
     AWS_PLATFORM_OS_MAC,
     AWS_PLATFORM_OS_UNIX,
 };
 
-AWS_EXTERN_C_BEGIN
-
+AWS_EXTERN_C_BEGIN 
+ 
 /* Returns the OS this was built under */
 AWS_COMMON_API
 enum aws_platform_os aws_get_platform_build_os(void);
 
-/* Returns the number of online processors available for usage. */
-AWS_COMMON_API
-size_t aws_system_info_processor_count(void);
-
+/* Returns the number of online processors available for usage. */ 
+AWS_COMMON_API 
+size_t aws_system_info_processor_count(void); 
+ 
 /* Returns true if a debugger is currently attached to the process. */
 AWS_COMMON_API
 bool aws_is_debugger_present(void);
@@ -76,6 +76,6 @@ void aws_backtrace_print(FILE *fp, void *call_site_data);
 AWS_COMMON_API
 void aws_backtrace_log(void);
 
-AWS_EXTERN_C_END
-
-#endif /* AWS_COMMON_SYSTEM_INFO_H */
+AWS_EXTERN_C_END 
+ 
+#endif /* AWS_COMMON_SYSTEM_INFO_H */ 

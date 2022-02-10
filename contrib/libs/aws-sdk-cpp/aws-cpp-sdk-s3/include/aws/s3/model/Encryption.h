@@ -48,12 +48,12 @@ namespace Model
      * <p>The server-side encryption algorithm used when storing job results in Amazon
      * S3 (for example, AES256, aws:kms).</p>
      */
-    inline bool EncryptionTypeHasBeenSet() const { return m_encryptionTypeHasBeenSet; }
-
-    /**
-     * <p>The server-side encryption algorithm used when storing job results in Amazon
+    inline bool EncryptionTypeHasBeenSet() const { return m_encryptionTypeHasBeenSet; } 
+ 
+    /** 
+     * <p>The server-side encryption algorithm used when storing job results in Amazon 
      * S3 (for example, AES256, aws:kms).</p>
-     */
+     */ 
     inline void SetEncryptionType(const ServerSideEncryption& value) { m_encryptionTypeHasBeenSet = true; m_encryptionType = value; }
 
     /**
@@ -95,9 +95,9 @@ namespace Model
      * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
      * Guide</i>.</p>
      */
-    inline bool KMSKeyIdHasBeenSet() const { return m_kMSKeyIdHasBeenSet; }
-
-    /**
+    inline bool KMSKeyIdHasBeenSet() const { return m_kMSKeyIdHasBeenSet; } 
+ 
+    /** 
      * <p>If the encryption type is <code>aws:kms</code>, this optional value specifies
      * the ID of the symmetric customer managed AWS KMS CMK to use for encryption of
      * job results. Amazon S3 only supports symmetric CMKs. For more information, see
@@ -105,7 +105,7 @@ namespace Model
      * href="https://docs.aws.amazon.com/kms/latest/developerguide/symmetric-asymmetric.html">Using
      * Symmetric and Asymmetric Keys</a> in the <i>AWS Key Management Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline void SetKMSKeyId(const Aws::String& value) { m_kMSKeyIdHasBeenSet = true; m_kMSKeyId = value; }
 
     /**
@@ -174,12 +174,12 @@ namespace Model
      * <p>If the encryption type is <code>aws:kms</code>, this optional value can be
      * used to specify the encryption context for the restore results.</p>
      */
-    inline bool KMSContextHasBeenSet() const { return m_kMSContextHasBeenSet; }
-
-    /**
+    inline bool KMSContextHasBeenSet() const { return m_kMSContextHasBeenSet; } 
+ 
+    /** 
      * <p>If the encryption type is <code>aws:kms</code>, this optional value can be
      * used to specify the encryption context for the restore results.</p>
-     */
+     */ 
     inline void SetKMSContext(const Aws::String& value) { m_kMSContextHasBeenSet = true; m_kMSContext = value; }
 
     /**

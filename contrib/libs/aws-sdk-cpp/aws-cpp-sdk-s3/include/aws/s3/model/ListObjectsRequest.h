@@ -43,7 +43,7 @@ namespace Model
     Aws::Http::HeaderValueCollection GetRequestSpecificHeaders() const override;
 
 
-    /**
+    /** 
      * <p>The name of the bucket containing the objects.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -63,10 +63,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /**
+    /** 
      * <p>The name of the bucket containing the objects.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -86,10 +86,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
-
-    /**
+     */ 
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
+ 
+    /** 
      * <p>The name of the bucket containing the objects.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -109,10 +109,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
-    /**
+    /** 
      * <p>The name of the bucket containing the objects.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -132,10 +132,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
-    /**
+    /** 
      * <p>The name of the bucket containing the objects.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -155,10 +155,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
-    /**
+    /** 
      * <p>The name of the bucket containing the objects.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -178,10 +178,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline ListObjectsRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /**
+    /** 
      * <p>The name of the bucket containing the objects.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -201,10 +201,10 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline ListObjectsRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>The name of the bucket containing the objects.</p> <p>When using this API
      * with an access point, you must direct requests to the access point hostname. The
      * access point hostname takes the form
@@ -224,7 +224,7 @@ namespace Model
      * href="https://docs.aws.amazon.com/AmazonS3/latest/dev/S3onOutposts.html">Using
      * S3 on Outposts</a> in the <i>Amazon Simple Storage Service Developer
      * Guide</i>.</p>
-     */
+     */ 
     inline ListObjectsRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
@@ -236,11 +236,11 @@ namespace Model
     /**
      * <p>A delimiter is a character you use to group keys.</p>
      */
-    inline bool DelimiterHasBeenSet() const { return m_delimiterHasBeenSet; }
-
-    /**
-     * <p>A delimiter is a character you use to group keys.</p>
-     */
+    inline bool DelimiterHasBeenSet() const { return m_delimiterHasBeenSet; } 
+ 
+    /** 
+     * <p>A delimiter is a character you use to group keys.</p> 
+     */ 
     inline void SetDelimiter(const Aws::String& value) { m_delimiterHasBeenSet = true; m_delimiter = value; }
 
     /**
@@ -273,9 +273,9 @@ namespace Model
     inline const EncodingType& GetEncodingType() const{ return m_encodingType; }
 
     
-    inline bool EncodingTypeHasBeenSet() const { return m_encodingTypeHasBeenSet; }
-
-    
+    inline bool EncodingTypeHasBeenSet() const { return m_encodingTypeHasBeenSet; } 
+ 
+     
     inline void SetEncodingType(const EncodingType& value) { m_encodingTypeHasBeenSet = true; m_encodingType = value; }
 
     
@@ -296,11 +296,11 @@ namespace Model
     /**
      * <p>Specifies the key to start with when listing objects in a bucket.</p>
      */
-    inline bool MarkerHasBeenSet() const { return m_markerHasBeenSet; }
-
-    /**
-     * <p>Specifies the key to start with when listing objects in a bucket.</p>
-     */
+    inline bool MarkerHasBeenSet() const { return m_markerHasBeenSet; } 
+ 
+    /** 
+     * <p>Specifies the key to start with when listing objects in a bucket.</p> 
+     */ 
     inline void SetMarker(const Aws::String& value) { m_markerHasBeenSet = true; m_marker = value; }
 
     /**
@@ -341,13 +341,13 @@ namespace Model
      * returns up to 1,000 key names. The response might contain fewer keys but will
      * never contain more. </p>
      */
-    inline bool MaxKeysHasBeenSet() const { return m_maxKeysHasBeenSet; }
-
-    /**
+    inline bool MaxKeysHasBeenSet() const { return m_maxKeysHasBeenSet; } 
+ 
+    /** 
      * <p>Sets the maximum number of keys returned in the response. By default the API
      * returns up to 1,000 key names. The response might contain fewer keys but will
      * never contain more. </p>
-     */
+     */ 
     inline void SetMaxKeys(int value) { m_maxKeysHasBeenSet = true; m_maxKeys = value; }
 
     /**
@@ -366,11 +366,11 @@ namespace Model
     /**
      * <p>Limits the response to keys that begin with the specified prefix.</p>
      */
-    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; }
-
-    /**
-     * <p>Limits the response to keys that begin with the specified prefix.</p>
-     */
+    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; } 
+ 
+    /** 
+     * <p>Limits the response to keys that begin with the specified prefix.</p> 
+     */ 
     inline void SetPrefix(const Aws::String& value) { m_prefixHasBeenSet = true; m_prefix = value; }
 
     /**
@@ -411,13 +411,13 @@ namespace Model
      * objects request. Bucket owners need not specify this parameter in their
      * requests.</p>
      */
-    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; }
-
-    /**
-     * <p>Confirms that the requester knows that she or he will be charged for the list
-     * objects request. Bucket owners need not specify this parameter in their
-     * requests.</p>
-     */
+    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; } 
+ 
+    /** 
+     * <p>Confirms that the requester knows that she or he will be charged for the list 
+     * objects request. Bucket owners need not specify this parameter in their 
+     * requests.</p> 
+     */ 
     inline void SetRequestPayer(const RequestPayer& value) { m_requestPayerHasBeenSet = true; m_requestPayer = value; }
 
     /**
@@ -503,9 +503,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
-
-    
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
+ 
+     
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     

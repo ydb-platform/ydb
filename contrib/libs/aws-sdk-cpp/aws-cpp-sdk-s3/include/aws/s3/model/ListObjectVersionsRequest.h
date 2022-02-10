@@ -42,44 +42,44 @@ namespace Model
     Aws::Http::HeaderValueCollection GetRequestSpecificHeaders() const override;
 
 
-    /**
+    /** 
      * <p>The bucket name that contains the objects. </p>
-     */
+     */ 
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /**
+    /** 
      * <p>The bucket name that contains the objects. </p>
-     */
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
-
-    /**
+     */ 
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
+ 
+    /** 
      * <p>The bucket name that contains the objects. </p>
-     */
+     */ 
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
-    /**
+    /** 
      * <p>The bucket name that contains the objects. </p>
-     */
+     */ 
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
-    /**
+    /** 
      * <p>The bucket name that contains the objects. </p>
-     */
+     */ 
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
-    /**
+    /** 
      * <p>The bucket name that contains the objects. </p>
-     */
+     */ 
     inline ListObjectVersionsRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /**
+    /** 
      * <p>The bucket name that contains the objects. </p>
-     */
+     */ 
     inline ListObjectVersionsRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>The bucket name that contains the objects. </p>
-     */
+     */ 
     inline ListObjectVersionsRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
@@ -99,15 +99,15 @@ namespace Model
      * These groups are counted as one result against the max-keys limitation. These
      * keys are not returned elsewhere in the response.</p>
      */
-    inline bool DelimiterHasBeenSet() const { return m_delimiterHasBeenSet; }
-
-    /**
+    inline bool DelimiterHasBeenSet() const { return m_delimiterHasBeenSet; } 
+ 
+    /** 
      * <p>A delimiter is a character that you specify to group keys. All keys that
      * contain the same string between the <code>prefix</code> and the first occurrence
      * of the delimiter are grouped under a single result element in CommonPrefixes.
      * These groups are counted as one result against the max-keys limitation. These
      * keys are not returned elsewhere in the response.</p>
-     */
+     */ 
     inline void SetDelimiter(const Aws::String& value) { m_delimiterHasBeenSet = true; m_delimiter = value; }
 
     /**
@@ -160,9 +160,9 @@ namespace Model
     inline const EncodingType& GetEncodingType() const{ return m_encodingType; }
 
     
-    inline bool EncodingTypeHasBeenSet() const { return m_encodingTypeHasBeenSet; }
-
-    
+    inline bool EncodingTypeHasBeenSet() const { return m_encodingTypeHasBeenSet; } 
+ 
+     
     inline void SetEncodingType(const EncodingType& value) { m_encodingTypeHasBeenSet = true; m_encodingType = value; }
 
     
@@ -183,11 +183,11 @@ namespace Model
     /**
      * <p>Specifies the key to start with when listing objects in a bucket.</p>
      */
-    inline bool KeyMarkerHasBeenSet() const { return m_keyMarkerHasBeenSet; }
-
-    /**
-     * <p>Specifies the key to start with when listing objects in a bucket.</p>
-     */
+    inline bool KeyMarkerHasBeenSet() const { return m_keyMarkerHasBeenSet; } 
+ 
+    /** 
+     * <p>Specifies the key to start with when listing objects in a bucket.</p> 
+     */ 
     inline void SetKeyMarker(const Aws::String& value) { m_keyMarkerHasBeenSet = true; m_keyMarker = value; }
 
     /**
@@ -234,16 +234,16 @@ namespace Model
      * &lt;isTruncated&gt;true&lt;/isTruncated&gt;. To return the additional keys, see
      * key-marker and version-id-marker.</p>
      */
-    inline bool MaxKeysHasBeenSet() const { return m_maxKeysHasBeenSet; }
-
-    /**
+    inline bool MaxKeysHasBeenSet() const { return m_maxKeysHasBeenSet; } 
+ 
+    /** 
      * <p>Sets the maximum number of keys returned in the response. By default the API
      * returns up to 1,000 key names. The response might contain fewer keys but will
      * never contain more. If additional keys satisfy the search criteria, but were not
      * returned because max-keys was exceeded, the response contains
      * &lt;isTruncated&gt;true&lt;/isTruncated&gt;. To return the additional keys, see
      * key-marker and version-id-marker.</p>
-     */
+     */ 
     inline void SetMaxKeys(int value) { m_maxKeysHasBeenSet = true; m_maxKeys = value; }
 
     /**
@@ -273,15 +273,15 @@ namespace Model
      * folder in a file system.) You can use prefix with delimiter to roll up numerous
      * objects into a single result under CommonPrefixes. </p>
      */
-    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; }
-
-    /**
+    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; } 
+ 
+    /** 
      * <p>Use this parameter to select only those keys that begin with the specified
      * prefix. You can use prefixes to separate a bucket into different groupings of
      * keys. (You can think of using prefix to make groups in the same way you'd use a
      * folder in a file system.) You can use prefix with delimiter to roll up numerous
      * objects into a single result under CommonPrefixes. </p>
-     */
+     */ 
     inline void SetPrefix(const Aws::String& value) { m_prefixHasBeenSet = true; m_prefix = value; }
 
     /**
@@ -338,11 +338,11 @@ namespace Model
     /**
      * <p>Specifies the object version you want to start listing from.</p>
      */
-    inline bool VersionIdMarkerHasBeenSet() const { return m_versionIdMarkerHasBeenSet; }
-
-    /**
-     * <p>Specifies the object version you want to start listing from.</p>
-     */
+    inline bool VersionIdMarkerHasBeenSet() const { return m_versionIdMarkerHasBeenSet; } 
+ 
+    /** 
+     * <p>Specifies the object version you want to start listing from.</p> 
+     */ 
     inline void SetVersionIdMarker(const Aws::String& value) { m_versionIdMarkerHasBeenSet = true; m_versionIdMarker = value; }
 
     /**
@@ -432,9 +432,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
-
-    
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
+ 
+     
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     

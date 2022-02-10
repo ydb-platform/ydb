@@ -41,52 +41,52 @@ namespace Model
     Aws::Http::HeaderValueCollection GetRequestSpecificHeaders() const override;
 
 
-    /**
+    /** 
      * <p>Specifies the bucket whose <code>cors</code> configuration is being
      * deleted.</p>
-     */
+     */ 
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /**
+    /** 
      * <p>Specifies the bucket whose <code>cors</code> configuration is being
      * deleted.</p>
-     */
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
-
-    /**
+     */ 
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
+ 
+    /** 
      * <p>Specifies the bucket whose <code>cors</code> configuration is being
      * deleted.</p>
-     */
+     */ 
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
-    /**
+    /** 
      * <p>Specifies the bucket whose <code>cors</code> configuration is being
      * deleted.</p>
-     */
+     */ 
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
-    /**
+    /** 
      * <p>Specifies the bucket whose <code>cors</code> configuration is being
      * deleted.</p>
-     */
+     */ 
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
-    /**
+    /** 
      * <p>Specifies the bucket whose <code>cors</code> configuration is being
      * deleted.</p>
-     */
+     */ 
     inline DeleteBucketCorsRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /**
+    /** 
      * <p>Specifies the bucket whose <code>cors</code> configuration is being
      * deleted.</p>
-     */
+     */ 
     inline DeleteBucketCorsRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>Specifies the bucket whose <code>cors</code> configuration is being
      * deleted.</p>
-     */
+     */ 
     inline DeleteBucketCorsRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
@@ -151,9 +151,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
-
-    
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
+ 
+     
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     

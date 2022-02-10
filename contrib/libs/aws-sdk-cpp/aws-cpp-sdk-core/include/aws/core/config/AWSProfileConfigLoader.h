@@ -6,8 +6,8 @@
 #pragma once
 
 #include <aws/core/utils/memory/stl/AWSString.h>
-#include <aws/core/utils/memory/stl/AWSMap.h>
-#include <aws/core/auth/AWSCredentials.h>
+#include <aws/core/utils/memory/stl/AWSMap.h> 
+#include <aws/core/auth/AWSCredentials.h> 
 #include <aws/core/utils/DateTime.h>
 #include <aws/core/utils/threading/ReaderWriterLock.h>
 
@@ -38,13 +38,13 @@ namespace Aws
             inline void SetExternalId(const Aws::String& value) { m_externalId = value; }
             inline const Aws::String& GetSourceProfile() const { return m_sourceProfile; }
             inline void SetSourceProfile(const Aws::String& value ) { m_sourceProfile = value; }
-            inline const Aws::String& GetCredentialProcess() const { return m_credentialProcess; }
-            inline void SetCredentialProcess(const Aws::String& value ) { m_credentialProcess = value; }
+            inline const Aws::String& GetCredentialProcess() const { return m_credentialProcess; } 
+            inline void SetCredentialProcess(const Aws::String& value ) { m_credentialProcess = value; } 
             inline void SetAllKeyValPairs(const Aws::Map<Aws::String, Aws::String>& map) { m_allKeyValPairs = map; }
             inline const Aws::String GetValue(const Aws::String& key) const
             {
                 auto iter = m_allKeyValPairs.find(key);
-                if (iter == m_allKeyValPairs.end()) return {};
+                if (iter == m_allKeyValPairs.end()) return {}; 
                 return iter->second;
             }
 
@@ -55,7 +55,7 @@ namespace Aws
             Aws::String m_roleArn;
             Aws::String m_externalId;
             Aws::String m_sourceProfile;
-            Aws::String m_credentialProcess;
+            Aws::String m_credentialProcess; 
             Aws::Map<Aws::String, Aws::String> m_allKeyValPairs;
         };
 

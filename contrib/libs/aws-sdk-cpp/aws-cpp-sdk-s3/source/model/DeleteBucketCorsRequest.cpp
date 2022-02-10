@@ -25,7 +25,7 @@ DeleteBucketCorsRequest::DeleteBucketCorsRequest() :
 
 Aws::String DeleteBucketCorsRequest::SerializePayload() const
 {
-  return {};
+  return {}; 
 }
 
 void DeleteBucketCorsRequest::AddQueryStringParameters(URI& uri) const

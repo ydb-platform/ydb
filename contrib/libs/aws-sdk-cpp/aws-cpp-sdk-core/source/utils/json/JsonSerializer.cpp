@@ -633,7 +633,7 @@ Aws::String JsonView::WriteCompact(bool treatAsObject) const
         {
             return "{}";
         }
-        return {};
+        return {}; 
     }
 
     auto temp = cJSON_PrintUnformatted(m_value);
@@ -650,7 +650,7 @@ Aws::String JsonView::WriteReadable(bool treatAsObject) const
         {
             return "{\n}\n";
         }
-        return {};
+        return {}; 
     }
 
     auto temp = cJSON_Print(m_value);

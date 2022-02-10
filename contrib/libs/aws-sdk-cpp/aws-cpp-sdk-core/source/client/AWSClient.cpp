@@ -37,9 +37,9 @@
 #include <aws/core/Version.h>
 #include <aws/core/platform/OSVersionInfo.h>
 
-#include <cstring>
-#include <cassert>
-
+#include <cstring> 
+#include <cassert> 
+ 
 using namespace Aws;
 using namespace Aws::Client;
 using namespace Aws::Http;
@@ -560,38 +560,38 @@ StreamOutcome AWSClient::MakeRequestWithUnparsedResponse(const Aws::Http::URI& u
     return StreamOutcome(std::move(httpResponseOutcome));
 }
 
-XmlOutcome AWSXMLClient::MakeRequestWithEventStream(const Aws::Http::URI& uri,
-    const Aws::AmazonWebServiceRequest& request,
-    Http::HttpMethod method,
+XmlOutcome AWSXMLClient::MakeRequestWithEventStream(const Aws::Http::URI& uri, 
+    const Aws::AmazonWebServiceRequest& request, 
+    Http::HttpMethod method, 
     const char* signerName,
     const char* signerRegionOverride,
     const char* signerServiceNameOverride) const
-{
+{ 
     HttpResponseOutcome httpOutcome = AttemptExhaustively(uri, request, method, signerName, signerRegionOverride, signerServiceNameOverride);
-    if (httpOutcome.IsSuccess())
-    {
-        return XmlOutcome(AmazonWebServiceResult<XmlDocument>(XmlDocument(), httpOutcome.GetResult()->GetHeaders()));
-    }
-
+    if (httpOutcome.IsSuccess()) 
+    { 
+        return XmlOutcome(AmazonWebServiceResult<XmlDocument>(XmlDocument(), httpOutcome.GetResult()->GetHeaders())); 
+    } 
+ 
     return XmlOutcome(std::move(httpOutcome));
-}
-
+} 
+ 
 XmlOutcome AWSXMLClient::MakeRequestWithEventStream(const Aws::Http::URI& uri,
     Http::HttpMethod method,
     const char* signerName,
     const char* requestName,
     const char* signerRegionOverride,
     const char* signerServiceNameOverride) const
-{
+{ 
     HttpResponseOutcome httpOutcome = AttemptExhaustively(uri, method, signerName, requestName, signerRegionOverride, signerServiceNameOverride);
-    if (httpOutcome.IsSuccess())
-    {
-        return XmlOutcome(AmazonWebServiceResult<XmlDocument>(XmlDocument(), httpOutcome.GetResult()->GetHeaders()));
-    }
-
+    if (httpOutcome.IsSuccess()) 
+    { 
+        return XmlOutcome(AmazonWebServiceResult<XmlDocument>(XmlDocument(), httpOutcome.GetResult()->GetHeaders())); 
+    } 
+ 
     return XmlOutcome(std::move(httpOutcome));
-}
-
+} 
+ 
 void AWSClient::AddHeadersToRequest(const std::shared_ptr<Aws::Http::HttpRequest>& httpRequest,
     const Http::HeaderValueCollection& headerValues) const
 {
@@ -666,37 +666,37 @@ void AWSClient::AddContentBodyToRequest(const std::shared_ptr<Aws::Http::HttpReq
     }
 }
 
-Aws::String Aws::Client::GetAuthorizationHeader(const Aws::Http::HttpRequest& httpRequest)
-{
-    // Extract the hex-encoded signature from the authorization header rather than recalculating it.
-    assert(httpRequest.HasAwsAuthorization());
-    const auto& authHeader = httpRequest.GetAwsAuthorization();
-    auto signaturePosition = authHeader.rfind(Aws::Auth::SIGNATURE);
-    // The auth header should end with 'Signature=<64 chars>'
-    // Make sure we found the word 'Signature' in the header and make sure it's the last item followed by its 64 hex chars
-    if (signaturePosition == Aws::String::npos || (signaturePosition + strlen(Aws::Auth::SIGNATURE) + 1/*'=' character*/ + 64/*hex chars*/) != authHeader.length())
-    {
-        AWS_LOGSTREAM_ERROR(AWS_CLIENT_LOG_TAG, "Failed to extract signature from authorization header.");
-        return {};
-    }
-    return authHeader.substr(signaturePosition + strlen(Aws::Auth::SIGNATURE) + 1);
-}
-
+Aws::String Aws::Client::GetAuthorizationHeader(const Aws::Http::HttpRequest& httpRequest) 
+{ 
+    // Extract the hex-encoded signature from the authorization header rather than recalculating it. 
+    assert(httpRequest.HasAwsAuthorization()); 
+    const auto& authHeader = httpRequest.GetAwsAuthorization(); 
+    auto signaturePosition = authHeader.rfind(Aws::Auth::SIGNATURE); 
+    // The auth header should end with 'Signature=<64 chars>' 
+    // Make sure we found the word 'Signature' in the header and make sure it's the last item followed by its 64 hex chars 
+    if (signaturePosition == Aws::String::npos || (signaturePosition + strlen(Aws::Auth::SIGNATURE) + 1/*'=' character*/ + 64/*hex chars*/) != authHeader.length()) 
+    { 
+        AWS_LOGSTREAM_ERROR(AWS_CLIENT_LOG_TAG, "Failed to extract signature from authorization header."); 
+        return {}; 
+    } 
+    return authHeader.substr(signaturePosition + strlen(Aws::Auth::SIGNATURE) + 1); 
+} 
+ 
 void AWSClient::BuildHttpRequest(const Aws::AmazonWebServiceRequest& request,
     const std::shared_ptr<HttpRequest>& httpRequest) const
-{
+{ 
     //do headers first since the request likely will set content-length as it's own header.
-    AddHeadersToRequest(httpRequest, request.GetHeaders());
-
+    AddHeadersToRequest(httpRequest, request.GetHeaders()); 
+ 
     if (request.IsEventStreamRequest())
-    {
+    { 
         httpRequest->AddContentBody(request.GetBody());
-    }
+    } 
     else
     {
         AddContentBodyToRequest(httpRequest, request.GetBody(), request.ShouldComputeContentMd5(), request.IsStreaming() && request.IsChunked() && m_httpClient->SupportsChunkedTransferEncoding());
     }
-
+ 
     // Pass along handlers for processing data sent/received in bytes
     httpRequest->SetDataReceivedEventHandler(request.GetDataReceivedEventHandler());
     httpRequest->SetDataSentEventHandler(request.GetDataSentEventHandler());
@@ -719,7 +719,7 @@ Aws::String AWSClient::GeneratePresignedUrl(URI& uri, HttpMethod method, long lo
         return request->GetURIString();
     }
 
-    return {};
+    return {}; 
 }
 
 Aws::String AWSClient::GeneratePresignedUrl(URI& uri, HttpMethod method, const Aws::Http::HeaderValueCollection& customizedHeaders, long long expirationInSeconds)
@@ -735,7 +735,7 @@ Aws::String AWSClient::GeneratePresignedUrl(URI& uri, HttpMethod method, const A
         return request->GetURIString();
     }
 
-    return {};
+    return {}; 
 }
 
 Aws::String AWSClient::GeneratePresignedUrl(URI& uri, HttpMethod method, const char* region, long long expirationInSeconds) const
@@ -775,7 +775,7 @@ Aws::String AWSClient::GeneratePresignedUrl(Aws::Http::URI& uri, Aws::Http::Http
         return request->GetURIString();
     }
 
-    return {};
+    return {}; 
 }
 
 Aws::String AWSClient::GeneratePresignedUrl(Aws::Http::URI& uri, Aws::Http::HttpMethod method, const char* region, const char* serviceName, const Aws::Http::HeaderValueCollection& customizedHeaders, long long expirationInSeconds)
@@ -791,7 +791,7 @@ Aws::String AWSClient::GeneratePresignedUrl(Aws::Http::URI& uri, Aws::Http::Http
         return request->GetURIString();
     }
 
-    return {};
+    return {}; 
 }
 
 Aws::String AWSClient::GeneratePresignedUrl(const Aws::AmazonWebServiceRequest& request, Aws::Http::URI& uri, Aws::Http::HttpMethod method, const char* region,
@@ -805,7 +805,7 @@ Aws::String AWSClient::GeneratePresignedUrl(const Aws::AmazonWebServiceRequest& 
         return httpRequest->GetURIString();
     }
 
-    return {};
+    return {}; 
 }
 
 Aws::String AWSClient::GeneratePresignedUrl(const Aws::AmazonWebServiceRequest& request, Aws::Http::URI& uri, Aws::Http::HttpMethod method, const char* region, const char* serviceName,
@@ -819,7 +819,7 @@ const Aws::Http::QueryStringParameterCollection& extraParams, long long expirati
         return httpRequest->GetURIString();
     }
 
-    return {};
+    return {}; 
 }
 
 Aws::String AWSClient::GeneratePresignedUrl(const Aws::AmazonWebServiceRequest& request, Aws::Http::URI& uri, Aws::Http::HttpMethod method,
@@ -833,7 +833,7 @@ Aws::String AWSClient::GeneratePresignedUrl(const Aws::AmazonWebServiceRequest& 
         return httpRequest->GetURIString();
     }
 
-    return {};
+    return {}; 
 }
 
 std::shared_ptr<Aws::Http::HttpRequest> AWSClient::ConvertToRequestForPresigning(const Aws::AmazonWebServiceRequest& request, Aws::Http::URI& uri,
@@ -850,12 +850,12 @@ std::shared_ptr<Aws::Http::HttpRequest> AWSClient::ConvertToRequestForPresigning
     return httpRequest;
 }
 
-std::shared_ptr<Aws::Http::HttpResponse> AWSClient::MakeHttpRequest(std::shared_ptr<Aws::Http::HttpRequest>& request) const
-{
-    return m_httpClient->MakeRequest(request, m_readRateLimiter.get(), m_writeRateLimiter.get());
-}
+std::shared_ptr<Aws::Http::HttpResponse> AWSClient::MakeHttpRequest(std::shared_ptr<Aws::Http::HttpRequest>& request) const 
+{ 
+    return m_httpClient->MakeRequest(request, m_readRateLimiter.get(), m_writeRateLimiter.get()); 
+} 
 
-
+ 
 ////////////////////////////////////////////////////////////////////////////
 AWSJsonClient::AWSJsonClient(const Aws::Client::ClientConfiguration& configuration,
     const std::shared_ptr<Aws::Client::AWSAuthSigner>& signer,
@@ -925,39 +925,39 @@ JsonOutcome AWSJsonClient::MakeRequest(const Aws::Http::URI& uri,
     return JsonOutcome(AmazonWebServiceResult<JsonValue>(JsonValue(), httpOutcome.GetResult()->GetHeaders()));
 }
 
-JsonOutcome AWSJsonClient::MakeEventStreamRequest(std::shared_ptr<Aws::Http::HttpRequest>& request) const
-{
-    // request is assumed to be signed
-    std::shared_ptr<HttpResponse> httpResponse = MakeHttpRequest(request);
-
-    if (DoesResponseGenerateError(httpResponse))
-    {
-        AWS_LOGSTREAM_DEBUG(AWS_CLIENT_LOG_TAG, "Request returned error. Attempting to generate appropriate error codes from response");
+JsonOutcome AWSJsonClient::MakeEventStreamRequest(std::shared_ptr<Aws::Http::HttpRequest>& request) const 
+{ 
+    // request is assumed to be signed 
+    std::shared_ptr<HttpResponse> httpResponse = MakeHttpRequest(request); 
+ 
+    if (DoesResponseGenerateError(httpResponse)) 
+    { 
+        AWS_LOGSTREAM_DEBUG(AWS_CLIENT_LOG_TAG, "Request returned error. Attempting to generate appropriate error codes from response"); 
         auto error = BuildAWSError(httpResponse);
         return JsonOutcome(std::move(error));
-    }
-
-    AWS_LOGSTREAM_DEBUG(AWS_CLIENT_LOG_TAG, "Request returned successful response.");
-
+    } 
+ 
+    AWS_LOGSTREAM_DEBUG(AWS_CLIENT_LOG_TAG, "Request returned successful response."); 
+ 
     HttpResponseOutcome httpOutcome(std::move(httpResponse));
-
-    if (httpOutcome.GetResult()->GetResponseBody().tellp() > 0)
-    {
-        JsonValue jsonValue(httpOutcome.GetResult()->GetResponseBody());
-        if (!jsonValue.WasParseSuccessful())
-        {
-            return JsonOutcome(AWSError<CoreErrors>(CoreErrors::UNKNOWN, "Json Parser Error", jsonValue.GetErrorMessage(), false));
-        }
-
-        //this is stupid, but gcc doesn't pick up the covariant on the dereference so we have to give it a little hint.
-        return JsonOutcome(AmazonWebServiceResult<JsonValue>(std::move(jsonValue),
-            httpOutcome.GetResult()->GetHeaders(),
-            httpOutcome.GetResult()->GetResponseCode()));
-    }
-
-    return JsonOutcome(AmazonWebServiceResult<JsonValue>(JsonValue(), httpOutcome.GetResult()->GetHeaders()));
-}
-
+ 
+    if (httpOutcome.GetResult()->GetResponseBody().tellp() > 0) 
+    { 
+        JsonValue jsonValue(httpOutcome.GetResult()->GetResponseBody()); 
+        if (!jsonValue.WasParseSuccessful()) 
+        { 
+            return JsonOutcome(AWSError<CoreErrors>(CoreErrors::UNKNOWN, "Json Parser Error", jsonValue.GetErrorMessage(), false)); 
+        } 
+ 
+        //this is stupid, but gcc doesn't pick up the covariant on the dereference so we have to give it a little hint. 
+        return JsonOutcome(AmazonWebServiceResult<JsonValue>(std::move(jsonValue), 
+            httpOutcome.GetResult()->GetHeaders(), 
+            httpOutcome.GetResult()->GetResponseCode())); 
+    } 
+ 
+    return JsonOutcome(AmazonWebServiceResult<JsonValue>(JsonValue(), httpOutcome.GetResult()->GetHeaders())); 
+} 
+ 
 AWSError<CoreErrors> AWSJsonClient::BuildAWSError(
     const std::shared_ptr<Aws::Http::HttpResponse>& httpResponse) const
 {

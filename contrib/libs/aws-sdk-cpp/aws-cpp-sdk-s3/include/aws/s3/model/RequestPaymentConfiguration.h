@@ -22,11 +22,11 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>Container for Payer.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/RequestPaymentConfiguration">AWS
-   * API Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/RequestPaymentConfiguration">AWS 
+   * API Reference</a></p> 
+   */ 
   class AWS_S3_API RequestPaymentConfiguration
   {
   public:
@@ -45,11 +45,11 @@ namespace Model
     /**
      * <p>Specifies who pays for the download and request fees.</p>
      */
-    inline bool PayerHasBeenSet() const { return m_payerHasBeenSet; }
-
-    /**
-     * <p>Specifies who pays for the download and request fees.</p>
-     */
+    inline bool PayerHasBeenSet() const { return m_payerHasBeenSet; } 
+ 
+    /** 
+     * <p>Specifies who pays for the download and request fees.</p> 
+     */ 
     inline void SetPayer(const Payer& value) { m_payerHasBeenSet = true; m_payer = value; }
 
     /**

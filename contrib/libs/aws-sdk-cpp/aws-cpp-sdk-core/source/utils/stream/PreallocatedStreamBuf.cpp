@@ -16,8 +16,8 @@ namespace Aws
             PreallocatedStreamBuf::PreallocatedStreamBuf(unsigned char* buffer, uint64_t lengthToRead) :
                 m_underlyingBuffer(buffer), m_lengthToRead(lengthToRead)
             {
-                char* end = reinterpret_cast<char*>(m_underlyingBuffer + m_lengthToRead);
-                char* begin = reinterpret_cast<char*>(m_underlyingBuffer);
+                char* end = reinterpret_cast<char*>(m_underlyingBuffer + m_lengthToRead); 
+                char* begin = reinterpret_cast<char*>(m_underlyingBuffer); 
                 setp(begin, end);
                 setg(begin, begin, end);
             }
@@ -55,12 +55,12 @@ namespace Aws
                     return pos_type(off_type(-1));
                 }
 
-                char* end = reinterpret_cast<char*>(m_underlyingBuffer + m_lengthToRead);
-                char* begin = reinterpret_cast<char*>(m_underlyingBuffer);
+                char* end = reinterpret_cast<char*>(m_underlyingBuffer + m_lengthToRead); 
+                char* begin = reinterpret_cast<char*>(m_underlyingBuffer); 
 
                 if (which == std::ios_base::in)
                 {
-                    setg(begin, begin + static_cast<size_t>(pos), end);
+                    setg(begin, begin + static_cast<size_t>(pos), end); 
                 }
 
                 if (which == std::ios_base::out)
@@ -72,4 +72,4 @@ namespace Aws
             }
         }
     }
-}
+} 

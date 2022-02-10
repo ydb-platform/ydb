@@ -22,11 +22,11 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>Container for all error elements.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Error">AWS API
-   * Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/Error">AWS API 
+   * Reference</a></p> 
+   */ 
   class AWS_S3_API Error
   {
   public:
@@ -37,89 +37,89 @@ namespace Model
     void AddToNode(Aws::Utils::Xml::XmlNode& parentNode) const;
 
 
-    /**
+    /** 
      * <p>The error key.</p>
-     */
+     */ 
     inline const Aws::String& GetKey() const{ return m_key; }
 
-    /**
+    /** 
      * <p>The error key.</p>
-     */
-    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
-
-    /**
+     */ 
+    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; } 
+ 
+    /** 
      * <p>The error key.</p>
-     */
+     */ 
     inline void SetKey(const Aws::String& value) { m_keyHasBeenSet = true; m_key = value; }
 
-    /**
+    /** 
      * <p>The error key.</p>
-     */
+     */ 
     inline void SetKey(Aws::String&& value) { m_keyHasBeenSet = true; m_key = std::move(value); }
 
-    /**
+    /** 
      * <p>The error key.</p>
-     */
+     */ 
     inline void SetKey(const char* value) { m_keyHasBeenSet = true; m_key.assign(value); }
 
-    /**
+    /** 
      * <p>The error key.</p>
-     */
+     */ 
     inline Error& WithKey(const Aws::String& value) { SetKey(value); return *this;}
 
-    /**
+    /** 
      * <p>The error key.</p>
-     */
+     */ 
     inline Error& WithKey(Aws::String&& value) { SetKey(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>The error key.</p>
-     */
+     */ 
     inline Error& WithKey(const char* value) { SetKey(value); return *this;}
 
 
-    /**
+    /** 
      * <p>The version ID of the error.</p>
-     */
+     */ 
     inline const Aws::String& GetVersionId() const{ return m_versionId; }
 
-    /**
+    /** 
      * <p>The version ID of the error.</p>
-     */
-    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; }
-
-    /**
+     */ 
+    inline bool VersionIdHasBeenSet() const { return m_versionIdHasBeenSet; } 
+ 
+    /** 
      * <p>The version ID of the error.</p>
-     */
+     */ 
     inline void SetVersionId(const Aws::String& value) { m_versionIdHasBeenSet = true; m_versionId = value; }
 
-    /**
+    /** 
      * <p>The version ID of the error.</p>
-     */
+     */ 
     inline void SetVersionId(Aws::String&& value) { m_versionIdHasBeenSet = true; m_versionId = std::move(value); }
 
-    /**
+    /** 
      * <p>The version ID of the error.</p>
-     */
+     */ 
     inline void SetVersionId(const char* value) { m_versionIdHasBeenSet = true; m_versionId.assign(value); }
 
-    /**
+    /** 
      * <p>The version ID of the error.</p>
-     */
+     */ 
     inline Error& WithVersionId(const Aws::String& value) { SetVersionId(value); return *this;}
 
-    /**
+    /** 
      * <p>The version ID of the error.</p>
-     */
+     */ 
     inline Error& WithVersionId(Aws::String&& value) { SetVersionId(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>The version ID of the error.</p>
-     */
+     */ 
     inline Error& WithVersionId(const char* value) { SetVersionId(value); return *this;}
 
 
-    /**
+    /** 
      * <p>The error code is a string that uniquely identifies an error condition. It is
      * meant to be read and understood by programs that detect and handle errors by
      * type. </p> <p class="title"> <b>Amazon S3 error codes</b> </p> <ul> <li> <ul>
@@ -475,11 +475,11 @@ namespace Model
      * must contain the specified field name. If it is specified, check the order of
      * the fields.</p> </li> <li> <p> <i>HTTP Status Code:</i> 400 Bad Request</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> </ul>
-     * <p/>
-     */
+     * <p/> 
+     */ 
     inline const Aws::String& GetCode() const{ return m_code; }
 
-    /**
+    /** 
      * <p>The error code is a string that uniquely identifies an error condition. It is
      * meant to be read and understood by programs that detect and handle errors by
      * type. </p> <p class="title"> <b>Amazon S3 error codes</b> </p> <ul> <li> <ul>
@@ -835,11 +835,11 @@ namespace Model
      * must contain the specified field name. If it is specified, check the order of
      * the fields.</p> </li> <li> <p> <i>HTTP Status Code:</i> 400 Bad Request</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> </ul>
-     * <p/>
-     */
-    inline bool CodeHasBeenSet() const { return m_codeHasBeenSet; }
-
-    /**
+     * <p/> 
+     */ 
+    inline bool CodeHasBeenSet() const { return m_codeHasBeenSet; } 
+ 
+    /** 
      * <p>The error code is a string that uniquely identifies an error condition. It is
      * meant to be read and understood by programs that detect and handle errors by
      * type. </p> <p class="title"> <b>Amazon S3 error codes</b> </p> <ul> <li> <ul>
@@ -1195,11 +1195,11 @@ namespace Model
      * must contain the specified field name. If it is specified, check the order of
      * the fields.</p> </li> <li> <p> <i>HTTP Status Code:</i> 400 Bad Request</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> </ul>
-     * <p/>
-     */
+     * <p/> 
+     */ 
     inline void SetCode(const Aws::String& value) { m_codeHasBeenSet = true; m_code = value; }
 
-    /**
+    /** 
      * <p>The error code is a string that uniquely identifies an error condition. It is
      * meant to be read and understood by programs that detect and handle errors by
      * type. </p> <p class="title"> <b>Amazon S3 error codes</b> </p> <ul> <li> <ul>
@@ -1555,11 +1555,11 @@ namespace Model
      * must contain the specified field name. If it is specified, check the order of
      * the fields.</p> </li> <li> <p> <i>HTTP Status Code:</i> 400 Bad Request</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> </ul>
-     * <p/>
-     */
+     * <p/> 
+     */ 
     inline void SetCode(Aws::String&& value) { m_codeHasBeenSet = true; m_code = std::move(value); }
 
-    /**
+    /** 
      * <p>The error code is a string that uniquely identifies an error condition. It is
      * meant to be read and understood by programs that detect and handle errors by
      * type. </p> <p class="title"> <b>Amazon S3 error codes</b> </p> <ul> <li> <ul>
@@ -1915,11 +1915,11 @@ namespace Model
      * must contain the specified field name. If it is specified, check the order of
      * the fields.</p> </li> <li> <p> <i>HTTP Status Code:</i> 400 Bad Request</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> </ul>
-     * <p/>
-     */
+     * <p/> 
+     */ 
     inline void SetCode(const char* value) { m_codeHasBeenSet = true; m_code.assign(value); }
 
-    /**
+    /** 
      * <p>The error code is a string that uniquely identifies an error condition. It is
      * meant to be read and understood by programs that detect and handle errors by
      * type. </p> <p class="title"> <b>Amazon S3 error codes</b> </p> <ul> <li> <ul>
@@ -2275,11 +2275,11 @@ namespace Model
      * must contain the specified field name. If it is specified, check the order of
      * the fields.</p> </li> <li> <p> <i>HTTP Status Code:</i> 400 Bad Request</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> </ul>
-     * <p/>
-     */
+     * <p/> 
+     */ 
     inline Error& WithCode(const Aws::String& value) { SetCode(value); return *this;}
 
-    /**
+    /** 
      * <p>The error code is a string that uniquely identifies an error condition. It is
      * meant to be read and understood by programs that detect and handle errors by
      * type. </p> <p class="title"> <b>Amazon S3 error codes</b> </p> <ul> <li> <ul>
@@ -2635,11 +2635,11 @@ namespace Model
      * must contain the specified field name. If it is specified, check the order of
      * the fields.</p> </li> <li> <p> <i>HTTP Status Code:</i> 400 Bad Request</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> </ul>
-     * <p/>
-     */
+     * <p/> 
+     */ 
     inline Error& WithCode(Aws::String&& value) { SetCode(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>The error code is a string that uniquely identifies an error condition. It is
      * meant to be read and understood by programs that detect and handle errors by
      * type. </p> <p class="title"> <b>Amazon S3 error codes</b> </p> <ul> <li> <ul>
@@ -2995,89 +2995,89 @@ namespace Model
      * must contain the specified field name. If it is specified, check the order of
      * the fields.</p> </li> <li> <p> <i>HTTP Status Code:</i> 400 Bad Request</p>
      * </li> <li> <p> <i>SOAP Fault Code Prefix:</i> Client</p> </li> </ul> </li> </ul>
-     * <p/>
-     */
+     * <p/> 
+     */ 
     inline Error& WithCode(const char* value) { SetCode(value); return *this;}
 
 
-    /**
+    /** 
      * <p>The error message contains a generic description of the error condition in
      * English. It is intended for a human audience. Simple programs display the
      * message directly to the end user if they encounter an error condition they don't
      * know how or don't care to handle. Sophisticated programs with more exhaustive
      * error handling and proper internationalization are more likely to ignore the
      * error message.</p>
-     */
+     */ 
     inline const Aws::String& GetMessage() const{ return m_message; }
 
-    /**
+    /** 
      * <p>The error message contains a generic description of the error condition in
      * English. It is intended for a human audience. Simple programs display the
      * message directly to the end user if they encounter an error condition they don't
      * know how or don't care to handle. Sophisticated programs with more exhaustive
      * error handling and proper internationalization are more likely to ignore the
      * error message.</p>
-     */
-    inline bool MessageHasBeenSet() const { return m_messageHasBeenSet; }
-
-    /**
+     */ 
+    inline bool MessageHasBeenSet() const { return m_messageHasBeenSet; } 
+ 
+    /** 
      * <p>The error message contains a generic description of the error condition in
      * English. It is intended for a human audience. Simple programs display the
      * message directly to the end user if they encounter an error condition they don't
      * know how or don't care to handle. Sophisticated programs with more exhaustive
      * error handling and proper internationalization are more likely to ignore the
      * error message.</p>
-     */
+     */ 
     inline void SetMessage(const Aws::String& value) { m_messageHasBeenSet = true; m_message = value; }
 
-    /**
+    /** 
      * <p>The error message contains a generic description of the error condition in
      * English. It is intended for a human audience. Simple programs display the
      * message directly to the end user if they encounter an error condition they don't
      * know how or don't care to handle. Sophisticated programs with more exhaustive
      * error handling and proper internationalization are more likely to ignore the
      * error message.</p>
-     */
+     */ 
     inline void SetMessage(Aws::String&& value) { m_messageHasBeenSet = true; m_message = std::move(value); }
 
-    /**
+    /** 
      * <p>The error message contains a generic description of the error condition in
      * English. It is intended for a human audience. Simple programs display the
      * message directly to the end user if they encounter an error condition they don't
      * know how or don't care to handle. Sophisticated programs with more exhaustive
      * error handling and proper internationalization are more likely to ignore the
      * error message.</p>
-     */
+     */ 
     inline void SetMessage(const char* value) { m_messageHasBeenSet = true; m_message.assign(value); }
 
-    /**
+    /** 
      * <p>The error message contains a generic description of the error condition in
      * English. It is intended for a human audience. Simple programs display the
      * message directly to the end user if they encounter an error condition they don't
      * know how or don't care to handle. Sophisticated programs with more exhaustive
      * error handling and proper internationalization are more likely to ignore the
      * error message.</p>
-     */
+     */ 
     inline Error& WithMessage(const Aws::String& value) { SetMessage(value); return *this;}
 
-    /**
+    /** 
      * <p>The error message contains a generic description of the error condition in
      * English. It is intended for a human audience. Simple programs display the
      * message directly to the end user if they encounter an error condition they don't
      * know how or don't care to handle. Sophisticated programs with more exhaustive
      * error handling and proper internationalization are more likely to ignore the
      * error message.</p>
-     */
+     */ 
     inline Error& WithMessage(Aws::String&& value) { SetMessage(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>The error message contains a generic description of the error condition in
      * English. It is intended for a human audience. Simple programs display the
      * message directly to the end user if they encounter an error condition they don't
      * know how or don't care to handle. Sophisticated programs with more exhaustive
      * error handling and proper internationalization are more likely to ignore the
      * error message.</p>
-     */
+     */ 
     inline Error& WithMessage(const char* value) { SetMessage(value); return *this;}
 
   private:

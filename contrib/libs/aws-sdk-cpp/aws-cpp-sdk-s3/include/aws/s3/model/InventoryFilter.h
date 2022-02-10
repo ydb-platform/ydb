@@ -22,12 +22,12 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>Specifies an inventory filter. The inventory only includes objects that meet
    * the filter's criteria.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/InventoryFilter">AWS
-   * API Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/InventoryFilter">AWS 
+   * API Reference</a></p> 
+   */ 
   class AWS_S3_API InventoryFilter
   {
   public:
@@ -48,12 +48,12 @@ namespace Model
      * <p>The prefix that an object must have to be included in the inventory
      * results.</p>
      */
-    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; }
-
-    /**
-     * <p>The prefix that an object must have to be included in the inventory
-     * results.</p>
-     */
+    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; } 
+ 
+    /** 
+     * <p>The prefix that an object must have to be included in the inventory 
+     * results.</p> 
+     */ 
     inline void SetPrefix(const Aws::String& value) { m_prefixHasBeenSet = true; m_prefix = value; }
 
     /**

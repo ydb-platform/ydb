@@ -4,7 +4,7 @@
  */
 
 #include <aws/core/utils/DNS.h>
-#include <aws/core/utils/StringUtils.h>
+#include <aws/core/utils/StringUtils.h> 
 
 namespace Aws
 {
@@ -24,32 +24,32 @@ namespace Aws
             if (label.size() > 63)
                 return false;
 
-            if (!StringUtils::IsAlnum(label.front()))
+            if (!StringUtils::IsAlnum(label.front())) 
                 return false; // '-' is not acceptable as the first character
 
-            if (!StringUtils::IsAlnum(label.back()))
+            if (!StringUtils::IsAlnum(label.back())) 
                 return false; // '-' is not acceptable as the last  character
 
             for (size_t i = 1, e = label.size() - 1; i < e; ++i)
             {
                 auto c = label[i];
-                if (c != '-' && !StringUtils::IsAlnum(c))
+                if (c != '-' && !StringUtils::IsAlnum(c)) 
                     return false;
             }
 
             return true;
         }
-
-        bool IsValidHost(const Aws::String& host)
-        {
-            // Valid DNS hostnames are composed of valid DNS labels separated by a period.
-            auto labels = StringUtils::Split(host, '.');
-            if (labels.empty()) 
-            {
-                return false;
-            }
-
-            return !std::any_of(labels.begin(), labels.end(), [](const Aws::String& label){ return !IsValidDnsLabel(label); });
-        }
+ 
+        bool IsValidHost(const Aws::String& host) 
+        { 
+            // Valid DNS hostnames are composed of valid DNS labels separated by a period. 
+            auto labels = StringUtils::Split(host, '.'); 
+            if (labels.empty())  
+            { 
+                return false; 
+            } 
+ 
+            return !std::any_of(labels.begin(), labels.end(), [](const Aws::String& label){ return !IsValidDnsLabel(label); }); 
+        } 
     }
 }

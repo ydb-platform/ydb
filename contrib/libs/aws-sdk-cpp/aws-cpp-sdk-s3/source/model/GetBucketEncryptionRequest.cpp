@@ -25,7 +25,7 @@ GetBucketEncryptionRequest::GetBucketEncryptionRequest() :
 
 Aws::String GetBucketEncryptionRequest::SerializePayload() const
 {
-  return {};
+  return {}; 
 }
 
 void GetBucketEncryptionRequest::AddQueryStringParameters(URI& uri) const

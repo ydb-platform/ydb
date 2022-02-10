@@ -41,14 +41,14 @@ namespace Aws
                  * Get the buffer that is being used by the stream buffer.
                  * @return Pointer to the underlying buffer (probably for a Aws::Delete() call).
                  */
-                unsigned char* GetBuffer() { return m_underlyingBuffer; }
+                unsigned char* GetBuffer() { return m_underlyingBuffer; } 
 
             protected:
                 pos_type seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode which = std::ios_base::in | std::ios_base::out) override;
                 pos_type seekpos(pos_type pos, std::ios_base::openmode which = std::ios_base::in | std::ios_base::out) override;
 
             private:
-                unsigned char* m_underlyingBuffer;
+                unsigned char* m_underlyingBuffer; 
                 const uint64_t m_lengthToRead;
             };
         }

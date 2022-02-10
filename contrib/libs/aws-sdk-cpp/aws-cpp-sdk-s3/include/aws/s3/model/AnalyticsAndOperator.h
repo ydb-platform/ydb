@@ -24,14 +24,14 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>A conjunction (logical AND) of predicates, which is used in evaluating a
    * metrics filter. The operator must have at least two predicates in any
    * combination, and an object must match all of the predicates for the filter to
    * apply.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AnalyticsAndOperator">AWS
-   * API Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AnalyticsAndOperator">AWS 
+   * API Reference</a></p> 
+   */ 
   class AWS_S3_API AnalyticsAndOperator
   {
   public:
@@ -52,12 +52,12 @@ namespace Model
      * <p>The prefix to use when evaluating an AND predicate: The prefix that an object
      * must have to be included in the metrics results.</p>
      */
-    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; }
-
-    /**
+    inline bool PrefixHasBeenSet() const { return m_prefixHasBeenSet; } 
+ 
+    /** 
      * <p>The prefix to use when evaluating an AND predicate: The prefix that an object
      * must have to be included in the metrics results.</p>
-     */
+     */ 
     inline void SetPrefix(const Aws::String& value) { m_prefixHasBeenSet = true; m_prefix = value; }
 
     /**
@@ -99,11 +99,11 @@ namespace Model
     /**
      * <p>The list of tags to use when evaluating an AND predicate.</p>
      */
-    inline bool TagsHasBeenSet() const { return m_tagsHasBeenSet; }
-
-    /**
-     * <p>The list of tags to use when evaluating an AND predicate.</p>
-     */
+    inline bool TagsHasBeenSet() const { return m_tagsHasBeenSet; } 
+ 
+    /** 
+     * <p>The list of tags to use when evaluating an AND predicate.</p> 
+     */ 
     inline void SetTags(const Aws::Vector<Tag>& value) { m_tagsHasBeenSet = true; m_tags = value; }
 
     /**

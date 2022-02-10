@@ -43,157 +43,157 @@ namespace Model
     Aws::Http::HeaderValueCollection GetRequestSpecificHeaders() const override;
 
 
-    /**
+    /** 
      * <p>Name of the bucket to which the multipart upload was initiated.</p>
-     */
+     */ 
     inline const Aws::String& GetBucket() const{ return m_bucket; }
 
-    /**
+    /** 
      * <p>Name of the bucket to which the multipart upload was initiated.</p>
-     */
-    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; }
-
-    /**
+     */ 
+    inline bool BucketHasBeenSet() const { return m_bucketHasBeenSet; } 
+ 
+    /** 
      * <p>Name of the bucket to which the multipart upload was initiated.</p>
-     */
+     */ 
     inline void SetBucket(const Aws::String& value) { m_bucketHasBeenSet = true; m_bucket = value; }
 
-    /**
+    /** 
      * <p>Name of the bucket to which the multipart upload was initiated.</p>
-     */
+     */ 
     inline void SetBucket(Aws::String&& value) { m_bucketHasBeenSet = true; m_bucket = std::move(value); }
 
-    /**
+    /** 
      * <p>Name of the bucket to which the multipart upload was initiated.</p>
-     */
+     */ 
     inline void SetBucket(const char* value) { m_bucketHasBeenSet = true; m_bucket.assign(value); }
 
-    /**
+    /** 
      * <p>Name of the bucket to which the multipart upload was initiated.</p>
-     */
+     */ 
     inline CompleteMultipartUploadRequest& WithBucket(const Aws::String& value) { SetBucket(value); return *this;}
 
-    /**
+    /** 
      * <p>Name of the bucket to which the multipart upload was initiated.</p>
-     */
+     */ 
     inline CompleteMultipartUploadRequest& WithBucket(Aws::String&& value) { SetBucket(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>Name of the bucket to which the multipart upload was initiated.</p>
-     */
+     */ 
     inline CompleteMultipartUploadRequest& WithBucket(const char* value) { SetBucket(value); return *this;}
 
 
-    /**
+    /** 
      * <p>Object key for which the multipart upload was initiated.</p>
-     */
+     */ 
     inline const Aws::String& GetKey() const{ return m_key; }
 
-    /**
+    /** 
      * <p>Object key for which the multipart upload was initiated.</p>
-     */
-    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; }
-
-    /**
+     */ 
+    inline bool KeyHasBeenSet() const { return m_keyHasBeenSet; } 
+ 
+    /** 
      * <p>Object key for which the multipart upload was initiated.</p>
-     */
+     */ 
     inline void SetKey(const Aws::String& value) { m_keyHasBeenSet = true; m_key = value; }
 
-    /**
+    /** 
      * <p>Object key for which the multipart upload was initiated.</p>
-     */
+     */ 
     inline void SetKey(Aws::String&& value) { m_keyHasBeenSet = true; m_key = std::move(value); }
 
-    /**
+    /** 
      * <p>Object key for which the multipart upload was initiated.</p>
-     */
+     */ 
     inline void SetKey(const char* value) { m_keyHasBeenSet = true; m_key.assign(value); }
 
-    /**
+    /** 
      * <p>Object key for which the multipart upload was initiated.</p>
-     */
+     */ 
     inline CompleteMultipartUploadRequest& WithKey(const Aws::String& value) { SetKey(value); return *this;}
 
-    /**
+    /** 
      * <p>Object key for which the multipart upload was initiated.</p>
-     */
+     */ 
     inline CompleteMultipartUploadRequest& WithKey(Aws::String&& value) { SetKey(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>Object key for which the multipart upload was initiated.</p>
-     */
+     */ 
     inline CompleteMultipartUploadRequest& WithKey(const char* value) { SetKey(value); return *this;}
 
 
-    /**
+    /** 
      * <p>The container for the multipart upload request information.</p>
-     */
+     */ 
     inline const CompletedMultipartUpload& GetMultipartUpload() const{ return m_multipartUpload; }
 
-    /**
+    /** 
      * <p>The container for the multipart upload request information.</p>
-     */
-    inline bool MultipartUploadHasBeenSet() const { return m_multipartUploadHasBeenSet; }
-
-    /**
+     */ 
+    inline bool MultipartUploadHasBeenSet() const { return m_multipartUploadHasBeenSet; } 
+ 
+    /** 
      * <p>The container for the multipart upload request information.</p>
-     */
+     */ 
     inline void SetMultipartUpload(const CompletedMultipartUpload& value) { m_multipartUploadHasBeenSet = true; m_multipartUpload = value; }
 
-    /**
+    /** 
      * <p>The container for the multipart upload request information.</p>
-     */
+     */ 
     inline void SetMultipartUpload(CompletedMultipartUpload&& value) { m_multipartUploadHasBeenSet = true; m_multipartUpload = std::move(value); }
 
-    /**
+    /** 
      * <p>The container for the multipart upload request information.</p>
-     */
+     */ 
     inline CompleteMultipartUploadRequest& WithMultipartUpload(const CompletedMultipartUpload& value) { SetMultipartUpload(value); return *this;}
 
-    /**
+    /** 
      * <p>The container for the multipart upload request information.</p>
-     */
+     */ 
     inline CompleteMultipartUploadRequest& WithMultipartUpload(CompletedMultipartUpload&& value) { SetMultipartUpload(std::move(value)); return *this;}
 
 
-    /**
+    /** 
      * <p>ID for the initiated multipart upload.</p>
-     */
+     */ 
     inline const Aws::String& GetUploadId() const{ return m_uploadId; }
 
-    /**
+    /** 
      * <p>ID for the initiated multipart upload.</p>
-     */
-    inline bool UploadIdHasBeenSet() const { return m_uploadIdHasBeenSet; }
-
-    /**
+     */ 
+    inline bool UploadIdHasBeenSet() const { return m_uploadIdHasBeenSet; } 
+ 
+    /** 
      * <p>ID for the initiated multipart upload.</p>
-     */
+     */ 
     inline void SetUploadId(const Aws::String& value) { m_uploadIdHasBeenSet = true; m_uploadId = value; }
 
-    /**
+    /** 
      * <p>ID for the initiated multipart upload.</p>
-     */
+     */ 
     inline void SetUploadId(Aws::String&& value) { m_uploadIdHasBeenSet = true; m_uploadId = std::move(value); }
 
-    /**
+    /** 
      * <p>ID for the initiated multipart upload.</p>
-     */
+     */ 
     inline void SetUploadId(const char* value) { m_uploadIdHasBeenSet = true; m_uploadId.assign(value); }
 
-    /**
+    /** 
      * <p>ID for the initiated multipart upload.</p>
-     */
+     */ 
     inline CompleteMultipartUploadRequest& WithUploadId(const Aws::String& value) { SetUploadId(value); return *this;}
 
-    /**
+    /** 
      * <p>ID for the initiated multipart upload.</p>
-     */
+     */ 
     inline CompleteMultipartUploadRequest& WithUploadId(Aws::String&& value) { SetUploadId(std::move(value)); return *this;}
 
-    /**
+    /** 
      * <p>ID for the initiated multipart upload.</p>
-     */
+     */ 
     inline CompleteMultipartUploadRequest& WithUploadId(const char* value) { SetUploadId(value); return *this;}
 
 
@@ -201,9 +201,9 @@ namespace Model
     inline const RequestPayer& GetRequestPayer() const{ return m_requestPayer; }
 
     
-    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; }
-
-    
+    inline bool RequestPayerHasBeenSet() const { return m_requestPayerHasBeenSet; } 
+ 
+     
     inline void SetRequestPayer(const RequestPayer& value) { m_requestPayerHasBeenSet = true; m_requestPayer = value; }
 
     
@@ -277,9 +277,9 @@ namespace Model
     inline const Aws::Map<Aws::String, Aws::String>& GetCustomizedAccessLogTag() const{ return m_customizedAccessLogTag; }
 
     
-    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; }
-
-    
+    inline bool CustomizedAccessLogTagHasBeenSet() const { return m_customizedAccessLogTagHasBeenSet; } 
+ 
+     
     inline void SetCustomizedAccessLogTag(const Aws::Map<Aws::String, Aws::String>& value) { m_customizedAccessLogTagHasBeenSet = true; m_customizedAccessLogTag = value; }
 
     

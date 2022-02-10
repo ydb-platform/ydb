@@ -29,7 +29,7 @@ AbortMultipartUploadRequest::AbortMultipartUploadRequest() :
 
 Aws::String AbortMultipartUploadRequest::SerializePayload() const
 {
-  return {};
+  return {}; 
 }
 
 void AbortMultipartUploadRequest::AddQueryStringParameters(URI& uri) const

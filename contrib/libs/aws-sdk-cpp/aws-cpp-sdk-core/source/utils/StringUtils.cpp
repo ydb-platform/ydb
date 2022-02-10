@@ -155,8 +155,8 @@ Aws::String StringUtils::URLEncode(const char* unsafe)
     size_t unsafeLength = strlen(unsafe);
     for (auto i = unsafe, n = unsafe + unsafeLength; i != n; ++i)
     {
-        char c = *i;
-        if (IsAlnum(c) || c == '-' || c == '_' || c == '.' || c == '~')
+        char c = *i; 
+        if (IsAlnum(c) || c == '-' || c == '_' || c == '.' || c == '~') 
         {
             escaped << (char)c;
         }
@@ -209,77 +209,77 @@ Aws::String StringUtils::URLEncode(double unsafe)
 
 Aws::String StringUtils::URLDecode(const char* safe)
 {
-    Aws::String unescaped;
+    Aws::String unescaped; 
 
-    for (; *safe; safe++)
+    for (; *safe; safe++) 
     {
-        switch(*safe)
+        switch(*safe) 
         {
-            case '%':
-            {
-                int hex = 0;
-                auto ch = *++safe;
-                if (ch >= '0' && ch <= '9')
-                {
-                    hex = (ch - '0') * 16;
-                }
-                else if (ch >= 'A' && ch <= 'F')
-                {
-                    hex = (ch - 'A' + 10) * 16;
-                }
-                else if (ch >= 'a' && ch <= 'f')
-                {
-                    hex = (ch - 'a' + 10) * 16;
-                }
-                else
-                {
-                    unescaped.push_back('%');
-                    if (ch == 0)
-                    {
-                        return unescaped;
-                    }
-                    unescaped.push_back(ch);
-                    break;
-                }
-
-                ch = *++safe;
-                if (ch >= '0' && ch <= '9')
-                {
-                    hex += (ch - '0');
-                }
-                else if (ch >= 'A' && ch <= 'F')
-                {
-                    hex += (ch - 'A' + 10);
-                }
-                else if (ch >= 'a' && ch <= 'f')
-                {
-                    hex += (ch - 'a' + 10);
-                }
-                else
-                {
-                    unescaped.push_back('%');
-                    unescaped.push_back(*(safe - 1));
-                    if (ch == 0)
-                    {
-                        return unescaped;
-                    }
-                    unescaped.push_back(ch);
-                    break;
-                }
-
-                unescaped.push_back(char(hex));
-                break;
-            }
-            case '+':
-                unescaped.push_back(' ');
-                break;
-            default:
-                unescaped.push_back(*safe);
-                break;
+            case '%': 
+            { 
+                int hex = 0; 
+                auto ch = *++safe; 
+                if (ch >= '0' && ch <= '9') 
+                { 
+                    hex = (ch - '0') * 16; 
+                } 
+                else if (ch >= 'A' && ch <= 'F') 
+                { 
+                    hex = (ch - 'A' + 10) * 16; 
+                } 
+                else if (ch >= 'a' && ch <= 'f') 
+                { 
+                    hex = (ch - 'a' + 10) * 16; 
+                } 
+                else 
+                { 
+                    unescaped.push_back('%'); 
+                    if (ch == 0) 
+                    { 
+                        return unescaped; 
+                    } 
+                    unescaped.push_back(ch); 
+                    break; 
+                } 
+ 
+                ch = *++safe; 
+                if (ch >= '0' && ch <= '9') 
+                { 
+                    hex += (ch - '0'); 
+                } 
+                else if (ch >= 'A' && ch <= 'F') 
+                { 
+                    hex += (ch - 'A' + 10); 
+                } 
+                else if (ch >= 'a' && ch <= 'f') 
+                { 
+                    hex += (ch - 'a' + 10); 
+                } 
+                else 
+                { 
+                    unescaped.push_back('%'); 
+                    unescaped.push_back(*(safe - 1)); 
+                    if (ch == 0) 
+                    { 
+                        return unescaped; 
+                    } 
+                    unescaped.push_back(ch); 
+                    break; 
+                } 
+ 
+                unescaped.push_back(char(hex)); 
+                break; 
+            } 
+            case '+': 
+                unescaped.push_back(' '); 
+                break; 
+            default: 
+                unescaped.push_back(*safe); 
+                break; 
         }
     }
 
-    return unescaped;
+    return unescaped; 
 }
 
 static bool IsSpace(int ch)

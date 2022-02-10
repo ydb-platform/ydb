@@ -65,10 +65,10 @@ Grantee& Grantee::operator =(const XmlNode& xmlNode)
       m_iD = Aws::Utils::Xml::DecodeEscapedXmlText(iDNode.GetText());
       m_iDHasBeenSet = true;
     }
-    auto type = resultNode.GetAttributeValue("xsi:type");
-    if(!type.empty())
+    auto type = resultNode.GetAttributeValue("xsi:type"); 
+    if(!type.empty()) 
     {
-      m_type = TypeMapper::GetTypeForName(StringUtils::Trim(type.c_str()).c_str());
+      m_type = TypeMapper::GetTypeForName(StringUtils::Trim(type.c_str()).c_str()); 
       m_typeHasBeenSet = true;
     }
     XmlNode uRINode = resultNode.FirstChild("URI");
@@ -85,7 +85,7 @@ Grantee& Grantee::operator =(const XmlNode& xmlNode)
 void Grantee::AddToNode(XmlNode& parentNode) const
 {
   Aws::StringStream ss;
-  parentNode.SetAttributeValue("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
+  parentNode.SetAttributeValue("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance"); 
   if(m_displayNameHasBeenSet)
   {
    XmlNode displayNameNode = parentNode.CreateChildElement("DisplayName");
@@ -106,7 +106,7 @@ void Grantee::AddToNode(XmlNode& parentNode) const
 
   if(m_typeHasBeenSet)
   {
-   parentNode.SetAttributeValue("xsi:type", TypeMapper::GetNameForType(m_type));
+   parentNode.SetAttributeValue("xsi:type", TypeMapper::GetNameForType(m_type)); 
   }
 
   if(m_uRIHasBeenSet)

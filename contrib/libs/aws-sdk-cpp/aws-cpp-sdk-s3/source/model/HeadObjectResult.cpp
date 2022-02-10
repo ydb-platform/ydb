@@ -26,9 +26,9 @@ HeadObjectResult::HeadObjectResult() :
     m_storageClass(StorageClass::NOT_SET),
     m_requestCharged(RequestCharged::NOT_SET),
     m_replicationStatus(ReplicationStatus::NOT_SET),
-    m_partsCount(0),
-    m_objectLockMode(ObjectLockMode::NOT_SET),
-    m_objectLockLegalHoldStatus(ObjectLockLegalHoldStatus::NOT_SET)
+    m_partsCount(0), 
+    m_objectLockMode(ObjectLockMode::NOT_SET), 
+    m_objectLockLegalHoldStatus(ObjectLockLegalHoldStatus::NOT_SET) 
 {
 }
 
@@ -42,9 +42,9 @@ HeadObjectResult::HeadObjectResult(const Aws::AmazonWebServiceResult<XmlDocument
     m_storageClass(StorageClass::NOT_SET),
     m_requestCharged(RequestCharged::NOT_SET),
     m_replicationStatus(ReplicationStatus::NOT_SET),
-    m_partsCount(0),
-    m_objectLockMode(ObjectLockMode::NOT_SET),
-    m_objectLockLegalHoldStatus(ObjectLockLegalHoldStatus::NOT_SET)
+    m_partsCount(0), 
+    m_objectLockMode(ObjectLockMode::NOT_SET), 
+    m_objectLockLegalHoldStatus(ObjectLockLegalHoldStatus::NOT_SET) 
 {
   *this = result;
 }
@@ -226,23 +226,23 @@ HeadObjectResult& HeadObjectResult::operator =(const Aws::AmazonWebServiceResult
      m_partsCount = StringUtils::ConvertToInt32(partsCountIter->second.c_str());
   }
 
-  const auto& objectLockModeIter = headers.find("x-amz-object-lock-mode");
-  if(objectLockModeIter != headers.end())
-  {
-    m_objectLockMode = ObjectLockModeMapper::GetObjectLockModeForName(objectLockModeIter->second);
-  }
-
-  const auto& objectLockRetainUntilDateIter = headers.find("x-amz-object-lock-retain-until-date");
-  if(objectLockRetainUntilDateIter != headers.end())
-  {
-    m_objectLockRetainUntilDate = DateTime(objectLockRetainUntilDateIter->second, DateFormat::RFC822);
-  }
-
-  const auto& objectLockLegalHoldStatusIter = headers.find("x-amz-object-lock-legal-hold");
-  if(objectLockLegalHoldStatusIter != headers.end())
-  {
-    m_objectLockLegalHoldStatus = ObjectLockLegalHoldStatusMapper::GetObjectLockLegalHoldStatusForName(objectLockLegalHoldStatusIter->second);
-  }
-
+  const auto& objectLockModeIter = headers.find("x-amz-object-lock-mode"); 
+  if(objectLockModeIter != headers.end()) 
+  { 
+    m_objectLockMode = ObjectLockModeMapper::GetObjectLockModeForName(objectLockModeIter->second); 
+  } 
+ 
+  const auto& objectLockRetainUntilDateIter = headers.find("x-amz-object-lock-retain-until-date"); 
+  if(objectLockRetainUntilDateIter != headers.end()) 
+  { 
+    m_objectLockRetainUntilDate = DateTime(objectLockRetainUntilDateIter->second, DateFormat::RFC822); 
+  } 
+ 
+  const auto& objectLockLegalHoldStatusIter = headers.find("x-amz-object-lock-legal-hold"); 
+  if(objectLockLegalHoldStatusIter != headers.end()) 
+  { 
+    m_objectLockLegalHoldStatus = ObjectLockLegalHoldStatusMapper::GetObjectLockLegalHoldStatusForName(objectLockLegalHoldStatusIter->second); 
+  } 
+ 
   return *this;
 }

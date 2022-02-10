@@ -22,9 +22,9 @@ namespace Model
     ETag,
     IsMultipartUploaded,
     ReplicationStatus,
-    EncryptionStatus,
-    ObjectLockRetainUntilDate,
-    ObjectLockMode,
+    EncryptionStatus, 
+    ObjectLockRetainUntilDate, 
+    ObjectLockMode, 
     ObjectLockLegalHoldStatus,
     IntelligentTieringAccessTier
   };

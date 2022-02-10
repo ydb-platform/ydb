@@ -26,7 +26,7 @@ GetBucketInventoryConfigurationRequest::GetBucketInventoryConfigurationRequest()
 
 Aws::String GetBucketInventoryConfigurationRequest::SerializePayload() const
 {
-  return {};
+  return {}; 
 }
 
 void GetBucketInventoryConfigurationRequest::AddQueryStringParameters(URI& uri) const

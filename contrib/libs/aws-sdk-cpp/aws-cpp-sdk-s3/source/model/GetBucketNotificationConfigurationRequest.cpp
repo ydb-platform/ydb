@@ -25,7 +25,7 @@ GetBucketNotificationConfigurationRequest::GetBucketNotificationConfigurationReq
 
 Aws::String GetBucketNotificationConfigurationRequest::SerializePayload() const
 {
-  return {};
+  return {}; 
 }
 
 void GetBucketNotificationConfigurationRequest::AddQueryStringParameters(URI& uri) const

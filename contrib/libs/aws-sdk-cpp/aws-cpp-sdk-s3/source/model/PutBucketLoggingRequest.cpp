@@ -38,7 +38,7 @@ Aws::String PutBucketLoggingRequest::SerializePayload() const
     return payloadDoc.ConvertToString();
   }
 
-  return {};
+  return {}; 
 }
 
 void PutBucketLoggingRequest::AddQueryStringParameters(URI& uri) const

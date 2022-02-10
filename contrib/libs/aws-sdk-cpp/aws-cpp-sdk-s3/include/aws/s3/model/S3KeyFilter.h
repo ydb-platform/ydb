@@ -24,7 +24,7 @@ namespace Model
 {
 
   /**
-   * <p>A container for object key name prefix and suffix filtering
+   * <p>A container for object key name prefix and suffix filtering 
    * rules.</p><p><h3>See Also:</h3>   <a
    * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/S3KeyFilter">AWS API
    * Reference</a></p>
@@ -43,9 +43,9 @@ namespace Model
     inline const Aws::Vector<FilterRule>& GetFilterRules() const{ return m_filterRules; }
 
     
-    inline bool FilterRulesHasBeenSet() const { return m_filterRulesHasBeenSet; }
-
-    
+    inline bool FilterRulesHasBeenSet() const { return m_filterRulesHasBeenSet; } 
+ 
+     
     inline void SetFilterRules(const Aws::Vector<FilterRule>& value) { m_filterRulesHasBeenSet = true; m_filterRules = value; }
 
     

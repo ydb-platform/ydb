@@ -22,11 +22,11 @@ namespace S3
 namespace Model
 {
 
-  /**
+  /** 
    * <p>Where to publish the analytics results.</p><p><h3>See Also:</h3>   <a
-   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AnalyticsExportDestination">AWS
-   * API Reference</a></p>
-   */
+   * href="http://docs.aws.amazon.com/goto/WebAPI/s3-2006-03-01/AnalyticsExportDestination">AWS 
+   * API Reference</a></p> 
+   */ 
   class AWS_S3_API AnalyticsExportDestination
   {
   public:
@@ -45,11 +45,11 @@ namespace Model
     /**
      * <p>A destination signifying output to an S3 bucket.</p>
      */
-    inline bool S3BucketDestinationHasBeenSet() const { return m_s3BucketDestinationHasBeenSet; }
-
-    /**
-     * <p>A destination signifying output to an S3 bucket.</p>
-     */
+    inline bool S3BucketDestinationHasBeenSet() const { return m_s3BucketDestinationHasBeenSet; } 
+ 
+    /** 
+     * <p>A destination signifying output to an S3 bucket.</p> 
+     */ 
     inline void SetS3BucketDestination(const AnalyticsS3BucketDestination& value) { m_s3BucketDestinationHasBeenSet = true; m_s3BucketDestination = value; }
 
     /**

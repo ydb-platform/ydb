@@ -1,10 +1,10 @@
-#include "type_ann_core.h"
-#include "type_ann_expr.h"
-#include "type_ann_impl.h"
-#include "type_ann_list.h"
+#include "type_ann_core.h" 
+#include "type_ann_expr.h" 
+#include "type_ann_impl.h" 
+#include "type_ann_list.h" 
 #include "type_ann_columnorder.h"
 #include "type_ann_wide.h"
-#include "type_ann_types.h"
+#include "type_ann_types.h" 
 
 #include <ydb/library/yql/core/yql_atom_enums.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
@@ -21,7 +21,7 @@
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/utils/utf8.h>
-
+ 
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
@@ -421,7 +421,7 @@ namespace NTypeAnnImpl {
     }
 
     TContext::TContext(TExprContext& expr)
-        : Expr(expr)
+        : Expr(expr) 
         {}
 
     TExtContext::TExtContext(TExprContext& expr, TTypeAnnotationContext& types)
@@ -1192,13 +1192,13 @@ namespace NTypeAnnImpl {
                 type = type->Cast<TOptionalExprType>()->GetItemType();
             }
             for (auto& field: type->Cast<TStructExprType>()->GetItems()) {
-                auto itemType = field->GetItemType();
+                auto itemType = field->GetItemType(); 
                 if (optional && itemType->GetKind() != ETypeAnnotationKind::Optional && itemType->GetKind() != ETypeAnnotationKind::Null) {
                     itemType = ctx.Expr.MakeType<TOptionalExprType>(itemType);
-                }
+                } 
                 auto newField = ctx.Expr.MakeType<TItemExprType>(
                     TString::Join(prefix->Content(), field->GetName()),
-                    itemType
+                    itemType 
                 );
                 allItems.push_back(newField);
             }
@@ -1671,7 +1671,7 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
-    template <bool Forced>
+    template <bool Forced> 
     IGraphTransformer::TStatus RemoveMemberWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
@@ -5500,8 +5500,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         if (thenNode != input->Child(1) || elseNode != input->Child(2)) {
-            return IGraphTransformer::TStatus::Repeat;
-        }
+            return IGraphTransformer::TStatus::Repeat; 
+        } 
 
         input->SetTypeAnn(commonType);
         return IGraphTransformer::TStatus::Ok;
@@ -12820,8 +12820,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["OrderedLMap"] = &LMapWrapper;
         Functions["Struct"] = &StructWrapper;
         Functions["AddMember"] = &AddMemberWrapper;
-        Functions["RemoveMember"] = &RemoveMemberWrapper<false>;
-        Functions["ForceRemoveMember"] = &RemoveMemberWrapper<true>;
+        Functions["RemoveMember"] = &RemoveMemberWrapper<false>; 
+        Functions["ForceRemoveMember"] = &RemoveMemberWrapper<true>; 
         Functions["ReplaceMember"] = &ReplaceMemberWrapper;
         Functions["RemovePrefixMembers"] = &RemovePrefixMembersWrapper;
         Functions["RemoveSystemMembers"] = &RemoveSystemMembersWrapper;
@@ -12856,7 +12856,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Merge"] = &ExtendWrapper;
         Functions["Extract"] = &ExtractWrapper;
         Functions["OrderedExtract"] = &ExtractWrapper;
-        Functions["UnionAll"] = &UnionAllWrapper;
+        Functions["UnionAll"] = &UnionAllWrapper; 
         Functions["UnionMerge"] = &UnionAllWrapper;
         Functions["ListExtend"] = &ListExtendWrapper<false>;
         Functions["ListExtendStrict"] = &ListExtendWrapper<true>;
@@ -12918,21 +12918,21 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["ZipAll"] = &ZipAllWrapper;
         Functions["Enumerate"] = &EnumerateWrapper;
         Functions["GenericType"] = &TypeWrapper<ETypeAnnotationKind::Generic>;
-        Functions["ResourceType"] = &TypeWrapper<ETypeAnnotationKind::Resource>;
+        Functions["ResourceType"] = &TypeWrapper<ETypeAnnotationKind::Resource>; 
         Functions["ErrorType"] = &TypeWrapper<ETypeAnnotationKind::Error>;
-        Functions["DataType"] = &TypeWrapper<ETypeAnnotationKind::Data>;
-        Functions["ListType"] = &TypeWrapper<ETypeAnnotationKind::List>;
-        Functions["TupleType"] = &TypeWrapper<ETypeAnnotationKind::Tuple>;
+        Functions["DataType"] = &TypeWrapper<ETypeAnnotationKind::Data>; 
+        Functions["ListType"] = &TypeWrapper<ETypeAnnotationKind::List>; 
+        Functions["TupleType"] = &TypeWrapper<ETypeAnnotationKind::Tuple>; 
         Functions["MultiType"] = &TypeWrapper<ETypeAnnotationKind::Multi>;
-        Functions["StructType"] = &TypeWrapper<ETypeAnnotationKind::Struct>;
-        Functions["OptionalType"] = &TypeWrapper<ETypeAnnotationKind::Optional>;
+        Functions["StructType"] = &TypeWrapper<ETypeAnnotationKind::Struct>; 
+        Functions["OptionalType"] = &TypeWrapper<ETypeAnnotationKind::Optional>; 
         Functions["TaggedType"] = &TypeWrapper<ETypeAnnotationKind::Tagged>;
         Functions["VariantType"] = &TypeWrapper<ETypeAnnotationKind::Variant>;
         Functions["StreamType"] = &TypeWrapper<ETypeAnnotationKind::Stream>;
         Functions["FlowType"] = &TypeWrapper<ETypeAnnotationKind::Flow>;
         Functions["Nothing"] = &NothingWrapper;
         Functions["List"] = &ListWrapper;
-        Functions["DictType"] = &TypeWrapper<ETypeAnnotationKind::Dict>;
+        Functions["DictType"] = &TypeWrapper<ETypeAnnotationKind::Dict>; 
         Functions["Dict"] = &DictWrapper;
         Functions["Variant"] = &VariantWrapper;
         Functions["Enum"] = &EnumWrapper;
@@ -12983,7 +12983,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["EmptyList"] = &EmptyListWrapper;
         Functions["EmptyDict"] = &EmptyDictWrapper;
         Functions["Error"] = &ErrorWrapper;
-        Functions["VoidType"] = &TypeWrapper<ETypeAnnotationKind::Void>;
+        Functions["VoidType"] = &TypeWrapper<ETypeAnnotationKind::Void>; 
         Functions["UnitType"] = &TypeWrapper<ETypeAnnotationKind::Unit>;
         Functions["NullType"] = &TypeWrapper<ETypeAnnotationKind::Null>;
         Functions["EmptyListType"] = &TypeWrapper<ETypeAnnotationKind::EmptyList>;
@@ -12997,23 +12997,23 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["HoppingTraits"] = &HoppingTraitsWrapper;
         Functions["HoppingCore"] = &HoppingCoreWrapper;
         Functions["MultiHoppingCore"] = &MultiHoppingCoreWrapper;
-        Functions["EquiJoin"] = &EquiJoinWrapper;
+        Functions["EquiJoin"] = &EquiJoinWrapper; 
         Functions["OptionalReduce"] = &OptionalReduceWrapper;
-        Functions["OptionalItemType"] = &TypeArgWrapper<ETypeArgument::OptionalItem>;
-        Functions["ListItemType"] = &TypeArgWrapper<ETypeArgument::ListItem>;
+        Functions["OptionalItemType"] = &TypeArgWrapper<ETypeArgument::OptionalItem>; 
+        Functions["ListItemType"] = &TypeArgWrapper<ETypeArgument::ListItem>; 
         Functions["StreamItemType"] = &TypeArgWrapper<ETypeArgument::StreamItem>;
-        Functions["TupleElementType"] = &TypeArgWrapper<ETypeArgument::TupleElement>;
-        Functions["StructMemberType"] = &TypeArgWrapper<ETypeArgument::StructMember>;
-        Functions["DictKeyType"] = &TypeArgWrapper<ETypeArgument::DictKey>;
-        Functions["DictPayloadType"] = &TypeArgWrapper<ETypeArgument::DictPayload>;
+        Functions["TupleElementType"] = &TypeArgWrapper<ETypeArgument::TupleElement>; 
+        Functions["StructMemberType"] = &TypeArgWrapper<ETypeArgument::StructMember>; 
+        Functions["DictKeyType"] = &TypeArgWrapper<ETypeArgument::DictKey>; 
+        Functions["DictPayloadType"] = &TypeArgWrapper<ETypeArgument::DictPayload>; 
         Functions["Apply"] = &ApplyWrapper;
         Functions["NamedApply"] = &NamedApplyWrapper;
         Functions["PositionalArgs"] = &PositionalArgsWrapper;
         Functions["SqlCall"] = &SqlCallWrapper;
         Functions["Callable"] = &CallableWrapper;
-        Functions["CallableType"] = &TypeWrapper<ETypeAnnotationKind::Callable>;
-        Functions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>;
-        Functions["CallableArgumentType"] = &TypeArgWrapper<ETypeArgument::CallableArgument>;
+        Functions["CallableType"] = &TypeWrapper<ETypeAnnotationKind::Callable>; 
+        Functions["CallableResultType"] = &TypeArgWrapper<ETypeArgument::CallableResult>; 
+        Functions["CallableArgumentType"] = &TypeArgWrapper<ETypeArgument::CallableArgument>; 
         Functions["CombineByKey"] = &CombineByKeyWrapper;
         Functions["NewMTRand"] = &NewMTRandWrapper;
         Functions["NextMTRand"] = &NextMTRandWrapper;
@@ -13426,7 +13426,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return provider.GetTypeAnnotationTransformer(InstantOnly);
         }
     };
-} // namespace NTypeAnnInpl
+} // namespace NTypeAnnInpl 
 
 TAutoPtr<IGraphTransformer> CreateIntentDeterminationTransformer(const TTypeAnnotationContext& types) {
     return new NTypeAnnImpl::TIntentDeterminationTransformer(types);
@@ -13437,7 +13437,7 @@ TAutoPtr<IGraphTransformer> CreateExtCallableTypeAnnotationTransformer(TTypeAnno
 }
 
 const THashSet<TString>& GetBuiltinFunctions() {
-    return NTypeAnnImpl::TSyncFunctionsMap::Instance().AllNames;
+    return NTypeAnnImpl::TSyncFunctionsMap::Instance().AllNames; 
 }
 
 IGraphTransformer::TStatus ValidateDataSource(const TExprNode::TPtr& input, TExprContext& ctx, const TTypeAnnotationContext& types,

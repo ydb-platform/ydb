@@ -1,26 +1,26 @@
 #include "list_builtin.h"
-
-using namespace NYql;
-
+ 
+using namespace NYql; 
+ 
 namespace NSQLTranslationV1 {
-
+ 
 TAstNode* TListBuiltin::Translate(TContext& ctx) const {
     Y_VERIFY_DEBUG(Node);
     return Node->Translate(ctx);
 }
-
+ 
 TNodePtr TListBuiltin::GetIdentityLambda() {
     return BuildLambda(Pos, Y("arg"), Y(), "arg");
 }
-
+ 
 bool TListSortBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() < 1 || Args.size() > 2) {
         ctx.Error(Pos) << OpName << " requires one or two parameters.";
         return false;
-    }
+    } 
     if (!Args[0]->Init(ctx, src)) {
         return false;
-    }
+    } 
     if (Args.size() == 2) {
         if (!Args[1]->Init(ctx, src)) {
             return false;
@@ -31,12 +31,12 @@ bool TListSortBuiltin::DoInit(TContext& ctx, ISource* src) {
     Node = Y(OpName, Args[0], Y("Bool", Q(Asc ? "true" : "false")), Args[1]);
     return true;
 }
-
+ 
 bool TListExtractBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() != 2) {
         ctx.Error(Pos) << OpName << " requires exactly two parameters.";
         return false;
-    }
+    } 
 
     for (const auto& arg : Args) {
         if (!arg->Init(ctx, src)) {

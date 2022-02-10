@@ -12,10 +12,10 @@
 enum ENumberFormatFlag {
     HF_FULL = 0x01, /**< Output number with leading zeros. */
     HF_ADDX = 0x02, /**< Output '0x' or '0b' before hex/bin digits. */
-};
+}; 
 Y_DECLARE_FLAGS(ENumberFormat, ENumberFormatFlag)
 Y_DECLARE_OPERATORS_FOR_FLAGS(ENumberFormat)
-
+ 
 enum ESizeFormat {
     SF_QUANTITY, /**< Base 1000, usual suffixes. 1100 gets turned into "1.1K". */
     SF_BYTES,    /**< Base 1024, byte suffix. 1100 gets turned into "1.07KiB". */
@@ -89,20 +89,20 @@ namespace NFormatPrivate {
         }
         return o;
     }
-
+ 
     template <typename T, size_t Base>
     struct TBaseNumber {
         T Value;
         ENumberFormat Flags;
-
+ 
         template <typename OtherT>
         inline TBaseNumber(OtherT value, ENumberFormat flags)
-            : Value(value)
-            , Flags(flags)
-        {
-        }
-    };
-
+            : Value(value) 
+            , Flags(flags) 
+        { 
+        } 
+    }; 
+ 
     template <typename T, size_t Base>
     using TUnsignedBaseNumber = TBaseNumber<std::make_unsigned_t<std::remove_cv_t<T>>, Base>;
 
@@ -255,11 +255,11 @@ static constexpr ::NFormatPrivate::TRightPad<const T*> RightPad(const T (&value)
  * @param value                         Value to output.
  * @param flags                         Output flags.
  */
-template <typename T>
+template <typename T> 
 static constexpr ::NFormatPrivate::TUnsignedBaseNumber<T, 16> Hex(const T& value, const ENumberFormat flags = HF_FULL | HF_ADDX) noexcept {
     return {value, flags};
-}
-
+} 
+ 
 /**
  * Output manipulator similar to `std::setbase(16)`.
  *

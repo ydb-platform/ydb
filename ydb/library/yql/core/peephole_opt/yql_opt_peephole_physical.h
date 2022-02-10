@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/core/yql_data_provider.h>
 #include <ydb/library/yql/core/yql_type_annotation.h>
-
+ 
 namespace NYql {
 
 struct IPipelineConfigurator;

@@ -408,8 +408,8 @@ TRuntimeNode TProgramBuilder::RemoveMember(TRuntimeNode structObj, const std::st
         }
     }
     if (!memberIndex && forced) {
-        return structObj;
-    }
+        return structObj; 
+    } 
 
     MKQL_ENSURE(memberIndex, "Unknown member name: " << memberName);
 
@@ -2176,16 +2176,16 @@ TRuntimeNode TProgramBuilder::Abs(TRuntimeNode data) {
     return Invoke(__func__, data.GetStaticType(), args);
 }
 
-TRuntimeNode TProgramBuilder::Plus(TRuntimeNode data) {
+TRuntimeNode TProgramBuilder::Plus(TRuntimeNode data) { 
     const std::array<TRuntimeNode, 1> args = {{ data }};
     return Invoke(__func__, data.GetStaticType(), args);
-}
-
-TRuntimeNode TProgramBuilder::Minus(TRuntimeNode data) {
+} 
+ 
+TRuntimeNode TProgramBuilder::Minus(TRuntimeNode data) { 
     const std::array<TRuntimeNode, 1> args = {{ data }};
     return Invoke(__func__, data.GetStaticType(), args);
-}
-
+} 
+ 
 TRuntimeNode TProgramBuilder::Add(TRuntimeNode data1, TRuntimeNode data2) {
     const std::array<TRuntimeNode, 2> args = {{ data1, data2 }};
 
@@ -2653,8 +2653,8 @@ TRuntimeNode TProgramBuilder::Exists(TRuntimeNode data) {
 
     if (!nodeType->IsOptional()) {
         return NewDataLiteral(true);
-    }
-
+    } 
+ 
     TCallableBuilder callableBuilder(Env, __func__, NewDataType(NUdf::TDataType<bool>::Id));
     callableBuilder.Add(data);
     return TRuntimeNode(callableBuilder.Build(), false);

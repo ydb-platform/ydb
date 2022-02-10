@@ -70,11 +70,11 @@ public:
     inline char* Pos() noexcept {
         return Data_ + Pos_;
     }
-
+ 
     inline const char* Pos() const noexcept {
         return Data_ + Pos_;
     }
-
+ 
     /// Used space in bytes (do not mix with Capacity!)
     inline size_t Size() const noexcept {
         return Pos_;
@@ -138,7 +138,7 @@ public:
     inline void Advance(size_t len) {
         Resize(Pos_ + len);
     }
-
+ 
     inline void Reserve(size_t len) {
         if (len > Len_) {
             DoReserve(len);

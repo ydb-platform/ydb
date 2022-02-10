@@ -178,7 +178,7 @@ bool TNode::IsMergeable() const {
     return !static_cast<const TCallable*>(this)->GetType()->IsMergeDisabled();
 }
 
-TStringBuf TType::KindAsStr(EKind kind) {
+TStringBuf TType::KindAsStr(EKind kind) { 
     switch (static_cast<int>(kind)) {
         MKQL_TYPE_KINDS(MKQL_SWITCH_ENUM_TYPE_TO_STR)
     }
@@ -186,10 +186,10 @@ TStringBuf TType::KindAsStr(EKind kind) {
     return TStringBuf("unknown");
 }
 
-TStringBuf TType::GetKindAsStr() const {
-    return KindAsStr(Kind);
-}
-
+TStringBuf TType::GetKindAsStr() const { 
+    return KindAsStr(Kind); 
+} 
+ 
 #define TYPES_LIST(xx) \
     xx(Type, TTypeType) \
     xx(Void, TVoidType) \

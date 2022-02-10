@@ -22,113 +22,113 @@ static inline void OldSplit(char* pszBuf, T* pRes) {
     }
 }
 
-template <class T1, class T2>
-inline void Cmp(const T1& t1, const T2& t2) {
-    try {
+template <class T1, class T2> 
+inline void Cmp(const T1& t1, const T2& t2) { 
+    try { 
         UNIT_ASSERT_EQUAL(t1.size(), t2.size());
-    } catch (...) {
-        Print(t1);
-        Cerr << "---------------" << Endl;
-        Print(t2);
-
-        throw;
-    }
-
+    } catch (...) { 
+        Print(t1); 
+        Cerr << "---------------" << Endl; 
+        Print(t2); 
+ 
+        throw; 
+    } 
+ 
     auto i = t1.begin();
     auto j = t2.begin();
 
     for (; i != t1.end() && j != t2.end(); ++i, ++j) {
-        try {
+        try { 
             UNIT_ASSERT_EQUAL(*i, *j);
-        } catch (...) {
+        } catch (...) { 
             Cerr << "(" << *i << ")->(" << *j << ")" << Endl;
-
-            throw;
-        }
-    }
+ 
+            throw; 
+        } 
+    } 
 }
 
-template <class T>
-inline void Print(const T& t) {
+template <class T> 
+inline void Print(const T& t) { 
     for (typename T::const_iterator i = t.begin(); i != t.end(); ++i) {
         Cerr << *i << Endl;
-    }
+    } 
 }
 
 template <template <typename> class TConsumer, typename TResult, typename I, typename TDelimiter>
-void TestDelimiterOnString(TResult& good, I* str, const TDelimiter& delim) {
-    TResult test;
+void TestDelimiterOnString(TResult& good, I* str, const TDelimiter& delim) { 
+    TResult test; 
     TConsumer<TResult> consumer(&test);
-    SplitString(str, delim, consumer);
-    Cmp(good, test);
-    UNIT_ASSERT_EQUAL(good, test);
+    SplitString(str, delim, consumer); 
+    Cmp(good, test); 
+    UNIT_ASSERT_EQUAL(good, test); 
 }
 
 template <template <typename> class TConsumer, typename TResult, typename I, typename TDelimiter>
-void TestDelimiterOnRange(TResult& good, I* b, I* e, const TDelimiter& delim) {
-    TResult test;
+void TestDelimiterOnRange(TResult& good, I* b, I* e, const TDelimiter& delim) { 
+    TResult test; 
     TConsumer<TResult> consumer(&test);
-    SplitString(b, e, delim, consumer);
-    Cmp(good, test);
-    UNIT_ASSERT_EQUAL(good, test);
-}
+    SplitString(b, e, delim, consumer); 
+    Cmp(good, test); 
+    UNIT_ASSERT_EQUAL(good, test); 
+} 
 
-template <typename TConsumer, typename TResult, typename I>
-void TestConsumerOnString(TResult& good, I* str, I* d) {
-    TResult test;
-    TContainerConsumer<TResult> consumer(&test);
-    TConsumer tested(&consumer);
-    TCharDelimiter<const I> delim(*d);
-    SplitString(str, delim, tested);
-    Cmp(good, test);
-    UNIT_ASSERT_EQUAL(good, test);
-}
+template <typename TConsumer, typename TResult, typename I> 
+void TestConsumerOnString(TResult& good, I* str, I* d) { 
+    TResult test; 
+    TContainerConsumer<TResult> consumer(&test); 
+    TConsumer tested(&consumer); 
+    TCharDelimiter<const I> delim(*d); 
+    SplitString(str, delim, tested); 
+    Cmp(good, test); 
+    UNIT_ASSERT_EQUAL(good, test); 
+} 
 
-template <typename TConsumer, typename TResult, typename I>
-void TestConsumerOnRange(TResult& good, I* b, I* e, I* d) {
-    TResult test;
-    TContainerConsumer<TResult> consumer(&test);
-    TConsumer tested(&consumer);
-    TCharDelimiter<const I> delim(*d);
-    SplitString(b, e, delim, tested);
-    Cmp(good, test);
-    UNIT_ASSERT_EQUAL(good, test);
-}
+template <typename TConsumer, typename TResult, typename I> 
+void TestConsumerOnRange(TResult& good, I* b, I* e, I* d) { 
+    TResult test; 
+    TContainerConsumer<TResult> consumer(&test); 
+    TConsumer tested(&consumer); 
+    TCharDelimiter<const I> delim(*d); 
+    SplitString(b, e, delim, tested); 
+    Cmp(good, test); 
+    UNIT_ASSERT_EQUAL(good, test); 
+} 
 
 using TStrokaConsumer = TContainerConsumer<TVector<TString>>;
 
 void TestLimitingConsumerOnString(TVector<TString>& good, const char* str, const char* d, size_t n, const char* last) {
     TVector<TString> test;
-    TStrokaConsumer consumer(&test);
-    TLimitingConsumer<TStrokaConsumer, const char> limits(n, &consumer);
-    TCharDelimiter<const char> delim(*d);
-    SplitString(str, delim, limits);
-    Cmp(good, test);
-    UNIT_ASSERT_EQUAL(good, test);
+    TStrokaConsumer consumer(&test); 
+    TLimitingConsumer<TStrokaConsumer, const char> limits(n, &consumer); 
+    TCharDelimiter<const char> delim(*d); 
+    SplitString(str, delim, limits); 
+    Cmp(good, test); 
+    UNIT_ASSERT_EQUAL(good, test); 
     UNIT_ASSERT_EQUAL(TString(limits.Last), TString(last)); // Quite unobvious behaviour. Why the last token is not added to slave consumer?
-}
+} 
 
 void TestLimitingConsumerOnRange(TVector<TString>& good, const char* b, const char* e, const char* d, size_t n, const char* last) {
     TVector<TString> test;
-    TStrokaConsumer consumer(&test);
-    TLimitingConsumer<TStrokaConsumer, const char> limits(n, &consumer);
-    TCharDelimiter<const char> delim(*d);
-    SplitString(b, e, delim, limits);
-    Cmp(good, test);
-    UNIT_ASSERT_EQUAL(good, test);
+    TStrokaConsumer consumer(&test); 
+    TLimitingConsumer<TStrokaConsumer, const char> limits(n, &consumer); 
+    TCharDelimiter<const char> delim(*d); 
+    SplitString(b, e, delim, limits); 
+    Cmp(good, test); 
+    UNIT_ASSERT_EQUAL(good, test); 
     UNIT_ASSERT_EQUAL(TString(limits.Last), TString(last));
-}
+} 
 
 Y_UNIT_TEST_SUITE(SplitStringTest) {
     Y_UNIT_TEST(TestCharSingleDelimiter) {
         TString data("qw ab  qwabcab");
         TString canonic[] = {"qw", "ab", "", "qwabcab"};
         TVector<TString> good(canonic, canonic + 4);
-        TCharDelimiter<const char> delim(' ');
+        TCharDelimiter<const char> delim(' '); 
 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
-    }
+    } 
 
     Y_UNIT_TEST(TestWideSingleDelimiter) {
         TUtf16String data(u"qw ab  qwabcab");
@@ -138,7 +138,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
-    }
+    } 
 
     Y_UNIT_TEST(TestConvertToIntCharSingleDelimiter) {
         TString data("42 4242 -12345 0");
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
 
         TestConsumerOnString<TSkipEmptyTokens<TStrokaConsumer>>(good, data.data(), " ");
         TestConsumerOnRange<TSkipEmptyTokens<TStrokaConsumer>>(good, data.data(), data.end(), " ");
-    }
+    } 
 
     Y_UNIT_TEST(TestCharKeepDelimiters) {
         TString data("qw ab  qwabcab ");
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
 
         TestConsumerOnString<TKeepDelimiters<TStrokaConsumer>>(good, data.data(), " ");
         TestConsumerOnRange<TKeepDelimiters<TStrokaConsumer>>(good, data.data(), data.end(), " ");
-    }
+    } 
 
     Y_UNIT_TEST(TestCharLimit) {
         TString data("qw ab  qwabcab ");
@@ -175,17 +175,17 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
 
         TestLimitingConsumerOnString(good, data.data(), " ", 3, " qwabcab ");
         TestLimitingConsumerOnRange(good, data.data(), data.end(), " ", 3, " qwabcab ");
-    }
+    } 
 
     Y_UNIT_TEST(TestCharStringDelimiter) {
         TString data("qw ab qwababcab");
         TString canonic[] = {"qw ", " qw", "", "c", ""};
         TVector<TString> good(canonic, canonic + 5);
-        TStringDelimiter<const char> delim("ab");
+        TStringDelimiter<const char> delim("ab"); 
 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
-    }
+    } 
 
     Y_UNIT_TEST(TestWideStringDelimiter) {
         TUtf16String data(u"qw ab qwababcab");
@@ -196,17 +196,17 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
-    }
+    } 
 
     Y_UNIT_TEST(TestCharSetDelimiter) {
         TString data("qw ab qwababccab");
         TString canonic[] = {"q", " ab q", "abab", "", "ab"};
         TVector<TString> good(canonic, canonic + 5);
-        TSetDelimiter<const char> delim("wc");
+        TSetDelimiter<const char> delim("wc"); 
 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
         TestDelimiterOnRange<TContainerConsumer>(good, data.data(), data.end(), delim);
-    }
+    } 
 
     Y_UNIT_TEST(TestWideSetDelimiter) {
         TUtf16String data(u"qw ab qwababccab");
@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TSetDelimiter<const wchar16> delim(wideDelim.data());
 
         TestDelimiterOnString<TContainerConsumer>(good, data.data(), delim);
-    }
+    } 
 
     Y_UNIT_TEST(TestWideSetDelimiterRange) {
         TUtf16String data(u"qw ab qwababccab");
@@ -224,19 +224,19 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         TVector<TUtf16String> good(1);
         TUtf16String wideDelim(u"wc");
         TSetDelimiter<const wchar16> delim(wideDelim.data());
-
+ 
         TVector<TUtf16String> test;
         TContainerConsumer<TVector<TUtf16String>> consumer(&test);
         SplitString(data.data(), data.data(), delim, consumer); // Empty string is still inserted into consumer
-        Cmp(good, test);
-
-        good.assign(canonic, canonic + 4);
+        Cmp(good, test); 
+ 
+        good.assign(canonic, canonic + 4); 
         good.push_back(TUtf16String());
-        test.clear();
+        test.clear(); 
         SplitString(data.data(), data.end() - 2, delim, consumer);
-        Cmp(good, test);
-    }
-
+        Cmp(good, test); 
+    } 
+ 
     Y_UNIT_TEST(TestSplit) {
         TString data("qw ab qwababcba");
         TString canonic[] = {"qw ", " qw", "c"};
@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(SplitStringTest) {
         UNIT_ASSERT_NO_EXCEPTION(Split(data, ' ', s1, s2, m1, m2, m1, m1, m1, m1));
         UNIT_ASSERT_EXCEPTION(Split(data, ' ', s1, s2, m1, m2, m1, m1, m1, m1, s1), yexception);
     }
-}
+} 
 
 template <typename I, typename C>
 void TestStringSplitterCount(I* str, C delim, size_t good) {

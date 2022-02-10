@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include "yql_codec_buf.h"
 
 #include <ydb/library/yql/minikql/mkql_node.h>
@@ -7,7 +7,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/ast/yql_expr.h>
-
+ 
 #include <util/generic/strbuf.h>
 #include <util/generic/maybe.h>
 #include <util/stream/output.h>
@@ -21,23 +21,23 @@ namespace NYT {
     class TNode;
 }
 
-namespace NYql {
+namespace NYql { 
 namespace NCommon {
-
-void WriteYsonValue(
+ 
+void WriteYsonValue( 
     NYson::TYsonConsumerBase& writer,
     const NKikimr::NUdf::TUnboxedValuePod& value,
-    NKikimr::NMiniKQL::TType* type,
+    NKikimr::NMiniKQL::TType* type, 
     const TVector<ui32>* structPositions = nullptr
-);
-
+); 
+ 
 TString WriteYsonValue(
     const NKikimr::NUdf::TUnboxedValuePod& value,
-    NKikimr::NMiniKQL::TType* type,
+    NKikimr::NMiniKQL::TType* type, 
     const TVector<ui32>* structPositions = nullptr,
     NYson::EYsonFormat format = NYson::EYsonFormat::Binary
-);
-
+); 
+ 
 TMaybe<TVector<ui32>> CreateStructPositions(
     NKikimr::NMiniKQL::TType* inputType,
     const TVector<TString>* columns = nullptr
@@ -46,19 +46,19 @@ TMaybe<TVector<ui32>> CreateStructPositions(
 NYT::TNode ValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TType* type);
 TExprNode::TPtr NodeToExprLiteral(TPositionHandle pos, const TTypeAnnotationNode& type, const NYT::TNode& node, TExprContext& ctx);
 
-struct TCodecContext {
-    const NKikimr::NMiniKQL::TTypeEnvironment& Env;
-    NKikimr::NMiniKQL::TProgramBuilder Builder;
+struct TCodecContext { 
+    const NKikimr::NMiniKQL::TTypeEnvironment& Env; 
+    NKikimr::NMiniKQL::TProgramBuilder Builder; 
     const NKikimr::NMiniKQL::THolderFactory* HolderFactory; // lazy initialized
     std::list<std::vector<size_t>> StructReorders;
-
-    TCodecContext(
-        const NKikimr::NMiniKQL::TTypeEnvironment& env,
+ 
+    TCodecContext( 
+        const NKikimr::NMiniKQL::TTypeEnvironment& env, 
         const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
         const NKikimr::NMiniKQL::THolderFactory* holderFactory = nullptr
-    );
-};
-
+    ); 
+}; 
+ 
 void SkipYson(char cmd, TInputBuf& buf);
 void CopyYson(char cmd, TInputBuf& buf, TVector<char>& yson);
 void CopyYsonWithAttrs(char cmd, TInputBuf& buf, TVector<char>& yson);
@@ -101,4 +101,4 @@ TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikim
     TPositionHandle pos = {});
 
 } // namespace NCommon
-} // namespace NYql
+} // namespace NYql 

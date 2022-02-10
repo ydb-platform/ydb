@@ -1,19 +1,19 @@
 #include "list_builtin.h"
-
-using namespace NYql;
-
+ 
+using namespace NYql; 
+ 
 namespace NSQLTranslationV0 {
-
+ 
 TAstNode* TListBuiltin::Translate(TContext& ctx) const {
     Y_UNUSED(ctx);
     Y_VERIFY_DEBUG(Node);
     return Node->Translate(ctx);
 }
-
+ 
 TNodePtr TListBuiltin::GetIdentityLambda() {
     return BuildLambda(Pos, Y("arg"), Y(), "arg");
 }
-
+ 
 TNodePtr TListBuiltin::SkipEmpty(TNodePtr arg) {
     auto sameArgLambda = BuildLambda(Pos, Y(), AstNode("item"));
     auto handleNotSkippableType = BuildLambda(Pos, Y(), Y("Just", "item"));
@@ -24,16 +24,16 @@ TNodePtr TListBuiltin::SkipEmpty(TNodePtr arg) {
         sameArgLambda, checkOptionalLambda);
     return Y("OrderedFlatMap", arg, BuildLambda(Pos, Y("item"), checkList));
 }
-
+ 
 bool TListSortBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() < 1 || Args.size() > 2) {
         ctx.Error(Pos) << "List" << OpName
                        << " requires one or two parameters";
         return false;
-    }
+    } 
     if (!Args[0]->Init(ctx, src)) {
         return false;
-    }
+    } 
     if (Args.size() == 2) {
         if (!Args[1]->Init(ctx, src)) {
             return false;
@@ -44,16 +44,16 @@ bool TListSortBuiltin::DoInit(TContext& ctx, ISource* src) {
     Node = Y(OpName, SkipEmpty(Args[0]), Y("Bool", Q(Asc ? "true" : "false")), Args[1]);
     return true;
 }
-
+ 
 bool TListExtractBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() != 2) {
         ctx.Error(Pos) << "List" << OpName
                        << " requires exactly two parameters";
         return false;
-    }
+    } 
     if (!Args[0]->Init(ctx, src)) {
         return false;
-    }
+    } 
 
     if (!Args[1]->Init(ctx, src)) {
         return false;
@@ -91,22 +91,22 @@ TNodePtr TListProcessBuiltin::PrepareResult() {
             const TString& function = OpLiteral->substr(modulePos + 2);
             auto udf = Y("Udf", Q(module + "." + function));
             result = Y("Apply", udf, "item");
-        } else {
+        } else { 
             result = Y(*OpLiteral, "item");
-        }
+        } 
     } else {
         result = Y("Apply", Args[1], "item");
-    }
-
+    } 
+ 
     for (size_t i = 0; i < Args.size(); ++i) {
         if (i > 1) {
             result->Add(Args[i]);
-        }
-    }
-
+        } 
+    } 
+ 
     return result;
 }
-
+ 
 
 bool TListMapBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (!CheckArgs(ctx, src)) {
@@ -203,16 +203,16 @@ TNodePtr TListAvgBuiltin::GetUpdateLambda() {
 TNodePtr TListHasBuiltin::GetUpdateLambda() {
     return BuildLambda(Pos, Y("item", "state"), Y("Or", "state",
                             Y("Coalesce", Y(OpName, "item", Args[1]), Y("Bool", Q("false")))));
-}
-
+} 
+ 
 bool TListFold1Builtin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() != 1) {
         ctx.Error(Pos) << "Folding list with " << OpName << " requires only one parameter";
         return false;
-    }
+    } 
     if (!Args[0]->Init(ctx, src)) {
-        return false;
-    }
+        return false; 
+    } 
     Node = Y("Fold1",
              SkipEmpty(Args[0]),
              GetInitLambda(),
@@ -223,11 +223,11 @@ bool TListFold1Builtin::DoInit(TContext& ctx, ISource* src) {
 TNodePtr TListFold1Builtin::GetInitLambda() {
     return GetIdentityLambda();
 }
-
+ 
 TNodePtr TListFold1Builtin::GetUpdateLambda() {
     return BuildLambda(Pos, Y("item", "state"), Y(OpName, "state", "item"));
-}
-
+} 
+ 
 bool TListUniqBuiltin::DoInit(TContext& ctx, ISource* src) {
     if (Args.size() != 1) {
         ctx.Error(Pos) << OpName << " requires only one parameter";

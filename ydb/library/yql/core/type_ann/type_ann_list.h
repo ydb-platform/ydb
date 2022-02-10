@@ -1,12 +1,12 @@
-#pragma once
-
-#include "type_ann_core.h"
-
+#pragma once 
+ 
+#include "type_ann_core.h" 
+ 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/ast/yql_expr_types.h>
-
-namespace NYql {
-namespace NTypeAnnImpl {
+ 
+namespace NYql { 
+namespace NTypeAnnImpl { 
     IGraphTransformer::TStatus InferPositionalUnionType(TPositionHandle pos, const TExprNode::TListType& children,
         TColumnOrder& resultColumnOrder, const TStructExprType*& resultStructType, TExtContext& ctx);
 
@@ -118,5 +118,5 @@ namespace NTypeAnnImpl {
     IGraphTransformer::TStatus ListFlattenWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus IterableWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
     IGraphTransformer::TStatus SqueezeToListWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NTypeAnnImpl 
+} // namespace NYql 

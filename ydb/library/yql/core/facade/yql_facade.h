@@ -97,7 +97,7 @@ public:
     ~TProgram();
 
     bool ParseYql();
-    bool ParseSql();
+    bool ParseSql(); 
     bool ParseSql(const NSQLTranslation::TTranslationSettings& settings);
 
     bool Compile(const TString& username);

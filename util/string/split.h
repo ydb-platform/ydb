@@ -198,29 +198,29 @@ private:
 template <class Char>
 struct TFindFirstOf {
     inline TFindFirstOf(Char* set)
-        : Set(set)
-    {
-    }
-
+        : Set(set) 
+    { 
+    } 
+ 
     inline Char* FindFirstOf(Char* b, Char* e) const noexcept {
         Char* ret = b;
-        for (; ret != e; ++ret) {
+        for (; ret != e; ++ret) { 
             if (NStringSplitPrivate::Find(Set, *ret))
-                break;
-        }
-        return ret;
-    }
-
+                break; 
+        } 
+        return ret; 
+    } 
+ 
     inline Char* FindFirstOf(Char* b) const noexcept {
         const std::basic_string_view<Char> bView(b);
         const auto ret = bView.find_first_of(Set);
         return ret != std::string::npos ? b + ret : b + bView.size();
-    }
-
+    } 
+ 
     Char* Set;
-};
-
-template <>
+}; 
+ 
+template <> 
 struct TFindFirstOf<const char>: public TCompactStrSpn {
     inline TFindFirstOf(const char* set, const char* e)
         : TCompactStrSpn(set, e)
@@ -229,37 +229,37 @@ struct TFindFirstOf<const char>: public TCompactStrSpn {
 
     inline TFindFirstOf(const char* set)
         : TCompactStrSpn(set)
-    {
-    }
+    { 
+    } 
 };
-
+ 
 template <class Char>
 struct TSetDelimiter: private TFindFirstOf<const Char> {
     using TFindFirstOf<const Char>::TFindFirstOf;
-
+ 
     inline Char* Find(Char*& b, Char* e) const noexcept {
         Char* ret = const_cast<Char*>(this->FindFirstOf(b, e));
 
-        if (ret != e) {
-            b = ret + 1;
-            return ret;
-        }
-
-        return (b = e);
-    }
-
+        if (ret != e) { 
+            b = ret + 1; 
+            return ret; 
+        } 
+ 
+        return (b = e); 
+    } 
+ 
     inline Char* Find(Char*& b) const noexcept {
         Char* ret = const_cast<Char*>(this->FindFirstOf(b));
-
-        if (*ret) {
-            b = ret + 1;
-            return ret;
-        }
-
-        return (b = ret);
-    }
-};
-
+ 
+        if (*ret) { 
+            b = ret + 1; 
+            return ret; 
+        } 
+ 
+        return (b = ret); 
+    } 
+}; 
+ 
 namespace NSplitTargetHasPushBack {
     Y_HAS_MEMBER(push_back, PushBack);
 }

@@ -1,9 +1,9 @@
-#include "yql_type_annotation.h"
+#include "yql_type_annotation.h" 
 
 #include "yql_expr_type_annotation.h"
 #include "yql_library_compiler.h"
 #include "yql_type_helpers.h"
-
+ 
 #include <ydb/library/yql/sql/sql.h>
 #include <ydb/library/yql/sql/settings/translation_settings.h>
 #include <ydb/library/yql/ast/yql_constraint.h>
@@ -138,15 +138,15 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
 }
 
 const TCredential* TTypeAnnotationContext::FindCredential(const TStringBuf& name) const {
-    for (auto& x : Credentials) {
-        auto data = x->FindPtr(name);
-        if (data) {
-            return data;
-        }
-    }
-    return nullptr;
-}
-
+    for (auto& x : Credentials) { 
+        auto data = x->FindPtr(name); 
+        if (data) { 
+            return data; 
+        } 
+    } 
+    return nullptr; 
+} 
+ 
 TString TTypeAnnotationContext::FindCredentialContent(const TStringBuf& name1, const TStringBuf& name2, const TString& defaultContent) const {
     if (auto cred = FindCredential(name1)) {
         return cred->Content;
@@ -508,4 +508,4 @@ TString TModuleResolver::SubstParameters(const TString& str) {
     }
 }
 
-} // namespace NYql
+} // namespace NYql 

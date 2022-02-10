@@ -1,10 +1,10 @@
 namespace antlr3 {
-
-template<class ImplTraits, class StreamType>
-ANTLR_ExceptionBase<ImplTraits, StreamType>::ANTLR_ExceptionBase(const StringType& message)
+ 
+template<class ImplTraits, class StreamType> 
+ANTLR_ExceptionBase<ImplTraits, StreamType>::ANTLR_ExceptionBase(const StringType& message) 
 	:m_message(message)
 	,m_input(NULL)
-{
+{ 
 	m_index = 0;
 	m_token	= NULL;
 	m_expecting = 0;
@@ -16,183 +16,183 @@ ANTLR_ExceptionBase<ImplTraits, StreamType>::ANTLR_ExceptionBase(const StringTyp
 	m_decisionNum = 0;
 	m_state = 0;
 	m_nextException = NULL;
-}
-
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::StringType& ANTLR_ExceptionBase<ImplTraits, StreamType>::get_message()
-{
+} 
+ 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::StringType& ANTLR_ExceptionBase<ImplTraits, StreamType>::get_message() 
+{ 
 	return m_message;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::StringType& ANTLR_ExceptionBase<ImplTraits, StreamType>::get_streamName()
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::StringType& ANTLR_ExceptionBase<ImplTraits, StreamType>::get_streamName() 
+{ 
 	return m_streamName;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE ANTLR_MARKER ANTLR_ExceptionBase<ImplTraits, StreamType>::get_index() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE ANTLR_MARKER ANTLR_ExceptionBase<ImplTraits, StreamType>::get_index() const 
+{ 
 	return m_index;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE const typename ANTLR_ExceptionBase<ImplTraits, StreamType>::TokenType* ANTLR_ExceptionBase<ImplTraits, StreamType>::get_token() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE const typename ANTLR_ExceptionBase<ImplTraits, StreamType>::TokenType* ANTLR_ExceptionBase<ImplTraits, StreamType>::get_token() const 
+{ 
 	return m_token;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::ExceptionBaseType* ANTLR_ExceptionBase<ImplTraits, StreamType>::get_nextException() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::ExceptionBaseType* ANTLR_ExceptionBase<ImplTraits, StreamType>::get_nextException() const 
+{ 
 	return m_nextException;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE ANTLR_UINT32 ANTLR_ExceptionBase<ImplTraits, StreamType>::get_expecting() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE ANTLR_UINT32 ANTLR_ExceptionBase<ImplTraits, StreamType>::get_expecting() const 
+{ 
 	return m_expecting;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::BitsetListType* ANTLR_ExceptionBase<ImplTraits, StreamType>::get_expectingSet() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::BitsetListType* ANTLR_ExceptionBase<ImplTraits, StreamType>::get_expectingSet() const 
+{ 
 	return m_expectingSet;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::TokenType* ANTLR_ExceptionBase<ImplTraits, StreamType>::get_node() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::TokenType* ANTLR_ExceptionBase<ImplTraits, StreamType>::get_node() const 
+{ 
 	return m_node;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE ANTLR_UCHAR ANTLR_ExceptionBase<ImplTraits, StreamType>::get_c() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE ANTLR_UCHAR ANTLR_ExceptionBase<ImplTraits, StreamType>::get_c() const 
+{ 
 	return m_c;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE ANTLR_UINT32 ANTLR_ExceptionBase<ImplTraits, StreamType>::get_line() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE ANTLR_UINT32 ANTLR_ExceptionBase<ImplTraits, StreamType>::get_line() const 
+{ 
 	return m_line;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE ANTLR_INT32 ANTLR_ExceptionBase<ImplTraits, StreamType>::get_charPositionInLine() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE ANTLR_INT32 ANTLR_ExceptionBase<ImplTraits, StreamType>::get_charPositionInLine() const 
+{ 
 	return m_charPositionInLine;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE ANTLR_UINT32 ANTLR_ExceptionBase<ImplTraits, StreamType>::get_decisionNum() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE ANTLR_UINT32 ANTLR_ExceptionBase<ImplTraits, StreamType>::get_decisionNum() const 
+{ 
 	return m_decisionNum;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE ANTLR_UINT32 ANTLR_ExceptionBase<ImplTraits, StreamType>::get_state() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE ANTLR_UINT32 ANTLR_ExceptionBase<ImplTraits, StreamType>::get_state() const 
+{ 
 	return m_state;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::StringType& ANTLR_ExceptionBase<ImplTraits, StreamType>::get_ruleName()
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::StringType& ANTLR_ExceptionBase<ImplTraits, StreamType>::get_ruleName() 
+{ 
 	return m_ruleName;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::IntStreamType* ANTLR_ExceptionBase<ImplTraits, StreamType>::get_input() const
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE typename ANTLR_ExceptionBase<ImplTraits, StreamType>::IntStreamType* ANTLR_ExceptionBase<ImplTraits, StreamType>::get_input() const 
+{ 
 	return m_input;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_message( const StringType& message )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_message( const StringType& message ) 
+{ 
 	m_message = message;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_streamName( const StringType& streamName )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_streamName( const StringType& streamName ) 
+{ 
 	m_streamName = streamName;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_index( ANTLR_MARKER index )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_index( ANTLR_MARKER index ) 
+{ 
 	m_index = index;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_token( const TokenType* token )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_token( const TokenType* token ) 
+{ 
 	if (m_token)
 		delete m_token;
 	m_token = token;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_nextException( ExceptionBaseType* nextException )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_nextException( ExceptionBaseType* nextException ) 
+{ 
 	m_nextException = nextException;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_expecting( ANTLR_UINT32 expecting )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_expecting( ANTLR_UINT32 expecting ) 
+{ 
 	m_expecting = expecting;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_expectingSet( BitsetListType* expectingSet )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_expectingSet( BitsetListType* expectingSet ) 
+{ 
 	m_expectingSet = expectingSet;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_node( TokenType* node )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_node( TokenType* node ) 
+{ 
 	m_node = node;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_c( ANTLR_UCHAR c )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_c( ANTLR_UCHAR c ) 
+{ 
 	m_c = c;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_line( ANTLR_UINT32 line )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_line( ANTLR_UINT32 line ) 
+{ 
 	m_line = line;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_charPositionInLine( ANTLR_INT32 charPositionInLine )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_charPositionInLine( ANTLR_INT32 charPositionInLine ) 
+{ 
 	m_charPositionInLine = charPositionInLine;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_decisionNum( ANTLR_UINT32 decisionNum )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_decisionNum( ANTLR_UINT32 decisionNum ) 
+{ 
 	m_decisionNum = decisionNum;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_state( ANTLR_UINT32 state )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_state( ANTLR_UINT32 state ) 
+{ 
 	m_state = state;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_ruleName( const StringType& ruleName )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_ruleName( const StringType& ruleName ) 
+{ 
 	m_ruleName = ruleName;
-}
-template<class ImplTraits, class StreamType>
-ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_input( IntStreamType* input )
-{
+} 
+template<class ImplTraits, class StreamType> 
+ANTLR_INLINE void ANTLR_ExceptionBase<ImplTraits, StreamType>::set_input( IntStreamType* input ) 
+{ 
 	m_input = input;
-}
-
-
-template<class ImplTraits, ExceptionType Ex, class StreamType>
+} 
+ 
+ 
+template<class ImplTraits, ExceptionType Ex, class StreamType> 
 	template<typename BaseRecognizerType>
-ANTLR_Exception<ImplTraits, Ex, StreamType>::ANTLR_Exception(BaseRecognizerType* recognizer, const StringType& message)
+ANTLR_Exception<ImplTraits, Ex, StreamType>::ANTLR_Exception(BaseRecognizerType* recognizer, const StringType& message) 
 	:BaseType( message )
-{
+{ 
 	recognizer->get_super()->fillExceptionData( this );
 	BaseType::m_input	= recognizer->get_super()->get_istream();
 	BaseType::m_nextException	= recognizer->get_state()->get_exception();	/* So we don't leak the memory */
 	recognizer->get_state()->set_exception(this);
 	recognizer->get_state()->set_error( true );	    /* Exception is outstanding	*/
-}
-
-template<class ImplTraits, ExceptionType Ex, class StreamType>
-ANTLR_UINT32 ANTLR_Exception<ImplTraits, Ex, StreamType>::getType() const
-{
+} 
+ 
+template<class ImplTraits, ExceptionType Ex, class StreamType> 
+ANTLR_UINT32 ANTLR_Exception<ImplTraits, Ex, StreamType>::getType() const 
+{ 
 	return static_cast<ANTLR_UINT32>(Ex);
-}
-
-template<class ImplTraits, ExceptionType Ex, class StreamType>
+} 
+ 
+template<class ImplTraits, ExceptionType Ex, class StreamType> 
 void ANTLR_Exception<ImplTraits, Ex, StreamType>::print() const
-{
+{ 
    /* Ensure valid pointer
      */
 	/* Number if no message, else the message
@@ -205,12 +205,12 @@ void ANTLR_Exception<ImplTraits, Ex, StreamType>::print() const
 	{
 		fprintf(stderr, "ANTLR3_EXCEPTION: %s\n", BaseType::m_message.c_str() );
 	}
-}
-
-template<class ImplTraits, ExceptionType Ex, class StreamType>
+} 
+ 
+template<class ImplTraits, ExceptionType Ex, class StreamType> 
 typename ANTLR_Exception<ImplTraits, Ex, StreamType>::StringType 
 	ANTLR_Exception<ImplTraits, Ex, StreamType>::getName() const
-{
+{ 
 	const char* exArray[] = {
 						"org.antlr.runtime.RecognitionException"
 						, "org.antlr.runtime.MismatchedTokenException"
@@ -225,7 +225,7 @@ typename ANTLR_Exception<ImplTraits, Ex, StreamType>::StringType
 					  };
 	return StringType(exArray[Ex]);
 }
-
+ 
 template<class ImplTraits, ExceptionType Ex, class StreamType>
 void ANTLR_Exception<ImplTraits, Ex, StreamType>::displayRecognitionError( ANTLR_UINT8** tokenNames, 
 																			StringStreamType& str_stream ) const
@@ -302,13 +302,13 @@ void ANTLR_Exception<ImplTraits, Ex, StreamType>::displayRecognitionError( ANTLR
 			ANTLR_UINT32	  bit;
 			ANTLR_UINT32	  size;
 			ANTLR_UINT32	  numbits;
-
+ 
 			// This means we were able to deal with one of a set of
 			// possible tokens at this point, but we did not see any
 			// member of that set.
 			//
 			str_stream << " : unexpected input :";
-
+ 
 			// What tokens could we have accepted at this point in the
 			// parse?
 			//
@@ -354,14 +354,14 @@ void ANTLR_Exception<ImplTraits, Ex, StreamType>::displayRecognitionError( ANTLR
 		str_stream << " : syntax not recognized...\n"; 
 		break;
 	}
-}
-
-template<class ImplTraits, class StreamType>
-ANTLR_ExceptionBase<ImplTraits,StreamType>::~ANTLR_ExceptionBase()
-{
+} 
+ 
+template<class ImplTraits, class StreamType> 
+ANTLR_ExceptionBase<ImplTraits,StreamType>::~ANTLR_ExceptionBase() 
+{ 
 	ANTLR_ExceptionBase<ImplTraits,StreamType>* next;
 	ANTLR_ExceptionBase<ImplTraits,StreamType>* ex = m_nextException;
-
+ 
 	/* Ensure valid pointer
 	 */
 	while   (ex != NULL)
@@ -371,15 +371,15 @@ ANTLR_ExceptionBase<ImplTraits,StreamType>::~ANTLR_ExceptionBase()
 		 */
 		next	= ex->m_nextException;
 		ex->m_nextException = NULL;
-
+ 
 		/* Free the actual structure itself
 		 */
 		delete ex;
-
+ 
 		ex = next;
 	}
 	if ( m_token)
 		delete m_token;
-}
-
+} 
+ 
 }

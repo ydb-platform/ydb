@@ -1,12 +1,12 @@
-#include "node.h"
-#include "context.h"
-
+#include "node.h" 
+#include "context.h" 
+ 
 #include <ydb/library/yql/utils/yql_panic.h>
 
-using namespace NYql;
-
+using namespace NYql; 
+ 
 namespace NSQLTranslationV1 {
-
+ 
 static const TMap<ESQLWriteColumnMode, EWriteColumnMode> sqlIntoMode2WriteColumn = {
     {ESQLWriteColumnMode::InsertInto, EWriteColumnMode::Insert},
     {ESQLWriteColumnMode::InsertOrAbortInto, EWriteColumnMode::InsertOrAbort},
@@ -20,42 +20,42 @@ static const TMap<ESQLWriteColumnMode, EWriteColumnMode> sqlIntoMode2WriteColumn
 };
 
 class TModifySourceBase: public ISource {
-public:
+public: 
     TModifySourceBase(TPosition pos, const TVector<TString>& columnsHint)
-        : ISource(pos)
+        : ISource(pos) 
         , ColumnsHint(columnsHint)
-    {
-    }
-
+    { 
+    } 
+ 
     bool AddFilter(TContext& ctx, TNodePtr filter) override {
         Y_UNUSED(filter);
-        ctx.Error(Pos) << "Source does not allow filtering";
-        return false;
-    }
-
+        ctx.Error(Pos) << "Source does not allow filtering"; 
+        return false; 
+    } 
+ 
     bool AddGroupKey(TContext& ctx, const TString& column) override {
         Y_UNUSED(column);
-        ctx.Error(Pos) << "Source does not allow grouping";
-        return false;
-    }
-
+        ctx.Error(Pos) << "Source does not allow grouping"; 
+        return false; 
+    } 
+ 
     bool AddAggregation(TContext& ctx, TAggregationPtr aggr) override {
         YQL_ENSURE(aggr);
         ctx.Error(aggr->GetPos()) << "Source does not allow aggregation";
-        return false;
-    }
-
+        return false; 
+    } 
+ 
     TNodePtr BuildFilter(TContext& ctx, const TString& label) override {
         Y_UNUSED(ctx);
         Y_UNUSED(label);
-        return nullptr;
-    }
-
+        return nullptr; 
+    } 
+ 
     TNodePtr BuildAggregation(const TString& label) override {
         Y_UNUSED(label);
-        return nullptr;
-    }
-
+        return nullptr; 
+    } 
+ 
 protected:
     TVector<TString> ColumnsHint;
     TString OperationHumanName;
@@ -76,8 +76,8 @@ public:
         }
         for (auto& value: Values) {
             if (!value->Init(ctx, src)) {
-                return false;
-            }
+                return false; 
+            } 
         }
         return true;
     }
@@ -131,17 +131,17 @@ public:
                 ctx.Error(Pos) << "VALUES have " << row.size() << " columns, " << OperationHumanName << " expects: " << ColumnsHint.size();
                 hasError = true;
                 continue;
-            }
+            } 
             for (auto& value: row) {
                 if (!value->Init(ctx, FakeSource.Get())) {
                     hasError = true;
                     continue;
                 }
-            }
-        }
+            } 
+        } 
         return !hasError;
-    }
-
+    } 
+ 
     TNodePtr Build(TContext& ctx) override {
         Y_UNUSED(ctx);
         auto tuple = Y();
@@ -153,9 +153,9 @@ public:
                 ++column;
             }
             tuple = L(tuple, rowValues);
-        }
+        } 
         return Y("PersistableRepr", Q(tuple));
-    }
+    } 
 
     TNodePtr DoClone() const final {
         TVector<TVector<TNodePtr>> clonedValues;
@@ -166,12 +166,12 @@ public:
         return new TModifyByValues(Pos, OperationHumanName, ColumnsHint, clonedValues);
     }
 
-private:
+private: 
     TString OperationHumanName;
     TVector<TVector<TNodePtr>> Values;
     TSourcePtr FakeSource;
-};
-
+}; 
+ 
 class TModifyBySource: public TModifySourceBase {
 public:
     TModifyBySource(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source)
@@ -251,8 +251,8 @@ private:
 
 TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values) {
     return new TModifyByValues(pos, operationHumanName, columnsHint, values);
-}
-
+} 
+ 
 TSourcePtr BuildWriteValues(TPosition pos, const TString& operationHumanName, const TVector<TString>& columnsHint, TSourcePtr source) {
     return new TModifyBySource(pos, operationHumanName, columnsHint, std::move(source));
 }
@@ -262,19 +262,19 @@ TSourcePtr BuildUpdateValues(TPosition pos, const TVector<TString>& columnsHint,
 }
 
 class TWriteColumnsNode: public TAstListNode {
-public:
+public: 
     TWriteColumnsNode(TPosition pos, TScopedStatePtr scoped,
         const TTableRef& table, EWriteColumnMode mode, TSourcePtr values = nullptr, TNodePtr options = nullptr)
-        : TAstListNode(pos)
+        : TAstListNode(pos) 
         , Scoped(scoped)
-        , Table(table)
+        , Table(table) 
         , Mode(mode)
         , Values(std::move(values))
         , Options(std::move(options))
-    {
+    { 
         FakeSource = BuildFakeSource(pos);
-    }
-
+    } 
+ 
     void ResetSource(TSourcePtr source) {
         TableSource = std::move(source);
     }
@@ -316,12 +316,12 @@ public:
                 return false;
             }
             unordered = (EOrderKind::None == Values->GetOrderKind());
-        }
-
+        } 
+ 
         TNodePtr node(BuildInputTables(Pos, tableList, false, Scoped));
         if (!node->Init(ctx, underlyingSrc)) {
-            return false;
-        }
+            return false; 
+        } 
 
         if (Update) {
             if (!Update->Init(ctx, TableSource.Get()) || !Update->InitFilters(ctx)) {
@@ -332,8 +332,8 @@ public:
 
         auto write = BuildWriteTable(Pos, "values", Table, Mode, std::move(options), Scoped);
         if (!write->Init(ctx, FakeSource.Get())) {
-            return false;
-        }
+            return false; 
+        } 
         if (values) {
             node = L(node, Y("let", "values", values));
             if (unordered && ctx.UseUnordered(Table)) {
@@ -342,32 +342,32 @@ public:
         } else {
             node = L(node, Y("let", "values", Y("Void")));
         }
-        node = L(node, Y("let", "world", write));
-        node = L(node, Y("return", "world"));
-
-        Add("block", Q(node));
-        return true;
-    }
-
+        node = L(node, Y("let", "world", write)); 
+        node = L(node, Y("return", "world")); 
+ 
+        Add("block", Q(node)); 
+        return true; 
+    } 
+ 
     TNodePtr DoClone() const final {
         return {};
     }
 
-protected:
+protected: 
     TScopedStatePtr Scoped;
-    TTableRef Table;
+    TTableRef Table; 
     TSourcePtr TableSource;
     EWriteColumnMode Mode;
     TSourcePtr Values;
     TSourcePtr Update;
     TSourcePtr FakeSource;
     TNodePtr Options;
-};
-
+}; 
+ 
 EWriteColumnMode ToWriteColumnsMode(ESQLWriteColumnMode sqlWriteColumnMode) {
     return sqlIntoMode2WriteColumn.at(sqlWriteColumnMode);
-}
-
+} 
+ 
 TNodePtr BuildWriteColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, EWriteColumnMode mode, TSourcePtr values, TNodePtr options) {
     YQL_ENSURE(values, "Invalid values node");
     return new TWriteColumnsNode(pos, scoped, table, mode, std::move(values), std::move(options));

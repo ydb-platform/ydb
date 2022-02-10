@@ -3399,8 +3399,8 @@ IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TType
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
     const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags) {
     return TryConvertToImpl(ctx, node, sourceType, expectedType, flags);
-}
-
+} 
+ 
 bool IsDataTypeNumeric(EDataSlot dataSlot) {
     return NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::NumericType;
 }

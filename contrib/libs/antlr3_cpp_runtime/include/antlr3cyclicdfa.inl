@@ -1,6 +1,6 @@
 namespace antlr3 {
-
-template<class ImplTraits, class CtxType>
+ 
+template<class ImplTraits, class CtxType> 
 CyclicDFA<ImplTraits, CtxType>::CyclicDFA( ANTLR_INT32	decisionNumber
 				, const ANTLR_UCHAR*	description
 				, const ANTLR_INT32* const	eot
@@ -18,13 +18,13 @@ CyclicDFA<ImplTraits, CtxType>::CyclicDFA( ANTLR_INT32	decisionNumber
 				, m_accept(accept)
 				, m_special(special)
 				, m_transition(transition)
-{
+{ 
 	m_description = description;
-}
-
-template<class ImplTraits, class CtxType>
-CyclicDFA<ImplTraits, CtxType>::CyclicDFA( const CyclicDFA& dfa )
-{
+} 
+ 
+template<class ImplTraits, class CtxType> 
+CyclicDFA<ImplTraits, CtxType>::CyclicDFA( const CyclicDFA& dfa ) 
+{ 
 	m_decisionNumber = dfa.m_decisionNumber;
 	m_description = dfa.m_description;
 	m_eot = dfa.m_eot;
@@ -34,11 +34,11 @@ CyclicDFA<ImplTraits, CtxType>::CyclicDFA( const CyclicDFA& dfa )
 	m_accept = dfa.m_accept;
 	m_special = dfa.m_special;
 	m_transition = dfa.m_transition;
-}
-
-template<class ImplTraits, class CtxType>
-CyclicDFA<ImplTraits, CtxType>& CyclicDFA<ImplTraits, CtxType>::operator=( const CyclicDFA& dfa)
-{
+} 
+ 
+template<class ImplTraits, class CtxType> 
+CyclicDFA<ImplTraits, CtxType>& CyclicDFA<ImplTraits, CtxType>::operator=( const CyclicDFA& dfa) 
+{ 
 	m_decisionNumber = dfa.m_decisionNumber;
 	m_description = dfa.m_description;
 	m_eot = dfa.m_eot;
@@ -49,50 +49,50 @@ CyclicDFA<ImplTraits, CtxType>& CyclicDFA<ImplTraits, CtxType>::operator=( const
 	m_special = dfa.m_special;
 	m_transition = dfa.m_transition;
 	return *this;
-}
-
-template<class ImplTraits, class CtxType>
+} 
+ 
+template<class ImplTraits, class CtxType> 
 ANTLR_INT32	CyclicDFA<ImplTraits, CtxType>::specialStateTransition(CtxType * ,
 																	RecognizerType* ,
 																	IntStreamType* , ANTLR_INT32 )
-{
+{ 
 	return -1;
-}
-
-template<class ImplTraits, class CtxType>
+} 
+ 
+template<class ImplTraits, class CtxType> 
 ANTLR_INT32	CyclicDFA<ImplTraits, CtxType>::specialTransition(CtxType * /*ctx*/,
 																	RecognizerType* /*recognizer*/,
 																	IntStreamType* /*is*/, ANTLR_INT32 /*s*/)
-{
+{ 
 	return 0;
-}
-
-template<class ImplTraits, class CtxType>
-  template<typename SuperType>
+} 
+ 
+template<class ImplTraits, class CtxType> 
+  template<typename SuperType> 
 ANTLR_INT32	CyclicDFA<ImplTraits, CtxType>::predict(CtxType * ctx,
 															RecognizerType* recognizer,
 															IntStreamType* is, SuperType& super)
-{
+{ 
 	ANTLR_MARKER	mark;
     ANTLR_INT32	s;
     ANTLR_INT32	specialState;
     ANTLR_INT32	c;
-
+ 
     mark	= is->mark();	    /* Store where we are right now	*/
     s		= 0;		    /* Always start with state 0	*/
-
+ 
 	for (;;)
 	{
 		/* Pick out any special state entry for this state
 		 */
 		specialState	= m_special[s];
-
+ 
 		/* Transition the special state and consume an input token
 		 */
 		if  (specialState >= 0)
 		{
 			s = super.specialStateTransition(ctx, recognizer, is, specialState);
-
+ 
 			// Error?
 			//
 			if	(s<0)
@@ -110,7 +110,7 @@ ANTLR_INT32	CyclicDFA<ImplTraits, CtxType>::predict(CtxType * ctx,
 			is->consume();
 			continue;
 		}
-
+ 
 		/* Accept state?
 		 */
 		if  (m_accept[s] >= 1)
@@ -118,21 +118,21 @@ ANTLR_INT32	CyclicDFA<ImplTraits, CtxType>::predict(CtxType * ctx,
 			is->rewind(mark);
 			return  m_accept[s];
 		}
-
+ 
 		/* Look for a normal transition state based upon the input token element
 		 */
 		c = is->LA(1);
-
+ 
 		/* Check against min and max for this state
 		 */
 		if  (c>= m_min[s] && c <= m_max[s])
 		{
 			ANTLR_INT32   snext;
-
+ 
 			/* What is the next state?
 			 */
 			snext = m_transition[s][c - m_min[s]];
-
+ 
 			if	(snext < 0)
 			{
 				/* Was in range but not a normal transition
@@ -150,7 +150,7 @@ ANTLR_INT32	CyclicDFA<ImplTraits, CtxType>::predict(CtxType * ctx,
 				is->rewind(mark);
 				return	0;
 			}
-
+ 
 			/* New current state - move to it
 			 */
 			s	= snext;
@@ -172,26 +172,26 @@ ANTLR_INT32	CyclicDFA<ImplTraits, CtxType>::predict(CtxType * ctx,
 			is->rewind(mark);
 			return  m_accept[m_eof[s]];
 		}
-
+ 
 		/* No alt, so bomb
 		 */
 		this->noViableAlt(recognizer, s);
 		is->rewind(mark);
 		return 0;
 	}
-}
-
-template<class ImplTraits, class CtxType>
-void CyclicDFA<ImplTraits, CtxType>::noViableAlt(RecognizerType* rec, ANTLR_UINT32 s)
-{
+} 
+ 
+template<class ImplTraits, class CtxType> 
+void CyclicDFA<ImplTraits, CtxType>::noViableAlt(RecognizerType* rec, ANTLR_UINT32 s) 
+{ 
 	// In backtracking mode, we just set the failed flag so that the
 	// alt can just exit right now. If we are parsing though, then
 	// we want the exception to be raised.
 	//
     if	(rec->get_state()->get_backtracking() > 0)
-    {
+    { 
 		rec->get_state()->set_failed(true);
-    }
+    } 
 	else
 	{
 		ANTLR_Exception<ImplTraits, NO_VIABLE_ALT_EXCEPTION, StreamType>* ex 
@@ -199,6 +199,6 @@ void CyclicDFA<ImplTraits, CtxType>::noViableAlt(RecognizerType* rec, ANTLR_UINT
 		ex->set_decisionNum( m_decisionNumber );
 		ex->set_state(s);
 	}
-}
-
+} 
+ 
 }

@@ -160,7 +160,7 @@ public:
         return Kind;
     }
 
-    static TStringBuf KindAsStr(EKind kind);
+    static TStringBuf KindAsStr(EKind kind); 
     TStringBuf GetKindAsStr() const;
 
 #define MKQL_KIND_ACCESSOR(name, value) \

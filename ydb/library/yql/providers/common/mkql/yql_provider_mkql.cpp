@@ -768,8 +768,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto structObj = MkqlBuildExpr(node.Head(), ctx);
         const auto name = node.Tail().Content();
         return ctx.ProgramBuilder.RemoveMember(structObj, name, true);
-    });
-
+    }); 
+ 
     AddCallable("Nth", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto tupleObj = MkqlBuildExpr(node.Head(), ctx);
         const auto index = FromString<ui32>(node.Tail().Content());

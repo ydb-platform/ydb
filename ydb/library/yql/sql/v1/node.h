@@ -1,19 +1,19 @@
-#pragma once
-
+#pragma once 
+ 
 #include <google/protobuf/message.h>
 #include <ydb/library/yql/utils/resetable_setting.h>
 #include <ydb/library/yql/parser/proto_ast/proto_ast.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/ast/yql_ast.h>
 #include <ydb/library/yql/ast/yql_expr.h>
-#include <util/generic/vector.h>
-#include <util/generic/set.h>
-#include <util/generic/map.h>
+#include <util/generic/vector.h> 
+#include <util/generic/set.h> 
+#include <util/generic/map.h> 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
-
+ 
 #include <library/cpp/enumbitset/enumbitset.h>
 
 #include <array>
@@ -23,7 +23,7 @@
 namespace NSQLTranslationV1 {
     constexpr const size_t SQL_MAX_INLINE_SCRIPT_LEN = 24;
 
-    using NYql::TPosition;
+    using NYql::TPosition; 
     using NYql::TAstNode;
 
     enum class ENodeState {
@@ -73,9 +73,9 @@ namespace NSQLTranslationV1 {
         DropColumn
     };
 
-    class TContext;
-    class ITableKeys;
-    class ISource;
+    class TContext; 
+    class ITableKeys; 
+    class ISource; 
     class IAggregation;
     typedef TIntrusivePtr<IAggregation> TAggregationPtr;
 
@@ -91,44 +91,44 @@ namespace NSQLTranslationV1 {
     TString ErrorDistinctByGroupKey(const TString& column);
     TString ErrorDistinctWithoutCorrelation(const TString& column);
 
-    class INode: public TSimpleRefCount<INode> {
-    public:
-        typedef TIntrusivePtr<INode> TPtr;
-
-        struct TIdPart {
+    class INode: public TSimpleRefCount<INode> { 
+    public: 
+        typedef TIntrusivePtr<INode> TPtr; 
+ 
+        struct TIdPart { 
             TString Name;
-            TPtr Expr;
-
+            TPtr Expr; 
+ 
             TIdPart(const TString& name)
-                : Name(name)
-            {
-            }
-            TIdPart(TPtr expr)
-                : Expr(expr)
-            {
-            }
+                : Name(name) 
+            { 
+            } 
+            TIdPart(TPtr expr) 
+                : Expr(expr) 
+            { 
+            } 
             TIdPart Clone() const {
                 TIdPart res(Name);
                 res.Expr = Expr ? Expr->Clone() : nullptr;
                 return res;
             }
-        };
-
-    public:
-        INode(TPosition pos);
-        virtual ~INode();
-
-        TPosition GetPos() const;
+        }; 
+ 
+    public: 
+        INode(TPosition pos); 
+        virtual ~INode(); 
+ 
+        TPosition GetPos() const; 
         const TString& GetLabel() const;
         TMaybe<TPosition> GetLabelPos() const;
         void SetLabel(const TString& label, TMaybe<TPosition> pos = {});
         bool IsImplicitLabel() const;
         void MarkImplicitLabel(bool isImplicitLabel);
-
+ 
         void SetCountHint(bool isCount);
         bool GetCountHint() const;
-        bool Init(TContext& ctx, ISource* src);
-
+        bool Init(TContext& ctx, ISource* src); 
+ 
         bool IsConstant() const;
         bool MaybeConstant() const;
         bool IsAggregated() const;
@@ -139,13 +139,13 @@ namespace NSQLTranslationV1 {
             return State.Test(state);
         }
 
-        virtual bool IsNull() const;
+        virtual bool IsNull() const; 
         virtual bool IsLiteral() const;
         virtual TString GetLiteralType() const;
         virtual TString GetLiteralValue() const;
         virtual bool IsIntegerLiteral() const;
         virtual TPtr ApplyUnaryOp(TContext& ctx, TPosition pos, const TString& opName) const;
-        virtual bool IsAsterisk() const;
+        virtual bool IsAsterisk() const; 
         virtual const TString* SubqueryAlias() const;
         virtual TString GetOpName() const;
         virtual const TString* GetLiteral(const TString& type) const;
@@ -154,10 +154,10 @@ namespace NSQLTranslationV1 {
         virtual const TString* GetSourceName() const;
         virtual const TString* GetAtomContent() const;
         virtual bool IsOptionalArg() const;
-        virtual size_t GetTupleSize() const;
+        virtual size_t GetTupleSize() const; 
         virtual TPtr GetTupleElement(size_t index) const;
-        virtual ITableKeys* GetTableKeys();
-        virtual ISource* GetSource();
+        virtual ITableKeys* GetTableKeys(); 
+        virtual ISource* GetSource(); 
         virtual TVector<INode::TPtr>* ContentListPtr();
         virtual TAstNode* Translate(TContext& ctx) const = 0;
         virtual TAggregationPtr GetAggregation() const;
@@ -169,7 +169,7 @@ namespace NSQLTranslationV1 {
         virtual bool IsSelect() const;
         virtual const TString* FuncName() const;
         virtual const TString* ModuleName() const;
-
+ 
         using TVisitFunc = std::function<bool (const INode&)>;
         using TVisitNodeSet = std::unordered_set<const INode*>;
 
@@ -180,62 +180,62 @@ namespace NSQLTranslationV1 {
         TPtr AstNode(TAstNode* node) const;
         TPtr AstNode(TPtr node) const;
         TPtr AstNode(const TString& str) const;
-
-        template <typename TVal, typename... TVals>
-        void Add(TVal val, TVals... vals) {
-            DoAdd(AstNode(val));
-            Add(vals...);
-        }
-
+ 
+        template <typename TVal, typename... TVals> 
+        void Add(TVal val, TVals... vals) { 
+            DoAdd(AstNode(val)); 
+            Add(vals...); 
+        } 
+ 
         void Add() {}
-
-        // Y() Q() L()
+ 
+        // Y() Q() L() 
         TPtr Y() const {
-            return AstNode();
-        }
-
-        template <typename... TVals>
+            return AstNode(); 
+        } 
+ 
+        template <typename... TVals> 
         TPtr Y(TVals... vals) const {
-            TPtr node(AstNode());
-            node->Add(vals...);
-            return node;
-        }
-
-        template <typename T>
+            TPtr node(AstNode()); 
+            node->Add(vals...); 
+            return node; 
+        } 
+ 
+        template <typename T> 
         TPtr Q(T a) const {
-            return Y("quote", a);
-        }
-
-        template <typename... TVals>
+            return Y("quote", a); 
+        } 
+ 
+        template <typename... TVals> 
         TPtr L(TPtr list, TVals... vals) const {
             Y_VERIFY_DEBUG(list);
-            auto copy = list->ShallowCopy();
-            copy->Add(vals...);
-            return copy;
-        }
-
+            auto copy = list->ShallowCopy(); 
+            copy->Add(vals...); 
+            return copy; 
+        } 
+ 
         TPtr Clone() const;
-    protected:
-        virtual TPtr ShallowCopy() const;
+    protected: 
+        virtual TPtr ShallowCopy() const; 
         virtual void DoUpdateState() const;
         virtual TPtr DoClone() const = 0;
         void PrecacheState() const;
-
+ 
         virtual void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const;
-    private:
-        virtual bool DoInit(TContext& ctx, ISource* src);
-        virtual void DoAdd(TPtr node);
-
-    protected:
-        TPosition Pos;
+    private: 
+        virtual bool DoInit(TContext& ctx, ISource* src); 
+        virtual void DoAdd(TPtr node); 
+ 
+    protected: 
+        TPosition Pos; 
         TString Label;
         TMaybe<TPosition> LabelPos;
         bool ImplicitLabel = false;
         mutable TNodeState State;
         bool AsInner = false;
-    };
-    typedef INode::TPtr TNodePtr;
-
+    }; 
+    typedef INode::TPtr TNodePtr; 
+ 
     using TTableHints = TMap<TString, TVector<TNodePtr>>;
     void MergeHints(TTableHints& base, const TTableHints& overrides);
 
@@ -254,28 +254,28 @@ namespace NSQLTranslationV1 {
         return cloneArgs;
     }
 
-    class TAstAtomNode: public INode {
-    public:
+    class TAstAtomNode: public INode { 
+    public: 
         TAstAtomNode(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg);
-
+ 
         ~TAstAtomNode() override;
-
+ 
         TAstNode* Translate(TContext& ctx) const override;
         const TString& GetContent() const {
             return Content;
         }
-
+ 
         const TString* GetAtomContent() const override;
         bool IsOptionalArg() const override;
 
-    protected:
+    protected: 
         TString Content;
-        ui32 Flags;
+        ui32 Flags; 
         bool IsOptionalArg_;
 
         void DoUpdateState() const override;
-    };
-
+    }; 
+ 
     class TAstAtomNodeImpl final: public TAstAtomNode {
     public:
         TAstAtomNodeImpl(TPosition pos, const TString& content, ui32 flags, bool isOptionalArg = false)
@@ -300,30 +300,30 @@ namespace NSQLTranslationV1 {
         TAstNode* Node;
     };
 
-    class TAstListNode: public INode {
-    public:
-        TAstListNode(TPosition pos);
-        virtual ~TAstListNode();
-
+    class TAstListNode: public INode { 
+    public: 
+        TAstListNode(TPosition pos); 
+        virtual ~TAstListNode(); 
+ 
         TAstNode* Translate(TContext& ctx) const override;
-
-    protected:
-        explicit TAstListNode(const TAstListNode& node);
+ 
+    protected: 
+        explicit TAstListNode(const TAstListNode& node); 
         explicit TAstListNode(TPosition pos, TVector<TNodePtr>&& nodes);
         TPtr ShallowCopy() const override;
         bool DoInit(TContext& ctx, ISource* src) override;
         void DoAdd(TNodePtr node) override;
         void DoVisitChildren(const TVisitFunc& func, TVisitNodeSet& visited) const override;
-
+ 
         void DoUpdateState() const override;
 
         void UpdateStateByListNodes(const TVector<TNodePtr>& Nodes) const;
 
-    protected:
+    protected: 
         TVector<TNodePtr> Nodes;
         mutable TMaybe<bool> CacheGroupKey;
-    };
-
+    }; 
+ 
     class TAstListNodeImpl final: public TAstListNode {
     public:
         TAstListNodeImpl(TPosition pos);
@@ -334,8 +334,8 @@ namespace NSQLTranslationV1 {
         TNodePtr DoClone() const final;
     };
 
-    class TCallNode: public TAstListNode {
-    public:
+    class TCallNode: public TAstListNode { 
+    public: 
         TCallNode(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
         TCallNode(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
             : TCallNode(pos, opName, args.size(), args.size(), args)
@@ -343,16 +343,16 @@ namespace NSQLTranslationV1 {
 
         TString GetOpName() const override;
         const TString* GetSourceName() const override;
-
+ 
         const TVector<TNodePtr>& GetArgs() const;
-
-    protected:
+ 
+    protected: 
         bool DoInit(TContext& ctx, ISource* src) override;
         bool ValidateArguments(TContext& ctx) const;
         TString GetCallExplain() const;
         void CollectPreaggregateExprs(TContext& ctx, ISource& src, TVector<INode::TPtr>& exprs) override;
-
-    protected:
+ 
+    protected: 
         TString OpName;
         i32 MinArgs;
         i32 MaxArgs;
@@ -360,8 +360,8 @@ namespace NSQLTranslationV1 {
         mutable TMaybe<bool> CacheGroupKey;
 
         void DoUpdateState() const override;
-    };
-
+    }; 
+ 
     class TCallNodeImpl final: public TCallNode {
         TPtr DoClone() const final;
     public:
@@ -455,8 +455,8 @@ namespace NSQLTranslationV1 {
         TWinRank(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args);
     };
 
-    class ITableKeys: public INode {
-    public:
+    class ITableKeys: public INode { 
+    public: 
         enum class EBuildKeysMode {
             CREATE,
             DROP,
@@ -464,11 +464,11 @@ namespace NSQLTranslationV1 {
             WRITE
         };
 
-        ITableKeys(TPosition pos);
+        ITableKeys(TPosition pos); 
         virtual const TString* GetTableName() const;
         virtual TNodePtr BuildKeys(TContext& ctx, EBuildKeysMode mode) = 0;
-
-    private:
+ 
+    private: 
         /// all TableKeys no clonnable
         TPtr DoClone() const final {
             return {};
@@ -476,8 +476,8 @@ namespace NSQLTranslationV1 {
 
         ITableKeys* GetTableKeys() override;
         TAstNode* Translate(TContext& ctx) const override;
-    };
-
+    }; 
+ 
     enum class ESampleMode {
         Auto,
         Bernoulli,
@@ -503,22 +503,22 @@ namespace NSQLTranslationV1 {
 
     typedef TIntrusivePtr<ISource> TSourcePtr;
 
-    struct TTableRef {
+    struct TTableRef { 
         TString RefName;
         TString Service;
         TDeferredAtom Cluster;
-        TNodePtr Keys;
-        TNodePtr Options;
+        TNodePtr Keys; 
+        TNodePtr Options; 
         TSourcePtr Source;
-
+ 
         TTableRef() = default;
         TTableRef(const TString& refName, const TString& service, const TDeferredAtom& cluster, TNodePtr keys);
         TTableRef(const TTableRef&) = default;
         TTableRef& operator=(const TTableRef&) = default;
-
+ 
         TString ShortName() const;
-    };
-
+    }; 
+ 
     struct TIdentifier {
         TPosition Pos;
         TString Name;
@@ -528,33 +528,33 @@ namespace NSQLTranslationV1 {
             , Name(name) {}
     };
 
-    struct TColumnSchema {
-        TPosition Pos;
+    struct TColumnSchema { 
+        TPosition Pos; 
         TString Name;
         TNodePtr Type;
-        bool Nullable;
+        bool Nullable; 
         TVector<TIdentifier> Families;
-
+ 
         TColumnSchema(TPosition pos, const TString& name, const TNodePtr& type, bool nullable,
             TVector<TIdentifier> families);
-    };
-
-    struct TColumns: public TSimpleRefCount<TColumns> {
+    }; 
+ 
+    struct TColumns: public TSimpleRefCount<TColumns> { 
         TSet<TString> Real;
         TSet<TString> Artificial;
         TVector<TString> List;
         TVector<bool> NamedColumns;
-        bool All = false;
+        bool All = false; 
         bool QualifiedAll = false;
         bool HasUnreliable = false;
-
+ 
         bool Add(const TString* column, bool countHint, bool isArtificial = false, bool isReliable = true, bool hasName = true);
-        void Merge(const TColumns& columns);
+        void Merge(const TColumns& columns); 
         void SetPrefix(const TString& prefix);
-        void SetAll();
+        void SetAll(); 
         bool IsColumnPossible(TContext& ctx, const TString& column);
-    };
-
+    }; 
+ 
     struct TSortSpecification: public TSimpleRefCount<TSortSpecification> {
         TNodePtr OrderExpr;
         bool Ascending;
@@ -631,22 +631,22 @@ namespace NSQLTranslationV1 {
     typedef TMap<TString, TWindowSpecificationPtr> TWinSpecs;
 
     typedef TVector<TTableRef> TTableList;
-
+ 
     void WarnIfAliasFromSelectIsUsedInGroupBy(TContext& ctx, const TVector<TNodePtr>& selectTerms, const TVector<TNodePtr>& groupByTerms,
         const TVector<TNodePtr>& groupByExprTerms);
     bool ValidateAllNodesForAggregation(TContext& ctx, const TVector<TNodePtr>& nodes);
-
+ 
     struct TWriteSettings {
         bool Discard = false;
         TDeferredAtom Label;
     };
 
     class TColumnNode final: public INode {
-    public:
+    public: 
         TColumnNode(TPosition pos, const TString& column, const TString& source, bool maybeType);
         TColumnNode(TPosition pos, const TNodePtr& column, const TString& source);
 
-        virtual ~TColumnNode();
+        virtual ~TColumnNode(); 
         bool IsAsterisk() const override;
         virtual bool IsArtificial() const;
         const TString* GetColumnName() const override;
@@ -654,7 +654,7 @@ namespace NSQLTranslationV1 {
         TAstNode* Translate(TContext& ctx) const override;
         void ResetColumn(const TString& column, const TString& source);
         void ResetColumn(const TNodePtr& column, const TString& source);
-
+ 
         void SetUseSourceAsColumn();
         void SetUseSource();
         void ResetAsReliable();
@@ -663,15 +663,15 @@ namespace NSQLTranslationV1 {
         bool IsUseSourceAsColumn() const;
         bool CanBeType() const;
 
-    private:
+    private: 
         bool DoInit(TContext& ctx, ISource* src) override;
         TPtr DoClone() const final;
-
+ 
         void DoUpdateState() const override;
 
-    private:
+    private: 
         static const TString Empty;
-        TNodePtr Node;
+        TNodePtr Node; 
         TString ColumnName;
         TNodePtr ColumnExpr;
         TString Source;
@@ -681,8 +681,8 @@ namespace NSQLTranslationV1 {
         bool UseSource = false;
         bool UseSourceAsColumn = false;
         bool MaybeType = false;
-    };
-
+    }; 
+ 
     class TArgPlaceholderNode final: public INode
     {
     public:
@@ -742,8 +742,8 @@ namespace NSQLTranslationV1 {
         const bool Ordered;
     };
 
-    class IAggregation: public INode {
-    public:
+    class IAggregation: public INode { 
+    public: 
         bool IsDistinct() const;
 
         void DoUpdateState() const override;
@@ -751,7 +751,7 @@ namespace NSQLTranslationV1 {
         virtual const TString* GetGenericKey() const;
 
         virtual bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) = 0;
-
+ 
         virtual TNodePtr AggregationTraits(const TNodePtr& type) const;
 
         virtual TNodePtr AggregationTraitsFactory() const = 0;
@@ -763,7 +763,7 @@ namespace NSQLTranslationV1 {
         virtual TNodePtr WindowTraits(const TNodePtr& type) const;
 
         const TString& GetName() const;
-
+ 
         EAggregateMode GetAggregationMode() const;
         void MarkKeyColumnAsGenerated();
 
@@ -772,17 +772,17 @@ namespace NSQLTranslationV1 {
     private:
         virtual TNodePtr GetApply(const TNodePtr& type) const = 0;
 
-    protected:
+    protected: 
         IAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode mode);
         TAstNode* Translate(TContext& ctx) const override;
-
+ 
         TString Name;
         TString Func;
         const EAggregateMode AggMode;
         TString DistinctKey;
         bool IsGeneratedKeyColumn = false;
-    };
-
+    }; 
+ 
     enum class EExprSeat: int {
         Open = 0,
         FlattenByExpr,
@@ -805,14 +805,14 @@ namespace NSQLTranslationV1 {
         Passthrough
     };
 
-    class IJoin;
-    class ISource: public INode {
-    public:
-        virtual ~ISource();
-
+    class IJoin; 
+    class ISource: public INode { 
+    public: 
+        virtual ~ISource(); 
+ 
         virtual bool IsFake() const;
-        virtual void AllColumns();
-        virtual const TColumns* GetColumns() const;
+        virtual void AllColumns(); 
+        virtual const TColumns* GetColumns() const; 
         virtual void GetInputTables(TTableList& tableList) const;
         /// in case of error unfilled, flag show if ensure column name
         virtual TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column);
@@ -821,15 +821,15 @@ namespace NSQLTranslationV1 {
         virtual void SetFlattenByMode(const TString& mode);
         virtual void MarkFlattenColumns();
         virtual bool IsFlattenColumns() const;
-        virtual bool AddFilter(TContext& ctx, TNodePtr filter);
+        virtual bool AddFilter(TContext& ctx, TNodePtr filter); 
         virtual bool AddGroupKey(TContext& ctx, const TString& column);
         virtual void SetCompactGroupBy(bool compactGroupBy);
         virtual TString MakeLocalName(const TString& name);
-        virtual bool AddAggregation(TContext& ctx, TAggregationPtr aggr);
+        virtual bool AddAggregation(TContext& ctx, TAggregationPtr aggr); 
         virtual bool AddFuncOverWindow(TContext& ctx, TNodePtr expr);
         virtual void AddTmpWindowColumn(const TString& column);
         virtual const TVector<TString>& GetTmpWindowColumns() const;
-        virtual bool HasAggregations() const;
+        virtual bool HasAggregations() const; 
         virtual void AddWindowSpecs(TWinSpecs winSpecs);
         virtual bool AddAggregationOverWindow(TContext& ctx, const TString& windowName, TAggregationPtr func);
         virtual bool AddFuncOverWindow(TContext& ctx, const TString& windowName, TNodePtr func);
@@ -861,17 +861,17 @@ namespace NSQLTranslationV1 {
         virtual TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label);
         virtual bool BuildSamplingLambda(TNodePtr& node);
         virtual bool SetSamplingRate(TContext& ctx, TNodePtr samplingRate);
-        virtual IJoin* GetJoin();
+        virtual IJoin* GetJoin(); 
         virtual ISource* GetCompositeSource();
         virtual bool IsSelect() const;
         virtual bool IsTableSource() const;
         virtual bool ShouldUseSourceAsColumn(const TString& source) const;
         virtual bool IsJoinKeysInitializing() const;
         virtual const TString* GetWindowName() const;
-
-        virtual bool DoInit(TContext& ctx, ISource* src);
-        virtual TNodePtr Build(TContext& ctx) = 0;
-
+ 
+        virtual bool DoInit(TContext& ctx, ISource* src); 
+        virtual TNodePtr Build(TContext& ctx) = 0; 
+ 
         virtual TMaybe<TString> FindColumnMistype(const TString& name) const;
 
         virtual bool InitFilters(TContext& ctx);
@@ -886,16 +886,16 @@ namespace NSQLTranslationV1 {
 
         TIntrusivePtr<ISource> CloneSource() const;
 
-    protected:
-        ISource(TPosition pos);
+    protected: 
+        ISource(TPosition pos); 
         virtual TAstNode* Translate(TContext& ctx) const;
-
+ 
         void FillSortParts(const TVector<TSortSpecificationPtr>& orderBy, TNodePtr& sortKeySelector, TNodePtr& sortDirection);
         TNodePtr BuildSortSpec(const TVector<TSortSpecificationPtr>& orderBy, const TString& label, bool traits, bool assume);
 
         TVector<TNodePtr>& Expressions(EExprSeat exprSeat);
         TNodePtr AliasOrColumn(const TNodePtr& node, bool withSource);
-
+ 
         TNodePtr BuildWindowFrame(const TFrameSpecification& spec, bool isCompact);
 
         THashSet<TString> ExprAliases;
@@ -918,8 +918,8 @@ namespace NSQLTranslationV1 {
         THashMap<TString, ui32> GenIndexes;
         TVector<TString> TmpWindowColumns;
         TNodePtr SamplingRate;
-    };
-
+    }; 
+ 
     template<>
     inline TVector<TSourcePtr> CloneContainer<TSourcePtr>(const TVector<TSourcePtr>& args) {
         TVector<TSourcePtr> cloneArgs;
@@ -929,25 +929,25 @@ namespace NSQLTranslationV1 {
         }
         return cloneArgs;
     }
-
+ 
     struct TJoinLinkSettings {
         bool ForceSortedMerge = false;
     };
 
-    class IJoin: public ISource {
-    public:
-        virtual ~IJoin();
-
-        virtual IJoin* GetJoin();
+    class IJoin: public ISource { 
+    public: 
+        virtual ~IJoin(); 
+ 
+        virtual IJoin* GetJoin(); 
         virtual TNodePtr BuildJoinKeys(TContext& ctx, const TVector<TDeferredAtom>& names) = 0;
         virtual void SetupJoin(const TString& joinOp, TNodePtr joinExpr, const TJoinLinkSettings& linkSettings) = 0;
         virtual const THashMap<TString, THashSet<TString>>& GetSameKeysMap() const = 0;
         virtual TVector<TString> GetJoinLabels() const = 0;
-
-    protected:
-        IJoin(TPosition pos);
-    };
-
+ 
+    protected: 
+        IJoin(TPosition pos); 
+    }; 
+ 
     class TListOfNamedNodes final: public INode {
     public:
         TListOfNamedNodes(TPosition pos, TVector<TNodePtr>&& exprs);
@@ -1170,14 +1170,14 @@ namespace NSQLTranslationV1 {
     TString IdContent(TContext& ctx, const TString& str);
     TString IdContentFromString(TContext& ctx, const TString& str);
     TTableHints GetContextHints(TContext& ctx);
-
+ 
     TString TypeByAlias(const TString& alias, bool normalize = true);
-
+ 
     TNodePtr BuildAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent,
         bool isOptionalArg = false);
     TNodePtr BuildQuotedAtom(TPosition pos, const TString& content, ui32 flags = NYql::TNodeFlags::ArbitraryContent);
-
-    TNodePtr BuildLiteralNull(TPosition pos);
+ 
+    TNodePtr BuildLiteralNull(TPosition pos); 
     TNodePtr BuildLiteralVoid(TPosition pos);
     /// String is checked as quotable, support escaping and multiline
     TNodePtr BuildLiteralSmartString(TContext& ctx, const TString& value);
@@ -1191,7 +1191,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildLiteralRawString(TPosition pos, const TString& value, bool isUtf8 = false);
     TNodePtr BuildLiteralBool(TPosition pos, bool value);
     TNodePtr BuildEmptyAction(TPosition pos);
-
+ 
     TNodePtr BuildTuple(TPosition pos, const TVector<TNodePtr>& exprs);
 
     TNodePtr BuildStructure(TPosition pos, const TVector<TNodePtr>& exprs);
@@ -1199,7 +1199,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildOrderedStructure(TPosition pos, const TVector<TNodePtr>& exprsUnlabeled, const TVector<TNodePtr>& labels);
 
     TNodePtr BuildListOfNamedNodes(TPosition pos, TVector<TNodePtr>&& exprs);
-
+ 
     TNodePtr BuildArgPlaceholder(TPosition pos, const TString& name);
 
     TNodePtr BuildColumn(TPosition pos, const TString& column = TString(), const TString& source = TString());
@@ -1211,16 +1211,16 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildLambda(TPosition pos, TNodePtr params, TNodePtr body, const TString& resName = TString());
     TNodePtr BuildDataType(TPosition pos, const TString& typeName);
     TNodePtr BuildSimpleType(TContext& ctx, TPosition pos, const TString& typeName, bool dataOnly);
-    TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a);
+    TNodePtr BuildIsNullOp(TPosition pos, TNodePtr a); 
     TNodePtr BuildBinaryOp(TContext& ctx, TPosition pos, const TString& opName, TNodePtr a, TNodePtr b);
-
+ 
     TNodePtr BuildCalcOverWindow(TPosition pos, const TString& windowName, TNodePtr call);
     TNodePtr BuildYsonOptionsNode(TPosition pos, bool autoConvert, bool strict, bool fastYson);
 
     TNodePtr BuildDoCall(TPosition pos, const TNodePtr& node);
     TNodePtr BuildTupleResult(TNodePtr tuple, int ensureTupleSize);
 
-    // Implemented in aggregation.cpp
+    // Implemented in aggregation.cpp 
     TAggregationPtr BuildFactoryAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode, bool multi = false);
     TAggregationPtr BuildKeyPayloadFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildPayloadPredicateFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
@@ -1235,12 +1235,12 @@ namespace NSQLTranslationV1 {
     TAggregationPtr BuildPercentileFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
     TAggregationPtr BuildCountAggregation(TPosition pos, const TString& name, const TString& func, EAggregateMode aggMode);
     TAggregationPtr BuildUserDefinedFactoryAggregation(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode);
+ 
 
-
-    // Implemented in builtin.cpp
+    // Implemented in builtin.cpp 
     TNodePtr BuildCallable(TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args, bool forReduce = false);
     TNodePtr BuildUdf(TContext& ctx, TPosition pos, const TString& module, const TString& name, const TVector<TNodePtr>& args);
-    TNodePtr BuildBuiltinFunc(
+    TNodePtr BuildBuiltinFunc( 
         TContext& ctx,
         TPosition pos,
         TString name,
@@ -1249,13 +1249,13 @@ namespace NSQLTranslationV1 {
         EAggregateMode aggMode = EAggregateMode::Normal,
         bool* mustUseNamed = nullptr,
         bool warnOnYqlNameSpace = true
-    );
-
-    // Implemented in join.cpp
+    ); 
+ 
+    // Implemented in join.cpp 
     TString NormalizeJoinOp(const TString& joinOp);
     TSourcePtr BuildEquiJoin(TPosition pos, TVector<TSourcePtr>&& sources, TVector<bool>&& anyFlags, bool strictJoinKeyTypes);
-
-    // Implemented in select.cpp
+ 
+    // Implemented in select.cpp 
     TNodePtr BuildSubquery(TSourcePtr source, const TString& alias, bool inSubquery, int ensureTupleSize, TScopedStatePtr scoped);
     TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex = -1);
     TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist = false);
@@ -1267,21 +1267,21 @@ namespace NSQLTranslationV1 {
     TSourcePtr BuildRefColumnSource(TPosition pos, const TString& partExpression);
     TSourcePtr BuildUnionAll(TPosition pos, TVector<TSourcePtr>&& sources, const TWriteSettings& settings);
     TSourcePtr BuildOverWindowSource(TPosition pos, const TString& windowName, ISource* origSource);
-
+ 
     TNodePtr BuildOrderBy(TPosition pos, const TVector<TNodePtr>& keys, const TVector<bool>& order);
     TNodePtr BuildSkipTake(TPosition pos, const TNodePtr& skip, const TNodePtr& take);
+ 
 
-
-    TSourcePtr BuildSelectCore(
+    TSourcePtr BuildSelectCore( 
         TContext& ctx,
-        TPosition pos,
-        TSourcePtr source,
+        TPosition pos, 
+        TSourcePtr source, 
         const TVector<TNodePtr>& groupByExpr,
         const TVector<TNodePtr>& groupBy,
         bool compactGroupBy,
         bool assumeSorted,
         const TVector<TSortSpecificationPtr>& orderBy,
-        TNodePtr having,
+        TNodePtr having, 
         TWinSpecs&& windowSpec,
         THoppingWindowSpecPtr hoppingWindowSpec,
         TVector<TNodePtr>&& terms,
@@ -1289,9 +1289,9 @@ namespace NSQLTranslationV1 {
         TVector<TNodePtr>&& without,
         bool selectStream,
         const TWriteSettings& settings
-    );
+    ); 
     TSourcePtr BuildSelect(TPosition pos, TSourcePtr source, TNodePtr skipTake);
-
+ 
 
     enum class ReduceMode {
         ByPartition,
@@ -1304,8 +1304,8 @@ namespace NSQLTranslationV1 {
         bool prcessStream, const TWriteSettings& settings, const TVector<TSortSpecificationPtr>& assumeOrderBy);
 
     TNodePtr BuildSelectResult(TPosition pos, TSourcePtr source, bool writeResult, bool inSubquery, TScopedStatePtr scoped);
-
-    // Implemented in insert.cpp
+ 
+    // Implemented in insert.cpp 
     TSourcePtr BuildWriteValues(TPosition pos, const TString& opertationHumanName, const TVector<TString>& columnsHint, const TVector<TVector<TNodePtr>>& values);
     TSourcePtr BuildWriteValues(TPosition pos, const TString& opertationHumanName, const TVector<TString>& columnsHint, TSourcePtr source);
     TSourcePtr BuildUpdateValues(TPosition pos, const TVector<TString>& columnsHint, const TVector<TNodePtr>& values);
@@ -1315,8 +1315,8 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildWriteColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, EWriteColumnMode mode, TSourcePtr values, TNodePtr options = nullptr);
     TNodePtr BuildUpdateColumns(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr values, TSourcePtr source);
     TNodePtr BuildDelete(TPosition pos, TScopedStatePtr scoped, const TTableRef& table, TSourcePtr source);
-
-    // Implemented in query.cpp
+ 
+    // Implemented in query.cpp 
     TNodePtr BuildTableKey(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TDeferredAtom& name, const TString& view);
     TNodePtr BuildTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& func, const TVector<TTableArg>& args);
     TNodePtr BuildInputOptions(TPosition pos, const TTableHints& hints);

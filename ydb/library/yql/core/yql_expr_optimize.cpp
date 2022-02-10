@@ -1,5 +1,5 @@
 #include "yql_expr_optimize.h"
-
+ 
 #include <util/generic/hash.h>
 #include "yql_expr_type_annotation.h"
 
@@ -485,9 +485,9 @@ IGraphTransformer::TStatus RemapExpr(const TExprNode::TPtr& input, TExprNode::TP
 }
 
 IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-    if (ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas))
-        return IGraphTransformer::TStatus::Ok;
-
+    if (ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas)) 
+        return IGraphTransformer::TStatus::Ok; 
+ 
     TOptimizeExprSettings settings(nullptr);
     auto ret = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, bool& changed, TExprContext& ctx) -> TExprNode::TPtr {
         if (node->Content() == "WithOptionalArgs") {
@@ -533,12 +533,12 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
         if (lambdaNode->ChildrenSize() == 0) {
             ctx.AddError(TIssue(ctx.GetPosition(lambdaNode->Pos()), "Expected at least one argument - lambda or callable"));
             return nullptr;
-        }
-
+        } 
+ 
         if (lambdaNode->Head().Type() != TExprNode::Lambda) {
             return node;
-        }
-
+        } 
+ 
         auto nullNode = ctx.NewCallable(input->Pos(), "Null", {});
         const auto& lambda = lambdaNode->Head();
         const auto& args = lambda.Head();
@@ -576,7 +576,7 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
             if (!EnsureMinArgsCount(*node, 3, ctx)) {
                 return nullptr;
             }
-
+ 
             if (!EnsureTuple(*node->Child(1), ctx)) {
                 return nullptr;
             }
@@ -638,12 +638,12 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
                 ret = ctx.ReplaceNodes(lambda.TailPtr(), replaces);
             }
             changed = true;
-        }
-
-        return ret;
+        } 
+ 
+        return ret; 
     }, ctx, settings);
-
-    if (ret.Level == IGraphTransformer::TStatus::Ok) {
+ 
+    if (ret.Level == IGraphTransformer::TStatus::Ok) { 
         ret = ret.Combine(OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, bool& changed, TExprContext& ctx) -> TExprNode::TPtr {
             if (node->Content() == "Combine") {
                 if (!EnsureMinArgsCount(*node, 1, ctx)) {
@@ -810,41 +810,41 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
     }
 
     if (ret.Level == IGraphTransformer::TStatus::Ok) {
-        ctx.Step.Done(TExprStep::ExpandApplyForLambdas);
-    }
-
-    return ret;
+        ctx.Step.Done(TExprStep::ExpandApplyForLambdas); 
+    } 
+ 
+    return ret; 
 }
-
+ 
 TExprNode::TPtr ApplySyncListToWorld(const TExprNode::TPtr& main, const TSyncMap& syncList, TExprContext& ctx) {
-    if (syncList.empty()) {
-        return main;
-    }
-
+    if (syncList.empty()) { 
+        return main; 
+    } 
+ 
     using TPair = std::pair<TExprNode::TPtr, ui64>;
     TVector<TPair> sortedList(syncList.cbegin(), syncList.cend());
     TExprNode::TListType syncChildren;
     syncChildren.push_back(main);
-    Sort(sortedList, [](const TPair& x, const TPair& y) { return x.second < y.second; });
-    for (auto x : sortedList) {
+    Sort(sortedList, [](const TPair& x, const TPair& y) { return x.second < y.second; }); 
+    for (auto x : sortedList) { 
         if (x.first->IsCallable(RightName)) {
             auto world = ctx.NewCallable(main->Pos(), LeftName, { x.first->HeadPtr() });
             syncChildren.push_back(world);
         } else if (x.first->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
             syncChildren.push_back(x.first);
-        } else {
+        } else { 
             auto world = ctx.NewCallable(main->Pos(), LeftName, { x.first });
             syncChildren.push_back(world);
-        }
-    }
-
+        } 
+    } 
+ 
     return ctx.NewCallable(main->Pos(), SyncName, std::move(syncChildren));
-}
-
+} 
+ 
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func) {
     TNodeSet visitedNodes;
     VisitExprInternal(root, func, {}, visitedNodes);
-}
+} 
 
 void VisitExpr(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc) {
     TNodeSet visitedNodes;

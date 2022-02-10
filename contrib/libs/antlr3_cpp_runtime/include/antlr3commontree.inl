@@ -1,81 +1,81 @@
 namespace antlr3 {
-
-template<class ImplTraits>
-CommonTree<ImplTraits>::CommonTree()
-{
+ 
+template<class ImplTraits> 
+CommonTree<ImplTraits>::CommonTree() 
+{ 
 	m_startIndex = -1;
 	m_stopIndex  = -1;
 	m_childIndex = -1;
 	m_token		 = NULL;
 	m_parent     = NULL;
-}
-
-template<class ImplTraits>
-CommonTree<ImplTraits>::CommonTree( const CommonTree& ctree )
+} 
+ 
+template<class ImplTraits> 
+CommonTree<ImplTraits>::CommonTree( const CommonTree& ctree ) 
 	:m_children( ctree.m_children)
 	,UserData(ctree.UserData)
-{
+{ 
 	m_startIndex = ctree.m_startIndex;
 	m_stopIndex  = ctree.m_stopIndex;
 	m_childIndex = ctree.m_childIndex;
 	m_token		 = ctree.m_token;
 	m_parent     = ctree.m_parent;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 CommonTree<ImplTraits>::CommonTree( const CommonTokenType* token )
-{
+{ 
 	m_startIndex = -1;
 	m_stopIndex  = -1;
 	m_childIndex = -1;
 	m_token		 = token;
 	m_parent     = NULL;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 CommonTree<ImplTraits>::CommonTree( const CommonTree* tree )
 	:UserData(tree->UserData)
-{
+{ 
 	m_startIndex = tree->get_startIndex();
 	m_stopIndex  = tree->get_stopIndex();
 	m_childIndex = -1;
 	m_token		 = tree->get_token();
 	m_parent     = NULL;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 const typename CommonTree<ImplTraits>::CommonTokenType* CommonTree<ImplTraits>::get_token() const
-{
+{ 
 	return m_token;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 void CommonTree<ImplTraits>::set_token(typename CommonTree<ImplTraits>::CommonTokenType const* token)
-{
+{ 
 	m_token = token;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 typename CommonTree<ImplTraits>::ChildrenType& CommonTree<ImplTraits>::get_children()
-{
+{ 
 	return m_children;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 const typename CommonTree<ImplTraits>::ChildrenType& CommonTree<ImplTraits>::get_children() const
-{
+{ 
 	return m_children;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 void	CommonTree<ImplTraits>::addChild(TreeTypePtr& child)
-{
+{ 
 	if	(child == NULL)
 		return;
-
+ 
 	ChildrenType& child_children = child->get_children();
 	//ChildrenType& tree_children  = this->get_children();
-
+ 
 	if	(child->isNilNode() == true)
 	{
 		if ( !child_children.empty() && child_children == m_children )
@@ -84,13 +84,13 @@ void	CommonTree<ImplTraits>::addChild(TreeTypePtr& child)
 			fprintf(stderr, "ANTLR3: An attempt was made to add a child list to itself!\n");
 			return;
 		}
-
-        // Add all of the children's children to this list
-        //
-        if ( !child_children.empty() )
-        {
+ 
+        // Add all of the children's children to this list 
+        // 
+        if ( !child_children.empty() ) 
+        { 
             if (!m_children.empty())
-            {
+            { 
                 // Need to copy(append) the children
                 for(auto i = child_children.begin(); i != child_children.end(); ++i)
                 {
@@ -105,15 +105,15 @@ void	CommonTree<ImplTraits>::addChild(TreeTypePtr& child)
 					}
                 }
             } else {
-                // We are build ing the tree structure here, so we need not
-                // worry about duplication of pointers as the tree node
-                // factory will only clean up each node once. So we just
-                // copy in the child's children pointer as the child is
-                // a nil node (has not root itself).
-                //
+                // We are build ing the tree structure here, so we need not 
+                // worry about duplication of pointers as the tree node 
+                // factory will only clean up each node once. So we just 
+                // copy in the child's children pointer as the child is 
+                // a nil node (has not root itself). 
+                // 
                 m_children.swap( child_children );
                 this->freshenParentAndChildIndexes();
-            }
+            } 
 		}
 	}
 	else
@@ -125,35 +125,35 @@ void	CommonTree<ImplTraits>::addChild(TreeTypePtr& child)
 		m_children.back()->set_parent(tree);
 		m_children.back()->set_childIndex(m_children.size() - 1);
 	}
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 void CommonTree<ImplTraits>::addChildren(const ChildListType& kids)
-{
+{ 
 	for( typename ChildListType::const_iterator iter = kids.begin();
 		 iter != kids.end(); ++iter )
 	{
 		this->addChild( *iter );
 	}
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 typename CommonTree<ImplTraits>::TreeTypePtr	CommonTree<ImplTraits>::deleteChild(ANTLR_UINT32 i)
-{
+{ 
 	if( m_children.empty() )
 		return	NULL;
 	TreeTypePtr killed = m_children.erase( m_children.begin() + i);
 	this->freshenParentAndChildIndexes(i);
 	return killed;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 void	CommonTree<ImplTraits>::replaceChildren(ANTLR_INT32 startChildIndex, ANTLR_INT32 stopChildIndex, TreeTypePtr newTree)
-{
-
+{ 
+ 
 	ANTLR_INT32	numNewChildren;			// Tracking variable
 	ANTLR_INT32	delta;					// Difference in new vs existing count
-
+ 
 	if	( m_children.empty() )
 	{
 		fprintf(stderr, "replaceChildren call: Indexes are invalid; no children in list for %s", this->get_text().c_str() );
@@ -163,25 +163,25 @@ void	CommonTree<ImplTraits>::replaceChildren(ANTLR_INT32 startChildIndex, ANTLR_
 	// How many nodes will go away
 	ANTLR_INT32 replacingHowMany		= stopChildIndex - startChildIndex + 1;
 	ANTLR_INT32	replacingWithHowMany;	// How many nodes will replace them
-
+ 
 	// Either use the existing list of children in the supplied nil node, or build a vector of the
 	// tree we were given if it is not a nil node, then we treat both situations exactly the same
 	//
 	ChildrenType    newChildren;
 	ChildrenType   &newChildrenRef(newChildren);
-
+ 
 	if	(newTree->isNilNode())
 	{
 		newChildrenRef = newTree->get_children();
 	} else {
 		newChildrenRef.push_back(newTree);
 	}
-
+ 
 	// Initialize
 	replacingWithHowMany	= newChildrenRef.size();
 	numNewChildren			= newChildrenRef.size();
 	delta					= replacingHowMany - replacingWithHowMany;
-
+ 
 	// If it is the same number of nodes, then do a direct replacement
 	//
 	if	(delta == 0)
@@ -221,31 +221,31 @@ void	CommonTree<ImplTraits>::replaceChildren(ANTLR_INT32 startChildIndex, ANTLR_
 		{
 			m_children[ startChildIndex + j ] = newChildrenRef.at(j);
 		}
-
+ 
 		for	(ANTLR_UINT32 j = replacingHowMany; j < replacingWithHowMany; j++)
 		{
 			m_children.push_back( newChildrenRef.at(j) );
 		}
-
+ 
 		this->freshenParentAndChildIndexes(startChildIndex);
 	}
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 CommonTree<ImplTraits>*	CommonTree<ImplTraits>::dupNode() const
-{
+{ 
 	return new CommonTree<ImplTraits>(this);
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 CommonTree<ImplTraits>*	CommonTree<ImplTraits>::dupNode(void *p) const
-{
+{ 
 	return new (p) CommonTree<ImplTraits>(this);
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 ANTLR_UINT32	CommonTree<ImplTraits>::get_charPositionInLine() const
-{
+{ 
 	if(m_token == NULL || (m_token->get_charPositionInLine() == 0) )
 	{
 		if(m_children.empty())
@@ -255,11 +255,11 @@ ANTLR_UINT32	CommonTree<ImplTraits>::get_charPositionInLine() const
 		return 0;
 	}
 	return m_token->get_charPositionInLine();
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 typename CommonTree<ImplTraits>::TreeTypePtr& CommonTree<ImplTraits>::getChild(ANTLR_UINT32 i)
-{
+{ 
 	static TreeTypePtr nul;
 	if	(  m_children.empty() || i >= m_children.size() )
 	{
@@ -267,66 +267,66 @@ typename CommonTree<ImplTraits>::TreeTypePtr& CommonTree<ImplTraits>::getChild(A
 		return nul;
 	}
 	return  m_children.at(i);
-}
-
-template<class ImplTraits>
-void    CommonTree<ImplTraits>::set_childIndex( ANTLR_INT32 i)
-{
+} 
+ 
+template<class ImplTraits> 
+void    CommonTree<ImplTraits>::set_childIndex( ANTLR_INT32 i) 
+{ 
 	m_childIndex = i;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 ANTLR_INT32	CommonTree<ImplTraits>::get_childIndex() const
-{
+{ 
 	return m_childIndex;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 ANTLR_UINT32	CommonTree<ImplTraits>::getChildCount() const
-{
+{ 
 	return static_cast<ANTLR_UINT32>( m_children.size() );
-}
-
-template<class ImplTraits>
-typename CommonTree<ImplTraits>::TreeType* CommonTree<ImplTraits>::get_parent() const
-{
+} 
+ 
+template<class ImplTraits> 
+typename CommonTree<ImplTraits>::TreeType* CommonTree<ImplTraits>::get_parent() const 
+{ 
 	return m_parent;
-}
-
-template<class ImplTraits>
-void     CommonTree<ImplTraits>::set_parent( TreeType* parent)
-{
+} 
+ 
+template<class ImplTraits> 
+void     CommonTree<ImplTraits>::set_parent( TreeType* parent) 
+{ 
 	m_parent = parent;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 ANTLR_MARKER CommonTree<ImplTraits>::get_startIndex() const
-{
+{ 
 	if( m_startIndex==-1 && m_token!=NULL)
 		return m_token->get_tokenIndex();
 	return m_startIndex;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 void     CommonTree<ImplTraits>::set_startIndex( ANTLR_MARKER index)
-{
+{ 
 	m_startIndex = index;
 }
-
+ 
 template<class ImplTraits>
 ANTLR_MARKER CommonTree<ImplTraits>::get_stopIndex() const
 {
 	if( m_stopIndex==-1 && m_token!=NULL)
 		return m_token->get_tokenIndex();
 	return m_stopIndex;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 void     CommonTree<ImplTraits>::set_stopIndex( ANTLR_MARKER index)
-{
+{ 
 	m_stopIndex = index;
 }
-
+ 
 template<class ImplTraits>
 ANTLR_UINT32	CommonTree<ImplTraits>::getType()
 {
@@ -334,11 +334,11 @@ ANTLR_UINT32	CommonTree<ImplTraits>::getType()
 		return	CommonTokenType::TOKEN_INVALID;
 	else
 		return	m_token->get_type();
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 typename CommonTree<ImplTraits>::TreeTypePtr& CommonTree<ImplTraits>::getFirstChildWithType(ANTLR_UINT32 type)
-{
+{ 
 	ANTLR_UINT32   i;
 	std::size_t   cs;
 
@@ -356,11 +356,11 @@ typename CommonTree<ImplTraits>::TreeTypePtr& CommonTree<ImplTraits>::getFirstCh
 		}
 	}
 	return  NULL;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 ANTLR_UINT32	CommonTree<ImplTraits>::get_line() const
-{
+{ 
 	if(m_token == NULL || m_token->get_line() == 0)
 	{
 		if ( m_children.empty())
@@ -370,53 +370,53 @@ ANTLR_UINT32	CommonTree<ImplTraits>::get_line() const
 		return 0;
 	}
 	return m_token->get_line();
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 typename CommonTree<ImplTraits>::StringType	CommonTree<ImplTraits>::getText()
-{
+{ 
 	return this->toString();
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 bool CommonTree<ImplTraits>::isNilNode()
-{
+{ 
 	// This is a Nil tree if it has no payload (Token in our case)
 	if(m_token == NULL)
 		return true;
 	else
 		return false;
 }
-
+ 
 template<class ImplTraits>
 void CommonTree<ImplTraits>::setChild(ANTLR_UINT32 i, TreeTypePtr child)
 {
 	if( child==NULL)
 		return;
-
+ 
 	if( child->isNilNode())
 	{
 		// TODO: throw IllegalArgumentException
 		return;
 	}
-
+ 
 	if( m_children.size() <= i )
 		m_children.resize(i+1);
-
+ 
 	m_children[i] = child;
 	TreeType* tree = static_cast<TreeType*>(this);
 	child->set_parent(tree);
 	child->set_childIndex(i);
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 typename CommonTree<ImplTraits>::StringType	CommonTree<ImplTraits>::toStringTree()
-{
+{ 
 	StringType retval;
-
+ 
 	if( m_children.empty() )
 		return	this->toString();
-
+ 
 	/* Need a new string with nothing at all in it.
 	*/
 	if(this->isNilNode() == false)
@@ -425,7 +425,7 @@ typename CommonTree<ImplTraits>::StringType	CommonTree<ImplTraits>::toStringTree
 		retval.append(this->toString());
 		retval.append(" ");
 	}
-
+ 
 	if	( !m_children.empty())
 	{
 		retval.append( m_children.front()->toStringTree());
@@ -441,22 +441,22 @@ typename CommonTree<ImplTraits>::StringType	CommonTree<ImplTraits>::toStringTree
 		retval.append(")");
 	}
 	return  retval;
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 typename CommonTree<ImplTraits>::StringType	CommonTree<ImplTraits>::toString()
-{
+{ 
 	if( this->isNilNode())
 		return StringType("nil");
 	return	m_token->toString();
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 void	CommonTree<ImplTraits>::freshenParentAndChildIndexes()
-{
+{ 
 	this->freshenParentAndChildIndexes(0);
 }
-
+ 
 template<class ImplTraits>
 void	CommonTree<ImplTraits>::freshenParentAndChildIndexes(ANTLR_UINT32 offset)
 {
@@ -480,13 +480,13 @@ void	CommonTree<ImplTraits>::freshenParentAndChildIndexes(ANTLR_UINT32 offset)
 		(*i)->set_parent(tree);
 	}
 }
-
+ 
 template<class ImplTraits>
 void	CommonTree<ImplTraits>::freshenParentAndChildIndexesDeeply()
 {
 	this->freshenParentAndChildIndexes(0);
 }
-
+ 
 template<class ImplTraits>
 void	CommonTree<ImplTraits>::freshenParentAndChildIndexesDeeply(ANTLR_UINT32 offset)
 {
@@ -497,11 +497,11 @@ void	CommonTree<ImplTraits>::freshenParentAndChildIndexesDeeply(ANTLR_UINT32 off
 		child->set_parent(this);
 		child->freshenParentAndChildIndexesDeeply();
 	}
-}
-
-template<class ImplTraits>
+} 
+ 
+template<class ImplTraits> 
 void	CommonTree<ImplTraits>::reuse()
-{
+{ 
 	m_startIndex = -1;
 	m_stopIndex  = -1;
 	m_childIndex = -1;
@@ -510,11 +510,11 @@ void	CommonTree<ImplTraits>::reuse()
 
 	ChildrenType empty;
 	m_children.swap(empty);
-}
-
-template<class ImplTraits>
-CommonTree<ImplTraits>::~CommonTree()
-{
-}
-
+} 
+ 
+template<class ImplTraits> 
+CommonTree<ImplTraits>::~CommonTree() 
+{ 
+} 
+ 
 }

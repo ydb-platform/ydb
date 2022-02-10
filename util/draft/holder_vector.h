@@ -58,13 +58,13 @@ public:
         (*this)[i] = t.Release();
     }
 
-    void PopBack() {
-        if (size()) {
-            D::Destroy(back());
-            TBase::pop_back();
-        }
-    }
-
+    void PopBack() { 
+        if (size()) { 
+            D::Destroy(back()); 
+            TBase::pop_back(); 
+        } 
+    } 
+ 
     T* Release(size_t i) {
         T* t = (*this)[i];
         (*this)[i] = nullptr;

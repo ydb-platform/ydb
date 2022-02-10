@@ -1,10 +1,10 @@
-#include "type_ann_core.h"
-#include "type_ann_impl.h"
+#include "type_ann_core.h" 
+#include "type_ann_impl.h" 
 #include <util/string/join.h>
 #include <ydb/library/yql/core/yql_join.h>
 
 namespace NYql {
-namespace NTypeAnnImpl {
+namespace NTypeAnnImpl { 
 
     using namespace NNodes;
 
@@ -236,10 +236,10 @@ namespace NTypeAnnImpl {
 
     IGraphTransformer::TStatus EquiJoinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureMinArgsCount(*input, 4, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
+            return IGraphTransformer::TStatus::Error; 
+        } 
         const size_t numLists = input->ChildrenSize() - 2;
-
+ 
         auto optionsNode = input->Child(input->ChildrenSize() - 1);
         TJoinOptions options;
         auto status = ValidateEquiJoinOptions(input->Pos(), *optionsNode, options, ctx.Expr);
@@ -249,26 +249,26 @@ namespace NTypeAnnImpl {
 
         TJoinLabels labels;
         TExprNode::TListType updatedChildren;
-        for (ui32 idx = 0; idx < numLists; ++idx) {
+        for (ui32 idx = 0; idx < numLists; ++idx) { 
             auto& listPair = *input->Child(idx);
-            if (!EnsureTupleSize(listPair, 2, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
+            if (!EnsureTupleSize(listPair, 2, ctx.Expr)) { 
+                return IGraphTransformer::TStatus::Error; 
+            } 
+ 
             const auto& list = listPair.Head();
-            if (!EnsureListType(list, ctx.Expr)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-
+            if (!EnsureListType(list, ctx.Expr)) { 
+                return IGraphTransformer::TStatus::Error; 
+            } 
+ 
             const TTypeAnnotationNode* itemType = list.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-            if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
+            if (itemType->GetKind() != ETypeAnnotationKind::Struct) { 
                 ctx.Expr.AddError(TIssue(
                     ctx.Expr.GetPosition(list.Pos()),
                     TStringBuilder() << "Expected list of struct"
                     ));
-                return IGraphTransformer::TStatus::Error;
-            }
-
+                return IGraphTransformer::TStatus::Error; 
+            } 
+ 
             auto structType = itemType->Cast<TStructExprType>();
             if (!options.KeepSysColumns && AnyOf(structType->GetItems(), [](const TItemExprType* structItem) { return structItem->GetName().StartsWith("_yql_sys_"); })) {
                 if (updatedChildren.empty()) {
@@ -292,25 +292,25 @@ namespace NTypeAnnImpl {
                     ctx.Expr.GetPosition(input->Child(idx)->Pos()),
                     TStringBuilder() << "Failed to parse labels of struct as second element of " << idx << " argument"
                     ));
-                return IGraphTransformer::TStatus::Error;
-            }
-        }
+                return IGraphTransformer::TStatus::Error; 
+            } 
+        } 
         if (!updatedChildren.empty()) {
             output = ctx.Expr.ChangeChildren(*input, std::move(updatedChildren));
             return IGraphTransformer::TStatus::Repeat;
         }
-
+ 
         auto joins = input->Child(input->ChildrenSize() - 2);
-        const TStructExprType* resultType = nullptr;
+        const TStructExprType* resultType = nullptr; 
         status = EquiJoinAnnotation(input->Pos(), resultType, labels, *joins, options, ctx.Expr);
-        if (status != IGraphTransformer::TStatus::Ok) {
-            return status;
-        }
-
+        if (status != IGraphTransformer::TStatus::Ok) { 
+            return status; 
+        } 
+ 
         input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(resultType));
-        return IGraphTransformer::TStatus::Ok;
-    }
-
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
     const TTypeAnnotationNode* GetFieldType(const TTupleExprType& tupleType, const ui32 position) {
         return tupleType.GetItems()[position];
     }
@@ -812,5 +812,5 @@ namespace NTypeAnnImpl {
         }
     }
 
-} // namespace NTypeAnnImpl
-} // namespace NYql
+} // namespace NTypeAnnImpl 
+} // namespace NYql 

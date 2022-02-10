@@ -44,7 +44,7 @@ namespace NUnitTest {
     TString ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& delims = TString(), bool reverse = false);
     TString GetFormatTag(const char* name);
     TString GetResetTag();
-
+ 
     // Raise error handler
     // Used for testing library/cpp/testing/unittest macroses
     // and unittest helpers.
@@ -456,8 +456,8 @@ public:                       \
         if (_a != _b) {                                                                                                                        \
             UNIT_FAIL_IMPL("strings (" #A ") and (" #B ") are different", Sprintf("\n%s", ::NUnitTest::ColoredDiff(_a, _b, " \t\n.,:;'\"").data())); \
         }                                                                                                                                      \
-    } while (false)
-
+    } while (false) 
+ 
 //strings
 #define UNIT_ASSERT_STRINGS_UNEQUAL_C(A, B, C)                                                           \
     do {                                                                                                 \

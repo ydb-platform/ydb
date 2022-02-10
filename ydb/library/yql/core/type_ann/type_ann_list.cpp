@@ -1,6 +1,6 @@
-#include "type_ann_core.h"
-#include "type_ann_impl.h"
-#include "type_ann_list.h"
+#include "type_ann_core.h" 
+#include "type_ann_impl.h" 
+#include "type_ann_list.h" 
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
@@ -12,7 +12,7 @@
 #include <util/string/join.h>
 
 namespace NYql {
-namespace NTypeAnnImpl {
+namespace NTypeAnnImpl { 
 
 using namespace NNodes;
 
@@ -2229,8 +2229,8 @@ namespace {
         if (!input->ChildrenSize()) {
             output = ctx.Expr.NewCallable(input->Pos(), "EmptyList", {});
             return IGraphTransformer::TStatus::Repeat;
-        }
-
+        } 
+ 
         const bool hasEmptyLists = AnyOf(input->Children(), IsEmptyList);
         if (hasEmptyLists) {
             auto children = input->ChildrenList();
@@ -2245,16 +2245,16 @@ namespace {
         ui32 inputsCount = input->ChildrenSize();
         auto checkStructType = [&members, &ctx, tmpArg1, tmpArg2, inputsCount, pos = input->Pos()](TExprNode& input) -> const TStructExprType* {
             if (!EnsureListType(input, ctx.Expr)) {
-                return nullptr;
-            }
+                return nullptr; 
+            } 
             auto itemType = input.GetTypeAnn()->Cast<TListExprType>()->GetItemType();
             if (!EnsureStructType(input.Pos(), *itemType, ctx.Expr)) {
-                return nullptr;
-            }
-            auto structType = itemType->Cast<TStructExprType>();
-            for (auto item: structType->GetItems()) {
+                return nullptr; 
+            } 
+            auto structType = itemType->Cast<TStructExprType>(); 
+            for (auto item: structType->GetItems()) { 
                 auto res = members.insert({ item->GetName(), { item->GetItemType(), 1 } });
-                if (!res.second) {
+                if (!res.second) { 
                     if (item->GetItemType()->GetKind() == ETypeAnnotationKind::Error) {
                         continue;
                     }
@@ -2272,8 +2272,8 @@ namespace {
                     if (SilentInferCommonType(arg1, *p.first, arg2, *item->GetItemType(), ctx.Expr, commonType)
                         != IGraphTransformer::TStatus::Error) {
                         p.first = commonType;
-                        continue;
-                    }
+                        continue; 
+                    } 
 
                     auto err = TIssue(
                         ctx.Expr.GetPosition(pos),
@@ -2283,11 +2283,11 @@ namespace {
                     );
 
                     members[item->GetName()] = { ctx.Expr.MakeType<TErrorExprType>(err), inputsCount };
-                }
-            }
-            return structType;
-        };
-
+                } 
+            } 
+            return structType; 
+        }; 
+ 
         TVector<const TStructExprType*> structTypes;
         for (auto child : input->Children()) {
             auto structType = checkStructType(*child);
@@ -2296,31 +2296,31 @@ namespace {
             }
 
             structTypes.push_back(structType);
-        }
-
+        } 
+ 
         TVector<const TItemExprType*> resultItems;
         THashSet<TStringBuf> addedMembers;
         auto addResultItems = [&resultItems, &members, &ctx, &addedMembers, inputsCount](const TStructExprType* structType) {
-            for (auto item: structType->GetItems()) {
-                const TTypeAnnotationNode* memberType = nullptr;
-                auto it = members.find(item->GetName());
+            for (auto item: structType->GetItems()) { 
+                const TTypeAnnotationNode* memberType = nullptr; 
+                auto it = members.find(item->GetName()); 
                 YQL_ENSURE(it != members.end());
                 memberType = it->second.first;
                 if (it->second.first->GetKind() != ETypeAnnotationKind::Error && it->second.second < inputsCount) {
-                    if (memberType->GetKind() != ETypeAnnotationKind::Optional) {
+                    if (memberType->GetKind() != ETypeAnnotationKind::Optional) { 
                         memberType = ctx.Expr.MakeType<TOptionalExprType>(memberType);
-                    }
-                }
+                    } 
+                } 
 
                 if (addedMembers.insert(item->GetName()).second) {
                     resultItems.push_back(ctx.Expr.MakeType<TItemExprType>(
-                        item->GetName(),
-                        memberType
+                        item->GetName(), 
+                        memberType 
                     ));
-                }
-            }
-        };
-
+                } 
+            } 
+        }; 
+ 
         for (auto structType : structTypes) {
             addResultItems(structType);
         }
@@ -2331,9 +2331,9 @@ namespace {
         }
 
         input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(structType));
-        return IGraphTransformer::TStatus::Ok;
-    }
-
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
     IGraphTransformer::TStatus UnionAllPositionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!ctx.Types.OrderedColumns) {
@@ -6292,5 +6292,5 @@ namespace {
         input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(ctx.Expr.MakeType<TListExprType>(itemType)));
         return IGraphTransformer::TStatus::Ok;
     }
-} // namespace NTypeAnnImpl
+} // namespace NTypeAnnImpl 
 }

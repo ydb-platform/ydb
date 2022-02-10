@@ -77,12 +77,12 @@ public:
         return s;
     }
 
-    const char* brk(const char* s, const char* e) const {
-        while (s < e && c_chars_table[(ui8)*s])
+    const char* brk(const char* s, const char* e) const { 
+        while (s < e && c_chars_table[(ui8)*s]) 
             ++s;
-        return s;
-    }
-
+        return s; 
+    } 
+ 
     /// Return first character not in table, like strpbrk() for inverted table.
     /// That is, skip all characters in table
     const char* cbrk(const char* s) const {
@@ -91,12 +91,12 @@ public:
         return s;
     }
 
-    const char* cbrk(const char* s, const char* e) const {
-        while (s < e && chars_table[(ui8)*s])
+    const char* cbrk(const char* s, const char* e) const { 
+        while (s < e && chars_table[(ui8)*s]) 
             ++s;
-        return s;
-    }
-
+        return s; 
+    } 
+ 
     /// Offset of the first character not in table, like strspn().
     size_t spn(const char* s) const {
         return cbrk(s) - s;
@@ -172,7 +172,7 @@ public:
     void Do(char* s, size_t l) const {
         for (size_t i = 0; i < l && s[i]; i++)
             s[i] = ConvertChar(s[i]);
-    }
+    } 
     void Do(TString& str) const;
 
 private:

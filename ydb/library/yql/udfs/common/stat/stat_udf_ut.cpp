@@ -118,20 +118,20 @@ using namespace NKikimr::NMiniKQL;
             auto udfTDigest_GetPercentile = pgmBuilder.Udf("Stat.TDigest_GetPercentile");
             auto udfTDigest_Serialize = pgmBuilder.Udf("Stat.TDigest_Serialize");
             auto udfTDigest_Deserialize = pgmBuilder.Udf("Stat.TDigest_Deserialize");
-
+ 
             TRuntimeNode pgmDigest;
             {
                 auto param1 = pgmBuilder.NewDataLiteral<double>(0.0);
                 TVector<TRuntimeNode> params = {param1};
                 pgmDigest = pgmBuilder.Apply(udfTDigest_Create, params);
             }
-
+ 
             for (int n = 1; n < 10; n += 1) {
                 auto param2 = pgmBuilder.NewDataLiteral((double)n);
                 TVector<TRuntimeNode> params = {pgmDigest, param2};
                 pgmDigest = pgmBuilder.Apply(udfTDigest_AddValue, params);
             }
-
+ 
             TRuntimeNode pgmSerializedData;
             {
                 TVector<TRuntimeNode> params = {pgmDigest};
@@ -186,13 +186,13 @@ using namespace NKikimr::NMiniKQL;
                     TVector<TRuntimeNode> params = {param1};
                     pgmDigest = pgmBuilder.Apply(udfTDigest_Create, params);
                 }
-
+ 
                 for (int n = i + 1; n < i + 10; n += 1) {
                     auto param2 = pgmBuilder.NewDataLiteral(double(n) / 10);
                     TVector<TRuntimeNode> params = {pgmDigest, param2};
                     pgmDigest = pgmBuilder.Apply(udfTDigest_AddValue, params);
                 }
-
+ 
                 TRuntimeNode pgmSerializedData;
                 {
                     TVector<TRuntimeNode> params = {pgmDigest};

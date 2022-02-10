@@ -1,12 +1,12 @@
-// Copyright 2007 The RE2 Authors.  All Rights Reserved.
-// Use of this source code is governed by a BSD-style
-// license that can be found in the LICENSE file.
-
-// Compiled regular expression representation.
-// Tested by compile_test.cc
-
-#include "re2/prog.h"
-
+// Copyright 2007 The RE2 Authors.  All Rights Reserved. 
+// Use of this source code is governed by a BSD-style 
+// license that can be found in the LICENSE file. 
+ 
+// Compiled regular expression representation. 
+// Tested by compile_test.cc 
+ 
+#include "re2/prog.h" 
+ 
 #if defined(__AVX2__)
 #include <immintrin.h>
 #ifdef _MSC_VER
@@ -25,132 +25,132 @@
 #include "re2/bitmap256.h"
 #include "re2/stringpiece.h"
 
-namespace re2 {
-
-// Constructors per Inst opcode
-
+namespace re2 { 
+ 
+// Constructors per Inst opcode 
+ 
 void Prog::Inst::InitAlt(uint32_t out, uint32_t out1) {
-  DCHECK_EQ(out_opcode_, 0);
-  set_out_opcode(out, kInstAlt);
-  out1_ = out1;
-}
-
+  DCHECK_EQ(out_opcode_, 0); 
+  set_out_opcode(out, kInstAlt); 
+  out1_ = out1; 
+} 
+ 
 void Prog::Inst::InitByteRange(int lo, int hi, int foldcase, uint32_t out) {
-  DCHECK_EQ(out_opcode_, 0);
-  set_out_opcode(out, kInstByteRange);
-  lo_ = lo & 0xFF;
-  hi_ = hi & 0xFF;
+  DCHECK_EQ(out_opcode_, 0); 
+  set_out_opcode(out, kInstByteRange); 
+  lo_ = lo & 0xFF; 
+  hi_ = hi & 0xFF; 
   hint_foldcase_ = foldcase&1;
-}
-
+} 
+ 
 void Prog::Inst::InitCapture(int cap, uint32_t out) {
-  DCHECK_EQ(out_opcode_, 0);
-  set_out_opcode(out, kInstCapture);
-  cap_ = cap;
-}
-
+  DCHECK_EQ(out_opcode_, 0); 
+  set_out_opcode(out, kInstCapture); 
+  cap_ = cap; 
+} 
+ 
 void Prog::Inst::InitEmptyWidth(EmptyOp empty, uint32_t out) {
-  DCHECK_EQ(out_opcode_, 0);
-  set_out_opcode(out, kInstEmptyWidth);
-  empty_ = empty;
-}
-
+  DCHECK_EQ(out_opcode_, 0); 
+  set_out_opcode(out, kInstEmptyWidth); 
+  empty_ = empty; 
+} 
+ 
 void Prog::Inst::InitMatch(int32_t id) {
-  DCHECK_EQ(out_opcode_, 0);
-  set_opcode(kInstMatch);
-  match_id_ = id;
-}
-
+  DCHECK_EQ(out_opcode_, 0); 
+  set_opcode(kInstMatch); 
+  match_id_ = id; 
+} 
+ 
 void Prog::Inst::InitNop(uint32_t out) {
-  DCHECK_EQ(out_opcode_, 0);
-  set_opcode(kInstNop);
-}
-
-void Prog::Inst::InitFail() {
-  DCHECK_EQ(out_opcode_, 0);
-  set_opcode(kInstFail);
-}
-
+  DCHECK_EQ(out_opcode_, 0); 
+  set_opcode(kInstNop); 
+} 
+ 
+void Prog::Inst::InitFail() { 
+  DCHECK_EQ(out_opcode_, 0); 
+  set_opcode(kInstFail); 
+} 
+ 
 std::string Prog::Inst::Dump() {
-  switch (opcode()) {
-    default:
-      return StringPrintf("opcode %d", static_cast<int>(opcode()));
-
-    case kInstAlt:
-      return StringPrintf("alt -> %d | %d", out(), out1_);
-
-    case kInstAltMatch:
-      return StringPrintf("altmatch -> %d | %d", out(), out1_);
-
-    case kInstByteRange:
+  switch (opcode()) { 
+    default: 
+      return StringPrintf("opcode %d", static_cast<int>(opcode())); 
+ 
+    case kInstAlt: 
+      return StringPrintf("alt -> %d | %d", out(), out1_); 
+ 
+    case kInstAltMatch: 
+      return StringPrintf("altmatch -> %d | %d", out(), out1_); 
+ 
+    case kInstByteRange: 
       return StringPrintf("byte%s [%02x-%02x] %d -> %d",
                           foldcase() ? "/i" : "",
                           lo_, hi_, hint(), out());
-
-    case kInstCapture:
-      return StringPrintf("capture %d -> %d", cap_, out());
-
-    case kInstEmptyWidth:
-      return StringPrintf("emptywidth %#x -> %d",
-                          static_cast<int>(empty_), out());
-
-    case kInstMatch:
-      return StringPrintf("match! %d", match_id());
-
-    case kInstNop:
-      return StringPrintf("nop -> %d", out());
-
-    case kInstFail:
-      return StringPrintf("fail");
-  }
-}
-
-Prog::Prog()
-  : anchor_start_(false),
-    anchor_end_(false),
-    reversed_(false),
+ 
+    case kInstCapture: 
+      return StringPrintf("capture %d -> %d", cap_, out()); 
+ 
+    case kInstEmptyWidth: 
+      return StringPrintf("emptywidth %#x -> %d", 
+                          static_cast<int>(empty_), out()); 
+ 
+    case kInstMatch: 
+      return StringPrintf("match! %d", match_id()); 
+ 
+    case kInstNop: 
+      return StringPrintf("nop -> %d", out()); 
+ 
+    case kInstFail: 
+      return StringPrintf("fail"); 
+  } 
+} 
+ 
+Prog::Prog() 
+  : anchor_start_(false), 
+    anchor_end_(false), 
+    reversed_(false), 
     did_flatten_(false),
-    did_onepass_(false),
-    start_(0),
-    start_unanchored_(0),
-    size_(0),
-    bytemap_range_(0),
+    did_onepass_(false), 
+    start_(0), 
+    start_unanchored_(0), 
+    size_(0), 
+    bytemap_range_(0), 
     prefix_foldcase_(false),
     prefix_size_(0),
     list_count_(0),
     bit_state_text_max_size_(0),
     dfa_mem_(0),
-    dfa_first_(NULL),
+    dfa_first_(NULL), 
     dfa_longest_(NULL) {
-}
-
-Prog::~Prog() {
+} 
+ 
+Prog::~Prog() { 
   DeleteDFA(dfa_longest_);
   DeleteDFA(dfa_first_);
   if (prefix_foldcase_)
     delete[] prefix_dfa_;
-}
-
-typedef SparseSet Workq;
-
-static inline void AddToQueue(Workq* q, int id) {
-  if (id != 0)
-    q->insert(id);
-}
-
+} 
+ 
+typedef SparseSet Workq; 
+ 
+static inline void AddToQueue(Workq* q, int id) { 
+  if (id != 0) 
+    q->insert(id); 
+} 
+ 
 static std::string ProgToString(Prog* prog, Workq* q) {
   std::string s;
-  for (Workq::iterator i = q->begin(); i != q->end(); ++i) {
-    int id = *i;
-    Prog::Inst* ip = prog->inst(id);
+  for (Workq::iterator i = q->begin(); i != q->end(); ++i) { 
+    int id = *i; 
+    Prog::Inst* ip = prog->inst(id); 
     s += StringPrintf("%d. %s\n", id, ip->Dump().c_str());
-    AddToQueue(q, ip->out());
-    if (ip->opcode() == kInstAlt || ip->opcode() == kInstAltMatch)
-      AddToQueue(q, ip->out1());
-  }
-  return s;
-}
-
+    AddToQueue(q, ip->out()); 
+    if (ip->opcode() == kInstAlt || ip->opcode() == kInstAltMatch) 
+      AddToQueue(q, ip->out1()); 
+  } 
+  return s; 
+} 
+ 
 static std::string FlattenedProgToString(Prog* prog, int start) {
   std::string s;
   for (int id = start; id < prog->size(); id++) {
@@ -159,28 +159,28 @@ static std::string FlattenedProgToString(Prog* prog, int start) {
       s += StringPrintf("%d. %s\n", id, ip->Dump().c_str());
     else
       s += StringPrintf("%d+ %s\n", id, ip->Dump().c_str());
-  }
+  } 
   return s;
 }
-
+ 
 std::string Prog::Dump() {
   if (did_flatten_)
     return FlattenedProgToString(this, start_);
 
-  Workq q(size_);
-  AddToQueue(&q, start_);
+  Workq q(size_); 
+  AddToQueue(&q, start_); 
   return ProgToString(this, &q);
-}
-
+} 
+ 
 std::string Prog::DumpUnanchored() {
   if (did_flatten_)
     return FlattenedProgToString(this, start_unanchored_);
 
-  Workq q(size_);
-  AddToQueue(&q, start_unanchored_);
-  return ProgToString(this, &q);
-}
-
+  Workq q(size_); 
+  AddToQueue(&q, start_unanchored_); 
+  return ProgToString(this, &q); 
+} 
+ 
 std::string Prog::DumpByteMap() {
   std::string map;
   for (int c = 0; c < 256; c++) {
@@ -220,104 +220,104 @@ static bool IsMatch(Prog* prog, Prog::Inst* ip) {
   }
 }
 
-// Peep-hole optimizer.
-void Prog::Optimize() {
-  Workq q(size_);
-
-  // Eliminate nops.  Most are taken out during compilation
-  // but a few are hard to avoid.
-  q.clear();
-  AddToQueue(&q, start_);
-  for (Workq::iterator i = q.begin(); i != q.end(); ++i) {
-    int id = *i;
-
-    Inst* ip = inst(id);
-    int j = ip->out();
-    Inst* jp;
-    while (j != 0 && (jp=inst(j))->opcode() == kInstNop) {
-      j = jp->out();
-    }
-    ip->set_out(j);
-    AddToQueue(&q, ip->out());
-
-    if (ip->opcode() == kInstAlt) {
-      j = ip->out1();
-      while (j != 0 && (jp=inst(j))->opcode() == kInstNop) {
-        j = jp->out();
-      }
-      ip->out1_ = j;
-      AddToQueue(&q, ip->out1());
-    }
-  }
-
-  // Insert kInstAltMatch instructions
-  // Look for
-  //   ip: Alt -> j | k
-  //	  j: ByteRange [00-FF] -> ip
-  //    k: Match
-  // or the reverse (the above is the greedy one).
-  // Rewrite Alt to AltMatch.
-  q.clear();
-  AddToQueue(&q, start_);
-  for (Workq::iterator i = q.begin(); i != q.end(); ++i) {
-    int id = *i;
-    Inst* ip = inst(id);
-    AddToQueue(&q, ip->out());
-    if (ip->opcode() == kInstAlt)
-      AddToQueue(&q, ip->out1());
-
-    if (ip->opcode() == kInstAlt) {
-      Inst* j = inst(ip->out());
-      Inst* k = inst(ip->out1());
-      if (j->opcode() == kInstByteRange && j->out() == id &&
-          j->lo() == 0x00 && j->hi() == 0xFF &&
-          IsMatch(this, k)) {
-        ip->set_opcode(kInstAltMatch);
-        continue;
-      }
-      if (IsMatch(this, j) &&
-          k->opcode() == kInstByteRange && k->out() == id &&
-          k->lo() == 0x00 && k->hi() == 0xFF) {
-        ip->set_opcode(kInstAltMatch);
-      }
-    }
-  }
-}
-
+// Peep-hole optimizer. 
+void Prog::Optimize() { 
+  Workq q(size_); 
+ 
+  // Eliminate nops.  Most are taken out during compilation 
+  // but a few are hard to avoid. 
+  q.clear(); 
+  AddToQueue(&q, start_); 
+  for (Workq::iterator i = q.begin(); i != q.end(); ++i) { 
+    int id = *i; 
+ 
+    Inst* ip = inst(id); 
+    int j = ip->out(); 
+    Inst* jp; 
+    while (j != 0 && (jp=inst(j))->opcode() == kInstNop) { 
+      j = jp->out(); 
+    } 
+    ip->set_out(j); 
+    AddToQueue(&q, ip->out()); 
+ 
+    if (ip->opcode() == kInstAlt) { 
+      j = ip->out1(); 
+      while (j != 0 && (jp=inst(j))->opcode() == kInstNop) { 
+        j = jp->out(); 
+      } 
+      ip->out1_ = j; 
+      AddToQueue(&q, ip->out1()); 
+    } 
+  } 
+ 
+  // Insert kInstAltMatch instructions 
+  // Look for 
+  //   ip: Alt -> j | k 
+  //	  j: ByteRange [00-FF] -> ip 
+  //    k: Match 
+  // or the reverse (the above is the greedy one). 
+  // Rewrite Alt to AltMatch. 
+  q.clear(); 
+  AddToQueue(&q, start_); 
+  for (Workq::iterator i = q.begin(); i != q.end(); ++i) { 
+    int id = *i; 
+    Inst* ip = inst(id); 
+    AddToQueue(&q, ip->out()); 
+    if (ip->opcode() == kInstAlt) 
+      AddToQueue(&q, ip->out1()); 
+ 
+    if (ip->opcode() == kInstAlt) { 
+      Inst* j = inst(ip->out()); 
+      Inst* k = inst(ip->out1()); 
+      if (j->opcode() == kInstByteRange && j->out() == id && 
+          j->lo() == 0x00 && j->hi() == 0xFF && 
+          IsMatch(this, k)) { 
+        ip->set_opcode(kInstAltMatch); 
+        continue; 
+      } 
+      if (IsMatch(this, j) && 
+          k->opcode() == kInstByteRange && k->out() == id && 
+          k->lo() == 0x00 && k->hi() == 0xFF) { 
+        ip->set_opcode(kInstAltMatch); 
+      } 
+    } 
+  } 
+} 
+ 
 uint32_t Prog::EmptyFlags(const StringPiece& text, const char* p) {
-  int flags = 0;
-
-  // ^ and \A
+  int flags = 0; 
+ 
+  // ^ and \A 
   if (p == text.data())
-    flags |= kEmptyBeginText | kEmptyBeginLine;
-  else if (p[-1] == '\n')
-    flags |= kEmptyBeginLine;
-
-  // $ and \z
+    flags |= kEmptyBeginText | kEmptyBeginLine; 
+  else if (p[-1] == '\n') 
+    flags |= kEmptyBeginLine; 
+ 
+  // $ and \z 
   if (p == text.data() + text.size())
-    flags |= kEmptyEndText | kEmptyEndLine;
+    flags |= kEmptyEndText | kEmptyEndLine; 
   else if (p < text.data() + text.size() && p[0] == '\n')
-    flags |= kEmptyEndLine;
-
-  // \b and \B
+    flags |= kEmptyEndLine; 
+ 
+  // \b and \B 
   if (p == text.data() && p == text.data() + text.size()) {
-    // no word boundary here
+    // no word boundary here 
   } else if (p == text.data()) {
-    if (IsWordChar(p[0]))
-      flags |= kEmptyWordBoundary;
+    if (IsWordChar(p[0])) 
+      flags |= kEmptyWordBoundary; 
   } else if (p == text.data() + text.size()) {
-    if (IsWordChar(p[-1]))
-      flags |= kEmptyWordBoundary;
-  } else {
-    if (IsWordChar(p[-1]) != IsWordChar(p[0]))
-      flags |= kEmptyWordBoundary;
-  }
-  if (!(flags & kEmptyWordBoundary))
-    flags |= kEmptyNonWordBoundary;
-
-  return flags;
-}
-
+    if (IsWordChar(p[-1])) 
+      flags |= kEmptyWordBoundary; 
+  } else { 
+    if (IsWordChar(p[-1]) != IsWordChar(p[0])) 
+      flags |= kEmptyWordBoundary; 
+  } 
+  if (!(flags & kEmptyWordBoundary)) 
+    flags |= kEmptyNonWordBoundary; 
+ 
+  return flags; 
+} 
+ 
 // ByteMapBuilder implements a coloring algorithm.
 //
 // The first phase is a series of "mark and merge" batches: we mark one or more
@@ -375,8 +375,8 @@ void ByteMapBuilder::Mark(int lo, int hi) {
     return;
 
   ranges_.emplace_back(lo, hi);
-}
-
+} 
+ 
 void ByteMapBuilder::Merge() {
   for (std::vector<std::pair<int, int>>::const_iterator it = ranges_.begin();
        it != ranges_.end();
@@ -443,12 +443,12 @@ int ByteMapBuilder::Recolor(int oldcolor) {
   return newcolor;
 }
 
-void Prog::ComputeByteMap() {
+void Prog::ComputeByteMap() { 
   // Fill in bytemap with byte classes for the program.
   // Ranges of bytes that are treated indistinguishably
   // will be mapped to a single byte class.
   ByteMapBuilder builder;
-
+ 
   // Don't repeat the work for ^ and $.
   bool marked_line_boundaries = false;
   // Don't repeat the work for \b and \B.
@@ -507,18 +507,18 @@ void Prog::ComputeByteMap() {
         marked_word_boundaries = true;
       }
     }
-  }
-
+  } 
+ 
   builder.Build(bytemap_, &bytemap_range_);
 
   if (0) {  // For debugging, use trivial bytemap.
     LOG(ERROR) << "Using trivial bytemap.";
     for (int i = 0; i < 256; i++)
       bytemap_[i] = static_cast<uint8_t>(i);
-    bytemap_range_ = 256;
-  }
-}
-
+    bytemap_range_ = 256; 
+  } 
+} 
+ 
 // Prog::Flatten() implements a graph rewriting algorithm.
 //
 // The overall process is similar to epsilon removal, but retains some epsilon
@@ -1172,4 +1172,4 @@ const void* Prog::PrefixAccel_FrontAndBack(const void* data, size_t size) {
   }
 }
 
-}  // namespace re2
+}  // namespace re2 

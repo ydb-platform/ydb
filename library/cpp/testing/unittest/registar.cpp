@@ -2,7 +2,7 @@
 
 #include <library/cpp/diff/diff.h>
 #include <library/cpp/colorizer/colors.h>
-
+ 
 #include <util/generic/bt_exception.h>
 #include <util/random/fast.h>
 #include <util/string/printf.h>
@@ -62,7 +62,7 @@ void ::NUnitTest::NPrivate::SetUnittestThread(bool unittestThread) {
     Y_VERIFY(UnittestThread != unittestThread, "state check");
     UnittestThread = unittestThread;
 }
-
+ 
 void ::NUnitTest::NPrivate::SetCurrentTest(TTestBase* test) {
     Y_VERIFY(!test || !currentTest, "state check");
     currentTest = test;
@@ -72,10 +72,10 @@ NUnitTest::TTestBase* ::NUnitTest::NPrivate::GetCurrentTest() {
     return currentTest;
 }
 
-struct TDiffColorizer {
-    NColorizer::TColors Colors;
+struct TDiffColorizer { 
+    NColorizer::TColors Colors; 
     bool Reverse = false;
-
+ 
     explicit TDiffColorizer(bool reverse = false)
         : Reverse(reverse)
     {
@@ -83,19 +83,19 @@ struct TDiffColorizer {
 
     TString Special(TStringBuf str) const {
         return ToString(Colors.YellowColor()) + str;
-    }
-
+    } 
+ 
     TString Common(TArrayRef<const char> str) const {
         return ToString(Colors.OldColor()) + TString(str.begin(), str.end());
-    }
-
+    } 
+ 
     TString Left(TArrayRef<const char> str) const {
         return ToString(GetLeftColor()) + TString(str.begin(), str.end());
-    }
-
+    } 
+ 
     TString Right(TArrayRef<const char> str) const {
         return ToString(GetRightColor()) + TString(str.begin(), str.end());
-    }
+    } 
 
     TStringBuf GetLeftColor() const {
         return Reverse ? Colors.RedColor() : Colors.GreenColor();
@@ -104,8 +104,8 @@ struct TDiffColorizer {
     TStringBuf GetRightColor() const {
         return Reverse ? Colors.GreenColor() : Colors.RedColor();
     }
-};
-
+}; 
+ 
 struct TTraceDiffFormatter {
     bool Reverse = false;
 
@@ -144,17 +144,17 @@ TString NUnitTest::GetResetTag() {
 }
 
 TString NUnitTest::ColoredDiff(TStringBuf s1, TStringBuf s2, const TString& delims, bool reverse) {
-    TStringStream res;
+    TStringStream res; 
     TVector<NDiff::TChunk<char>> chunks;
-    NDiff::InlineDiff(chunks, s1, s2, delims);
+    NDiff::InlineDiff(chunks, s1, s2, delims); 
     if (NUnitTest::ShouldColorizeDiff) {
         NDiff::PrintChunks(res, TDiffColorizer(reverse), chunks);
     } else {
         res << NUnitTest::GetResetTag();
         NDiff::PrintChunks(res, TTraceDiffFormatter(reverse), chunks);
     }
-    return res.Str();
-}
+    return res.Str(); 
+} 
 
 static TString MakeTestName(const NUnitTest::ITestSuiteProcessor::TTest& test) {
     return TStringBuilder() << test.unit->name << "::" << test.name;

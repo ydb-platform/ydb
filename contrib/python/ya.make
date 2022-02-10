@@ -665,7 +665,7 @@ RECURSE(
     netaddr
     netifaces
     networkx
-    nltk 
+    nltk
     normality
     nose
     notebook

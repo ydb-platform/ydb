@@ -164,8 +164,8 @@ namespace NActors {
         std::shared_ptr<NMonitoring::TMetricRegistry> Metrics;
     };
 
-    TAtomic TLoggerActor::IsOverflow = 0;
-
+    TAtomic TLoggerActor::IsOverflow = 0; 
+ 
     TLoggerActor::TLoggerActor(TIntrusivePtr<NLog::TSettings> settings,
                                TAutoPtr<TLogBackend> logBackend,
                                TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
@@ -224,10 +224,10 @@ namespace NActors {
     }
 
     void TLoggerActor::Throttle(const NLog::TSettings& settings) {
-        if (AtomicGet(IsOverflow))
+        if (AtomicGet(IsOverflow)) 
             Sleep(settings.ThrottleDelay);
-    }
-
+    } 
+ 
     void TLoggerActor::LogIgnoredCount(TInstant now) {
         TString message = Sprintf("Ignored IgnoredCount# %" PRIu64 " log records due to logger overflow!", IgnoredCount);
         if (!OutputRecord(now, NActors::NLog::EPrio::Error, Settings->LoggerComponent, message)) {
@@ -250,7 +250,7 @@ namespace NActors {
         Metrics->IncActorMsgs();
 
         const auto prio = ev.Level.ToPrio();
-
+ 
         switch (prio) {
             case ::NActors::NLog::EPrio::Alert:
                 Metrics->IncAlertMsgs();
@@ -267,28 +267,28 @@ namespace NActors {
     void TLoggerActor::HandleLogEvent(NLog::TEvLog::TPtr& ev, const NActors::TActorContext& ctx) {
         i64 delayMillisec = (ctx.Now() - ev->Get()->Stamp).MilliSeconds();
         WriteMessageStat(*ev->Get());
-        if (Settings->AllowDrop) {
-            // Disable throttling if it was enabled previously
-            if (AtomicGet(IsOverflow))
-                AtomicSet(IsOverflow, 0);
-
-            // Check if some records have to be dropped
+        if (Settings->AllowDrop) { 
+            // Disable throttling if it was enabled previously 
+            if (AtomicGet(IsOverflow)) 
+                AtomicSet(IsOverflow, 0); 
+ 
+            // Check if some records have to be dropped 
             if ((PassedCount > 10 && delayMillisec > (i64)Settings->TimeThresholdMs) || IgnoredCount > 0) {
                 Metrics->IncIgnoredMsgs();
-                if (IgnoredCount == 0) {
-                    ctx.Send(ctx.SelfID, new TLogIgnored());
-                }
-                ++IgnoredCount;
-                PassedCount = 0;
-                return;
+                if (IgnoredCount == 0) { 
+                    ctx.Send(ctx.SelfID, new TLogIgnored()); 
+                } 
+                ++IgnoredCount; 
+                PassedCount = 0; 
+                return; 
             }
-            PassedCount++;
-        } else {
-            // Enable of disable throttling depending on the load
-            if (delayMillisec > (i64)Settings->TimeThresholdMs && !AtomicGet(IsOverflow))
-                AtomicSet(IsOverflow, 1);
-            else if (delayMillisec <= (i64)Settings->TimeThresholdMs && AtomicGet(IsOverflow))
-                AtomicSet(IsOverflow, 0);
+            PassedCount++; 
+        } else { 
+            // Enable of disable throttling depending on the load 
+            if (delayMillisec > (i64)Settings->TimeThresholdMs && !AtomicGet(IsOverflow)) 
+                AtomicSet(IsOverflow, 1); 
+            else if (delayMillisec <= (i64)Settings->TimeThresholdMs && AtomicGet(IsOverflow)) 
+                AtomicSet(IsOverflow, 0); 
         }
 
         const auto prio = ev->Get()->Level.ToPrio();
@@ -376,8 +376,8 @@ namespace NActors {
         bool hasPriority = false;
         bool hasSamplingPriority = false;
         bool hasSamplingRate = false;
-        bool hasAllowDrop = false;
-        int allowDrop = 0;
+        bool hasAllowDrop = false; 
+        int allowDrop = 0; 
         if (params.Has("c")) {
             if (TryFromString(params.Get("c"), component) && (component == NLog::InvalidComponent || Settings->IsValidComponent(component))) {
                 hasComponent = true;
@@ -402,11 +402,11 @@ namespace NActors {
                 }
             }
         }
-        if (params.Has("allowdrop")) {
-            if (TryFromString(params.Get("allowdrop"), allowDrop)) {
-                hasAllowDrop = true;
-            }
-        }
+        if (params.Has("allowdrop")) { 
+            if (TryFromString(params.Get("allowdrop"), allowDrop)) { 
+                hasAllowDrop = true; 
+            } 
+        } 
 
         TStringStream str;
         if (hasComponent && !hasPriority && !hasSamplingPriority && !hasSamplingRate) {
@@ -485,9 +485,9 @@ namespace NActors {
             if (hasComponent && hasSamplingRate) {
                 Settings->SetSamplingRate(samplingRate, component, explanation);
             }
-            if (hasAllowDrop) {
-                Settings->SetAllowDrop(allowDrop);
-            }
+            if (hasAllowDrop) { 
+                Settings->SetAllowDrop(allowDrop); 
+            } 
 
             HTML(str) {
                 if (!explanation.empty()) {
@@ -559,10 +559,10 @@ namespace NActors {
                             str << "Drop log entries in case of overflow: "
                                 << (Settings->AllowDrop ? "Enabled" : "Disabled");
                         }
-                        str << "<form method=\"GET\">" << Endl;
+                        str << "<form method=\"GET\">" << Endl; 
                         str << "<input type=\"hidden\" name=\"allowdrop\" value=\"" << (Settings->AllowDrop ? "0" : "1") << "\"/>" << Endl;
                         str << "<input class=\"btn btn-primary\" type=\"submit\" value=\"" << (Settings->AllowDrop ? "Disable" : "Enable") << "\"/>" << Endl;
-                        str << "</form>" << Endl;
+                        str << "</form>" << Endl; 
                     }
                 }
                 Metrics->GetOutputHtml(str);
@@ -588,7 +588,7 @@ namespace NActors {
                     logRecord << time;
                 }
                 logRecord
-                    << Settings->MessagePrefix
+                    << Settings->MessagePrefix 
                     << " :" << Settings->ComponentName(component)
                     << " "  << PriorityToString(priority)
                     << ": " << formatted;

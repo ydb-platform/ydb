@@ -211,7 +211,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         const auto& ttl = op.GetTTLSettings();
 
         if (!ValidateTtlSettings(ttl, source ? source->Columns : THashMap<ui32, TColumn>(), alterData->Columns, colName2Id, subDomain, errStr)) {
-            return nullptr;
+            return nullptr; 
         }
 
         alterData->TableDescriptionFull->MutableTTLSettings()->CopyFrom(ttl);
@@ -723,7 +723,7 @@ THashMap<ui32, size_t> TPartitionConfigMerger::DeduplicateStorageRoomsById(NKiki
         return true;
     });
 }
-
+ 
 NKikimrSchemeOp::TFamilyDescription &TPartitionConfigMerger::MutableColumnFamilyById(
     NKikimrSchemeOp::TPartitionConfig &partitionConfig,
     THashMap<ui32, size_t> &posById, ui32 familyId)
@@ -1230,7 +1230,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     THashMap<TShardIdx, TPartitionStats> newPartitionStats;
     TPartitionStats newAggregatedStats;
     newAggregatedStats.PartCount = newPartitioning.size();
-    ui64 cpuTotal = 0;
+    ui64 cpuTotal = 0; 
     for (const auto& np : newPartitioning) {
         auto idx = np.ShardIdx;
         auto& newStats(newPartitionStats[idx]);
@@ -1238,7 +1238,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         newAggregatedStats.RowCount += newStats.RowCount;
         newAggregatedStats.DataSize += newStats.DataSize;
         newAggregatedStats.IndexSize += newStats.IndexSize;
-        cpuTotal += newStats.GetCurrentRawCpuUsage();
+        cpuTotal += newStats.GetCurrentRawCpuUsage(); 
         newAggregatedStats.Memory += newStats.Memory;
         newAggregatedStats.Network += newStats.Network;
         newAggregatedStats.Storage += newStats.Storage;
@@ -1247,7 +1247,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
         newAggregatedStats.ReadIops += newStats.ReadIops;
         newAggregatedStats.WriteIops += newStats.WriteIops;
     }
-    newAggregatedStats.SetCurrentRawCpuUsage(cpuTotal, AppData()->TimeProvider->Now());
+    newAggregatedStats.SetCurrentRawCpuUsage(cpuTotal, AppData()->TimeProvider->Now()); 
     newAggregatedStats.LastAccessTime = Stats.Aggregated.LastAccessTime;
     newAggregatedStats.LastUpdateTime = Stats.Aggregated.LastUpdateTime;
 
@@ -1284,7 +1284,7 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     }
 }
 
-void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, TPartitionStats& newStats) {
+void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, TPartitionStats& newStats) { 
     // Ignore stats from unknown datashard (it could have been split)
     if (!Stats.PartitionStats.contains(datashardIdx))
         return;
@@ -1326,11 +1326,11 @@ void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, TPartitionStats& newSt
     Stats.Aggregated.RangeReads += (newStats.RangeReads - oldStats.RangeReads);
     Stats.Aggregated.RangeReadRows += (newStats.RangeReadRows - oldStats.RangeReadRows);
 
-    i64 cpuUsageDelta = newStats.GetCurrentRawCpuUsage() - oldStats.GetCurrentRawCpuUsage();
-    i64 prevCpuUsage = Stats.Aggregated.GetCurrentRawCpuUsage();
-    ui64 newAggregatedCpuUsage = std::max<i64>(0, prevCpuUsage + cpuUsageDelta);
-    TInstant now = AppData()->TimeProvider->Now();
-    Stats.Aggregated.SetCurrentRawCpuUsage(newAggregatedCpuUsage, now);
+    i64 cpuUsageDelta = newStats.GetCurrentRawCpuUsage() - oldStats.GetCurrentRawCpuUsage(); 
+    i64 prevCpuUsage = Stats.Aggregated.GetCurrentRawCpuUsage(); 
+    ui64 newAggregatedCpuUsage = std::max<i64>(0, prevCpuUsage + cpuUsageDelta); 
+    TInstant now = AppData()->TimeProvider->Now(); 
+    Stats.Aggregated.SetCurrentRawCpuUsage(newAggregatedCpuUsage, now); 
     Stats.Aggregated.Memory += (newStats.Memory - oldStats.Memory);
     Stats.Aggregated.Network += (newStats.Network - oldStats.Network);
     Stats.Aggregated.Storage += (newStats.Storage - oldStats.Storage);
@@ -1339,7 +1339,7 @@ void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, TPartitionStats& newSt
     Stats.Aggregated.ReadIops += (newStats.ReadIops - oldStats.ReadIops);
     Stats.Aggregated.WriteIops += (newStats.WriteIops - oldStats.WriteIops);
 
-    newStats.SaveCpuUsageHistory(oldStats);
+    newStats.SaveCpuUsageHistory(oldStats); 
     oldStats = newStats;
     Stats.PartitionStatsUpdated++;
 
@@ -1412,10 +1412,10 @@ void TTableInfo::FinishSplitMergeOp(TOperationId opId) {
     }
 }
 
-
-
-bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
-                                    TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
+ 
+ 
+bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings, 
+                                    TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge, 
                                     THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad) const
 {
     if (ExpectedPartitionCount + 1 - shardsToMerge.size() <= GetMinPartitionsCount()) {
@@ -1444,45 +1444,45 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     if (stats->HasBorrowed)
         return false;
 
-    bool canMerge = false;
-
-    // Check if we can try merging by size
-    if (IsMergeBySizeEnabled() && stats->DataSize + totalSize <= GetSizeToMerge()) {
-        canMerge = true;
-    }
-
-    // Check if we can try merging by load
-    TInstant now = AppData()->TimeProvider->Now();
-    TDuration minUptime = TDuration::Seconds(splitSettings.MergeByLoadMinUptimeSec);
-    if (!canMerge && IsMergeByLoadEnabled() && stats->StartTime && stats->StartTime + minUptime < now) {
-        canMerge = true;
-    }
-
-    if (!canMerge)
+    bool canMerge = false; 
+ 
+    // Check if we can try merging by size 
+    if (IsMergeBySizeEnabled() && stats->DataSize + totalSize <= GetSizeToMerge()) { 
+        canMerge = true; 
+    } 
+ 
+    // Check if we can try merging by load 
+    TInstant now = AppData()->TimeProvider->Now(); 
+    TDuration minUptime = TDuration::Seconds(splitSettings.MergeByLoadMinUptimeSec); 
+    if (!canMerge && IsMergeByLoadEnabled() && stats->StartTime && stats->StartTime + minUptime < now) { 
+        canMerge = true; 
+    } 
+ 
+    if (!canMerge) 
         return false;
 
-    // Check that total size doesn't exceed the limits
-    if (IsSplitBySizeEnabled() && stats->DataSize + totalSize >= GetShardSizeToSplit()*0.9) {
-        return false;
-    }
-
-    // Check that total load doesn't exceed the limits
-    float shardLoad = stats->GetCurrentRawCpuUsage() * 0.000001;
+    // Check that total size doesn't exceed the limits 
+    if (IsSplitBySizeEnabled() && stats->DataSize + totalSize >= GetShardSizeToSplit()*0.9) { 
+        return false; 
+    } 
+ 
+    // Check that total load doesn't exceed the limits 
+    float shardLoad = stats->GetCurrentRawCpuUsage() * 0.000001; 
     if (IsMergeByLoadEnabled()) {
-        const auto& settings = PartitionConfig().GetPartitioningPolicy().GetSplitByLoadSettings();
-        i64 cpuPercentage = settings.GetCpuPercentageThreshold();
-        float cpuUsageThreshold = 0.01 * (cpuPercentage ? cpuPercentage : (i64)splitSettings.FastSplitCpuPercentageThreshold);
-
-        // Calculate shard load based on historical data
-        TDuration loadDuration = TDuration::Seconds(splitSettings.MergeByLoadMinLowLoadDurationSec);
-        shardLoad = 0.01 * stats->GetLatestMaxCpuUsagePercent(now - loadDuration);
-
-        if (shardLoad + totalLoad > cpuUsageThreshold *0.7)
-            return false;
-    }
-
-    // Merged shards must not have borrowed parts from the same original tablet
-    // because this will break part ref-counting
+        const auto& settings = PartitionConfig().GetPartitioningPolicy().GetSplitByLoadSettings(); 
+        i64 cpuPercentage = settings.GetCpuPercentageThreshold(); 
+        float cpuUsageThreshold = 0.01 * (cpuPercentage ? cpuPercentage : (i64)splitSettings.FastSplitCpuPercentageThreshold); 
+ 
+        // Calculate shard load based on historical data 
+        TDuration loadDuration = TDuration::Seconds(splitSettings.MergeByLoadMinLowLoadDurationSec); 
+        shardLoad = 0.01 * stats->GetLatestMaxCpuUsagePercent(now - loadDuration); 
+ 
+        if (shardLoad + totalLoad > cpuUsageThreshold *0.7) 
+            return false; 
+    } 
+ 
+    // Merged shards must not have borrowed parts from the same original tablet 
+    // because this will break part ref-counting 
     for (auto tabletId : stats->PartOwners) {
         if (partOwners.contains(tabletId))
             return false;
@@ -1490,13 +1490,13 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
     shardsToMerge.push_back(shardIdx);
     totalSize += stats->DataSize;
-    totalLoad += shardLoad;
+    totalLoad += shardLoad; 
     partOwners.insert(stats->PartOwners.begin(), stats->PartOwners.end());
 
     return true;
 }
 
-bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings, TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge) const {
+bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings, TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge) const { 
     // Don't split/merge backup tables
     if (IsBackup) {
         return false;
@@ -1519,7 +1519,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings, TS
 
     shardsToMerge.clear();
     ui64 totalSize = 0;
-    float totalLoad = 0;
+    float totalLoad = 0; 
     THashSet<TTabletId> partOwners;
 
     // Make sure we can actually merge current shard first
@@ -1549,88 +1549,88 @@ bool TTableInfo::CheckFastSplitForPartition(const TSplitSettings& splitSettings,
     if (IsBackup)
         return false;
 
-    // Ignore stats from unknown datashard (it could have been split)
-    if (!Stats.PartitionStats.contains(shardIdx))
-        return false;
-
-    if (!Shard2PartitionIdx.contains(shardIdx))
-        return false;
-
-    const ui64 MIN_ROWS_FOR_FAST_SPLIT = 1000;
-    ui64 sizeThreshold = splitSettings.FastSplitSizeThreshold;
-    ui64 rowCountThreshold = splitSettings.FastSplitRowCountThreshold;
-    float cpuUsageThreshold = 0.01 * splitSettings.FastSplitCpuPercentageThreshold;
-
-    const auto& partitionConfig = PartitionConfig();
-
-    if (partitionConfig.GetPartitioningPolicy().HasFastSplitSettings()) {
-        const auto& settings = partitionConfig.GetPartitioningPolicy().GetFastSplitSettings();
-        sizeThreshold = settings.GetSizeThreshold();
-        rowCountThreshold = settings.GetRowCountThreshold();
-        cpuUsageThreshold = 0.01 * settings.GetCpuPercentageThreshold();
-    }
-
-    const auto& stats = *Stats.PartitionStats.FindPtr(shardIdx);
-    if ((dataSize < sizeThreshold && rowCount < rowCountThreshold) ||
-         rowCount < MIN_ROWS_FOR_FAST_SPLIT ||
-         stats.InFlightTxCount == 0 ||
-         stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
-    {
-        return false;
-    }
-
-    return true;
-}
-
-bool TTableInfo::CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const {
+    // Ignore stats from unknown datashard (it could have been split) 
+    if (!Stats.PartitionStats.contains(shardIdx)) 
+        return false; 
+ 
+    if (!Shard2PartitionIdx.contains(shardIdx)) 
+        return false; 
+ 
+    const ui64 MIN_ROWS_FOR_FAST_SPLIT = 1000; 
+    ui64 sizeThreshold = splitSettings.FastSplitSizeThreshold; 
+    ui64 rowCountThreshold = splitSettings.FastSplitRowCountThreshold; 
+    float cpuUsageThreshold = 0.01 * splitSettings.FastSplitCpuPercentageThreshold; 
+ 
+    const auto& partitionConfig = PartitionConfig(); 
+ 
+    if (partitionConfig.GetPartitioningPolicy().HasFastSplitSettings()) { 
+        const auto& settings = partitionConfig.GetPartitioningPolicy().GetFastSplitSettings(); 
+        sizeThreshold = settings.GetSizeThreshold(); 
+        rowCountThreshold = settings.GetRowCountThreshold(); 
+        cpuUsageThreshold = 0.01 * settings.GetCpuPercentageThreshold(); 
+    } 
+ 
+    const auto& stats = *Stats.PartitionStats.FindPtr(shardIdx); 
+    if ((dataSize < sizeThreshold && rowCount < rowCountThreshold) || 
+         rowCount < MIN_ROWS_FOR_FAST_SPLIT || 
+         stats.InFlightTxCount == 0 || 
+         stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000) 
+    { 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
+bool TTableInfo::CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const { 
     // Don't split/merge backup tables
     if (IsBackup)
         return false;
 
-    if (!splitSettings.SplitByLoadEnabled)
-        return false;
-
-    // Ignore stats from unknown datashard (it could have been split)
-    if (!Stats.PartitionStats.contains(shardIdx))
-        return false;
-    if (!Shard2PartitionIdx.contains(shardIdx))
-        return false;
-
-    // A shard can be overloaded by heavy reads of non-existing keys.
-    // So we want to be able to split it even if it has no data.
-    const ui64 MIN_ROWS_FOR_SPLIT_BY_LOAD = 0;
-    const ui64 MIN_SIZE_FOR_SPLIT_BY_LOAD = 0;
-
-    const auto& partitionConfig = PartitionConfig();
-    const auto& policy = partitionConfig.GetPartitioningPolicy();
-
-    ui64 maxShards = policy.GetMaxPartitionsCount();
-    if (maxShards == 0) {
-        // Don't want to trigger "too many shards" or "too many readsets" errors
-        maxShards = splitSettings.SplitByLoadMaxShardsDefault;
-    }
-
-    if (!policy.HasSplitByLoadSettings() || !policy.GetSplitByLoadSettings().GetEnabled()) {
-        return false;
-    }
-
-    const auto& settings = policy.GetSplitByLoadSettings();
-    i64 cpuPercentage = settings.GetCpuPercentageThreshold();
-
-    float cpuUsageThreshold = 0.01 * (cpuPercentage ? cpuPercentage : (i64)splitSettings.FastSplitCpuPercentageThreshold);
-
-    const auto& stats = *Stats.PartitionStats.FindPtr(shardIdx);
-    if (rowCount < MIN_ROWS_FOR_SPLIT_BY_LOAD ||
-        dataSize < MIN_SIZE_FOR_SPLIT_BY_LOAD ||
-        Stats.PartitionStats.size() >= maxShards ||
-        stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
-    {
-        return false;
-    }
-
-    return true;
-}
-
+    if (!splitSettings.SplitByLoadEnabled) 
+        return false; 
+ 
+    // Ignore stats from unknown datashard (it could have been split) 
+    if (!Stats.PartitionStats.contains(shardIdx)) 
+        return false; 
+    if (!Shard2PartitionIdx.contains(shardIdx)) 
+        return false; 
+ 
+    // A shard can be overloaded by heavy reads of non-existing keys. 
+    // So we want to be able to split it even if it has no data. 
+    const ui64 MIN_ROWS_FOR_SPLIT_BY_LOAD = 0; 
+    const ui64 MIN_SIZE_FOR_SPLIT_BY_LOAD = 0; 
+ 
+    const auto& partitionConfig = PartitionConfig(); 
+    const auto& policy = partitionConfig.GetPartitioningPolicy(); 
+ 
+    ui64 maxShards = policy.GetMaxPartitionsCount(); 
+    if (maxShards == 0) { 
+        // Don't want to trigger "too many shards" or "too many readsets" errors 
+        maxShards = splitSettings.SplitByLoadMaxShardsDefault; 
+    } 
+ 
+    if (!policy.HasSplitByLoadSettings() || !policy.GetSplitByLoadSettings().GetEnabled()) { 
+        return false; 
+    } 
+ 
+    const auto& settings = policy.GetSplitByLoadSettings(); 
+    i64 cpuPercentage = settings.GetCpuPercentageThreshold(); 
+ 
+    float cpuUsageThreshold = 0.01 * (cpuPercentage ? cpuPercentage : (i64)splitSettings.FastSplitCpuPercentageThreshold); 
+ 
+    const auto& stats = *Stats.PartitionStats.FindPtr(shardIdx); 
+    if (rowCount < MIN_ROWS_FOR_SPLIT_BY_LOAD || 
+        dataSize < MIN_SIZE_FOR_SPLIT_BY_LOAD || 
+        Stats.PartitionStats.size() >= maxShards || 
+        stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000) 
+    { 
+        return false; 
+    } 
+ 
+    return true; 
+} 
+ 
 TChannelsMapping GetPoolsMapping(const TChannelsBindings& bindings) {
     TChannelsMapping mapping;
     for (const auto& bind : bindings) {
@@ -2121,4 +2121,4 @@ bool TSequenceInfo::ValidateCreate(const NKikimrSchemeOp::TSequenceDescription& 
 
 } // namespace NSchemeShard
 } // namespace NKikimr
-
+ 

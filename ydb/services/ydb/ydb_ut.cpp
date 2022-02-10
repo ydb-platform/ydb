@@ -4098,13 +4098,13 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
         {
             auto tableBuilder = client.GetTableBuilder();
             tableBuilder
-                .AddNullableColumn("Data", EPrimitiveType::String)
-                .AddNullableColumn("KeyHash", EPrimitiveType::Uint64)
-                .AddNullableColumn("Version", EPrimitiveType::Uint32)
-                .AddNullableColumn("Ratio", EPrimitiveType::Float)
-                .AddNullableColumn("SubKey", EPrimitiveType::Int32)
-                .AddNullableColumn("Key", EPrimitiveType::Utf8);
-            tableBuilder.SetPrimaryKeyColumns({"KeyHash", "Key", "SubKey"});
+                .AddNullableColumn("Data", EPrimitiveType::String) 
+                .AddNullableColumn("KeyHash", EPrimitiveType::Uint64) 
+                .AddNullableColumn("Version", EPrimitiveType::Uint32) 
+                .AddNullableColumn("Ratio", EPrimitiveType::Float) 
+                .AddNullableColumn("SubKey", EPrimitiveType::Int32) 
+                .AddNullableColumn("Key", EPrimitiveType::Utf8); 
+            tableBuilder.SetPrimaryKeyColumns({"KeyHash", "Key", "SubKey"}); 
             auto settings = TCreateTableSettings().PresetName("profile1");
             auto res = session.CreateTable("/Root/ydb_ut_tenant/table-1", tableBuilder.Build(), settings).ExtractValueSync();
 

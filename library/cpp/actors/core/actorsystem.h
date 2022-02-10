@@ -8,7 +8,7 @@
 #include "event.h"
 #include "log_settings.h"
 #include "scheduler_cookie.h"
-#include "mon_stats.h"
+#include "mon_stats.h" 
 
 #include <library/cpp/threading/future/future.h>
 #include <library/cpp/actors/util/ticket_lock.h>
@@ -58,7 +58,7 @@ namespace NActors {
             , DestroyedActors(0)
         {
         }
-
+ 
         virtual ~IExecutorPool() {
         }
 
@@ -348,7 +348,7 @@ namespace NActors {
         T* AppData() const {
             return (T*)AppData0;
         }
-
+ 
         NLog::TSettings* LoggerSettings() const {
             return LoggerSettings0.Get();
         }

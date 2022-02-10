@@ -1,4 +1,4 @@
-#pragma once
+#pragma once 
 #include "defs.h"
 #include "tablet_flat_executor.h"
 #include "flat_executor_misc.h"
@@ -8,19 +8,19 @@
 #include "util_fmt_line.h"
 #include <ydb/core/base/localdb.h>
 #include <library/cpp/time_provider/time_provider.h>
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
 
 namespace NTable{
     class TScheme;
 }
 
-namespace NTabletFlatExecutor {
-
+namespace NTabletFlatExecutor { 
+ 
 class TTableSnapshotContext;
 
-using TCompactionPolicy = NLocalDb::TCompactionPolicy;
-
+using TCompactionPolicy = NLocalDb::TCompactionPolicy; 
+ 
 enum class EForceCompaction {
     Mem,
     Borrowed,
@@ -103,14 +103,14 @@ struct TCompactionLogicState {
         TTableInfo() = default;
 
         ~TTableInfo();
-
-        ui32 ComputeBackgroundPriority(const TCompactionLogicState::TCompactionTask &task,
-                                                 const TCompactionPolicy::TBackgroundPolicy &policy,
-                                                 ui32 percentage,
-                                                 TInstant now) const;
-        ui32 ComputeBackgroundPriority(const TCompactionLogicState::TInMem &inMem,
-                                                 const TCompactionPolicy &policy,
-                                                 TInstant now) const;
+ 
+        ui32 ComputeBackgroundPriority(const TCompactionLogicState::TCompactionTask &task, 
+                                                 const TCompactionPolicy::TBackgroundPolicy &policy, 
+                                                 ui32 percentage, 
+                                                 TInstant now) const; 
+        ui32 ComputeBackgroundPriority(const TCompactionLogicState::TInMem &inMem, 
+                                                 const TCompactionPolicy &policy, 
+                                                 TInstant now) const; 
     };
 
     struct TSnapshotState {
@@ -183,9 +183,9 @@ class TCompactionLogic {
         const NTable::TCompactionParams* params,
         TTableCompactionResult* ret);
 
-public:
-    static constexpr ui32 BAD_PRIORITY = Max<ui32>();
-
+public: 
+    static constexpr ui32 BAD_PRIORITY = Max<ui32>(); 
+ 
     TCompactionLogic(
         NUtil::ILogger*,
         NTable::IResourceBroker*,
@@ -193,10 +193,10 @@ public:
         TAutoPtr<TCompactionLogicState>,
         TString taskSuffix = { });
     ~TCompactionLogic();
-
+ 
     void Start();
     void Stop();
-
+ 
     TCompactionLogicState::TSnapshotState SnapToLog(ui32 tableId);
 
     // Update priorities for background compaction tasks.
@@ -222,8 +222,8 @@ public:
     void CheckInMemStats(ui32 table);
     void UpdateLogUsage(TArrayRef<const NRedo::TUsage>);
     void UpdateLogUsage(const NRedo::TUsage&);
-    float GetOverloadFactor() const;
-    ui64 GetBackingSize() const;
+    float GetOverloadFactor() const; 
+    ui64 GetBackingSize() const; 
     ui64 GetBackingSize(ui64 ownerTabletId) const;
 
     TTableCompactionResult CompleteCompaction(
@@ -242,6 +242,6 @@ public:
     TTableCompactionChanges RemovedParts(ui32 tableId, TArrayRef<const TLogoBlobID> parts);
 
     void OutputHtml(IOutputStream &out, const NTable::TScheme &scheme, const TCgiParameters& cgi);
-};
-
-}}
+}; 
+ 
+}} 

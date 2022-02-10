@@ -2,7 +2,7 @@
 
 #include "defs.h"
 #include "grpc_request_proxy.h"
-#include "rpc_common.h"
+#include "rpc_common.h" 
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/base/kikimr_issue.h>
@@ -13,7 +13,7 @@
 #include <ydb/public/lib/operation_id/operation_id.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
-
+ 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr {
@@ -21,11 +21,11 @@ namespace NGRpcService {
 
 template <typename TDerived, typename TRequest, bool IsOperation>
 class TRpcRequestWithOperationParamsActor : public TActorBootstrapped<TDerived> {
-private:
-    typedef TActorBootstrapped<TDerived> TBase;
+private: 
+    typedef TActorBootstrapped<TDerived> TBase; 
     typedef typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type TRequestBase;
-
-public:
+ 
+public: 
     enum EWakeupTag {
         WakeupTagTimeout = 10,
         WakeupTagCancel = 11,
@@ -45,8 +45,8 @@ public:
 
     const typename TRequest::TRequest* GetProtoRequest() const {
         return TRequest::GetProtoRequest(Request_);
-    }
-
+    } 
+ 
     Ydb::Operations::OperationParams::OperationMode GetOperationMode() const {
         return GetProtoRequest()->operation_params().operation_mode();
     }
@@ -55,15 +55,15 @@ public:
         HasCancel_ = static_cast<TDerived*>(this)->HasCancelOperation();
 
         if (OperationTimeout_) {
-            OperationTimeoutTimer = CreateLongTimer(ctx, OperationTimeout_,
-                new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagTimeout)),
-                AppData(ctx)->UserPoolId);
+            OperationTimeoutTimer = CreateLongTimer(ctx, OperationTimeout_, 
+                new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagTimeout)), 
+                AppData(ctx)->UserPoolId); 
         }
 
         if (HasCancel_ && CancelAfter_) {
-            CancelAfterTimer = CreateLongTimer(ctx, CancelAfter_,
-                new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagCancel)),
-                AppData(ctx)->UserPoolId);
+            CancelAfterTimer = CreateLongTimer(ctx, CancelAfter_, 
+                new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup(WakeupTagCancel)), 
+                AppData(ctx)->UserPoolId); 
         }
 
         auto selfId = ctx.SelfID;

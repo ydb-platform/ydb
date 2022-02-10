@@ -70,7 +70,7 @@ namespace NBus {
     inline bool IsBusKeyValid(TBusKey key) {
         return key != YBUS_KEYINVALID && key != YBUS_KEYMAX && key > YBUS_KEYLOCAL;
     }
-
+ 
 #define YBUS_VERSION 0
 
 #define YBUS_INFINITE (1u << 30u)

@@ -156,7 +156,7 @@ public:
     bool HasDrop() const { return SchemaTx && SchemaTx->IsDrop(); }
     bool HasBackup() const { return SchemaTx && SchemaTx->IsBackup(); }
     bool HasRestore() const { return SchemaTx && SchemaTx->IsRestore(); }
-    bool HasCopy() const { return SchemaTx && SchemaTx->IsCopy(); }
+    bool HasCopy() const { return SchemaTx && SchemaTx->IsCopy(); } 
     bool HasCreatePersistentSnapshot() const { return SchemaTx && SchemaTx->IsCreatePersistentSnapshot(); }
     bool HasDropPersistentSnapshot() const { return SchemaTx && SchemaTx->IsDropPersistentSnapshot(); }
     bool HasInitiateBuilIndex() const { return SchemaTx && SchemaTx->IsInitiateBuildIndex(); }

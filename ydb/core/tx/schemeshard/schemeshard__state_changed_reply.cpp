@@ -10,14 +10,14 @@ namespace NSchemeShard {
 using namespace NTabletFlatExecutor;
 
 struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
-    TEvDataShard::TEvStateChanged::TPtr Ev;
+    TEvDataShard::TEvStateChanged::TPtr Ev; 
     TSideEffects SideEffects;
-
-    TTxShardStateChanged(TSelf *self, TEvDataShard::TEvStateChanged::TPtr& ev)
+ 
+    TTxShardStateChanged(TSelf *self, TEvDataShard::TEvStateChanged::TPtr& ev) 
         : TRwTxBase(self)
-        , Ev(ev)
-    {}
-
+        , Ev(ev) 
+    {} 
+ 
     TTxType GetTxType() const override { return TXTYPE_DATASHARD_STATE_RESULT; }
 
     void DeleteShard(TTabletId tabletId, const TActorContext &ctx) {
@@ -72,10 +72,10 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
         }
     }
 
-    void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
+    void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override { 
         auto tabletId = TTabletId(Ev->Get()->Record.GetTabletId());
-        auto state = Ev->Get()->Record.GetState();
-
+        auto state = Ev->Get()->Record.GetState(); 
+ 
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                    "TTxShardStateChanged DoExecute"
                        << ", datashard informs about state changing"
@@ -91,20 +91,20 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
         if (state == NDataShard::TShardState::Offline) {
             DeleteShard(tabletId, ctx);
             ProgressDependentOperation(tabletId, ctx);
-        }
+        } 
 
         SideEffects.ApplyOnExecute(Self, txc, ctx);
-    }
-
-    void DoComplete(const TActorContext &ctx) override {
+    } 
+ 
+    void DoComplete(const TActorContext &ctx) override { 
         SideEffects.ApplyOnComplete(Self, ctx);
-    }
-};
-
+    } 
+}; 
+ 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxShardStateChanged(
     TEvDataShard::TEvStateChanged::TPtr& ev)
 {
     return new TTxShardStateChanged(this, ev);
-}
-
+} 
+ 
 }}

@@ -12,7 +12,7 @@
 static const bool EnableLogs = false;
 
 namespace NKikimr {
-namespace NLocksTests {
+namespace NLocksTests { 
 
 using namespace Tests;
 

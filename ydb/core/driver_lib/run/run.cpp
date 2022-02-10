@@ -183,10 +183,10 @@ public:
         for (const NKikimrConfig::TDomainsConfig::THiveConfig &hiveConfig : Config.GetDomainsConfig().GetHiveConfig()) {
             appData->DomainsInfo->AddHive(hiveConfig.GetHiveUid(), hiveConfig.GetHive());
         }
-
-        for (const NKikimrConfig::TDomainsConfig::TNamedCompactionPolicy &policy : Config.GetDomainsConfig().GetNamedCompactionPolicy()) {
-            appData->DomainsInfo->AddCompactionPolicy(policy.GetName(), new NLocalDb::TCompactionPolicy(policy.GetPolicy()));
-        }
+ 
+        for (const NKikimrConfig::TDomainsConfig::TNamedCompactionPolicy &policy : Config.GetDomainsConfig().GetNamedCompactionPolicy()) { 
+            appData->DomainsInfo->AddCompactionPolicy(policy.GetName(), new NLocalDb::TCompactionPolicy(policy.GetPolicy())); 
+        } 
 
         const auto& securityConfig(Config.GetDomainsConfig().GetSecurityConfig());
 
@@ -515,11 +515,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["pqv1"] = &hasPQv1;
         bool hasPQCD = false;
         names["pqcd"] = &hasPQCD;
-        bool hasS3Internal = false;
+        bool hasS3Internal = false; 
         names["s3_internal"] = &hasS3Internal;
-        bool hasExperimental = false;
+        bool hasExperimental = false; 
         names["experimental"] = &hasExperimental;
-        bool hasClickhouseInternal = services.empty();
+        bool hasClickhouseInternal = services.empty(); 
         names["clickhouse_internal"] = &hasClickhouseInternal;
         bool hasRateLimiter = false;
         names["rate_limiter"] = &hasRateLimiter;
@@ -535,7 +535,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["datastreams"] = &hasDataStreams;
         bool hasYandexQuery = false;
         names["yq"] = &hasYandexQuery;
-        bool hasLogStore = false;
+        bool hasLogStore = false; 
         names["logstore"] = &hasLogStore;
         bool hasAuth = services.empty();
         names["auth"] = &hasAuth;
@@ -629,19 +629,19 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
-        if (hasExperimental) {
-            server.AddService(new NGRpcService::TGRpcYdbExperimentalService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId));
-        }
-
-        if (hasClickhouseInternal) {
-            server.AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(ActorSystem.Get(), Counters,
-                AppData->InFlightLimiterRegistry, grpcRequestProxyId));
-        }
-
-        if (hasS3Internal) {
-            server.AddService(new NGRpcService::TGRpcYdbS3InternalService(ActorSystem.Get(), Counters,
-                grpcRequestProxyId));
+        if (hasExperimental) { 
+            server.AddService(new NGRpcService::TGRpcYdbExperimentalService(ActorSystem.Get(), Counters, 
+                grpcRequestProxyId)); 
+        } 
+ 
+        if (hasClickhouseInternal) { 
+            server.AddService(new NGRpcService::TGRpcYdbClickhouseInternalService(ActorSystem.Get(), Counters, 
+                AppData->InFlightLimiterRegistry, grpcRequestProxyId)); 
+        } 
+ 
+        if (hasS3Internal) { 
+            server.AddService(new NGRpcService::TGRpcYdbS3InternalService(ActorSystem.Get(), Counters, 
+                grpcRequestProxyId)); 
         }
 
         if (hasScripting) {
@@ -717,10 +717,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             server.AddService(new NGRpcService::TGRpcYandexQueryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
             server.AddService(new NGRpcService::TGRpcYqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
-
-        if (hasLogStore) {
-            server.AddService(new NGRpcService::TGRpcYdbLogStoreService(ActorSystem.Get(), Counters, grpcRequestProxyId));
-        }
+ 
+        if (hasLogStore) { 
+            server.AddService(new NGRpcService::TGRpcYdbLogStoreService(ActorSystem.Get(), Counters, grpcRequestProxyId)); 
+        } 
 
         if (ModuleFactories) {
             for (const auto& service : ModuleFactories->GrpcServiceFactory.Create(enabled, disabled, ActorSystem.Get(), Counters, grpcRequestProxyId)) {
@@ -738,7 +738,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         opts.SetPort(grpcConfig.GetPort());
         opts.SetWorkerThreads(grpcConfig.GetWorkerThreads());
         opts.SetGRpcMemoryQuotaBytes(grpcConfig.GetGRpcMemoryQuotaBytes());
-        opts.SetMaxMessageSize(grpcConfig.HasMaxMessageSize() ? grpcConfig.GetMaxMessageSize() : DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
+        opts.SetMaxMessageSize(grpcConfig.HasMaxMessageSize() ? grpcConfig.GetMaxMessageSize() : DEFAULT_GRPC_MESSAGE_SIZE_LIMIT); 
         opts.SetMaxGlobalRequestInFlight(grpcConfig.GetMaxInFlight());
         opts.SetLogger(NGrpc::CreateActorSystemLogger(*ActorSystem.Get(), NKikimrServices::GRPC_SERVER));
 
@@ -848,7 +848,7 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
                                servicePools,
                                TypeRegistry.Get(),
                                FunctionRegistry.Get(),
-                               FormatFactory.Get(),
+                               FormatFactory.Get(), 
                                &KikimrShouldContinue));
     AppData->DataShardExportFactory = ModuleFactories ? ModuleFactories->DataShardExportFactory.get() : nullptr;
     AppData->SqsEventsWriterFactory = ModuleFactories ? ModuleFactories->SqsEventsWriterFactory.get() : nullptr;
@@ -981,10 +981,10 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         Y_FAIL("Unknown log format: \"%s\"", logConfig.GetFormat().data());
     }
 
-    if (logConfig.HasAllowDropEntries()) {
-        LogSettings->SetAllowDrop(logConfig.GetAllowDropEntries());
-    }
-
+    if (logConfig.HasAllowDropEntries()) { 
+        LogSettings->SetAllowDrop(logConfig.GetAllowDropEntries()); 
+    } 
+ 
     if (logConfig.HasUseLocalTimestamps()) {
         LogSettings->SetUseLocalTimestamps(logConfig.GetUseLocalTimestamps());
     }
@@ -1097,20 +1097,20 @@ void TKikimrRunner::InitializeActorSystem(
                 false,
                 ActorSystem.Get(),
                 NInterconnect::MakeInterconnectMonActorId(runConfig.NodeId));
-
-        if (servicesMask.EnableGRpcService) {
-            Monitoring->RegisterActorPage(nullptr, "grpc", "GRPC", false, ActorSystem.Get(), NGRpcService::GrpcMonServiceId());
-        }
-    }
+ 
+        if (servicesMask.EnableGRpcService) { 
+            Monitoring->RegisterActorPage(nullptr, "grpc", "GRPC", false, ActorSystem.Get(), NGRpcService::GrpcMonServiceId()); 
+        } 
+    } 
 
     if (servicesMask.EnableSqs && AppData->SqsConfig.GetEnableSqs()) {
         if (AppData->SqsConfig.GetHttpServerConfig().GetPort()) {
 
             SqsHttp.Reset(new NSQS::TAsyncHttpServer(AppData->SqsConfig));
-            SqsHttp->Initialize(ActorSystem.Get(),
+            SqsHttp->Initialize(ActorSystem.Get(), 
                                 GetServiceCounters(AppData->Counters, "sqs"),
                                 GetServiceCounters(AppData->Counters, "ymq_public"),
-                                AppData->UserPoolId);
+                                AppData->UserPoolId); 
         }
     }
 
@@ -1165,9 +1165,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     if (serviceMask.EnableSharedCache) {
         sil->AddServiceInitializer(new TSharedCacheInitializer(runConfig));
     }
-    if (serviceMask.EnableBlobCache) {
-        sil->AddServiceInitializer(new TBlobCacheInitializer(runConfig));
-    }
+    if (serviceMask.EnableBlobCache) { 
+        sil->AddServiceInitializer(new TBlobCacheInitializer(runConfig)); 
+    } 
     if (serviceMask.EnableLogger) {
         sil->AddServiceInitializer(new TLoggerInitializer(runConfig, LogSettings, LogBackend));
     }
@@ -1377,10 +1377,10 @@ void TKikimrRunner::KikimrStart() {
         }
     }
 
-    if (SqsHttp) {
-        SqsHttp->Start();
-    }
-
+    if (SqsHttp) { 
+        SqsHttp->Start(); 
+    } 
+ 
     EnableActorCallstack();
     ThreadSigmask(SIG_UNBLOCK);
 }
@@ -1433,10 +1433,10 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         ActorSystem->Send(new IEventHandle(MakeInterconnectListenerActorId(true), {}, new TEvents::TEvPoisonPill));
     }
 
-    if (SqsHttp) {
-        SqsHttp->Shutdown();
-    }
-
+    if (SqsHttp) { 
+        SqsHttp->Shutdown(); 
+    } 
+ 
     if (YdbDriver) {
         YdbDriver->Stop(true);
     }

@@ -1020,8 +1020,8 @@ private:
 
             settings.StatsMode = SessionCtx->Query().StatsMode;
             auto profile = config->Profile.Get(cluster);
-            if (profile && *profile) {
-                // Do not disable profiling if it was enabled at request level
+            if (profile && *profile) { 
+                // Do not disable profiling if it was enabled at request level 
                 settings.StatsMode = EKikimrStatsMode::Profile;
             }
 

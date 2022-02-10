@@ -1,5 +1,5 @@
-#include "ydb_clickhouse_internal.h"
-
+#include "ydb_clickhouse_internal.h" 
+ 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
@@ -7,146 +7,146 @@
 #include <ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.grpc.pb.h>
 #include <library/cpp/grpc/client/grpc_client_low.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
-
-// TODO: Bad dependency???
+ 
+// TODO: Bad dependency??? 
 #include <ydb/core/scheme/scheme_tablecell.h>
-
-namespace NYdb {
-namespace NClickhouseInternal {
-
+ 
+namespace NYdb { 
+namespace NClickhouseInternal { 
+ 
 using namespace NThreading;
 
-///////////////////////////////////////////////////////////////////////////
-class TScanResult::TResultImpl {
-public:
-    TResultImpl(Ydb::ClickhouseInternal::ScanResult&& result)
-        : Result(std::move(result))
-    {}
-
-    const Ydb::ClickhouseInternal::ScanResult Result;
-};
-
-TScanResult::TScanResult(TResultImpl* impl, TStatus&& status)
-    : TStatus(std::move(status))
-    , ResultImpl(impl)
-{}
-
-TScanResult::TScanResult(TScanResult&& other)
-    : TStatus(std::move(other))
-    , ResultImpl(std::move(other.ResultImpl))
-{}
-
-TScanResult& TScanResult::operator = (TScanResult&& other) {
-    (TStatus&)*this = std::move(other);
-    ResultImpl = std::move(other.ResultImpl);
-    return *this;
-}
-
-TScanResult::~TScanResult() {
-}
-
-size_t TScanResult::GetBuffersCount() const {
-    return ResultImpl->Result.blocks_size();
-}
-
-TString TScanResult::GetBuffer(size_t idx) const {
-    return ResultImpl->Result.blocks(idx);
-}
-
-bool TScanResult::IsEos() const {
-    return ResultImpl->Result.eos();
-}
-
-std::pair<TString, bool> TScanResult::GetLastKey() const {
-    return {ResultImpl->Result.last_key(), ResultImpl->Result.last_key_inclusive()};
-}
-
-class TScanClient::TImpl : public TClientImplCommon<TScanClient::TImpl> {
-public:
-    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
+/////////////////////////////////////////////////////////////////////////// 
+class TScanResult::TResultImpl { 
+public: 
+    TResultImpl(Ydb::ClickhouseInternal::ScanResult&& result) 
+        : Result(std::move(result)) 
+    {} 
+ 
+    const Ydb::ClickhouseInternal::ScanResult Result; 
+}; 
+ 
+TScanResult::TScanResult(TResultImpl* impl, TStatus&& status) 
+    : TStatus(std::move(status)) 
+    , ResultImpl(impl) 
+{} 
+ 
+TScanResult::TScanResult(TScanResult&& other) 
+    : TStatus(std::move(other)) 
+    , ResultImpl(std::move(other.ResultImpl)) 
+{} 
+ 
+TScanResult& TScanResult::operator = (TScanResult&& other) { 
+    (TStatus&)*this = std::move(other); 
+    ResultImpl = std::move(other.ResultImpl); 
+    return *this; 
+} 
+ 
+TScanResult::~TScanResult() { 
+} 
+ 
+size_t TScanResult::GetBuffersCount() const { 
+    return ResultImpl->Result.blocks_size(); 
+} 
+ 
+TString TScanResult::GetBuffer(size_t idx) const { 
+    return ResultImpl->Result.blocks(idx); 
+} 
+ 
+bool TScanResult::IsEos() const { 
+    return ResultImpl->Result.eos(); 
+} 
+ 
+std::pair<TString, bool> TScanResult::GetLastKey() const { 
+    return {ResultImpl->Result.last_key(), ResultImpl->Result.last_key_inclusive()}; 
+} 
+ 
+class TScanClient::TImpl : public TClientImplCommon<TScanClient::TImpl> { 
+public: 
+    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings) 
         : TClientImplCommon(std::move(connections), settings) {}
-
-    TAsyncScanResult Scan(
-            const TString& table, const TVector<TString>& columns,
-            ui64 maxRows, ui64 maxBytes,
-            const TString& fromKey, bool fromKeyInclusive,
-            const TScanSettings& settings)
-    {
-        auto request = MakeOperationRequest<Ydb::ClickhouseInternal::ScanRequest>(settings);
-        request.set_table(table);
-        for (TString col : columns) {
-            request.add_columns(col);
-        }
-        request.set_from_key(fromKey);
-        request.set_from_key_inclusive(fromKeyInclusive);
-        request.set_max_rows(maxRows);
-        request.set_max_bytes(maxBytes);
+ 
+    TAsyncScanResult Scan( 
+            const TString& table, const TVector<TString>& columns, 
+            ui64 maxRows, ui64 maxBytes, 
+            const TString& fromKey, bool fromKeyInclusive, 
+            const TScanSettings& settings) 
+    { 
+        auto request = MakeOperationRequest<Ydb::ClickhouseInternal::ScanRequest>(settings); 
+        request.set_table(table); 
+        for (TString col : columns) { 
+            request.add_columns(col); 
+        } 
+        request.set_from_key(fromKey); 
+        request.set_from_key_inclusive(fromKeyInclusive); 
+        request.set_max_rows(maxRows); 
+        request.set_max_bytes(maxBytes); 
         if (settings.SnapshotId_) {
             request.set_snapshot_id(settings.SnapshotId_);
         }
-//        Cerr << request << Endl;
-
-        auto promise = NThreading::NewPromise<TScanResult>();
-
+//        Cerr << request << Endl; 
+ 
+        auto promise = NThreading::NewPromise<TScanResult>(); 
+ 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::ClickhouseInternal::ScanResult result;
-                if (any) {
-                    any->UnpackTo(&result);
-                }
-//                Cerr << result << Endl;
-
-                TScanResult val(new TScanResult::TResultImpl(std::move(result)),
+                Ydb::ClickhouseInternal::ScanResult result; 
+                if (any) { 
+                    any->UnpackTo(&result); 
+                } 
+//                Cerr << result << Endl; 
+ 
+                TScanResult val(new TScanResult::TResultImpl(std::move(result)), 
                    TStatus(std::move(status)));
-
-                promise.SetValue(std::move(val));
-            };
-
-        Connections_->RunDeferred<Ydb::ClickhouseInternal::V1::ClickhouseInternalService, Ydb::ClickhouseInternal::ScanRequest, Ydb::ClickhouseInternal::ScanResponse>(
-                    std::move(request),
-                    extractor,
-                    &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncScan,
-                    DbDriverState_,
+ 
+                promise.SetValue(std::move(val)); 
+            }; 
+ 
+        Connections_->RunDeferred<Ydb::ClickhouseInternal::V1::ClickhouseInternalService, Ydb::ClickhouseInternal::ScanRequest, Ydb::ClickhouseInternal::ScanResponse>( 
+                    std::move(request), 
+                    extractor, 
+                    &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncScan, 
+                    DbDriverState_, 
                     INITIAL_DEFERRED_CALL_DELAY,
                     TRpcRequestSettings::Make(settings),
-                    settings.ClientTimeout_,
-                    settings.Endpoint_);
-
-        return promise.GetFuture();
-    }
-};
-
-
-TScanClient::TScanClient(const TDriver& driver, const TCommonClientSettings& settings)
-    : Impl_(new TImpl(CreateInternalInterface(driver), settings))
-{}
-
-TAsyncScanResult TScanClient::Scan(const TString& path, const TVector<TString>& columns,
-        ui64 maxRows, ui64 maxBytes, const TString& fromKey, bool fromKeyInclusive, const TScanSettings& settings) {
-    return Impl_->Scan(path, columns, maxRows, maxBytes, fromKey, fromKeyInclusive, settings);
-}
-
-bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes) {
-    if (lastReadKey.empty()) // +inf
-        return true;
-
-    if (endKey.empty())
-        return false;
-
-    NKikimr::TSerializedCellVec last(lastReadKey);
-    Y_VERIFY(last.GetCells().size() <= keyColumnTypes.size());
-
-    NKikimr::TSerializedCellVec end(endKey);
-    Y_VERIFY(end.GetCells().size() <= keyColumnTypes.size());
-
-    int cmp = NKikimr::CompareTypedCellVectors(
-                last.GetCells().data(), end.GetCells().data(),
-                keyColumnTypes.data(),
-                last.GetCells().size(), end.GetCells().size());
-
-    return cmp >= 0;
-}
-
+                    settings.ClientTimeout_, 
+                    settings.Endpoint_); 
+ 
+        return promise.GetFuture(); 
+    } 
+}; 
+ 
+ 
+TScanClient::TScanClient(const TDriver& driver, const TCommonClientSettings& settings) 
+    : Impl_(new TImpl(CreateInternalInterface(driver), settings)) 
+{} 
+ 
+TAsyncScanResult TScanClient::Scan(const TString& path, const TVector<TString>& columns, 
+        ui64 maxRows, ui64 maxBytes, const TString& fromKey, bool fromKeyInclusive, const TScanSettings& settings) { 
+    return Impl_->Scan(path, columns, maxRows, maxBytes, fromKey, fromKeyInclusive, settings); 
+} 
+ 
+bool RangeFinished(const TString& lastReadKey, const TString& endKey, const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes) { 
+    if (lastReadKey.empty()) // +inf 
+        return true; 
+ 
+    if (endKey.empty()) 
+        return false; 
+ 
+    NKikimr::TSerializedCellVec last(lastReadKey); 
+    Y_VERIFY(last.GetCells().size() <= keyColumnTypes.size()); 
+ 
+    NKikimr::TSerializedCellVec end(endKey); 
+    Y_VERIFY(end.GetCells().size() <= keyColumnTypes.size()); 
+ 
+    int cmp = NKikimr::CompareTypedCellVectors( 
+                last.GetCells().data(), end.GetCells().data(), 
+                keyColumnTypes.data(), 
+                last.GetCells().size(), end.GetCells().size()); 
+ 
+    return cmp >= 0; 
+} 
+ 
 TScanIterator::TScanIterator(const TDriver& driver, const TString &database, const TString &endpoint, const TString &token, bool ssl, const TString& path,
                                            const TVector<TString>& columns,
                                            const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
@@ -169,253 +169,253 @@ TScanIterator::TScanIterator(const TDriver& driver, const TString &database, con
 {
     MakeRequest();
 }
-
-TScanIterator::TScanIterator(const TDriver& driver, const TString &database, const TString &token, const TString& path,
-                                           const TVector<TString>& columns,
-                                           const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes,
-                                           ui64 maxRowsInRequest, ui64 maxBytesInRequest,
+ 
+TScanIterator::TScanIterator(const TDriver& driver, const TString &database, const TString &token, const TString& path, 
+                                           const TVector<TString>& columns, 
+                                           const TVector<NKikimr::NScheme::TTypeId>& keyColumnTypes, 
+                                           ui64 maxRowsInRequest, ui64 maxBytesInRequest, 
                                            const TString& keyFrom, const TString& keyTo,
                                            const TScanSettings& settings)
-    : Path(path)
-    , Columns(columns)
-    , KeyColumnTypes(keyColumnTypes)
-    , MaxRows(maxRowsInRequest)
-    , MaxBytes(maxBytesInRequest)
+    : Path(path) 
+    , Columns(columns) 
+    , KeyColumnTypes(keyColumnTypes) 
+    , MaxRows(maxRowsInRequest) 
+    , MaxBytes(maxBytesInRequest) 
     , Settings(settings)
-    , Connection(driver, NYdb::TCommonClientSettings().Database(database).AuthToken(token))
+    , Connection(driver, NYdb::TCommonClientSettings().Database(database).AuthToken(token)) 
     , LastReadKey(keyFrom.empty() ? NKikimr::TSerializedCellVec::Serialize(TVector<NKikimr::TCell>(KeyColumnTypes.size())) : keyFrom)
-    , LastReadKeyInclusive(false)
-    , EndKey(keyTo)
+    , LastReadKeyInclusive(false) 
+    , EndKey(keyTo) 
     , RequestsDone(!EndKey.empty() && RangeFinished(LastReadKey, EndKey, KeyColumnTypes))
-    , MaxRetries(20)
-    , Retried(0)
-{
-    MakeRequest();
-}
-
-TString TScanIterator::GetBlocks() {
-    while (Blocks.empty()) {
-        if (RequestsDone)
-            return TString();
-
-        WaitResult();
-        MakeRequest();
-    }
-
-    TString block = Blocks.front();
-    Blocks.pop_front();
-    return block;
-}
-
-void TScanIterator::MakeRequest() {
-    if (RequestsDone)
-        return;
-
-    // TODO: check that previous request is finished
-
+    , MaxRetries(20) 
+    , Retried(0) 
+{ 
+    MakeRequest(); 
+} 
+ 
+TString TScanIterator::GetBlocks() { 
+    while (Blocks.empty()) { 
+        if (RequestsDone) 
+            return TString(); 
+ 
+        WaitResult(); 
+        MakeRequest(); 
+    } 
+ 
+    TString block = Blocks.front(); 
+    Blocks.pop_front(); 
+    return block; 
+} 
+ 
+void TScanIterator::MakeRequest() { 
+    if (RequestsDone) 
+        return; 
+ 
+    // TODO: check that previous request is finished 
+ 
     NextResult = Connection.Scan(Path, Columns, MaxRows, MaxBytes, LastReadKey, !LastReadKeyInclusive, Settings);
-}
-
-bool IsRetriable(EStatus status) {
-    switch (status) {
-    case EStatus::BAD_REQUEST:
-    case EStatus::SCHEME_ERROR:
-    case EStatus::UNAUTHORIZED:
-    case EStatus::NOT_FOUND:
-        return false;
-    default:
-        return true;
-    }
-}
-
-void TScanIterator::WaitResult() {
-    while (true) {
-        TScanResult res = NextResult.ExtractValueSync();
-        if (res.GetStatus() == EStatus::SUCCESS) {
-            size_t bc = res.GetBuffersCount();
-
-            for (size_t i = 0; i < bc; ++i) {
-                TString block = res.GetBuffer(i);
-                if (block.size() > 0)
-                    Blocks.push_back(block);
-            }
-
-            RequestsDone = res.IsEos();
-            std::tie(LastReadKey, LastReadKeyInclusive) = res.GetLastKey();
-
-            if (!EndKey.empty()) {
-                RequestsDone = RangeFinished(LastReadKey, EndKey, KeyColumnTypes);
-            }
-
-            // Reset backoffs after a successful attempt
-            Retried = 0;
-
-            return;
-        }
-
-        if (!IsRetriable(res.GetStatus()) || Retried > MaxRetries) {
-            ythrow yexception() << res.GetStatus() << ": " << res.GetIssues().ToString();
-        }
-
-        TDuration delay = TDuration::MilliSeconds(50 * (1 << Retried));
-        Sleep(Min(TDuration::Seconds(3), delay));
-        ++Retried;
-
-        MakeRequest();
-    }
-}
-
-
-///////////////////////////////////////////////////////////////////////////
-class TGetShardLocationsResult::TResultImpl {
-public:
-    TResultImpl(Ydb::ClickhouseInternal::GetShardLocationsResult&& result) {
-        for (const auto& ti : result.tablets()) {
-            ShardLocations[ti.tablet_id()] = { ti.host(), ti.port() };
-        }
-    }
-
-    THashMap<ui64, std::pair<TString, ui16>> ShardLocations;
-};
-
-TGetShardLocationsResult::TGetShardLocationsResult(TResultImpl* impl, TStatus&& status)
-    : TStatus(std::move(status))
-    , ResultImpl(impl)
-{}
-
-TGetShardLocationsResult::TGetShardLocationsResult(TGetShardLocationsResult&& other)
-    : TStatus(std::move(other))
-    , ResultImpl(std::move(other.ResultImpl))
-{}
-
-TGetShardLocationsResult& TGetShardLocationsResult::operator = (TGetShardLocationsResult&& other) {
-    (TStatus&)*this = std::move(other);
-    ResultImpl = std::move(other.ResultImpl);
-    return *this;
-}
-
-TGetShardLocationsResult::~TGetShardLocationsResult() {
-}
-
-
-std::pair<TString, ui16> TGetShardLocationsResult::GetLocation(ui64 tabletId) const {
-    const auto* info = ResultImpl->ShardLocations.FindPtr(tabletId);
-    return info ? *info : std::pair<TString, ui16>();
-}
-
-class TDescribeTableResult::TResultImpl {
-public:
-    TResultImpl(Ydb::ClickhouseInternal::DescribeTableResult&& result)
-        : Result(std::move(result))
-    {}
-
-    Ydb::ClickhouseInternal::DescribeTableResult Result;
-};
-
-
-TDescribeTableResult::TDescribeTableResult(TResultImpl* impl, TStatus&& status)
-    : TStatus(std::move(status))
-    , ResultImpl(impl)
-{}
-
-TDescribeTableResult::TDescribeTableResult(TDescribeTableResult&& other)
-    : TStatus(std::move(other))
-    , ResultImpl(std::move(other.ResultImpl))
-{}
-
-TDescribeTableResult& TDescribeTableResult::operator = (TDescribeTableResult&& other) {
-    (TStatus&)*this = std::move(other);
-    ResultImpl = std::move(other.ResultImpl);
-    return *this;
-}
-
-TDescribeTableResult::~TDescribeTableResult() {
-}
-
-const Ydb::ClickhouseInternal::DescribeTableResult& TDescribeTableResult::GetDescription() const {
-    return ResultImpl->Result;
-}
-
+} 
+ 
+bool IsRetriable(EStatus status) { 
+    switch (status) { 
+    case EStatus::BAD_REQUEST: 
+    case EStatus::SCHEME_ERROR: 
+    case EStatus::UNAUTHORIZED: 
+    case EStatus::NOT_FOUND: 
+        return false; 
+    default: 
+        return true; 
+    } 
+} 
+ 
+void TScanIterator::WaitResult() { 
+    while (true) { 
+        TScanResult res = NextResult.ExtractValueSync(); 
+        if (res.GetStatus() == EStatus::SUCCESS) { 
+            size_t bc = res.GetBuffersCount(); 
+ 
+            for (size_t i = 0; i < bc; ++i) { 
+                TString block = res.GetBuffer(i); 
+                if (block.size() > 0) 
+                    Blocks.push_back(block); 
+            } 
+ 
+            RequestsDone = res.IsEos(); 
+            std::tie(LastReadKey, LastReadKeyInclusive) = res.GetLastKey(); 
+ 
+            if (!EndKey.empty()) { 
+                RequestsDone = RangeFinished(LastReadKey, EndKey, KeyColumnTypes); 
+            } 
+ 
+            // Reset backoffs after a successful attempt 
+            Retried = 0; 
+ 
+            return; 
+        } 
+ 
+        if (!IsRetriable(res.GetStatus()) || Retried > MaxRetries) { 
+            ythrow yexception() << res.GetStatus() << ": " << res.GetIssues().ToString(); 
+        } 
+ 
+        TDuration delay = TDuration::MilliSeconds(50 * (1 << Retried)); 
+        Sleep(Min(TDuration::Seconds(3), delay)); 
+        ++Retried; 
+ 
+        MakeRequest(); 
+    } 
+} 
+ 
+ 
+/////////////////////////////////////////////////////////////////////////// 
+class TGetShardLocationsResult::TResultImpl { 
+public: 
+    TResultImpl(Ydb::ClickhouseInternal::GetShardLocationsResult&& result) { 
+        for (const auto& ti : result.tablets()) { 
+            ShardLocations[ti.tablet_id()] = { ti.host(), ti.port() }; 
+        } 
+    } 
+ 
+    THashMap<ui64, std::pair<TString, ui16>> ShardLocations; 
+}; 
+ 
+TGetShardLocationsResult::TGetShardLocationsResult(TResultImpl* impl, TStatus&& status) 
+    : TStatus(std::move(status)) 
+    , ResultImpl(impl) 
+{} 
+ 
+TGetShardLocationsResult::TGetShardLocationsResult(TGetShardLocationsResult&& other) 
+    : TStatus(std::move(other)) 
+    , ResultImpl(std::move(other.ResultImpl)) 
+{} 
+ 
+TGetShardLocationsResult& TGetShardLocationsResult::operator = (TGetShardLocationsResult&& other) { 
+    (TStatus&)*this = std::move(other); 
+    ResultImpl = std::move(other.ResultImpl); 
+    return *this; 
+} 
+ 
+TGetShardLocationsResult::~TGetShardLocationsResult() { 
+} 
+ 
+ 
+std::pair<TString, ui16> TGetShardLocationsResult::GetLocation(ui64 tabletId) const { 
+    const auto* info = ResultImpl->ShardLocations.FindPtr(tabletId); 
+    return info ? *info : std::pair<TString, ui16>(); 
+} 
+ 
+class TDescribeTableResult::TResultImpl { 
+public: 
+    TResultImpl(Ydb::ClickhouseInternal::DescribeTableResult&& result) 
+        : Result(std::move(result)) 
+    {} 
+ 
+    Ydb::ClickhouseInternal::DescribeTableResult Result; 
+}; 
+ 
+ 
+TDescribeTableResult::TDescribeTableResult(TResultImpl* impl, TStatus&& status) 
+    : TStatus(std::move(status)) 
+    , ResultImpl(impl) 
+{} 
+ 
+TDescribeTableResult::TDescribeTableResult(TDescribeTableResult&& other) 
+    : TStatus(std::move(other)) 
+    , ResultImpl(std::move(other.ResultImpl)) 
+{} 
+ 
+TDescribeTableResult& TDescribeTableResult::operator = (TDescribeTableResult&& other) { 
+    (TStatus&)*this = std::move(other); 
+    ResultImpl = std::move(other.ResultImpl); 
+    return *this; 
+} 
+ 
+TDescribeTableResult::~TDescribeTableResult() { 
+} 
+ 
+const Ydb::ClickhouseInternal::DescribeTableResult& TDescribeTableResult::GetDescription() const { 
+    return ResultImpl->Result; 
+} 
+ 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMetaClient::TImpl : public TClientImplCommon<TMetaClient::TImpl> {
+class TMetaClient::TImpl : public TClientImplCommon<TMetaClient::TImpl> { 
     friend class TSnapshotHandleLifecycle;
 
-public:
-    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings)
+public: 
+    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TCommonClientSettings& settings) 
         : TClientImplCommon(std::move(connections), settings) {}
-
-    TAsyncGetShardLocationsResult GetShardLocations(
-            const TVector<ui64>& tabletIds,
-            const TGetShardLocationsSettings& settings)
-    {
-        auto request = MakeOperationRequest<Ydb::ClickhouseInternal::GetShardLocationsRequest>(settings);
-        for (ui64 id : tabletIds) {
-            request.add_tablet_ids(id);
-        }
-
-        auto promise = NThreading::NewPromise<TGetShardLocationsResult>();
-
+ 
+    TAsyncGetShardLocationsResult GetShardLocations( 
+            const TVector<ui64>& tabletIds, 
+            const TGetShardLocationsSettings& settings) 
+    { 
+        auto request = MakeOperationRequest<Ydb::ClickhouseInternal::GetShardLocationsRequest>(settings); 
+        for (ui64 id : tabletIds) { 
+            request.add_tablet_ids(id); 
+        } 
+ 
+        auto promise = NThreading::NewPromise<TGetShardLocationsResult>(); 
+ 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::ClickhouseInternal::GetShardLocationsResult result;
-                if (any) {
-                    any->UnpackTo(&result);
-                }
-
-                TGetShardLocationsResult val(new TGetShardLocationsResult::TResultImpl(std::move(result)),
+                Ydb::ClickhouseInternal::GetShardLocationsResult result; 
+                if (any) { 
+                    any->UnpackTo(&result); 
+                } 
+ 
+                TGetShardLocationsResult val(new TGetShardLocationsResult::TResultImpl(std::move(result)), 
                    TStatus(std::move(status)));
-
-                promise.SetValue(std::move(val));
-            };
-
-        Connections_->RunDeferred<Ydb::ClickhouseInternal::V1::ClickhouseInternalService, Ydb::ClickhouseInternal::GetShardLocationsRequest, Ydb::ClickhouseInternal::GetShardLocationsResponse>(
-                    std::move(request),
-                    extractor,
-                    &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncGetShardLocations,
-                    DbDriverState_,
+ 
+                promise.SetValue(std::move(val)); 
+            }; 
+ 
+        Connections_->RunDeferred<Ydb::ClickhouseInternal::V1::ClickhouseInternalService, Ydb::ClickhouseInternal::GetShardLocationsRequest, Ydb::ClickhouseInternal::GetShardLocationsResponse>( 
+                    std::move(request), 
+                    extractor, 
+                    &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncGetShardLocations, 
+                    DbDriverState_, 
                     INITIAL_DEFERRED_CALL_DELAY,
                     TRpcRequestSettings::Make(settings),
-                    settings.ClientTimeout_);
-
-        return promise.GetFuture();
-    }
-
-    TAsyncDescribeTableResult GetTableDescription(
-            const TString& path,
-            bool includePartitionsInfo,
-            const TGetShardLocationsSettings& settings)
-    {
-        auto request = MakeOperationRequest<Ydb::ClickhouseInternal::DescribeTableRequest>(settings);
-        request.set_path(path);
-        request.set_include_partitions_info(includePartitionsInfo);
-
-        auto promise = NThreading::NewPromise<TDescribeTableResult>();
-
+                    settings.ClientTimeout_); 
+ 
+        return promise.GetFuture(); 
+    } 
+ 
+    TAsyncDescribeTableResult GetTableDescription( 
+            const TString& path, 
+            bool includePartitionsInfo, 
+            const TGetShardLocationsSettings& settings) 
+    { 
+        auto request = MakeOperationRequest<Ydb::ClickhouseInternal::DescribeTableRequest>(settings); 
+        request.set_path(path); 
+        request.set_include_partitions_info(includePartitionsInfo); 
+ 
+        auto promise = NThreading::NewPromise<TDescribeTableResult>(); 
+ 
         auto extractor = [promise]
-            (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Ydb::ClickhouseInternal::DescribeTableResult result;
-                if (any) {
-                    any->UnpackTo(&result);
-                }
-
-                TDescribeTableResult val(new TDescribeTableResult::TResultImpl(std::move(result)),
+            (google::protobuf::Any* any, TPlainStatus status) mutable { 
+                Ydb::ClickhouseInternal::DescribeTableResult result; 
+                if (any) { 
+                    any->UnpackTo(&result); 
+                } 
+ 
+                TDescribeTableResult val(new TDescribeTableResult::TResultImpl(std::move(result)), 
                    TStatus(std::move(status)));
-
-                promise.SetValue(std::move(val));
-            };
-
-        Connections_->RunDeferred<Ydb::ClickhouseInternal::V1::ClickhouseInternalService, Ydb::ClickhouseInternal::DescribeTableRequest, Ydb::ClickhouseInternal::DescribeTableResponse>(
-                    std::move(request),
-                    extractor,
-                    &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncDescribeTable,
-                    DbDriverState_,
-                    INITIAL_DEFERRED_CALL_DELAY,
+ 
+                promise.SetValue(std::move(val)); 
+            }; 
+ 
+        Connections_->RunDeferred<Ydb::ClickhouseInternal::V1::ClickhouseInternalService, Ydb::ClickhouseInternal::DescribeTableRequest, Ydb::ClickhouseInternal::DescribeTableResponse>( 
+                    std::move(request), 
+                    extractor, 
+                    &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::Stub::AsyncDescribeTable, 
+                    DbDriverState_, 
+                    INITIAL_DEFERRED_CALL_DELAY, 
                     TRpcRequestSettings::Make(settings),
-                    settings.ClientTimeout_);
-
-        return promise.GetFuture();
-    }
+                    settings.ClientTimeout_); 
+ 
+        return promise.GetFuture(); 
+    } 
 
     template<class TProtoResult, class TResultWrapper>
     auto MakeResultExtractor(NThreading::TPromise<TResultWrapper> promise) {
@@ -544,10 +544,10 @@ private:
     TGRpcConnectionsImpl* Connections() const {
         return Connections_.get();
     }
-};
-
+}; 
+ 
 ////////////////////////////////////////////////////////////////////////////////
-
+ 
 class TSnapshotHandleLifecycle : public TThrRefBase {
     friend class TSnapshotHandle::TImpl;
 
@@ -860,25 +860,25 @@ bool TSnapshotHandle::IsAlive() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TMetaClient::TMetaClient(const TDriver& driver, const TCommonClientSettings& settings)
-    : Impl_(new TImpl(CreateInternalInterface(driver), settings))
-{}
-
-TAsyncGetShardLocationsResult TMetaClient::GetShardLocations(
-        const TVector<ui64> tabletIds,
-        const TGetShardLocationsSettings& settings)
-{
-    return Impl_->GetShardLocations(tabletIds, settings);
-}
-
-TAsyncDescribeTableResult TMetaClient::GetTableDescription(
-        const TString& path,
-        bool includePartitionsInfo,
-        const TGetShardLocationsSettings& settings)
-{
-    return Impl_->GetTableDescription(path, includePartitionsInfo, settings);
-}
-
+TMetaClient::TMetaClient(const TDriver& driver, const TCommonClientSettings& settings) 
+    : Impl_(new TImpl(CreateInternalInterface(driver), settings)) 
+{} 
+ 
+TAsyncGetShardLocationsResult TMetaClient::GetShardLocations( 
+        const TVector<ui64> tabletIds, 
+        const TGetShardLocationsSettings& settings) 
+{ 
+    return Impl_->GetShardLocations(tabletIds, settings); 
+} 
+ 
+TAsyncDescribeTableResult TMetaClient::GetTableDescription( 
+        const TString& path, 
+        bool includePartitionsInfo, 
+        const TGetShardLocationsSettings& settings) 
+{ 
+    return Impl_->GetTableDescription(path, includePartitionsInfo, settings); 
+} 
+ 
 TAsyncCreateSnapshotResult TMetaClient::CreateSnapshot(
         const TVector<TString>& tables,
         const TSnapshotSettings& settings)
@@ -909,5 +909,5 @@ TAsyncCreateSnapshotHandleResult TMetaClient::CreateSnapshotHandle(
     return MakeIntrusive<TSnapshotHandleLifecycle>(Impl_, tables, settings)->Start();
 }
 
-} // namespace NClickhouseInternal
+} // namespace NClickhouseInternal 
 } // namespace NYdb

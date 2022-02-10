@@ -694,11 +694,11 @@ namespace {
             resultLists.emplace_back(std::move(list));
             totalSize += size;
             totalItems += items;
-
-            if (bytesLimit && bytesLimit < totalSize) {
+ 
+            if (bytesLimit && bytesLimit < totalSize) { 
                 resultTruncated = true;
-                break;
-            }
+                break; 
+            } 
 
             if (truncated) {
                 if (!bytesLimit) {

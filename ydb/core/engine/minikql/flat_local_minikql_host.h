@@ -13,7 +13,7 @@ public:
             TEngineHostCounters& counters,
             const TEngineHostSettings& settings,
             const TMiniKQLFactory* factory)
-        : TEngineHost(db, counters, settings)
+        : TEngineHost(db, counters, settings) 
         , Factory(factory)
     {}
 

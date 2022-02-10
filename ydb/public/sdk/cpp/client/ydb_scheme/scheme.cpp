@@ -50,7 +50,7 @@ public:
         request.set_path(path);
 
         return RunSimple<Ydb::Scheme::V1::SchemeService, MakeDirectoryRequest, MakeDirectoryResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncMakeDirectory,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
@@ -61,7 +61,7 @@ public:
         request.set_path(path);
 
         return RunSimple<Ydb::Scheme::V1::SchemeService, RemoveDirectoryRequest, RemoveDirectoryResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncRemoveDirectory,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
@@ -93,7 +93,7 @@ public:
             };
 
         Connections_->RunDeferred<Ydb::Scheme::V1::SchemeService, DescribePathRequest, DescribePathResponse>(
-            std::move(request),
+            std::move(request), 
             extractor,
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncDescribePath,
             DbDriverState_,
@@ -136,7 +136,7 @@ public:
             };
 
         Connections_->RunDeferred<Ydb::Scheme::V1::SchemeService, ListDirectoryRequest, ListDirectoryResponse>(
-            std::move(request),
+            std::move(request), 
             extractor,
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncListDirectory,
             DbDriverState_,
@@ -185,7 +185,7 @@ public:
         }
 
         return RunSimple<Ydb::Scheme::V1::SchemeService, ModifyPermissionsRequest, ModifyPermissionsResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Scheme::V1::SchemeService::Stub::AsyncModifyPermissions,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);

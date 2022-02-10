@@ -59,7 +59,7 @@ struct TKikimrEvents : TEvents {
         ES_NODE_WHITEBOARD,
         ES_FLAT_TX_SCHEMESHARD, // 4137
         ES_PQ,
-        ES_YQL_KIKIMR_PROXY,
+        ES_YQL_KIKIMR_PROXY, 
         ES_PQ_META_CACHE,
         ES_DEPRECATED_4141,
         ES_PQ_L2_CACHE, //4142
@@ -97,7 +97,7 @@ struct TKikimrEvents : TEvents {
         ES_CONFIGS_DISPATCHER,
         ES_IAM_SERVICE,
         ES_FOLDER_SERVICE,
-        ES_GRPC_MON,
+        ES_GRPC_MON, 
         ES_QUOTA,
         ES_COORDINATED_QUOTA,
         ES_ACCESS_SERVICE,
@@ -127,7 +127,7 @@ struct TKikimrEvents : TEvents {
         ES_CROSSREF,
         ES_SCHEME_BOARD_MON,
         ES_YQL_ANALYTICS_PROXY = NYq::TEventIds::ES_YQL_ANALYTICS_PROXY,
-        ES_BLOB_CACHE,
+        ES_BLOB_CACHE, 
         ES_LONG_TX_SERVICE,
         ES_TEST_SHARD,
         ES_DATASTREAMS_PROXY,

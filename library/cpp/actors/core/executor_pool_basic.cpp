@@ -21,8 +21,8 @@ namespace NActors {
         TAffinity* affinity,
         TDuration timePerMailbox,
         ui32 eventsPerMailbox,
-        int realtimePriority,
-        ui32 maxActivityType)
+        int realtimePriority, 
+        ui32 maxActivityType) 
         : TExecutorPoolBase(poolId, threads, affinity, maxActivityType)
         , SpinThreshold(spinThreshold)
         , SpinThresholdCycles(spinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
@@ -195,7 +195,7 @@ namespace NActors {
                 return activation;
             }
             SpinLockPause();
-        }
+        } 
 
         // stopping, die!
         return 0;
@@ -245,8 +245,8 @@ namespace NActors {
         for (size_t i = 0; i < PoolThreads; ++i) {
             Threads[i].Thread->GetCurrentStats(statsCopy[i + 1]);
         }
-    }
-
+    } 
+ 
     void TBasicExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) {
         TAffinityGuard affinityGuard(Affinity());
 

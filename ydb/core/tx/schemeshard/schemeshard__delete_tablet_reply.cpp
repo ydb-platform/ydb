@@ -15,9 +15,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
         : TRwTxBase(self)
         , Ev(ev)
         , ShardIdx(self->MakeLocalId(TLocalShardIdx(Ev->Get()->Record.GetTxId_Deprecated()))) // We use TxId field as a cookie where we store shrdIdx
-        , TabletId(InvalidTabletId)
-        , Status(Ev->Get()->Record.GetStatus())
-        , HiveId(Ev->Get()->Record.GetOrigin())
+        , TabletId(InvalidTabletId) 
+        , Status(Ev->Get()->Record.GetStatus()) 
+        , HiveId(Ev->Get()->Record.GetOrigin()) 
     {
         if (Ev->Get()->Record.HasShardOwnerId()) {
             Y_VERIFY(Ev->Get()->Record.ShardLocalIdxSize() == 1);
@@ -32,7 +32,7 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
     TTxType GetTxType() const override { return TXTYPE_FREE_TABLET_RESULT; }
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
-        if (Status != NKikimrProto::OK) {
+        if (Status != NKikimrProto::OK) { 
             if (Status == NKikimrProto::INVALID_OWNER) {
                 LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                            "Got DeleteTabletReply with Forward response from Hive " << HiveId << " to Hive " << ForwardToHiveId << " shardIdx " << ShardIdx);
@@ -40,13 +40,13 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
                 Self->ShardDeleter.RedirectDeleteRequest(HiveId, ForwardToHiveId, ShardIdx, Self->ShardInfos, ctx);
                 return;
             }
-            // WTF could happen that hive failed to delete the freaking tablet?
+            // WTF could happen that hive failed to delete the freaking tablet? 
             LOG_ALERT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Got DeleteTabletReply from Hive " << HiveId << " shardIdx " << ShardIdx << " status " << Status);
             return;
         }
 
-        // "Forget" the deleted shard
+        // "Forget" the deleted shard 
         if (Self->ShardInfos.contains(ShardIdx)) {
             auto tabletType = Self->ShardInfos[ShardIdx].TabletType;
             switch (tabletType) {
@@ -136,9 +136,9 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             }
 
             TabletId = shardInfo.TabletID;
-            Self->TabletIdToShardIdx[TabletId] = ShardIdx;
+            Self->TabletIdToShardIdx[TabletId] = ShardIdx; 
 
-            Self->ShardInfos.erase(ShardIdx);
+            Self->ShardInfos.erase(ShardIdx); 
 
             Self->DecrementPathDbRefCount(pathId, "shard deleted");
 
@@ -154,24 +154,24 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             NIceDb::TNiceDb db(txc.DB);
             Self->PersistUnknownShardDeleted(db, ShardIdx);
         }
-    }
+    } 
 
-    void DoComplete(const TActorContext &ctx) override {
-        if (Status == NKikimrProto::OK) {
+    void DoComplete(const TActorContext &ctx) override { 
+        if (Status == NKikimrProto::OK) { 
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                         "Deleted shardIdx " << ShardIdx);
 
-            Self->ShardDeleter.ShardDeleted(ShardIdx, ctx);
-
-            if (TabletId != InvalidTabletId) {
+            Self->ShardDeleter.ShardDeleted(ShardIdx, ctx); 
+ 
+            if (TabletId != InvalidTabletId) { 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             "Close pipe to deleted shardIdx " << ShardIdx << " tabletId " << TabletId);
                 Self->PipeClientCache->ForceClose(ctx, ui64(TabletId));
-            }
+            } 
         }
     }
 
-private:
+private: 
     TShardIdx ShardIdx;
     TTabletId TabletId;
     NKikimrProto::EReplyStatus Status;

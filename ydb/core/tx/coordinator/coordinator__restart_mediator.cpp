@@ -31,12 +31,12 @@ struct TTxCoordinator::TTxRestartMediatorQueue : public TTransactionBase<TTxCoor
         for (const auto& it : pushToAffectedBuffer) {
             TTransaction& transaction = Self->Transactions[it.first];
             THashSet<TTabletId>& unconfirmedAffectedSet = transaction.UnconfirmedAffectedSet[MediatorId];
-            Y_VERIFY(unconfirmedAffectedSet.size() == it.second.size(),
-                     "Incosistent affected set in mem in DB for txId %" PRIu64, it.first);
+            Y_VERIFY(unconfirmedAffectedSet.size() == it.second.size(), 
+                     "Incosistent affected set in mem in DB for txId %" PRIu64, it.first); 
             for (const TTabletId affectedTabletId : it.second) {
                 Y_VERIFY(unconfirmedAffectedSet.contains(affectedTabletId),
-                         "Incosistent affected set in mem in DB for txId %" PRIu64 " missing tabletId %" PRIu64,
-                         it.first, affectedTabletId);
+                         "Incosistent affected set in mem in DB for txId %" PRIu64 " missing tabletId %" PRIu64, 
+                         it.first, affectedTabletId); 
             }
         }
 
@@ -74,7 +74,7 @@ bool TTxCoordinator::RestoreMediatorInfo(TTabletId mediatorId, TVector<TAutoPtr<
     if (!rowset.IsReady())
         return false;
 
-    // Later we will need this to be sorted by stepId
+    // Later we will need this to be sorted by stepId 
     TMap<TStepId, TAutoPtr<TMediatorStep>> mediatorSteps;
 
     while (!rowset.EndOfSet()) {

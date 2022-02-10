@@ -73,8 +73,8 @@ namespace NKikimr {
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_LOAD_PDISK_WRITE;
-            }
-
+            } 
+ 
             TVDiskLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TVDiskLoadStart& cmd,
                     const NActors::TActorId& parent, ui64 tag)
                 : ParentActorId(parent)

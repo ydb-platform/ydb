@@ -23,7 +23,7 @@ class RecordBatch;
 namespace NKikimr {
 
 namespace NDataShard {
-    using TShardState = NKikimrTxDataShard::EDatashardState;
+    using TShardState = NKikimrTxDataShard::EDatashardState; 
 
     struct TTxFlags {
         enum Flags : ui64 {
@@ -125,39 +125,39 @@ namespace NDataShard {
                 | BlockingImmediateOps | BlockingImmediateWrites,
         };
     };
-
+ 
     // Old datashard uses Uint32 column type for flags in local database.
     static_assert(TTxFlags::PreservedPrivateFlagsMask <= Max<ui64>());
     static_assert(TTxFlags::PublicFlagsMask <= Max<ui32>());
 
-    // NOTE: this switch should be modified only in tests !!!
-    extern bool gAllowLogBatchingDefaultValue;
-    extern TDuration gDbStatsReportInterval;
-    extern ui64 gDbStatsDataSizeResolution;
-    extern ui64 gDbStatsRowCountResolution;
-
-    // This SeqNo is used to discard outdated schema Tx requests on datashards.
-    // In case of tablet restart on network disconnects SS can resend same Propose for the same schema Tx.
-    // Because of this a DS might receive this Propose multiple times. In particular it might get Propose
-    // for a Tx that has already been completed and erased from the queue. So the duplicate Proposal might be
-    // treated as new. In order to avoid this the SS includes this SeqNo in each Proposal.
-    // The SeqNo consists of SS tablet Generation (it's incremented on each SS restart) and Round within this
-    // generation. The logic on DS is the following. When sending a Propose SS assings Round to it and increments
-    // it's in-mem Round counter. If SS retires sending the same Propose it uses the previously assigned Round value.
-    // This assigned Round value is not persisted on SS so in case of SS restart retry will be done with incremented
-    // Generation and newly assigned Round. DS has LastSeenSeqNo persisted in it's local DB.
-    // If it receives Propose with Generation < LastSeen.Generation it means that SS has restarted and it's
-    // going to resend the Propose. If Generation == LastSeen.Generation && Round < LastSeen.Round then this is
-    // an old Tx that should have already been acked (becuase SS never start new schema Tx before the previous one was
-    // finised)
-    struct TSchemeOpSeqNo : public TMessageSeqNo {
-        explicit TSchemeOpSeqNo(ui64 gen = 0, ui64 round = 0)
-            : TMessageSeqNo(gen, round)
-        {}
-
-        explicit TSchemeOpSeqNo(const NKikimrTxDataShard::TSchemeOpSeqNo& pb)
-            : TMessageSeqNo(pb.GetGeneration(), pb.GetRound())
-        {}
+    // NOTE: this switch should be modified only in tests !!! 
+    extern bool gAllowLogBatchingDefaultValue; 
+    extern TDuration gDbStatsReportInterval; 
+    extern ui64 gDbStatsDataSizeResolution; 
+    extern ui64 gDbStatsRowCountResolution; 
+ 
+    // This SeqNo is used to discard outdated schema Tx requests on datashards. 
+    // In case of tablet restart on network disconnects SS can resend same Propose for the same schema Tx. 
+    // Because of this a DS might receive this Propose multiple times. In particular it might get Propose 
+    // for a Tx that has already been completed and erased from the queue. So the duplicate Proposal might be 
+    // treated as new. In order to avoid this the SS includes this SeqNo in each Proposal. 
+    // The SeqNo consists of SS tablet Generation (it's incremented on each SS restart) and Round within this 
+    // generation. The logic on DS is the following. When sending a Propose SS assings Round to it and increments 
+    // it's in-mem Round counter. If SS retires sending the same Propose it uses the previously assigned Round value. 
+    // This assigned Round value is not persisted on SS so in case of SS restart retry will be done with incremented 
+    // Generation and newly assigned Round. DS has LastSeenSeqNo persisted in it's local DB. 
+    // If it receives Propose with Generation < LastSeen.Generation it means that SS has restarted and it's 
+    // going to resend the Propose. If Generation == LastSeen.Generation && Round < LastSeen.Round then this is 
+    // an old Tx that should have already been acked (becuase SS never start new schema Tx before the previous one was 
+    // finised) 
+    struct TSchemeOpSeqNo : public TMessageSeqNo { 
+        explicit TSchemeOpSeqNo(ui64 gen = 0, ui64 round = 0) 
+            : TMessageSeqNo(gen, round) 
+        {} 
+ 
+        explicit TSchemeOpSeqNo(const NKikimrTxDataShard::TSchemeOpSeqNo& pb) 
+            : TMessageSeqNo(pb.GetGeneration(), pb.GetRound()) 
+        {} 
 
         TSchemeOpSeqNo& operator++() {
             if (0 == ++Round) {
@@ -165,8 +165,8 @@ namespace NDataShard {
             }
             return *this;
         }
-    };
-
+    }; 
+ 
 }
 
 // legacy
@@ -196,7 +196,7 @@ struct TEvDataShard {
         EvReadOperationHistogram,
         EvUpdateConfig,
         EvSchemaChanged,
-        EvStateChanged,
+        EvStateChanged, 
         EvCancelBackup,
         EvMigrateSchemeShardRequest,
         EvMigrateSchemeShardResponse,
@@ -207,33 +207,33 @@ struct TEvDataShard {
         EvReadOperationHistogramResult,
         EvUpdateConfigResult,
         EvSchemaChangedResult,
-        EvStateChangedResult,
+        EvStateChangedResult, 
 
-        EvReturnBorrowedPart = 6 * 512,
-        EvReturnBorrowedPartAck,
-
-        EvInitSplitMergeDestination = EvProposeTransaction + 7*512,
-        EvInitSplitMergeDestinationAck,
-        EvSplit,
-        EvSplitAck,
-        EvSplitTransferSnapshot,
-        EvSplitTransferSnapshotAck,
-        EvSplitPartitioningChanged,
-        EvSplitPartitioningChangedAck,
-
-        EvGetTableStats,
-        EvGetTableStatsResult,
-        EvPeriodicTableStats,
-
-        EvS3ListingRequest,
-        EvS3ListingResponse,
-
-        EvUploadRowsRequest,
-        EvUploadRowsResponse,
-
-        EvReadColumnsRequest,
-        EvReadColumnsResponse,
-
+        EvReturnBorrowedPart = 6 * 512, 
+        EvReturnBorrowedPartAck, 
+ 
+        EvInitSplitMergeDestination = EvProposeTransaction + 7*512, 
+        EvInitSplitMergeDestinationAck, 
+        EvSplit, 
+        EvSplitAck, 
+        EvSplitTransferSnapshot, 
+        EvSplitTransferSnapshotAck, 
+        EvSplitPartitioningChanged, 
+        EvSplitPartitioningChangedAck, 
+ 
+        EvGetTableStats, 
+        EvGetTableStatsResult, 
+        EvPeriodicTableStats, 
+ 
+        EvS3ListingRequest, 
+        EvS3ListingResponse, 
+ 
+        EvUploadRowsRequest, 
+        EvUploadRowsResponse, 
+ 
+        EvReadColumnsRequest, 
+        EvReadColumnsResponse, 
+ 
         EvGetInfoRequest,
         EvGetInfoResponse,
         EvListOperationsRequest,
@@ -372,33 +372,33 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvStateChanged : public TEventPB<TEvStateChanged, NKikimrTxDataShard::TEvStateChanged,
-                                        TEvDataShard::EvStateChanged> {
-        TEvStateChanged()
-        {}
-
+    struct TEvStateChanged : public TEventPB<TEvStateChanged, NKikimrTxDataShard::TEvStateChanged, 
+                                        TEvDataShard::EvStateChanged> { 
+        TEvStateChanged() 
+        {} 
+ 
         TEvStateChanged(const TActorId& source, ui64 tabletId, ui32 state) {
             ActorIdToProto(source, Record.MutableSource());
-            Record.SetTabletId(tabletId);
-            Record.SetState(state);
-        }
-
+            Record.SetTabletId(tabletId); 
+            Record.SetState(state); 
+        } 
+ 
         TActorId GetSource() const {
             return ActorIdFromProto(Record.GetSource());
-        }
-    };
-
-    struct TEvStateChangedResult : public TEventPB<TEvStateChangedResult, NKikimrTxDataShard::TEvStateChangedResult,
-                                        TEvDataShard::EvStateChangedResult> {
-        TEvStateChangedResult()
-        {}
-
-        TEvStateChangedResult(ui64 tabletId, ui32 state) {
-            Record.SetTabletId(tabletId);
-            Record.SetState(state);
-        }
-    };
-
+        } 
+    }; 
+ 
+    struct TEvStateChangedResult : public TEventPB<TEvStateChangedResult, NKikimrTxDataShard::TEvStateChangedResult, 
+                                        TEvDataShard::EvStateChangedResult> { 
+        TEvStateChangedResult() 
+        {} 
+ 
+        TEvStateChangedResult(ui64 tabletId, ui32 state) { 
+            Record.SetTabletId(tabletId); 
+            Record.SetState(state); 
+        } 
+    }; 
+ 
     struct TEvProposeTransaction : public TEventPB<TEvProposeTransaction, NKikimrTxDataShard::TEvProposeTransaction,
         TEvDataShard::EvProposeTransaction> {
         TEvProposeTransaction()
@@ -638,7 +638,7 @@ struct TEvDataShard {
         bool ForceOnline = false;
         bool ForceDirty = false;
     };
-
+ 
     struct TEvProposeTransactionRestart : public TEventPB<TEvProposeTransactionRestart, NKikimrTxDataShard::TEvProposeTransactionRestart, TEvDataShard::EvProposeTransactionRestart> {
         TEvProposeTransactionRestart() = default;
         TEvProposeTransactionRestart(ui64 tabletId, ui64 txId) {
@@ -664,103 +664,103 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvReturnBorrowedPart : public TEventPB<TEvReturnBorrowedPart, NKikimrTxDataShard::TEvReturnBorrowedPart, TEvDataShard::EvReturnBorrowedPart> {
-        TEvReturnBorrowedPart() = default;
+    struct TEvReturnBorrowedPart : public TEventPB<TEvReturnBorrowedPart, NKikimrTxDataShard::TEvReturnBorrowedPart, TEvDataShard::EvReturnBorrowedPart> { 
+        TEvReturnBorrowedPart() = default; 
         TEvReturnBorrowedPart(ui64 tabletId, const TVector<TLogoBlobID>& partMetaVec) {
-            Record.SetFromTabletId(tabletId);
-            for (const auto& partMeta : partMetaVec) {
-                LogoBlobIDFromLogoBlobID(partMeta, Record.AddPartMetadata());
-            }
-        }
-    };
-
-    struct TEvReturnBorrowedPartAck : public TEventPB<TEvReturnBorrowedPartAck, NKikimrTxDataShard::TEvReturnBorrowedPartAck, TEvDataShard::EvReturnBorrowedPartAck> {
-        TEvReturnBorrowedPartAck() = default;
+            Record.SetFromTabletId(tabletId); 
+            for (const auto& partMeta : partMetaVec) { 
+                LogoBlobIDFromLogoBlobID(partMeta, Record.AddPartMetadata()); 
+            } 
+        } 
+    }; 
+ 
+    struct TEvReturnBorrowedPartAck : public TEventPB<TEvReturnBorrowedPartAck, NKikimrTxDataShard::TEvReturnBorrowedPartAck, TEvDataShard::EvReturnBorrowedPartAck> { 
+        TEvReturnBorrowedPartAck() = default; 
         explicit TEvReturnBorrowedPartAck(const TVector<TLogoBlobID>& partMetaVec) {
-            for (const auto& partMeta : partMetaVec) {
-                LogoBlobIDFromLogoBlobID(partMeta, Record.AddPartMetadata());
-            }
-        }
-    };
-
-
-    struct TEvInitSplitMergeDestination : public TEventPB<TEvInitSplitMergeDestination,
-                                                        NKikimrTxDataShard::TEvInitSplitMergeDestination,
-                                                        TEvDataShard::EvInitSplitMergeDestination> {
-        TEvInitSplitMergeDestination() = default;
+            for (const auto& partMeta : partMetaVec) { 
+                LogoBlobIDFromLogoBlobID(partMeta, Record.AddPartMetadata()); 
+            } 
+        } 
+    }; 
+ 
+ 
+    struct TEvInitSplitMergeDestination : public TEventPB<TEvInitSplitMergeDestination, 
+                                                        NKikimrTxDataShard::TEvInitSplitMergeDestination, 
+                                                        TEvDataShard::EvInitSplitMergeDestination> { 
+        TEvInitSplitMergeDestination() = default; 
         TEvInitSplitMergeDestination(ui64 opId, ui64 schemeshardTabletId, ui64 subDomainPathId,
                                      const NKikimrTxDataShard::TSplitMergeDescription &splitDesc,
                                      const NKikimrSubDomains::TProcessingParams &processingParams) {
-            Record.SetOperationCookie(opId);
-            Record.SetSchemeshardTabletId(schemeshardTabletId);
+            Record.SetOperationCookie(opId); 
+            Record.SetSchemeshardTabletId(schemeshardTabletId); 
             Record.SetSubDomainPathId(subDomainPathId);
             Record.MutableSplitDescription()->CopyFrom(splitDesc);
             Record.MutableProcessingParams()->CopyFrom(processingParams);
-        }
-    };
-
-    struct TEvInitSplitMergeDestinationAck : public TEventPB<TEvInitSplitMergeDestinationAck,
-                                                        NKikimrTxDataShard::TEvInitSplitMergeDestinationAck,
-                                                        TEvDataShard::EvInitSplitMergeDestinationAck> {
-        TEvInitSplitMergeDestinationAck() = default;
-        explicit TEvInitSplitMergeDestinationAck(ui64 opId, ui64 tabletId) {
-            Record.SetOperationCookie(opId);
-            Record.SetTabletId(tabletId);
-        }
-    };
-
-    struct TEvSplit : public TEventPB<TEvSplit, NKikimrTxDataShard::TEvSplit, TEvDataShard::EvSplit> {
-        TEvSplit() = default;
-        explicit TEvSplit(ui64 opId) {
-            Record.SetOperationCookie(opId);
-        }
-    };
-
-    struct TEvSplitAck : public TEventPB<TEvSplitAck, NKikimrTxDataShard::TEvSplitAck, TEvDataShard::EvSplitAck> {
-        TEvSplitAck() = default;
-        explicit TEvSplitAck(ui64 opId, ui64 tabletId) {
-            Record.SetOperationCookie(opId);
-            Record.SetTabletId(tabletId);
-        }
-    };
-
-    struct TEvSplitTransferSnapshot : public TEventPB<TEvSplitTransferSnapshot,
-                                                        NKikimrTxDataShard::TEvSplitTransferSnapshot,
-                                                        TEvDataShard::EvSplitTransferSnapshot> {
-        TEvSplitTransferSnapshot() = default;
-        explicit TEvSplitTransferSnapshot(ui64 opId) {
-            Record.SetOperationCookie(opId);
-        }
-    };
-
-    struct TEvSplitTransferSnapshotAck : public TEventPB<TEvSplitTransferSnapshotAck,
-                                                        NKikimrTxDataShard::TEvSplitTransferSnapshotAck,
-                                                        TEvDataShard::EvSplitTransferSnapshotAck> {
-        TEvSplitTransferSnapshotAck() = default;
-        explicit TEvSplitTransferSnapshotAck(ui64 opId, ui64 tabletId) {
-            Record.SetOperationCookie(opId);
-            Record.SetTabletId(tabletId);
-        }
-    };
-
-    struct TEvSplitPartitioningChanged : public TEventPB<TEvSplitPartitioningChanged,
-                                                        NKikimrTxDataShard::TEvSplitPartitioningChanged,
-                                                        TEvDataShard::EvSplitPartitioningChanged> {
-        TEvSplitPartitioningChanged() = default;
-        explicit TEvSplitPartitioningChanged(ui64 opId) {
-            Record.SetOperationCookie(opId);
-        }
-    };
-
-    struct TEvSplitPartitioningChangedAck : public TEventPB<TEvSplitPartitioningChangedAck,
-                                                        NKikimrTxDataShard::TEvSplitPartitioningChangedAck,
-                                                        TEvDataShard::EvSplitPartitioningChangedAck> {
-        TEvSplitPartitioningChangedAck() = default;
-        explicit TEvSplitPartitioningChangedAck(ui64 opId, ui64 tabletId) {
-            Record.SetOperationCookie(opId);
-            Record.SetTabletId(tabletId);
-        }
-    };
+        } 
+    }; 
+ 
+    struct TEvInitSplitMergeDestinationAck : public TEventPB<TEvInitSplitMergeDestinationAck, 
+                                                        NKikimrTxDataShard::TEvInitSplitMergeDestinationAck, 
+                                                        TEvDataShard::EvInitSplitMergeDestinationAck> { 
+        TEvInitSplitMergeDestinationAck() = default; 
+        explicit TEvInitSplitMergeDestinationAck(ui64 opId, ui64 tabletId) { 
+            Record.SetOperationCookie(opId); 
+            Record.SetTabletId(tabletId); 
+        } 
+    }; 
+ 
+    struct TEvSplit : public TEventPB<TEvSplit, NKikimrTxDataShard::TEvSplit, TEvDataShard::EvSplit> { 
+        TEvSplit() = default; 
+        explicit TEvSplit(ui64 opId) { 
+            Record.SetOperationCookie(opId); 
+        } 
+    }; 
+ 
+    struct TEvSplitAck : public TEventPB<TEvSplitAck, NKikimrTxDataShard::TEvSplitAck, TEvDataShard::EvSplitAck> { 
+        TEvSplitAck() = default; 
+        explicit TEvSplitAck(ui64 opId, ui64 tabletId) { 
+            Record.SetOperationCookie(opId); 
+            Record.SetTabletId(tabletId); 
+        } 
+    }; 
+ 
+    struct TEvSplitTransferSnapshot : public TEventPB<TEvSplitTransferSnapshot, 
+                                                        NKikimrTxDataShard::TEvSplitTransferSnapshot, 
+                                                        TEvDataShard::EvSplitTransferSnapshot> { 
+        TEvSplitTransferSnapshot() = default; 
+        explicit TEvSplitTransferSnapshot(ui64 opId) { 
+            Record.SetOperationCookie(opId); 
+        } 
+    }; 
+ 
+    struct TEvSplitTransferSnapshotAck : public TEventPB<TEvSplitTransferSnapshotAck, 
+                                                        NKikimrTxDataShard::TEvSplitTransferSnapshotAck, 
+                                                        TEvDataShard::EvSplitTransferSnapshotAck> { 
+        TEvSplitTransferSnapshotAck() = default; 
+        explicit TEvSplitTransferSnapshotAck(ui64 opId, ui64 tabletId) { 
+            Record.SetOperationCookie(opId); 
+            Record.SetTabletId(tabletId); 
+        } 
+    }; 
+ 
+    struct TEvSplitPartitioningChanged : public TEventPB<TEvSplitPartitioningChanged, 
+                                                        NKikimrTxDataShard::TEvSplitPartitioningChanged, 
+                                                        TEvDataShard::EvSplitPartitioningChanged> { 
+        TEvSplitPartitioningChanged() = default; 
+        explicit TEvSplitPartitioningChanged(ui64 opId) { 
+            Record.SetOperationCookie(opId); 
+        } 
+    }; 
+ 
+    struct TEvSplitPartitioningChangedAck : public TEventPB<TEvSplitPartitioningChangedAck, 
+                                                        NKikimrTxDataShard::TEvSplitPartitioningChangedAck, 
+                                                        TEvDataShard::EvSplitPartitioningChangedAck> { 
+        TEvSplitPartitioningChangedAck() = default; 
+        explicit TEvSplitPartitioningChangedAck(ui64 opId, ui64 tabletId) { 
+            Record.SetOperationCookie(opId); 
+            Record.SetTabletId(tabletId); 
+        } 
+    }; 
 
     struct TEvCancelBackup
         : public TEventPB<TEvCancelBackup,
@@ -773,7 +773,7 @@ struct TEvDataShard {
             Record.SetBackupTxId(txid);
             Record.SetTableId(tableId);
         }
-    };
+    }; 
 
     struct TEvCancelRestore
         : public TEventPB<TEvCancelRestore,
@@ -788,87 +788,87 @@ struct TEvDataShard {
         }
     };
 
-    struct TEvGetTableStats : public TEventPB<TEvGetTableStats,
-                                                        NKikimrTxDataShard::TEvGetTableStats,
-                                                        TEvDataShard::EvGetTableStats> {
-        TEvGetTableStats() = default;
-        explicit TEvGetTableStats(ui64 tableId, ui64 dataSizeResolution = 0, ui64 rowCountResolution = 0, bool collectKeySample = false) {
-            Record.SetTableId(tableId);
-            Record.SetDataSizeResolution(dataSizeResolution);
-            Record.SetRowCountResolution(rowCountResolution);
-            Record.SetCollectKeySample(collectKeySample);
-        }
-    };
+    struct TEvGetTableStats : public TEventPB<TEvGetTableStats, 
+                                                        NKikimrTxDataShard::TEvGetTableStats, 
+                                                        TEvDataShard::EvGetTableStats> { 
+        TEvGetTableStats() = default; 
+        explicit TEvGetTableStats(ui64 tableId, ui64 dataSizeResolution = 0, ui64 rowCountResolution = 0, bool collectKeySample = false) { 
+            Record.SetTableId(tableId); 
+            Record.SetDataSizeResolution(dataSizeResolution); 
+            Record.SetRowCountResolution(rowCountResolution); 
+            Record.SetCollectKeySample(collectKeySample); 
+        } 
+    }; 
 
-    struct TEvGetTableStatsResult : public TEventPB<TEvGetTableStatsResult,
-                                                        NKikimrTxDataShard::TEvGetTableStatsResult,
-                                                        TEvDataShard::EvGetTableStatsResult> {
-        TEvGetTableStatsResult() = default;
+    struct TEvGetTableStatsResult : public TEventPB<TEvGetTableStatsResult, 
+                                                        NKikimrTxDataShard::TEvGetTableStatsResult, 
+                                                        TEvDataShard::EvGetTableStatsResult> { 
+        TEvGetTableStatsResult() = default; 
         TEvGetTableStatsResult(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) {
-            Record.SetDatashardId(datashardId);
+            Record.SetDatashardId(datashardId); 
             Record.SetTableOwnerId(tableOwnerId);
             Record.SetTableLocalId(tableLocalId);
-        }
+        } 
     };
-
-    struct TEvPeriodicTableStats : public TEventPB<TEvPeriodicTableStats,
-                                                        NKikimrTxDataShard::TEvPeriodicTableStats,
-                                                        TEvDataShard::EvPeriodicTableStats> {
-        TEvPeriodicTableStats() = default;
+ 
+    struct TEvPeriodicTableStats : public TEventPB<TEvPeriodicTableStats, 
+                                                        NKikimrTxDataShard::TEvPeriodicTableStats, 
+                                                        TEvDataShard::EvPeriodicTableStats> { 
+        TEvPeriodicTableStats() = default; 
         TEvPeriodicTableStats(ui64 datashardId, ui64 tableOwnerId, ui64 tableLocalId) {
-            Record.SetDatashardId(datashardId);
+            Record.SetDatashardId(datashardId); 
             Record.SetTableOwnerId(tableOwnerId);
             Record.SetTableLocalId(tableLocalId);
-        }
-    };
-
-    struct TEvS3ListingRequest : public TEventPB<TEvS3ListingRequest,
-                                                        NKikimrTxDataShard::TEvS3ListingRequest,
-                                                        TEvDataShard::EvS3ListingRequest> {
-        TEvS3ListingRequest() = default;
-    };
-
-    struct TEvS3ListingResponse : public TEventPB<TEvS3ListingResponse,
-                                                        NKikimrTxDataShard::TEvS3ListingResponse,
-                                                        TEvDataShard::EvS3ListingResponse> {
-        TEvS3ListingResponse() = default;
-
-        explicit TEvS3ListingResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
-            Record.SetTabletID(tabletId);
-            Record.SetStatus(status);
-        }
-    };
-
-    struct TEvUploadRowsRequest : public TEventPBWithArena<TEvUploadRowsRequest,
-                                                        NKikimrTxDataShard::TEvUploadRowsRequest,
-                                                        TEvDataShard::EvUploadRowsRequest,
-                                                        16200, 32500> {
-        TEvUploadRowsRequest() = default;
-    };
-
-    struct TEvUploadRowsResponse : public TEventPB<TEvUploadRowsResponse,
-                                                        NKikimrTxDataShard::TEvUploadRowsResponse,
-                                                        TEvDataShard::EvUploadRowsResponse> {
-        TEvUploadRowsResponse() = default;
-
-        explicit TEvUploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
-            Record.SetTabletID(tabletId);
-            Record.SetStatus(status);
-        }
-    };
-
+        } 
+    }; 
+ 
+    struct TEvS3ListingRequest : public TEventPB<TEvS3ListingRequest, 
+                                                        NKikimrTxDataShard::TEvS3ListingRequest, 
+                                                        TEvDataShard::EvS3ListingRequest> { 
+        TEvS3ListingRequest() = default; 
+    }; 
+ 
+    struct TEvS3ListingResponse : public TEventPB<TEvS3ListingResponse, 
+                                                        NKikimrTxDataShard::TEvS3ListingResponse, 
+                                                        TEvDataShard::EvS3ListingResponse> { 
+        TEvS3ListingResponse() = default; 
+ 
+        explicit TEvS3ListingResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) { 
+            Record.SetTabletID(tabletId); 
+            Record.SetStatus(status); 
+        } 
+    }; 
+ 
+    struct TEvUploadRowsRequest : public TEventPBWithArena<TEvUploadRowsRequest, 
+                                                        NKikimrTxDataShard::TEvUploadRowsRequest, 
+                                                        TEvDataShard::EvUploadRowsRequest, 
+                                                        16200, 32500> { 
+        TEvUploadRowsRequest() = default; 
+    }; 
+ 
+    struct TEvUploadRowsResponse : public TEventPB<TEvUploadRowsResponse, 
+                                                        NKikimrTxDataShard::TEvUploadRowsResponse, 
+                                                        TEvDataShard::EvUploadRowsResponse> { 
+        TEvUploadRowsResponse() = default; 
+ 
+        explicit TEvUploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) { 
+            Record.SetTabletID(tabletId); 
+            Record.SetStatus(status); 
+        } 
+    }; 
+ 
     struct TEvUnsafeUploadRowsRequest : public TEventPBWithArena<TEvUnsafeUploadRowsRequest,
                                                         NKikimrTxDataShard::TEvUploadRowsRequest,
                                                         TEvDataShard::EvUnsafeUploadRowsRequest,
                                                         16200, 32500> {
         TEvUnsafeUploadRowsRequest() = default;
     };
-
+ 
     struct TEvUnsafeUploadRowsResponse : public TEventPB<TEvUnsafeUploadRowsResponse,
                                                         NKikimrTxDataShard::TEvUploadRowsResponse,
                                                         TEvDataShard::EvUnsafeUploadRowsResponse> {
         TEvUnsafeUploadRowsResponse() = default;
-
+ 
         explicit TEvUnsafeUploadRowsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
             Record.SetTabletID(tabletId);
             Record.SetStatus(status);
@@ -994,23 +994,23 @@ struct TEvDataShard {
         TEvReadCancel() = default;
     };
 
-    struct TEvReadColumnsRequest : public TEventPB<TEvReadColumnsRequest,
+    struct TEvReadColumnsRequest : public TEventPB<TEvReadColumnsRequest, 
                                                    NKikimrTxDataShard::TEvReadColumnsRequest,
                                                    TEvDataShard::EvReadColumnsRequest> {
-        TEvReadColumnsRequest() = default;
-    };
-
-    struct TEvReadColumnsResponse : public TEventPB<TEvReadColumnsResponse,
+        TEvReadColumnsRequest() = default; 
+    }; 
+ 
+    struct TEvReadColumnsResponse : public TEventPB<TEvReadColumnsResponse, 
                                                     NKikimrTxDataShard::TEvReadColumnsResponse,
                                                     TEvDataShard::EvReadColumnsResponse> {
-        TEvReadColumnsResponse() = default;
-
-        explicit TEvReadColumnsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) {
-            Record.SetTabletID(tabletId);
-            Record.SetStatus(status);
-        }
-    };
-
+        TEvReadColumnsResponse() = default; 
+ 
+        explicit TEvReadColumnsResponse(ui64 tabletId, ui32 status = NKikimrTxDataShard::TError::OK) { 
+            Record.SetTabletID(tabletId); 
+            Record.SetStatus(status); 
+        } 
+    }; 
+ 
     struct TEvGetInfoRequest : public TEventPB<TEvGetInfoRequest,
                                                NKikimrTxDataShard::TEvGetInfoRequest,
                                                TEvDataShard::EvGetInfoRequest> {
@@ -1545,7 +1545,7 @@ IActor* CreateDataShard(const TActorId &tablet, TTabletStorageInfo *info);
 
 }
 
-inline TString DatashardStateName(ui32 state) {
-    NKikimrTxDataShard::EDatashardState s = (NKikimrTxDataShard::EDatashardState)state;
-    return NKikimrTxDataShard::EDatashardState_Name(s);
-}
+inline TString DatashardStateName(ui32 state) { 
+    NKikimrTxDataShard::EDatashardState s = (NKikimrTxDataShard::EDatashardState)state; 
+    return NKikimrTxDataShard::EDatashardState_Name(s); 
+} 

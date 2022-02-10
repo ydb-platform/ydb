@@ -19,9 +19,9 @@ class DeltaTypes(IntEnum):
     UpdateExecutorInfo = 8,
     SetCompactionPolicy = 9,
     SetRoom = 10,
-    SetFamily = 11,
-    SetRedo = 12,
-    SetTable = 13
+    SetFamily = 11, 
+    SetRedo = 12, 
+    SetTable = 13 
 
 
 @unique

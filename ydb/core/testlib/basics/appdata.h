@@ -38,7 +38,7 @@ namespace NKikimr {
         struct TMine : public NActors::IDestructable {
             TIntrusivePtr<NScheme::TTypeRegistry> Types;
             TIntrusivePtr<NMiniKQL::IFunctionRegistry> Funcs;
-            TIntrusivePtr<TFormatFactory> Formats;
+            TIntrusivePtr<TFormatFactory> Formats; 
             std::shared_ptr<NDataShard::IExportFactory> DataShardExportFactory;
             std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
 

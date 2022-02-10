@@ -571,7 +571,7 @@ TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode para
                     auto itemValue = list->GetItems()[i];
                     bool wereChanges;
                     auto newValue = SinglePassVisitCallables(lambdaRootNode, explorer,
-                        [&](TInternName name) {
+                        [&](TInternName name) { 
                             Y_UNUSED(name);
                             return [&](TCallable& callable, const TTypeEnvironment& env) {
                                 Y_UNUSED(env);
@@ -580,7 +580,7 @@ TRuntimeNode TKikimrProgramBuilder::Bind(TRuntimeNode program, TRuntimeNode para
                                 }
 
                                 if (callable.GetType()->GetNameStr() == arg) {
-                                    TCallableBuilder itemCallableBuilder(Env, arg.Str(), callable.GetType()->GetReturnType(), true);
+                                    TCallableBuilder itemCallableBuilder(Env, arg.Str(), callable.GetType()->GetReturnType(), true); 
                                     TRuntimeNode itemArg(itemCallableBuilder.Build(), false);
                                     return itemArg;
                                 }

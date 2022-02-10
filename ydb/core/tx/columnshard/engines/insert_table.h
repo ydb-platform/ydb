@@ -2,23 +2,23 @@
 #include <ydb/core/tx/columnshard/blob.h>
 #include <util/generic/set.h>
 
-#include "defs.h"
-
+#include "defs.h" 
+ 
 namespace NKikimr::NOlap {
 
 struct TInsertedData {
-    ui64 ShardOrPlan = 0;
-    ui64 WriteTxId = 0;
-    ui64 PathId = 0;
+    ui64 ShardOrPlan = 0; 
+    ui64 WriteTxId = 0; 
+    ui64 PathId = 0; 
     TString DedupId;
-    TUnifiedBlobId BlobId;
+    TUnifiedBlobId BlobId; 
     TString Metadata;
     TInstant DirtyTime;
 
-    TInsertedData() = default;
-
-    TInsertedData(ui64 shardOrPlan, ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId,
-                  const TString& meta, const TInstant& writeTime)
+    TInsertedData() = default; 
+ 
+    TInsertedData(ui64 shardOrPlan, ui64 writeTxId, ui64 pathId, TString dedupId, const TUnifiedBlobId& blobId, 
+                  const TString& meta, const TInstant& writeTime) 
         : ShardOrPlan(shardOrPlan)
         , WriteTxId(writeTxId)
         , PathId(pathId)
@@ -109,19 +109,19 @@ public:
     void EraseInserted(IDbWrapper& dbTable, const TInsertedData& key);
     void EraseCommitted(IDbWrapper& dbTable, const TInsertedData& key);
     void EraseAborted(IDbWrapper& dbTable, const TInsertedData& key);
-    TVector<TUnifiedBlobId> Read(ui64 pathId, ui64 plan, ui64 txId) const;
+    TVector<TUnifiedBlobId> Read(ui64 pathId, ui64 plan, ui64 txId) const; 
     bool Load(IDbWrapper& dbTable, const TInstant& loadTime);
     void GetCounters(TCounters& prepared, TCounters& committed) const;
 
     size_t InsertedSize() const { return Inserted.size(); }
-    const THashMap<ui64, TSet<TInsertedData>>& GetCommitted() const { return CommittedByPathId; }
+    const THashMap<ui64, TSet<TInsertedData>>& GetCommitted() const { return CommittedByPathId; } 
     const THashMap<TWriteId, TInsertedData>& GetAborted() const { return Aborted; }
     void SetOverloaded(ui64 pathId, bool overload);
     bool IsOverloaded(ui64 pathId) const { return PathsOverloaded.count(pathId); }
 
 private:
-    THashMap<TWriteId, TInsertedData> Inserted;
-    THashMap<ui64, TSet<TInsertedData>> CommittedByPathId;
+    THashMap<TWriteId, TInsertedData> Inserted; 
+    THashMap<ui64, TSet<TInsertedData>> CommittedByPathId; 
     THashMap<TWriteId, TInsertedData> Aborted;
     THashSet<ui64> PathsOverloaded;
     TInstant LastCleanup;

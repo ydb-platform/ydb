@@ -44,7 +44,7 @@ namespace NFake {
             SetupStaticServices();
 
             auto *types = NTable::NTest::DbgRegistry();
-            auto *app = new TAppData(0, 0, 0, 0, { }, types, nullptr, nullptr, nullptr);
+            auto *app = new TAppData(0, 0, 0, 0, { }, types, nullptr, nullptr, nullptr); 
 
             Env.Initialize({ app, nullptr, nullptr });
             Env.SetDispatchTimeout(DEFAULT_DISPATCH_TIMEOUT);

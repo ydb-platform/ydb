@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 
 #define FLAT_EXECUTOR_SIMPLE_COUNTERS_MAP(XX) \
-    XX(DB_TX_IN_FLY, "ExecutorTxInFly") \
+    XX(DB_TX_IN_FLY, "ExecutorTxInFly") \ 
     XX(LOG_REDO_COUNT, "LogRedoItems") \
     XX(LOG_REDO_MEMORY, "LogRedoMemory") \
     XX(LOG_REDO_SOLIDS, "LogRedoLargeGlobIds") \
@@ -44,8 +44,8 @@ namespace NTabletFlatExecutor {
     XX(GC_BLOBS_CREATED, "GcBlobsCreated") \
     XX(GC_BLOBS_DELETED, "GcBlobsDeleted") \
     XX(GC_BARRIERS_ACTIVE, "GcBarriersActive") \
-    XX(CACHE_FRESH_SIZE, "CacheFreshSize") \
-    XX(CACHE_STAGING_SIZE, "CacheStagingSize") \
+    XX(CACHE_FRESH_SIZE, "CacheFreshSize") \ 
+    XX(CACHE_STAGING_SIZE, "CacheStagingSize") \ 
     XX(CACHE_WARM_SIZE, "CacheMemTableSize") \
     XX(CACHE_PINNED_SET, "CachePinned") \
     XX(CACHE_PINNED_LOAD, "CachePinnedLoad") \
@@ -84,7 +84,7 @@ namespace NTabletFlatExecutor {
     XX(TX_QUEUED, "TxQueued") \
     XX(TX_RETRIED, "TxRetried") \
     XX(TX_FINISHED, "TxFinished") \
-    XX(TX_POSTPONED, "TxPostponed") \
+    XX(TX_POSTPONED, "TxPostponed") \ 
     XX(TX_MEM_REQUESTS, "TxMemoryRequests") \
     XX(TX_MEM_CAPTURES, "TxMemoryCaptures") \
     XX(TX_MEM_ATTACHES, "TxMemoryAttaches") \

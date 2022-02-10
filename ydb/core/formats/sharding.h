@@ -59,15 +59,15 @@ private:
 // KIKIMR-11529
 class TLogsSharding {
 public:
-    static constexpr ui32 DEFAULT_ACITVE_SHARDS = 10;
-    static constexpr TDuration DEFAULT_CHANGE_PERIOD = TDuration::Minutes(5);
-
+    static constexpr ui32 DEFAULT_ACITVE_SHARDS = 10; 
+    static constexpr TDuration DEFAULT_CHANGE_PERIOD = TDuration::Minutes(5); 
+ 
     // TODO
-    TLogsSharding(ui32 shardsCountTotal, ui32 shardsCountActive = DEFAULT_ACITVE_SHARDS, TDuration changePeriod = DEFAULT_CHANGE_PERIOD)
-        : ShardsCount(shardsCountTotal)
-        , NumActive(Min<ui32>(shardsCountActive, ShardsCount))
-        , TsMin(0)
-        , ChangePeriod(changePeriod.MicroSeconds())
+    TLogsSharding(ui32 shardsCountTotal, ui32 shardsCountActive = DEFAULT_ACITVE_SHARDS, TDuration changePeriod = DEFAULT_CHANGE_PERIOD) 
+        : ShardsCount(shardsCountTotal) 
+        , NumActive(Min<ui32>(shardsCountActive, ShardsCount)) 
+        , TsMin(0) 
+        , ChangePeriod(changePeriod.MicroSeconds()) 
     {}
 
     // tsMin = GetTsMin(tabletIdsMap, timestamp);
@@ -80,7 +80,7 @@ public:
         ui64 uidHash = XXH64(uid.data(), uid.size(), 0);
         ui32 tsInterval = (timestamp - TsMin) / ChangePeriod;
         ui32 numIntervals = ShardsCount / NumActive;
-        return ((uidHash % NumActive) + (tsInterval % numIntervals) * NumActive) % ShardsCount;
+        return ((uidHash % NumActive) + (tsInterval % numIntervals) * NumActive) % ShardsCount; 
     }
 
     std::vector<ui32> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch,
@@ -118,8 +118,8 @@ public:
 private:
     ui32 ShardsCount;
     ui32 NumActive;
-    ui64 TsMin;
-    ui64 ChangePeriod;
+    ui64 TsMin; 
+    ui64 ChangePeriod; 
 };
 
 }

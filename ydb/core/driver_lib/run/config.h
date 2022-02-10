@@ -19,7 +19,7 @@ union TBasicKikimrServicesMask {
         bool EnableStateStorageService:1;
         bool EnableLocalService:1;
         bool EnableSharedCache:1;
-        bool EnableBlobCache:1;
+        bool EnableBlobCache:1; 
         bool EnableLogger:1;
         bool EnableSchedulerActor:1;
         bool EnableProfiler:1;

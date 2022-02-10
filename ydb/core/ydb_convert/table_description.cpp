@@ -23,15 +23,15 @@ template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
 
-    splitKeyType.SetKind(NKikimrMiniKQL::ETypeKind::Tuple);
-    splitKeyType.MutableTuple()->MutableElement()->Reserve(in.KeyColumnIdsSize());
-    THashMap<ui32, size_t> columnIdToKeyPos;
-    for (size_t keyPos = 0; keyPos < in.KeyColumnIdsSize(); ++keyPos) {
-        ui32 colId = in.GetKeyColumnIds(keyPos);
-        columnIdToKeyPos[colId] = keyPos;
-        splitKeyType.MutableTuple()->AddElement();
-    }
-
+    splitKeyType.SetKind(NKikimrMiniKQL::ETypeKind::Tuple); 
+    splitKeyType.MutableTuple()->MutableElement()->Reserve(in.KeyColumnIdsSize()); 
+    THashMap<ui32, size_t> columnIdToKeyPos; 
+    for (size_t keyPos = 0; keyPos < in.KeyColumnIdsSize(); ++keyPos) { 
+        ui32 colId = in.GetKeyColumnIds(keyPos); 
+        columnIdToKeyPos[colId] = keyPos; 
+        splitKeyType.MutableTuple()->AddElement(); 
+    } 
+ 
     for (const auto& column : in.GetColumns()) {
         NYql::NProto::TypeIds protoType;
         if (!NYql::NProto::TypeIds_Parse(column.GetType(), &protoType)) {
@@ -50,14 +50,14 @@ void FillColumnDescriptionImpl(TYdbProto& out,
         } else {
             NMiniKQL::ExportPrimitiveTypeToProto(protoType, item);
         }
-
-        if (columnIdToKeyPos.count(column.GetId())) {
-            size_t keyPos = columnIdToKeyPos[column.GetId()];
-            auto tupleElement = splitKeyType.MutableTuple()->MutableElement(keyPos);
-            tupleElement->SetKind(NKikimrMiniKQL::ETypeKind::Optional);
-            ConvertYdbTypeToMiniKQLType(item, *tupleElement->MutableOptional()->MutableItem());
+ 
+        if (columnIdToKeyPos.count(column.GetId())) { 
+            size_t keyPos = columnIdToKeyPos[column.GetId()]; 
+            auto tupleElement = splitKeyType.MutableTuple()->MutableElement(keyPos); 
+            tupleElement->SetKind(NKikimrMiniKQL::ETypeKind::Optional); 
+            ConvertYdbTypeToMiniKQLType(item, *tupleElement->MutableOptional()->MutableItem()); 
         }
-
+ 
         if (column.HasFamilyName()) {
             newColumn->set_family(column.GetFamilyName());
         }
@@ -101,51 +101,51 @@ void FillColumnDescription(Ydb::Table::CreateTableRequest& out,
     FillColumnDescriptionImpl(out, splitKeyType, in);
 }
 
-bool ExtractColumnTypeId(ui32& outTypeId, const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error) {
-    ui32 typeId;
+bool ExtractColumnTypeId(ui32& outTypeId, const Ydb::Type& inType, Ydb::StatusIds::StatusCode& status, TString& error) { 
+    ui32 typeId; 
     auto itemType = inType.has_optional_type() ? inType.optional_type().item() : inType;
-    switch (itemType.type_case()) {
-        case Ydb::Type::kTypeId:
-            typeId = (ui32)itemType.type_id();
-            break;
-        case Ydb::Type::kDecimalType: {
-            if (itemType.decimal_type().precision() != NScheme::DECIMAL_PRECISION) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("Bad decimal precision. Only Decimal(%" PRIu32
-                                    ",%" PRIu32 ") is supported for table columns",
-                                    NScheme::DECIMAL_PRECISION,
-                                    NScheme::DECIMAL_SCALE);
-                return false;
-            }
-            if (itemType.decimal_type().scale() != NScheme::DECIMAL_SCALE) {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = Sprintf("Bad decimal scale. Only Decimal(%" PRIu32
-                                    ",%" PRIu32 ") is supported for table columns",
-                                    NScheme::DECIMAL_PRECISION,
-                                    NScheme::DECIMAL_SCALE);
-                return false;
-            }
-            typeId = NYql::NProto::TypeIds::Decimal;
-            break;
-        }
-
-        default: {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            error = "Only optional of data types are supported for table columns";
-            return false;
-        }
-    }
-
-    if (!NYql::NProto::TypeIds_IsValid((int)typeId)) {
-        status = Ydb::StatusIds::BAD_REQUEST;
-        error = TStringBuilder() << "Got invalid typeId: " << (int)typeId;
-        return false;
-    }
-
-    outTypeId = typeId;
-    return true;
-}
-
+    switch (itemType.type_case()) { 
+        case Ydb::Type::kTypeId: 
+            typeId = (ui32)itemType.type_id(); 
+            break; 
+        case Ydb::Type::kDecimalType: { 
+            if (itemType.decimal_type().precision() != NScheme::DECIMAL_PRECISION) { 
+                status = Ydb::StatusIds::BAD_REQUEST; 
+                error = Sprintf("Bad decimal precision. Only Decimal(%" PRIu32 
+                                    ",%" PRIu32 ") is supported for table columns", 
+                                    NScheme::DECIMAL_PRECISION, 
+                                    NScheme::DECIMAL_SCALE); 
+                return false; 
+            } 
+            if (itemType.decimal_type().scale() != NScheme::DECIMAL_SCALE) { 
+                status = Ydb::StatusIds::BAD_REQUEST; 
+                error = Sprintf("Bad decimal scale. Only Decimal(%" PRIu32 
+                                    ",%" PRIu32 ") is supported for table columns", 
+                                    NScheme::DECIMAL_PRECISION, 
+                                    NScheme::DECIMAL_SCALE); 
+                return false; 
+            } 
+            typeId = NYql::NProto::TypeIds::Decimal; 
+            break; 
+        } 
+ 
+        default: { 
+            status = Ydb::StatusIds::BAD_REQUEST; 
+            error = "Only optional of data types are supported for table columns"; 
+            return false; 
+        } 
+    } 
+ 
+    if (!NYql::NProto::TypeIds_IsValid((int)typeId)) { 
+        status = Ydb::StatusIds::BAD_REQUEST; 
+        error = TStringBuilder() << "Got invalid typeId: " << (int)typeId; 
+        return false; 
+    } 
+ 
+    outTypeId = typeId; 
+    return true; 
+} 
+ 
 bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
     const google::protobuf::RepeatedPtrField<Ydb::Table::ColumnMeta>& in, Ydb::StatusIds::StatusCode& status, TString& error) {
 
@@ -163,7 +163,7 @@ bool FillColumnDescription(NKikimrSchemeOp::TTableDescription& out,
         }
 
         ui32 typeId;
-        if (!ExtractColumnTypeId(typeId, column.type(), status, error)) {
+        if (!ExtractColumnTypeId(typeId, column.type(), status, error)) { 
             return false;
         }
         cd->SetType(NYql::NProto::TypeIds_Name(NYql::NProto::TypeIds(typeId)));
@@ -581,14 +581,14 @@ void FillPartitioningSettingsImpl(TYdbProto& out,
         outPartSettings.set_partitioning_by_size(Ydb::FeatureFlag::DISABLED);
     }
 
-    if (inPartPolicy.HasSplitByLoadSettings()) {
-        bool enabled = inPartPolicy.GetSplitByLoadSettings().GetEnabled();
-        outPartSettings.set_partitioning_by_load(enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
+    if (inPartPolicy.HasSplitByLoadSettings()) { 
+        bool enabled = inPartPolicy.GetSplitByLoadSettings().GetEnabled(); 
+        outPartSettings.set_partitioning_by_load(enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED); 
     } else {
         // (!) We assume that partitioning by load is disabled by default. But we don't know it for sure.
         outPartSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-    }
-
+    } 
+ 
     if (inPartPolicy.HasMinPartitionsCount() && inPartPolicy.GetMinPartitionsCount()) {
         outPartSettings.set_min_partitions_count(inPartPolicy.GetMinPartitionsCount());
     }

@@ -159,17 +159,17 @@ public:
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }
 
-    static void ConvertReadStats(const NKikimrQueryStats::TReadOpStats& from, Ydb::TableStats::OperationStats* to) {
-        to->set_rows(to->rows() + from.GetRows());
-        to->set_bytes(to->bytes() + from.GetBytes());
-    }
-
-    static void ConvertWriteStats(const NKikimrQueryStats::TWriteOpStats& from, Ydb::TableStats::OperationStats* to) {
-        to->set_rows(from.GetCount());
-        to->set_bytes(from.GetBytes());
-    }
-
-    static void ConvertQueryStats(const NKikimrKqp::TQueryResponse& from, Ydb::Table::ExecuteQueryResult* to) {
+    static void ConvertReadStats(const NKikimrQueryStats::TReadOpStats& from, Ydb::TableStats::OperationStats* to) { 
+        to->set_rows(to->rows() + from.GetRows()); 
+        to->set_bytes(to->bytes() + from.GetBytes()); 
+    } 
+ 
+    static void ConvertWriteStats(const NKikimrQueryStats::TWriteOpStats& from, Ydb::TableStats::OperationStats* to) { 
+        to->set_rows(from.GetCount()); 
+        to->set_bytes(from.GetBytes()); 
+    } 
+ 
+    static void ConvertQueryStats(const NKikimrKqp::TQueryResponse& from, Ydb::Table::ExecuteQueryResult* to) { 
         if (from.HasQueryStats()) {
             FillQueryStats(*to->mutable_query_stats(), from);
             to->mutable_query_stats()->set_query_ast(from.GetQueryAst());
@@ -177,35 +177,35 @@ public:
         }
 
         // TODO: For compatibility with old kqp workers, deprecate.
-        if (from.GetProfile().KqlProfilesSize() == 1) {
-            const auto& kqlProlfile = from.GetProfile().GetKqlProfiles(0);
-            const auto& phases = kqlProlfile.GetMkqlProfiles();
-            for (const auto& s : phases) {
-                if (s.HasTxStats()) {
-                    const auto& tableStats = s.GetTxStats().GetTableAccessStats();
-                    auto* phase = to->mutable_query_stats()->add_query_phases();
-                    phase->set_duration_us(s.GetTxStats().GetDurationUs());
-                    for (const auto& ts : tableStats) {
-                        auto* tableAccess = phase->add_table_access();
-                        tableAccess->set_name(ts.GetTableInfo().GetName());
-                        if (ts.HasSelectRow()) {
-                            ConvertReadStats(ts.GetSelectRow(), tableAccess->mutable_reads());
-                        }
-                        if (ts.HasSelectRange()) {
-                            ConvertReadStats(ts.GetSelectRange(), tableAccess->mutable_reads());
-                        }
-                        if (ts.HasUpdateRow()) {
-                            ConvertWriteStats(ts.GetUpdateRow(), tableAccess->mutable_updates());
-                        }
-                        if (ts.HasEraseRow()) {
-                            ConvertWriteStats(ts.GetEraseRow(), tableAccess->mutable_deletes());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
+        if (from.GetProfile().KqlProfilesSize() == 1) { 
+            const auto& kqlProlfile = from.GetProfile().GetKqlProfiles(0); 
+            const auto& phases = kqlProlfile.GetMkqlProfiles(); 
+            for (const auto& s : phases) { 
+                if (s.HasTxStats()) { 
+                    const auto& tableStats = s.GetTxStats().GetTableAccessStats(); 
+                    auto* phase = to->mutable_query_stats()->add_query_phases(); 
+                    phase->set_duration_us(s.GetTxStats().GetDurationUs()); 
+                    for (const auto& ts : tableStats) { 
+                        auto* tableAccess = phase->add_table_access(); 
+                        tableAccess->set_name(ts.GetTableInfo().GetName()); 
+                        if (ts.HasSelectRow()) { 
+                            ConvertReadStats(ts.GetSelectRow(), tableAccess->mutable_reads()); 
+                        } 
+                        if (ts.HasSelectRange()) { 
+                            ConvertReadStats(ts.GetSelectRange(), tableAccess->mutable_reads()); 
+                        } 
+                        if (ts.HasUpdateRow()) { 
+                            ConvertWriteStats(ts.GetUpdateRow(), tableAccess->mutable_updates()); 
+                        } 
+                        if (ts.HasEraseRow()) { 
+                            ConvertWriteStats(ts.GetEraseRow(), tableAccess->mutable_deletes()); 
+                        } 
+                    } 
+                } 
+            } 
+        } 
+    } 
+ 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record.GetRef();
         SetCost(record.GetConsumedRu());
@@ -217,7 +217,7 @@ public:
 
             auto queryResult = TEvExecuteDataQueryRequest::AllocateResult<Ydb::Table::ExecuteQueryResult>(Request_);
             ConvertKqpQueryResultsToDbResult(kqpResponse, queryResult);
-            ConvertQueryStats(kqpResponse, queryResult);
+            ConvertQueryStats(kqpResponse, queryResult); 
             if (kqpResponse.HasTxMeta()) {
                 queryResult->mutable_tx_meta()->CopyFrom(kqpResponse.GetTxMeta());
             }

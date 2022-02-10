@@ -114,7 +114,7 @@ public:
 
     size_t GetLimit() const { return MyState_.GetLimit(); }
     void SetLimit(size_t limit) { MyState_.SetLimit(limit); }
-    void DisableStrictAllocationCheck() { MyState_.DisableStrictAllocationCheck(); }
+    void DisableStrictAllocationCheck() { MyState_.DisableStrictAllocationCheck(); } 
 
     void ReleaseFreePages() { MyState_.ReleaseFreePages(); }
     void InvalidateMemInfo() { MyState_.InvalidateMemInfo(); }

@@ -163,7 +163,7 @@ public:
 
     virtual ~ISimpleThread() = default;
 
-    virtual void* ThreadProc() = 0;
+    virtual void* ThreadProc() = 0; 
 };
 
 struct TCurrentThreadLimits {

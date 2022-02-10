@@ -1811,46 +1811,46 @@ public:
     }
 
     TAsyncStatus CreateNode(
-        Ydb::Coordination::CreateNodeRequest&& request,
+        Ydb::Coordination::CreateNodeRequest&& request, 
         const TCreateNodeSettings& settings)
     {
         return RunSimple<Ydb::Coordination::V1::CoordinationService,
                         Ydb::Coordination::CreateNodeRequest,
                         Ydb::Coordination::CreateNodeResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Coordination::V1::CoordinationService::Stub::AsyncCreateNode,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
     }
 
     TAsyncStatus AlterNode(
-        Ydb::Coordination::AlterNodeRequest&& request,
+        Ydb::Coordination::AlterNodeRequest&& request, 
         const TAlterNodeSettings& settings)
     {
         return RunSimple<Ydb::Coordination::V1::CoordinationService,
                         Ydb::Coordination::AlterNodeRequest,
                         Ydb::Coordination::AlterNodeResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Coordination::V1::CoordinationService::Stub::AsyncAlterNode,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
     }
 
     TAsyncStatus DropNode(
-        Ydb::Coordination::DropNodeRequest&& request,
+        Ydb::Coordination::DropNodeRequest&& request, 
         const TDropNodeSettings& settings)
     {
         return RunSimple<Ydb::Coordination::V1::CoordinationService,
                         Ydb::Coordination::DropNodeRequest,
                         Ydb::Coordination::DropNodeResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Coordination::V1::CoordinationService::Stub::AsyncDropNode,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
     }
 
     TAsyncDescribeNodeResult DescribeNode(
-        Ydb::Coordination::DescribeNodeRequest&& request,
+        Ydb::Coordination::DescribeNodeRequest&& request, 
         const TDescribeNodeSettings& settings)
     {
         auto promise = NewPromise<TDescribeNodeResult>();
@@ -1870,7 +1870,7 @@ public:
         Connections_->RunDeferred<Ydb::Coordination::V1::CoordinationService,
                                 Ydb::Coordination::DescribeNodeRequest,
                                 Ydb::Coordination::DescribeNodeResponse>(
-            std::move(request),
+            std::move(request), 
             std::move(extractor),
             &Ydb::Coordination::V1::CoordinationService::Stub::AsyncDescribeNode,
             DbDriverState_,

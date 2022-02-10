@@ -28,7 +28,7 @@ struct TFunctionTypeInfo
 //////////////////////////////////////////////////////////////////////////////
 struct TArgInfo {
     NMiniKQL::TType* Type_ = nullptr;
-    TInternName Name_;
+    TInternName Name_; 
     ui64 Flags_;
 };
 

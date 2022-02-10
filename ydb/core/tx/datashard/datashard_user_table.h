@@ -104,7 +104,7 @@ struct TUserTable : public TThrRefBase {
             return 1;
         }
 
-        ui32 OuterChannel() const {
+        ui32 OuterChannel() const { 
             if (!*Room) {
                 return OuterChannelByStorageEnum();
             }
@@ -113,16 +113,16 @@ struct TUserTable : public TThrRefBase {
         }
 
         ui32 OuterChannelByStorageEnum() const {
-            switch (Storage) {
+            switch (Storage) { 
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage1Med2Ext2:
                 case NKikimrSchemeOp::EColumnStorage::ColumnStorage2Med2Ext2:
-                    return 2;
-                default:
-                    break;
-            }
+                    return 2; 
+                default: 
+                    break; 
+            } 
             return MainChannelByStorageEnum();
-        }
-
+        } 
+ 
         ui32 ExternalChannel() const {
             if (!*Room) {
                 return ExternalChannelByStorageEnum();
@@ -300,36 +300,36 @@ struct TUserTable : public TThrRefBase {
         }
     };
 
-    struct TStats {
-        NTable::TStats DataStats;
-        ui64 IndexSize = 0;
-        ui64 MemRowCount = 0;
-        ui64 MemDataSize = 0;
-        TInstant AccessTime;
-        TInstant UpdateTime;
+    struct TStats { 
+        NTable::TStats DataStats; 
+        ui64 IndexSize = 0; 
+        ui64 MemRowCount = 0; 
+        ui64 MemDataSize = 0; 
+        TInstant AccessTime; 
+        TInstant UpdateTime; 
         TInstant LastFullCompaction;
-        THashSet<ui64> PartOwners;
-        ui64 PartCount = 0;
+        THashSet<ui64> PartOwners; 
+        ui64 PartCount = 0; 
         ui64 SearchHeight = 0;
-        TInstant StatsUpdateTime;
-        ui64 DataSizeResolution = 0;
-        ui64 RowCountResolution = 0;
+        TInstant StatsUpdateTime; 
+        ui64 DataSizeResolution = 0; 
+        ui64 RowCountResolution = 0; 
         ui64 BackgroundCompactionRequests = 0;
-        NTable::TKeyAccessSample AccessStats;
-
+        NTable::TKeyAccessSample AccessStats; 
+ 
         bool LastSearchHeightMetricSet = false;
 
         std::optional<ui32> HoursSinceFullCompaction;
 
-        void Update(NTable::TStats&& dataStats, ui64 indexSize, THashSet<ui64>&& partOwners, ui64 partCount, TInstant statsUpdateTime) {
-            DataStats = dataStats;
-            IndexSize = indexSize;
-            PartOwners = partOwners;
-            PartCount = partCount;
-            StatsUpdateTime = statsUpdateTime;
-        }
-    };
-
+        void Update(NTable::TStats&& dataStats, ui64 indexSize, THashSet<ui64>&& partOwners, ui64 partCount, TInstant statsUpdateTime) { 
+            DataStats = dataStats; 
+            IndexSize = indexSize; 
+            PartOwners = partOwners; 
+            PartCount = partCount; 
+            StatsUpdateTime = statsUpdateTime; 
+        } 
+    }; 
+ 
     struct TSpecialUpdate {
         bool HasUpdates = false;
 

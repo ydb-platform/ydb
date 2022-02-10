@@ -20,7 +20,7 @@ public:
     };
 
     void Insert(const TInsertedData& data) override {
-        Inserted[TWriteId{data.WriteTxId}] = data;
+        Inserted[TWriteId{data.WriteTxId}] = data; 
     }
 
     void Commit(const TInsertedData& data) override {
@@ -32,11 +32,11 @@ public:
     }
 
     void EraseInserted(const TInsertedData& data) override {
-        Inserted.erase(TWriteId{data.WriteTxId});
+        Inserted.erase(TWriteId{data.WriteTxId}); 
     }
 
     void EraseCommitted(const TInsertedData& data) override {
-        Committed[data.PathId].erase(data);
+        Committed[data.PathId].erase(data); 
     }
 
     void EraseAborted(const TInsertedData& data) override {
@@ -147,8 +147,8 @@ public:
     }
 
 private:
-    THashMap<TWriteId, TInsertedData> Inserted;
-    THashMap<ui64, TSet<TInsertedData>> Committed;
+    THashMap<TWriteId, TInsertedData> Inserted; 
+    THashMap<ui64, TSet<TInsertedData>> Committed; 
     THashMap<TWriteId, TInsertedData> Aborted;
     THashMap<ui32, TIndex> Indices;
 };
@@ -235,9 +235,9 @@ private:
     std::unique_ptr<arrow::RecordBatchBuilder> BatchBuilder;
 };
 
-TBlobRange MakeBlobRange(ui32 step, ui32 blobSize) {
+TBlobRange MakeBlobRange(ui32 step, ui32 blobSize) { 
     // tabletId, generation, step, channel, blobSize, cookie
-    return TBlobRange(TUnifiedBlobId(11111, TLogoBlobID(100500, 42, step, 3, blobSize, 0)), 0, blobSize);
+    return TBlobRange(TUnifiedBlobId(11111, TLogoBlobID(100500, 42, step, 3, blobSize, 0)), 0, blobSize); 
 }
 
 TString MakeTestBlob(ui64 start = 0, ui64 end = 100) {
@@ -251,13 +251,13 @@ TString MakeTestBlob(ui64 start = 0, ui64 end = 100) {
 }
 
 void AddIdsToBlobs(const TVector<TString>& srcBlobs, TVector<TPortionInfo>& portions,
-                   THashMap<TBlobRange, TString>& blobs, ui32& step) {
+                   THashMap<TBlobRange, TString>& blobs, ui32& step) { 
     ui32 pos = 0;
     for (auto& portion : portions) {
         for (auto& rec : portion.Records) {
-            rec.BlobRange = MakeBlobRange(++step, srcBlobs[pos].size());
+            rec.BlobRange = MakeBlobRange(++step, srcBlobs[pos].size()); 
             //UNIT_ASSERT(rec.Valid());
-            blobs[rec.BlobRange] = srcBlobs[pos];
+            blobs[rec.BlobRange] = srcBlobs[pos]; 
             ++pos;
         }
     }
@@ -272,14 +272,14 @@ TCompactionLimits TestLimits() {
 }
 
 bool Insert(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap,
-            TVector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) {
+            TVector<TInsertedData>&& dataToIndex, THashMap<TBlobRange, TString>& blobs, ui32& step) { 
     std::shared_ptr<TColumnEngineChanges> changes = engine.StartInsert(std::move(dataToIndex));
     if (!changes) {
         return false;
     }
 
-    changes->Blobs.insert(blobs.begin(), blobs.end());
-
+    changes->Blobs.insert(blobs.begin(), blobs.end()); 
+ 
     TVector<TString> newBlobs = TColumnEngineForLogs::IndexBlobs(engine.GetIndexInfo(), changes);
 
     UNIT_ASSERT_VALUES_EQUAL(changes->AppendedPortions.size(), 1);
@@ -372,23 +372,23 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         TString testBlob = MakeTestBlob();
 
-        TVector<TBlobRange> blobRanges;
-        blobRanges.push_back(MakeBlobRange(1, testBlob.size()));
-        blobRanges.push_back(MakeBlobRange(2, testBlob.size()));
+        TVector<TBlobRange> blobRanges; 
+        blobRanges.push_back(MakeBlobRange(1, testBlob.size())); 
+        blobRanges.push_back(MakeBlobRange(2, testBlob.size())); 
 
         // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
         TInstant writeTime = TInstant::Now();
         TVector<TInsertedData> dataToIndex = {
-            {1, 2, paths[0], "", blobRanges[0].BlobId, "", writeTime},
-            {2, 1, paths[0], "", blobRanges[1].BlobId, "", writeTime}
+            {1, 2, paths[0], "", blobRanges[0].BlobId, "", writeTime}, 
+            {2, 1, paths[0], "", blobRanges[1].BlobId, "", writeTime} 
         };
 
         // write
 
         ui32 step = 1000;
-        THashMap<TBlobRange, TString> blobs;
-        blobs[blobRanges[0]] = testBlob;
-        blobs[blobRanges[1]] = testBlob;
+        THashMap<TBlobRange, TString> blobs; 
+        blobs[blobRanges[0]] = testBlob; 
+        blobs[blobRanges[1]] = testBlob; 
         Insert(db, {1, 2}, std::move(dataToIndex), blobs, step);
 
         // load
@@ -409,7 +409,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             ui64 planStep = 1;
             ui64 txId = 0;
             auto selectInfo = engine.Select(paths[0], {planStep, txId}, columnIds, {}, {});
-            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(selectInfo->Granules.size(), 0); 
             UNIT_ASSERT_VALUES_EQUAL(selectInfo->Portions.size(), 0);
         }
 
@@ -449,18 +449,18 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         // insert
         ui64 planStep = 1;
 
-        THashMap<TBlobRange, TString> blobs;
+        THashMap<TBlobRange, TString> blobs; 
         ui64 numRows = 1000;
         ui64 rowPos = 0;
         for (ui64 txId = 1; txId <= 20; ++txId, rowPos += numRows) {
             TString testBlob = MakeTestBlob(rowPos, rowPos + numRows);
-            auto blobRange = MakeBlobRange(++step, testBlob.size());
-            blobs[blobRange] = testBlob;
+            auto blobRange = MakeBlobRange(++step, testBlob.size()); 
+            blobs[blobRange] = testBlob; 
 
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             TVector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
+                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()}); 
 
             bool ok = Insert(db, {planStep, txId}, std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -536,7 +536,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             TVector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
+                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()}); 
 
             bool ok = Insert(engine, db, {planStep, txId}, std::move(dataToIndex), blobs, step);
             // first overload returns ok: it's a postcondition
@@ -573,7 +573,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             TVector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
+                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()}); 
 
             bool ok = Insert(engine, db, {planStep, txId}, std::move(dataToIndex), blobs, step);
             bool overload = engine.GetOverloadedGranules(pathId);
@@ -608,7 +608,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
             // PlanStep, TxId, PathId, DedupId, BlobId, Data, [Metadata]
             TVector<TInsertedData> dataToIndex;
             dataToIndex.push_back(
-                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()});
+                TInsertedData{planStep, txId, pathId, "", blobRange.BlobId, "", TInstant::Now()}); 
 
             bool ok = Insert(db, {planStep, txId}, std::move(dataToIndex), blobs, step);
             UNIT_ASSERT(ok);
@@ -664,7 +664,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
         // load
         engine.Load(db);
-        UNIT_ASSERT_VALUES_EQUAL(engine.GetTotalStats().EmptyGranules, 1);
+        UNIT_ASSERT_VALUES_EQUAL(engine.GetTotalStats().EmptyGranules, 1); 
 
         { // full scan
             ui64 txId = 1;

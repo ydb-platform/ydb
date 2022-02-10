@@ -498,10 +498,10 @@ public:
         : TBase(request, promise, callback)
         , ParamsMap(std::move(paramsMap))
         , CompilationPending(false)
-        , CompilationRetried(false)
-        , AllocCounters(allocCounters)
+        , CompilationRetried(false) 
+        , AllocCounters(allocCounters) 
         , MiniKqlComplileServiceActorId(miniKqlComplileServiceActorId)
-    {}
+    {} 
 
     void Bootstrap(const TActorContext& ctx) {
         auto& mkqlTx = *Request->Record.MutableTransaction()->MutableMiniKQLTransaction();
@@ -653,7 +653,7 @@ private:
     bool CompilationRetried;
     TString MkqlProgramText;
     THashMap<TString, ui64> CompileResolveCookies;
-    TAlignedPagePoolCounters AllocCounters;
+    TAlignedPagePoolCounters AllocCounters; 
     TActorId MiniKqlComplileServiceActorId;
 };
 
@@ -988,7 +988,7 @@ public:
         : Cluster(cluster)
         , Database(database)
         , ActorSystem(actorSystem)
-        , NodeId(nodeId)
+        , NodeId(nodeId) 
         , Counters(counters)
         , MetadataLoader(std::move(metadataLoader))
         , MkqlComplileService(mkqlComplileService)
@@ -1851,7 +1851,7 @@ public:
     }
 
     TFuture<TKqpSnapshotHandle> CreatePersistentSnapshot(const TVector<TString>& tablePaths, TDuration queryTimeout) override {
-        auto* snapMgr = CreateKqpSnapshotManager(Database, queryTimeout);
+        auto* snapMgr = CreateKqpSnapshotManager(Database, queryTimeout); 
         auto snapMgrActorId = RegisterActor(snapMgr);
 
         auto ev = MakeHolder<TEvKqpSnapshot::TEvCreateSnapshotRequest>(tablePaths);
@@ -2101,10 +2101,10 @@ private:
                 }
             }
 
-            if (settings.CollectStats) {
-                mkqlTx.SetCollectStats(true);
-            }
-
+            if (settings.CollectStats) { 
+                mkqlTx.SetCollectStats(true); 
+            } 
+ 
             return SendMkqlRequest(ev.Release(), std::move(params),
                 [compileOnly] (TPromise<TMkqlResult> promise, TTransactionResponse&& response) {
                     try {
@@ -2182,7 +2182,7 @@ private:
         response.MiniKQLCompileResults = ev.GetMiniKQLCompileResults();
 
         response.ExecutionEngineEvaluatedResponse.Swap(ev.MutableExecutionEngineEvaluatedResponse());
-        response.TxStats = ev.GetTxStats();
+        response.TxStats = ev.GetTxStats(); 
 
         return response;
     }
@@ -2520,19 +2520,19 @@ private:
         }
 
         if (metadata->TableSettings.AutoPartitioningByLoad) {
-            auto& partitioningSettings = *proto.mutable_partitioning_settings();
-            TString value = to_lower(metadata->TableSettings.AutoPartitioningByLoad.GetRef());
-            if (value == "enabled") {
-                partitioningSettings.set_partitioning_by_load(Ydb::FeatureFlag::ENABLED);
-            } else if (value == "disabled") {
-                partitioningSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED);
-            } else {
-                code = Ydb::StatusIds::BAD_REQUEST;
-                error = TStringBuilder() << "Unknown feature flag '"
-                    << metadata->TableSettings.AutoPartitioningByLoad.GetRef()
-                    << "' for auto partitioning by load";
-                return false;
-            }
+            auto& partitioningSettings = *proto.mutable_partitioning_settings(); 
+            TString value = to_lower(metadata->TableSettings.AutoPartitioningByLoad.GetRef()); 
+            if (value == "enabled") { 
+                partitioningSettings.set_partitioning_by_load(Ydb::FeatureFlag::ENABLED); 
+            } else if (value == "disabled") { 
+                partitioningSettings.set_partitioning_by_load(Ydb::FeatureFlag::DISABLED); 
+            } else { 
+                code = Ydb::StatusIds::BAD_REQUEST; 
+                error = TStringBuilder() << "Unknown feature flag '" 
+                    << metadata->TableSettings.AutoPartitioningByLoad.GetRef() 
+                    << "' for auto partitioning by load"; 
+                return false; 
+            } 
         }
 
         if (metadata->TableSettings.MinPartitions) {
@@ -2642,7 +2642,7 @@ private:
     TActorSystem* ActorSystem;
     ui32 NodeId;
     TKqpRequestCounters::TPtr Counters;
-    TAlignedPagePoolCounters AllocCounters;
+    TAlignedPagePoolCounters AllocCounters; 
     TMaybe<TUserTokenData> UserToken;
     std::shared_ptr<IKqpTableMetadataLoader> MetadataLoader;
     TActorId MkqlComplileService;

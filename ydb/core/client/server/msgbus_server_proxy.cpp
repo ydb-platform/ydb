@@ -28,16 +28,16 @@ class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMe
     void Handle(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev, const TActorContext& ctx) {
         auto &mutableRecord = *ev->Get()->MutableRecord();
         TAutoPtr<ResponseType> response(new ResponseType());
-        response->Record.SetSchemeStatus(mutableRecord.GetStatus());
-        const auto status = mutableRecord.GetStatus();
+        response->Record.SetSchemeStatus(mutableRecord.GetStatus()); 
+        const auto status = mutableRecord.GetStatus(); 
         if (status == NKikimrScheme::StatusSuccess) {
-            response->Record.SetStatus(MSTATUS_OK);
-            response->Record.SetPath(mutableRecord.GetPath());
+            response->Record.SetStatus(MSTATUS_OK); 
+            response->Record.SetPath(mutableRecord.GetPath()); 
             response->Record.MutablePathDescription()->Swap(mutableRecord.MutablePathDescription());
             response->Record.SetStatusCode(NKikimrIssues::TStatusIds::SUCCESS);
-        } else {
-            response->Record.SetStatus(MSTATUS_ERROR);
-            response->Record.SetErrorReason(mutableRecord.GetReason());
+        } else { 
+            response->Record.SetStatus(MSTATUS_ERROR); 
+            response->Record.SetErrorReason(mutableRecord.GetReason()); 
 
             switch (status) {
             case NKikimrScheme::StatusPathDoesNotExist:
@@ -49,7 +49,7 @@ class TMessageBusServerFlatDescribeRequest : public TMessageBusSecureRequest<TMe
                 IssueManager.RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR));
                 break;
             }
-        }
+        } 
 
         if (IssueManager.GetIssues())
             IssuesToMessage(IssueManager.GetIssues(), response->Record.MutableIssues());

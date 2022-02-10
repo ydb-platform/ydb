@@ -1329,12 +1329,12 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         CheckGetItems(runtime, TVector<ui32>(),
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2,
                       ITEM_DOMAIN_TENANT_POOL_1, ITEM_DOMAIN_TENANT_POOL_2);
-        CheckGetItems(runtime, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+        CheckGetItems(runtime, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
-        CheckGetItems(runtime, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::TenantPoolConfigItem}),
+        CheckGetItems(runtime, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::TenantPoolConfigItem}), 
                       ITEM_DOMAIN_TENANT_POOL_1, ITEM_DOMAIN_TENANT_POOL_2);
-        CheckGetItems(runtime, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem,
-                                              (ui32)NKikimrConsole::TConfigItem::TenantPoolConfigItem}),
+        CheckGetItems(runtime, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem, 
+                                              (ui32)NKikimrConsole::TConfigItem::TenantPoolConfigItem}), 
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2,
                       ITEM_DOMAIN_TENANT_POOL_1, ITEM_DOMAIN_TENANT_POOL_2);
         CheckGetItems(runtime, TVector<ui32>(NKikimrConsole::TConfigItem::ActorSystemConfigItem));
@@ -1366,113 +1366,113 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                   ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
 
         CheckGetItemsById(runtime, TVector<ui64>({id2[0]}),
-                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                           ITEM_NODE12_LOG_1);
         CheckGetItemsById(runtime, TVector<ui64>({id2[1]}),
-                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                           ITEM_NODE23_LOG_1);
         CheckGetItemsById(runtime, TVector<ui64>({id2[0], id2[0]}),
-                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                           ITEM_NODE12_LOG_1);
         CheckGetItemsById(runtime, TVector<ui64>({id2[0], id2[1]}),
-                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                           ITEM_NODE12_LOG_1, ITEM_NODE23_LOG_1);
         CheckGetItemsById(runtime, TVector<ui64>({id2[1]}),
-                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsById(runtime, TVector<ui64>({987654321}),
-                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
+                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem})); 
 
         CheckGetItemsByNodeId(runtime, TVector<ui32>({1}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_NODE12_LOG_1);
         CheckGetItemsByNodeId(runtime, TVector<ui32>({2}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_NODE12_LOG_1, ITEM_NODE23_LOG_1);
         CheckGetItemsByNodeId(runtime, TVector<ui32>({3}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_NODE23_LOG_1, ITEM_NODE34_LOG_1);
         CheckGetItemsByNodeId(runtime, TVector<ui32>({4}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_NODE34_LOG_1);
         CheckGetItemsByNodeId(runtime, TVector<ui32>({1, 1}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_NODE12_LOG_1);
         CheckGetItemsByNodeId(runtime, TVector<ui32>({1, 2}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_NODE12_LOG_1, ITEM_NODE23_LOG_1);
         CheckGetItemsByNodeId(runtime, TVector<ui32>({1, 2, 3}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_NODE12_LOG_1, ITEM_NODE23_LOG_1, ITEM_NODE34_LOG_1);
         CheckGetItemsByNodeId(runtime, TVector<ui32>({1, 2, 3, 4}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_NODE12_LOG_1, ITEM_NODE23_LOG_1, ITEM_NODE34_LOG_1);
         CheckGetItemsByNodeId(runtime, TVector<ui32>({2, 4, 5}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_NODE12_LOG_1, ITEM_NODE23_LOG_1, ITEM_NODE34_LOG_1);
         CheckGetItemsByNodeId(runtime, TVector<ui32>({}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_NODE12_LOG_1, ITEM_NODE23_LOG_1, ITEM_NODE34_LOG_1);
         CheckGetItemsByNodeId(runtime, TVector<ui32>({4}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByNodeId(runtime, TVector<ui32>({}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByNodeId(runtime, TVector<ui32>({5}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem})); 
 
         CheckGetItemsByHost(runtime, TVector<TString>({"host1"}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                             ITEM_HOST12_LOG_1);
         CheckGetItemsByHost(runtime, TVector<TString>({"host2"}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                             ITEM_HOST12_LOG_1, ITEM_HOST23_LOG_1);
         CheckGetItemsByHost(runtime, TVector<TString>({"host3"}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                             ITEM_HOST23_LOG_1, ITEM_HOST34_LOG_1);
         CheckGetItemsByHost(runtime, TVector<TString>({"host4"}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                             ITEM_HOST34_LOG_1);
         CheckGetItemsByHost(runtime, TVector<TString>({"host1", "host1"}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                             ITEM_HOST12_LOG_1);
         CheckGetItemsByHost(runtime, TVector<TString>({"host1", "host2"}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                             ITEM_HOST12_LOG_1, ITEM_HOST23_LOG_1);
         CheckGetItemsByHost(runtime, TVector<TString>({"host1", "host2", "host3"}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                             ITEM_HOST12_LOG_1, ITEM_HOST23_LOG_1, ITEM_HOST34_LOG_1);
         CheckGetItemsByHost(runtime, TVector<TString>({"host1", "host2", "host3", "host4"}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                             ITEM_HOST12_LOG_1, ITEM_HOST23_LOG_1, ITEM_HOST34_LOG_1);
         CheckGetItemsByHost(runtime, TVector<TString>({"host2", "host3", "host5"}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                             ITEM_HOST12_LOG_1, ITEM_HOST23_LOG_1, ITEM_HOST34_LOG_1);
         CheckGetItemsByHost(runtime, TVector<TString>({}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                             ITEM_HOST12_LOG_1, ITEM_HOST23_LOG_1, ITEM_HOST34_LOG_1);
         CheckGetItemsByHost(runtime, TVector<TString>({"host4"}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByHost(runtime, TVector<TString>({}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByHost(runtime, TVector<TString>({"host5"}),
-                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
+                            TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem})); 
 
         CheckGetItemsByTenant(runtime, TVector<TString>({"tenant1"}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_TENANT1_LOG_1, ITEM_TENANT1_LOG_2,
                               ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2,
                               ITEM_TENANT1_TYPE2_LOG_1, ITEM_TENANT1_TYPE2_LOG_2);
         CheckGetItemsByTenant(runtime, TVector<TString>({"tenant2"}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_TENANT2_LOG_1, ITEM_TENANT2_LOG_2,
                               ITEM_TENANT2_TYPE1_LOG_1, ITEM_TENANT2_TYPE1_LOG_2,
                               ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
         CheckGetItemsByTenant(runtime, TVector<TString>({"tenant1", "tenant1"}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_TENANT1_LOG_1, ITEM_TENANT1_LOG_2,
                               ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2,
                               ITEM_TENANT1_TYPE2_LOG_1, ITEM_TENANT1_TYPE2_LOG_2);
         CheckGetItemsByTenant(runtime, TVector<TString>({"tenant1", "tenant2"}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_TENANT1_LOG_1, ITEM_TENANT1_LOG_2,
                               ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2,
                               ITEM_TENANT1_TYPE2_LOG_1, ITEM_TENANT1_TYPE2_LOG_2,
@@ -1480,7 +1480,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                               ITEM_TENANT2_TYPE1_LOG_1, ITEM_TENANT2_TYPE1_LOG_2,
                               ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
         CheckGetItemsByTenant(runtime, TVector<TString>({}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                               ITEM_TENANT1_LOG_1, ITEM_TENANT1_LOG_2,
                               ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2,
                               ITEM_TENANT1_TYPE2_LOG_1, ITEM_TENANT1_TYPE2_LOG_2,
@@ -1488,29 +1488,29 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                               ITEM_TENANT2_TYPE1_LOG_1, ITEM_TENANT2_TYPE1_LOG_2,
                               ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
         CheckGetItemsByTenant(runtime, TVector<TString>({"tenant2"}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByTenant(runtime, TVector<TString>({}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByTenant(runtime, TVector<TString>({"tenant3"}),
-                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
+                              TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem})); 
 
         CheckGetItemsByNodeType(runtime, TVector<TString>({"type1"}),
-                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                 ITEM_TYPE1_LOG_1, ITEM_TYPE1_LOG_2,
                                 ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2,
                                 ITEM_TENANT2_TYPE1_LOG_1, ITEM_TENANT2_TYPE1_LOG_2);
         CheckGetItemsByNodeType(runtime, TVector<TString>({"type2"}),
-                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                 ITEM_TYPE2_LOG_1, ITEM_TYPE2_LOG_2,
                                 ITEM_TENANT1_TYPE2_LOG_1, ITEM_TENANT1_TYPE2_LOG_2,
                                 ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
         CheckGetItemsByNodeType(runtime, TVector<TString>({"type1", "type1"}),
-                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                 ITEM_TYPE1_LOG_1, ITEM_TYPE1_LOG_2,
                                 ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2,
                                 ITEM_TENANT2_TYPE1_LOG_1, ITEM_TENANT2_TYPE1_LOG_2);
         CheckGetItemsByNodeType(runtime, TVector<TString>({"type1", "type2"}),
-                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                 ITEM_TYPE1_LOG_1, ITEM_TYPE1_LOG_2,
                                 ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2,
                                 ITEM_TENANT2_TYPE1_LOG_1, ITEM_TENANT2_TYPE1_LOG_2,
@@ -1518,7 +1518,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                                 ITEM_TENANT1_TYPE2_LOG_1, ITEM_TENANT1_TYPE2_LOG_2,
                                 ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
         CheckGetItemsByNodeType(runtime, TVector<TString>({}),
-                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                 ITEM_TYPE1_LOG_1, ITEM_TYPE1_LOG_2,
                                 ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2,
                                 ITEM_TENANT2_TYPE1_LOG_1, ITEM_TENANT2_TYPE1_LOG_2,
@@ -1526,52 +1526,52 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                                 ITEM_TENANT1_TYPE2_LOG_1, ITEM_TENANT1_TYPE2_LOG_2,
                                 ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
         CheckGetItemsByNodeType(runtime, TVector<TString>({"type2"}),
-                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByNodeType(runtime, TVector<TString>({}),
-                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByNodeType(runtime, TVector<TString>({"type3"}),
-                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
+                                TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem})); 
 
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({std::make_pair("tenant1", "type1")}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                          ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2);
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({std::make_pair("tenant1", "type2")}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                          ITEM_TENANT1_TYPE2_LOG_1, ITEM_TENANT1_TYPE2_LOG_2);
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({std::make_pair("tenant2", "type1")}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                          ITEM_TENANT2_TYPE1_LOG_1, ITEM_TENANT2_TYPE1_LOG_2);
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({std::make_pair("tenant2", "type2")}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                          ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({std::make_pair("tenant1", "type1"),
                                                                                         std::make_pair("tenant1", "type1")}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                          ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2);
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({std::make_pair("tenant1", "type1"),
                                                                                         std::make_pair("tenant1", "type2")}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                          ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2,
                                          ITEM_TENANT1_TYPE2_LOG_1, ITEM_TENANT1_TYPE2_LOG_2);
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({std::make_pair("tenant1", "type1"),
                                                                                         std::make_pair("tenant2", "type2")}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                          ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2,
                                          ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                          ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2,
                                          ITEM_TENANT1_TYPE2_LOG_1, ITEM_TENANT1_TYPE2_LOG_2,
                                          ITEM_TENANT2_TYPE1_LOG_1, ITEM_TENANT2_TYPE1_LOG_2,
                                          ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({std::make_pair("tenant2", "type2")}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({std::make_pair("tenant1", "type3")}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem})); 
         CheckGetItemsByTenantAndNodeType(runtime, TVector<std::pair<TString, TString>>({std::make_pair("tenant3", "type2")}),
-                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}));
+                                         TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem})); 
 
         CheckGetItemsByUsageScope(runtime, MakeUsageScope(TVector<ui32>({1, 2})), TVector<ui32>(),
                                   ITEM_NODE12_LOG_1);
@@ -1580,7 +1580,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         CheckGetItemsByUsageScope(runtime, MakeUsageScope(TVector<ui32>({3, 4})), TVector<ui32>(),
                                   ITEM_NODE34_LOG_1);
         CheckGetItemsByUsageScope(runtime, MakeUsageScope(TVector<ui32>({3, 4})),
-                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByUsageScope(runtime, MakeUsageScope(TVector<ui32>({})), TVector<ui32>());
         CheckGetItemsByUsageScope(runtime, MakeUsageScope(TVector<ui32>({1})), TVector<ui32>());
         CheckGetItemsByUsageScope(runtime, MakeUsageScope(TVector<ui32>({2})), TVector<ui32>());
@@ -1597,7 +1597,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                                   TVector<ui32>(),
                                   ITEM_HOST34_LOG_1);
         CheckGetItemsByUsageScope(runtime, MakeUsageScope(TVector<TString>({TString("host3"), TString("host4")})),
-                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByUsageScope(runtime, MakeUsageScope(TVector<TString>()), TVector<ui32>());
         CheckGetItemsByUsageScope(runtime, MakeUsageScope(TVector<TString>({TString("host1")})), TVector<ui32>());
         CheckGetItemsByUsageScope(runtime, MakeUsageScope(TVector<TString>({TString("host2")})), TVector<ui32>());
@@ -1610,14 +1610,14 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("tenant2", ""), TVector<ui32>(),
                                   ITEM_TENANT2_LOG_1, ITEM_TENANT2_LOG_2);
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("tenant2", ""),
-                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("tenant3", ""), TVector<ui32>());
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("", "type1"), TVector<ui32>(),
                                   ITEM_TYPE1_LOG_1, ITEM_TYPE1_LOG_2);
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("", "type2"), TVector<ui32>(),
                                   ITEM_TYPE2_LOG_1, ITEM_TYPE2_LOG_2);
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("", "type2"),
-                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("", "type3"), TVector<ui32>());
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("tenant1", "type1"), TVector<ui32>(),
                                   ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2);
@@ -1628,7 +1628,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("tenant2", "type2"), TVector<ui32>(),
                                   ITEM_TENANT2_TYPE2_LOG_1, ITEM_TENANT2_TYPE2_LOG_2);
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("tenant2", "type2"),
-                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("tenant3", "type1"), TVector<ui32>());
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("tenant1", "type3"), TVector<ui32>());
 
@@ -1636,18 +1636,18 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                                   ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2,
                                   ITEM_DOMAIN_TENANT_POOL_1, ITEM_DOMAIN_TENANT_POOL_2);
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("", ""),
-                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                   ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
         CheckGetItemsByUsageScope(runtime, MakeUsageScope("", ""),
-                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetItemsByUsageScope(runtime, NKikimrConsole::TUsageScope(), TVector<ui32>(),
                                   ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2,
                                   ITEM_DOMAIN_TENANT_POOL_1, ITEM_DOMAIN_TENANT_POOL_2);
         CheckGetItemsByUsageScope(runtime, NKikimrConsole::TUsageScope(),
-                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                   ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2);
         CheckGetItemsByUsageScope(runtime, NKikimrConsole::TUsageScope(),
-                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
 
         auto scope1 = MakeUsageScope(TVector<ui32>({1, 2}));
         auto scope2 = MakeUsageScope(TVector<TString>({TString("host1"), TString("host2")}));
@@ -1664,7 +1664,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                                   ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2,
                                   ITEM_DOMAIN_TENANT_POOL_1, ITEM_DOMAIN_TENANT_POOL_2);
         CheckGetItemsByUsageScope(runtime, TVector<NKikimrConsole::TUsageScope>({scope1, scope2, scope3, scope4, scope5, scope6}),
-                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+                                  TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                                   ITEM_NODE12_LOG_1, ITEM_HOST12_LOG_1,
                                   ITEM_TENANT1_LOG_1, ITEM_TENANT1_LOG_2,
                                   ITEM_TYPE1_LOG_1, ITEM_TYPE1_LOG_2,
@@ -1692,7 +1692,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
         CheckGetItemsByCookie(runtime, TVector<TString>({"cookie3"}),
                               TVector<ui32>());
 
-        CheckGetItems(runtime, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}),
+        CheckGetItems(runtime, TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::LogConfigItem}), 
                       ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2,
                       ITEM_NODE12_LOG_1, ITEM_NODE23_LOG_1,
                       ITEM_NODE34_LOG_1, ITEM_HOST12_LOG_1,
@@ -1760,7 +1760,7 @@ Y_UNIT_TEST_SUITE(TConsoleConfigTests) {
                           ITEM_TYPE1_LOG_1, ITEM_TYPE1_LOG_2,
                           ITEM_TENANT1_TYPE1_LOG_1, ITEM_TENANT1_TYPE1_LOG_2);
         CheckGetNodeItems(runtime, 1, "host1", "tenant1", "type1",
-                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem}));
+                          TVector<ui32>({(ui32)NKikimrConsole::TConfigItem::ActorSystemConfigItem})); 
         CheckGetNodeItems(runtime, 2, "host1", "tenant1", "type1", TVector<ui32>(),
                           ITEM_DOMAIN_LOG_1, ITEM_DOMAIN_LOG_2,
                           ITEM_NODE12_LOG_1, ITEM_NODE23_LOG_1, ITEM_HOST12_LOG_1,

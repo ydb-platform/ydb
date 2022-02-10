@@ -1,5 +1,5 @@
 #include "rpc_kh_snapshots.h"
-#include "resolve_local_db_table.h"
+#include "resolve_local_db_table.h" 
 
 #include "rpc_calls.h"
 #include "rpc_common.h"
@@ -105,9 +105,9 @@ public:
 
         auto* tx = req->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
         for (const TString& path : proto->path()) {
-            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
-                continue;
-            }
+            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) { 
+                continue; 
+            } 
             tx->AddTables()->SetTablePath(path);
         }
         tx->SetTimeoutMs(SnapshotTimeout.MilliSeconds());
@@ -241,9 +241,9 @@ public:
 
         auto* tx = req->Record.MutableTransaction()->MutableRefreshVolatileSnapshot();
         for (const TString& path : proto->path()) {
-            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
-                continue;
-            }
+            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) { 
+                continue; 
+            } 
             tx->AddTables()->SetTablePath(path);
         }
         tx->SetSnapshotStep(SnapshotId.Step);
@@ -382,9 +382,9 @@ public:
 
         auto* tx = req->Record.MutableTransaction()->MutableDiscardVolatileSnapshot();
         for (const TString& path : proto->path()) {
-            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) {
-                continue;
-            }
+            if (proto->ignore_system_views() && TryParseLocalDbPath(::NKikimr::SplitPath(path))) { 
+                continue; 
+            } 
             tx->AddTables()->SetTablePath(path);
         }
         tx->SetSnapshotStep(SnapshotId.Step);

@@ -1,5 +1,5 @@
-#pragma once
-
+#pragma once 
+ 
 #include "schemeshard.h"
 #include "schemeshard_export.h"
 #include "schemeshard_import.h"
@@ -13,7 +13,7 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_utils.h"
 #include "schemeshard_schema.h"
-
+ 
 #include "schemeshard__operation.h"
 
 #include "operation_queue_timer.h"
@@ -44,17 +44,17 @@
 #include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/util/pb.h>
-
+ 
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
 
 #include <ydb/library/login/login.h>
 
-#include <util/generic/ptr.h>
-
-namespace NKikimr {
+#include <util/generic/ptr.h> 
+ 
+namespace NKikimr { 
 namespace NSchemeShard {
-
+ 
 extern const ui64 NEW_TABLE_ALTER_VERSION;
 
 class TSchemeShard
@@ -106,16 +106,16 @@ public:
     static constexpr ui32 MaxPQWriteSpeedPerPartition = 50*1024*1024;
     static constexpr ui32 MaxPQLifetimeSeconds = 31 * 86400;
     static constexpr ui32 PublishChunkSize = 1000;
-
+ 
     static const TSchemeLimits DefaultLimits;
 
     TIntrusivePtr<TChannelProfiles> ChannelProfiles;
-
+ 
     TControlWrapper AllowConditionalEraseOperations;
     TControlWrapper AllowServerlessStorageBilling;
 
-    TSplitSettings SplitSettings;
-
+    TSplitSettings SplitSettings; 
+ 
     struct TTenantInitState {
         enum EInitState {
             InvalidState = 0,
@@ -185,30 +185,30 @@ public:
     THashMap<TShardIdx, TAdoptedShard> AdoptedShards;
     THashMap<TTabletId, TShardIdx> TabletIdToShardIdx;
     THashMap<TShardIdx, TVector<TActorId>> ShardDeletionSubscribers; // for tests
-
+ 
     TActorId SchemeBoardPopulator;
 
     static constexpr ui32 InitiateCachedTxIdsCount = 100;
     TDeque<TTxId> CachedTxIds;
     TActorId TxAllocatorClient;
 
-    TAutoPtr<NTabletPipe::IClientCache> PipeClientCache;
-    TPipeTracker PipeTracker;
-
+    TAutoPtr<NTabletPipe::IClientCache> PipeClientCache; 
+    TPipeTracker PipeTracker; 
+ 
     TCompactionStarter CompactionStarter;
     TCompactionQueue* CompactionQueue = nullptr;
     bool EnableBackgroundCompaction = false;
     bool EnableBackgroundCompactionServerless = false;
     ui32 CompactionSearchHeightThreshold = 0;
 
-    TShardDeleter ShardDeleter;
-
+    TShardDeleter ShardDeleter; 
+ 
     // Counter-strike stuff
     TTabletCountersBase* TabletCounters = nullptr;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
-
-    TAutoPtr<TSelfPinger> SelfPinger;
-
+ 
+    TAutoPtr<TSelfPinger> SelfPinger; 
+ 
     TActorId SysPartitionStatsCollector;
 
     TSet<TPathId> CleanDroppedPathsCandidates;
@@ -278,7 +278,7 @@ public:
 
     void Clear();
     void BreakTabletAndRestart(const TActorContext& ctx);
-
+ 
     bool IsShemeShardConfigured() const;
 
     ui64 Generation() const;
@@ -360,8 +360,8 @@ public:
     void ClearDescribePathCaches(const TPathElement::TPtr node);
     TString PathToString(TPathElement::TPtr item);
     NKikimrSchemeOp::TPathVersion  GetPathVersion(const TPath& pathEl) const;
-
-    const TTableInfo* GetMainTableForIndex(TPathId indexTableId) const;
+ 
+    const TTableInfo* GetMainTableForIndex(TPathId indexTableId) const; 
 
     TPathId ResolveDomainId(TPathId pathId) const;
     TPathId ResolveDomainId(TPathElement::TPtr pathEl) const;
@@ -395,12 +395,12 @@ public:
     TMaybe<NKikimrSchemeOp::TPartitionConfig> GetTablePartitionConfigWithAlterData(TPathId pathId) const;
     void DeleteSplitOp(TOperationId txId, TTxState& txState);
     bool ShardIsUnderSplitMergeOp(const TShardIdx& idx) const;
-
+ 
     THashSet<TShardIdx> CollectAllShards(const THashSet<TPathId>& pathes) const;
     void ExamineTreeVFS(TPathId nodeId, std::function<void(TPathElement::TPtr)> func, const TActorContext& ctx);
     THashSet<TPathId> ListSubThee(TPathId subdomain_root, const TActorContext& ctx);
     THashSet<TTxId> GetRelatedTransactions(const THashSet<TPathId>& pathes, const TActorContext &ctx);
-
+ 
     void MarkAsDroping(TPathElement::TPtr node, TTxId txId, const TActorContext& ctx);
     void MarkAsDroping(const THashSet<TPathId>& pathes, TTxId txId, const TActorContext& ctx);
 
@@ -409,9 +409,9 @@ public:
 
     void DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, NIceDb::TNiceDb& db, const TActorContext& ctx);
     void DropPathes(const THashSet<TPathId>& pathes, TStepId step, TTxId txId, NIceDb::TNiceDb& db, const TActorContext& ctx);
-
+ 
     void DoShardsDeletion(const THashSet<TShardIdx>& shardIdx, const TActorContext& ctx);
-
+ 
     void SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning);
     auto BuildStatsForCollector(TPathId tableId, TShardIdx shardIdx, TTabletId datashardId,
         TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TTableInfo::TPartitionStats& stats);
@@ -583,11 +583,11 @@ public:
     TShardIdx GetShardIdx(TTabletId tabletId) const;
     TShardIdx MustGetShardIdx(TTabletId tabletId) const;
     TTabletTypes::EType GetTabletType(TTabletId tabletId) const;
-
+ 
     struct TTxMonitoring;
     //OnRenderAppHtmlPage
 
-    struct TTxInit;
+    struct TTxInit; 
     NTabletFlatExecutor::ITransaction* CreateTxInit();
 
     struct TTxInitRoot;
@@ -648,16 +648,16 @@ public:
     struct TTxMigrate;
     NTabletFlatExecutor::ITransaction* CreateTxMigrate(TEvSchemeShard::TEvMigrateSchemeShard::TPtr &ev);
 
-    struct TTxDescribeScheme;
+    struct TTxDescribeScheme; 
     NTabletFlatExecutor::ITransaction* CreateTxDescribeScheme(TEvSchemeShard::TEvDescribeScheme::TPtr &ev);
 
-    struct TTxNotifyCompletion;
+    struct TTxNotifyCompletion; 
     NTabletFlatExecutor::ITransaction* CreateTxNotifyTxCompletion(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev);
 
     struct TTxDeleteTabletReply;
     NTabletFlatExecutor::ITransaction* CreateTxDeleteTabletReply(TEvHive::TEvDeleteTabletReply::TPtr& ev);
 
-    struct TTxShardStateChanged;
+    struct TTxShardStateChanged; 
     NTabletFlatExecutor::ITransaction* CreateTxShardStateChanged(TEvDataShard::TEvStateChanged::TPtr& ev);
 
     struct TTxRunConditionalErase;
@@ -670,7 +670,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxSyncTenant(TPathId tabletId);
     struct TTxUpdateTenant;
     NTabletFlatExecutor::ITransaction* CreateTxUpdateTenant(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev);
-
+ 
     struct TTxPublishToSchemeBoard;
     NTabletFlatExecutor::ITransaction* CreateTxPublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths);
     struct TTxAckPublishToSchemeBoard;
@@ -724,16 +724,16 @@ public:
     static bool FillSplitPartitioning(TVector<TString>& rangeEnds, const TConstArrayRef<NScheme::TTypeId>& keyColTypes,
                                       const ::google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries,
                                       TString& errStr);
-
+ 
     TString FillAlterTableTxBody(TPathId tableId, TShardIdx shardIdx, TMessageSeqNo seqNo) const;
     TString FillBackupTxBody(TPathId pathId, const NKikimrSchemeOp::TBackupTask& task, ui32 shardNum, TMessageSeqNo seqNo) const;
 
     static void FillSeqNo(NKikimrTxDataShard::TFlatSchemeTransaction &tx, TMessageSeqNo seqNo);
     static void FillSeqNo(NKikimrTxColumnShard::TSchemaTxBody &tx, TMessageSeqNo seqNo);
-
+ 
     void FillAsyncIndexInfo(const TPathId& tableId, NKikimrTxDataShard::TFlatSchemeTransaction& tx);
 
-    void DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme::TTypeRegistry* typeRegistry,
+    void DescribeTable(const TTableInfo::TPtr tableInfo, const NScheme::TTypeRegistry* typeRegistry, 
                        bool fillConfig, bool fillBoundaries, NKikimrSchemeOp::TTableDescription* entry) const;
     void DescribeTableIndex(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TIndexDescription& entry);
     void DescribeTableIndex(const TPathId& pathId, const TString& name, TTableIndexInfo::TPtr indexInfo, NKikimrSchemeOp::TIndexDescription& entry);
@@ -744,24 +744,24 @@ public:
     void DescribeReplication(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TReplicationDescription& desc);
     void DescribeReplication(const TPathId& pathId, const TString& name, TReplicationInfo::TPtr info, NKikimrSchemeOp::TReplicationDescription& desc);
     static void FillTableBoundaries(const TTableInfo::TPtr tableInfo, google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries);
-
+ 
     void Handle(TEvSchemeShard::TEvInitRootShard::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvInitTenantSchemeShard::TPtr &ev, const TActorContext &ctx);
 
     void Handle(TEvSchemeShard::TEvModifySchemeTransaction::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvDescribeScheme::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSchemeShard::TEvNotifyTxCompletion::TPtr &ev, const TActorContext &ctx);
-
+ 
     void Handle(TEvSchemeShard::TEvCancelTx::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx);
-
-    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx);
-
-    void Handle(TEvHive::TEvCreateTabletReply::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvProgressOperation::TPtr &ev, const TActorContext &ctx); 
+ 
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvTabletPipe::TEvServerConnected::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx); 
+ 
+    void Handle(TEvHive::TEvCreateTabletReply::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvHive::TEvAdoptTabletReply::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvHive::TEvDeleteTabletReply::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvSubscribeToShardDeletion::TPtr &ev, const TActorContext &ctx);
@@ -777,9 +777,9 @@ public:
     void Handle(NSequenceShard::TEvSequenceShard::TEvRedirectSequenceResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NReplication::TEvController::TEvCreateReplicationResult::TPtr &ev, const TActorContext &ctx);
     void Handle(NReplication::TEvController::TEvDropReplicationResult::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvDataShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvDataShard::TEvSchemaChanged::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvDataShard::TEvStateChanged::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvDataShard::TEvStateChanged::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvSubDomain::TEvConfigureStatus::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlockStore::TEvUpdateVolumeConfigResponse::TPtr& ev, const TActorContext& ctx);
@@ -797,21 +797,21 @@ public:
 
     void Handle(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvUpdateTenantSchemeShard::TPtr& ev, const TActorContext& ctx);
-
+ 
     void Handle(TSchemeBoardEvents::TEvUpdateAck::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorContext &ctx);
-
+    void Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorContext &ctx); 
+ 
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
-    void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
-
-    void Handle(TEvDataShard::TEvInitSplitMergeDestinationAck::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvSplitAck::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvSplitPartitioningChangedAck::TPtr& ev, const TActorContext& ctx);
-
-    void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx);
-
+    void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx); 
+ 
+    void Handle(TEvDataShard::TEvInitSplitMergeDestinationAck::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvSplitAck::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvSplitPartitioningChangedAck::TPtr& ev, const TActorContext& ctx); 
+ 
+    void Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx); 
+ 
     void Handle(TEvSchemeShard::TEvFindTabletSubDomainPathId::TPtr& ev, const TActorContext& ctx);
 
     void ScheduleConditionalEraseRun(const TActorContext& ctx);
@@ -829,7 +829,7 @@ public:
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
 
     void RestartPipeTx(TTabletId tabletId, const TActorContext& ctx);
-
+ 
     TOperationId RouteIncomming(TTabletId tabletId, const TActorContext& ctx);
 
     // namespace NLongRunningCommon {
@@ -1062,15 +1062,15 @@ public:
 
     NLogin::TLoginProvider LoginProvider;
 
-private:
-    void OnDetach(const TActorContext &ctx) override;
-    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override;
-    void OnActivateExecutor(const TActorContext &ctx) override;
-    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override;
-    void DefaultSignalTabletActive(const TActorContext &ctx) override;
-    void Cleanup(const TActorContext &ctx);
-    void Enqueue(STFUNC_SIG) override;
-    void Die(const TActorContext &ctx) override;
+private: 
+    void OnDetach(const TActorContext &ctx) override; 
+    void OnTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) override; 
+    void OnActivateExecutor(const TActorContext &ctx) override; 
+    bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) override; 
+    void DefaultSignalTabletActive(const TActorContext &ctx) override; 
+    void Cleanup(const TActorContext &ctx); 
+    void Enqueue(STFUNC_SIG) override; 
+    void Die(const TActorContext &ctx) override; 
 
     bool ReassignChannelsEnabled() const override {
         return true;
@@ -1079,21 +1079,21 @@ private:
     const TDomainsInfo::TDomain& GetDomainDescription(const TActorContext &ctx) const;
     NKikimrSubDomains::TProcessingParams CreateRootProcessingParams(const TActorContext &ctx);
     static NTabletPipe::TClientConfig GetPipeClientConfig();
-
-public:
+ 
+public: 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;
     }
 
     TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info);
-
+ 
     //TTabletId TabletID() const { return TTabletId(ITablet::TabletID()); }
     TTabletId SelfTabletId() const { return TTabletId(ITablet::TabletID()); }
 
-    STFUNC(StateInit);
+    STFUNC(StateInit); 
     STFUNC(StateConfigure);
-    STFUNC(StateWork);
-    STFUNC(BrokenState);
+    STFUNC(StateWork); 
+    STFUNC(BrokenState); 
 
     // A helper that enforces write-only access to the internal DB (reads must be done from the
     // internal structures)
@@ -1113,7 +1113,7 @@ public:
         virtual void DoExecute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) = 0;
         virtual void DoComplete(const TActorContext &ctx) = 0;
     };
-};
-
+}; 
+ 
 }
 }

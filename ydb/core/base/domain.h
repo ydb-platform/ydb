@@ -1,13 +1,13 @@
 #pragma once
 #include "defs.h"
 #include "tabletid.h"
-#include "localdb.h"
+#include "localdb.h" 
 
 #include <ydb/core/protos/blobstorage_config.pb.h>
 
 #include <util/generic/map.h>
-#include <util/generic/hash.h>
-#include <util/generic/ptr.h>
+#include <util/generic/hash.h> 
+#include <util/generic/ptr.h> 
 
 namespace NKikimr {
 
@@ -60,16 +60,16 @@ struct TDomainsInfo : public TThrRefBase {
         return MakeTabletID(domain, 0, uniqPart);
     }
 
-    static constexpr const char* SystemTableDefaultPoicyName() {
-        return "SystemTableDefault";
-    }
-
-    static constexpr const char* UserTableDefaultPoicyName() {
-        return "UserTableDefault";
-    }
-
+    static constexpr const char* SystemTableDefaultPoicyName() { 
+        return "SystemTableDefault"; 
+    } 
+ 
+    static constexpr const char* UserTableDefaultPoicyName() { 
+        return "UserTableDefault"; 
+    } 
+ 
     typedef THashMap<TString, TIntrusiveConstPtr<NLocalDb::TCompactionPolicy>> TNamedCompactionPolicies;
-
+ 
     struct TDomain : public TThrRefBase {
         using TPtr = TIntrusivePtr<TDomain>;
 
@@ -236,30 +236,30 @@ struct TDomainsInfo : public TThrRefBase {
     TMap<ui32, TIntrusivePtr<TDomain>> DomainByStateStorageGroup;
     TMap<ui32, TIntrusivePtr<TDomain>> DomainByHiveUid;
     TMap<ui32, ui64> HivesByHiveUid;
-    TNamedCompactionPolicies NamedCompactionPolicies;
+    TNamedCompactionPolicies NamedCompactionPolicies; 
 
-    TDomainsInfo() {
-        // Add default configs. They can be overriden by user
+    TDomainsInfo() { 
+        // Add default configs. They can be overriden by user 
         NamedCompactionPolicies[SystemTableDefaultPoicyName()] = NLocalDb::CreateDefaultTablePolicy();
-        NamedCompactionPolicies[UserTableDefaultPoicyName()] = NLocalDb::CreateDefaultUserTablePolicy();
-    }
-
-    TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> GetDefaultSystemTablePolicy() const {
-        return *NamedCompactionPolicies.FindPtr(SystemTableDefaultPoicyName());
-    }
-
-    TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> GetDefaultUserTablePolicy() const {
-        return *NamedCompactionPolicies.FindPtr(UserTableDefaultPoicyName());
-    }
-
+        NamedCompactionPolicies[UserTableDefaultPoicyName()] = NLocalDb::CreateDefaultUserTablePolicy(); 
+    } 
+ 
+    TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> GetDefaultSystemTablePolicy() const { 
+        return *NamedCompactionPolicies.FindPtr(SystemTableDefaultPoicyName()); 
+    } 
+ 
+    TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> GetDefaultUserTablePolicy() const { 
+        return *NamedCompactionPolicies.FindPtr(UserTableDefaultPoicyName()); 
+    } 
+ 
     void AddCompactionPolicy(TString name, TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> policy) {
-        NamedCompactionPolicies[name] = policy;
-    }
-
+        NamedCompactionPolicies[name] = policy; 
+    } 
+ 
     void AddDomain(TDomain *domain) {
         Y_VERIFY(domain->DomainUid <= MaxDomainId);
         Domains[domain->DomainUid] = domain;
-        DomainByName[domain->Name] = domain;
+        DomainByName[domain->Name] = domain; 
         Y_VERIFY(Domains.size() == DomainByName.size());
         for (auto group: domain->StateStorageGroups) {
             DomainByStateStorageGroup[group] = domain;

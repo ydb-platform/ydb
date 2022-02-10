@@ -135,17 +135,17 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
         NYdb::NLongTx::TClient client(connection);
 
         NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(resBeginTx.Status().GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(resBeginTx.Status().GetStatus(), EStatus::SUCCESS); 
 
         auto txId = resBeginTx.GetResult().tx_id();
         TString data = TestBlob();
 
         NLongTx::TLongTxWriteResult resWrite =
             client.Write(txId, TestTablePath, "0", data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(resWrite.Status().GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(resWrite.Status().GetStatus(), EStatus::SUCCESS); 
 
         NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(resCommitTx.Status().GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(resCommitTx.Status().GetStatus(), EStatus::SUCCESS); 
     }
 
     Y_UNIT_TEST(BeginWriteRollback) {
@@ -163,17 +163,17 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
         NYdb::NLongTx::TClient client(connection);
 
         NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(resBeginTx.Status().GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(resBeginTx.Status().GetStatus(), EStatus::SUCCESS); 
 
         auto txId = resBeginTx.GetResult().tx_id();
         TString data = TestBlob();
 
         NLongTx::TLongTxWriteResult resWrite =
             client.Write(txId, TestTablePath, "0", data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(resWrite.Status().GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(resWrite.Status().GetStatus(), EStatus::SUCCESS); 
 
         NLongTx::TLongTxRollbackResult resRollbackTx = client.RollbackTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(resRollbackTx.Status().GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(resRollbackTx.Status().GetStatus(), EStatus::SUCCESS); 
     }
 
     Y_UNIT_TEST(BeginRead) {
@@ -191,12 +191,12 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
         NYdb::NLongTx::TClient client(connection);
 
         NLongTx::TLongTxBeginResult resBeginTx = client.BeginReadTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(resBeginTx.Status().GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(resBeginTx.Status().GetStatus(), EStatus::SUCCESS); 
 
         auto txId = resBeginTx.GetResult().tx_id();
 
         NLongTx::TLongTxReadResult resRead = client.Read(txId, TestTablePath).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(resRead.Status().GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(resRead.Status().GetStatus(), EStatus::SUCCESS); 
         UNIT_ASSERT_VALUES_EQUAL(resRead.GetResult().data().data(), "");
     }
 

@@ -93,7 +93,7 @@ namespace NActors {
         TVector<TFinalEventCondition> FinalEvents;
         TVector<TEventMailboxId> NonEmptyMailboxes;
         TVector<TEventMailboxId> OnlyMailboxes;
-        std::function<bool()> CustomFinalCondition;
+        std::function<bool()> CustomFinalCondition; 
         bool Quiet = false;
     };
 
@@ -219,8 +219,8 @@ namespace NActors {
         TEventFilter SetEventFilter(TEventFilter filterFunc);
         TScheduledEventFilter SetScheduledEventFilter(TScheduledEventFilter filterFunc);
         TRegistrationObserver SetRegistrationObserverFunc(TRegistrationObserver observerFunc);
-        static bool IsVerbose();
-        static void SetVerbose(bool verbose);
+        static bool IsVerbose(); 
+        static void SetVerbose(bool verbose); 
         TDuration SetDispatchTimeout(TDuration timeout);
         void SetDispatchedEventsLimit(ui64 limit) {
             DispatchedEventsLimit = limit;
@@ -499,7 +499,7 @@ namespace NActors {
         void ClearMailbox(ui32 nodeId, ui32 hint);
         void HandleNonEmptyMailboxesForEachContext(TEventMailboxId mboxId);
         void UpdateFinalEventsStatsForEachContext(IEventHandle& ev);
-        bool DispatchEventsInternal(const TDispatchOptions& options, TInstant simDeadline);
+        bool DispatchEventsInternal(const TDispatchOptions& options, TInstant simDeadline); 
 
     private:
         ui64 ScheduledCount;

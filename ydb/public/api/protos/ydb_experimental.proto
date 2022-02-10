@@ -1,15 +1,15 @@
-syntax = "proto3";
-option cc_enable_arenas = true;
-
-package Ydb.Experimental;
+syntax = "proto3"; 
+option cc_enable_arenas = true; 
+ 
+package Ydb.Experimental; 
 option java_package = "com.yandex.ydb.experimental";
-option java_outer_classname = "ExperimentalProtos";
-
+option java_outer_classname = "ExperimentalProtos"; 
+ 
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_value.proto";
-
-
+ 
+ 
 message ExecuteStreamQueryRequest {
     string yql_text = 1;
     map<string, TypedValue> parameters = 2;

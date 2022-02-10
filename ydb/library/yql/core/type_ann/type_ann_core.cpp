@@ -3518,32 +3518,32 @@ namespace NTypeAnnImpl {
     }
 
     IGraphTransformer::TStatus FromBytesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
+        Y_UNUSED(output); 
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
+            return IGraphTransformer::TStatus::Error; 
+        } 
 
         bool isOptional;
         const TDataExprType* dataType;
         if (!EnsureDataOrOptionalOfData(input->Head(), isOptional, dataType, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         if (!EnsureSpecificDataType(input->Head().Pos(), *dataType, EDataSlot::String, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
 
         if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         auto dataTypeName = input->Child(1)->Content();
         auto slot = NKikimr::NUdf::FindDataSlot(dataTypeName);
         if (!slot) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1)->Pos()), TStringBuilder() << "Unknown datatype: " << dataTypeName));
-            return IGraphTransformer::TStatus::Error;
-        }
-
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         const bool isDecimal = IsDataTypeDecimal(*slot);
         if (!EnsureArgsCount(*input, isDecimal ? 4 : 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -3556,9 +3556,9 @@ namespace NTypeAnnImpl {
         if (isDecimal && !input->GetTypeAnn()->Cast<TDataExprParamsType>()->Validate(input->Pos(), ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
-        return IGraphTransformer::TStatus::Ok;
-    }
-
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
     bool CanConvert(EDataSlot sourceType, EDataSlot targetType) {
         bool canConvert = false;
         if ((IsDataTypeIntegral(sourceType) || sourceType == EDataSlot::Bool) &&
@@ -4935,25 +4935,25 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
     }
 
     IGraphTransformer::TStatus ToBytesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-        Y_UNUSED(output);
+        Y_UNUSED(output); 
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         bool isOptional;
         const TDataExprType* dataType;
         if (!EnsureDataOrOptionalOfData(input->Head(), isOptional, dataType, ctx.Expr)) {
-            return IGraphTransformer::TStatus::Error;
-        }
-
+            return IGraphTransformer::TStatus::Error; 
+        } 
+ 
         input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
         if (isOptional) {
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(input->GetTypeAnn()));
         }
-
-        return IGraphTransformer::TStatus::Ok;
-    }
-
+ 
+        return IGraphTransformer::TStatus::Ok; 
+    } 
+ 
     IGraphTransformer::TStatus DictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
@@ -12876,7 +12876,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SessionWindowTraits"] = &SessionWindowTraitsWrapper;
         Functions["FromString"] = &FromStringWrapper;
         Functions["StrictFromString"] = &StrictFromStringWrapper;
-        Functions["FromBytes"] = &FromBytesWrapper;
+        Functions["FromBytes"] = &FromBytesWrapper; 
         Functions["Convert"] = &ConvertWrapper;
         Functions["AlterTo"] = &AlterToWrapper;
         Functions["ToIntegral"] = &ToIntegralWrapper;
@@ -12899,7 +12899,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["Optional"] = &OptionalWrapper;
         Functions["OptionalIf"] = &OptionalIfWrapper;
         Functions["ToString"] = &ToStringWrapper;
-        Functions["ToBytes"] = &ToBytesWrapper;
+        Functions["ToBytes"] = &ToBytesWrapper; 
         Functions["GroupByKey"] = &GroupByKeyWrapper;
         Functions["PartitionByKey"] = &PartitionByKeyWrapper;
         Functions["PartitionsByKeys"] = &PartitionsByKeysWrapper;

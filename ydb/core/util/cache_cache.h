@@ -19,8 +19,8 @@ struct TCacheCacheConfig : public TAtomicRefCount<TCacheCacheConfig> {
         CacheGenWarm,
     };
 
-    ui64 Limit;
-
+    ui64 Limit; 
+ 
     ui64 FreshLimit;
     ui64 StagingLimit;
     ui64 WarmLimit;
@@ -30,25 +30,25 @@ struct TCacheCacheConfig : public TAtomicRefCount<TCacheCacheConfig> {
     TCounterPtr ReportedWarm;
 
     TCacheCacheConfig(ui64 limit, const TCounterPtr &reportedFresh, const TCounterPtr &reportedStaging, const TCounterPtr &reportedWarm)
-        : Limit(0)
-        , FreshLimit(0)
-        , StagingLimit(0)
-        , WarmLimit(0)
+        : Limit(0) 
+        , FreshLimit(0) 
+        , StagingLimit(0) 
+        , WarmLimit(0) 
         , ReportedFresh(reportedFresh)
         , ReportedStaging(reportedStaging)
         , ReportedWarm(reportedWarm)
-    {
-        SetLimit(limit);
-    }
+    { 
+        SetLimit(limit); 
+    } 
 
-    void SetLimit(ui64 limit) {
-        Limit = limit;
-
-        FreshLimit = Limit / 3;
-        StagingLimit = FreshLimit;
-        WarmLimit = FreshLimit;
-    }
-
+    void SetLimit(ui64 limit) { 
+        Limit = limit; 
+ 
+        FreshLimit = Limit / 3; 
+        StagingLimit = FreshLimit; 
+        WarmLimit = FreshLimit; 
+    } 
+ 
     template<typename TItem>
     struct TDefaultWeight {
         static ui64 Get(TItem *) {
@@ -164,7 +164,7 @@ public:
         if (cacheSize == 0)
             cacheSize = Max<ui64>();
 
-        Config.SetLimit(cacheSize);
+        Config.SetLimit(cacheSize); 
     }
 private:
     void Unlink(TItem *item, ui64 &weight) {

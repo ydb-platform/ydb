@@ -80,7 +80,7 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(
     // todo: amortize destruction cost (how?)
     auto it = PageCollections.find(id);
     Y_VERIFY(it != PageCollections.end(), "trying to forget unknown page collection. logic flaw?");
-    TIntrusivePtr<TInfo> info = it->second;
+    TIntrusivePtr<TInfo> info = it->second; 
 
     TPage::TWaitQueuePtr ret;
     for (const auto& kv : info->PageMap) {

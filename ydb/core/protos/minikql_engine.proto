@@ -14,6 +14,6 @@ enum EResult {
     SnapshotNotReady = 9;
     TooManyRS = 10;
     ResultTooBig = 11;
-    Cancelled = 12;
+    Cancelled = 12; 
 };
 

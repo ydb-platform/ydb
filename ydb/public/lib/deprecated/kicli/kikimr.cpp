@@ -277,8 +277,8 @@ public:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusChooseProxy>(&NGRpcProxy::TGRpcClient::ChooseProxy, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusSqsRequest, NMsgBusProxy::TBusSqsResponse>(&NGRpcProxy::TGRpcClient::SqsRequest, promise, request);
-        case NMsgBusProxy::MTYPE_CLIENT_S3_LISTING_REQUEST:
-            return ExecuteGRpcRequest<NMsgBusProxy::TBusS3ListingRequest, NMsgBusProxy::TBusS3ListingResponse>(&NGRpcProxy::TGRpcClient::S3Listing, promise, request);
+        case NMsgBusProxy::MTYPE_CLIENT_S3_LISTING_REQUEST: 
+            return ExecuteGRpcRequest<NMsgBusProxy::TBusS3ListingRequest, NMsgBusProxy::TBusS3ListingResponse>(&NGRpcProxy::TGRpcClient::S3Listing, promise, request); 
         case NMsgBusProxy::MTYPE_CLIENT_INTERCONNECT_DEBUG:
             return ExecuteGRpcRequest<NMsgBusProxy::TBusInterconnectDebug>(&NGRpcProxy::TGRpcClient::InterconnectDebug, promise, request);
         case NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST:
@@ -524,8 +524,8 @@ NThreading::TFuture<TResult> TKikimr::MakeDirectory(const TSchemaObject& object,
 }
 
 NThreading::TFuture<TResult> TKikimr::CreateTable(TSchemaObject& object, const TString& name, const TVector<TColumn>& columns,
-                                                  const TTablePartitionConfig* partitionConfig)
-{
+                                                  const TTablePartitionConfig* partitionConfig) 
+{ 
     TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
     request->Record.MutablePollOptions()->SetTimeout(POLLING_TIMEOUT);
     auto* modifyScheme = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -545,9 +545,9 @@ NThreading::TFuture<TResult> TKikimr::CreateTable(TSchemaObject& object, const T
             }
         }
     }
-    if (partitionConfig) {
-        createTable->MutablePartitionConfig()->CopyFrom(*partitionConfig);
-    }
+    if (partitionConfig) { 
+        createTable->MutablePartitionConfig()->CopyFrom(*partitionConfig); 
+    } 
     return ExecuteRequest(request.Release());
 }
 

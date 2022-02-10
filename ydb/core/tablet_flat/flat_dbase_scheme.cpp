@@ -30,7 +30,7 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
 
             delta.AddColumn(table, col.Name, it.first, col.PType, col.NotNull, col.Null);
             delta.AddColumnToFamily(table, it.first, col.Family);
-        }
+        } 
 
         for(ui32 columnId : itTable.second.KeyColumns)
             delta.AddColumnToKey(table, columnId);
@@ -53,8 +53,8 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
     delta.SetExecutorAllowLogBatching(Executor.AllowLogBatching);
     delta.SetExecutorLogFlushPeriod(Executor.LogFlushPeriod);
     delta.SetExecutorResourceProfile(Executor.ResourceProfile);
-    delta.SetExecutorFastLogPolicy(Executor.LogFastTactic);
-
+    delta.SetExecutorFastLogPolicy(Executor.LogFastTactic); 
+ 
     return delta.Flush();
 }
 
@@ -250,12 +250,12 @@ TAlter& TAlter::SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPo
 {
     TAlterRecord &delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::SetCompactionPolicy);
-    delta.SetTableId(tableId);
-    newPolicy.Serialize(*delta.MutableCompactionPolicy());
+    delta.SetTableId(tableId); 
+    newPolicy.Serialize(*delta.MutableCompactionPolicy()); 
 
     return *this;
-}
-
+} 
+ 
 TAlter& TAlter::SetByKeyFilter(ui32 tableId, bool enabled)
 {
     TAlterRecord &delta = *Log.AddDelta();

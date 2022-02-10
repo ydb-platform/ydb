@@ -32,7 +32,7 @@ public:
     }
 
     static inline long ObjectCount() noexcept {
-        return AtomicGet(Count_);
+        return AtomicGet(Count_); 
     }
 
     /**

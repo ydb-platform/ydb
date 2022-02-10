@@ -3,7 +3,7 @@
 #include "flat_update_op.h"
 #include "flat_dbase_scheme.h"
 #include "flat_mem_warm.h"
-#include "flat_iterator.h"
+#include "flat_iterator.h" 
 #include "flat_row_scheme.h"
 #include "flat_row_versions.h"
 #include "flat_part_laid.h"
@@ -18,12 +18,12 @@
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-
+ 
 #include <util/generic/deque.h>
 #include <util/generic/set.h>
-#include <util/generic/hash.h>
-#include <util/generic/ptr.h>
-
+#include <util/generic/hash.h> 
+#include <util/generic/ptr.h> 
+ 
 namespace NKikimr {
 namespace NTable {
 
@@ -63,9 +63,9 @@ public:
 
     explicit TTable(TEpoch);
     ~TTable();
-
-    void SetScheme(const TScheme::TTableInfo& tableScheme);
-
+ 
+    void SetScheme(const TScheme::TTableInfo& tableScheme); 
+ 
     TIntrusiveConstPtr<TRowScheme> GetScheme() const noexcept;
 
     TEpoch Snapshot() noexcept;
@@ -128,11 +128,11 @@ public:
 
     TAutoPtr<TTableIt> Iterate(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept;
     TAutoPtr<TTableReverseIt> IterateReverse(TRawVals key, TTagsRef tags, IPages* env, ESeek, TRowVersion snapshot) const noexcept;
-    TReady Select(TRawVals key, TTagsRef tags, IPages* env, TRowState& row,
+    TReady Select(TRawVals key, TTagsRef tags, IPages* env, TRowState& row, 
                    ui64 flg, TRowVersion snapshot, TDeque<TPartSimpleIt>& tempIterators) const noexcept;
 
     TReady Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
-                   IPages* env, ui64 flg,
+                   IPages* env, ui64 flg, 
                    ui64 itemsLimit, ui64 bytesLimit,
                    EDirection direction, TRowVersion snapshot) const;
 
@@ -223,11 +223,11 @@ public:
         return Stat_.FrozenWaste + (Mutable ? Mutable->GetWastedMem() : 0);
     }
 
-    ui64 GetMemRowCount() const noexcept
-    {
-        return Stat_.FrozenRows + (Mutable ? Mutable->GetRowCount() : 0);
-    }
-
+    ui64 GetMemRowCount() const noexcept 
+    { 
+        return Stat_.FrozenRows + (Mutable ? Mutable->GetRowCount() : 0); 
+    } 
+ 
     ui64 GetOpsCount() const noexcept
     {
         return Stat_.FrozenOps + (Mutable ? Mutable->GetOpsCount() : 0);
@@ -254,7 +254,7 @@ public:
     }
 
     void DebugDump(IOutputStream& str, IPages *env, const NScheme::TTypeRegistry& typeRegistry) const;
-
+ 
     TKeyRangeCache* GetErasedKeysCache() const;
 
     bool RemoveRowVersions(const TRowVersion& lower, const TRowVersion& upper);
@@ -267,7 +267,7 @@ public:
 
     void FillTxStatusCache(THashMap<TLogoBlobID, TSharedData>& cache) const noexcept;
 
-private:
+private: 
     TMemTable& MemTable();
     void AddSafe(TPartView partView);
 
@@ -303,7 +303,7 @@ private:
     THashMap<ui64, TOpenTransaction> OpenTransactions;
     TTransactionMap<TRowVersion> CommittedTransactions;
     TTransactionSet RemovedTransactions;
-};
-
-}
-}
+}; 
+ 
+} 
+} 

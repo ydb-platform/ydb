@@ -121,12 +121,12 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
     tableMeta->SchemaVersion = entry.TableId.SchemaVersion;
 
     if (!tableMeta->SysView.empty()) {
-        if (entry.Kind == EKind::KindOlapTable) {
-            // NOTE: OLAP sys views for stats are themselves represented by OLAP tables
-            tableMeta->Kind = NYql::EKikimrTableKind::Olap;
-        } else {
-            tableMeta->Kind = NYql::EKikimrTableKind::SysView;
-        }
+        if (entry.Kind == EKind::KindOlapTable) { 
+            // NOTE: OLAP sys views for stats are themselves represented by OLAP tables 
+            tableMeta->Kind = NYql::EKikimrTableKind::Olap; 
+        } else { 
+            tableMeta->Kind = NYql::EKikimrTableKind::SysView; 
+        } 
     } else {
         switch (entry.Kind) {
             case EKind::KindTable:

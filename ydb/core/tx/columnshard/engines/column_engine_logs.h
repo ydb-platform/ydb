@@ -146,8 +146,8 @@ public:
                       const TSnapshot& snapshot) override;
     void UpdateDefaultSchema(const TSnapshot& snapshot, TIndexInfo&& info) override;
     void UpdateCompactionLimits(const TCompactionLimits& limits) override { Limits = limits; }
-    const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
-    const TColumnEngineStats& GetTotalStats() override;
+    const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override; 
+    const TColumnEngineStats& GetTotalStats() override; 
     ui64 MemoryUsage() const override;
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
@@ -203,7 +203,7 @@ private:
     std::shared_ptr<TCountersTable> CountersTable;
     THashMap<ui64, std::shared_ptr<TGranuleMeta>> Granules; // granule -> meta
     THashMap<ui64, TMap<ui64, ui64>> PathGranules; // path_id -> {timestamp, granule}
-    TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats; // per path_id stats sorted by path_id
+    TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats; // per path_id stats sorted by path_id 
     THashSet<ui64> GranulesInSplit;
     THashSet<ui64> EmptyGranules;
     THashMap<ui64, THashSet<ui64>> PathsGranulesOverloaded;

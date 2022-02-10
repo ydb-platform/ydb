@@ -39,7 +39,7 @@ bool TDbWrapper::Load(THashMap<TWriteId, TInsertedData>& inserted,
                       THashMap<TWriteId, TInsertedData>& aborted,
                       const TInstant& loadTime) {
     NIceDb::TNiceDb db(Database);
-    return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, inserted, committed, aborted, loadTime);
+    return NColumnShard::Schema::InsertTable_Load(db, DsGroupSelector, inserted, committed, aborted, loadTime); 
 }
 
 void TDbWrapper::WriteGranule(ui32 index, const TGranuleRecord& row) {
@@ -69,7 +69,7 @@ void TDbWrapper::EraseColumn(ui32 index, const TColumnRecord& row) {
 
 bool TDbWrapper::LoadColumns(ui32 index, std::function<void(TColumnRecord&&)> callback) {
     NIceDb::TNiceDb db(Database);
-    return NColumnShard::Schema::IndexColumns_Load(db, DsGroupSelector, index, callback);
+    return NColumnShard::Schema::IndexColumns_Load(db, DsGroupSelector, index, callback); 
 }
 
 void TDbWrapper::WriteCounter(ui32 index, ui32 counterId, ui64 value) {

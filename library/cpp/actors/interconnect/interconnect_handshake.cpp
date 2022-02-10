@@ -98,10 +98,10 @@ namespace NActors {
         TInstant Deadline;
 
     public:
-        static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::INTERCONNECT_HANDSHAKE;
-        }
-
+        static constexpr IActor::EActivityType ActorActivityType() { 
+            return IActor::INTERCONNECT_HANDSHAKE; 
+        } 
+ 
         THandshakeActor(TInterconnectProxyCommon::TPtr common, const TActorId& self, const TActorId& peer,
                         ui32 nodeId, ui64 nextPacket, TString peerHostName, TSessionParams params)
             : TActorCoroImpl(StackSize, true, true) // allow unhandled poison pills and dtors

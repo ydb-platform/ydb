@@ -389,214 +389,214 @@ Y_UNIT_TEST(TestExportVariantStructTypeYdb) {
         "variant_index: 1\n");
     }
 
-    TString DoTestCellsFromTuple(const TConstArrayRef<NScheme::TTypeId>& types, TString paramsProto) {
-        NKikimrMiniKQL::TParams params;
-        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(paramsProto, &params);
-        UNIT_ASSERT_C(parseOk, paramsProto);
-
+    TString DoTestCellsFromTuple(const TConstArrayRef<NScheme::TTypeId>& types, TString paramsProto) { 
+        NKikimrMiniKQL::TParams params; 
+        bool parseOk = ::google::protobuf::TextFormat::ParseFromString(paramsProto, &params); 
+        UNIT_ASSERT_C(parseOk, paramsProto); 
+ 
         TVector<TCell> cells;
-        TString errStr;
-        bool res = CellsFromTuple(&params.GetType(), params.GetValue(), types, true, cells, errStr);
-        UNIT_ASSERT_VALUES_EQUAL_C(res, errStr.empty(), paramsProto);
-
-        return errStr;
-    }
-
+        TString errStr; 
+        bool res = CellsFromTuple(&params.GetType(), params.GetValue(), types, true, cells, errStr); 
+        UNIT_ASSERT_VALUES_EQUAL_C(res, errStr.empty(), paramsProto); 
+ 
+        return errStr; 
+    } 
+ 
     Y_UNIT_TEST(TestCellsFromTuple) {
-        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::Int32
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }"
-            "        }"
-            "    }"
-            "    Value {"
-            "        Tuple { Optional { Int32: -42 } }"
-            "    }"
-            )
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL("Value of type Int32 expected in tuple at position 0", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::Int32
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }"
-            "        }"
-            "    }"
-            "    Value {"
-            "        Tuple { Optional { Int64: -42 } }"
-            "    }"
-            )
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::Int32
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }"
-            "        }"
-            "    }"
-            "    Value {"
-            "        Tuple { }"
-            "    }"
-            )
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::Int32
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }"
-            "        }"
-            "    }"
-            "    Value {"
-            "        Tuple { Optional { Text : '-42' } }"
-            "    }"
-            )
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::String
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }"
-            "        }"
-            "    }"
-            "    Value {"
-            "        Tuple { Optional { Text : 'AAAA' } }"
-            "    }"
-            )
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL("Cannot parse value of type Uint32 from text '-42' in tuple at position 0", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::Uint32
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }"
-            "        }"
-            "    }"
-            "    Value {"
-            "        Tuple { Optional { Text : '-42' } }"
-            "    }"
-            )
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL("Tuple value length 0 doesn't match the length in type 1", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::Int32
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }"
-            "        }"
-            "    }"
-            "    Value {"
-            "    }"
-            )
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::Int32
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "        }"
-            "    }"
-            "    Value {"
-            "    }"
-            )
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL("Data must be present at position 0", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::Int32
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }"
-            "        }"
-            "    }"
-            "    Value {"
-            "        Tuple { Optional {} }"
-            "    }"
-            )
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL("Tuple value length 0 doesn't match the length in type 1", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::Int32,
-                NScheme::NTypeIds::Utf8
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }"
-            "        }"
-            "    }"
-            "    Value {"
-            "    }"
-            )
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::Int32,
-                NScheme::NTypeIds::Int32
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }"
-            "        }"
-            "    }"
-            "    Value {"
-            "        Tuple { Optional { Int32 : -42 } }"
-            "        Tuple { Optional { Text : '-42' } }"
-            "    }"
-            )
-        );
-
-        UNIT_ASSERT_VALUES_EQUAL("Tuple size 2 is greater that expected size 1", DoTestCellsFromTuple(
-            {
-                NScheme::NTypeIds::Int32
-            },
-            "   Type {"
-            "        Kind : Tuple"
-            "        Tuple {"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }"
-            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }"
-            "        }"
-            "    }"
-            "    Value {"
-            "        Tuple { Optional { Int32 : -42 } }"
-            "        Tuple { Optional { Text : '-42' } }"
-            "    }"
-            )
-        );
-    }
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::Int32 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "        Tuple { Optional { Int32: -42 } }" 
+            "    }" 
+            ) 
+        ); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL("Value of type Int32 expected in tuple at position 0", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::Int32 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "        Tuple { Optional { Int64: -42 } }" 
+            "    }" 
+            ) 
+        ); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::Int32 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "        Tuple { }" 
+            "    }" 
+            ) 
+        ); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::Int32 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "        Tuple { Optional { Text : '-42' } }" 
+            "    }" 
+            ) 
+        ); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::String 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "        Tuple { Optional { Text : 'AAAA' } }" 
+            "    }" 
+            ) 
+        ); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL("Cannot parse value of type Uint32 from text '-42' in tuple at position 0", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::Uint32 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "        Tuple { Optional { Text : '-42' } }" 
+            "    }" 
+            ) 
+        ); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL("Tuple value length 0 doesn't match the length in type 1", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::Int32 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "    }" 
+            ) 
+        ); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::Int32 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "    }" 
+            ) 
+        ); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL("Data must be present at position 0", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::Int32 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "        Tuple { Optional {} }" 
+            "    }" 
+            ) 
+        ); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL("Tuple value length 0 doesn't match the length in type 1", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::Int32, 
+                NScheme::NTypeIds::Utf8 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "    }" 
+            ) 
+        ); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL("", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::Int32, 
+                NScheme::NTypeIds::Int32 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "        Tuple { Optional { Int32 : -42 } }" 
+            "        Tuple { Optional { Text : '-42' } }" 
+            "    }" 
+            ) 
+        ); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL("Tuple size 2 is greater that expected size 1", DoTestCellsFromTuple( 
+            { 
+                NScheme::NTypeIds::Int32 
+            }, 
+            "   Type {" 
+            "        Kind : Tuple" 
+            "        Tuple {" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 1 } } } }" 
+            "            Element { Kind : Optional Optional { Item { Kind : Data Data { Scheme : 4608 } } } }" 
+            "        }" 
+            "    }" 
+            "    Value {" 
+            "        Tuple { Optional { Int32 : -42 } }" 
+            "        Tuple { Optional { Text : '-42' } }" 
+            "    }" 
+            ) 
+        ); 
+    } 
 }
 
 }

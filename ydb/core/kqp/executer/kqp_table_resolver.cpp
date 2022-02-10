@@ -81,16 +81,16 @@ private:
                 return;
             }
 
-            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindOlapTable) {
-                YQL_ENSURE(entry.OlapTableInfo || entry.OlapStoreInfo);
-                // NOTE: entry.SysViewInfo might not be empty for OLAP stats virtual tables
-                table->TableKind = ETableKind::Olap;
-            } else if (entry.TableId.IsSystemView()) {
-                table->TableKind = ETableKind::SysView;
-            } else {
-                table->TableKind = ETableKind::Datashard;
-            }
-
+            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindOlapTable) { 
+                YQL_ENSURE(entry.OlapTableInfo || entry.OlapStoreInfo); 
+                // NOTE: entry.SysViewInfo might not be empty for OLAP stats virtual tables 
+                table->TableKind = ETableKind::Olap; 
+            } else if (entry.TableId.IsSystemView()) { 
+                table->TableKind = ETableKind::SysView; 
+            } else { 
+                table->TableKind = ETableKind::Datashard; 
+            } 
+ 
             // TODO: Resolve columns by id
             TMap<TStringBuf, ui32> columnsMap;
             for (auto& [columnId, column] : entry.Columns) {
@@ -266,9 +266,9 @@ private:
                 YQL_ENSURE(stageInfo.Meta.ShardOperations.size() == 1);
                 auto operation = *stageInfo.Meta.ShardOperations.begin();
 
-                const TKqpTableKeys::TTable* table = TableKeys.FindTablePtr(stageInfo.Meta.TableId);
-                stageInfo.Meta.TableKind = table->TableKind;
-
+                const TKqpTableKeys::TTable* table = TableKeys.FindTablePtr(stageInfo.Meta.TableId); 
+                stageInfo.Meta.TableKind = table->TableKind; 
+ 
                 stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, operation);
 
                 auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));

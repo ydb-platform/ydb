@@ -4,22 +4,22 @@
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/library/aclib/aclib.h>
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
 namespace NSchemeShard {
-
-using namespace NTabletFlatExecutor;
-
+ 
+using namespace NTabletFlatExecutor; 
+ 
 struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
     TTxInitRoot(TSelf *self)
         : TRwTxBase(self)
-    {}
-
+    {} 
+ 
     TTxType GetTxType() const override { return TXTYPE_INIT_ROOT; }
 
     void DoExecute(TTransactionContext &txc, const TActorContext &ctx) override {
-        NIceDb::TNiceDb db(txc.DB);
-
+        NIceDb::TNiceDb db(txc.DB); 
+ 
         const TDomainsInfo::TDomain& selfDomain = Self->GetDomainDescription(ctx);
 
         TString rootName = selfDomain.Name;
@@ -52,7 +52,7 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Self->NextLocalShardIdx = 1;
         Self->ShardInfos.clear();
         Self->RootPathElemets = std::move(rootPathElemets);
-
+ 
 
         TSubDomainInfo::TPtr newDomain = new TSubDomainInfo(0, Self->RootPathId());
         newDomain->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
@@ -66,9 +66,9 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
 
         Self->InitState = TTenantInitState::Done;
         Self->PersistInitState(db);
-    }
-
-    void DoComplete(const TActorContext &ctx) override {
+    } 
+ 
+    void DoComplete(const TActorContext &ctx) override { 
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                      "TTxInitRoot DoComplete"
                          << ", at schemeshard: " << Self->TabletID());
@@ -76,13 +76,13 @@ struct TSchemeShard::TTxInitRoot : public TSchemeShard::TRwTxBase {
         Self->SignalTabletActive(ctx);
 
         Self->ActivateAfterInitialization(ctx);
-    }
-};
-
+    } 
+}; 
+ 
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxInitRoot() {
     return new TTxInitRoot(this);
-}
-
+} 
+ 
 struct TSchemeShard::TTxInitRootCompatibility : public TSchemeShard::TRwTxBase {
     TEvSchemeShard::TEvInitRootShard::TPtr Ev;
     TSideEffects OnComplete;
@@ -685,4 +685,4 @@ struct TSchemeShard::TTxMigrate : public TSchemeShard::TRwTxBase {
 NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxMigrate(TEvSchemeShard::TEvMigrateSchemeShard::TPtr &ev) {
     return new TTxMigrate(this, ev);
 }
-}}
+}} 

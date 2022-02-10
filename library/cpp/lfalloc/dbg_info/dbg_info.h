@@ -1,6 +1,6 @@
 #pragma once
 
-#include <util/generic/ptr.h>
+#include <util/generic/ptr.h> 
 #include <util/system/types.h>
 
 namespace NAllocDbg {
@@ -60,7 +60,7 @@ namespace NAllocDbg {
     // Allocation sampling could be used to collect detailed information
 
     bool SetProfileCurrentThread(bool newVal);
-    bool SetProfileAllThreads(bool newVal);
+    bool SetProfileAllThreads(bool newVal); 
     bool SetAllocationSamplingEnabled(bool newVal);
 
     size_t SetAllocationSampleRate(size_t newVal);

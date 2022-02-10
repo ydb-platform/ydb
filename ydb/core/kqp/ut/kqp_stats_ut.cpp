@@ -21,7 +21,7 @@ Y_UNIT_TEST(MultiTxStatsFullExp) {
     settings.ProfileMode(NYdb::NExperimental::EStreamQueryProfileMode::Full);
 
     auto it = db.ExecuteStreamQuery(R"(
-        SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
+        SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4; 
     )", settings).GetValueSync();
 
     auto res = CollectStreamResult(it);
@@ -42,7 +42,7 @@ Y_UNIT_TEST(JoinNoStats) {
     settings.CollectQueryStats(ECollectQueryStatsMode::None);
 
     auto it = db.StreamExecuteScanQuery(R"(
-        SELECT count(*) FROM `/Root/EightShard` AS t JOIN `/Root/KeyValue` AS kv ON t.Data = kv.Key;
+        SELECT count(*) FROM `/Root/EightShard` AS t JOIN `/Root/KeyValue` AS kv ON t.Data = kv.Key; 
     )", settings).GetValueSync();
 
     auto res = CollectStreamResult(it);

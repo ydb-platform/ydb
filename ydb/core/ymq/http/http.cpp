@@ -1010,15 +1010,15 @@ void TAsyncHttpServer::Initialize(
             nullptr, TOTAL_COUNTER_LABEL, nullptr, true
     );
     AggregatedUserCounters_->ShowDetailedCounters(TInstant::Max());
-    PoolId_ = poolId;
+    PoolId_ = poolId; 
 }
 
-void TAsyncHttpServer::Start() {
-    if (!THttpServer::Start()) {
-        Y_FAIL("Unable to start http server for SQS service on port %" PRIu16, Options().Port);
-    }
-}
-
+void TAsyncHttpServer::Start() { 
+    if (!THttpServer::Start()) { 
+        Y_FAIL("Unable to start http server for SQS service on port %" PRIu16, Options().Port); 
+    } 
+} 
+ 
 TClientRequest* TAsyncHttpServer::CreateClient() {
     return new THttpRequest(this);
 }

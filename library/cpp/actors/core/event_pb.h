@@ -127,27 +127,27 @@ namespace NActors {
     static const size_t EventMaxByteSize = 67108000;
 #endif
 
-    template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder>
-    class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder {
+    template <typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType, typename TRecHolder> 
+    class TEventPBBase: public TEventBase<TEv, TEventType> , public TRecHolder { 
         // a vector of data buffers referenced by record; if filled, then extended serialization mechanism applies
         TVector<TRope> Payload;
 
     public:
-        using TRecHolder::Record;
-
-    public:
+        using TRecHolder::Record; 
+ 
+    public: 
         using ProtoRecordType = TRecord;
 
-        TEventPBBase() = default;
+        TEventPBBase() = default; 
 
-        explicit TEventPBBase(const TRecord& rec)
+        explicit TEventPBBase(const TRecord& rec) 
         {
-            Record = rec;
+            Record = rec; 
         }
 
-        explicit TEventPBBase(TRecord&& rec)
+        explicit TEventPBBase(TRecord&& rec) 
         {
-            Record = std::move(rec);
+            Record = std::move(rec); 
         }
 
         TString ToStringHeader() const override {
@@ -231,7 +231,7 @@ namespace NActors {
         }
 
         static IEventBase* Load(TIntrusivePtr<TEventSerializedData> input) {
-            THolder<TEventPBBase> ev(new TEv());
+            THolder<TEventPBBase> ev(new TEv()); 
             if (!input->GetSize()) {
                 Y_PROTOBUF_SUPPRESS_NODISCARD ev->Record.ParseFromString(TString());
             } else {
@@ -273,7 +273,7 @@ namespace NActors {
             }
             ev->CachedByteSize = input->GetSize();
             return ev.Release();
-        }
+        } 
 
         size_t GetCachedByteSize() const {
             if (CachedByteSize == 0) {
@@ -369,43 +369,43 @@ namespace NActors {
         }
     };
 
-    // Protobuf record not using arena
-    template <typename TRecord>
-    struct TRecordHolder {
-        TRecord Record;
-    };
-
-    // Protobuf arena and a record allocated on it
-    template <typename TRecord, size_t InitialBlockSize, size_t MaxBlockSize>
-    struct TArenaRecordHolder {
-        google::protobuf::Arena PbArena;
-        TRecord& Record;
-
-        static const google::protobuf::ArenaOptions GetArenaOptions() {
-            google::protobuf::ArenaOptions opts;
-            opts.initial_block_size = InitialBlockSize;
-            opts.max_block_size = MaxBlockSize;
-            return opts;
-        }
-
-        TArenaRecordHolder()
-            : PbArena(GetArenaOptions())
-            , Record(*google::protobuf::Arena::CreateMessage<TRecord>(&PbArena))
-        {}
-    };
-
+    // Protobuf record not using arena 
+    template <typename TRecord> 
+    struct TRecordHolder { 
+        TRecord Record; 
+    }; 
+ 
+    // Protobuf arena and a record allocated on it 
+    template <typename TRecord, size_t InitialBlockSize, size_t MaxBlockSize> 
+    struct TArenaRecordHolder { 
+        google::protobuf::Arena PbArena; 
+        TRecord& Record; 
+ 
+        static const google::protobuf::ArenaOptions GetArenaOptions() { 
+            google::protobuf::ArenaOptions opts; 
+            opts.initial_block_size = InitialBlockSize; 
+            opts.max_block_size = MaxBlockSize; 
+            return opts; 
+        } 
+ 
+        TArenaRecordHolder() 
+            : PbArena(GetArenaOptions()) 
+            , Record(*google::protobuf::Arena::CreateMessage<TRecord>(&PbArena)) 
+        {} 
+    }; 
+ 
     template <typename TEv, typename TRecord, ui32 TEventType>
-    class TEventPB : public TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> > {
-        typedef TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> > TPbBase;
-        // NOTE: No extra fields allowed: TEventPB must be a "template typedef"
-    public:
-        using TPbBase::TPbBase;
-    };
-
-    template <typename TEv, typename TRecord, ui32 TEventType, size_t InitialBlockSize = 512, size_t MaxBlockSize = 16*1024>
-    using TEventPBWithArena = TEventPBBase<TEv, TRecord, TEventType, TArenaRecordHolder<TRecord, InitialBlockSize, MaxBlockSize> >;
-
-    template <typename TEv, typename TRecord, ui32 TEventType>
+    class TEventPB : public TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> > { 
+        typedef TEventPBBase<TEv, TRecord, TEventType, TRecordHolder<TRecord> > TPbBase; 
+        // NOTE: No extra fields allowed: TEventPB must be a "template typedef" 
+    public: 
+        using TPbBase::TPbBase; 
+    }; 
+ 
+    template <typename TEv, typename TRecord, ui32 TEventType, size_t InitialBlockSize = 512, size_t MaxBlockSize = 16*1024> 
+    using TEventPBWithArena = TEventPBBase<TEv, TRecord, TEventType, TArenaRecordHolder<TRecord, InitialBlockSize, MaxBlockSize> >; 
+ 
+    template <typename TEv, typename TRecord, ui32 TEventType> 
     class TEventShortDebugPB: public TEventPB<TEv, TRecord, TEventType> {
     public:
         using TBase = TEventPB<TEv, TRecord, TEventType>;
@@ -455,7 +455,7 @@ namespace NActors {
                 base.Swap(&copy);
                 PreSerializedData.clear();
             }
-            return TBase::Record;
+            return TBase::Record; 
         }
 
         const TRecord& GetRecord() const {
@@ -463,7 +463,7 @@ namespace NActors {
         }
 
         TRecord* MutableRecord() {
-            GetRecord(); // Make sure PreSerializedData is parsed
+            GetRecord(); // Make sure PreSerializedData is parsed 
             return &(TBase::Record);
         }
 

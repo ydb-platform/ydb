@@ -7,10 +7,10 @@ namespace NKikimr::NColumnShard {
 class TIndexingActor : public TActorBootstrapped<TIndexingActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_COLUMNSHARD_INDEXING_ACTOR;
+        return NKikimrServices::TActivity::TX_COLUMNSHARD_INDEXING_ACTOR; 
     }
 
-    TIndexingActor(ui64 tabletId, const TActorId& parent)
+    TIndexingActor(ui64 tabletId, const TActorId& parent) 
         : TabletId(tabletId)
         , Parent(parent)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
@@ -28,10 +28,10 @@ public:
 
         auto& blobsToIndex = indexChanges->DataToIndex;
         for (size_t i = 0; i < blobsToIndex.size(); ++i) {
-            auto& blobId = blobsToIndex[i].BlobId;
-            auto res = BlobsToRead.emplace(blobId, i);
-            Y_VERIFY(res.second, "Duplicate blob in DataToIndex: %s", blobId.ToStringNew().c_str());
-            SendReadRequest(ctx, blobId);
+            auto& blobId = blobsToIndex[i].BlobId; 
+            auto res = BlobsToRead.emplace(blobId, i); 
+            Y_VERIFY(res.second, "Duplicate blob in DataToIndex: %s", blobId.ToStringNew().c_str()); 
+            SendReadRequest(ctx, blobId); 
         }
 
         if (BlobsToRead.empty()) {
@@ -44,9 +44,9 @@ public:
             << ") at tablet " << TabletId << " (index)");
 
         auto& event = *ev->Get();
-        const TUnifiedBlobId& blobId = event.BlobRange.BlobId;
+        const TUnifiedBlobId& blobId = event.BlobRange.BlobId; 
         if (event.Status != NKikimrProto::EReplyStatus::OK) {
-            LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob " << blobId << " status " << event.Status
+            LOG_S_ERROR("TEvReadBlobRangeResult cannot get blob " << blobId << " status " << event.Status 
                 << " at tablet " << TabletId << " (index)");
 
             BlobsToRead.erase(blobId);
@@ -71,7 +71,7 @@ public:
         auto& indexChanges = TxEvent->IndexChanges;
         Y_VERIFY(indexChanges);
         Y_VERIFY(indexChanges->DataToIndex[pos].BlobId == blobId);
-        indexChanges->Blobs[event.BlobRange] = blobData;
+        indexChanges->Blobs[event.BlobRange] = blobData; 
 
         if (BlobsToRead.empty()) {
             Index(ctx);
@@ -97,12 +97,12 @@ private:
     TActorId Parent;
     TActorId BlobCacheActorId;
     std::unique_ptr<TEvPrivate::TEvWriteIndex> TxEvent;
-    THashMap<TUnifiedBlobId, ui32> BlobsToRead;
+    THashMap<TUnifiedBlobId, ui32> BlobsToRead; 
 
-    void SendReadRequest(const TActorContext&, const TUnifiedBlobId& blobId) {
+    void SendReadRequest(const TActorContext&, const TUnifiedBlobId& blobId) { 
         Y_VERIFY(blobId.BlobSize());
         Send(BlobCacheActorId,
-             new NBlobCache::TEvBlobCache::TEvReadBlobRange(NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()), false));
+             new NBlobCache::TEvBlobCache::TEvReadBlobRange(NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()), false)); 
     }
 
     void Index(const TActorContext& ctx) {
@@ -110,7 +110,7 @@ private:
         if (TxEvent->PutStatus == NKikimrProto::UNKNOWN) {
             LOG_S_DEBUG("Indexing started at tablet " << TabletId);
 
-            TCpuGuard guard(TxEvent->ResourceUsage);
+            TCpuGuard guard(TxEvent->ResourceUsage); 
             TxEvent->Blobs = NOlap::TColumnEngineForLogs::IndexBlobs(TxEvent->IndexInfo, TxEvent->IndexChanges);
 
             LOG_S_DEBUG("Indexing finished at tablet " << TabletId);
@@ -123,8 +123,8 @@ private:
     }
 };
 
-IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent) {
-    return new TIndexingActor(tabletId, parent);
+IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent) { 
+    return new TIndexingActor(tabletId, parent); 
 }
 
 }

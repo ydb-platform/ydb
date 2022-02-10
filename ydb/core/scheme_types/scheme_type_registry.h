@@ -55,7 +55,7 @@ public:
             return "Null";
         }
         auto type = GetType(typeId);
-        return type.IsKnownType() ? ::TString(type->GetName()) : (TStringBuilder() << "Unknown(" << typeId << ")");
+        return type.IsKnownType() ? ::TString(type->GetName()) : (TStringBuilder() << "Unknown(" << typeId << ")"); 
     }
 
     ITypeSP GetKnownType(TTypeId typeId) const {

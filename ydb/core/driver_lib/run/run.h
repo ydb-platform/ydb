@@ -32,7 +32,7 @@ protected:
     std::shared_ptr<TModuleFactories> ModuleFactories;
     TIntrusivePtr<NScheme::TTypeRegistry> TypeRegistry;
     TIntrusivePtr<NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
-    TIntrusivePtr<TFormatFactory> FormatFactory;
+    TIntrusivePtr<TFormatFactory> FormatFactory; 
     NYq::IYqSharedResources::TPtr YqSharedResources;
 
     TAutoPtr<TMon> Monitoring;
@@ -67,7 +67,7 @@ protected:
 
     virtual ~TKikimrRunner();
 
-    virtual void InitializeRegistries(const TKikimrRunConfig& runConfig);
+    virtual void InitializeRegistries(const TKikimrRunConfig& runConfig); 
 
     void InitializeAllocator(const TKikimrRunConfig& runConfig);
 

@@ -15,7 +15,7 @@ namespace NAllocDbg {
         int& numSizes);
 
     using TSetProfileCurrentThread = bool(bool newVal);
-    using TSetProfileAllThreads = bool(bool newVal);
+    using TSetProfileAllThreads = bool(bool newVal); 
     using TSetAllocationSamplingEnabled = bool(bool newVal);
 
     using TSetAllocationSampleRate = size_t(size_t newVal);
@@ -32,7 +32,7 @@ namespace NAllocDbg {
         TGetPerTagAllocInfo* GetPerTagAllocInfo = nullptr;
 
         TSetProfileCurrentThread* SetProfileCurrentThread = nullptr;
-        TSetProfileAllThreads* SetProfileAllThreads = nullptr;
+        TSetProfileAllThreads* SetProfileAllThreads = nullptr; 
         TSetAllocationSamplingEnabled* SetAllocationSamplingEnabled = nullptr;
 
         TSetAllocationSampleRate* SetAllocationSampleRate = nullptr;
@@ -51,7 +51,7 @@ namespace NAllocDbg {
             GetPerTagAllocInfo = (TGetPerTagAllocInfo*)mallocInfo.GetParam("GetPerTagAllocInfo");
 
             SetProfileCurrentThread = (TSetProfileCurrentThread*)mallocInfo.GetParam("SetProfileCurrentThread");
-            SetProfileAllThreads = (TSetProfileAllThreads*)mallocInfo.GetParam("SetProfileAllThreads");
+            SetProfileAllThreads = (TSetProfileAllThreads*)mallocInfo.GetParam("SetProfileAllThreads"); 
             SetAllocationSamplingEnabled = (TSetAllocationSamplingEnabled*)mallocInfo.GetParam("SetAllocationSamplingEnabled");
 
             SetAllocationSampleRate = (TSetAllocationSampleRate*)mallocInfo.GetParam("SetAllocationSampleRate");
@@ -97,10 +97,10 @@ namespace NAllocDbg {
         return AllocFn.SetProfileCurrentThread ? AllocFn.SetProfileCurrentThread(newVal) : false;
     }
 
-    bool SetProfileAllThreads(bool newVal) {
-        return AllocFn.SetProfileAllThreads ? AllocFn.SetProfileAllThreads(newVal) : false;
-    }
-
+    bool SetProfileAllThreads(bool newVal) { 
+        return AllocFn.SetProfileAllThreads ? AllocFn.SetProfileAllThreads(newVal) : false; 
+    } 
+ 
     bool SetAllocationSamplingEnabled(bool newVal) {
         return AllocFn.SetAllocationSamplingEnabled ? AllocFn.SetAllocationSamplingEnabled(newVal) : false;
     }

@@ -4,7 +4,7 @@
 #include <ydb/library/dynumber/dynumber.h>
 
 #include <util/stream/hex.h>
-#include <util/string/escape.h>
+#include <util/string/escape.h> 
 #include <library/cpp/html/pcdata/pcdata.h>
 
 namespace NKikimr {
@@ -133,84 +133,84 @@ public:
                     str << "</tr>";
                     str << "</thead>";
                     str << "<tbody>";
-                    ssize_t rowOffset = FromStringWithDefault<ssize_t>(cgi.Get("RowsOffset"), 0);
-                    rowOffset = Max<ssize_t>(rowOffset, 0);
-                    ssize_t rowLimit = FromStringWithDefault<ssize_t>(cgi.Get("MaxRows"), 1000);
-                    rowLimit = Max<ssize_t>(rowLimit, 1);
-                    ssize_t rowCount = 0;
+                    ssize_t rowOffset = FromStringWithDefault<ssize_t>(cgi.Get("RowsOffset"), 0); 
+                    rowOffset = Max<ssize_t>(rowOffset, 0); 
+                    ssize_t rowLimit = FromStringWithDefault<ssize_t>(cgi.Get("MaxRows"), 1000); 
+                    rowLimit = Max<ssize_t>(rowLimit, 1); 
+                    ssize_t rowCount = 0; 
                     while (result->Next(NTable::ENext::Data) == NTable::EReady::Data && rowCount < rowOffset + rowLimit) {
-                            ++rowCount;
-                            if (rowCount > rowOffset) {
-                                str << "<tr>";
+                            ++rowCount; 
+                            if (rowCount > rowOffset) { 
+                                str << "<tr>"; 
                                 TDbTupleRef tuple = result->GetValues();
-                                for (size_t i = 0; i < columns.size(); ++i) {
-                                    const void *data = tuple.Columns[i].Data();
-                                    ui32 size = tuple.Columns[i].Size();
-                                    str << "<td>";
-                                    if (data == nullptr) {
-                                        str << "<i>&lt;null&gt;</i>";
-                                    } else {
-                                        switch(tuple.Types[i]) {
-                                        case NScheme::NTypeIds::Int8:
-                                            str << *(i8*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Int16:
-                                            str << *(i16*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Uint16:
-                                            str << *(ui16*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Int32:
-                                            str << *(i32*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Uint32:
-                                            str << *(ui32*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Int64:
-                                            str << *(i64*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Uint64:
-                                            str << *(ui64*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Byte:
-                                            str << (ui32)*(ui8*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Bool:
-                                            str << *(bool*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Double:
-                                            str << *(double*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Float:
-                                            str << *(float*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Date:
-                                            str << *(ui16*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Datetime:
-                                            str << *(ui32*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Timestamp:
-                                            str << *(ui64*)data;
-                                            break;
-                                        case NScheme::NTypeIds::Interval:
-                                            str << *(i64*)data;
-                                            break;
-                                        case NScheme::NTypeIds::PairUi64Ui64:
-                                            str << "(" << ((std::pair<ui64,ui64>*)data)->first << "," << ((std::pair<ui64,ui64>*)data)->second << ")";
-                                            break;
+                                for (size_t i = 0; i < columns.size(); ++i) { 
+                                    const void *data = tuple.Columns[i].Data(); 
+                                    ui32 size = tuple.Columns[i].Size(); 
+                                    str << "<td>"; 
+                                    if (data == nullptr) { 
+                                        str << "<i>&lt;null&gt;</i>"; 
+                                    } else { 
+                                        switch(tuple.Types[i]) { 
+                                        case NScheme::NTypeIds::Int8: 
+                                            str << *(i8*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Int16: 
+                                            str << *(i16*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Uint16: 
+                                            str << *(ui16*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Int32: 
+                                            str << *(i32*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Uint32: 
+                                            str << *(ui32*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Int64: 
+                                            str << *(i64*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Uint64: 
+                                            str << *(ui64*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Byte: 
+                                            str << (ui32)*(ui8*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Bool: 
+                                            str << *(bool*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Double: 
+                                            str << *(double*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Float: 
+                                            str << *(float*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Date: 
+                                            str << *(ui16*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Datetime: 
+                                            str << *(ui32*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Timestamp: 
+                                            str << *(ui64*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::Interval: 
+                                            str << *(i64*)data; 
+                                            break; 
+                                        case NScheme::NTypeIds::PairUi64Ui64: 
+                                            str << "(" << ((std::pair<ui64,ui64>*)data)->first << "," << ((std::pair<ui64,ui64>*)data)->second << ")"; 
+                                            break; 
                                         case NScheme::NTypeIds::String:
                                         case NScheme::NTypeIds::String4k:
                                         case NScheme::NTypeIds::String2m:
-                                            str << EncodeHtmlPcdata(EscapeC(TStringBuf(static_cast<const char*>(data), Min(size, (ui32)1024))));
-                                            break;
-                                        case NScheme::NTypeIds::ActorId:
+                                            str << EncodeHtmlPcdata(EscapeC(TStringBuf(static_cast<const char*>(data), Min(size, (ui32)1024)))); 
+                                            break; 
+                                        case NScheme::NTypeIds::ActorId: 
                                             str << *(TActorId*)data;
-                                            break;
+                                            break; 
                                         case NScheme::NTypeIds::Utf8:
                                         case NScheme::NTypeIds::Json:
-                                            str << EncodeHtmlPcdata(TStringBuf((const char*)data, size));
-                                            break;
+                                            str << EncodeHtmlPcdata(TStringBuf((const char*)data, size)); 
+                                            break; 
                                         case NScheme::NTypeIds::JsonDocument: {
                                             const auto json = NBinaryJson::SerializeToJson(TStringBuf((const char*)data, size));
                                             str << "(JsonDocument) " << EncodeHtmlPcdata(json);
@@ -221,24 +221,24 @@ public:
                                             str << "(DyNumber) " << number;
                                             break;
                                         }
-                                        default:
-                                            str << "<i>unknown type " << tuple.Types[i] << "</i>";
-                                            break;
-                                        }
+                                        default: 
+                                            str << "<i>unknown type " << tuple.Types[i] << "</i>"; 
+                                            break; 
+                                        } 
                                     }
-                                    str << "</td>";
+                                    str << "</td>"; 
                                 }
-                                str << "</tr>";
+                                str << "</tr>"; 
                             }
                     }
                     str << "</tbody>";
                     str << "</table>";
-
+ 
                     if (result->Last() == NTable::EReady::Page)
                         return false;
 
                     auto fnPrintLink = [this, &str, tableId, &cgi] (ssize_t offset, ssize_t limit, TString caption) {
-                        str << "<a href='db?TabletID=" << Self->TabletId()
+                        str << "<a href='db?TabletID=" << Self->TabletId() 
                             << "&TableID=" << tableId;
                         if (cgi.Has("Key")) {
                             str << "&Key=" << cgi.Get("Key");
@@ -247,25 +247,25 @@ public:
                             str << "&Lookup=" << cgi.Get("Lookup");
                         }
                         str << "&RowsOffset=" << offset
-                            << "&MaxRows=" << limit
-                            << "'>" << caption << "</a>";
-                    };
-
-                    // Prev rows?
-                    if (rowOffset > 0) {
-                        ssize_t off = Max<ssize_t>(0, rowOffset - rowLimit);
-                        ssize_t lim = Min<ssize_t>(rowOffset, rowLimit);
-                        fnPrintLink(off, lim, Sprintf("Prev %" PRISZT " rows", lim));
-                        str << "<br>";
-                    }
-
-                    // More rows?
+                            << "&MaxRows=" << limit 
+                            << "'>" << caption << "</a>"; 
+                    }; 
+ 
+                    // Prev rows? 
+                    if (rowOffset > 0) { 
+                        ssize_t off = Max<ssize_t>(0, rowOffset - rowLimit); 
+                        ssize_t lim = Min<ssize_t>(rowOffset, rowLimit); 
+                        fnPrintLink(off, lim, Sprintf("Prev %" PRISZT " rows", lim)); 
+                        str << "<br>"; 
+                    } 
+ 
+                    // More rows? 
                     if (result->Next(NTable::ENext::Data) != NTable::EReady::Gone) {
-                        fnPrintLink(rowCount, rowLimit, Sprintf("Next %" PRISZT " rows", rowLimit));
-                        str << "<br>";
-                    }
-
-                    fnPrintLink(0, 1000000000, "All");
+                        fnPrintLink(rowCount, rowLimit, Sprintf("Next %" PRISZT " rows", rowLimit)); 
+                        str << "<br>"; 
+                    } 
+ 
+                    fnPrintLink(0, 1000000000, "All"); 
                 }
             }
         }

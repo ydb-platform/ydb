@@ -74,7 +74,7 @@ template <class T>
 static void Run(i64 instances = 1) {
     TVector<TActorId> testIds;
     TAppData appData(0, 0, 0, 0, TMap<TString, ui32>(),
-                     nullptr, nullptr, nullptr, nullptr);
+                     nullptr, nullptr, nullptr, nullptr); 
 
     try {
         Counters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());

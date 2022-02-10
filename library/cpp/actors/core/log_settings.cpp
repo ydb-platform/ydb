@@ -11,7 +11,7 @@ namespace NActors {
             : LoggerActorId(loggerActorId)
             , LoggerComponent(loggerComponent)
             , TimeThresholdMs(timeThresholdMs)
-            , AllowDrop(true)
+            , AllowDrop(true) 
             , ThrottleDelay(TDuration::MilliSeconds(100))
             , MinVal(0)
             , MaxVal(0)
@@ -33,7 +33,7 @@ namespace NActors {
             : LoggerActorId(loggerActorId)
             , LoggerComponent(loggerComponent)
             , TimeThresholdMs(timeThresholdMs)
-            , AllowDrop(true)
+            , AllowDrop(true) 
             , ThrottleDelay(TDuration::MilliSeconds(100))
             , MinVal(0)
             , MaxVal(0)
@@ -201,10 +201,10 @@ namespace NActors {
             return (MinVal <= component) && (component <= MaxVal) && !ComponentNames[component].empty();
         }
 
-        void TSettings::SetAllowDrop(bool val) {
-            AllowDrop = val;
-        }
-
+        void TSettings::SetAllowDrop(bool val) { 
+            AllowDrop = val; 
+        } 
+ 
         void TSettings::SetThrottleDelay(TDuration value) {
             ThrottleDelay = value;
         }

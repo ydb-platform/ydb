@@ -687,7 +687,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
                 bool operator()(IEventHandle& ev)
                 {
                     if (ev.GetTypeRewrite() == TEvTablet::EvCommitResult) {
-                        if (ev.Cookie == (ui64)NKikimr::NTabletFlatExecutor::ECommit::Redo) {
+                        if (ev.Cookie == (ui64)NKikimr::NTabletFlatExecutor::ECommit::Redo) { 
                             if (!Recipient)
                                 Recipient = ev.Recipient;
                             else if (Recipient != ev.Recipient)

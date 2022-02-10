@@ -439,8 +439,8 @@ struct TEvPQ {
 
     struct TEvChangeConfig : public TEventLocal<TEvChangeConfig, EvChangeConfig> {
         TEvChangeConfig(const TString& topicName, const NKikimrPQ::TPQTabletConfig& config)
-        : TopicName(topicName)
-        , Config(config)
+        : TopicName(topicName) 
+        , Config(config) 
         {}
 
         TString TopicName;

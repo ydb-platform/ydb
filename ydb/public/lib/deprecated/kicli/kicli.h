@@ -49,7 +49,7 @@ class TKikimr;
 
 using TTablePartitionConfig = NKikimrSchemeOp::TPartitionConfig;
 using TModifyScheme = NKikimrSchemeOp::TModifyScheme;
-
+ 
 class TType {
 public:
     static const TType Int64;
@@ -65,8 +65,8 @@ public:
     static const TType String2m;
     static const TType Yson;
     static const TType Json;
-    static const TType JsonDocument;
-    static const TType Timestamp;
+    static const TType JsonDocument; 
+    static const TType Timestamp; 
 
     const TString& GetName() const;
     ui16 GetId() const;
@@ -82,10 +82,10 @@ protected:
 class TColumn {
     friend class TSchemaObject;
 public:
-    TString Name;
-    TType Type;
-    bool Key;
-    ui32 Partitions;
+    TString Name; 
+    TType Type; 
+    bool Key; 
+    ui32 Partitions; 
 
     // generic column of a table, used in schema operations
     TColumn(const TString& name, const TType& type);
@@ -575,7 +575,7 @@ public:
         Kesus,
         SolomonVolume,
         FileStore,
-        OlapStore,
+        OlapStore, 
         OlapTable,
         Sequence,
         Replication,
@@ -589,7 +589,7 @@ public:
     TSchemaObject MakeDirectory(const TString& name);
     TSchemaObject CreateTable(const TString& name, const TVector<TColumn>& columns);
     TSchemaObject CreateTable(const TString& name, const TVector<TColumn>& columns,
-                              const TTablePartitionConfig& partitionConfig);
+                              const TTablePartitionConfig& partitionConfig); 
     TSchemaObject GetChild(const TString& name) const;
     TString GetName() const;
     TString GetPath() const;
@@ -607,8 +607,8 @@ protected:
                   EPathType pathType = EPathType::Unknown);
 
     TSchemaObject DoCreateTable(const TString& name, const TVector<TColumn>& columns,
-                                const TTablePartitionConfig* partitionConfig);
-
+                                const TTablePartitionConfig* partitionConfig); 
+ 
     TKikimr& Kikimr;
     TString Path;
     TString Name;
@@ -788,7 +788,7 @@ protected:
     NThreading::TFuture<TResult> ModifySchema(const TModifyScheme& schema);
     NThreading::TFuture<TResult> MakeDirectory(const TSchemaObject& object, const TString& name);
     NThreading::TFuture<TResult> CreateTable(TSchemaObject& object, const TString& name, const TVector<TColumn>& columns,
-                                             const TTablePartitionConfig* partitionConfig);
+                                             const TTablePartitionConfig* partitionConfig); 
     NBus::EMessageStatus ExecuteRequestInternal(NThreading::TPromise<TResult> promise, TAutoPtr<NBus::TBusMessage> request);
     NThreading::TFuture<TResult> RegisterNode(const TString& domainPath, const TString& host, ui16 port,
                                               const TString& address, const TString& resolveHost,
@@ -856,18 +856,18 @@ protected:
         }
     }
 
-    void PrepareRequest(NKikimrClient::TLocalMKQL& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
-    void PrepareRequest(NKikimrClient::TLocalSchemeTx& request) const {
-        if (!SecurityToken.empty()) {
-            request.SetSecurityToken(SecurityToken);
-        }
-    }
-
+    void PrepareRequest(NKikimrClient::TLocalMKQL& request) const { 
+        if (!SecurityToken.empty()) { 
+            request.SetSecurityToken(SecurityToken); 
+        } 
+    } 
+ 
+    void PrepareRequest(NKikimrClient::TLocalSchemeTx& request) const { 
+        if (!SecurityToken.empty()) { 
+            request.SetSecurityToken(SecurityToken); 
+        } 
+    } 
+ 
     TString SecurityToken;
     THolder<TImpl> Impl;
 };

@@ -546,85 +546,85 @@ private:
         }
     }
 
-    // Returns the list of ColumnShards that can store rows from the specified range
-    // NOTE: Unlike OLTP tables that store data in DataShards, data in OLAP tables is not range
-    // partitioned and multiple ColumnShards store data from the same key range
-    THashMap<ui64, TShardInfo> ListColumnshadsForRange(const TKqpTableKeys& tableKeys,
+    // Returns the list of ColumnShards that can store rows from the specified range 
+    // NOTE: Unlike OLTP tables that store data in DataShards, data in OLAP tables is not range 
+    // partitioned and multiple ColumnShards store data from the same key range 
+    THashMap<ui64, TShardInfo> ListColumnshadsForRange(const TKqpTableKeys& tableKeys, 
         const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
-        const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
-    {
-        const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
-        YQL_ENSURE(table);
-        YQL_ENSURE(table->TableKind == ETableKind::Olap);
-        YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
-
+        const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv) 
+    { 
+        const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId); 
+        YQL_ENSURE(table); 
+        YQL_ENSURE(table->TableKind == ETableKind::Olap); 
+        YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap); 
+ 
         const auto& keyColumnTypes = table->KeyColumnTypes;
         auto ranges = FillReadRanges(keyColumnTypes, readRanges, stageInfo, holderFactory, typeEnv);
-
-        THashMap<ui64, TShardInfo> shardInfoMap;
-        for (const auto& partition :  stageInfo.Meta.ShardKey->Partitions) {
-            auto& shardInfo = shardInfoMap[partition.ShardId];
-
-            YQL_ENSURE(!shardInfo.KeyReadRanges);
-            shardInfo.KeyReadRanges.ConstructInPlace();
+ 
+        THashMap<ui64, TShardInfo> shardInfoMap; 
+        for (const auto& partition :  stageInfo.Meta.ShardKey->Partitions) { 
+            auto& shardInfo = shardInfoMap[partition.ShardId]; 
+ 
+            YQL_ENSURE(!shardInfo.KeyReadRanges); 
+            shardInfo.KeyReadRanges.ConstructInPlace(); 
             shardInfo.KeyReadRanges->CopyFrom(ranges);
-        }
-
-        return shardInfoMap;
-    }
-
-    // Creates scan tasks for reading OLAP table range
-    void BuildColumnshardScanTasks(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
-        const NMiniKQL::TTypeEnvironment& typeEnv)
-    {
-        YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
-        auto& stage = GetStage(stageInfo);
-
-        const auto& table = TableKeys.GetTable(stageInfo.Meta.TableId);
+        } 
+ 
+        return shardInfoMap; 
+    } 
+ 
+    // Creates scan tasks for reading OLAP table range 
+    void BuildColumnshardScanTasks(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory, 
+        const NMiniKQL::TTypeEnvironment& typeEnv) 
+    { 
+        YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap); 
+        auto& stage = GetStage(stageInfo); 
+ 
+        const auto& table = TableKeys.GetTable(stageInfo.Meta.TableId); 
         const auto& keyTypes = table.KeyColumnTypes;
+ 
+        TMap<ui64, TKeyDesc::TPartitionRangeInfo> shard2range; 
+        for (const auto& part: stageInfo.Meta.ShardKey->Partitions) { 
+            shard2range[part.ShardId] = part.Range.GetRef(); 
+        } 
+ 
+        ui64 taskCount = 0; 
 
-        TMap<ui64, TKeyDesc::TPartitionRangeInfo> shard2range;
-        for (const auto& part: stageInfo.Meta.ShardKey->Partitions) {
-            shard2range[part.ShardId] = part.Range.GetRef();
-        }
-
-        ui64 taskCount = 0;
-
-        for (auto& op : stage.GetTableOps()) {
-            Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
-
+        for (auto& op : stage.GetTableOps()) { 
+            Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath()); 
+ 
             auto columns = BuildKqpColumns(op, table);
-
+ 
             YQL_ENSURE(
                 op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange,
                 "Unexpected OLAP table scan operation: " << (ui32) op.GetTypeCase()
             );
 
             const auto& readRange = op.GetReadOlapRange();
-
+ 
             auto allShards = ListColumnshadsForRange(TableKeys, readRange, stageInfo, holderFactory, typeEnv);
-
+ 
             bool reverse = readRange.GetReverse();
             ui64 itemsLimit = 0;
             TString itemsLimitParamName;
             NDqProto::TData itemsLimitBytes;
             NKikimr::NMiniKQL::TType* itemsLimitType;
-
+ 
             ExtractItemsLimit(stageInfo, op.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv,
                 itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
 
             for (auto& [shardId, shardInfo] : allShards) {
                 YQL_ENSURE(!shardInfo.KeyWriteRanges);
-
+ 
                 if (shardInfo.KeyReadRanges->GetRanges().empty()) {
                     continue;
                 }
-
+ 
                 ui64 nodeId = ShardIdToNodeId.at(shardId);
                 auto& task = TasksGraph.AddTask(stageInfo);
                 task.Meta.NodeId = nodeId;
                 ++taskCount;
-
+ 
                 for (auto& [name, value] : shardInfo.Params) {
                     auto ret = task.Meta.Params.emplace(name, std::move(value));
                     YQL_ENSURE(ret.second);
@@ -633,31 +633,31 @@ private:
                     auto retType = task.Meta.ParamTypes.emplace(name, typeIterator->second);
                     YQL_ENSURE(retType.second);
                 }
-
+ 
                 TTaskMeta::TShardReadInfo readInfo = {
                     .Ranges = std::move(*shardInfo.KeyReadRanges),
                     .Columns = columns,
                     .ShardId = shardId,
                 };
-
+ 
                 FillReadInfo(task.Meta, itemsLimit, reverse, readRange);
-
+ 
                 if (itemsLimit) {
                     task.Meta.Params.emplace(itemsLimitParamName, itemsLimitBytes);
                     task.Meta.ParamTypes.emplace(itemsLimitParamName, itemsLimitType);
-                }
-
+                } 
+ 
                 task.Meta.Reads.ConstructInPlace();
                 task.Meta.Reads->emplace_back(std::move(readInfo));
 
                 LOG_D("Stage " << stageInfo.Id << " create columnshard scan task at node: " << nodeId
                     << ", meta: " << task.Meta.ToString(keyTypes, *AppData()->TypeRegistry));
-            }
-        }
-
-        LOG_D("Stage " << stageInfo.Id << " will be executed using " << taskCount << " tasks.");
-    }
-
+            } 
+        } 
+ 
+        LOG_D("Stage " << stageInfo.Id << " will be executed using " << taskCount << " tasks."); 
+    } 
+ 
     void BuildComputeTasks(TStageInfo& stageInfo) {
         auto& stage = GetStage(stageInfo);
 
@@ -735,8 +735,8 @@ private:
                 BuildComputeTasks(stageInfo);
             } else if (stageInfo.Meta.IsSysView()) {
                 BuildSysViewScanTasks(stageInfo, holderFactory, typeEnv);
-            } else if (stageInfo.Meta.IsOlap()) {
-                BuildColumnshardScanTasks(stageInfo, holderFactory, typeEnv);
+            } else if (stageInfo.Meta.IsOlap()) { 
+                BuildColumnshardScanTasks(stageInfo, holderFactory, typeEnv); 
             } else if (stageInfo.Meta.IsDatashard()) {
                 BuildDatashardScanTasks(stageInfo, holderFactory, typeEnv);
             } else {

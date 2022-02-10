@@ -245,9 +245,9 @@ void TExecutorBorrowLogic::BorrowBundle(
         loaners.end());
 
     Sort(fullBorrow);
-    // !!HACK: Allow to borrow the same bundle multiple times
-    //Y_VERIFY(std::adjacent_find(fullBorrow.begin(), fullBorrow.end()) == fullBorrow.end());
-    fullBorrow.erase(std::unique(fullBorrow.begin(), fullBorrow.end()), fullBorrow.end());
+    // !!HACK: Allow to borrow the same bundle multiple times 
+    //Y_VERIFY(std::adjacent_find(fullBorrow.begin(), fullBorrow.end()) == fullBorrow.end()); 
+    fullBorrow.erase(std::unique(fullBorrow.begin(), fullBorrow.end()), fullBorrow.end()); 
 
     StoreBorrowProto(bundleId, storedInfo, commit);
 }
@@ -258,9 +258,9 @@ void TExecutorBorrowLogic::LoanBundle(
     TLogCommit *commit)
 {
     auto storedInfoItPair = BorrowedInfo.insert(std::make_pair(bundleId, TBorrowedPartInfo()));
-    Y_VERIFY(storedInfoItPair.second,
-        "must not back-borrow parts at %" PRIu64 " part owner %" PRIu64 " existing loan from %" PRIu64 " new loan from %" PRIu64,
-        SelfTabletId, bundleId.TabletID(), storedInfoItPair.first->second.LoanInfo.Lender, loaned.Lender);
+    Y_VERIFY(storedInfoItPair.second, 
+        "must not back-borrow parts at %" PRIu64 " part owner %" PRIu64 " existing loan from %" PRIu64 " new loan from %" PRIu64, 
+        SelfTabletId, bundleId.TabletID(), storedInfoItPair.first->second.LoanInfo.Lender, loaned.Lender); 
     HasFlag = true;
 
     TBorrowedPartInfo &storedInfo = storedInfoItPair.first->second;

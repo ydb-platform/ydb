@@ -408,7 +408,7 @@ void TUserTable::DoApplyCreate(
     }
 
     // N.B. some settings only apply to the main table
-
+ 
     if (!shadow) {
         if (partConfig.HasExecutorCacheSize()) {
             alter.SetExecutorCacheSize(partConfig.GetExecutorCacheSize());
@@ -552,11 +552,11 @@ void TUserTable::ApplyAlter(
         alter.SetExecutorResourceProfile(configDelta.GetResourceProfile());
     }
 
-    if (configDelta.HasExecutorFastLogPolicy()) {
-        config.SetExecutorFastLogPolicy(configDelta.GetExecutorFastLogPolicy());
-        alter.SetExecutorFastLogPolicy(configDelta.GetExecutorFastLogPolicy());
-    }
-
+    if (configDelta.HasExecutorFastLogPolicy()) { 
+        config.SetExecutorFastLogPolicy(configDelta.GetExecutorFastLogPolicy()); 
+        alter.SetExecutorFastLogPolicy(configDelta.GetExecutorFastLogPolicy()); 
+    } 
+ 
     if (configDelta.HasEnableEraseCache() || configDelta.HasEraseCacheMinRows() || configDelta.HasEraseCacheMaxBytes()) {
         if (configDelta.HasEnableEraseCache()) {
             config.SetEnableEraseCache(configDelta.GetEnableEraseCache());

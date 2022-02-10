@@ -23,18 +23,18 @@ namespace NTable {
 
 TDatabase::TDatabase(TDatabaseImpl *databaseImpl) noexcept
     : DatabaseImpl(databaseImpl ? databaseImpl : new TDatabaseImpl(0, new TScheme, nullptr))
-    , NoMoreReadsFlag(true)
+    , NoMoreReadsFlag(true) 
 {
 
-}
-
+} 
+ 
 TDatabase::~TDatabase() { }
 
 const TScheme& TDatabase::GetScheme() const noexcept
 {
     return *DatabaseImpl->Scheme;
-}
-
+} 
+ 
 TIntrusiveConstPtr<TRowScheme> TDatabase::GetRowScheme(ui32 table) const noexcept
 {
     return Require(table)->GetScheme();
@@ -70,8 +70,8 @@ TAutoPtr<TTableIt> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, E
     IteratedTables.insert(table);
 
     return Require(table)->Iterate(key, tags, Env, seekBy(key, mode), TRowVersion::Max());
-}
-
+} 
+ 
 TAutoPtr<TTableIt> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef tags, TRowVersion snapshot) const noexcept
 {
     Y_VERIFY(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
@@ -176,29 +176,29 @@ EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row
 void TDatabase::CalculateReadSize(TSizeEnv& env, ui32 table, TRawVals minKey, TRawVals maxKey,
                                   TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
                                   EDirection direction, TRowVersion snapshot)
-{
+{ 
     Y_VERIFY(!NoMoreReadsFlag, "Trying to do precharge after reads prohibited, table %u", table);
     Require(table)->Precharge(minKey, maxKey, tags, &env, flg, items, bytes, direction, snapshot);
-}
-
+} 
+ 
 bool TDatabase::Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
                     TTagsRef tags, ui64 flg, ui64 items, ui64 bytes,
                     EDirection direction, TRowVersion snapshot)
-{
+{ 
     Y_VERIFY(!NoMoreReadsFlag, "Trying to do precharge after reads prohibited, table %u", table);
     auto res = Require(table)->Precharge(minKey, maxKey, tags, Env, flg, items, bytes, direction, snapshot);
     Change->Stats.ChargeSieved += res.Sieved;
     Change->Stats.ChargeWeeded += res.Weeded;
     return res.Ready == EReady::Data;
-}
-
+} 
+ 
 void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, TRowVersion rowVersion)
 {
     Y_VERIFY_DEBUG(rowVersion != TRowVersion::Max(), "Updates cannot have v{max} as row version");
 
     Redo->EvUpdate(table, rop, key, ops, rowVersion);
-}
-
+} 
+ 
 void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, ui64 txId)
 {
     Redo->EvUpdateTx(table, rop, key, ops, txId);
@@ -231,10 +231,10 @@ const TRowVersionRanges& TDatabase::GetRemovedRowVersions(ui32 table) const
     return empty;
 }
 
-void TDatabase::NoMoreReadsForTx() {
-    NoMoreReadsFlag = true;
-}
-
+void TDatabase::NoMoreReadsForTx() { 
+    NoMoreReadsFlag = true; 
+} 
+ 
 void TDatabase::Begin(TTxStamp stamp, IPages& env)
 {
     Y_VERIFY(!Redo, "Transaction already in progress");
@@ -243,7 +243,7 @@ void TDatabase::Begin(TTxStamp stamp, IPages& env)
     Redo = new NRedo::TWriter{ Annex.Get(), DatabaseImpl->AnnexByteLimit() };
     Change = MakeHolder<TChange>(Stamp = stamp, DatabaseImpl->Serial() + 1);
     Env = &env;
-    NoMoreReadsFlag = false;
+    NoMoreReadsFlag = false; 
 }
 
 TPartView TDatabase::GetPartView(ui32 tableId, const TLogoBlobID &bundle) const {
@@ -252,8 +252,8 @@ TPartView TDatabase::GetPartView(ui32 tableId, const TLogoBlobID &bundle) const 
 
 TVector<TPartView> TDatabase::GetTableParts(ui32 tableId) const {
     return Require(tableId)->GetAllParts();
-}
-
+} 
+ 
 TVector<TIntrusiveConstPtr<TColdPart>> TDatabase::GetTableColdParts(ui32 tableId) const {
     return Require(tableId)->GetColdParts();
 }
@@ -278,22 +278,22 @@ ui64 TDatabase::GetTableMemSize(ui32 tableId, TEpoch epoch) const {
     return Require(tableId)->GetMemSize(epoch);
 }
 
-ui64 TDatabase::GetTableMemRowCount(ui32 tableId) const {
-    return Require(tableId)->GetMemRowCount();
-}
-
-ui64 TDatabase::GetTableIndexSize(ui32 tableId) const {
+ui64 TDatabase::GetTableMemRowCount(ui32 tableId) const { 
+    return Require(tableId)->GetMemRowCount(); 
+} 
+ 
+ui64 TDatabase::GetTableIndexSize(ui32 tableId) const { 
     return Require(tableId)->Stat().Parts.IndexBytes;
-}
-
+} 
+ 
 ui64 TDatabase::GetTableSearchHeight(ui32 tableId) const {
     return Require(tableId)->GetSearchHeight();
 }
 
-ui64 TDatabase::EstimateRowSize(ui32 tableId) const {
-    return Require(tableId)->EstimateRowSize();
-}
-
+ui64 TDatabase::EstimateRowSize(ui32 tableId) const { 
+    return Require(tableId)->EstimateRowSize(); 
+} 
+ 
 const TDbStats& TDatabase::Counters() const noexcept
 {
     return DatabaseImpl->Stats;
@@ -308,8 +308,8 @@ TDatabase::TChg TDatabase::Head(ui32 table) const noexcept
 
         return { wrap.Serial, wrap->Head() };
     }
-}
-
+} 
+ 
 TString TDatabase::SnapshotToLog(ui32 table, TTxStamp stamp)
 {
     auto scn = DatabaseImpl->Serial() + 1;
@@ -321,8 +321,8 @@ TString TDatabase::SnapshotToLog(ui32 table, TTxStamp stamp)
         NRedo::TWriter{ }
             .EvBegin(ui32(ECompatibility::Head), ui32(ECompatibility::Edge), scn, stamp)
             .EvFlush(table, stamp, epoch).Dump();
-}
-
+} 
+ 
 ui32 TDatabase::TxSnapTable(ui32 table)
 {
     Require(table);
@@ -333,8 +333,8 @@ ui32 TDatabase::TxSnapTable(ui32 table)
 TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const
 {
     return Require(table)->Subset(bundle, before);
-}
-
+} 
+ 
 TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TEpoch before, TRawVals from, TRawVals to) const
 {
     auto subset = Require(table)->Subset(before);
@@ -364,7 +364,7 @@ TBundleSlicesMap TDatabase::LookupSlices(ui32 table, TArrayRef<const TLogoBlobID
 {
     return Require(table)->LookupSlices(bundles);
 }
-
+ 
 void TDatabase::ReplaceSlices(ui32 table, TBundleSlicesMap slices)
 {
     return DatabaseImpl->ReplaceSlices(table, std::move(slices));
@@ -383,8 +383,8 @@ void TDatabase::ReplaceTxStatus(ui32 table, TArrayRef<const TIntrusiveConstPtr<T
 void TDatabase::Merge(ui32 table, TPartView partView)
 {
     return DatabaseImpl->Merge(table, std::move(partView));
-}
-
+} 
+ 
 void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TColdPart> part)
 {
     return DatabaseImpl->Merge(table, std::move(part));
@@ -401,25 +401,25 @@ TAlter& TDatabase::Alter()
     Y_VERIFY(!*Redo, "Scheme change must be done before any data updates");
 
     return *(Alter_ ? Alter_ : (Alter_ = new TAlter()));
-}
-
+} 
+ 
 void TDatabase::DebugDumpTable(ui32 table, IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const {
     str << "Table " << table << Endl;
     if (auto &wrap = DatabaseImpl->Get(table, false))
         wrap->DebugDump(str, Env, typeRegistry);
-    else
-        str << "unknown" << Endl;
-}
-
+    else 
+        str << "unknown" << Endl; 
+} 
+ 
 void TDatabase::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const {
     for (const auto& it: DatabaseImpl->Scheme->Tables) {
         if (DatabaseImpl->Get(it.first, false)) {
             str << "======= " << it.second.Name << " ======\n";
             DebugDumpTable(it.first, str, typeRegistry);
-        }
-    }
-}
-
+        } 
+    } 
+} 
+ 
 TKeyRangeCache* TDatabase::DebugGetTableErasedKeysCache(ui32 table) const {
     if (auto &wrap = DatabaseImpl->Get(table, false)) {
         return wrap->GetErasedKeysCache();
@@ -500,11 +500,11 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
 
         if (Alter_) {
             auto delta = Alter_->Flush();
-
+ 
             if (DatabaseImpl->Apply(*delta, &prefix))
                 Y_PROTOBUF_SUPPRESS_NODISCARD delta->SerializeToString(&Change->Scheme);
-        }
-
+        } 
+ 
         for (auto &one: Change->Snapshots) {
             one.Epoch = Require(one.Table)->Snapshot();
             prefix.EvFlush(one.Table, Stamp, one.Epoch);
@@ -545,8 +545,8 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
         } else if (Change->Deleted.size() != Change->Garbage.size()) {
             Y_Fail(NFmt::Do(*Change) << " has inconsistent garbage data");
         }
-    }
-
+    } 
+ 
     Redo = nullptr;
     Annex = nullptr;
     Alter_ = nullptr;
@@ -596,10 +596,10 @@ TCompactionStats TDatabase::GetCompactionStats(ui32 table) const
     return Require(table)->GetCompactionStats();
 }
 
-// NOTE: This helper should be used only to dump local DB contents in GDB
-void DebugDumpDb(const TDatabase &db) {
-    NScheme::TTypeRegistry typeRegistry;
-    db.DebugDump(Cout, typeRegistry);
-}
-
+// NOTE: This helper should be used only to dump local DB contents in GDB 
+void DebugDumpDb(const TDatabase &db) { 
+    NScheme::TTypeRegistry typeRegistry; 
+    db.DebugDump(Cout, typeRegistry); 
+} 
+ 
 }}

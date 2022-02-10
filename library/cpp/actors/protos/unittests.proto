@@ -1,5 +1,5 @@
-option cc_enable_arenas = true;
-
+option cc_enable_arenas = true; 
+ 
 message TSimple {
     required string Str1 = 1;
     optional string Str2 = 2;
@@ -16,5 +16,5 @@ message TBigMessage {
 message TMessageWithPayload {
     optional string Meta = 1;
     repeated uint32 PayloadId = 2;
-    repeated string SomeData = 3;
+    repeated string SomeData = 3; 
 }

@@ -408,7 +408,7 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep *sx) {
                 ++oooIt;
                 ++planIt;
             } else {
-                Y_FAIL("Inconsistency: Plan TxId %" PRIu64 " > OutOfOrder TxId %" PRIu64, planIt->TxId, oooIt->TxId);
+                Y_FAIL("Inconsistency: Plan TxId %" PRIu64 " > OutOfOrder TxId %" PRIu64, planIt->TxId, oooIt->TxId); 
             }
         }
         OutOfOrder.erase(ox);

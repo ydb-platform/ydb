@@ -32,8 +32,8 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::FLAT_SCHEMESHARD_ACTOR;
-    }
-
+    } 
+ 
     TFakeSchemeShard(const TActorId &tablet, TTabletStorageInfo *info, TState::TPtr state)
         : TActor<TFakeSchemeShard>(&TFakeSchemeShard::StateInit)
         , NTabletFlatExecutor::TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)

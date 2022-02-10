@@ -73,7 +73,7 @@ SRCS(
     schemeshard__serverless_storage_billing.cpp
     schemeshard__sync_update_tenants.cpp
     schemeshard__login.cpp
-    schemeshard__monitoring.cpp
+    schemeshard__monitoring.cpp 
     schemeshard__notify.cpp
     schemeshard__operation.cpp
     schemeshard__operation.h
@@ -155,7 +155,7 @@ SRCS(
     schemeshard__operation_drop_cdc_stream.cpp
     schemeshard__publish_to_scheme_board.cpp
     schemeshard__state_changed_reply.cpp
-    schemeshard__table_stats.cpp
+    schemeshard__table_stats.cpp 
     schemeshard__table_stats_histogram.cpp
     schemeshard__upgrade_schema.cpp
     schemeshard__upgrade_access_database.cpp

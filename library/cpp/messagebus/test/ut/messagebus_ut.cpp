@@ -313,9 +313,9 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         TMutex Lock_;
         TDeque<TAutoPtr<TOnMessageContext>> DelayedMessages;
 
-        TDelayReplyServer()
-            : MessageReceivedEvent(TEventResetType::rAuto)
-        {
+        TDelayReplyServer() 
+            : MessageReceivedEvent(TEventResetType::rAuto) 
+        { 
             Bus = CreateMessageQueue("TDelayReplyServer");
             TBusServerSessionConfig sessionConfig;
             sessionConfig.SendTimeout = 1000;
@@ -617,30 +617,30 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
     }
 
     Y_UNIT_TEST(ServerMessageReservedIds) {
-        TObjectCountCheck objectCountCheck;
-
-        TExampleServer server;
-        TNetAddr serverAddr = server.GetActualListenAddr();
-
-        TExampleClient client;
-
-        client.SendMessagesWaitReplies(2, serverAddr);
-
-        // This test doens't check 0, 1, YBUS_KEYINVALID because there are asserts() on sending side
-
-        TAutoPtr<TBusMessage> req(new TExampleRequest(&client.Proto.RequestCount));
-        req->GetHeader()->Id = 2;
-        client.Session->SendMessageAutoPtr(req, &serverAddr);
-        client.MessageCount = 1;
-        client.WaitForError(MESSAGE_DELIVERY_FAILED);
-
-        req.Reset(new TExampleRequest(&client.Proto.RequestCount));
-        req->GetHeader()->Id = YBUS_KEYLOCAL;
-        client.Session->SendMessageAutoPtr(req, &serverAddr);
-        client.MessageCount = 1;
-        client.WaitForError(MESSAGE_DELIVERY_FAILED);
-    }
-
+        TObjectCountCheck objectCountCheck; 
+ 
+        TExampleServer server; 
+        TNetAddr serverAddr = server.GetActualListenAddr(); 
+ 
+        TExampleClient client; 
+ 
+        client.SendMessagesWaitReplies(2, serverAddr); 
+ 
+        // This test doens't check 0, 1, YBUS_KEYINVALID because there are asserts() on sending side 
+ 
+        TAutoPtr<TBusMessage> req(new TExampleRequest(&client.Proto.RequestCount)); 
+        req->GetHeader()->Id = 2; 
+        client.Session->SendMessageAutoPtr(req, &serverAddr); 
+        client.MessageCount = 1; 
+        client.WaitForError(MESSAGE_DELIVERY_FAILED); 
+ 
+        req.Reset(new TExampleRequest(&client.Proto.RequestCount)); 
+        req->GetHeader()->Id = YBUS_KEYLOCAL; 
+        client.Session->SendMessageAutoPtr(req, &serverAddr); 
+        client.MessageCount = 1; 
+        client.WaitForError(MESSAGE_DELIVERY_FAILED); 
+    } 
+ 
     Y_UNIT_TEST(TestGetInFlightForDestination) {
         TObjectCountCheck objectCountCheck;
 
@@ -661,7 +661,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
                 break;
             }
         }
-        UNIT_ASSERT_VALUES_EQUAL(server.GetDelayedMessageCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(server.GetDelayedMessageCount(), 2); 
 
         size_t inFlight = client.Session->GetInFlight(addr);
         // 4 is for messagebus1 that adds inFlight counter twice for some reason
@@ -731,10 +731,10 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
             // check reset is possible here
             message->Reset();
 
-            // intentionally don't destroy the message
-            // we will try to resend it
+            // intentionally don't destroy the message 
+            // we will try to resend it 
             Y_UNUSED(message.Release());
-
+ 
             TestSync.CheckAndIncrement(1);
         }
     };
@@ -760,8 +760,8 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         // check reset is possible here
         message->Reset();
         client.TestSync.CheckAndIncrement(3);
-
-        delete message;
+ 
+        delete message; 
     }
 
     Y_UNIT_TEST(ResetAfterSendOneWayErrorInReturn) {
@@ -865,8 +865,8 @@ Y_UNIT_TEST_SUITE(TMessageBusTests) {
         request.SetVersionInternal(0xF); // max
         output.Write(&request, sizeof(request));
 
-        UNIT_ASSERT_VALUES_EQUAL(IsVersionNegotiation(request), true);
-
+        UNIT_ASSERT_VALUES_EQUAL(IsVersionNegotiation(request), true); 
+ 
         TStreamSocketInput input(&socket);
 
         TBusHeader response;

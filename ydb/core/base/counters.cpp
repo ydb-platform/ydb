@@ -141,10 +141,10 @@ TIntrusivePtr<TDynamicCounters> GetServiceCounters(TIntrusivePtr<TDynamicCounter
 
     res = SkipLabels(res, SERVICE_COUNTERS_EXTRA_LABELS);
 
-    auto utils = root->GetSubgroup("counters", "utils");
+    auto utils = root->GetSubgroup("counters", "utils"); 
     utils = SkipLabels(utils, SERVICE_COUNTERS_EXTRA_LABELS);
-    auto lookupCounter = utils->GetSubgroup("component", service)->GetCounter("CounterLookups", true);
-    res->SetLookupCounter(lookupCounter);
+    auto lookupCounter = utils->GetSubgroup("component", service)->GetCounter("CounterLookups", true); 
+    res->SetLookupCounter(lookupCounter); 
     res->SetOnLookup(OnCounterLookup);
 
     return res;

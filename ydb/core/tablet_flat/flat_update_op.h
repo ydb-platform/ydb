@@ -4,8 +4,8 @@
 #include "flat_row_column.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme_types/scheme_raw_type_value.h>
-#include <util/string/printf.h>
-
+#include <util/string/printf.h> 
+ 
 namespace NKikimr {
 namespace NTable {
 
@@ -22,8 +22,8 @@ namespace NTable {
         default:
             return "!!unexpected op!!";
         }
-    }
-
+    } 
+ 
     struct TUpdateOp {
         TUpdateOp() = default;
 
@@ -55,6 +55,6 @@ namespace NTable {
         TRawTypeValue Value;
     };
 
-}
-
+} 
+ 
 }

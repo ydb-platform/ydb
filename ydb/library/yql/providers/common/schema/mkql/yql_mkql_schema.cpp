@@ -126,7 +126,7 @@ public:
                 TBase::SaveTupleType(*static_cast<const TTupleType*>(type));
                 break;
             case TType::EKind::Resource:
-                TBase::SaveResourceType(static_cast<const TResourceType*>(type)->GetTag());
+                TBase::SaveResourceType(static_cast<const TResourceType*>(type)->GetTag()); 
                 break;
             case TType::EKind::Variant:
                 TBase::SaveVariantType(*static_cast<const TVariantType*>(type));

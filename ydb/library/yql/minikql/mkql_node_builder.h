@@ -103,7 +103,7 @@ public:
 
 private:
     const TTypeEnvironment* Env;
-    TInternName Name;
+    TInternName Name; 
     TType* ReturnType;
     TVector<TType*> Arguments;
     ui32 OptionalArgsCount;
@@ -130,7 +130,7 @@ public:
 
 private:
     const TTypeEnvironment* Env;
-    TInternName Name;
+    TInternName Name; 
     TType* ReturnType;
     bool DisableMerge;
     TVector<TType*> Arguments;

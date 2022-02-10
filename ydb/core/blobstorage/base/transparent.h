@@ -17,9 +17,9 @@ namespace NKikimr {
     /////////////////////////////////////////////////////////////////////////////////////////
     class TTransparentMemoryPool {
     public:
-        TTransparentMemoryPool(TMemoryConsumer&& consumer, size_t initial, TMemoryPool::IGrowPolicy* growPolicy)
+        TTransparentMemoryPool(TMemoryConsumer&& consumer, size_t initial, TMemoryPool::IGrowPolicy* growPolicy) 
             : Consumer(std::move(consumer))
-            , MemoryPool(initial, growPolicy)
+            , MemoryPool(initial, growPolicy) 
             , TotalAllocated(0)
         {}
 

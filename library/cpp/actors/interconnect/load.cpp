@@ -100,10 +100,10 @@ namespace NInterconnect {
         }
 
     public:
-        static constexpr IActor::EActivityType ActorActivityType() {
+        static constexpr IActor::EActivityType ActorActivityType() { 
             return IActor::INTERCONNECT_LOAD_RESPONDER;
-        }
-
+        } 
+ 
         TLoadResponderMasterActor()
         {}
 
@@ -150,10 +150,10 @@ namespace NInterconnect {
         std::shared_ptr<std::atomic_uint64_t> Traffic;
 
     public:
-        static constexpr IActor::EActivityType ActorActivityType() {
+        static constexpr IActor::EActivityType ActorActivityType() { 
             return IActor::INTERCONNECT_LOAD_ACTOR;
-        }
-
+        } 
+ 
         TLoadActor(const TLoadParams& params)
             : Params(params)
         {}

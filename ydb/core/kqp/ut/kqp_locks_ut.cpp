@@ -39,7 +39,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
             [] (const NYql::TIssue& issue) {
-                return issue.Message.Contains("/Root/Test");
+                return issue.Message.Contains("/Root/Test"); 
             }));
 
         result = session2.ExecuteDataQuery(Q_(R"(
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         commitResult.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(HasIssue(commitResult.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
             [] (const NYql::TIssue& issue) {
-                return issue.Message.Contains("/Root/Test");
+                return issue.Message.Contains("/Root/Test"); 
             }));
 
         result = session2.ExecuteDataQuery(Q_(R"(
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         auto session2 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session1.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM `/Root/Test` WHERE Group = 1;
+            SELECT * FROM `/Root/Test` WHERE Group = 1; 
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
@@ -104,7 +104,7 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         UNIT_ASSERT(tx1);
 
         result = session2.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO `/Root/Test` (Group, Name, Comment)
+            UPSERT INTO `/Root/Test` (Group, Name, Comment) 
             VALUES (2U, "Paul", "Changed");
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());

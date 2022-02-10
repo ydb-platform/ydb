@@ -7,7 +7,7 @@ OWNER(
 
 SRCS(
     defs.h
-    message_seqno.h
+    message_seqno.h 
     tx.h
     tx.cpp
     tx_processing.h

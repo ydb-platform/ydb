@@ -1,7 +1,7 @@
 #include "columnshard_impl.h"
 #include "columnshard_txs.h"
 #include "columnshard_schema.h"
-#include "columnshard__index_scan.h"
+#include "columnshard__index_scan.h" 
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
 
@@ -11,37 +11,37 @@ namespace {
 
 template <typename T, typename U>
 TVector<T> ProtoToVector(const U& cont) {
-    return TVector<T>(cont.begin(), cont.end());
+    return TVector<T>(cont.begin(), cont.end()); 
 }
 
 }
 
-IActor* CreateReadActor(ui64 tabletId,
+IActor* CreateReadActor(ui64 tabletId, 
                         const TActorId& dstActor,
                         std::unique_ptr<TEvColumnShard::TEvReadResult>&& event,
-                        NOlap::TReadMetadata::TConstPtr readMetadata,
-                        const TInstant& deadline,
-                        const TActorId& columnShardActorId,
-                        ui64 requestCookie);
+                        NOlap::TReadMetadata::TConstPtr readMetadata, 
+                        const TInstant& deadline, 
+                        const TActorId& columnShardActorId, 
+                        ui64 requestCookie); 
 
 using namespace NTabletFlatExecutor;
 
-NOlap::TReadMetadata::TPtr
+NOlap::TReadMetadata::TPtr 
 TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescription& read,
                                  const std::unique_ptr<NOlap::TInsertTable>& insertTable,
-                                 const std::unique_ptr<NOlap::IColumnEngine>& index,
-                                 TString& error) const {
-    Y_UNUSED(ctx);
-
+                                 const std::unique_ptr<NOlap::IColumnEngine>& index, 
+                                 TString& error) const { 
+    Y_UNUSED(ctx); 
+ 
     if (!insertTable || !index) {
         return {};
     }
-
-    if (read.PlanStep < Self->GetMinReadStep()) {
-        error = Sprintf("Snapshot %" PRIu64 ":%" PRIu64 " too old", read.PlanStep, read.TxId);
-        return {};
-    }
-
+ 
+    if (read.PlanStep < Self->GetMinReadStep()) { 
+        error = Sprintf("Snapshot %" PRIu64 ":%" PRIu64 " too old", read.PlanStep, read.TxId); 
+        return {}; 
+    } 
+ 
     const NOlap::TIndexInfo& indexInfo = index->GetIndexInfo();
     auto spOut = std::make_shared<NOlap::TReadMetadata>(indexInfo);
     auto& out = *spOut;
@@ -57,8 +57,8 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
     } else if (read.ColumnNames.size()) {
         out.ResultSchema = indexInfo.ArrowSchema(read.ColumnNames);
     } else {
-        error = "Empty column list requested";
-        return {};
+        error = "Empty column list requested"; 
+        return {}; 
     }
 
     if (!out.BlobSchema || !out.ResultSchema) {
@@ -67,7 +67,7 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
 
     // insert table
 
-    out.CommittedBlobs = insertTable->Read(read.PathId, read.PlanStep, read.TxId);
+    out.CommittedBlobs = insertTable->Read(read.PathId, read.PlanStep, read.TxId); 
 
     // index
 
@@ -80,7 +80,7 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
     if (!read.ColumnIds.empty()) {
         columns = indexInfo.GetColumnNames(read.ColumnIds);
     }
-    Y_VERIFY(!columns.empty(), "Empty column list");
+    Y_VERIFY(!columns.empty(), "Empty column list"); 
 
     { // Add more columns: snapshot, replace, predicate
         // Key columns (replace, sort)
@@ -109,8 +109,8 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
         for (auto& reqCol : requiredColumns) {
             columns.push_back(reqCol);
         }
-    }
-
+    } 
+ 
     out.LoadSchema = indexInfo.AddColumns(out.ResultSchema, columns);
     if (!out.LoadSchema) {
         return {};
@@ -149,15 +149,15 @@ TTxReadBase::PrepareReadMetadata(const TActorContext& ctx, const TReadDescriptio
                                        out.GreaterPredicate, out.LessPredicate);
     }
     return spOut;
-}
-
+} 
+ 
 bool TTxReadBase::ParseProgram(const TActorContext& ctx, NKikimrSchemeOp::EOlapProgramType programType,
     TString serializedProgram, TReadDescription& read, const IColumnResolver& columnResolver)
 {
     if (serializedProgram.empty()) {
         return true;
     }
-
+ 
     NKikimrSSA::TProgram program;
     NKikimrSSA::TOlapProgram olapProgram;
 
@@ -211,18 +211,18 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     auto& record = Proto(Ev->Get());
 
     ui64 metaShard = record.GetTxInitiator();
-
-    TReadDescription read;
-    read.PlanStep = record.GetPlanStep();
-    read.TxId = record.GetTxId();
-    read.PathId = record.GetTableId();
+ 
+    TReadDescription read; 
+    read.PlanStep = record.GetPlanStep(); 
+    read.TxId = record.GetTxId(); 
+    read.PathId = record.GetTableId(); 
     read.ReadNothing = Self->PathsToDrop.count(read.PathId);
-    read.ColumnIds = ProtoToVector<ui32>(record.GetColumnIds());
-    read.ColumnNames = ProtoToVector<TString>(record.GetColumnNames());
-    if (read.ColumnIds.empty() && read.ColumnNames.empty()) {
-        auto allColumnNames = indexInfo.ArrowSchema()->field_names();
-        read.ColumnNames.assign(allColumnNames.begin(), allColumnNames.end());
-    }
+    read.ColumnIds = ProtoToVector<ui32>(record.GetColumnIds()); 
+    read.ColumnNames = ProtoToVector<TString>(record.GetColumnNames()); 
+    if (read.ColumnIds.empty() && read.ColumnNames.empty()) { 
+        auto allColumnNames = indexInfo.ArrowSchema()->field_names(); 
+        read.ColumnNames.assign(allColumnNames.begin(), allColumnNames.end()); 
+    } 
 
     if (record.HasGreaterPredicate()) {
         auto& proto = record.GetGreaterPredicate();
@@ -236,7 +236,7 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
         read.LessPredicate = std::make_shared<NOlap::TPredicate>(
             NArrow::EOperation::Less, proto.GetRow(), schema, proto.GetInclusive());
     }
-
+ 
     bool parseResult = ParseProgram(ctx, record.GetOlapProgramType(), record.GetOlapProgram(), read,
         TIndexColumnResolver(Self->PrimaryIndex->GetIndexInfo()));
 
@@ -251,7 +251,7 @@ bool TTxRead::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     }
 
     Result = std::make_unique<TEvColumnShard::TEvReadResult>(
-        Self->TabletID(), metaShard, read.PlanStep, read.TxId, read.PathId, 0, true, status);
+        Self->TabletID(), metaShard, read.PlanStep, read.TxId, read.PathId, 0, true, status); 
 
     if (status == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
         Self->IncCounter(COUNTER_READ_SUCCESS);
@@ -269,7 +269,7 @@ void TTxRead::Complete(const TActorContext& ctx) {
     bool success = (Proto(Result.get()).GetStatus() == NKikimrTxColumnShard::EResultStatus::SUCCESS);
 
     if (!success) {
-        LOG_S_DEBUG("TTxRead.Complete. Error " << ErrorDescription << " while reading at tablet " << Self->TabletID());
+        LOG_S_DEBUG("TTxRead.Complete. Error " << ErrorDescription << " while reading at tablet " << Self->TabletID()); 
         ctx.Send(Ev->Get()->GetSource(), Result.release());
     } else if (noData) {
         LOG_S_DEBUG("TTxRead.Complete. Empty result at tablet " << Self->TabletID());
@@ -277,19 +277,19 @@ void TTxRead::Complete(const TActorContext& ctx) {
     } else {
         LOG_S_DEBUG("TTxRead.Complete at tablet " << Self->TabletID() << " Metadata: " << *ReadMetadata);
 
-        const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest(
-            std::static_pointer_cast<const NOlap::TReadMetadataBase>(ReadMetadata), *Self->BlobManager);
-        auto statsDelta = Self->InFlightReadsTracker.GetSelectStatsDelta();
+        const ui64 requestCookie = Self->InFlightReadsTracker.AddInFlightRequest( 
+            std::static_pointer_cast<const NOlap::TReadMetadataBase>(ReadMetadata), *Self->BlobManager); 
+        auto statsDelta = Self->InFlightReadsTracker.GetSelectStatsDelta(); 
 
-        Self->IncCounter(COUNTER_READ_INDEX_GRANULES, statsDelta.Granules);
-        Self->IncCounter(COUNTER_READ_INDEX_PORTIONS, statsDelta.Portions);
-        Self->IncCounter(COUNTER_READ_INDEX_BLOBS, statsDelta.Blobs);
-        Self->IncCounter(COUNTER_READ_INDEX_ROWS, statsDelta.Rows);
-        Self->IncCounter(COUNTER_READ_INDEX_BYTES, statsDelta.Bytes);
+        Self->IncCounter(COUNTER_READ_INDEX_GRANULES, statsDelta.Granules); 
+        Self->IncCounter(COUNTER_READ_INDEX_PORTIONS, statsDelta.Portions); 
+        Self->IncCounter(COUNTER_READ_INDEX_BLOBS, statsDelta.Blobs); 
+        Self->IncCounter(COUNTER_READ_INDEX_ROWS, statsDelta.Rows); 
+        Self->IncCounter(COUNTER_READ_INDEX_BYTES, statsDelta.Bytes); 
 
         TInstant deadline = TInstant::Max(); // TODO
-        ctx.Register(CreateReadActor(Self->TabletID(), Ev->Get()->GetSource(),
-            std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie));
+        ctx.Register(CreateReadActor(Self->TabletID(), Ev->Get()->GetSource(), 
+            std::move(Result), ReadMetadata, deadline, Self->SelfId(), requestCookie)); 
     }
 }
 

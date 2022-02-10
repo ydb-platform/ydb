@@ -8,7 +8,7 @@
 #include <google/protobuf/util/message_differencer.h>
 
 namespace NKikimr {
-namespace NLocalDb {
+namespace NLocalDb { 
 
 struct TCompactionPolicy : public TThrRefBase {
     struct TBackgroundPolicy {
@@ -77,9 +77,9 @@ struct TCompactionPolicy : public TThrRefBase {
     ui64 InMemForceSizeToSnapshot;
     ui32 InMemCompactionBrokerQueue; // TODO: remove deprecated field
     TString InMemResourceBrokerTask;
-    ui64 ReadAheadHiThreshold;
-    ui64 ReadAheadLoThreshold;
-    ui32 MinDataPageSize;
+    ui64 ReadAheadHiThreshold; 
+    ui64 ReadAheadLoThreshold; 
+    ui32 MinDataPageSize; 
     ui32 SnapshotCompactionBrokerQueue; // TODO: remove deprecated field
     TString SnapshotResourceBrokerTask;
     ui32 BackupCompactionBrokerQueue; // TODO: remove deprecated field
@@ -97,7 +97,7 @@ struct TCompactionPolicy : public TThrRefBase {
 
     TCompactionPolicy();
     explicit TCompactionPolicy(const NKikimrSchemeOp::TCompactionPolicy& policyPb);
-
+ 
     void Serialize(NKikimrSchemeOp::TCompactionPolicy& policyPb) const;
 
     bool operator ==(const TCompactionPolicy& p) const {
@@ -107,9 +107,9 @@ struct TCompactionPolicy : public TThrRefBase {
                 && InMemForceSizeToSnapshot == p.InMemForceSizeToSnapshot
                 && InMemCompactionBrokerQueue == p.InMemCompactionBrokerQueue
                 && InMemResourceBrokerTask == p.InMemResourceBrokerTask
-                && ReadAheadHiThreshold == p.ReadAheadHiThreshold
-                && ReadAheadLoThreshold == p.ReadAheadLoThreshold
-                && MinDataPageSize == p.MinDataPageSize
+                && ReadAheadHiThreshold == p.ReadAheadHiThreshold 
+                && ReadAheadLoThreshold == p.ReadAheadLoThreshold 
+                && MinDataPageSize == p.MinDataPageSize 
                 && Generations == p.Generations
                 && SnapshotCompactionBrokerQueue == p.SnapshotCompactionBrokerQueue
                 && SnapshotResourceBrokerTask == p.SnapshotResourceBrokerTask
@@ -126,13 +126,13 @@ struct TCompactionPolicy : public TThrRefBase {
     }
 };
 
-typedef TIntrusivePtr<TCompactionPolicy> TCompactionPolicyPtr;
+typedef TIntrusivePtr<TCompactionPolicy> TCompactionPolicyPtr; 
 
 TCompactionPolicyPtr CreateDefaultTablePolicy();
-TCompactionPolicyPtr CreateDefaultUserTablePolicy();
+TCompactionPolicyPtr CreateDefaultUserTablePolicy(); 
 
 bool ValidateCompactionPolicyChange(const TCompactionPolicy& oldPolicy, const TCompactionPolicy& newPolicy, TString& err);
-
+ 
 // Get Resource Broker task type name by Compaction Broker queue ID.
 TString LegacyQueueIdToTaskName(ui32 id);
 

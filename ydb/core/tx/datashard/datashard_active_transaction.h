@@ -139,9 +139,9 @@ public:
     bool Immediate() const { return Tx.GetImmediate(); }
     bool ReadOnly() const { return Tx.GetReadOnly(); }
     bool NeedDiagnostics() const { return Tx.GetNeedDiagnostics(); }
-    bool CollectStats() const { return Tx.GetCollectStats(); }
-    TInstant ReceivedAt() const { return ReceivedAt_; }
-    TInstant Deadline() const { return Deadline_; }
+    bool CollectStats() const { return Tx.GetCollectStats(); } 
+    TInstant ReceivedAt() const { return ReceivedAt_; } 
+    TInstant Deadline() const { return Deadline_; } 
     TMaybe<ui64> PerShardKeysSizeLimitBytes() const { return PerShardKeysSizeLimitBytes_; }
 
     bool Ready() const { return ErrCode == NKikimrTxDataShard::TError::OK; }
@@ -167,11 +167,11 @@ public:
 
     NMiniKQL::IEngineFlat *GetEngine() { return EngineBay.GetEngine(); }
     void DestroyEngine() { EngineBay.DestroyEngine(); }
-    const NMiniKQL::TEngineHostCounters& GetCounters() { return EngineBay.GetCounters(); }
+    const NMiniKQL::TEngineHostCounters& GetCounters() { return EngineBay.GetCounters(); } 
     void ResetCounters() { EngineBay.ResetCounters(); }
 
     bool CanCancel();
-    bool CheckCancelled();
+    bool CheckCancelled(); 
 
     void SetWriteVersion(TRowVersion writeVersion) { EngineBay.SetWriteVersion(writeVersion); }
     void SetReadVersion(TRowVersion readVersion) { EngineBay.SetReadVersion(readVersion); }
@@ -221,9 +221,9 @@ public:
 
     bool IsTxReadOnly() const { return IsReadOnly; }
 
-    bool HasOutReadsets() const { return TxInfo().HasOutReadsets; }
-    bool HasInReadsets() const { return TxInfo().HasInReadsets; }
-
+    bool HasOutReadsets() const { return TxInfo().HasOutReadsets; } 
+    bool HasInReadsets() const { return TxInfo().HasInReadsets; } 
+ 
     const NMiniKQL::IEngineFlat::TValidationInfo& TxInfo() const { return EngineBay.TxInfo(); }
 
 private:
@@ -240,13 +240,13 @@ private:
     bool IsReleased;
     TMaybe<ui64> PerShardKeysSizeLimitBytes_;
     bool IsReadOnly;
-    bool AllowCancelROwithReadsets;
-    bool Cancelled;
-    const TInstant ReceivedAt_; // For local timeout tracking
-    TInstant Deadline_;
+    bool AllowCancelROwithReadsets; 
+    bool Cancelled; 
+    const TInstant ReceivedAt_; // For local timeout tracking 
+    TInstant Deadline_; 
 
     void ComputeTxSize();
-    void ComputeDeadline();
+    void ComputeDeadline(); 
 };
 
 enum class ERestoreDataStatus {

@@ -28,7 +28,7 @@ public:
     using TValidationInfo = NMiniKQL::IEngineFlat::TValidationInfo;
     using TValidatedKey = NMiniKQL::IEngineFlat::TValidatedKey;
     using EResult = NMiniKQL::IEngineFlat::EResult;
-    using TEngineHostCounters = NMiniKQL::TEngineHostCounters;
+    using TEngineHostCounters = NMiniKQL::TEngineHostCounters; 
 
     struct TSizes {
         ui64 ReadSize = 0;

@@ -8,7 +8,7 @@
 #include <util/generic/vector.h>
 #include <util/stream/str.h>
 
-namespace NAllocProfiler {
+namespace NAllocProfiler { 
 
 namespace {
 
@@ -50,32 +50,32 @@ void DeallocationCallback(int stackId, int tag, size_t size, int sizeIdx)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool StartAllocationSampling(bool profileAllThreads)
+bool StartAllocationSampling(bool profileAllThreads) 
 {
     auto& collector = AllocationStackCollector();
     collector.Clear();
 
-    NAllocDbg::SetProfileAllThreads(profileAllThreads);
+    NAllocDbg::SetProfileAllThreads(profileAllThreads); 
     NAllocDbg::SetAllocationCallback(AllocationCallback);
     NAllocDbg::SetDeallocationCallback(DeallocationCallback);
     NAllocDbg::SetAllocationSamplingEnabled(true);
     return true;
 }
 
-bool StopAllocationSampling(IAllocationStatsDumper &out, int count)
+bool StopAllocationSampling(IAllocationStatsDumper &out, int count) 
 {
     NAllocDbg::SetAllocationCallback(nullptr);
     NAllocDbg::SetDeallocationCallback(nullptr);
     NAllocDbg::SetAllocationSamplingEnabled(false);
 
     auto& collector = AllocationStackCollector();
-    collector.Dump(count, out);
+    collector.Dump(count, out); 
     return true;
 }
 
-bool StopAllocationSampling(IOutputStream& out, int count) {
-    TAllocationStatsDumper dumper(out);
-    return StopAllocationSampling(dumper, count);
+bool StopAllocationSampling(IOutputStream& out, int count) { 
+    TAllocationStatsDumper dumper(out); 
+    return StopAllocationSampling(dumper, count); 
 }
 
 }   // namespace NProfiler

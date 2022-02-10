@@ -54,13 +54,13 @@ namespace NRegExp {
                 lexer.Assign(regexp.data(), regexp.data() + regexp.size());
             } else {
                 TVector<wchar32> ucs4(regexp.size() + 1);
-                size_t inRead = 0;
-                size_t outWritten = 0;
+                size_t inRead = 0; 
+                size_t outWritten = 0; 
                 int recodeRes = RecodeToUnicode(opts.Charset, regexp.data(), ucs4.data(),
                                                 regexp.size(), regexp.size(), inRead, outWritten);
                 Y_ASSERT(recodeRes == RECODE_OK);
                 Y_ASSERT(outWritten < ucs4.size());
-                ucs4[outWritten] = 0;
+                ucs4[outWritten] = 0; 
 
                 lexer.Assign(ucs4.begin(),
                              ucs4.begin() + std::char_traits<wchar32>::length(ucs4.data()));
@@ -207,12 +207,12 @@ namespace NRegExp {
         }
 
     protected:
-        inline void Run(const char* data, size_t len, bool addBegin, bool addEnd) noexcept {
-            if (addBegin) {
+        inline void Run(const char* data, size_t len, bool addBegin, bool addEnd) noexcept { 
+            if (addBegin) { 
                 NPire::Step(GetScanner(), State, NPire::BeginMark);
             }
             NPire::Run(GetScanner(), State, data, data + len);
-            if (addEnd) {
+            if (addEnd) { 
                 NPire::Step(GetScanner(), State, NPire::EndMark);
             }
         }
@@ -236,8 +236,8 @@ namespace NRegExp {
         {
         }
 
-        inline TMatcher& Match(const char* data, size_t len, bool addBegin = false, bool addEnd = false) noexcept {
-            Run(data, len, addBegin, addEnd);
+        inline TMatcher& Match(const char* data, size_t len, bool addBegin = false, bool addEnd = false) noexcept { 
+            Run(data, len, addBegin, addEnd); 
             return *this;
         }
 
@@ -267,9 +267,9 @@ namespace NRegExp {
             return GetState().Captured();
         }
 
-        inline TSearcher& Search(const char* data, size_t len, bool addBegin = true, bool addEnd = true) noexcept {
+        inline TSearcher& Search(const char* data, size_t len, bool addBegin = true, bool addEnd = true) noexcept { 
             Data = TStringBuf(data, len);
-            Run(data, len, addBegin, addEnd);
+            Run(data, len, addBegin, addEnd); 
             return *this;
         }
 

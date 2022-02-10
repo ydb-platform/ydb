@@ -72,7 +72,7 @@ namespace NActors {
             TActorId LoggerActorId;
             EComponent LoggerComponent;
             ui64 TimeThresholdMs;
-            bool AllowDrop;
+            bool AllowDrop; 
             TDuration ThrottleDelay;
             TArrayHolder<TAtomic> ComponentInfo;
             TVector<TString> ComponentNames;
@@ -92,7 +92,7 @@ namespace NActors {
             ELogFormat Format;
             TString ShortHostName;
             TString ClusterName;
-            TString MessagePrefix;
+            TString MessagePrefix; 
 
             // The best way to provide minVal, maxVal and func is to have
             // protobuf enumeration of components. In this case protoc
@@ -161,7 +161,7 @@ namespace NActors {
             static int PowerOf2Mask(int val);
             static bool IsValidPriority(EPriority priority);
             bool IsValidComponent(EComponent component);
-            void SetAllowDrop(bool val);
+            void SetAllowDrop(bool val); 
             void SetThrottleDelay(TDuration value);
             void SetUseLocalTimestamps(bool value);
 

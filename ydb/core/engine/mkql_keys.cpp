@@ -78,8 +78,8 @@ THolder<TKeyDesc> ExtractKeyTuple(const TTableId& tableId, TTupleLiteral* tuple,
         fromValues[i] = toValues[i] = MakeCell(keyColumnTypes[i], data, env);
     }
 
-    TTableRange range(TConstArrayRef<TCell>(fromValues.data(), tuple->GetValuesCount()),
-        inclusiveFrom, TConstArrayRef<TCell>(toValues.data(), staticComponents), inclusiveTo, point);
+    TTableRange range(TConstArrayRef<TCell>(fromValues.data(), tuple->GetValuesCount()), 
+        inclusiveFrom, TConstArrayRef<TCell>(toValues.data(), staticComponents), inclusiveTo, point); 
     return MakeHolder<TKeyDesc>(tableId, range, rowOperation, keyColumnTypes, columns);
 }
 
@@ -166,8 +166,8 @@ THolder<TKeyDesc> ExtractSelectRange(TCallable& callable, const TTypeEnvironment
         reverse = AS_VALUE(TDataLiteral, callable.GetInput(10))->AsValue().Get<bool>();
     }
 
-    TTableRange range(TConstArrayRef<TCell>(fromValues.data(), fromValues.size()),
-        inclusiveFrom, TConstArrayRef<TCell>(toValues.data(), toValues.size()), inclusiveTo, point);
+    TTableRange range(TConstArrayRef<TCell>(fromValues.data(), fromValues.size()), 
+        inclusiveFrom, TConstArrayRef<TCell>(toValues.data(), toValues.size()), inclusiveTo, point); 
     THolder<TKeyDesc> desc(
         new TKeyDesc(tableId, range, TKeyDesc::ERowOperation::Read, keyColumnTypes, columns, itemsLimit, bytesLimit, reverse));
     desc->ReadTarget = ExtractFlatReadTarget(callable.GetInput(8));

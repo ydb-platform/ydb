@@ -69,8 +69,8 @@ public:
 
     size_t GetCurrentOffset() const {
         return Position_;
-    }
-
+    } 
+ 
     /**
      * Ensures alignment of the position in the output stream by writing
      * some data.

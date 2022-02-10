@@ -10,7 +10,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <ydb/core/util/pb.h>
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/maybe.h>
@@ -107,7 +107,7 @@ namespace NSchemeShardUT_Private {
     }
 
     void CheckExpected(const TVector<TEvSchemeShard::EStatus>& expected, TEvSchemeShard::EStatus result, const TString& reason)
-    {
+    { 
         for (TEvSchemeShard::EStatus exp : expected) {
             if (result == exp) {
                 return;
@@ -117,7 +117,7 @@ namespace NSchemeShardUT_Private {
         UNIT_FAIL("Unexpected status: " << NKikimrScheme::EStatus_Name(result) << ": " << reason);
     }
 
-    void SkipModificationReply(TTestActorRuntime& runtime, ui32 num) {
+    void SkipModificationReply(TTestActorRuntime& runtime, ui32 num) { 
         TAutoPtr<IEventHandle> handle;
         for (ui32 i = 0; i < num; ++i)
             runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
@@ -125,19 +125,19 @@ namespace NSchemeShardUT_Private {
 
     void TestModificationResult(TTestActorRuntime& runtime, ui64 txId,
                                 TEvSchemeShard::EStatus expectedResult) {
-        TestModificationResults(runtime, txId, {expectedResult});
+        TestModificationResults(runtime, txId, {expectedResult}); 
     }
 
-    ui64 TestModificationResults(TTestActorRuntime& runtime, ui64 txId,
+    ui64 TestModificationResults(TTestActorRuntime& runtime, ui64 txId, 
                                         const TVector<TEvSchemeShard::EStatus>& expectedResults) {
         TAutoPtr<IEventHandle> handle;
         TEvSchemeShard::TEvModifySchemeTransactionResult* event;
-        do {
+        do { 
             Cerr << "TestModificationResults wait txId: " <<  txId << "\n";
             event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
-            UNIT_ASSERT(event);
+            UNIT_ASSERT(event); 
             Cerr << "TestModificationResult got TxId: " << event->Record.GetTxId() << ", wait until txId: " << txId << "\n";
-        } while(event->Record.GetTxId() < txId);
+        } while(event->Record.GetTxId() < txId); 
         UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), txId);
 
         CheckExpected(expectedResults, event->Record.GetStatus(), event->Record.GetReason());
@@ -199,13 +199,13 @@ namespace NSchemeShardUT_Private {
         auto evLs = new TEvSchemeShard::TEvDescribeScheme(path);
         evLs->Record.MutableOptions()->CopyFrom(opts);
         ForwardToTablet(runtime, schemeShard, sender, evLs);
-        TAutoPtr<IEventHandle> handle;
+        TAutoPtr<IEventHandle> handle; 
         auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvDescribeSchemeResult>(handle);
-        UNIT_ASSERT(event);
+        UNIT_ASSERT(event); 
 
         return event->GetRecord();
-    }
-
+    } 
+ 
     NKikimrScheme::TEvDescribeSchemeResult DescribePathId(TTestActorRuntime& runtime, ui64 schemeShard, ui64 pathId, const NKikimrSchemeOp::TDescribeOptions& opts = { }) {
         TActorId sender = runtime.AllocateEdgeActor();
         auto evLs = new TEvSchemeShard::TEvDescribeScheme(schemeShard, pathId);
@@ -301,13 +301,13 @@ namespace NSchemeShardUT_Private {
         transaction->SetWorkingDir(dstPath);
 
         auto op = transaction->MutableCreateTable();
-        op->SetName(dstName);
-        op->SetCopyFromTable(srcFullName);
+        op->SetName(dstName); 
+        op->SetCopyFromTable(srcFullName); 
 
         SetApplyIf(*transaction, applyIf);
         return evTx;
-    }
-
+    } 
+ 
     void AsyncCopyTable(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId,
                         const TString& dstPath, const TString& dstName, const TString& srcFullName) {
         TActorId sender = runtime.AllocateEdgeActor();
@@ -323,9 +323,9 @@ namespace NSchemeShardUT_Private {
                        const TString& dstPath, const TString& dstName, const TString& srcFullName,
                        TEvSchemeShard::EStatus expectedResult) {
         AsyncCopyTable(runtime, schemeShardId, txId, dstPath, dstName, srcFullName);
-        TestModificationResult(runtime, txId, expectedResult);
-    }
-
+        TestModificationResult(runtime, txId, expectedResult); 
+    } 
+ 
     void TestCopyTable(TTestActorRuntime& runtime, ui64 txId,
                        const TString& dstPath, const TString& dstName, const TString& srcFullName,
                        TEvSchemeShard::EStatus expectedResult) {
@@ -333,9 +333,9 @@ namespace NSchemeShardUT_Private {
     }
 
     TString TestDescribe(TTestActorRuntime& runtime, const TString& path) {
-        return TestLs(runtime, path, true);
-    }
-
+        return TestLs(runtime, path, true); 
+    } 
+ 
     TEvSchemeShard::TEvModifySchemeTransaction* MoveTableRequest(ui64 txId, const TString& srcPath, const TString& dstPath, ui64 schemeShard, const TApplyIf& applyIf) {
         THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
@@ -1093,29 +1093,29 @@ namespace NSchemeShardUT_Private {
 
     NKikimrProto::EReplyStatus LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query, NKikimrMiniKQL::TResult& result, TString& err) {
         TActorId sender = runtime.AllocateEdgeActor();
-
-        auto evTx = new TEvTablet::TEvLocalMKQL;
-        auto *mkql = evTx->Record.MutableProgram();
-        mkql->MutableProgram()->SetText(query);
-
+ 
+        auto evTx = new TEvTablet::TEvLocalMKQL; 
+        auto *mkql = evTx->Record.MutableProgram(); 
+        mkql->MutableProgram()->SetText(query); 
+ 
         ForwardToTablet(runtime, tabletId, sender, evTx);
-
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(handle);
-        UNIT_ASSERT(event);
-
-        NYql::TIssues programErrors;
-        NYql::TIssues paramsErrors;
-        NYql::IssuesFromMessage(event->Record.GetCompileResults().GetProgramCompileErrors(), programErrors);
-        NYql::IssuesFromMessage(event->Record.GetCompileResults().GetParamsCompileErrors(), paramsErrors);
-        err = programErrors.ToString() + paramsErrors.ToString() + event->Record.GetMiniKQLErrors();
-
-        result.CopyFrom(event->Record.GetExecutionEngineEvaluatedResponse());
-
+ 
+        TAutoPtr<IEventHandle> handle; 
+        auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(handle); 
+        UNIT_ASSERT(event); 
+ 
+        NYql::TIssues programErrors; 
+        NYql::TIssues paramsErrors; 
+        NYql::IssuesFromMessage(event->Record.GetCompileResults().GetProgramCompileErrors(), programErrors); 
+        NYql::IssuesFromMessage(event->Record.GetCompileResults().GetParamsCompileErrors(), paramsErrors); 
+        err = programErrors.ToString() + paramsErrors.ToString() + event->Record.GetMiniKQLErrors(); 
+ 
+        result.CopyFrom(event->Record.GetExecutionEngineEvaluatedResponse()); 
+ 
         // emulate enum behavior from proto3
         return static_cast<NKikimrProto::EReplyStatus>(event->Record.GetStatus());
-    }
-
+    } 
+ 
     NKikimrMiniKQL::TResult LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query) {
         NKikimrMiniKQL::TResult result;
         TString error;
@@ -1148,43 +1148,43 @@ namespace NSchemeShardUT_Private {
     NKikimrProto::EReplyStatus LocalSchemeTx(TTestActorRuntime& runtime, ui64 tabletId, const TString& schemeChangesStr, bool dryRun,
                        NTabletFlatScheme::TSchemeChanges& scheme, TString& err) {
         TActorId sender = runtime.AllocateEdgeActor();
-
-        auto evTx = new TEvTablet::TEvLocalSchemeTx;
-        evTx->Record.SetDryRun(dryRun);
-        auto schemeChanges = evTx->Record.MutableSchemeChanges();
+ 
+        auto evTx = new TEvTablet::TEvLocalSchemeTx; 
+        evTx->Record.SetDryRun(dryRun); 
+        auto schemeChanges = evTx->Record.MutableSchemeChanges(); 
         bool parseResult = ::google::protobuf::TextFormat::ParseFromString(schemeChangesStr, schemeChanges);
         UNIT_ASSERT_C(parseResult, "protobuf parsing failed");
-
+ 
         ForwardToTablet(runtime, tabletId, sender, evTx);
-
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalSchemeTxResponse>(handle);
-        UNIT_ASSERT(event);
-
-        err = event->Record.GetErrorReason();
-        scheme.CopyFrom(event->Record.GetFullScheme());
-
+ 
+        TAutoPtr<IEventHandle> handle; 
+        auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalSchemeTxResponse>(handle); 
+        UNIT_ASSERT(event); 
+ 
+        err = event->Record.GetErrorReason(); 
+        scheme.CopyFrom(event->Record.GetFullScheme()); 
+ 
         // emulate enum behavior from proto3
         return static_cast<NKikimrProto::EReplyStatus>(event->Record.GetStatus());
-    }
-
-    ui64 GetDatashardState(TTestActorRuntime& runtime, ui64 tabletId) {
-        NKikimrMiniKQL::TResult result;
-        TString err;
+    } 
+ 
+    ui64 GetDatashardState(TTestActorRuntime& runtime, ui64 tabletId) { 
+        NKikimrMiniKQL::TResult result; 
+        TString err; 
         NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, R"(
-                                   (
-                                        (let row '('('Id (Uint64 '2)))) # Sys_State
-                                        (let select '('Uint64))
-                                        (let ret(AsList(SetResult 'State (SelectRow 'Sys row select))))
-                                        (return ret)
-                                   )
-                                   )", result, err);
-        // Cdbg << result << "\n";
+                                   ( 
+                                        (let row '('('Id (Uint64 '2)))) # Sys_State 
+                                        (let select '('Uint64)) 
+                                        (let ret(AsList(SetResult 'State (SelectRow 'Sys row select)))) 
+                                        (return ret) 
+                                   ) 
+                                   )", result, err); 
+        // Cdbg << result << "\n"; 
         UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);
-        // Value { Struct { Optional { Optional { Struct { Optional { Uint64: 100 } } } } } } }
-        return result.GetValue().GetStruct(0).GetOptional().GetOptional().GetStruct(0).GetOptional().GetUint64();
-    }
-
+        // Value { Struct { Optional { Optional { Struct { Optional { Uint64: 100 } } } } } } } 
+        return result.GetValue().GetStruct(0).GetOptional().GetOptional().GetStruct(0).GetOptional().GetUint64(); 
+    } 
+ 
     NLs::TCheckFunc ShardsIsReady(TTestActorRuntime& runtime) {
         return [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
             TVector<ui64> datashards;
@@ -1195,14 +1195,14 @@ namespace NSchemeShardUT_Private {
         };
     }
 
-    TString SetAllowLogBatching(TTestActorRuntime& runtime, ui64 tabletId, bool v) {
-        NTabletFlatScheme::TSchemeChanges scheme;
-        TString errStr;
-        LocalSchemeTx(runtime, tabletId,
-                 Sprintf("Delta { DeltaType: UpdateExecutorInfo ExecutorAllowLogBatching: %s }", v ? "true" : "false"),
-                 false, scheme, errStr);
-        return errStr;
-    }
+    TString SetAllowLogBatching(TTestActorRuntime& runtime, ui64 tabletId, bool v) { 
+        NTabletFlatScheme::TSchemeChanges scheme; 
+        TString errStr; 
+        LocalSchemeTx(runtime, tabletId, 
+                 Sprintf("Delta { DeltaType: UpdateExecutorInfo ExecutorAllowLogBatching: %s }", v ? "true" : "false"), 
+                 false, scheme, errStr); 
+        return errStr; 
+    } 
 
     ui64 GetDatashardSysTableValue(TTestActorRuntime& runtime, ui64 tabletId, ui64 sysKey) {
         NKikimrMiniKQL::TResult result;

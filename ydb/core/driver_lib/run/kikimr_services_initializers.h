@@ -43,9 +43,9 @@ public:
 // base, nameservice, interconnect
 class TBasicServicesInitializer : public IKikimrServicesInitializer {
     static IExecutorPool*
-    CreateExecutorPool(const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig,
+    CreateExecutorPool(const NKikimrConfig::TActorSystemConfig::TExecutor& poolConfig, 
         const NKikimrConfig::TActorSystemConfig& systemConfig,
-        ui32 poolId, ui32 maxActivityType);
+        ui32 poolId, ui32 maxActivityType); 
 
     static ISchedulerThread* CreateScheduler(const NKikimrConfig::TActorSystemConfig::TScheduler &config);
 
@@ -91,13 +91,13 @@ public:
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
 };
 
-class TBlobCacheInitializer : public IKikimrServicesInitializer {
-public:
-    TBlobCacheInitializer(const TKikimrRunConfig& runConfig);
-
-    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
-};
-
+class TBlobCacheInitializer : public IKikimrServicesInitializer { 
+public: 
+    TBlobCacheInitializer(const TKikimrRunConfig& runConfig); 
+ 
+    void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override; 
+}; 
+ 
 class TLoggerInitializer : public IKikimrServicesInitializer {
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
     std::shared_ptr<TLogBackend> LogBackend;

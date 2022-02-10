@@ -327,7 +327,7 @@ const TTypeAnnotationNode* ConvertMiniKQLType(TPosition position, NKikimr::NMini
     case TType::EKind::Resource:
     {
         auto resType = static_cast<TResourceType*>(type);
-        return ctx.MakeType<TResourceExprType>(resType->GetTag());
+        return ctx.MakeType<TResourceExprType>(resType->GetTag()); 
     }
 
     case TType::EKind::Stream:

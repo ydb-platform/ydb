@@ -43,9 +43,9 @@ void TGRpcCmsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     MakeIntrusive<TGRpcRequest<Ydb::Cms::IN, Ydb::Cms::OUT, TGRpcCmsService>>(this, &Service_, CQ_, \
         [this](NGrpc::IRequestContextBase *ctx) { \
-            ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ACTION; \
-        }, &Ydb::Cms::V1::CmsService::AsyncService::Request ## NAME, \
+            ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \ 
+            ACTION; \ 
+        }, &Ydb::Cms::V1::CmsService::AsyncService::Request ## NAME, \ 
         #NAME, logger, getCounterBlock("cms", #NAME))->Run();
 
     ADD_REQUEST(CreateDatabase, CreateDatabaseRequest, CreateDatabaseResponse, {

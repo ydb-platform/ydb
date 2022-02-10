@@ -44,10 +44,10 @@ struct TMessageCookie
 struct TSyncMessageCookie : public TMessageCookie {
     TAutoPtr<NBus::TBusMessage> Reply;
     NBus::EMessageStatus ErrorStatus = NBus::MESSAGE_UNKNOWN;
-    TManualEvent Ev;
+    TManualEvent Ev; 
 
     TSyncMessageCookie()
-        : Ev()
+        : Ev() 
     {}
 
     void Wait() {

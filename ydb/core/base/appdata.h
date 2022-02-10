@@ -61,8 +61,8 @@ namespace NPQ {
     class IPersQueueMirrorReaderFactory;
 }
 
-class TFormatFactory;
-
+class TFormatFactory; 
+ 
 struct TAppData {
     static const ui32 MagicTag = 0x2991AAF8;
     const ui32 Magic;
@@ -125,7 +125,7 @@ struct TAppData {
     NMonitoring::TDynamicCounterPtr Counters;
     NMonitoring::TBusNgMonPage* BusMonPage;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
-    TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
+    TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry; 
 
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
 
@@ -176,7 +176,7 @@ struct TAppData {
             TMap<TString, ui32> servicePools,
             const NScheme::TTypeRegistry* typeRegistry,
             const NMiniKQL::IFunctionRegistry* functionRegistry,
-            const TFormatFactory* formatFactory,
+            const TFormatFactory* formatFactory, 
             TProgramShouldContinue *kikimrShouldContinue);
 };
 

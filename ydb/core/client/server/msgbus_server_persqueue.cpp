@@ -1,7 +1,7 @@
 #include "msgbus_tabletreq.h"
 
 #include "msgbus_server_persqueue.h"
-#include "msgbus_server_pq_metacache.h"
+#include "msgbus_server_pq_metacache.h" 
 #include "msgbus_server_pq_metarequest.h"
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
@@ -438,7 +438,7 @@ class TMessageBusServerPersQueueImpl : public TActorBootstrapped<TMessageBusServ
 protected:
     NKikimrClient::TPersQueueRequest RequestProto;
     const TString RequestId;
-    const bool IsMetaRequest;
+    const bool IsMetaRequest; 
     const bool IsFetchRequest;
 
     bool CanProcessFetchRequest; //any partitions answered that it has data or WaitMs timeout occured
@@ -497,7 +497,7 @@ public:
             return;
         }
         if (record.HasMetaRequest()) {
-            Y_VERIFY(IsMetaRequest);
+            Y_VERIFY(IsMetaRequest); 
             auto& meta = record.GetMetaRequest();
             ui32 count = meta.HasCmdGetPartitionLocations() + meta.HasCmdGetPartitionOffsets() +
                          meta.HasCmdGetTopicMetadata() + meta.HasCmdGetPartitionStatus() + meta.HasCmdGetReadSessionsInfo();
@@ -777,7 +777,7 @@ public:
 
 
     bool AnswerIfCanForMeta(const TActorContext& ctx) {
-        Y_VERIFY(IsMetaRequest);
+        Y_VERIFY(IsMetaRequest); 
         Y_VERIFY(RequestProto.HasMetaRequest());
         if (AclRequests)
             return false;
@@ -980,7 +980,7 @@ public:
                     break;
                 }
             }
-
+ 
             if (!tabletId) {
                 ErrorReason = Sprintf("no partition %u in topic '%s', Marker# PQ4", partition, topic.c_str());
                 return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, ctx), ctx);
@@ -1050,8 +1050,8 @@ public:
                 bool res = it->second.PartitionToTablet.insert({part, tabletId}).second;
                 Y_VERIFY(res);
                 if (TabletInfo.find(tabletId) == TabletInfo.end()) {
-                    auto& tabletInfo = TabletInfo[tabletId];
-                    tabletInfo.Topic = topic;
+                    auto& tabletInfo = TabletInfo[tabletId]; 
+                    tabletInfo.Topic = topic; 
                     it->second.Tablets.push_back(tabletId);
                         // Tablet node resolution relies on opening a pipe
 
@@ -1135,27 +1135,27 @@ public:
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
         const ui64 tabletId = ev->Get()->TabletId;
         if (msg->Status != NKikimrProto::OK) {
-
+ 
             if (HandlePipeError(tabletId, ctx))
                 return;
-
-            ErrorReason = Sprintf("Client pipe to %" PRIu64 " connection error, Status# %s, Marker# PQ6",
+ 
+            ErrorReason = Sprintf("Client pipe to %" PRIu64 " connection error, Status# %s, Marker# PQ6", 
                 tabletId, NKikimrProto::EReplyStatus_Name(msg->Status).data());
             return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::ERROR, ctx), ctx);
         }
-
-        // Update node resolution info for GetPartitionLocations request
+ 
+        // Update node resolution info for GetPartitionLocations request 
         if (RequestProto.HasMetaRequest() && (RequestProto.GetMetaRequest().HasCmdGetPartitionLocations()
                                               || RequestProto.GetMetaRequest().HasCmdGetReadSessionsInfo())) {
-            auto it = TabletInfo.find(ev->Get()->TabletId);
-            if (it != TabletInfo.end()) {
-                ui32 nodeId = ev->Get()->ServerId.NodeId();
-                it->second.NodeId = nodeId;
+            auto it = TabletInfo.find(ev->Get()->TabletId); 
+            if (it != TabletInfo.end()) { 
+                ui32 nodeId = ev->Get()->ServerId.NodeId(); 
+                it->second.NodeId = nodeId; 
                 TabletsDiscovered.insert(tabletId);
 
-                AnswerIfCanForMeta(ctx);
-            }
-        }
+                AnswerIfCanForMeta(ctx); 
+            } 
+        } 
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {

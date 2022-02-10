@@ -27,9 +27,9 @@ Y_UNIT_TEST_SUITE(TSelfPingTest) {
             TDuration::MilliSeconds(100), // sendInterval (unused in test)
             counter, counter2);
 
-        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(counter->Val(), 0); 
         UNIT_ASSERT_VALUES_EQUAL(counter2->Val(), 0);
-
+ 
         const TActorId actorId = runtime->Register(actor);
         Y_UNUSED(actorId);
 

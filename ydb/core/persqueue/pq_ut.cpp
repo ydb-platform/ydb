@@ -1776,7 +1776,7 @@ Y_UNIT_TEST(TestReadSubscription) {
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(600);
-        tc.Runtime->SetScheduledEventFilter(&tc.ImmediateLogFlushAndRequestTimeoutFilter);
+        tc.Runtime->SetScheduledEventFilter(&tc.ImmediateLogFlushAndRequestTimeoutFilter); 
 
         TVector<std::pair<ui64, TString>> data;
 
@@ -1875,7 +1875,7 @@ Y_UNIT_TEST(TestPQCacheSizeManagement) {
 
         tc.Runtime->SetScheduledLimit(200);
 
-        activeZone = false;
+        activeZone = false; 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"aaa", true}}, tc); //important client - never delete
 
         TVector<std::pair<ui64, TString>> data;

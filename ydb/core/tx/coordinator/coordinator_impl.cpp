@@ -50,16 +50,16 @@ const ui32 TTxCoordinator::Schema::CurrentVersion = 1;
 TTxCoordinator::TTxCoordinator(TTabletStorageInfo *info, const TActorId &tablet)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-#ifdef COORDINATOR_LOG_TO_FILE
-    , DebugName(Sprintf("/tmp/coordinator_db_log_%" PRIu64 ".%" PRIi32 ".%" PRIu64 ".gz", TabletID(), getpid(), tablet.LocalId()))
-    , DebugLogFile(DebugName)
-    , DebugLog(&DebugLogFile, ZLib::GZip, 1)
-#endif
+#ifdef COORDINATOR_LOG_TO_FILE 
+    , DebugName(Sprintf("/tmp/coordinator_db_log_%" PRIu64 ".%" PRIi32 ".%" PRIu64 ".gz", TabletID(), getpid(), tablet.LocalId())) 
+    , DebugLogFile(DebugName) 
+    , DebugLog(&DebugLogFile, ZLib::GZip, 1) 
+#endif 
 {
-#ifdef COORDINATOR_LOG_TO_FILE
+#ifdef COORDINATOR_LOG_TO_FILE 
     // HACK
     Cerr << "Coordinator LOG will be dumped to " << DebugName << Endl;
-#endif
+#endif 
 
     Config.PlanAhead = 50;
     Config.Resolution = 1250;

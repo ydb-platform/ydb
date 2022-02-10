@@ -764,8 +764,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                     .String("Anna")
                 .AddMember("Value")
                     .Int32(-100)
-                .AddMember("Description")
-                    .EmptyOptional(EPrimitiveType::Utf8)
+                .AddMember("Description") 
+                    .EmptyOptional(EPrimitiveType::Utf8) 
                 .EndStruct()
             .AddListItem()
                 .BeginStruct()
@@ -774,14 +774,14 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                 .AddMember("Value", TValueBuilder().Int32(-200).Build())
                 .AddMember("Id")
                     .Uint32(2)
-                .AddMember("Description")
-                    .OptionalUtf8("Some details")
+                .AddMember("Description") 
+                    .OptionalUtf8("Some details") 
                 .EndStruct()
             .EndList()
             .Build();
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
-            R"([[1u;"Anna";-100;#];[2u;"Paul";-200;["Some details"]]])");
+            R"([[1u;"Anna";-100;#];[2u;"Paul";-200;["Some details"]]])"); 
         UNIT_ASSERT_NO_DIFF(
             FormatValueJson(value, EBinaryStringEncoding::Unicode),
             R"([{"Id":1,"Name":"Anna","Value":-100,"Description":null},)"

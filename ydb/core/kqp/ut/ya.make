@@ -37,7 +37,7 @@ SRCS(
     kqp_newengine_flowcontrol_ut.cpp
     kqp_newengine_ut.cpp
     kqp_not_null_columns_ut.cpp
-    kqp_olap_ut.cpp
+    kqp_olap_ut.cpp 
     kqp_params_ut.cpp
     kqp_pragma_ut.cpp
     kqp_query_ut.cpp

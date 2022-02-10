@@ -21,10 +21,10 @@ public:
           TChannelsConfig channelsSettings = TChannelsConfig(),
           ui32 numDynamicNodes = 0, ui32 numThreads = 1) {
         TActorSystemSetup setup;
-        setup.NodeId = nodeId;
-        setup.ExecutorsCount = 1;
+        setup.NodeId = nodeId; 
+        setup.ExecutorsCount = 1; 
         setup.Executors.Reset(new TAutoPtr<IExecutorPool>[setup.ExecutorsCount]);
-        for (ui32 i = 0; i < setup.ExecutorsCount; ++i) {
+        for (ui32 i = 0; i < setup.ExecutorsCount; ++i) { 
             setup.Executors[i].Reset(new TBasicExecutorPool(i, numThreads, 20 /* magic number */));
         }
         setup.Scheduler.Reset(new TBasicSchedulerThread());

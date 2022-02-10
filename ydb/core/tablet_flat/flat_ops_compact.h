@@ -503,7 +503,7 @@ namespace NTabletFlatExecutor {
 
             auto flag = NKikimrBlobStorage::AsyncBlob;
             auto *ev = new TEvPut(id.Logo, std::exchange(glob.Data, TString{ }), TInstant::Max(), flag,
-                TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput);
+                TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput); 
             auto ctx = TActivationContext::ActorContextFor(SelfId());
 
             SendToBSProxy(ctx, id.Group, ev);

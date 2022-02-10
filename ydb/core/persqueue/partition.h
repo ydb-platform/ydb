@@ -133,7 +133,7 @@ private:
 
     void Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ctx);
     void HandleWakeup(const TActorContext& ctx);
-    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx); 
 
     void Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx);
     void Handle(NReadSpeedLimiterEvents::TEvResponse::TPtr& ev, const TActorContext& ctx);
@@ -254,13 +254,13 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
+        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateInit", ev)); 
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             HFuncTraced(TEvKeyValue::TEvResponse, HandleOnInit); //result of reads
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
+            HFuncTraced(TEvents::TEvPoisonPill, Handle); 
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
             HFuncTraced(TEvPQ::TEvChangeConfig, Handle);
             HFuncTraced(TEvPQ::TEvPartitionOffsets, HandleOnInit);
@@ -271,7 +271,7 @@ private:
             HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
             HFuncTraced(TEvPQ::TEvGetPartitionClientInfo, Handle);
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
+            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev)); 
             break;
         };
     }
@@ -280,7 +280,7 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
+        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev)); 
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -291,7 +291,7 @@ private:
             HFuncTraced(TEvPQ::TEvRead, Handle);
             HFuncTraced(NReadSpeedLimiterEvents::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
+            HFuncTraced(TEvents::TEvPoisonPill, Handle); 
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
             HFuncTraced(TEvPQ::TEvGetMaxSeqNoRequest, Handle);
             HFuncTraced(TEvPQ::TEvChangeConfig, Handle);
@@ -318,7 +318,7 @@ private:
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnIdle);
 
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
+            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev)); 
             break;
         };
     }
@@ -327,7 +327,7 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(Counters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev));
+        LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, EventStr("StateWrite", ev)); 
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -339,7 +339,7 @@ private:
             HFuncTraced(TEvPQ::TEvRead, Handle);
             HFuncTraced(NReadSpeedLimiterEvents::TEvResponse, Handle);
             HFuncTraced(TEvPQ::TEvReadTimeout, Handle);
-            HFuncTraced(TEvents::TEvPoisonPill, Handle);
+            HFuncTraced(TEvents::TEvPoisonPill, Handle); 
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
             HFuncTraced(TEvPQ::TEvGetMaxSeqNoRequest, Handle);
             HFuncTraced(TEvPQ::TEvGetClientOffset, Handle);
@@ -366,7 +366,7 @@ private:
             HFuncTraced(TEvPQ::TEvSplitMessageGroup, HandleOnWrite);
 
         default:
-            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev));
+            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateWrite", ev)); 
             break;
         };
     }
@@ -412,7 +412,7 @@ private:
     };
 
 
-    ui64 TabletID;
+    ui64 TabletID; 
     ui32 Partition;
     NKikimrPQ::TPQTabletConfig Config;
     TString TopicName;

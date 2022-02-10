@@ -28,10 +28,10 @@ std::shared_ptr<arrow::Schema> ExtractArrowSchema(const NKikimrSchemeOp::TColumn
     return NArrow::MakeArrowSchema(columns);
 }
 
-THashMap<ui64, TString> SplitData(const std::shared_ptr<arrow::RecordBatch>& batch,
-    const NKikimrSchemeOp::TColumnTableDescription& description)
-{
-    Y_VERIFY(batch);
+THashMap<ui64, TString> SplitData(const std::shared_ptr<arrow::RecordBatch>& batch, 
+    const NKikimrSchemeOp::TColumnTableDescription& description) 
+{ 
+    Y_VERIFY(batch); 
     Y_VERIFY(description.HasSharding() && description.GetSharding().HasHashSharding());
 
     auto& descSharding = description.GetSharding();
@@ -75,23 +75,23 @@ THashMap<ui64, TString> SplitData(const std::shared_ptr<arrow::RecordBatch>& bat
     return out;
 }
 
-// Deserailizes arrow batch and splits it
-THashMap<ui64, TString> SplitData(const TString& data, const NKikimrSchemeOp::TColumnTableDescription& description) {
-    Y_VERIFY(description.HasSchema());
-    auto& olapSchema = description.GetSchema();
-    Y_VERIFY(olapSchema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
-
-    std::shared_ptr<arrow::Schema> schema = ExtractArrowSchema(olapSchema);
-    std::shared_ptr<arrow::RecordBatch> batch = NArrow::DeserializeBatch(data, schema);
-    if (!batch || !batch->ValidateFull().ok()) {
-        return {};
-    }
-
-    return SplitData(batch, description);
+// Deserailizes arrow batch and splits it 
+THashMap<ui64, TString> SplitData(const TString& data, const NKikimrSchemeOp::TColumnTableDescription& description) { 
+    Y_VERIFY(description.HasSchema()); 
+    auto& olapSchema = description.GetSchema(); 
+    Y_VERIFY(olapSchema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES); 
+ 
+    std::shared_ptr<arrow::Schema> schema = ExtractArrowSchema(olapSchema); 
+    std::shared_ptr<arrow::RecordBatch> batch = NArrow::DeserializeBatch(data, schema); 
+    if (!batch || !batch->ValidateFull().ok()) { 
+        return {}; 
+    } 
+ 
+    return SplitData(batch, description); 
 }
 
-}
-
+} 
+ 
 namespace NGRpcService {
 
 using namespace NLongTxService;
@@ -310,43 +310,43 @@ private:
     TLongTxId LongTxId;
 };
 
-// Common logic of LongTx Write that takes care of splitting the data according to the sharding scheme,
-// sending it to shards and collecting their responses
-template <class TLongTxWriteImpl>
-class TLongTxWriteBase : public TActorBootstrapped<TLongTxWriteImpl> {
-    using TBase = TActorBootstrapped<TLongTxWriteImpl>;
-protected:
-    using TThis = typename TBase::TThis;
+// Common logic of LongTx Write that takes care of splitting the data according to the sharding scheme, 
+// sending it to shards and collecting their responses 
+template <class TLongTxWriteImpl> 
+class TLongTxWriteBase : public TActorBootstrapped<TLongTxWriteImpl> { 
+    using TBase = TActorBootstrapped<TLongTxWriteImpl>; 
+protected: 
+    using TThis = typename TBase::TThis; 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::GRPC_REQ;
     }
 
-    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token,
-        const TLongTxId& longTxId, const TString& dedupId)
+    TLongTxWriteBase(const TString& databaseName, const TString& path, const TString& token, 
+        const TLongTxId& longTxId, const TString& dedupId) 
         : TBase()
-        , DatabaseName(databaseName)
-        , Path(path)
-        , DedupId(dedupId)
-        , LongTxId(longTxId)
+        , DatabaseName(databaseName) 
+        , Path(path) 
+        , DedupId(dedupId) 
+        , LongTxId(longTxId) 
         , LeaderPipeCache(MakePipePeNodeCacheID(false))
     {
-        if (token) {
-            UserToken.emplace(token);
+        if (token) { 
+            UserToken.emplace(token); 
         }
     }
 
     void PassAway() override {
-        this->Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0));
+        this->Send(LeaderPipeCache, new TEvPipeCache::TEvUnlink(0)); 
         TBase::PassAway();
     }
 
-protected:
-    void SetLongTxId(const TLongTxId& longTxId) {
-        LongTxId = longTxId;
+protected: 
+    void SetLongTxId(const TLongTxId& longTxId) { 
+        LongTxId = longTxId; 
     }
 
-    void ProceedWithSchema(const NSchemeCache::TSchemeCacheNavigate* resp) {
+    void ProceedWithSchema(const NSchemeCache::TSchemeCacheNavigate* resp) { 
         if (resp->ErrorCount > 0) {
             // TODO: map to a correct error
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query");
@@ -357,7 +357,7 @@ protected:
         if (UserToken && entry.SecurityObject) {
             const ui32 access = NACLib::UpdateRow;
             if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
-                RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, TStringBuilder()
+                RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, TStringBuilder() 
                     << "User has no permission to perform writes to this table"
                     << " user: " << UserToken->GetUserSID()
                     << " path: " << Path));
@@ -391,29 +391,29 @@ protected:
 
         if (sharding.HasRandomSharding()) {
             ui64 shard = sharding.GetColumnShards(0);
-            SendWriteRequest(shard, tableId, DedupId, GetSerializedData());
+            SendWriteRequest(shard, tableId, DedupId, GetSerializedData()); 
         } else if (sharding.HasHashSharding()) {
-
-            auto batches = HasDeserializedBatch() ?
-                SplitData(GetDeserializedBatch(), description) :
-                SplitData(GetSerializedData(), description);
+ 
+            auto batches = HasDeserializedBatch() ? 
+                SplitData(GetDeserializedBatch(), description) : 
+                SplitData(GetSerializedData(), description); 
             if (batches.empty()) {
                 return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Cannot deserialize or split input data");
             }
             for (auto& [shard, batch] : batches) {
-                SendWriteRequest(shard, tableId, DedupId, batch);
+                SendWriteRequest(shard, tableId, DedupId, batch); 
             }
         } else {
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Sharding method is not supported");
         }
 
-        this->Become(&TThis::StateWrite);
+        this->Become(&TThis::StateWrite); 
     }
 
 private:
     void SendWriteRequest(ui64 shardId, ui64 tableId, const TString& dedupId, const TString& data) {
         WaitShards.insert(shardId);
-        SendToTablet(shardId, MakeHolder<TEvColumnShard::TEvWrite>(this->SelfId(), LongTxId, tableId, dedupId, data));
+        SendToTablet(shardId, MakeHolder<TEvColumnShard::TEvWrite>(this->SelfId(), LongTxId, tableId, dedupId, data)); 
     }
 
     STFUNC(StateWrite) {
@@ -424,37 +424,37 @@ private:
         }
     }
 
-    // Expects NKikimrTxColumnShard::EResultStatus
-    static Ydb::StatusIds::StatusCode ConvertToYdbStatus(ui32 columnShardStatus) {
-        switch (columnShardStatus) {
-        case NKikimrTxColumnShard::UNSPECIFIED:
-            return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-
-        case NKikimrTxColumnShard::PREPARED:
-        case NKikimrTxColumnShard::SUCCESS:
-            return Ydb::StatusIds::SUCCESS;
-
-        case NKikimrTxColumnShard::ABORTED:
-            return Ydb::StatusIds::ABORTED;
-
-        case NKikimrTxColumnShard::ERROR:
-            return Ydb::StatusIds::GENERIC_ERROR;
-
-        case NKikimrTxColumnShard::TIMEOUT:
-            return Ydb::StatusIds::TIMEOUT;
-
-        case NKikimrTxColumnShard::SCHEMA_ERROR:
-        case NKikimrTxColumnShard::SCHEMA_CHANGED:
-            return Ydb::StatusIds::SCHEME_ERROR;
-
+    // Expects NKikimrTxColumnShard::EResultStatus 
+    static Ydb::StatusIds::StatusCode ConvertToYdbStatus(ui32 columnShardStatus) { 
+        switch (columnShardStatus) { 
+        case NKikimrTxColumnShard::UNSPECIFIED: 
+            return Ydb::StatusIds::STATUS_CODE_UNSPECIFIED; 
+ 
+        case NKikimrTxColumnShard::PREPARED: 
+        case NKikimrTxColumnShard::SUCCESS: 
+            return Ydb::StatusIds::SUCCESS; 
+ 
+        case NKikimrTxColumnShard::ABORTED: 
+            return Ydb::StatusIds::ABORTED; 
+ 
+        case NKikimrTxColumnShard::ERROR: 
+            return Ydb::StatusIds::GENERIC_ERROR; 
+ 
+        case NKikimrTxColumnShard::TIMEOUT: 
+            return Ydb::StatusIds::TIMEOUT; 
+ 
+        case NKikimrTxColumnShard::SCHEMA_ERROR: 
+        case NKikimrTxColumnShard::SCHEMA_CHANGED: 
+            return Ydb::StatusIds::SCHEME_ERROR; 
+ 
         case NKikimrTxColumnShard::OVERLOADED:
             return Ydb::StatusIds::OVERLOADED;
 
-        default:
-            return Ydb::StatusIds::GENERIC_ERROR;
-        }
-    }
-
+        default: 
+            return Ydb::StatusIds::GENERIC_ERROR; 
+        } 
+    } 
+ 
     void Handle(TEvColumnShard::TEvWriteResult::TPtr& ev) {
         const auto* msg = ev->Get();
         ui64 shardId = msg->Record.GetOrigin();
@@ -462,8 +462,8 @@ private:
 
         auto status = msg->Record.GetStatus();
         if (status != NKikimrTxColumnShard::SUCCESS) {
-            auto ydbStatus = ConvertToYdbStatus(status);
-            return ReplyError(ydbStatus, "Write error");
+            auto ydbStatus = ConvertToYdbStatus(status); 
+            return ReplyError(ydbStatus, "Write error"); 
         }
 
         if (!WaitShards.count(shardId)) {
@@ -493,8 +493,8 @@ private:
         for (auto& [shardId, writeId] : ShardsWrites) {
             req->AddWrite(shardId, writeId);
         }
-        this->Send(MakeLongTxServiceID(this->SelfId().NodeId()), req.Release());
-        this->Become(&TThis::StateAttachWrite);
+        this->Send(MakeLongTxServiceID(this->SelfId().NodeId()), req.Release()); 
+        this->Become(&TThis::StateAttachWrite); 
     }
 
 
@@ -511,122 +511,122 @@ private:
         if (msg->Record.GetStatus() != Ydb::StatusIds::SUCCESS) {
             NYql::TIssues issues;
             NYql::IssuesFromMessage(msg->Record.GetIssues(), issues);
-            for (auto& issue : issues) {
-                RaiseIssue(issue);
+            for (auto& issue : issues) { 
+                RaiseIssue(issue); 
             }
-            ReplyError(msg->Record.GetStatus());
+            ReplyError(msg->Record.GetStatus()); 
             return PassAway();
         }
 
-        ReplySuccess();
+        ReplySuccess(); 
+    } 
+ 
+private: 
+    void SendToTablet(ui64 tabletId, THolder<IEventBase> event) { 
+        this->Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, true), 
+                IEventHandle::FlagTrackDelivery); 
+    } 
+ 
+protected: 
+    virtual bool HasDeserializedBatch() const { 
+         return false; 
+    } 
+ 
+    virtual std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const { 
+        return nullptr; 
+    } 
+ 
+    virtual TString GetSerializedData() = 0; 
+    virtual void RaiseIssue(const NYql::TIssue& issue) = 0; 
+    virtual void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message = TString()) = 0; 
+    virtual void ReplySuccess() = 0; 
+ 
+protected: 
+    const TString DatabaseName; 
+    const TString Path; 
+    const TString DedupId; 
+private: 
+    TLongTxId LongTxId; 
+    const TActorId LeaderPipeCache; 
+    std::optional<NACLib::TUserToken> UserToken; 
+    THashSet<ui64> WaitShards; 
+    THashMap<ui64, ui64> ShardsWrites; 
+}; 
+ 
+ 
+// GRPC call implementation of LongTx Write 
+class TLongTxWriteRPC : public TLongTxWriteBase<TLongTxWriteRPC> { 
+    using TBase = TLongTxWriteBase<TLongTxWriteRPC>; 
+public: 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::GRPC_REQ; 
+    } 
+ 
+    explicit TLongTxWriteRPC(TAutoPtr<IRequestOpCtx> request) 
+        : TBase(request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())), 
+            TEvLongTxWriteRequest::GetProtoRequest(request)->path(), 
+            request->GetInternalToken(), 
+            TLongTxId(), 
+            TEvLongTxWriteRequest::GetProtoRequest(request)->dedup_id()) 
+        , Request(request.Release()) 
+        , SchemeCache(MakeSchemeCacheID()) 
+    { 
+    } 
+ 
+    void Bootstrap() { 
+        const auto* req = GetProtoRequest(); 
+
+        TString errMsg; 
+        TLongTxId longTxId; 
+        if (!longTxId.ParseString(req->tx_id(), &errMsg)) { 
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg); 
+        } 
+        SetLongTxId(longTxId); 
+ 
+        if (GetProtoRequest()->data().format() != Ydb::LongTx::Data::APACHE_ARROW) { 
+            return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Only APACHE_ARROW data format is supported"); 
+        } 
+ 
+        SendNavigateRequest(); 
     }
 
+    void SendNavigateRequest() { 
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>(); 
+        request->DatabaseName = this->DatabaseName; 
+        auto& entry = request->ResultSet.emplace_back(); 
+        entry.Path = ::NKikimr::SplitPath(Path); 
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath; 
+        Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release())); 
+        Become(&TThis::StateNavigate); 
+    } 
+ 
+    STFUNC(StateNavigate) { 
+        Y_UNUSED(ctx); 
+        switch (ev->GetTypeRewrite()) { 
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle); 
+        } 
+    } 
+ 
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) { 
+        NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get(); 
+        ProceedWithSchema(resp); 
+    } 
+ 
 private:
-    void SendToTablet(ui64 tabletId, THolder<IEventBase> event) {
-        this->Send(LeaderPipeCache, new TEvPipeCache::TEvForward(event.Release(), tabletId, true),
-                IEventHandle::FlagTrackDelivery);
+    const TEvLongTxWriteRequest::TRequest* GetProtoRequest() const { 
+        return TEvLongTxWriteRequest::GetProtoRequest(Request); 
+    } 
+ 
+protected: 
+    TString GetSerializedData() override { 
+        return GetProtoRequest()->data().data(); 
     }
 
-protected:
-    virtual bool HasDeserializedBatch() const {
-         return false;
-    }
-
-    virtual std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const {
-        return nullptr;
-    }
-
-    virtual TString GetSerializedData() = 0;
-    virtual void RaiseIssue(const NYql::TIssue& issue) = 0;
-    virtual void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message = TString()) = 0;
-    virtual void ReplySuccess() = 0;
-
-protected:
-    const TString DatabaseName;
-    const TString Path;
-    const TString DedupId;
-private:
-    TLongTxId LongTxId;
-    const TActorId LeaderPipeCache;
-    std::optional<NACLib::TUserToken> UserToken;
-    THashSet<ui64> WaitShards;
-    THashMap<ui64, ui64> ShardsWrites;
-};
-
-
-// GRPC call implementation of LongTx Write
-class TLongTxWriteRPC : public TLongTxWriteBase<TLongTxWriteRPC> {
-    using TBase = TLongTxWriteBase<TLongTxWriteRPC>;
-public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::GRPC_REQ;
-    }
-
-    explicit TLongTxWriteRPC(TAutoPtr<IRequestOpCtx> request)
-        : TBase(request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData())),
-            TEvLongTxWriteRequest::GetProtoRequest(request)->path(),
-            request->GetInternalToken(),
-            TLongTxId(),
-            TEvLongTxWriteRequest::GetProtoRequest(request)->dedup_id())
-        , Request(request.Release())
-        , SchemeCache(MakeSchemeCacheID())
-    {
-    }
-
-    void Bootstrap() {
-        const auto* req = GetProtoRequest();
-
-        TString errMsg;
-        TLongTxId longTxId;
-        if (!longTxId.ParseString(req->tx_id(), &errMsg)) {
-            return ReplyError(Ydb::StatusIds::BAD_REQUEST, errMsg);
-        }
-        SetLongTxId(longTxId);
-
-        if (GetProtoRequest()->data().format() != Ydb::LongTx::Data::APACHE_ARROW) {
-            return ReplyError(Ydb::StatusIds::BAD_REQUEST, "Only APACHE_ARROW data format is supported");
-        }
-
-        SendNavigateRequest();
-    }
-
-    void SendNavigateRequest() {
-        auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        request->DatabaseName = this->DatabaseName;
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Path = ::NKikimr::SplitPath(Path);
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
-        Send(SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
-        Become(&TThis::StateNavigate);
-    }
-
-    STFUNC(StateNavigate) {
-        Y_UNUSED(ctx);
-        switch (ev->GetTypeRewrite()) {
-            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-        }
-    }
-
-    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
-        ProceedWithSchema(resp);
-    }
-
-private:
-    const TEvLongTxWriteRequest::TRequest* GetProtoRequest() const {
-        return TEvLongTxWriteRequest::GetProtoRequest(Request);
-    }
-
-protected:
-    TString GetSerializedData() override {
-        return GetProtoRequest()->data().data();
-    }
-
-    void RaiseIssue(const NYql::TIssue& issue) override {
-        Request->RaiseIssue(issue);
-    }
-
-    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message = TString()) override {
+    void RaiseIssue(const NYql::TIssue& issue) override { 
+        Request->RaiseIssue(issue); 
+    } 
+ 
+    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message = TString()) override { 
         if (!message.empty()) {
             Request->RaiseIssue(NYql::TIssue(message));
         }
@@ -634,100 +634,100 @@ protected:
         PassAway();
     }
 
-    void ReplySuccess() override {
-        Ydb::LongTx::WriteResult result;
-        result.set_tx_id(GetProtoRequest()->tx_id());
-        result.set_path(Path);
-        result.set_dedup_id(DedupId);
-
+    void ReplySuccess() override { 
+        Ydb::LongTx::WriteResult result; 
+        result.set_tx_id(GetProtoRequest()->tx_id()); 
+        result.set_path(Path); 
+        result.set_dedup_id(DedupId); 
+ 
         Request->SendResult(result, Ydb::StatusIds::SUCCESS);
         PassAway();
     }
 
 private:
-    std::unique_ptr<IRequestOpCtx> Request;
+    std::unique_ptr<IRequestOpCtx> Request; 
     TActorId SchemeCache;
 };
 
+ 
+template<> 
+IActor* TEvLongTxWriteRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) { 
+    return new TLongTxWriteRPC(msg); 
+} 
+ 
+// LongTx Write implementation called from the inside of YDB (e.g. as a part of BulkUpsert call) 
+// NOTE: permission checks must have been done by the caller 
+class TLongTxWriteInternal : public TLongTxWriteBase<TLongTxWriteInternal> { 
+    using TBase = TLongTxWriteBase<TLongTxWriteInternal>; 
+public: 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() { 
+        return NKikimrServices::TActivity::GRPC_REQ; 
+    } 
 
-template<>
-IActor* TEvLongTxWriteRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
-    return new TLongTxWriteRPC(msg);
-}
-
-// LongTx Write implementation called from the inside of YDB (e.g. as a part of BulkUpsert call)
-// NOTE: permission checks must have been done by the caller
-class TLongTxWriteInternal : public TLongTxWriteBase<TLongTxWriteInternal> {
-    using TBase = TLongTxWriteBase<TLongTxWriteInternal>;
-public:
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::GRPC_REQ;
-    }
-
-    explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId,
-            const TString& databaseName, const TString& path,
-            const NSchemeCache::TSchemeCacheNavigate& navigateResult,
-            std::shared_ptr<arrow::RecordBatch> batch, NYql::TIssues& issues)
-        : TBase(databaseName, path, TString(), longTxId, dedupId)
-        , ReplyTo(replyTo)
-        , NavigateResult(navigateResult)
-        , Batch(batch)
-        , Issues(issues)
-    {
-    }
-
-    void Bootstrap() {
-        ProceedWithSchema(&NavigateResult);
-    }
-
-protected:
-    bool HasDeserializedBatch() const override {
-         return true;
-    }
-
-    std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const override {
-        return Batch;
-    }
-
-    TString GetSerializedData() override {
-        return NArrow::SerializeBatchNoCompression(Batch);
-    }
-
-    void RaiseIssue(const NYql::TIssue& issue) override {
-        Issues.AddIssue(issue);
-    }
-
-    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message = TString()) override {
-        if (!message.empty()) {
-            Issues.AddIssue(NYql::TIssue(message));
-        }
-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status));
-        PassAway();
-    }
-
-    void ReplySuccess() override {
-        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS));
-        PassAway();
-    }
-
-private:
-    const TActorId ReplyTo;
-    const NSchemeCache::TSchemeCacheNavigate& NavigateResult;
-    std::shared_ptr<arrow::RecordBatch> Batch;
-    NYql::TIssues& Issues;
-};
-
-
-TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
-    const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
-    const TString& databaseName, const TString& path, const NSchemeCache::TSchemeCacheNavigate& navigateResult,
-    std::shared_ptr<arrow::RecordBatch> batch, NYql::TIssues& issues)
-{
-    return ctx.RegisterWithSameMailbox(
-        new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues));
-}
-
-
+    explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId, 
+            const TString& databaseName, const TString& path, 
+            const NSchemeCache::TSchemeCacheNavigate& navigateResult, 
+            std::shared_ptr<arrow::RecordBatch> batch, NYql::TIssues& issues) 
+        : TBase(databaseName, path, TString(), longTxId, dedupId) 
+        , ReplyTo(replyTo) 
+        , NavigateResult(navigateResult) 
+        , Batch(batch) 
+        , Issues(issues) 
+    { 
+    } 
+ 
+    void Bootstrap() { 
+        ProceedWithSchema(&NavigateResult); 
+    } 
+ 
+protected: 
+    bool HasDeserializedBatch() const override { 
+         return true; 
+    } 
+ 
+    std::shared_ptr<arrow::RecordBatch> GetDeserializedBatch() const override { 
+        return Batch; 
+    } 
+ 
+    TString GetSerializedData() override { 
+        return NArrow::SerializeBatchNoCompression(Batch); 
+    } 
+ 
+    void RaiseIssue(const NYql::TIssue& issue) override { 
+        Issues.AddIssue(issue); 
+    } 
+ 
+    void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message = TString()) override { 
+        if (!message.empty()) { 
+            Issues.AddIssue(NYql::TIssue(message)); 
+        } 
+        this->Send(ReplyTo, new TEvents::TEvCompleted(0, status)); 
+        PassAway(); 
+    } 
+ 
+    void ReplySuccess() override { 
+        this->Send(ReplyTo, new TEvents::TEvCompleted(0, Ydb::StatusIds::SUCCESS)); 
+        PassAway(); 
+    } 
+ 
+private: 
+    const TActorId ReplyTo; 
+    const NSchemeCache::TSchemeCacheNavigate& NavigateResult; 
+    std::shared_ptr<arrow::RecordBatch> Batch; 
+    NYql::TIssues& Issues; 
+}; 
+ 
+ 
+TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo, 
+    const NLongTxService::TLongTxId& longTxId, const TString& dedupId, 
+    const TString& databaseName, const TString& path, const NSchemeCache::TSchemeCacheNavigate& navigateResult, 
+    std::shared_ptr<arrow::RecordBatch> batch, NYql::TIssues& issues) 
+{ 
+    return ctx.RegisterWithSameMailbox( 
+        new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues)); 
+} 
+ 
+ 
 class TLongTxReadRPC : public TActorBootstrapped<TLongTxReadRPC> {
     using TBase = TActorBootstrapped<TLongTxReadRPC>;
 

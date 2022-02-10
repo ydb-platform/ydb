@@ -445,7 +445,7 @@ protected:
         meta->MutableTableId()->SetOwnerId(stageInfo.Meta.TableId.PathId.OwnerId);
         meta->SetSchemaVersion(stageInfo.Meta.TableId.SchemaVersion);
         meta->SetSysViewInfo(stageInfo.Meta.TableId.SysViewInfo);
-        meta->SetTableKind((ui32)stageInfo.Meta.TableKind);
+        meta->SetTableKind((ui32)stageInfo.Meta.TableKind); 
     }
 
     void ExtractItemsLimit(const TStageInfo& stageInfo, const NKqpProto::TKqpPhyParamValue& paramValue,

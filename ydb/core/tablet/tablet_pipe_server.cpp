@@ -3,7 +3,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/interconnect.h>
 #include <library/cpp/actors/core/log.h>
-#include <util/generic/hash_set.h>
+#include <util/generic/hash_set.h> 
 
 namespace NKikimr {
 
@@ -39,7 +39,7 @@ namespace NTabletPipe {
                 HFunc(TEvTabletPipe::TEvShutdown, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
                 HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
-                HFunc(TEvents::TEvUndelivered, Handle);
+                HFunc(TEvents::TEvUndelivered, Handle); 
             }
         }
 
@@ -168,8 +168,8 @@ namespace NTabletPipe {
 
         void Handle(TEvTabletPipe::TEvPeerClosed::TPtr& ev, const TActorContext& ctx) {
             Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
-            LOG_DEBUG_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
-                << " Got PeerClosed from# " << ev->Sender);
+            LOG_DEBUG_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]" 
+                << " Got PeerClosed from# " << ev->Sender); 
             Reset(ctx);
         }
 
@@ -256,9 +256,9 @@ namespace NTabletPipe {
 
     class TConnectAcceptor: public IConnectAcceptor {
     public:
-        explicit TConnectAcceptor(ui64 tabletId)
+        explicit TConnectAcceptor(ui64 tabletId) 
             : TabletId(tabletId)
-            , Active(false)
+            , Active(false) 
             , Stopped(false)
         {
         }
@@ -322,7 +322,7 @@ namespace NTabletPipe {
             }
 
             ActivatePending.clear();
-            Active = true;
+            Active = true; 
         }
 
         void Erase(TEvTabletPipe::TEvServerDestroyed::TPtr &ev) override {
@@ -331,10 +331,10 @@ namespace NTabletPipe {
             ActivatePending.erase(serverId);
         }
 
-        bool IsActive() const override {
-            return Active;
-        }
-
+        bool IsActive() const override { 
+            return Active; 
+        } 
+ 
         bool IsStopped() const override {
             return Stopped;
         }
@@ -344,7 +344,7 @@ namespace NTabletPipe {
         const ui64 TabletId;
         THashSet<TActorId> ServerIds;
         THashSet<TActorId> ActivatePending;
-        bool Active;
+        bool Active; 
         bool Stopped;
     };
 

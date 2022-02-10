@@ -75,15 +75,15 @@ namespace {
         table.Columns.insert(std::make_pair("key", TColumn{ 34, 0, NUdf::TDataType<ui32>::Id, 0 }));
         table.Columns.insert(std::make_pair("value", TColumn{ 56, -1, NUdf::TDataType<char*>::Id, (ui32)EInplaceUpdateMode::Min }));
         services.DbSchemeResolver.AddTable(table);
-
-        IDbSchemeResolver::TTableResult table2(IDbSchemeResolver::TTableResult::Ok);
-        table2.Table.TableName = "table2";
+ 
+        IDbSchemeResolver::TTableResult table2(IDbSchemeResolver::TTableResult::Ok); 
+        table2.Table.TableName = "table2"; 
         table2.Table.ColumnNames = { "key", "value" };
-        table2.TableId.Reset(new TTableId(10, 20));
-        table2.KeyColumnCount = 1;
+        table2.TableId.Reset(new TTableId(10, 20)); 
+        table2.KeyColumnCount = 1; 
         table2.Columns.insert(std::make_pair("key", TColumn{ 340, 0, NUdf::TDataType<ui32>::Id, 0 }));
         table2.Columns.insert(std::make_pair("value", TColumn{ 560, -1, NUdf::TDataType<char*>::Id, (ui32)EInplaceUpdateMode::Min }));
-        services.DbSchemeResolver.AddTable(table2);
+        services.DbSchemeResolver.AddTable(table2); 
     }
 }
 
@@ -224,37 +224,37 @@ Y_UNIT_TEST_SUITE(TTestYqlToMiniKQLCompile) {
     }
 
     Y_UNIT_TEST(SimpleCrossShardTx) {
-        auto programText = R"___(
-                (
-                (let row '('('key (Uint32 '2))))
-                (let select '('value))
-                (let selectRes (SelectRow 'table1 row select))
-                (let val (FlatMap selectRes (lambda '(x) (Member x 'value))))
-                (let row '('('key (Uint32 '2))))
-                (let myUpd '(
-                    '('value val)
-                ))
-                (let pgmReturn (AsList
-                    (UpdateRow 'table2 row myUpd)
-                ))
-                    (return pgmReturn)
-                )
-            )___";
-
-        TServices services;
-        RegisterSampleTables(services);
-        auto pgm = ProgramText2Bin(programText, services);
-        services.ExtractKeys(pgm);
+        auto programText = R"___( 
+                ( 
+                (let row '('('key (Uint32 '2)))) 
+                (let select '('value)) 
+                (let selectRes (SelectRow 'table1 row select)) 
+                (let val (FlatMap selectRes (lambda '(x) (Member x 'value)))) 
+                (let row '('('key (Uint32 '2)))) 
+                (let myUpd '( 
+                    '('value val) 
+                )) 
+                (let pgmReturn (AsList 
+                    (UpdateRow 'table2 row myUpd) 
+                )) 
+                    (return pgmReturn) 
+                ) 
+            )___"; 
+ 
+        TServices services; 
+        RegisterSampleTables(services); 
+        auto pgm = ProgramText2Bin(programText, services); 
+        services.ExtractKeys(pgm); 
         UNIT_ASSERT_VALUES_EQUAL(services.DescList.size(), 2);
         THashMap<TKeyDesc::ERowOperation, ui32> counters;
-        for (ui32 i = 0; i < services.DescList.size(); ++i) {
+        for (ui32 i = 0; i < services.DescList.size(); ++i) { 
             ++counters[services.DescList[i]->RowOperation];
-        }
+        } 
 
         UNIT_ASSERT_VALUES_EQUAL(counters.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(counters[TKeyDesc::ERowOperation::Read], 1);
         UNIT_ASSERT_VALUES_EQUAL(counters[TKeyDesc::ERowOperation::Update], 1);
-    }
+    } 
 
     Y_UNIT_TEST(AcquireLocks) {
         auto programText = R"___(

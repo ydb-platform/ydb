@@ -180,7 +180,7 @@ namespace NActors {
                     TSimpleMailbox* const mailbox = TSimpleMailbox::Get(lineHint, x);
 #if (!defined(_tsan_enabled_))
                     Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
-#endif
+#endif 
                     mailbox->Queue.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
                         RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());
@@ -200,11 +200,11 @@ namespace NActors {
                                   "We expect that one line can store more simple mailboxes than revolving mailboxes");
                     if (lineHint > TRevolvingMailbox::MaxMailboxesInLine())
                         return false;
-
+ 
                     TRevolvingMailbox* const mailbox = TRevolvingMailbox::Get(lineHint, x);
 #if (!defined(_tsan_enabled_))
                     Y_VERIFY_DEBUG(mailbox->Type == (ui32)x->MailboxType);
-#endif
+#endif 
                     mailbox->QueueWriter.Push(ev.Release());
                     if (mailbox->MarkForSchedule()) {
                         RelaxedStore<NHPTimer::STime>(&mailbox->ScheduleMoment, GetCycleCountFast());

@@ -137,7 +137,7 @@ namespace NTxMediator {
             for (TVector<std::pair<TTabletId, std::size_t>>::const_iterator it = step->TabletsToTransaction.begin(), end = step->TabletsToTransaction.end(); it != end; ++it) {
                 if (activeTablet != it->first) {
                     if (activeTablet)
-                        SendStepToBucket<TEvTxMediator::TEvOoOTabletStep>(activeTablet, step->Step, currentTx, ctx);
+                        SendStepToBucket<TEvTxMediator::TEvOoOTabletStep>(activeTablet, step->Step, currentTx, ctx); 
                     activeTablet = it->first;
                     currentTx.clear();
                 }
@@ -147,7 +147,7 @@ namespace NTxMediator {
             }
 
             if (activeTablet)
-                SendStepToBucket<TEvTxMediator::TEvOoOTabletStep>(activeTablet, step->Step, currentTx, ctx);
+                SendStepToBucket<TEvTxMediator::TEvOoOTabletStep>(activeTablet, step->Step, currentTx, ctx); 
         }
 
         void Handle(TEvMediatorTimecast::TEvWatch::TPtr &ev, const TActorContext &ctx) {

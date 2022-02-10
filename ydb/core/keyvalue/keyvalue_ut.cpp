@@ -1318,34 +1318,34 @@ Y_UNIT_TEST(TestInlineWriteReadWithRestartsWithNotCorrectUTF8NewApi) {
 
 
 Y_UNIT_TEST(TestEmptyWriteReadDeleteWithRestartsThenResponseOk) {
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
+    TTestContext tc; 
+    RunTestWithReboots(tc.TabletIds, [&]() { 
+        return tc.InitialEventsFilter.Prepare(); 
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
-        TFinalizer finalizer(tc);
-        tc.Prepare(dispatchName, setup, activeZone);
+        TFinalizer finalizer(tc); 
+        tc.Prepare(dispatchName, setup, activeZone); 
         CmdWrite("key", "", NKikimrClient::TKeyValueRequest::MAIN,
             NKikimrClient::TKeyValueRequest::REALTIME, tc);
         CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
-            {""}, {}, tc);
-
+            {""}, {}, tc); 
+ 
         TDeque<TString> expectedKeys;
         TDeque<TString> expectedValues;
-        expectedKeys.push_back("key");
-        expectedValues.push_back("");
+        expectedKeys.push_back("key"); 
+        expectedValues.push_back(""); 
         {
             TDesiredPair<TEvKeyValue::TEvRequest> dp;
             AddCmdReadRange("a", true, "z", false, true, Max<ui64>(), NKikimrClient::TKeyValueRequest::REALTIME,
                     expectedKeys, expectedValues, NKikimrProto::OK, tc, dp);
             RunRequest(dp, tc, __LINE__);
         }
-
-        CmdDeleteRange("key", true, "key", true, tc);
+ 
+        CmdDeleteRange("key", true, "key", true, tc); 
         CmdRead({"key"}, NKikimrClient::TKeyValueRequest::REALTIME,
-            {""}, {true}, tc);
-    });
-}
-
+            {""}, {true}, tc); 
+    }); 
+} 
+ 
 
 Y_UNIT_TEST(TestEmptyWriteReadDeleteWithRestartsThenResponseOkNewApi) {
     TTestContext tc;

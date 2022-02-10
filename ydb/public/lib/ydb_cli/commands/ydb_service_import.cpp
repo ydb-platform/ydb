@@ -166,10 +166,10 @@ void TCommandImportFromCsv::Config(TConfig& config) {
     config.Opts->AddLongOption("batch-bytes",
             "Use portions of this size in bytes to parse and upload file data")
         .DefaultValue(HumanReadableSize(defaults.BytesPerRequest_, SF_BYTES)).StoreResult(&BytesPerRequest);
-
-    config.Opts->AddLongOption("max-in-flight",
-            "Maximum number of in-flight requests; increase to load big files faster (more memory needed)")
-        .DefaultValue(defaults.MaxInFlightRequests_).StoreResult(&MaxInFlightRequests);
+ 
+    config.Opts->AddLongOption("max-in-flight", 
+            "Maximum number of in-flight requests; increase to load big files faster (more memory needed)") 
+        .DefaultValue(defaults.MaxInFlightRequests_).StoreResult(&MaxInFlightRequests); 
 }
 
 void TCommandImportFromCsv::Parse(TConfig& config) {
@@ -193,11 +193,11 @@ int TCommandImportFromCsv::Run(TConfig& config) {
         settings.BytesPerRequest(bytesPerRequest);
     }
 
-    if (MaxInFlightRequests == 0) {
-        MaxInFlightRequests = 1;
-    }
-    settings.MaxInFlightRequests(MaxInFlightRequests);
-
+    if (MaxInFlightRequests == 0) { 
+        MaxInFlightRequests = 1; 
+    } 
+    settings.MaxInFlightRequests(MaxInFlightRequests); 
+ 
     if (Delimiter.size() != 1) {
         throw TMissUseException()
             << "--delimiter should be a one symbol string. Got: '" << Delimiter << "'";

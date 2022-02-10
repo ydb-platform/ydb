@@ -5,10 +5,10 @@
 
 namespace NKikimr::NColumnShard {
 
-// NOTE: We really want to batch log records by default in columnshards!
-// But in unittests we want to test both scenarios
-bool gAllowLogBatchingDefaultValue = true;
-
+// NOTE: We really want to batch log records by default in columnshards! 
+// But in unittests we want to test both scenarios 
+bool gAllowLogBatchingDefaultValue = true; 
+ 
 namespace
 {
 
@@ -29,13 +29,13 @@ TColumnShard::TColumnShard(TTabletStorageInfo* info, const TActorId& tablet)
     , PipeClientCache(NTabletPipe::CreateBoundedClientCache(new NTabletPipe::TBoundedClientCacheConfig(), GetPipeClientConfig()))
     , InsertTable(std::make_unique<NOlap::TInsertTable>())
 {
-    TabletCountersPtr.reset(new TProtobufTabletCounters<
+    TabletCountersPtr.reset(new TProtobufTabletCounters< 
         ESimpleCounters_descriptor,
         ECumulativeCounters_descriptor,
         EPercentileCounters_descriptor,
         ETxTypes_descriptor
     >());
-    TabletCounters = TabletCountersPtr.get();
+    TabletCounters = TabletCountersPtr.get(); 
 }
 
 void TColumnShard::OnDetach(const TActorContext& ctx) {
@@ -170,17 +170,17 @@ ui64 TColumnShard::GetOutdatedStep() const {
     return step;
 }
 
-ui64 TColumnShard::GetAllowedStep() const {
-    return Max(GetOutdatedStep() + 1, TAppData::TimeProvider->Now().MilliSeconds());
-}
-
-ui64 TColumnShard::GetMinReadStep() const {
-    ui64 delayMillisec = MaxReadStaleness.MilliSeconds();
-    ui64 passedStep = GetOutdatedStep();
-    ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0);
-    return minReadStep;
-}
-
+ui64 TColumnShard::GetAllowedStep() const { 
+    return Max(GetOutdatedStep() + 1, TAppData::TimeProvider->Now().MilliSeconds()); 
+} 
+ 
+ui64 TColumnShard::GetMinReadStep() const { 
+    ui64 delayMillisec = MaxReadStaleness.MilliSeconds(); 
+    ui64 passedStep = GetOutdatedStep(); 
+    ui64 minReadStep = (passedStep > delayMillisec ? passedStep - delayMillisec : 0); 
+    return minReadStep; 
+} 
+ 
 bool TColumnShard::HaveOutdatedTxs() const {
     if (!DeadlineQueue) {
         return false;
@@ -247,15 +247,15 @@ bool TColumnShard::RemoveTx(NTable::TDatabase& database, ui64 txId) {
         case NKikimrTxColumnShard::TX_KIND_COMMIT: {
             if (auto* meta = CommitsInFlight.FindPtr(txId)) {
                 if (meta->MetaShard == 0) {
-                    for (TWriteId writeId : meta->WriteIds) {
+                    for (TWriteId writeId : meta->WriteIds) { 
                         // TODO: we probably need to have more complex
                         // logic in the future, when there are multiple
                         // inflight commits for the same writeId.
                         RemoveLongTxWrite(db, writeId, txId);
                     }
                 }
-                TBlobGroupSelector dsGroupSelector(Info());
-                NOlap::TDbWrapper dbTable(database, &dsGroupSelector);
+                TBlobGroupSelector dsGroupSelector(Info()); 
+                NOlap::TDbWrapper dbTable(database, &dsGroupSelector); 
                 InsertTable->Abort(dbTable, meta->MetaShard, meta->WriteIds);
 
                 CommitsInFlight.erase(txId);
@@ -471,8 +471,8 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
         Ttl.DropPathTtl(pathId);
 
         // TODO: Allow to read old snapshots after DROP
-        TBlobGroupSelector dsGroupSelector(Info());
-        NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+        TBlobGroupSelector dsGroupSelector(Info()); 
+        NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector); 
         auto abortedWrites = InsertTable->DropPath(dbTable, pathId);
         for (auto& writeId : abortedWrites) {
             RemoveLongTxWrite(db, writeId);
@@ -609,15 +609,15 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
     ui64 bytesToIndex = 0;
     TVector<const NOlap::TInsertedData*> dataToIndex;
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
-    for (auto& [pathId, committed] : InsertTable->GetCommitted()) {
-        for (auto& data : committed) {
+    for (auto& [pathId, committed] : InsertTable->GetCommitted()) { 
+        for (auto& data : committed) { 
             ui32 dataSize = data.BlobSize();
             Y_VERIFY(dataSize);
 
             size += dataSize;
             if (bytesToIndex && (bytesToIndex + dataSize) > (ui64)Limits.MaxInsertBytes) {
                 continue;
-            }
+            } 
             if (auto* pMap = PrimaryIndex->GetOverloadedGranules(data.PathId)) {
                 InsertTable->SetOverloaded(data.PathId, true);
                 ++ignored;
@@ -655,9 +655,9 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
     }
 
     ActiveIndexing = true;
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
-        Settings.CacheDataAfterIndexing);
-    return std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev));
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges, 
+        Settings.CacheDataAfterIndexing); 
+    return std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev)); 
 }
 
 std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
@@ -693,9 +693,9 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
     }
 
     ActiveCompaction = true;
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
-        Settings.CacheDataAfterCompaction);
-    return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev));
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges, 
+        Settings.CacheDataAfterCompaction); 
+    return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev)); 
 }
 
 std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTtlInfo>& pathTtls,
@@ -734,64 +734,64 @@ std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupTtl(const THashMap
     }
 
     ActiveTtl = true;
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges, false);
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges, false); 
     ev->PutStatus = NKikimrProto::OK; // No blobs to write, start TTxWriteIndex in event handler
     return ev;
 }
 
-std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() {
-    if (ActiveCleanup) {
-        LOG_S_DEBUG("Cleanup already in progress at tablet " << TabletID());
-        return {};
-    }
-    if (!PrimaryIndex) {
+std::unique_ptr<TEvPrivate::TEvWriteIndex> TColumnShard::SetupCleanup() { 
+    if (ActiveCleanup) { 
+        LOG_S_DEBUG("Cleanup already in progress at tablet " << TabletID()); 
+        return {}; 
+    } 
+    if (!PrimaryIndex) { 
         LOG_S_NOTICE("Cleanup not started. No index for cleanup at tablet " << TabletID());
-        return {};
-    }
-
-    NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0};
-
+        return {}; 
+    } 
+ 
+    NOlap::TSnapshot cleanupSnapshot{GetMinReadStep(), 0}; 
+ 
     auto changes = PrimaryIndex->StartCleanup(cleanupSnapshot, PathsToDrop);
     if (!changes) {
         LOG_S_NOTICE("Cannot prepare cleanup at tablet " << TabletID());
         return {};
     }
 
-    Y_VERIFY(!changes->CompactionInfo);
-    Y_VERIFY(changes->DataToIndex.empty());
-    Y_VERIFY(changes->AppendedPortions.empty());
-
+    Y_VERIFY(!changes->CompactionInfo); 
+    Y_VERIFY(changes->DataToIndex.empty()); 
+    Y_VERIFY(changes->AppendedPortions.empty()); 
+ 
     // TODO: limit PortionsToDrop total size. Delete them in small portions.
-    // Filter PortionsToDrop
-    TVector<NOlap::TPortionInfo> portionsCanBedropped;
-    THashSet<ui64> excludedPortions;
-    for (const auto& portionInfo : changes->PortionsToDrop) {
-        ui64 portionId = portionInfo.Records.front().Portion;
-        // Exclude portions that are used by in-flght reads/scans
-        if (!InFlightReadsTracker.IsPortionUsed(portionId)) {
-            portionsCanBedropped.push_back(portionInfo);
-        } else {
-            excludedPortions.insert(portionId);
-        }
-    }
-    changes->PortionsToDrop.swap(portionsCanBedropped);
-
-    LOG_S_DEBUG("Prepare Cleanup snapshot: " << cleanupSnapshot
-        << " portions to drop: " << changes->PortionsToDrop.size()
-        << " in use by reads: " << excludedPortions.size()
-        << " at tablet " << TabletID());
-
-    if (changes->PortionsToDrop.empty()) {
-        return {};
-    }
-
-    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), changes , false);
-    ev->PutStatus = NKikimrProto::OK; // No new blobs to write
-
-    ActiveCleanup = true;
-    return ev;
-}
-
+    // Filter PortionsToDrop 
+    TVector<NOlap::TPortionInfo> portionsCanBedropped; 
+    THashSet<ui64> excludedPortions; 
+    for (const auto& portionInfo : changes->PortionsToDrop) { 
+        ui64 portionId = portionInfo.Records.front().Portion; 
+        // Exclude portions that are used by in-flght reads/scans 
+        if (!InFlightReadsTracker.IsPortionUsed(portionId)) { 
+            portionsCanBedropped.push_back(portionInfo); 
+        } else { 
+            excludedPortions.insert(portionId); 
+        } 
+    } 
+    changes->PortionsToDrop.swap(portionsCanBedropped); 
+ 
+    LOG_S_DEBUG("Prepare Cleanup snapshot: " << cleanupSnapshot 
+        << " portions to drop: " << changes->PortionsToDrop.size() 
+        << " in use by reads: " << excludedPortions.size() 
+        << " at tablet " << TabletID()); 
+ 
+    if (changes->PortionsToDrop.empty()) { 
+        return {}; 
+    } 
+ 
+    auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), changes , false); 
+    ev->PutStatus = NKikimrProto::OK; // No new blobs to write 
+ 
+    ActiveCleanup = true; 
+    return ev; 
+} 
+ 
 NOlap::TIndexInfo TColumnShard::ConvertSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) {
     Y_VERIFY(schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
 

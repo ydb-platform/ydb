@@ -77,21 +77,21 @@ public:
         , Request(ev->Release())
         , TxProxyMon(mon)
         , DefaultTimeoutMs(60000, 0, 360000)
-        , SnapshotTxId(txid)
+        , SnapshotTxId(txid) 
     { }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_REQ_PROXY;
     }
 
-    STFUNC(StateWaitLongTxSnaphost) {
-        TRACE_EVENT(NKikimrServices::TX_PROXY);
-        switch (ev->GetTypeRewrite()) {
-            HFuncTraced(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, HandleLongTxSnaphot);
-            CFunc(TEvents::TSystem::Wakeup, HandleLongTxSnaphotTimeout);
-        }
-    }
-
+    STFUNC(StateWaitLongTxSnaphost) { 
+        TRACE_EVENT(NKikimrServices::TX_PROXY); 
+        switch (ev->GetTypeRewrite()) { 
+            HFuncTraced(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, HandleLongTxSnaphot); 
+            CFunc(TEvents::TSystem::Wakeup, HandleLongTxSnaphotTimeout); 
+        } 
+    } 
+ 
     STFUNC(StateWaitResolve) {
         TRACE_EVENT(NKikimrServices::TX_PROXY);
         switch (ev->GetTypeRewrite()) {
@@ -213,14 +213,14 @@ public:
         return Die(ctx);
     }
 
-    void HandleLongTxSnaphotTimeout(const TActorContext& ctx) {
-        LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId,
-            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
-            << " HANDLE LongTxSnaphotTimeout TCreateSnapshotReq");
-        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx);
-        return Die(ctx);
-    }
-
+    void HandleLongTxSnaphotTimeout(const TActorContext& ctx) { 
+        LOG_ERROR_S_SAMPLED_BY(ctx, NKikimrServices::TX_PROXY, TxId, 
+            "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId 
+            << " HANDLE LongTxSnaphotTimeout TCreateSnapshotReq"); 
+        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecTimeout, NKikimrIssues::TStatusIds::TIMEOUT, true, ctx); 
+        return Die(ctx); 
+    } 
+ 
     void HandlePrepareErrorTimeout(const TActorContext& ctx) {
         TxProxyMon->PrepareErrorTimeout->Inc();
         return Die(ctx);
@@ -269,7 +269,7 @@ public:
 
         TxProxyMon->TxPrepareResolveHgram->Collect((WallClockResolved - WallClockResolveStarted).MicroSeconds());
 
-        bool hasOlapTable = false;
+        bool hasOlapTable = false; 
         for (const auto& entry : msg->Tables) {
             // N.B. we create all keys as a read operation
             ui32 access = 0;
@@ -291,12 +291,12 @@ public:
                 continue;
             }
 
-            if (entry.IsOlapTable) {
-                // OLAP tables don't create snapshots explicitly
-                hasOlapTable = true;
-                continue;
-            }
-
+            if (entry.IsOlapTable) { 
+                // OLAP tables don't create snapshots explicitly 
+                hasOlapTable = true; 
+                continue; 
+            } 
+ 
             if (entry.KeyDescription->TableId.IsSystemView() ||
                 TSysTables::IsSystemTable(entry.KeyDescription->TableId))
             {
@@ -335,22 +335,22 @@ public:
         }
 
         if (PerShardStates.empty()) {
-            if (!hasOlapTable) {
-                // No real (OLTP or OLAP) tables in the request so we can use current time as a fake PlanStep
-                PlanStep = ctx.Now().MilliSeconds();
+            if (!hasOlapTable) { 
+                // No real (OLTP or OLAP) tables in the request so we can use current time as a fake PlanStep 
+                PlanStep = ctx.Now().MilliSeconds(); 
 
-                // We don't have any shards to snapshot, report fake success
-                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, true, ctx);
+                // We don't have any shards to snapshot, report fake success 
+                ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, true, ctx); 
 
-                return Die(ctx);
-            } else {
-                // The request includes only OLAP tables, need to get the snaphost from Long Tx service
-                auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
-                TString database = Request->Record.GetDatabaseName();
-                Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(database));
-
-                return Become(&TThis::StateWaitLongTxSnaphost);
-            }
+                return Die(ctx); 
+            } else { 
+                // The request includes only OLAP tables, need to get the snaphost from Long Tx service 
+                auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId()); 
+                TString database = Request->Record.GetDatabaseName(); 
+                Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(database)); 
+ 
+                return Become(&TThis::StateWaitLongTxSnaphost); 
+            } 
         }
 
         if (!msg->CheckDomainLocality()) {
@@ -408,35 +408,35 @@ public:
         Become(&TThis::StateWaitPrepare);
     }
 
-    void HandleLongTxSnaphot(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-        if (record.GetStatus() == Ydb::StatusIds::SUCCESS) {
-            PlanStep = record.GetSnapshotStep();
-            SnapshotTxId = record.GetSnapshotTxId();
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, true, ctx);
-        } else {
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(record.GetIssues(), issues);
-            IssueManager.RaiseIssues(issues);
-            NKikimrIssues::TStatusIds::EStatusCode statusCode = NKikimrIssues::TStatusIds::ERROR;
-            switch (record.GetStatus()) {
-            case Ydb::StatusIds::SCHEME_ERROR:
-                statusCode = NKikimrIssues::TStatusIds::SCHEME_ERROR;
-                break;
-            case Ydb::StatusIds::UNAVAILABLE:
-                statusCode = NKikimrIssues::TStatusIds::NOTREADY;
-                break;
-            case Ydb::StatusIds::INTERNAL_ERROR:
-                statusCode = NKikimrIssues::TStatusIds::INTERNAL_ERROR;
-                break;
-            default:
-                break;
-            }
-            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, statusCode, true, ctx);
-        }
-        return Die(ctx);
-    }
-
+    void HandleLongTxSnaphot(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev, const TActorContext& ctx) { 
+        const auto& record = ev->Get()->Record; 
+        if (record.GetStatus() == Ydb::StatusIds::SUCCESS) { 
+            PlanStep = record.GetSnapshotStep(); 
+            SnapshotTxId = record.GetSnapshotTxId(); 
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, NKikimrIssues::TStatusIds::SUCCESS, true, ctx); 
+        } else { 
+            NYql::TIssues issues; 
+            NYql::IssuesFromMessage(record.GetIssues(), issues); 
+            IssueManager.RaiseIssues(issues); 
+            NKikimrIssues::TStatusIds::EStatusCode statusCode = NKikimrIssues::TStatusIds::ERROR; 
+            switch (record.GetStatus()) { 
+            case Ydb::StatusIds::SCHEME_ERROR: 
+                statusCode = NKikimrIssues::TStatusIds::SCHEME_ERROR; 
+                break; 
+            case Ydb::StatusIds::UNAVAILABLE: 
+                statusCode = NKikimrIssues::TStatusIds::NOTREADY; 
+                break; 
+            case Ydb::StatusIds::INTERNAL_ERROR: 
+                statusCode = NKikimrIssues::TStatusIds::INTERNAL_ERROR; 
+                break; 
+            default: 
+                break; 
+            } 
+            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecError, statusCode, true, ctx); 
+        } 
+        return Die(ctx); 
+    } 
+ 
     void HandlePrepare(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
@@ -976,7 +976,7 @@ public:
 
     void ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status, NKikimrIssues::TStatusIds::EStatusCode code, bool reportIssues, const TActorContext& ctx) {
         auto x = MakeHolder<TEvTxUserProxy::TEvProposeTransactionStatus>(status);
-        x->Record.SetTxId(SnapshotTxId);
+        x->Record.SetTxId(SnapshotTxId); 
 
         if (reportIssues && IssueManager.GetIssues()) {
             IssuesToMessage(IssueManager.GetIssues(), x->Record.MutableIssues());
@@ -1071,7 +1071,7 @@ private:
     size_t ResultsReceivedCount = 0;
 
     ui64 PlanStep = 0;
-    ui64 SnapshotTxId = 0;   // SnaphotTxId overrides TxId in case using AcquireReadSnapshot
+    ui64 SnapshotTxId = 0;   // SnaphotTxId overrides TxId in case using AcquireReadSnapshot 
     ui64 AggrMinStep = 0;
     ui64 AggrMaxStep = Max<ui64>();
 
@@ -1315,11 +1315,11 @@ public:
                 continue;
             }
 
-            if (entry.IsOlapTable) {
-                // OLAP tables don't create snapshots explicitly
-                continue;
-            }
-
+            if (entry.IsOlapTable) { 
+                // OLAP tables don't create snapshots explicitly 
+                continue; 
+            } 
+ 
             if (entry.KeyDescription->TableId.IsSystemView() ||
                 TSysTables::IsSystemTable(entry.KeyDescription->TableId))
             {

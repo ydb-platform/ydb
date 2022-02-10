@@ -1,5 +1,5 @@
-#include "schemeshard_impl.h"
-
+#include "schemeshard_impl.h" 
+ 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/tx/datashard/range_ops.h>
@@ -7,7 +7,7 @@
 
 #include <library/cpp/html/pcdata/pcdata.h>
 #include <util/string/cast.h>
-
+ 
 static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
     if (tabletIdParam.StartsWith("0x"))
         return IntFromString<ui64, 16>(tabletIdParam.substr(2));
@@ -15,9 +15,9 @@ static ui64 TryParseTabletId(TStringBuf tabletIdParam) {
         return FromStringWithDefault<ui64>(tabletIdParam, ui64(NKikimr::NSchemeShard::InvalidTabletId));
 }
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NSchemeShard {
-
+ 
 struct TCgi {
     struct TParam {
         const TStringBuf Name;
@@ -228,19 +228,19 @@ private:
 };
 
 struct TSchemeShard::TTxMonitoring : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
-    NMon::TEvRemoteHttpInfo::TPtr Ev;
+    NMon::TEvRemoteHttpInfo::TPtr Ev; 
     TStringStream Answer;
 
-public:
+public: 
     TTxMonitoring(TSchemeShard *self, NMon::TEvRemoteHttpInfo::TPtr ev)
-        : TBase(self)
-        , Ev(ev)
+        : TBase(self) 
+        , Ev(ev) 
     {
     }
-
-    bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
-        Y_UNUSED(txc);
-
+ 
+    bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override { 
+        Y_UNUSED(txc); 
+ 
         const TCgiParameters& cgi = Ev->Get()->Cgi();
 
         const TString page = cgi.Has(TCgi::Page) ? cgi.Get(TCgi::Page) : ToString(TCgi::TPages::MainPage);
@@ -296,30 +296,30 @@ public:
         else if (page == TCgi::TPages::AdminPage)
         {
             OutputAdminPage(Answer);
-        }
+        } 
         else if (page == TCgi::TPages::BuildIndexInfo)
         {
             auto id = TIndexBuildId(FromStringWithDefault<ui64>(cgi.Get(TCgi::BuildIndexId), ui64(InvalidIndexBuildId)));
             BuildIndexInfoPage(id, Answer);
         }
-
-        return true;
-    }
-
+ 
+        return true; 
+    } 
+ 
     void Complete(const TActorContext &ctx) override {
         if (Answer) {
             ctx.Send(Ev->Sender, new NMon::TEvRemoteHttpInfoRes(Answer.Str()));
         }
     }
 
-private:
+private: 
     void LinkToMain(TStringStream& str) const {
         str << "<a href='app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
                                << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::MainPage) << "'>";
         str << "Back to main scheme shard page";
         str << "</a><br>";
     }
-
+ 
     void OutputAdminRequestPage(TStringStream& str, NIceDb::TNiceDb& db, const TCgiParameters& cgi, const TActorContext& ctx) const {
         if (cgi.Has(TCgi::IsReadOnlyMode)) {
             TString rowStr = cgi.Get(TCgi::IsReadOnlyMode);
@@ -539,7 +539,7 @@ private:
     }
 
     void OutputMainPage(TStringStream& str) const {
-        HTML(str) {
+        HTML(str) { 
             H3() {str << "SchemeShard main page:";}
 
             {
@@ -806,36 +806,36 @@ private:
 
     void TableTxInfly(TStringStream& str) const {
         HTML(str) {
-            TABLE_SORTABLE_CLASS("table") {
-                TABLEHEAD() {
-                    TABLER() {
+            TABLE_SORTABLE_CLASS("table") { 
+                TABLEHEAD() { 
+                    TABLER() { 
                         TABLEH() {str << "OpId";}
-                        TABLEH() {str << "Type";}
-                        TABLEH() {str << "State";}
-                        TABLEH() {str << "Shards in progress";}
-                    }
-                    str << "\n";
-                }
-
-                for (const auto& tx : Self->TxInFlight) {
+                        TABLEH() {str << "Type";} 
+                        TABLEH() {str << "State";} 
+                        TABLEH() {str << "Shards in progress";} 
+                    } 
+                    str << "\n"; 
+                } 
+ 
+                for (const auto& tx : Self->TxInFlight) { 
                     TOperationId opId = tx.first;
                     const TTxState txState = tx.second;
-                    TABLER() {
+                    TABLER() { 
                         TABLED() { str << "<a href='app?" << TCgi::Page.AsCgiParam(TCgi::TPages::TransactionInfo)
                                                           << "&" << TCgi::TabletID.AsCgiParam(Self->TabletID())
                                                           << "&" << TCgi::TxId.AsCgiParam(opId.GetTxId())
                                                           << "&" << TCgi::PartId.AsCgiParam(opId.GetSubTxId())
                                             << "'>" << opId << "</a>"; }
-                        TABLED() { str << TTxState::TypeName(txState.TxType); }
-                        TABLED() { str << TTxState::StateName(txState.State); }
-                        TABLED() { str << txState.ShardsInProgress.size(); }
-                    }
-                    str << "\n";
-                }
-            }
-        }
-    }
-
+                        TABLED() { str << TTxState::TypeName(txState.TxType); } 
+                        TABLED() { str << TTxState::StateName(txState.State); } 
+                        TABLED() { str << txState.ShardsInProgress.size(); } 
+                    } 
+                    str << "\n"; 
+                } 
+            } 
+        } 
+    } 
+ 
     void OutputTxListPage(TStringStream& str) const {
         HTML(str) {
             H3() {str << "Transactions in flight:";}
@@ -845,28 +845,28 @@ private:
     }
 
     void OutputTxInfoPage(TOperationId operationId, TStringStream& str) const {
-        HTML(str) {
+        HTML(str) { 
             H3() {str << "Transaction " << operationId;}
-
+ 
             auto txInfo = Self->FindTx(operationId);
-            if (!txInfo) {
-                PRE() {
-                    str << "Unknown Tx\n";
-                }
-            } else {
+            if (!txInfo) { 
+                PRE() { 
+                    str << "Unknown Tx\n"; 
+                } 
+            } else { 
                 const TTxState txState = *txInfo;
-                H3() {str << "Shards in progress : " << txState.ShardsInProgress.size() << "\n";}
-                TABLE_SORTABLE_CLASS("table") {
-                    TABLEHEAD() {
-                        TABLER() {
+                H3() {str << "Shards in progress : " << txState.ShardsInProgress.size() << "\n";} 
+                TABLE_SORTABLE_CLASS("table") { 
+                    TABLEHEAD() { 
+                        TABLER() { 
                             TABLEH() {str << "OwnerShardIdx";}
                             TABLEH() {str << "LocalShardIdx";}
-                            TABLEH() {str << "TabletId";}
-                        }
-                    }
+                            TABLEH() {str << "TabletId";} 
+                        } 
+                    } 
                     for (auto shardIdx :  txState.ShardsInProgress) {
-                        TABLER() {
-                            TABLED() {
+                        TABLER() { 
+                            TABLED() { 
                                 str << "<a href='../tablets/app?" << TCgi::TabletID.AsCgiParam(Self->TabletID())
                                     << "&" << TCgi::Page.AsCgiParam(TCgi::TPages::ShardInfoByShardIdx)
                                     << "&" << TCgi::OwnerShardIdx.AsCgiParam(shardIdx.GetOwnerId())
@@ -879,18 +879,18 @@ private:
                                     str << "<a href='../tablets?"
                                         << TCgi::TabletID.AsCgiParam(tabletId)
                                         << "'>" << tabletId <<"</a>";
-                                } else {
-                                    str << "UNKNOWN_TABLET!";
-                                }
-                            }
-                        }
-                        str << "\n";
-                    }
-                }
-            }
-        }
-    }
-
+                                } else { 
+                                    str << "UNKNOWN_TABLET!"; 
+                                } 
+                            } 
+                        } 
+                        str << "\n"; 
+                    } 
+                } 
+            } 
+        } 
+    } 
+ 
     void OutputShardInfo(TShardIdx shardIdx, TStringStream& str) const {
         HTML(str) {
             if (!Self->ShardInfos.contains(shardIdx)) {
@@ -1323,20 +1323,20 @@ private:
         }
     }
 
-    TTxType GetTxType() const override { return TXTYPE_MONITORING; }
-};
-
+    TTxType GetTxType() const override { return TXTYPE_MONITORING; } 
+}; 
+ 
 bool TSchemeShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext &ctx) {
-    if (!Executor() || !Executor()->GetStats().IsActive)
-        return false;
-
-    if (!ev)
-        return true;
-
+    if (!Executor() || !Executor()->GetStats().IsActive) 
+        return false; 
+ 
+    if (!ev) 
+        return true; 
+ 
     LOG_DEBUG(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Handle TEvRemoteHttpInfo: %s", ev->Get()->Query.data());
-    Execute(new TTxMonitoring(this, ev), ctx);
-
-    return true;
-}
-
-}}
+    Execute(new TTxMonitoring(this, ev), ctx); 
+ 
+    return true; 
+} 
+ 
+}} 

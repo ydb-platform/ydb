@@ -140,16 +140,16 @@ namespace NPDisk {
             nodeIndex);
     }
 
-    void SetupBlobCache(TTestActorRuntime& runtime, ui32 nodeIndex)
-    {
+    void SetupBlobCache(TTestActorRuntime& runtime, ui32 nodeIndex) 
+    { 
         runtime.AddLocalService(NBlobCache::MakeBlobCacheServiceId(),
-            TActorSetupCmd(
+            TActorSetupCmd( 
                 NBlobCache::CreateBlobCache(20<<20, runtime.GetDynamicCounters(nodeIndex)),
-                TMailboxType::ReadAsFilled,
-                0),
-            nodeIndex);
-    }
-
+                TMailboxType::ReadAsFilled, 
+                0), 
+            nodeIndex); 
+    } 
+ 
     template<size_t N>
     static TIntrusivePtr<TStateStorageInfo> GenerateStateStorageInfo(const TActorId (&replicas)[N], ui64 stateStorageGroup)
     {
@@ -266,7 +266,7 @@ namespace NPDisk {
             SetupTabletPipePeNodeCaches(runtime, nodeIndex);
             SetupResourceBroker(runtime, nodeIndex);
             SetupSharedPageCache(runtime, nodeIndex, caches);
-            SetupBlobCache(runtime, nodeIndex);
+            SetupBlobCache(runtime, nodeIndex); 
             SetupQuoterService(runtime, nodeIndex);
 
             if (factory)

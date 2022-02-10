@@ -95,7 +95,7 @@ namespace NPQ {
             Cache.Touch(ctx);
         }
 
-        void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx)
+        void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) 
         {
             Y_VERIFY(ev->Sender == Tablet);
             Die(ctx);
@@ -367,7 +367,7 @@ namespace NPQ {
         STFUNC(StateFunc) {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvPQ::TEvBlobRequest, Handle);       // read requests
-                HFunc(TEvents::TEvPoisonPill, Handle);
+                HFunc(TEvents::TEvPoisonPill, Handle); 
                 HFunc(TEvPQ::TEvMonRequest, HandleMonitoring);
                 HFunc(TEvKeyValue::TEvRequest, Handle);     // write requests
                 HFunc(TEvKeyValue::TEvResponse, Handle);    // read & write responses

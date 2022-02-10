@@ -44,8 +44,8 @@ namespace NKikimr {
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_INCR_HUGE_KEEPER;
-            }
-
+            } 
+ 
             TKeeper(const TKeeperSettings& settings);
 
             void Bootstrap(const TActorContext& ctx);

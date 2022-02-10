@@ -16,8 +16,8 @@
 #include <util/string/builder.h>
 #include <util/folder/path.h>
 
-#include <deque>
-
+#include <deque> 
+ 
 namespace NYdb {
 namespace NConsoleClient {
 
@@ -69,22 +69,22 @@ TStatus TImportFileClient::Import(const TString& filePath, const TString& dbPath
     return UpsertCsv(dataFile, dbPath, settings);
 }
 
-namespace {
-
-TStatus WaitForQueue(std::deque<TAsyncStatus>& inFlightRequests, size_t maxQueueSize) {
-    while (!inFlightRequests.empty() && inFlightRequests.size() > maxQueueSize) {
-        auto status = inFlightRequests.front().ExtractValueSync();
-        inFlightRequests.pop_front();
-        if (!status.IsSuccess()) {
-            return status;
-        }
-    }
-
-    return MakeStatus();
-}
-
-}
-
+namespace { 
+ 
+TStatus WaitForQueue(std::deque<TAsyncStatus>& inFlightRequests, size_t maxQueueSize) { 
+    while (!inFlightRequests.empty() && inFlightRequests.size() > maxQueueSize) { 
+        auto status = inFlightRequests.front().ExtractValueSync(); 
+        inFlightRequests.pop_front(); 
+        if (!status.IsSuccess()) { 
+            return status; 
+        } 
+    } 
+ 
+    return MakeStatus(); 
+} 
+ 
+} 
+ 
 TStatus TImportFileClient::UpsertCsv(const TString& dataFile, const TString& dbPath,
                                      const TImportFileSettings& settings) {
     TFileInput input(dataFile, settings.FileBufferSize_);
@@ -130,8 +130,8 @@ TStatus TImportFileClient::UpsertCsv(const TString& dataFile, const TString& dbP
         upsertSettings.FormatSettings(formatSettings);
     }
 
-    std::deque<TAsyncStatus> inFlightRequests;
-
+    std::deque<TAsyncStatus> inFlightRequests; 
+ 
     // TODO: better read
     // * read serveral lines a time
     // * support endlines inside quotes
@@ -141,36 +141,36 @@ TStatus TImportFileClient::UpsertCsv(const TString& dataFile, const TString& dbP
         buffer += '\n'; // TODO: keep original endline?
 
         if (buffer.Size() >= settings.BytesPerRequest_) {
-            auto status = WaitForQueue(inFlightRequests, settings.MaxInFlightRequests_);
+            auto status = WaitForQueue(inFlightRequests, settings.MaxInFlightRequests_); 
             if (!status.IsSuccess()) {
                 return status;
             }
 
-            inFlightRequests.push_back(UpsertCsvBuffer(dbPath, buffer, {}, upsertSettings, retrySettings));
-
+            inFlightRequests.push_back(UpsertCsvBuffer(dbPath, buffer, {}, upsertSettings, retrySettings)); 
+ 
             buffer = headerRow;
         }
     }
 
     if (!buffer.Empty()) {
-        inFlightRequests.push_back(UpsertCsvBuffer(dbPath, buffer, {}, upsertSettings, retrySettings));
+        inFlightRequests.push_back(UpsertCsvBuffer(dbPath, buffer, {}, upsertSettings, retrySettings)); 
     }
 
-    return WaitForQueue(inFlightRequests, 0);
+    return WaitForQueue(inFlightRequests, 0); 
 }
 
-TAsyncStatus TImportFileClient::UpsertCsvBuffer(const TString& dbPath, const TString& csv, const TString& header,
+TAsyncStatus TImportFileClient::UpsertCsvBuffer(const TString& dbPath, const TString& csv, const TString& header, 
                                        const NTable::TBulkUpsertSettings& upsertSettings,
                                        const NTable::TRetryOperationSettings& retrySettings) {
-    auto upsert = [dbPath, csv, header, upsertSettings](NYdb::NTable::TTableClient& tableClient) -> TAsyncStatus {
-        return tableClient.BulkUpsert(dbPath, NTable::EDataFormat::CSV, csv, header, upsertSettings)
-            .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
-                NYdb::TStatus status = bulkUpsertResult.GetValueSync();
-                return NThreading::MakeFuture(status);
-            });
+    auto upsert = [dbPath, csv, header, upsertSettings](NYdb::NTable::TTableClient& tableClient) -> TAsyncStatus { 
+        return tableClient.BulkUpsert(dbPath, NTable::EDataFormat::CSV, csv, header, upsertSettings) 
+            .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) { 
+                NYdb::TStatus status = bulkUpsertResult.GetValueSync(); 
+                return NThreading::MakeFuture(status); 
+            }); 
     };
 
-    return TableClient->RetryOperation(upsert, retrySettings);
+    return TableClient->RetryOperation(upsert, retrySettings); 
 }
 
 }

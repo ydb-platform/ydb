@@ -66,14 +66,14 @@ namespace {
         ui32 hash = MurmurHash<ui32>(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
     }
-
+ 
     SIMPLE_UDF(TCityHash, ui64(TAutoMap<char*>)) {
         Y_UNUSED(valueBuilder);
         const auto& inputRef = args[0].AsStringRef();
         ui64 hash = CityHash64(inputRef.Data(), inputRef.Size());
         return TUnboxedValuePod(hash);
-    }
-
+    } 
+ 
     using TUi64Pair = NUdf::TTuple<ui64, ui64>;
 
     class TCityHash128: public TBoxedValue {
@@ -84,9 +84,9 @@ namespace {
         }
 
         static bool DeclareSignature(
-            const TStringRef& name,
+            const TStringRef& name, 
             TType* userType,
-            IFunctionTypeInfoBuilder& builder,
+            IFunctionTypeInfoBuilder& builder, 
             bool typesOnly) {
             Y_UNUSED(userType);
             if (Name() == name) {
@@ -99,8 +99,8 @@ namespace {
                 return true;
             } else {
                 return false;
-            }
-        }
+            } 
+        } 
 
     private:
         TUnboxedValue Run(
@@ -121,15 +121,15 @@ namespace {
         ui64 input = args[0].Get<ui64>();
         ui64 hash = (ui64)NumericHash(input);
         return TUnboxedValuePod(hash);
-    }
+    } 
 
     SIMPLE_UDF(TMd5Hex, char*(TAutoMap<char*>)) {
-        const auto& inputRef = args[0].AsStringRef();
+        const auto& inputRef = args[0].AsStringRef(); 
         MD5 md5;
         const TString& hash = md5.Calc(inputRef);
         return valueBuilder->NewString(hash);
-    }
-
+    } 
+ 
     SIMPLE_UDF(TMd5Raw, char*(TAutoMap<char*>)) {
         const auto& inputRef = args[0].AsStringRef();
         MD5 md5;

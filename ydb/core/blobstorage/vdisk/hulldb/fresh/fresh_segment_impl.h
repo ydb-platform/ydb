@@ -93,7 +93,7 @@ namespace NKikimr {
         class TIterator;
 
         TFreshIndex(TVDiskContextPtr vctx)
-            : LocalArena(TMemoryConsumer(vctx->FreshIndex), (8 << 20), TMemoryPool::TLinearGrow::Instance())
+            : LocalArena(TMemoryConsumer(vctx->FreshIndex), (8 << 20), TMemoryPool::TLinearGrow::Instance()) 
             , Idx(LocalArena)
         {}
 

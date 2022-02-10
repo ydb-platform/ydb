@@ -4,8 +4,8 @@
 #include "columnshard_common.h"
 #include "columnshard_ttl.h"
 #include "columnshard_txs.h"
-#include "blob_manager.h"
-#include "inflight_request_tracker.h"
+#include "blob_manager.h" 
+#include "inflight_request_tracker.h" 
 
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
@@ -15,30 +15,30 @@
 
 namespace NKikimr::NColumnShard {
 
-extern bool gAllowLogBatchingDefaultValue;
-
-struct TSettings {
-    TControlWrapper BlobWriteGrouppingEnabled;
-    TControlWrapper CacheDataAfterIndexing;
-    TControlWrapper CacheDataAfterCompaction;
-    TControlWrapper MaxSmallBlobSize;
-
-    TSettings()
-        : BlobWriteGrouppingEnabled(1, 0, 1)
-        , CacheDataAfterIndexing(1, 0, 1)
-        , CacheDataAfterCompaction(1, 0, 1)
-        , MaxSmallBlobSize(0, 0, 8000000)
-    {}
-
-    void RegisterControls(TControlBoard& icb) {
-        icb.RegisterSharedControl(BlobWriteGrouppingEnabled, "ColumnShardControls.BlobWriteGrouppingEnabled");
-        icb.RegisterSharedControl(CacheDataAfterIndexing, "ColumnShardControls.CacheDataAfterIndexing");
-        icb.RegisterSharedControl(CacheDataAfterCompaction, "ColumnShardControls.CacheDataAfterCompaction");
-        icb.RegisterSharedControl(MaxSmallBlobSize, "ColumnShardControls.MaxSmallBlobSize");
-    }
-};
-
-
+extern bool gAllowLogBatchingDefaultValue; 
+ 
+struct TSettings { 
+    TControlWrapper BlobWriteGrouppingEnabled; 
+    TControlWrapper CacheDataAfterIndexing; 
+    TControlWrapper CacheDataAfterCompaction; 
+    TControlWrapper MaxSmallBlobSize; 
+ 
+    TSettings() 
+        : BlobWriteGrouppingEnabled(1, 0, 1) 
+        , CacheDataAfterIndexing(1, 0, 1) 
+        , CacheDataAfterCompaction(1, 0, 1) 
+        , MaxSmallBlobSize(0, 0, 8000000) 
+    {} 
+ 
+    void RegisterControls(TControlBoard& icb) { 
+        icb.RegisterSharedControl(BlobWriteGrouppingEnabled, "ColumnShardControls.BlobWriteGrouppingEnabled"); 
+        icb.RegisterSharedControl(CacheDataAfterIndexing, "ColumnShardControls.CacheDataAfterIndexing"); 
+        icb.RegisterSharedControl(CacheDataAfterCompaction, "ColumnShardControls.CacheDataAfterCompaction"); 
+        icb.RegisterSharedControl(MaxSmallBlobSize, "ColumnShardControls.MaxSmallBlobSize"); 
+    } 
+}; 
+ 
+ 
 class TColumnShard
     : public TActor<TColumnShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
@@ -52,13 +52,13 @@ class TColumnShard
     friend class TTxNotifyTxCompletion;
     friend class TTxPlanStep;
     friend class TTxWrite;
-    friend class TTxReadBase;
+    friend class TTxReadBase; 
     friend class TTxRead;
-    friend class TTxScan;
+    friend class TTxScan; 
     friend class TTxWriteIndex;
-    friend class TTxRunGC;
-    friend class TTxProcessGCResult;
-    friend class TTxReadBlobRanges;
+    friend class TTxRunGC; 
+    friend class TTxProcessGCResult; 
+    friend class TTxReadBlobRanges; 
 
     class TTxProgressTx;
     class TTxProposeCancel;
@@ -75,19 +75,19 @@ class TColumnShard
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvColumnShard::TEvRead::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvColumnShard::TEvReadBlobRanges::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx); 
+    void Handle(TEvColumnShard::TEvReadBlobRanges::TPtr& ev, const TActorContext& ctx); 
     void Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPrivate::TEvScanStats::TPtr &ev, const TActorContext &ctx);
-    void Handle(TEvPrivate::TEvReadFinished::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvPrivate::TEvScanStats::TPtr &ev, const TActorContext &ctx); 
+    void Handle(TEvPrivate::TEvReadFinished::TPtr &ev, const TActorContext &ctx); 
     void Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvWriteIndex::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr& ev, const TActorContext& ctx); 
 
     ITransaction* CreateTxInitSchema();
-    ITransaction* CreateTxRunGc();
+    ITransaction* CreateTxRunGc(); 
 
     void OnActivateExecutor(const TActorContext& ctx) override;
     void OnDetach(const TActorContext& ctx) override;
@@ -168,17 +168,17 @@ protected:
             HFunc(TEvColumnShard::TEvProposeTransaction, Handle);
             HFunc(TEvColumnShard::TEvCancelTransactionProposal, Handle);
             HFunc(TEvColumnShard::TEvNotifyTxCompletion, Handle);
-            HFunc(TEvColumnShard::TEvScan, Handle);
+            HFunc(TEvColumnShard::TEvScan, Handle); 
             HFunc(TEvTxProcessing::TEvPlanStep, Handle);
             HFunc(TEvColumnShard::TEvWrite, Handle);
             HFunc(TEvColumnShard::TEvRead, Handle);
-            HFunc(TEvColumnShard::TEvReadBlobRanges, Handle);
+            HFunc(TEvColumnShard::TEvReadBlobRanges, Handle); 
             HFunc(TEvMediatorTimecast::TEvRegisterTabletResult, Handle);
             HFunc(TEvMediatorTimecast::TEvNotifyPlanStep, Handle);
-            HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
+            HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle); 
             HFunc(TEvPrivate::TEvWriteIndex, Handle);
-            HFunc(TEvPrivate::TEvScanStats, Handle);
-            HFunc(TEvPrivate::TEvReadFinished, Handle);
+            HFunc(TEvPrivate::TEvScanStats, Handle); 
+            HFunc(TEvPrivate::TEvReadFinished, Handle); 
             HFunc(TEvPrivate::TEvPeriodicWakeup, Handle);
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
@@ -237,9 +237,9 @@ private:
 
     struct TCommitMeta {
         ui64 MetaShard{};
-        THashSet<TWriteId> WriteIds;
+        THashSet<TWriteId> WriteIds; 
 
-        void AddWriteId(TWriteId id) {
+        void AddWriteId(TWriteId id) { 
             WriteIds.insert(id);
         }
     };
@@ -291,7 +291,7 @@ private:
     ui64 CurrentSchemeShardId = 0;
     TMessageSeqNo LastSchemaSeqNo;
     std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
-    TWriteId LastWriteId = TWriteId{0};
+    TWriteId LastWriteId = TWriteId{0}; 
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
     ui64 LastCompactedGranule = 0;
@@ -299,16 +299,16 @@ private:
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;
     TSet<ui64> MediatorTimeCastWaitingSteps;
-    TDuration MaxReadStaleness = TDuration::Minutes(5); // TODO: Make configurable?
-    TDuration MaxCommitTxDelay = TDuration::Seconds(30); // TODO: Make configurable?
+    TDuration MaxReadStaleness = TDuration::Minutes(5); // TODO: Make configurable? 
+    TDuration MaxCommitTxDelay = TDuration::Seconds(30); // TODO: Make configurable? 
     TDuration ActivationPeriod = TDuration::Seconds(60);
     TDuration FailActivationDelay = TDuration::Seconds(1);
     TInstant LastBackActivation;
 
     TActorId IndexingActor;     // It's logically bounded to 1: we move each portion of data to multiple indices.
     TActorId CompactionActor;   // It's memory bounded to 1: we have no memory for parallel compation.
-    std::unique_ptr<TTabletCountersBase> TabletCountersPtr;
-    TTabletCountersBase* TabletCounters;
+    std::unique_ptr<TTabletCountersBase> TabletCountersPtr; 
+    TTabletCountersBase* TabletCounters; 
     std::unique_ptr<NTabletPipe::IClientCache> PipeClientCache;
     std::unique_ptr<NOlap::TInsertTable> InsertTable;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
@@ -325,18 +325,18 @@ private:
     THashMap<ui32, TSchemaPreset> SchemaPresets;
     //THashMap<ui32, TTtlSettingsPreset> TtlSettingsPresets;
     THashMap<ui64, TTableInfo> Tables;
-    THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites;
+    THashMap<TWriteId, TLongTxWriteInfo> LongTxWrites; 
     THashMap<TULID, TLongTxWriteInfo*> LongTxWritesByUniqueId;
     TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads;
     TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans;
     THashSet<ui64> PathsToDrop;
     bool ActiveIndexing = false;
     bool ActiveCompaction = false;
-    bool ActiveCleanup = false;
+    bool ActiveCleanup = false; 
     bool ActiveTtl = false;
-    std::unique_ptr<TBlobManager> BlobManager;
-    TInFlightReadsTracker InFlightReadsTracker;
-    TSettings Settings;
+    std::unique_ptr<TBlobManager> BlobManager; 
+    TInFlightReadsTracker InFlightReadsTracker; 
+    TSettings Settings; 
     TLimits Limits;
     TCompactionLimits CompactionLimits;
 
@@ -347,9 +347,9 @@ private:
     void SendWaitPlanStep(ui64 step);
     void RescheduleWaitingReads();
     TRowVersion GetMaxReadVersion() const;
-    ui64 GetMinReadStep() const;
+    ui64 GetMinReadStep() const; 
     ui64 GetOutdatedStep() const;
-    ui64 GetAllowedStep() const;
+    ui64 GetAllowedStep() const; 
     bool HaveOutdatedTxs() const;
 
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId);
@@ -382,13 +382,13 @@ private:
     std::unique_ptr<TEvPrivate::TEvCompaction> SetupCompaction();
     std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupTtl(const THashMap<ui64, NOlap::TTtlInfo>& pathTtls = {},
                                                         bool force = false);
-    std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupCleanup();
+    std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupCleanup(); 
 
-    void UpdateBlobMangerCounters();
+    void UpdateBlobMangerCounters(); 
     void UpdateInsertTableCounters();
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TUsage& usage);
-
+ 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::TX_COLUMNSHARD_ACTOR;

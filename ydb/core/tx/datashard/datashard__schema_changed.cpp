@@ -13,14 +13,14 @@ public:
         , TxId(0)
     {}
 
-    TTxType GetTxType() const override { return TXTYPE_SCHEMA_CHANGED; }
-
+    TTxType GetTxType() const override { return TXTYPE_SCHEMA_CHANGED; } 
+ 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         TxId = Ev->Get()->Record.GetTxId();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Got TEvSchemaChangedResult from SS at "
-                    << Self->TabletID());
-
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Got TEvSchemaChangedResult from SS at " 
+                    << Self->TabletID()); 
+ 
         NIceDb::TNiceDb db(txc.DB);
         Self->Pipeline.CompleteSchemaTx(db, TxId);
         return true;
@@ -28,7 +28,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         NTabletPipe::CloseAndForgetClient(Self->SelfId(), Self->SchemeShardPipe);
-        Self->CheckStateChange(ctx);
+        Self->CheckStateChange(ctx); 
     }
 
 private:

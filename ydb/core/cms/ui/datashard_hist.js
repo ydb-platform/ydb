@@ -40,9 +40,9 @@ function addTableHistograms(data) {
 
     if (data.CountHistogram)
         addHistogram(tableName, keys, 'Rows count', data.CountHistogram)
-
-    if (data.KeyAccessSample)
-        addHistogram(tableName, keys, 'Key access sample', data.KeyAccessSample)
+ 
+    if (data.KeyAccessSample) 
+        addHistogram(tableName, keys, 'Key access sample', data.KeyAccessSample) 
 }
 
 function addHistogram(tableName, keys, histName, hist) {

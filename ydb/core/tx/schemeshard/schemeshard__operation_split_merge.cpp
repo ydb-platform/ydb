@@ -138,20 +138,20 @@ public:
                             << " alterVersion: " << alterVersion
                             << " at tablet: " << context.SS->TabletID());
 
-            const ui32 rangeIdx = getDstRangeIdx(datashardId);
-            const auto& rangeDescr = splitDescr.GetDestinationRanges(rangeIdx);
-
-            // For each destination shard we construct an individual description
-            // that contains all src shards and only this one dst shard with its range
-            NKikimrTxDataShard::TSplitMergeDescription splitDescForShard;
-            splitDescForShard.MutableSourceRanges()->CopyFrom(txState->SplitDescription->GetSourceRanges());
-            splitDescForShard.AddDestinationRanges()->CopyFrom(rangeDescr);
-
+            const ui32 rangeIdx = getDstRangeIdx(datashardId); 
+            const auto& rangeDescr = splitDescr.GetDestinationRanges(rangeIdx); 
+ 
+            // For each destination shard we construct an individual description 
+            // that contains all src shards and only this one dst shard with its range 
+            NKikimrTxDataShard::TSplitMergeDescription splitDescForShard; 
+            splitDescForShard.MutableSourceRanges()->CopyFrom(txState->SplitDescription->GetSourceRanges()); 
+            splitDescForShard.AddDestinationRanges()->CopyFrom(rangeDescr); 
+ 
             Y_VERIFY(txState->SplitDescription);
             THolder<TEvDataShard::TEvInitSplitMergeDestination> event =
                 THolder(new TEvDataShard::TEvInitSplitMergeDestination(ui64(OperationId.GetTxId()), context.SS->TabletID(),
                                                                    subDomainPathId,
-                                                                   splitDescForShard,
+                                                                   splitDescForShard, 
                                                                    context.SS->SelectProcessingPrarams(txState->TargetPathId)));
 
             // Add a new-style CreateTable with correct per-shard settings
@@ -789,7 +789,7 @@ public:
             return result;
         }
 
-        const THashMap<TShardIdx, ui64>& shardIdx2partition = tableInfo->GetShard2PartitionIdx();
+        const THashMap<TShardIdx, ui64>& shardIdx2partition = tableInfo->GetShard2PartitionIdx(); 
 
         TVector<ui64> srcPartitionIdxs;
         i64 totalSrcPartCount = 0;
@@ -835,7 +835,7 @@ public:
                 return result;
             }
 
-            if (context.SS->SplitSettings.SplitMergePartCountLimit != -1) {
+            if (context.SS->SplitSettings.SplitMergePartCountLimit != -1) { 
                 const auto* stats = tableInfo->GetStats().PartitionStats.FindPtr(srcShardIdx);
                 if (!stats || stats->ShardState != NKikimrTxDataShard::Ready) {
                     TString errMsg = TStringBuilder() << "Src TabletId " << srcTabletId << " is not in Ready state";
@@ -851,9 +851,9 @@ public:
             srcPartitionIdxs.push_back(pi);
         }
 
-        if (context.SS->SplitSettings.SplitMergePartCountLimit != -1 &&
-            totalSrcPartCount >= context.SS->SplitSettings.SplitMergePartCountLimit)
-        {
+        if (context.SS->SplitSettings.SplitMergePartCountLimit != -1 && 
+            totalSrcPartCount >= context.SS->SplitSettings.SplitMergePartCountLimit) 
+        { 
             result->SetError(NKikimrScheme::StatusNotAvailable,
                              Sprintf("Split/Merge operation involves too many parts: %" PRIu64, totalSrcPartCount));
 

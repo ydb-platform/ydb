@@ -72,7 +72,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
 
         Counters = GetServiceCounters(AppData(ctx)->Counters, "compile")->GetSubgroup("subsystem", "cache");
-        AllocPoolCounters = TAlignedPagePoolCounters(AppData(ctx)->Counters, "compile");
+        AllocPoolCounters = TAlignedPagePoolCounters(AppData(ctx)->Counters, "compile"); 
 
         if (!DbSchemeResolver) {
             DbSchemeResolver.Reset(MakeDbSchemeResolver(ctx));
@@ -165,7 +165,7 @@ private:
     TCompilingMap Compiling;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    TAlignedPagePoolCounters AllocPoolCounters;
+    TAlignedPagePoolCounters AllocPoolCounters; 
     TActorId SchemeCache;
     THolder<NYql::IDbSchemeResolver> DbSchemeResolver;
 };

@@ -222,14 +222,14 @@ TOlapTableInfo::TPtr CreateOlapTable(
         op.MutableTtlSettings()->SetVersion(1);
     }
 
-    // Validate ttl settings and schema compatibility
-    if (op.HasTtlSettings()) {
+    // Validate ttl settings and schema compatibility 
+    if (op.HasTtlSettings()) { 
         if (!ValidateTtlSettings(op.GetTtlSettings(), pSchema->Columns, pSchema->ColumnsByName, storageTiers, errStr)) {
             status = NKikimrScheme::StatusInvalidParameter;
-            return nullptr;
-        }
-    }
-
+            return nullptr; 
+        } 
+    } 
+ 
     if (op.HasSharding()) {
         tableInfo->Sharding = std::move(*op.MutableSharding());
         op.ClearSharding();

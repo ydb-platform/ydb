@@ -1,271 +1,271 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/client/draft/ydb_long_tx.h>
-
+ 
 #include <ydb/core/sys_view/service/query_history.h>
 #include <ydb/core/tx/columnshard/columnshard_ut_common.h>
-
+ 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
-
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYdb;
-using namespace NYdb::NTable;
-using namespace NYdb::NScheme;
-
-Y_UNIT_TEST_SUITE(KqpOlap) {
-    void EnableDebugLogging(TKikimrRunner& kikimr) {
-        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
-        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG);
-        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG);
-        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG);
-        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
+ 
+namespace NKikimr { 
+namespace NKqp { 
+ 
+using namespace NYdb; 
+using namespace NYdb::NTable; 
+using namespace NYdb::NScheme; 
+ 
+Y_UNIT_TEST_SUITE(KqpOlap) { 
+    void EnableDebugLogging(TKikimrRunner& kikimr) { 
+        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG); 
+        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NActors::NLog::PRI_DEBUG); 
+        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::SCHEME_BOARD_REPLICA, NActors::NLog::PRI_DEBUG); 
+        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_PROXY, NActors::NLog::PRI_DEBUG); 
+        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG); 
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG); 
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG); 
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG); 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NActors::NLog::PRI_DEBUG);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG); 
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG); 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
-    }
-
-    void CreateTestOlapTable(TKikimrRunner& kikimr, TString tableName = "olapTable") {
-        auto& legacyClient = kikimr.GetTestClient();
-
-        legacyClient.CreateOlapStore("/Root", R"(
-                                     Name: "olapStore"
-                                     ColumnShardCount: 4
-                                     SchemaPresets {
-                                         Name: "default"
-                                         Schema {
-                                             Columns { Name: "timestamp" Type: "Timestamp" }
-                                             #Columns { Name: "resource_type" Type: "Utf8" }
-                                             Columns { Name: "resource_id" Type: "Utf8" }
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG); 
+    } 
+ 
+    void CreateTestOlapTable(TKikimrRunner& kikimr, TString tableName = "olapTable") { 
+        auto& legacyClient = kikimr.GetTestClient(); 
+ 
+        legacyClient.CreateOlapStore("/Root", R"( 
+                                     Name: "olapStore" 
+                                     ColumnShardCount: 4 
+                                     SchemaPresets { 
+                                         Name: "default" 
+                                         Schema { 
+                                             Columns { Name: "timestamp" Type: "Timestamp" } 
+                                             #Columns { Name: "resource_type" Type: "Utf8" } 
+                                             Columns { Name: "resource_id" Type: "Utf8" } 
                                              Columns { Name: "uid" Type: "Utf8" }
                                              Columns { Name: "level" Type: "Int32" }
-                                             Columns { Name: "message" Type: "Utf8" }
-                                             #Columns { Name: "json_payload" Type: "Json" }
-                                             #Columns { Name: "ingested_at" Type: "Timestamp" }
-                                             #Columns { Name: "saved_at" Type: "Timestamp" }
-                                             #Columns { Name: "request_id" Type: "Utf8" }
-                                             KeyColumnNames: "timestamp"
+                                             Columns { Name: "message" Type: "Utf8" } 
+                                             #Columns { Name: "json_payload" Type: "Json" } 
+                                             #Columns { Name: "ingested_at" Type: "Timestamp" } 
+                                             #Columns { Name: "saved_at" Type: "Timestamp" } 
+                                             #Columns { Name: "request_id" Type: "Utf8" } 
+                                             KeyColumnNames: "timestamp" 
                                              Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                                         }
-                                     }
-                                     )");
-        legacyClient.CreateOlapTable("/Root/olapStore", Sprintf(R"(
-            Name: "%s"
-            ColumnShardCount: 3
+                                         } 
+                                     } 
+                                     )"); 
+        legacyClient.CreateOlapTable("/Root/olapStore", Sprintf(R"( 
+            Name: "%s" 
+            ColumnShardCount: 3 
             Sharding {
                 HashSharding {
                     Function: HASH_FUNCTION_CLOUD_LOGS
                     Columns: ["timestamp", "uid"]
                 }
-            })", tableName.c_str()));
-
-        legacyClient.Ls("/Root");
-        legacyClient.Ls("/Root/olapStore");
-        legacyClient.Ls("/Root/olapStore/" + tableName);
-    }
-
-    std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
-        auto schema = std::make_shared<arrow::Schema>(
-            std::vector<std::shared_ptr<arrow::Field>>{
-                arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
-                arrow::field("resource_id", arrow::utf8()),
+            })", tableName.c_str())); 
+ 
+        legacyClient.Ls("/Root"); 
+        legacyClient.Ls("/Root/olapStore"); 
+        legacyClient.Ls("/Root/olapStore/" + tableName); 
+    } 
+ 
+    std::shared_ptr<arrow::RecordBatch> TestArrowBatch(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) { 
+        auto schema = std::make_shared<arrow::Schema>( 
+            std::vector<std::shared_ptr<arrow::Field>>{ 
+                arrow::field("timestamp", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)), 
+                arrow::field("resource_id", arrow::utf8()), 
                 arrow::field("uid", arrow::utf8()),
                 arrow::field("level", arrow::int32()),
-                arrow::field("message", arrow::utf8())
-            });
-
+                arrow::field("message", arrow::utf8()) 
+            }); 
+ 
         arrow::TimestampBuilder b1(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool());
         arrow::StringBuilder b2;
-        arrow::StringBuilder b3;
+        arrow::StringBuilder b3; 
         arrow::Int32Builder b4;
         arrow::StringBuilder b5;
-
-        for (size_t i = 0; i < rowCount; ++i) {
-            std::string uid("uid_" + std::to_string(tsBegin + i));
-            std::string message("some prefix " + std::string(1024 + i % 200, 'x'));
+ 
+        for (size_t i = 0; i < rowCount; ++i) { 
+            std::string uid("uid_" + std::to_string(tsBegin + i)); 
+            std::string message("some prefix " + std::string(1024 + i % 200, 'x')); 
             Y_VERIFY(b1.Append(tsBegin + i).ok());
             Y_VERIFY(b2.Append(std::to_string(pathIdBegin + i)).ok());
-            Y_VERIFY(b3.Append(uid).ok());
+            Y_VERIFY(b3.Append(uid).ok()); 
             Y_VERIFY(b4.Append(i % 5).ok());
             Y_VERIFY(b5.Append(message).ok());
-        }
-
+        } 
+ 
         std::shared_ptr<arrow::TimestampArray> a1;
         std::shared_ptr<arrow::StringArray> a2;
-        std::shared_ptr<arrow::StringArray> a3;
+        std::shared_ptr<arrow::StringArray> a3; 
         std::shared_ptr<arrow::Int32Array> a4;
         std::shared_ptr<arrow::StringArray> a5;
-
-        Y_VERIFY(b1.Finish(&a1).ok());
-        Y_VERIFY(b2.Finish(&a2).ok());
-        Y_VERIFY(b3.Finish(&a3).ok());
+ 
+        Y_VERIFY(b1.Finish(&a1).ok()); 
+        Y_VERIFY(b2.Finish(&a2).ok()); 
+        Y_VERIFY(b3.Finish(&a3).ok()); 
         Y_VERIFY(b4.Finish(&a4).ok());
         Y_VERIFY(b5.Finish(&a5).ok());
-
+ 
         return arrow::RecordBatch::Make(schema, rowCount, { a1, a2, a3, a4, a5 });
-    }
-
-    TString TestBlob(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
-        auto batch = TestArrowBatch(pathIdBegin, tsBegin, rowCount);
-        int64_t size;
-        auto status = arrow::ipc::GetRecordBatchSize(*batch, &size);
-        Y_VERIFY(status.ok());
-
-        TString buf;
-        buf.resize(size);
-        auto writer = arrow::Buffer::GetWriter(arrow::MutableBuffer::Wrap(&buf[0], size));
-        Y_VERIFY(writer.ok());
-
-        // UNCOMPRESSED
-        status = SerializeRecordBatch(*batch, arrow::ipc::IpcWriteOptions::Defaults(), (*writer).get());
-        Y_VERIFY(status.ok());
-        return buf;
-    }
-
-    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) {
-        NYdb::NLongTx::TClient client(kikimr.GetDriver());
-
+    } 
+ 
+    TString TestBlob(ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) { 
+        auto batch = TestArrowBatch(pathIdBegin, tsBegin, rowCount); 
+        int64_t size; 
+        auto status = arrow::ipc::GetRecordBatchSize(*batch, &size); 
+        Y_VERIFY(status.ok()); 
+ 
+        TString buf; 
+        buf.resize(size); 
+        auto writer = arrow::Buffer::GetWriter(arrow::MutableBuffer::Wrap(&buf[0], size)); 
+        Y_VERIFY(writer.ok()); 
+ 
+        // UNCOMPRESSED 
+        status = SerializeRecordBatch(*batch, arrow::ipc::IpcWriteOptions::Defaults(), (*writer).get()); 
+        Y_VERIFY(status.ok()); 
+        return buf; 
+    } 
+ 
+    void WriteTestData(TKikimrRunner& kikimr, TString testTable, ui64 pathIdBegin, ui64 tsBegin, size_t rowCount) { 
+        NYdb::NLongTx::TClient client(kikimr.GetDriver()); 
+ 
         NLongTx::TLongTxBeginResult resBeginTx = client.BeginWriteTx().GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString());
-
+        UNIT_ASSERT_VALUES_EQUAL_C(resBeginTx.Status().GetStatus(), EStatus::SUCCESS, resBeginTx.Status().GetIssues().ToString()); 
+ 
         auto txId = resBeginTx.GetResult().tx_id();
-        TString data = TestBlob(pathIdBegin, tsBegin, rowCount);
-
-        NLongTx::TLongTxWriteResult resWrite =
-                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString());
-
+        TString data = TestBlob(pathIdBegin, tsBegin, rowCount); 
+ 
+        NLongTx::TLongTxWriteResult resWrite = 
+                client.Write(txId, testTable, txId, data, Ydb::LongTx::Data::APACHE_ARROW).GetValueSync(); 
+        UNIT_ASSERT_VALUES_EQUAL_C(resWrite.Status().GetStatus(), EStatus::SUCCESS, resWrite.Status().GetIssues().ToString()); 
+ 
         NLongTx::TLongTxCommitResult resCommitTx = client.CommitTx(txId).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString());
-    }
-
-    TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it) {
-        TVector<THashMap<TString, NYdb::TValue>> rows;
-
-        for (;;) {
-            auto streamPart = it.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
-                break;
-            }
-
-            UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(),
-                "Unexpected empty scan query response.");
-
-            if (streamPart.HasResultSet()) {
-                auto resultSet = streamPart.ExtractResultSet();
-                NYdb::TResultSetParser rsParser(resultSet);
-                while (rsParser.TryNextRow()) {
-                    THashMap<TString, NYdb::TValue> row;
-                    for (size_t ci = 0; ci < resultSet.ColumnsCount(); ++ci) {
-                        row.emplace(resultSet.GetColumnsMeta()[ci].Name, rsParser.GetValue(ci));
-                    }
-                    rows.emplace_back(std::move(row));
-                }
-            }
-        }
-        return rows;
-    }
-
-    void PrintValue(IOutputStream& out, const NYdb::TValue& v) {
-        NYdb::TValueParser value(v);
-
-        while (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
-            if (value.IsNull()) {
-                out << "<NULL>";
-                return;
-            } else {
-                value.OpenOptional();
-            }
-        }
-
-        switch (value.GetPrimitiveType()) {
-            case NYdb::EPrimitiveType::Uint32: {
-                out << value.GetUint32();
-                break;
-            }
-            case NYdb::EPrimitiveType::Uint64: {
-                out << value.GetUint64();
-                break;
-            }
-            case NYdb::EPrimitiveType::Utf8: {
-                out << value.GetUtf8();
-                break;
-            }
-            case NYdb::EPrimitiveType::Timestamp: {
-                out << value.GetTimestamp();
-                break;
-            }
-            default: {
-                UNIT_ASSERT_C(false, "PrintValue not iplemented for this type");
-            }
-        }
-    }
-
-    void PrintRow(IOutputStream& out, const THashMap<TString, NYdb::TValue>& fields) {
-        for (const auto& f : fields) {
-            out << f.first << ": ";
-            PrintValue(out, f.second);
-            out << " ";
-        }
-    }
-
-    void PrintRows(IOutputStream& out, const TVector<THashMap<TString, NYdb::TValue>>& rows) {
-        for (const auto& r : rows) {
-            PrintRow(out, r);
-            out << "\n";
-        }
-    }
-
-    TVector<THashMap<TString, NYdb::TValue>> ExecuteScanQuery(NYdb::NTable::TTableClient& tableClient, const TString& query) {
-        Cerr << "====================================\n"
-            << "QUERY:\n" << query
-            << "\n\nRESULT:\n";
-
-        TStreamExecScanQuerySettings scanSettings;
-        auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
-        auto rows = CollectRows(it);
-
-        PrintRows(Cerr, rows);
-        Cerr << "\n";
-
-        return rows;
-    }
-
-    ui64 GetUint32(const NYdb::TValue& v) {
-        NYdb::TValueParser value(v);
-        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
-            return *value.GetOptionalUint32();
-        } else {
-            return value.GetUint32();
-        }
-    }
-
-    ui64 GetUint64(const NYdb::TValue& v) {
-        NYdb::TValueParser value(v);
-        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
-            return *value.GetOptionalUint64();
-        } else {
-            return value.GetUint64();
-        }
-    }
-
-    TInstant GetTimestamp(const NYdb::TValue& v) {
-        NYdb::TValueParser value(v);
-        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) {
-            return *value.GetOptionalTimestamp();
-        } else {
-            return value.GetTimestamp();
-        }
-    }
-
+        UNIT_ASSERT_VALUES_EQUAL_C(resCommitTx.Status().GetStatus(), EStatus::SUCCESS, resCommitTx.Status().GetIssues().ToString()); 
+    } 
+ 
+    TVector<THashMap<TString, NYdb::TValue>> CollectRows(NYdb::NTable::TScanQueryPartIterator& it) { 
+        TVector<THashMap<TString, NYdb::TValue>> rows; 
+ 
+        for (;;) { 
+            auto streamPart = it.ReadNext().GetValueSync(); 
+            if (!streamPart.IsSuccess()) { 
+                UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString()); 
+                break; 
+            } 
+ 
+            UNIT_ASSERT_C(streamPart.HasResultSet() || streamPart.HasQueryStats(), 
+                "Unexpected empty scan query response."); 
+ 
+            if (streamPart.HasResultSet()) { 
+                auto resultSet = streamPart.ExtractResultSet(); 
+                NYdb::TResultSetParser rsParser(resultSet); 
+                while (rsParser.TryNextRow()) { 
+                    THashMap<TString, NYdb::TValue> row; 
+                    for (size_t ci = 0; ci < resultSet.ColumnsCount(); ++ci) { 
+                        row.emplace(resultSet.GetColumnsMeta()[ci].Name, rsParser.GetValue(ci)); 
+                    } 
+                    rows.emplace_back(std::move(row)); 
+                } 
+            } 
+        } 
+        return rows; 
+    } 
+ 
+    void PrintValue(IOutputStream& out, const NYdb::TValue& v) { 
+        NYdb::TValueParser value(v); 
+ 
+        while (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) { 
+            if (value.IsNull()) { 
+                out << "<NULL>"; 
+                return; 
+            } else { 
+                value.OpenOptional(); 
+            } 
+        } 
+ 
+        switch (value.GetPrimitiveType()) { 
+            case NYdb::EPrimitiveType::Uint32: { 
+                out << value.GetUint32(); 
+                break; 
+            } 
+            case NYdb::EPrimitiveType::Uint64: { 
+                out << value.GetUint64(); 
+                break; 
+            } 
+            case NYdb::EPrimitiveType::Utf8: { 
+                out << value.GetUtf8(); 
+                break; 
+            } 
+            case NYdb::EPrimitiveType::Timestamp: { 
+                out << value.GetTimestamp(); 
+                break; 
+            } 
+            default: { 
+                UNIT_ASSERT_C(false, "PrintValue not iplemented for this type"); 
+            } 
+        } 
+    } 
+ 
+    void PrintRow(IOutputStream& out, const THashMap<TString, NYdb::TValue>& fields) { 
+        for (const auto& f : fields) { 
+            out << f.first << ": "; 
+            PrintValue(out, f.second); 
+            out << " "; 
+        } 
+    } 
+ 
+    void PrintRows(IOutputStream& out, const TVector<THashMap<TString, NYdb::TValue>>& rows) { 
+        for (const auto& r : rows) { 
+            PrintRow(out, r); 
+            out << "\n"; 
+        } 
+    } 
+ 
+    TVector<THashMap<TString, NYdb::TValue>> ExecuteScanQuery(NYdb::NTable::TTableClient& tableClient, const TString& query) { 
+        Cerr << "====================================\n" 
+            << "QUERY:\n" << query 
+            << "\n\nRESULT:\n"; 
+ 
+        TStreamExecScanQuerySettings scanSettings; 
+        auto it = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync(); 
+        auto rows = CollectRows(it); 
+ 
+        PrintRows(Cerr, rows); 
+        Cerr << "\n"; 
+ 
+        return rows; 
+    } 
+ 
+    ui64 GetUint32(const NYdb::TValue& v) { 
+        NYdb::TValueParser value(v); 
+        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) { 
+            return *value.GetOptionalUint32(); 
+        } else { 
+            return value.GetUint32(); 
+        } 
+    } 
+ 
+    ui64 GetUint64(const NYdb::TValue& v) { 
+        NYdb::TValueParser value(v); 
+        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) { 
+            return *value.GetOptionalUint64(); 
+        } else { 
+            return value.GetUint64(); 
+        } 
+    } 
+ 
+    TInstant GetTimestamp(const NYdb::TValue& v) { 
+        NYdb::TValueParser value(v); 
+        if (value.GetKind() == NYdb::TTypeParser::ETypeKind::Optional) { 
+            return *value.GetOptionalTimestamp(); 
+        } else { 
+            return value.GetTimestamp(); 
+        } 
+    } 
+ 
     void CreateTableOfAllTypes(TKikimrRunner& kikimr) {
         auto& legacyClient = kikimr.GetTestClient();
 
@@ -399,101 +399,101 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
     }
 
-    Y_UNIT_TEST(SimpleQueryOlap) {
+    Y_UNIT_TEST(SimpleQueryOlap) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        // EnableDebugLogging(kikimr);
-
-        CreateTestOlapTable(kikimr);
-
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
-
-        auto client = kikimr.GetTableClient();
-
-        // EnableDebugLogging(kikimr);
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                ORDER BY `resource_id`, `timestamp`
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            CompareYson(result, R"([[["0"];[1000000u]];[["1"];[1000001u]]])");
-        }
-    }
-
-    Y_UNIT_TEST(SimpleLookupOlap) {
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        CreateTestOlapTable(kikimr); 
+ 
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2); 
+ 
+        auto client = kikimr.GetTableClient(); 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        { 
+            auto it = client.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT `resource_id`, `timestamp` 
+                FROM `/Root/olapStore/olapTable` 
+                ORDER BY `resource_id`, `timestamp` 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+            CompareYson(result, R"([[["0"];[1000000u]];[["1"];[1000001u]]])"); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(SimpleLookupOlap) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        // EnableDebugLogging(kikimr);
-
-        CreateTestOlapTable(kikimr);
-
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
-
-        auto client = kikimr.GetTableClient();
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                WHERE `timestamp` == CAST(1000000 AS Timestamp)
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        CreateTestOlapTable(kikimr); 
+ 
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2); 
+ 
+        auto client = kikimr.GetTableClient(); 
+ 
+        { 
+            auto it = client.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT `resource_id`, `timestamp` 
+                FROM `/Root/olapStore/olapTable` 
+                WHERE `timestamp` == CAST(1000000 AS Timestamp) 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
 
             CompareYson(result, R"([[["0"];[1000000u]]])");
-        }
-    }
-
-    Y_UNIT_TEST(SimpleRangeOlap) {
+        } 
+    } 
+ 
+    Y_UNIT_TEST(SimpleRangeOlap) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        // EnableDebugLogging(kikimr);
-
-        CreateTestOlapTable(kikimr);
-
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
-
-        auto client = kikimr.GetTableClient();
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT `resource_id`, `timestamp`
-                FROM `/Root/olapStore/olapTable`
-                WHERE `timestamp` >= CAST(1000000 AS Timestamp)
-                  AND `timestamp` <= CAST(2000000 AS Timestamp)
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        CreateTestOlapTable(kikimr); 
+ 
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2); 
+ 
+        auto client = kikimr.GetTableClient(); 
+ 
+        { 
+            auto it = client.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT `resource_id`, `timestamp` 
+                FROM `/Root/olapStore/olapTable` 
+                WHERE `timestamp` >= CAST(1000000 AS Timestamp) 
+                  AND `timestamp` <= CAST(2000000 AS Timestamp) 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
 
             CompareYson(result, R"([[["0"];[1000000u]];[["1"];[1000001u]]])");
-        }
-    }
-
+        } 
+    } 
+ 
     Y_UNIT_TEST(CompositeRangeOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
@@ -628,64 +628,64 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    void CreateSampleOltpTable(TKikimrRunner& kikimr) {
-        kikimr.GetTestClient().CreateTable("/Root", R"(
-            Name: "OltpTable"
-            Columns { Name: "Key", Type: "Uint64" }
-            Columns { Name: "Value1", Type: "String" }
-            Columns { Name: "Value2", Type: "String" }
-            KeyColumnNames: ["Key"]
-        )");
-
-        TTableClient tableClient{kikimr.GetDriver()};
-        auto session = tableClient.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(R"(
-            REPLACE INTO `/Root/OltpTable` (Key, Value1, Value2) VALUES
-                (1u,   "Value-001",  "1"),
-                (2u,   "Value-002",  "2"),
-                (42u,  "Value-002",  "2"),
-                (101u, "Value-101",  "101")
-        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
-
-        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-
-        session.Close();
-    }
-
-    Y_UNIT_TEST(QueryOltpAndOlap) {
+    void CreateSampleOltpTable(TKikimrRunner& kikimr) { 
+        kikimr.GetTestClient().CreateTable("/Root", R"( 
+            Name: "OltpTable" 
+            Columns { Name: "Key", Type: "Uint64" } 
+            Columns { Name: "Value1", Type: "String" } 
+            Columns { Name: "Value2", Type: "String" } 
+            KeyColumnNames: ["Key"] 
+        )"); 
+ 
+        TTableClient tableClient{kikimr.GetDriver()}; 
+        auto session = tableClient.CreateSession().GetValueSync().GetSession(); 
+ 
+        auto result = session.ExecuteDataQuery(R"( 
+            REPLACE INTO `/Root/OltpTable` (Key, Value1, Value2) VALUES 
+                (1u,   "Value-001",  "1"), 
+                (2u,   "Value-002",  "2"), 
+                (42u,  "Value-002",  "2"), 
+                (101u, "Value-101",  "101") 
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync(); 
+ 
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString()); 
+ 
+        session.Close(); 
+    } 
+ 
+    Y_UNIT_TEST(QueryOltpAndOlap) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        // EnableDebugLogging(kikimr);
-
-        auto client = kikimr.GetTableClient();
-
-        CreateTestOlapTable(kikimr);
-
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 3);
-
-        CreateSampleOltpTable(kikimr);
-
-        {
-            auto it = client.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT a.`resource_id`, a.`timestamp`, t.*
-                FROM `/Root/OltpTable` AS t
-                JOIN `/Root/olapStore/olapTable` AS a ON CAST(t.Key AS Utf8) = a.resource_id
-                ORDER BY a.`resource_id`, a.`timestamp`
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            CompareYson(result, R"([[[1u];["Value-001"];["1"];["1"];[1000001u]];[[2u];["Value-002"];["2"];["2"];[1000002u]]])");
-        }
-    }
-
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        auto client = kikimr.GetTableClient(); 
+ 
+        CreateTestOlapTable(kikimr); 
+ 
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 3); 
+ 
+        CreateSampleOltpTable(kikimr); 
+ 
+        { 
+            auto it = client.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT a.`resource_id`, a.`timestamp`, t.* 
+                FROM `/Root/OltpTable` AS t 
+                JOIN `/Root/olapStore/olapTable` AS a ON CAST(t.Key AS Utf8) = a.resource_id 
+                ORDER BY a.`resource_id`, a.`timestamp` 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+            CompareYson(result, R"([[[1u];["Value-001"];["1"];["1"];[1000001u]];[[2u];["Value-002"];["2"];["2"];[1000002u]]])"); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(EmptyRange) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
@@ -709,79 +709,79 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         CompareYson(StreamResultToYson(it), "[]");
     }
 
-    Y_UNIT_TEST(Aggregation) {
+    Y_UNIT_TEST(Aggregation) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        // EnableDebugLogging(kikimr);
-
-        CreateTestOlapTable(kikimr);
-
-        auto tableClient = kikimr.GetTableClient();
-
-        // EnableDebugLogging(kikimr);
-
-        {
-            auto it = tableClient.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT
-                    COUNT(*)
-                FROM `/Root/olapStore/olapTable`
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            CompareYson(result, R"([[0u;]])");
-        }
-
-        // EnableDebugLogging(kikimr);
-
-        {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        CreateTestOlapTable(kikimr); 
+ 
+        auto tableClient = kikimr.GetTableClient(); 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        { 
+            auto it = tableClient.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT 
+                    COUNT(*) 
+                FROM `/Root/olapStore/olapTable` 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+            CompareYson(result, R"([[0u;]])"); 
+        } 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        { 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000); 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000); 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000); 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000); 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000); 
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
             WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
-        }
-
-        // EnableDebugLogging(kikimr);
-
-        {
-            auto it = tableClient.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT
-                    COUNT(*), MAX(`resource_id`), MAX(`timestamp`), MIN(LENGTH(`message`))
-                FROM `/Root/olapStore/olapTable`
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            CompareYson(result, R"([[23000u;["40999"];[3004999u];[1036u]]])");
-        }
-
-        {
-            auto it = tableClient.StreamExecuteScanQuery(R"(
-                --!syntax_v1
-
-                SELECT
-                    COUNT(*)
-                FROM `/Root/olapStore/olapTable`
-            )").GetValueSync();
-
-            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            CompareYson(result, R"([[23000u;]])");
-        }
-    }
+        } 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        { 
+            auto it = tableClient.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT 
+                    COUNT(*), MAX(`resource_id`), MAX(`timestamp`), MIN(LENGTH(`message`)) 
+                FROM `/Root/olapStore/olapTable` 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+            CompareYson(result, R"([[23000u;["40999"];[3004999u];[1036u]]])"); 
+        } 
+ 
+        { 
+            auto it = tableClient.StreamExecuteScanQuery(R"( 
+                --!syntax_v1 
+ 
+                SELECT 
+                    COUNT(*) 
+                FROM `/Root/olapStore/olapTable` 
+            )").GetValueSync(); 
+ 
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString()); 
+            TString result = StreamResultToYson(it); 
+            Cout << result << Endl; 
+            CompareYson(result, R"([[23000u;]])"); 
+        } 
+    } 
 
     Y_UNIT_TEST(PushdownFilter) {
         static bool enableLog = false;
@@ -967,45 +967,45 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ORDER BY `timestamp`;
         )");
 
-        auto rows = ExecuteScanQuery(tableClient, selectQuery);
-        TInstant tsPrev = TInstant::MicroSeconds(1000000);
-        for (const auto& r : rows) {
-            TInstant ts = GetTimestamp(r.at("timestamp"));
-            UNIT_ASSERT_GE_C(ts, tsPrev, "result is not sorted in ASC order");
-            tsPrev = ts;
-        }
+        auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+        TInstant tsPrev = TInstant::MicroSeconds(1000000); 
+        for (const auto& r : rows) { 
+            TInstant ts = GetTimestamp(r.at("timestamp")); 
+            UNIT_ASSERT_GE_C(ts, tsPrev, "result is not sorted in ASC order"); 
+            tsPrev = ts; 
+        } 
     }
 
-    Y_UNIT_TEST(ExtractRangesReverse) {
+    Y_UNIT_TEST(ExtractRangesReverse) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        CreateTestOlapTable(kikimr);
-        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000);
-
-        // EnableDebugLogging(kikimr);
-
-        auto tableClient = kikimr.GetTableClient();
-        auto selectQuery = TString(R"(
-            SELECT `timestamp` FROM `/Root/olapStore/olapTable`
-                WHERE
-                    (`timestamp` < CAST(1000100 AS Timestamp) AND `timestamp` > CAST(1000095 AS Timestamp)) OR
-                    (`timestamp` <= CAST(1001000 AS Timestamp) AND `timestamp` >= CAST(1000999 AS Timestamp)) OR
-                    (`timestamp` > CAST(1002000 AS Timestamp))
-                ORDER BY `timestamp` DESC;
-        )");
-
-        auto rows = ExecuteScanQuery(tableClient, selectQuery);
-        TInstant tsPrev = TInstant::MicroSeconds(2000000);
-        for (const auto& r : rows) {
-            TInstant ts = GetTimestamp(r.at("timestamp"));
-            UNIT_ASSERT_LE_C(ts, tsPrev, "result is not sorted in DESC order");
-            tsPrev = ts;
-        }
-    }
-
+ 
+        CreateTestOlapTable(kikimr); 
+        WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2000); 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        auto tableClient = kikimr.GetTableClient(); 
+        auto selectQuery = TString(R"( 
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` 
+                WHERE 
+                    (`timestamp` < CAST(1000100 AS Timestamp) AND `timestamp` > CAST(1000095 AS Timestamp)) OR 
+                    (`timestamp` <= CAST(1001000 AS Timestamp) AND `timestamp` >= CAST(1000999 AS Timestamp)) OR 
+                    (`timestamp` > CAST(1002000 AS Timestamp)) 
+                ORDER BY `timestamp` DESC; 
+        )"); 
+ 
+        auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+        TInstant tsPrev = TInstant::MicroSeconds(2000000); 
+        for (const auto& r : rows) { 
+            TInstant ts = GetTimestamp(r.at("timestamp")); 
+            UNIT_ASSERT_LE_C(ts, tsPrev, "result is not sorted in DESC order"); 
+            tsPrev = ts; 
+        } 
+    } 
+ 
     Y_UNIT_TEST(PredicatePushdown) {
         constexpr bool logQueries = false;
         auto settings = TKikimrSettings()
@@ -1129,501 +1129,501 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(StatsSysView) {
+    Y_UNIT_TEST(StatsSysView) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        CreateTestOlapTable(kikimr);
-        for (ui64 i = 0; i < 100; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 1000);
-        }
-
-        // EnableDebugLogging(kikimr);
-
-        auto tableClient = kikimr.GetTableClient();
-        auto selectQuery = TString(R"(
-            SELECT *
-            FROM `/Root/olapStore/.sys/store_primary_index_stats`
-            ORDER BY PathId, Kind, TabletId
-        )");
-
-        auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4*3);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull);
-        UNIT_ASSERT_GE(GetUint64(rows[0].at("TabletId")), 72075186224037888ull);
-        UNIT_ASSERT_GE(GetUint64(rows[1].at("TabletId")), GetUint64(rows[0].at("TabletId")));
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[2].at("Kind")), 1ull);
-        UNIT_ASSERT_GE(GetUint64(rows[2].at("TabletId")), GetUint64(rows[1].at("TabletId")));
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[6].at("PathId")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[6].at("Kind")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[6].at("TabletId")), GetUint64(rows[0].at("TabletId")));
-        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[7].at("Kind")), 3ull);
-        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[7].at("TabletId")), GetUint64(rows[1].at("TabletId")));
-        UNIT_ASSERT_GE(
-            GetUint64(rows[0].at("Rows")) + GetUint64(rows[1].at("Rows")) + GetUint64(rows[2].at("Rows")) +
-            GetUint64(rows[3].at("Rows")) + GetUint64(rows[4].at("Rows")) + GetUint64(rows[5].at("Rows")) +
-            GetUint64(rows[6].at("Rows")) + GetUint64(rows[7].at("Rows")) + GetUint64(rows[8].at("Rows")),
-            0.3*0.9*100*1000); // >= 90% of 100K inserted rows
-    }
-
-    Y_UNIT_TEST(StatsSysViewTable) {
+ 
+        CreateTestOlapTable(kikimr); 
+        for (ui64 i = 0; i < 100; ++i) { 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 1000); 
+        } 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        auto tableClient = kikimr.GetTableClient(); 
+        auto selectQuery = TString(R"( 
+            SELECT * 
+            FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+            ORDER BY PathId, Kind, TabletId 
+        )"); 
+ 
+        auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4*3); 
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull); 
+        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull); 
+        UNIT_ASSERT_GE(GetUint64(rows[0].at("TabletId")), 72075186224037888ull); 
+        UNIT_ASSERT_GE(GetUint64(rows[1].at("TabletId")), GetUint64(rows[0].at("TabletId"))); 
+        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[2].at("Kind")), 1ull); 
+        UNIT_ASSERT_GE(GetUint64(rows[2].at("TabletId")), GetUint64(rows[1].at("TabletId"))); 
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[6].at("PathId")), 3ull); 
+        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[6].at("Kind")), 3ull); 
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[6].at("TabletId")), GetUint64(rows[0].at("TabletId"))); 
+        UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[7].at("Kind")), 3ull); 
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[7].at("TabletId")), GetUint64(rows[1].at("TabletId"))); 
+        UNIT_ASSERT_GE( 
+            GetUint64(rows[0].at("Rows")) + GetUint64(rows[1].at("Rows")) + GetUint64(rows[2].at("Rows")) + 
+            GetUint64(rows[3].at("Rows")) + GetUint64(rows[4].at("Rows")) + GetUint64(rows[5].at("Rows")) + 
+            GetUint64(rows[6].at("Rows")) + GetUint64(rows[7].at("Rows")) + GetUint64(rows[8].at("Rows")), 
+            0.3*0.9*100*1000); // >= 90% of 100K inserted rows 
+    } 
+ 
+    Y_UNIT_TEST(StatsSysViewTable) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        CreateTestOlapTable(kikimr, "olapTable_1");
-        CreateTestOlapTable(kikimr, "olapTable_2");
-        for (ui64 i = 0; i < 10; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 2000);
-        }
-
-        // EnableDebugLogging(kikimr);
-
-        auto tableClient = kikimr.GetTableClient();
-        {
-            auto selectQuery = TString(R"(
-                SELECT *
-                FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
-                ORDER BY PathId, Kind, TabletId
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_GT(rows.size(), 1*4);
-            UNIT_ASSERT_LE(rows.size(), 3*4);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size() % 4, 0); // 4 Kinds
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 3ull);
-        }
-        {
-            auto selectQuery = TString(R"(
-                SELECT *
-                FROM `/Root/olapStore/olapTable_2/.sys/primary_index_stats`
-                ORDER BY PathId, Kind, TabletId
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_GT(rows.size(), 1*4);
-            UNIT_ASSERT_LE(rows.size(), 3*4);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size() % 4, 0); // 4 Kinds
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 4ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 4ull);
-        }
-        {
-            auto selectQuery = TString(R"(
-                SELECT *
-                FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats`
-                WHERE
+ 
+        CreateTestOlapTable(kikimr, "olapTable_1"); 
+        CreateTestOlapTable(kikimr, "olapTable_2"); 
+        for (ui64 i = 0; i < 10; ++i) { 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 1000); 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 2000); 
+        } 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        auto tableClient = kikimr.GetTableClient(); 
+        { 
+            auto selectQuery = TString(R"( 
+                SELECT * 
+                FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats` 
+                ORDER BY PathId, Kind, TabletId 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_GT(rows.size(), 1*4); 
+            UNIT_ASSERT_LE(rows.size(), 3*4); 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size() % 4, 0); // 4 Kinds 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 3ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 3ull); 
+        } 
+        { 
+            auto selectQuery = TString(R"( 
+                SELECT * 
+                FROM `/Root/olapStore/olapTable_2/.sys/primary_index_stats` 
+                ORDER BY PathId, Kind, TabletId 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_GT(rows.size(), 1*4); 
+            UNIT_ASSERT_LE(rows.size(), 3*4); 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size() % 4, 0); // 4 Kinds 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.front().at("PathId")), 4ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows.back().at("PathId")), 4ull); 
+        } 
+        { 
+            auto selectQuery = TString(R"( 
+                SELECT * 
+                FROM `/Root/olapStore/olapTable_1/.sys/primary_index_stats` 
+                WHERE 
                     PathId > UInt64("3")
-                ORDER BY PathId, Kind, TabletId
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 0);
-        }
-    }
-
-    Y_UNIT_TEST(StatsSysViewColumns) {
+                ORDER BY PathId, Kind, TabletId 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 0); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(StatsSysViewColumns) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        CreateTestOlapTable(kikimr);
-        for (ui64 i = 0; i < 10; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000);
-        }
-
-        // EnableDebugLogging(kikimr);
-
-        auto tableClient = kikimr.GetTableClient();
-
-        {
-            auto selectQuery = TString(R"(
-                SELECT TabletId, PathId, Kind
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                ORDER BY PathId, Kind, TabletId
-                LIMIT 4;
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[3].at("Kind")), 2ull);
-        }
-        {
-            auto selectQuery = TString(R"(
-                SELECT Bytes, Rows
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                ORDER BY Bytes
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*4);
-            UNIT_ASSERT_LE(GetUint64(rows[0].at("Bytes")), GetUint64(rows[1].at("Bytes")));
-        }
-        {
-            auto selectQuery = TString(R"(
-                SELECT Rows, Kind, RawBytes, Rows as Rows2, Rows as Rows3, PathId
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                ORDER BY PathId, Kind, Rows3
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*4);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows2")), GetUint64(rows[0].at("Rows3")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("Rows")), GetUint64(rows[1].at("Rows3")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("Rows")), GetUint64(rows[2].at("Rows2")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[5].at("Rows")), GetUint64(rows[5].at("Rows3")));
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[11].at("Rows")), GetUint64(rows[11].at("Rows2")));
-        }
-    }
-
-    Y_UNIT_TEST(StatsSysViewRanges) {
+ 
+        CreateTestOlapTable(kikimr); 
+        for (ui64 i = 0; i < 10; ++i) { 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000); 
+        } 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        auto tableClient = kikimr.GetTableClient(); 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                SELECT TabletId, PathId, Kind 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                ORDER BY PathId, Kind, TabletId 
+                LIMIT 4; 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[3].at("PathId")), 3ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[3].at("Kind")), 2ull); 
+        } 
+        { 
+            auto selectQuery = TString(R"( 
+                SELECT Bytes, Rows 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                ORDER BY Bytes 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*4); 
+            UNIT_ASSERT_LE(GetUint64(rows[0].at("Bytes")), GetUint64(rows[1].at("Bytes"))); 
+        } 
+        { 
+            auto selectQuery = TString(R"( 
+                SELECT Rows, Kind, RawBytes, Rows as Rows2, Rows as Rows3, PathId 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                ORDER BY PathId, Kind, Rows3 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*4); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("Rows2")), GetUint64(rows[0].at("Rows3"))); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("Rows")), GetUint64(rows[1].at("Rows3"))); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("Rows")), GetUint64(rows[2].at("Rows2"))); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[5].at("Rows")), GetUint64(rows[5].at("Rows3"))); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[11].at("Rows")), GetUint64(rows[11].at("Rows2"))); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(StatsSysViewRanges) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        CreateTestOlapTable(kikimr, "olapTable_1");
-        CreateTestOlapTable(kikimr, "olapTable_2");
-        CreateTestOlapTable(kikimr, "olapTable_3");
-
-        for (ui64 i = 0; i < 10; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 2000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 3000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i*10000, 5000);
-        }
-
-        // EnableDebugLogging(kikimr);
-
-        auto tableClient = kikimr.GetTableClient();
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-                SELECT *
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE
+ 
+        CreateTestOlapTable(kikimr, "olapTable_1"); 
+        CreateTestOlapTable(kikimr, "olapTable_2"); 
+        CreateTestOlapTable(kikimr, "olapTable_3"); 
+ 
+        for (ui64 i = 0; i < 10; ++i) { 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 2000); 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 3000); 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i*10000, 5000); 
+        } 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        auto tableClient = kikimr.GetTableClient(); 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+                SELECT * 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                WHERE 
                     PathId == UInt64("3") AND Kind < UInt32("4")
-                ORDER BY PathId, Kind, TabletId;
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*3);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[2].at("Kind")), 1ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[8].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[8].at("Kind")), 3ull);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-                SELECT *
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                ORDER BY
-                    PathId DESC, Kind DESC, TabletId DESC
-                ;
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*3*4);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 4ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[35].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[35].at("Kind")), 1ull);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-                SELECT *
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE
+                ORDER BY PathId, Kind, TabletId; 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*3); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 1ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 3ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[2].at("Kind")), 1ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[8].at("PathId")), 3ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[8].at("Kind")), 3ull); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+                SELECT * 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                ORDER BY 
+                    PathId DESC, Kind DESC, TabletId DESC 
+                ; 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3*3*4); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 4ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[35].at("PathId")), 3ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[35].at("Kind")), 1ull); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+                SELECT * 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                WHERE 
                     PathId > UInt64("0") AND PathId < UInt32("4")
                     OR PathId > UInt64("4") AND PathId <= UInt64("5")
-                ORDER BY
-                    PathId DESC, Kind DESC, TabletId DESC
-                ;
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2*3*4);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 4ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[23].at("PathId")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[23].at("Kind")), 1ull);
-        }
-    }
-
-    Y_UNIT_TEST(StatsSysViewFilter) {
+                ORDER BY 
+                    PathId DESC, Kind DESC, TabletId DESC 
+                ; 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2*3*4); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[0].at("Kind")), 4ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[23].at("PathId")), 3ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint32(rows[23].at("Kind")), 1ull); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(StatsSysViewFilter) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        CreateTestOlapTable(kikimr);
-        for (ui64 i = 0; i < 10; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000);
-        }
-
-        // EnableDebugLogging(kikimr);
-
-        auto tableClient = kikimr.GetTableClient();
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-
-                SELECT *
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
+ 
+        CreateTestOlapTable(kikimr); 
+        for (ui64 i = 0; i < 10; ++i) { 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000 + i*10000, 2000); 
+        } 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        auto tableClient = kikimr.GetTableClient(); 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+ 
+                SELECT * 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
                 WHERE Bytes > UInt64("0")
-                ORDER BY PathId, Kind, TabletId;
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_GE(rows.size(), 3);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-
-                SELECT PathId, Kind, TabletId
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                ORDER BY PathId, Kind, TabletId; 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_GE(rows.size(), 3); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+ 
+                SELECT PathId, Kind, TabletId 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
                 WHERE Bytes > UInt64("0")
-                ORDER BY PathId, Kind, TabletId;
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_GE(rows.size(), 3);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-                SELECT *
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                ORDER BY PathId, Kind, TabletId; 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_GE(rows.size(), 3); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+                SELECT * 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
                 WHERE Kind == UInt32("5")
-                ORDER BY PathId, Kind, TabletId;
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_GE(rows.size(), 0);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-                SELECT *
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
+                ORDER BY PathId, Kind, TabletId; 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_GE(rows.size(), 0); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+                SELECT * 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
                 WHERE Kind >= UInt32("3")
-                ORDER BY PathId, Kind, TabletId;
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-
-            UNIT_ASSERT_GE(rows.size(), 3*2);
-        }
-    }
-
-    Y_UNIT_TEST(StatsSysViewAggregation) {
+                ORDER BY PathId, Kind, TabletId; 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+ 
+            UNIT_ASSERT_GE(rows.size(), 3*2); 
+        } 
+    } 
+ 
+    Y_UNIT_TEST(StatsSysViewAggregation) { 
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
         TKikimrRunner kikimr(settings);
-
-        CreateTestOlapTable(kikimr, "olapTable_1");
-        CreateTestOlapTable(kikimr, "olapTable_2");
-        CreateTestOlapTable(kikimr, "olapTable_3");
-
-        for (ui64 i = 0; i < 100; ++i) {
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 1000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 2000);
-            WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i*10000, 3000);
-        }
-
-        // EnableDebugLogging(kikimr);
-
-        auto tableClient = kikimr.GetTableClient();
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-
-                SELECT
-                    SUM(Rows) as rows,
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE
+ 
+        CreateTestOlapTable(kikimr, "olapTable_1"); 
+        CreateTestOlapTable(kikimr, "olapTable_2"); 
+        CreateTestOlapTable(kikimr, "olapTable_3"); 
+ 
+        for (ui64 i = 0; i < 100; ++i) { 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_1", 0, 1000000 + i*10000, 1000); 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_2", 0, 1000000 + i*10000, 2000); 
+            WriteTestData(kikimr, "/Root/olapStore/olapTable_3", 0, 1000000 + i*10000, 3000); 
+        } 
+ 
+        // EnableDebugLogging(kikimr); 
+ 
+        auto tableClient = kikimr.GetTableClient(); 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+ 
+                SELECT 
+                    SUM(Rows) as rows, 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                WHERE 
                     Kind != UInt32("4") -- not INACTIVE
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1ull);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-
-                SELECT
-                    PathId,
-                    SUM(Rows) as rows,
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1ull); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+ 
+                SELECT 
+                    PathId, 
+                    SUM(Rows) as rows, 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                WHERE 
                     Kind != UInt32("4") -- not INACTIVE
-                GROUP BY
-                    PathId
-                ORDER BY
-                    PathId
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 4);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), 5);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-
-                SELECT
-                    PathId,
-                    SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE
+                GROUP BY 
+                    PathId 
+                ORDER BY 
+                    PathId 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 4); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), 5); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+ 
+                SELECT 
+                    PathId, 
+                    SUM(Rows) as rows, 
+                    SUM(Bytes) as bytes, 
+                    SUM(RawBytes) as bytes_raw, 
+                    SUM(Portions) as portions, 
+                    SUM(Blobs) as blobs 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                WHERE 
                     Kind < UInt32("4")
-                GROUP BY PathId
-                ORDER BY rows DESC
-                LIMIT 10
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 4);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), 3);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-
-                SELECT
-                    PathId,
-                    SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE
+                GROUP BY PathId 
+                ORDER BY rows DESC 
+                LIMIT 10 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 4); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[2].at("PathId")), 3); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+ 
+                SELECT 
+                    PathId, 
+                    SUM(Rows) as rows, 
+                    SUM(Bytes) as bytes, 
+                    SUM(RawBytes) as bytes_raw, 
+                    SUM(Portions) as portions, 
+                    SUM(Blobs) as blobs 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                WHERE 
                     PathId == UInt64("3") AND Kind < UInt32("4")
-                GROUP BY PathId
-                ORDER BY rows DESC
-                LIMIT 10
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                PRAGMA Kikimr.KqpPushOlapProcess = "true";
-
-                SELECT
-                    PathId,
-                    SUM(Rows) as rows,
-                    SUM(Bytes) as bytes,
-                    SUM(RawBytes) as bytes_raw,
-                    SUM(Portions) as portions,
-                    SUM(Blobs) as blobs
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                WHERE
+                GROUP BY PathId 
+                ORDER BY rows DESC 
+                LIMIT 10 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 3); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                PRAGMA Kikimr.KqpPushOlapProcess = "true"; 
+ 
+                SELECT 
+                    PathId, 
+                    SUM(Rows) as rows, 
+                    SUM(Bytes) as bytes, 
+                    SUM(RawBytes) as bytes_raw, 
+                    SUM(Portions) as portions, 
+                    SUM(Blobs) as blobs 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                WHERE 
                     PathId >= UInt64("4") AND Kind < UInt32("4")
-                GROUP BY PathId
-                ORDER BY rows DESC
-                LIMIT 10
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 4);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                SELECT count(*)
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            // 3 Tables with 3 Shards each and 4 KindId-s of stats
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3*3*4);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                SELECT
-                    count(distinct(PathId)),
-                    count(distinct(Kind)),
-                    count(distinct(TabletId))
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3ull);
-            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column1")), 4ull);
-            UNIT_ASSERT_GE(GetUint64(rows[0].at("column2")), 3ull);
-        }
-
-        {
-            auto selectQuery = TString(R"(
-                SELECT PathId, count(*), sum(Rows), sum(Bytes), sum(RawBytes)
-                FROM `/Root/olapStore/.sys/store_primary_index_stats`
-                GROUP BY PathId
-                ORDER BY PathId
-            )");
-
-            auto rows = ExecuteScanQuery(tableClient, selectQuery);
-            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3ull);
-            for (ui64 pathId = 3, row = 0; pathId <= 5; ++pathId, ++row) {
-                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("PathId")), pathId);
-                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("column1")), 12);
-            }
-        }
-    }
-
+                GROUP BY PathId 
+                ORDER BY rows DESC 
+                LIMIT 10 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 2ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("PathId")), 5); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[1].at("PathId")), 4); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                SELECT count(*) 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+            // 3 Tables with 3 Shards each and 4 KindId-s of stats 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3*3*4); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                SELECT 
+                    count(distinct(PathId)), 
+                    count(distinct(Kind)), 
+                    count(distinct(TabletId)) 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column0")), 3ull); 
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[0].at("column1")), 4ull); 
+            UNIT_ASSERT_GE(GetUint64(rows[0].at("column2")), 3ull); 
+        } 
+ 
+        { 
+            auto selectQuery = TString(R"( 
+                SELECT PathId, count(*), sum(Rows), sum(Bytes), sum(RawBytes) 
+                FROM `/Root/olapStore/.sys/store_primary_index_stats` 
+                GROUP BY PathId 
+                ORDER BY PathId 
+            )"); 
+ 
+            auto rows = ExecuteScanQuery(tableClient, selectQuery); 
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 3ull); 
+            for (ui64 pathId = 3, row = 0; pathId <= 5; ++pathId, ++row) { 
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("PathId")), pathId); 
+                UNIT_ASSERT_VALUES_EQUAL(GetUint64(rows[row].at("column1")), 12); 
+            } 
+        } 
+    } 
+ 
     Y_UNIT_TEST(PredicatePushdownWithParameters) {
         constexpr bool logQueries = true;
         auto settings = TKikimrSettings()
@@ -1917,7 +1917,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         b << "------------------------------------------------" << Endl;
         UNIT_ASSERT_C(falsePositive.empty() && falseNegative.empty(), b);
     }
-}
-
+} 
+ 
 } // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr 

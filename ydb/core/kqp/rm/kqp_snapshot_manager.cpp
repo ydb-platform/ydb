@@ -18,9 +18,9 @@ namespace {
 
 class TSnapshotManagerActor: public TActorBootstrapped<TSnapshotManagerActor> {
 public:
-    TSnapshotManagerActor(const TString& database, TDuration queryTimeout)
-        : Database(database)
-        , RequestTimeout(queryTimeout)
+    TSnapshotManagerActor(const TString& database, TDuration queryTimeout) 
+        : Database(database) 
+        , RequestTimeout(queryTimeout) 
     {}
 
     void Bootstrap() {
@@ -216,7 +216,7 @@ private:
     }
 
     void HandleUnexpectedEvent(const TString& state, ui32 eventType) {
-        LOG_E("KqpSnapshotManager: unexpected event, state: " << state
+        LOG_E("KqpSnapshotManager: unexpected event, state: " << state 
             << ", event type: " << eventType);
         ReplyErrorAndDie(NKikimrIssues::TStatusIds::INTERNAL_ERROR, {});
     }
@@ -232,7 +232,7 @@ private:
     }
 
 private:
-    const TString Database;
+    const TString Database; 
     TVector<TString> Tables;
     TActorId ClientActorId;
     IKqpGateway::TKqpSnapshot Snapshot;
@@ -252,8 +252,8 @@ private:
 
 } // anonymous namespace
 
-IActor* CreateKqpSnapshotManager(const TString& database, TDuration queryTimeout) {
-    return new TSnapshotManagerActor(database, queryTimeout);
+IActor* CreateKqpSnapshotManager(const TString& database, TDuration queryTimeout) { 
+    return new TSnapshotManagerActor(database, queryTimeout); 
 }
 
 } // namespace NKqp

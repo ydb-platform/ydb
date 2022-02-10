@@ -175,13 +175,13 @@ namespace {
 
             proxyEngine->AfterShardProgramsExtracted();
 
-            THashMap<ui64, TAutoPtr<TEngineHostCounters>> hostCounters;
+            THashMap<ui64, TAutoPtr<TEngineHostCounters>> hostCounters; 
             THashMap<ui64, TAutoPtr<IEngineFlatHost>> hosts;
             for (const auto& shardPgm : shardPrograms) {
-                auto& counters = hostCounters[shardPgm.first];
-                counters.Reset(new TEngineHostCounters());
+                auto& counters = hostCounters[shardPgm.first]; 
+                counters.Reset(new TEngineHostCounters()); 
                 hosts[shardPgm.first].Reset(new TUnversionedEngineHost(
-                    *ShardDbState.Dbs[shardPgm.first], *counters, TEngineHostSettings(shardPgm.first, false)));
+                    *ShardDbState.Dbs[shardPgm.first], *counters, TEngineHostSettings(shardPgm.first, false))); 
             }
 
             for (const auto& shardPgm : shardPrograms) {
@@ -189,14 +189,14 @@ namespace {
                 auto dataEngine = CreateEngineFlat(TEngineFlatSettings(IEngineFlat::EProtocol::V1, FunctionRegistry.Get(),
                     *RandomProvider, *TimeProvider, hosts[shardPgm.first].Get()));
                 UNIT_ASSERT(dataEngine->AddProgram(shardPgm.first, shardPgm.second) == IEngineFlat::EResult::Ok);
-                IEngineFlat::TValidationInfo validationInfo;
-                IEngineFlat::EResult result = dataEngine->Validate(validationInfo);
+                IEngineFlat::TValidationInfo validationInfo; 
+                IEngineFlat::EResult result = dataEngine->Validate(validationInfo); 
                 if (result != IEngineFlat::EResult::Ok) {
                     Cerr << dataEngine->GetErrors() << Endl;
                     return IEngineFlat::EStatus::Error;
                 }
 
-                UNIT_ASSERT(dataEngine->PinPages() == IEngineFlat::EResult::Ok);
+                UNIT_ASSERT(dataEngine->PinPages() == IEngineFlat::EResult::Ok); 
                 ShardDbState.CommitTransaction(shardPgm.first);
             }
 
@@ -255,7 +255,7 @@ namespace {
                     }
                 }
 
-                dataEngine->PinPages();
+                dataEngine->PinPages(); 
                 auto result = dataEngine->Execute();
                 if (result != IEngineFlat::EResult::Ok) {
                     Cerr << dataEngine->GetErrors() << Endl;
@@ -3670,22 +3670,22 @@ Value {
         }
 
         {
-            driver.ShardDbState.BeginTransaction(Shard1);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]);
+            driver.ShardDbState.BeginTransaction(Shard1); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard1]); 
             db.Table<Schema1::Table1>()
                 .Key(ui32(43))
                 .Update(NIceDb::TUpdate<Schema1::Table1::Value>("qwe"));
 
-            driver.ShardDbState.CommitTransaction(Shard1);
-        }
-
-        {
-            driver.ShardDbState.BeginTransaction(Shard2);
-            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]);
-            db.Table<Schema1::Table1>()
-                .Key(ui32(44))
-                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("zxc"));
-
+            driver.ShardDbState.CommitTransaction(Shard1); 
+        } 
+ 
+        { 
+            driver.ShardDbState.BeginTransaction(Shard2); 
+            NIceDb::TNiceDb db(*driver.ShardDbState.Dbs[Shard2]); 
+            db.Table<Schema1::Table1>() 
+                .Key(ui32(44)) 
+                .Update(NIceDb::TUpdate<Schema1::Table1::Value>("zxc")); 
+ 
             driver.ShardDbState.CommitTransaction(Shard2);
         }
 
@@ -3700,7 +3700,7 @@ Value {
         rowFrom[0] = pgmBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui32>::Id);
         options.FromColumns = rowFrom;
         options.Flags = pgmBuilder.TProgramBuilder::NewDataLiteral<ui32>(TReadRangeOptions::TFlags::ExcludeTermValue);
-        const ui64 RowOverheadBytes = 8;
+        const ui64 RowOverheadBytes = 8; 
         options.BytesLimit = pgmBuilder.TProgramBuilder::NewDataLiteral<ui64>(4 + RowOverheadBytes);
         auto value = pgmBuilder.SelectRange(TTableId(OwnerId, Table1Id), keyTypes, columns, options);
         auto pgm = pgmBuilder.Build(pgmBuilder.AsList(pgmBuilder.SetResult("myRes", value)));
@@ -3773,13 +3773,13 @@ Value {
             }
           }
         }
-        List {
-          Struct {
-            Optional {
-              Text: "qwe"
-            }
-          }
-        }
+        List { 
+          Struct { 
+            Optional { 
+              Text: "qwe" 
+            } 
+          } 
+        } 
       }
       Struct {
         Bool: true

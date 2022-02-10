@@ -196,11 +196,11 @@ TOlapStoreInfo::TPtr CreateOlapStore(const NKikimrSchemeOp::TColumnStoreDescript
 
     if (op.GetRESERVED_MetaShardCount() != 0) {
         status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("trying to create OLAP store with meta shards (not supported yet)");
-        return nullptr;
-    }
-
-    if (!op.HasColumnShardCount()) {
+        errStr = Sprintf("trying to create OLAP store with meta shards (not supported yet)"); 
+        return nullptr; 
+    } 
+ 
+    if (!op.HasColumnShardCount()) { 
         status = NKikimrScheme::StatusSchemeError;
         errStr = Sprintf("trying to create OLAP store without shards number specified");
         return nullptr;
@@ -415,8 +415,8 @@ public:
         context.SS->ClearDescribePathCaches(parentDir);
         context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
 
-        ++path->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, path);
+        ++path->DirAlterVersion; 
+        context.SS->PersistPathDirAlterVersion(db, path); 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
 

@@ -1,33 +1,33 @@
-#include "datashard_impl.h"
-
+#include "datashard_impl.h" 
+ 
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
-
+ 
 #include <util/string/escape.h>
 
-namespace NKikimr {
+namespace NKikimr { 
 namespace NDataShard {
-
-
+ 
+ 
 class TDataShard::TTxInitSplitMergeDestination : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-private:
-    TEvDataShard::TEvInitSplitMergeDestination::TPtr Ev;
-
-public:
+private: 
+    TEvDataShard::TEvInitSplitMergeDestination::TPtr Ev; 
+ 
+public: 
     TTxInitSplitMergeDestination(TDataShard* ds, TEvDataShard::TEvInitSplitMergeDestination::TPtr ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
-        , Ev(ev)
-    {}
-
-    TTxType GetTxType() const override { return TXTYPE_INIT_SPLIT_MERGE_DESTINATION; }
-
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_UNUSED(ctx);
-
-        if (Self->State != TShardState::WaitScheme) {
-            // TODO: check if this is really a repeated messages and not a buggy one
-            return true;
-        }
-
+        , Ev(ev) 
+    {} 
+ 
+    TTxType GetTxType() const override { return TXTYPE_INIT_SPLIT_MERGE_DESTINATION; } 
+ 
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override { 
+        Y_UNUSED(ctx); 
+ 
+        if (Self->State != TShardState::WaitScheme) { 
+            // TODO: check if this is really a repeated messages and not a buggy one 
+            return true; 
+        } 
+ 
         NIceDb::TNiceDb db(txc.DB);
 
         const bool initializeSchema = Ev->Get()->Record.HasCreateTable();
@@ -54,29 +54,29 @@ public:
         }
 
         Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());
-
-        for (ui32 i = 0; i < Self->DstSplitDescription->SourceRangesSize(); ++i) {
-            ui64 srcTabletId = Self->DstSplitDescription->GetSourceRanges(i).GetTabletID();
-            Self->ReceiveSnapshotsFrom.insert(srcTabletId);
-        }
-
-        // Persist split description
+ 
+        for (ui32 i = 0; i < Self->DstSplitDescription->SourceRangesSize(); ++i) { 
+            ui64 srcTabletId = Self->DstSplitDescription->GetSourceRanges(i).GetTabletID(); 
+            Self->ReceiveSnapshotsFrom.insert(srcTabletId); 
+        } 
+ 
+        // Persist split description 
         TString splitDescr;
-        bool serilaizeOk = Self->DstSplitDescription->SerializeToString(&splitDescr);
-        Y_VERIFY(serilaizeOk, "Failed to serialize split/merge description");
+        bool serilaizeOk = Self->DstSplitDescription->SerializeToString(&splitDescr); 
+        Y_VERIFY(serilaizeOk, "Failed to serialize split/merge description"); 
         Self->PersistSys(db, Schema::Sys_DstSplitDescription, splitDescr);
-
+ 
         if (initializeSchema) {
             Self->DstSplitSchemaInitialized = true;
             Self->PersistSys(db, Schema::Sys_DstSplitSchemaInitialized, ui64(1));
         }
 
-        Self->State = TShardState::SplitDstReceivingSnapshot;
-        Self->PersistSys(db, Schema::Sys_State, Self->State);
-
+        Self->State = TShardState::SplitDstReceivingSnapshot; 
+        Self->PersistSys(db, Schema::Sys_State, Self->State); 
+ 
         Self->CurrentSchemeShardId = Ev->Get()->Record.GetSchemeshardTabletId();
         Self->PersistSys(db, Schema::Sys_CurrentSchemeShardId, Self->CurrentSchemeShardId);
-
+ 
         if (!Self->ProcessingParams && Ev->Get()->Record.HasProcessingParams()) {
             Self->ProcessingParams.reset(new NKikimrSubDomains::TProcessingParams());
             Self->ProcessingParams->CopyFrom(Ev->Get()->Record.GetProcessingParams());
@@ -91,66 +91,66 @@ public:
             Self->StartFindSubDomainPathId();
         }
 
-        return true;
-    }
-
-    void Complete(const TActorContext &ctx) override {
-        // Send Ack
+        return true; 
+    } 
+ 
+    void Complete(const TActorContext &ctx) override { 
+        // Send Ack 
         TActorId ackTo = Ev->Sender;
-        ui64 opId = Ev->Get()->Record.GetOperationCookie();
-
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack init split/merge destination OpId " << opId);
-
-        ctx.Send(ackTo, new TEvDataShard::TEvInitSplitMergeDestinationAck(opId, Self->TabletID()));
+        ui64 opId = Ev->Get()->Record.GetOperationCookie(); 
+ 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack init split/merge destination OpId " << opId); 
+ 
+        ctx.Send(ackTo, new TEvDataShard::TEvInitSplitMergeDestinationAck(opId, Self->TabletID())); 
         Self->SendRegistrationRequestTimeCast(ctx);
-    }
-};
-
-
+    } 
+}; 
+ 
+ 
 class TDataShard::TTxSplitTransferSnapshot : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-private:
-    TEvDataShard::TEvSplitTransferSnapshot::TPtr Ev;
-    bool LastSnapshotReceived;
-
-public:
+private: 
+    TEvDataShard::TEvSplitTransferSnapshot::TPtr Ev; 
+    bool LastSnapshotReceived; 
+ 
+public: 
     TTxSplitTransferSnapshot(TDataShard* ds, TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
-        , Ev(ev)
-        , LastSnapshotReceived(false)
-    {}
-
-    TTxType GetTxType() const override { return TXTYPE_SPLIT_TRANSFER_SNAPSHOT; }
-
+        , Ev(ev) 
+        , LastSnapshotReceived(false) 
+    {} 
+ 
+    TTxType GetTxType() const override { return TXTYPE_SPLIT_TRANSFER_SNAPSHOT; } 
+ 
     /**
      * Initialize schema based on the first received snapshot
      *
      * Legacy code path for splits initiated by old-style schemeshard
      */
     void LegacyInitSchema(TTransactionContext& txc) {
-        const auto& tableScheme = Ev->Get()->Record.GetUserTableScheme();
+        const auto& tableScheme = Ev->Get()->Record.GetUserTableScheme(); 
         TString tableName = TDataShard::Schema::UserTablePrefix + tableScheme.GetName();
         if (!txc.DB.GetScheme().TableNames.contains(tableName)) { // TODO: properly check if table has already been created
             NKikimrSchemeOp::TTableDescription newTableScheme(tableScheme);
-
-            // Get this shard's range boundaries from the split/merge description
+ 
+            // Get this shard's range boundaries from the split/merge description 
             TString rangeBegin, rangeEnd;
-            for (ui32 di = 0; di < Self->DstSplitDescription->DestinationRangesSize(); ++di) {
-                const auto& dstRange = Self->DstSplitDescription->GetDestinationRanges(di);
-                if (dstRange.GetTabletID() != Self->TabletID())
-                    continue;
-                rangeBegin = dstRange.GetKeyRangeBegin();
-                rangeEnd = dstRange.GetKeyRangeEnd();
-            }
-
-            newTableScheme.SetPartitionRangeBegin(rangeBegin);
-            newTableScheme.SetPartitionRangeEnd(rangeEnd);
-            newTableScheme.SetPartitionRangeBeginIsInclusive(true);
-            newTableScheme.SetPartitionRangeEndIsInclusive(false);
-
+            for (ui32 di = 0; di < Self->DstSplitDescription->DestinationRangesSize(); ++di) { 
+                const auto& dstRange = Self->DstSplitDescription->GetDestinationRanges(di); 
+                if (dstRange.GetTabletID() != Self->TabletID()) 
+                    continue; 
+                rangeBegin = dstRange.GetKeyRangeBegin(); 
+                rangeEnd = dstRange.GetKeyRangeEnd(); 
+            } 
+ 
+            newTableScheme.SetPartitionRangeBegin(rangeBegin); 
+            newTableScheme.SetPartitionRangeEnd(rangeEnd); 
+            newTableScheme.SetPartitionRangeBeginIsInclusive(true); 
+            newTableScheme.SetPartitionRangeEndIsInclusive(false); 
+ 
             Self->CreateUserTable(txc, newTableScheme);
-        }
+        } 
     }
-
+ 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Ev->Get()->Record;
 
@@ -170,15 +170,15 @@ public:
             LegacyInitSchema(txc);
         }
 
-        for (ui32 i = 0 ; i < Ev->Get()->Record.TableSnapshotSize(); ++i) {
-            ui32 localTableId = Ev->Get()->Record.GetTableSnapshot(i).GetTableId();
-            TString compressedBody = Ev->Get()->Record.GetTableSnapshot(i).GetSnapshotData();
-            TString snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody);
+        for (ui32 i = 0 ; i < Ev->Get()->Record.TableSnapshotSize(); ++i) { 
+            ui32 localTableId = Ev->Get()->Record.GetTableSnapshot(i).GetTableId(); 
+            TString compressedBody = Ev->Get()->Record.GetTableSnapshot(i).GetSnapshotData(); 
+            TString snapBody = NBlockCodecs::Codec("lz4fast")->Decode(compressedBody); 
             txc.Env.LoanTable(localTableId, snapBody);
-        }
-
-        NIceDb::TNiceDb db(txc.DB);
-
+        } 
+ 
+        NIceDb::TNiceDb db(txc.DB); 
+ 
         // Choose the highest write version, so we won't overwrite any important data
         TRowVersion minWriteVersion(record.GetMinWriteVersionStep(), record.GetMinWriteVersionTxId());
 
@@ -230,18 +230,18 @@ public:
             }
         }
 
-        // Persist the fact that the snapshot has been received, so that duplicate event can be ignored
-        db.Table<Schema::SplitDstReceivedSnapshots>().Key(srcTabletId).Update();
-        Self->ReceiveSnapshotsFrom.erase(srcTabletId);
-
+        // Persist the fact that the snapshot has been received, so that duplicate event can be ignored 
+        db.Table<Schema::SplitDstReceivedSnapshots>().Key(srcTabletId).Update(); 
+        Self->ReceiveSnapshotsFrom.erase(srcTabletId); 
+ 
         if (record.GetWaitForActivation()) {
             Self->ReceiveActivationsFrom.insert(srcTabletId);
             db.Table<Schema::DstChangeSenderActivations>().Key(srcTabletId).Update();
         }
 
-        if (Self->ReceiveSnapshotsFrom.empty()) {
-            LastSnapshotReceived = true;
-
+        if (Self->ReceiveSnapshotsFrom.empty()) { 
+            LastSnapshotReceived = true; 
+ 
             const auto minVersion = mvcc ? Self->GetSnapshotManager().GetLowWatermark()
                                          : Self->GetSnapshotManager().GetMinWriteVersion();
 
@@ -271,32 +271,32 @@ public:
                 kv.second.OptimizeSplitKeys(rdb);
             }
 
-            Self->State = TShardState::Ready;
-            Self->PersistSys(db, Schema::Sys_State, Self->State);
-        }
-
-        return true;
-    }
-
-    void Complete(const TActorContext &ctx) override {
+            Self->State = TShardState::Ready; 
+            Self->PersistSys(db, Schema::Sys_State, Self->State); 
+        } 
+ 
+        return true; 
+    } 
+ 
+    void Complete(const TActorContext &ctx) override { 
         TActorId ackTo = Ev->Sender;
-        ui64 opId = Ev->Get()->Record.GetOperationCookie();
-
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack snapshot OpId " << opId);
-
-        ctx.Send(ackTo, new TEvDataShard::TEvSplitTransferSnapshotAck(opId, Self->TabletID()));
-
-        if (LastSnapshotReceived) {
-            // We have received all the data, reload everything from the received system tables
-            Self->Execute(Self->CreateTxInit(), ctx);
-        }
-    }
-};
-
+        ui64 opId = Ev->Get()->Record.GetOperationCookie(); 
+ 
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack snapshot OpId " << opId); 
+ 
+        ctx.Send(ackTo, new TEvDataShard::TEvSplitTransferSnapshotAck(opId, Self->TabletID())); 
+ 
+        if (LastSnapshotReceived) { 
+            // We have received all the data, reload everything from the received system tables 
+            Self->Execute(Self->CreateTxInit(), ctx); 
+        } 
+    } 
+}; 
+ 
 class TDataShard::TTxSplitReplicationSourceOffsets : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
 private:
     TEvPrivate::TEvReplicationSourceOffsets::TPtr Ev;
-
+ 
 public:
     TTxSplitReplicationSourceOffsets(TDataShard* ds, TEvPrivate::TEvReplicationSourceOffsets::TPtr& ev)
         : TTransactionBase(ds)
@@ -508,9 +508,9 @@ public:
 };
 
 void TDataShard::Handle(TEvDataShard::TEvInitSplitMergeDestination::TPtr& ev, const TActorContext& ctx) {
-    Execute(new TTxInitSplitMergeDestination(this, ev), ctx);
-}
-
+    Execute(new TTxInitSplitMergeDestination(this, ev), ctx); 
+} 
+ 
 void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev, const TActorContext& ctx) {
     const auto* msg = ev->Get();
     const ui64 srcTabletId = msg->Record.GetSrcTabletId();
@@ -544,12 +544,12 @@ void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshot::TPtr& ev, const 
         }
     }
 
-    Execute(new TTxSplitTransferSnapshot(this, ev), ctx);
-}
-
+    Execute(new TTxSplitTransferSnapshot(this, ev), ctx); 
+} 
+ 
 void TDataShard::Handle(TEvPrivate::TEvReplicationSourceOffsets::TPtr& ev, const TActorContext& ctx) {
     Actors.erase(ev->Sender);
     Execute(new TTxSplitReplicationSourceOffsets(this, ev), ctx);
 }
 
-}}
+}} 

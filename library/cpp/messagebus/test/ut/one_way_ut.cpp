@@ -93,7 +93,7 @@ public:
     TExampleProtocol Proto;
 
 public:
-    TAtomic NumMessages;
+    TAtomic NumMessages; 
 
     NullServer() {
         NumMessages = 0;
@@ -119,7 +119,7 @@ public:
         /// tell session to forget this message and never expect any reply
         mess.ForgetRequest();
 
-        AtomicIncrement(NumMessages);
+        AtomicIncrement(NumMessages); 
     }
 
     /// this handler should not be called because this server does not send replies
@@ -139,10 +139,10 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
         client.Work();
 
         // wait until all client message are delivered
-        UNIT_WAIT_FOR(AtomicGet(server.NumMessages) == 10);
+        UNIT_WAIT_FOR(AtomicGet(server.NumMessages) == 10); 
 
         // assert correct number of messages
-        UNIT_ASSERT_VALUES_EQUAL(AtomicGet(server.NumMessages), 10);
+        UNIT_ASSERT_VALUES_EQUAL(AtomicGet(server.NumMessages), 10); 
         UNIT_ASSERT_VALUES_EQUAL(server.Session->GetInFlight(), 0);
         UNIT_ASSERT_VALUES_EQUAL(client.Session->GetInFlight(), 0);
     }
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
             TBusClientSessionConfig sessionConfig;
             sessionConfig.SendTimeout = 1;
             sessionConfig.ConnectTimeout = 1;
-            sessionConfig.Secret.TimeoutPeriod = TDuration::MilliSeconds(10);
+            sessionConfig.Secret.TimeoutPeriod = TDuration::MilliSeconds(10); 
             return sessionConfig;
         }
 
@@ -245,11 +245,11 @@ Y_UNIT_TEST_SUITE(TMessageBusTests_OneWay) {
             first = false;
         }
 
-        // BUGBUG: The test is buggy: the client might not get any error when sending one-way messages.
-        // All the messages that the client has sent before he gets first MESSAGE_BUSY error might get
-        // serailized and written to the socket buffer, so the write queue gets drained and there are
-        // no messages to timeout when periodic timeout check happens.
-
+        // BUGBUG: The test is buggy: the client might not get any error when sending one-way messages. 
+        // All the messages that the client has sent before he gets first MESSAGE_BUSY error might get 
+        // serailized and written to the socket buffer, so the write queue gets drained and there are 
+        // no messages to timeout when periodic timeout check happens. 
+ 
         client.GotError.WaitI();
     }
 }

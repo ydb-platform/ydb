@@ -491,7 +491,7 @@ public:
     void BuildAndRunProgram(const NActors::TActorContext& ctx) {
         try {
             const NMiniKQL::IFunctionRegistry& functionRegistry = *AppData(ctx)->FunctionRegistry;
-            TAlignedPagePoolCounters counters(AppData(ctx)->Counters, "build");
+            TAlignedPagePoolCounters counters(AppData(ctx)->Counters, "build"); 
             NMiniKQL::TScopedAlloc alloc(counters, functionRegistry.SupportsSizedAllocators());
             NMiniKQL::TTypeEnvironment env(alloc);
             NMiniKQL::TKikimrProgramBuilder pgmBuilder(env, functionRegistry);
@@ -729,8 +729,8 @@ protected:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_COMMON;
-    }
-
+    } 
+ 
     TServerDbSchema(TBusMessageContext &msg, TActorId txProxyId, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters);
 
     TServerDbSchema(
@@ -983,8 +983,8 @@ protected:
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::MSGBUS_COMMON;
-    }
-
+    } 
+ 
     TServerDbBatch(TBusMessageContext &msg, const TActorId txProxyId, const TActorId& schemeCache, const TIntrusivePtr<TMessageBusDbOpsCounters>& dbOperationsCounters);
 
     void HandleTimeout(const TActorContext& ctx) {

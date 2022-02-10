@@ -80,15 +80,15 @@ SRCS(
     memory_tracker.cpp
     memory_tracker.h
     mon.h
-    mon_stats.h
+    mon_stats.h 
     monotonic.cpp
     monotonic.h
     worker_context.cpp
     worker_context.h
     probes.cpp
-    probes.h
-    process_stats.cpp
-    process_stats.h
+    probes.h 
+    process_stats.cpp 
+    process_stats.h 
     scheduler_actor.cpp
     scheduler_actor.h
     scheduler_basic.cpp

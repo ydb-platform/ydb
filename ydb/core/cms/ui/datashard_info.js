@@ -47,16 +47,16 @@ function onDataShardInfoLoaded(data) {
             if (table.Stats) {
                 tableInfoHTML += `
                     <table class="ds-info">
-                      <caption class="ds-info-table-stats">Metrics</caption>
-                      <tbody class="ds-info">
-                        <tr class="ds-info">
-                          <td class="ds-info">CPU</td>
-                          <td class="ds-info">` + table.Metrics.CPU/10000 + `%</td>
-                        </tr>
-                      </tbody>
-                    </table>
-
-                    <table class="ds-info">
+                      <caption class="ds-info-table-stats">Metrics</caption> 
+                      <tbody class="ds-info"> 
+                        <tr class="ds-info"> 
+                          <td class="ds-info">CPU</td> 
+                          <td class="ds-info">` + table.Metrics.CPU/10000 + `%</td> 
+                        </tr> 
+                      </tbody> 
+                    </table> 
+ 
+                    <table class="ds-info"> 
                       <caption class="ds-info-table-stats">Statistics</caption>
                       <tbody class="ds-info">
                         <tr class="ds-info">

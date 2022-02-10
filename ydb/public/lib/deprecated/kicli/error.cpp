@@ -86,7 +86,7 @@ bool TError::Permanent() const {
         case NTxProxy::TResultStatus::EStatus::ExecInProgress:
         case NTxProxy::TResultStatus::EStatus::ProxyShardTryLater:
         case NTxProxy::TResultStatus::EStatus::ProxyShardOverloaded:
-        case NTxProxy::TResultStatus::EStatus::ProxyShardNotAvailable:
+        case NTxProxy::TResultStatus::EStatus::ProxyShardNotAvailable: 
             return false;
         default:
             break;

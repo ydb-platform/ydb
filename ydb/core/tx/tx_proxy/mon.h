@@ -123,11 +123,11 @@ namespace NTxProxy {
         NMonitoring::TDynamicCounters::TCounterPtr MergeResultMiniKQLExecComplete;
         NMonitoring::TDynamicCounters::TCounterPtr MergeResultMiniKQLUnknownStatus;
 
-        NMonitoring::TDynamicCounters::TCounterPtr ResultsReceivedCount;
-        NMonitoring::TDynamicCounters::TCounterPtr ResultsReceivedSize;
-
-        TAlignedPagePoolCounters AllocPoolCounters;
-
+        NMonitoring::TDynamicCounters::TCounterPtr ResultsReceivedCount; 
+        NMonitoring::TDynamicCounters::TCounterPtr ResultsReceivedSize; 
+ 
+        TAlignedPagePoolCounters AllocPoolCounters; 
+ 
         TTxProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters);
     };
 

@@ -122,18 +122,18 @@ void TTabletExecutedFlat::HandleLocalMKQL(TEvTablet::TEvLocalMKQL::TPtr &ev, con
     Execute(Factory->Make(ev), ctx);
 }
 
-void TTabletExecutedFlat::HandleLocalSchemeTx(TEvTablet::TEvLocalSchemeTx::TPtr &ev, const TActorContext &ctx) {
+void TTabletExecutedFlat::HandleLocalSchemeTx(TEvTablet::TEvLocalSchemeTx::TPtr &ev, const TActorContext &ctx) { 
     Y_VERIFY(Factory, "Need IMiniKQLFactory to execute scheme query");
 
     Execute(Factory->Make(ev), ctx);
-}
-
-void TTabletExecutedFlat::HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns::TPtr &ev, const TActorContext &ctx) {
-    Y_VERIFY(Factory, "Need IMiniKQLFactory to execute read columns query");
-
-    Execute(Factory->Make(ev), ctx);
-}
-
+} 
+ 
+void TTabletExecutedFlat::HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns::TPtr &ev, const TActorContext &ctx) { 
+    Y_VERIFY(Factory, "Need IMiniKQLFactory to execute read columns query"); 
+ 
+    Execute(Factory->Make(ev), ctx); 
+} 
+ 
 void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx) {
     ctx.Send(Tablet(), new TEvTablet::TEvTabletActive());
 }
@@ -253,8 +253,8 @@ bool TTabletExecutedFlat::HandleDefaultEvents(STFUNC_SIG) {
         HFunc(TEvTablet::TEvTabletStop, HandleTabletStop);
         HFunc(TEvTablet::TEvTabletDead, HandleTabletDead);
         HFunc(TEvTablet::TEvLocalMKQL, HandleLocalMKQL);
-        HFunc(TEvTablet::TEvLocalSchemeTx, HandleLocalSchemeTx);
-        HFunc(TEvTablet::TEvLocalReadColumns, HandleLocalReadColumns);
+        HFunc(TEvTablet::TEvLocalSchemeTx, HandleLocalSchemeTx); 
+        HFunc(TEvTablet::TEvLocalReadColumns, HandleLocalReadColumns); 
         hFunc(TEvTablet::TEvGetCounters, HandleGetCounters);
         hFunc(TEvTablet::TEvUpdateConfig, Handle);
         HFunc(NMon::TEvRemoteHttpInfo, RenderHtmlPage);

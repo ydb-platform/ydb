@@ -161,7 +161,7 @@ Y_UNIT_TEST(ReadSpecialColumns) {
 Y_UNIT_TEST(ReadNonExisting) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     {
         auto programText = R"___((
             (let row '('('key (Uint32 '42))))
@@ -171,16 +171,16 @@ Y_UNIT_TEST(ReadNonExisting) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
         TValue value = TValue::Create(res.GetValue(), res.GetType());
         TValue row = value["myRes"];
         UNIT_ASSERT(!row.HaveValue());
-    }
+    } 
 }
-
+ 
 Y_UNIT_TEST(WriteEraseRead) {
     TTester t(TTester::ESchema_KV);
     TFakeMiniKQLProxy proxy(t);
@@ -266,10 +266,10 @@ Y_UNIT_TEST(SelectRange) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
     }
-
+ 
     {
         auto programText = R"___((
             (let range '('ExcFrom '('key (Uint32 '2) (Void))))
@@ -492,7 +492,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
             (let $18 (AsList $17))
             (return $18)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -502,7 +502,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
         TValue rsl = rs0["List"];
         UNIT_ASSERT_EQUAL(rsl.Size(), 0);
     }
-
+ 
     {
         auto programText = R"___((
             (let r1 '('key1 (Uint32 '345) (Uint32 '347)))
@@ -626,7 +626,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "Tables");
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "Paulson");
     }
-
+ 
     // (345,inf).. (347,inf)
     {
         auto programText = R"___((
@@ -639,7 +639,7 @@ Y_UNIT_TEST(SelectRangeWithNotFullKey) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -721,21 +721,21 @@ Y_UNIT_TEST(WriteAndReadMultipleShards) {
 
 void GetTableStats(TTestActorRuntime &runtime, ui64 tabletId, ui64 tableId, NKikimrTableStats::TTableStats& stats) {
     TAutoPtr<TEvDataShard::TEvGetTableStats> ev(new TEvDataShard::TEvGetTableStats(tableId));
-
+ 
     TActorId edge = runtime.AllocateEdgeActor();
     runtime.SendToPipe(tabletId, edge, ev.Release());
     TAutoPtr<IEventHandle> handle;
     TEvDataShard::TEvGetTableStatsResult* response = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvGetTableStatsResult>(handle);
     stats.Swap(response->Record.MutableTableStats());
 }
-
+ 
 Y_UNIT_TEST(TableStats) {
     TTester t(TTester::ESchema_MultiShardKV);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     ui64 tableId = 13;
     ui64 ds1 = TTestTxConfig::TxTablet0;
-
+ 
     {
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
@@ -754,10 +754,10 @@ Y_UNIT_TEST(TableStats) {
             ))
             (return pgmReturn)
         ))___";
-
+ 
         UNIT_ASSERT_EQUAL(proxy.Execute(programText), IEngineFlat::EStatus::Complete);
     }
-
+ 
     NKikimrTableStats::TTableStats statsAfterUpdate;
     GetTableStats(t.Runtime, ds1, tableId, statsAfterUpdate);
     Cerr << statsAfterUpdate << Endl;
@@ -766,13 +766,13 @@ Y_UNIT_TEST(TableStats) {
     UNIT_ASSERT_C(statsAfterUpdate.GetLastUpdateTime() > 0, "LastUpdateTime wasn't set");
     UNIT_ASSERT_VALUES_EQUAL_C(statsAfterUpdate.GetLastAccessTime(), statsAfterUpdate.GetLastUpdateTime(),
                                "After update LastAccessTime should be equal to LastUpdateTime ");
-
+ 
     // Non-existing table
     NKikimrTableStats::TTableStats stats;
     GetTableStats(t.Runtime, ds1, tableId+42, stats);
     Cerr << stats << Endl;
     UNIT_ASSERT_C(!stats.HasIndexSize() && !stats.HasInMemSize(), "Unknown table shouldn't have stats");
-
+ 
     {
         auto programText = R"___((
             (let row1 '('('key (Uint32 '100))))
@@ -784,11 +784,11 @@ Y_UNIT_TEST(TableStats) {
                     (SelectRow 'table1 row1 select)
                     (SelectRow 'table1 row2 select)
                     (SelectRow 'table1 row3 select)
-                ))
+                )) 
             ))
             (return pgmReturn)
         ))___";
-
+ 
         NKikimrMiniKQL::TResult res;
         UNIT_ASSERT_EQUAL(proxy.Execute(programText, res), IEngineFlat::EStatus::Complete);
 
@@ -800,8 +800,8 @@ Y_UNIT_TEST(TableStats) {
         UNIT_ASSERT_EQUAL(TString(row1["value"]), "ImInShard1");
         UNIT_ASSERT_EQUAL(TString(row2["value"]), "ImInShard2");
         UNIT_ASSERT_EQUAL(TString(row3["value"]), "ImInShard3");
-    }
-
+    } 
+ 
     NKikimrTableStats::TTableStats statsAfterRead;
     GetTableStats(t.Runtime, ds1, tableId, statsAfterRead);
     Cerr << statsAfterRead << Endl;
@@ -810,11 +810,11 @@ Y_UNIT_TEST(TableStats) {
     UNIT_ASSERT_C(statsAfterRead.GetLastAccessTime() > statsAfterUpdate.GetLastAccessTime(),
                   "LastAccessTime should change after read");
 }
-
+ 
 Y_UNIT_TEST(TableStatsHistograms) {
     TTester t(TTester::ESchema_MultiShardKV);
     TFakeMiniKQLProxy proxy(t);
-
+ 
     ui64 tableId = 13;
     ui64 ds1 = TTestTxConfig::TxTablet0;
 
@@ -831,23 +831,23 @@ Y_UNIT_TEST(TableStatsHistograms) {
                 '('value (Utf8 'ImInShard333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333))))
             (let pgmReturn (AsList
                 (UpdateRow 'table1 row1 myUpd1)
-#                  (UpdateRow 'table1 row2 myUpd2)
-#                  (UpdateRow 'table1 row3 myUpd3)
+#                  (UpdateRow 'table1 row2 myUpd2) 
+#                  (UpdateRow 'table1 row3 myUpd3) 
             ))
             (return pgmReturn)
         ))___";
-
+ 
         TString query = Sprintf(programText, i, 1+1000, i+2000);
-
+ 
         UNIT_ASSERT_EQUAL(proxy.Execute(query), IEngineFlat::EStatus::Complete);
         Cerr << ".";
-    }
-
+    } 
+ 
     NKikimrTableStats::TTableStats statsAfterUpdate;
     GetTableStats(t.Runtime, ds1, tableId, statsAfterUpdate);
     Cerr << statsAfterUpdate << Endl;
 }
-
+ 
 //
 
 void InitCrossShard(TFakeMiniKQLProxy& proxy) {

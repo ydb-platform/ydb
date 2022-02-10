@@ -208,17 +208,17 @@ TMaybe<bool> TPartitioningSettings::GetPartitioningBySize() const {
     }
 }
 
-TMaybe<bool> TPartitioningSettings::GetPartitioningByLoad() const {
-    switch (GetProto().partitioning_by_load()) {
-    case Ydb::FeatureFlag::ENABLED:
-        return true;
-    case Ydb::FeatureFlag::DISABLED:
-        return false;
-    default:
-        return { };
-    }
-}
-
+TMaybe<bool> TPartitioningSettings::GetPartitioningByLoad() const { 
+    switch (GetProto().partitioning_by_load()) { 
+    case Ydb::FeatureFlag::ENABLED: 
+        return true; 
+    case Ydb::FeatureFlag::DISABLED: 
+        return false; 
+    default: 
+        return { }; 
+    } 
+} 
+ 
 ui64 TPartitioningSettings::GetPartitionSizeMb() const {
     return GetProto().partition_size_mb();
 }
@@ -931,12 +931,12 @@ TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitioningBySiz
     return *this;
 }
 
-TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitioningByLoad(bool enabled) {
-    Impl_->Proto.set_partitioning_by_load(
-        enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED);
-    return *this;
-}
-
+TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitioningByLoad(bool enabled) { 
+    Impl_->Proto.set_partitioning_by_load( 
+        enabled ? Ydb::FeatureFlag::ENABLED : Ydb::FeatureFlag::DISABLED); 
+    return *this; 
+} 
+ 
 TPartitioningSettingsBuilder& TPartitioningSettingsBuilder::SetPartitionSizeMb(ui64 sizeMb) {
     Impl_->Proto.set_partition_size_mb(sizeMb);
     return *this;
@@ -1967,7 +1967,7 @@ public:
             };
 
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::CreateSessionRequest, Ydb::Table::CreateSessionResponse>(
-            std::move(request),
+            std::move(request), 
             createSessionExtractor,
             &Ydb::Table::V1::TableService::Stub::AsyncCreateSession,
             DbDriverState_,
@@ -2011,7 +2011,7 @@ public:
             };
 
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::KeepAliveRequest, Ydb::Table::KeepAliveResponse>(
-            std::move(request),
+            std::move(request), 
             keepAliveExtractor,
             &Ydb::Table::V1::TableService::Stub::AsyncKeepAlive,
             DbDriverState_,
@@ -2026,7 +2026,7 @@ public:
     TFuture<TStatus> CreateTable(Ydb::Table::CreateTableRequest&& request, const TCreateTableSettings& settings)
     {
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CreateTableRequest,Ydb::Table::CreateTableResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Table::V1::TableService::Stub::AsyncCreateTable,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
@@ -2035,7 +2035,7 @@ public:
     TFuture<TStatus> AlterTable(Ydb::Table::AlterTableRequest&& request, const TAlterTableSettings& settings)
     {
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::AlterTableRequest, Ydb::Table::AlterTableResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Table::V1::TableService::Stub::AsyncAlterTable,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
@@ -2062,7 +2062,7 @@ public:
         request.set_destination_path(dst);
 
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::CopyTableRequest, Ydb::Table::CopyTableResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Table::V1::TableService::Stub::AsyncCopyTable,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
@@ -2092,7 +2092,7 @@ public:
         request.set_path(path);
 
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DropTableRequest, Ydb::Table::DropTableResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Table::V1::TableService::Stub::AsyncDropTable,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
@@ -2128,7 +2128,7 @@ public:
             };
 
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::DescribeTableRequest, Ydb::Table::DescribeTableResponse>(
-            std::move(request),
+            std::move(request), 
             extractor,
             &Ydb::Table::V1::TableService::Stub::AsyncDescribeTable,
             DbDriverState_,
@@ -2210,7 +2210,7 @@ public:
         CollectQuerySize(query, QuerySizeHistogram);
 
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::PrepareDataQueryRequest, Ydb::Table::PrepareDataQueryResponse>(
-            std::move(request),
+            std::move(request), 
             extractor,
             &Ydb::Table::V1::TableService::Stub::AsyncPrepareDataQuery,
             DbDriverState_,
@@ -2230,7 +2230,7 @@ public:
         request.set_yql_text(query);
 
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::ExecuteSchemeQueryRequest, Ydb::Table::ExecuteSchemeQueryResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Table::V1::TableService::Stub::AsyncExecuteSchemeQuery,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_);
@@ -2260,7 +2260,7 @@ public:
             };
 
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BeginTransactionRequest, Ydb::Table::BeginTransactionResponse>(
-            std::move(request),
+            std::move(request), 
             extractor,
             &Ydb::Table::V1::TableService::Stub::AsyncBeginTransaction,
             DbDriverState_,
@@ -2299,7 +2299,7 @@ public:
             };
 
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::CommitTransactionRequest, Ydb::Table::CommitTransactionResponse>(
-            std::move(request),
+            std::move(request), 
             extractor,
             &Ydb::Table::V1::TableService::Stub::AsyncCommitTransaction,
             DbDriverState_,
@@ -2319,7 +2319,7 @@ public:
         request.set_tx_id(tx.GetId());
 
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::RollbackTransactionRequest, Ydb::Table::RollbackTransactionResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Table::V1::TableService::Stub::AsyncRollbackTransaction,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_,
@@ -2351,7 +2351,7 @@ public:
             };
 
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::ExplainDataQueryRequest, Ydb::Table::ExplainDataQueryResponse>(
-            std::move(request),
+            std::move(request), 
             extractor,
             &Ydb::Table::V1::TableService::Stub::AsyncExplainDataQuery,
             DbDriverState_,
@@ -2411,7 +2411,7 @@ public:
         auto promise = NewPromise<std::pair<TPlainStatus, TReadTableStreamProcessorPtr>>();
 
         Connections_->StartReadStream<Ydb::Table::V1::TableService, Ydb::Table::ReadTableRequest, Ydb::Table::ReadTableResponse>(
-            std::move(request),
+            std::move(request), 
             [promise] (TPlainStatus status, TReadTableStreamProcessorPtr processor) mutable {
                 promise.SetValue(std::make_pair(status, processor));
             },
@@ -2427,7 +2427,7 @@ public:
         auto request = MakeOperationRequest<Ydb::Table::DeleteSessionRequest>(settings);
         request.set_session_id(sessionImpl->GetId());
         return RunSimple<Ydb::Table::V1::TableService, Ydb::Table::DeleteSessionRequest, Ydb::Table::DeleteSessionResponse>(
-            std::move(request),
+            std::move(request), 
             &Ydb::Table::V1::TableService::Stub::AsyncDeleteSession,
             TRpcRequestSettings::Make(settings),
             settings.ClientTimeout_,
@@ -2522,35 +2522,35 @@ public:
         RequestMigrated.Set(collector.RequestMigrated);
     }
 
-    TAsyncBulkUpsertResult BulkUpsert(const TString& table, TValue&& rows, const TBulkUpsertSettings& settings) {
-        auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings);
-        request.set_table(table);
-        *request.mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType());
-
-        // TODO: move protobuf instead of copying it!!!!111
-        *request.mutable_rows()->mutable_value() = TProtoAccessor::GetProto(rows);
-
-        auto promise = NewPromise<TBulkUpsertResult>();
-
+    TAsyncBulkUpsertResult BulkUpsert(const TString& table, TValue&& rows, const TBulkUpsertSettings& settings) { 
+        auto request = MakeOperationRequest<Ydb::Table::BulkUpsertRequest>(settings); 
+        request.set_table(table); 
+        *request.mutable_rows()->mutable_type() = TProtoAccessor::GetProto(rows.GetType()); 
+ 
+        // TODO: move protobuf instead of copying it!!!!111 
+        *request.mutable_rows()->mutable_value() = TProtoAccessor::GetProto(rows); 
+ 
+        auto promise = NewPromise<TBulkUpsertResult>(); 
+ 
         auto extractor = [promise]
             (google::protobuf::Any* any, TPlainStatus status) mutable {
-                Y_UNUSED(any);
+                Y_UNUSED(any); 
                 TBulkUpsertResult val(TStatus(std::move(status)));
-                promise.SetValue(std::move(val));
-            };
-
-        Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>(
-            std::move(request),
-            extractor,
-            &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert,
-            DbDriverState_,
+                promise.SetValue(std::move(val)); 
+            }; 
+ 
+        Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::BulkUpsertRequest, Ydb::Table::BulkUpsertResponse>( 
+            std::move(request), 
+            extractor, 
+            &Ydb::Table::V1::TableService::Stub::AsyncBulkUpsert, 
+            DbDriverState_, 
             INITIAL_DEFERRED_CALL_DELAY,
             TRpcRequestSettings::Make(settings),
-            settings.ClientTimeout_);
-
-        return promise.GetFuture();
-    }
-
+            settings.ClientTimeout_); 
+ 
+        return promise.GetFuture(); 
+    } 
+ 
     TAsyncBulkUpsertResult BulkUpsert(const TString& table, EDataFormat format,
         const TString& data, const TString& schema, const TBulkUpsertSettings& settings)
     {
@@ -2727,7 +2727,7 @@ private:
         }
 
         request.set_collect_stats(GetStatsCollectionMode(settings.CollectQueryStats_));
-
+ 
         SetQuery(query, request.mutable_query());
         CollectQuerySize(query, QuerySizeHistogram);
 
@@ -2753,7 +2753,7 @@ private:
                 TVector<TResultSet> res;
                 TMaybe<TTransaction> tx;
                 TMaybe<TDataQuery> dataQuery;
-                TMaybe<TQueryStats> queryStats;
+                TMaybe<TQueryStats> queryStats; 
 
                 auto queryText = GetQueryText(query);
                 if (any) {
@@ -2774,10 +2774,10 @@ private:
                             dataQuery = TDataQuery(*sessionPtr, *queryText, query_meta.id(), query_meta.parameters_types());
                         }
                     }
-
-                    if (result.has_query_stats()) {
-                        queryStats = TQueryStats(result.query_stats());
-                    }
+ 
+                    if (result.has_query_stats()) { 
+                        queryStats = TQueryStats(result.query_stats()); 
+                    } 
                 }
 
                 if (keepInCache && dataQuery && queryText) {
@@ -2785,7 +2785,7 @@ private:
                 }
 
                 TDataQueryResult dataQueryResult(TStatus(std::move(status)),
-                    std::move(res), tx, dataQuery, fromCache, queryStats);
+                    std::move(res), tx, dataQuery, fromCache, queryStats); 
 
                 delete sessionPtr;
                 tx.Clear();
@@ -2794,7 +2794,7 @@ private:
             };
 
         Connections_->RunDeferred<Ydb::Table::V1::TableService, Ydb::Table::ExecuteDataQueryRequest, Ydb::Table::ExecuteDataQueryResponse>(
-            std::move(request),
+            std::move(request), 
             extractor,
             &Ydb::Table::V1::TableService::Stub::AsyncExecuteDataQuery,
             DbDriverState_,
@@ -3240,124 +3240,124 @@ static void Backoff(const TBackoffSettings& settings, ui32 retryNumber) {
     Sleep(TDuration::MilliSeconds(durationMs));
 }
 
-class TRetryOperationContext : public TThrRefBase, TNonCopyable {
-public:
-    using TRetryContextPtr = TIntrusivePtr<TRetryOperationContext>;
+class TRetryOperationContext : public TThrRefBase, TNonCopyable { 
+public: 
+    using TRetryContextPtr = TIntrusivePtr<TRetryOperationContext>; 
 
-protected:
-    TRetryOperationSettings Settings;
-    TTableClient TableClient;
-    NThreading::TPromise<TStatus> Promise;
-    ui32 RetryNumber;
+protected: 
+    TRetryOperationSettings Settings; 
+    TTableClient TableClient; 
+    NThreading::TPromise<TStatus> Promise; 
+    ui32 RetryNumber; 
 
-public:
-    virtual void Execute() = 0;
+public: 
+    virtual void Execute() = 0; 
+ 
+    TAsyncStatus GetFuture() { 
+        return Promise.GetFuture(); 
+    } 
 
-    TAsyncStatus GetFuture() {
-        return Promise.GetFuture();
-    }
+protected: 
+    TRetryOperationContext(const TRetryOperationSettings& settings, 
+                           const TTableClient& tableClient) 
+        : Settings(settings) 
+        , TableClient(tableClient) 
+        , Promise(NThreading::NewPromise<TStatus>()) 
+        , RetryNumber(0) 
+    {} 
 
-protected:
-    TRetryOperationContext(const TRetryOperationSettings& settings,
-                           const TTableClient& tableClient)
-        : Settings(settings)
-        , TableClient(tableClient)
-        , Promise(NThreading::NewPromise<TStatus>())
-        , RetryNumber(0)
-    {}
+    static void RunOp(TRetryContextPtr self) { 
+        self->Execute(); 
+    } 
 
-    static void RunOp(TRetryContextPtr self) {
-        self->Execute();
-    }
+    virtual void Reset() {} 
 
-    virtual void Reset() {}
+    static void DoRetry(TRetryContextPtr self, bool fast) { 
+        self->TableClient.Impl_->AsyncBackoff( 
+                    fast ? self->Settings.FastBackoffSettings_ : self->Settings.SlowBackoffSettings_, 
+                    self->RetryNumber, 
+                    [self]() { 
+                        RunOp(self); 
+                    } 
+        ); 
+    } 
 
-    static void DoRetry(TRetryContextPtr self, bool fast) {
-        self->TableClient.Impl_->AsyncBackoff(
-                    fast ? self->Settings.FastBackoffSettings_ : self->Settings.SlowBackoffSettings_,
-                    self->RetryNumber,
-                    [self]() {
-                        RunOp(self);
-                    }
-        );
-    }
+    static void HandleStatus(TRetryContextPtr self, const TStatus& status) { 
+        if (status.IsSuccess()) { 
+            return self->Promise.SetValue(status); 
+        } 
 
-    static void HandleStatus(TRetryContextPtr self, const TStatus& status) {
-        if (status.IsSuccess()) {
-            return self->Promise.SetValue(status);
+        if (self->RetryNumber >= self->Settings.MaxRetries_) { 
+            return self->Promise.SetValue(status); 
+        } 
+
+        self->RetryNumber++; 
+        self->TableClient.Impl_->RetryOperationStatCollector.IncAsyncRetryOperation(status.GetStatus()); 
+
+        switch (status.GetStatus()) { 
+            case EStatus::ABORTED: 
+                return RunOp(self); 
+
+            case EStatus::OVERLOADED: 
+            case EStatus::CLIENT_RESOURCE_EXHAUSTED: 
+                return DoRetry(self, false); 
+
+            case EStatus::UNAVAILABLE: 
+                return DoRetry(self, true); 
+
+            case EStatus::BAD_SESSION: 
+            case EStatus::SESSION_BUSY: 
+                self->Reset(); 
+                return RunOp(self); 
+
+            case EStatus::NOT_FOUND: 
+                return self->Settings.RetryNotFound_ 
+                    ? RunOp(self) 
+                    : self->Promise.SetValue(status); 
+
+            case EStatus::UNDETERMINED: 
+                return self->Settings.Idempotent_ 
+                    ? DoRetry(self, true) 
+                    : self->Promise.SetValue(status); 
+ 
+            case EStatus::TRANSPORT_UNAVAILABLE: 
+                if (self->Settings.Idempotent_) { 
+                    self->Reset(); 
+                    return DoRetry(self, true); 
+                } else { 
+                    return self->Promise.SetValue(status); 
+                } 
+ 
+            default: 
+                return self->Promise.SetValue(status); 
         }
-
-        if (self->RetryNumber >= self->Settings.MaxRetries_) {
-            return self->Promise.SetValue(status);
-        }
-
-        self->RetryNumber++;
-        self->TableClient.Impl_->RetryOperationStatCollector.IncAsyncRetryOperation(status.GetStatus());
-
-        switch (status.GetStatus()) {
-            case EStatus::ABORTED:
-                return RunOp(self);
-
-            case EStatus::OVERLOADED:
-            case EStatus::CLIENT_RESOURCE_EXHAUSTED:
-                return DoRetry(self, false);
-
-            case EStatus::UNAVAILABLE:
-                return DoRetry(self, true);
-
-            case EStatus::BAD_SESSION:
-            case EStatus::SESSION_BUSY:
-                self->Reset();
-                return RunOp(self);
-
-            case EStatus::NOT_FOUND:
-                return self->Settings.RetryNotFound_
-                    ? RunOp(self)
-                    : self->Promise.SetValue(status);
-
-            case EStatus::UNDETERMINED:
-                return self->Settings.Idempotent_
-                    ? DoRetry(self, true)
-                    : self->Promise.SetValue(status);
-
-            case EStatus::TRANSPORT_UNAVAILABLE:
-                if (self->Settings.Idempotent_) {
-                    self->Reset();
-                    return DoRetry(self, true);
-                } else {
-                    return self->Promise.SetValue(status);
-                }
-
-            default:
-                return self->Promise.SetValue(status);
-        }
-    }
+    } 
 
     static void HandleException(TRetryContextPtr self, std::exception_ptr e) {
         self->Promise.SetException(e);
     }
-};
+}; 
 
-class TRetryOperationWithSession : public TRetryOperationContext {
-    using TFunc = TTableClient::TOperationFunc;
-
-    TFunc Operation;
-    TMaybe<TSession> Session;
-
-public:
-    explicit TRetryOperationWithSession(TFunc&& operation,
-                                        const TRetryOperationSettings& settings,
-                                        const TTableClient& tableClient)
-        : TRetryOperationContext(settings, tableClient)
-        , Operation(operation)
-    {}
-
-    void Execute() override {
-        TRetryContextPtr self(this);
-        if (!Session) {
-            TableClient.GetSession(
-                TCreateSessionSettings().ClientTimeout(Settings.GetSessionClientTimeout_)).Subscribe(
-                [self](const TAsyncCreateSessionResult& resultFuture) {
+class TRetryOperationWithSession : public TRetryOperationContext { 
+    using TFunc = TTableClient::TOperationFunc; 
+ 
+    TFunc Operation; 
+    TMaybe<TSession> Session; 
+ 
+public: 
+    explicit TRetryOperationWithSession(TFunc&& operation, 
+                                        const TRetryOperationSettings& settings, 
+                                        const TTableClient& tableClient) 
+        : TRetryOperationContext(settings, tableClient) 
+        , Operation(operation) 
+    {} 
+ 
+    void Execute() override { 
+        TRetryContextPtr self(this); 
+        if (!Session) { 
+            TableClient.GetSession( 
+                TCreateSessionSettings().ClientTimeout(Settings.GetSessionClientTimeout_)).Subscribe( 
+                [self](const TAsyncCreateSessionResult& resultFuture) { 
                     try {
                         auto& result = resultFuture.GetValue();
                         if (!result.IsSuccess()) {
@@ -3369,75 +3369,75 @@ public:
                         myself->DoRunOp(self);
                     } catch (...) {
                         return HandleException(self, std::current_exception());
-                    }
-            });
-        } else {
-            DoRunOp(self);
-        }
-    }
-
-private:
-    void Reset() override {
-        Session.Clear();
-    }
-
-    void DoRunOp(TRetryContextPtr self) {
-        Operation(Session.GetRef()).Subscribe([self](const TAsyncStatus& result) {
+                    } 
+            }); 
+        } else { 
+            DoRunOp(self); 
+        } 
+    } 
+ 
+private: 
+    void Reset() override { 
+        Session.Clear(); 
+    } 
+ 
+    void DoRunOp(TRetryContextPtr self) { 
+        Operation(Session.GetRef()).Subscribe([self](const TAsyncStatus& result) { 
             try {
                 return HandleStatus(self, result.GetValue());
             } catch (...) {
                 return HandleException(self, std::current_exception());
             }
-        });
-    }
-};
-
-TAsyncStatus TTableClient::RetryOperation(TOperationFunc&& operation, const TRetryOperationSettings& settings) {
-    TRetryOperationContext::TRetryContextPtr ctx(new TRetryOperationWithSession(std::move(operation), settings, *this));
-    ctx->Execute();
-    return ctx->GetFuture();
+        }); 
+    } 
+}; 
+ 
+TAsyncStatus TTableClient::RetryOperation(TOperationFunc&& operation, const TRetryOperationSettings& settings) { 
+    TRetryOperationContext::TRetryContextPtr ctx(new TRetryOperationWithSession(std::move(operation), settings, *this)); 
+    ctx->Execute(); 
+    return ctx->GetFuture(); 
 }
 
-class TRetryOperationWithoutSession : public TRetryOperationContext {
-    using TFunc = TTableClient::TOperationWithoutSessionFunc;
-
-    TFunc Operation;
-
-public:
-    explicit TRetryOperationWithoutSession(TFunc&& operation,
-                                        const TRetryOperationSettings& settings,
-                                        const TTableClient& tableClient)
-        : TRetryOperationContext(settings, tableClient)
-        , Operation(operation)
-    {}
-
-    void Execute() override {
-        TRetryContextPtr self(this);
-        Operation(TableClient).Subscribe([self](const TAsyncStatus& result) {
+class TRetryOperationWithoutSession : public TRetryOperationContext { 
+    using TFunc = TTableClient::TOperationWithoutSessionFunc; 
+ 
+    TFunc Operation; 
+ 
+public: 
+    explicit TRetryOperationWithoutSession(TFunc&& operation, 
+                                        const TRetryOperationSettings& settings, 
+                                        const TTableClient& tableClient) 
+        : TRetryOperationContext(settings, tableClient) 
+        , Operation(operation) 
+    {} 
+ 
+    void Execute() override { 
+        TRetryContextPtr self(this); 
+        Operation(TableClient).Subscribe([self](const TAsyncStatus& result) { 
             try {
                 return HandleStatus(self, result.GetValue());
             } catch (...) {
                 return HandleException(self, std::current_exception());
             }
-        });
-    }
-};
-
-TAsyncStatus TTableClient::RetryOperation(TOperationWithoutSessionFunc&& operation, const TRetryOperationSettings& settings) {
-    TRetryOperationContext::TRetryContextPtr ctx(new TRetryOperationWithoutSession(std::move(operation), settings, *this));
-    ctx->Execute();
-    return ctx->GetFuture();
-}
-
-TStatus TTableClient::RetryOperationSyncHelper(const TOperationWrapperSyncFunc& operationWrapper, const TRetryOperationSettings& settings) {
+        }); 
+    } 
+}; 
+ 
+TAsyncStatus TTableClient::RetryOperation(TOperationWithoutSessionFunc&& operation, const TRetryOperationSettings& settings) { 
+    TRetryOperationContext::TRetryContextPtr ctx(new TRetryOperationWithoutSession(std::move(operation), settings, *this)); 
+    ctx->Execute(); 
+    return ctx->GetFuture(); 
+} 
+ 
+TStatus TTableClient::RetryOperationSyncHelper(const TOperationWrapperSyncFunc& operationWrapper, const TRetryOperationSettings& settings) { 
     TRetryState retryState;
     TMaybe<NYdb::TStatus> status;
 
     for (ui32 retryNumber = 0; retryNumber <= settings.MaxRetries_; ++retryNumber) {
-        status = operationWrapper(retryState);
+        status = operationWrapper(retryState); 
 
-        if (status->IsSuccess()) {
-            return *status;
+        if (status->IsSuccess()) { 
+            return *status; 
         }
 
         if (retryNumber == settings.MaxRetries_) {
@@ -3494,42 +3494,42 @@ TStatus TTableClient::RetryOperationSyncHelper(const TOperationWrapperSyncFunc& 
     return *status;
 }
 
-TStatus TTableClient::RetryOperationSync(const TOperationWithoutSessionSyncFunc& operation, const TRetryOperationSettings& settings) {
-    auto operationWrapper = [this, &operation] (TRetryState&) {
-        return operation(*this);
-    };
-
-    return RetryOperationSyncHelper(operationWrapper, settings);
-}
-
-TStatus TTableClient::RetryOperationSync(const TOperationSyncFunc& operation, const TRetryOperationSettings& settings) {
-    TRetryState retryState;
-
-    auto operationWrapper = [this, &operation, &settings] (TRetryState& retryState) {
-        TMaybe<NYdb::TStatus> status;
-
-        if (!retryState.Session) {
-            auto sessionResult = Impl_->GetSession(
-                TCreateSessionSettings().ClientTimeout(settings.GetSessionClientTimeout_)).GetValueSync();
-            if (sessionResult.IsSuccess()) {
-                retryState.Session = sessionResult.GetSession();
-            }
-            status = sessionResult;
-        }
-
-        if (retryState.Session) {
-            status = operation(retryState.Session.GetRef());
-            if (status->IsSuccess()) {
-                return *status;
-            }
-        }
-
-        return *status;
-    };
-
-    return RetryOperationSyncHelper(operationWrapper, settings);
-}
-
+TStatus TTableClient::RetryOperationSync(const TOperationWithoutSessionSyncFunc& operation, const TRetryOperationSettings& settings) { 
+    auto operationWrapper = [this, &operation] (TRetryState&) { 
+        return operation(*this); 
+    }; 
+ 
+    return RetryOperationSyncHelper(operationWrapper, settings); 
+} 
+ 
+TStatus TTableClient::RetryOperationSync(const TOperationSyncFunc& operation, const TRetryOperationSettings& settings) { 
+    TRetryState retryState; 
+ 
+    auto operationWrapper = [this, &operation, &settings] (TRetryState& retryState) { 
+        TMaybe<NYdb::TStatus> status; 
+ 
+        if (!retryState.Session) { 
+            auto sessionResult = Impl_->GetSession( 
+                TCreateSessionSettings().ClientTimeout(settings.GetSessionClientTimeout_)).GetValueSync(); 
+            if (sessionResult.IsSuccess()) { 
+                retryState.Session = sessionResult.GetSession(); 
+            } 
+            status = sessionResult; 
+        } 
+ 
+        if (retryState.Session) { 
+            status = operation(retryState.Session.GetRef()); 
+            if (status->IsSuccess()) { 
+                return *status; 
+            } 
+        } 
+ 
+        return *status; 
+    }; 
+ 
+    return RetryOperationSyncHelper(operationWrapper, settings); 
+} 
+ 
 NThreading::TFuture<void> TTableClient::Stop() {
     return Impl_->Stop();
 }
@@ -3537,9 +3537,9 @@ NThreading::TFuture<void> TTableClient::Stop() {
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, TValue&& rows,
     const TBulkUpsertSettings& settings)
 {
-    return Impl_->BulkUpsert(table, std::move(rows), settings);
-}
-
+    return Impl_->BulkUpsert(table, std::move(rows), settings); 
+} 
+ 
 TAsyncBulkUpsertResult TTableClient::BulkUpsert(const TString& table, EDataFormat format,
         const TString& data, const TString& schema, const TBulkUpsertSettings& settings)
 {
@@ -4151,14 +4151,14 @@ TTableDescription TDescribeTableResult::GetTableDescription() const {
 ////////////////////////////////////////////////////////////////////////////////
 
 TDataQueryResult::TDataQueryResult(TStatus&& status, TVector<TResultSet>&& resultSets,
-    const TMaybe<TTransaction>& transaction, const TMaybe<TDataQuery>& dataQuery, bool fromCache, const TMaybe<TQueryStats> &queryStats)
+    const TMaybe<TTransaction>& transaction, const TMaybe<TDataQuery>& dataQuery, bool fromCache, const TMaybe<TQueryStats> &queryStats) 
     : TStatus(std::move(status))
     , Transaction_(transaction)
     , ResultSets_(std::move(resultSets))
     , DataQuery_(dataQuery)
-    , FromCache_(fromCache)
-    , QueryStats_(queryStats)
-{}
+    , FromCache_(fromCache) 
+    , QueryStats_(queryStats) 
+{} 
 
 const TVector<TResultSet>& TDataQueryResult::GetResultSets() const {
     return ResultSets_;
@@ -4188,10 +4188,10 @@ bool TDataQueryResult::IsQueryFromCache() const {
     return FromCache_;
 }
 
-const TMaybe<TQueryStats>& TDataQueryResult::GetStats() const {
-    return QueryStats_;
-}
-
+const TMaybe<TQueryStats>& TDataQueryResult::GetStats() const { 
+    return QueryStats_; 
+} 
+ 
 const TString TDataQueryResult::GetQueryPlan() const {
     if (QueryStats_.Defined()) {
         return NYdb::TProtoAccessor::GetProto(*QueryStats_.Get()).query_plan();
@@ -4416,8 +4416,8 @@ bool operator!=(const TIndexDescription& lhs, const TIndexDescription& rhs) {
     return !(lhs == rhs);
 }
 
-////////////////////////////////////////////////////////////////////////////////
-
+//////////////////////////////////////////////////////////////////////////////// 
+ 
 TDateTypeColumnModeSettings::TDateTypeColumnModeSettings(const TString& columnName, const TDuration& expireAfter)
     : ColumnName_(columnName)
     , ExpireAfter_(expireAfter)
@@ -4668,9 +4668,9 @@ ui64 TReadReplicasSettings::GetReadReplicasCount() const {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TBulkUpsertResult::TBulkUpsertResult(TStatus&& status)
-    : TStatus(std::move(status))
-{}
-
+TBulkUpsertResult::TBulkUpsertResult(TStatus&& status) 
+    : TStatus(std::move(status)) 
+{} 
+ 
 } // namespace NTable
 } // namespace NYdb

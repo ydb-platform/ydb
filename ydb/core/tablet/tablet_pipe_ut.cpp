@@ -184,28 +184,28 @@ namespace NKikimr {
         NTabletPipe::TClientConfig Config;
     };
 
-    struct TEvPrivate {
-        enum EEv {
-            EvGetServerPipeInfo = EventSpaceBegin(TEvents::ES_PRIVATE),
-            EvServerPipeInfo,
-
-            EvEnd
-        };
-
-        struct TEvGetServerPipeInfo : public TEventLocal<TEvGetServerPipeInfo, EvGetServerPipeInfo> {
-        };
-
-        struct TEvServerPipeInfo : public TEventLocal<TEvServerPipeInfo, EvServerPipeInfo> {
-            TEvServerPipeInfo(ui32 opened, ui32 closed)
-                : ServerPipesOpened(opened)
-                , ServerPipesClosed(closed)
-            {}
-
-            ui32 ServerPipesOpened;
-            ui32 ServerPipesClosed;
-        };
-    };
-
+    struct TEvPrivate { 
+        enum EEv { 
+            EvGetServerPipeInfo = EventSpaceBegin(TEvents::ES_PRIVATE), 
+            EvServerPipeInfo, 
+ 
+            EvEnd 
+        }; 
+ 
+        struct TEvGetServerPipeInfo : public TEventLocal<TEvGetServerPipeInfo, EvGetServerPipeInfo> { 
+        }; 
+ 
+        struct TEvServerPipeInfo : public TEventLocal<TEvServerPipeInfo, EvServerPipeInfo> { 
+            TEvServerPipeInfo(ui32 opened, ui32 closed) 
+                : ServerPipesOpened(opened) 
+                , ServerPipesClosed(closed) 
+            {} 
+ 
+            ui32 ServerPipesOpened; 
+            ui32 ServerPipesClosed; 
+        }; 
+    }; 
+ 
     class TConsumerTablet : public TActor<TConsumerTablet>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         TConsumerTablet(const TActorId &tablet, TTabletStorageInfo *info)
@@ -213,8 +213,8 @@ namespace NKikimr {
             , TTabletExecutedFlat(info, tablet, nullptr)
             , PipeConnectAcceptor(NTabletPipe::CreateConnectAcceptor(TabletID()))
             , RejectAll(false)
-            , ServerPipesOpened(0)
-            , ServerPipesClosed(0)
+            , ServerPipesOpened(0) 
+            , ServerPipesClosed(0) 
         {
         }
 
@@ -239,7 +239,7 @@ namespace NKikimr {
                 HFunc(TEvents::TEvPing, Handle);
                 HFunc(TEvents::TEvPoisonPill, Handle);
                 HFunc(TEvConsumerTablet::TEvReject, Handle);
-                HFunc(TEvPrivate::TEvGetServerPipeInfo, Handle);
+                HFunc(TEvPrivate::TEvGetServerPipeInfo, Handle); 
             default:
                 HandleDefaultEvents(ev, ctx);
             }
@@ -279,14 +279,14 @@ namespace NKikimr {
             Y_UNUSED(ev);
             Y_UNUSED(ctx);
             Cout << "Server pipe is opened\n";
-            ++ServerPipesOpened;
+            ++ServerPipesOpened; 
         }
 
         void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
             Y_UNUSED(ctx);
             Cout << "Pipe reset on server\n";
-            ++ServerPipesClosed;
+            ++ServerPipesClosed; 
         }
 
         void Handle(TEvTabletPipe::TEvServerDestroyed::TPtr &ev, const TActorContext &ctx) {
@@ -302,11 +302,11 @@ namespace NKikimr {
             RejectAll = true;
         }
 
-        void Handle(TEvPrivate::TEvGetServerPipeInfo::TPtr &ev, const TActorContext &ctx) {
-            Cout << "Server pipes opened: " << ServerPipesOpened << ", closed: " << ServerPipesClosed << "\n";
-            ctx.Send(ev->Sender, new TEvPrivate::TEvServerPipeInfo(ServerPipesOpened, ServerPipesClosed));
-        }
-
+        void Handle(TEvPrivate::TEvGetServerPipeInfo::TPtr &ev, const TActorContext &ctx) { 
+            Cout << "Server pipes opened: " << ServerPipesOpened << ", closed: " << ServerPipesClosed << "\n"; 
+            ctx.Send(ev->Sender, new TEvPrivate::TEvServerPipeInfo(ServerPipesOpened, ServerPipesClosed)); 
+        } 
+ 
         void OnDetach(const TActorContext &ctx) override {
             Cout << "Consumer dead\n";
             PipeConnectAcceptor->Detach(SelfId());
@@ -329,8 +329,8 @@ namespace NKikimr {
         THolder<NTabletPipe::IConnectAcceptor> PipeConnectAcceptor;
         bool RejectAll;
         TActorId LastServerId;
-        ui32 ServerPipesOpened;
-        ui32 ServerPipesClosed;
+        ui32 ServerPipesOpened; 
+        ui32 ServerPipesClosed; 
     };
 
     class TConsumerTabletWithoutAcceptor : public TActor<TConsumerTabletWithoutAcceptor>, public NTabletFlatExecutor::TTabletExecutedFlat {
@@ -470,47 +470,47 @@ Y_UNIT_TEST_SUITE(TTabletPipeTest) {
     Y_UNIT_TEST(TestKillClientBeforServerIdKnown) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);
-        runtime.SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG);
-
+        runtime.SetLogPriority(NKikimrServices::PIPE_SERVER, NActors::NLog::PRI_DEBUG); 
+        runtime.SetLogPriority(NKikimrServices::PIPE_CLIENT, NActors::NLog::PRI_DEBUG); 
+ 
         TActorId sender = runtime.AllocateEdgeActor();
         CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet1, TTabletTypes::TX_DUMMY), [](const TActorId & tablet, TTabletStorageInfo* info) {
-            return new TConsumerTablet(tablet, info);
-        });
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1));
-            runtime.DispatchEvents(options);
-        }
-
-        NTabletPipe::TClientConfig config;
-        config.ConnectToUserTablet = false;
-
-        i32 i = 3;
-        while (i --> 0) {
+            return new TConsumerTablet(tablet, info); 
+        }); 
+ 
+        { 
+            TDispatchOptions options; 
+            options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot, 1)); 
+            runtime.DispatchEvents(options); 
+        } 
+ 
+        NTabletPipe::TClientConfig config; 
+        config.ConnectToUserTablet = false; 
+ 
+        i32 i = 3; 
+        while (i --> 0) { 
             auto client = NTabletPipe::CreateClient(sender, TTestTxConfig::TxTablet1, config);
             TActorId clientId = runtime.Register(client);
-
-            // We want to close the client right after it has sent EvConnect to the target tablet but before
-            // the client received the EvConnectResult
+ 
+            // We want to close the client right after it has sent EvConnect to the target tablet but before 
+            // the client received the EvConnectResult 
             runtime.SetObserverFunc([clientId, sender](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-                if (event->Type == TEvTabletPipe::EvConnect) {
-                    runtime.Send(new IEventHandle(clientId, sender, new TEvents::TEvPoisonPill()), 0);
-                }
-                return TTestActorRuntime::EEventAction::PROCESS;
-            });
-            runtime.DispatchEvents();
-        }
-
-        {
+                if (event->Type == TEvTabletPipe::EvConnect) { 
+                    runtime.Send(new IEventHandle(clientId, sender, new TEvents::TEvPoisonPill()), 0); 
+                } 
+                return TTestActorRuntime::EEventAction::PROCESS; 
+            }); 
+            runtime.DispatchEvents(); 
+        } 
+ 
+        { 
             ForwardToTablet(runtime, TTestTxConfig::TxTablet1, sender, new TEvPrivate::TEvGetServerPipeInfo());
-            TAutoPtr<IEventHandle> handle;
-            const TEvPrivate::TEvServerPipeInfo* ev = runtime.GrabEdgeEvent<TEvPrivate::TEvServerPipeInfo>(handle);
-            UNIT_ASSERT_VALUES_EQUAL(ev->ServerPipesOpened, ev->ServerPipesClosed);
-        }
-    }
-
+            TAutoPtr<IEventHandle> handle; 
+            const TEvPrivate::TEvServerPipeInfo* ev = runtime.GrabEdgeEvent<TEvPrivate::TEvServerPipeInfo>(handle); 
+            UNIT_ASSERT_VALUES_EQUAL(ev->ServerPipesOpened, ev->ServerPipesClosed); 
+        } 
+    } 
+ 
     Y_UNIT_TEST(TestSendWithoutWaitOpenToWrongTablet) {
         TTestBasicRuntime runtime;
         SetupTabletServices(runtime);

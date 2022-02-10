@@ -8,43 +8,43 @@ namespace NDataShard {
 
 void TOutReadSets::UpdateMonCounter() const {
     Self->SetCounter(COUNTER_OUT_READSETS_IN_FLIGHT, CurrentReadSets.size());
-}
-
+} 
+ 
 bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
     using Schema = TDataShard::Schema;
 
     CurrentReadSets.clear(); // For idempotency
-    CurrentReadSetInfos.clear();
+    CurrentReadSetInfos.clear(); 
 
     // TODO[serxa]: this should be Range but it is not working right now
-    auto rowset = db.Table<Schema::OutReadSets>().GreaterOrEqual(0).Select<
-                                    Schema::OutReadSets::Seqno,
-                                    Schema::OutReadSets::TxId,
-                                    Schema::OutReadSets::Origin,
-                                    Schema::OutReadSets::From,
-                                    Schema::OutReadSets::To>();
+    auto rowset = db.Table<Schema::OutReadSets>().GreaterOrEqual(0).Select< 
+                                    Schema::OutReadSets::Seqno, 
+                                    Schema::OutReadSets::TxId, 
+                                    Schema::OutReadSets::Origin, 
+                                    Schema::OutReadSets::From, 
+                                    Schema::OutReadSets::To>(); 
     if (!rowset.IsReady())
         return false;
     while (!rowset.EndOfSet()) {
-        ui64 seqNo = rowset.GetValue<Schema::OutReadSets::Seqno>();
-        ui64 txId = rowset.GetValue<Schema::OutReadSets::TxId>();
-        ui64 origin = rowset.GetValue<Schema::OutReadSets::Origin>();
-        ui64 source = rowset.GetValue<Schema::OutReadSets::From>();
-        ui64 target = rowset.GetValue<Schema::OutReadSets::To>();
-
+        ui64 seqNo = rowset.GetValue<Schema::OutReadSets::Seqno>(); 
+        ui64 txId = rowset.GetValue<Schema::OutReadSets::TxId>(); 
+        ui64 origin = rowset.GetValue<Schema::OutReadSets::Origin>(); 
+        ui64 source = rowset.GetValue<Schema::OutReadSets::From>(); 
+        ui64 target = rowset.GetValue<Schema::OutReadSets::To>(); 
+ 
         TReadSetKey rsInfo(txId, origin, source, target);
-
+ 
         Y_VERIFY(!CurrentReadSets.contains(seqNo));
         Y_VERIFY(!CurrentReadSetInfos.contains(rsInfo));
-
-        CurrentReadSets[seqNo] = rsInfo;
-        CurrentReadSetInfos[rsInfo] = seqNo;
-
+ 
+        CurrentReadSets[seqNo] = rsInfo; 
+        CurrentReadSetInfos[rsInfo] = seqNo; 
+ 
         if (!rowset.Next())
             return false;
     }
 
-    UpdateMonCounter();
+    UpdateMonCounter(); 
     return true;
 }
 
@@ -53,12 +53,12 @@ void TOutReadSets::SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const
 
     Y_VERIFY(!CurrentReadSets.contains(seqNo));
     Y_VERIFY(!CurrentReadSetInfos.contains(rsInfo));
-
-    CurrentReadSetInfos[rsInfo] = seqNo;
-    CurrentReadSets[seqNo] = rsInfo;
-
-    UpdateMonCounter();
-
+ 
+    CurrentReadSetInfos[rsInfo] = seqNo; 
+    CurrentReadSets[seqNo] = rsInfo; 
+ 
+    UpdateMonCounter(); 
+ 
     db.Table<Schema::OutReadSets>().Key(seqNo).Update(
         NIceDb::TUpdate<Schema::OutReadSets::Step>(step),
         NIceDb::TUpdate<Schema::OutReadSets::TxId>(rsInfo.TxId),
@@ -71,45 +71,45 @@ void TOutReadSets::SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const
 void TOutReadSets::AckForDeletedDestination(ui64 tabletId, ui64 seqNo, const TActorContext &ctx) {
     const TReadSetKey* rsInfo  = CurrentReadSets.FindPtr(seqNo);
 
-    if (!rsInfo) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
-            "Unknown seqNo %" PRIu64 " for readset to tablet %" PRIu64 " at tablet %" PRIu64,
-            seqNo, tabletId, Self->TabletID());
-        return;
-    }
-
-    TAutoPtr<TEvTxProcessing::TEvReadSetAck> ev = new TEvTxProcessing::TEvReadSetAck;
-
-    ev->Record.SetSeqno(seqNo);
-    ev->Record.SetTabletSource(rsInfo->From);
-    ev->Record.SetTabletDest(rsInfo->To);
-    ev->Record.SetTabletConsumer(rsInfo->Origin);
-    ev->Record.SetTxId(rsInfo->TxId);
-
-    SaveAck(ctx, ev);
-}
-
+    if (!rsInfo) { 
+        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, 
+            "Unknown seqNo %" PRIu64 " for readset to tablet %" PRIu64 " at tablet %" PRIu64, 
+            seqNo, tabletId, Self->TabletID()); 
+        return; 
+    } 
+ 
+    TAutoPtr<TEvTxProcessing::TEvReadSetAck> ev = new TEvTxProcessing::TEvReadSetAck; 
+ 
+    ev->Record.SetSeqno(seqNo); 
+    ev->Record.SetTabletSource(rsInfo->From); 
+    ev->Record.SetTabletDest(rsInfo->To); 
+    ev->Record.SetTabletConsumer(rsInfo->Origin); 
+    ev->Record.SetTxId(rsInfo->TxId); 
+ 
+    SaveAck(ctx, ev); 
+} 
+ 
 void TOutReadSets::SaveAck(const TActorContext &ctx, TAutoPtr<TEvTxProcessing::TEvReadSetAck> ev) {
-    ui64 seqno = ev->Record.GetSeqno();
-    ui64 sender = ev->Record.GetTabletSource();
-    ui64 dest = ev->Record.GetTabletDest();
-    ui64 consumer = ev->Record.GetTabletConsumer();
-    ui64 txId = ev->Record.GetTxId();
-
+    ui64 seqno = ev->Record.GetSeqno(); 
+    ui64 sender = ev->Record.GetTabletSource(); 
+    ui64 dest = ev->Record.GetTabletDest(); 
+    ui64 consumer = ev->Record.GetTabletConsumer(); 
+    ui64 txId = ev->Record.GetTxId(); 
+ 
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
         "Receive RS Ack at %" PRIu64 " source %" PRIu64 " dest %" PRIu64 " consumer %" PRIu64 " txId %" PRIu64,
         Self->TabletID(), sender, dest, consumer, txId);
 
-    ReadSetAcks.emplace_back(ev.Release());
+    ReadSetAcks.emplace_back(ev.Release()); 
     AckedSeqno.insert(seqno);
-
+ 
     if (CurrentReadSets.contains(seqno)) {
         TReadSetKey rsInfo(txId, Self->TabletID(), sender, dest);
-        Y_VERIFY(CurrentReadSetInfos[rsInfo] == seqno);
-
-        CurrentReadSets.erase(seqno);
-        CurrentReadSetInfos.erase(rsInfo);
-    }
+        Y_VERIFY(CurrentReadSetInfos[rsInfo] == seqno); 
+ 
+        CurrentReadSets.erase(seqno); 
+        CurrentReadSetInfos.erase(rsInfo); 
+    } 
 }
 
 void TOutReadSets::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
@@ -133,8 +133,8 @@ void TOutReadSets::Cleanup(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     }
     ReadSetAcks.clear();
     AckedSeqno.clear();
-
-    UpdateMonCounter();
+ 
+    UpdateMonCounter(); 
 }
 
 void TOutReadSets::ResendAll(const TActorContext& ctx) {

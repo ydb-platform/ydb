@@ -147,16 +147,16 @@ namespace NTabletPipe {
                 PoolContainer->Erase(tabletId);
         }
 
-        void ForceClose(const TActorContext& ctx, ui64 tabletId) override {
-            TClientCacheEntry* currentClient;
-            if (!Container->Find(tabletId, currentClient))
-                return;
-
+        void ForceClose(const TActorContext& ctx, ui64 tabletId) override { 
+            TClientCacheEntry* currentClient; 
+            if (!Container->Find(tabletId, currentClient)) 
+                return; 
+ 
             TActorId client = currentClient->Client;
-            CloseClient(ctx, client);
-            Container->Erase(tabletId);
-        }
-
+            CloseClient(ctx, client); 
+            Container->Erase(tabletId); 
+        } 
+ 
         void Shutdown(const TActorContext& ctx, ui64 tabletId) override {
             TClientCacheEntry* currentClient;
             if (!Container->Find(tabletId, currentClient))

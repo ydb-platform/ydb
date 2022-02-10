@@ -30,9 +30,9 @@ constexpr TStringBuf TabletsName = "hive_tablets";
 
 constexpr TStringBuf QueryMetricsName = "query_metrics_one_minute";
 
-constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats";
-constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats";
-
+constexpr TStringBuf StorePrimaryIndexStatsName = "store_primary_index_stats"; 
+constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats"; 
+ 
 struct Schema : NIceDb::Schema {
     struct PartitionStats : Table<1> {
         struct OwnerId              : Column<1, NScheme::NTypeIds::Uint64> {};
@@ -379,31 +379,31 @@ struct Schema : NIceDb::Schema {
             SumDeleteRows, MinDeleteRows, MaxDeleteRows,
             SumRequestUnits, MinRequestUnits, MaxRequestUnits>;
     };
-
-    struct PrimaryIndexStats : Table<10> {
-        struct PathId   : Column<1, NScheme::NTypeIds::Uint64> {};
-        struct Kind     : Column<2, NScheme::NTypeIds::Uint32> {};
-        struct TabletId : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct Rows     : Column<4, NScheme::NTypeIds::Uint64> {};
-        struct Bytes    : Column<5, NScheme::NTypeIds::Uint64> {};
-        struct RawBytes : Column<6, NScheme::NTypeIds::Uint64> {};
-        struct Portions : Column<7, NScheme::NTypeIds::Uint64> {};
-        struct Blobs    : Column<8, NScheme::NTypeIds::Uint64> {};
-
-        using TKey = TableKey<
-            PathId,
-            Kind,
-            TabletId>;
-        using TColumns = TableColumns<
-            PathId,
-            Kind,
-            TabletId,
-            Rows,
-            Bytes,
-            RawBytes,
-            Portions,
-            Blobs>;
-    };
+ 
+    struct PrimaryIndexStats : Table<10> { 
+        struct PathId   : Column<1, NScheme::NTypeIds::Uint64> {}; 
+        struct Kind     : Column<2, NScheme::NTypeIds::Uint32> {}; 
+        struct TabletId : Column<3, NScheme::NTypeIds::Uint64> {}; 
+        struct Rows     : Column<4, NScheme::NTypeIds::Uint64> {}; 
+        struct Bytes    : Column<5, NScheme::NTypeIds::Uint64> {}; 
+        struct RawBytes : Column<6, NScheme::NTypeIds::Uint64> {}; 
+        struct Portions : Column<7, NScheme::NTypeIds::Uint64> {}; 
+        struct Blobs    : Column<8, NScheme::NTypeIds::Uint64> {}; 
+ 
+        using TKey = TableKey< 
+            PathId, 
+            Kind, 
+            TabletId>; 
+        using TColumns = TableColumns< 
+            PathId, 
+            Kind, 
+            TabletId, 
+            Rows, 
+            Bytes, 
+            RawBytes, 
+            Portions, 
+            Blobs>; 
+    }; 
 
     struct StorageStats : Table<11> {
         struct PDiskFilter : Column<2, NScheme::NTypeIds::Utf8> {};
@@ -429,9 +429,9 @@ public:
 
     enum class ETarget : ui8 {
         Domain,
-        SubDomain,
-        OlapStore,
-        OlapTable
+        SubDomain, 
+        OlapStore, 
+        OlapTable 
     };
 
     struct TSystemViewPath {

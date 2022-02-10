@@ -15,7 +15,7 @@
 
 namespace NKikimr {
     struct TAppPrepare;
-
+ 
     const TBlobStorageGroupType::EErasureSpecies DataGroupErasure = TBlobStorageGroupType::ErasureNone;
 
     TActorId FollowerTablet(TTestActorRuntime &runtime, const TActorId &launcher, TTabletStorageInfo *info,
@@ -41,20 +41,20 @@ namespace NKikimr {
     void SetupChannelProfiles(TAppPrepare &app, ui32 domainId = 0, ui32 nchannels = 3);
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count = 1);
 
-    i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);
+    i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val); 
     bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow);
-
+ 
     const TString INITIAL_TEST_DISPATCH_NAME = "Trace";
 
     void RunTestWithReboots(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory,
         std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc,
-        ui32 selectedReboot = Max<ui32>(), ui64 selectedTablet = Max<ui64>(), ui32 bucket = 0, ui32 totalBuckets = 0, bool killOnCommit = false);
+        ui32 selectedReboot = Max<ui32>(), ui64 selectedTablet = Max<ui64>(), ui32 bucket = 0, ui32 totalBuckets = 0, bool killOnCommit = false); 
 
-    // Resets pipe when receiving client events
+    // Resets pipe when receiving client events 
     void RunTestWithPipeResets(const TVector<ui64>& tabletIds, std::function<TTestActorRuntime::TEventFilter()> filterFactory,
         std::function<void(const TString& dispatchPass, std::function<void(TTestActorRuntime&)> setup, bool& activeZone)> testFunc,
-        ui32 selectedReboot = Max<ui32>(), ui32 bucket = 0, ui32 totalBuckets = 0);
-
+        ui32 selectedReboot = Max<ui32>(), ui32 bucket = 0, ui32 totalBuckets = 0); 
+ 
     struct TRunWithDelaysConfig {
         double DelayInjectionProbability;
         TDuration ReschedulingDelay;
@@ -85,30 +85,30 @@ namespace NKikimr {
 
     void WaitScheduledEvents(TTestActorRuntime &runtime, TDuration delay, const TActorId &sender, ui32 nodeIndex = 0);
 
-
-    struct TEvFakeHive {
-        enum EEv {
-            EvSubscribeToTabletDeletion = TEvHive::EvEnd + 1,
-            EvNotifyTabletDeleted
-        };
-
-        struct TEvSubscribeToTabletDeletion : public TEventLocal<TEvSubscribeToTabletDeletion, EvSubscribeToTabletDeletion> {
-            ui64 TabletId;
-
-            explicit TEvSubscribeToTabletDeletion(ui64 tabletId)
-                : TabletId(tabletId)
-            {}
-        };
-
-        struct TEvNotifyTabletDeleted : public TEventLocal<TEvNotifyTabletDeleted, EvNotifyTabletDeleted> {
-            ui64 TabletId;
-
-            explicit TEvNotifyTabletDeleted(ui64 tabletId)
-                : TabletId(tabletId)
-            {}
-        };
-    };
-
+ 
+    struct TEvFakeHive { 
+        enum EEv { 
+            EvSubscribeToTabletDeletion = TEvHive::EvEnd + 1, 
+            EvNotifyTabletDeleted 
+        }; 
+ 
+        struct TEvSubscribeToTabletDeletion : public TEventLocal<TEvSubscribeToTabletDeletion, EvSubscribeToTabletDeletion> { 
+            ui64 TabletId; 
+ 
+            explicit TEvSubscribeToTabletDeletion(ui64 tabletId) 
+                : TabletId(tabletId) 
+            {} 
+        }; 
+ 
+        struct TEvNotifyTabletDeleted : public TEventLocal<TEvNotifyTabletDeleted, EvNotifyTabletDeleted> { 
+            ui64 TabletId; 
+ 
+            explicit TEvNotifyTabletDeleted(ui64 tabletId) 
+                : TabletId(tabletId) 
+            {} 
+        }; 
+    }; 
+ 
     struct TFakeHiveTabletInfo {
         const TTabletTypes::EType Type;
         const ui64 TabletId;
@@ -118,11 +118,11 @@ namespace NKikimr {
         ui32 ChannelsProfile;
 
         THashSet<TActorId> DeletionWaiters;
-
+ 
         TFakeHiveTabletInfo(TTabletTypes::EType type, ui64 tabletId, TActorId bootstrapperActorId)
             : Type(type)
             , TabletId(tabletId)
-            , BootstrapperActorId(bootstrapperActorId)
+            , BootstrapperActorId(bootstrapperActorId) 
         {}
 
         TFakeHiveTabletInfo(const TFakeHiveTabletInfo& info) = default;

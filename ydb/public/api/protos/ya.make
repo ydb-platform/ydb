@@ -18,32 +18,32 @@ SRCS(
     draft/persqueue_common.proto
     draft/persqueue_error_codes.proto
     draft/ydb_long_tx.proto
-    draft/ydb_logstore.proto
+    draft/ydb_logstore.proto 
     draft/yq_private.proto
     persqueue_error_codes_v1.proto
     ydb_auth.proto
     ydb_persqueue_v1.proto
     ydb_persqueue_cluster_discovery.proto
-    ydb_clickhouse_internal.proto
+    ydb_clickhouse_internal.proto 
     ydb_cms.proto
     ydb_common.proto
     ydb_coordination.proto
     ydb_discovery.proto
-    ydb_experimental.proto
+    ydb_experimental.proto 
     ydb_export.proto
     ydb_formats.proto
     ydb_import.proto
     ydb_issue_message.proto
     ydb_monitoring.proto
     ydb_operation.proto
-    ydb_query_stats.proto
+    ydb_query_stats.proto 
     ydb_rate_limiter.proto
     ydb_scheme.proto
     ydb_scripting.proto
     ydb_status_codes.proto
     ydb_table.proto
     ydb_value.proto
-    ydb_s3_internal.proto
+    ydb_s3_internal.proto 
     yq.proto
 )
 

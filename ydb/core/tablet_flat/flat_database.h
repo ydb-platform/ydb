@@ -5,7 +5,7 @@
 #include "flat_dbase_scheme.h"
 #include "flat_dbase_change.h"
 #include "flat_dbase_misc.h"
-#include "flat_iterator.h"
+#include "flat_iterator.h" 
 #include "util_basics.h"
 
 namespace NKikimr {
@@ -75,8 +75,8 @@ public:
     template<class TIteratorType>
     TAutoPtr<TIteratorType> IterateRangeGeneric(ui32 table, const TKeyRange& range, TTagsRef tags, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
 
-    // NOTE: the row refeneces data in some internal buffers that get invalidated on the next Select() or Commit() call
-    EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row,
+    // NOTE: the row refeneces data in some internal buffers that get invalidated on the next Select() or Commit() call 
+    EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row, 
                         ui64 readFlags = 0, TRowVersion snapshot = TRowVersion::Max()) const noexcept;
 
     EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row, TSelectStats& stats,
@@ -91,7 +91,7 @@ public:
                         TTagsRef tags, ui64 readFlags, ui64 itemsLimit, ui64 bytesLimit,
                         EDirection direction = EDirection::Forward,
                         TRowVersion snapshot = TRowVersion::Max());
-
+ 
     void Update(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, TRowVersion rowVersion = TRowVersion::Min());
 
     void UpdateTx(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, ui64 txId);
@@ -114,7 +114,7 @@ public:
      */
     const TRowVersionRanges& GetRemovedRowVersions(ui32 table) const;
 
-    void NoMoreReadsForTx();
+    void NoMoreReadsForTx(); 
 
     TAlter& Alter(); /* Begin DDL ALTER script */
 
@@ -132,13 +132,13 @@ public:
     void EnumerateTableTxStatusParts(ui32 table, const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     ui64 GetTableMemSize(ui32 table, TEpoch epoch = TEpoch::Max()) const;
-    ui64 GetTableMemRowCount(ui32 tableId) const;
+    ui64 GetTableMemRowCount(ui32 tableId) const; 
     ui64 GetTableIndexSize(ui32 table) const;
     ui64 GetTableSearchHeight(ui32 table) const;
     ui64 EstimateRowSize(ui32 table) const;
     const TCounters& Counters() const noexcept;
     TString SnapshotToLog(ui32 table, TTxStamp);
-
+ 
     TAutoPtr<TSubset> Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const;
     TAutoPtr<TSubset> Subset(ui32 table, TEpoch before, TRawVals from, TRawVals to) const;
     TAutoPtr<TSubset> ScanSnapshot(ui32 table, TRowVersion snapshot = TRowVersion::Max());
@@ -154,7 +154,7 @@ public:
 
     void DebugDumpTable(ui32 table, IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;
     void DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const;
-
+ 
     TKeyRangeCache* DebugGetTableErasedKeysCache(ui32 table) const;
 
     // executor interface
@@ -168,23 +168,23 @@ public:
 
     TCompactionStats GetCompactionStats(ui32 table) const;
 
-private:
+private: 
     TTable* Require(ui32 tableId) const noexcept;
 
 private:
     const THolder<TDatabaseImpl> DatabaseImpl;
 
     ui64 Stamp = Max<ui64>();
-    bool NoMoreReadsFlag;
+    bool NoMoreReadsFlag; 
     IPages* Env = nullptr;
     THolder<TChange> Change;
     TAutoPtr<TAlter> Alter_;
     TAutoPtr<TAnnex> Annex;
     TAutoPtr<NRedo::TWriter> Redo;
 
-    mutable TDeque<TPartSimpleIt> TempIterators; // Keeps the last result of Select() valid
+    mutable TDeque<TPartSimpleIt> TempIterators; // Keeps the last result of Select() valid 
     mutable THashSet<ui32> IteratedTables;
 };
 
-
+ 
 }}

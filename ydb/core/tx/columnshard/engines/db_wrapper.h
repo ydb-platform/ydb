@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include "defs.h" 
 
 namespace NKikimr::NTable {
 class TDatabase;
@@ -13,7 +13,7 @@ struct TGranuleRecord;
 
 class IDbWrapper {
 public:
-    virtual ~IDbWrapper() = default;
+    virtual ~IDbWrapper() = default; 
 
     virtual void Insert(const TInsertedData& data) = 0;
     virtual void Commit(const TInsertedData& data) = 0;
@@ -41,9 +41,9 @@ public:
 
 class TDbWrapper : public IDbWrapper {
 public:
-    TDbWrapper(NTable::TDatabase& db, const IBlobGroupSelector* dsGroupSelector)
+    TDbWrapper(NTable::TDatabase& db, const IBlobGroupSelector* dsGroupSelector) 
         : Database(db)
-        , DsGroupSelector(dsGroupSelector)
+        , DsGroupSelector(dsGroupSelector) 
     {}
 
     void Insert(const TInsertedData& data) override;
@@ -71,7 +71,7 @@ public:
 
 private:
     NTable::TDatabase& Database;
-    const IBlobGroupSelector* DsGroupSelector;
+    const IBlobGroupSelector* DsGroupSelector; 
 };
 
 }

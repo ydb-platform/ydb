@@ -4,31 +4,31 @@ import "ydb/core/protos/subdomains.proto";
 import "ydb/core/protos/bind_channel_storage_pool.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/public/api/protos/ydb_cms.proto";
-
+ 
 package NKikimrScheme;
-option java_package = "ru.yandex.kikimr.proto";
-
-message TSchemeConfig {
-    optional uint64 PipeClientCachePoolLimit = 1;
-}
-
-message TConfig {
-    optional TSchemeConfig Current = 1;
-    //optional NKikimrTxDataShard.TConfig DefaultDataShardConfig = 2;
-    optional TSchemeConfig DefaultSchemeShardConfig = 3;
-}
-
-enum EStatus  {
-    StatusSuccess = 0;
-    StatusAccepted = 1;
-    StatusPathDoesNotExist = 2;
-    StatusPathIsNotDirectory = 3;
-    StatusAlreadyExists = 4;
-    StatusSchemeError = 5;
-    StatusNameConflict = 6;
+option java_package = "ru.yandex.kikimr.proto"; 
+ 
+message TSchemeConfig { 
+    optional uint64 PipeClientCachePoolLimit = 1; 
+} 
+ 
+message TConfig { 
+    optional TSchemeConfig Current = 1; 
+    //optional NKikimrTxDataShard.TConfig DefaultDataShardConfig = 2; 
+    optional TSchemeConfig DefaultSchemeShardConfig = 3; 
+} 
+ 
+enum EStatus  { 
+    StatusSuccess = 0; 
+    StatusAccepted = 1; 
+    StatusPathDoesNotExist = 2; 
+    StatusPathIsNotDirectory = 3; 
+    StatusAlreadyExists = 4; 
+    StatusSchemeError = 5; 
+    StatusNameConflict = 6; 
     StatusInvalidParameter = 7;
     StatusMultipleModifications = 8;
-    StatusReadOnly = 9;
+    StatusReadOnly = 9; 
     StatusTxIdNotExists = 10;
     StatusTxIsNotCancellable = 11;
     StatusAccessDenied = 12;
@@ -42,31 +42,31 @@ enum EStatus  {
     // when adding a new status and keeping parse compatibility with the old version
     // rename existing reserved status to desired one, and add new reserved status to
     // the end of reserved statuses
-}
-
-message TEvModifySchemeTransaction {
+} 
+ 
+message TEvModifySchemeTransaction { 
     repeated NKikimrSchemeOp.TModifyScheme Transaction = 1;
-    optional uint64 TxId = 2;
-    optional uint64 TabletId = 3;
+    optional uint64 TxId = 2; 
+    optional uint64 TabletId = 3; 
     optional string Owner = 5;
     optional bool FailOnExist = 6; // depricated, TModifyScheme.FailOnExist is recomended
-    optional string UserToken = 7; // serialized NACLib::TUserToken
-}
-
-message TEvModifySchemeTransactionResult {
+    optional string UserToken = 7; // serialized NACLib::TUserToken 
+} 
+ 
+message TEvModifySchemeTransactionResult { 
     optional EStatus Status = 1;
     optional string Reason = 2;
-    optional uint64 TxId = 3;
-    optional uint64 SchemeshardId = 4;
+    optional uint64 TxId = 3; 
+    optional uint64 SchemeshardId = 4; 
     optional uint64 PathId = 5;
     optional uint64 PathCreateTxId = 6;
     optional uint64 PathDropTxId = 7;
-}
-
-message TEvDescribeSchemeResult {
+} 
+ 
+message TEvDescribeSchemeResult { 
     optional EStatus Status = 1;
     optional string Reason = 2;
-    optional string Path = 3;
+    optional string Path = 3; 
     optional NKikimrSchemeOp.TPathDescription PathDescription = 4;
     optional fixed64 PathOwner = 5;
     optional fixed64 PathId = 6;
@@ -75,8 +75,8 @@ message TEvDescribeSchemeResult {
     optional fixed64 LastExistedPrefixPathId = 8;
     optional NKikimrSchemeOp.TPathDescription LastExistedPrefixDescription = 9;
     optional fixed64 PathOwnerId = 10;
-}
-
+} 
+ 
 message TEvCancelTx {
     optional uint64 TargetTxId = 1;
     optional string Path = 2;
@@ -91,17 +91,17 @@ message TEvCancelTxResult {
     optional uint64 TxId = 4;
 }
 
-message TEvUpdateConfig {
+message TEvUpdateConfig { 
     optional NActorsProto.TActorId Source = 1;
-    optional TConfig Config = 2;
-}
-
-message TEvUpdateConfigResult {
-    optional uint64 Origin = 1;
-    optional NKikimrProto.EReplyStatus Status = 2;
+    optional TConfig Config = 2; 
+} 
+ 
+message TEvUpdateConfigResult { 
+    optional uint64 Origin = 1; 
+    optional NKikimrProto.EReplyStatus Status = 2; 
     optional string Reason = 3;
-}
-
+} 
+ 
 message TEvLogin {
     optional string User = 1;
     optional string Password = 2;
@@ -112,18 +112,18 @@ message TEvLoginResult {
     optional string Token = 2;
 }
 
-// Sending actor registers itself to be notified when tx completes
-message TEvNotifyTxCompletion {
-    optional uint64 TxId = 1;
-}
-
-message TEvNotifyTxCompletionRegistered {
-    optional uint64 TxId = 1;
-}
-
-message TEvNotifyTxCompletionResult {
-    optional uint64 TxId = 1;
-}
+// Sending actor registers itself to be notified when tx completes 
+message TEvNotifyTxCompletion { 
+    optional uint64 TxId = 1; 
+} 
+ 
+message TEvNotifyTxCompletionRegistered { 
+    optional uint64 TxId = 1; 
+} 
+ 
+message TEvNotifyTxCompletionResult { 
+    optional uint64 TxId = 1; 
+} 
 
 message TSchemeLimits {
     optional uint64 MaxDepth = 1;

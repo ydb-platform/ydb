@@ -1,9 +1,9 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <ydb/library/yql/minikql/mkql_node.h>
-
+ 
 using namespace NKikimr;
-using namespace NKikimr::NMiniKQL;
+using namespace NKikimr::NMiniKQL; 
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
@@ -252,9 +252,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
                                     PartitioningPolicy {
                                         MinPartitionsCount: 1
                                         SizeToSplit: 100500
-                                    }
-                                }
-                            )");
+                                    } 
+                                } 
+                            )"); 
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
@@ -269,6 +269,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
                                {NLs::PartitionKeys({""})});
 
         }, true);
-    }
-
-}
+    } 
+ 
+} 

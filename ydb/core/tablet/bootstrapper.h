@@ -23,7 +23,7 @@ struct TEvBootstrapper {
         DEFINE_SIMPLE_NONLOCAL_EVENT(TEvActivate, "TEvBootstrapper::Activate");
     };
 
-    struct TEvStandBy : public TEventBase<TEvStandBy, EvStandBy> {
+    struct TEvStandBy : public TEventBase<TEvStandBy, EvStandBy> { 
         DEFINE_SIMPLE_NONLOCAL_EVENT(TEvStandBy, "TEvBootstrapper::StandBy");
     };
 

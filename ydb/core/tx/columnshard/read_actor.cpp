@@ -8,25 +8,25 @@ namespace NKikimr::NColumnShard {
 class TReadActor : public TActorBootstrapped<TReadActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::TX_COLUMNSHARD_READ_ACTOR;
+        return NKikimrServices::TActivity::TX_COLUMNSHARD_READ_ACTOR; 
     }
 
     TReadActor(ui64 tabletId,
                const TActorId& dstActor,
                std::unique_ptr<TEvColumnShard::TEvReadResult>&& event,
-               NOlap::TReadMetadata::TConstPtr readMetadata,
-               const TInstant& deadline,
-               const TActorId& columnShardActorId,
-               ui64 requestCookie)
+               NOlap::TReadMetadata::TConstPtr readMetadata, 
+               const TInstant& deadline, 
+               const TActorId& columnShardActorId, 
+               ui64 requestCookie) 
         : TabletId(tabletId)
         , DstActor(dstActor)
         , BlobCacheActorId(NBlobCache::MakeBlobCacheServiceId())
         , Result(std::move(event))
         , ReadMetadata(readMetadata)
-        , IndexedData(ReadMetadata)
+        , IndexedData(ReadMetadata) 
         , Deadline(deadline)
-        , ColumnShardActorId(columnShardActorId)
-        , RequestCookie(requestCookie)
+        , ColumnShardActorId(columnShardActorId) 
+        , RequestCookie(requestCookie) 
         , ReturnedBatchNo(0)
     {}
 
@@ -34,15 +34,15 @@ public:
         LOG_S_TRACE("TEvReadBlobRangeResult at tablet " << TabletId << " (read)");
 
         auto& event = *ev->Get();
-        const TUnifiedBlobId& blobId = event.BlobRange.BlobId;
-        Y_VERIFY(event.Data.size() == event.BlobRange.Size);
+        const TUnifiedBlobId& blobId = event.BlobRange.BlobId; 
+        Y_VERIFY(event.Data.size() == event.BlobRange.Size); 
 
-        if (IndexedBlobs.count(event.BlobRange)) {
-            if (!WaitIndexed.count(event.BlobRange)) {
+        if (IndexedBlobs.count(event.BlobRange)) { 
+            if (!WaitIndexed.count(event.BlobRange)) { 
                 return; // ignore duplicate parts
             }
-            WaitIndexed.erase(event.BlobRange);
-            IndexedData.AddIndexedColumn(event.BlobRange, event.Data);
+            WaitIndexed.erase(event.BlobRange); 
+            IndexedData.AddIndexedColumn(event.BlobRange, event.Data); 
         } else if (CommittedBlobs.count(blobId)) {
             if (!WaitCommitted.count(blobId)) {
                 return; // ignore duplicate parts
@@ -56,7 +56,7 @@ public:
             return;
         }
 
-        auto ready = IndexedData.GetReadyResults(Max<i64>());
+        auto ready = IndexedData.GetReadyResults(Max<i64>()); 
         size_t next = 1;
         for (auto it = ready.begin(); it != ready.end(); ++it, ++next) {
             TString data = NArrow::SerializeBatchNoCompression(it->ResultBatch);
@@ -129,7 +129,7 @@ public:
     void DieFinished(const TActorContext& ctx) {
         if (Finished()) {
             LOG_S_DEBUG("Finished read (with " << ReturnedBatchNo << " batches sent) at tablet " << TabletId);
-            Send(ColumnShardActorId, new TEvPrivate::TEvReadFinished(RequestCookie));
+            Send(ColumnShardActorId, new TEvPrivate::TEvReadFinished(RequestCookie)); 
             Die(ctx);
         }
     }
@@ -137,14 +137,14 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         ui32 notIndexed = 0;
         for (size_t i = 0; i < ReadMetadata->CommittedBlobs.size(); ++i, ++notIndexed) {
-            const TUnifiedBlobId& blobId = ReadMetadata->CommittedBlobs[i];
+            const TUnifiedBlobId& blobId = ReadMetadata->CommittedBlobs[i]; 
             CommittedBlobs.emplace(blobId);
             WaitCommitted.emplace(blobId, notIndexed);
         }
 
         IndexedBlobs = IndexedData.InitRead(notIndexed);
-        for (auto& [blobRange, granule] : IndexedBlobs) {
-            WaitIndexed.insert(blobRange);
+        for (auto& [blobRange, granule] : IndexedBlobs) { 
+            WaitIndexed.insert(blobRange); 
         }
 
         LOG_S_DEBUG("Starting read (" << WaitIndexed.size() << " indexed, " << WaitCommitted.size()
@@ -167,10 +167,10 @@ public:
         } else {
             // TODO: Keep inflight
             for (auto& [blobId, batchNo] : WaitCommitted) {
-                SendReadRequest(ctx, NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()));
+                SendReadRequest(ctx, NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize())); 
             }
-            for (auto& [blobRange, granule] : IndexedBlobs) {
-                SendReadRequest(ctx, blobRange);
+            for (auto& [blobRange, granule] : IndexedBlobs) { 
+                SendReadRequest(ctx, blobRange); 
             }
         }
 
@@ -184,10 +184,10 @@ public:
         IndexedBlobs.clear();
     }
 
-    void SendReadRequest(const TActorContext& ctx, const NBlobCache::TBlobRange& blobRange) {
+    void SendReadRequest(const TActorContext& ctx, const NBlobCache::TBlobRange& blobRange) { 
         Y_UNUSED(ctx);
-        Y_VERIFY(blobRange.Size);
-        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange));
+        Y_VERIFY(blobRange.Size); 
+        Send(BlobCacheActorId, new NBlobCache::TEvBlobCache::TEvReadBlobRange(blobRange)); 
     }
 
     STFUNC(StateWait) {
@@ -204,15 +204,15 @@ private:
     TActorId DstActor;
     TActorId BlobCacheActorId;
     std::unique_ptr<TEvColumnShard::TEvReadResult> Result;
-    NOlap::TReadMetadata::TConstPtr ReadMetadata;
+    NOlap::TReadMetadata::TConstPtr ReadMetadata; 
     NOlap::TIndexedReadData IndexedData;
     TInstant Deadline;
-    TActorId ColumnShardActorId;
-    const ui64 RequestCookie;
-    THashMap<NBlobCache::TBlobRange, ui64> IndexedBlobs;
-    THashSet<TUnifiedBlobId> CommittedBlobs;
-    THashSet<NBlobCache::TBlobRange> WaitIndexed;
-    THashMap<TUnifiedBlobId, ui32> WaitCommitted;
+    TActorId ColumnShardActorId; 
+    const ui64 RequestCookie; 
+    THashMap<NBlobCache::TBlobRange, ui64> IndexedBlobs; 
+    THashSet<TUnifiedBlobId> CommittedBlobs; 
+    THashSet<NBlobCache::TBlobRange> WaitIndexed; 
+    THashMap<TUnifiedBlobId, ui32> WaitCommitted; 
     ui32 ReturnedBatchNo;
     mutable TString SerializedSchema;
 
@@ -225,16 +225,16 @@ private:
     }
 };
 
-IActor* CreateReadActor(ui64 tabletId,
+IActor* CreateReadActor(ui64 tabletId, 
                         const TActorId& dstActor,
                         std::unique_ptr<TEvColumnShard::TEvReadResult>&& event,
-                        NOlap::TReadMetadata::TConstPtr readMetadata,
-                        const TInstant& deadline,
-                        const TActorId& columnShardActorId,
-                        ui64 requestCookie)
-{
-    return new TReadActor(tabletId, dstActor, std::move(event), readMetadata,
-                          deadline, columnShardActorId, requestCookie);
+                        NOlap::TReadMetadata::TConstPtr readMetadata, 
+                        const TInstant& deadline, 
+                        const TActorId& columnShardActorId, 
+                        ui64 requestCookie) 
+{ 
+    return new TReadActor(tabletId, dstActor, std::move(event), readMetadata, 
+                          deadline, columnShardActorId, requestCookie); 
 }
 
 }

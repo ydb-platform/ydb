@@ -8,14 +8,14 @@ namespace NMsgBusProxy {
 class TMessageBusTxStatusRequestActor : public TMessageBusSimpleTabletRequest<TMessageBusTxStatusRequestActor, NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult, NKikimrServices::TActivity::FRONT_SCHEME_TXSTATUS> {
     const ui64 TxId;
     const ui64 PathId;
-    bool InProgress;
+    bool InProgress; 
 public:
     TMessageBusTxStatusRequestActor(NMsgBusProxy::TBusMessageContext& msg, const TBusSchemeOperationStatus* casted)
         : TMessageBusSimpleTabletRequest(msg, casted->Record.GetFlatTxId().GetSchemeShardTabletId(), false,
             TDuration::MilliSeconds(casted->Record.GetPollOptions().GetTimeout()), false)
         , TxId(casted->Record.GetFlatTxId().GetTxId())
         , PathId(casted->Record.GetFlatTxId().GetPathId())
-        , InProgress(false)
+        , InProgress(false) 
     {}
 
     TMessageBusTxStatusRequestActor(NMsgBusProxy::TBusMessageContext& msg)
@@ -32,12 +32,12 @@ public:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr&, const TActorContext&) {
-        InProgress = true;
-    }
-
+        InProgress = true; 
+    } 
+ 
     void HandleTimeout(const TActorContext& ctx) {
         TAutoPtr<NMsgBusProxy::TBusResponse> response = new NMsgBusProxy::TBusResponse();
-        response->Record.SetStatus(InProgress ? NMsgBusProxy::MSTATUS_INPROGRESS : NMsgBusProxy::MSTATUS_TIMEOUT);
+        response->Record.SetStatus(InProgress ? NMsgBusProxy::MSTATUS_INPROGRESS : NMsgBusProxy::MSTATUS_TIMEOUT); 
         response->Record.MutableFlatTxId()->SetTxId(TxId);
         response->Record.MutableFlatTxId()->SetPathId(PathId);
         response->Record.MutableFlatTxId()->SetSchemeShardTabletId(TabletID);

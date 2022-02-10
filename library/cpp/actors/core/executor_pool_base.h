@@ -12,11 +12,11 @@ namespace NActors {
     protected:
         TActorSystem* ActorSystem;
         THolder<TMailboxTable> MailboxTable;
-#ifdef ACTORSLIB_COLLECT_EXEC_STATS
+#ifdef ACTORSLIB_COLLECT_EXEC_STATS 
         // Need to have per pool object to collect stats like actor registrations (because
         // registrations might be done in threads from other pools)
         TExecutorThreadStats Stats;
-#endif
+#endif 
         TAtomic RegisterRevolvingCounter = 0;
         ui64 AllocateID();
     public:

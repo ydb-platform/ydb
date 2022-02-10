@@ -17,7 +17,7 @@
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
-#include <util/string/escape.h>
+#include <util/string/escape.h> 
 
 namespace NKikimr {
 namespace NPQ {
@@ -425,8 +425,8 @@ public:
     , Cache(cache)
     , TotalRequests(partitions.size() + 1)
     , TotalResponses(0)
-    , TopicName(topicName)
-    , TabletID(tabletId)
+    , TopicName(topicName) 
+    , TabletID(tabletId) 
     , Inflight(inflight)
     {
         for (auto& p: Partitions) {
@@ -529,7 +529,7 @@ private:
     ui32 TotalRequests;
     ui32 TotalResponses;
     TString TopicName;
-    ui64 TabletID;
+    ui64 TabletID; 
     ui32 Inflight;
 };
 
@@ -537,12 +537,12 @@ private:
 /******************************************************* TPersQueue *********************************************************/
 
 void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error)
-{
+{ 
     ReplyPersQueueError(
         ctx.SelfID, ctx, TabletID(), TopicName, Nothing(), *Counters, NKikimrServices::PERSQUEUE,
         responseCookie, errorCode, error
     );
-}
+} 
 
 void TPersQueue::FillMeteringParams(const TActorContext& ctx)
 {
@@ -665,7 +665,7 @@ void TPersQueue::HandleConfigWriteResponse(const NKikimrClient::TResponse& resp,
     else
         NewConfigShouldBeApplied = true; //when config will be inited with old value new config will be applied
 }
-
+ 
 void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, const TActorContext& ctx)
 {
     bool ok = (resp.GetStatus() == NMsgBusProxy::MSTATUS_OK) && (resp.ReadResultSize() == 2) && (resp.HasSetExecutorFastLogPolicyResult()) &&
@@ -676,7 +676,7 @@ void TPersQueue::HandleConfigReadResponse(const NKikimrClient::TResponse& resp, 
         ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
         return;
     }
-
+ 
     ReadConfig(resp.GetReadResult(0), ctx);
     ReadState(resp.GetReadResult(1), ctx);
 }
@@ -719,11 +719,11 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         Y_VERIFY(TopicName.size(), "Need topic name here");
         CacheActor = ctx.Register(new TPQCacheProxy(ctx.SelfID, TopicName, cacheSize));
     } else if (read.GetStatus() == NKikimrProto::NODATA) {
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " no config, start with empty partitions and default config");
+        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " no config, start with empty partitions and default config"); 
     } else {
         Y_FAIL("Unexpected config read status: %d", read.GetStatus());
     }
-
+ 
     for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
@@ -734,7 +734,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         ));
     }
     ConfigInited = true;
-
+ 
     auto now = ctx.Now();
     ShardsMetricsLastFlush = now;
     RequestsMetricsLastFlush = now;
@@ -827,9 +827,9 @@ void TPersQueue::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         HandleStateWriteResponse(resp, ctx);
         break;
     default:
-        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
-                    << " Unexpected KV response: " << ev->Get()->ToString() << " " << ctx.SelfID);
-        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill());
+        LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() 
+                    << " Unexpected KV response: " << ev->Get()->ToString() << " " << ctx.SelfID); 
+        ctx.Send(ctx.SelfID, new TEvents::TEvPoisonPill()); 
     }
 }
 
@@ -1038,9 +1038,9 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
         return;
     }
     if (curConfigVersion == newConfigVersion) { //nothing to change, will be answered on cfg write from prev step
-        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID()
+        LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() 
                     << " Config update version " << Config.GetVersion() << " is already in progress actor " << sender
-                    << " txId " << record.GetTxId() << " config:\n" << cfg.DebugString());
+                    << " txId " << record.GetTxId() << " config:\n" << cfg.DebugString()); 
         ChangeConfigNotification.insert(TChangeNotification(sender, record.GetTxId()));
         return;
     }
@@ -1141,7 +1141,7 @@ void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConf
     Y_VERIFY(res);
 
     TAutoPtr<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-    request->Record.SetCookie(WRITE_CONFIG_COOKIE);
+    request->Record.SetCookie(WRITE_CONFIG_COOKIE); 
 
     auto write = request->Record.AddCmdWrite();
     write->SetKey(KeyConfig());
@@ -1952,9 +1952,9 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
     FlushMetrics(true, ctx);
 
     for (const auto& p : Partitions) {
-        ctx.Send(p.second.Actor, new TEvents::TEvPoisonPill());
+        ctx.Send(p.second.Actor, new TEvents::TEvPoisonPill()); 
     }
-    ctx.Send(CacheActor, new TEvents::TEvPoisonPill());
+    ctx.Send(CacheActor, new TEvents::TEvPoisonPill()); 
 
 
     for (const auto& p : ResponseProxy) {
@@ -2015,7 +2015,7 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
 
     ResourceMetrics = Executor()->GetResourceMetrics();
     THolder<TEvKeyValue::TEvRequest> request(new TEvKeyValue::TEvRequest);
-    request->Record.SetCookie(READ_CONFIG_COOKIE);
+    request->Record.SetCookie(READ_CONFIG_COOKIE); 
     request->Record.AddCmdRead()->SetKey(KeyConfig());
     request->Record.AddCmdRead()->SetKey(KeyState());
     request->Record.MutableCmdSetExecutorFastLogPolicy()

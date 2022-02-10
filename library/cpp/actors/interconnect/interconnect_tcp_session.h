@@ -518,10 +518,10 @@ namespace NActors {
         TInterconnectProxyCommon::TPtr Common;
 
     public:
-        static constexpr EActivityType ActorActivityType() {
-            return INTERCONNECT_SESSION_KILLER;
-        }
-
+        static constexpr EActivityType ActorActivityType() { 
+            return INTERCONNECT_SESSION_KILLER; 
+        } 
+ 
         TInterconnectSessionKiller(TInterconnectProxyCommon::TPtr common)
             : Common(common)
         {

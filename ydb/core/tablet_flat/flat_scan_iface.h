@@ -101,10 +101,10 @@ namespace NTable {
             */
 
             ui32 LargeEdge = Max<ui32>();
-
-            // Scan can override default read ahead settings
-            ui64 ReadAheadLo = Max<ui64>();
-            ui64 ReadAheadHi = Max<ui64>();
+ 
+            // Scan can override default read ahead settings 
+            ui64 ReadAheadLo = Max<ui64>(); 
+            ui64 ReadAheadHi = Max<ui64>(); 
         };
 
         struct THello {

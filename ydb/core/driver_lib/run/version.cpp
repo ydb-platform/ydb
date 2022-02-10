@@ -14,7 +14,7 @@ TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInte
 
 TString GetBranchName(TString url) {
     bool found = false;
-    for (const char *prefix : {"arcadia.yandex.ru/arc/", "arcadia/arc/", "arcadia.arc.yandex.ru/arc/"}) {
+    for (const char *prefix : {"arcadia.yandex.ru/arc/", "arcadia/arc/", "arcadia.arc.yandex.ru/arc/"}) { 
         const char *base = url.data();
         const char *p = strstr(base, prefix);
         if (p) {

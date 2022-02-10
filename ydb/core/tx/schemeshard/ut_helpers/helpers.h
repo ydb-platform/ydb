@@ -2,7 +2,7 @@
 
 #include "ls_checks.h"
 #include "test_env.h"
-
+ 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <ydb/core/engine/mkql_engine_flat.h>
@@ -17,7 +17,7 @@
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 
 #include <util/stream/null.h>
-
+ 
 #include <functional>
 
 #undef Cdbg
@@ -29,7 +29,7 @@
 
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;
-
+ 
     using TEvTx = TEvSchemeShard::TEvModifySchemeTransaction;
 
     ////////// tablet
@@ -79,7 +79,7 @@ namespace NSchemeShardUT_Private {
         const TString& parentPath, const TString& scheme
     #define UT_PARAMS_BY_PATH_ID \
         ui64 pathId
-
+ 
     #define DEFINE_HELPERS(name, params, ...) \
         TEvTx* name##Request(ui64 schemeShardId, ui64 txId, params, __VA_ARGS__); \
         TEvTx* name##Request(ui64 txId, params, __VA_ARGS__); \
@@ -182,7 +182,7 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(AlterKesus);
     GENERIC_HELPERS(DropKesus);
     DROP_BY_PATH_ID_HELPERS(DropKesus);
-
+ 
     // filestore
     GENERIC_HELPERS(CreateFileStore);
     GENERIC_HELPERS(AlterFileStore);
@@ -330,13 +330,13 @@ namespace NSchemeShardUT_Private {
             Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS);
 
     ////////// datashard
-    ui64 GetDatashardState(TTestActorRuntime& runtime, ui64 tabletId);
-    TString SetAllowLogBatching(TTestActorRuntime& runtime, ui64 tabletId, bool v);
-
+    ui64 GetDatashardState(TTestActorRuntime& runtime, ui64 tabletId); 
+    TString SetAllowLogBatching(TTestActorRuntime& runtime, ui64 tabletId, bool v); 
+ 
     ui64 GetDatashardSysTableValue(TTestActorRuntime& runtime, ui64 tabletId, ui64 sysKey);
     ui64 GetTxReadSizeLimit(TTestActorRuntime& runtime, ui64 tabletId);
     ui64 GetStatDisabled(TTestActorRuntime& runtime, ui64 tabletId);
-
+ 
     ui64 GetExecutorCacheSize(TTestActorRuntime& runtime, ui64 tabletId);
     bool GetFastLogPolicy(TTestActorRuntime& runtime, ui64 tabletId);
     bool GetByKeyFilterEnabled(TTestActorRuntime& runtime, ui64 tabletId, ui32 table);
@@ -349,7 +349,7 @@ namespace NSchemeShardUT_Private {
     void SetSchemeshardDatabaseQuotas(TTestActorRuntime& runtime, Ydb::Cms::DatabaseQuotas databaseQuotas, ui64 dimainId, ui64 schemeShard);
 
     NKikimrSchemeOp::TTableDescription GetDatashardSchema(TTestActorRuntime& runtime, ui64 tabletId, ui64 tid);
-
+ 
     NLs::TCheckFunc ShardsIsReady(TTestActorRuntime& runtime);
 
     template <typename TCreateFunc>

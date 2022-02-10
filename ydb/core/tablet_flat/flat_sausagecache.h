@@ -129,7 +129,7 @@ public:
         };
     };
 
-    struct TInfo : public TThrRefBase {
+    struct TInfo : public TThrRefBase { 
         ui32 Total() const noexcept {
             return PageMap.size();
         }

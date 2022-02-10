@@ -165,11 +165,11 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
             DB.Commit(stamp, true);
         }
 
-        // SelectRow
+        // SelectRow 
         {
             TDummyEnv env;
             DB.Begin(++stamp, env);
-            for (ui64 i = 0; i < 1000; ++i) {
+            for (ui64 i = 0; i < 1000; ++i) { 
                 auto row = db.Table<Schema::TestTable>().Key(i).Select<
                         Schema::TestTable::Value,
                         Schema::TestTable::Name,
@@ -188,20 +188,20 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
                 bool boolValue = row.GetValue<Schema::TestTable::BoolValue>();
                 ESomeEnum enumValue = row.GetValue<Schema::TestTable::EnumValue>();
                 TInstant instantValue = row.GetValue<Schema::TestTable::InstantValue>();
-                UNIT_ASSERT_EQUAL(value, i);
-                UNIT_ASSERT_EQUAL(ToString(value), name);
-                UNIT_ASSERT_EQUAL(boolValue, (i % 2 == 0));
+                UNIT_ASSERT_EQUAL(value, i); 
+                UNIT_ASSERT_EQUAL(ToString(value), name); 
+                UNIT_ASSERT_EQUAL(boolValue, (i % 2 == 0)); 
                 UNIT_ASSERT_EQUAL(enumValue, ESomeEnum::SomeValue1);
                 UNIT_ASSERT_EQUAL(instantValue, timestamp);
                 UNIT_ASSERT_EQUAL(row.GetValue<Schema::TestTable::EmptyValue>(), 13);
                 UNIT_ASSERT_EQUAL(row.GetValueOrDefault<Schema::TestTable::EmptyValue>(), 13);
                 UNIT_ASSERT_EQUAL(row.GetValueOrDefault<Schema::TestTable::EmptyValue>(i), i);
-            }
+            } 
             DB.Commit(stamp, true);
-        }
-
+        } 
+ 
         // All
-        {
+        { 
             TDummyEnv env;
             DB.Begin(++stamp, env);
             UNIT_ASSERT(db.Table<Schema::TestTable>().Precharge());
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
             DB.Commit(stamp, true);
         }
 
-        // GreaterOrEqual
+        // GreaterOrEqual 
         {
             TDummyEnv env;
             DB.Begin(++stamp, env);
@@ -605,30 +605,30 @@ Y_UNIT_TEST_SUITE(TFlatCxxDatabaseTest) {
         UNIT_ASSERT(scheme.Tables.find(1)->second.ColumnNames.find("testtest")->second == 1);
         UNIT_ASSERT(scheme.Tables.find(1)->second.ColumnNames.find("test") == scheme.Tables.find(1)->second.ColumnNames.end());
     }
-
-    Y_UNIT_TEST(SchemaFillerTest) {
-        NTable::TScheme::TTableSchema schema;
-        NIceDb::NHelpers::TStaticSchemaFiller<Schema::TestTable>::Fill(schema);
-
-        UNIT_ASSERT_VALUES_EQUAL(schema.Columns.size(), 8);
-        UNIT_ASSERT_VALUES_EQUAL(schema.ColumnNames.size(), 8);
-        UNIT_ASSERT_VALUES_EQUAL(schema.KeyColumns.size(), 1);
-        const TVector<std::pair<TString, NScheme::TTypeId>> columns = {
-            {"ID", NScheme::NTypeIds::Uint64},
-            {"Value", NScheme::NTypeIds::Uint64},
-            {"Name", NScheme::NTypeIds::Utf8},
-            {"BoolValue", NScheme::NTypeIds::Bool},
-            {"EmptyValue", NScheme::NTypeIds::Uint64},
-            {"ProtoValue", NScheme::NTypeIds::String},
-            {"EnumValue", NScheme::NTypeIds::Uint64},
-            {"InstantValue", NScheme::NTypeIds::Uint64}
-            };
-        for (const auto& col : columns) {
-            ui32 id = schema.ColumnNames.at(col.first);
-            UNIT_ASSERT_VALUES_EQUAL(schema.Columns.at(id).Name, col.first);
-            UNIT_ASSERT_VALUES_EQUAL(schema.Columns.at(id).PType, col.second);
-        }
-    }
+ 
+    Y_UNIT_TEST(SchemaFillerTest) { 
+        NTable::TScheme::TTableSchema schema; 
+        NIceDb::NHelpers::TStaticSchemaFiller<Schema::TestTable>::Fill(schema); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(schema.Columns.size(), 8); 
+        UNIT_ASSERT_VALUES_EQUAL(schema.ColumnNames.size(), 8); 
+        UNIT_ASSERT_VALUES_EQUAL(schema.KeyColumns.size(), 1); 
+        const TVector<std::pair<TString, NScheme::TTypeId>> columns = { 
+            {"ID", NScheme::NTypeIds::Uint64}, 
+            {"Value", NScheme::NTypeIds::Uint64}, 
+            {"Name", NScheme::NTypeIds::Utf8}, 
+            {"BoolValue", NScheme::NTypeIds::Bool}, 
+            {"EmptyValue", NScheme::NTypeIds::Uint64}, 
+            {"ProtoValue", NScheme::NTypeIds::String}, 
+            {"EnumValue", NScheme::NTypeIds::Uint64}, 
+            {"InstantValue", NScheme::NTypeIds::Uint64} 
+            }; 
+        for (const auto& col : columns) { 
+            ui32 id = schema.ColumnNames.at(col.first); 
+            UNIT_ASSERT_VALUES_EQUAL(schema.Columns.at(id).Name, col.first); 
+            UNIT_ASSERT_VALUES_EQUAL(schema.Columns.at(id).PType, col.second); 
+        } 
+    } 
 }
 
 }

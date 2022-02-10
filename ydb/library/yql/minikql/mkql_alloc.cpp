@@ -23,7 +23,7 @@ void TAllocState::TListEntry::Unlink() noexcept {
 }
 
 TAllocState::TAllocState(const NKikimr::TAlignedPagePoolCounters &counters, bool supportsSizedAllocators)
-    : TAlignedPagePool(counters)
+    : TAlignedPagePool(counters) 
     , SupportsSizedAllocators(supportsSizedAllocators)
 {
     GetRoot()->InitLinks();

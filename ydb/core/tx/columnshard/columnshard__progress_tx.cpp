@@ -41,8 +41,8 @@ public:
                     break;
                 }
                 ui64 txId = it->TxId;
-                LOG_S_DEBUG("Removing outdated txId " << txId << " max step " << it->MaxStep << " outdated step "
-                    << outdatedStep << " at tablet " << Self->TabletID());
+                LOG_S_DEBUG("Removing outdated txId " << txId << " max step " << it->MaxStep << " outdated step " 
+                    << outdatedStep << " at tablet " << Self->TabletID()); 
                 Self->DeadlineQueue.erase(it);
                 Self->RemoveTx(txc.DB, txId);
                 ++removedCount;
@@ -81,15 +81,15 @@ public:
                 case NKikimrTxColumnShard::TX_KIND_COMMIT: {
                     const auto& meta = Self->CommitsInFlight.at(txId);
 
-                    TBlobGroupSelector dsGroupSelector(Self->Info());
-                    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
+                    TBlobGroupSelector dsGroupSelector(Self->Info()); 
+                    NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector); 
                     auto counters = Self->InsertTable->Commit(dbTable, step, txId, meta.MetaShard, meta.WriteIds);
                     Self->IncCounter(COUNTER_BLOBS_COMMITTED, counters.Rows);
                     Self->IncCounter(COUNTER_BYTES_COMMITTED, counters.Bytes);
                     Self->IncCounter(COUNTER_RAW_BYTES_COMMITTED, counters.RawBytes);
 
                     if (meta.MetaShard == 0) {
-                        for (TWriteId writeId : meta.WriteIds) {
+                        for (TWriteId writeId : meta.WriteIds) { 
                             Self->RemoveLongTxWrite(db, writeId);
                         }
                     }
@@ -129,11 +129,11 @@ public:
         for (auto& rec : TxEvents) {
             ctx.Send(rec.Target, rec.Event.Release(), 0, rec.Cookie);
         }
-
-        Self->UpdateBlobMangerCounters();
-        if (Self->BlobManager->TryMoveGCBarrier()) {
-            Self->Execute(Self->CreateTxRunGc(), ctx);
-        }
+ 
+        Self->UpdateBlobMangerCounters(); 
+        if (Self->BlobManager->TryMoveGCBarrier()) { 
+            Self->Execute(Self->CreateTxRunGc(), ctx); 
+        } 
 
         if (StartBackgroundActivities) {
             Self->EnqueueBackgroundActivities(false, true);

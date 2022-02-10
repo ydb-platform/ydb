@@ -145,11 +145,11 @@ void TKqpPlanner::Process(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot
         planner->SetLogFunc([TxId = TxId](TStringBuf msg) { LOG_D(msg); });
     }
 
-    THashMap<ui64, size_t> nodeIdtoIdx;
-    for (size_t idx = 0; idx < snapshot.size(); ++idx) {
-        nodeIdtoIdx[snapshot[idx].nodeid()] = idx;
-    }
-
+    THashMap<ui64, size_t> nodeIdtoIdx; 
+    for (size_t idx = 0; idx < snapshot.size(); ++idx) { 
+        nodeIdtoIdx[snapshot[idx].nodeid()] = idx; 
+    } 
+ 
     auto plan = planner->Plan(snapshot, std::move(est));
 
     if (!plan.empty()) {
@@ -206,11 +206,11 @@ void TKqpPlanner::RunLocal(const TVector<NKikimrKqp::TKqpNodeResources>& snapsho
     }
 
     THashMap<ui64, size_t> nodeIdToIdx;
-    for (size_t idx = 0; idx < snapshot.size(); ++idx) {
+    for (size_t idx = 0; idx < snapshot.size(); ++idx) { 
         nodeIdToIdx[snapshot[idx].nodeid()] = idx;
         LOG_D("snapshot #" << idx << ": " << snapshot[idx].ShortDebugString());
-    }
-
+    } 
+ 
     for (auto nodeId: nodes) {
         auto ev = PrepareKqpNodeRequest({});
         AddScansToKqpNodeRequest(ev, nodeId);

@@ -13,7 +13,7 @@
 #include <ydb/core/util/stlog.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/json/writer/json_value.h>
-#include <util/string/escape.h>
+#include <util/string/escape.h> 
 #include <util/charset/utf8.h>
 
 // Set to 1 in order for tablet to reboot instead of failing a Y_VERIFY on database damage
@@ -1041,10 +1041,10 @@ void TKeyValueState::ProcessCmd(TIntermediate::TWrite &request,
             } else {
                 // all blobs from the same write must be within the same channel
                 Y_VERIFY(channel == (int)logoBlobId.Channel());
-            }
+            } 
         }
         storage_channel = channel + MainStorageChannelInPublicApi;
-
+ 
         ctx.Send(ChannelBalancerActorId, new TChannelBalancer::TEvReportWriteLatency(channel, request.Latency));
     }
 

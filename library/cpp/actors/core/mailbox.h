@@ -370,7 +370,7 @@ namespace NActors {
 
             TRevolvingMailbox();
             ~TRevolvingMailbox();
-
+ 
             IEventHandle* Pop() {
                 return QueueReader.Pop();
             }

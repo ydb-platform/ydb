@@ -35,8 +35,8 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::NODE_BROKER_LEASE_HOLDER;
-    }
-
+    } 
+ 
     TLeaseHolder(TInstant expire)
         : LastPingEpoch(0)
         , Expire(expire)

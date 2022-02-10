@@ -65,8 +65,8 @@ TTester::TTester(ESchema schema, const TOptions& opts)
 {
     Setup(Runtime, opts);
     Sender = Runtime.AllocateEdgeActor();
-
-    // Schemeshard is only used to receive notifications
+ 
+    // Schemeshard is only used to receive notifications 
     CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
     CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
     CreateSchema(schema, opts);
@@ -84,8 +84,8 @@ TTester::TTester(ESchema schema, const TString& dispatchName, std::function<void
     AllowIncompleteResult = (dispatchName != INITIAL_TEST_DISPATCH_NAME);
     ActiveZone = &activeZone;
     DispatchName = dispatchName;
-
-    // Schemeshard is only used to receive notifications
+ 
+    // Schemeshard is only used to receive notifications 
     CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_SCHEMESHARD_TABLET_ID, TTabletTypes::FLAT_SCHEMESHARD), &CreateFlatTxSchemeShard);
     CreateTestBootstrapper(Runtime, CreateTestTabletInfo(FAKE_TX_ALLOCATOR_TABLET_ID, TTabletTypes::TX_ALLOCATOR), &CreateTxAllocator);
     CreateSchema(schema, opts);

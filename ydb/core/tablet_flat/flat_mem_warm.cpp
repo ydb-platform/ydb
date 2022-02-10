@@ -1,14 +1,14 @@
 #include "flat_mem_warm.h"
 #include "flat_mem_snapshot.h"
 #include "flat_page_other.h"
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
 namespace NTable {
-
+ 
 TString PrintRow(const TDbTupleRef& row, const NScheme::TTypeRegistry& typeRegistry) {
-    return DbgPrintTuple(row, typeRegistry);
-}
-
+    return DbgPrintTuple(row, typeRegistry); 
+} 
+ 
 TIntrusiveConstPtr<NPage::TExtBlobs> TMemTable::MakeBlobsPage(TArrayRef<const TMemTableSnapshot> list)
 {
     NPage::TExtBlobsWriter writer;
@@ -42,13 +42,13 @@ void TMemTable::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& type
     auto types = Scheme->Keys->BasicTypes();
     for (it.SeekFirst(); it.IsValid(); it.Next()) {
         TDbTupleRef key(types.data(), it.GetKey(), types.size());
-
+ 
         TString keyStr = PrintRow(key, typeRegistry) + " -> ";
         const auto *row = it.GetValue();
         while (row) {
-            str << keyStr
+            str << keyStr 
                 << "ERowOp " << int(row->Rop)
-                << " {";
+                << " {"; 
             for (ui32 i = 0; i < row->Items; ++i) {
                 TTag colId = row->Ops()[i].Tag;
                 if (Scheme->ColInfo(colId)) {
@@ -56,16 +56,16 @@ void TMemTable::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& type
                     auto &op = row->Ops()[i];
 
                     str << EOpToStr(ECellOp(op.Op)) << " " << op.Tag << " " << DbgPrintCell(op.Value, typeId, typeRegistry);
-                } else {
-                    str << "unknown column " << colId;
-                }
+                } else { 
+                    str << "unknown column " << colId; 
+                } 
                 if (i+1 < row->Items)
-                    str << ", ";
-            }
-            str << "}" << Endl;
+                    str << ", "; 
+            } 
+            str << "}" << Endl; 
             row = row->Next;
-        }
-    }
-}
-
-}}
+        } 
+    } 
+} 
+ 
+}} 

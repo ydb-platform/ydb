@@ -358,7 +358,7 @@ TThread::TId TThread::ImpossibleThreadId() noexcept {
 
 namespace {
     template <class T>
-    static void* ThreadProcWrapper(void* param) {
+    static void* ThreadProcWrapper(void* param) { 
         return reinterpret_cast<T*>(param)->ThreadProc();
     }
 }

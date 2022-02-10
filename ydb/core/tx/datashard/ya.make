@@ -60,24 +60,24 @@ SRCS(
     datashard__propose_tx_base.cpp
     datashard__readset.cpp
     datashard__read_iterator.cpp
-    datashard__read_columns.cpp
-    datashard__s3.cpp
+    datashard__read_columns.cpp 
+    datashard__s3.cpp 
     datashard__s3_download_txs.cpp
     datashard__s3_upload_txs.cpp
     datashard__kqp_scan.cpp
     datashard__snapshot_txs.cpp
-    datashard__stats.cpp
+    datashard__stats.cpp 
     datashard__store_table_path.cpp
     datashard__store_scan_state.cpp
     datashard_change_receiving.cpp
     datashard_change_sender_activation.cpp
     datashard_change_sending.cpp
     datashard_counters.cpp
-    datashard_loans.cpp
+    datashard_loans.cpp 
     datashard_locks.h
     datashard_locks.cpp
-    datashard_split_dst.cpp
-    datashard_split_src.cpp
+    datashard_split_dst.cpp 
+    datashard_split_src.cpp 
     datashard_switch_mvcc_state.cpp
     datashard_trans_queue.cpp
     datashard_trans_queue.h
@@ -91,8 +91,8 @@ SRCS(
     datashard_direct_erase.cpp
     datashard_direct_upload.cpp
     datashard_distributed_erase.cpp
-    datashard_failpoints.cpp
-    datashard_failpoints.h
+    datashard_failpoints.cpp 
+    datashard_failpoints.h 
     datashard_dep_tracker.cpp
     datashard_dep_tracker.h
     datashard_pipeline.cpp

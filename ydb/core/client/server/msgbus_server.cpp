@@ -102,7 +102,7 @@ public:
             MTYPE(TBusMessageBusTraceStatus)
             MTYPE(TBusTabletKillRequest)
             MTYPE(TBusTabletStateRequest)
-            MTYPE(TBusTabletCountersRequest)
+            MTYPE(TBusTabletCountersRequest) 
             MTYPE(TBusTabletLocalMKQL)
             MTYPE(TBusTabletLocalSchemeTx)
             MTYPE(TBusSchemeOperation)
@@ -125,8 +125,8 @@ public:
             MTYPE(TBusSqsRequest)
             MTYPE(TBusWhoAmI)
             MTYPE(TBusStreamRequest)
-            MTYPE(TBusS3ListingRequest)
-            MTYPE(TBusS3ListingResponse)
+            MTYPE(TBusS3ListingRequest) 
+            MTYPE(TBusS3ListingResponse) 
             MTYPE(TBusInterconnectDebug)
             MTYPE(TBusConsoleRequest)
             MTYPE(TBusResolveNode)
@@ -175,7 +175,7 @@ public:
             REPLY_OPTION(TBusNodeRegistrationResponse)
             REPLY_OPTION(TBusCmsResponse)
             REPLY_OPTION(TBusSqsResponse)
-            REPLY_OPTION(TBusS3ListingResponse)
+            REPLY_OPTION(TBusS3ListingResponse) 
             REPLY_OPTION(TBusConsoleResponse)
 
             default:
@@ -456,8 +456,8 @@ void TMessageBusServer::InitSession(TActorSystem *actorSystem, const TActorId &p
     Proxy = proxy;
     Session = NBus::TBusServerSession::Create(&Protocol, this, SessionConfig, BusQueue);
     HttpServer.Reset(CreateMessageBusHttpServer(actorSystem, this, Protocol, SessionConfig));
-    Monitor = ActorSystem->Register(new TMessageBusMonitorActor(Session, SessionConfig), TMailboxType::HTSwap,
-        actorSystem->AppData<TAppData>()->UserPoolId);
+    Monitor = ActorSystem->Register(new TMessageBusMonitorActor(Session, SessionConfig), TMailboxType::HTSwap, 
+        actorSystem->AppData<TAppData>()->UserPoolId); 
 }
 
 void TMessageBusServer::ShutdownSession() {
@@ -505,11 +505,11 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusChooseProxy, msg);
     case MTYPE_CLIENT_TABLET_STATE_REQUEST:
         return ClientActorRequest(CreateMessageBusTabletStateRequest, msg);
-    case MTYPE_CLIENT_TABLET_COUNTERS_REQUEST:
-        return ClientActorRequest(CreateMessageBusTabletCountersRequest, msg);
+    case MTYPE_CLIENT_TABLET_COUNTERS_REQUEST: 
+        return ClientActorRequest(CreateMessageBusTabletCountersRequest, msg); 
     case MTYPE_CLIENT_LOCAL_MINIKQL:
         return ClientActorRequest(CreateMessageBusLocalMKQL, msg);
-    case MTYPE_CLIENT_LOCAL_SCHEME_TX:
+    case MTYPE_CLIENT_LOCAL_SCHEME_TX: 
         return ClientActorRequest(CreateMessageBusLocalSchemeTx, msg);
     case MTYPE_CLIENT_TABLET_KILL_REQUEST:
         return ClientActorRequest(CreateMessageBusTabletKillRequest, msg);
@@ -540,12 +540,12 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusResolveNode, msg);
     case MTYPE_CLIENT_CMS_REQUEST:
         return ClientActorRequest(CreateMessageBusCmsRequest, msg);
-    case MTYPE_CLIENT_SQS_REQUEST:
-        return ClientActorRequest(CreateMessageBusSqsRequest, msg);
+    case MTYPE_CLIENT_SQS_REQUEST: 
+        return ClientActorRequest(CreateMessageBusSqsRequest, msg); 
     case MTYPE_CLIENT_WHOAMI:
         return ClientActorRequest(CreateMessageBusWhoAmI, msg);
-    case MTYPE_CLIENT_S3_LISTING_REQUEST:
-        return ClientActorRequest(CreateMessageBusS3ListingRequest, msg);
+    case MTYPE_CLIENT_S3_LISTING_REQUEST: 
+        return ClientActorRequest(CreateMessageBusS3ListingRequest, msg); 
     case MTYPE_CLIENT_INTERCONNECT_DEBUG:
         return ClientActorRequest(CreateMessageBusInterconnectDebug, msg);
     case MTYPE_CLIENT_CONSOLE_REQUEST:
@@ -558,15 +558,15 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
 }
 
 void TMessageBusServer::OnError(TAutoPtr<NBus::TBusMessage> msg, NBus::EMessageStatus status) {
-    if (ActorSystem) {
-        if (status == NBus::MESSAGE_SHUTDOWN) {
-            LOG_DEBUG_S(*ActorSystem, NKikimrServices::MSGBUS_REQUEST, "Msgbus client disconnected before reply was sent"
-                    << " msg# " << msg->Describe());
-        } else {
-            LOG_ERROR_S(*ActorSystem, NKikimrServices::MSGBUS_REQUEST, "Failed to send reply over msgbus status# " << status
-                    << " msg# " << msg->Describe());
-        }
-    }
+    if (ActorSystem) { 
+        if (status == NBus::MESSAGE_SHUTDOWN) { 
+            LOG_DEBUG_S(*ActorSystem, NKikimrServices::MSGBUS_REQUEST, "Msgbus client disconnected before reply was sent" 
+                    << " msg# " << msg->Describe()); 
+        } else { 
+            LOG_ERROR_S(*ActorSystem, NKikimrServices::MSGBUS_REQUEST, "Failed to send reply over msgbus status# " << status 
+                    << " msg# " << msg->Describe()); 
+        } 
+    } 
 }
 
 template<typename TEv>
@@ -579,14 +579,14 @@ void TMessageBusServer::ClientProxyRequest(TBusMessageContext &msg) {
 
 void TMessageBusServer::ClientActorRequest(ActorCreationFunc func, TBusMessageContext &msg) {
     if (IActor *x = func(msg))
-        ActorSystem->Register(x, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+        ActorSystem->Register(x, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId); 
     else
         msg.SendReplyMove(new TBusResponseStatus(MSTATUS_ERROR));
 }
 
 void TMessageBusServer::GetTypes(TBusMessageContext &msg) {
     if (IActor *x = CreateMessageBusGetTypes(msg)) {
-        ActorSystem->Register(x, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+        ActorSystem->Register(x, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId); 
     } else {
         auto reply = new TBusTypesResponse();
         reply->Record.SetStatus(MSTATUS_ERROR);

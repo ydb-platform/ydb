@@ -12,13 +12,13 @@
 namespace NKikimr {
 namespace NKqp {
 
-enum class ETableKind {
-    Unknown = 0,
-    Datashard,
-    SysView,
-    Olap
-};
-
+enum class ETableKind { 
+    Unknown = 0, 
+    Datashard, 
+    SysView, 
+    Olap 
+}; 
+ 
 class TKqpTableKeys {
 public:
     struct TColumn {
@@ -31,7 +31,7 @@ public:
         TMap<TString, TColumn> Columns;
         TVector<TString> KeyColumns;
         TVector<NUdf::TDataTypeId> KeyColumnTypes;
-        ETableKind TableKind = ETableKind::Unknown;
+        ETableKind TableKind = ETableKind::Unknown; 
     };
 
     TTable* FindTablePtr(const TTableId& id) {

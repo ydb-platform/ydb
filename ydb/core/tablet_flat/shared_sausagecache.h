@@ -43,7 +43,7 @@ struct TSharedPageCacheConfig final : public TAtomicRefCount<TSharedPageCacheCon
     TIntrusivePtr<TCacheCacheConfig> CacheConfig;
     ui64 TotalScanQueueInFlyLimit = 512 * 1024 * 1024;
     ui64 TotalAsyncQueueInFlyLimit = 512 * 1024 * 1024;
-    TString CacheName = "SharedPageCache";
+    TString CacheName = "SharedPageCache"; 
     TIntrusivePtr<TSharedPageCacheCounters> Counters;
 };
 

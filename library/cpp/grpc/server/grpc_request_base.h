@@ -28,16 +28,16 @@ struct TAuthState {
     EAuthState State;
 };
 
-
-//! An interface that may be used to limit concurrency of requests
+ 
+//! An interface that may be used to limit concurrency of requests 
 class IGRpcRequestLimiter: public TThrRefBase {
-public:
-    virtual bool IncRequest() = 0;
-    virtual void DecRequest() = 0;
-};
-
-using IGRpcRequestLimiterPtr = TIntrusivePtr<IGRpcRequestLimiter>;
-
+public: 
+    virtual bool IncRequest() = 0; 
+    virtual void DecRequest() = 0; 
+}; 
+ 
+using IGRpcRequestLimiterPtr = TIntrusivePtr<IGRpcRequestLimiter>; 
+ 
 //! State of current request
 class IRequestContextBase: public TThrRefBase {
 public:

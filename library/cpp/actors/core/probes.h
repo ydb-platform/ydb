@@ -1,8 +1,8 @@
-#pragma once
-
+#pragma once 
+ 
 #include <library/cpp/lwtrace/all.h>
 #include <util/generic/vector.h>
-
+ 
 #define LWACTORID(x) (x).RawX1(), (x).RawX2(), (x).NodeId(), (x).PoolID()
 #define LWTYPE_ACTORID ui64, ui64, ui32, ui32
 #define LWNAME_ACTORID(n) n "Raw1", n "Raw2", n "NodeId", n "PoolId"
@@ -167,8 +167,8 @@
           TYPES(ui32, ui64, TString, TString, ui32),                                                                                  \
           NAMES("fromPoolId", "toPoolId", "fromPool", "toPool", "cpu"))                                                               \
     /**/
-
-LWTRACE_DECLARE_PROVIDER(ACTORLIB_PROVIDER)
+ 
+LWTRACE_DECLARE_PROVIDER(ACTORLIB_PROVIDER) 
 
 namespace NActors {
     struct TActorSystemSetup;

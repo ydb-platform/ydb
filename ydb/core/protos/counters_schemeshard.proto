@@ -9,13 +9,13 @@ option (TabletTypeName) = "SchemeShard"; // Used as prefix for all counters
 enum ESimpleCounters {
     COUNTER_SIMPLE_IGNORE = 0;
 
-    COUNTER_RESPONSE_TIME_USEC = 1                        [(CounterOpts) = {Name: "ResponseTimeMicrosec"}];
-    COUNTER_DIR_COUNT = 2                                 [(CounterOpts) = {Name: "Directories"}];
-    COUNTER_TABLE_COUNT = 3                               [(CounterOpts) = {Name: "Tables"}];
-    COUNTER_PQ_GROUP_COUNT = 4                            [(CounterOpts) = {Name: "PqGroups"}];
-    COUNTER_TABLE_SHARD_ACTIVE_COUNT = 5                  [(CounterOpts) = {Name: "TableShardsActive"}];
-    COUNTER_TABLE_SHARD_INACTIVE_COUNT = 6                [(CounterOpts) = {Name: "TableShardsInactive"}];
-    COUNTER_PQ_SHARD_COUNT = 7                            [(CounterOpts) = {Name: "PqGroupShards"}];
+    COUNTER_RESPONSE_TIME_USEC = 1                        [(CounterOpts) = {Name: "ResponseTimeMicrosec"}]; 
+    COUNTER_DIR_COUNT = 2                                 [(CounterOpts) = {Name: "Directories"}]; 
+    COUNTER_TABLE_COUNT = 3                               [(CounterOpts) = {Name: "Tables"}]; 
+    COUNTER_PQ_GROUP_COUNT = 4                            [(CounterOpts) = {Name: "PqGroups"}]; 
+    COUNTER_TABLE_SHARD_ACTIVE_COUNT = 5                  [(CounterOpts) = {Name: "TableShardsActive"}]; 
+    COUNTER_TABLE_SHARD_INACTIVE_COUNT = 6                [(CounterOpts) = {Name: "TableShardsInactive"}]; 
+    COUNTER_PQ_SHARD_COUNT = 7                            [(CounterOpts) = {Name: "PqGroupShards"}]; 
     COUNTER_PQ_RB_SHARD_COUNT = 8                         [(CounterOpts) = {Name: "PqReadBalancerShards"}];
     COUNTER_SUB_DOMAIN_COUNT = 9                          [(CounterOpts) = {Name: "SubDomains"}];
     COUNTER_SUB_DOMAIN_COORDINATOR_COUNT = 10             [(CounterOpts) = {Name: "SubDomainsCoordinators"}];
@@ -25,28 +25,28 @@ enum ESimpleCounters {
     COUNTER_BLOCKSTORE_VOLUME_COUNT = 14                  [(CounterOpts) = {Name: "BlockStoreVolumes"}];
     COUNTER_BLOCKSTORE_VOLUME_SHARD_COUNT = 15            [(CounterOpts) = {Name: "BlockStoreVolumeShards"}];
     COUNTER_BLOCKSTORE_PARTITION_SHARD_COUNT = 16         [(CounterOpts) = {Name: "BlockStorePartitionShards"}];
-
-    COUNTER_IN_FLIGHT_OPS_TxInvalid = 17                  [(CounterOpts) = {Name: "InFlightOps/Invalid"}];
-    COUNTER_IN_FLIGHT_OPS_TxMkDir = 18                    [(CounterOpts) = {Name: "InFlightOps/MkDir"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateTable = 19              [(CounterOpts) = {Name: "InFlightOps/CreateTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreatePQGroup = 20            [(CounterOpts) = {Name: "InFlightOps/CreatePQGroup"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterPQGroup = 21             [(CounterOpts) = {Name: "InFlightOps/AlterPQGroup"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterTable = 22               [(CounterOpts) = {Name: "InFlightOps/AlterTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropTable = 23                [(CounterOpts) = {Name: "InFlightOps/DropTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropPQGroup = 24              [(CounterOpts) = {Name: "InFlightOps/DropPQGroup"}];
-    COUNTER_IN_FLIGHT_OPS_TxModifyACL = 25                [(CounterOpts) = {Name: "InFlightOps/ModifyACL"}];
-    COUNTER_IN_FLIGHT_OPS_TxRmDir = 26                    [(CounterOpts) = {Name: "InFlightOps/RmDir"}];
-    COUNTER_IN_FLIGHT_OPS_TxCopyTable = 27                [(CounterOpts) = {Name: "InFlightOps/CopyTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxSplitTablePartition = 28      [(CounterOpts) = {Name: "InFlightOps/SplitTablePartition"}];
-    COUNTER_IN_FLIGHT_OPS_TxBackup = 29                   [(CounterOpts) = {Name: "InFlightOps/Backup"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateSubDomain = 30          [(CounterOpts) = {Name: "InFlightOps/CreateSubDomain"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropSubDomain = 31            [(CounterOpts) = {Name: "InFlightOps/DropSubDomain"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateRtmrVolume = 32         [(CounterOpts) = {Name: "InFlightOps/CreateRtmrVolume"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateBlockStoreVolume = 33   [(CounterOpts) = {Name: "InFlightOps/CreateBlockStoreVolume"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterBlockStoreVolume = 34    [(CounterOpts) = {Name: "InFlightOps/AlterBlockStoreVolume"}];
-    COUNTER_IN_FLIGHT_OPS_TxAssignBlockStoreVolume = 35   [(CounterOpts) = {Name: "InFlightOps/AssignBlockStoreVolume"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropBlockStoreVolume = 36     [(CounterOpts) = {Name: "InFlightOps/DropBlockStoreVolume"}];
-    COUNTER_IN_FLIGHT_OPS_UNKNOWN = 37                    [(CounterOpts) = {Name: "InFlightOps/UNKNOWN"}];
+ 
+    COUNTER_IN_FLIGHT_OPS_TxInvalid = 17                  [(CounterOpts) = {Name: "InFlightOps/Invalid"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxMkDir = 18                    [(CounterOpts) = {Name: "InFlightOps/MkDir"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCreateTable = 19              [(CounterOpts) = {Name: "InFlightOps/CreateTable"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCreatePQGroup = 20            [(CounterOpts) = {Name: "InFlightOps/CreatePQGroup"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxAlterPQGroup = 21             [(CounterOpts) = {Name: "InFlightOps/AlterPQGroup"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxAlterTable = 22               [(CounterOpts) = {Name: "InFlightOps/AlterTable"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxDropTable = 23                [(CounterOpts) = {Name: "InFlightOps/DropTable"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxDropPQGroup = 24              [(CounterOpts) = {Name: "InFlightOps/DropPQGroup"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxModifyACL = 25                [(CounterOpts) = {Name: "InFlightOps/ModifyACL"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxRmDir = 26                    [(CounterOpts) = {Name: "InFlightOps/RmDir"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCopyTable = 27                [(CounterOpts) = {Name: "InFlightOps/CopyTable"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxSplitTablePartition = 28      [(CounterOpts) = {Name: "InFlightOps/SplitTablePartition"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxBackup = 29                   [(CounterOpts) = {Name: "InFlightOps/Backup"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCreateSubDomain = 30          [(CounterOpts) = {Name: "InFlightOps/CreateSubDomain"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxDropSubDomain = 31            [(CounterOpts) = {Name: "InFlightOps/DropSubDomain"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCreateRtmrVolume = 32         [(CounterOpts) = {Name: "InFlightOps/CreateRtmrVolume"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxCreateBlockStoreVolume = 33   [(CounterOpts) = {Name: "InFlightOps/CreateBlockStoreVolume"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxAlterBlockStoreVolume = 34    [(CounterOpts) = {Name: "InFlightOps/AlterBlockStoreVolume"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxAssignBlockStoreVolume = 35   [(CounterOpts) = {Name: "InFlightOps/AssignBlockStoreVolume"}]; 
+    COUNTER_IN_FLIGHT_OPS_TxDropBlockStoreVolume = 36     [(CounterOpts) = {Name: "InFlightOps/DropBlockStoreVolume"}]; 
+    COUNTER_IN_FLIGHT_OPS_UNKNOWN = 37                    [(CounterOpts) = {Name: "InFlightOps/UNKNOWN"}]; 
 
     COUNTER_KESUS_COUNT = 38                              [(CounterOpts) = {Name: "Kesus"}];
     COUNTER_KESUS_SHARD_COUNT = 39                        [(CounterOpts) = {Name: "KesusShards"}];
@@ -152,28 +152,28 @@ enum ESimpleCounters {
 
 enum ECumulativeCounters {
     COUNTER_CUMULATIVE_IGNORE = 0;
-
-    COUNTER_FINISHED_OPS_TxInvalid = 1                    [(CounterOpts) = {Name: "FinishedOps/Invalid"}];
-    COUNTER_FINISHED_OPS_TxMkDir = 2                      [(CounterOpts) = {Name: "FinishedOps/MkDir"}];
-    COUNTER_FINISHED_OPS_TxCreateTable = 3                [(CounterOpts) = {Name: "FinishedOps/CreateTable"}];
-    COUNTER_FINISHED_OPS_TxCreatePQGroup = 4              [(CounterOpts) = {Name: "FinishedOps/CreatePQGroup"}];
-    COUNTER_FINISHED_OPS_TxAlterPQGroup = 5               [(CounterOpts) = {Name: "FinishedOps/AlterPQGroup"}];
-    COUNTER_FINISHED_OPS_TxAlterTable = 6                 [(CounterOpts) = {Name: "FinishedOps/AlterTable"}];
-    COUNTER_FINISHED_OPS_TxDropTable = 7                  [(CounterOpts) = {Name: "FinishedOps/DropTable"}];
-    COUNTER_FINISHED_OPS_TxDropPQGroup = 8                [(CounterOpts) = {Name: "FinishedOps/DropPQGroup"}];
-    COUNTER_FINISHED_OPS_TxModifyACL = 9                  [(CounterOpts) = {Name: "FinishedOps/ModifyACL"}];
-    COUNTER_FINISHED_OPS_TxRmDir = 10                     [(CounterOpts) = {Name: "FinishedOps/RmDir"}];
-    COUNTER_FINISHED_OPS_TxCopyTable = 11                 [(CounterOpts) = {Name: "FinishedOps/CopyTable"}];
-    COUNTER_FINISHED_OPS_TxSplitTablePartition = 12       [(CounterOpts) = {Name: "FinishedOps/SplitTablePartition"}];
-    COUNTER_FINISHED_OPS_TxBackup = 13                    [(CounterOpts) = {Name: "FinishedOps/Backup"}];
-    COUNTER_FINISHED_OPS_TxCreateSubDomain = 14           [(CounterOpts) = {Name: "FinishedOps/CreateSubDomain"}];
-    COUNTER_FINISHED_OPS_TxDropSubDomain = 15             [(CounterOpts) = {Name: "FinishedOps/DropSubDomain"}];
-    COUNTER_FINISHED_OPS_TxCreateRtmrVolume = 16          [(CounterOpts) = {Name: "FinishedOps/CreateRtmrVolume"}];
-    COUNTER_FINISHED_OPS_TxCreateBlockStoreVolume = 17    [(CounterOpts) = {Name: "FinishedOps/CreateBlockStoreVolume"}];
-    COUNTER_FINISHED_OPS_TxAlterBlockStoreVolume = 18     [(CounterOpts) = {Name: "FinishedOps/AlterBlockStoreVolume"}];
-    COUNTER_FINISHED_OPS_TxAssignBlockStoreVolume = 19    [(CounterOpts) = {Name: "FinishedOps/AssignBlockStoreVolume"}];
-    COUNTER_FINISHED_OPS_TxDropBlockStoreVolume = 20      [(CounterOpts) = {Name: "FinishedOps/DropBlockStoreVolume"}];
-    COUNTER_FINISHED_OPS_UNKNOWN = 21                     [(CounterOpts) = {Name: "FinishedOps/UNKNOWN"}];
+ 
+    COUNTER_FINISHED_OPS_TxInvalid = 1                    [(CounterOpts) = {Name: "FinishedOps/Invalid"}]; 
+    COUNTER_FINISHED_OPS_TxMkDir = 2                      [(CounterOpts) = {Name: "FinishedOps/MkDir"}]; 
+    COUNTER_FINISHED_OPS_TxCreateTable = 3                [(CounterOpts) = {Name: "FinishedOps/CreateTable"}]; 
+    COUNTER_FINISHED_OPS_TxCreatePQGroup = 4              [(CounterOpts) = {Name: "FinishedOps/CreatePQGroup"}]; 
+    COUNTER_FINISHED_OPS_TxAlterPQGroup = 5               [(CounterOpts) = {Name: "FinishedOps/AlterPQGroup"}]; 
+    COUNTER_FINISHED_OPS_TxAlterTable = 6                 [(CounterOpts) = {Name: "FinishedOps/AlterTable"}]; 
+    COUNTER_FINISHED_OPS_TxDropTable = 7                  [(CounterOpts) = {Name: "FinishedOps/DropTable"}]; 
+    COUNTER_FINISHED_OPS_TxDropPQGroup = 8                [(CounterOpts) = {Name: "FinishedOps/DropPQGroup"}]; 
+    COUNTER_FINISHED_OPS_TxModifyACL = 9                  [(CounterOpts) = {Name: "FinishedOps/ModifyACL"}]; 
+    COUNTER_FINISHED_OPS_TxRmDir = 10                     [(CounterOpts) = {Name: "FinishedOps/RmDir"}]; 
+    COUNTER_FINISHED_OPS_TxCopyTable = 11                 [(CounterOpts) = {Name: "FinishedOps/CopyTable"}]; 
+    COUNTER_FINISHED_OPS_TxSplitTablePartition = 12       [(CounterOpts) = {Name: "FinishedOps/SplitTablePartition"}]; 
+    COUNTER_FINISHED_OPS_TxBackup = 13                    [(CounterOpts) = {Name: "FinishedOps/Backup"}]; 
+    COUNTER_FINISHED_OPS_TxCreateSubDomain = 14           [(CounterOpts) = {Name: "FinishedOps/CreateSubDomain"}]; 
+    COUNTER_FINISHED_OPS_TxDropSubDomain = 15             [(CounterOpts) = {Name: "FinishedOps/DropSubDomain"}]; 
+    COUNTER_FINISHED_OPS_TxCreateRtmrVolume = 16          [(CounterOpts) = {Name: "FinishedOps/CreateRtmrVolume"}]; 
+    COUNTER_FINISHED_OPS_TxCreateBlockStoreVolume = 17    [(CounterOpts) = {Name: "FinishedOps/CreateBlockStoreVolume"}]; 
+    COUNTER_FINISHED_OPS_TxAlterBlockStoreVolume = 18     [(CounterOpts) = {Name: "FinishedOps/AlterBlockStoreVolume"}]; 
+    COUNTER_FINISHED_OPS_TxAssignBlockStoreVolume = 19    [(CounterOpts) = {Name: "FinishedOps/AssignBlockStoreVolume"}]; 
+    COUNTER_FINISHED_OPS_TxDropBlockStoreVolume = 20      [(CounterOpts) = {Name: "FinishedOps/DropBlockStoreVolume"}]; 
+    COUNTER_FINISHED_OPS_UNKNOWN = 21                     [(CounterOpts) = {Name: "FinishedOps/UNKNOWN"}]; 
 
     COUNTER_FINISHED_OPS_TxCreateKesus = 22               [(CounterOpts) = {Name: "FinishedOps/CreateKesus"}];
     COUNTER_FINISHED_OPS_TxDropKesus = 23                 [(CounterOpts) = {Name: "FinishedOps/DropKesus"}];

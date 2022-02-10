@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         TString query = Q_(R"(
             SELECT Group, Name, Amount, Comment
-            FROM `/Root/Test`
+            FROM `/Root/Test` 
             ORDER BY Group DESC, Name DESC;
         )");
 
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         TString query = Q_(R"(
             SELECT Group, Name, Amount, Comment
-            FROM `/Root/Test`
+            FROM `/Root/Test` 
             ORDER BY Group DESC, Name DESC;
         )");
 
@@ -85,7 +85,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         TString query = Q_(R"(
             SELECT Group, Name, Amount, Comment
-            FROM `/Root/Test`
+            FROM `/Root/Test` 
             WHERE Group < 2u
             ORDER BY Group DESC, Name DESC;
         )");
@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         TString query = Q_(R"(
             SELECT Group, Name, Amount, Comment
-            FROM [/Root/Test]
+            FROM [/Root/Test] 
             ORDER BY Group DESC;
         )");
 
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         TString query = Q_(R"(
             SELECT Group, Name, Amount, Comment
-            FROM `/Root/Test`
+            FROM `/Root/Test` 
             ORDER BY Group DESC, Name ASC;
         )");
 
@@ -216,7 +216,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         TString query = Q_(R"(
             SELECT Group, Name, Amount, Comment
-            FROM `/Root/Test`
+            FROM `/Root/Test` 
             WHERE Group < 2
             ORDER BY Group DESC, Name DESC;
         )");
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         TString query = Q_(R"(
             SELECT Group, Name, Amount, Comment
-            FROM `/Root/Test`
+            FROM `/Root/Test` 
             ORDER BY Group DESC, Name DESC
             LIMIT 1;
         )");
@@ -310,7 +310,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         TString query = Q_(R"(
             SELECT Group, Name, Amount, Comment
-            FROM `/Root/Test`
+            FROM `/Root/Test` 
             WHERE Group < 2
             ORDER BY Group DESC, Name DESC
             LIMIT 1;
@@ -360,7 +360,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         TString query = Q_(R"(
             SELECT Key, Text, Data
-            FROM `/Root/EightShard`
+            FROM `/Root/EightShard` 
             ORDER BY Key DESC
             LIMIT 8;
         )");
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             DECLARE $minKey AS Uint64;
 
             SELECT *
-            FROM `/Root/EightShard`
+            FROM `/Root/EightShard` 
             WHERE Key >= $minKey
             ORDER BY Data, Key DESC
             LIMIT $limit OFFSET $offset;
@@ -471,7 +471,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             DECLARE $minKey AS Uint64;
 
             SELECT *
-            FROM `/Root/EightShard`
+            FROM `/Root/EightShard` 
             WHERE Key >= $minKey
             ORDER BY Data, Key DESC
             LIMIT $limit + 1 OFFSET $offset - 1;
@@ -529,7 +529,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             DECLARE $minKey AS Uint64;
 
             SELECT *
-            FROM `/Root/EightShard`
+            FROM `/Root/EightShard` 
             WHERE Key >= $minKey
             ORDER BY Key
             LIMIT $limit + 1 OFFSET $offset - 1;
@@ -579,7 +579,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
                 DECLARE $y AS "String?";
 
                 SELECT *
-                FROM `/Root/Join2`
+                FROM `/Root/Join2` 
                 WHERE Key1 = $x AND Key2 > $y
                 ORDER BY Key1, Key2
                 LIMIT 10;
@@ -629,7 +629,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
                 DECLARE $y AS "String?";
 
                 SELECT *
-                FROM `/Root/Join2`
+                FROM `/Root/Join2` 
                 WHERE Key1 = $x AND Key2 < $y
                 ORDER BY Key1, Key2
                 LIMIT 10;
@@ -685,7 +685,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
                 DECLARE $y AS "String?";
 
                 SELECT *
-                FROM `/Root/Join2`
+                FROM `/Root/Join2` 
                 WHERE Key1 = $x AND Key2 >= $y
                 ORDER BY Key1, Key2
                 LIMIT 10;
@@ -735,7 +735,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
                 DECLARE $y AS "String?";
 
                 SELECT *
-                FROM `/Root/Join2`
+                FROM `/Root/Join2` 
                 WHERE Key1 = $x AND Key2 <= $y
                 ORDER BY Key1, Key2
                 LIMIT 10;
@@ -794,7 +794,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             );
 
             SELECT *
-            FROM `/Root/EightShard`
+            FROM `/Root/EightShard` 
             ORDER BY Data DESC, Key
             LIMIT CAST($fetch AS Uint64) ?? 0;
         )");
@@ -832,12 +832,12 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             DECLARE $key AS Uint32;
 
             $fetch = (
-                SELECT Value2 + 1 AS Take FROM `/Root/TwoShard`
+                SELECT Value2 + 1 AS Take FROM `/Root/TwoShard` 
                 WHERE Key = $key
             );
 
             SELECT *
-            FROM `/Root/EightShard`
+            FROM `/Root/EightShard` 
             ORDER BY Data DESC, Key
             LIMIT 2 OFFSET CAST($fetch AS Uint64) ?? 0;
         )");
@@ -977,7 +977,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             DECLARE $limit AS Uint64;
 
             SELECT *
-            FROM `/Root/TwoShard`
+            FROM `/Root/TwoShard` 
             ORDER BY Key
             LIMIT $limit;
         )");
@@ -1025,7 +1025,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             DECLARE $value AS Int32;
 
             SELECT *
-            FROM `/Root/TwoShard`
+            FROM `/Root/TwoShard` 
             WHERE Value2 != $value
             LIMIT $limit;
         )");

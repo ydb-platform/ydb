@@ -177,14 +177,14 @@ public:
         }
     }
 
-    void Reply(const NKikimrClient::TS3ListingResponse& resp) override {
-        try {
+    void Reply(const NKikimrClient::TS3ListingResponse& resp) override { 
+        try { 
             Finish(dynamic_cast<const TOut&>(resp), 0);
-        } catch (const std::bad_cast&) {
-            Y_FAIL("unexpected response type generated");
-        }
-    }
-
+        } catch (const std::bad_cast&) { 
+            Y_FAIL("unexpected response type generated"); 
+        } 
+    } 
+ 
     void Reply(const NKikimrClient::TConsoleResponse& resp) override {
         try {
             Finish(dynamic_cast<const TOut&>(resp), 0);
@@ -226,24 +226,24 @@ public:
     static void GenerateErrorResponse(NKikimrClient::TSqsResponse&, const TString&)
     { }
 
-    static void GenerateErrorResponse(NKikimrClient::TS3ListingResponse& resp, const TString& reason) {
-        resp.SetStatus(NMsgBusProxy::MSTATUS_ERROR);
-        resp.SetDescription(reason);
-    }
+    static void GenerateErrorResponse(NKikimrClient::TS3ListingResponse& resp, const TString& reason) { 
+        resp.SetStatus(NMsgBusProxy::MSTATUS_ERROR); 
+        resp.SetDescription(reason); 
+    } 
 
     static void GenerateErrorResponse(NKikimrClient::TConsoleResponse& resp, const TString& reason) {
         resp.MutableStatus()->SetCode(Ydb::StatusIds::GENERIC_ERROR);
         resp.MutableStatus()->SetReason(reason);
     }
-
+ 
     NMsgBusProxy::TBusMessageContext BindBusContext(int type) override {
         return BusContext.ConstructInPlace(this, type);
     }
 
-    TString GetPeer() const override {
-        return GetPeerName();
-    }
-
+    TString GetPeer() const override { 
+        return GetPeerName(); 
+    } 
+ 
 private:
     void* GetGRpcTag() {
         return static_cast<IQueueEvent*>(this);
@@ -422,27 +422,27 @@ void TGRpcService::Start() {
     SetupIncomingRequests();
 }
 
-void TGRpcService::RegisterRequestActor(NActors::IActor* req) {
-    ActorSystem->Register(req, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
-}
-
+void TGRpcService::RegisterRequestActor(NActors::IActor* req) { 
+    ActorSystem->Register(req, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId); 
+} 
+ 
 void TGRpcService::SetupIncomingRequests() {
 
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
 
 #define ADD_REQUEST(NAME, IN, OUT, ACTION) \
     (new TSimpleRequest<NKikimrClient::IN, NKikimrClient::OUT>(this, &Service_, CQ, \
-        [this](IRequestContext *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
-            ACTION; \
-        }, &NKikimrClient::TGRpcServer::AsyncService::Request ## NAME, \
+        [this](IRequestContext *ctx) { \ 
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \ 
+            ACTION; \ 
+        }, &NKikimrClient::TGRpcServer::AsyncService::Request ## NAME, \ 
         *ActorSystem, #NAME, getCounterBlock("legacy", #NAME)))->Start();
 
 #define ADD_ACTOR_REQUEST(NAME, TYPE, MTYPE) \
     ADD_REQUEST(NAME, TYPE, TResponse, { \
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE)); \
-        NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \
-        RegisterRequestActor(CreateMessageBus ## NAME(msg)); \
+        NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer()); \ 
+        RegisterRequestActor(CreateMessageBus ## NAME(msg)); \ 
     })
 
 
@@ -470,33 +470,33 @@ void TGRpcService::SetupIncomingRequests() {
     // dynamic node registration
     ADD_REQUEST(RegisterNode, TNodeRegistrationRequest, TNodeRegistrationResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_NODE_REGISTRATION_REQUEST));
-        RegisterRequestActor(CreateMessageBusRegisterNode(msg));
+        RegisterRequestActor(CreateMessageBusRegisterNode(msg)); 
     })
 
     // CMS request
     ADD_REQUEST(CmsRequest, TCmsRequest, TCmsResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CMS_REQUEST));
-        RegisterRequestActor(CreateMessageBusCmsRequest(msg));
+        RegisterRequestActor(CreateMessageBusCmsRequest(msg)); 
     })
 
     // SQS request
     ADD_REQUEST(SqsRequest, TSqsRequest, TSqsResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_SQS_REQUEST));
-        RegisterRequestActor(CreateMessageBusSqsRequest(msg));
+        RegisterRequestActor(CreateMessageBusSqsRequest(msg)); 
     })
 
-    // S3 listing request
-    ADD_REQUEST(S3Listing, TS3ListingRequest, TS3ListingResponse, {
-        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_S3_LISTING_REQUEST));
-        RegisterRequestActor(CreateMessageBusS3ListingRequest(msg));
-    })
+    // S3 listing request 
+    ADD_REQUEST(S3Listing, TS3ListingRequest, TS3ListingResponse, { 
+        NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_S3_LISTING_REQUEST)); 
+        RegisterRequestActor(CreateMessageBusS3ListingRequest(msg)); 
+    }) 
 
     // Console request
     ADD_REQUEST(ConsoleRequest, TConsoleRequest, TConsoleResponse, {
         NMsgBusProxy::TBusMessageContext msg(ctx->BindBusContext(NMsgBusProxy::MTYPE_CLIENT_CONSOLE_REQUEST));
-        RegisterRequestActor(CreateMessageBusConsoleRequest(msg));
+        RegisterRequestActor(CreateMessageBusConsoleRequest(msg)); 
     })
-
+ 
 #define ADD_PROXY_REQUEST_BASE(NAME, TYPE, RES_TYPE, EVENT_TYPE, MTYPE) \
     ADD_REQUEST(NAME, TYPE, RES_TYPE, { \
         if (MsgBusProxy) { \

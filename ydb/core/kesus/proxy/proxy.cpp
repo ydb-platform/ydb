@@ -242,8 +242,8 @@ public:
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KESUS_RESOLVE_ACTOR;
-    }
-
+    } 
+ 
 private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& ctx = TActivationContext::AsActorContext();

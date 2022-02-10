@@ -39,8 +39,8 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
     config.Parse(argc, argv);
 
     auto functionRegistry = NMiniKQL::CreateFunctionRegistry(NMiniKQL::CreateBuiltinRegistry());
-    TAlignedPagePoolCounters countersStub;
-    NMiniKQL::TScopedAlloc alloc(countersStub);
+    TAlignedPagePoolCounters countersStub; 
+    NMiniKQL::TScopedAlloc alloc(countersStub); 
     NMiniKQL::TTypeEnvironment TypeEnv(alloc);
 
     TAutoPtr<NMsgBusProxy::TBusRequest> request(new NMsgBusProxy::TBusRequest());
@@ -63,7 +63,7 @@ int CompileAndExecMiniKQL(TCommandConfig &cmdConf, int argc, char **argv) {
     }
 
     mkqlTx->SetFlatMKQL(true);
-
+ 
     TAutoPtr<NBus::TBusMessage> reply;
     NBus::EMessageStatus msgStatus = config.SyncCall(request, reply);
 

@@ -18,7 +18,7 @@ using namespace NTabletFlatScheme;
 
 using NKikimrSchemeOp::ECompactionStrategy;
 
-using TCompactionPolicy = NLocalDb::TCompactionPolicy;
+using TCompactionPolicy = NLocalDb::TCompactionPolicy; 
 
 class TScheme {
 public:
@@ -74,16 +74,16 @@ public:
 
     using TColumn = NTable::TColumn;
 
-    struct TTableSchema {
-        using TColumns = THashMap<ui32, TColumn>;
-        using TColumnNames = THashMap<TString, ui32>;
-
-        TColumns Columns;
-        TColumnNames ColumnNames;
-        TVector<ui32> KeyColumns; // key columns sorted by order
-    };
-
-    struct TTableInfo : public TTableSchema {
+    struct TTableSchema { 
+        using TColumns = THashMap<ui32, TColumn>; 
+        using TColumnNames = THashMap<TString, ui32>; 
+ 
+        TColumns Columns; 
+        TColumnNames ColumnNames; 
+        TVector<ui32> KeyColumns; // key columns sorted by order 
+    }; 
+ 
+    struct TTableInfo : public TTableSchema { 
         TTableInfo(TString name, ui32 id)
             : Id(id)
             , Name(std::move(name))
@@ -143,7 +143,7 @@ public:
 
     inline TColumn* GetColumnInfo(TTableInfo* ptable, ui32 id) {
         return ptable ? ptable->Columns.FindPtr(id) : nullptr;
-    }
+    } 
 
     inline const TColumn* GetColumnInfo(const TTableInfo* ptable, ui32 id) const {
         return ptable ? ptable->Columns.FindPtr(id) : nullptr;

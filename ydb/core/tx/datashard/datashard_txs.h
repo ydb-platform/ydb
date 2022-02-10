@@ -31,7 +31,7 @@ public:
     TTxGetShardState(TDataShard* ds, TEvDataShard::TEvGetShardState::TPtr ev);
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override;
     void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_GET_STARD_STATE; }
+    TTxType GetTxType() const override { return TXTYPE_GET_STARD_STATE; } 
 private:
     TEvDataShard::TEvGetShardState::TPtr Ev;
     THolder<TEvDataShard::TEvGetShardStateResult> Result;
@@ -101,7 +101,7 @@ protected:
     const TInstant ReceivedAt;
     const ui64 TieBreakerIndex;
     EOperationKind Kind;
-    ui64 TxId;
+    ui64 TxId; 
     TVector<EExecutionUnitKind> CompleteList;
     TInstant CommitStart;
     bool Acked;
@@ -127,21 +127,21 @@ public:
     TTxProgressResendRS(TDataShard *self, ui64 seqno);
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
     void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_PROGRESS_RESEND_RS; }
+    TTxType GetTxType() const override { return TXTYPE_PROGRESS_RESEND_RS; } 
 private:
     const ui64 Seqno;
 };
 
 class TDataShard::TTxCancelTransactionProposal : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-public:
+public: 
     TTxCancelTransactionProposal(TDataShard *self, ui64 txId);
-    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override;
-    void Complete(const TActorContext &ctx) override;
-    TTxType GetTxType() const override { return TXTYPE_CANCEL_TX_PROPOSAL; }
-private:
-    const ui64 TxId;
-};
-
+    bool Execute(TTransactionContext &txc, const TActorContext &ctx) override; 
+    void Complete(const TActorContext &ctx) override; 
+    TTxType GetTxType() const override { return TXTYPE_CANCEL_TX_PROPOSAL; } 
+private: 
+    const ui64 TxId; 
+}; 
+ 
 inline bool MaybeRequestMoreTxMemory(ui64 usage, NTabletFlatExecutor::TTransactionContext &txc) {
     if (usage > txc.GetMemoryLimit()) {
         ui64 request = Max(usage - txc.GetMemoryLimit(), txc.GetMemoryLimit() * MEMORY_REQUEST_FACTOR);

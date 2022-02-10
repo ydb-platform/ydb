@@ -485,7 +485,7 @@ private:
         // send a batch and try to send an empty batch again without adding rows, then a copy of the batch will be send
         // instead. So we check Rows here.
         if (Rows != 0) {
-            Result->ArrowBatch = Tags.empty() ? NArrow::CreateNoColumnsBatch(Rows) : BatchBuilder->FlushBatch(true);
+            Result->ArrowBatch = Tags.empty() ? NArrow::CreateNoColumnsBatch(Rows) : BatchBuilder->FlushBatch(true); 
         }
     }
 

@@ -11,6 +11,6 @@ void TVersionMonPage::OutputText(IOutputStream& out, NMonitoring::IMonHttpReques
     out << version;
     if (!TString(version).EndsWith("\n"))
         out << "\n";
-    out << GetBuildInfo() << "\n\n";
+    out << GetBuildInfo() << "\n\n"; 
     out << "linked with malloc: " << NMalloc::MallocInfo().Name << "\n";
 }

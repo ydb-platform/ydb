@@ -175,7 +175,7 @@ Y_UNIT_TEST_SUITE(TFlatMetrics) {
         UNIT_ASSERT(!value.IsValueObsolete(time));
         auto avg = value.GetValue();
         UNIT_ASSERT_C(avg == 60, avg);
-        value.Set(avg, time);
+        value.Set(avg, time); 
         auto avg2 = value.GetValue();
         UNIT_ASSERT_C(avg2 == avg, avg2);
         time += TDuration::Minutes(1);

@@ -75,12 +75,12 @@ TAutoPtr<TBusMessage> TBusBufferProtocol::Deserialize(ui16 messageType, TArrayRe
     // clone the base
     TAutoPtr<TBusBufferBase> bmess = messageTemplate->New();
 
-    // Need to override protobuf message size limit
-    // NOTE: the payload size has already been checked against session MaxMessageSize
-    google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(payload.data()), payload.size());
+    // Need to override protobuf message size limit 
+    // NOTE: the payload size has already been checked against session MaxMessageSize 
+    google::protobuf::io::CodedInputStream input(reinterpret_cast<const ui8*>(payload.data()), payload.size()); 
     input.SetTotalBytesLimit(payload.size());
-
-    bool ok = bmess->GetRecord()->ParseFromCodedStream(&input) && input.ConsumedEntireMessage();
+ 
+    bool ok = bmess->GetRecord()->ParseFromCodedStream(&input) && input.ConsumedEntireMessage(); 
     if (!ok) {
         return nullptr;
     }

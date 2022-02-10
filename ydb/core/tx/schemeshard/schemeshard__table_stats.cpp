@@ -1,10 +1,10 @@
-#include "schemeshard_impl.h"
+#include "schemeshard_impl.h" 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/sys_view.pb.h>
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
 namespace NSchemeShard {
-
+ 
 template <typename T>
 static ui64 GetThroughput(const T& c) {
     ui64 acc = 0;
@@ -35,7 +35,7 @@ auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TT
     sysStats.SetDataSize(stats.DataSize);
     sysStats.SetRowCount(stats.RowCount);
     sysStats.SetIndexSize(stats.IndexSize);
-    sysStats.SetCPUCores(std::min(stats.GetCurrentRawCpuUsage() / 1000000., 1.0));
+    sysStats.SetCPUCores(std::min(stats.GetCurrentRawCpuUsage() / 1000000., 1.0)); 
     sysStats.SetTabletId(ui64(datashardId));
     sysStats.SetAccessTime(stats.LastAccessTime.MilliSeconds());
     sysStats.SetUpdateTime(stats.LastUpdateTime.MilliSeconds());
@@ -125,47 +125,47 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         tableId = Self->MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
     }
 
-    const auto& tableStats = rec.GetTableStats();
+    const auto& tableStats = rec.GetTableStats(); 
     const auto& tabletMetrics = rec.GetTabletMetrics();
-    ui64 dataSize = tableStats.GetDataSize();
-    ui64 rowCount = tableStats.GetRowCount();
-
+    ui64 dataSize = tableStats.GetDataSize(); 
+    ui64 rowCount = tableStats.GetRowCount(); 
+ 
     if (!Self->Tables.contains(tableId)) {
         return true;
     }
-
+ 
     TTableInfo::TPtr table = Self->Tables[tableId];
-
+ 
     if (!Self->TabletIdToShardIdx.contains(datashardId)) {
         return true;
     }
-
+ 
     auto shardIdx = Self->TabletIdToShardIdx[datashardId];
-
-    TTableInfo::TPartitionStats newStats;
-    newStats.SeqNo = TMessageSeqNo(rec.GetGeneration(), rec.GetRound());
-
-    newStats.RowCount = tableStats.GetRowCount();
-    newStats.DataSize = tableStats.GetDataSize();
-    newStats.IndexSize = tableStats.GetIndexSize();
-    newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
-    newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
-
-    newStats.ImmediateTxCompleted = tableStats.GetImmediateTxCompleted();
-    newStats.PlannedTxCompleted = tableStats.GetPlannedTxCompleted();
-    newStats.TxRejectedByOverload = tableStats.GetTxRejectedByOverload();
-    newStats.TxRejectedBySpace = tableStats.GetTxRejectedBySpace();
-    newStats.TxCompleteLag = TDuration::MilliSeconds(tableStats.GetTxCompleteLagMsec());
-    newStats.InFlightTxCount = tableStats.GetInFlightTxCount();
-
-    newStats.RowUpdates = tableStats.GetRowUpdates();
-    newStats.RowDeletes = tableStats.GetRowDeletes();
-    newStats.RowReads = tableStats.GetRowReads();
-    newStats.RangeReads = tableStats.GetRangeReads();
-    newStats.RangeReadRows = tableStats.GetRangeReadRows();
-
-    TInstant now = AppData(ctx)->TimeProvider->Now();
-    newStats.SetCurrentRawCpuUsage(tabletMetrics.GetCPU(), now);
+ 
+    TTableInfo::TPartitionStats newStats; 
+    newStats.SeqNo = TMessageSeqNo(rec.GetGeneration(), rec.GetRound()); 
+ 
+    newStats.RowCount = tableStats.GetRowCount(); 
+    newStats.DataSize = tableStats.GetDataSize(); 
+    newStats.IndexSize = tableStats.GetIndexSize(); 
+    newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime()); 
+    newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime()); 
+ 
+    newStats.ImmediateTxCompleted = tableStats.GetImmediateTxCompleted(); 
+    newStats.PlannedTxCompleted = tableStats.GetPlannedTxCompleted(); 
+    newStats.TxRejectedByOverload = tableStats.GetTxRejectedByOverload(); 
+    newStats.TxRejectedBySpace = tableStats.GetTxRejectedBySpace(); 
+    newStats.TxCompleteLag = TDuration::MilliSeconds(tableStats.GetTxCompleteLagMsec()); 
+    newStats.InFlightTxCount = tableStats.GetInFlightTxCount(); 
+ 
+    newStats.RowUpdates = tableStats.GetRowUpdates(); 
+    newStats.RowDeletes = tableStats.GetRowDeletes(); 
+    newStats.RowReads = tableStats.GetRowReads(); 
+    newStats.RangeReads = tableStats.GetRangeReads(); 
+    newStats.RangeReadRows = tableStats.GetRangeReadRows(); 
+ 
+    TInstant now = AppData(ctx)->TimeProvider->Now(); 
+    newStats.SetCurrentRawCpuUsage(tabletMetrics.GetCPU(), now); 
     newStats.Memory = tabletMetrics.GetMemory();
     newStats.Network = tabletMetrics.GetNetwork();
     newStats.Storage = tabletMetrics.GetStorage();
@@ -173,23 +173,23 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     newStats.WriteThroughput = GetThroughput(tabletMetrics.GetGroupWriteThroughput());
     newStats.ReadIops = GetIops(tabletMetrics.GetGroupReadIops());
     newStats.WriteIops = GetIops(tabletMetrics.GetGroupWriteIops());
-    newStats.PartCount = tableStats.GetPartCount();
+    newStats.PartCount = tableStats.GetPartCount(); 
     newStats.SearchHeight = tableStats.GetSearchHeight();
-    newStats.StartTime = TInstant::MilliSeconds(rec.GetStartTime());
-    for (ui64 tabletId : rec.GetUserTablePartOwners()) {
+    newStats.StartTime = TInstant::MilliSeconds(rec.GetStartTime()); 
+    for (ui64 tabletId : rec.GetUserTablePartOwners()) { 
         newStats.PartOwners.insert(TTabletId(tabletId));
         if (tabletId != rec.GetDatashardId()) {
             newStats.HasBorrowed = true;
         }
-    }
-    for (ui64 tabletId : rec.GetSysTablesPartOwners()) {
+    } 
+    for (ui64 tabletId : rec.GetSysTablesPartOwners()) { 
         newStats.PartOwners.insert(TTabletId(tabletId));
-    }
-    newStats.ShardState = rec.GetShardState();
-
+    } 
+    newStats.ShardState = rec.GetShardState(); 
+ 
     auto oldAggrStats = table->GetStats().Aggregated;
-    table->UpdateShardStats(shardIdx, newStats);
-
+    table->UpdateShardStats(shardIdx, newStats); 
+ 
     if (Self->CompactionQueue) {
         TShardCompactionInfo compactionInfo(shardIdx, newStats.SearchHeight);
         if (newStats.SearchHeight >= Self->CompactionSearchHeightThreshold) {
@@ -256,7 +256,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     }
 
     TVector<TShardIdx> shardsToMerge;
-    if (table->CheckCanMergePartitions(Self->SplitSettings, shardIdx, shardsToMerge)) {
+    if (table->CheckCanMergePartitions(Self->SplitSettings, shardIdx, shardsToMerge)) { 
         TTxId txId = Self->GetCachedTxId(ctx);
 
         if (!txId) {
@@ -266,8 +266,8 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
                         << ", shardIdx: " << shardIdx
                         << ", size of merge: " << shardsToMerge.size());
             return true;
-        }
-
+        } 
+ 
         auto request = MergeRequest(Self, txId, Self->ShardInfos[shardIdx].PathId, shardsToMerge);
 
         TMemoryChanges memChanges;
@@ -280,29 +280,29 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         MergeOpSideEffects.ApplyOnExecute(Self, txc, ctx);
 
         return true;
-    }
-
-    if (rec.GetShardState() != NKikimrTxDataShard::Ready) {
+    } 
+ 
+    if (rec.GetShardState() != NKikimrTxDataShard::Ready) { 
         return true;
-    }
-
-    ui64 dataSizeResolution = 0; // Datashard will use default resolution
-    ui64 rowCountResolution = 0; // Datashard will use default resolution
-    bool collectKeySample = false;
+    } 
+ 
+    ui64 dataSizeResolution = 0; // Datashard will use default resolution 
+    ui64 rowCountResolution = 0; // Datashard will use default resolution 
+    bool collectKeySample = false; 
     if (table->CheckFastSplitForPartition(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
-        dataSizeResolution = Max<ui64>(dataSize / 100, 100*1024);
-        rowCountResolution = Max<ui64>(rowCount / 100, 1000);
-        collectKeySample = true;
-    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
-        collectKeySample = true;
-    } else if (dataSize < table->GetShardSizeToSplit()) {
+        dataSizeResolution = Max<ui64>(dataSize / 100, 100*1024); 
+        rowCountResolution = Max<ui64>(rowCount / 100, 1000); 
+        collectKeySample = true; 
+    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount)) { 
+        collectKeySample = true; 
+    } else if (dataSize < table->GetShardSizeToSplit()) { 
         return true;
     }
 
-    if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
+    if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) { 
         return true;
-    }
-
+    } 
+ 
     {
         constexpr ui64 deltaShards = 2;
         TPathElement::TPtr path = Self->PathsById.at(tableId);
@@ -339,11 +339,11 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     }
 
     // Request histograms from the datashard
-    GetStatsEv.Reset(new TEvDataShard::TEvGetTableStats(tableId.LocalPathId, dataSizeResolution, rowCountResolution, collectKeySample));
-
+    GetStatsEv.Reset(new TEvDataShard::TEvGetTableStats(tableId.LocalPathId, dataSizeResolution, rowCountResolution, collectKeySample)); 
+ 
     return true;
-}
-
+} 
+ 
 void TTxStorePartitionStats::Complete(const TActorContext& ctx) {
     MergeOpSideEffects.ApplyOnComplete(Self, ctx);
 
@@ -389,4 +389,4 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
     Execute(new TTxStorePartitionStats(this, ev), ctx);
 }
 
-}}
+}} 

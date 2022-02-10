@@ -71,8 +71,8 @@ public:
     ui64 DataSize() const override
     {
         return BackingSize() - IndexesRawSize;
-    }
-
+    } 
+ 
     ui64 GetPageSize(NPage::TPageId id, NPage::TGroupId groupId) const override
     {
         Y_VERIFY(groupId.Index < PageCollections.size());

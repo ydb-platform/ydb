@@ -178,7 +178,7 @@ private:
 
 class TTypeEnvironment;
 typedef std::function<TRuntimeNode (TCallable& callable, const TTypeEnvironment& env)> TCallableVisitFunc;
-typedef std::function<TCallableVisitFunc (const TInternName& name)> TCallableVisitFuncProvider;
+typedef std::function<TCallableVisitFunc (const TInternName& name)> TCallableVisitFuncProvider; 
 
 TRuntimeNode SinglePassVisitCallables(TRuntimeNode root, TExploringNodeVisitor& explorer,
     const TCallableVisitFuncProvider& funcProvider, const TTypeEnvironment& env, bool inPlace, bool& wereChanges);

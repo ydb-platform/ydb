@@ -52,10 +52,10 @@ class TMiniKQLNodeCast: public TTestBase
         Y_UNUSED(list);
     }
 
-    TMiniKQLNodeCast()
+    TMiniKQLNodeCast() 
         : Env(Alloc)
-    {}
-
+    {} 
+ 
 private:
     TRuntimeNode Uint32AsNode(ui32 value) {
         return TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(value), NUdf::EDataSlot::Uint32, Env), true);

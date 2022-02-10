@@ -159,7 +159,7 @@ public:
 
     virtual void ResolveTables(const TVector<TTable>& tables, NActors::TActorId responseTo) override {
         TAutoPtr<NActors::IActor> proxyActor(new TTableProxyActor(SchemeCacheActor, responseTo, tables));
-        HostActorSystem->Register(proxyActor.Release(), TMailboxType::HTSwap, HostActorSystem->AppData<TAppData>()->UserPoolId);
+        HostActorSystem->Register(proxyActor.Release(), TMailboxType::HTSwap, HostActorSystem->AppData<TAppData>()->UserPoolId); 
     }
 
 private:

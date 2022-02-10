@@ -61,7 +61,7 @@ protected:
                 alter.AddColumn(TABLE_ID, "key", KEY_TAG, NScheme::TSmallBoundedString::TypeId, false);
                 alter.AddColumnToKey(TABLE_ID, KEY_TAG);
                 alter.AddColumn(TABLE_ID, "value", VALUE_TAG, NScheme::TString::TypeId, false);
-                // Init log batching settings
+                // Init log batching settings 
                 alter.SetExecutorAllowLogBatching(true);
                 alter.SetExecutorLogFlushPeriod(TDuration::MicroSeconds(500));
                 Self.State.Clear();
@@ -467,7 +467,7 @@ public:
     STFUNC(StateWork) {
         if (HandleHook(ev, ctx))
             return;
-        RestoreActorActivity();
+        RestoreActorActivity(); 
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKeyValue::TEvRead, Handle);
             hFunc(TEvKeyValue::TEvReadRange, Handle);

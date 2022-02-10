@@ -32,15 +32,15 @@ public:
     // Validate key and fill status into it.
     virtual bool IsValidKey(TKeyDesc& key, std::pair<ui64, ui64>& maxSnapshotTime) const = 0;
 
-    // Calculate the whole size of data that needs to be read into memory
+    // Calculate the whole size of data that needs to be read into memory 
     virtual ui64 CalculateReadSize(const TVector<const TKeyDesc*>& keys) const = 0;
 
-    // Exstimate size of the merged result of reading the data
-    virtual ui64 CalculateResultSize(const TKeyDesc& key) const = 0;
-
-    // At Tx execution make sure that all pages are loaded
+    // Exstimate size of the merged result of reading the data 
+    virtual ui64 CalculateResultSize(const TKeyDesc& key) const = 0; 
+ 
+    // At Tx execution make sure that all pages are loaded 
     virtual void PinPages(const TVector<THolder<TKeyDesc>>& keys, ui64 pageFaultCount = 0) = 0;
-
+ 
     // Returns empty optional with type 'returnType' or the filled one.
     virtual NUdf::TUnboxedValue SelectRow(const TTableId& tableId, const TArrayRef<const TCell>& row,
         TStructLiteral* columnIds, TOptionalType* returnType, const TReadTarget& readTarget,

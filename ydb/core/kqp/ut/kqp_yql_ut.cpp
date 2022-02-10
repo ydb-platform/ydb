@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
             PRAGMA RefSelect;
-            SELECT * FROM `/Root/Test`;
+            SELECT * FROM `/Root/Test`; 
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
-            SELECT * FROM CONCAT(`/Root/Test`, `/Root/Test`)
+            SELECT * FROM CONCAT(`/Root/Test`, `/Root/Test`) 
             WHERE Group = 1;
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -48,7 +48,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
-            SELECT * FROM RANGE(`Root`, `/Root/Test`, `/Root/Test`)
+            SELECT * FROM RANGE(`Root`, `/Root/Test`, `/Root/Test`) 
             WHERE Group = 1;
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -64,11 +64,11 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
-            SELECT * FROM `/Root/NewTable`;
+            SELECT * FROM `/Root/NewTable`; 
 
             COMMIT;
 
-            CREATE TABLE `/Root/NewTable` (
+            CREATE TABLE `/Root/NewTable` ( 
                 Id Uint32,
                 Value String,
                 PRIMARY KEY(Id)
@@ -107,13 +107,13 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
-            SELECT * FROM `/Root/Test`;
+            SELECT * FROM `/Root/Test`; 
 
             COMMIT;
 
-            DROP TABLE `/Root/Test`;
+            DROP TABLE `/Root/Test`; 
 
-            CREATE TABLE `/Root/Test` (
+            CREATE TABLE `/Root/Test` ( 
                 Id Uint32,
                 Value String,
                 PRIMARY KEY (Id)
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
             COMMIT;
 
-            SELECT * FROM `/Root/Test`;
+            SELECT * FROM `/Root/Test`; 
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -136,8 +136,8 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
-            SELECT * FROM `/Root/Test`;
-            DROP TABLE `/Root/Test`;
+            SELECT * FROM `/Root/Test`; 
+            DROP TABLE `/Root/Test`; 
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
-            UPDATE `/Root/Test`
+            UPDATE `/Root/Test` 
             SET Group = Group + 1
             WHERE Name != "Paul";
         )").GetValueSync();
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
-            UPDATE `/Root/Test`
+            UPDATE `/Root/Test` 
             SET Amount = Name;
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
-            INSERT INTO `/Root/Test` (Group, Name, Amount) VALUES
+            INSERT INTO `/Root/Test` (Group, Name, Amount) VALUES 
                 (1u, "Anna", 10000);
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
@@ -221,7 +221,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
-            INSERT INTO `/Root/Test` (Group, Name, Amount) VALUES
+            INSERT INTO `/Root/Test` (Group, Name, Amount) VALUES 
                 (100u, "NewName1", 10),
                 (110u, "NewName2", 20),
                 (100u, "NewName1", 30);
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
-            INSERT OR IGNORE INTO `/Root/Test` (Group, Name, Amount) VALUES
+            INSERT OR IGNORE INTO `/Root/Test` (Group, Name, Amount) VALUES 
                 (1u, "Anna", 10000),
                 (100u, "NewName1", 10);
         )").GetValueSync();
@@ -256,8 +256,8 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = session.ExecuteDataQuery(Q_(R"(
             --!syntax_v1
-            DELETE FROM `/Root/Test` WHERE Group = 1;
-            UPDATE `/Root/Test` SET Comment = "Updated" WHERE Group = 2;
+            DELETE FROM `/Root/Test` WHERE Group = 1; 
+            UPDATE `/Root/Test` SET Comment = "Updated" WHERE Group = 2; 
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
 
         result.GetIssues().PrintTo(Cerr);
@@ -273,7 +273,7 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
             PRAGMA kikimr.UnwrapReadTableValues = "true";
-            SELECT LENGTH(Name) == 4 AND Amount > 1000 FROM `/Root/Test`;
+            SELECT LENGTH(Name) == 4 AND Amount > 1000 FROM `/Root/Test`; 
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -288,19 +288,19 @@ Y_UNIT_TEST_SUITE(KqpYql) {
 
         auto result = client.ExecuteYqlScript(R"(
             --!syntax_v1
-            CREATE TABLE `/Root/NewTable` (
+            CREATE TABLE `/Root/NewTable` ( 
                 Id Uint32,
                 Value String,
                 PRIMARY KEY(Id)
             );
             COMMIT;
 
-            REPLACE INTO `/Root/NewTable` (Id, Value) VALUES
+            REPLACE INTO `/Root/NewTable` (Id, Value) VALUES 
                 (1, "One"),
                 (2, "Two");
             COMMIT;
 
-            SELECT * FROM `/Root/NewTable`;
+            SELECT * FROM `/Root/NewTable`; 
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 

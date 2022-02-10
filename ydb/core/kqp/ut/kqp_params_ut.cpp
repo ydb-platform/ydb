@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             DECLARE $group AS Uint32;
             DECLARE $name AS String;
 
-            SELECT * FROM `/Root/Test` WHERE Group = $group AND Name = $name;
+            SELECT * FROM `/Root/Test` WHERE Group = $group AND Name = $name; 
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(KqpParams) {
             DECLARE $group AS Uint32;
             DECLARE $name AS String;
 
-            SELECT * FROM `/Root/Test` WHERE Group = $group AND Name = $name;
+            SELECT * FROM `/Root/Test` WHERE Group = $group AND Name = $name; 
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());

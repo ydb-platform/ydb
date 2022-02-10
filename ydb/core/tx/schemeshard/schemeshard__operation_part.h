@@ -83,7 +83,7 @@ struct TOperationContext {
     TSideEffects& OnComplete;
     TMemoryChanges& MemChanges;
     TStorageChanges& DbChanges;
-    TAutoPtr<NACLib::TUserToken> UserToken = nullptr;
+    TAutoPtr<NACLib::TUserToken> UserToken = nullptr; 
     bool IsAllowedPrivateTables = false;
 };
 

@@ -56,8 +56,8 @@ protected:
     void HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const TActorContext &ctx);
     void HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx);
     void HandleLocalMKQL(TEvTablet::TEvLocalMKQL::TPtr &ev, const TActorContext &ctx);
-    void HandleLocalSchemeTx(TEvTablet::TEvLocalSchemeTx::TPtr &ev, const TActorContext &ctx);
-    void HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns::TPtr &ev, const TActorContext &ctx);
+    void HandleLocalSchemeTx(TEvTablet::TEvLocalSchemeTx::TPtr &ev, const TActorContext &ctx); 
+    void HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns::TPtr &ev, const TActorContext &ctx); 
     void HandleGetCounters(TEvTablet::TEvGetCounters::TPtr &ev);
 
     STFUNC(StateInitImpl);

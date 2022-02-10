@@ -65,15 +65,15 @@ ChannelArguments::ChannelArguments(const ChannelArguments& other)
   }
 }
 
-ChannelArguments::~ChannelArguments() {
+ChannelArguments::~ChannelArguments() { 
   grpc_core::ExecCtx exec_ctx;
   for (auto& arg : args_) {
     if (arg.type == GRPC_ARG_POINTER) {
       arg.value.pointer.vtable->destroy(arg.value.pointer.p);
-    }
-  }
-}
-
+    } 
+  } 
+} 
+ 
 void ChannelArguments::Swap(ChannelArguments& other) {
   args_.swap(other.args_);
   strings_.swap(other.strings_);
@@ -190,7 +190,7 @@ void ChannelArguments::SetPointerWithVtable(
   arg.type = GRPC_ARG_POINTER;
   strings_.push_back(key);
   arg.key = const_cast<char*>(strings_.back().c_str());
-  arg.value.pointer.p = vtable->copy(value);
+  arg.value.pointer.p = vtable->copy(value); 
   arg.value.pointer.vtable = vtable;
   args_.push_back(arg);
 }

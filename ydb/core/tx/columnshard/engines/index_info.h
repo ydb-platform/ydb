@@ -20,47 +20,47 @@ void ScalarToConstant(const arrow::Scalar& scalar, NKikimrSSA::TProgram_TConstan
 std::shared_ptr<arrow::Scalar> ConstantToScalar(const NKikimrSSA::TProgram_TConstant& value,
                                                 const std::shared_ptr<arrow::DataType>& type);
 
-template <typename T>
-static std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const T& ids) {
-    std::vector<std::shared_ptr<arrow::Field>> fields;
-    fields.reserve(ids.size());
-
-    for (ui32 id: ids) {
-        auto it = columns.find(id);
-        if (it == columns.end()) {
-            return {};
-        }
-
-        const auto& column = it->second;
-        std::string colName(column.Name.data(), column.Name.size());
-        fields.emplace_back(std::make_shared<arrow::Field>(colName, NArrow::GetArrowType(column.PType)));
-    }
-
-    return std::make_shared<arrow::Schema>(fields);
-}
-
-inline
-TVector<std::pair<TString, NScheme::TTypeId>>
-GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const TVector<ui32>& ids) {
-    TVector<std::pair<TString, NScheme::TTypeId>> out;
-    out.reserve(ids.size());
-    for (ui32 id : ids) {
-        Y_VERIFY(tableSchema.Columns.count(id));
-        auto& column = tableSchema.Columns.find(id)->second;
-        out.emplace_back(column.Name, column.PType);
-    }
-    return out;
-}
-
+template <typename T> 
+static std::shared_ptr<arrow::Schema> MakeArrowSchema(const NTable::TScheme::TTableSchema::TColumns& columns, const T& ids) { 
+    std::vector<std::shared_ptr<arrow::Field>> fields; 
+    fields.reserve(ids.size()); 
+ 
+    for (ui32 id: ids) { 
+        auto it = columns.find(id); 
+        if (it == columns.end()) { 
+            return {}; 
+        } 
+ 
+        const auto& column = it->second; 
+        std::string colName(column.Name.data(), column.Name.size()); 
+        fields.emplace_back(std::make_shared<arrow::Field>(colName, NArrow::GetArrowType(column.PType))); 
+    } 
+ 
+    return std::make_shared<arrow::Schema>(fields); 
+} 
+ 
+inline 
+TVector<std::pair<TString, NScheme::TTypeId>> 
+GetColumns(const NTable::TScheme::TTableSchema& tableSchema, const TVector<ui32>& ids) { 
+    TVector<std::pair<TString, NScheme::TTypeId>> out; 
+    out.reserve(ids.size()); 
+    for (ui32 id : ids) { 
+        Y_VERIFY(tableSchema.Columns.count(id)); 
+        auto& column = tableSchema.Columns.find(id)->second; 
+        out.emplace_back(column.Name, column.PType); 
+    } 
+    return out; 
+} 
+ 
 struct TInsertedData;
 
 /// Column engine index description in terms of tablet's local table.
 /// We have to use YDB types for keys here.
-struct TIndexInfo : public NTable::TScheme::TTableSchema {
+struct TIndexInfo : public NTable::TScheme::TTableSchema { 
     static constexpr const char * SPEC_COL_PLAN_STEP = "_yql_plan_step";
     static constexpr const char * SPEC_COL_TX_ID = "_yql_tx_id";
-    static const TString STORE_INDEX_STATS_TABLE;
-    static const TString TABLE_INDEX_STATS_TABLE;
+    static const TString STORE_INDEX_STATS_TABLE; 
+    static const TString TABLE_INDEX_STATS_TABLE; 
 
     enum class ESpecialColumn : ui32 {
         PLAN_STEP = 0xffffff00,
@@ -68,15 +68,15 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
     };
 
     TIndexInfo(const TString& name, ui32 id)
-        : NTable::TScheme::TTableSchema()
-        , Id(id)
-        , Name(name)
+        : NTable::TScheme::TTableSchema() 
+        , Id(id) 
+        , Name(name) 
     {}
 
-    ui32 GetId() const {
-        return Id;
-    }
-
+    ui32 GetId() const { 
+        return Id; 
+    } 
+ 
     ui32 GetColumnId(const TString& name) const {
         if (!ColumnNames.count(name)) {
             if (name == SPEC_COL_PLAN_STEP) {
@@ -118,7 +118,7 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
     }
 
     TVector<std::pair<TString, NScheme::TTypeId>> GetColumns(const TVector<ui32>& ids) const {
-        return NOlap::GetColumns(*this, ids);
+        return NOlap::GetColumns(*this, ids); 
     }
 
     // Traditional Primary Key (includes uniqueness, search and sorting logic)
@@ -195,8 +195,8 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
     void SetDefaultCompressionLevel(const std::optional<int>& level = {}) { DefaultCompressionLevel = level; }
 
 private:
-    ui32 Id;
-    TString Name;
+    ui32 Id; 
+    TString Name; 
     mutable std::shared_ptr<arrow::Schema> Schema;
     mutable std::shared_ptr<arrow::Schema> SchemaWithSpecials;
     std::shared_ptr<arrow::Schema> SortingKey;

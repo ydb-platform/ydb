@@ -97,8 +97,8 @@ namespace NActors {
 
         MonPorts.clear();
         for (ui32 nodeIndex = 0; nodeIndex < NodeCount; ++nodeIndex) {
-            ui32 nodeId = FirstNodeId + nodeIndex;
-            auto* node = GetNodeById(nodeId);
+            ui32 nodeId = FirstNodeId + nodeIndex; 
+            auto* node = GetNodeById(nodeId); 
             const auto* app0 = App0.Get();
             if (!SingleSysEnv) {
                 const TIntrusivePtr<NMonitoring::TDynamicCounters> profilerCounters = NKikimr::GetServiceCounters(node->DynamicCounters, "utils");
@@ -116,7 +116,7 @@ namespace NActors {
                 node->AppData0.reset(new NKikimr::TAppData(0, 1, 2, 3, { }, app0->TypeRegistry, app0->FunctionRegistry, app0->FormatFactory, nullptr));
                 node->ActorSystem = MakeActorSystem(nodeIndex, node);
             }
-            node->LogSettings->MessagePrefix = " node " + ToString(nodeId);
+            node->LogSettings->MessagePrefix = " node " + ToString(nodeId); 
 
             auto* nodeAppData = node->GetAppData<NKikimr::TAppData>();
             nodeAppData->DataShardExportFactory = app0->DataShardExportFactory;

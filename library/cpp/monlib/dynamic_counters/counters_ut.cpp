@@ -284,33 +284,33 @@ Y_UNIT_TEST_SUITE(TDynamicCountersTest) {
                                   "  sensor:timeMillis = {1: 1, 2: 1, 4: 2, inf: 95}\n"
                                   "}\n");
     }
-
-    Y_UNIT_TEST(CounterLookupCounter) {
-        TDynamicCounterPtr rootGroup(new TDynamicCounters());
-        TDynamicCounters::TCounterPtr lookups = rootGroup->GetCounter("Lookups", true);
-        rootGroup->SetLookupCounter(lookups);
-
-        // Create subtree and check that counter is inherited
-        TDynamicCounterPtr serviceGroup = rootGroup->GetSubgroup("service", "MyService");
-        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 1);
-
-        TDynamicCounterPtr subGroup = serviceGroup->GetSubgroup("component", "MyComponent");
-        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 2);
-
-        auto counter = subGroup->GetNamedCounter("range", "20 msec", true);
-        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 3);
-
-        auto hist = subGroup->GetHistogram("timeMsec", ExponentialHistogram(4, 2));
-        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 4);
-
-        // Replace the counter for subGroup
-        auto subGroupLookups = rootGroup->GetCounter("LookupsInMyComponent", true);
-        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 5);
-        subGroup->SetLookupCounter(subGroupLookups);
-        auto counter2 = subGroup->GetNamedCounter("range", "30 msec", true);
-        UNIT_ASSERT_VALUES_EQUAL(subGroupLookups->Val(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 5);
-    }
+ 
+    Y_UNIT_TEST(CounterLookupCounter) { 
+        TDynamicCounterPtr rootGroup(new TDynamicCounters()); 
+        TDynamicCounters::TCounterPtr lookups = rootGroup->GetCounter("Lookups", true); 
+        rootGroup->SetLookupCounter(lookups); 
+ 
+        // Create subtree and check that counter is inherited 
+        TDynamicCounterPtr serviceGroup = rootGroup->GetSubgroup("service", "MyService"); 
+        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 1); 
+ 
+        TDynamicCounterPtr subGroup = serviceGroup->GetSubgroup("component", "MyComponent"); 
+        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 2); 
+ 
+        auto counter = subGroup->GetNamedCounter("range", "20 msec", true); 
+        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 3); 
+ 
+        auto hist = subGroup->GetHistogram("timeMsec", ExponentialHistogram(4, 2)); 
+        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 4); 
+ 
+        // Replace the counter for subGroup 
+        auto subGroupLookups = rootGroup->GetCounter("LookupsInMyComponent", true); 
+        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 5); 
+        subGroup->SetLookupCounter(subGroupLookups); 
+        auto counter2 = subGroup->GetNamedCounter("range", "30 msec", true); 
+        UNIT_ASSERT_VALUES_EQUAL(subGroupLookups->Val(), 1); 
+        UNIT_ASSERT_VALUES_EQUAL(lookups->Val(), 5); 
+    } 
 
     Y_UNIT_TEST(FindCounters) {
         TDynamicCounterPtr rootGroup(new TDynamicCounters());

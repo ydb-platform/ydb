@@ -168,8 +168,8 @@ class TBoardLookupActor : public TActorBootstrapped<TBoardLookupActor> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BOARD_LOOKUP_ACTOR;
-    }
-
+    } 
+ 
     TBoardLookupActor(const TString &path, TActorId owner, EBoardLookupMode mode, ui32 groupId)
         : Path(path)
         , Owner(owner)

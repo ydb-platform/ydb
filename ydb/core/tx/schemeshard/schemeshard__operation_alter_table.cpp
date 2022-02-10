@@ -28,39 +28,39 @@ bool CheckFreezeStateAlredySet(const TTableInfo::TPtr table, const NKikimrScheme
     return false;
 }
 
-bool IsSuperUser(const NACLib::TUserToken* userToken) {
-    if (!userToken)
-        return false;
-
-    const auto& adminSids = AppData()->AdministrationAllowedSIDs;
-    auto hasSid = [userToken](const TString& sid) -> bool {
-        return userToken->IsExist(sid);
-    };
-    auto it = std::find_if(adminSids.begin(), adminSids.end(), hasSid);
-    return (it != adminSids.end());
-}
-
+bool IsSuperUser(const NACLib::TUserToken* userToken) { 
+    if (!userToken) 
+        return false; 
+ 
+    const auto& adminSids = AppData()->AdministrationAllowedSIDs; 
+    auto hasSid = [userToken](const TString& sid) -> bool { 
+        return userToken->IsExist(sid); 
+    }; 
+    auto it = std::find_if(adminSids.begin(), adminSids.end(), hasSid); 
+    return (it != adminSids.end()); 
+} 
+ 
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
                                       const bool shadowDataAllowed,
                                       TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
     const TAppData* appData = AppData(context.Ctx);
 
-    if (!path.IsCommonSensePath()) {
+    if (!path.IsCommonSensePath()) { 
         Y_VERIFY_DEBUG(IsSuperUser(context.UserToken.Get()) || context.IsAllowedPrivateTables, "Only superuser can alter index impl table");
-
-        if (alter.ColumnsSize() != 0 || alter.DropColumnsSize() != 0) {
-            errStr = "Adding or dropping columns in index table is not supported";
+ 
+        if (alter.ColumnsSize() != 0 || alter.DropColumnsSize() != 0) { 
+            errStr = "Adding or dropping columns in index table is not supported"; 
             status = NKikimrScheme::StatusInvalidParameter;
-            return nullptr;
-        }
+            return nullptr; 
+        } 
 
         if (alter.HasTTLSettings()) {
             errStr = "TTL on index table is not supported";
             status = NKikimrScheme::StatusInvalidParameter;
             return nullptr;
         }
-    }
-
+    } 
+ 
     auto copyAlter = alter;
 
     const bool hasSchemaChanges = (
@@ -510,12 +510,12 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .IsTable()
-                .NotUnderOperation();
+                .NotUnderOperation(); 
 
             if (!context.IsAllowedPrivateTables && !IsSuperUser(context.UserToken.Get())) {
-                checks.IsCommonSensePath(); //forbid alter impl index tables
-            }
-
+                checks.IsCommonSensePath(); //forbid alter impl index tables 
+            } 
+ 
             if (!checks) {
                 TString explain = TStringBuilder() << "path fail checks"
                                                    << ", path: " << path.PathString();

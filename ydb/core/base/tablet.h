@@ -71,12 +71,12 @@ struct TEvTablet {
         EvReadLocalBaseResult,
         EvLocalMKQL,
         EvLocalMKQLResponse,
-        EvLocalSchemeTx,
-        EvLocalSchemeTxResponse,
+        EvLocalSchemeTx, 
+        EvLocalSchemeTxResponse, 
         EvGetCounters,
         EvGetCountersResponse,
-        EvLocalReadColumns,
-        EvLocalReadColumnsResponse,
+        EvLocalReadColumns, 
+        EvLocalReadColumnsResponse, 
 
         // from outside to leader
         EvFollowerAttach = EvBoot + 2048,
@@ -474,25 +474,25 @@ struct TEvTablet {
     };
 
     struct TEvLocalSchemeTx : public TEventPB<TEvLocalSchemeTx, NKikimrTabletTxBase::TEvLocalSchemeTx, TEvTablet::EvLocalSchemeTx> {
-        TEvLocalSchemeTx()
-        {}
-    };
-
+        TEvLocalSchemeTx() 
+        {} 
+    }; 
+ 
     struct TEvLocalSchemeTxResponse : public TEventPB<TEvLocalSchemeTxResponse, NKikimrTabletTxBase::TEvLocalSchemeTxResponse, TEvTablet::EvLocalSchemeTxResponse> {
-        TEvLocalSchemeTxResponse()
-        {}
-    };
-
-    struct TEvLocalReadColumns : public TEventPB<TEvLocalReadColumns, NKikimrTabletTxBase::TEvLocalReadColumns, TEvTablet::EvLocalReadColumns> {
-        TEvLocalReadColumns()
-        {}
-    };
-
-    struct TEvLocalReadColumnsResponse : public TEventPB<TEvLocalReadColumnsResponse, NKikimrTabletTxBase::TEvLocalReadColumnsResponse, TEvTablet::EvLocalReadColumnsResponse> {
-        TEvLocalReadColumnsResponse()
-        {}
-    };
-
+        TEvLocalSchemeTxResponse() 
+        {} 
+    }; 
+ 
+    struct TEvLocalReadColumns : public TEventPB<TEvLocalReadColumns, NKikimrTabletTxBase::TEvLocalReadColumns, TEvTablet::EvLocalReadColumns> { 
+        TEvLocalReadColumns() 
+        {} 
+    }; 
+ 
+    struct TEvLocalReadColumnsResponse : public TEventPB<TEvLocalReadColumnsResponse, NKikimrTabletTxBase::TEvLocalReadColumnsResponse, TEvTablet::EvLocalReadColumnsResponse> { 
+        TEvLocalReadColumnsResponse() 
+        {} 
+    }; 
+ 
     struct TEvFollowerAttach : public TEventPB<TEvFollowerAttach, NKikimrTabletBase::TEvFollowerAttach, EvFollowerAttach> {
         TEvFollowerAttach()
         {}

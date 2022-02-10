@@ -6,7 +6,7 @@
 #include <util/system/defaults.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
-
+ 
 #include <type_traits>
 #include <stack>
 #include <vector>
@@ -15,22 +15,22 @@
 
 namespace NKikimr {
 
-struct TAlignedPagePoolCounters {
-    explicit TAlignedPagePoolCounters(NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString());
-
-    NMonitoring::TDynamicCounters::TCounterPtr TotalBytesAllocatedCntr;
-    NMonitoring::TDynamicCounters::TCounterPtr AllocationsCntr;
-    NMonitoring::TDynamicCounters::TCounterPtr PoolsCntr;
-    NMonitoring::TDynamicCounters::TCounterPtr LostPagesBytesFreeCntr;
-
-    void Swap(TAlignedPagePoolCounters& other) {
-        DoSwap(TotalBytesAllocatedCntr, other.TotalBytesAllocatedCntr);
-        DoSwap(AllocationsCntr, other.AllocationsCntr);
-        DoSwap(PoolsCntr, other.PoolsCntr);
-        DoSwap(LostPagesBytesFreeCntr, other.LostPagesBytesFreeCntr);
-    }
-};
-
+struct TAlignedPagePoolCounters { 
+    explicit TAlignedPagePoolCounters(NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString()); 
+ 
+    NMonitoring::TDynamicCounters::TCounterPtr TotalBytesAllocatedCntr; 
+    NMonitoring::TDynamicCounters::TCounterPtr AllocationsCntr; 
+    NMonitoring::TDynamicCounters::TCounterPtr PoolsCntr; 
+    NMonitoring::TDynamicCounters::TCounterPtr LostPagesBytesFreeCntr; 
+ 
+    void Swap(TAlignedPagePoolCounters& other) { 
+        DoSwap(TotalBytesAllocatedCntr, other.TotalBytesAllocatedCntr); 
+        DoSwap(AllocationsCntr, other.AllocationsCntr); 
+        DoSwap(PoolsCntr, other.PoolsCntr); 
+        DoSwap(LostPagesBytesFreeCntr, other.LostPagesBytesFreeCntr); 
+    } 
+}; 
+ 
 // NOTE: We intentionally avoid inheritance from std::exception here to make it harder
 // to catch this exception in UDFs code, so we can handle it in the host.
 class TMemoryLimitExceededException {};
@@ -40,20 +40,20 @@ public:
     static constexpr ui64 POOL_PAGE_SIZE = 1ULL << 16; // 64k
     static constexpr ui64 PAGE_ADDR_MASK = ~(POOL_PAGE_SIZE - 1);
 
-    explicit TAlignedPagePool(const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters())
-        : Counters(counters)
-    {
-        if (Counters.PoolsCntr) {
-            ++(*Counters.PoolsCntr);
-        }
-    }
-
+    explicit TAlignedPagePool(const TAlignedPagePoolCounters& counters = TAlignedPagePoolCounters()) 
+        : Counters(counters) 
+    { 
+        if (Counters.PoolsCntr) { 
+            ++(*Counters.PoolsCntr); 
+        } 
+    } 
+ 
     TAlignedPagePool(const TAlignedPagePool&) = delete;
-    TAlignedPagePool(TAlignedPagePool&& other) = delete;
-
-    TAlignedPagePool& operator = (const TAlignedPagePool&) = delete;
-    TAlignedPagePool& operator = (TAlignedPagePool&& other) = delete;
-
+    TAlignedPagePool(TAlignedPagePool&& other) = delete; 
+ 
+    TAlignedPagePool& operator = (const TAlignedPagePool&) = delete; 
+    TAlignedPagePool& operator = (TAlignedPagePool&& other) = delete; 
+ 
     ~TAlignedPagePool();
 
     inline size_t GetAllocated() const noexcept {
@@ -82,12 +82,12 @@ public:
 
     void Swap(TAlignedPagePool& other) {
         DoSwap(FreePages, other.FreePages);
-        DoSwap(AllPages, other.AllPages);
-        DoSwap(ActiveBlocks, other.ActiveBlocks);
+        DoSwap(AllPages, other.AllPages); 
+        DoSwap(ActiveBlocks, other.ActiveBlocks); 
         DoSwap(TotalAllocated, other.TotalAllocated);
         DoSwap(PeakAllocated, other.PeakAllocated);
         DoSwap(PeakUsed, other.PeakUsed);
-        DoSwap(Limit, other.Limit);
+        DoSwap(Limit, other.Limit); 
         DoSwap(AllocCount, other.AllocCount);
         DoSwap(PageAllocCount, other.PageAllocCount);
         DoSwap(PageHitCount, other.PageHitCount);
@@ -96,8 +96,8 @@ public:
         DoSwap(OffloadedAllocCount, other.OffloadedAllocCount);
         DoSwap(OffloadedBytes, other.OffloadedBytes);
         DoSwap(OffloadedActiveBytes, other.OffloadedActiveBytes);
-        DoSwap(Counters, other.Counters);
-        DoSwap(CheckLostMem, other.CheckLostMem);
+        DoSwap(Counters, other.Counters); 
+        DoSwap(CheckLostMem, other.CheckLostMem); 
         DoSwap(AllocNotifyCallback, other.AllocNotifyCallback);
         DoSwap(IncreaseMemoryLimitCallback, other.IncreaseMemoryLimitCallback);
     }
@@ -147,8 +147,8 @@ public:
     void OffloadAlloc(ui64 size);
     void OffloadFree(ui64 size) noexcept;
 
-    static ui64 GetGlobalPagePoolSize();
-
+    static ui64 GetGlobalPagePoolSize(); 
+ 
     ui64 GetLimit() const noexcept {
         return Limit;
     }
@@ -160,9 +160,9 @@ public:
     void ReleaseFreePages();
 
     void DisableStrictAllocationCheck() noexcept {
-        CheckLostMem = false;
-    }
-
+        CheckLostMem = false; 
+    } 
+ 
     using TAllocNotifyCallback = std::function<void()>;
     void SetAllocNotifyCallback(TAllocNotifyCallback&& callback, ui64 notifyBytes = 0) {
         AllocNotifyCallback = std::move(callback);
@@ -206,8 +206,8 @@ protected:
     ui64 OffloadedBytes = 0;
     ui64 OffloadedActiveBytes = 0;
 
-    TAlignedPagePoolCounters Counters;
-    bool CheckLostMem = true;
+    TAlignedPagePoolCounters Counters; 
+    bool CheckLostMem = true; 
 
     TAllocNotifyCallback AllocNotifyCallback;
     ui64 AllocNotifyBytes = 0;

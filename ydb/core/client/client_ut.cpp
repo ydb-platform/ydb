@@ -62,7 +62,7 @@ struct TTestTables {
         bool OutOfOrder = false;
         bool SoftUpdates = false;
         ui32 FollowerCount = 0;
-
+ 
         TOpts(EVariant var = OneShard_NoOpts, ui32 numFollowers = 0)
             : Sharded(false)
             , OutOfOrder(false)
@@ -460,21 +460,21 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             UNIT_ASSERT(resEmpty1.HaveValue() && bool(resEmpty1) == false);
             UNIT_ASSERT(resEmpty2.HaveValue() && bool(resEmpty2) == false);
         }
-
-        const TString rangeQueryTemplate = R"___(
-            (
-                (let range '('('key (Uint64 '0) (Void))))
-                (let select '('uint))
-                (let options '('('ItemsLimit (Uint64 '30))) )
-                (let result (SelectRange '/dc-1/Berkanavt/tables/Simple range select options __HEAD__))
-                (return (AsList (SetResult 'result result) ))
-            )
-        )___";
-
-        TString rangeQuery = rangeQueryTemplate;
+ 
+        const TString rangeQueryTemplate = R"___( 
+            ( 
+                (let range '('('key (Uint64 '0) (Void)))) 
+                (let select '('uint)) 
+                (let options '('('ItemsLimit (Uint64 '30))) ) 
+                (let result (SelectRange '/dc-1/Berkanavt/tables/Simple range select options __HEAD__)) 
+                (return (AsList (SetResult 'result result) )) 
+            ) 
+        )___"; 
+ 
+        TString rangeQuery = rangeQueryTemplate; 
         SubstGlobal(rangeQuery, "__HEAD__", !useHead ? (useFollower ? "'follower" : "'online") : "'head");
-        NKikimrMiniKQL::TResult rangeRes;
-        UNIT_ASSERT(client.FlatQuery(rangeQuery, rangeRes));
+        NKikimrMiniKQL::TResult rangeRes; 
+        UNIT_ASSERT(client.FlatQuery(rangeQuery, rangeRes)); 
 
         {
             //Cerr << rangeRes << Endl;
@@ -686,24 +686,24 @@ Y_UNIT_TEST_SUITE(TClientTest) {
         client.InitRootScheme();
         TTestTables tables(client, TTestTables::Sharded_NoOpts);
 
-        //server.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
+        //server.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
         ReadWriteViaMiniKQLBody(client, true, false);
     }
 
     Y_UNIT_TEST(ReadWriteViaMiniKQLShardedFollower) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
-
+ 
         // Currently followers cannot be started at the same node with leader
-        // so we need 2 nodes
+        // so we need 2 nodes 
         auto settings = TServerSettings(port);
         settings.SetNodeCount(2);
 
         TServer server(settings);
         TClient client(settings);
 
-        server.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
-
+        server.GetRuntime()->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG); 
+ 
         client.InitRootScheme();
 
         {
@@ -1454,54 +1454,54 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             TTestTables tables(client, TTestTables::OneShard_NoOpts);
             MultiSelectBody(client, true);
         }
-
+ 
         {
             TTestTables tables(client, TTestTables::Sharded_NoOpts);
             MultiSelectBody(client, true);
         }
-    }
-
+    } 
+ 
     void PrepareTestData(TClient& client, bool allowFollowerPromotion) {
         client.InitRootScheme();
-        client.MkDir("/dc-1", "Berkanavt");
-        client.MkDir("/dc-1/Berkanavt", "tables");
-        client.CreateTable(TablePlacement, Sprintf(
-                            R"___(
-                                Name: "Simple"
-                                Columns { Name: "key"        Type: "Uint64"}
-                                Columns { Name: "uint"       Type: "Uint64"}
-                                KeyColumnNames: ["key"]
+        client.MkDir("/dc-1", "Berkanavt"); 
+        client.MkDir("/dc-1/Berkanavt", "tables"); 
+        client.CreateTable(TablePlacement, Sprintf( 
+                            R"___( 
+                                Name: "Simple" 
+                                Columns { Name: "key"        Type: "Uint64"} 
+                                Columns { Name: "uint"       Type: "Uint64"} 
+                                KeyColumnNames: ["key"] 
                                 PartitionConfig { FollowerCount: 1 AllowFollowerPromotion: %s }
                             )___", allowFollowerPromotion ? "true": "false"));
-
-        NKikimrMiniKQL::TResult writeRes;
+ 
+        NKikimrMiniKQL::TResult writeRes; 
         const TString writeQuery = R"___(
-            (
-                (let table '/dc-1/Berkanavt/tables/Simple)
-                (let row1 '('('key (Uint64 '2))))
-                (return (AsList
-                    (UpdateRow table row1 '( '('uint (Uint64 '10))))
-                ))
-            )
-            )___";
-
-        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes));
-    }
-
+            ( 
+                (let table '/dc-1/Berkanavt/tables/Simple) 
+                (let row1 '('('key (Uint64 '2)))) 
+                (return (AsList 
+                    (UpdateRow table row1 '( '('uint (Uint64 '10)))) 
+                )) 
+            ) 
+            )___"; 
+ 
+        UNIT_ASSERT(client.FlatQuery(writeQuery, writeRes)); 
+    } 
+ 
     void CheckRead(TClient& client, bool readFromFollower) {
         const TString readQuery = Sprintf(
-            R"___(
-            (
-                (let key '('('key (Uint64 '2))))
-                (let columns '('uint 'key))
-                (let row (SelectRow '/dc-1/Berkanavt/tables/Simple key columns %s))
-                (return (AsList (SetResult 'row row)))
-            )
+            R"___( 
+            ( 
+                (let key '('('key (Uint64 '2)))) 
+                (let columns '('uint 'key)) 
+                (let row (SelectRow '/dc-1/Berkanavt/tables/Simple key columns %s)) 
+                (return (AsList (SetResult 'row row))) 
+            ) 
             )___", readFromFollower ? "'follower" : "");
-
-        NKikimrMiniKQL::TResult readRes;
-        UNIT_ASSERT(client.FlatQuery(readQuery, readRes));
-
+ 
+        NKikimrMiniKQL::TResult readRes; 
+        UNIT_ASSERT(client.FlatQuery(readQuery, readRes)); 
+ 
         {
             //Cerr << readRes << Endl;
             TValue value = TValue::Create(readRes.GetValue(), readRes.GetType());
@@ -1510,37 +1510,37 @@ Y_UNIT_TEST_SUITE(TClientTest) {
             UNIT_ASSERT_VALUES_EQUAL(10, ui64(row["uint"]));
             UNIT_ASSERT_VALUES_EQUAL(2, ui64(row["key"]));
         }
-    }
-
+    } 
+ 
     void WaitForLeaderStart(TClient& client, TTestActorRuntime* runtime, ui64 tabletId, const TDuration& timeout) {
-        if (client.WaitForTabletAlive(runtime, tabletId, true, timeout))
-            return;
-
+        if (client.WaitForTabletAlive(runtime, tabletId, true, timeout)) 
+            return; 
+ 
         UNIT_ASSERT(!"Timeout expired while waiting for leader start");
-    }
-
+    } 
+ 
     void WaitForFollowerStart(TClient& client, TTestActorRuntime* runtime, ui64 tabletId, const TDuration& timeout) {
-        if (client.WaitForTabletAlive(runtime, tabletId, false, timeout))
-            return;
-
+        if (client.WaitForTabletAlive(runtime, tabletId, false, timeout)) 
+            return; 
+ 
         UNIT_ASSERT(!"Timeout expired while waiting for follower start");
-    }
-
+    } 
+ 
     Y_UNIT_TEST(ReadFromFollower) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
 
         auto settings = TServerSettings(port);
         settings.SetNodeCount(2);
         TServer server(settings);
         TClient client(settings);
 
-        SetupLogging(server);
-
-        PrepareTestData(client, false);
-        CheckRead(client, true);
-    }
-
+        SetupLogging(server); 
+ 
+        PrepareTestData(client, false); 
+        CheckRead(client, true); 
+    } 
+ 
     Y_UNIT_TEST(FollowerCacheRefresh) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -1626,53 +1626,53 @@ Y_UNIT_TEST_SUITE(TClientTest) {
     }
 
     Y_UNIT_TEST(PromoteFollower) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
-
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
+ 
         auto settings = TServerSettings(port);
         settings.SetNodeCount(2);
 
         TServer server(settings);
         TClient client(settings);
 
-        PrepareTestData(client, true);
-
-        SetupLogging(server);
-
-        const ui64 tabletId = 72075186224037888ull;
-
+        PrepareTestData(client, true); 
+ 
+        SetupLogging(server); 
+ 
+        const ui64 tabletId = 72075186224037888ull; 
+ 
         ui32 leaderNode = client.GetLeaderNode(server.GetRuntime(), tabletId);
-
+ 
         WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
         WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
-
+ 
         TVector<ui32> followerNodes = client.GetFollowerNodes(server.GetRuntime(), tabletId);
         UNIT_ASSERT_VALUES_EQUAL(1, followerNodes.size());
         UNIT_ASSERT_VALUES_UNEQUAL(leaderNode, followerNodes[0]);
-
+ 
         Cout << "Read from follower" << Endl;
-        CheckRead(client, true);
+        CheckRead(client, true); 
         Cout << "Read from leader" << Endl;
-        CheckRead(client, false);
-
+        CheckRead(client, false); 
+ 
         Cout << "Disable node, leader should move back" << Endl;
         client.MarkNodeInHive(server.GetRuntime(), leaderNode, false);
         client.KickNodeInHive(server.GetRuntime(), leaderNode);
         WaitForLeaderStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
-
+ 
         Cout << "Read from new leader" << Endl;
-        CheckRead(client, false);
+        CheckRead(client, false); 
         ui32 newLeaderNode = client.GetLeaderNode(server.GetRuntime(), tabletId);
         UNIT_ASSERT_VALUES_UNEQUAL_C(newLeaderNode, leaderNode, "Leader has moved");
-
+ 
         Cout << "Reenable node, follower should start there" << Endl;
         client.MarkNodeInHive(server.GetRuntime(), leaderNode, true);
         WaitForFollowerStart(client, server.GetRuntime(), tabletId, TDuration::Seconds(5));
         followerNodes = client.GetFollowerNodes(server.GetRuntime(), tabletId);
-
-        CheckRead(client, true);
-    }
-
+ 
+        CheckRead(client, true); 
+    } 
+ 
     void DiagnosticsBody(TClient &client, bool testWrite, bool allowFollower = false) {
         TString query;
         if (testWrite) {
@@ -1695,7 +1695,7 @@ Y_UNIT_TEST_SUITE(TClientTest) {
                 ))
             ))", allowFollower ? "'follower" : "");
         }
-
+ 
         NKikimrMiniKQL::TResult result;
         UNIT_ASSERT(client.FlatQuery(query, result));
 
@@ -1760,98 +1760,98 @@ Y_UNIT_TEST_SUITE(TClientTest) {
 
     TString DiffStrings(const TString& newStr, const TString& oldStr) {
         TVector<NDiff::TChunk<char>> chunks;
-        NDiff::InlineDiff(chunks, newStr, oldStr, "\n");
-
+        NDiff::InlineDiff(chunks, newStr, oldStr, "\n"); 
+ 
         TString res;
-        TStringOutput out(res);
-        for (const auto& c : chunks) {
+        TStringOutput out(res); 
+        for (const auto& c : chunks) { 
             TString left(c.Left.begin(), c.Left.end());
             TString right(c.Right.begin(), c.Right.end());
-            if (!left.empty() || !right.empty()) {
-                out  << ">>>>>" << Endl
-                     << left << Endl
-                     << "=====" << Endl
-                     << right << Endl
-                     << "<<<<<" << Endl;
-            }
-        }
-        return res;
-    }
-
+            if (!left.empty() || !right.empty()) { 
+                out  << ">>>>>" << Endl 
+                     << left << Endl 
+                     << "=====" << Endl 
+                     << right << Endl 
+                     << "<<<<<" << Endl; 
+            } 
+        } 
+        return res; 
+    } 
+ 
     TString ToString(const NTabletFlatScheme::TSchemeChanges& scheme) {
         TString str;
-        ::google::protobuf::TextFormat::PrintToString(scheme, &str);
-        return str;
-    }
-
+        ::google::protobuf::TextFormat::PrintToString(scheme, &str); 
+        return str; 
+    } 
+ 
     Y_UNIT_TEST(LocalSchemeTxRead) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
-
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
+ 
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
-        NTabletFlatScheme::TSchemeChanges scheme1;
-        NTabletFlatScheme::TSchemeChanges scheme2;
+        NTabletFlatScheme::TSchemeChanges scheme1; 
+        NTabletFlatScheme::TSchemeChanges scheme2; 
         TString err;
-        bool success = client.LocalSchemeTx(Tests::Hive, "", true, scheme1, err);
-        UNIT_ASSERT(success);
-        success = client.LocalSchemeTx(Tests::Hive, "", false, scheme2, err);
-        UNIT_ASSERT(success);
-
-        UNIT_ASSERT_VALUES_EQUAL(ToString(scheme1), ToString(scheme2));
-    }
-
+        bool success = client.LocalSchemeTx(Tests::Hive, "", true, scheme1, err); 
+        UNIT_ASSERT(success); 
+        success = client.LocalSchemeTx(Tests::Hive, "", false, scheme2, err); 
+        UNIT_ASSERT(success); 
+ 
+        UNIT_ASSERT_VALUES_EQUAL(ToString(scheme1), ToString(scheme2)); 
+    } 
+ 
     Y_UNIT_TEST(LocalSchemeTxModify) {
-        TPortManager tp;
-        ui16 port = tp.GetPort(2134);
-
+        TPortManager tp; 
+        ui16 port = tp.GetPort(2134); 
+ 
         const auto settings = TServerSettings(port);
         TServer server(settings);
         TClient client(settings);
 
-        NTabletFlatScheme::TSchemeChanges scheme;
+        NTabletFlatScheme::TSchemeChanges scheme; 
         TString err;
-        bool success = false;
-
-        success = client.LocalSchemeTx(Tests::Hive, "", true, scheme, err);
-        UNIT_ASSERT(success);
+        bool success = false; 
+ 
+        success = client.LocalSchemeTx(Tests::Hive, "", true, scheme, err); 
+        UNIT_ASSERT(success); 
         TString oldScheme = ToString(scheme);
-
+ 
         TString change =  R"___(
-                Delta {
-                    DeltaType: AddColumn
-                    TableId: 10
-                    ColumnId: 1001
-                    ColumnName: "NewColumn"
-                    ColumnType: 2
-                }
-                Delta {
-                    DeltaType: UpdateExecutorInfo
-                    ExecutorCacheSize: 10000000
-                }
-                )___";
-
-        // Dry run first
-        success = client.LocalSchemeTx(Tests::Hive, change, true, scheme, err);
-        UNIT_ASSERT(success);
+                Delta { 
+                    DeltaType: AddColumn 
+                    TableId: 10 
+                    ColumnId: 1001 
+                    ColumnName: "NewColumn" 
+                    ColumnType: 2 
+                } 
+                Delta { 
+                    DeltaType: UpdateExecutorInfo 
+                    ExecutorCacheSize: 10000000 
+                } 
+                )___"; 
+ 
+        // Dry run first 
+        success = client.LocalSchemeTx(Tests::Hive, change, true, scheme, err); 
+        UNIT_ASSERT(success); 
         TString dryRunScheme = ToString(scheme);
-        // Re-read
-        success = client.LocalSchemeTx(Tests::Hive, "", true, scheme, err);
+        // Re-read 
+        success = client.LocalSchemeTx(Tests::Hive, "", true, scheme, err); 
         TString newScheme = ToString(scheme);
-        UNIT_ASSERT_VALUES_EQUAL_C(newScheme, oldScheme, "Schema changed by dry-run");
-
-        // Update
-        success = client.LocalSchemeTx(Tests::Hive, change, false, scheme, err);
-        UNIT_ASSERT(success);
-        newScheme = ToString(scheme);
-        UNIT_ASSERT_VALUES_EQUAL_C(newScheme, dryRunScheme, "Dry-run result is not equal");
-
+        UNIT_ASSERT_VALUES_EQUAL_C(newScheme, oldScheme, "Schema changed by dry-run"); 
+ 
+        // Update 
+        success = client.LocalSchemeTx(Tests::Hive, change, false, scheme, err); 
+        UNIT_ASSERT(success); 
+        newScheme = ToString(scheme); 
+        UNIT_ASSERT_VALUES_EQUAL_C(newScheme, dryRunScheme, "Dry-run result is not equal"); 
+ 
         TString schemaDiff = DiffStrings(oldScheme, newScheme);
-        Cout << schemaDiff << Endl;
-        UNIT_ASSERT_C(!schemaDiff.empty(), "Schema not changed after update");
-    }
+        Cout << schemaDiff << Endl; 
+        UNIT_ASSERT_C(!schemaDiff.empty(), "Schema not changed after update"); 
+    } 
 
     Y_UNIT_TEST(LocalSchemeDropTable) {
         TPortManager tp;

@@ -355,7 +355,7 @@ public:
     NMonitoring::THistogramPtr DataTxTotalTimeHistogram;
     NMonitoring::THistogramPtr ScanTxTotalTimeHistogram;
 
-    TAlignedPagePoolCounters AllocCounters;
+    TAlignedPagePoolCounters AllocCounters; 
 
     // db counters
     TConcurrentRWHashMap<TString, TKqpDbCountersPtr, 256> DbCounters;

@@ -741,7 +741,7 @@ namespace NActors {
 #endif
                 }
             }
-        }
+        } 
 
         void WakeFastWorker() {
 #ifdef _linux_

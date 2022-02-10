@@ -43,7 +43,7 @@ void CreateSampleTables(TKikimrRunner& kikimr) {
     auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
     auto result = session.ExecuteDataQuery(R"(
-        REPLACE INTO `/Root/FourShard` (Key, Value1, Value2) VALUES
+        REPLACE INTO `/Root/FourShard` (Key, Value1, Value2) VALUES 
             (1u,   "Value-001",  "1"),
             (2u,   "Value-002",  "2"),
             (101u, "Value-101",  "101"),
@@ -64,7 +64,7 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
     auto session = db.CreateSession().GetValueSync().GetSession();
 
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-        CREATE TABLE [/Root/TestNulls] (
+        CREATE TABLE [/Root/TestNulls] ( 
             Key1 Uint32,
             Key2 Uint32,
             Value String,
@@ -73,7 +73,7 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
     )").GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteDataQuery(R"(
-        REPLACE INTO [/Root/TestNulls] (Key1, Key2, Value) VALUES
+        REPLACE INTO [/Root/TestNulls] (Key1, Key2, Value) VALUES 
             (NULL, NULL, "One"),
             (NULL, 100u, "Two"),
             (NULL, 200u, "Three"),
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         CreateNullSampleTables(kikimr);
 
         auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
-                SELECT Value FROM `/Root/TestNulls`
+                SELECT Value FROM `/Root/TestNulls` 
                 WHERE Key1 IS NULL AND Key2 IS NULL
             )").GetValueSync();
 
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         CreateNullSampleTables(kikimr);
 
         auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
-                SELECT * FROM `/Root/Test`
+                SELECT * FROM `/Root/Test` 
                 WHERE Group == 1 AND Name IS NULL
             )").GetValueSync();
 
@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         CreateNullSampleTables(kikimr);
 
         auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
-                SELECT Value FROM `/Root/TestNulls`
+                SELECT Value FROM `/Root/TestNulls` 
                 WHERE Key1 <= 1
                 ORDER BY Value
             )").GetValueSync();
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
                 DECLARE $key1 AS Uint32?;
-                SELECT Value FROM `/Root/TestNulls`
+                SELECT Value FROM `/Root/TestNulls` 
                 WHERE Key1 > 1
             )").GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT Key, Text, Data FROM `/Root/EightShard` ORDER BY Key LIMIT 3 OFFSET 6
+            SELECT Key, Text, Data FROM `/Root/EightShard` ORDER BY Key LIMIT 3 OFFSET 6 
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT * FROM `/Root/KeyValue` LIMIT 10
+            SELECT * FROM `/Root/KeyValue` LIMIT 10 
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -230,23 +230,23 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT * FROM `/Root/KeyValue` ORDER BY Key LIMIT 1
+            SELECT * FROM `/Root/KeyValue` ORDER BY Key LIMIT 1 
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(R"([[[1u];["One"]]])", StreamResultToYson(it));
     }
 
-    Y_UNIT_TEST(Grep) {
+    Y_UNIT_TEST(Grep) { 
         TKikimrRunner kikimr(AppCfg());
         auto db = kikimr.GetTableClient();
-
+ 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT * FROM `/Root/EightShard` WHERE Data == 1 ORDER BY Key;
+            SELECT * FROM `/Root/EightShard` WHERE Data == 1 ORDER BY Key; 
         )").GetValueSync();
-
-        UNIT_ASSERT(it.IsSuccess());
-
+ 
+        UNIT_ASSERT(it.IsSuccess()); 
+ 
         CompareYson(R"([
             [[1];[101u];["Value1"]];
             [[1];[202u];["Value2"]];
@@ -257,21 +257,21 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             [[1];[701u];["Value1"]];
             [[1];[802u];["Value2"]]])", StreamResultToYson(it));
     }
-
-    Y_UNIT_TEST(GrepByString) {
+ 
+    Y_UNIT_TEST(GrepByString) { 
         TKikimrRunner kikimr(AppCfg());
         auto db = kikimr.GetTableClient();
-
+ 
         auto it = db.StreamExecuteScanQuery(R"(
-            $value = 'some very very very very long string';
-            SELECT * FROM `/Root/Logs` WHERE Message == $value ORDER BY App, Ts;
-        )").GetValueSync();;
-
-        UNIT_ASSERT(it.IsSuccess());
-
-        CompareYson(R"([
-            [["ydb"];["ydb-1000"];["some very very very very long string"];[0]]])", StreamResultToYson(it));
-    }
+            $value = 'some very very very very long string'; 
+            SELECT * FROM `/Root/Logs` WHERE Message == $value ORDER BY App, Ts; 
+        )").GetValueSync();; 
+ 
+        UNIT_ASSERT(it.IsSuccess()); 
+ 
+        CompareYson(R"([ 
+            [["ydb"];["ydb-1000"];["some very very very very long string"];[0]]])", StreamResultToYson(it)); 
+    } 
 
     Y_UNIT_TEST(Order) {
         TKikimrRunner kikimr(AppCfg());
@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             DECLARE $low AS Uint64;
             DECLARE $high AS Uint64;
 
-            SELECT * FROM `/Root/EightShard` WHERE Key >= $low AND Key <= $high AND Data == 1 ORDER BY Key;
+            SELECT * FROM `/Root/EightShard` WHERE Key >= $low AND Key <= $high AND Data == 1 ORDER BY Key; 
         )", params).GetValueSync();
 
         UNIT_ASSERT(it.IsSuccess());
@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             [[1];[502u];["Value2"]]
         ])", StreamResultToYson(it));
     }
-
+ 
     Y_UNIT_TEST(GrepLimit) {
         TKikimrRunner kikimr(AppCfg());
         auto db = kikimr.GetTableClient();
@@ -352,7 +352,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             DECLARE $tsTo AS Int64;
 
             SELECT *
-            FROM `/Root/Logs`
+            FROM `/Root/Logs` 
             WHERE
                 App == $app
                 AND Ts > $tsFrom
@@ -371,36 +371,36 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     Y_UNIT_TEST(GrepNonKeyColumns) {
         TKikimrRunner kikimr(AppCfg());
         auto db = kikimr.GetTableClient();
-
-        TParamsBuilder params;
-        params.AddParam("$app").Utf8("nginx").Build();
-        params.AddParam("$tsFrom").Uint64(0).Build();
-        params.AddParam("$tsTo").Uint64(5).Build();
-
+ 
+        TParamsBuilder params; 
+        params.AddParam("$app").Utf8("nginx").Build(); 
+        params.AddParam("$tsFrom").Uint64(0).Build(); 
+        params.AddParam("$tsTo").Uint64(5).Build(); 
+ 
         auto it = db.StreamExecuteScanQuery(R"(
-            DECLARE $app AS Utf8;
-            DECLARE $tsFrom AS Uint64;
-            DECLARE $tsTo AS Uint64;
-
-            SELECT
+            DECLARE $app AS Utf8; 
+            DECLARE $tsFrom AS Uint64; 
+            DECLARE $tsTo AS Uint64; 
+ 
+            SELECT 
                 Message,
                 Ts
-            FROM `/Root/Logs`
-            WHERE
+            FROM `/Root/Logs` 
+            WHERE 
                 App == $app
                 AND Ts > $tsFrom
                 AND Ts <= $tsTo
             ORDER BY Ts;
-        )", params.Build()).GetValueSync();;
-
-        UNIT_ASSERT(it.IsSuccess());
-
-        CompareYson(R"([
+        )", params.Build()).GetValueSync();; 
+ 
+        UNIT_ASSERT(it.IsSuccess()); 
+ 
+        CompareYson(R"([ 
             [["GET /index.html HTTP/1.1"];[1]];
             [["PUT /form HTTP/1.1"];[2]];
             [["GET /cat.jpg HTTP/1.1"];[3]]
-        ])", StreamResultToYson(it));
-    }
+        ])", StreamResultToYson(it)); 
+    } 
 
     Y_UNIT_TEST(SingleKey) {
         TKikimrRunner kikimr(AppCfg());
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto it = db.StreamExecuteScanQuery(R"(
             DECLARE $key AS Uint64;
 
-            SELECT * FROM `/Root/EightShard` WHERE Key = $key;
+            SELECT * FROM `/Root/EightShard` WHERE Key = $key; 
         )", params).GetValueSync();
 
         UNIT_ASSERT(it.IsSuccess());
@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT Text, SUM(Key) AS Total FROM `/Root/EightShard`
+            SELECT Text, SUM(Key) AS Total FROM `/Root/EightShard` 
             GROUP BY Text
             ORDER BY Total DESC;
         )").GetValueSync();
@@ -450,7 +450,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT SUM(Data), AVG(Data), COUNT(*), MAX(Data), MIN(Data), SUM(Data * 3 + Key * 2) as foo
-            FROM `/Root/EightShard`
+            FROM `/Root/EightShard` 
             WHERE Key > 300
         )").GetValueSync();
 
@@ -465,7 +465,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
                 SELECT SUM(Data), AVG(Data), COUNT(*)
-                FROM `/Root/EightShard`
+                FROM `/Root/EightShard` 
                 WHERE Key > 300
             )").GetValueSync();
 
@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT (SUM(Data) * 100) / (MIN(Data) + 10)
-            FROM `/Root/EightShard`
+            FROM `/Root/EightShard` 
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -492,7 +492,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrRunner kikimr(AppCfg());
         auto db = kikimr.GetTableClient();
 
-        auto it = db.StreamExecuteScanQuery("SELECT COUNT(*) FROM `/Root/EightShard`").GetValueSync();
+        auto it = db.StreamExecuteScanQuery("SELECT COUNT(*) FROM `/Root/EightShard`").GetValueSync(); 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(R"([[24u]])", StreamResultToYson(it));
     }
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrRunner kikimr(AppCfg());
         auto db = kikimr.GetTableClient();
 
-        auto it = db.StreamExecuteScanQuery("SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key < 10").GetValueSync();
+        auto it = db.StreamExecuteScanQuery("SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key < 10").GetValueSync(); 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(R"([[0u]])", StreamResultToYson(it));
     }
@@ -510,7 +510,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         TKikimrRunner kikimr(AppCfg());
         auto db = kikimr.GetTableClient();
 
-        auto it = db.StreamExecuteScanQuery("SELECT SUM(Data) FROM `/Root/EightShard` WHERE Key < 10").GetValueSync();
+        auto it = db.StreamExecuteScanQuery("SELECT SUM(Data) FROM `/Root/EightShard` WHERE Key < 10").GetValueSync(); 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(R"([[#]])", StreamResultToYson(it));
     }
@@ -522,7 +522,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT *
-            FROM `/Root/EightShard` AS l JOIN `/Root/FourShard` AS r ON l.Key = r.Key
+            FROM `/Root/EightShard` AS l JOIN `/Root/FourShard` AS r ON l.Key = r.Key 
             ORDER BY Key, Text, Data, Value1, Value2
         )").GetValueSync();
 
@@ -546,10 +546,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto test = [&](bool simpleColumns) {
             auto it = db.StreamExecuteScanQuery(Sprintf(R"(
                 PRAGMA %sSimpleColumns;
-                $r = (select * from `/Root/FourShard` where Key > 201);
+                $r = (select * from `/Root/FourShard` where Key > 201); 
 
                 SELECT l.Key as key, l.Text as text, r.Value1 as value
-                FROM `/Root/EightShard` AS l JOIN $r AS r ON l.Key = r.Key
+                FROM `/Root/EightShard` AS l JOIN $r AS r ON l.Key = r.Key 
                 ORDER BY key, text, value
             )", simpleColumns ? "" : "Disable")).GetValueSync();
 
@@ -573,8 +573,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT *
-            FROM `/Root/EightShard` AS l
-            JOIN `/Root/FourShard` AS r
+            FROM `/Root/EightShard` AS l 
+            JOIN `/Root/FourShard` AS r 
             ON l.Key = r.Key
             WHERE l.Text != "Value1" AND r.Value2 > "1"
             ORDER BY Key, Text, Data, Value1, Value2
@@ -599,7 +599,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 PRAGMA %sSimpleColumns;
                 $join = (
                     SELECT l.Key as Key, l.Text as Text, l.Data as Data, r.Value1 as Value1, r.Value2 as Value2
-                    FROM `/Root/EightShard` AS l JOIN `/Root/FourShard` AS r ON l.Key = r.Key
+                    FROM `/Root/EightShard` AS l JOIN `/Root/FourShard` AS r ON l.Key = r.Key 
                 );
 
                 SELECT Key, COUNT(*) AS Cnt
@@ -630,7 +630,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT *
-            FROM `/Root/FourShard` AS l LEFT SEMI JOIN `/Root/EightShard` AS r ON l.Key = r.Key
+            FROM `/Root/FourShard` AS l LEFT SEMI JOIN `/Root/EightShard` AS r ON l.Key = r.Key 
             ORDER BY Key
         )").GetValueSync();
 
@@ -652,7 +652,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT l.Key, l.Text, l.Data, r.Key, r.Value1, r.Value2
-            FROM `/Root/EightShard` AS l RIGHT JOIN `/Root/FourShard` AS r ON l.Key = r.Key
+            FROM `/Root/EightShard` AS l RIGHT JOIN `/Root/FourShard` AS r ON l.Key = r.Key 
             WHERE r.Key < 200
             ORDER BY l.Key, l.Text, l.Data, r.Key, r.Value1, r.Value2
         )").GetValueSync();
@@ -674,7 +674,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT Key, Value1, Value2
-            FROM `/Root/EightShard` AS l RIGHT ONLY JOIN `/Root/FourShard` AS r ON l.Key = r.Key
+            FROM `/Root/EightShard` AS l RIGHT ONLY JOIN `/Root/FourShard` AS r ON l.Key = r.Key 
             WHERE Key < 200
             ORDER BY Key, Value1, Value2
         )").GetValueSync();
@@ -694,7 +694,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT Key, Value1, Value2
-            FROM `/Root/EightShard` AS l RIGHT SEMI JOIN `/Root/FourShard` AS r ON l.Key = r.Key
+            FROM `/Root/EightShard` AS l RIGHT SEMI JOIN `/Root/FourShard` AS r ON l.Key = r.Key 
             WHERE Key < 200
             ORDER BY Key, Value1, Value2
         )").GetValueSync();
@@ -719,13 +719,13 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto query1 = R"(
             declare $in as List<Struct<key: UInt64>>;
             select l.Key, l.Value
-            from `/Root/KeyValue` as l join AS_TABLE($in) as r on l.Key = r.key
+            from `/Root/KeyValue` as l join AS_TABLE($in) as r on l.Key = r.key 
         )";
         // params join table
         auto query2 = R"(
             declare $in as List<Struct<key: UInt64>>;
             select r.Key, r.Value
-            from AS_TABLE($in) as l join `/Root/KeyValue` as r on l.key = r.Key
+            from AS_TABLE($in) as l join `/Root/KeyValue` as r on l.key = r.Key 
         )";
         for (auto& query : {query1, query2}) {
             auto it = db.StreamExecuteScanQuery(query, params).GetValueSync();
@@ -740,7 +740,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-            CREATE TABLE `/Root/Tmp` (
+            CREATE TABLE `/Root/Tmp` ( 
                 Key Uint64,
                 Value String,
                 PRIMARY KEY (Key)
@@ -815,10 +815,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto it = db.StreamExecuteScanQuery(R"(
             PRAGMA DisableSimpleColumns;
             SELECT *
-            FROM `/Root/EightShard` AS t8
-              JOIN `/Root/FourShard` AS t4
+            FROM `/Root/EightShard` AS t8 
+              JOIN `/Root/FourShard` AS t4 
                 ON t8.Key = t4.Key
-              JOIN `/Root/TwoShard` AS t2
+              JOIN `/Root/TwoShard` AS t2 
                 ON t8.Data = t2.Key
             ORDER BY t8.Key, t8.Text, t8.Data, t4.Value1, t4.Value2, t2.Value1, t2.Value2
         )").GetValueSync();
@@ -845,10 +845,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             auto it = db.StreamExecuteScanQuery(Sprintf(R"(
                 PRAGMA %sSimpleColumns;
                 SELECT t8.Key as key, t8.Text as text, t4.Value1, t2.Value2
-                FROM `/Root/EightShard` AS t8
-                  JOIN `/Root/FourShard` AS t4
+                FROM `/Root/EightShard` AS t8 
+                  JOIN `/Root/FourShard` AS t4 
                     ON t8.Key = t4.Key
-                  JOIN `/Root/TwoShard` AS t2
+                  JOIN `/Root/TwoShard` AS t2 
                     ON t8.Data = t2.Key
                 WHERE t8.Key > 200 AND t2.Value2 >= 0
                 ORDER BY key, text, t4.Value1, t2.Value2
@@ -877,8 +877,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             auto it = db.StreamExecuteScanQuery(Sprintf(R"(
                 PRAGMA %sSimpleColumns;
                 SELECT *
-                FROM `/Root/EightShard` AS l
-                    LEFT ONLY JOIN `/Root/FourShard` AS r
+                FROM `/Root/EightShard` AS l 
+                    LEFT ONLY JOIN `/Root/FourShard` AS r 
                         ON l.Key = r.Key
                 WHERE Data = 1
                 ORDER BY Key, Text, Data
@@ -908,7 +908,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT l.Key, r.Key, l.Text, r.Value1
-            FROM `/Root/EightShard` AS l CROSS JOIN `/Root/FourShard` AS r
+            FROM `/Root/EightShard` AS l CROSS JOIN `/Root/FourShard` AS r 
             WHERE l.Key > r.Key AND l.Data = 1 AND r.Value2 > "200"
             ORDER BY l.Key, l.Text, r.Value1
         )").GetValueSync();
@@ -952,15 +952,15 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto it = db.StreamExecuteScanQuery(R"(
             $foo = (
                 SELECT t1.Key AS Key
-                FROM `/Root/KeyValue` AS t1
-                JOIN `/Root/KeyValue` AS t2
+                FROM `/Root/KeyValue` AS t1 
+                JOIN `/Root/KeyValue` AS t2 
                 ON t1.Key = t2.Key
                 GROUP BY t1.Key
             );
 
             SELECT t1.Key AS Key
             FROM $foo AS Foo
-            JOIN `/Root/KeyValue` AS t1
+            JOIN `/Root/KeyValue` AS t1 
             ON t1.Key = Foo.Key
             ORDER BY Key
         )").GetValueSync();
@@ -978,15 +978,15 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto it = db.StreamExecuteScanQuery(R"(
             $foo = (
                 SELECT t1.Key AS Key
-                FROM `/Root/KeyValue` AS t1
-                JOIN `/Root/KeyValue` AS t2
+                FROM `/Root/KeyValue` AS t1 
+                JOIN `/Root/KeyValue` AS t2 
                 ON t1.Key = t2.Key
                 GROUP BY t1.Key
             );
 
             SELECT t3.Key AS Key
             FROM $foo AS Foo
-            JOIN `/Root/KeyValue` AS t3
+            JOIN `/Root/KeyValue` AS t3 
             ON t3.Key = Foo.Key
             ORDER BY Key
         )").GetValueSync();
@@ -1009,7 +1009,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto it = db.StreamExecuteScanQuery(R"(
             DECLARE $in AS 'List<Struct<k: Uint64, v: String>>';
             SELECT *
-            FROM `/Root/KeyValue` AS l
+            FROM `/Root/KeyValue` AS l 
             JOIN AS_TABLE($in) AS r
             ON l.Key = r.k
         )", params).GetValueSync();
@@ -1041,7 +1041,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 FROM AS_TABLE($in1) AS l
                 JOIN AS_TABLE($in2) AS r
                 ON l.k = r.k;
-                UPSERT INTO [/Root/KeyValue] (Key, Value) Values (1, "test");
+                UPSERT INTO [/Root/KeyValue] (Key, Value) Values (1, "test"); 
             )", params).GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1091,7 +1091,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             .ProfileMode(NExperimental::EStreamQueryProfileMode::Basic);
 
         auto it = db.ExecuteStreamQuery(R"(
-                SELECT * FROM `/Root/EightShard` WHERE Key = 301;
+                SELECT * FROM `/Root/EightShard` WHERE Key = 301; 
             )", settings).GetValueSync();
 
         UNIT_ASSERT(it.IsSuccess());
@@ -1135,7 +1135,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.ExecuteStreamQuery(R"(
             DECLARE $key AS Uint64;
-            SELECT * FROM `/Root/EightShard` WHERE Key = $key + 1;
+            SELECT * FROM `/Root/EightShard` WHERE Key = $key + 1; 
         )", params, settings).GetValueSync();
 
         UNIT_ASSERT(it.IsSuccess());
@@ -1180,7 +1180,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto it = db.StreamExecuteScanQuery(R"(
             $join = (
                 SELECT l.Key as Key, l.Text as Text, l.Data as Data, r.Value1 as Value1, r.Value2 as Value2
-                FROM `/Root/EightShard` AS l JOIN `/Root/FourShard` AS r ON l.Key = r.Key
+                FROM `/Root/EightShard` AS l JOIN `/Root/FourShard` AS r ON l.Key = r.Key 
             );
 
             SELECT Key, COUNT(*) AS Cnt
@@ -1219,7 +1219,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         for (int i = 0; i < 100; ++i) {
             AssertSuccessResult(session.ExecuteDataQuery(
                 Sprintf(R"(
-                    REPLACE INTO `/Root/EightShard` (Key, Text, Data) VALUES
+                    REPLACE INTO `/Root/EightShard` (Key, Text, Data) VALUES 
                         (%d, "Value1", 0),
                         (%d, "Value2", 1),
                         (%d, "Value3", 2),
@@ -1233,7 +1233,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         }
 
         auto db = kikimr.GetTableClient();
-        auto it = db.StreamExecuteScanQuery("SELECT * FROM `/Root/EightShard` LIMIT 2").GetValueSync();
+        auto it = db.StreamExecuteScanQuery("SELECT * FROM `/Root/EightShard` LIMIT 2").GetValueSync(); 
 
         Cerr << StreamResultToYson(it) << Endl;
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1244,8 +1244,8 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT * FROM `/Root/KeyValue`;
-            SELECT * FROM `/Root/EightShard`;
+            SELECT * FROM `/Root/KeyValue`; 
+            SELECT * FROM `/Root/EightShard`; 
         )").GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -1259,10 +1259,10 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            UPSERT INTO `/Root/KeyValue`
-            SELECT Key, Text AS Value FROM `/Root/EightShard`;
+            UPSERT INTO `/Root/KeyValue` 
+            SELECT Key, Text AS Value FROM `/Root/EightShard`; 
 
-            SELECT * FROM `/Root/EightShard`;
+            SELECT * FROM `/Root/EightShard`; 
         )").GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
@@ -1302,7 +1302,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1;
+            SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1; 
             SELECT 2;
         )").GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1316,9 +1316,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1)
+            (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1) 
             UNION ALL
-            (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1);
+            (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1); 
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1332,7 +1332,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT 42
             UNION ALL
-            (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1);
+            (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1); 
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1344,11 +1344,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1)
+            (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1) 
             UNION ALL
-            (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1)
+            (SELECT Key FROM `/Root/EightShard` ORDER BY Key LIMIT 1) 
             UNION ALL
-            (SELECT Key FROM `/Root/TwoShard` ORDER BY Key DESC LIMIT 1);
+            (SELECT Key FROM `/Root/TwoShard` ORDER BY Key DESC LIMIT 1); 
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1360,9 +1360,9 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1)
+            (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1) 
             UNION ALL
-            (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1);
+            (SELECT Key FROM `/Root/KeyValue` ORDER BY Key LIMIT 1); 
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1374,11 +1374,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT COUNT(*) FROM `/Root/KeyValue`
+            SELECT COUNT(*) FROM `/Root/KeyValue` 
             UNION ALL
-            SELECT COUNT(*) FROM `/Root/EightShard`
+            SELECT COUNT(*) FROM `/Root/EightShard` 
             UNION ALL
-            SELECT SUM(Amount) FROM `/Root/Test`;
+            SELECT SUM(Amount) FROM `/Root/Test`; 
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1391,7 +1391,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT count(*) AS c1, count(DISTINCT Value) AS c2
-            FROM `/Root/KeyValue` GROUP BY Key;
+            FROM `/Root/KeyValue` GROUP BY Key; 
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1405,7 +1405,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT group_total, count(*) FROM (
                 SELECT Key, Text, SUM(Data) OVER w1 AS group_total
-                FROM `/Root/EightShard` WINDOW w1 AS (partition by Text)
+                FROM `/Root/EightShard` WINDOW w1 AS (partition by Text) 
             ) GROUP BY group_total ORDER BY group_total;
         )").GetValueSync();
         auto res = StreamResultToYson(it);
@@ -1420,7 +1420,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT Text, running_total FROM (
                 SELECT Key, Text, SUM(Data) OVER w1 AS running_total
-                FROM `/Root/EightShard`
+                FROM `/Root/EightShard` 
                 WHERE Text = 'Value2'
                 WINDOW w1 AS (partition by Text order by Key)
             ) ORDER BY running_total;
@@ -1447,7 +1447,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT tot, avg, count(*) FROM (
                 SELECT Key, Text, SUM(Data) OVER w1 AS tot, avg(Data) OVER w1 AS avg
-                FROM `/Root/EightShard`
+                FROM `/Root/EightShard` 
                 WHERE Text = 'Value3'
                 WINDOW w1 AS (partition by Text)
             ) GROUP BY tot, avg
@@ -1463,7 +1463,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT Key, Text, sum(Data) OVER w1 AS tot, sum(Data) OVER w2 AS avg
-            FROM `/Root/EightShard`
+            FROM `/Root/EightShard` 
             WHERE Text = 'Value2'
             WINDOW w1 AS (partition by Text),
                    w2 AS (partition by Text order by Key)
@@ -1490,7 +1490,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto it = db.StreamExecuteScanQuery(R"(
             SELECT Key, sum_short_win FROM (
                 SELECT Key, Text, SUM(Data) OVER w1 AS sum_short_win
-                FROM `/Root/EightShard`
+                FROM `/Root/EightShard` 
                 WHERE Text = 'Value2'
                 WINDOW w1 AS (partition by Text order by Key ROWS BETWEEN CURRENT ROW and 2 FOLLOWING)
             ) ORDER BY Key;
@@ -1514,7 +1514,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT Key FROM `/Root/EightShard` WHERE false;
+            SELECT Key FROM `/Root/EightShard` WHERE false; 
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1527,7 +1527,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             --!syntax_v0
-            SELECT * FROM [/Root/EightShard] WHERE Key = 1;
+            SELECT * FROM [/Root/EightShard] WHERE Key = 1; 
         )").GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto part = it.ReadNext().GetValueSync();
@@ -1541,7 +1541,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT min(Message), max(Message) FROM `/Root/Logs`;
+            SELECT min(Message), max(Message) FROM `/Root/Logs`; 
         )").GetValueSync();
         auto res = StreamResultToYson(it);
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -1553,7 +1553,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto result = db.CreateSession().GetValueSync().GetSession().ExecuteDataQuery(R"(
-            REPLACE INTO `/Root/KeyValue` (Key, Value) VALUES
+            REPLACE INTO `/Root/KeyValue` (Key, Value) VALUES 
                 (3u,   "Three"),
                 (4u,   "Four"),
                 (10u,  "Ten"),
@@ -1587,7 +1587,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto result = db.CreateSession().GetValueSync().GetSession().ExecuteDataQuery(R"(
-                REPLACE INTO `/Root/KeyValue` (Key, Value) VALUES
+                REPLACE INTO `/Root/KeyValue` (Key, Value) VALUES 
                     (3u,   "Three"),
                     (4u,   "Four"),
                     (10u,  "Ten"),
@@ -1718,7 +1718,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto db = kikimr.GetTableClient();
 
         auto it = db.StreamExecuteScanQuery(R"(
-            SELECT * FROM `/Root/KeyValue` WHERE Key IN (1,2,3) LIMIT 10;
+            SELECT * FROM `/Root/KeyValue` WHERE Key IN (1,2,3) LIMIT 10; 
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());

@@ -27,8 +27,8 @@ SRCS(
     flat_executor_bootlogic.h
     flat_executor_borrowlogic.cpp
     flat_executor_borrowlogic.h
-    flat_executor_compaction_logic.cpp
-    flat_executor_compaction_logic.h
+    flat_executor_compaction_logic.cpp 
+    flat_executor_compaction_logic.h 
     flat_executor_counters.cpp
     flat_executor_counters.h
     flat_executor_db_mon.cpp
@@ -54,12 +54,12 @@ SRCS(
     flat_range_cache.cpp
     flat_row_versions.cpp
     flat_stat_part.cpp
-    flat_stat_part.h
-    flat_stat_table.h
-    flat_stat_table.cpp
+    flat_stat_part.h 
+    flat_stat_table.h 
+    flat_stat_table.cpp 
     flat_store_hotdog.cpp
     flat_table.cpp
-    flat_table.h
+    flat_table.h 
     flat_table_part.cpp
     flat_table_part.h
     flat_table_misc.cpp

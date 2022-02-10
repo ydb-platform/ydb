@@ -1,207 +1,207 @@
-#include "schemeshard_impl.h"
+#include "schemeshard_impl.h" 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-
-namespace NKikimr {
+ 
+namespace NKikimr { 
 namespace NSchemeShard {
-
-static bool IsIntegerType(NScheme::TTypeId typeId) {
-    switch (typeId) {
-    case NScheme::NTypeIds::Bool:
-
-    case NScheme::NTypeIds::Int8:
-    case NScheme::NTypeIds::Uint8:
-    case NScheme::NTypeIds::Int16:
-    case NScheme::NTypeIds::Uint16:
-    case NScheme::NTypeIds::Int32:
-    case NScheme::NTypeIds::Uint32:
-    case NScheme::NTypeIds::Int64:
-    case NScheme::NTypeIds::Uint64:
-
-    case NScheme::NTypeIds::Date:
-    case NScheme::NTypeIds::Datetime:
-    case NScheme::NTypeIds::Timestamp:
-    case NScheme::NTypeIds::Interval:
-        return true;
-
-    default:
-        return false;
-    }
-}
-
-TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, const TConstArrayRef<NScheme::TTypeId> &keyColumnTypes) {
-    ui64 bucketsCount = histogram.BucketsSize();
-    ui64 idxLo = bucketsCount * 0.33;
-    ui64 idxMed = bucketsCount * 0.5;
-    ui64 idxHi = bucketsCount * 0.66;
-
-    TSerializedCellVec keyLo(histogram.GetBuckets(idxLo).GetKey());
-    TSerializedCellVec keyMed(histogram.GetBuckets(idxMed).GetKey());
-    TSerializedCellVec keyHi(histogram.GetBuckets(idxHi).GetKey());
-
-    TVector<TCell> splitKey(keyMed.GetCells().size());
-
-    for (size_t i = 0; i < keyMed.GetCells().size(); ++i) {
-        NScheme::TTypeId columnType = keyColumnTypes[i];
-
-        if (0 == CompareTypedCells(keyLo.GetCells()[i], keyHi.GetCells()[i], columnType)) {
-            // lo == hi, so we add this value and proceed to the next column
-            splitKey[i] = keyLo.GetCells()[i];
-            continue;
-        }
-
-        if (0 != CompareTypedCells(keyLo.GetCells()[i], keyMed.GetCells()[i], columnType)) {
-            // med != lo
-            splitKey[i] = keyMed.GetCells()[i];
-        } else {
-            // med == lo and med != hi, so we want to find a value that is > med and <= hi
-            if (IsIntegerType(columnType) && !keyMed.GetCells()[i].IsNull()) {
-                // For interger types we can add 1 to med
-                ui64 val = 0;
-                size_t sz =  keyMed.GetCells()[i].Size();
-                memcpy(&val, keyMed.GetCells()[i].Data(), sz);
-                val++;
-                splitKey[i] = TCell((const char*)&val, sz);
-            } else {
-                // For other types let's do binary search between med and hi to find smallest key > med
-
-                // Compares only i-th cell in keys
-                auto fnCmpCurrentCell = [i, columnType] (const auto& bucket1, const auto& bucket2) {
-                    TSerializedCellVec key1(bucket1.GetKey());
-                    TSerializedCellVec key2(bucket2.GetKey());
-                    return CompareTypedCells(key1.GetCells()[i], key2.GetCells()[i], columnType) < 0;
-                };
-                const auto bucketsBegin = histogram.GetBuckets().begin();
-                const auto it = UpperBound(
-                            bucketsBegin + idxMed,
-                            bucketsBegin + idxHi,
-                            histogram.GetBuckets(idxMed),
-                            fnCmpCurrentCell);
-                TSerializedCellVec keyFound(it->GetKey());
-                splitKey[i] = keyFound.GetCells()[i];
-            }
-        }
-        break;
-    }
-
-    return TSerializedCellVec(TSerializedCellVec::Serialize(splitKey));
-}
-
-TSerializedCellVec DoFindSplitKey(const TVector<std::pair<TSerializedCellVec, ui64>>& keysHist,
-                                  const TConstArrayRef<NScheme::TTypeId>& keyColumnTypes,
-                                  const size_t prefixSize)
-{
-    ui64 total = keysHist.back().second;
-
-    // Compares bucket value
-    auto fnValueLess = [] (ui64 val, const auto& bucket) {
-        return val < bucket.second;
-    };
-
-    // Find the position of total/2
-    auto halfIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.5, fnValueLess);
-    auto loIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.1, fnValueLess);
-    auto hiIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.9, fnValueLess);
-
-    auto fnCmp = [&keyColumnTypes, prefixSize] (const auto& bucket1, const auto& bucket2) {
-        return CompareTypedCellVectors(bucket1.first.GetCells().data(), bucket2.first.GetCells().data(),
-                                       keyColumnTypes.data(),
-                                       std::min(bucket1.first.GetCells().size(), prefixSize), std::min(bucket2.first.GetCells().size(), prefixSize));
-    };
-
-    // Check if half key is no equal to low and high keys
-    if (fnCmp(*halfIt, *loIt) == 0)
-        return TSerializedCellVec();
-    if (fnCmp(*halfIt, *hiIt) == 0)
-        return TSerializedCellVec();
-
-    // Build split key by leaving the prefix and extending it with NULLs
-    TVector<TCell> splitKey(halfIt->first.GetCells().begin(), halfIt->first.GetCells().end());
-    splitKey.resize(prefixSize);
-    splitKey.resize(keyColumnTypes.size());
-
-    return TSerializedCellVec(TSerializedCellVec::Serialize(splitKey));
-}
-
-TSerializedCellVec ChooseSplitKeyByKeySample(const NKikimrTableStats::THistogram& keySample, const TConstArrayRef<NScheme::TTypeId>& keyColumnTypes) {
-    TVector<std::pair<TSerializedCellVec, ui64>> keysHist;
-    for (const auto& s : keySample.GetBuckets()) {
-        keysHist.emplace_back(std::make_pair(TSerializedCellVec(s.GetKey()), s.GetValue()));
-    }
-
-    auto fnCmp = [&keyColumnTypes] (const auto& key1, const auto& key2) {
-        return CompareTypedCellVectors(key1.first.GetCells().data(), key2.first.GetCells().data(),
-                                       keyColumnTypes.data(),
-                                       key1.first.GetCells().size(), key2.first.GetCells().size());
-    };
-
-    Sort(keysHist, [&fnCmp] (const auto& key1, const auto& key2) { return fnCmp(key1, key2) < 0; });
-
-    // The keys are now sorted. Next we convert the stats into a histogram by accumulating
-    // stats for all previous keys at each key.
-    size_t last = 0;
-    for (size_t i = 1; i < keysHist.size(); ++i) {
-        // Accumulate stats
-        keysHist[i].second += keysHist[i-1].second;
-
-        if (fnCmp(keysHist[i], keysHist[last]) == 0) {
-            // Merge equal keys
-            keysHist[last].second = keysHist[i].second;
-        } else {
-            ++last;
-            if (last != i) {
-                keysHist[last] = keysHist[i];
-            }
-        }
-    }
-    keysHist.resize(std::min(keysHist.size(), last + 1));
-
-    if (keysHist.size() < 2)
-        return TSerializedCellVec();
-
-    // Find the median key with the shortest prefix
-    size_t minPrefix = 0;
-    size_t maxPrefix = keyColumnTypes.size();
-
-    // Binary search for shortest prefix that can be used to split the load
-    TSerializedCellVec splitKey;
-    while (minPrefix + 1 < maxPrefix) {
-        size_t prefixSize = (minPrefix + maxPrefix + 1) / 2;
-        splitKey = DoFindSplitKey(keysHist, keyColumnTypes, prefixSize);
-        if (splitKey.GetCells().empty()) {
-            minPrefix = prefixSize;
-        } else {
-            maxPrefix = prefixSize;
-        }
-    }
-    splitKey = DoFindSplitKey(keysHist, keyColumnTypes, maxPrefix);
-
-    return splitKey;
-}
-
-enum struct ESplitReason {
-    NO_SPLIT = 0,
-    FAST_SPLIT_INDEX,
-    SPLIT_BY_SIZE,
-    SPLIT_BY_LOAD
-};
-
-const char* ToString(ESplitReason splitReason) {
-    switch (splitReason) {
-    case ESplitReason::NO_SPLIT:
-        return "No split";
-    case ESplitReason::FAST_SPLIT_INDEX:
-        return "Fast split index table";
-    case ESplitReason::SPLIT_BY_SIZE:
-        return "Split by size";
-    case ESplitReason::SPLIT_BY_LOAD:
-        return "Split by load";
-    default:
-        Y_VERIFY_DEBUG(!"Unexpected enum value");
-        return "Unexpected enum value";
-    }
-}
-
+ 
+static bool IsIntegerType(NScheme::TTypeId typeId) { 
+    switch (typeId) { 
+    case NScheme::NTypeIds::Bool: 
+ 
+    case NScheme::NTypeIds::Int8: 
+    case NScheme::NTypeIds::Uint8: 
+    case NScheme::NTypeIds::Int16: 
+    case NScheme::NTypeIds::Uint16: 
+    case NScheme::NTypeIds::Int32: 
+    case NScheme::NTypeIds::Uint32: 
+    case NScheme::NTypeIds::Int64: 
+    case NScheme::NTypeIds::Uint64: 
+ 
+    case NScheme::NTypeIds::Date: 
+    case NScheme::NTypeIds::Datetime: 
+    case NScheme::NTypeIds::Timestamp: 
+    case NScheme::NTypeIds::Interval: 
+        return true; 
+ 
+    default: 
+        return false; 
+    } 
+} 
+ 
+TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram& histogram, const TConstArrayRef<NScheme::TTypeId> &keyColumnTypes) { 
+    ui64 bucketsCount = histogram.BucketsSize(); 
+    ui64 idxLo = bucketsCount * 0.33; 
+    ui64 idxMed = bucketsCount * 0.5; 
+    ui64 idxHi = bucketsCount * 0.66; 
+ 
+    TSerializedCellVec keyLo(histogram.GetBuckets(idxLo).GetKey()); 
+    TSerializedCellVec keyMed(histogram.GetBuckets(idxMed).GetKey()); 
+    TSerializedCellVec keyHi(histogram.GetBuckets(idxHi).GetKey()); 
+ 
+    TVector<TCell> splitKey(keyMed.GetCells().size()); 
+ 
+    for (size_t i = 0; i < keyMed.GetCells().size(); ++i) { 
+        NScheme::TTypeId columnType = keyColumnTypes[i]; 
+ 
+        if (0 == CompareTypedCells(keyLo.GetCells()[i], keyHi.GetCells()[i], columnType)) { 
+            // lo == hi, so we add this value and proceed to the next column 
+            splitKey[i] = keyLo.GetCells()[i]; 
+            continue; 
+        } 
+ 
+        if (0 != CompareTypedCells(keyLo.GetCells()[i], keyMed.GetCells()[i], columnType)) { 
+            // med != lo 
+            splitKey[i] = keyMed.GetCells()[i]; 
+        } else { 
+            // med == lo and med != hi, so we want to find a value that is > med and <= hi 
+            if (IsIntegerType(columnType) && !keyMed.GetCells()[i].IsNull()) { 
+                // For interger types we can add 1 to med 
+                ui64 val = 0; 
+                size_t sz =  keyMed.GetCells()[i].Size(); 
+                memcpy(&val, keyMed.GetCells()[i].Data(), sz); 
+                val++; 
+                splitKey[i] = TCell((const char*)&val, sz); 
+            } else { 
+                // For other types let's do binary search between med and hi to find smallest key > med 
+ 
+                // Compares only i-th cell in keys 
+                auto fnCmpCurrentCell = [i, columnType] (const auto& bucket1, const auto& bucket2) { 
+                    TSerializedCellVec key1(bucket1.GetKey()); 
+                    TSerializedCellVec key2(bucket2.GetKey()); 
+                    return CompareTypedCells(key1.GetCells()[i], key2.GetCells()[i], columnType) < 0; 
+                }; 
+                const auto bucketsBegin = histogram.GetBuckets().begin(); 
+                const auto it = UpperBound( 
+                            bucketsBegin + idxMed, 
+                            bucketsBegin + idxHi, 
+                            histogram.GetBuckets(idxMed), 
+                            fnCmpCurrentCell); 
+                TSerializedCellVec keyFound(it->GetKey()); 
+                splitKey[i] = keyFound.GetCells()[i]; 
+            } 
+        } 
+        break; 
+    } 
+ 
+    return TSerializedCellVec(TSerializedCellVec::Serialize(splitKey)); 
+} 
+ 
+TSerializedCellVec DoFindSplitKey(const TVector<std::pair<TSerializedCellVec, ui64>>& keysHist, 
+                                  const TConstArrayRef<NScheme::TTypeId>& keyColumnTypes, 
+                                  const size_t prefixSize) 
+{ 
+    ui64 total = keysHist.back().second; 
+ 
+    // Compares bucket value 
+    auto fnValueLess = [] (ui64 val, const auto& bucket) { 
+        return val < bucket.second; 
+    }; 
+ 
+    // Find the position of total/2 
+    auto halfIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.5, fnValueLess); 
+    auto loIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.1, fnValueLess); 
+    auto hiIt = std::upper_bound(keysHist.begin(), keysHist.end(), total*0.9, fnValueLess); 
+ 
+    auto fnCmp = [&keyColumnTypes, prefixSize] (const auto& bucket1, const auto& bucket2) { 
+        return CompareTypedCellVectors(bucket1.first.GetCells().data(), bucket2.first.GetCells().data(), 
+                                       keyColumnTypes.data(), 
+                                       std::min(bucket1.first.GetCells().size(), prefixSize), std::min(bucket2.first.GetCells().size(), prefixSize)); 
+    }; 
+ 
+    // Check if half key is no equal to low and high keys 
+    if (fnCmp(*halfIt, *loIt) == 0) 
+        return TSerializedCellVec(); 
+    if (fnCmp(*halfIt, *hiIt) == 0) 
+        return TSerializedCellVec(); 
+ 
+    // Build split key by leaving the prefix and extending it with NULLs 
+    TVector<TCell> splitKey(halfIt->first.GetCells().begin(), halfIt->first.GetCells().end()); 
+    splitKey.resize(prefixSize); 
+    splitKey.resize(keyColumnTypes.size()); 
+ 
+    return TSerializedCellVec(TSerializedCellVec::Serialize(splitKey)); 
+} 
+ 
+TSerializedCellVec ChooseSplitKeyByKeySample(const NKikimrTableStats::THistogram& keySample, const TConstArrayRef<NScheme::TTypeId>& keyColumnTypes) { 
+    TVector<std::pair<TSerializedCellVec, ui64>> keysHist; 
+    for (const auto& s : keySample.GetBuckets()) { 
+        keysHist.emplace_back(std::make_pair(TSerializedCellVec(s.GetKey()), s.GetValue())); 
+    } 
+ 
+    auto fnCmp = [&keyColumnTypes] (const auto& key1, const auto& key2) { 
+        return CompareTypedCellVectors(key1.first.GetCells().data(), key2.first.GetCells().data(), 
+                                       keyColumnTypes.data(), 
+                                       key1.first.GetCells().size(), key2.first.GetCells().size()); 
+    }; 
+ 
+    Sort(keysHist, [&fnCmp] (const auto& key1, const auto& key2) { return fnCmp(key1, key2) < 0; }); 
+ 
+    // The keys are now sorted. Next we convert the stats into a histogram by accumulating 
+    // stats for all previous keys at each key. 
+    size_t last = 0; 
+    for (size_t i = 1; i < keysHist.size(); ++i) { 
+        // Accumulate stats 
+        keysHist[i].second += keysHist[i-1].second; 
+ 
+        if (fnCmp(keysHist[i], keysHist[last]) == 0) { 
+            // Merge equal keys 
+            keysHist[last].second = keysHist[i].second; 
+        } else { 
+            ++last; 
+            if (last != i) { 
+                keysHist[last] = keysHist[i]; 
+            } 
+        } 
+    } 
+    keysHist.resize(std::min(keysHist.size(), last + 1)); 
+ 
+    if (keysHist.size() < 2) 
+        return TSerializedCellVec(); 
+ 
+    // Find the median key with the shortest prefix 
+    size_t minPrefix = 0; 
+    size_t maxPrefix = keyColumnTypes.size(); 
+ 
+    // Binary search for shortest prefix that can be used to split the load 
+    TSerializedCellVec splitKey; 
+    while (minPrefix + 1 < maxPrefix) { 
+        size_t prefixSize = (minPrefix + maxPrefix + 1) / 2; 
+        splitKey = DoFindSplitKey(keysHist, keyColumnTypes, prefixSize); 
+        if (splitKey.GetCells().empty()) { 
+            minPrefix = prefixSize; 
+        } else { 
+            maxPrefix = prefixSize; 
+        } 
+    } 
+    splitKey = DoFindSplitKey(keysHist, keyColumnTypes, maxPrefix); 
+ 
+    return splitKey; 
+} 
+ 
+enum struct ESplitReason { 
+    NO_SPLIT = 0, 
+    FAST_SPLIT_INDEX, 
+    SPLIT_BY_SIZE, 
+    SPLIT_BY_LOAD 
+}; 
+ 
+const char* ToString(ESplitReason splitReason) { 
+    switch (splitReason) { 
+    case ESplitReason::NO_SPLIT: 
+        return "No split"; 
+    case ESplitReason::FAST_SPLIT_INDEX: 
+        return "Fast split index table"; 
+    case ESplitReason::SPLIT_BY_SIZE: 
+        return "Split by size"; 
+    case ESplitReason::SPLIT_BY_LOAD: 
+        return "Split by load"; 
+    default: 
+        Y_VERIFY_DEBUG(!"Unexpected enum value"); 
+        return "Unexpected enum value"; 
+    } 
+} 
+ 
 class TTxPartitionHistogram: public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TEvDataShard::TEvGetTableStatsResult::TPtr Ev;
 
@@ -227,8 +227,8 @@ public:
 
 
 void TSchemeShard::Handle(TEvDataShard::TEvGetTableStatsResult::TPtr& ev, const TActorContext& ctx) {
-    const auto& rec = ev->Get()->Record;
-
+    const auto& rec = ev->Get()->Record; 
+ 
     auto datashardId = TTabletId(rec.GetDatashardId());
     ui64 dataSize = rec.GetTableStats().GetDataSize();
     ui64 rowCount = rec.GetTableStats().GetRowCount();
@@ -272,9 +272,9 @@ THolder<TProposeRequest> SplitRequest(
 bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     const auto& rec = Ev->Get()->Record;
 
-    if (!rec.GetFullStatsReady())
+    if (!rec.GetFullStatsReady()) 
         return true;
-
+ 
     auto datashardId = TTabletId(rec.GetDatashardId());
     TPathId tableId = InvalidPathId;
     if (rec.HasTableOwnerId()) {
@@ -283,10 +283,10 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     } else {
         tableId = Self->MakeLocalId(TLocalPathId(rec.GetTableLocalId()));
     }
-    ui64 dataSize = rec.GetTableStats().GetDataSize();
-    ui64 rowCount = rec.GetTableStats().GetRowCount();
-
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    ui64 dataSize = rec.GetTableStats().GetDataSize(); 
+    ui64 rowCount = rec.GetTableStats().GetRowCount(); 
+ 
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
                 "TTxPartitionHistogram::Execute partition histogran"
                     << " at tablet " << Self->SelfTabletId()
                     << " from datashard " << datashardId
@@ -294,87 +294,87 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
                     << " state '" << DatashardStateName(rec.GetShardState()).data() << "'"
                     << " dataSize " << dataSize
                     << " rowCount " << rowCount);
-
+ 
     if (!Self->Tables.contains(tableId))
         return true;
-
+ 
     TTableInfo::TPtr table = Self->Tables[tableId];
-
+ 
     if (!Self->TabletIdToShardIdx.contains(datashardId))
         return true;
-
+ 
     // Don't split/merge backup tables
     if (table->IsBackup)
         return true;
 
     auto shardIdx = Self->TabletIdToShardIdx[datashardId];
-
-    ESplitReason splitReason = ESplitReason::NO_SPLIT;
+ 
+    ESplitReason splitReason = ESplitReason::NO_SPLIT; 
     if (table->CheckFastSplitForPartition(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
         const TTableInfo* parentTable = Self->GetMainTableForIndex(tableId);
-        if (parentTable && table->GetPartitions().size() < parentTable->GetPartitions().size()) {
-            splitReason = ESplitReason::FAST_SPLIT_INDEX;
-        }
-    }
-
-    if (splitReason == ESplitReason::NO_SPLIT && dataSize >= table->GetShardSizeToSplit()) {
-        splitReason = ESplitReason::SPLIT_BY_SIZE;
-    }
-
+        if (parentTable && table->GetPartitions().size() < parentTable->GetPartitions().size()) { 
+            splitReason = ESplitReason::FAST_SPLIT_INDEX; 
+        } 
+    } 
+ 
+    if (splitReason == ESplitReason::NO_SPLIT && dataSize >= table->GetShardSizeToSplit()) { 
+        splitReason = ESplitReason::SPLIT_BY_SIZE; 
+    } 
+ 
     if (splitReason == ESplitReason::NO_SPLIT && table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
-        splitReason = ESplitReason::SPLIT_BY_LOAD;
-    }
-
+        splitReason = ESplitReason::SPLIT_BY_LOAD; 
+    } 
+ 
     if (splitReason == ESplitReason::NO_SPLIT) {
         return true;
     }
-
-
+ 
+ 
     if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         return true;
     }
 
-    TSmallVec<NScheme::TTypeId> keyColumnTypes(table->KeyColumnIds.size());
-    for (size_t ki = 0; ki < table->KeyColumnIds.size(); ++ki) {
-        keyColumnTypes[ki] = table->Columns.FindPtr(table->KeyColumnIds[ki])->PType;
-    }
-
-    TSerializedCellVec splitKey;
-    if (splitReason == ESplitReason::SPLIT_BY_LOAD) {
-        // TODO: choose split key based on access stats for split by load
-        const auto& keySample = rec.GetTableStats().GetKeyAccessSample();
-        splitKey = ChooseSplitKeyByKeySample(keySample, keyColumnTypes);
-
-        // TODO: check that the choosen key is valid
-    } else {
-        // Choose number of parts and split boundaries
-        const auto& histogram = rec.GetTableStats().GetDataSizeHistogram();
+    TSmallVec<NScheme::TTypeId> keyColumnTypes(table->KeyColumnIds.size()); 
+    for (size_t ki = 0; ki < table->KeyColumnIds.size(); ++ki) { 
+        keyColumnTypes[ki] = table->Columns.FindPtr(table->KeyColumnIds[ki])->PType; 
+    } 
+ 
+    TSerializedCellVec splitKey; 
+    if (splitReason == ESplitReason::SPLIT_BY_LOAD) { 
+        // TODO: choose split key based on access stats for split by load 
+        const auto& keySample = rec.GetTableStats().GetKeyAccessSample(); 
+        splitKey = ChooseSplitKeyByKeySample(keySample, keyColumnTypes); 
+ 
+        // TODO: check that the choosen key is valid 
+    } else { 
+        // Choose number of parts and split boundaries 
+        const auto& histogram = rec.GetTableStats().GetDataSizeHistogram(); 
         if (histogram.BucketsSize() < 2) {
             return true;
         }
-
-        splitKey = ChooseSplitKeyByHistogram(histogram, keyColumnTypes);
-
-        // Split key must not be less than the first key
-        TSerializedCellVec lowestKey(histogram.GetBuckets(0).GetKey());
-        if (0 < CompareTypedCellVectors(lowestKey.GetCells().data(), splitKey.GetCells().data(),
-                                    keyColumnTypes.data(),
-                                    lowestKey.GetCells().size(), splitKey.GetCells().size()))
-        {
-            LOG_WARN(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "Failed to find proper split key for '%s' of datashard %" PRIu64,
-                      ToString(splitReason), datashardId);
+ 
+        splitKey = ChooseSplitKeyByHistogram(histogram, keyColumnTypes); 
+ 
+        // Split key must not be less than the first key 
+        TSerializedCellVec lowestKey(histogram.GetBuckets(0).GetKey()); 
+        if (0 < CompareTypedCellVectors(lowestKey.GetCells().data(), splitKey.GetCells().data(), 
+                                    keyColumnTypes.data(), 
+                                    lowestKey.GetCells().size(), splitKey.GetCells().size())) 
+        { 
+            LOG_WARN(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+                     "Failed to find proper split key for '%s' of datashard %" PRIu64, 
+                      ToString(splitReason), datashardId); 
             return true;
-        }
-    }
-
-    if (splitKey.GetBuffer().empty()) {
-        LOG_WARN(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "Failed to find proper split key for '%s' of datashard %" PRIu64,
-                  ToString(splitReason), datashardId);
+        } 
+    } 
+ 
+    if (splitKey.GetBuffer().empty()) { 
+        LOG_WARN(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
+                 "Failed to find proper split key for '%s' of datashard %" PRIu64, 
+                  ToString(splitReason), datashardId); 
         return true;
-    }
-
+    } 
+ 
     TTxId txId = Self->GetCachedTxId(ctx);
 
     if (!txId) {
@@ -386,7 +386,7 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     }
 
     auto request = SplitRequest(Self, txId, tableId, datashardId, splitKey.GetBuffer());
-
+ 
     TMemoryChanges memChanges;
     TStorageChanges dbChanges;
     TOperationContext context{Self, txc, ctx, SplitOpSideEffects, memChanges, dbChanges};
@@ -397,11 +397,11 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     SplitOpSideEffects.ApplyOnExecute(Self, txc, ctx);
 
     return true;
-}
-
+} 
+ 
 
 void TTxPartitionHistogram::Complete(const TActorContext& ctx) {
     SplitOpSideEffects.ApplyOnComplete(Self, ctx);
 }
 
-}}
+}} 

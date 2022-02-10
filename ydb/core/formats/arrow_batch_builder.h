@@ -22,10 +22,10 @@ public:
         Y_UNUSED(err);
         return Start(columns);
     }
-
-    void AddRow(const NKikimr::TDbTupleRef& key, const NKikimr::TDbTupleRef& value) override;
+ 
+    void AddRow(const NKikimr::TDbTupleRef& key, const NKikimr::TDbTupleRef& value) override; 
     void AddRow(const TConstArrayRef<TCell>& key, const TConstArrayRef<TCell>& value);
-
+ 
     // You have to call it before Start()
     void Reserve(size_t numRows) {
         RowsToReserve = numRows;
@@ -39,28 +39,28 @@ public:
     }
 
     bool Start(const TVector<std::pair<TString, NScheme::TTypeId>>& columns);
-    std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize);
+    std::shared_ptr<arrow::RecordBatch> FlushBatch(bool reinitialize); 
     std::shared_ptr<arrow::RecordBatch> GetBatch() const { return Batch; }
 
-protected:
-    void AppendCell(const TCell& cell, ui32 colNum);
-
-    const TVector<std::pair<TString, NScheme::TTypeId>>& GetYdbSchema() const {
-        return YdbSchema;
-    }
-
+protected: 
+    void AppendCell(const TCell& cell, ui32 colNum); 
+ 
+    const TVector<std::pair<TString, NScheme::TTypeId>>& GetYdbSchema() const { 
+        return YdbSchema; 
+    } 
+ 
 private:
     arrow::ipc::IpcWriteOptions WriteOptions;
     TVector<std::pair<TString, NScheme::TTypeId>> YdbSchema;
     std::unique_ptr<arrow::RecordBatchBuilder> BatchBuilder;
     std::shared_ptr<arrow::RecordBatch> Batch;
     size_t RowsToReserve{DEFAULT_ROWS_TO_RESERVE};
-
-protected:
+ 
+protected: 
     size_t NumRows{0};
     size_t NumBytes{0};
 
-private:
+private: 
     std::unique_ptr<IBlockBuilder> Clone() const override {
         return std::make_unique<TArrowBatchBuilder>();
     }

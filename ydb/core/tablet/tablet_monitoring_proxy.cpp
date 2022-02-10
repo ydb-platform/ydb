@@ -235,9 +235,9 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
 
 
     TStringStream str;
-
-    const NKikimr::TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get();
-    auto& domains = domainsInfo->Domains;
+ 
+    const NKikimr::TDomainsInfo* domainsInfo = AppData(ctx)->DomainsInfo.Get(); 
+    auto& domains = domainsInfo->Domains; 
     HTML(str) {
         for (auto di: domains) {
             ui32 domainId = di.first;
@@ -252,7 +252,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                         TABLEH_CLASS("sorter-false") {}
                         TABLEH_CLASS("sorter-false") {}
                     }
-                }
+                } 
                 TABLEBODY() {
                     if (const ui64 schemeRootTabletId = di.second->SchemeRoot) {
                         TABLER() {

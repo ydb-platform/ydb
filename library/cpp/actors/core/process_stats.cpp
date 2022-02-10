@@ -1,25 +1,25 @@
-#include "actorsystem.h"
-#include "actor_bootstrapped.h"
-#include "hfunc.h"
+#include "actorsystem.h" 
+#include "actor_bootstrapped.h" 
+#include "hfunc.h" 
 #include "process_stats.h"
-
+ 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
-
+ 
 #include <util/datetime/uptime.h>
-#include <util/system/defaults.h>
-#include <util/stream/file.h>
-#include <util/string/vector.h>
-#include <util/string/split.h>
-
-#ifndef _win_
+#include <util/system/defaults.h> 
+#include <util/stream/file.h> 
+#include <util/string/vector.h> 
+#include <util/string/split.h> 
+ 
+#ifndef _win_ 
 #include <sys/user.h>
 #include <sys/sysctl.h>
-#endif
-
-namespace NActors {
-#ifdef _linux_
-
+#endif 
+ 
+namespace NActors { 
+#ifdef _linux_ 
+ 
     namespace {
         template <typename TVal>
         static bool ExtractVal(const TString& str, const TString& name, TVal& res) {
@@ -32,16 +32,16 @@ namespace NActors {
             res = atol(str.data() + pos);
             return true;
         }
-
+ 
         float TicksPerMillisec() {
-#ifdef _SC_CLK_TCK
+#ifdef _SC_CLK_TCK 
             return sysconf(_SC_CLK_TCK) / 1000.0;
-#else
+#else 
             return 1.f;
-#endif
-        }
+#endif 
+        } 
     }
-
+ 
     bool TProcStat::Fill(pid_t pid) {
         try {
             TString strPid(ToString(pid));
@@ -57,9 +57,9 @@ namespace NActors {
             }
             // Convert from kB to bytes
             Rss *= 1024;
-
+ 
             float tickPerMillisec = TicksPerMillisec();
-
+ 
             TFileInput procStat("/proc/" + strPid + "/stat");
             procStat.ReadLine(str);
             if (!str.empty()) {
@@ -114,28 +114,28 @@ namespace NActors {
 
         } catch (...) {
             return false;
-        }
+        } 
         return true;
-    }
-
+    } 
+ 
     long TProcStat::ObtainPageSize() {
         long sz = sysconf(_SC_PAGESIZE);
         return sz;
     }
 
-#else
-
+#else 
+ 
     bool TProcStat::Fill(pid_t pid) {
         Y_UNUSED(pid);
         return false;
     }
-
+ 
     long TProcStat::ObtainPageSize() {
         return 0;
     }
 
-#endif
-
+#endif 
+ 
 namespace {
     // Periodically collects process stats and exposes them as mon counters
     template <typename TDerived>
@@ -144,7 +144,7 @@ namespace {
         static constexpr IActor::EActivityType ActorActivityType() {
             return IActor::ACTORLIB_STATS;
         }
-
+ 
         TProcStatCollectingActor(TDuration interval)
             : Interval(interval)
         {
@@ -154,19 +154,19 @@ namespace {
             ctx.Schedule(Interval, new TEvents::TEvWakeup());
             Self()->Become(&TDerived::StateWork);
         }
-
+ 
         STFUNC(StateWork) {
             switch (ev->GetTypeRewrite()) {
                 CFunc(TEvents::TSystem::Wakeup, Wakeup);
             }
         }
-
+ 
     private:
         void Wakeup(const TActorContext& ctx) {
             Self()->UpdateCounters(ProcStat);
             ctx.Schedule(Interval, new TEvents::TEvWakeup());
-        }
-
+        } 
+ 
         TDerived* Self() {
             ProcStat.Fill(getpid());
             return static_cast<TDerived*>(this);
@@ -176,7 +176,7 @@ namespace {
         const TDuration Interval;
         TProcStat ProcStat;
     };
-
+ 
     // Periodically collects process stats and exposes them as mon counters
     class TDynamicCounterCollector: public TProcStatCollectingActor<TDynamicCounterCollector> {
         using TBase = TProcStatCollectingActor<TDynamicCounterCollector>;
@@ -295,8 +295,8 @@ namespace {
 
     IActor* CreateProcStatCollector(ui32 intervalSec, NMonitoring::TDynamicCounterPtr counters) {
         return new TDynamicCounterCollector(intervalSec, counters);
-    }
-
+    } 
+ 
     IActor* CreateProcStatCollector(TDuration interval, NMonitoring::TMetricRegistry& registry) {
         return new TRegistryCollector(interval, registry);
     }

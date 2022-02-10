@@ -54,20 +54,20 @@ message TExecutorSettings {
     optional TRuntimeSettings RuntimeSettings = 2;
 }
 
-message TCompactionBroker {
+message TCompactionBroker { 
     message TQueueType {
-        optional uint32 QueueID = 1;
-        optional uint32 Quota = 2;
-    }
-
+        optional uint32 QueueID = 1; 
+        optional uint32 Quota = 2; 
+    } 
+ 
     repeated TQueueType Queue = 1;
-}
-
-message TEvSetCompactionBrokerConfig {
-    optional TCompactionBroker Config = 1;
-}
-
-message TEvSetCompactionBrokerConfigResult {
-    optional NKikimrProto.EReplyStatus Status = 1;
-    optional bytes Reason = 2;
-}
+} 
+ 
+message TEvSetCompactionBrokerConfig { 
+    optional TCompactionBroker Config = 1; 
+} 
+ 
+message TEvSetCompactionBrokerConfigResult { 
+    optional NKikimrProto.EReplyStatus Status = 1; 
+    optional bytes Reason = 2; 
+} 

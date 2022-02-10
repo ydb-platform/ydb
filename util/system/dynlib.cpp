@@ -105,8 +105,8 @@ TDynamicLibrary::TDynamicLibrary(const TString& path, int flags) {
 
 TDynamicLibrary::~TDynamicLibrary() = default;
 
-void TDynamicLibrary::Open(const char* path, int flags) {
-    Impl_.Reset(TImpl::SafeCreate(path, flags));
+void TDynamicLibrary::Open(const char* path, int flags) { 
+    Impl_.Reset(TImpl::SafeCreate(path, flags)); 
 }
 
 void TDynamicLibrary::Close() noexcept {

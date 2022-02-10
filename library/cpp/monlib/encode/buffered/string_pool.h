@@ -82,6 +82,10 @@ namespace NMonitoring {
             return Index_.size();
         }
 
+        size_t SizeBytes() const {
+            return Index_.capacity() * sizeof(TStringBuf);
+        }
+
     private:
         void InitIndex(const char* data, ui32 size);
 

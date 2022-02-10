@@ -298,7 +298,6 @@ RECURSE(
     sasl
     sctp
     sentencepiece
-    serf
     snappy
     sophos
     sparrowhawk

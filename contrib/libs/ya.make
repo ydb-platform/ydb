@@ -176,7 +176,7 @@ RECURSE(
     libpsl
     libraw
     librdkafka
-    librosa-cpp 
+    librosa-cpp
     librsvg
     libsamplerate
     libsavi

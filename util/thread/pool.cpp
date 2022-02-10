@@ -11,7 +11,7 @@
 #include <util/generic/yexception.h>
 #include <util/generic/ylimits.h>
 #include <util/generic/singleton.h>
-#include <util/generic/fastqueue.h>
+#include <util/generic/fastqueue.h> 
 
 #include <util/stream/output.h>
 #include <util/string/builder.h>

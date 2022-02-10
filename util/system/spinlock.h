@@ -117,9 +117,9 @@ struct TCommonLockOps<TAtomic> {
     }
 
     static inline bool TryAcquire(TAtomic* v) noexcept {
-        return AtomicTryLock(v);
-    }
-
+        return AtomicTryLock(v); 
+    } 
+ 
     static inline void Release(TAtomic* v) noexcept {
         ReleaseAdaptiveLock(v);
     }

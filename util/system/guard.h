@@ -13,13 +13,13 @@ struct TCommonLockOps {
     }
 };
 
-template <class T>
+template <class T> 
 struct TTryLockOps: public TCommonLockOps<T> {
     static inline bool TryAcquire(T* t) noexcept {
-        return t->TryAcquire();
-    }
-};
-
+        return t->TryAcquire(); 
+    } 
+}; 
+ 
 //must be used with great care
 template <class TOps>
 struct TInverseLockOps: public TOps {
@@ -115,7 +115,7 @@ static inline TGuard<T> Guard(const T& t) {
  */
 template <class T, class TOps = TCommonLockOps<T>>
 using TInverseGuard = TGuard<T, TInverseLockOps<TOps>>;
-
+ 
 template <class T, class TOps>
 static inline TInverseGuard<T, TOps> Unguard(const TGuard<T, TOps>& guard) {
     return {guard.GetMutex()};
@@ -127,16 +127,16 @@ static inline TInverseGuard<T> Unguard(const T& mutex) {
 }
 
 template <class T, class TOps = TTryLockOps<T>>
-class TTryGuard: public TNonCopyable {
+class TTryGuard: public TNonCopyable { 
 public:
     inline TTryGuard(const T& t) noexcept {
         Init(&t);
     }
-
+ 
     inline TTryGuard(const T* t) noexcept {
         Init(t);
     }
-
+ 
     inline TTryGuard(TTryGuard&& g) noexcept
         : T_(g.T_)
     {
@@ -146,18 +146,18 @@ public:
     inline ~TTryGuard() {
         Release();
     }
-
+ 
     inline void Release() noexcept {
         if (WasAcquired()) {
             TOps::Release(T_);
             T_ = nullptr;
-        }
+        } 
     }
-
+ 
     inline bool WasAcquired() const noexcept {
         return T_ != nullptr;
     }
-
+ 
     explicit inline operator bool() const noexcept {
         return WasAcquired();
     }
@@ -168,9 +168,9 @@ private:
         T* tMutable = const_cast<T*>(t);
         if (TOps::TryAcquire(tMutable)) {
             T_ = tMutable;
-        }
+        } 
     }
-
+ 
 private:
     T* T_;
-};
+}; 

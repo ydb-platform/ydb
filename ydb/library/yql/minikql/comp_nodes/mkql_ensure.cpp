@@ -58,7 +58,7 @@ public:
 #endif
 
 private:
-    [[noreturn]] static void Throw(TEnsureWrapper const* thisPtr, TComputationContext* ctxPtr) {
+    [[noreturn]] static void Throw(TEnsureWrapper const* thisPtr, TComputationContext* ctxPtr) { 
         auto message = thisPtr->Message->GetValue(*ctxPtr);
         auto messageStr = message.AsStringRef();
         TStringBuilder res;

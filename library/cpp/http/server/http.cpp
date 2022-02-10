@@ -397,15 +397,15 @@ public:
         Requests->Start(Options_.nThreads, Options_.MaxQueueSize);
     }
 
-    TImpl(THttpServer* parent, ICallBack* cb, TMtpQueueRef mainWorkers, TMtpQueueRef failWorkers, const TOptions& options_)
+    TImpl(THttpServer* parent, ICallBack* cb, TMtpQueueRef mainWorkers, TMtpQueueRef failWorkers, const TOptions& options_) 
         : Requests(mainWorkers)
-        , FailRequests(failWorkers)
-        , Options_(options_)
-        , Cb_(cb)
-        , Parent_(parent)
-    {
-    }
-
+        , FailRequests(failWorkers) 
+        , Options_(options_) 
+        , Cb_(cb) 
+        , Parent_(parent) 
+    { 
+    } 
+ 
     TImpl(THttpServer* parent, ICallBack* cb, const TOptions& options, IThreadFactory* factory)
         : TImpl(
               parent,
@@ -413,8 +413,8 @@ public:
               MakeThreadPool<TSimpleThreadPool>(factory, options.UseElasticQueues, cb, options.RequestsThreadName),
               MakeThreadPool<TThreadPool>(factory, options.UseElasticQueues, nullptr, options.FailRequestsThreadName),
               options) {
-    }
-
+    } 
+ 
     ~TImpl() {
         try {
             Stop();
@@ -446,8 +446,8 @@ public:
     TPipeHandle ListenWakeupReadFd;
     TPipeHandle ListenWakeupWriteFd;
     TSystemEvent ListenStartEvent;
-    TMtpQueueRef Requests;
-    TMtpQueueRef FailRequests;
+    TMtpQueueRef Requests; 
+    TMtpQueueRef FailRequests; 
     TAtomic ConnectionCount = 0;
     THolder<TSocketPoller> Poller;
     THolder<TConnections> Connections;
@@ -487,11 +487,11 @@ THttpServer::THttpServer(ICallBack* cb, const TOptions& options, IThreadFactory*
 {
 }
 
-THttpServer::THttpServer(ICallBack* cb, TMtpQueueRef mainWorkers, TMtpQueueRef failWorkers, const TOptions& options)
-    : Impl_(new TImpl(this, cb, mainWorkers, failWorkers, options))
-{
-}
-
+THttpServer::THttpServer(ICallBack* cb, TMtpQueueRef mainWorkers, TMtpQueueRef failWorkers, const TOptions& options) 
+    : Impl_(new TImpl(this, cb, mainWorkers, failWorkers, options)) 
+{ 
+} 
+ 
 THttpServer::~THttpServer() {
 }
 

@@ -29,14 +29,14 @@ struct TTestGuard: public TTestBase {
         void Release() {
             guarded = false;
         }
-        bool TryAcquire() {
-            if (guarded) {
-                return false;
-            } else {
-                guarded = true;
-                return true;
-            }
-        }
+        bool TryAcquire() { 
+            if (guarded) { 
+                return false; 
+            } else { 
+                guarded = true; 
+                return true; 
+            } 
+        } 
 
         bool guarded;
     };
@@ -111,24 +111,24 @@ struct TTestGuard: public TTestBase {
         }
         UNIT_ASSERT(!checker.guarded);
     }
-
-    void TestTryGuard() {
-        TGuardChecker checker;
-
-        UNIT_ASSERT(!checker.guarded);
-        {
-            TTryGuard<TGuardChecker> guard(checker);
-            UNIT_ASSERT(checker.guarded);
+ 
+    void TestTryGuard() { 
+        TGuardChecker checker; 
+ 
+        UNIT_ASSERT(!checker.guarded); 
+        { 
+            TTryGuard<TGuardChecker> guard(checker); 
+            UNIT_ASSERT(checker.guarded); 
             UNIT_ASSERT(guard.WasAcquired());
             {
-                TTryGuard<TGuardChecker> guard2(checker);
-                UNIT_ASSERT(checker.guarded);
+                TTryGuard<TGuardChecker> guard2(checker); 
+                UNIT_ASSERT(checker.guarded); 
                 UNIT_ASSERT(!guard2.WasAcquired());
-            }
-            UNIT_ASSERT(checker.guarded);
-        }
-        UNIT_ASSERT(!checker.guarded);
-    }
+            } 
+            UNIT_ASSERT(checker.guarded); 
+        } 
+        UNIT_ASSERT(!checker.guarded); 
+    } 
 
     void TestTryReadGuard() {
         TRWMutex mutex;

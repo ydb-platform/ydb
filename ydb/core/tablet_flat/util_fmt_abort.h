@@ -20,7 +20,7 @@ namespace NUtil {
             Raw.reserve(192);
         }
 
-        [[noreturn]] ~TFail()
+        [[noreturn]] ~TFail() 
         {
             ::NPrivate::Panic(File, Line, Func, nullptr, "%s\n", Raw.data());
         }

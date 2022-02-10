@@ -393,7 +393,7 @@ public:
         return NextTokTemplate(delim, tok);
     }
 
-    bool NextTok(TdSelf delim, TdSelf& tok) {
+    bool NextTok(TdSelf delim, TdSelf& tok) { 
         return NextTokTemplate(delim, tok);
     }
 
@@ -401,7 +401,7 @@ public:
         return RNextTokTemplate(delim, tok);
     }
 
-    bool RNextTok(TdSelf delim, TdSelf& tok) {
+    bool RNextTok(TdSelf delim, TdSelf& tok) { 
         return RNextTokTemplate(delim, tok);
     }
 
@@ -425,11 +425,11 @@ public:
         return RNextTokTemplate(delim);
     }
 
-    TdSelf NextTok(TdSelf delim) {
+    TdSelf NextTok(TdSelf delim) { 
         return NextTokTemplate(delim);
     }
 
-    TdSelf RNextTok(TdSelf delim) {
+    TdSelf RNextTok(TdSelf delim) { 
         return RNextTokTemplate(delim);
     }
 

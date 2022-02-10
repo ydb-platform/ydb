@@ -233,7 +233,7 @@ template <class T, class D, class S>
 TCompactTrie<T, D, S>::TCompactTrie(const char* d, size_t len, TPacker packer)
     : Packer(packer)
 {
-    Init(d, len, packer);
+    Init(d, len, packer); 
 }
 
 template <class T, class D, class S>

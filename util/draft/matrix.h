@@ -92,7 +92,7 @@ public:
     }
 
     void Zero() {
-        memset((void*)Arr, 0, M * N * sizeof(T));
+        memset((void*)Arr, 0, M * N * sizeof(T)); 
     }
 
     void Fill(T value) {

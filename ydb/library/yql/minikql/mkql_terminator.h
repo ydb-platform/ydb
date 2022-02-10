@@ -26,7 +26,7 @@ private:
     ITerminator* PreviousTerminator;
 };
 
-[[noreturn]] void MKQLTerminate(const char* message);
+[[noreturn]] void MKQLTerminate(const char* message); 
 
 }
 

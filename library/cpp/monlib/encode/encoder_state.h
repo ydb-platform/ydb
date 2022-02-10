@@ -31,7 +31,7 @@ namespace NMonitoring {
             return !operator==(rhs);
         }
 
-        [[noreturn]] inline void ThrowInvalid(TStringBuf message) const {
+        [[noreturn]] inline void ThrowInvalid(TStringBuf message) const { 
             ythrow yexception() << "invalid encoder state: "
                                 << ToStr() << ", " << message;
         }

@@ -237,9 +237,9 @@ constexpr Y_FORCE_INLINE int Y_UNUSED(Types&&...) {
     #define Y_ASSUME(condition) Y_UNUSED(condition)
 #endif
 
-#ifdef __cplusplus
-[[noreturn]]
-#endif
+#ifdef __cplusplus 
+[[noreturn]] 
+#endif 
 Y_HIDDEN void
 _YandexAbort();
 

@@ -9,7 +9,7 @@ class TYqlPanic : public yexception
 {};
 
 namespace NDetail {
-    [[noreturn]] void YqlPanic(const ::NPrivate::TStaticBuf& file, int line, const char* function, const TStringBuf& condition, const TStringBuf& message);
+    [[noreturn]] void YqlPanic(const ::NPrivate::TStaticBuf& file, int line, const char* function, const TStringBuf& condition, const TStringBuf& message); 
 }
 
 #define YQL_ENSURE(CONDITION, ...)     \

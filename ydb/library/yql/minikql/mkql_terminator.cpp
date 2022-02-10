@@ -18,7 +18,7 @@ TBindTerminator::~TBindTerminator()
     Terminator = PreviousTerminator;
 }
 
-[[noreturn]] void MKQLTerminate(const char* message) {
+[[noreturn]] void MKQLTerminate(const char* message) { 
     if (const auto t = TBindTerminator::Terminator)
         t->Terminate(message);
 

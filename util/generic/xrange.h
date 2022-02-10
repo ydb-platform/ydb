@@ -1,37 +1,37 @@
-#pragma once
-
+#pragma once 
+ 
 #include "typetraits.h"
 #include "utility.h"
-#include <util/system/yassert.h>
+#include <util/system/yassert.h> 
 #include <iterator>
-
-/** @file
- * Some similar for python xrange(): https://docs.python.org/2/library/functions.html#xrange
- * Discussion: https://clubs.at.yandex-team.ru/arcadia/6124
- *
- * Example usage:
- *  for (auto i: xrange(MyVector.size())) { // instead for (size_t i = 0; i < MyVector.size(); ++i)
- *      DoSomething(i, MyVector[i]);
- *  }
+ 
+/** @file 
+ * Some similar for python xrange(): https://docs.python.org/2/library/functions.html#xrange 
+ * Discussion: https://clubs.at.yandex-team.ru/arcadia/6124 
+ * 
+ * Example usage: 
+ *  for (auto i: xrange(MyVector.size())) { // instead for (size_t i = 0; i < MyVector.size(); ++i) 
+ *      DoSomething(i, MyVector[i]); 
+ *  } 
  *
  * TVector<int> arithmeticSeq = xrange(10); // instead: TVector<int> arithmeticSeq; for(size_t i = 0; i < 10; ++i) { arithmeticSeq.push_back(i); }
  *
- */
-
-namespace NPrivate {
-    template <typename T>
+ */ 
+ 
+namespace NPrivate { 
+    template <typename T> 
     class TSimpleXRange {
         using TDiff = decltype(T() - T());
 
-    public:
+    public: 
         constexpr TSimpleXRange(T start, T finish) noexcept
             : Start(start)
             , Finish(Max(start, finish))
         {
-        }
-
+        } 
+ 
         class TIterator {
-        public:
+        public: 
             using value_type = T;
             using difference_type = TDiff;
             using pointer = const T*;
@@ -39,26 +39,26 @@ namespace NPrivate {
             using iterator_category = std::random_access_iterator_tag;
 
             constexpr TIterator(T value) noexcept
-                : Value(value)
-            {
-            }
-
+                : Value(value) 
+            { 
+            } 
+ 
             constexpr T operator*() const noexcept {
-                return Value;
-            }
-
+                return Value; 
+            } 
+ 
             constexpr bool operator!=(const TIterator& other) const noexcept {
-                return Value != other.Value;
-            }
-
+                return Value != other.Value; 
+            } 
+ 
             constexpr bool operator==(const TIterator& other) const noexcept {
                 return Value == other.Value;
             }
 
             TIterator& operator++() noexcept {
-                ++Value;
+                ++Value; 
                 return *this;
-            }
+            } 
 
             TIterator& operator--() noexcept {
                 --Value;
@@ -95,21 +95,21 @@ namespace NPrivate {
                 return Value < b.Value;
             }
 
-        private:
-            T Value;
-        };
-
+        private: 
+            T Value; 
+        }; 
+ 
         using value_type = T;
         using iterator = TIterator;
         using const_iterator = TIterator;
 
         constexpr TIterator begin() const noexcept {
-            return TIterator(Start);
-        }
-
+            return TIterator(Start); 
+        } 
+ 
         constexpr TIterator end() const noexcept {
-            return TIterator(Finish);
-        }
+            return TIterator(Finish); 
+        } 
 
         constexpr T size() const noexcept {
             return Finish - Start;
@@ -120,11 +120,11 @@ namespace NPrivate {
             return Container(begin(), end());
         }
 
-    private:
-        T Start;
-        T Finish;
-    };
-
+    private: 
+        T Start; 
+        T Finish; 
+    }; 
+ 
     template <typename T>
     class TSteppedXRange {
         using TDiff = decltype(T() - T());
@@ -244,7 +244,7 @@ namespace NPrivate {
     };
 
 }
-
+ 
 /**
  * generate arithmetic progression that starts at start with certain step and stop at finish (not including)
  *
@@ -255,14 +255,14 @@ constexpr ::NPrivate::TSteppedXRange<T> xrange(T start, T finish, decltype(T() -
     return {start, finish, step};
 }
 
-/// generate sequence [start; finish)
-template <typename T>
+/// generate sequence [start; finish) 
+template <typename T> 
 constexpr ::NPrivate::TSimpleXRange<T> xrange(T start, T finish) noexcept {
     return {start, finish};
-}
-
-/// generate sequence [0; finish)
-template <typename T>
+} 
+ 
+/// generate sequence [0; finish) 
+template <typename T> 
 constexpr auto xrange(T finish) noexcept -> decltype(xrange(T(), finish)) {
-    return xrange(T(), finish);
-}
+    return xrange(T(), finish); 
+} 

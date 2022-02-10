@@ -103,7 +103,7 @@ static int ModeToMmapProt(TMemoryMapCommon::EOpenMode mode) {
 #endif
 
 // maybe we should move this function to another .cpp file to avoid unwanted optimization?
-void NPrivate::Precharge(const void* data, size_t dataSize, size_t off, size_t size) {
+void NPrivate::Precharge(const void* data, size_t dataSize, size_t off, size_t size) { 
     if (off > dataSize) {
         assert(false);
         return;
@@ -118,7 +118,7 @@ void NPrivate::Precharge(const void* data, size_t dataSize, size_t off, size_t s
         return;
     }
 
-    volatile const char *c = (const char*)data + off, *e = c + size;
+    volatile const char *c = (const char*)data + off, *e = c + size; 
     for (; c < e; c += 512) {
         *c;
     }
@@ -262,7 +262,7 @@ public:
         }
         NSan::Unpoison(result.Ptr, result.Size);
         if (Mode_ & oPrecharge) {
-            NPrivate::Precharge(result.Ptr, result.Size, 0, result.Size);
+            NPrivate::Precharge(result.Ptr, result.Size, 0, result.Size); 
         }
 
         return result;
@@ -526,7 +526,7 @@ TFileMap::~TFileMap() {
 }
 
 void TFileMap::Precharge(size_t pos, size_t size) const {
-    NPrivate::Precharge(Ptr(), MappedSize(), pos, size);
+    NPrivate::Precharge(Ptr(), MappedSize(), pos, size); 
 }
 
 TMappedAllocation::TMappedAllocation(size_t size, bool shared, void* addr)

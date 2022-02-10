@@ -21,7 +21,7 @@ Y_UNIT_TEST_SUITE(THttpServerTest) {
 
             bool Reply(void* /*tsr*/) override {
                 if (!ProcessHeaders()) {
-                    return true;
+                    return true; 
                 }
 
                 Output() << "HTTP/1.1 200 Ok\r\n\r\n";

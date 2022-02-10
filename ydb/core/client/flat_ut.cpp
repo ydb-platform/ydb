@@ -59,7 +59,7 @@ namespace {
 
             bool Reply(void* /*tsr*/) override {
                 if (!ProcessHeaders()) {
-                    return true;
+                    return true; 
                 }
 
                 if (strncmp(RequestString.data(), "GET /hosts HTTP/1.", 18) == 0) {

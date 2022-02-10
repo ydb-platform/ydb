@@ -66,7 +66,7 @@
 #include <sstream>
 #include <stack>
 #include <stdexcept>
-#include <stlfwd>
+#include <stlfwd> 
 #include <streambuf>
 #include <string>
 #include <strstream>

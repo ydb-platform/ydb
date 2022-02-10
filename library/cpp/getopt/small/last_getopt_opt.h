@@ -684,12 +684,12 @@ namespace NLastGetopt {
             return Handler1T<T>([target](auto&& value) { target->insert(std::move(value)); });
         }
 
-        // Emplaces TString arg to *target for each argument
-        template <typename T>
-        TOpt& EmplaceTo(TVector<T>* target) {
-            return Handler1T<TString>([target](TString arg) { target->emplace_back(std::move(arg)); } );
-        }
-
+        // Emplaces TString arg to *target for each argument 
+        template <typename T> 
+        TOpt& EmplaceTo(TVector<T>* target) { 
+            return Handler1T<TString>([target](TString arg) { target->emplace_back(std::move(arg)); } ); 
+        } 
+ 
         template <class Container>
         TOpt& SplitHandler(Container* target, const char delim) {
             return Handler(new NLastGetopt::TOptSplitHandler<Container>(target, delim));

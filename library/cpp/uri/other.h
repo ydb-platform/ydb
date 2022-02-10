@@ -19,23 +19,23 @@ inline TString& InvertDomain(TString& url) {
     return url;
 }
 
-void InvertUrl(char* begin, char* end);
-
-inline void InvertUrl(char* url) {
-    InvertUrl(url, url + strlen(url));
-}
-
+void InvertUrl(char* begin, char* end); 
+ 
+inline void InvertUrl(char* url) { 
+    InvertUrl(url, url + strlen(url)); 
+} 
+ 
 inline TString& InvertUrl(TString& url) {
     InvertUrl(url.begin(), url.begin() + url.size());
     return url;
 }
 
-void RevertUrl(char* begin, char* end);
-
-inline void RevertUrl(char* url) {
-    RevertUrl(url, url + strlen(url));
-}
-
+void RevertUrl(char* begin, char* end); 
+ 
+inline void RevertUrl(char* url) { 
+    RevertUrl(url, url + strlen(url)); 
+} 
+ 
 inline TString& RevertUrl(TString& url) {
     RevertUrl(url.begin(), url.begin() + url.size());
     return url;

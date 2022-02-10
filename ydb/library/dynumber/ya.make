@@ -1,16 +1,16 @@
-LIBRARY() 
- 
-OWNER(g:kikimr) 
- 
-PEERDIR( 
-    library/cpp/containers/stack_vector 
-) 
- 
-SRCS( 
+LIBRARY()
+
+OWNER(g:kikimr)
+
+PEERDIR(
+    library/cpp/containers/stack_vector
+)
+
+SRCS(
     cast.h
-    dynumber.cpp 
-) 
- 
+    dynumber.cpp
+)
+
 END()
 
 RECURSE_FOR_TESTS(

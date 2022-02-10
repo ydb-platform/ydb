@@ -243,7 +243,7 @@ TAggregationPtr INode::GetAggregation() const {
 }
 
 INode::TPtr INode::WindowSpecFunc(const TPtr& type) const {
-    Y_UNUSED(type); 
+    Y_UNUSED(type);
     return {};
 }
 
@@ -486,22 +486,22 @@ TString TCallNode::GetCallExplain() const {
     if (derivedName != OpName) {
         sb << ", converted to " << OpName << "()";
     }
-    return std::move(sb); 
+    return std::move(sb);
 }
 
 bool TCallNode::ValidateArguments(TContext& ctx) const {
-    const auto argsCount = static_cast<i32>(Args.size()); 
-    if (MinArgs >= 0 && MaxArgs == MinArgs && argsCount != MinArgs) { 
+    const auto argsCount = static_cast<i32>(Args.size());
+    if (MinArgs >= 0 && MaxArgs == MinArgs && argsCount != MinArgs) {
         ctx.Error(Pos) << GetCallExplain() << " requires exactly " << MinArgs << " arguments, given: " << Args.size();
         return false;
     }
 
-    if (MinArgs >= 0 && argsCount < MinArgs) { 
+    if (MinArgs >= 0 && argsCount < MinArgs) {
         ctx.Error(Pos) << GetCallExplain() << " requires at least " << MinArgs << " arguments, given: " << Args.size();
         return false;
     }
 
-    if (MaxArgs >= 0 && argsCount > MaxArgs) { 
+    if (MaxArgs >= 0 && argsCount > MaxArgs) {
         ctx.Error(Pos) << GetCallExplain() << " requires at most " << MaxArgs << " arguments, given: " << Args.size();
         return false;
     }
@@ -1159,11 +1159,11 @@ TString ISource::MakeLocalName(const TString& name) {
     TStringBuilder str;
     str << name << iter->second;
     ++iter->second;
-    return std::move(str); 
+    return std::move(str);
 }
 
 bool ISource::AddAggregation(TContext& ctx, TAggregationPtr aggr) {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
     Aggregations.push_back(aggr);
     return true;
 }
@@ -1177,8 +1177,8 @@ void ISource::AddWindowSpecs(TWinSpecs winSpecs) {
 }
 
 bool ISource::AddFuncOverWindow(TContext& ctx, TNodePtr expr) {
-    Y_UNUSED(ctx); 
-    Y_UNUSED(expr); 
+    Y_UNUSED(ctx);
+    Y_UNUSED(expr);
     return false;
 }
 
@@ -1347,8 +1347,8 @@ bool ISource::SetSamplingOptions(TContext& ctx,
 }
 
 bool ISource::CalculateGroupingHint(TContext& ctx, const TVector<TString>& columns, ui64& hint) const {
-    Y_UNUSED(columns); 
-    Y_UNUSED(hint); 
+    Y_UNUSED(columns);
+    Y_UNUSED(hint);
     ctx.Error() << "Source not support grouping hint";
     return false;
 }
@@ -1503,7 +1503,7 @@ public:
         return iter != WindowMap.end() ? iter->second : 0;
     }
     size_t CreateWindowBySpec(const TString& windowName, const TWindowSpecificationPtr& winSpec) {
-        Y_UNUSED(windowName); 
+        Y_UNUSED(windowName);
         auto curPartitions = winSpec->Partitions;
         auto curOrderBy = winSpec->OrderBy;
         auto partition = std::find_if(Partitions.begin(), Partitions.end(), [&curPartitions, &curOrderBy](const TWinPartition& other) {
@@ -1559,7 +1559,7 @@ public:
         return Evals[frameId-1];
     }
     TNodePtr BuildFrame(TPosition pos, size_t frameId) {
-        Y_UNUSED(frameId); 
+        Y_UNUSED(frameId);
         /// \todo support not default frame
         return BuildLiteralVoid(pos);
     }
@@ -1639,8 +1639,8 @@ TNodePtr ISource::BuildCalcOverWindow(TContext& ctx, const TString& label, const
 }
 
 TNodePtr ISource::BuildSort(TContext& ctx, const TString& label) {
-    Y_UNUSED(ctx); 
-    Y_UNUSED(label); 
+    Y_UNUSED(ctx);
+    Y_UNUSED(label);
     return nullptr;
 }
 
@@ -1936,7 +1936,7 @@ TNodePtr TLiteralNumberNode<T>::DoClone() const {
 
 template<typename T>
 bool TLiteralNumberNode<T>::DoInit(TContext& ctx, ISource* src) {
-    Y_UNUSED(src); 
+    Y_UNUSED(src);
     T val;
     if (!TryFromString(Value, val)) {
         ctx.Error(Pos) << "Failed to convert string: " << Value << " to " << Type << " value";
@@ -2132,13 +2132,13 @@ TArgPlaceholderNode::TArgPlaceholderNode(TPosition pos, const TString &name) :
 }
 
 bool TArgPlaceholderNode::DoInit(TContext& ctx, ISource* src) {
-    Y_UNUSED(src); 
+    Y_UNUSED(src);
     ctx.Error(Pos) << Name << " can't be used as a part of expression.";
     return false;
 }
 
 TAstNode* TArgPlaceholderNode::Translate(TContext& ctx) const {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
     return nullptr;
 }
 
@@ -2497,7 +2497,7 @@ bool TCastNode<true>::DoInit(TContext& ctx, ISource* src) {
 }
 
 TNodePtr BuildCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne, const TString& paramTwo) {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
     if (!expr) {
         return nullptr;
     }
@@ -2505,7 +2505,7 @@ TNodePtr BuildCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString& t
 }
 
 TNodePtr BuildBitCast(TContext& ctx, TPosition pos, TNodePtr expr, const TString& typeName, const TString& paramOne, const TString& paramTwo) {
-    Y_UNUSED(ctx); 
+    Y_UNUSED(ctx);
     if (!expr) {
         return nullptr;
     }
@@ -2717,7 +2717,7 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
-        Y_UNUSED(src); 
+        Y_UNUSED(src);
         ctx.PushBlockShortcuts();
         if (!Node->Init(ctx, FakeSource.Get())) {
             return false;

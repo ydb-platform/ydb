@@ -40,7 +40,7 @@ using NALP::SQLLexerTokens;
     TMutex SanitizerSQLTranslationMutex;
 #endif
 
-using namespace NSQLGenerated; 
+using namespace NSQLGenerated;
 
 static TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
@@ -410,8 +410,8 @@ static TVector<TString> TableHintsImpl(const TRule_table_hints& node, TTranslati
             PureColumnListStr(block.GetAlt2().GetRule_pure_column_list1(), ctx, hints);
             break;
         }
-        default: 
-            Y_FAIL("You should change implementation according grammar changes"); 
+        default:
+            Y_FAIL("You should change implementation according grammar changes");
     }
     return hints;
 }
@@ -943,8 +943,8 @@ TTableRef TSqlTranslation::TableRefImpl(const TRule_table_ref& node) {
         tr.Keys = BuildTableKeys(pos, cluster, func, args);
         break;
     }
-    default: 
-        Y_FAIL("You should change implementation according grammar changes"); 
+    default:
+        Y_FAIL("You should change implementation according grammar changes");
     }
     TVector<TString> hints = GetContextHints(Ctx);
     if (node.HasBlock3()) {
@@ -1236,7 +1236,7 @@ bool ParseNumbers(TContext& ctx, const TString& strOrig, ui64& value, TString& s
     value = 0;
     const TString digString(str.begin() + (base == 10 ? 0 : 2), str.end() - suffix.size());
     for (const char& cur: digString) {
-        const ui64 curDigit = Char2DigitTable[static_cast<int>(cur)]; 
+        const ui64 curDigit = Char2DigitTable[static_cast<int>(cur)];
         if (curDigit >= base) {
             ctx.Error(ctx.Pos()) << "Failed to parse number from string: " << strOrig << ", char: '" << cur <<
                 "' is out of base: " << base;
@@ -1380,8 +1380,8 @@ TNodePtr TSqlExpression::UnaryExpr(const TUnarySubExprType& node) {
             ids.push_back(expr);
             break;
         }
-        default: 
-            Y_FAIL("You should change implementation according grammar changes"); 
+        default:
+            Y_FAIL("You should change implementation according grammar changes");
     }
     bool isLookup = false;
     for (auto& b: node.GetBlock2()) {
@@ -1423,8 +1423,8 @@ TNodePtr TSqlExpression::UnaryExpr(const TUnarySubExprType& node) {
                 ids.push_back(IdOrString(bb.GetAlt3().GetRule_id_or_string1(), *this));
                 break;
             }
-            default: 
-                Y_FAIL("You should change implementation according grammar changes"); 
+            default:
+                Y_FAIL("You should change implementation according grammar changes");
         }
         for (auto& b: dotBlock.GetBlock3()) {
             auto expr = KeyExpr(b.GetRule_key_expr1());
@@ -1801,8 +1801,8 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node) {
             Ctx.IncrementMonCounter("sql_unary_operations", opName);
             return BuildUnaryOp(pos, opName, UnaryExpr(node.GetAlt_con_subexpr2().GetRule_unary_subexpr2()));
         }
-        default: 
-            Y_FAIL("You should change implementation according grammar changes"); 
+        default:
+            Y_FAIL("You should change implementation according grammar changes");
     }
     return nullptr;
 }
@@ -1931,7 +1931,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node) {
                                 bool madeIncrement = false;
 
                                 for (i64 i = lowerBound.size() - 1; i >=0 ; --i) {
-                                    if (!madeIncrement) { 
+                                    if (!madeIncrement) {
                                         upperBound.append(lowerBound[i] + 1);
                                         madeIncrement = true;
                                     } else {
@@ -3565,8 +3565,8 @@ bool TGroupByClause::GroupingElement(const TRule_grouping_element& node) {
             }
             break;
         }
-        default: 
-            Y_FAIL("You should change implementation according grammar changes"); 
+        default:
+            Y_FAIL("You should change implementation according grammar changes");
     }
     return true;
 }
@@ -3816,8 +3816,8 @@ TSourcePtr TSqlSelect::SelectKind(const TRule_select_kind& node, TPosition& sele
         case TRule_select_kind_TBlock2::kAlt3:
             res = SelectCore(node.GetBlock2().GetAlt3().GetRule_select_core1(), settings, selectPos);
             break;
-        default: 
-            Y_FAIL("You should change implementation according grammar changes"); 
+        default:
+            Y_FAIL("You should change implementation according grammar changes");
     }
 
     return res;
@@ -4012,8 +4012,8 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         case TRule_into_table_stmt_TBlock1::AltCase::kAlt6:
             modeTokens = {modeBlock.GetAlt6().GetToken1()};
             break;
-        default: 
-            Y_FAIL("You should change implementation according grammar changes"); 
+        default:
+            Y_FAIL("You should change implementation according grammar changes");
     }
 
     TVector<TString> modeStrings;
@@ -4146,7 +4146,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
 
 bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const TTableRef& table,
     ESQLWriteColumnMode mode, const TPosition& pos) {
-    Y_UNUSED(node); 
+    Y_UNUSED(node);
     if (!table.Check(Ctx)) {
         return false;
     }

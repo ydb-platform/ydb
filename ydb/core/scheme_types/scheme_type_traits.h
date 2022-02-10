@@ -48,8 +48,8 @@ constexpr bool IsStringType(TTypeId id) noexcept {
         || NTypeIds::Utf8 == id
         || NTypeIds::Yson == id
         || NTypeIds::Json == id
-        || NTypeIds::JsonDocument == id 
-        || NTypeIds::DyNumber 
+        || NTypeIds::JsonDocument == id
+        || NTypeIds::DyNumber
         ;
 }
 

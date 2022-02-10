@@ -404,8 +404,8 @@ public:
                     return false;
                 }
                 break;
-            default: 
-                Y_FAIL("Unexpected data slot"); 
+            default:
+                Y_FAIL("Unexpected data slot");
             }
 
             if (NUdf::GetDataTypeInfo(*slot).Features & NUdf::TzDateType) {
@@ -980,9 +980,9 @@ TString NormalizeTypeString(const TString& str) {
     if (ret.StartsWith("Tz")) {
         ret = "Tz" + to_title(ret.substr(2));
     }
-    if (ret.StartsWith("Json")) { 
-        ret = "Json" + to_title(ret.substr(4)); 
-    } 
+    if (ret.StartsWith("Json")) {
+        ret = "Json" + to_title(ret.substr(4));
+    }
     if (ret.StartsWith("Dy")) {
         ret = "Dy" + to_title(ret.substr(2));
     }
@@ -990,7 +990,7 @@ TString NormalizeTypeString(const TString& str) {
     return ret;
 }
 
-static const TSet<TString> AvailableDataTypes = {"Bool", "String", "Uint32", "Uint64", "Int32", "Int64", "Float", "Double", "Utf8", "Yson", "Json", "JsonDocument", 
+static const TSet<TString> AvailableDataTypes = {"Bool", "String", "Uint32", "Uint64", "Int32", "Int64", "Float", "Double", "Utf8", "Yson", "Json", "JsonDocument",
     "Date", "Datetime", "Timestamp", "Interval", "Uint8", "Int8", "Uint16", "Int16", "TzDate", "TzDatetime", "TzTimestamp", "Uuid", "Decimal", "DyNumber"};
 TNodePtr GetDataTypeStringNode(TContext& ctx, TCallNode& node, unsigned argNum, TString* outTypeStrPtr = nullptr) {
     auto errMsgFunc = [&node, argNum]() {
@@ -2223,9 +2223,9 @@ class THoppingTime final: public TAstListNode {
 public:
     THoppingTime(TPosition pos, const TVector<TNodePtr>& args = {})
         : TAstListNode(pos)
-    { 
-        Y_UNUSED(args); 
-    } 
+    {
+        Y_UNUSED(args);
+    }
 
 private:
     TNodePtr DoClone() const override {
@@ -2940,8 +2940,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         case NKikimr::NMiniKQL::EScriptType::SystemPython2:
             scriptType = NKikimr::NMiniKQL::EScriptType::Python2;
             break;
-        default: 
-            break; 
+        default:
+            break;
     }
 
     if (ns == "yql" || ns == "@yql") {
@@ -3175,38 +3175,38 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
                         return args[1];
                     } else {
                         Y_VERIFY_DEBUG(dynamic_cast<TStructNode*>(args[1].Get()));
-                        auto namedArgs = static_cast<TStructNode*>(args[1].Get()); 
-                        return new TStructTypeNode(pos, namedArgs->GetExprs()); 
+                        auto namedArgs = static_cast<TStructNode*>(args[1].Get());
+                        return new TStructTypeNode(pos, namedArgs->GetExprs());
                     }
                 }
             }
             return new TInvalidBuiltin(pos, TStringBuilder() <<
                 (normalizedName == "asstruct" ? "AsStruct" : "StructType") <<
                 " requires all argument to be named");
-        } else if (normalizedName == "expandstruct") { 
+        } else if (normalizedName == "expandstruct") {
             if (mustUseNamed) {
                 if (!*mustUseNamed) {
                     return new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires at least one named argument");
                 }
                 *mustUseNamed = false;
-            } 
-            YQL_ENSURE(args.size() == 2); 
-            auto posArgs = static_cast<TTupleNode*>(args[0].Get()); 
-            Y_VERIFY_DEBUG(dynamic_cast<TTupleNode*>(args[0].Get())); 
-            Y_VERIFY_DEBUG(dynamic_cast<TStructNode*>(args[1].Get())); 
-            if (posArgs->GetTupleSize() != 1) { 
-                return new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires all arguments except first to be named"); 
-            } 
+            }
+            YQL_ENSURE(args.size() == 2);
+            auto posArgs = static_cast<TTupleNode*>(args[0].Get());
+            Y_VERIFY_DEBUG(dynamic_cast<TTupleNode*>(args[0].Get()));
+            Y_VERIFY_DEBUG(dynamic_cast<TStructNode*>(args[1].Get()));
+            if (posArgs->GetTupleSize() != 1) {
+                return new TInvalidBuiltin(pos, TStringBuilder() << "ExpandStruct requires all arguments except first to be named");
+            }
 
-            TVector<TNodePtr> flattenMembersArgs = { 
-                BuildTuple(pos, {BuildQuotedAtom(pos, ""), posArgs->GetTupleElement(0)}), 
-                BuildTuple(pos, {BuildQuotedAtom(pos, ""), args[1]}), 
-            }; 
-            return new TCallNodeImpl(pos, "FlattenMembers", 2, 2, flattenMembersArgs); 
+            TVector<TNodePtr> flattenMembersArgs = {
+                BuildTuple(pos, {BuildQuotedAtom(pos, ""), posArgs->GetTupleElement(0)}),
+                BuildTuple(pos, {BuildQuotedAtom(pos, ""), args[1]}),
+            };
+            return new TCallNodeImpl(pos, "FlattenMembers", 2, 2, flattenMembersArgs);
         } else if (normalizedName == "sqlexternalfunction") {
             return new TCallNodeImpl(pos, "SqlExternalFunction", args);
-        } else { 
-            return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown builtin: " << name); 
+        } else {
+            return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown builtin: " << name);
         }
     }
 
@@ -3223,8 +3223,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     TNodePtr customUserType = nullptr;
     if (ns == "json") {
-        ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_JSON_UDF) << "Json UDF is deprecated. Please use JSON API instead"; 
- 
+        ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_JSON_UDF) << "Json UDF is deprecated. Please use JSON API instead";
+
         ns = "yson";
         nameSpace = "Yson";
         if (name == "Serialize") {

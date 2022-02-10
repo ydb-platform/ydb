@@ -160,8 +160,8 @@ namespace NNames {
     extern const char Utf8[5];
     extern const char Yson[5];
     extern const char Json[5];
-    extern const char JsonDocument[13]; 
-    extern const char DyNumber[9]; 
+    extern const char JsonDocument[13];
+    extern const char DyNumber[9];
 }
 
 void WriteEscapedValue(IOutputStream &out, const char *data, size_t size);
@@ -180,14 +180,14 @@ class TJson : public TStringBase<TJson, NTypeIds::Json, NNames::Json> {
 public:
 };
 
-class TJsonDocument : public TStringBase<TJsonDocument, NTypeIds::JsonDocument, NNames::JsonDocument> { 
-public: 
-}; 
- 
-class TDyNumber : public TStringBase<TDyNumber, NTypeIds::DyNumber, NNames::DyNumber> { 
-public: 
-}; 
- 
+class TJsonDocument : public TStringBase<TJsonDocument, NTypeIds::JsonDocument, NNames::JsonDocument> {
+public:
+};
+
+class TDyNumber : public TStringBase<TDyNumber, NTypeIds::DyNumber, NNames::DyNumber> {
+public:
+};
+
 template <ui32 TMaxSize, TTypeId TypeId, const char* Name>
 class TBoundedString : public TStringBase<TBoundedString<TMaxSize, TypeId, Name>, TypeId, Name> {
 public:
@@ -248,13 +248,13 @@ class TInterval : public IIntegerTypeWithKeyString<i64, NTypeIds::Interval, NNam
     xx(Utf8, TUtf8, __VA_ARGS__) \
     xx(Yson, TYson, __VA_ARGS__) \
     xx(Json, TJson, __VA_ARGS__) \
-    xx(JsonDocument, TJsonDocument, __VA_ARGS__) \ 
+    xx(JsonDocument, TJsonDocument, __VA_ARGS__) \
     xx(Decimal, TDecimal, __VA_ARGS__) \
     xx(Date, TDate, __VA_ARGS__) \
     xx(Datetime, TDatetime, __VA_ARGS__) \
     xx(Timestamp, TTimestamp, __VA_ARGS__) \
     xx(Interval, TInterval, __VA_ARGS__) \
-    xx(DyNumber, TDyNumber, __VA_ARGS__) \ 
+    xx(DyNumber, TDyNumber, __VA_ARGS__) \
     /**/
 
 

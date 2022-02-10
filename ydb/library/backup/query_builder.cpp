@@ -175,19 +175,19 @@ void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {
         Value.OptionalJson(TryParse<TString>(buf));
         break;
 
-    case EPrimitiveType::JsonDocument: 
-        Value.OptionalJsonDocument(TryParse<TString>(buf)); 
-        break; 
+    case EPrimitiveType::JsonDocument:
+        Value.OptionalJsonDocument(TryParse<TString>(buf));
+        break;
 
-    case EPrimitiveType::DyNumber: 
+    case EPrimitiveType::DyNumber:
         if (buf == "null") {
             Value.OptionalDyNumber(Nothing());
         } else {
             Y_ENSURE(NKikimr::NDyNumber::IsValidDyNumberString(buf));
             Value.OptionalDyNumber(TString(buf));
         }
-        break; 
- 
+        break;
+
     case EPrimitiveType::Uuid:
         Y_ENSURE(false, TStringBuilder() << "Unexpected Primitive kind while parsing line: " << type);
         break;

@@ -40,7 +40,7 @@ namespace NYson {
 
                 while (!(TBase::IsFinished() && TBase::IsEmpty())) {
                     if (TBase::template SkipSpaceAndGetChar<true>() != EndSymbol) {
-                        ythrow TYsonException() << "Stray '" << (*TBase::Begin()) << "' found"; 
+                        ythrow TYsonException() << "Stray '" << (*TBase::Begin()) << "' found";
                     } else if (!TBase::IsEmpty()) {
                         TBase::Advance(1);
                     }
@@ -163,7 +163,7 @@ namespace NYson {
                                 Consumer->OnDoubleScalar(TBase::template ReadNanOrInf<AllowFinish>());
                             }
                         } else {
-                            ythrow TYsonException() << "Unexpected '" << ch << "' while parsing node"; 
+                            ythrow TYsonException() << "Unexpected '" << ch << "' while parsing node";
                         }
                     }
                 }
@@ -195,7 +195,7 @@ namespace NYson {
                             TBase::ReadUnquotedString(&value);
                             Consumer->OnKeyedItem(value);
                         } else {
-                            ythrow TYsonException() << "Unexpected '" << ch << "' while parsing key"; 
+                            ythrow TYsonException() << "Unexpected '" << ch << "' while parsing key";
                         }
                     }
                 }
@@ -210,7 +210,7 @@ namespace NYson {
                     if (ch == KeyValueSeparatorSymbol) {
                         TBase::Advance(1);
                     } else {
-                        ythrow TYsonException() << "Expected '" << KeyValueSeparatorSymbol << "' but '" << ch << "' found"; 
+                        ythrow TYsonException() << "Expected '" << KeyValueSeparatorSymbol << "' but '" << ch << "' found";
                     }
                     ParseNode<AllowFinish>();
                     ch = TBase::template SkipSpaceAndGetChar<AllowFinish>();
@@ -218,8 +218,8 @@ namespace NYson {
                         TBase::Advance(1);
                         ch = TBase::template SkipSpaceAndGetChar<AllowFinish>();
                     } else if (ch != endSymbol) {
-                        ythrow TYsonException() << "Expected '" << KeyedItemSeparatorSymbol 
-                                                << "' or '" << endSymbol << "' but '" << ch << "' found"; 
+                        ythrow TYsonException() << "Expected '" << KeyedItemSeparatorSymbol
+                                                << "' or '" << endSymbol << "' but '" << ch << "' found";
                     }
                 }
             }
@@ -246,8 +246,8 @@ namespace NYson {
                     TBase::Advance(1);
                     return true;
                 } else if (ch != endSymbol) {
-                    ythrow TYsonException() << "Expected '" << ListItemSeparatorSymbol 
-                                            << "' or '" << endSymbol << "' but '" << ch << "' found"; 
+                    ythrow TYsonException() << "Expected '" << ListItemSeparatorSymbol
+                                            << "' or '" << endSymbol << "' but '" << ch << "' found";
                 }
                 return false;
             }
@@ -273,7 +273,7 @@ namespace NYson {
                         value = FromString<double>(valueBuffer);
                     } catch (yexception& e) {
                         // This exception is wrapped in parser.
-                        ythrow TYsonException() << "Failed to parse double literal '" << valueBuffer << "'" << e; 
+                        ythrow TYsonException() << "Failed to parse double literal '" << valueBuffer << "'" << e;
                     }
                     Consumer->OnDoubleScalar(value);
                 } else if (numericResult == ENumericResult::Int64) {
@@ -282,7 +282,7 @@ namespace NYson {
                         value = FromString<i64>(valueBuffer);
                     } catch (yexception& e) {
                         // This exception is wrapped in parser.
-                        ythrow TYsonException() << "Failed to parse int64 literal '" << valueBuffer << "'" << e; 
+                        ythrow TYsonException() << "Failed to parse int64 literal '" << valueBuffer << "'" << e;
                     }
                     Consumer->OnInt64Scalar(value);
                 } else if (numericResult == ENumericResult::Uint64) {
@@ -291,7 +291,7 @@ namespace NYson {
                         value = FromString<ui64>(valueBuffer.SubStr(0, valueBuffer.size() - 1));
                     } catch (yexception& e) {
                         // This exception is wrapped in parser.
-                        ythrow TYsonException() << "Failed to parse uint64 literal '" << valueBuffer << "'" << e; 
+                        ythrow TYsonException() << "Failed to parse uint64 literal '" << valueBuffer << "'" << e;
                     }
                     Consumer->OnUint64Scalar(value);
                 }

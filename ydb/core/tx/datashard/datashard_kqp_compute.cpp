@@ -31,7 +31,7 @@ struct TKqpDatashardComputationMap {
         Map["KqpWideReadTableRanges"] = &WrapKqpWideReadTableRanges;
         Map["KqpLookupTable"] = &WrapKqpLookupTable;
         Map["KqpUpsertRows"] = &WrapKqpUpsertRows;
-        Map["KqpDeleteRows"] = &WrapKqpDeleteRows; 
+        Map["KqpDeleteRows"] = &WrapKqpDeleteRows;
         Map["KqpEffects"] = &WrapKqpEffects;
     }
 

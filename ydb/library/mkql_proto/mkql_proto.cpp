@@ -89,18 +89,18 @@ Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxed
             UuidToYdbProto(stringRef.Data(), stringRef.Size(), res);
             break;
         }
-        case NUdf::TDataType<NUdf::TJsonDocument>::Id: { 
-            NUdf::TUnboxedValue json = ValueToString(NUdf::EDataSlot::JsonDocument, value); 
-            const auto stringRef = json.AsStringRef(); 
-            res.set_text_value(stringRef.Data(), stringRef.Size()); 
-            break; 
-        } 
-        case NUdf::TDataType<NUdf::TDyNumber>::Id: { 
-            NUdf::TUnboxedValue number = ValueToString(NUdf::EDataSlot::DyNumber, value); 
-            const auto stringRef = number.AsStringRef(); 
-            res.set_text_value(stringRef.Data(), stringRef.Size()); 
-            break; 
-        } 
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            NUdf::TUnboxedValue json = ValueToString(NUdf::EDataSlot::JsonDocument, value);
+            const auto stringRef = json.AsStringRef();
+            res.set_text_value(stringRef.Data(), stringRef.Size());
+            break;
+        }
+        case NUdf::TDataType<NUdf::TDyNumber>::Id: {
+            NUdf::TUnboxedValue number = ValueToString(NUdf::EDataSlot::DyNumber, value);
+            const auto stringRef = number.AsStringRef();
+            res.set_text_value(stringRef.Data(), stringRef.Size());
+            break;
+        }
         default:
             const auto& stringRef = value.AsStringRef();
             res.set_bytes_value(stringRef.Data(), stringRef.Size());
@@ -406,16 +406,16 @@ Y_FORCE_INLINE void HandleKindDataExport(const TType* type, const NUdf::TUnboxed
             UuidToMkqlProto(stringRef.Data(), stringRef.Size(), res);
             break;
         }
-        case NUdf::TDataType<NUdf::TJsonDocument>::Id: { 
-            auto stringRef = value.AsStringRef(); 
-            res.SetBytes(stringRef.Data(), stringRef.Size()); 
-            break; 
-        } 
-        case NUdf::TDataType<NUdf::TDyNumber>::Id: { 
-            auto stringRef = value.AsStringRef(); 
-            res.SetBytes(stringRef.Data(), stringRef.Size()); 
-            break; 
-        } 
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            auto stringRef = value.AsStringRef();
+            res.SetBytes(stringRef.Data(), stringRef.Size());
+            break;
+        }
+        case NUdf::TDataType<NUdf::TDyNumber>::Id: {
+            auto stringRef = value.AsStringRef();
+            res.SetBytes(stringRef.Data(), stringRef.Size());
+            break;
+        }
         default:
             auto stringRef = value.AsStringRef();
             res.SetBytes(stringRef.Data(), stringRef.Size());
@@ -686,14 +686,14 @@ Y_FORCE_INLINE NUdf::TUnboxedValue HandleKindDataImport(const TType* type, const
         case NUdf::TDataType<NUdf::TInterval>::Id:
             MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kInt64);
             return NUdf::TUnboxedValuePod(value.GetInt64());
-        case NUdf::TDataType<NUdf::TJsonDocument>::Id: 
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id:
             MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kBytes);
-            return MakeString(value.GetBytes()); 
+            return MakeString(value.GetBytes());
         case NUdf::TDataType<NUdf::TDecimal>::Id:
             return NUdf::TUnboxedValuePod(NYql::NDecimal::FromHalfs(value.GetLow128(), value.GetHi128()));
-        case NUdf::TDataType<NUdf::TDyNumber>::Id: 
+        case NUdf::TDataType<NUdf::TDyNumber>::Id:
             MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kBytes);
-            return MakeString(value.GetBytes()); 
+            return MakeString(value.GetBytes());
         case NUdf::TDataType<NUdf::TUuid>::Id: {
             MKQL_ENSURE_S(oneOfCase == NKikimrMiniKQL::TValue::ValueValueCase::kLow128);
             union {
@@ -738,8 +738,8 @@ void ExportPrimitiveTypeToProto(ui32 schemeType, Ydb::Type& output) {
         case NYql::NProto::TypeIds::Yson:
         case NYql::NProto::TypeIds::Json:
         case NYql::NProto::TypeIds::Uuid:
-        case NYql::NProto::TypeIds::JsonDocument: 
-        case NYql::NProto::TypeIds::DyNumber: 
+        case NYql::NProto::TypeIds::JsonDocument:
+        case NYql::NProto::TypeIds::DyNumber:
             output.set_type_id(static_cast<Ydb::Type::PrimitiveTypeId>(schemeType));
             break;
 
@@ -1046,8 +1046,8 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
                     break;
                 case NUdf::TDataType<char*>::Id:
                 case NUdf::TDataType<NUdf::TYson>::Id:
-                case NUdf::TDataType<NUdf::TJsonDocument>::Id: 
-                case NUdf::TDataType<NUdf::TDyNumber>::Id: 
+                case NUdf::TDataType<NUdf::TJsonDocument>::Id:
+                case NUdf::TDataType<NUdf::TDyNumber>::Id:
                     dataNode = TDataLiteral::Create(env.NewStringValue(value.GetBytes()), dataType, env);
                     break;
                 case NUdf::TDataType<NUdf::TJson>::Id:

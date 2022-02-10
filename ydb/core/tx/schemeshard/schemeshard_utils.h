@@ -27,7 +27,7 @@ inline bool IsAllowedKeyType(NScheme::TTypeId typeId) {
         case NScheme::NTypeIds::Yson:
         case NScheme::NTypeIds::Float:
         case NScheme::NTypeIds::Double:
-        case NScheme::NTypeIds::JsonDocument: 
+        case NScheme::NTypeIds::JsonDocument:
             return false;
         default:
             return true;

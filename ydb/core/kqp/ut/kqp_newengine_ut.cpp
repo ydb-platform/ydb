@@ -1634,98 +1634,98 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST(Delete) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
+    Y_UNIT_TEST(Delete) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
 
-        NYdb::NTable::TExecDataQuerySettings execSettings; 
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-        auto result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UseNewEngine = "true"; 
- 
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+
             DELETE FROM [/Root/TwoShard]
             WHERE Value2 = -1;
-        )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
+        )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
- 
+
         // Phase reading rows to delete
-        UNIT_ASSERT(stats.query_phases(0).duration_us() > 0); 
+        UNIT_ASSERT(stats.query_phases(0).duration_us() > 0);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
- 
+
         // Phase deleting rows
-        UNIT_ASSERT(stats.query_phases(1).duration_us() > 0); 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard"); 
+        UNIT_ASSERT(stats.query_phases(1).duration_us() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 2);
- 
-        result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UseNewEngine = "true"; 
- 
+
+        result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+
             SELECT * FROM [/Root/TwoShard] ORDER BY Key;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-        CompareYson(R"([ 
-            [[2u];["Two"];[0]]; 
-            [[3u];["Three"];[1]]; 
-            [[4000000002u];["BigTwo"];[0]]; 
-            [[4000000003u];["BigThree"];[1]] 
-        ])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
- 
-    Y_UNIT_TEST(DeleteOn) { 
-        TKikimrRunner kikimr; 
-        auto db = kikimr.GetTableClient(); 
-        auto session = db.CreateSession().GetValueSync().GetSession(); 
- 
-        NYdb::NTable::TExecDataQuerySettings execSettings; 
-        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic); 
- 
-        auto result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UseNewEngine = "true"; 
- 
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[2u];["Two"];[0]];
+            [[3u];["Three"];[1]];
+            [[4000000002u];["BigTwo"];[0]];
+            [[4000000003u];["BigThree"];[1]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(DeleteOn) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        auto result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+
             DELETE FROM [/Root/TwoShard] ON
             SELECT * FROM [/Root/TwoShard] WHERE Value2 = 1;
-        )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats()); 
+        )", TTxControl::BeginTx().CommitTx(), execSettings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
- 
+
         // Phase reading rows to delete
-        UNIT_ASSERT(stats.query_phases(0).duration_us() > 0); 
+        UNIT_ASSERT(stats.query_phases(0).duration_us() > 0);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/TwoShard");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).reads().rows(), 6);
- 
+
         // Phase deleting rows
-        UNIT_ASSERT(stats.query_phases(1).duration_us() > 0); 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1); 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard"); 
+        UNIT_ASSERT(stats.query_phases(1).duration_us() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/TwoShard");
         UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).deletes().rows(), 2);
- 
-        result = session.ExecuteDataQuery(R"( 
-            PRAGMA kikimr.UseNewEngine = "true"; 
- 
+
+        result = session.ExecuteDataQuery(R"(
+            PRAGMA kikimr.UseNewEngine = "true";
+
             SELECT * FROM [/Root/TwoShard] ORDER BY Key;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync(); 
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString()); 
- 
-        CompareYson(R"([ 
-            [[1u];["One"];[-1]]; 
-            [[2u];["Two"];[0]]; 
-            [[4000000001u];["BigOne"];[-1]]; 
-            [[4000000002u];["BigTwo"];[0]]; 
-        ])", FormatResultSetYson(result.GetResultSet(0))); 
-    } 
- 
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1u];["One"];[-1]];
+            [[2u];["Two"];[0]];
+            [[4000000001u];["BigOne"];[-1]];
+            [[4000000002u];["BigTwo"];[0]];
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
     Y_UNIT_TEST(MultiEffects) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

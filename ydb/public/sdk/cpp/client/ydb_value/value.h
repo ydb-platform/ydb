@@ -33,31 +33,31 @@ private:
 };
 
 enum class EPrimitiveType {
-    Bool         = 0x0006, 
-    Int8         = 0x0007, 
-    Uint8        = 0x0005, 
-    Int16        = 0x0008, 
-    Uint16       = 0x0009, 
-    Int32        = 0x0001, 
-    Uint32       = 0x0002, 
-    Int64        = 0x0003, 
-    Uint64       = 0x0004, 
-    Float        = 0x0021, 
-    Double       = 0x0020, 
-    Date         = 0x0030, 
-    Datetime     = 0x0031, 
-    Timestamp    = 0x0032, 
-    Interval     = 0x0033, 
-    TzDate       = 0x0034, 
-    TzDatetime   = 0x0035, 
-    TzTimestamp  = 0x0036, 
-    String       = 0x1001, 
-    Utf8         = 0x1200, 
-    Yson         = 0x1201, 
-    Json         = 0x1202, 
-    Uuid         = 0x1203, 
-    JsonDocument = 0x1204, 
-    DyNumber     = 0x1302, 
+    Bool         = 0x0006,
+    Int8         = 0x0007,
+    Uint8        = 0x0005,
+    Int16        = 0x0008,
+    Uint16       = 0x0009,
+    Int32        = 0x0001,
+    Uint32       = 0x0002,
+    Int64        = 0x0003,
+    Uint64       = 0x0004,
+    Float        = 0x0021,
+    Double       = 0x0020,
+    Date         = 0x0030,
+    Datetime     = 0x0031,
+    Timestamp    = 0x0032,
+    Interval     = 0x0033,
+    TzDate       = 0x0034,
+    TzDatetime   = 0x0035,
+    TzTimestamp  = 0x0036,
+    String       = 0x1001,
+    Utf8         = 0x1200,
+    Yson         = 0x1201,
+    Json         = 0x1202,
+    Uuid         = 0x1203,
+    JsonDocument = 0x1204,
+    DyNumber     = 0x1302,
 };
 
 struct TDecimalType {
@@ -257,8 +257,8 @@ public:
     const TString& GetYson() const;
     const TString& GetJson() const;
     TDecimalValue GetDecimal() const;
-    const TString& GetJsonDocument() const; 
-    const TString& GetDyNumber() const; 
+    const TString& GetJsonDocument() const;
+    const TString& GetDyNumber() const;
 
     TMaybe<bool> GetOptionalBool() const;
     TMaybe<i8> GetOptionalInt8() const;
@@ -283,8 +283,8 @@ public:
     TMaybe<TString> GetOptionalYson() const;
     TMaybe<TString> GetOptionalJson() const;
     TMaybe<TDecimalValue> GetOptionalDecimal() const;
-    TMaybe<TString> GetOptionalJsonDocument() const; 
-    TMaybe<TString> GetOptionalDyNumber() const; 
+    TMaybe<TString> GetOptionalJsonDocument() const;
+    TMaybe<TString> GetOptionalDyNumber() const;
 
     // Optional
     void OpenOptional();
@@ -360,8 +360,8 @@ public:
     TDerived& Yson(const TString& value);
     TDerived& Json(const TString& value);
     TDerived& Decimal(const TDecimalValue& value);
-    TDerived& JsonDocument(const TString& value); 
-    TDerived& DyNumber(const TString& value); 
+    TDerived& JsonDocument(const TString& value);
+    TDerived& DyNumber(const TString& value);
 
     TDerived& OptionalBool(const TMaybe<bool>& value);
     TDerived& OptionalInt8(const TMaybe<i8>& value);
@@ -385,8 +385,8 @@ public:
     TDerived& OptionalUtf8(const TMaybe<TString>& value);
     TDerived& OptionalYson(const TMaybe<TString>& value);
     TDerived& OptionalJson(const TMaybe<TString>& value);
-    TDerived& OptionalJsonDocument(const TMaybe<TString>& value); 
-    TDerived& OptionalDyNumber(const TMaybe<TString>& value); 
+    TDerived& OptionalJsonDocument(const TMaybe<TString>& value);
+    TDerived& OptionalDyNumber(const TMaybe<TString>& value);
 
     // Optional
     TDerived& BeginOptional();

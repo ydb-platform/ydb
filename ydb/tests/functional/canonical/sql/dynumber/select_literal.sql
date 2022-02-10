@@ -1,3 +1,3 @@
---!syntax_v1 
- 
-SELECT DyNumber("123.456"); 
+--!syntax_v1
+
+SELECT DyNumber("123.456");

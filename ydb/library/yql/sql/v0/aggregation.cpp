@@ -381,7 +381,7 @@ public:
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        ui32 adjustArgsCount = isFactory ? 0 : 2; 
+        ui32 adjustArgsCount = isFactory ? 0 : 2;
         if (exprs.size() != adjustArgsCount) {
             ctx.Error(Pos) << "Aggregation function " << (isFactory ? "factory " : "") << Name << " requires " <<
                 adjustArgsCount << " arguments, given: " << exprs.size();
@@ -1048,9 +1048,9 @@ public:
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        ui32 adjustArgsCount = isFactory ? 0 : 1; 
-        ui32 minArgs = (0 + adjustArgsCount); 
-        ui32 maxArgs = (1 + adjustArgsCount); 
+        ui32 adjustArgsCount = isFactory ? 0 : 1;
+        ui32 minArgs = (0 + adjustArgsCount);
+        ui32 maxArgs = (1 + adjustArgsCount);
         if (exprs.size() < minArgs || exprs.size() > maxArgs) {
             ctx.Error(Pos) << "List aggregation " << (isFactory ? "factory " : "") << "function require " << minArgs
                 << " or " << maxArgs << " arguments, given: " << exprs.size();
@@ -1112,7 +1112,7 @@ public:
 
 private:
     bool InitAggr(TContext& ctx, bool isFactory, ISource* src, TAstListNode& node, const TVector<TNodePtr>& exprs) final {
-        ui32 adjustArgsCount = isFactory ? 0 : 1; 
+        ui32 adjustArgsCount = isFactory ? 0 : 1;
         if (exprs.size() < (3 + adjustArgsCount) || exprs.size() > (7 + adjustArgsCount)) {
             ctx.Error(Pos) << "User defined aggregation function " << (isFactory ? "factory " : "") << " requires " <<
                 (3 + adjustArgsCount) << " to " << (7 + adjustArgsCount) << " arguments, given: " << exprs.size();

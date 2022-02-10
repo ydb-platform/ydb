@@ -7,7 +7,7 @@
 
 #include <ydb/library/binary_json/write.h>
 #include <ydb/library/binary_json/read.h>
- 
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -379,58 +379,58 @@ struct TStringConvert {
 #endif
 };
 
-NUdf::TUnboxedValuePod JsonToJsonDocument(const NUdf::TUnboxedValuePod value) { 
-    auto binaryJson = NKikimr::NBinaryJson::SerializeToBinaryJson(value.AsStringRef()); 
-    if (!binaryJson.Defined()) { 
-        // JSON parse error happened, return NULL 
-        return NUdf::TUnboxedValuePod(); 
-    } 
-    return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size())); 
+NUdf::TUnboxedValuePod JsonToJsonDocument(const NUdf::TUnboxedValuePod value) {
+    auto binaryJson = NKikimr::NBinaryJson::SerializeToBinaryJson(value.AsStringRef());
+    if (!binaryJson.Defined()) {
+        // JSON parse error happened, return NULL
+        return NUdf::TUnboxedValuePod();
+    }
+    return MakeString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
 }
 
-struct TJsonToJsonDocumentConvert { 
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) 
-    { 
-        return JsonToJsonDocument(arg); 
-    } 
- 
-#ifndef MKQL_DISABLE_CODEGEN 
-    static Value* Generate(Value* json, const TCodegenContext& ctx, BasicBlock*& block) 
-    { 
-        auto& context = ctx.Codegen->GetContext(); 
-        const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(JsonToJsonDocument)); 
-        const auto functionType = FunctionType::get(json->getType(), {json->getType()}, /* isVarArg */ false); 
-        const auto functionPtr = CastInst::Create(Instruction::IntToPtr, functionAddress, PointerType::getUnqual(functionType), "func", block); 
-        return CallInst::Create(functionPtr, {json}, "jsonToJsonDocument", block); 
-    } 
-#endif 
-}; 
- 
-NUdf::TUnboxedValuePod JsonDocumentToJson(const NUdf::TUnboxedValuePod value) { 
-    auto json = NKikimr::NBinaryJson::SerializeToJson(value.AsStringRef()); 
-    return MakeString(json); 
-} 
- 
-struct TJsonDocumentToJsonConvert { 
-    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg) 
-    { 
-        return JsonDocumentToJson(arg); 
-    } 
- 
-#ifndef MKQL_DISABLE_CODEGEN 
-    static Value* Generate(Value* jsonDocument, const TCodegenContext& ctx, BasicBlock*& block) 
-    { 
-        auto& context = ctx.Codegen->GetContext(); 
-        const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(JsonDocumentToJson)); 
-        const auto functionType = FunctionType::get(jsonDocument->getType(), {jsonDocument->getType()}, /* isVarArg */ false); 
-        const auto functionPtr = CastInst::Create(Instruction::IntToPtr, functionAddress, PointerType::getUnqual(functionType), "func", block); 
-        return CallInst::Create(functionPtr, {jsonDocument}, "jsonDocumentToJson", block); 
-    } 
-#endif 
-}; 
- 
-} 
- 
+struct TJsonToJsonDocumentConvert {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg)
+    {
+        return JsonToJsonDocument(arg);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* json, const TCodegenContext& ctx, BasicBlock*& block)
+    {
+        auto& context = ctx.Codegen->GetContext();
+        const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(JsonToJsonDocument));
+        const auto functionType = FunctionType::get(json->getType(), {json->getType()}, /* isVarArg */ false);
+        const auto functionPtr = CastInst::Create(Instruction::IntToPtr, functionAddress, PointerType::getUnqual(functionType), "func", block);
+        return CallInst::Create(functionPtr, {json}, "jsonToJsonDocument", block);
+    }
+#endif
+};
+
+NUdf::TUnboxedValuePod JsonDocumentToJson(const NUdf::TUnboxedValuePod value) {
+    auto json = NKikimr::NBinaryJson::SerializeToJson(value.AsStringRef());
+    return MakeString(json);
+}
+
+struct TJsonDocumentToJsonConvert {
+    static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& arg)
+    {
+        return JsonDocumentToJson(arg);
+    }
+
+#ifndef MKQL_DISABLE_CODEGEN
+    static Value* Generate(Value* jsonDocument, const TCodegenContext& ctx, BasicBlock*& block)
+    {
+        auto& context = ctx.Codegen->GetContext();
+        const auto functionAddress = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(JsonDocumentToJson));
+        const auto functionType = FunctionType::get(jsonDocument->getType(), {jsonDocument->getType()}, /* isVarArg */ false);
+        const auto functionPtr = CastInst::Create(Instruction::IntToPtr, functionAddress, PointerType::getUnqual(functionType), "func", block);
+        return CallInst::Create(functionPtr, {jsonDocument}, "jsonDocumentToJson", block);
+    }
+#endif
+};
+
+}
+
 namespace NDecimal {
 
 template <typename TInput>
@@ -1062,21 +1062,21 @@ void RegisterTzDateimeConvert(IBuiltinFunctionRegistry& registry) {
     RegisterTzDateimeOpt<NUdf::TDataType<NUdf::TTzTimestamp>, NUdf::TDataType<NUdf::TTimestamp>, true>(registry);
 }
 
-void RegisterJsonDocumentConvert(IBuiltinFunctionRegistry& registry) { 
-    // String/Utf8 -> JsonDocument and JsonDocument -> String/Utf8 conversions. TStringConvert is used as a placeholder because 
-    // actual conversions are handled by ValueFromString and ValueToString in mkql_type_ops.cpp 
-    RegisterFunctionOpt<NUdf::TDataType<char*>, NUdf::TDataType<NUdf::TJsonDocument>, TStringConvert, TUnaryArgsOpt>(registry, convert); 
-    RegisterFunctionOpt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<NUdf::TJsonDocument>, TStringConvert, TUnaryArgsOpt>(registry, convert); 
-    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<char*>, TStringConvert, TUnaryArgsOpt>(registry, convert); 
-    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<NUdf::TUtf8>, TStringConvert, TUnaryArgsOpt>(registry, convert); 
- 
-    // Json -> JsonDocument and JsonDocument -> Json conversions 
-    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJson>, NUdf::TDataType<NUdf::TJsonDocument>, TJsonToJsonDocumentConvert, TUnaryArgsOpt>(registry, convert); 
-    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<NUdf::TJson>, TJsonDocumentToJsonConvert, TUnaryArgsOpt>(registry, convert); 
+void RegisterJsonDocumentConvert(IBuiltinFunctionRegistry& registry) {
+    // String/Utf8 -> JsonDocument and JsonDocument -> String/Utf8 conversions. TStringConvert is used as a placeholder because
+    // actual conversions are handled by ValueFromString and ValueToString in mkql_type_ops.cpp
+    RegisterFunctionOpt<NUdf::TDataType<char*>, NUdf::TDataType<NUdf::TJsonDocument>, TStringConvert, TUnaryArgsOpt>(registry, convert);
+    RegisterFunctionOpt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<NUdf::TJsonDocument>, TStringConvert, TUnaryArgsOpt>(registry, convert);
+    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<char*>, TStringConvert, TUnaryArgsOpt>(registry, convert);
+    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<NUdf::TUtf8>, TStringConvert, TUnaryArgsOpt>(registry, convert);
+
+    // Json -> JsonDocument and JsonDocument -> Json conversions
+    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJson>, NUdf::TDataType<NUdf::TJsonDocument>, TJsonToJsonDocumentConvert, TUnaryArgsOpt>(registry, convert);
+    RegisterFunctionOpt<NUdf::TDataType<NUdf::TJsonDocument>, NUdf::TDataType<NUdf::TJson>, TJsonDocumentToJsonConvert, TUnaryArgsOpt>(registry, convert);
 }
 
-} 
- 
+}
+
 void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterIntegralCasts<NUdf::TDataType<i32>>(registry);
     RegisterIntegralCasts<NUdf::TDataType<ui32>>(registry);
@@ -1127,8 +1127,8 @@ void RegisterConvert(IBuiltinFunctionRegistry& registry) {
     RegisterToDateConvert(registry);
 
     RegisterDecimalConvert(registry);
- 
-    RegisterJsonDocumentConvert(registry); 
+
+    RegisterJsonDocumentConvert(registry);
 }
 
 } // namespace NMiniKQL

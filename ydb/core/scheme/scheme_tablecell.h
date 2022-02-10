@@ -163,9 +163,9 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, NScheme::TTypeIdOrd
     case NKikimr::NScheme::NTypeIds::Utf8:
     case NKikimr::NScheme::NTypeIds::Json:
     case NKikimr::NScheme::NTypeIds::Yson:
-    // XXX: using memcmp is meaningless for both JsonDocument and Json 
-    case NKikimr::NScheme::NTypeIds::JsonDocument: 
-    case NKikimr::NScheme::NTypeIds::DyNumber: 
+    // XXX: using memcmp is meaningless for both JsonDocument and Json
+    case NKikimr::NScheme::NTypeIds::JsonDocument:
+    case NKikimr::NScheme::NTypeIds::DyNumber:
     {
         const char* pa = (const char*)a.Data();
         const char* pb = (const char*)b.Data();
@@ -268,8 +268,8 @@ inline ui64 GetValueHash(NScheme::TTypeId type, const TCell& cell) {
     case NYql::NProto::TypeIds::Yson:
     case NYql::NProto::TypeIds::Json:
     case NYql::NProto::TypeIds::Decimal:
-    case NYql::NProto::TypeIds::JsonDocument: 
-    case NYql::NProto::TypeIds::DyNumber: 
+    case NYql::NProto::TypeIds::JsonDocument:
+    case NYql::NProto::TypeIds::DyNumber:
         return ComputeHash(TStringBuf{cell.Data(), cell.Size()});
 
     default:

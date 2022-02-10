@@ -91,14 +91,14 @@ unary_op: PLUS | MINUS | TILDA | NOT;
 
 unary_subexpr_suffix: (key_expr | invoke_expr |(DOT (bind_parameter | DIGITS | an_id_or_type)))* (COLLATE an_id)?;
 
-unary_casual_subexpr: (id_expr | atom_expr) unary_subexpr_suffix; 
+unary_casual_subexpr: (id_expr | atom_expr) unary_subexpr_suffix;
 
 in_unary_casual_subexpr: (id_expr_in | in_atom_expr) unary_subexpr_suffix;
 
-unary_subexpr:    unary_casual_subexpr | json_api_expr; 
- 
+unary_subexpr:    unary_casual_subexpr | json_api_expr;
+
 in_unary_subexpr: in_unary_casual_subexpr | json_api_expr;
- 
+
 list_literal: LBRACE_SQUARE expr_list? COMMA? RBRACE_SQUARE;
 
 expr_dict_list: expr (COLON expr)? (COMMA expr (COLON expr)?)*;
@@ -153,44 +153,44 @@ lambda: smart_parenthesis (ARROW ((LPAREN expr RPAREN) | (LBRACE_CURLY lambda_bo
 
 in_expr: in_unary_subexpr;
 
-// ANSI SQL JSON support 
-json_api_expr: json_value | json_exists | json_query; 
- 
+// ANSI SQL JSON support
+json_api_expr: json_value | json_exists | json_query;
+
 jsonpath_spec: STRING_VALUE;
- 
-json_variable_name: id_expr | STRING_VALUE; 
- 
-json_variable: expr AS json_variable_name; 
- 
-json_variables: json_variable (COMMA json_variable)*; 
- 
-json_common_args: expr COMMA jsonpath_spec (PASSING json_variables)?; 
- 
-json_case_handler: ERROR | NULL | (DEFAULT expr); 
- 
-json_value: JSON_VALUE LPAREN 
-  json_common_args 
-  (RETURNING type_name_simple)? 
-  (json_case_handler ON (EMPTY | ERROR))* 
-RPAREN; 
- 
-json_exists_handler: (TRUE | FALSE | UNKNOWN | ERROR) ON ERROR; 
- 
-json_exists: JSON_EXISTS LPAREN 
-  json_common_args 
-  json_exists_handler? 
-RPAREN; 
- 
-json_query_wrapper: (WITHOUT ARRAY?) | (WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY?); 
-json_query_handler: ERROR | NULL | (EMPTY ARRAY) | (EMPTY OBJECT); 
- 
-json_query: JSON_QUERY LPAREN 
-  json_common_args 
-  (json_query_wrapper WRAPPER)? 
-  (json_query_handler ON EMPTY)? 
-  (json_query_handler ON ERROR)? 
-RPAREN; 
- 
+
+json_variable_name: id_expr | STRING_VALUE;
+
+json_variable: expr AS json_variable_name;
+
+json_variables: json_variable (COMMA json_variable)*;
+
+json_common_args: expr COMMA jsonpath_spec (PASSING json_variables)?;
+
+json_case_handler: ERROR | NULL | (DEFAULT expr);
+
+json_value: JSON_VALUE LPAREN
+  json_common_args
+  (RETURNING type_name_simple)?
+  (json_case_handler ON (EMPTY | ERROR))*
+RPAREN;
+
+json_exists_handler: (TRUE | FALSE | UNKNOWN | ERROR) ON ERROR;
+
+json_exists: JSON_EXISTS LPAREN
+  json_common_args
+  json_exists_handler?
+RPAREN;
+
+json_query_wrapper: (WITHOUT ARRAY?) | (WITH (CONDITIONAL | UNCONDITIONAL)? ARRAY?);
+json_query_handler: ERROR | NULL | (EMPTY ARRAY) | (EMPTY OBJECT);
+
+json_query: JSON_QUERY LPAREN
+  json_common_args
+  (json_query_wrapper WRAPPER)?
+  (json_query_handler ON EMPTY)?
+  (json_query_handler ON ERROR)?
+RPAREN;
+
 // struct, tuple or named list
 smart_parenthesis: LPAREN named_expr_list? COMMA? RPAREN;
 
@@ -787,7 +787,7 @@ keyword_expr_uncompat:
   | CASE
   | CAST
   | CUBE
-  | CURRENT_DATE 
+  | CURRENT_DATE
   | CURRENT_TIME
   | CURRENT_TIMESTAMP
   | EMPTY_ACTION
@@ -795,9 +795,9 @@ keyword_expr_uncompat:
   | FROM
   | FULL
   | HOP
-  | JSON_EXISTS 
-  | JSON_VALUE 
-  | JSON_QUERY 
+  | JSON_EXISTS
+  | JSON_VALUE
+  | JSON_QUERY
   | LOCAL
   | NOT
   | NULL
@@ -863,7 +863,7 @@ keyword_compat: (
   | ANALYZE
   | AND
   | ANSI
-  | ARRAY 
+  | ARRAY
   | ASC
   | ASYNC
   | ATTACH
@@ -877,7 +877,7 @@ keyword_compat: (
   | CHECK
   | COLLATE
   | COMMIT
-  | CONDITIONAL 
+  | CONDITIONAL
   | CONFLICT
   | CONSTRAINT
   | COVER
@@ -900,14 +900,14 @@ keyword_compat: (
   | DROP
   | EACH
   | ELSE
-  | EMPTY 
+  | EMPTY
   | ENCRYPTED
   | END
-  | ERROR 
+  | ERROR
   | ESCAPE
   | EVALUATE
   | EXCLUDE
-  | EXCLUSION 
+  | EXCLUSION
   | EXCLUSIVE
   | EXPLAIN
   | EXPORT
@@ -945,8 +945,8 @@ keyword_compat: (
   | NATURAL
   | NO
   | NOTNULL
-  | NULLS 
-  | OBJECT 
+  | NULLS
+  | OBJECT
   | OF
   | OFFSET
   | ON
@@ -956,8 +956,8 @@ keyword_compat: (
   | OTHERS
   | OUTER
   | OVER
-  | PARTITION 
-  | PASSING 
+  | PARTITION
+  | PASSING
   | PASSWORD
   | PLAN
   | PRAGMA
@@ -976,7 +976,7 @@ keyword_compat: (
   | RESPECT
   | RESTRICT
   | RESULT
-  | RETURNING 
+  | RETURNING
   | REVERT
   | RIGHT
   | RLIKE
@@ -995,14 +995,14 @@ keyword_compat: (
   | TABLESAMPLE
   | TEMP
   | TEMPORARY
-  | THEN 
+  | THEN
   | TIES
   | TO
   | TRANSACTION
   | TRIGGER
-  | UNCONDITIONAL 
+  | UNCONDITIONAL
   | UNIQUE
-  | UNKNOWN 
+  | UNKNOWN
   | UPDATE
   | UPSERT
   | USER
@@ -1012,7 +1012,7 @@ keyword_compat: (
   | VIEW
   | VIRTUAL
   | WITH
-  | WRAPPER 
+  | WRAPPER
   | XOR
   );
 
@@ -1121,7 +1121,7 @@ ANALYZE: A N A L Y Z E;
 AND: A N D;
 ANSI: A N S I;
 ANY: A N Y;
-ARRAY: A R R A Y; 
+ARRAY: A R R A Y;
 AS: A S;
 ASC: A S C;
 ASSUME: A S S U M E;
@@ -1146,7 +1146,7 @@ COLUMN: C O L U M N;
 COLUMNS: C O L U M N S;
 COMMIT: C O M M I T;
 COMPACT: C O M P A C T;
-CONDITIONAL: C O N D I T I O N A L; 
+CONDITIONAL: C O N D I T I O N A L;
 CONFLICT: C O N F L I C T;
 CONSTRAINT: C O N S T R A I N T;
 COVER: C O V E R;
@@ -1175,8 +1175,8 @@ DO: D O;
 DROP: D R O P;
 EACH: E A C H;
 ELSE: E L S E;
-ERROR: E R R O R; 
-EMPTY: E M P T Y; 
+ERROR: E R R O R;
+EMPTY: E M P T Y;
 EMPTY_ACTION: E M P T Y '_' A C T I O N;
 ENCRYPTED: E N C R Y P T E D;
 END: E N D;
@@ -1243,7 +1243,7 @@ NOT: N O T;
 NOTNULL: N O T N U L L;
 NULL: N U L L;
 NULLS: N U L L S;
-OBJECT: O B J E C T; 
+OBJECT: O B J E C T;
 OF: O F;
 OFFSET: O F F S E T;
 ON: O N;
@@ -1255,7 +1255,7 @@ OTHERS: O T H E R S;
 OUTER: O U T E R;
 OVER: O V E R;
 PARTITION: P A R T I T I O N;
-PASSING: P A S S I N G; 
+PASSING: P A S S I N G;
 PASSWORD: P A S S W O R D;
 PLAN: P L A N;
 PRAGMA: P R A G M A;
@@ -1280,7 +1280,7 @@ RESPECT: R E S P E C T;
 RESTRICT: R E S T R I C T;
 RESULT: R E S U L T;
 RETURN: R E T U R N;
-RETURNING: R E T U R N I N G; 
+RETURNING: R E T U R N I N G;
 REVERT: R E V E R T;
 RIGHT: R I G H T;
 RLIKE: R L I K E;
@@ -1314,10 +1314,10 @@ TRANSACTION: T R A N S A C T I O N;
 TRIGGER: T R I G G E R;
 TUPLE: T U P L E;
 UNBOUNDED: U N B O U N D E D;
-UNCONDITIONAL: U N C O N D I T I O N A L; 
+UNCONDITIONAL: U N C O N D I T I O N A L;
 UNION: U N I O N;
 UNIQUE: U N I Q U E;
-UNKNOWN: U N K N O W N; 
+UNKNOWN: U N K N O W N;
 UPDATE: U P D A T E;
 UPSERT: U P S E R T;
 USE: U S E;
@@ -1333,7 +1333,7 @@ WHERE: W H E R E;
 WINDOW: W I N D O W;
 WITH: W I T H;
 WITHOUT: W I T H O U T;
-WRAPPER: W R A P P E R; 
+WRAPPER: W R A P P E R;
 XOR: X O R;
 TRUE: T R U E;
 FALSE: F A L S E;

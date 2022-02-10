@@ -92,7 +92,7 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
 
             case NUdf::TDataType<char*>::Id:
             case NUdf::TDataType<NUdf::TUuid>::Id:
-            case NUdf::TDataType<NUdf::TDyNumber>::Id: 
+            case NUdf::TDataType<NUdf::TDyNumber>::Id:
                 writer.OnStringScalar(value.AsStringRef());
                 return;
 
@@ -120,8 +120,8 @@ void WriteYsonValueImpl(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod&
                 return;
             case NUdf::TDataType<NUdf::TTzDate>::Id:
             case NUdf::TDataType<NUdf::TTzDatetime>::Id:
-            case NUdf::TDataType<NUdf::TTzTimestamp>::Id: 
-            case NUdf::TDataType<NUdf::TJsonDocument>::Id: { 
+            case NUdf::TDataType<NUdf::TTzTimestamp>::Id:
+            case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
                 const NUdf::TUnboxedValue out(ValueToString(*dataType->GetDataSlot(), value));
                 writer.OnUtf8StringScalar(out.AsStringRef());
                 return;
@@ -352,10 +352,10 @@ NYT::TNode DataValueToNode(const NKikimr::NUdf::TUnboxedValuePod& value, NKikimr
             const auto params = static_cast<NKikimr::NMiniKQL::TDataDecimalType*>(type)->GetParams();
             return NYT::TNode(NDecimal::ToString(value.GetInt128(), params.first, params.second));
         }
-        case NUdf::TDataType<NUdf::TJsonDocument>::Id: { 
-            NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value); 
-            return NYT::TNode(ToString(TStringBuf(value.AsStringRef()))); 
-        } 
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
+            return NYT::TNode(ToString(TStringBuf(value.AsStringRef())));
+        }
     }
     YQL_ENSURE(false, "Unsupported type: " << static_cast<int>(dataType->GetSchemeType()));
 }
@@ -459,10 +459,10 @@ TString DataValueToString(const NKikimr::NUdf::TUnboxedValuePod& value, const TD
             out << value.Get<ui64>() << "," << NKikimr::NMiniKQL::GetTimezoneIANAName(value.GetTimezoneId());
             return out.Str();
         }
-        case NUdf::EDataSlot::JsonDocument: { 
-            NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value); 
-            return ToString(TStringBuf(value.AsStringRef())); 
-        } 
+        case NUdf::EDataSlot::JsonDocument: {
+            NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
+            return ToString(TStringBuf(value.AsStringRef()));
+        }
     }
 
     Y_FAIL("Unexpected");
@@ -848,8 +848,8 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         case NUdf::TDataType<NUdf::TUtf8>::Id:
         case NUdf::TDataType<char*>::Id:
         case NUdf::TDataType<NUdf::TJson>::Id:
-        case NUdf::TDataType<NUdf::TDyNumber>::Id: 
-        case NUdf::TDataType<NUdf::TUuid>::Id: { 
+        case NUdf::TDataType<NUdf::TDyNumber>::Id:
+        case NUdf::TDataType<NUdf::TUuid>::Id: {
             if (isTableFormat) {
                 auto nextString = ReadNextString(cmd, buf);
                 return NUdf::TUnboxedValue(MakeString(NUdf::TStringRef(nextString)));
@@ -965,15 +965,15 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
             return data;
         }
 
-        case NUdf::TDataType<NUdf::TJsonDocument>::Id: { 
-            if (isTableFormat) { 
-                return ValueFromString(EDataSlot::JsonDocument, ReadNextString(cmd, buf)); 
-            } 
- 
-            const auto json = ReadYsonStringInResultFormat(cmd, buf); 
-            return ValueFromString(EDataSlot::JsonDocument, json.AsStringRef()); 
-        } 
- 
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            if (isTableFormat) {
+                return ValueFromString(EDataSlot::JsonDocument, ReadNextString(cmd, buf));
+            }
+
+            const auto json = ReadYsonStringInResultFormat(cmd, buf);
+            return ValueFromString(EDataSlot::JsonDocument, json.AsStringRef());
+        }
+
         default:
             YQL_ENSURE(false, "Unsupported data type: " << schemeType);
         }
@@ -1389,8 +1389,8 @@ NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, TInputBuf
     case NUdf::TDataType<char*>::Id:
     case NUdf::TDataType<NUdf::TJson>::Id:
     case NUdf::TDataType<NUdf::TYson>::Id:
-    case NUdf::TDataType<NUdf::TDyNumber>::Id: 
-    case NUdf::TDataType<NUdf::TUuid>::Id: { 
+    case NUdf::TDataType<NUdf::TDyNumber>::Id:
+    case NUdf::TDataType<NUdf::TUuid>::Id: {
         ui32 size;
         buf.ReadMany((char*)&size, sizeof(size));
         CHECK_STRING_LENGTH_UNSIGNED(size);
@@ -1475,15 +1475,15 @@ NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, TInputBuf
         return data;
     }
 
-    case NUdf::TDataType<NUdf::TJsonDocument>::Id: { 
-        ui32 size; 
-        buf.ReadMany((char*)&size, sizeof(size)); 
-        CHECK_STRING_LENGTH_UNSIGNED(size); 
-        auto json = NUdf::TUnboxedValue(MakeStringNotFilled(size)); 
-        buf.ReadMany(json.AsStringRef().Data(), size); 
-        return ValueFromString(EDataSlot::JsonDocument, json.AsStringRef()); 
-    } 
- 
+    case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+        ui32 size;
+        buf.ReadMany((char*)&size, sizeof(size));
+        CHECK_STRING_LENGTH_UNSIGNED(size);
+        auto json = NUdf::TUnboxedValue(MakeStringNotFilled(size));
+        buf.ReadMany(json.AsStringRef().Data(), size);
+        return ValueFromString(EDataSlot::JsonDocument, json.AsStringRef());
+    }
+
     default:
         YQL_ENSURE(false, "Unsupported data type: " << schemeType);
     }
@@ -1780,8 +1780,8 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, const NUdf::TUnbo
         case NUdf::TDataType<NUdf::TUtf8>::Id:
         case NUdf::TDataType<char*>::Id:
         case NUdf::TDataType<NUdf::TJson>::Id:
-        case NUdf::TDataType<NUdf::TDyNumber>::Id: 
-        case NUdf::TDataType<NUdf::TUuid>::Id: { 
+        case NUdf::TDataType<NUdf::TDyNumber>::Id:
+        case NUdf::TDataType<NUdf::TUuid>::Id: {
             buf.Write(StringMarker);
             auto str = value.AsStringRef();
             buf.WriteVarI32(str.Size());
@@ -1857,15 +1857,15 @@ void WriteYsonValueInTableFormat(TOutputBuf& buf, TType* type, const NUdf::TUnbo
             break;
         }
 
-        case NUdf::TDataType<NUdf::TJsonDocument>::Id: { 
-            buf.Write(StringMarker); 
-            NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value); 
-            auto str = json.AsStringRef(); 
-            buf.WriteVarI32(str.Size()); 
-            buf.WriteMany(str); 
-            break; 
-        } 
- 
+        case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+            buf.Write(StringMarker);
+            NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
+            auto str = json.AsStringRef();
+            buf.WriteVarI32(str.Size());
+            buf.WriteMany(str);
+            break;
+        }
+
         default:
             YQL_ENSURE(false, "Unsupported data type: " << schemeType);
         }
@@ -2066,8 +2066,8 @@ void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, cons
     case NUdf::TDataType<char*>::Id:
     case NUdf::TDataType<NUdf::TJson>::Id:
     case NUdf::TDataType<NUdf::TYson>::Id:
-    case NUdf::TDataType<NUdf::TDyNumber>::Id: 
-    case NUdf::TDataType<NUdf::TUuid>::Id: { 
+    case NUdf::TDataType<NUdf::TDyNumber>::Id:
+    case NUdf::TDataType<NUdf::TUuid>::Id: {
         auto str = value.AsStringRef();
         ui32 size = str.Size();
         buf.WriteMany((const char*)&size, sizeof(size));
@@ -2129,15 +2129,15 @@ void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, cons
         break;
     }
 
-    case NUdf::TDataType<NUdf::TJsonDocument>::Id: { 
-        NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value); 
-        auto str = json.AsStringRef(); 
-        ui32 size = str.Size(); 
-        buf.WriteMany((const char*)&size, sizeof(size)); 
-        buf.WriteMany(str); 
-        break; 
-    } 
- 
+    case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+        NUdf::TUnboxedValue json = ValueToString(EDataSlot::JsonDocument, value);
+        auto str = json.AsStringRef();
+        ui32 size = str.Size();
+        buf.WriteMany((const char*)&size, sizeof(size));
+        buf.WriteMany(str);
+        break;
+    }
+
     default:
         YQL_ENSURE(false, "Unsupported data type: " << schemeType);
     }

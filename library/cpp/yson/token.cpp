@@ -188,11 +188,11 @@ namespace NYson {
     void TToken::CheckType(ETokenType expectedType) const {
         if (Type_ != expectedType) {
             if (Type_ == ETokenType::EndOfStream) {
-                ythrow TYsonException() << "Unexpected end of stream (ExpectedType: " << TokenTypeToString(expectedType) << ")"; 
+                ythrow TYsonException() << "Unexpected end of stream (ExpectedType: " << TokenTypeToString(expectedType) << ")";
             } else {
-                ythrow TYsonException() << "Unexpected token (Token: '" << ToString(*this) 
-                                        << "', Type: " << TokenTypeToString(Type_) 
-                                        << ", ExpectedType: " << TokenTypeToString(expectedType) << ")"; 
+                ythrow TYsonException() << "Unexpected token (Token: '" << ToString(*this)
+                                        << "', Type: " << TokenTypeToString(Type_)
+                                        << ", ExpectedType: " << TokenTypeToString(expectedType) << ")";
             }
         }
     }

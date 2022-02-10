@@ -98,7 +98,7 @@ TNodePtr TListProcessBuiltin::PrepareResult() {
         result = Y("Apply", Args[1], "item");
     }
 
-    for (size_t i = 0; i < Args.size(); ++i) { 
+    for (size_t i = 0; i < Args.size(); ++i) {
         if (i > 1) {
             result->Add(Args[i]);
         }

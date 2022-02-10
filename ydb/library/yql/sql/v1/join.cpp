@@ -626,7 +626,7 @@ private:
         const TVector<std::pair<TJoinDescr::TFullColumn, TJoinDescr::TFullColumn>>& keys,
         bool left
     ) {
-        Y_UNUSED(ctx); 
+        Y_UNUSED(ctx);
         auto res = Y();
         for (auto& it: keys) {
             auto tableName = Sources[left ? it.first.Source : it.second.Source]->GetLabel();

@@ -307,29 +307,29 @@ class BaseCanonicalTest(object):
             )
         )
 
-    def do_execute(self, session, query, parameters=None): 
-        if parameters is None: 
-            parameters = {} 
- 
-        prepared_query = session.prepare(query) 
-        result_sets = session.transaction(ydb.SerializableReadWrite()).execute( 
-            prepared_query, 
-            commit_tx=True, 
-            parameters=parameters, 
-        ) 
+    def do_execute(self, session, query, parameters=None):
+        if parameters is None:
+            parameters = {}
+
+        prepared_query = session.prepare(query)
+        result_sets = session.transaction(ydb.SerializableReadWrite()).execute(
+            prepared_query,
+            commit_tx=True,
+            parameters=parameters,
+        )
         return result_sets
 
     @pretty_error_report
-    def serializable_execute(self, query, parameters=None): 
-        if parameters is None: 
-            parameters = {} 
- 
+    def serializable_execute(self, query, parameters=None):
+        if parameters is None:
+            parameters = {}
+
         return self.wrap_result_sets(
             self.pool.retry_operation_sync(
                 lambda session: self.do_execute(
                     session,
                     query,
-                    parameters, 
+                    parameters,
                 )
             )
         )
@@ -370,11 +370,11 @@ class BaseCanonicalTest(object):
 
     def wrap_rows(self, columns, rows):
         return [
-            { 
-                column.name: self.wrap_value(row[column.name]) 
-                for column in columns 
-            } 
-            for row in rows 
+            {
+                column.name: self.wrap_value(row[column.name])
+                for column in columns
+            }
+            for row in rows
         ]
 
     def wrap_result_set(self, result_set):
@@ -390,7 +390,7 @@ class BaseCanonicalTest(object):
         if not os.path.exists(cfg_json):
             return {}
         cfg = json.loads(self.read_query_text(cfg_json))
-        return cfg.get(fl, {}) 
+        return cfg.get(fl, {})
 
     def read_table(self, table):
         fpath = os.path.join(self.prefix, table)
@@ -499,7 +499,7 @@ class BaseCanonicalTest(object):
                 assert self.pretty_json(self.format_plan(plan)) == self.pretty_json(self.format_plan(new_engine_plan))
 
         elif kind == 'result_sets':
-            result_sets = self.serializable_execute(query, config.get('parameters', {})) 
+            result_sets = self.serializable_execute(query, config.get('parameters', {}))
             canons['result_sets'] = self.canonical_results(query_name, self.pretty_json(result_sets))
 
             check_scan_query = config.get('check_scan_query', False)

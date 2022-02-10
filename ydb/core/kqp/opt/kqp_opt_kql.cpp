@@ -221,15 +221,15 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
         .Done();
 }
 
-TExprBase BuildDeleteTable(const TKiWriteTable& write, const TKikimrTableDescription& tableData, TExprContext& ctx) { 
-    const auto keysToDelete = ProjectColumns(write.Input(), tableData.Metadata->KeyColumnNames, ctx); 
- 
-    return Build<TKqlDeleteRows>(ctx, write.Pos()) 
-        .Table(BuildTableMeta(tableData, write.Pos(), ctx)) 
-        .Input(keysToDelete) 
-        .Done(); 
-} 
- 
+TExprBase BuildDeleteTable(const TKiWriteTable& write, const TKikimrTableDescription& tableData, TExprContext& ctx) {
+    const auto keysToDelete = ProjectColumns(write.Input(), tableData.Metadata->KeyColumnNames, ctx);
+
+    return Build<TKqlDeleteRows>(ctx, write.Pos())
+        .Table(BuildTableMeta(tableData, write.Pos(), ctx))
+        .Input(keysToDelete)
+        .Done();
+}
+
 TExprBase BuildDeleteTableWithIndex(const TKiWriteTable& write, const TKikimrTableDescription& tableData, TExprContext& ctx) {
     const auto keysToDelete = ProjectColumns(write.Input(), tableData.Metadata->KeyColumnNames, ctx);
 
@@ -244,38 +244,38 @@ TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withS
 {
     const auto tableMeta = BuildTableMeta(tableData, pos, ctx);
     const auto tableColumns = BuildColumnsList(tableData, pos, ctx, withSystemColumns);
- 
+
     const auto allRows = Build<TKqlReadTable>(ctx, pos)
-        .Table(tableMeta) 
-        .Range() 
-            .From<TKqlKeyInc>() 
-                .Build() 
-            .To<TKqlKeyInc>() 
-                .Build() 
-            .Build() 
+        .Table(tableMeta)
+        .Range()
+            .From<TKqlKeyInc>()
+                .Build()
+            .To<TKqlKeyInc>()
+                .Build()
+            .Build()
         .Columns(tableColumns)
         .Settings()
             .Build()
-        .Done(); 
- 
+        .Done();
+
     return Build<TCoFilter>(ctx, pos)
-        .Input(allRows) 
+        .Input(allRows)
         .Lambda(filter)
-        .Done(); 
+        .Done();
 }
- 
+
 TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescription& tableData, bool withSystemColumns,
     TExprContext& ctx)
 {
     auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.Pos(), ctx);
     auto keysToDelete = ProjectColumns(rowsToDelete, tableData.Metadata->KeyColumnNames, ctx);
- 
+
     return Build<TKqlDeleteRows>(ctx, del.Pos())
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
-        .Input(keysToDelete) 
-        .Done(); 
-} 
- 
+        .Input(keysToDelete)
+        .Done();
+}
+
 TVector<TExprBase> BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx)
 {
@@ -576,9 +576,9 @@ TExprBase WriteTableSimple(const TKiWriteTable& write, const TCoAtomList& inputC
         case TYdbOperation::UpdateOn:
             return BuildUpdateOnTable(write, inputColumns, tableData, ctx);
         case TYdbOperation::Delete:
-            return BuildDeleteTable(write, tableData, ctx); 
+            return BuildDeleteTable(write, tableData, ctx);
         case TYdbOperation::DeleteOn:
-            return BuildDeleteTable(write, tableData, ctx); 
+            return BuildDeleteTable(write, tableData, ctx);
         default:
             YQL_ENSURE(false, "Unsupported table operation: " << op << ", table: " << tableData.Metadata->Name);
     }
@@ -636,7 +636,7 @@ TVector<TExprBase> HandleUpdateTable(const TKiUpdateTable& update, TExprContext&
 TVector<TExprBase> HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, const TKikimrTablesData& tablesData,
     bool withSystemColumns)
 {
-    auto& tableData = GetTableData(tablesData, del.DataSink().Cluster(), del.Table().Value()); 
+    auto& tableData = GetTableData(tablesData, del.DataSink().Cluster(), del.Table().Value());
     if (HasIndexesToWrite(tableData)) {
         return BuildDeleteTableWithIndex(del, tableData, withSystemColumns, ctx);
     } else {

@@ -8,7 +8,7 @@
 
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/dynumber/dynumber.h>
- 
+
 //#include <library/cpp/actors/interconnect/interconnect.h>
 
 //#include <util/generic/cast.h>
@@ -92,17 +92,17 @@ Y_FORCE_INLINE void AddCell(TOutValue& row, NScheme::TTypeId type, const TCell &
     case NUdf::TDataType<NUdf::TInterval>::Id:
         val.set_int64_value(cell.AsValue<i64>());
         break;
-    case NUdf::TDataType<NUdf::TJsonDocument>::Id: { 
-        const auto json = NBinaryJson::SerializeToJson(TStringBuf(cell.Data(), cell.Size())); 
-        val.set_text_value(json); 
-        break; 
-    } 
-    case NUdf::TDataType<NUdf::TDyNumber>::Id: { 
-        const auto number = NDyNumber::DyNumberToString(TStringBuf(cell.Data(), cell.Size())); 
-        Y_VERIFY(number.Defined(), "Invalid DyNumber binary representation"); 
-        val.set_text_value(*number); 
-        break; 
-    } 
+    case NUdf::TDataType<NUdf::TJsonDocument>::Id: {
+        const auto json = NBinaryJson::SerializeToJson(TStringBuf(cell.Data(), cell.Size()));
+        val.set_text_value(json);
+        break;
+    }
+    case NUdf::TDataType<NUdf::TDyNumber>::Id: {
+        const auto number = NDyNumber::DyNumberToString(TStringBuf(cell.Data(), cell.Size()));
+        Y_VERIFY(number.Defined(), "Invalid DyNumber binary representation");
+        val.set_text_value(*number);
+        break;
+    }
     default:
         val.set_bytes_value(cell.Data(), cell.Size());
     }

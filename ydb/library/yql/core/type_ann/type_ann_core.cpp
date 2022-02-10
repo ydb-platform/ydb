@@ -25,7 +25,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 
-#include <util/generic/serialized_enum.h> 
+#include <util/generic/serialized_enum.h>
 #include <util/generic/singleton.h>
 #include <util/generic/strbuf.h>
 #include <util/generic/maybe.h>
@@ -337,17 +337,17 @@ namespace NTypeAnnImpl {
                     .Build(), ctx.MakeType<TDataExprType>(EDataSlot::TzTimestamp) };
             }
 
-            if (resType->GetTag() == "JsonNode") { 
-                return { ctx.Builder(input->Pos()) 
-                    .Callable("Apply") 
-                        .Callable(0, "Udf") 
+            if (resType->GetTag() == "JsonNode") {
+                return { ctx.Builder(input->Pos())
+                    .Callable("Apply")
+                        .Callable(0, "Udf")
                             .Atom(0, "Json2.Serialize", TNodeFlags::Default)
-                        .Seal() 
-                        .Add(1, input) 
-                    .Seal() 
-                    .Build(), ctx.MakeType<TDataExprType>(EDataSlot::Json) }; 
-            } 
- 
+                        .Seal()
+                        .Add(1, input)
+                    .Seal()
+                    .Build(), ctx.MakeType<TDataExprType>(EDataSlot::Json) };
+            }
+
             return { nullptr, nullptr };
         }
 
@@ -457,60 +457,60 @@ namespace NTypeAnnImpl {
         }
     }
 
-    bool EnsureJsonQueryFunction(const NNodes::TCoJsonQueryBase& function, TContext& ctx) { 
-        // first argument must be "Json", "Json?", "JsonDocument" or "JsonDocument?" type 
-        const auto& jsonArg = function.Json().Ref(); 
-        bool isOptional; 
-        const TDataExprType* dataType; 
-        if (!EnsureDataOrOptionalOfData(jsonArg, isOptional, dataType, ctx.Expr)) { 
-            return false; 
-        } 
- 
-        if (dataType->GetSlot() != EDataSlot::Json && dataType->GetSlot() != EDataSlot::JsonDocument) { 
-            ctx.Expr.AddError(TIssue( 
-                ctx.Expr.GetPosition(jsonArg.Pos()), 
-                TStringBuilder() << "Expected Json, Json?, JsonDocument or JsonDocument?, but got: " << *jsonArg.GetTypeAnn() 
-            )); 
-            return false; 
-        } 
- 
-        // second argument must be "Utf8" type 
-        const auto& jsonPathArg = function.JsonPath().Ref(); 
-        if (!EnsureSpecificDataType(jsonPathArg, EDataSlot::Utf8, ctx.Expr)) { 
-            return false; 
-        } 
- 
-        // third argument must be "Dict" type 
-        const auto& variablesArg = function.Variables().Ref(); 
-        if (!variablesArg.GetTypeAnn()) { 
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(variablesArg.Pos()), "Expected dict, but got lambda")); 
-            return false; 
-        } 
- 
-        if (variablesArg.GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyDict) { 
-            return true; 
-        } 
- 
-        if (!EnsureDictType(variablesArg, ctx.Expr)) { 
-            return false; 
-        } 
- 
-        const TDictExprType* dictType = variablesArg.GetTypeAnn()->Cast<TDictExprType>(); 
- 
-        if (!EnsureSpecificDataType(variablesArg.Pos(), *dictType->GetKeyType(), EDataSlot::Utf8, ctx.Expr)) { 
-            return false; 
-        } 
- 
-        const auto* payloadType = dictType->GetPayloadType(); 
-        if (payloadType->GetKind() != ETypeAnnotationKind::Resource 
-            || payloadType->Cast<TResourceExprType>()->GetTag() != "JsonNode") { 
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(variablesArg.Pos()), TStringBuilder() << "Dict payload type must be Resource<'JsonNode'>, not " << *payloadType)); 
-            return false; 
-        } 
- 
-        return true; 
-    } 
- 
+    bool EnsureJsonQueryFunction(const NNodes::TCoJsonQueryBase& function, TContext& ctx) {
+        // first argument must be "Json", "Json?", "JsonDocument" or "JsonDocument?" type
+        const auto& jsonArg = function.Json().Ref();
+        bool isOptional;
+        const TDataExprType* dataType;
+        if (!EnsureDataOrOptionalOfData(jsonArg, isOptional, dataType, ctx.Expr)) {
+            return false;
+        }
+
+        if (dataType->GetSlot() != EDataSlot::Json && dataType->GetSlot() != EDataSlot::JsonDocument) {
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(jsonArg.Pos()),
+                TStringBuilder() << "Expected Json, Json?, JsonDocument or JsonDocument?, but got: " << *jsonArg.GetTypeAnn()
+            ));
+            return false;
+        }
+
+        // second argument must be "Utf8" type
+        const auto& jsonPathArg = function.JsonPath().Ref();
+        if (!EnsureSpecificDataType(jsonPathArg, EDataSlot::Utf8, ctx.Expr)) {
+            return false;
+        }
+
+        // third argument must be "Dict" type
+        const auto& variablesArg = function.Variables().Ref();
+        if (!variablesArg.GetTypeAnn()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(variablesArg.Pos()), "Expected dict, but got lambda"));
+            return false;
+        }
+
+        if (variablesArg.GetTypeAnn()->GetKind() == ETypeAnnotationKind::EmptyDict) {
+            return true;
+        }
+
+        if (!EnsureDictType(variablesArg, ctx.Expr)) {
+            return false;
+        }
+
+        const TDictExprType* dictType = variablesArg.GetTypeAnn()->Cast<TDictExprType>();
+
+        if (!EnsureSpecificDataType(variablesArg.Pos(), *dictType->GetKeyType(), EDataSlot::Utf8, ctx.Expr)) {
+            return false;
+        }
+
+        const auto* payloadType = dictType->GetPayloadType();
+        if (payloadType->GetKind() != ETypeAnnotationKind::Resource
+            || payloadType->Cast<TResourceExprType>()->GetTag() != "JsonNode") {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(variablesArg.Pos()), TStringBuilder() << "Dict payload type must be Resource<'JsonNode'>, not " << *payloadType));
+            return false;
+        }
+
+        return true;
+    }
+
     typedef std::function<IGraphTransformer::TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TContext& ctx)>
         TAnnotationFunc;
 
@@ -705,8 +705,8 @@ namespace NTypeAnnImpl {
 
                     return IGraphTransformer::TStatus::Error;
                 }
-            } else if (input->Content() == "JsonDocument") { 
-                // check will be performed in JsonDocument callable 
+            } else if (input->Content() == "JsonDocument") {
+                // check will be performed in JsonDocument callable
             } else if (input->Content() == "DyNumber") {
                 if (!NKikimr::NMiniKQL::IsValidStringValue(EDataSlot::DyNumber, input->Head().Content())) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Bad atom format for type: "
@@ -11867,241 +11867,241 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
-    IGraphTransformer::TStatus JsonValueWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) { 
-        Y_UNUSED(output); 
- 
-        using NNodes::TCoJsonValue; 
-        if (!EnsureMinArgsCount(*input, 7, ctx.Expr) 
-            || !EnsureMaxArgsCount(*input, 8, ctx.Expr) 
-            || !EnsureAtom(*input->Child(TCoJsonValue::idx_OnEmptyMode), ctx.Expr) 
-            || !EnsureAtom(*input->Child(TCoJsonValue::idx_OnErrorMode), ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
+    IGraphTransformer::TStatus JsonValueWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+
+        using NNodes::TCoJsonValue;
+        if (!EnsureMinArgsCount(*input, 7, ctx.Expr)
+            || !EnsureMaxArgsCount(*input, 8, ctx.Expr)
+            || !EnsureAtom(*input->Child(TCoJsonValue::idx_OnEmptyMode), ctx.Expr)
+            || !EnsureAtom(*input->Child(TCoJsonValue::idx_OnErrorMode), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (TCoJsonValue::idx_ReturningType < input->ChildrenSize()) {
             auto status = EnsureTypeRewrite(input->ChildRef(TCoJsonValue::idx_ReturningType), ctx.Expr);
             if (status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
-        } 
- 
-        TCoJsonValue jsonValue(input); 
- 
-        // check first 3 common arguments 
-        if (!EnsureJsonQueryFunction(jsonValue, ctx)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        // default return value type is "Utf8?" 
-        EDataSlot resultSlot = EDataSlot::Utf8; 
- 
-        // check if user provided custom return value type 
-        const auto& returningTypeArg = jsonValue.ReturningType(); 
-        if (returningTypeArg) { 
-            const auto* returningTypeAnn = returningTypeArg.Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType(); 
-            if (!EnsureDataType(returningTypeArg.Ref().Pos(), *returningTypeAnn, ctx.Expr)) { 
-                return IGraphTransformer::TStatus::Error; 
-            } 
-            resultSlot = returningTypeAnn->Cast<TDataExprType>()->GetSlot(); 
+        }
 
-            if (!IsDataTypeNumeric(resultSlot) 
-                && !IsDataTypeDate(resultSlot) 
-                && resultSlot != EDataSlot::Utf8 
-                && resultSlot != EDataSlot::String 
-                && resultSlot != EDataSlot::Bool) { 
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Returning argument of JsonValue callable supports only Utf8, String, Bool, date and numeric types")); 
-                return IGraphTransformer::TStatus::Error; 
-            } 
-        } 
- 
-        // ON ERROR and ON EMPTY values must be castable to resultSlot or "Null" 
-        auto isValidCaseHandler = [&] (const TExprNode& node) { 
-            const auto* typeAnn = node.GetTypeAnn(); 
-            if (!typeAnn) { 
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node.Pos()), "Expected computable value, but got lambda")); 
-                return false; 
-            } 
- 
-            if (IsNull(node)) { 
-                return true; 
-            } 
- 
-            bool isOptional; 
-            const TDataExprType* dataType; 
-            if (!EnsureDataOrOptionalOfData(node, isOptional, dataType, ctx.Expr)) { 
-                return false; 
-            } 
- 
-            const auto handlerSlot = dataType->GetSlot(); 
-            const auto castResult = GetCastResult(handlerSlot, resultSlot); 
-            if (!castResult.Defined() || *castResult == NUdf::ECastOptions::Impossible) { 
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node.Pos()), 
-                    TStringBuilder() << "Cannot cast type of case handler " << handlerSlot << " to the returning type of JSON_VALUE " << resultSlot)); 
-                return false; 
-            } 
- 
-            return true; 
-        }; 
- 
-        if (!isValidCaseHandler(jsonValue.OnEmpty().Ref()) || !isValidCaseHandler(jsonValue.OnError().Ref())) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        // make returning type optional 
-        const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TDataExprType>(resultSlot); 
-        input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(resultType)); 
-        return IGraphTransformer::TStatus::Ok; 
-    } 
- 
-    IGraphTransformer::TStatus JsonExistsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) { 
-        Y_UNUSED(output); 
- 
-        if (!EnsureMinArgsCount(*input, 3, ctx.Expr) || !EnsureMaxArgsCount(*input, 4, ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        NNodes::TCoJsonExists jsonExists(input); 
- 
-        // check first 3 common arguments 
-        if (!EnsureJsonQueryFunction(jsonExists, ctx)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        // onError argument if present must be "Bool?" type 
-        if (jsonExists.OnError()) { 
-            const auto& onErrorArg = jsonExists.OnError().Ref(); 
- 
-            if (!EnsureOptionalType(onErrorArg, ctx.Expr)) { 
-                return IGraphTransformer::TStatus::Error; 
-            } 
+        TCoJsonValue jsonValue(input);
 
-            const auto optionalTypeAnn = onErrorArg.GetTypeAnn(); 
-            if (!optionalTypeAnn) { 
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(onErrorArg.Pos()), "Expected optional Bool, but got lambda")); 
-                return IGraphTransformer::TStatus::Error; 
-            } 
- 
-            const auto underlyingType = optionalTypeAnn->Cast<TOptionalExprType>()->GetItemType(); 
-            if (!EnsureSpecificDataType(onErrorArg.Pos(), *underlyingType, EDataSlot::Bool, ctx.Expr)) { 
-                return IGraphTransformer::TStatus::Error; 
-            } 
-        } 
- 
-        // make returning type optional 
-        const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool); 
-        input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(resultType)); 
-        return IGraphTransformer::TStatus::Ok; 
-    } 
- 
-    IGraphTransformer::TStatus JsonQueryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) { 
-        Y_UNUSED(output); 
- 
-        if (!EnsureArgsCount(*input, 6, ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        using NNodes::TCoJsonQuery; 
-        if (!EnsureAtom(*input->Child(TCoJsonQuery::idx_WrapMode), ctx.Expr) 
-            || !EnsureAtom(*input->Child(TCoJsonQuery::idx_OnEmpty), ctx.Expr) 
-            || !EnsureAtom(*input->Child(TCoJsonQuery::idx_OnError), ctx.Expr)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        TCoJsonQuery jsonQuery(input); 
- 
-        // check first 3 common arguments 
-        if (!EnsureJsonQueryFunction(jsonQuery, ctx)) { 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        const auto& wrapModeArg = jsonQuery.WrapMode().Ref(); 
-        EJsonQueryWrap wrapMode; 
-        if (!TryFromString(wrapModeArg.Content(), wrapMode)) { 
-            ctx.Expr.AddError(TIssue( 
-                ctx.Expr.GetPosition(input->Pos()), 
-                TStringBuilder() << "Invalid value for WrapMode argument. Available options are: " << GetEnumAllNames<EJsonQueryWrap>() 
-            )); 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        const auto& onEmptyArg = jsonQuery.OnEmpty().Ref(); 
-        EJsonQueryHandler onEmpty; 
-        if (!TryFromString(onEmptyArg.Content(), onEmpty)) { 
-            ctx.Expr.AddError(TIssue( 
-                ctx.Expr.GetPosition(input->Pos()), 
-                TStringBuilder() << "Invalid value for OnEmpty argument. Available options are: " << GetEnumAllNames<EJsonQueryHandler>() 
-            )); 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        const auto& onErrorArg = jsonQuery.OnError().Ref(); 
-        EJsonQueryHandler onError; 
-        if (!TryFromString(onErrorArg.Content(), onError)) { 
-            ctx.Expr.AddError(TIssue( 
-                ctx.Expr.GetPosition(input->Pos()), 
-                TStringBuilder() << "Invalid value for OnError argument. Available options are: " << GetEnumAllNames<EJsonQueryHandler>() 
-            )); 
-            return IGraphTransformer::TStatus::Error; 
-        } 
- 
-        // make returning type optional 
-        EDataSlot returnType = EDataSlot::JsonDocument; 
-        if (!ctx.Types.JsonQueryReturnsJsonDocument) { 
-            auto issue = TIssue( 
-                ctx.Expr.GetPosition(input->Pos()), 
-                "JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to " 
-                "make JSON_QUERY return JsonDocument type. It will be turned on by default soon" 
-            ); 
-            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_YQL_JSON_QUERY_RETURNING_JSON_IS_DEPRECATED, issue); 
-            if (!ctx.Expr.AddWarning(issue)) { 
-                return IGraphTransformer::TStatus::Error; 
-            } 
-            returnType = EDataSlot::Json; 
-        } 
-        const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TDataExprType>(returnType); 
-        input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(resultType)); 
-        return IGraphTransformer::TStatus::Ok; 
-    } 
- 
-    IGraphTransformer::TStatus JsonVariablesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) { 
-        Y_UNUSED(output); 
-        for (size_t i = 0; i < input->ChildrenSize(); i++) { 
-            const auto& tuple = input->Child(i); 
- 
-            using NNodes::TCoNameValueTuple; 
-            if (!EnsureTuple(*tuple, ctx.Expr) || !EnsureTupleSize(*tuple, 2, ctx.Expr) || !EnsureAtom(*tuple->Child(TCoNameValueTuple::idx_Name), ctx.Expr)) { 
-                return IGraphTransformer::TStatus::Error; 
-            } 
- 
-            TCoNameValueTuple nameValueTuple(tuple); 
-            const auto& variableValue = nameValueTuple.Value().Ref(); 
-            if (IsNull(variableValue)) { 
-                continue; 
-            } 
- 
-            bool isOptional; 
-            const TDataExprType* valueType; 
-            if (!EnsureDataOrOptionalOfData(variableValue, isOptional, valueType, ctx.Expr)) { 
-                return IGraphTransformer::TStatus::Error; 
-            } 
- 
-            const auto valueSlot = valueType->GetSlot(); 
-            if (!IsDataTypeNumeric(valueSlot) 
-                && !IsDataTypeDate(valueSlot) 
-                && valueSlot != EDataSlot::Utf8 
-                && valueSlot != EDataSlot::Bool 
-                && valueSlot != EDataSlot::Json) { 
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "You can pass only values of Utf8, Bool, Json, date and numeric types for jsonpath variables")); 
-                return IGraphTransformer::TStatus::Error; 
-            } 
-        } 
- 
-        const auto* keyType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Utf8); 
-        const auto* payloadType = ctx.Expr.MakeType<TResourceExprType>("JsonNode"); 
-        input->SetTypeAnn(ctx.Expr.MakeType<TDictExprType>(keyType, payloadType)); 
-        return IGraphTransformer::TStatus::Ok; 
-    } 
- 
+        // check first 3 common arguments
+        if (!EnsureJsonQueryFunction(jsonValue, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // default return value type is "Utf8?"
+        EDataSlot resultSlot = EDataSlot::Utf8;
+
+        // check if user provided custom return value type
+        const auto& returningTypeArg = jsonValue.ReturningType();
+        if (returningTypeArg) {
+            const auto* returningTypeAnn = returningTypeArg.Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            if (!EnsureDataType(returningTypeArg.Ref().Pos(), *returningTypeAnn, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            resultSlot = returningTypeAnn->Cast<TDataExprType>()->GetSlot();
+
+            if (!IsDataTypeNumeric(resultSlot)
+                && !IsDataTypeDate(resultSlot)
+                && resultSlot != EDataSlot::Utf8
+                && resultSlot != EDataSlot::String
+                && resultSlot != EDataSlot::Bool) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Returning argument of JsonValue callable supports only Utf8, String, Bool, date and numeric types"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        // ON ERROR and ON EMPTY values must be castable to resultSlot or "Null"
+        auto isValidCaseHandler = [&] (const TExprNode& node) {
+            const auto* typeAnn = node.GetTypeAnn();
+            if (!typeAnn) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node.Pos()), "Expected computable value, but got lambda"));
+                return false;
+            }
+
+            if (IsNull(node)) {
+                return true;
+            }
+
+            bool isOptional;
+            const TDataExprType* dataType;
+            if (!EnsureDataOrOptionalOfData(node, isOptional, dataType, ctx.Expr)) {
+                return false;
+            }
+
+            const auto handlerSlot = dataType->GetSlot();
+            const auto castResult = GetCastResult(handlerSlot, resultSlot);
+            if (!castResult.Defined() || *castResult == NUdf::ECastOptions::Impossible) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node.Pos()),
+                    TStringBuilder() << "Cannot cast type of case handler " << handlerSlot << " to the returning type of JSON_VALUE " << resultSlot));
+                return false;
+            }
+
+            return true;
+        };
+
+        if (!isValidCaseHandler(jsonValue.OnEmpty().Ref()) || !isValidCaseHandler(jsonValue.OnError().Ref())) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // make returning type optional
+        const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TDataExprType>(resultSlot);
+        input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(resultType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus JsonExistsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+
+        if (!EnsureMinArgsCount(*input, 3, ctx.Expr) || !EnsureMaxArgsCount(*input, 4, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        NNodes::TCoJsonExists jsonExists(input);
+
+        // check first 3 common arguments
+        if (!EnsureJsonQueryFunction(jsonExists, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // onError argument if present must be "Bool?" type
+        if (jsonExists.OnError()) {
+            const auto& onErrorArg = jsonExists.OnError().Ref();
+
+            if (!EnsureOptionalType(onErrorArg, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto optionalTypeAnn = onErrorArg.GetTypeAnn();
+            if (!optionalTypeAnn) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(onErrorArg.Pos()), "Expected optional Bool, but got lambda"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto underlyingType = optionalTypeAnn->Cast<TOptionalExprType>()->GetItemType();
+            if (!EnsureSpecificDataType(onErrorArg.Pos(), *underlyingType, EDataSlot::Bool, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        // make returning type optional
+        const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool);
+        input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(resultType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus JsonQueryWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+
+        if (!EnsureArgsCount(*input, 6, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        using NNodes::TCoJsonQuery;
+        if (!EnsureAtom(*input->Child(TCoJsonQuery::idx_WrapMode), ctx.Expr)
+            || !EnsureAtom(*input->Child(TCoJsonQuery::idx_OnEmpty), ctx.Expr)
+            || !EnsureAtom(*input->Child(TCoJsonQuery::idx_OnError), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TCoJsonQuery jsonQuery(input);
+
+        // check first 3 common arguments
+        if (!EnsureJsonQueryFunction(jsonQuery, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& wrapModeArg = jsonQuery.WrapMode().Ref();
+        EJsonQueryWrap wrapMode;
+        if (!TryFromString(wrapModeArg.Content(), wrapMode)) {
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Invalid value for WrapMode argument. Available options are: " << GetEnumAllNames<EJsonQueryWrap>()
+            ));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& onEmptyArg = jsonQuery.OnEmpty().Ref();
+        EJsonQueryHandler onEmpty;
+        if (!TryFromString(onEmptyArg.Content(), onEmpty)) {
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Invalid value for OnEmpty argument. Available options are: " << GetEnumAllNames<EJsonQueryHandler>()
+            ));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto& onErrorArg = jsonQuery.OnError().Ref();
+        EJsonQueryHandler onError;
+        if (!TryFromString(onErrorArg.Content(), onError)) {
+            ctx.Expr.AddError(TIssue(
+                ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Invalid value for OnError argument. Available options are: " << GetEnumAllNames<EJsonQueryHandler>()
+            ));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // make returning type optional
+        EDataSlot returnType = EDataSlot::JsonDocument;
+        if (!ctx.Types.JsonQueryReturnsJsonDocument) {
+            auto issue = TIssue(
+                ctx.Expr.GetPosition(input->Pos()),
+                "JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to "
+                "make JSON_QUERY return JsonDocument type. It will be turned on by default soon"
+            );
+            SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_YQL_JSON_QUERY_RETURNING_JSON_IS_DEPRECATED, issue);
+            if (!ctx.Expr.AddWarning(issue)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            returnType = EDataSlot::Json;
+        }
+        const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TDataExprType>(returnType);
+        input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(resultType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus JsonVariablesWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        for (size_t i = 0; i < input->ChildrenSize(); i++) {
+            const auto& tuple = input->Child(i);
+
+            using NNodes::TCoNameValueTuple;
+            if (!EnsureTuple(*tuple, ctx.Expr) || !EnsureTupleSize(*tuple, 2, ctx.Expr) || !EnsureAtom(*tuple->Child(TCoNameValueTuple::idx_Name), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            TCoNameValueTuple nameValueTuple(tuple);
+            const auto& variableValue = nameValueTuple.Value().Ref();
+            if (IsNull(variableValue)) {
+                continue;
+            }
+
+            bool isOptional;
+            const TDataExprType* valueType;
+            if (!EnsureDataOrOptionalOfData(variableValue, isOptional, valueType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            const auto valueSlot = valueType->GetSlot();
+            if (!IsDataTypeNumeric(valueSlot)
+                && !IsDataTypeDate(valueSlot)
+                && valueSlot != EDataSlot::Utf8
+                && valueSlot != EDataSlot::Bool
+                && valueSlot != EDataSlot::Json) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "You can pass only values of Utf8, Bool, Json, date and numeric types for jsonpath variables"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        const auto* keyType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Utf8);
+        const auto* payloadType = ctx.Expr.MakeType<TResourceExprType>("JsonNode");
+        input->SetTypeAnn(ctx.Expr.MakeType<TDictExprType>(keyType, payloadType));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     bool IsValidTypeForRanges(const TTypeAnnotationNode* type) {
         YQL_ENSURE(type);
         if (type->GetKind() != ETypeAnnotationKind::Optional) {
@@ -13234,10 +13234,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["CurrentAuthenticatedUser"] = &CurrentAuthenticatedUserWrapper;
         ExtFunctions["SecureParam"] = &SecureParamWrapper;
         ExtFunctions["UnsafeTimestampCast"] = &UnsafeTimestampCastWrapper;
-        ExtFunctions["JsonValue"] = &JsonValueWrapper; 
-        ExtFunctions["JsonExists"] = &JsonExistsWrapper; 
-        ExtFunctions["JsonQuery"] = &JsonQueryWrapper; 
-        ExtFunctions["JsonVariables"] = &JsonVariablesWrapper; 
+        ExtFunctions["JsonValue"] = &JsonValueWrapper;
+        ExtFunctions["JsonExists"] = &JsonExistsWrapper;
+        ExtFunctions["JsonQuery"] = &JsonQueryWrapper;
+        ExtFunctions["JsonVariables"] = &JsonVariablesWrapper;
         ExtFunctions["AssumeColumnOrder"] = &AssumeColumnOrderWrapper;
         ExtFunctions["AssumeColumnOrderPartial"] = &AssumeColumnOrderWrapper;
         ExtFunctions["UnionAllPositional"] = &UnionAllPositionalWrapper;

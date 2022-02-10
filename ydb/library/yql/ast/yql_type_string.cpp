@@ -77,8 +77,8 @@ enum EToken
     TOKEN_EMPTYLIST = -45,
     TOKEN_EMPTYDICT = -46,
     TOKEN_TYPE_MAX = -47,
-    TOKEN_JSON_DOCUMENT = -48, 
-    TOKEN_DYNUMBER = -49, 
+    TOKEN_JSON_DOCUMENT = -48,
+    TOKEN_DYNUMBER = -49,
 
     // identifiers
     TOKEN_IDENTIFIER = -100,
@@ -209,8 +209,8 @@ private:
         case TOKEN_TZDATETIME:
         case TOKEN_TZTIMESTAMP:
         case TOKEN_UUID:
-        case TOKEN_JSON_DOCUMENT: 
-        case TOKEN_DYNUMBER: 
+        case TOKEN_JSON_DOCUMENT:
+        case TOKEN_DYNUMBER:
             type = MakeDataType(Identifier);
             GetNextToken();
             break;

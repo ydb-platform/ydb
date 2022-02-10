@@ -51,10 +51,10 @@ namespace {
                 return NUdf::TUnboxedValuePod(value.uint64_value());
             case NUdf::TDataType<NUdf::TInterval>::Id:
                 return NUdf::TUnboxedValuePod(value.int64_value());
-            case NUdf::TDataType<NUdf::TJsonDocument>::Id: 
-                return ValueFromString(NUdf::EDataSlot::JsonDocument, value.text_value()); 
-            case NUdf::TDataType<NUdf::TDyNumber>::Id: 
-                return ValueFromString(NUdf::EDataSlot::DyNumber, value.text_value()); 
+            case NUdf::TDataType<NUdf::TJsonDocument>::Id:
+                return ValueFromString(NUdf::EDataSlot::JsonDocument, value.text_value());
+            case NUdf::TDataType<NUdf::TDyNumber>::Id:
+                return ValueFromString(NUdf::EDataSlot::DyNumber, value.text_value());
             default:
                 return MakeString(value.bytes_value());
         }
@@ -302,12 +302,12 @@ bool CellsFromTuple(const NKikimrMiniKQL::TType* tupleType,
             c = TCell(v.GetText().data(), v.GetText().size());
             break;
         }
-        case NScheme::NTypeIds::JsonDocument: 
-        case NScheme::NTypeIds::DyNumber: 
-        { 
-            c = TCell(v.GetBytes().data(), v.GetBytes().size()); 
-            break; 
-        } 
+        case NScheme::NTypeIds::JsonDocument:
+        case NScheme::NTypeIds::DyNumber:
+        {
+            c = TCell(v.GetBytes().data(), v.GetBytes().size());
+            break;
+        }
         case NScheme::NTypeIds::String:
         {
             if (v.HasBytes()) {
@@ -407,9 +407,9 @@ bool CellToValue(NScheme::TTypeId typeId, const TCell& c, NKikimrMiniKQL::TValue
         val.MutableOptional()->SetInt64(ReadUnaligned<i64>(c.Data()));
         break;
 
-    case NScheme::NTypeIds::JsonDocument: 
+    case NScheme::NTypeIds::JsonDocument:
     case NScheme::NTypeIds::String:
-    case NScheme::NTypeIds::DyNumber: 
+    case NScheme::NTypeIds::DyNumber:
         val.MutableOptional()->SetBytes(c.Data(), c.Size());
         break;
 

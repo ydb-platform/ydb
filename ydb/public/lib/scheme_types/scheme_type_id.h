@@ -44,10 +44,10 @@ static constexpr TTypeId Utf8 = NYql::NProto::Utf8;
 static constexpr TTypeId Yson = NYql::NProto::Yson;
 static constexpr TTypeId Json = NYql::NProto::Json;
 
-static constexpr TTypeId JsonDocument = NYql::NProto::JsonDocument; 
- 
-static constexpr TTypeId DyNumber = NYql::NProto::DyNumber; 
- 
+static constexpr TTypeId JsonDocument = NYql::NProto::JsonDocument;
+
+static constexpr TTypeId DyNumber = NYql::NProto::DyNumber;
+
 static constexpr TTypeId Decimal = NYql::NProto::Decimal;
 
 static constexpr TTypeId YqlIds[] = {
@@ -67,9 +67,9 @@ static constexpr TTypeId YqlIds[] = {
     Date,
     Datetime,
     Timestamp,
-    Interval, 
-    JsonDocument, 
-    DyNumber, 
+    Interval,
+    JsonDocument,
+    DyNumber,
 };
 
 // types must be defined in GetValueHash and CompareTypedCells
@@ -114,9 +114,9 @@ const char *TypeName(TTypeId typeId) {
         case NTypeIds::Utf8:            return "Utf8";
         case NTypeIds::Yson:            return "Yson";
         case NTypeIds::Json:            return "Json";
-        case NTypeIds::JsonDocument:    return "JsonDocument"; 
+        case NTypeIds::JsonDocument:    return "JsonDocument";
         case NTypeIds::Decimal:         return "Decimal";
-        case NTypeIds::DyNumber:        return "DyNumber"; 
+        case NTypeIds::DyNumber:        return "DyNumber";
         default:                        return "Unknown";
     }
 }

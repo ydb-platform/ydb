@@ -229,8 +229,8 @@ public:
             func == "regexp" || func == "regexp_strict" || func == "filter" || func == "filter_strict") {
             bool isRange = func.StartsWith("range");
             bool isFilter = func.StartsWith("filter");
-            size_t minArgs = isRange ? 1 : 2; 
-            size_t maxArgs = isRange ? 5 : 4; 
+            size_t minArgs = isRange ? 1 : 2;
+            size_t maxArgs = isRange ? 5 : 4;
             if (Args.size() < minArgs || Args.size() > maxArgs) {
                 ctx.Error(Pos) << Func << " requires from " << minArgs << " to " << maxArgs << " arguments, but got: " << Args.size();
                 return nullptr;
@@ -366,8 +366,8 @@ public:
             return each;
         }
         else if (func == "folder") {
-            size_t minArgs = 1; 
-            size_t maxArgs = 2; 
+            size_t minArgs = 1;
+            size_t maxArgs = 2;
             if (Args.size() < minArgs || Args.size() > maxArgs) {
                 ctx.Error(Pos) << Func << " requires from " << minArgs << " to " << maxArgs << " arguments, but found: " << Args.size();
                 return nullptr;
@@ -1672,14 +1672,14 @@ public:
                         BuildQuotedAtom(Pos, "DqEngine"), BuildQuotedAtom(Pos, mode))));
                 }
 
-                if (ctx.JsonQueryReturnsJsonDocument.Defined()) { 
-                    TString pragmaName = "DisableJsonQueryReturnsJsonDocument"; 
-                    if (*ctx.JsonQueryReturnsJsonDocument) { 
-                        pragmaName = "JsonQueryReturnsJsonDocument"; 
-                    } 
- 
-                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, BuildQuotedAtom(Pos, pragmaName)))); 
-                } 
+                if (ctx.JsonQueryReturnsJsonDocument.Defined()) {
+                    TString pragmaName = "DisableJsonQueryReturnsJsonDocument";
+                    if (*ctx.JsonQueryReturnsJsonDocument) {
+                        pragmaName = "JsonQueryReturnsJsonDocument";
+                    }
+
+                    Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource, BuildQuotedAtom(Pos, pragmaName))));
+                }
 
                 if (ctx.OrderedColumns) {
                     Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
@@ -1791,7 +1791,7 @@ public:
     }
 
     bool DoInit(TContext& ctx, ISource* src) override {
-        Y_UNUSED(src); 
+        Y_UNUSED(src);
         TString serviceName;
         TString cluster;
         if (std::find(Providers.cbegin(), Providers.cend(), Prefix) != Providers.cend()) {

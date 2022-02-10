@@ -1071,16 +1071,16 @@ public:
         return GetProto().text_value();
     }
 
-    const TString& GetJsonDocument() const { 
-        CheckPrimitive(NYdb::EPrimitiveType::JsonDocument); 
-        return GetProto().text_value(); 
-    } 
- 
-    const TString& GetDyNumber() const { 
-        CheckPrimitive(NYdb::EPrimitiveType::DyNumber); 
-        return GetProto().text_value(); 
-    } 
- 
+    const TString& GetJsonDocument() const {
+        CheckPrimitive(NYdb::EPrimitiveType::JsonDocument);
+        return GetProto().text_value();
+    }
+
+    const TString& GetDyNumber() const {
+        CheckPrimitive(NYdb::EPrimitiveType::DyNumber);
+        return GetProto().text_value();
+    }
+
     TDecimalValue GetDecimal() const {
         CheckDecimal();
         return TDecimalValue(GetProto(), TypeParser_.GetDecimal());
@@ -1415,8 +1415,8 @@ private:
             case NYdb::EPrimitiveType::Yson:
                 return Ydb::Value::kBytesValue;
             case NYdb::EPrimitiveType::Json:
-            case NYdb::EPrimitiveType::JsonDocument: 
-            case NYdb::EPrimitiveType::DyNumber: 
+            case NYdb::EPrimitiveType::JsonDocument:
+            case NYdb::EPrimitiveType::DyNumber:
                 return Ydb::Value::kTextValue;
             default:
                 FatalError(TStringBuilder() << "Unexpected primitive type: " << primitiveTypeId);
@@ -1547,14 +1547,14 @@ const TString& TValueParser::GetJson() const {
     return Impl_->GetJson();
 }
 
-const TString& TValueParser::GetJsonDocument() const { 
-    return Impl_->GetJsonDocument(); 
-} 
- 
-const TString& TValueParser::GetDyNumber() const { 
-    return Impl_->GetDyNumber(); 
-} 
- 
+const TString& TValueParser::GetJsonDocument() const {
+    return Impl_->GetJsonDocument();
+}
+
+const TString& TValueParser::GetDyNumber() const {
+    return Impl_->GetDyNumber();
+}
+
 TDecimalValue TValueParser::GetDecimal() const {
     return Impl_->GetDecimal();
 }
@@ -1655,14 +1655,14 @@ TMaybe<TString> TValueParser::GetOptionalJson() const {
     RET_OPT_VALUE(TString, Json);
 }
 
-TMaybe<TString> TValueParser::GetOptionalJsonDocument() const { 
-    RET_OPT_VALUE(TString, JsonDocument); 
-} 
- 
-TMaybe<TString> TValueParser::GetOptionalDyNumber() const { 
-    RET_OPT_VALUE(TString, DyNumber); 
-} 
- 
+TMaybe<TString> TValueParser::GetOptionalJsonDocument() const {
+    RET_OPT_VALUE(TString, JsonDocument);
+}
+
+TMaybe<TString> TValueParser::GetOptionalDyNumber() const {
+    RET_OPT_VALUE(TString, DyNumber);
+}
+
 TMaybe<TDecimalValue> TValueParser::GetOptionalDecimal() const {
     RET_OPT_VALUE(TDecimalValue, Decimal);
 }
@@ -1931,16 +1931,16 @@ public:
         GetValue().set_text_value(value);
     }
 
-    void JsonDocument(const TString& value) { 
-        FillPrimitiveType(EPrimitiveType::JsonDocument); 
-        GetValue().set_text_value(value); 
-    } 
- 
-    void DyNumber(const TString& value) { 
-        FillPrimitiveType(EPrimitiveType::DyNumber); 
-        GetValue().set_text_value(value); 
-    } 
- 
+    void JsonDocument(const TString& value) {
+        FillPrimitiveType(EPrimitiveType::JsonDocument);
+        GetValue().set_text_value(value);
+    }
+
+    void DyNumber(const TString& value) {
+        FillPrimitiveType(EPrimitiveType::DyNumber);
+        GetValue().set_text_value(value);
+    }
+
     void Decimal(const TDecimalValue& value) {
         FillDecimalType(value.DecimalType_);
         GetValue().set_low_128(value.Low_);
@@ -2615,18 +2615,18 @@ TDerived& TValueBuilderBase<TDerived>::Json(const TString& value) {
 }
 
 template<typename TDerived>
-TDerived& TValueBuilderBase<TDerived>::JsonDocument(const TString& value) { 
-    Impl_->JsonDocument(value); 
-    return static_cast<TDerived&>(*this); 
-} 
- 
-template<typename TDerived> 
-TDerived& TValueBuilderBase<TDerived>::DyNumber(const TString& value) { 
-    Impl_->DyNumber(value); 
-    return static_cast<TDerived&>(*this); 
-} 
- 
-template<typename TDerived> 
+TDerived& TValueBuilderBase<TDerived>::JsonDocument(const TString& value) {
+    Impl_->JsonDocument(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::DyNumber(const TString& value) {
+    Impl_->DyNumber(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::Decimal(const TDecimalValue& value) {
     Impl_->Decimal(value);
     return static_cast<TDerived&>(*this);
@@ -2758,17 +2758,17 @@ TDerived& TValueBuilderBase<TDerived>::OptionalJson(const TMaybe<TString>& value
     SET_OPT_VALUE_MAYBE(Json);
 }
 
-template<typename TDerived> 
-TDerived& TValueBuilderBase<TDerived>::OptionalJsonDocument(const TMaybe<TString>& value) { 
-    SET_OPT_VALUE_MAYBE(JsonDocument); 
-} 
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalJsonDocument(const TMaybe<TString>& value) {
+    SET_OPT_VALUE_MAYBE(JsonDocument);
+}
 
-template<typename TDerived> 
-TDerived& TValueBuilderBase<TDerived>::OptionalDyNumber(const TMaybe<TString>& value) { 
-    SET_OPT_VALUE_MAYBE(DyNumber); 
-} 
- 
- 
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::OptionalDyNumber(const TMaybe<TString>& value) {
+    SET_OPT_VALUE_MAYBE(DyNumber);
+}
+
+
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::BeginOptional() {
     Impl_->BeginOptional();

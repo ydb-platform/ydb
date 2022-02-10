@@ -454,7 +454,7 @@ void RegisterCompareStrings(IBuiltinFunctionRegistry& registry, const std::strin
     RegisterCompareCustomOpt<NUdf::TDataType<char*>, NUdf::TDataType<NUdf::TUtf8>, TFunc<NUdf::EDataSlot::Utf8>, TArgs>(registry, name);
     if constexpr (WithSpecial) {
         RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TUuid>, NUdf::TDataType<NUdf::TUuid>, TFunc<NUdf::EDataSlot::Uuid>, TArgs>(registry, name);
-        RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDyNumber>, NUdf::TDataType<NUdf::TDyNumber>, TFunc<NUdf::EDataSlot::DyNumber>, TArgs>(registry, name); 
+        RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TDyNumber>, NUdf::TDataType<NUdf::TDyNumber>, TFunc<NUdf::EDataSlot::DyNumber>, TArgs>(registry, name);
     }
 }
 
@@ -466,7 +466,7 @@ void RegisterAggrCompareStrings(IBuiltinFunctionRegistry& registry, const std::s
     RegisterAggrCompareCustomOpt<NUdf::TDataType<char*>, TFunc<NUdf::EDataSlot::String>, TArgs>(registry, name);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TUtf8>, TFunc<NUdf::EDataSlot::Utf8>, TArgs>(registry, name);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TUuid>, TFunc<NUdf::EDataSlot::Uuid>, TArgs>(registry, name);
-    RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDyNumber>, TFunc<NUdf::EDataSlot::DyNumber>, TArgs>(registry, name); 
+    RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TDyNumber>, TFunc<NUdf::EDataSlot::DyNumber>, TArgs>(registry, name);
 }
 
 void RegisterEquals(IBuiltinFunctionRegistry& registry);

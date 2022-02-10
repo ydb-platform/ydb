@@ -58,7 +58,7 @@ public:
         return NUdf::TUnboxedValuePod::Embedded(NUdf::TStringRef(buf, sizeof(buf)));
     }
 };
- 
+
 class TToBytesWrapper : public TDecoratorCodegeneratorNode<TToBytesWrapper> {
 using TBaseComputation = TDecoratorCodegeneratorNode<TToBytesWrapper>;
 public:

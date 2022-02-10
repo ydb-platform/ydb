@@ -370,10 +370,10 @@ public:
             return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Yson>(jsonValue.GetString());
         case NScheme::NTypeIds::Json:
             return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::Json>(jsonValue.GetString());
-        case NScheme::NTypeIds::JsonDocument: 
-            return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::JsonDocument>(jsonValue.GetString()); 
-        case NScheme::NTypeIds::DyNumber: 
-            return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::DyNumber>(jsonValue.GetString()); 
+        case NScheme::NTypeIds::JsonDocument:
+            return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::JsonDocument>(jsonValue.GetString());
+        case NScheme::NTypeIds::DyNumber:
+            return pgmBuilder.NewDataLiteral<NUdf::EDataSlot::DyNumber>(jsonValue.GetString());
         default:
             // still better than VERIFY
             return pgmBuilder.NewEmptyOptionalDataLiteral(typeId);

@@ -334,29 +334,29 @@
                 {"Index": 0, "Name": "Lambda", "Type": "TCoLambda"},
                 {"Index": 1, "Name": "ArgsType", "Type": "TExprBase"}
             ]
-        }, 
-        { 
-            "Name": "TKqlDeleteRowsBase", 
-            "Base": "TKqlTableEffect", 
-            "Match": {"Type": "CallableBase"}, 
-            "Children": [ 
-                {"Index": 1, "Name": "Input", "Type": "TExprBase"} 
-            ] 
-        }, 
-        { 
-            "Name": "TKqlDeleteRows", 
-            "Base": "TKqlDeleteRowsBase", 
-            "Match": {"Type": "Callable", "Name": "KqlDeleteRows"} 
-        }, 
-        { 
+        },
+        {
+            "Name": "TKqlDeleteRowsBase",
+            "Base": "TKqlTableEffect",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 1, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqlDeleteRows",
+            "Base": "TKqlDeleteRowsBase",
+            "Match": {"Type": "Callable", "Name": "KqlDeleteRows"}
+        },
+        {
             "Name": "TKqlDeleteRowsIndex",
             "Base": "TKqlDeleteRowsBase",
             "Match": {"Type": "Callable", "Name": "KqlDeleteRowsIndex"}
         },
         {
-            "Name": "TKqpDeleteRows", 
-            "Base": "TKqlDeleteRowsBase", 
-            "Match": {"Type": "Callable", "Name": "KqpDeleteRows"} 
+            "Name": "TKqpDeleteRows",
+            "Base": "TKqlDeleteRowsBase",
+            "Match": {"Type": "Callable", "Name": "KqpDeleteRows"}
         },
         {
             "Name": "TKqpOlapOperationBase",

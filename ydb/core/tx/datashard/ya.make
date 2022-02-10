@@ -111,7 +111,7 @@ SRCS(
     datashard_kqp_lookup_table.cpp
     datashard_kqp_read_table.cpp
     datashard_kqp_upsert_rows.cpp
-    datashard_kqp_delete_rows.cpp 
+    datashard_kqp_delete_rows.cpp
     datashard_kqp.cpp
     datashard_kqp.h
     datashard_repl_apply.cpp

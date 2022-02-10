@@ -196,7 +196,7 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata& tableMeta, 
     readProto.SetReverse(settings.Reverse);
 }
 
-template <typename TEffectCallable, typename TEffectProto> 
+template <typename TEffectCallable, typename TEffectProto>
 void FillEffectRows(const TEffectCallable& callable, TEffectProto& proto, bool inplace) {
     if (auto maybeList = callable.Input().template Maybe<TCoIterator>().List()) {
         if (auto maybeParam = maybeList.Cast().template Maybe<TCoParameter>()) {
@@ -491,15 +491,15 @@ private:
                 FillTable(upsertRows.Table(), *tableOp.MutableTable());
                 FillColumns(upsertRows.Columns(), *tableMeta, tableOp, false);
                 FillEffectRows(upsertRows, *tableOp.MutableUpsertRows(), settings.Inplace);
-            } else if (auto maybeDeleteRows = node.Maybe<TKqpDeleteRows>()) { 
-                auto deleteRows = maybeDeleteRows.Cast(); 
-                auto tableMeta = TablesData->ExistingTable(Cluster, deleteRows.Table().Path()).Metadata; 
-                YQL_ENSURE(tableMeta); 
- 
-                YQL_ENSURE(stageProto.GetIsEffectsStage()); 
- 
-                auto& tableOp = *stageProto.AddTableOps(); 
-                FillTable(deleteRows.Table(), *tableOp.MutableTable()); 
+            } else if (auto maybeDeleteRows = node.Maybe<TKqpDeleteRows>()) {
+                auto deleteRows = maybeDeleteRows.Cast();
+                auto tableMeta = TablesData->ExistingTable(Cluster, deleteRows.Table().Path()).Metadata;
+                YQL_ENSURE(tableMeta);
+
+                YQL_ENSURE(stageProto.GetIsEffectsStage());
+
+                auto& tableOp = *stageProto.AddTableOps();
+                FillTable(deleteRows.Table(), *tableOp.MutableTable());
                 FillEffectRows(deleteRows, *tableOp.MutableDeleteRows(), false);
             } else if (auto maybeWideReadTableRanges = node.Maybe<TKqpWideReadTableRanges>()) {
                 auto readTableRanges = maybeWideReadTableRanges.Cast();

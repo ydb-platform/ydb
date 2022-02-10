@@ -1,8 +1,8 @@
 #include "flat_executor.h"
- 
+
 #include <ydb/library/binary_json/read.h>
 #include <ydb/library/dynumber/dynumber.h>
- 
+
 #include <util/stream/hex.h>
 #include <util/string/escape.h>
 #include <library/cpp/html/pcdata/pcdata.h>
@@ -211,16 +211,16 @@ public:
                                         case NScheme::NTypeIds::Json:
                                             str << EncodeHtmlPcdata(TStringBuf((const char*)data, size));
                                             break;
-                                        case NScheme::NTypeIds::JsonDocument: { 
-                                            const auto json = NBinaryJson::SerializeToJson(TStringBuf((const char*)data, size)); 
-                                            str << "(JsonDocument) " << EncodeHtmlPcdata(json); 
-                                            break; 
-                                        } 
-                                        case NScheme::NTypeIds::DyNumber: { 
-                                            const auto number = NDyNumber::DyNumberToString(TStringBuf((const char*)data, size)); 
-                                            str << "(DyNumber) " << number; 
-                                            break; 
-                                        } 
+                                        case NScheme::NTypeIds::JsonDocument: {
+                                            const auto json = NBinaryJson::SerializeToJson(TStringBuf((const char*)data, size));
+                                            str << "(JsonDocument) " << EncodeHtmlPcdata(json);
+                                            break;
+                                        }
+                                        case NScheme::NTypeIds::DyNumber: {
+                                            const auto number = NDyNumber::DyNumberToString(TStringBuf((const char*)data, size));
+                                            str << "(DyNumber) " << number;
+                                            break;
+                                        }
                                         default:
                                             str << "<i>unknown type " << tuple.Types[i] << "</i>";
                                             break;

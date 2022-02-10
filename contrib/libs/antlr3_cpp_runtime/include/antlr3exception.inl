@@ -313,12 +313,12 @@ void ANTLR_Exception<ImplTraits, Ex, StreamType>::displayRecognitionError( ANTLR
 			// parse?
 			//
 			count   = 0;
-			size    = 0; 
-			if (BaseType::m_expectingSet != NULL) { 
-				std::unique_ptr<BitsetType> errBits(BaseType::m_expectingSet->bitsetLoad()); 
-				numbits = errBits->numBits(); 
-				size    = errBits->size(); 
-			} 
+			size    = 0;
+			if (BaseType::m_expectingSet != NULL) {
+				std::unique_ptr<BitsetType> errBits(BaseType::m_expectingSet->bitsetLoad());
+				numbits = errBits->numBits();
+				size    = errBits->size();
+			}
 
 			if  (size > 0)
 			{

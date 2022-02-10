@@ -189,12 +189,12 @@ namespace NYdb {
             case EPrimitiveType::Json:
                 Writer.WriteString(Parser.GetJson());
                 break;
-            case EPrimitiveType::JsonDocument: 
+            case EPrimitiveType::JsonDocument:
                 Writer.WriteString(Parser.GetJsonDocument());
-                break; 
-            case EPrimitiveType::DyNumber: 
+                break;
+            case EPrimitiveType::DyNumber:
                 Writer.WriteString(Parser.GetDyNumber());
-                break; 
+                break;
             default:
                 ThrowFatalError(TStringBuilder() << "Unsupported primitive type: " << type);
             }

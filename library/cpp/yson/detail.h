@@ -380,9 +380,9 @@ namespace NYson {
 
             void CheckMemoryLimit() {
                 if (MemoryLimit_ && Buffer_.capacity() > *MemoryLimit_) {
-                    ythrow TYsonException() 
-                        << "Memory limit exceeded while parsing YSON stream: allocated " 
-                        << Buffer_.capacity() << ", limit " << (*MemoryLimit_); 
+                    ythrow TYsonException()
+                        << "Memory limit exceeded while parsing YSON stream: allocated "
+                        << Buffer_.capacity() << ", limit " << (*MemoryLimit_);
                 }
             }
 
@@ -411,7 +411,7 @@ namespace NYson {
                         Buffer_.push_back(ch);
                         result = ENumericResult::Uint64;
                     } else if (isalpha(ch)) {
-                        ythrow TYsonException() << "Unexpected '" << ch << "' in numeric literal"; 
+                        ythrow TYsonException() << "Unexpected '" << ch << "' in numeric literal";
                     } else {
                         break;
                     }
@@ -531,7 +531,7 @@ namespace NYson {
 
                 i32 length = ZigZagDecode32(ulength);
                 if (length < 0) {
-                    ythrow TYsonException() << "Negative binary string literal length " << length; 
+                    ythrow TYsonException() << "Negative binary string literal length " << length;
                 }
 
                 if (TBaseStream::Begin() + length <= TBaseStream::End()) {
@@ -564,7 +564,7 @@ namespace NYson {
                 static TStringBuf falseString = "false";
 
                 auto throwIncorrectBoolean = [&]() {
-                    ythrow TYsonException() << "Incorrect boolean string " << TString(Buffer_.data(), Buffer_.size()); 
+                    ythrow TYsonException() << "Incorrect boolean string " << TString(Buffer_.data(), Buffer_.size());
                 };
 
                 Buffer_.push_back(TBaseStream::template GetChar<AllowFinish>());
@@ -637,7 +637,7 @@ namespace NYson {
             void SkipCharToken(char symbol) {
                 char ch = SkipSpaceAndGetChar();
                 if (ch != symbol) {
-                    ythrow TYsonException() << "Expected '" << symbol << "' but found '" << ch << "'"; 
+                    ythrow TYsonException() << "Expected '" << symbol << "' but found '" << ch << "'";
                 }
 
                 TBaseStream::Advance(1);

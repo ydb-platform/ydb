@@ -96,7 +96,7 @@ class PrimitiveType(enum.Enum):
     Interval = _apis.primitive_types.INTERVAL, "int64_value"
 
     DyNumber = _apis.primitive_types.DYNUMBER, "text_value", _from_bytes
- 
+
     def __init__(self, idn, proto_field, to_obj=None, from_obj=None):
         self._idn_ = idn
         self._to_obj = to_obj

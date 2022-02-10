@@ -96,8 +96,8 @@ struct TSchemeTraits {
         return &(*v)[key];
     }
 
-    static inline size_t DictSize(TConstValueRef v) { 
-        return v->GetDict().size(); 
+    static inline size_t DictSize(TConstValueRef v) {
+        return v->GetDict().size();
     }
 
     using TDictIterator = NSc::TDict::const_iterator;
